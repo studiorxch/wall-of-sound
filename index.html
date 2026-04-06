@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Swarm Break Engine</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="stage-shell">
+      <div class="canvas-stage">
+        <div class="canvas-wrap" id="canvas-wrap">
+          <canvas id="engine-canvas" width="1080" height="1920"></canvas>
+        </div>
+      </div>
+    </main>
+
+    <div class="floating-status">
+      <p id="engine-status">Stopped</p>
+      <p id="scene-stats">0L 0T 0B</p>
+    </div>
+
+    <div id="transport" class="floating-transport">
+      <input id="bpm-input" type="number" min="60" max="180" step="0.1" value="120.0" aria-label="BPM" />
+      <select id="bar-count" aria-label="Bars">
+        <option value="8">8 Bars</option>
+        <option value="16">16 Bars</option>
+        <option value="32">32 Bars</option>
+      </select>
+      <label class="mini-toggle" title="Quantize">
+        <input id="quantize-enabled" type="checkbox" />
+        <span>Q</span>
+      </label>
+      <select id="quantize-division" aria-label="Quantize division">
+        <option value="0.25">1/4</option>
+        <option value="0.125">1/8</option>
+        <option value="0.0625">1/16</option>
+      </select>
+      <button id="record-loop" title="Record">REC</button>
+      <button id="stop-loop" title="Stop">STOP</button>
+      <button id="clear-scene" title="Clear">CLEAR</button>
+      <button id="export-loop" class="hidden" title="Export">EXPORT</button>
+      <button id="retake-loop" class="hidden" title="Retake">RETAKE</button>
+      <button id="load-example" title="Demo">DEMO</button>
+      <label class="ghost-file" title="Open scene">
+        <input id="scene-file" type="file" accept="application/json" />
+        <span>OPEN</span>
+      </label>
+      <button id="save-scene" title="Save scene">SAVE</button>
+      <label class="ghost-file" title="Load font">
+        <input
+          id="text-font-file"
+          type="file"
+          accept=".ttf,.otf,.woff,.woff2,font/ttf,font/otf,font/woff,font/woff2"
+        />
+        <span>FONT</span>
+      </label>
+      <label class="ghost-file" title="Load background">
+        <input id="background-file" type="file" accept="image/*" />
+        <span>BG</span>
+      </label>
+      <label class="mini-toggle" title="Transparent background">
+        <input id="transparent-bg" type="checkbox" />
+        <span>ALPHA</span>
+      </label>
+    </div>
+
+    <div id="toolbar" class="floating-toolbar">
+      <button class="tool active" data-tool="select" aria-label="Select tool">Select</button>
+      <button class="tool" data-tool="draw" aria-label="Draw tool">Draw</button>
+      <button class="tool" data-tool="shape" aria-label="Shape tool">Shape</button>
+      <button class="tool" data-tool="text" aria-label="Text tool">Text</button>
+      <button class="tool" data-tool="ball" aria-label="Ball tool">Ball</button>
+    </div>
+
+    <aside id="shape-panel" class="floating-mini-panel hidden shape-panel">
+      <button class="shape-button active" data-shape="circle">Circle</button>
+      <button class="shape-button" data-shape="square">Square</button>
+      <button class="shape-button" data-shape="triangle">Triangle</button>
+      <button class="shape-button" data-shape="rounded-loop">Loop</button>
+      <button class="shape-button" data-shape="zig-zag">Zig</button>
+      <button class="shape-button" data-shape="sine">Sine</button>
+      <button class="shape-button" data-shape="straight">Line</button>
+      <button class="shape-button" data-shape="x-form">X</button>
+      <button class="shape-button" data-shape="v-form">V</button>
+      <button class="shape-button" data-shape="l-form">L</button>
+      <button class="shape-button" data-shape="m-form">M</button>
+      <button class="shape-button" data-shape="c-form">C</button>
+    </aside>
+
+    <aside id="ball-panel" class="floating-mini-panel hidden ball-panel">
+      <label class="field compact">
+        <span>Count</span>
+        <input id="ball-count" type="range" min="1" max="8" step="1" value="1" />
+        <output id="ball-count-value">1</output>
+      </label>
+      <label class="field compact">
+        <span>Speed</span>
+        <input id="ball-speed" type="range" min="0.4" max="3" step="0.1" value="1" />
+        <output id="ball-speed-value">1.0</output>
+      </label>
+      <label class="field compact">
+        <span>Spread</span>
+        <input id="ball-spread" type="range" min="0" max="1" step="0.05" value="0.15" />
+        <output id="ball-spread-value">0.15</output>
+      </label>
+    </aside>
+
+    <aside id="inspector" class="floating-inspector hidden">
+      <section class="inspector-block text-block" id="text-inspector-block">
+        <input id="text-content" type="text" value="SWARM" placeholder="Content" />
+        <div class="compact-grid three">
+          <input id="text-x" type="number" min="-4000" max="4000" step="1" value="540" placeholder="X" />
+          <input id="text-y" type="number" min="-4000" max="4000" step="1" value="960" placeholder="Y" />
+          <button id="center-text" type="button">Center</button>
+        </div>
+        <div class="compact-grid three">
+          <label class="field compact">
+            <span>Size</span>
+            <input id="text-size" type="range" min="24" max="420" step="1" value="160" />
+            <output id="text-size-value">160</output>
+          </label>
+          <label class="field compact">
+            <span>Scale</span>
+            <input id="text-scale" type="range" min="0.1" max="8" step="0.1" value="1" />
+            <output id="text-scale-value">1.0</output>
+          </label>
+          <label class="field compact">
+            <span>Rotation</span>
+            <input id="text-rotation" type="range" min="-180" max="180" step="1" value="0" />
+            <output id="text-rotation-value">0</output>
+          </label>
+        </div>
+      </section>
+
+      <section class="inspector-block">
+        <p class="micro-title">MIDI</p>
+        <div id="note-grid" class="note-grid">
+          <button class="note-cell" type="button" data-note-class="0">C</button>
+          <button class="note-cell" type="button" data-note-class="1">C#</button>
+          <button class="note-cell" type="button" data-note-class="2">D</button>
+          <button class="note-cell" type="button" data-note-class="3">D#</button>
+          <button class="note-cell" type="button" data-note-class="4">E</button>
+          <button class="note-cell" type="button" data-note-class="5">F</button>
+          <button class="note-cell" type="button" data-note-class="6">F#</button>
+          <button class="note-cell" type="button" data-note-class="7">G</button>
+          <button class="note-cell" type="button" data-note-class="8">G#</button>
+          <button class="note-cell" type="button" data-note-class="9">A</button>
+          <button class="note-cell" type="button" data-note-class="10">A#</button>
+          <button class="note-cell" type="button" data-note-class="11">B</button>
+        </div>
+      </section>
+
+      <section class="inspector-block">
+        <p class="micro-title">Behavior</p>
+        <div class="compact-grid two">
+          <select id="line-behavior">
+            <option value="none">None</option>
+            <option value="attract">Attract</option>
+            <option value="repel">Repel</option>
+            <option value="orbital">Orbit</option>
+          </select>
+          <label class="field compact">
+            <span>Strength</span>
+            <input id="line-strength" type="range" min="0" max="5" step="0.1" value="1.4" />
+            <output id="line-strength-value">1.4</output>
+          </label>
+        </div>
+      </section>
+
+      <section class="inspector-block">
+        <p class="micro-title">Appearance</p>
+        <div class="compact-grid two">
+          <input id="line-color" type="color" value="#ff4b4b" aria-label="Color" disabled />
+          <label class="field compact">
+            <span>Outline</span>
+            <input id="line-thickness" type="range" min="1" max="24" step="1" value="5" />
+            <output id="line-thickness-value">5</output>
+          </label>
+        </div>
+        <div class="swatch-grid">
+          <button class="swatch" type="button" data-color="#ff4b4b" style="--swatch:#ff4b4b"></button>
+          <button class="swatch" type="button" data-color="#ff6d39" style="--swatch:#ff6d39"></button>
+          <button class="swatch" type="button" data-color="#ff9b1f" style="--swatch:#ff9b1f"></button>
+          <button class="swatch" type="button" data-color="#ffbf2f" style="--swatch:#ffbf2f"></button>
+          <button class="swatch" type="button" data-color="#e5df45" style="--swatch:#e5df45"></button>
+          <button class="swatch" type="button" data-color="#b9e54f" style="--swatch:#b9e54f"></button>
+          <button class="swatch" type="button" data-color="#35cb68" style="--swatch:#35cb68"></button>
+          <button class="swatch" type="button" data-color="#26d3a6" style="--swatch:#26d3a6"></button>
+          <button class="swatch" type="button" data-color="#2cc7dc" style="--swatch:#2cc7dc"></button>
+          <button class="swatch" type="button" data-color="#498cff" style="--swatch:#498cff"></button>
+          <button class="swatch" type="button" data-color="#7a62ff" style="--swatch:#7a62ff"></button>
+          <button class="swatch" type="button" data-color="#ff59cb" style="--swatch:#ff59cb"></button>
+        </div>
+        <div class="action-row">
+          <button id="duplicate-selection" type="button">Duplicate</button>
+          <button id="delete-selection" type="button">Delete</button>
+          <button id="undo-action" type="button">Undo</button>
+        </div>
+      </section>
+    </aside>
+
+    <input id="active-note" type="hidden" value="60" />
+
+    <div id="shortcut-hud" class="shortcut-hud hidden">
+      <div class="shortcut-card">
+        <p><strong>Shortcuts</strong></p>
+        <p>`V` Select, `D` Draw, `S` Shape, `T` Text, `B` Ball</p>
+        <p>`Cmd/Ctrl+D` Duplicate, `Delete` Remove, `Cmd/Ctrl+Z` Undo</p>
+        <p>`Tab` Presentation, `?` Shortcuts</p>
+        <button id="close-shortcuts">Close</button>
+      </div>
+    </div>
+
+    <p class="font-status hidden" id="text-font-status">
+      No font loaded. Load a font file to place text.
+    </p>
+
+    <script src="./engine/physics.js"></script>
+    <script src="./engine/swarm.js"></script>
+    <script src="./engine/lineSystem.js"></script>
+    <script src="./engine/textSystem.js"></script>
+    <script src="./engine/collision.js"></script>
+    <script src="./midi/midiOut.js"></script>
+    <script src="./render/canvasRenderer.js"></script>
+    <script src="./state/examplePreset.js"></script>
+    <script src="./state/sceneManager.js"></script>
+    <script src="./ui/controls.js"></script>
+    <script src="./ui/drawTools.js"></script>
+    <script src="./main.js"></script>
+  </body>
+</html>
