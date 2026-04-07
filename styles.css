@@ -105,25 +105,36 @@ output {
   background:
     linear-gradient(var(--stage-grid) 1px, transparent 1px),
     linear-gradient(90deg, var(--stage-grid) 1px, transparent 1px),
-    radial-gradient(circle at center, rgba(255, 122, 89, 0.04), transparent 40%),
+    radial-gradient(
+      circle at center,
+      rgba(255, 122, 89, 0.04),
+      transparent 40%
+    ),
     var(--bg);
-  background-size: 40px 40px, 40px 40px, auto, auto;
+  background-size:
+    40px 40px,
+    40px 40px,
+    auto,
+    auto;
 }
 
-.canvas-wrap {
+#canvas-wrap {
   width: 100%;
-  height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  aspect-ratio: 1080 / 1920;
+  max-width: 600px;
+  aspect-ratio: 9 / 16;
+  margin: 0 auto;
+  position: relative;
+}
+
+#engine-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
 }
 
 canvas {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
+  width: 1080px;
+  height: 1920px;
   display: block;
   background: #090a0c;
 }
@@ -180,15 +191,10 @@ canvas {
 }
 
 .floating-toolbar {
-  bottom: 22px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  gap: 0.4rem;
-  padding: 0.38rem;
-  border-radius: 1rem;
-  background: var(--panel);
-  opacity: 0.88;
+  left: 20px;
+  bottom: 20px;
+  transform: none;
+  flex-direction: column;
 }
 
 .tool {
@@ -205,16 +211,9 @@ canvas {
 }
 
 .floating-mini-panel {
-  bottom: 80px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: min(92vw, 360px);
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.55rem;
-  padding: 0.7rem;
-  border-radius: 1rem;
-  background: var(--panel);
+  left: 20px;
+  bottom: 140px;
+  transform: none;
 }
 
 .floating-inspector {

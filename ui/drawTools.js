@@ -19,6 +19,15 @@
       const point = getCanvasCoords(event, canvas);
       toolState.lastPoint = point;
 
+      if (state.tool === "erase") {
+        const ball = findBall(state.balls || [], point);
+        if (ball) {
+          callbacks.onSelectBall(ball);
+          callbacks.onDeleteSelection?.(); // optional
+        }
+        return;
+      }
+
       if (state.tool === "draw") {
         toolState.drawPoints = [point];
         toolState.previewStroke = [point];
@@ -71,7 +80,11 @@
           return;
         }
 
-        const line = SBE.LineSystem.findNearestLine(state.lines || [], point, 18);
+        const line = SBE.LineSystem.findNearestLine(
+          state.lines || [],
+          point,
+          18,
+        );
         if (line) {
           toolState.draggingSelection = true;
           callbacks.onSelectLine(line);
@@ -88,9 +101,26 @@
 
       if (state.tool === "draw" && toolState.drawPoints.length) {
         const previous = toolState.drawPoints[toolState.drawPoints.length - 1];
-        if (!previous || Math.hypot(point.x - previous.x, point.y - previous.y) >= 2) {
-          toolState.drawPoints.push(point);
-          toolState.previewStroke = toolState.drawPoints.slice();
+
+        if (!previous) return;
+
+        const dx = point.x - previous.x;
+        const dy = point.y - previous.y;
+        const dist = Math.hypot(dx, dy);
+
+        const spacing = 1.5;
+
+        if (dist >= spacing) {
+          const steps = Math.floor(dist / spacing);
+
+          for (let i = 1; i <= steps; i++) {
+            toolState.drawPoints.push({
+              x: previous.x + (dx * i) / steps,
+              y: previous.y + (dy * i) / steps,
+            });
+          }
+
+          toolState.previewStroke = toolState.drawPoints;
           callbacks.onOverlayChange();
         }
         return;
@@ -107,7 +137,11 @@
         return;
       }
 
-      if (state.tool === "select" && toolState.draggingSelection && toolState.lastPoint) {
+      if (
+        state.tool === "select" &&
+        toolState.draggingSelection &&
+        toolState.lastPoint
+      ) {
         const dx = point.x - toolState.lastPoint.x;
         const dy = point.y - toolState.lastPoint.y;
         toolState.lastPoint = point;
@@ -116,25 +150,39 @@
       }
     });
 
-    canvas.addEventListener("pointerup", function onPointerUp() {
-      if (state.tool === "draw" && toolState.drawPoints.length >= 2) {
+    canvas.addEventListener("pointerup", function onPointerUp(event) {
+      const points = toolState.drawPoints;
+
+      if (state.tool === "draw" && points && points.length >= 2) {
+        console.log("COMMIT STROKE:", points.length);
+
         callbacks.onCreateFreehand(toolState.drawPoints.slice());
       }
 
-      if (state.tool === "ball" && toolState.ballStart && toolState.ballVector) {
+      if (
+        state.tool === "ball" &&
+        toolState.ballStart &&
+        toolState.ballVector
+      ) {
         callbacks.onSpawnBall(toolState.ballStart, {
           x: toolState.ballVector.x2,
           y: toolState.ballVector.y2,
         });
       }
 
-      toolState.drawPoints = [];
-      toolState.previewStroke = null;
-      toolState.ballStart = null;
-      toolState.ballVector = null;
-      toolState.draggingSelection = false;
-      toolState.lastPoint = null;
-      callbacks.onOverlayChange();
+      canvas.releasePointerCapture(event.pointerId);
+
+      // 🔴 IMPORTANT: delay reset ONE FRAME
+      requestAnimationFrame(() => {
+        toolState.drawPoints = [];
+        toolState.previewStroke = null;
+        toolState.ballStart = null;
+        toolState.ballVector = null;
+        toolState.draggingSelection = false;
+        toolState.lastPoint = null;
+
+        callbacks.onOverlayChange();
+      });
     });
 
     return {
@@ -151,21 +199,23 @@
     };
   }
 
-  function getCanvasCoords(event, canvas) {
+  function getCanvasCoords(e, canvas) {
     const rect = canvas.getBoundingClientRect();
+
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
 
     return {
-      x: (event.clientX - rect.left) * scaleX,
-      y: (event.clientY - rect.top) * scaleY,
+      x: (e.clientX - rect.left) * scaleX,
+      y: (e.clientY - rect.top) * scaleY,
     };
   }
 
   function findBall(balls, point) {
     for (let index = balls.length - 1; index >= 0; index -= 1) {
       const ball = balls[index];
-      const radius = ball.renderRadius || ball.collisionRadius || ball.radius || 8;
+      const radius =
+        ball.renderRadius || ball.collisionRadius || ball.radius || 8;
       if (Math.hypot(point.x - ball.x, point.y - ball.y) <= radius + 6) {
         return ball;
       }

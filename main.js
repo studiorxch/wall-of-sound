@@ -1,6 +1,19 @@
 (function initMain(global) {
   const SBE = (global.SBE = global.SBE || {});
-  const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+  const NOTE_NAMES = [
+    "C",
+    "C#",
+    "D",
+    "D#",
+    "E",
+    "F",
+    "F#",
+    "G",
+    "G#",
+    "A",
+    "A#",
+    "B",
+  ];
   const NOTE_COLORS = {
     C: "#ff4b4b",
     "C#": "#ff6d39",
@@ -17,29 +30,37 @@
   };
   const SHAPE_LIBRARY = {
     circle: function circle(center, size) {
-      return [ellipsePoints(center.x, center.y, size * 0.5, size * 0.5, 20, true)];
+      return [
+        ellipsePoints(center.x, center.y, size * 0.5, size * 0.5, 20, true),
+      ];
     },
     square: function square(center, size) {
       const half = size * 0.5;
-      return [[
-        { x: center.x - half, y: center.y - half },
-        { x: center.x + half, y: center.y - half },
-        { x: center.x + half, y: center.y + half },
-        { x: center.x - half, y: center.y + half },
-        { x: center.x - half, y: center.y - half },
-      ]];
+      return [
+        [
+          { x: center.x - half, y: center.y - half },
+          { x: center.x + half, y: center.y - half },
+          { x: center.x + half, y: center.y + half },
+          { x: center.x - half, y: center.y + half },
+          { x: center.x - half, y: center.y - half },
+        ],
+      ];
     },
     triangle: function triangle(center, size) {
       const half = size * 0.55;
-      return [[
-        { x: center.x, y: center.y - half },
-        { x: center.x + half, y: center.y + half },
-        { x: center.x - half, y: center.y + half },
-        { x: center.x, y: center.y - half },
-      ]];
+      return [
+        [
+          { x: center.x, y: center.y - half },
+          { x: center.x + half, y: center.y + half },
+          { x: center.x - half, y: center.y + half },
+          { x: center.x, y: center.y - half },
+        ],
+      ];
     },
     "rounded-loop": function roundedLoop(center, size) {
-      return [ellipsePoints(center.x, center.y, size * 0.58, size * 0.42, 18, true)];
+      return [
+        ellipsePoints(center.x, center.y, size * 0.58, size * 0.42, 18, true),
+      ];
     },
     "zig-zag": function zigZag(center, size) {
       const width = size * 1.2;
@@ -68,46 +89,57 @@
       return [points];
     },
     straight: function straight(center, size) {
-      return [[
-        { x: center.x - size * 0.65, y: center.y },
-        { x: center.x + size * 0.65, y: center.y },
-      ]];
+      return [
+        [
+          { x: center.x - size * 0.65, y: center.y },
+          { x: center.x + size * 0.65, y: center.y },
+        ],
+      ];
     },
     "x-form": function xForm(center, size) {
       const half = size * 0.52;
-      return [[
-        { x: center.x - half, y: center.y - half },
-        { x: center.x + half, y: center.y + half },
-      ], [
-        { x: center.x + half, y: center.y - half },
-        { x: center.x - half, y: center.y + half },
-      ]];
+      return [
+        [
+          { x: center.x - half, y: center.y - half },
+          { x: center.x + half, y: center.y + half },
+        ],
+        [
+          { x: center.x + half, y: center.y - half },
+          { x: center.x - half, y: center.y + half },
+        ],
+      ];
     },
     "v-form": function vForm(center, size) {
       const half = size * 0.55;
-      return [[
-        { x: center.x - half, y: center.y - half },
-        { x: center.x, y: center.y + half },
-        { x: center.x + half, y: center.y - half },
-      ]];
+      return [
+        [
+          { x: center.x - half, y: center.y - half },
+          { x: center.x, y: center.y + half },
+          { x: center.x + half, y: center.y - half },
+        ],
+      ];
     },
     "l-form": function lForm(center, size) {
       const half = size * 0.55;
-      return [[
-        { x: center.x - half, y: center.y - half },
-        { x: center.x - half, y: center.y + half },
-        { x: center.x + half, y: center.y + half },
-      ]];
+      return [
+        [
+          { x: center.x - half, y: center.y - half },
+          { x: center.x - half, y: center.y + half },
+          { x: center.x + half, y: center.y + half },
+        ],
+      ];
     },
     "m-form": function mForm(center, size) {
       const half = size * 0.58;
-      return [[
-        { x: center.x - half, y: center.y + half },
-        { x: center.x - half, y: center.y - half },
-        { x: center.x, y: center.y + half * 0.1 },
-        { x: center.x + half, y: center.y - half },
-        { x: center.x + half, y: center.y + half },
-      ]];
+      return [
+        [
+          { x: center.x - half, y: center.y + half },
+          { x: center.x - half, y: center.y - half },
+          { x: center.x, y: center.y + half * 0.1 },
+          { x: center.x + half, y: center.y - half },
+          { x: center.x + half, y: center.y + half },
+        ],
+      ];
     },
     "c-form": function cForm(center, size) {
       const points = [];
@@ -170,7 +202,8 @@
       selectedBallId: null,
       ui: {
         cleanOutput: false,
-        presentation: new URLSearchParams(global.location.search).get("mode") === "present",
+        presentation:
+          new URLSearchParams(global.location.search).get("mode") === "present",
         shortcutsVisible: false,
         transparentBackground: false,
       },
@@ -219,10 +252,19 @@
       },
     };
 
+    document.querySelectorAll(".tool-panel").forEach(makePanelDraggable);
+
     normalizeSwarmConfig();
     renderer.resize(state.canvas.width, state.canvas.height);
 
     const drawTools = SBE.DrawTools.createDrawTools(canvas, state, {
+      onTranslateSelection: function onTranslateSelection(dx, dy) {
+        translateSelection(dx, dy);
+      },
+      onEraseBall: function (ball) {
+        state.balls = state.balls.filter((b) => b.id !== ball.id);
+        renderFrame();
+      },
       getDraftColor: function getDraftColor() {
         return noteToColor(state.defaults.note);
       },
@@ -231,6 +273,7 @@
       },
       onCreateFreehand: function onCreateFreehand(points) {
         createFreehandStroke(points);
+        renderFrame(); // 🔥 ADD THIS
       },
       onCreateShapeAt: function onCreateShapeAt(point) {
         createShapeAt(point);
@@ -266,6 +309,7 @@
     updateCanvasAspect();
     setViewClasses();
     syncUI();
+    updatePanels(state.tool);
     renderFrame();
     function bindControls() {
       const elements = controls.elements;
@@ -283,18 +327,24 @@
         clearScene();
       });
 
-      elements.exportLoop.addEventListener("click", async function exportLoop() {
-        await exportAllOutputs();
-      });
+      elements.exportLoop.addEventListener(
+        "click",
+        async function exportLoop() {
+          await exportAllOutputs();
+        },
+      );
 
       elements.retakeLoop.addEventListener("click", function retakeLoop() {
         clearLoop();
         armLoopRecording();
       });
 
-      elements.loadExample.addEventListener("click", async function loadExample() {
-        await applyExampleScene();
-      });
+      elements.loadExample.addEventListener(
+        "click",
+        async function loadExample() {
+          await applyExampleScene();
+        },
+      );
 
       elements.bpmInput.addEventListener("input", function updateBpm() {
         state.bpm = clampBpm(Number(elements.bpmInput.value));
@@ -306,74 +356,93 @@
         syncUI();
       });
 
-      elements.quantizeEnabled.addEventListener("change", function toggleQuantize() {
-        const wasEnabled = state.quantize.enabled;
-        state.quantize.enabled = elements.quantizeEnabled.checked;
-        if (wasEnabled && !state.quantize.enabled) {
-          flushQuantizeQueue();
-        }
-      });
+      elements.quantizeEnabled.addEventListener(
+        "change",
+        function toggleQuantize() {
+          const wasEnabled = state.quantize.enabled;
+          state.quantize.enabled = elements.quantizeEnabled.checked;
+          if (wasEnabled && !state.quantize.enabled) {
+            flushQuantizeQueue();
+          }
+        },
+      );
 
-      elements.quantizeDivision.addEventListener("change", function updateQuantizeDivision() {
-        state.quantize.division = Number(elements.quantizeDivision.value) || 0.25;
-      });
+      elements.quantizeDivision.addEventListener(
+        "change",
+        function updateQuantizeDivision() {
+          state.quantize.division =
+            Number(elements.quantizeDivision.value) || 0.25;
+        },
+      );
 
-      elements.transparentBg.addEventListener("change", function toggleTransparentBackground() {
-        state.ui.transparentBackground = elements.transparentBg.checked;
-        renderFrame();
-      });
+      elements.transparentBg.addEventListener(
+        "change",
+        function toggleTransparentBackground() {
+          state.ui.transparentBackground = elements.transparentBg.checked;
+          renderFrame();
+        },
+      );
 
       elements.saveScene.addEventListener("click", function saveScene() {
         SBE.SceneManager.downloadScene(state, "sbe-scene");
       });
 
-      elements.sceneFile.addEventListener("change", async function openScene(event) {
-        const file = event.target.files && event.target.files[0];
-        event.target.value = "";
-        if (!file) {
-          return;
-        }
+      elements.sceneFile.addEventListener(
+        "change",
+        async function openScene(event) {
+          const file = event.target.files && event.target.files[0];
+          event.target.value = "";
+          if (!file) {
+            return;
+          }
 
-        try {
-          pushHistory();
-          await applyScene(await SBE.SceneManager.loadFromFile(file));
-        } catch (error) {
-          controls.elements.engineStatus.textContent = "Open failed";
-        }
-      });
+          try {
+            pushHistory();
+            await applyScene(await SBE.SceneManager.loadFromFile(file));
+          } catch (error) {
+            controls.elements.engineStatus.textContent = "Open failed";
+          }
+        },
+      );
 
-      elements.textFontFile.addEventListener("change", async function loadFont(event) {
-        const file = event.target.files && event.target.files[0];
-        event.target.value = "";
-        if (!file) {
-          return;
-        }
+      elements.textFontFile.addEventListener(
+        "change",
+        async function loadFont(event) {
+          const file = event.target.files && event.target.files[0];
+          event.target.value = "";
+          if (!file) {
+            return;
+          }
 
-        try {
-          state.textDraft.fontFile = await readFileAsDataUrl(file);
-          state.textDraft.fontName = file.name;
-          elements.textFontStatus.textContent = "Loaded font: " + file.name;
-        } catch (error) {
-          controls.elements.engineStatus.textContent = "Font failed";
-        }
-      });
+          try {
+            state.textDraft.fontFile = await readFileAsDataUrl(file);
+            state.textDraft.fontName = file.name;
+            elements.textFontStatus.textContent = "Loaded font: " + file.name;
+          } catch (error) {
+            controls.elements.engineStatus.textContent = "Font failed";
+          }
+        },
+      );
 
-      elements.backgroundFile.addEventListener("change", async function loadBackground(event) {
-        const file = event.target.files && event.target.files[0];
-        event.target.value = "";
-        if (!file) {
-          return;
-        }
+      elements.backgroundFile.addEventListener(
+        "change",
+        async function loadBackground(event) {
+          const file = event.target.files && event.target.files[0];
+          event.target.value = "";
+          if (!file) {
+            return;
+          }
 
-        try {
-          pushHistory();
-          state.backgroundDataUrl = await readFileAsDataUrl(file);
-          state.backgroundImage = await loadImage(state.backgroundDataUrl);
-          renderFrame();
-        } catch (error) {
-          controls.elements.engineStatus.textContent = "BG failed";
-        }
-      });
+          try {
+            pushHistory();
+            state.backgroundDataUrl = await readFileAsDataUrl(file);
+            state.backgroundImage = await loadImage(state.backgroundDataUrl);
+            renderFrame();
+          } catch (error) {
+            controls.elements.engineStatus.textContent = "BG failed";
+          }
+        },
+      );
 
       elements.toolButtons.forEach((button) => {
         button.addEventListener("click", function chooseTool() {
@@ -382,6 +451,10 @@
           }
           state.tool = button.dataset.tool;
           controls.syncTool(state.tool);
+
+          // ✅ ADD THIS
+          updatePanels(state.tool);
+
           if (state.tool !== "text") {
             removeCanvasTextInput(false);
           }
@@ -401,17 +474,26 @@
         });
       });
 
-      elements.lineBehavior.addEventListener("change", function updateBehaviorType() {
-        applyInspectorMetadata();
-      });
+      elements.lineBehavior.addEventListener(
+        "change",
+        function updateBehaviorType() {
+          applyInspectorMetadata();
+        },
+      );
 
-      elements.lineStrength.addEventListener("input", function updateBehaviorStrength() {
-        applyInspectorMetadata(false);
-      });
+      elements.lineStrength.addEventListener(
+        "input",
+        function updateBehaviorStrength() {
+          applyInspectorMetadata(false);
+        },
+      );
 
-      elements.lineThickness.addEventListener("input", function updateThickness() {
-        applyInspectorMetadata(false);
-      });
+      elements.lineThickness.addEventListener(
+        "input",
+        function updateThickness() {
+          applyInspectorMetadata(false);
+        },
+      );
 
       elements.lineColor.addEventListener("input", function syncDisplayColor() {
         const nextNote = findClosestNoteForColor(elements.lineColor.value);
@@ -429,13 +511,20 @@
         });
       });
 
-      elements.textContent.addEventListener("input", function updateTextContent() {
-        state.defaults.textValue = elements.textContent.value;
-        scheduleSelectedTextRefresh();
-      });
+      elements.textContent.addEventListener(
+        "input",
+        function updateTextContent() {
+          state.defaults.textValue = elements.textContent.value;
+          scheduleSelectedTextRefresh();
+        },
+      );
 
       elements.textSize.addEventListener("input", function updateTextSize() {
-        state.defaults.textSize = clampInt(Number(elements.textSize.value), 24, 420);
+        state.defaults.textSize = clampInt(
+          Number(elements.textSize.value),
+          24,
+          420,
+        );
         scheduleSelectedTextRefresh();
       });
 
@@ -451,25 +540,39 @@
         applySelectedTextTransform({ scale: Number(elements.textScale.value) });
       });
 
-      elements.textRotation.addEventListener("input", function updateTextRotation() {
-        applySelectedTextTransform({ rotation: Number(elements.textRotation.value) });
-      });
+      elements.textRotation.addEventListener(
+        "input",
+        function updateTextRotation() {
+          applySelectedTextTransform({
+            rotation: Number(elements.textRotation.value),
+          });
+        },
+      );
 
       elements.centerText.addEventListener("click", function centerText() {
         centerSelectedText();
       });
 
-      elements.duplicateSelection.addEventListener("click", async function duplicateSelection() {
-        await duplicateSelectedObject();
-      });
+      elements.duplicateSelection.addEventListener(
+        "click",
+        async function duplicateSelection() {
+          await duplicateSelectedObject();
+        },
+      );
 
-      elements.deleteSelection.addEventListener("click", function deleteSelection() {
-        deleteSelectionObject();
-      });
+      elements.deleteSelection.addEventListener(
+        "click",
+        function deleteSelection() {
+          deleteSelectionObject();
+        },
+      );
 
-      elements.undoAction.addEventListener("click", async function undoAction() {
-        await undo();
-      });
+      elements.undoAction.addEventListener(
+        "click",
+        async function undoAction() {
+          await undo();
+        },
+      );
 
       elements.ballCount.addEventListener("input", function updateBallCount() {
         state.ballTool.count = clampInt(Number(elements.ballCount.value), 1, 8);
@@ -479,13 +582,23 @@
         state.ballTool.speed = clamp(Number(elements.ballSpeed.value), 0.4, 3);
       });
 
-      elements.ballSpread.addEventListener("input", function updateBallSpread() {
-        state.ballTool.spread = clamp(Number(elements.ballSpread.value), 0, 1);
-      });
+      elements.ballSpread.addEventListener(
+        "input",
+        function updateBallSpread() {
+          state.ballTool.spread = clamp(
+            Number(elements.ballSpread.value),
+            0,
+            1,
+          );
+        },
+      );
 
-      elements.closeShortcuts.addEventListener("click", function closeShortcuts() {
-        toggleShortcuts(false);
-      });
+      elements.closeShortcuts.addEventListener(
+        "click",
+        function closeShortcuts() {
+          toggleShortcuts(false);
+        },
+      );
 
       global.addEventListener("keydown", async function onKeyDown(event) {
         if (textEditor && event.key === "Escape") {
@@ -523,16 +636,22 @@
           }
           state.tool = "draw";
           syncUI();
+          updatePanels(state.tool);
           return;
         }
-        if (event.key.toLowerCase() === "s" && !(event.metaKey || event.ctrlKey)) {
+        if (
+          event.key.toLowerCase() === "s" &&
+          !(event.metaKey || event.ctrlKey)
+        ) {
           state.tool = "shape";
           syncUI();
+          updatePanels(state.tool);
           return;
         }
         if (event.key.toLowerCase() === "t") {
           state.tool = "text";
           syncUI();
+          updatePanels(state.tool);
           return;
         }
         if (event.key.toLowerCase() === "b") {
@@ -570,7 +689,9 @@
       const lines = (scene.lines || []).map((line) =>
         normalizeLineObject(SBE.LineSystem.hydrateLine(line)),
       );
-      const texts = await SBE.TextSystem.hydrateTextObjects(scene.textObjects || []);
+      const texts = await SBE.TextSystem.hydrateTextObjects(
+        scene.textObjects || [],
+      );
       state.lines = lines;
       state.textObjects = texts.map(normalizeTextObject);
       state.canvas.width = 1080;
@@ -598,7 +719,8 @@
     }
 
     function updateCanvasAspect() {
-      canvasWrap.style.aspectRatio = state.canvas.width + " / " + state.canvas.height;
+      canvasWrap.style.aspectRatio =
+        state.canvas.width + " / " + state.canvas.height;
     }
 
     function syncUI() {
@@ -609,6 +731,48 @@
       controls.syncShortcutVisibility(state.ui.shortcutsVisible);
     }
 
+    function updatePanels(tool) {
+      const panels = document.querySelectorAll(".tool-panel");
+
+      panels.forEach((p) => (p.style.display = "none"));
+
+      const map = {
+        draw: "#draw-panel",
+        shape: "#shape-panel",
+        text: "#text-panel",
+      };
+
+      if (map[tool]) {
+        const el = document.querySelector(map[tool]);
+        if (el) el.style.display = "block";
+      }
+    }
+    function makePanelDraggable(el) {
+      let isDragging = false;
+      let offsetX = 0;
+      let offsetY = 0;
+
+      el.style.position = "absolute";
+
+      el.addEventListener("pointerdown", (e) => {
+        isDragging = true;
+        offsetX = e.clientX - el.offsetLeft;
+        offsetY = e.clientY - el.offsetTop;
+        el.setPointerCapture(e.pointerId);
+      });
+
+      el.addEventListener("pointermove", (e) => {
+        if (!isDragging) return;
+
+        el.style.left = e.clientX - offsetX + "px";
+        el.style.top = e.clientY - offsetY + "px";
+      });
+
+      el.addEventListener("pointerup", () => {
+        isDragging = false;
+      });
+    }
+
     function syncSelectionPanel() {
       const selection = getSelectedObject();
       const activeNote = selection ? selection.midi.note : state.defaults.note;
@@ -617,15 +781,23 @@
 
     function getSelectedObject() {
       if (state.selectedBallId) {
-        return state.balls.find((ball) => ball.id === state.selectedBallId) || null;
+        return (
+          state.balls.find((ball) => ball.id === state.selectedBallId) || null
+        );
       }
 
       if (state.selectedLineId) {
-        return state.lines.find((line) => line.id === state.selectedLineId) || null;
+        return (
+          state.lines.find((line) => line.id === state.selectedLineId) || null
+        );
       }
 
       if (state.selectedTextId) {
-        return state.textObjects.find((textObject) => textObject.id === state.selectedTextId) || null;
+        return (
+          state.textObjects.find(
+            (textObject) => textObject.id === state.selectedTextId,
+          ) || null
+        );
       }
 
       return null;
@@ -671,7 +843,8 @@
         return;
       }
 
-      const shapeFactory = SHAPE_LIBRARY[state.selectedShape] || SHAPE_LIBRARY.circle;
+      const shapeFactory =
+        SHAPE_LIBRARY[state.selectedShape] || SHAPE_LIBRARY.circle;
       const paths = shapeFactory(point, 240);
       const segments = [];
 
@@ -692,12 +865,17 @@
       let lastId = null;
 
       segments.forEach((segment) => {
-        const length = Math.hypot(segment.x2 - segment.x1, segment.y2 - segment.y1);
-        if (length < 6) {
-          return;
-        }
+        const length = Math.hypot(
+          segment.x2 - segment.x1,
+          segment.y2 - segment.y1,
+        );
 
-        const line = normalizeLineObject(SBE.LineSystem.createLine(segment, settings));
+        if (length < 2) return;
+
+        const line = normalizeLineObject(
+          SBE.LineSystem.createLine(segment, settings),
+        );
+
         state.lines.push(line);
         lastId = line.id;
       });
@@ -705,7 +883,9 @@
       if (lastId) {
         selectObject("line", lastId);
       }
+
       syncUI();
+      renderFrame(); // ✅ THIS FIXES DRAW
     }
 
     function beginCanvasTextInput(point) {
@@ -720,16 +900,28 @@
 
       removeCanvasTextInput(false);
       const rect = canvas.getBoundingClientRect();
+      const elAspect = rect.width / rect.height;
+      const cvAspect = canvas.width / canvas.height;
+      let cLeft, cTop, cWidth, cHeight;
+      if (cvAspect > elAspect) {
+        cWidth = rect.width;
+        cHeight = rect.width / cvAspect;
+        cLeft = rect.left;
+        cTop = rect.top + (rect.height - cHeight) * 0.5;
+      } else {
+        cHeight = rect.height;
+        cWidth = rect.height * cvAspect;
+        cLeft = rect.left + (rect.width - cWidth) * 0.5;
+        cTop = rect.top;
+      }
       const input = document.createElement("input");
       input.type = "text";
       input.value = state.defaults.textValue || "";
       input.placeholder = "Type";
       input.className = "canvas-text-input";
       input.style.position = "fixed";
-      input.style.left =
-        rect.left + (point.x / canvas.width) * rect.width - 10 + "px";
-      input.style.top =
-        rect.top + (point.y / canvas.height) * rect.height - 18 + "px";
+      input.style.left = cLeft + (point.x / canvas.width) * cWidth - 10 + "px";
+      input.style.top = cTop + (point.y / canvas.height) * cHeight - 18 + "px";
       input.style.zIndex = "60";
       input.style.minWidth = "180px";
       input.style.padding = "10px 12px";
@@ -737,7 +929,8 @@
       input.style.border = "1px solid rgba(255,255,255,0.14)";
       input.style.background = "rgba(12,14,18,0.92)";
       input.style.color = "#eff2f6";
-      input.style.font = '600 18px Inter, "Helvetica Neue", Helvetica, Arial, sans-serif';
+      input.style.font =
+        '600 18px Inter, "Helvetica Neue", Helvetica, Arial, sans-serif';
 
       input.addEventListener("keydown", function onInputKeyDown(event) {
         if (event.key === "Enter") {
@@ -787,7 +980,10 @@
       state.defaults.textValue = value;
       const textSettings = createTextSettings(point, value);
       const textObject = normalizeTextObject(
-        await SBE.TextSystem.createTextObject(textSettings, createLineSettingsFromInspector()),
+        await SBE.TextSystem.createTextObject(
+          textSettings,
+          createLineSettingsFromInspector(),
+        ),
       );
       state.textObjects.push(textObject);
       selectObject("text", textObject.id);
@@ -910,7 +1106,9 @@
       } else if (selected.type === "line") {
         state.lines = state.lines.filter((line) => line.id !== selected.id);
       } else {
-        state.textObjects = state.textObjects.filter((text) => text.id !== selected.id);
+        state.textObjects = state.textObjects.filter(
+          (text) => text.id !== selected.id,
+        );
       }
       clearSelection();
       syncUI();
@@ -945,7 +1143,9 @@
         rawText.id = undefined;
         rawText.transform.x += 20;
         rawText.transform.y += 20;
-        const text = normalizeTextObject(await SBE.TextSystem.hydrateTextObject(rawText));
+        const text = normalizeTextObject(
+          await SBE.TextSystem.hydrateTextObject(rawText),
+        );
         state.textObjects.push(text);
         selectObject("text", text.id);
       }
@@ -995,7 +1195,11 @@
     function readInspectorPatch() {
       return {
         note: clampInt(Number(controls.elements.activeNote.value), 0, 127),
-        thickness: clampInt(Number(controls.elements.lineThickness.value), 1, 24),
+        thickness: clampInt(
+          Number(controls.elements.lineThickness.value),
+          1,
+          24,
+        ),
         behaviorType:
           controls.elements.lineBehavior.value === "none"
             ? "normal"
@@ -1034,8 +1238,10 @@
 
     function applyNoteClass(noteClass, octaveHint) {
       const selected = getSelectedObject();
-      const baseNote = selected && selected.midi ? selected.midi.note : state.defaults.note;
-      const octave = typeof octaveHint === "number" ? octaveHint : Math.floor(baseNote / 12);
+      const baseNote =
+        selected && selected.midi ? selected.midi.note : state.defaults.note;
+      const octave =
+        typeof octaveHint === "number" ? octaveHint : Math.floor(baseNote / 12);
       const note = clampInt(octave * 12 + noteClass, 0, 127);
       state.defaults.note = note;
       controls.elements.activeNote.value = String(note);
@@ -1361,12 +1567,23 @@
       }
 
       const activeForceLines = state.lines.concat(
-        SBE.TextSystem ? SBE.TextSystem.getCollisionLines(state.textObjects || []) : [],
+        SBE.TextSystem
+          ? SBE.TextSystem.getCollisionLines(state.textObjects || [])
+          : [],
       );
-      SBE.EnginePhysics.applyForces(state.balls, activeForceLines, state.swarm, dt);
+      SBE.EnginePhysics.applyForces(
+        state.balls,
+        activeForceLines,
+        state.swarm,
+        dt,
+      );
       SBE.EnginePhysics.updateSwarm(state.balls, dt);
       const collisions = SBE.Collision.detectCollisions(state, now);
-      const midiEvents = SBE.Collision.resolveCollisions(state, collisions, now);
+      const midiEvents = SBE.Collision.resolveCollisions(
+        state,
+        collisions,
+        now,
+      );
       stabilizeBalls(collisions);
       midiEvents.forEach(dispatchMidiEvent);
     }
@@ -1503,7 +1720,11 @@
     }
 
     async function exportAudio() {
-      if (!state.loop.hasLoop || !state.loop.events.length || !global.OfflineAudioContext) {
+      if (
+        !state.loop.hasLoop ||
+        !state.loop.events.length ||
+        !global.OfflineAudioContext
+      ) {
         return;
       }
 
@@ -1535,7 +1756,9 @@
         18,
       );
       state.swarm.renderRadius = clamp(
-        Number(state.swarm.renderRadius || state.swarm.collisionRadius * 2.3 || 14),
+        Number(
+          state.swarm.renderRadius || state.swarm.collisionRadius * 2.3 || 14,
+        ),
         state.swarm.collisionRadius,
         28,
       );
@@ -1546,7 +1769,12 @@
     function normalizeBall(ball) {
       ball.id = ball.id || createBallId();
       ball.collisionRadius = clamp(
-        Number(ball.collisionRadius || ball.radius || state.swarm.collisionRadius || 6),
+        Number(
+          ball.collisionRadius ||
+            ball.radius ||
+            state.swarm.collisionRadius ||
+            6,
+        ),
         2,
         18,
       );
@@ -1568,7 +1796,10 @@
       const dy = endPoint.y - startPoint.y;
       const baseAngle = Math.atan2(dy, dx || 0.0001);
       const magnitude = Math.hypot(dx, dy);
-      const baseSpeed = Math.min(420, Math.max(60, magnitude * 3 * state.ballTool.speed));
+      const baseSpeed = Math.min(
+        420,
+        Math.max(60, magnitude * 3 * state.ballTool.speed),
+      );
       const spawnDistance = baseSpeed / 3;
       const balls = [];
 
@@ -1597,7 +1828,10 @@
       const counts = new Map();
       collisions.forEach((collision) => {
         if (collision && collision.ball) {
-          counts.set(collision.ball.id, (counts.get(collision.ball.id) || 0) + 1);
+          counts.set(
+            collision.ball.id,
+            (counts.get(collision.ball.id) || 0) + 1,
+          );
         }
       });
 
@@ -1632,6 +1866,12 @@
     }
 
     function normalizeLineObject(line) {
+      if (!line.x1 && line.segment) {
+        line.x1 = Number(line.x1);
+        line.y1 = Number(line.y1);
+        line.x2 = Number(line.x2);
+        line.y2 = Number(line.y2);
+      }
       line.type = "line";
       line.style = line.style || {};
       line.midi = line.midi || {};
@@ -1640,12 +1880,16 @@
       line.midi.note =
         typeof line.midi.note === "number" ? line.midi.note : line.note || 60;
       line.midi.channel =
-        typeof line.midi.channel === "number" ? line.midi.channel : line.midiChannel || 1;
+        typeof line.midi.channel === "number"
+          ? line.midi.channel
+          : line.midiChannel || 1;
       line.style.color = line.color || noteToColor(line.midi.note);
       line.style.thickness = line.thickness || 5;
       line.behavior.type = line.behavior.type || "normal";
       line.behavior.strength =
-        typeof line.behavior.strength === "number" ? line.behavior.strength : 1.4;
+        typeof line.behavior.strength === "number"
+          ? line.behavior.strength
+          : 1.4;
       line.color = line.style.color;
       line.thickness = line.style.thickness;
       line.note = line.midi.note;
@@ -1666,12 +1910,15 @@
       textObject.behavior = textObject.behavior || {};
       textObject.gravity = textObject.gravity || {};
       textObject.midi.note =
-        typeof textObject.midi.note === "number" ? textObject.midi.note : textObject.note || 60;
+        typeof textObject.midi.note === "number"
+          ? textObject.midi.note
+          : textObject.note || 60;
       textObject.midi.channel =
         typeof textObject.midi.channel === "number"
           ? textObject.midi.channel
           : textObject.midiChannel || 1;
-      textObject.style.color = textObject.color || noteToColor(textObject.midi.note);
+      textObject.style.color =
+        textObject.color || noteToColor(textObject.midi.note);
       textObject.style.thickness = textObject.thickness || 5;
       textObject.color = textObject.style.color;
       textObject.thickness = textObject.style.thickness;
@@ -1718,7 +1965,10 @@
     const result = [points[0]];
     let last = points[0];
     for (let index = 1; index < points.length - 1; index += 1) {
-      if (Math.hypot(points[index].x - last.x, points[index].y - last.y) >= threshold) {
+      if (
+        Math.hypot(points[index].x - last.x, points[index].y - last.y) >=
+        threshold
+      ) {
         result.push(points[index]);
         last = points[index];
       }
@@ -1802,7 +2052,11 @@
 
   function encodeWav(audioBuffer) {
     const channels = [];
-    for (let channel = 0; channel < audioBuffer.numberOfChannels; channel += 1) {
+    for (
+      let channel = 0;
+      channel < audioBuffer.numberOfChannels;
+      channel += 1
+    ) {
       channels.push(audioBuffer.getChannelData(channel));
     }
 
@@ -1817,7 +2071,11 @@
     view.setUint16(20, 1, true);
     view.setUint16(22, audioBuffer.numberOfChannels, true);
     view.setUint32(24, audioBuffer.sampleRate, true);
-    view.setUint32(28, audioBuffer.sampleRate * audioBuffer.numberOfChannels * 2, true);
+    view.setUint32(
+      28,
+      audioBuffer.sampleRate * audioBuffer.numberOfChannels * 2,
+      true,
+    );
     view.setUint16(32, audioBuffer.numberOfChannels * 2, true);
     view.setUint16(34, 16, true);
     writeString(view, 36, "data");
@@ -1826,7 +2084,11 @@
     let offset = 44;
     for (let index = 0; index < interleaved.length; index += 1) {
       const sample = Math.max(-1, Math.min(1, interleaved[index]));
-      view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
+      view.setInt16(
+        offset,
+        sample < 0 ? sample * 0x8000 : sample * 0x7fff,
+        true,
+      );
       offset += 2;
     }
 
@@ -1903,8 +2165,11 @@
   }
 
   function isTypingTarget(target) {
-    const tagName = target && target.tagName ? target.tagName.toLowerCase() : "";
-    return tagName === "input" || tagName === "textarea" || tagName === "select";
+    const tagName =
+      target && target.tagName ? target.tagName.toLowerCase() : "";
+    return (
+      tagName === "input" || tagName === "textarea" || tagName === "select"
+    );
   }
 
   function wait(milliseconds) {

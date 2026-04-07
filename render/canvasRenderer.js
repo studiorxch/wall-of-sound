@@ -1,279 +1,118 @@
-(function initRenderer(global) {
+(function initCanvasRenderer(global) {
   const SBE = (global.SBE = global.SBE || {});
 
-  function CanvasRenderer(canvas) {
-    this.canvas = canvas;
-    this.context = canvas.getContext("2d");
-  }
-
-  CanvasRenderer.prototype.resize = function resize(width, height) {
-    this.canvas.width = width;
-    this.canvas.height = height;
-  };
-
-  CanvasRenderer.prototype.render = function render(state, overlays) {
-    const context = this.context;
-    context.clearRect(0, 0, this.canvas.width, this.canvas.height);
-
-    drawBackground(context, state);
-    drawTextObjects(
-      context,
-      state.textObjects || [],
-      state.selectedTextId,
-      isClean(state),
-    );
-    drawLines(context, state.lines, state.selectedLineId, isClean(state));
-    drawBalls(context, state.balls, state.swarm.color, state.selectedBallId, isClean(state));
-    drawDraft(context, overlays, isClean(state));
-  };
-
-  function drawTextObjects(context, textObjects, selectedTextId, cleanOutput) {
-    const now = performance.now();
-
-    textObjects.forEach((textObject) => {
-      if (!textObject.geometry || !textObject.geometry.bounds) {
-        return;
+  class CanvasRenderer {
+    constructor(canvas) {
+      if (!canvas) {
+        throw new Error("CanvasRenderer requires a canvas element");
       }
 
-      context.save();
-      applyTextTransform(context, textObject);
+      this.canvas = canvas;
+      this.ctx = canvas.getContext("2d");
+      this.width = canvas.width;
+      this.height = canvas.height;
+    }
 
-      textObject.geometry.letters.forEach((letter) => {
-        if (!letter.path2d) {
-          return;
-        }
+    resize(width, height) {
+      this.canvas.width = width;
+      this.canvas.height = height;
+      this.width = width;
+      this.height = height;
+    }
 
-        let fillColor = textObject.color;
-        let strokeColor = textObject.color;
-        let alpha = 0.8;
-        let strokeWidth = Math.max(1, textObject.thickness * 0.35);
-        let shadowBlur = 0;
-        const highlightAt =
-          textObject.interaction.mode === "letter"
-            ? letter.lastHitAt
-            : textObject.lastHitAt;
+    clear(state) {
+      const ctx = this.ctx;
 
-        if (highlightAt) {
-          const elapsed = now - highlightAt;
-          if (elapsed < 180) {
-            const t = 1 - elapsed / 180;
-            fillColor = "#ffffff";
-            strokeColor = "#ffffff";
-            alpha = Math.max(alpha, 0.55 + t * 0.4);
-            strokeWidth += t * 2.5;
-            shadowBlur = 2 + t * 4;
-          }
-        }
+      if (state?.ui?.transparentBackground) {
+        ctx.clearRect(0, 0, this.width, this.height);
+      } else {
+        ctx.fillStyle = "#090a0c";
+        ctx.fillRect(0, 0, this.width, this.height);
+      }
+    }
 
-        context.save();
-        context.fillStyle = fillColor;
-        context.strokeStyle = strokeColor;
-        context.globalAlpha = alpha;
-        context.lineWidth = strokeWidth;
-        if (shadowBlur > 0) {
-          context.shadowColor = strokeColor;
-          context.shadowBlur = shadowBlur;
-        }
-        context.fill(letter.path2d);
-        context.stroke(letter.path2d);
-        context.restore();
+    drawLines(lines) {
+      const ctx = this.ctx;
+
+      lines.forEach((line) => {
+        if (!line) return;
+
+        const color = line.style?.color || line.color || "#ffffff";
+        const thickness = line.style?.thickness || line.thickness || 2;
+
+        // FIX: ensure visibility even if life missing
+        const life = typeof line.life === "number" ? line.life : 9999;
+        const alpha = life > 0 ? 0.9 : 0.25;
+
+        ctx.globalAlpha = alpha;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = thickness;
+
+        ctx.beginPath();
+        ctx.moveTo(line.x1, line.y1);
+        ctx.lineTo(line.x2, line.y2);
+        ctx.stroke();
       });
 
-      if (textObject.id === selectedTextId && !cleanOutput) {
-        const bounds = textObject.geometry.bounds;
-        context.save();
-        context.strokeStyle = "rgba(255,255,255,0.72)";
-        context.lineWidth = 2;
-        context.setLineDash([10, 8]);
-        context.strokeRect(
-          bounds.minX,
-          bounds.minY,
-          bounds.width || 1,
-          bounds.height || 1,
+      ctx.globalAlpha = 1;
+    }
+
+    drawBalls(balls) {
+      const ctx = this.ctx;
+
+      balls.forEach((ball) => {
+        if (!ball) return;
+
+        ctx.fillStyle = ball.color || "#f3f2ef";
+
+        ctx.beginPath();
+        ctx.arc(ball.x, ball.y, ball.renderRadius || 6, 0, Math.PI * 2);
+        ctx.fill();
+      });
+    }
+
+    drawOverlay(overlays) {
+      const ctx = this.ctx;
+
+      if (!overlays) return;
+
+      // preview stroke
+      if (overlays.previewStroke?.length) {
+        ctx.strokeStyle = "#ffffff";
+        ctx.lineWidth = 2;
+        ctx.globalAlpha = 0.5;
+
+        ctx.beginPath();
+        overlays.previewStroke.forEach((p, i) => {
+          if (i === 0) ctx.moveTo(p.x, p.y);
+          else ctx.lineTo(p.x, p.y);
+        });
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+    }
+
+    render(state, overlays) {
+      if (!this.ctx) return;
+
+      this.clear(state);
+
+      if (state.backgroundImage) {
+        this.ctx.drawImage(
+          state.backgroundImage,
+          0,
+          0,
+          this.width,
+          this.height,
         );
-        context.restore();
       }
 
-      context.restore();
-    });
-  }
-
-  function drawBackground(context, state) {
-    if (!state.ui || !state.ui.transparentBackground) {
-      context.fillStyle = "#090a0c";
-      context.fillRect(0, 0, state.canvas.width, state.canvas.height);
-    }
-
-    if (state.backgroundImage) {
-      context.save();
-      context.globalAlpha = 0.32;
-      context.drawImage(
-        state.backgroundImage,
-        0,
-        0,
-        state.canvas.width,
-        state.canvas.height,
-      );
-      context.restore();
-    }
-
-    if (!isClean(state)) {
-      const gradient = context.createLinearGradient(0, 0, 0, state.canvas.height);
-      gradient.addColorStop(0, "rgba(255,255,255,0.04)");
-      gradient.addColorStop(1, "rgba(255,255,255,0)");
-      context.fillStyle = gradient;
-      context.fillRect(0, 0, state.canvas.width, state.canvas.height);
+      this.drawLines(state.lines || []);
+      this.drawBalls(state.balls || []);
+      this.drawOverlay(overlays);
     }
   }
 
-  function drawLines(context, lines, selectedLineId, cleanOutput) {
-    const now = performance.now();
-
-    lines.forEach((line) => {
-      context.save();
-
-      context.lineCap = "round";
-
-      // --- BASE STYLE ---
-      let strokeColor = line.color;
-      let alpha = line.life > 0 ? 0.9 : 0.25;
-      let thickness = line.thickness;
-      let shadowBlur = 0;
-
-      // --- 🔥 HIGHLIGHT LOGIC ---
-      if (line.lastHitAt) {
-        const duration = (line.interaction && line.interaction.duration) || 140;
-        const highlightColor =
-          (line.interaction && line.interaction.highlightColor) || "#ffffff";
-
-        const elapsed = now - line.lastHitAt;
-
-        if (elapsed < duration) {
-          const t = 1 - elapsed / duration;
-
-          strokeColor = highlightColor;
-          alpha = Math.max(alpha, t * 0.95);
-
-          // optional visual punch
-          thickness = line.thickness + t * 3;
-          shadowBlur = 0;
-        }
-      }
-
-      context.lineWidth = thickness;
-      context.strokeStyle = strokeColor;
-      context.globalAlpha = alpha;
-
-      if (shadowBlur > 0) {
-        context.shadowColor = strokeColor;
-        context.shadowBlur = shadowBlur;
-      }
-
-      context.beginPath();
-      context.moveTo(line.x1, line.y1);
-      context.lineTo(line.x2, line.y2);
-      context.stroke();
-
-      // --- selection overlay ---
-      if (line.id === selectedLineId && !cleanOutput) {
-        context.strokeStyle = "rgba(255,255,255,0.9)";
-        context.lineWidth = thickness + 4;
-        context.globalAlpha = 0.25;
-        context.stroke();
-      }
-
-      context.restore();
-    });
-  }
-
-  function drawBalls(context, balls, color, selectedBallId, cleanOutput) {
-    balls.forEach((ball) => {
-      const renderRadius = ball.renderRadius || ball.radius;
-      const collisionRadius = ball.collisionRadius || ball.radius;
-      const alpha = 0.72 + ball.energy * 0.14;
-
-      context.save();
-
-      if (ball.style === "solid") {
-        context.fillStyle = color;
-        context.globalAlpha = alpha;
-        context.beginPath();
-        context.arc(ball.x, ball.y, renderRadius, 0, Math.PI * 2);
-        context.fill();
-      } else {
-        context.strokeStyle = color;
-        context.globalAlpha = alpha;
-        context.lineWidth = Math.max(1.5, renderRadius - collisionRadius);
-        context.beginPath();
-        context.arc(ball.x, ball.y, Math.max(collisionRadius, renderRadius - context.lineWidth * 0.5), 0, Math.PI * 2);
-        context.stroke();
-        context.fillStyle = color;
-        context.globalAlpha = 0.92;
-        context.beginPath();
-        context.arc(ball.x, ball.y, Math.max(1.5, collisionRadius * 0.6), 0, Math.PI * 2);
-        context.fill();
-      }
-
-      if (ball.id === selectedBallId && !cleanOutput) {
-        context.strokeStyle = "rgba(255,255,255,0.8)";
-        context.lineWidth = 2;
-        context.setLineDash([8, 6]);
-        context.beginPath();
-        context.arc(ball.x, ball.y, renderRadius + 6, 0, Math.PI * 2);
-        context.stroke();
-      }
-
-      context.restore();
-    });
-  }
-
-  function drawDraft(context, overlays, cleanOutput) {
-    if (cleanOutput) {
-      return;
-    }
-
-    if (overlays && overlays.previewStroke && overlays.previewStroke.length > 1) {
-      context.save();
-      context.lineWidth = 3;
-      context.strokeStyle = "#ffffff";
-      context.globalAlpha = 0.85;
-      context.lineCap = "round";
-      context.lineJoin = "round";
-      context.beginPath();
-      context.moveTo(overlays.previewStroke[0].x, overlays.previewStroke[0].y);
-      for (let index = 1; index < overlays.previewStroke.length; index += 1) {
-        context.lineTo(overlays.previewStroke[index].x, overlays.previewStroke[index].y);
-      }
-      context.stroke();
-      context.restore();
-    }
-
-    if (overlays && overlays.ballVector) {
-      context.save();
-      context.strokeStyle = "rgba(255,255,255,0.72)";
-      context.lineWidth = 2;
-      context.setLineDash([8, 6]);
-      context.beginPath();
-      context.moveTo(overlays.ballVector.x1, overlays.ballVector.y1);
-      context.lineTo(overlays.ballVector.x2, overlays.ballVector.y2);
-      context.stroke();
-      context.restore();
-    }
-  }
-
-  function applyTextTransform(context, textObject) {
-    context.translate(textObject.transform.x, textObject.transform.y);
-    context.rotate((textObject.transform.rotation * Math.PI) / 180);
-    context.scale(textObject.transform.scale, textObject.transform.scale);
-    context.translate(
-      -textObject.geometry.bounds.centerX,
-      -textObject.geometry.bounds.centerY,
-    );
-  }
-
+  // ✅ THIS is the critical line you were missing/breaking
   SBE.CanvasRenderer = CanvasRenderer;
-
-  function isClean(state) {
-    return !!(state && state.ui && (state.ui.cleanOutput || state.ui.presentation));
-  }
 })(window);
