@@ -21,7 +21,15 @@
     </div>
 
     <div id="transport" class="floating-transport">
-      <input id="bpm-input" type="number" min="60" max="180" step="0.1" value="120.0" aria-label="BPM" />
+      <input
+        id="bpm-input"
+        type="number"
+        min="60"
+        max="180"
+        step="0.1"
+        value="120.0"
+        aria-label="BPM"
+      />
       <select id="bar-count" aria-label="Bars">
         <option value="8">8 Bars</option>
         <option value="16">16 Bars</option>
@@ -66,9 +74,13 @@
     </div>
 
     <div id="toolbar" class="floating-toolbar">
-      <button class="tool active" data-tool="select" aria-label="Select tool">Select</button>
+      <button class="tool active" data-tool="select" aria-label="Select tool">
+        Select
+      </button>
       <button class="tool" data-tool="draw" aria-label="Draw tool">Draw</button>
-      <button class="tool" data-tool="shape" aria-label="Shape tool">Shape</button>
+      <button class="tool" data-tool="shape" aria-label="Shape tool">
+        Shape
+      </button>
       <button class="tool" data-tool="text" aria-label="Text tool">Text</button>
       <button class="tool" data-tool="ball" aria-label="Ball tool">Ball</button>
     </div>
@@ -91,43 +103,106 @@
     <aside id="ball-panel" class="floating-mini-panel hidden ball-panel">
       <label class="field compact">
         <span>Count</span>
-        <input id="ball-count" type="range" min="1" max="8" step="1" value="1" />
+        <input
+          id="ball-count"
+          type="range"
+          min="1"
+          max="8"
+          step="1"
+          value="1"
+        />
         <output id="ball-count-value">1</output>
       </label>
       <label class="field compact">
         <span>Speed</span>
-        <input id="ball-speed" type="range" min="0.4" max="3" step="0.1" value="1" />
+        <input
+          id="ball-speed"
+          type="range"
+          min="0.4"
+          max="3"
+          step="0.1"
+          value="1"
+        />
         <output id="ball-speed-value">1.0</output>
       </label>
       <label class="field compact">
         <span>Spread</span>
-        <input id="ball-spread" type="range" min="0" max="1" step="0.05" value="0.15" />
+        <input
+          id="ball-spread"
+          type="range"
+          min="0"
+          max="1"
+          step="0.05"
+          value="0.15"
+        />
         <output id="ball-spread-value">0.15</output>
       </label>
     </aside>
 
     <aside id="inspector" class="floating-inspector hidden">
       <section class="inspector-block text-block" id="text-inspector-block">
-        <input id="text-content" type="text" value="SWARM" placeholder="Content" />
+        <input
+          id="text-content"
+          type="text"
+          value="SWARM"
+          placeholder="Content"
+        />
         <div class="compact-grid three">
-          <input id="text-x" type="number" min="-4000" max="4000" step="1" value="540" placeholder="X" />
-          <input id="text-y" type="number" min="-4000" max="4000" step="1" value="960" placeholder="Y" />
+          <input
+            id="text-x"
+            type="number"
+            min="-4000"
+            max="4000"
+            step="1"
+            value="540"
+            placeholder="X"
+          />
+          <input
+            id="text-y"
+            type="number"
+            min="-4000"
+            max="4000"
+            step="1"
+            value="960"
+            placeholder="Y"
+          />
           <button id="center-text" type="button">Center</button>
         </div>
         <div class="compact-grid three">
           <label class="field compact">
             <span>Size</span>
-            <input id="text-size" type="range" min="24" max="420" step="1" value="160" />
+            <input
+              id="text-size"
+              type="range"
+              min="24"
+              max="420"
+              step="1"
+              value="160"
+            />
             <output id="text-size-value">160</output>
           </label>
           <label class="field compact">
             <span>Scale</span>
-            <input id="text-scale" type="range" min="0.1" max="8" step="0.1" value="1" />
+            <input
+              id="text-scale"
+              type="range"
+              min="0.1"
+              max="8"
+              step="0.1"
+              value="1"
+            />
             <output id="text-scale-value">1.0</output>
           </label>
           <label class="field compact">
             <span>Rotation</span>
-            <input id="text-rotation" type="range" min="-180" max="180" step="1" value="0" />
+            <input
+              id="text-rotation"
+              type="range"
+              min="-180"
+              max="180"
+              step="1"
+              value="0"
+            />
             <output id="text-rotation-value">0</output>
           </label>
         </div>
@@ -137,17 +212,29 @@
         <p class="micro-title">MIDI</p>
         <div id="note-grid" class="note-grid">
           <button class="note-cell" type="button" data-note-class="0">C</button>
-          <button class="note-cell" type="button" data-note-class="1">C#</button>
+          <button class="note-cell" type="button" data-note-class="1">
+            C#
+          </button>
           <button class="note-cell" type="button" data-note-class="2">D</button>
-          <button class="note-cell" type="button" data-note-class="3">D#</button>
+          <button class="note-cell" type="button" data-note-class="3">
+            D#
+          </button>
           <button class="note-cell" type="button" data-note-class="4">E</button>
           <button class="note-cell" type="button" data-note-class="5">F</button>
-          <button class="note-cell" type="button" data-note-class="6">F#</button>
+          <button class="note-cell" type="button" data-note-class="6">
+            F#
+          </button>
           <button class="note-cell" type="button" data-note-class="7">G</button>
-          <button class="note-cell" type="button" data-note-class="8">G#</button>
+          <button class="note-cell" type="button" data-note-class="8">
+            G#
+          </button>
           <button class="note-cell" type="button" data-note-class="9">A</button>
-          <button class="note-cell" type="button" data-note-class="10">A#</button>
-          <button class="note-cell" type="button" data-note-class="11">B</button>
+          <button class="note-cell" type="button" data-note-class="10">
+            A#
+          </button>
+          <button class="note-cell" type="button" data-note-class="11">
+            B
+          </button>
         </div>
       </section>
 
@@ -162,7 +249,14 @@
           </select>
           <label class="field compact">
             <span>Strength</span>
-            <input id="line-strength" type="range" min="0" max="5" step="0.1" value="1.4" />
+            <input
+              id="line-strength"
+              type="range"
+              min="0"
+              max="5"
+              step="0.1"
+              value="1.4"
+            />
             <output id="line-strength-value">1.4</output>
           </label>
         </div>
@@ -171,26 +265,99 @@
       <section class="inspector-block">
         <p class="micro-title">Appearance</p>
         <div class="compact-grid two">
-          <input id="line-color" type="color" value="#ff4b4b" aria-label="Color" disabled />
+          <input
+            id="line-color"
+            type="color"
+            value="#ff4b4b"
+            aria-label="Color"
+            disabled
+          />
           <label class="field compact">
             <span>Outline</span>
-            <input id="line-thickness" type="range" min="1" max="24" step="1" value="5" />
+            <input
+              id="line-thickness"
+              type="range"
+              min="1"
+              max="24"
+              step="1"
+              value="5"
+            />
             <output id="line-thickness-value">5</output>
           </label>
         </div>
         <div class="swatch-grid">
-          <button class="swatch" type="button" data-color="#ff4b4b" style="--swatch:#ff4b4b"></button>
-          <button class="swatch" type="button" data-color="#ff6d39" style="--swatch:#ff6d39"></button>
-          <button class="swatch" type="button" data-color="#ff9b1f" style="--swatch:#ff9b1f"></button>
-          <button class="swatch" type="button" data-color="#ffbf2f" style="--swatch:#ffbf2f"></button>
-          <button class="swatch" type="button" data-color="#e5df45" style="--swatch:#e5df45"></button>
-          <button class="swatch" type="button" data-color="#b9e54f" style="--swatch:#b9e54f"></button>
-          <button class="swatch" type="button" data-color="#35cb68" style="--swatch:#35cb68"></button>
-          <button class="swatch" type="button" data-color="#26d3a6" style="--swatch:#26d3a6"></button>
-          <button class="swatch" type="button" data-color="#2cc7dc" style="--swatch:#2cc7dc"></button>
-          <button class="swatch" type="button" data-color="#498cff" style="--swatch:#498cff"></button>
-          <button class="swatch" type="button" data-color="#7a62ff" style="--swatch:#7a62ff"></button>
-          <button class="swatch" type="button" data-color="#ff59cb" style="--swatch:#ff59cb"></button>
+          <button
+            class="swatch"
+            type="button"
+            data-color="#ff4b4b"
+            style="--swatch: #ff4b4b"
+          ></button>
+          <button
+            class="swatch"
+            type="button"
+            data-color="#ff6d39"
+            style="--swatch: #ff6d39"
+          ></button>
+          <button
+            class="swatch"
+            type="button"
+            data-color="#ff9b1f"
+            style="--swatch: #ff9b1f"
+          ></button>
+          <button
+            class="swatch"
+            type="button"
+            data-color="#ffbf2f"
+            style="--swatch: #ffbf2f"
+          ></button>
+          <button
+            class="swatch"
+            type="button"
+            data-color="#e5df45"
+            style="--swatch: #e5df45"
+          ></button>
+          <button
+            class="swatch"
+            type="button"
+            data-color="#b9e54f"
+            style="--swatch: #b9e54f"
+          ></button>
+          <button
+            class="swatch"
+            type="button"
+            data-color="#35cb68"
+            style="--swatch: #35cb68"
+          ></button>
+          <button
+            class="swatch"
+            type="button"
+            data-color="#26d3a6"
+            style="--swatch: #26d3a6"
+          ></button>
+          <button
+            class="swatch"
+            type="button"
+            data-color="#2cc7dc"
+            style="--swatch: #2cc7dc"
+          ></button>
+          <button
+            class="swatch"
+            type="button"
+            data-color="#498cff"
+            style="--swatch: #498cff"
+          ></button>
+          <button
+            class="swatch"
+            type="button"
+            data-color="#7a62ff"
+            style="--swatch: #7a62ff"
+          ></button>
+          <button
+            class="swatch"
+            type="button"
+            data-color="#ff59cb"
+            style="--swatch: #ff59cb"
+          ></button>
         </div>
         <div class="action-row">
           <button id="duplicate-selection" type="button">Duplicate</button>
@@ -220,6 +387,7 @@
     <script src="./engine/swarm.js"></script>
     <script src="./engine/lineSystem.js"></script>
     <script src="./engine/textSystem.js"></script>
+    <script src="./engine/shapeSystem.js"></script>
     <script src="./engine/collision.js"></script>
     <script src="./midi/midiOut.js"></script>
     <script src="./render/canvasRenderer.js"></script>
