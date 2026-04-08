@@ -9,6 +9,8 @@
       ballVector: null,
       draggingSelection: false,
       lastPoint: null,
+      lastClickTime: 0,
+      lastClickId: null,
     };
 
     canvas.addEventListener("pointerdown", function onPointerDown(event) {
@@ -18,15 +20,6 @@
 
       const point = getCanvasCoords(event, canvas);
       toolState.lastPoint = point;
-
-      if (state.tool === "erase") {
-        const ball = findBall(state.balls || [], point);
-        if (ball) {
-          callbacks.onSelectBall(ball);
-          callbacks.onDeleteSelection?.(); // optional
-        }
-        return;
-      }
 
       if (state.tool === "draw") {
         toolState.drawPoints = [point];
@@ -80,6 +73,56 @@
           return;
         }
 
+        // Shape hit testing (before lines)
+        if (SBE.ShapeSystem && state.shapes && state.shapes.length) {
+          var hitShape = SBE.ShapeSystem.findShapeAtPoint(
+            state.shapes,
+            point,
+            18,
+          );
+          if (hitShape) {
+            var isShift = !!event.shiftKey;
+
+            // Double-click detection for edit mode (single shape only)
+            var now = performance.now();
+            if (
+              !isShift &&
+              hitShape.id === toolState.lastClickId &&
+              now - toolState.lastClickTime < 400
+            ) {
+              if (callbacks.onDoubleClickShape) {
+                callbacks.onDoubleClickShape(hitShape);
+              }
+              toolState.lastClickTime = 0;
+              toolState.lastClickId = null;
+            } else {
+              toolState.lastClickTime = now;
+              toolState.lastClickId = hitShape.id;
+            }
+
+            toolState.draggingSelection = true;
+
+            // In edit mode (single shape, no shift), try segment selection
+            if (!isShift && hitShape.isExpanded) {
+              var hitSeg = SBE.ShapeSystem.findSegmentAtPoint(
+                hitShape,
+                point,
+                12,
+              );
+              if (hitSeg && callbacks.onSelectSegment) {
+                callbacks.onSelectSegment(hitShape, hitSeg);
+              } else if (callbacks.onSelectShape) {
+                callbacks.onSelectShape(hitShape, false);
+              }
+            } else if (callbacks.onSelectShape) {
+              callbacks.onSelectShape(hitShape, isShift);
+            }
+
+            canvas.setPointerCapture(event.pointerId);
+            return;
+          }
+        }
+
         const line = SBE.LineSystem.findNearestLine(
           state.lines || [],
           point,
@@ -92,6 +135,8 @@
           return;
         }
 
+        toolState.lastClickTime = 0;
+        toolState.lastClickId = null;
         callbacks.onClearSelection();
       }
     });
@@ -154,9 +199,7 @@
       const points = toolState.drawPoints;
 
       if (state.tool === "draw" && points && points.length >= 2) {
-        console.log("COMMIT STROKE:", points.length);
-
-        callbacks.onCreateFreehand(toolState.drawPoints.slice());
+        callbacks.onCreateFreehand(points.slice());
       }
 
       if (
@@ -171,18 +214,13 @@
       }
 
       canvas.releasePointerCapture(event.pointerId);
-
-      // 🔴 IMPORTANT: delay reset ONE FRAME
-      requestAnimationFrame(() => {
-        toolState.drawPoints = [];
-        toolState.previewStroke = null;
-        toolState.ballStart = null;
-        toolState.ballVector = null;
-        toolState.draggingSelection = false;
-        toolState.lastPoint = null;
-
-        callbacks.onOverlayChange();
-      });
+      toolState.drawPoints = [];
+      toolState.previewStroke = null;
+      toolState.ballStart = null;
+      toolState.ballVector = null;
+      toolState.draggingSelection = false;
+      toolState.lastPoint = null;
+      callbacks.onOverlayChange();
     });
 
     return {

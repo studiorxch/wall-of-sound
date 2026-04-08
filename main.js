@@ -15,18 +15,18 @@
     "B",
   ];
   const NOTE_COLORS = {
-    C: "#ff4b4b",
-    "C#": "#ff6d39",
-    D: "#ff9b1f",
-    "D#": "#ffbf2f",
-    E: "#e5df45",
-    F: "#b9e54f",
-    "F#": "#35cb68",
-    G: "#26d3a6",
-    "G#": "#2cc7dc",
-    A: "#498cff",
-    "A#": "#7a62ff",
-    B: "#ff59cb",
+    C: "#FF3B30",
+    "C#": "#FF6B3D",
+    D: "#FF9F1C",
+    "D#": "#FFD60A",
+    E: "#A3E635",
+    F: "#34C759",
+    "F#": "#2DD4BF",
+    G: "#22D3EE",
+    "G#": "#3B82F6",
+    A: "#6366F1",
+    "A#": "#A855F7",
+    B: "#EC4899",
   };
   const SHAPE_LIBRARY = {
     circle: function circle(center, size) {
@@ -161,7 +161,7 @@
     let lastFrameTime = 0;
     let frameAccumulator = 0;
     const canvas = document.getElementById("engine-canvas");
-    const canvasWrap = document.getElementById("canvas-wrap");
+    const canvasArea = document.getElementById("canvas-area");
     canvas.width = 1080;
     canvas.height = 1920;
     const renderer = new SBE.CanvasRenderer(canvas);
@@ -191,6 +191,7 @@
       },
       balls: [],
       lines: [],
+      shapes: [],
       textObjects: [],
       backgroundDataUrl: null,
       backgroundImage: null,
@@ -200,6 +201,8 @@
       selectedLineId: null,
       selectedTextId: null,
       selectedBallId: null,
+      selectedShapeIds: new Set(),
+      selectedSegmentId: null,
       ui: {
         cleanOutput: false,
         presentation:
@@ -252,19 +255,10 @@
       },
     };
 
-    document.querySelectorAll(".tool-panel").forEach(makePanelDraggable);
-
     normalizeSwarmConfig();
     renderer.resize(state.canvas.width, state.canvas.height);
 
     const drawTools = SBE.DrawTools.createDrawTools(canvas, state, {
-      onTranslateSelection: function onTranslateSelection(dx, dy) {
-        translateSelection(dx, dy);
-      },
-      onEraseBall: function (ball) {
-        state.balls = state.balls.filter((b) => b.id !== ball.id);
-        renderFrame();
-      },
       getDraftColor: function getDraftColor() {
         return noteToColor(state.defaults.note);
       },
@@ -293,6 +287,15 @@
       onSelectBall: function onSelectBall(ball) {
         selectObject("ball", ball.id);
       },
+      onSelectShape: function onSelectShape(shape, shiftKey) {
+        selectShape(shape.id, { shift: shiftKey });
+      },
+      onSelectSegment: function onSelectSegment(shape, segment) {
+        selectShape(shape.id, { segmentId: segment.id });
+      },
+      onDoubleClickShape: function onDoubleClickShape(shape) {
+        toggleShapeEditMode(shape.id);
+      },
       onClearSelection: function onClearSelection() {
         clearSelection();
       },
@@ -307,9 +310,9 @@
     bindControls();
     await applyExampleScene();
     updateCanvasAspect();
+    setupCanvasResize();
     setViewClasses();
     syncUI();
-    updatePanels(state.tool);
     renderFrame();
     function bindControls() {
       const elements = controls.elements;
@@ -451,10 +454,6 @@
           }
           state.tool = button.dataset.tool;
           controls.syncTool(state.tool);
-
-          // ✅ ADD THIS
-          updatePanels(state.tool);
-
           if (state.tool !== "text") {
             removeCanvasTextInput(false);
           }
@@ -468,9 +467,9 @@
         });
       });
 
-      elements.noteCells.forEach((cell) => {
-        cell.addEventListener("click", function chooseNoteClass() {
-          applyNoteClass(Number(cell.dataset.noteClass));
+      elements.swatches.forEach(function (swatch) {
+        swatch.addEventListener("click", function chooseSwatch() {
+          applyNoteClass(Number(swatch.dataset.noteClass));
         });
       });
 
@@ -494,22 +493,6 @@
           applyInspectorMetadata(false);
         },
       );
-
-      elements.lineColor.addEventListener("input", function syncDisplayColor() {
-        const nextNote = findClosestNoteForColor(elements.lineColor.value);
-        if (nextNote !== null) {
-          applyNoteClass(nextNote % 12, Math.floor(state.defaults.note / 12));
-        }
-      });
-
-      elements.colorSwatches.forEach((swatch) => {
-        swatch.addEventListener("click", function syncSwatchColor() {
-          const nextNote = findClosestNoteForColor(swatch.dataset.color);
-          if (nextNote !== null) {
-            applyNoteClass(nextNote % 12, Math.floor(state.defaults.note / 12));
-          }
-        });
-      });
 
       elements.textContent.addEventListener(
         "input",
@@ -636,7 +619,6 @@
           }
           state.tool = "draw";
           syncUI();
-          updatePanels(state.tool);
           return;
         }
         if (
@@ -645,13 +627,11 @@
         ) {
           state.tool = "shape";
           syncUI();
-          updatePanels(state.tool);
           return;
         }
         if (event.key.toLowerCase() === "t") {
           state.tool = "text";
           syncUI();
-          updatePanels(state.tool);
           return;
         }
         if (event.key.toLowerCase() === "b") {
@@ -694,6 +674,7 @@
       );
       state.lines = lines;
       state.textObjects = texts.map(normalizeTextObject);
+      state.shapes = (scene.shapes || []).map(SBE.ShapeSystem.hydrateShape);
       state.canvas.width = 1080;
       state.canvas.height = 1920;
       state.swarm = Object.assign({}, state.swarm, scene.swarm || {});
@@ -719,8 +700,17 @@
     }
 
     function updateCanvasAspect() {
-      canvasWrap.style.aspectRatio =
-        state.canvas.width + " / " + state.canvas.height;
+      // Canvas internal resolution stays fixed, CSS handles display via object-fit
+      canvas.style.width = "";
+      canvas.style.height = "";
+    }
+
+    function setupCanvasResize() {
+      if (typeof ResizeObserver !== "undefined") {
+        new ResizeObserver(function () {
+          renderFrame();
+        }).observe(canvasArea);
+      }
     }
 
     function syncUI() {
@@ -728,49 +718,16 @@
       controls.syncTool(state.tool);
       controls.syncShapeSelection(state.selectedShape);
       syncSelectionPanel();
+      syncNoteIndicator();
       controls.syncShortcutVisibility(state.ui.shortcutsVisible);
     }
 
-    function updatePanels(tool) {
-      const panels = document.querySelectorAll(".tool-panel");
-
-      panels.forEach((p) => (p.style.display = "none"));
-
-      const map = {
-        draw: "#draw-panel",
-        shape: "#shape-panel",
-        text: "#text-panel",
-      };
-
-      if (map[tool]) {
-        const el = document.querySelector(map[tool]);
-        if (el) el.style.display = "block";
-      }
-    }
-    function makePanelDraggable(el) {
-      let isDragging = false;
-      let offsetX = 0;
-      let offsetY = 0;
-
-      el.style.position = "absolute";
-
-      el.addEventListener("pointerdown", (e) => {
-        isDragging = true;
-        offsetX = e.clientX - el.offsetLeft;
-        offsetY = e.clientY - el.offsetTop;
-        el.setPointerCapture(e.pointerId);
-      });
-
-      el.addEventListener("pointermove", (e) => {
-        if (!isDragging) return;
-
-        el.style.left = e.clientX - offsetX + "px";
-        el.style.top = e.clientY - offsetY + "px";
-      });
-
-      el.addEventListener("pointerup", () => {
-        isDragging = false;
-      });
+    function syncNoteIndicator() {
+      var note = state.defaults.note;
+      var noteClass = ((note % 12) + 12) % 12;
+      var noteName = NOTE_NAMES[noteClass];
+      var noteColor = noteToColor(note);
+      controls.syncNoteIndicator(note, noteName, noteColor);
     }
 
     function syncSelectionPanel() {
@@ -807,6 +764,8 @@
       state.selectedBallId = type === "ball" ? id : null;
       state.selectedLineId = type === "line" ? id : null;
       state.selectedTextId = type === "text" ? id : null;
+      state.selectedShapeIds.clear();
+      state.selectedSegmentId = null;
       const selected = getSelectedObject();
       if (selected && selected.midi) {
         state.defaults.note = selected.midi.note;
@@ -819,7 +778,71 @@
       state.selectedBallId = null;
       state.selectedLineId = null;
       state.selectedTextId = null;
+      state.selectedShapeIds.clear();
+      state.selectedSegmentId = null;
       syncSelectionPanel();
+      renderFrame();
+    }
+
+    function selectShape(shapeId, options) {
+      var shift = options && options.shift;
+      var segmentId = options && options.segmentId;
+
+      if (shift) {
+        // Toggle membership
+        if (state.selectedShapeIds.has(shapeId)) {
+          state.selectedShapeIds.delete(shapeId);
+        } else {
+          state.selectedShapeIds.add(shapeId);
+        }
+        // Clear non-shape selections on first shift-add
+        state.selectedBallId = null;
+        state.selectedLineId = null;
+        state.selectedTextId = null;
+        state.selectedSegmentId = null;
+      } else {
+        // Replace selection
+        state.selectedBallId = null;
+        state.selectedLineId = null;
+        state.selectedTextId = null;
+        state.selectedShapeIds.clear();
+        state.selectedShapeIds.add(shapeId);
+        state.selectedSegmentId = segmentId || null;
+      }
+      syncSelectionPanel();
+      renderFrame();
+    }
+
+    function getSelectedShapes() {
+      if (!state.selectedShapeIds.size) {
+        return [];
+      }
+      return state.shapes.filter(function (s) {
+        return state.selectedShapeIds.has(s.id);
+      });
+    }
+
+    function getSelectedShape() {
+      if (state.selectedShapeIds.size !== 1) {
+        return null;
+      }
+      var id = state.selectedShapeIds.values().next().value;
+      return (
+        state.shapes.find(function (s) {
+          return s.id === id;
+        }) || null
+      );
+    }
+
+    function toggleShapeEditMode(shapeId) {
+      var shape = state.shapes.find(function (s) {
+        return s.id === shapeId;
+      });
+      if (!shape) {
+        return;
+      }
+      shape.isExpanded = !shape.isExpanded;
+      state.selectedSegmentId = null;
       renderFrame();
     }
 
@@ -846,17 +869,27 @@
       const shapeFactory =
         SHAPE_LIBRARY[state.selectedShape] || SHAPE_LIBRARY.circle;
       const paths = shapeFactory(point, 240);
-      const segments = [];
-
-      paths.forEach((path) => {
-        pointsToSegments(smoothStroke(path, 1)).forEach((segment) => {
-          segments.push(segment);
-        });
+      const smoothedPaths = paths.map(function (path) {
+        return smoothStroke(path, 1);
       });
 
-      if (segments.length) {
-        createSegmentsBatch(segments);
+      const settings = createLineSettingsFromInspector();
+      var shape = SBE.ShapeSystem.createShapeFromPoints(
+        state.selectedShape,
+        smoothedPaths,
+        point,
+        settings,
+      );
+
+      if (!shape) {
+        return;
       }
+
+      pushHistory();
+      state.shapes.push(shape);
+      selectShape(shape.id);
+      syncUI();
+      renderFrame();
     }
 
     function createSegmentsBatch(segments) {
@@ -869,13 +902,13 @@
           segment.x2 - segment.x1,
           segment.y2 - segment.y1,
         );
-
-        if (length < 2) return;
+        if (length < 2) {
+          return;
+        }
 
         const line = normalizeLineObject(
           SBE.LineSystem.createLine(segment, settings),
         );
-
         state.lines.push(line);
         lastId = line.id;
       });
@@ -883,9 +916,7 @@
       if (lastId) {
         selectObject("line", lastId);
       }
-
       syncUI();
-      renderFrame(); // ✅ THIS FIXES DRAW
     }
 
     function beginCanvasTextInput(point) {
@@ -1059,6 +1090,16 @@
     }
 
     function translateSelection(dx, dy) {
+      // Multi-shape selection
+      var selectedShapes = getSelectedShapes();
+      if (selectedShapes.length && !state.ui.presentation) {
+        selectedShapes.forEach(function (shape) {
+          SBE.ShapeSystem.translateShape(shape, dx, dy);
+        });
+        renderFrame();
+        return;
+      }
+
       const selected = getSelectedObject();
       if (!selected || state.ui.presentation) {
         return;
@@ -1094,6 +1135,19 @@
     }
 
     function deleteSelectionObject() {
+      // Multi-shape deletion
+      var selectedShapes = getSelectedShapes();
+      if (selectedShapes.length && !state.ui.presentation) {
+        pushHistory();
+        var ids = state.selectedShapeIds;
+        state.shapes = state.shapes.filter(function (s) {
+          return !ids.has(s.id);
+        });
+        clearSelection();
+        syncUI();
+        return;
+      }
+
       const selected = getSelectedObject();
       if (!selected || state.ui.presentation) {
         return;
@@ -1115,6 +1169,21 @@
     }
 
     async function duplicateSelectedObject() {
+      // Multi-shape duplication
+      var selectedShapes = getSelectedShapes();
+      if (selectedShapes.length && !state.ui.presentation) {
+        pushHistory();
+        state.selectedShapeIds.clear();
+        selectedShapes.forEach(function (shape) {
+          var copy = SBE.ShapeSystem.duplicateShape(shape);
+          state.shapes.push(copy);
+          state.selectedShapeIds.add(copy.id);
+        });
+        syncUI();
+        renderFrame();
+        return;
+      }
+
       const selected = getSelectedObject();
       if (!selected || state.ui.presentation) {
         return;
@@ -1164,6 +1233,7 @@
       state.history.push({
         lines: state.lines.map(serializeLineObject),
         textObjects: state.textObjects.map(SBE.TextSystem.serializeTextObject),
+        shapes: state.shapes.map(SBE.ShapeSystem.serializeShape),
         balls: clone(state.balls),
         canvas: clone(state.canvas),
         swarm: clone(state.swarm),
@@ -1569,6 +1639,9 @@
       const activeForceLines = state.lines.concat(
         SBE.TextSystem
           ? SBE.TextSystem.getCollisionLines(state.textObjects || [])
+          : [],
+        SBE.ShapeSystem
+          ? SBE.ShapeSystem.getCollisionSegments(state.shapes || [])
           : [],
       );
       SBE.EnginePhysics.applyForces(
