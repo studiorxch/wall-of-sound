@@ -355,7 +355,7 @@
 
     shapes.forEach(function (shape) {
       shape.segments.forEach(function (seg) {
-        result.push({
+        var proxy = {
           id: seg.id,
           x1: seg.x1,
           y1: seg.y1,
@@ -369,11 +369,22 @@
           life: seg.life,
           behavior: seg.behavior,
           interaction: { highlightColor: "#ffffff", duration: 140 },
-          lastHitAt: seg.lastHitAt || 0,
-          // back-reference for collision marking
           _shapeId: shape.id,
           _segment: seg,
+        };
+
+        // lastHitAt writes through to the real segment
+        Object.defineProperty(proxy, "lastHitAt", {
+          get: function () {
+            return seg.lastHitAt || 0;
+          },
+          set: function (v) {
+            seg.lastHitAt = v;
+          },
+          enumerable: true,
         });
+
+        result.push(proxy);
       });
     });
 

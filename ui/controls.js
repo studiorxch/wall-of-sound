@@ -21,10 +21,32 @@
       textFontStatus: byId("text-font-status"),
       engineStatus: byId("engine-status"),
       sceneStats: byId("scene-stats"),
-      inspector: byId("inspector"),
+
+      // Note indicator
+      noteIndicator: byId("note-indicator"),
+      noteDot: byId("note-dot"),
+      noteLabel: byId("note-label"),
+
+      // Sidebar panels
+      shapePresets: byId("shape-presets"),
       ballPanel: byId("ball-panel"),
-      shapePanel: byId("shape-panel"),
-      textInspectorBlock: byId("text-inspector-block"),
+      behaviorPanel: byId("behavior-panel"),
+      textPanel: byId("text-panel"),
+
+      // Swatches (note/color)
+      swatchGroup: byId("swatch-group"),
+      swatches: Array.from(document.querySelectorAll("#swatch-group .swatch")),
+
+      // Inspector fields
+      activeNote: byId("active-note"),
+      lineColor: byId("line-color"),
+      lineThickness: byId("line-thickness"),
+      lineThicknessValue: byId("line-thickness-value"),
+      lineBehavior: byId("line-behavior"),
+      lineStrength: byId("line-strength"),
+      lineStrengthValue: byId("line-strength-value"),
+
+      // Text fields
       textContent: byId("text-content"),
       textSize: byId("text-size"),
       textSizeValue: byId("text-size-value"),
@@ -35,28 +57,29 @@
       textRotation: byId("text-rotation"),
       textRotationValue: byId("text-rotation-value"),
       centerText: byId("center-text"),
-      activeNote: byId("active-note"),
-      noteCells: Array.from(document.querySelectorAll(".note-cell")),
-      lineColor: byId("line-color"),
-      colorSwatches: Array.from(document.querySelectorAll(".swatch")),
-      lineThickness: byId("line-thickness"),
-      lineThicknessValue: byId("line-thickness-value"),
-      lineBehavior: byId("line-behavior"),
-      lineStrength: byId("line-strength"),
-      lineStrengthValue: byId("line-strength-value"),
+
+      // Actions
       duplicateSelection: byId("duplicate-selection"),
       deleteSelection: byId("delete-selection"),
       undoAction: byId("undo-action"),
+
+      // Ball
       ballCount: byId("ball-count"),
       ballCountValue: byId("ball-count-value"),
       ballSpeed: byId("ball-speed"),
       ballSpeedValue: byId("ball-speed-value"),
       ballSpread: byId("ball-spread"),
       ballSpreadValue: byId("ball-spread-value"),
-      shapeButtons: Array.from(document.querySelectorAll(".shape-button")),
+
+      // Shape presets
+      shapeButtons: Array.from(document.querySelectorAll(".shape-btn")),
+
+      // Tools
+      toolButtons: Array.from(document.querySelectorAll(".tool-btn")),
+
+      // Shortcuts
       closeShortcuts: byId("close-shortcuts"),
       shortcutHud: byId("shortcut-hud"),
-      toolButtons: Array.from(document.querySelectorAll("[data-tool]")),
     };
 
     bindRange(elements.textSize, elements.textSizeValue, 0);
@@ -77,16 +100,17 @@
         elements.quantizeDivision.value = String(appState.quantize.division);
         elements.transparentBg.checked = !!appState.ui.transparentBackground;
         elements.engineStatus.textContent = appState.loop.recording
-          ? "Recording"
+          ? "REC"
           : appState.loop.armed
-            ? "Armed"
+            ? "ARM"
             : appState.loop.playing
-              ? "Looping"
+              ? "LOOP"
               : appState.running
-                ? "Running"
-                : "Stopped";
+                ? "RUN"
+                : "STOP";
         elements.sceneStats.textContent =
           appState.lines.length +
+          (appState.shapes ? appState.shapes.length : 0) +
           "L " +
           appState.textObjects.length +
           "T " +
@@ -97,50 +121,67 @@
         elements.ballCount.value = String(appState.ballTool.count);
         elements.ballCountValue.textContent = String(appState.ballTool.count);
         elements.ballSpeed.value = String(appState.ballTool.speed);
-        elements.ballSpeedValue.textContent = Number(appState.ballTool.speed).toFixed(1);
+        elements.ballSpeedValue.textContent = Number(
+          appState.ballTool.speed,
+        ).toFixed(1);
         elements.ballSpread.value = String(appState.ballTool.spread);
-        elements.ballSpreadValue.textContent = Number(appState.ballTool.spread).toFixed(2);
+        elements.ballSpreadValue.textContent = Number(
+          appState.ballTool.spread,
+        ).toFixed(2);
       },
       syncTool: function syncTool(tool) {
-        elements.toolButtons.forEach((button) => {
+        elements.toolButtons.forEach(function (button) {
           button.classList.toggle("active", button.dataset.tool === tool);
         });
+        elements.shapePresets.classList.toggle("hidden", tool !== "shape");
         elements.ballPanel.classList.toggle("hidden", tool !== "ball");
-        elements.shapePanel.classList.toggle("hidden", tool !== "shape");
       },
       syncShapeSelection: function syncShapeSelection(shapeId) {
-        elements.shapeButtons.forEach((button) => {
+        elements.shapeButtons.forEach(function (button) {
           button.classList.toggle("active", button.dataset.shape === shapeId);
         });
       },
+      syncNoteIndicator: function syncNoteIndicator(
+        noteNumber,
+        noteName,
+        noteColor,
+      ) {
+        elements.noteDot.style.background = noteColor;
+        elements.noteLabel.textContent = noteName;
+        elements.swatches.forEach(function (sw) {
+          sw.classList.toggle(
+            "active",
+            Number(sw.dataset.noteClass) === noteNumber % 12,
+          );
+        });
+      },
       syncSelection: function syncSelection(selection, activeNoteClass) {
-        const shouldShowInspector =
-          !!selection && (selection.type === "line" || selection.type === "text");
-        elements.inspector.classList.toggle("hidden", !shouldShowInspector);
-        elements.textInspectorBlock.classList.toggle(
+        var hasSelection =
+          !!selection &&
+          (selection.type === "line" || selection.type === "text");
+
+        elements.behaviorPanel.classList.toggle("hidden", !hasSelection);
+        elements.textPanel.classList.toggle(
           "hidden",
           !selection || selection.type !== "text",
         );
 
-        elements.noteCells.forEach((button) => {
-          button.classList.toggle(
-            "active",
-            Number(button.dataset.noteClass) === activeNoteClass,
-          );
-        });
-
-        if (!shouldShowInspector) {
+        if (!hasSelection) {
           return;
         }
 
         elements.activeNote.value = String(selection.midi.note);
-        elements.lineColor.value = selection.style.color;
         elements.lineThickness.value = String(selection.style.thickness);
-        elements.lineThicknessValue.textContent = String(selection.style.thickness);
+        elements.lineThicknessValue.textContent = String(
+          selection.style.thickness,
+        );
         elements.lineBehavior.value =
-          selection.behavior.type === "normal" ? "none" : selection.behavior.type;
+          selection.behavior.type === "normal"
+            ? "none"
+            : selection.behavior.type;
         elements.lineStrength.value = String(selection.behavior.strength);
-        elements.lineStrengthValue.textContent = selection.behavior.strength.toFixed(1);
+        elements.lineStrengthValue.textContent =
+          selection.behavior.strength.toFixed(1);
 
         if (selection.type === "text") {
           elements.textContent.value = selection.value;
@@ -149,9 +190,13 @@
           elements.textX.value = String(Math.round(selection.transform.x));
           elements.textY.value = String(Math.round(selection.transform.y));
           elements.textScale.value = String(selection.transform.scale);
-          elements.textScaleValue.textContent = Number(selection.transform.scale).toFixed(1);
+          elements.textScaleValue.textContent = Number(
+            selection.transform.scale,
+          ).toFixed(1);
           elements.textRotation.value = String(selection.transform.rotation);
-          elements.textRotationValue.textContent = Number(selection.transform.rotation).toFixed(0);
+          elements.textRotationValue.textContent = Number(
+            selection.transform.rotation,
+          ).toFixed(0);
         }
       },
       syncShortcutVisibility: function syncShortcutVisibility(visible) {
@@ -161,7 +206,10 @@
   }
 
   function bindRange(input, output, decimals) {
-    const sync = function sync() {
+    if (!input || !output) {
+      return;
+    }
+    var sync = function sync() {
       output.textContent = Number(input.value).toFixed(decimals);
     };
     input.addEventListener("input", sync);
