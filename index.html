@@ -3,256 +3,173 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Sonic Canvas</title>
+    <title>Wall of Sound</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <div id="app">
-      <!-- ── LEFT SIDEBAR ─────────────────────────── -->
-      <aside id="sidebar">
-        <!-- Active note indicator -->
-        <div id="note-indicator" class="note-indicator">
-          <span class="note-dot" id="note-dot"></span>
-          <span class="note-label" id="note-label">C</span>
+    <main class="stage-shell">
+      <div class="canvas-stage">
+        <div class="canvas-wrap" id="canvas-wrap">
+          <canvas id="engine-canvas" width="1080" height="1920"></canvas>
         </div>
+      </div>
+    </main>
 
-        <!-- Tool buttons -->
-        <nav class="tool-group">
-          <button class="tool-btn active" data-tool="select" title="Select (V)">
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-              <path d="M3 2l10 7-4 1-3 5-1-6z" fill="currentColor" />
-            </svg>
-          </button>
-          <button class="tool-btn" data-tool="draw" title="Draw (D)">
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-              <path
-                d="M3 15L13 3"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-              />
-            </svg>
-          </button>
-          <button class="tool-btn" data-tool="shape" title="Shape (S)">
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-              <circle
-                cx="9"
-                cy="9"
-                r="6"
-                stroke="currentColor"
-                stroke-width="2"
-              />
-            </svg>
-          </button>
-          <button class="tool-btn" data-tool="text" title="Text (T)">
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-              <text
-                x="4"
-                y="14"
-                font-size="14"
-                font-weight="700"
-                fill="currentColor"
-              >
-                T
-              </text>
-            </svg>
-          </button>
-          <button class="tool-btn" data-tool="ball" title="Ball (B)">
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-              <circle cx="9" cy="9" r="4" fill="currentColor" />
-            </svg>
-          </button>
-        </nav>
+    <div class="floating-status">
+      <p id="engine-status">Stopped</p>
+      <p id="scene-stats">0L 0T 0B</p>
+    </div>
 
-        <!-- Shape presets (visible when shape tool active) -->
-        <div id="shape-presets" class="panel-section hidden">
-          <button class="shape-btn active" data-shape="circle">●</button>
-          <button class="shape-btn" data-shape="square">■</button>
-          <button class="shape-btn" data-shape="triangle">▲</button>
-          <button class="shape-btn" data-shape="rounded-loop">◎</button>
-          <button class="shape-btn" data-shape="zig-zag">⩘</button>
-          <button class="shape-btn" data-shape="sine">∿</button>
-          <button class="shape-btn" data-shape="straight">—</button>
-          <button class="shape-btn" data-shape="x-form">✕</button>
-          <button class="shape-btn" data-shape="v-form">∨</button>
-        </div>
+    <div id="transport" class="floating-transport">
+      <input
+        id="bpm-input"
+        type="number"
+        min="60"
+        max="180"
+        step="0.1"
+        value="120.0"
+        aria-label="BPM"
+      />
+      <select id="bar-count" aria-label="Bars">
+        <option value="8">8 Bars</option>
+        <option value="16">16 Bars</option>
+        <option value="32">32 Bars</option>
+      </select>
+      <label class="mini-toggle" title="Quantize">
+        <input id="quantize-enabled" type="checkbox" />
+        <span>Q</span>
+      </label>
+      <select id="quantize-division" aria-label="Quantize division">
+        <option value="0.25">1/4</option>
+        <option value="0.125">1/8</option>
+        <option value="0.0625">1/16</option>
+      </select>
+      <button id="record-loop" title="Record">REC</button>
+      <button id="stop-loop" title="Stop">STOP</button>
+      <button id="clear-scene" title="Clear">CLEAR</button>
+      <button id="export-loop" class="hidden" title="Export">EXPORT</button>
+      <button id="retake-loop" class="hidden" title="Retake">RETAKE</button>
+      <button id="load-example" title="Demo">DEMO</button>
+      <label class="ghost-file" title="Open scene">
+        <input id="scene-file" type="file" accept="application/json" />
+        <span>OPEN</span>
+      </label>
+      <button id="save-scene" title="Save scene">SAVE</button>
+      <label class="ghost-file" title="Load font">
+        <input
+          id="text-font-file"
+          type="file"
+          accept=".ttf,.otf,.woff,.woff2,font/ttf,font/otf,font/woff,font/woff2"
+        />
+        <span>FONT</span>
+      </label>
+      <label class="ghost-file" title="Load background">
+        <input id="background-file" type="file" accept="image/*" />
+        <span>BG</span>
+      </label>
+      <label class="mini-toggle" title="Transparent background">
+        <input id="transparent-bg" type="checkbox" />
+        <span>ALPHA</span>
+      </label>
+    </div>
 
-        <!-- Note / Color swatches -->
-        <div class="swatch-group" id="swatch-group">
-          <button
-            class="swatch"
-            data-note-class="0"
-            data-color="#FF3B30"
-            style="--sw: #ff3b30"
-            title="C"
-          ></button>
-          <button
-            class="swatch"
-            data-note-class="1"
-            data-color="#FF6B3D"
-            style="--sw: #ff6b3d"
-            title="C#"
-          ></button>
-          <button
-            class="swatch"
-            data-note-class="2"
-            data-color="#FF9F1C"
-            style="--sw: #ff9f1c"
-            title="D"
-          ></button>
-          <button
-            class="swatch"
-            data-note-class="3"
-            data-color="#FFD60A"
-            style="--sw: #ffd60a"
-            title="D#"
-          ></button>
-          <button
-            class="swatch"
-            data-note-class="4"
-            data-color="#A3E635"
-            style="--sw: #a3e635"
-            title="E"
-          ></button>
-          <button
-            class="swatch"
-            data-note-class="5"
-            data-color="#34C759"
-            style="--sw: #34c759"
-            title="F"
-          ></button>
-          <button
-            class="swatch"
-            data-note-class="6"
-            data-color="#2DD4BF"
-            style="--sw: #2dd4bf"
-            title="F#"
-          ></button>
-          <button
-            class="swatch"
-            data-note-class="7"
-            data-color="#22D3EE"
-            style="--sw: #22d3ee"
-            title="G"
-          ></button>
-          <button
-            class="swatch"
-            data-note-class="8"
-            data-color="#3B82F6"
-            style="--sw: #3b82f6"
-            title="G#"
-          ></button>
-          <button
-            class="swatch"
-            data-note-class="9"
-            data-color="#6366F1"
-            style="--sw: #6366f1"
-            title="A"
-          ></button>
-          <button
-            class="swatch"
-            data-note-class="10"
-            data-color="#A855F7"
-            style="--sw: #a855f7"
-            title="A#"
-          ></button>
-          <button
-            class="swatch"
-            data-note-class="11"
-            data-color="#EC4899"
-            style="--sw: #ec4899"
-            title="B"
-          ></button>
-        </div>
+    <div id="toolbar" class="floating-toolbar">
+      <button class="tool active" data-tool="select" aria-label="Select tool">
+        Select
+      </button>
+      <button class="tool" data-tool="draw" aria-label="Draw tool">Draw</button>
+      <button class="tool" data-tool="shape" aria-label="Shape tool">
+        Shape
+      </button>
+      <button class="tool" data-tool="text" aria-label="Text tool">Text</button>
+      <button class="tool" data-tool="ball" aria-label="Ball tool">Ball</button>
+    </div>
 
-        <div class="sidebar-spacer"></div>
+    <aside id="shape-panel" class="floating-mini-panel hidden shape-panel">
+      <button class="shape-button active" data-shape="circle">Circle</button>
+      <button class="shape-button" data-shape="square">Square</button>
+      <button class="shape-button" data-shape="triangle">Triangle</button>
+      <button class="shape-button" data-shape="rounded-loop">Loop</button>
+      <button class="shape-button" data-shape="zig-zag">Zig</button>
+      <button class="shape-button" data-shape="sine">Sine</button>
+      <button class="shape-button" data-shape="straight">Line</button>
+      <button class="shape-button" data-shape="x-form">X</button>
+      <button class="shape-button" data-shape="v-form">V</button>
+      <button class="shape-button" data-shape="l-form">L</button>
+      <button class="shape-button" data-shape="m-form">M</button>
+      <button class="shape-button" data-shape="c-form">C</button>
+    </aside>
 
-        <!-- Ball panel (visible when ball tool active) -->
-        <div id="ball-panel" class="panel-section hidden">
-          <p class="panel-title">Ball</p>
-          <label class="field-row">
-            <span>Count</span>
-            <input
-              id="ball-count"
-              type="range"
-              min="1"
-              max="8"
-              step="1"
-              value="1"
-            />
-            <output id="ball-count-value">1</output>
-          </label>
-          <label class="field-row">
-            <span>Speed</span>
-            <input
-              id="ball-speed"
-              type="range"
-              min="0.4"
-              max="3"
-              step="0.1"
-              value="1"
-            />
-            <output id="ball-speed-value">1.0</output>
-          </label>
-          <label class="field-row">
-            <span>Spread</span>
-            <input
-              id="ball-spread"
-              type="range"
-              min="0"
-              max="1"
-              step="0.05"
-              value="0.15"
-            />
-            <output id="ball-spread-value">0.15</output>
-          </label>
-        </div>
+    <aside id="ball-panel" class="floating-mini-panel hidden ball-panel">
+      <label class="field compact">
+        <span>Count</span>
+        <input
+          id="ball-count"
+          type="range"
+          min="1"
+          max="8"
+          step="1"
+          value="1"
+        />
+        <output id="ball-count-value">1</output>
+      </label>
+      <label class="field compact">
+        <span>Speed</span>
+        <input
+          id="ball-speed"
+          type="range"
+          min="0.4"
+          max="3"
+          step="0.1"
+          value="1"
+        />
+        <output id="ball-speed-value">1.0</output>
+      </label>
+      <label class="field compact">
+        <span>Spread</span>
+        <input
+          id="ball-spread"
+          type="range"
+          min="0"
+          max="1"
+          step="0.05"
+          value="0.15"
+        />
+        <output id="ball-spread-value">0.15</output>
+      </label>
+    </aside>
 
-        <!-- Behavior panel (visible when line/shape/text selected) -->
-        <div id="behavior-panel" class="panel-section hidden">
-          <p class="panel-title">Behavior</p>
-          <select id="line-behavior">
-            <option value="none">None</option>
-            <option value="attract">Attract</option>
-            <option value="repel">Repel</option>
-            <option value="orbital">Orbit</option>
-          </select>
-          <label class="field-row">
-            <span>Strength</span>
-            <input
-              id="line-strength"
-              type="range"
-              min="0"
-              max="5"
-              step="0.1"
-              value="1.4"
-            />
-            <output id="line-strength-value">1.4</output>
-          </label>
-          <label class="field-row">
-            <span>Thickness</span>
-            <input
-              id="line-thickness"
-              type="range"
-              min="1"
-              max="24"
-              step="1"
-              value="5"
-            />
-            <output id="line-thickness-value">5</output>
-          </label>
-        </div>
-
-        <!-- Text panel (visible when text selected) -->
-        <div id="text-panel" class="panel-section hidden">
-          <p class="panel-title">Text</p>
+    <aside id="inspector" class="floating-inspector hidden">
+      <section class="inspector-block text-block" id="text-inspector-block">
+        <input
+          id="text-content"
+          type="text"
+          value="SWARM"
+          placeholder="Content"
+        />
+        <div class="compact-grid three">
           <input
-            id="text-content"
-            type="text"
-            value="SWARM"
-            placeholder="Content"
+            id="text-x"
+            type="number"
+            min="-4000"
+            max="4000"
+            step="1"
+            value="540"
+            placeholder="X"
           />
-          <label class="field-row">
+          <input
+            id="text-y"
+            type="number"
+            min="-4000"
+            max="4000"
+            step="1"
+            value="960"
+            placeholder="Y"
+          />
+          <button id="center-text" type="button">Center</button>
+        </div>
+        <div class="compact-grid three">
+          <label class="field compact">
             <span>Size</span>
             <input
               id="text-size"
@@ -264,7 +181,7 @@
             />
             <output id="text-size-value">160</output>
           </label>
-          <label class="field-row">
+          <label class="field compact">
             <span>Scale</span>
             <input
               id="text-scale"
@@ -276,7 +193,7 @@
             />
             <output id="text-scale-value">1.0</output>
           </label>
-          <label class="field-row">
+          <label class="field compact">
             <span>Rotation</span>
             <input
               id="text-rotation"
@@ -288,135 +205,190 @@
             />
             <output id="text-rotation-value">0</output>
           </label>
-          <div class="field-row-grid">
-            <input
-              id="text-x"
-              type="number"
-              min="-4000"
-              max="4000"
-              step="1"
-              value="540"
-              placeholder="X"
-            />
-            <input
-              id="text-y"
-              type="number"
-              min="-4000"
-              max="4000"
-              step="1"
-              value="960"
-              placeholder="Y"
-            />
-            <button id="center-text" type="button">Center</button>
-          </div>
         </div>
+      </section>
 
-        <!-- Actions -->
-        <div class="action-group">
-          <button
-            id="duplicate-selection"
-            type="button"
-            title="Duplicate (Cmd+D)"
-          >
-            Dup
+      <section class="inspector-block">
+        <p class="micro-title">MIDI</p>
+        <div id="note-grid" class="note-grid">
+          <button class="note-cell" type="button" data-note-class="0">C</button>
+          <button class="note-cell" type="button" data-note-class="1">
+            C#
           </button>
-          <button id="delete-selection" type="button" title="Delete">
-            Del
+          <button class="note-cell" type="button" data-note-class="2">D</button>
+          <button class="note-cell" type="button" data-note-class="3">
+            D#
           </button>
-          <button id="undo-action" type="button" title="Undo (Cmd+Z)">
-            Undo
+          <button class="note-cell" type="button" data-note-class="4">E</button>
+          <button class="note-cell" type="button" data-note-class="5">F</button>
+          <button class="note-cell" type="button" data-note-class="6">
+            F#
+          </button>
+          <button class="note-cell" type="button" data-note-class="7">G</button>
+          <button class="note-cell" type="button" data-note-class="8">
+            G#
+          </button>
+          <button class="note-cell" type="button" data-note-class="9">A</button>
+          <button class="note-cell" type="button" data-note-class="10">
+            A#
+          </button>
+          <button class="note-cell" type="button" data-note-class="11">
+            B
           </button>
         </div>
-      </aside>
+      </section>
 
-      <!-- ── MAIN AREA ────────────────────────────── -->
-      <div id="main">
-        <!-- Top bar: transport + file ops -->
-        <header id="topbar">
-          <div class="transport-row">
-            <span id="engine-status" class="status-badge">Stopped</span>
-            <span id="scene-stats" class="stats-badge">0L 0T 0B</span>
+      <section class="inspector-block">
+        <p class="micro-title">Behavior</p>
+        <div class="compact-grid two">
+          <select id="line-behavior">
+            <option value="none">None</option>
+            <option value="attract">Attract</option>
+            <option value="repel">Repel</option>
+            <option value="orbital">Orbit</option>
+          </select>
+          <label class="field compact">
+            <span>Strength</span>
             <input
-              id="bpm-input"
-              type="number"
-              min="60"
-              max="180"
+              id="line-strength"
+              type="range"
+              min="0"
+              max="5"
               step="0.1"
-              value="120.0"
-              aria-label="BPM"
+              value="1.4"
             />
-            <select id="bar-count" aria-label="Bars">
-              <option value="8">8 Bars</option>
-              <option value="16">16 Bars</option>
-              <option value="32">32 Bars</option>
-            </select>
-            <label class="mini-toggle" title="Quantize">
-              <input id="quantize-enabled" type="checkbox" />
-              <span>Q</span>
-            </label>
-            <select id="quantize-division" aria-label="Quantize division">
-              <option value="0.25">1/4</option>
-              <option value="0.125">1/8</option>
-              <option value="0.0625">1/16</option>
-            </select>
-            <button id="record-loop" title="Record">REC</button>
-            <button id="stop-loop" title="Stop">STOP</button>
-            <button id="clear-scene" title="Clear">CLR</button>
-            <button id="export-loop" class="hidden" title="Export">EXP</button>
-            <button id="retake-loop" class="hidden" title="Retake">RE</button>
-            <button id="load-example" title="Demo">DEMO</button>
-            <label class="ghost-file" title="Open scene">
-              <input id="scene-file" type="file" accept="application/json" />
-              <span>OPEN</span>
-            </label>
-            <button id="save-scene" title="Save scene">SAVE</button>
-            <label class="ghost-file" title="Load font">
-              <input
-                id="text-font-file"
-                type="file"
-                accept=".ttf,.otf,.woff,.woff2,font/ttf,font/otf,font/woff,font/woff2"
-              />
-              <span>FONT</span>
-            </label>
-            <label class="ghost-file" title="Load background">
-              <input id="background-file" type="file" accept="image/*" />
-              <span>BG</span>
-            </label>
-            <label class="mini-toggle" title="Transparent background">
-              <input id="transparent-bg" type="checkbox" />
-              <span>α</span>
-            </label>
-          </div>
-        </header>
-
-        <!-- Canvas area -->
-        <div id="canvas-area">
-          <canvas id="engine-canvas"></canvas>
+            <output id="line-strength-value">1.4</output>
+          </label>
         </div>
-      </div>
-    </div>
+      </section>
 
-    <!-- Hidden state -->
+      <section class="inspector-block">
+        <p class="micro-title">Appearance</p>
+        <div class="compact-grid two">
+          <input
+            id="line-color"
+            type="color"
+            value="#ff4b4b"
+            aria-label="Color"
+            disabled
+          />
+          <label class="field compact">
+            <span>Outline</span>
+            <input
+              id="line-thickness"
+              type="range"
+              min="1"
+              max="24"
+              step="1"
+              value="5"
+            />
+            <output id="line-thickness-value">5</output>
+          </label>
+        </div>
+        <div class="swatch-grid">
+          <button
+            class="swatch"
+            type="button"
+            data-color="#ff4b4b"
+            style="--swatch: #ff4b4b"
+          ></button>
+          <button
+            class="swatch"
+            type="button"
+            data-color="#ff6d39"
+            style="--swatch: #ff6d39"
+          ></button>
+          <button
+            class="swatch"
+            type="button"
+            data-color="#ff9b1f"
+            style="--swatch: #ff9b1f"
+          ></button>
+          <button
+            class="swatch"
+            type="button"
+            data-color="#ffbf2f"
+            style="--swatch: #ffbf2f"
+          ></button>
+          <button
+            class="swatch"
+            type="button"
+            data-color="#e5df45"
+            style="--swatch: #e5df45"
+          ></button>
+          <button
+            class="swatch"
+            type="button"
+            data-color="#b9e54f"
+            style="--swatch: #b9e54f"
+          ></button>
+          <button
+            class="swatch"
+            type="button"
+            data-color="#35cb68"
+            style="--swatch: #35cb68"
+          ></button>
+          <button
+            class="swatch"
+            type="button"
+            data-color="#26d3a6"
+            style="--swatch: #26d3a6"
+          ></button>
+          <button
+            class="swatch"
+            type="button"
+            data-color="#2cc7dc"
+            style="--swatch: #2cc7dc"
+          ></button>
+          <button
+            class="swatch"
+            type="button"
+            data-color="#498cff"
+            style="--swatch: #498cff"
+          ></button>
+          <button
+            class="swatch"
+            type="button"
+            data-color="#7a62ff"
+            style="--swatch: #7a62ff"
+          ></button>
+          <button
+            class="swatch"
+            type="button"
+            data-color="#ff59cb"
+            style="--swatch: #ff59cb"
+          ></button>
+        </div>
+        <div class="action-row">
+          <button id="duplicate-selection" type="button">Duplicate</button>
+          <button id="delete-selection" type="button">Delete</button>
+          <button id="undo-action" type="button">Undo</button>
+        </div>
+      </section>
+    </aside>
+
     <input id="active-note" type="hidden" value="60" />
-    <input id="line-color" type="hidden" value="#FF3B30" />
-    <p class="sr-only" id="text-font-status">No font loaded.</p>
 
-    <!-- Shortcuts overlay -->
     <div id="shortcut-hud" class="shortcut-hud hidden">
       <div class="shortcut-card">
         <p><strong>Shortcuts</strong></p>
-        <p>V Select · D Draw · S Shape · T Text · B Ball</p>
-        <p>Cmd/Ctrl+D Duplicate · Delete Remove · Cmd/Ctrl+Z Undo</p>
-        <p>Tab Presentation · ? Shortcuts</p>
+        <p>`V` Select, `D` Draw, `S` Shape, `T` Text, `B` Ball</p>
+        <p>`Cmd/Ctrl+D` Duplicate, `Delete` Remove, `Cmd/Ctrl+Z` Undo</p>
+        <p>`Tab` Presentation, `?` Shortcuts</p>
         <button id="close-shortcuts">Close</button>
       </div>
     </div>
+
+    <p class="font-status hidden" id="text-font-status">
+      No font loaded. Load a font file to place text.
+    </p>
 
     <script src="./engine/physics.js"></script>
     <script src="./engine/swarm.js"></script>
     <script src="./engine/lineSystem.js"></script>
     <script src="./engine/textSystem.js"></script>
     <script src="./engine/shapeSystem.js"></script>
+    <script src="./engine/eventBus.js"></script>
     <script src="./engine/collision.js"></script>
     <script src="./midi/midiOut.js"></script>
     <script src="./render/canvasRenderer.js"></script>

@@ -15,18 +15,18 @@
     "B",
   ];
   const NOTE_COLORS = {
-    C: "#FF3B30",
-    "C#": "#FF6B3D",
-    D: "#FF9F1C",
-    "D#": "#FFD60A",
-    E: "#A3E635",
-    F: "#34C759",
-    "F#": "#2DD4BF",
-    G: "#22D3EE",
-    "G#": "#3B82F6",
-    A: "#6366F1",
-    "A#": "#A855F7",
-    B: "#EC4899",
+    C: "#ff4b4b",
+    "C#": "#ff6d39",
+    D: "#ff9b1f",
+    "D#": "#ffbf2f",
+    E: "#e5df45",
+    F: "#b9e54f",
+    "F#": "#35cb68",
+    G: "#26d3a6",
+    "G#": "#2cc7dc",
+    A: "#498cff",
+    "A#": "#7a62ff",
+    B: "#ff59cb",
   };
   const SHAPE_LIBRARY = {
     circle: function circle(center, size) {
@@ -161,7 +161,7 @@
     let lastFrameTime = 0;
     let frameAccumulator = 0;
     const canvas = document.getElementById("engine-canvas");
-    const canvasArea = document.getElementById("canvas-area");
+    const canvasWrap = document.getElementById("canvas-wrap");
     canvas.width = 1080;
     canvas.height = 1920;
     const renderer = new SBE.CanvasRenderer(canvas);
@@ -169,6 +169,81 @@
     const controls = SBE.Controls.createControls();
     let textEditor = null;
     let textUpdateTimer = 0;
+
+    // ── Event Bus ────────────────────────────────────────
+    const eventBus = new SBE.EventBus();
+
+    // ── Oscillator Output ────────────────────────────────
+    const oscillatorOutput = {
+      enabled: true,
+      handle: function handleOscillator(type, sourceObject) {
+        const context = ensureAudioContext();
+        if (!context) {
+          return;
+        }
+
+        const sound = sourceObject.sound;
+        const freq =
+          typeof sound.frequency === "number" ? sound.frequency : 220;
+        const volume = typeof sound.volume === "number" ? sound.volume : 0.1;
+        const duration =
+          typeof sound.duration === "number" ? sound.duration : 0.05;
+        const now = context.currentTime;
+
+        const oscillator = context.createOscillator();
+        const gain = context.createGain();
+
+        oscillator.type = "triangle";
+        oscillator.frequency.value = freq;
+        gain.gain.setValueAtTime(0.0001, now);
+        gain.gain.exponentialRampToValueAtTime(
+          Math.max(0.0008, volume),
+          now + 0.008,
+        );
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+        oscillator.connect(gain);
+        gain.connect(context.destination);
+        oscillator.start(now);
+        oscillator.stop(now + duration + 0.02);
+      },
+    };
+
+    // ── MIDI Output ──────────────────────────────────────
+    const midiOutput = {
+      enabled: true,
+      handle: function handleMidi(type, sourceObject) {
+        const sound = sourceObject.sound;
+
+        if (!sound.midi) {
+          return;
+        }
+
+        const channel =
+          typeof sound.midi.channel === "number" ? sound.midi.channel : 1;
+        const note = typeof sound.midi.note === "number" ? sound.midi.note : 60;
+        const velocity =
+          typeof sound.midi.velocity === "number" ? sound.midi.velocity : 80;
+
+        midiOut.sendNote(channel, note, velocity);
+      },
+    };
+
+    eventBus.registerOutput(oscillatorOutput);
+    eventBus.registerOutput(midiOutput);
+
+    // ── Wall Sound Source ────────────────────────────────
+    const wallSoundSource = {
+      sound: {
+        enabled: true,
+        event: "wall",
+        frequency: 120,
+        volume: 0.04,
+        duration: 0.03,
+        cooldownMs: 30,
+        midi: null,
+      },
+    };
 
     const state = {
       running: false,
@@ -191,7 +266,6 @@
       },
       balls: [],
       lines: [],
-      shapes: [],
       textObjects: [],
       backgroundDataUrl: null,
       backgroundImage: null,
@@ -201,8 +275,6 @@
       selectedLineId: null,
       selectedTextId: null,
       selectedBallId: null,
-      selectedShapeIds: new Set(),
-      selectedSegmentId: null,
       ui: {
         cleanOutput: false,
         presentation:
@@ -255,10 +327,19 @@
       },
     };
 
+    document.querySelectorAll(".tool-panel").forEach(makePanelDraggable);
+
     normalizeSwarmConfig();
     renderer.resize(state.canvas.width, state.canvas.height);
 
     const drawTools = SBE.DrawTools.createDrawTools(canvas, state, {
+      onTranslateSelection: function onTranslateSelection(dx, dy) {
+        translateSelection(dx, dy);
+      },
+      onEraseBall: function (ball) {
+        state.balls = state.balls.filter((b) => b.id !== ball.id);
+        renderFrame();
+      },
       getDraftColor: function getDraftColor() {
         return noteToColor(state.defaults.note);
       },
@@ -267,7 +348,7 @@
       },
       onCreateFreehand: function onCreateFreehand(points) {
         createFreehandStroke(points);
-        renderFrame(); // 🔥 ADD THIS
+        renderFrame();
       },
       onCreateShapeAt: function onCreateShapeAt(point) {
         createShapeAt(point);
@@ -287,20 +368,8 @@
       onSelectBall: function onSelectBall(ball) {
         selectObject("ball", ball.id);
       },
-      onSelectShape: function onSelectShape(shape, shiftKey) {
-        selectShape(shape.id, { shift: shiftKey });
-      },
-      onSelectSegment: function onSelectSegment(shape, segment) {
-        selectShape(shape.id, { segmentId: segment.id });
-      },
-      onDoubleClickShape: function onDoubleClickShape(shape) {
-        toggleShapeEditMode(shape.id);
-      },
       onClearSelection: function onClearSelection() {
         clearSelection();
-      },
-      onTranslateSelection: function onTranslateSelection(dx, dy) {
-        translateSelection(dx, dy);
       },
       onOverlayChange: function onOverlayChange() {
         renderFrame();
@@ -310,353 +379,11 @@
     bindControls();
     await applyExampleScene();
     updateCanvasAspect();
-    setupCanvasResize();
     setViewClasses();
     syncUI();
+    updatePanels(state.tool);
     renderFrame();
-    function bindControls() {
-      const elements = controls.elements;
-
-      elements.recordLoop.addEventListener("click", function recordLoop() {
-        ensureAudioContext();
-        armLoopRecording();
-      });
-
-      elements.stopLoop.addEventListener("click", function stopLoop() {
-        cancelLoopRecording();
-      });
-
-      elements.clearScene.addEventListener("click", function clearSceneClick() {
-        clearScene();
-      });
-
-      elements.exportLoop.addEventListener(
-        "click",
-        async function exportLoop() {
-          await exportAllOutputs();
-        },
-      );
-
-      elements.retakeLoop.addEventListener("click", function retakeLoop() {
-        clearLoop();
-        armLoopRecording();
-      });
-
-      elements.loadExample.addEventListener(
-        "click",
-        async function loadExample() {
-          await applyExampleScene();
-        },
-      );
-
-      elements.bpmInput.addEventListener("input", function updateBpm() {
-        state.bpm = clampBpm(Number(elements.bpmInput.value));
-        syncUI();
-      });
-
-      elements.barCount.addEventListener("change", function updateBars() {
-        state.loop.bars = clampInt(Number(elements.barCount.value), 8, 32);
-        syncUI();
-      });
-
-      elements.quantizeEnabled.addEventListener(
-        "change",
-        function toggleQuantize() {
-          const wasEnabled = state.quantize.enabled;
-          state.quantize.enabled = elements.quantizeEnabled.checked;
-          if (wasEnabled && !state.quantize.enabled) {
-            flushQuantizeQueue();
-          }
-        },
-      );
-
-      elements.quantizeDivision.addEventListener(
-        "change",
-        function updateQuantizeDivision() {
-          state.quantize.division =
-            Number(elements.quantizeDivision.value) || 0.25;
-        },
-      );
-
-      elements.transparentBg.addEventListener(
-        "change",
-        function toggleTransparentBackground() {
-          state.ui.transparentBackground = elements.transparentBg.checked;
-          renderFrame();
-        },
-      );
-
-      elements.saveScene.addEventListener("click", function saveScene() {
-        SBE.SceneManager.downloadScene(state, "sbe-scene");
-      });
-
-      elements.sceneFile.addEventListener(
-        "change",
-        async function openScene(event) {
-          const file = event.target.files && event.target.files[0];
-          event.target.value = "";
-          if (!file) {
-            return;
-          }
-
-          try {
-            pushHistory();
-            await applyScene(await SBE.SceneManager.loadFromFile(file));
-          } catch (error) {
-            controls.elements.engineStatus.textContent = "Open failed";
-          }
-        },
-      );
-
-      elements.textFontFile.addEventListener(
-        "change",
-        async function loadFont(event) {
-          const file = event.target.files && event.target.files[0];
-          event.target.value = "";
-          if (!file) {
-            return;
-          }
-
-          try {
-            state.textDraft.fontFile = await readFileAsDataUrl(file);
-            state.textDraft.fontName = file.name;
-            elements.textFontStatus.textContent = "Loaded font: " + file.name;
-          } catch (error) {
-            controls.elements.engineStatus.textContent = "Font failed";
-          }
-        },
-      );
-
-      elements.backgroundFile.addEventListener(
-        "change",
-        async function loadBackground(event) {
-          const file = event.target.files && event.target.files[0];
-          event.target.value = "";
-          if (!file) {
-            return;
-          }
-
-          try {
-            pushHistory();
-            state.backgroundDataUrl = await readFileAsDataUrl(file);
-            state.backgroundImage = await loadImage(state.backgroundDataUrl);
-            renderFrame();
-          } catch (error) {
-            controls.elements.engineStatus.textContent = "BG failed";
-          }
-        },
-      );
-
-      elements.toolButtons.forEach((button) => {
-        button.addEventListener("click", function chooseTool() {
-          if (state.ui.presentation) {
-            return;
-          }
-          state.tool = button.dataset.tool;
-          controls.syncTool(state.tool);
-          if (state.tool !== "text") {
-            removeCanvasTextInput(false);
-          }
-        });
-      });
-
-      elements.shapeButtons.forEach((button) => {
-        button.addEventListener("click", function chooseShape() {
-          state.selectedShape = button.dataset.shape;
-          controls.syncShapeSelection(state.selectedShape);
-        });
-      });
-
-      elements.swatches.forEach(function (swatch) {
-        swatch.addEventListener("click", function chooseSwatch() {
-          applyNoteClass(Number(swatch.dataset.noteClass));
-        });
-      });
-
-      elements.lineBehavior.addEventListener(
-        "change",
-        function updateBehaviorType() {
-          applyInspectorMetadata();
-        },
-      );
-
-      elements.lineStrength.addEventListener(
-        "input",
-        function updateBehaviorStrength() {
-          applyInspectorMetadata(false);
-        },
-      );
-
-      elements.lineThickness.addEventListener(
-        "input",
-        function updateThickness() {
-          applyInspectorMetadata(false);
-        },
-      );
-
-      elements.textContent.addEventListener(
-        "input",
-        function updateTextContent() {
-          state.defaults.textValue = elements.textContent.value;
-          scheduleSelectedTextRefresh();
-        },
-      );
-
-      elements.textSize.addEventListener("input", function updateTextSize() {
-        state.defaults.textSize = clampInt(
-          Number(elements.textSize.value),
-          24,
-          420,
-        );
-        scheduleSelectedTextRefresh();
-      });
-
-      elements.textX.addEventListener("input", function updateTextX() {
-        applySelectedTextTransform({ x: Number(elements.textX.value) });
-      });
-
-      elements.textY.addEventListener("input", function updateTextY() {
-        applySelectedTextTransform({ y: Number(elements.textY.value) });
-      });
-
-      elements.textScale.addEventListener("input", function updateTextScale() {
-        applySelectedTextTransform({ scale: Number(elements.textScale.value) });
-      });
-
-      elements.textRotation.addEventListener(
-        "input",
-        function updateTextRotation() {
-          applySelectedTextTransform({
-            rotation: Number(elements.textRotation.value),
-          });
-        },
-      );
-
-      elements.centerText.addEventListener("click", function centerText() {
-        centerSelectedText();
-      });
-
-      elements.duplicateSelection.addEventListener(
-        "click",
-        async function duplicateSelection() {
-          await duplicateSelectedObject();
-        },
-      );
-
-      elements.deleteSelection.addEventListener(
-        "click",
-        function deleteSelection() {
-          deleteSelectionObject();
-        },
-      );
-
-      elements.undoAction.addEventListener(
-        "click",
-        async function undoAction() {
-          await undo();
-        },
-      );
-
-      elements.ballCount.addEventListener("input", function updateBallCount() {
-        state.ballTool.count = clampInt(Number(elements.ballCount.value), 1, 8);
-      });
-
-      elements.ballSpeed.addEventListener("input", function updateBallSpeed() {
-        state.ballTool.speed = clamp(Number(elements.ballSpeed.value), 0.4, 3);
-      });
-
-      elements.ballSpread.addEventListener(
-        "input",
-        function updateBallSpread() {
-          state.ballTool.spread = clamp(
-            Number(elements.ballSpread.value),
-            0,
-            1,
-          );
-        },
-      );
-
-      elements.closeShortcuts.addEventListener(
-        "click",
-        function closeShortcuts() {
-          toggleShortcuts(false);
-        },
-      );
-
-      global.addEventListener("keydown", async function onKeyDown(event) {
-        if (textEditor && event.key === "Escape") {
-          event.preventDefault();
-          removeCanvasTextInput(false);
-          return;
-        }
-
-        if (isTypingTarget(event.target)) {
-          return;
-        }
-
-        if (event.key === "Tab") {
-          event.preventDefault();
-          togglePresentationMode();
-          return;
-        }
-
-        if (event.key === "?") {
-          event.preventDefault();
-          toggleShortcuts();
-          return;
-        }
-
-        if (event.key.toLowerCase() === "v") {
-          state.tool = "select";
-          syncUI();
-          return;
-        }
-        if (event.key.toLowerCase() === "d") {
-          if (event.metaKey || event.ctrlKey) {
-            event.preventDefault();
-            await duplicateSelectedObject();
-            return;
-          }
-          state.tool = "draw";
-          syncUI();
-          return;
-        }
-        if (
-          event.key.toLowerCase() === "s" &&
-          !(event.metaKey || event.ctrlKey)
-        ) {
-          state.tool = "shape";
-          syncUI();
-          return;
-        }
-        if (event.key.toLowerCase() === "t") {
-          state.tool = "text";
-          syncUI();
-          return;
-        }
-        if (event.key.toLowerCase() === "b") {
-          state.tool = "ball";
-          syncUI();
-          return;
-        }
-
-        if (event.key === "Delete" || event.key === "Backspace") {
-          event.preventDefault();
-          deleteSelectionObject();
-          return;
-        }
-
-        const modifier = event.metaKey || event.ctrlKey;
-        if (!modifier) {
-          return;
-        }
-
-        if (event.key.toLowerCase() === "z") {
-          event.preventDefault();
-          await undo();
-        }
-      });
-    }
+    event.key === "Delete";
 
     async function applyExampleScene() {
       await applyScene(SBE.ExampleScene);
@@ -674,7 +401,6 @@
       );
       state.lines = lines;
       state.textObjects = texts.map(normalizeTextObject);
-      state.shapes = (scene.shapes || []).map(SBE.ShapeSystem.hydrateShape);
       state.canvas.width = 1080;
       state.canvas.height = 1920;
       state.swarm = Object.assign({}, state.swarm, scene.swarm || {});
@@ -700,17 +426,8 @@
     }
 
     function updateCanvasAspect() {
-      // Canvas internal resolution stays fixed, CSS handles display via object-fit
-      canvas.style.width = "";
-      canvas.style.height = "";
-    }
-
-    function setupCanvasResize() {
-      if (typeof ResizeObserver !== "undefined") {
-        new ResizeObserver(function () {
-          renderFrame();
-        }).observe(canvasArea);
-      }
+      canvasWrap.style.aspectRatio =
+        state.canvas.width + " / " + state.canvas.height;
     }
 
     function syncUI() {
@@ -718,16 +435,50 @@
       controls.syncTool(state.tool);
       controls.syncShapeSelection(state.selectedShape);
       syncSelectionPanel();
-      syncNoteIndicator();
       controls.syncShortcutVisibility(state.ui.shortcutsVisible);
     }
 
-    function syncNoteIndicator() {
-      var note = state.defaults.note;
-      var noteClass = ((note % 12) + 12) % 12;
-      var noteName = NOTE_NAMES[noteClass];
-      var noteColor = noteToColor(note);
-      controls.syncNoteIndicator(note, noteName, noteColor);
+    function updatePanels(tool) {
+      const panels = document.querySelectorAll(".tool-panel");
+
+      panels.forEach((p) => (p.style.display = "none"));
+
+      const map = {
+        draw: "#draw-panel",
+        shape: "#shape-panel",
+        text: "#text-panel",
+      };
+
+      if (map[tool]) {
+        const el = document.querySelector(map[tool]);
+        if (el) el.style.display = "block";
+      }
+    }
+
+    function makePanelDraggable(el) {
+      let isDragging = false;
+      let offsetX = 0;
+      let offsetY = 0;
+
+      el.style.position = "absolute";
+
+      el.addEventListener("pointerdown", (e) => {
+        isDragging = true;
+        offsetX = e.clientX - el.offsetLeft;
+        offsetY = e.clientY - el.offsetTop;
+        el.setPointerCapture(e.pointerId);
+      });
+
+      el.addEventListener("pointermove", (e) => {
+        if (!isDragging) return;
+
+        el.style.left = e.clientX - offsetX + "px";
+        el.style.top = e.clientY - offsetY + "px";
+      });
+
+      el.addEventListener("pointerup", () => {
+        isDragging = false;
+      });
     }
 
     function syncSelectionPanel() {
@@ -764,8 +515,6 @@
       state.selectedBallId = type === "ball" ? id : null;
       state.selectedLineId = type === "line" ? id : null;
       state.selectedTextId = type === "text" ? id : null;
-      state.selectedShapeIds.clear();
-      state.selectedSegmentId = null;
       const selected = getSelectedObject();
       if (selected && selected.midi) {
         state.defaults.note = selected.midi.note;
@@ -778,71 +527,7 @@
       state.selectedBallId = null;
       state.selectedLineId = null;
       state.selectedTextId = null;
-      state.selectedShapeIds.clear();
-      state.selectedSegmentId = null;
       syncSelectionPanel();
-      renderFrame();
-    }
-
-    function selectShape(shapeId, options) {
-      var shift = options && options.shift;
-      var segmentId = options && options.segmentId;
-
-      if (shift) {
-        // Toggle membership
-        if (state.selectedShapeIds.has(shapeId)) {
-          state.selectedShapeIds.delete(shapeId);
-        } else {
-          state.selectedShapeIds.add(shapeId);
-        }
-        // Clear non-shape selections on first shift-add
-        state.selectedBallId = null;
-        state.selectedLineId = null;
-        state.selectedTextId = null;
-        state.selectedSegmentId = null;
-      } else {
-        // Replace selection
-        state.selectedBallId = null;
-        state.selectedLineId = null;
-        state.selectedTextId = null;
-        state.selectedShapeIds.clear();
-        state.selectedShapeIds.add(shapeId);
-        state.selectedSegmentId = segmentId || null;
-      }
-      syncSelectionPanel();
-      renderFrame();
-    }
-
-    function getSelectedShapes() {
-      if (!state.selectedShapeIds.size) {
-        return [];
-      }
-      return state.shapes.filter(function (s) {
-        return state.selectedShapeIds.has(s.id);
-      });
-    }
-
-    function getSelectedShape() {
-      if (state.selectedShapeIds.size !== 1) {
-        return null;
-      }
-      var id = state.selectedShapeIds.values().next().value;
-      return (
-        state.shapes.find(function (s) {
-          return s.id === id;
-        }) || null
-      );
-    }
-
-    function toggleShapeEditMode(shapeId) {
-      var shape = state.shapes.find(function (s) {
-        return s.id === shapeId;
-      });
-      if (!shape) {
-        return;
-      }
-      shape.isExpanded = !shape.isExpanded;
-      state.selectedSegmentId = null;
       renderFrame();
     }
 
@@ -869,27 +554,17 @@
       const shapeFactory =
         SHAPE_LIBRARY[state.selectedShape] || SHAPE_LIBRARY.circle;
       const paths = shapeFactory(point, 240);
-      const smoothedPaths = paths.map(function (path) {
-        return smoothStroke(path, 1);
+      const segments = [];
+
+      paths.forEach((path) => {
+        pointsToSegments(smoothStroke(path, 1)).forEach((segment) => {
+          segments.push(segment);
+        });
       });
 
-      const settings = createLineSettingsFromInspector();
-      var shape = SBE.ShapeSystem.createShapeFromPoints(
-        state.selectedShape,
-        smoothedPaths,
-        point,
-        settings,
-      );
-
-      if (!shape) {
-        return;
+      if (segments.length) {
+        createSegmentsBatch(segments);
       }
-
-      pushHistory();
-      state.shapes.push(shape);
-      selectShape(shape.id);
-      syncUI();
-      renderFrame();
     }
 
     function createSegmentsBatch(segments) {
@@ -902,13 +577,13 @@
           segment.x2 - segment.x1,
           segment.y2 - segment.y1,
         );
-        if (length < 2) {
-          return;
-        }
+
+        if (length < 2) return;
 
         const line = normalizeLineObject(
           SBE.LineSystem.createLine(segment, settings),
         );
+
         state.lines.push(line);
         lastId = line.id;
       });
@@ -916,7 +591,9 @@
       if (lastId) {
         selectObject("line", lastId);
       }
+
       syncUI();
+      renderFrame();
     }
 
     function beginCanvasTextInput(point) {
@@ -1090,16 +767,6 @@
     }
 
     function translateSelection(dx, dy) {
-      // Multi-shape selection
-      var selectedShapes = getSelectedShapes();
-      if (selectedShapes.length && !state.ui.presentation) {
-        selectedShapes.forEach(function (shape) {
-          SBE.ShapeSystem.translateShape(shape, dx, dy);
-        });
-        renderFrame();
-        return;
-      }
-
       const selected = getSelectedObject();
       if (!selected || state.ui.presentation) {
         return;
@@ -1135,19 +802,6 @@
     }
 
     function deleteSelectionObject() {
-      // Multi-shape deletion
-      var selectedShapes = getSelectedShapes();
-      if (selectedShapes.length && !state.ui.presentation) {
-        pushHistory();
-        var ids = state.selectedShapeIds;
-        state.shapes = state.shapes.filter(function (s) {
-          return !ids.has(s.id);
-        });
-        clearSelection();
-        syncUI();
-        return;
-      }
-
       const selected = getSelectedObject();
       if (!selected || state.ui.presentation) {
         return;
@@ -1169,21 +823,6 @@
     }
 
     async function duplicateSelectedObject() {
-      // Multi-shape duplication
-      var selectedShapes = getSelectedShapes();
-      if (selectedShapes.length && !state.ui.presentation) {
-        pushHistory();
-        state.selectedShapeIds.clear();
-        selectedShapes.forEach(function (shape) {
-          var copy = SBE.ShapeSystem.duplicateShape(shape);
-          state.shapes.push(copy);
-          state.selectedShapeIds.add(copy.id);
-        });
-        syncUI();
-        renderFrame();
-        return;
-      }
-
       const selected = getSelectedObject();
       if (!selected || state.ui.presentation) {
         return;
@@ -1233,7 +872,6 @@
       state.history.push({
         lines: state.lines.map(serializeLineObject),
         textObjects: state.textObjects.map(SBE.TextSystem.serializeTextObject),
-        shapes: state.shapes.map(SBE.ShapeSystem.serializeShape),
         balls: clone(state.balls),
         canvas: clone(state.canvas),
         swarm: clone(state.swarm),
@@ -1304,6 +942,9 @@
       object.thickness = patch.thickness;
       object.behavior.type = patch.behaviorType;
       object.behavior.strength = patch.behaviorStrength;
+
+      // Sync sound config from updated note
+      rebuildSoundConfig(object);
     }
 
     function applyNoteClass(noteClass, octaveHint) {
@@ -1319,51 +960,131 @@
       applyInspectorMetadata();
     }
 
-    function createLineSettingsFromInspector() {
-      const defaults = readInspectorDefaults();
+    // ── Sound Config Builder ─────────────────────────────
+
+    function buildSoundConfig(note, midiChannel) {
       return {
-        midiChannel: defaults.midiChannel,
-        note: defaults.note,
-        velocityRange: [48, 110],
-        life: 9999,
-        behavior: {
-          type: defaults.behaviorType,
-          strength: defaults.behaviorStrength,
-          velocityMultiplier: 1,
-        },
-        color: noteToColor(defaults.note),
-        thickness: defaults.thickness,
-        style: {
-          color: noteToColor(defaults.note),
-          colorMode: "auto",
-          thickness: defaults.thickness,
-        },
-        gravity: {
-          enabled: false,
-          direction: "down",
-          strength: 0,
+        enabled: true,
+        event: "collision",
+        frequency: 440 * Math.pow(2, (note - 69) / 12),
+        volume: 0.1,
+        duration: 0.18,
+        cooldownMs: 72,
+        midi: {
+          channel: midiChannel,
+          note: note,
+          velocity: 80,
         },
       };
     }
 
-    function createTextSettings(point, value) {
-      return {
-        value: value || state.defaults.textValue,
-        font: {
-          file: state.textDraft.fontFile,
-          name: state.textDraft.fontName || "Uploaded font",
-          size: clampInt(Number(controls.elements.textSize.value), 24, 420),
-        },
-        transform: {
-          x: point.x,
-          y: point.y,
-          scale: Number(controls.elements.textScale.value),
-          rotation: Number(controls.elements.textRotation.value),
-        },
-        interaction: {
-          mode: "letter",
-        },
-      };
+    function rebuildSoundConfig(object) {
+      const note = object.midi ? object.midi.note : object.note || 60;
+      const channel = object.midi
+        ? object.midi.channel
+        : object.midiChannel || 1;
+      object.sound = buildSoundConfig(note, channel);
+    }
+
+    // ── Event Dispatch ───────────────────────────────────
+
+    function dispatchCollisionEvent(sourceObject) {
+      if (!isPlaying) {
+        return;
+      }
+
+      const currentTime = getTransportTime();
+
+      if (!state.quantize.enabled) {
+        eventBus.triggerEvent("collision", sourceObject);
+        recordLoopEvent(sourceObject, currentTime);
+        return;
+      }
+
+      const gridTime = getQuantizeGridTime();
+      const nextTime = Math.ceil(currentTime / gridTime) * gridTime;
+      state.quantizeQueue.push({
+        time: nextTime,
+        sourceObject: sourceObject,
+      });
+    }
+
+    function processQuantizeQueue() {
+      if (!isPlaying) {
+        return;
+      }
+
+      if (!state.quantizeQueue.length) {
+        return;
+      }
+
+      const now = getTransportTime();
+      const remaining = [];
+      state.quantizeQueue.forEach((entry) => {
+        if (entry.time <= now) {
+          eventBus.triggerEvent("collision", entry.sourceObject);
+          recordLoopEvent(entry.sourceObject, entry.time);
+          return;
+        }
+        remaining.push(entry);
+      });
+      state.quantizeQueue = remaining;
+    }
+
+    function flushQuantizeQueue() {
+      state.quantizeQueue = [];
+    }
+
+    // ── Loop Recording / Playback ────────────────────────
+
+    function recordLoopEvent(sourceObject, scheduledTime) {
+      if (!state.loop.recording) {
+        return;
+      }
+
+      const relativeTime = scheduledTime - state.loop.startTime;
+      if (relativeTime < 0 || relativeTime > state.loop.duration) {
+        return;
+      }
+
+      // Store a snapshot of the sound config for replay
+      state.loop.events.push({
+        time: relativeTime,
+        sound: clone(sourceObject.sound),
+      });
+    }
+
+    function processLoopPlayback(nowSeconds) {
+      if (!state.loop.playing || !state.loop.hasLoop || !state.loop.duration) {
+        return;
+      }
+
+      const elapsed = nowSeconds - state.loop.cycleStartTime;
+      if (elapsed < 0) {
+        return;
+      }
+
+      const previous = state.loop.lastPlaybackPosition;
+      const current = mod(elapsed, state.loop.duration);
+      const wrapped = elapsed >= state.loop.duration && current < previous;
+
+      state.loop.events.forEach((event) => {
+        let shouldPlay = false;
+
+        if (wrapped) {
+          shouldPlay = event.time >= previous || event.time < current;
+        } else {
+          shouldPlay = event.time >= previous && event.time < current;
+        }
+
+        if (shouldPlay) {
+          // Replay through the event bus using the stored sound snapshot
+          const replaySource = { sound: event.sound };
+          eventBus.triggerEvent(event.sound.event, replaySource);
+        }
+      });
+
+      state.loop.lastPlaybackPosition = current;
     }
 
     function armLoopRecording() {
@@ -1442,112 +1163,51 @@
       }
     }
 
-    function processLoopPlayback(nowSeconds) {
-      if (!state.loop.playing || !state.loop.hasLoop || !state.loop.duration) {
-        return;
-      }
-
-      const elapsed = nowSeconds - state.loop.cycleStartTime;
-      if (elapsed < 0) {
-        return;
-      }
-
-      const previous = state.loop.lastPlaybackPosition;
-      const current = mod(elapsed, state.loop.duration);
-      const wrapped = elapsed >= state.loop.duration && current < previous;
-
-      state.loop.events.forEach((event) => {
-        if (wrapped) {
-          if (event.time >= previous || event.time < current) {
-            performMidiEvent(event, nowSeconds, { record: false, loop: true });
-          }
-          return;
-        }
-
-        if (event.time >= previous && event.time < current) {
-          performMidiEvent(event, nowSeconds, { record: false, loop: true });
-        }
-      });
-
-      state.loop.lastPlaybackPosition = current;
-    }
-
-    function recordLoopEvent(event, scheduledTime) {
-      if (!state.loop.recording) {
-        return;
-      }
-
-      const relativeTime = scheduledTime - state.loop.startTime;
-      if (relativeTime < 0 || relativeTime > state.loop.duration) {
-        return;
-      }
-
-      state.loop.events.push({
-        channel: event.channel,
-        note: event.note,
-        velocity: event.velocity,
-        time: relativeTime,
-      });
-    }
-
-    function dispatchMidiEvent(event) {
-      if (!isPlaying) {
-        return;
-      }
-
-      const currentTime = getTransportTime();
-      if (!state.quantize.enabled) {
-        performMidiEvent(event, currentTime, { record: true });
-        return;
-      }
-
-      const gridTime = getQuantizeGridTime();
-      const nextTime = Math.ceil(currentTime / gridTime) * gridTime;
-      state.quantizeQueue.push({
-        time: nextTime,
-        midiEvent: {
-          channel: event.channel,
-          note: event.note,
-          velocity: event.velocity,
+    function createLineSettingsFromInspector() {
+      const defaults = readInspectorDefaults();
+      return {
+        midiChannel: defaults.midiChannel,
+        note: defaults.note,
+        velocityRange: [48, 110],
+        life: 9999,
+        behavior: {
+          type: defaults.behaviorType,
+          strength: defaults.behaviorStrength,
+          velocityMultiplier: 1,
         },
-      });
+        color: noteToColor(defaults.note),
+        thickness: defaults.thickness,
+        style: {
+          color: noteToColor(defaults.note),
+          colorMode: "auto",
+          thickness: defaults.thickness,
+        },
+        gravity: {
+          enabled: false,
+          direction: "down",
+          strength: 0,
+        },
+      };
     }
 
-    function processQuantizeQueue() {
-      if (!isPlaying) {
-        return;
-      }
-
-      if (!state.quantizeQueue.length) {
-        return;
-      }
-
-      const now = getTransportTime();
-      const remaining = [];
-      state.quantizeQueue.forEach((entry) => {
-        if (entry.time <= now) {
-          performMidiEvent(entry.midiEvent, entry.time, { record: true });
-          return;
-        }
-        remaining.push(entry);
-      });
-      state.quantizeQueue = remaining;
-    }
-
-    function flushQuantizeQueue() {
-      state.quantizeQueue = [];
-    }
-
-    function performMidiEvent(event, eventTime, options) {
-      if (!isPlaying) {
-        return;
-      }
-
-      midiOut.sendNote(event.channel, event.note, event.velocity);
-      playMonitorTone(event.note, event.velocity);
-      if (!options || options.record !== false) {
-        recordLoopEvent(event, eventTime);
-      }
+    function createTextSettings(point, value) {
+      return {
+        value: value || state.defaults.textValue,
+        font: {
+          file: state.textDraft.fontFile,
+          name: state.textDraft.fontName || "Uploaded font",
+          size: clampInt(Number(controls.elements.textSize.value), 24, 420),
+        },
+        transform: {
+          x: point.x,
+          y: point.y,
+          scale: Number(controls.elements.textScale.value),
+          rotation: Number(controls.elements.textRotation.value),
+        },
+        interaction: {
+          mode: "letter",
+        },
+      };
     }
 
     function togglePlayback() {
@@ -1640,9 +1300,6 @@
         SBE.TextSystem
           ? SBE.TextSystem.getCollisionLines(state.textObjects || [])
           : [],
-        SBE.ShapeSystem
-          ? SBE.ShapeSystem.getCollisionSegments(state.shapes || [])
-          : [],
       );
       SBE.EnginePhysics.applyForces(
         state.balls,
@@ -1651,14 +1308,29 @@
         dt,
       );
       SBE.EnginePhysics.updateSwarm(state.balls, dt);
+
       const collisions = SBE.Collision.detectCollisions(state, now);
-      const midiEvents = SBE.Collision.resolveCollisions(
+      const soundSources = SBE.Collision.resolveCollisions(
         state,
         collisions,
         now,
       );
+
+      // Wall bounce events
+      collisions.forEach(function (collision) {
+        if (collision.type === "wall") {
+          eventBus.triggerEvent("wall", wallSoundSource);
+        }
+      });
+
+      // Collision events — dispatch through event bus
+      soundSources.forEach(function (source) {
+        if (source.line && source.line.sound) {
+          dispatchCollisionEvent(source.line);
+        }
+      });
+
       stabilizeBalls(collisions);
-      midiEvents.forEach(dispatchMidiEvent);
     }
 
     function renderFrame() {
@@ -1716,16 +1388,6 @@
       const AudioCtor = global.AudioContext || global.webkitAudioContext;
       state.audio.context = new AudioCtor();
       return state.audio.context;
-    }
-
-    function playMonitorTone(note, velocity) {
-      const context = ensureAudioContext();
-      if (!context) {
-        return;
-      }
-
-      const time = context.currentTime;
-      scheduleSynthTone(context, note, velocity, time, context.destination);
     }
 
     async function exportAllOutputs() {
@@ -1808,14 +1470,34 @@
         sampleRate,
       );
 
-      state.loop.events.forEach((event) => {
-        scheduleSynthTone(
-          offline,
-          event.note,
-          event.velocity,
-          event.time,
-          offline.destination,
+      state.loop.events.forEach(function (event) {
+        const sound = event.sound;
+        if (!sound || !sound.enabled) {
+          return;
+        }
+
+        const freq =
+          typeof sound.frequency === "number" ? sound.frequency : 220;
+        const volume = typeof sound.volume === "number" ? sound.volume : 0.1;
+        const duration =
+          typeof sound.duration === "number" ? sound.duration : 0.18;
+
+        const oscillator = offline.createOscillator();
+        const gain = offline.createGain();
+
+        oscillator.type = "triangle";
+        oscillator.frequency.value = freq;
+        gain.gain.setValueAtTime(0.0001, event.time);
+        gain.gain.exponentialRampToValueAtTime(
+          Math.max(0.0008, volume),
+          event.time + 0.008,
         );
+        gain.gain.exponentialRampToValueAtTime(0.0001, event.time + duration);
+
+        oscillator.connect(gain);
+        gain.connect(offline.destination);
+        oscillator.start(event.time);
+        oscillator.stop(event.time + duration + 0.02);
       });
 
       const buffer = await offline.startRendering();
@@ -1973,6 +1655,10 @@
           duration: 140,
         };
       }
+
+      // Build sound config from note/channel
+      line.sound = buildSoundConfig(line.midi.note, line.midi.channel);
+
       return line;
     }
 
@@ -2002,6 +1688,13 @@
         typeof textObject.behavior.strength === "number"
           ? textObject.behavior.strength
           : 1.4;
+
+      // Build sound config from note/channel
+      textObject.sound = buildSoundConfig(
+        textObject.midi.note,
+        textObject.midi.channel,
+      );
+
       return textObject;
     }
 
@@ -2100,27 +1793,6 @@
       });
     }
     return points;
-  }
-
-  function scheduleSynthTone(context, note, velocity, when, destination) {
-    const oscillator = context.createOscillator();
-    const gain = context.createGain();
-    const filter = context.createBiquadFilter();
-    oscillator.type = "triangle";
-    oscillator.frequency.value = 440 * Math.pow(2, (note - 69) / 12);
-    filter.type = "lowpass";
-    filter.frequency.value = 2400;
-    gain.gain.setValueAtTime(0.0001, when);
-    gain.gain.exponentialRampToValueAtTime(
-      Math.max(0.0008, velocity / 600),
-      when + 0.008,
-    );
-    gain.gain.exponentialRampToValueAtTime(0.0001, when + 0.18);
-    oscillator.connect(filter);
-    filter.connect(gain);
-    gain.connect(destination);
-    oscillator.start(when);
-    oscillator.stop(when + 0.22);
   }
 
   function encodeWav(audioBuffer) {

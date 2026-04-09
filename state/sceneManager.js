@@ -8,6 +8,11 @@
         ? state.textObjects.map(SBE.TextSystem.serializeTextObject)
         : [];
 
+    const shapes =
+      SBE.ShapeSystem && Array.isArray(state.shapes)
+        ? state.shapes.map(SBE.ShapeSystem.serializeShape)
+        : [];
+
     return {
       lines: state.lines.map((line) => ({
         id: line.id,
@@ -63,6 +68,7 @@
         color: state.swarm.color,
       },
       textObjects,
+      shapes,
       groups: Array.isArray(state.groups) ? state.groups.slice() : [],
       balls: Array.isArray(state.balls) ? state.balls.slice() : [],
       background: state.backgroundDataUrl,
@@ -77,6 +83,12 @@
       ? scene.textObjects.slice()
       : [];
     state.textObjects = [];
+
+    // Hydrate shapes if ShapeSystem is available
+    state.shapes = SBE.ShapeSystem && Array.isArray(scene.shapes)
+      ? scene.shapes.map(SBE.ShapeSystem.hydrateShape)
+      : [];
+
     if (scene.canvas && scene.canvas.width && scene.canvas.height) {
       state.canvas.width = scene.canvas.width;
       state.canvas.height = scene.canvas.height;
@@ -91,6 +103,8 @@
     state.balls = Array.isArray(scene.balls) ? scene.balls.slice() : [];
     state.selectedLineId = null;
     state.selectedTextId = null;
+    if (state.selectedShapeIds) { state.selectedShapeIds.clear(); }
+    state.selectedSegmentId = null;
     if (state.collisionMemory) {
       state.collisionMemory.clear();
     }
