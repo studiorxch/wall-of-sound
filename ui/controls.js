@@ -22,20 +22,9 @@
       engineStatus: byId("engine-status"),
       sceneStats: byId("scene-stats"),
 
-      // Note indicator
-      noteIndicator: byId("note-indicator"),
-      noteDot: byId("note-dot"),
-      noteLabel: byId("note-label"),
-
-      // Sidebar panels
-      shapePresets: byId("shape-presets"),
-      ballPanel: byId("ball-panel"),
-      behaviorPanel: byId("behavior-panel"),
-      textPanel: byId("text-panel"),
-
-      // Swatches (note/color)
-      swatchGroup: byId("swatch-group"),
-      swatches: Array.from(document.querySelectorAll("#swatch-group .swatch")),
+      // Inspector
+      inspector: byId("inspector"),
+      textInspectorBlock: byId("text-inspector-block"),
 
       // Inspector fields
       activeNote: byId("active-note"),
@@ -71,11 +60,17 @@
       ballSpread: byId("ball-spread"),
       ballSpreadValue: byId("ball-spread-value"),
 
-      // Shape presets
-      shapeButtons: Array.from(document.querySelectorAll(".shape-btn")),
+      // Shape panel
+      shapePanel: byId("shape-panel"),
+      ballPanel: byId("ball-panel"),
 
-      // Tools
-      toolButtons: Array.from(document.querySelectorAll(".tool-btn")),
+      // Buttons — match current index.html classes
+      shapeButtons: Array.from(document.querySelectorAll(".shape-button")),
+      toolButtons: Array.from(document.querySelectorAll(".tool")),
+      noteCells: Array.from(document.querySelectorAll(".note-cell")),
+      colorSwatches: Array.from(
+        document.querySelectorAll(".swatch-grid .swatch"),
+      ),
 
       // Shortcuts
       closeShortcuts: byId("close-shortcuts"),
@@ -133,26 +128,16 @@
         elements.toolButtons.forEach(function (button) {
           button.classList.toggle("active", button.dataset.tool === tool);
         });
-        elements.shapePresets.classList.toggle("hidden", tool !== "shape");
-        elements.ballPanel.classList.toggle("hidden", tool !== "ball");
+        if (elements.shapePanel) {
+          elements.shapePanel.classList.toggle("hidden", tool !== "shape");
+        }
+        if (elements.ballPanel) {
+          elements.ballPanel.classList.toggle("hidden", tool !== "ball");
+        }
       },
       syncShapeSelection: function syncShapeSelection(shapeId) {
         elements.shapeButtons.forEach(function (button) {
           button.classList.toggle("active", button.dataset.shape === shapeId);
-        });
-      },
-      syncNoteIndicator: function syncNoteIndicator(
-        noteNumber,
-        noteName,
-        noteColor,
-      ) {
-        elements.noteDot.style.background = noteColor;
-        elements.noteLabel.textContent = noteName;
-        elements.swatches.forEach(function (sw) {
-          sw.classList.toggle(
-            "active",
-            Number(sw.dataset.noteClass) === noteNumber % 12,
-          );
         });
       },
       syncSelection: function syncSelection(selection, activeNoteClass) {
@@ -160,11 +145,15 @@
           !!selection &&
           (selection.type === "line" || selection.type === "text");
 
-        elements.behaviorPanel.classList.toggle("hidden", !hasSelection);
-        elements.textPanel.classList.toggle(
-          "hidden",
-          !selection || selection.type !== "text",
-        );
+        if (elements.inspector) {
+          elements.inspector.classList.toggle("hidden", !hasSelection);
+        }
+        if (elements.textInspectorBlock) {
+          elements.textInspectorBlock.classList.toggle(
+            "hidden",
+            !selection || selection.type !== "text",
+          );
+        }
 
         if (!hasSelection) {
           return;
@@ -200,7 +189,9 @@
         }
       },
       syncShortcutVisibility: function syncShortcutVisibility(visible) {
-        elements.shortcutHud.classList.toggle("hidden", !visible);
+        if (elements.shortcutHud) {
+          elements.shortcutHud.classList.toggle("hidden", !visible);
+        }
       },
     };
   }

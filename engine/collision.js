@@ -6,7 +6,9 @@
     const lineSystem = SBE.LineSystem;
     const physics = SBE.EnginePhysics;
     const activeLines = state.lines.concat(
-      SBE.TextSystem ? SBE.TextSystem.getCollisionLines(state.textObjects || []) : [],
+      SBE.TextSystem
+        ? SBE.TextSystem.getCollisionLines(state.textObjects || [])
+        : [],
     );
 
     state.balls.forEach((ball) => {
@@ -42,7 +44,7 @@
           closestPoint: closest,
           distance,
           threshold,
-          canTriggerMidi: now - previous > 72,
+          canTriggerSound: now - previous > 72,
         };
 
         if (!current || distance < current.distance) {
@@ -61,7 +63,7 @@
   function resolveCollisions(state, collisions, now) {
     const physics = SBE.EnginePhysics;
     const lineSystem = SBE.LineSystem;
-    const midiEvents = [];
+    const soundSources = [];
 
     collisions.forEach((collision) => {
       if (collision.type !== "line") {
@@ -82,17 +84,13 @@
         line.life -= 1;
       }
 
-      if (collision.canTriggerMidi) {
+      if (collision.canTriggerSound) {
         state.collisionMemory.set(collision.key, now);
         markCollisionTarget(line, now);
 
-        midiEvents.push({
-          ballId: ball.id,
-          lineId: line.id,
-          channel: line.midiChannel,
-          note: line.note,
-          velocity: mapVelocity(ball, line),
-          speed: Math.hypot(ball.vx, ball.vy),
+        soundSources.push({
+          ball: ball,
+          line: line,
         });
       }
     });
@@ -101,18 +99,7 @@
 
     pruneMemory(state, now);
 
-    return midiEvents;
-  }
-
-  function mapVelocity(ball, line) {
-    const min = Math.min(line.velocityRange[0], line.velocityRange[1]);
-    const max = Math.max(line.velocityRange[0], line.velocityRange[1]);
-    const speed = Math.hypot(ball.vx, ball.vy);
-    const normalized = Math.min(1, speed / 460);
-    return Math.max(
-      1,
-      Math.min(127, Math.round(min + (max - min) * normalized)),
-    );
+    return soundSources;
   }
 
   function pruneMemory(state, now) {

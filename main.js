@@ -177,10 +177,10 @@
     const oscillatorOutput = {
       enabled: true,
       handle: function handleOscillator(type, sourceObject) {
-        const context = ensureAudioContext();
-        if (!context) {
+        if (!state.audio.context || state.audio.context.state !== "running") {
           return;
         }
+        const context = state.audio.context;
 
         const sound = sourceObject.sound;
         const freq =
@@ -383,7 +383,371 @@
     syncUI();
     updatePanels(state.tool);
     renderFrame();
-    event.key === "Delete";
+
+    function bindControls() {
+      const elements = controls.elements;
+
+      elements.recordLoop.addEventListener("click", function recordLoop() {
+        ensureAudioContext();
+        armLoopRecording();
+      });
+
+      elements.stopLoop.addEventListener("click", function stopLoop() {
+        cancelLoopRecording();
+      });
+
+      elements.clearScene.addEventListener("click", function clearSceneClick() {
+        clearScene();
+      });
+
+      elements.exportLoop.addEventListener(
+        "click",
+        async function exportLoop() {
+          await exportAllOutputs();
+        },
+      );
+
+      elements.retakeLoop.addEventListener("click", function retakeLoop() {
+        clearLoop();
+        armLoopRecording();
+      });
+
+      elements.loadExample.addEventListener(
+        "click",
+        async function loadExample() {
+          await applyExampleScene();
+        },
+      );
+
+      elements.bpmInput.addEventListener("input", function updateBpm() {
+        state.bpm = clampBpm(Number(elements.bpmInput.value));
+        syncUI();
+      });
+
+      elements.barCount.addEventListener("change", function updateBars() {
+        state.loop.bars = clampInt(Number(elements.barCount.value), 8, 32);
+        syncUI();
+      });
+
+      elements.quantizeEnabled.addEventListener(
+        "change",
+        function toggleQuantize() {
+          const wasEnabled = state.quantize.enabled;
+          state.quantize.enabled = elements.quantizeEnabled.checked;
+          if (wasEnabled && !state.quantize.enabled) {
+            flushQuantizeQueue();
+          }
+        },
+      );
+
+      elements.quantizeDivision.addEventListener(
+        "change",
+        function updateQuantizeDivision() {
+          state.quantize.division =
+            Number(elements.quantizeDivision.value) || 0.25;
+        },
+      );
+
+      elements.transparentBg.addEventListener(
+        "change",
+        function toggleTransparentBackground() {
+          state.ui.transparentBackground = elements.transparentBg.checked;
+          renderFrame();
+        },
+      );
+
+      elements.saveScene.addEventListener("click", function saveScene() {
+        SBE.SceneManager.downloadScene(state, "sbe-scene");
+      });
+
+      elements.sceneFile.addEventListener(
+        "change",
+        async function openScene(event) {
+          const file = event.target.files && event.target.files[0];
+          event.target.value = "";
+          if (!file) {
+            return;
+          }
+
+          try {
+            pushHistory();
+            await applyScene(await SBE.SceneManager.loadFromFile(file));
+          } catch (error) {
+            controls.elements.engineStatus.textContent = "Open failed";
+          }
+        },
+      );
+
+      elements.textFontFile.addEventListener(
+        "change",
+        async function loadFont(event) {
+          const file = event.target.files && event.target.files[0];
+          event.target.value = "";
+          if (!file) {
+            return;
+          }
+
+          try {
+            state.textDraft.fontFile = await readFileAsDataUrl(file);
+            state.textDraft.fontName = file.name;
+            elements.textFontStatus.textContent = "Loaded font: " + file.name;
+          } catch (error) {
+            controls.elements.engineStatus.textContent = "Font failed";
+          }
+        },
+      );
+
+      elements.backgroundFile.addEventListener(
+        "change",
+        async function loadBackground(event) {
+          const file = event.target.files && event.target.files[0];
+          event.target.value = "";
+          if (!file) {
+            return;
+          }
+
+          try {
+            pushHistory();
+            state.backgroundDataUrl = await readFileAsDataUrl(file);
+            state.backgroundImage = await loadImage(state.backgroundDataUrl);
+            renderFrame();
+          } catch (error) {
+            controls.elements.engineStatus.textContent = "BG failed";
+          }
+        },
+      );
+
+      elements.toolButtons.forEach((button) => {
+        button.addEventListener("click", function chooseTool() {
+          if (state.ui.presentation) {
+            return;
+          }
+          state.tool = button.dataset.tool;
+          controls.syncTool(state.tool);
+          updatePanels(state.tool);
+
+          if (state.tool !== "text") {
+            removeCanvasTextInput(false);
+          }
+        });
+      });
+
+      elements.shapeButtons.forEach((button) => {
+        button.addEventListener("click", function chooseShape() {
+          state.selectedShape = button.dataset.shape;
+          controls.syncShapeSelection(state.selectedShape);
+        });
+      });
+
+      elements.noteCells.forEach((cell) => {
+        cell.addEventListener("click", function chooseNoteClass() {
+          applyNoteClass(Number(cell.dataset.noteClass));
+        });
+      });
+
+      elements.lineBehavior.addEventListener(
+        "change",
+        function updateBehaviorType() {
+          applyInspectorMetadata();
+        },
+      );
+
+      elements.lineStrength.addEventListener(
+        "input",
+        function updateBehaviorStrength() {
+          applyInspectorMetadata(false);
+        },
+      );
+
+      elements.lineThickness.addEventListener(
+        "input",
+        function updateThickness() {
+          applyInspectorMetadata(false);
+        },
+      );
+
+      elements.lineColor.addEventListener("input", function syncDisplayColor() {
+        const nextNote = findClosestNoteForColor(elements.lineColor.value);
+        if (nextNote !== null) {
+          applyNoteClass(nextNote % 12, Math.floor(state.defaults.note / 12));
+        }
+      });
+
+      elements.colorSwatches.forEach((swatch) => {
+        swatch.addEventListener("click", function syncSwatchColor() {
+          const nextNote = findClosestNoteForColor(swatch.dataset.color);
+          if (nextNote !== null) {
+            applyNoteClass(nextNote % 12, Math.floor(state.defaults.note / 12));
+          }
+        });
+      });
+
+      elements.textContent.addEventListener(
+        "input",
+        function updateTextContent() {
+          state.defaults.textValue = elements.textContent.value;
+          scheduleSelectedTextRefresh();
+        },
+      );
+
+      elements.textSize.addEventListener("input", function updateTextSize() {
+        state.defaults.textSize = clampInt(
+          Number(elements.textSize.value),
+          24,
+          420,
+        );
+        scheduleSelectedTextRefresh();
+      });
+
+      elements.textX.addEventListener("input", function updateTextX() {
+        applySelectedTextTransform({ x: Number(elements.textX.value) });
+      });
+
+      elements.textY.addEventListener("input", function updateTextY() {
+        applySelectedTextTransform({ y: Number(elements.textY.value) });
+      });
+
+      elements.textScale.addEventListener("input", function updateTextScale() {
+        applySelectedTextTransform({ scale: Number(elements.textScale.value) });
+      });
+
+      elements.textRotation.addEventListener(
+        "input",
+        function updateTextRotation() {
+          applySelectedTextTransform({
+            rotation: Number(elements.textRotation.value),
+          });
+        },
+      );
+
+      elements.centerText.addEventListener("click", function centerText() {
+        centerSelectedText();
+      });
+
+      elements.duplicateSelection.addEventListener(
+        "click",
+        async function duplicateSelection() {
+          await duplicateSelectedObject();
+        },
+      );
+
+      elements.deleteSelection.addEventListener(
+        "click",
+        function deleteSelection() {
+          deleteSelectionObject();
+        },
+      );
+
+      elements.undoAction.addEventListener(
+        "click",
+        async function undoAction() {
+          await undo();
+        },
+      );
+
+      elements.ballCount.addEventListener("input", function updateBallCount() {
+        state.ballTool.count = clampInt(Number(elements.ballCount.value), 1, 8);
+      });
+
+      elements.ballSpeed.addEventListener("input", function updateBallSpeed() {
+        state.ballTool.speed = clamp(Number(elements.ballSpeed.value), 0.4, 3);
+      });
+
+      elements.ballSpread.addEventListener(
+        "input",
+        function updateBallSpread() {
+          state.ballTool.spread = clamp(
+            Number(elements.ballSpread.value),
+            0,
+            1,
+          );
+        },
+      );
+
+      elements.closeShortcuts.addEventListener(
+        "click",
+        function closeShortcuts() {
+          toggleShortcuts(false);
+        },
+      );
+
+      global.addEventListener("keydown", async function onKeyDown(event) {
+        if (textEditor && event.key === "Escape") {
+          event.preventDefault();
+          removeCanvasTextInput(false);
+          return;
+        }
+
+        if (isTypingTarget(event.target)) {
+          return;
+        }
+
+        if (event.key === "Tab") {
+          event.preventDefault();
+          togglePresentationMode();
+          return;
+        }
+
+        if (event.key === "?") {
+          event.preventDefault();
+          toggleShortcuts();
+          return;
+        }
+
+        if (event.key.toLowerCase() === "v") {
+          state.tool = "select";
+          syncUI();
+          return;
+        }
+        if (event.key.toLowerCase() === "d") {
+          if (event.metaKey || event.ctrlKey) {
+            event.preventDefault();
+            await duplicateSelectedObject();
+            return;
+          }
+          state.tool = "draw";
+          syncUI();
+          updatePanels(state.tool);
+          return;
+        }
+        if (
+          event.key.toLowerCase() === "s" &&
+          !(event.metaKey || event.ctrlKey)
+        ) {
+          state.tool = "shape";
+          syncUI();
+          updatePanels(state.tool);
+          return;
+        }
+        if (event.key.toLowerCase() === "t") {
+          state.tool = "text";
+          syncUI();
+          updatePanels(state.tool);
+          return;
+        }
+        if (event.key.toLowerCase() === "b") {
+          state.tool = "ball";
+          syncUI();
+          return;
+        }
+
+        if (event.key === "Delete" || event.key === "Backspace") {
+          event.preventDefault();
+          deleteSelectionObject();
+          return;
+        }
+
+        const modifier = event.metaKey || event.ctrlKey;
+        if (!modifier) {
+          return;
+        }
+
+        if (event.key.toLowerCase() === "z") {
+          event.preventDefault();
+          await undo();
+        }
+      });
+    }
 
     async function applyExampleScene() {
       await applyScene(SBE.ExampleScene);

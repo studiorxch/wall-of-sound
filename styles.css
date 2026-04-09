@@ -1,99 +1,8 @@
-:root {
-  color-scheme: dark;
-  --bg: #0a0a0c;
-  --sidebar-bg: #111114;
-  --topbar-bg: #111114;
-  --border: rgba(255, 255, 255, 0.06);
-  --text: #e8eaed;
-  --text-dim: #8b909a;
-  --active: rgba(255, 255, 255, 0.08);
-  --active-border: rgba(255, 255, 255, 0.18);
-  --canvas-bg: #090a0c;
-}
+/* ── STAGE SHELL (canvas-first layout) ──────────── */
 
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
-
-html,
-body {
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-  background: var(--bg);
-  color: var(--text);
-  font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
-  font-size: 11px;
-}
-
-body.presentation #sidebar,
-body.presentation #topbar,
-body.presentation .shortcut-hud {
-  display: none !important;
-}
-body.presentation #canvas-area {
-  border: 0;
-}
-
-button,
-input,
-select,
-textarea,
-output {
-  font: inherit;
-  color: inherit;
-}
-
-/* ── LAYOUT ─────────────────────────────────────── */
-
-#app {
-  display: flex;
+.stage-shell {
   width: 100%;
   height: 100vh;
-  overflow: hidden;
-}
-
-#sidebar {
-  width: 64px;
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  padding: 10px 0 8px;
-  background: var(--sidebar-bg);
-  border-right: 1px solid var(--border);
-  overflow-y: auto;
-  overflow-x: hidden;
-  scrollbar-width: none;
-}
-#sidebar::-webkit-scrollbar {
-  display: none;
-}
-
-#main {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-#topbar {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  padding: 0 10px;
-  height: 38px;
-  background: var(--topbar-bg);
-  border-bottom: 1px solid var(--border);
-}
-
-#canvas-area {
-  flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -101,254 +10,64 @@ output {
   background: var(--bg);
 }
 
-#engine-canvas {
-  display: block;
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
-  background: var(--canvas-bg);
-  touch-action: none;
-}
-
-/* ── NOTE INDICATOR ─────────────────────────────── */
-
-.note-indicator {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 3px;
-  padding: 8px 0 6px;
-  cursor: default;
-}
-
-.note-dot {
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: var(--sw, #ff3b30);
-  border: 2px solid rgba(255, 255, 255, 0.12);
-  transition: background 120ms ease;
-}
-
-.note-label {
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-}
-
-/* ── TOOL BUTTONS ───────────────────────────────── */
-
-.tool-group {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1px;
-  padding: 4px 0;
-  border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
+.canvas-stage {
   width: 100%;
-}
-
-.tool-btn {
-  width: 44px;
-  height: 36px;
+  height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  color: var(--text-dim);
-  cursor: pointer;
-  transition: all 100ms ease;
-}
-.tool-btn:hover {
-  color: var(--text);
-  background: var(--active);
-}
-.tool-btn.active {
-  color: var(--text);
-  background: var(--active);
-  border-color: var(--active-border);
 }
 
-/* ── SHAPE PRESETS ──────────────────────────────── */
-
-#shape-presets {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 2px;
-  padding: 4px 6px;
+.canvas-wrap {
   width: 100%;
-}
-
-.shape-btn {
-  width: 100%;
-  height: 28px;
+  height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 13px;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 5px;
-  color: var(--text-dim);
-  cursor: pointer;
-}
-.shape-btn:hover {
-  color: var(--text);
-  background: var(--active);
-}
-.shape-btn.active {
-  color: var(--text);
-  background: var(--active);
-  border-color: var(--active-border);
+  overflow: hidden;
 }
 
-/* ── SWATCHES ───────────────────────────────────── */
+/* ── FLOATING STATUS ────────────────────────────── */
 
-.swatch-group {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 3px;
-  padding: 6px 8px;
-  width: 100%;
-}
-
-.swatch {
-  width: 100%;
-  aspect-ratio: 1;
-  border-radius: 5px;
-  background: var(--sw);
-  border: 2px solid transparent;
-  cursor: pointer;
-  transition:
-    border-color 100ms ease,
-    transform 100ms ease;
-}
-.swatch:hover {
-  transform: scale(1.12);
-}
-.swatch.active {
-  border-color: #fff;
-  transform: scale(1.08);
-}
-
-/* ── SIDEBAR PANELS ─────────────────────────────── */
-
-.sidebar-spacer {
-  flex: 1;
-}
-
-.panel-section {
-  width: 100%;
-  padding: 6px 8px;
-  border-top: 1px solid var(--border);
+.floating-status {
+  position: fixed;
+  top: 16px;
+  left: 16px;
   display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-
-.panel-title {
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-}
-
-.field-row {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 2px;
-}
-.field-row span {
-  font-size: 9px;
-  color: var(--text-dim);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-.field-row output {
-  font-size: 9px;
-  color: var(--text-dim);
-  text-align: right;
-  background: transparent;
-  border: 0;
-  padding: 0;
-}
-
-.field-row-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 3px;
-}
-.field-row-grid button {
-  grid-column: 1 / -1;
-}
-
-/* ── ACTION GROUP ───────────────────────────────── */
-
-.action-group {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 2px;
-  padding: 6px 6px 4px;
-  width: 100%;
-  border-top: 1px solid var(--border);
-}
-
-.action-group button {
-  font-size: 9px;
-  font-weight: 600;
-  padding: 5px 0;
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  color: var(--text-dim);
-  cursor: pointer;
-}
-.action-group button:hover {
-  color: var(--text);
-  background: var(--active);
-}
-
-/* ── TOPBAR ─────────────────────────────────────── */
-
-.transport-row {
-  display: flex;
+  gap: 8px;
   align-items: center;
-  gap: 4px;
-  width: 100%;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-.transport-row::-webkit-scrollbar {
-  display: none;
-}
-
-.status-badge {
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--text);
-  padding: 3px 6px;
-  background: rgba(255, 255, 255, 0.06);
-  border-radius: 4px;
-  white-space: nowrap;
-}
-
-.stats-badge {
-  font-size: 9px;
   color: var(--text-dim);
-  padding: 3px 5px;
-  white-space: nowrap;
+  background: rgba(18, 20, 24, 0.9);
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  z-index: 10;
+  pointer-events: none;
 }
 
-#topbar input[type="number"] {
-  width: 62px;
+/* ── FLOATING TRANSPORT ─────────────────────────── */
+
+.floating-transport {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(18, 20, 24, 0.92);
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  z-index: 10;
+}
+
+.floating-transport input[type="number"] {
+  width: 58px;
   text-align: center;
   padding: 3px 4px;
   background: rgba(255, 255, 255, 0.04);
@@ -357,7 +76,7 @@ output {
   font-size: 10px;
 }
 
-#topbar select {
+.floating-transport select {
   padding: 3px 4px;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid var(--border);
@@ -365,9 +84,7 @@ output {
   font-size: 10px;
 }
 
-#topbar button,
-.ghost-file span,
-.mini-toggle span {
+.floating-transport button {
   font-size: 9px;
   font-weight: 600;
   padding: 4px 7px;
@@ -377,126 +94,233 @@ output {
   cursor: pointer;
   white-space: nowrap;
 }
-#topbar button:hover,
-.ghost-file span:hover,
-.mini-toggle span:hover {
+.floating-transport button:hover {
   background: rgba(255, 255, 255, 0.08);
   border-color: var(--active-border);
 }
 
-.ghost-file,
-.mini-toggle {
-  position: relative;
-  display: inline-flex;
+/* ── FLOATING TOOLBAR ───────────────────────────── */
+
+.floating-toolbar {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 4px;
+  background: rgba(18, 20, 24, 0.92);
+  padding: 6px 8px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  z-index: 10;
 }
-.ghost-file input,
-.mini-toggle input {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
+
+.floating-toolbar .tool {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 6px 12px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--text-dim);
   cursor: pointer;
+  white-space: nowrap;
 }
-.mini-toggle input:checked + span {
-  background: rgba(255, 255, 255, 0.1);
+.floating-toolbar .tool:hover {
+  color: var(--text);
+  background: var(--active);
+}
+.floating-toolbar .tool.active {
+  color: var(--text);
+  background: var(--active);
   border-color: var(--active-border);
 }
 
-/* ── RANGE INPUTS ───────────────────────────────── */
+/* ── FLOATING MINI-PANELS (shape, ball) ─────────── */
 
-input[type="range"] {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 100%;
-  height: 3px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 2px;
-  border: 0;
-  padding: 0;
-  cursor: pointer;
-}
-input[type="range"]::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--text);
-  border: 0;
+.floating-mini-panel {
+  position: fixed;
+  bottom: 72px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  background: rgba(18, 20, 24, 0.92);
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  z-index: 10;
+  max-width: 420px;
+  justify-content: center;
 }
 
-/* Panel text inputs */
-.panel-section input[type="text"],
-.panel-section input[type="number"] {
-  width: 100%;
-  padding: 4px 5px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  font-size: 10px;
-}
-.panel-section select {
-  width: 100%;
-  padding: 4px 5px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  font-size: 10px;
-}
-.panel-section button {
-  padding: 4px 6px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid var(--border);
-  border-radius: 4px;
+.floating-mini-panel .shape-button {
   font-size: 9px;
+  font-weight: 600;
+  padding: 4px 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: var(--text-dim);
   cursor: pointer;
 }
-.panel-section button:hover {
+.floating-mini-panel .shape-button:hover {
+  color: var(--text);
+  background: var(--active);
+}
+.floating-mini-panel .shape-button.active {
+  color: var(--text);
+  background: var(--active);
+  border-color: var(--active-border);
+}
+
+.floating-mini-panel .field.compact {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 80px;
+}
+.floating-mini-panel .field.compact span {
+  font-size: 9px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ── FLOATING INSPECTOR ─────────────────────────── */
+
+.floating-inspector {
+  position: fixed;
+  right: 24px;
+  top: 80px;
+  width: 260px;
+  background: rgba(18, 20, 24, 0.95);
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+}
+
+.inspector-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.micro-title {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.compact-grid {
+  display: grid;
+  gap: 4px;
+}
+.compact-grid.two {
+  grid-template-columns: 1fr 1fr;
+}
+.compact-grid.three {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+
+.note-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 3px;
+}
+
+.note-cell {
+  font-size: 9px;
+  font-weight: 600;
+  padding: 4px 0;
+  text-align: center;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.note-cell:hover {
+  color: var(--text);
+  background: var(--active);
+}
+.note-cell.active {
+  color: var(--text);
+  background: var(--active);
+  border-color: var(--active-border);
+}
+
+.swatch-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 3px;
+}
+
+.action-row {
+  display: flex;
+  gap: 4px;
+}
+.action-row button {
+  flex: 1;
+  font-size: 9px;
+  font-weight: 600;
+  padding: 5px 0;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.action-row button:hover {
+  color: var(--text);
   background: var(--active);
 }
 
-/* ── UTILITIES ──────────────────────────────────── */
+/* ── TOOL PANELS (draggable, draw/shape/text) ───── */
 
-.hidden {
-  display: none !important;
-}
-.sr-only {
-  position: absolute;
-  left: -9999px;
-}
-
-/* ── SHORTCUTS OVERLAY ──────────────────────────── */
-
-.shortcut-hud {
+.tool-panel {
   position: fixed;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  background: rgba(0, 0, 0, 0.5);
-  z-index: 100;
-}
-.shortcut-card {
-  width: min(88vw, 380px);
-  display: grid;
-  gap: 8px;
-  padding: 14px;
+  background: rgba(18, 20, 24, 0.95);
+  padding: 10px;
   border-radius: 10px;
   border: 1px solid var(--border);
-  background: var(--sidebar-bg);
+  z-index: 12;
+  cursor: move;
 }
-.shortcut-card p {
-  margin: 0;
-  font-size: 11px;
+
+/* ── PRESENTATION MODE ──────────────────────────── */
+
+body.presentation .floating-status,
+body.presentation .floating-transport,
+body.presentation .floating-toolbar,
+body.presentation .floating-mini-panel,
+body.presentation .floating-inspector,
+body.presentation .tool-panel,
+body.presentation .shortcut-hud {
+  display: none !important;
+}
+
+/* ── FONT STATUS ────────────────────────────────── */
+
+.font-status {
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 10px;
   color: var(--text-dim);
-  line-height: 1.5;
-}
-.shortcut-card p:first-child {
-  color: var(--text);
-}
-
-/* ── CANVAS TEXT INPUT (overlay) ────────────────── */
-
-.canvas-text-input {
-  font:
-    600 18px "SF Mono",
-    "Fira Code",
-    monospace;
+  background: rgba(18, 20, 24, 0.9);
+  padding: 6px 12px;
+  border-radius: 8px;
+  z-index: 8;
+  pointer-events: none;
 }
