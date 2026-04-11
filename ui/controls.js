@@ -3,6 +3,7 @@
 
   function createControls() {
     const elements = {
+      // Transport / tempo
       bpmInput: byId("bpm-input"),
       barCount: byId("bar-count"),
       quantizeEnabled: byId("quantize-enabled"),
@@ -22,15 +23,12 @@
       engineStatus: byId("engine-status"),
       sceneStats: byId("scene-stats"),
 
-      // Inspector
-      inspector: byId("inspector"),
-      textInspectorBlock: byId("text-inspector-block"),
-
       // Inspector fields
       activeNote: byId("active-note"),
       lineColor: byId("line-color"),
       lineThickness: byId("line-thickness"),
       lineThicknessValue: byId("line-thickness-value"),
+      lineMechanic: byId("line-mechanic"),
       lineBehavior: byId("line-behavior"),
       lineStrength: byId("line-strength"),
       lineStrengthValue: byId("line-strength-value"),
@@ -47,10 +45,18 @@
       textRotationValue: byId("text-rotation-value"),
       centerText: byId("center-text"),
 
+      // Text inspector block (for show/hide)
+      textInspectorBlock: byId("text-inspector-block"),
+
       // Actions
       duplicateSelection: byId("duplicate-selection"),
       deleteSelection: byId("delete-selection"),
       undoAction: byId("undo-action"),
+      duplicatePattern: byId("duplicate-pattern"),
+      gridCols: byId("grid-cols"),
+      gridRows: byId("grid-rows"),
+      gridSpacingX: byId("grid-spacing-x"),
+      gridSpacingY: byId("grid-spacing-y"),
 
       // Ball
       ballCount: byId("ball-count"),
@@ -60,11 +66,7 @@
       ballSpread: byId("ball-spread"),
       ballSpreadValue: byId("ball-spread-value"),
 
-      // Shape panel
-      shapePanel: byId("shape-panel"),
-      ballPanel: byId("ball-panel"),
-
-      // Buttons — match current index.html classes
+      // Button collections
       shapeButtons: Array.from(document.querySelectorAll(".shape-button")),
       toolButtons: Array.from(document.querySelectorAll(".tool")),
       noteCells: Array.from(document.querySelectorAll(".note-cell")),
@@ -75,8 +77,15 @@
       // Shortcuts
       closeShortcuts: byId("close-shortcuts"),
       shortcutHud: byId("shortcut-hud"),
+
+      // Tabs
+      inspectorTabs: Array.from(
+        document.querySelectorAll(".inspector-tabs .tab"),
+      ),
+      tabContents: Array.from(document.querySelectorAll(".tab-content")),
     };
 
+    // Bind range → output sync
     bindRange(elements.textSize, elements.textSizeValue, 0);
     bindRange(elements.textScale, elements.textScaleValue, 1);
     bindRange(elements.textRotation, elements.textRotationValue, 0);
@@ -86,14 +95,29 @@
     bindRange(elements.ballSpeed, elements.ballSpeedValue, 1);
     bindRange(elements.ballSpread, elements.ballSpreadValue, 2);
 
+    // Tab switching
+    elements.inspectorTabs.forEach(function (tab) {
+      tab.addEventListener("click", function onTabClick() {
+        var tabId = tab.dataset.tab;
+        elements.inspectorTabs.forEach(function (t) {
+          t.classList.toggle("active", t.dataset.tab === tabId);
+        });
+        elements.tabContents.forEach(function (tc) {
+          tc.classList.toggle("active", tc.dataset.tabContent === tabId);
+        });
+      });
+    });
+
     return {
-      elements,
+      elements: elements,
       syncState: function syncState(appState) {
         elements.bpmInput.value = Number(appState.bpm).toFixed(1);
         elements.barCount.value = String(appState.loop.bars);
         elements.quantizeEnabled.checked = !!appState.quantize.enabled;
         elements.quantizeDivision.value = String(appState.quantize.division);
-        elements.transparentBg.checked = !!appState.ui.transparentBackground;
+        if (elements.transparentBg) {
+          elements.transparentBg.checked = !!appState.ui.transparentBackground;
+        }
         elements.engineStatus.textContent = appState.loop.recording
           ? "REC"
           : appState.loop.armed
@@ -105,7 +129,6 @@
                 : "STOP";
         elements.sceneStats.textContent =
           appState.lines.length +
-          (appState.shapes ? appState.shapes.length : 0) +
           "L " +
           appState.textObjects.length +
           "T " +
@@ -128,12 +151,6 @@
         elements.toolButtons.forEach(function (button) {
           button.classList.toggle("active", button.dataset.tool === tool);
         });
-        if (elements.shapePanel) {
-          elements.shapePanel.classList.toggle("hidden", tool !== "shape");
-        }
-        if (elements.ballPanel) {
-          elements.ballPanel.classList.toggle("hidden", tool !== "ball");
-        }
       },
       syncShapeSelection: function syncShapeSelection(shapeId) {
         elements.shapeButtons.forEach(function (button) {
@@ -141,13 +158,9 @@
         });
       },
       syncSelection: function syncSelection(selection, activeNoteClass) {
-        var hasSelection =
-          !!selection &&
-          (selection.type === "line" || selection.type === "text");
+        var hasSelection = !!selection;
 
-        if (elements.inspector) {
-          elements.inspector.classList.toggle("hidden", !hasSelection);
-        }
+        // Show/hide text section
         if (elements.textInspectorBlock) {
           elements.textInspectorBlock.classList.toggle(
             "hidden",
@@ -159,33 +172,70 @@
           return;
         }
 
-        elements.activeNote.value = String(selection.midi.note);
-        elements.lineThickness.value = String(selection.style.thickness);
-        elements.lineThicknessValue.textContent = String(
-          selection.style.thickness,
-        );
-        elements.lineBehavior.value =
-          selection.behavior.type === "normal"
-            ? "none"
-            : selection.behavior.type;
-        elements.lineStrength.value = String(selection.behavior.strength);
-        elements.lineStrengthValue.textContent =
-          selection.behavior.strength.toFixed(1);
+        var note = selection.midi ? selection.midi.note : selection.note;
+        if (
+          typeof note !== "number" &&
+          selection.segments &&
+          selection.segments.length
+        ) {
+          note = selection.segments[0].note;
+        }
+        if (typeof note === "number") {
+          elements.activeNote.value = String(note);
+        }
+        if (elements.lineMechanic) {
+          var mechVal = selection.mechanicType;
+          if (!mechVal && selection.segments && selection.segments.length) {
+            mechVal = selection.segments[0].mechanicType;
+          }
+          elements.lineMechanic.value = mechVal || "none";
+        }
+        var selStyle = selection.style;
+        var selBehavior = selection.behavior;
+        if (!selStyle && selection.segments && selection.segments.length) {
+          selStyle = { thickness: selection.segments[0].thickness };
+        }
+        if (!selBehavior && selection.segments && selection.segments.length) {
+          selBehavior = selection.segments[0].behavior;
+        }
+        if (elements.lineThickness && selStyle) {
+          elements.lineThickness.value = String(selStyle.thickness);
+        }
+        if (elements.lineThicknessValue && selStyle) {
+          elements.lineThicknessValue.textContent = String(selStyle.thickness);
+        }
+        if (elements.lineBehavior && selBehavior) {
+          elements.lineBehavior.value =
+            selBehavior.type === "normal" ? "none" : selBehavior.type;
+        }
+        if (elements.lineStrength && selBehavior) {
+          elements.lineStrength.value = String(selBehavior.strength);
+        }
+        if (elements.lineStrengthValue && selBehavior) {
+          elements.lineStrengthValue.textContent =
+            selBehavior.strength.toFixed(1);
+        }
 
         if (selection.type === "text") {
           elements.textContent.value = selection.value;
           elements.textSize.value = String(selection.font.size);
-          elements.textSizeValue.textContent = String(selection.font.size);
+          if (elements.textSizeValue) {
+            elements.textSizeValue.textContent = String(selection.font.size);
+          }
           elements.textX.value = String(Math.round(selection.transform.x));
           elements.textY.value = String(Math.round(selection.transform.y));
           elements.textScale.value = String(selection.transform.scale);
-          elements.textScaleValue.textContent = Number(
-            selection.transform.scale,
-          ).toFixed(1);
+          if (elements.textScaleValue) {
+            elements.textScaleValue.textContent = Number(
+              selection.transform.scale,
+            ).toFixed(1);
+          }
           elements.textRotation.value = String(selection.transform.rotation);
-          elements.textRotationValue.textContent = Number(
-            selection.transform.rotation,
-          ).toFixed(0);
+          if (elements.textRotationValue) {
+            elements.textRotationValue.textContent = Number(
+              selection.transform.rotation,
+            ).toFixed(0);
+          }
         }
       },
       syncShortcutVisibility: function syncShortcutVisibility(visible) {
@@ -212,6 +262,6 @@
   }
 
   SBE.Controls = {
-    createControls,
+    createControls: createControls,
   };
 })(window);

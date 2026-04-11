@@ -1,21 +1,288 @@
-/* ── STAGE SHELL (canvas-first layout) ──────────── */
+:root {
+  color-scheme: dark;
+  --bg: #0c0d0f;
+  --panel: #131416;
+  --panel-border: rgba(255, 255, 255, 0.06);
+  --topbar: #111214;
+  --text: #e0e2e6;
+  --text-dim: #6b7280;
+  --accent: #3dd8c5;
+  --active: rgba(255, 255, 255, 0.07);
+  --active-border: rgba(255, 255, 255, 0.16);
+  --canvas-bg: #08090b;
+  --field-bg: rgba(255, 255, 255, 0.04);
+  --field-border: rgba(255, 255, 255, 0.08);
+}
 
-.stage-shell {
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
   width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "SF Mono", "Fira Code", "Cascadia Code", "Menlo", monospace;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+button,
+input,
+select,
+textarea,
+output {
+  font: inherit;
+  color: inherit;
+}
+
+/* ── APP GRID ───────────────────────────────────── */
+
+body {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  grid-template-columns: 1fr;
   height: 100vh;
+}
+
+.topbar {
+  grid-row: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px;
+  height: 40px;
+  background: var(--topbar);
+  border-bottom: 1px solid var(--panel-border);
+  gap: 8px;
+  z-index: 20;
+}
+
+.app-body {
+  grid-row: 2;
+  display: grid;
+  grid-template-columns: 220px 1fr 260px;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* ── TOP BAR ────────────────────────────────────── */
+
+.topbar-left,
+.topbar-center,
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.logo-id {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: var(--accent);
+  margin-right: 8px;
+  user-select: none;
+}
+
+.tool-group {
+  display: flex;
+  gap: 2px;
+}
+
+.tool {
+  width: 32px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.tool:hover {
+  color: var(--text);
+  background: var(--active);
+}
+.tool.active {
+  color: var(--accent);
+  background: var(--active);
+  border-color: var(--active-border);
+}
+
+.topbar input[type="number"] {
+  width: 54px;
+  text-align: center;
+  padding: 3px 4px;
+  background: var(--field-bg);
+  border: 1px solid var(--field-border);
+  border-radius: 4px;
+  font-size: 10px;
+}
+
+.topbar select {
+  padding: 3px 4px;
+  background: var(--field-bg);
+  border: 1px solid var(--field-border);
+  border-radius: 4px;
+  font-size: 10px;
+}
+
+.topbar button,
+.file-btn span,
+.toggle-btn span {
+  font-size: 9px;
+  font-weight: 600;
+  padding: 4px 7px;
+  background: var(--field-bg);
+  border: 1px solid var(--field-border);
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.topbar button:hover,
+.file-btn span:hover,
+.toggle-btn span:hover {
+  background: var(--active);
+  border-color: var(--active-border);
+}
+
+.file-btn,
+.toggle-btn {
+  position: relative;
+  display: inline-flex;
+}
+.file-btn input,
+.toggle-btn input[type="file"] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.toggle-btn input[type="checkbox"] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.toggle-btn input:checked + span {
+  color: var(--accent);
+  background: rgba(61, 216, 197, 0.1);
+  border-color: var(--accent);
+}
+
+/* ── PANELS ─────────────────────────────────────── */
+
+.panel {
+  background: var(--panel);
+  border-color: var(--panel-border);
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
+}
+
+.panel-left {
+  border-right: 1px solid var(--panel-border);
+}
+
+.panel-right {
+  border-left: 1px solid var(--panel-border);
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── LEFT PANEL: Libraries ──────────────────────── */
+
+.library-section {
+  padding: 8px;
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.library-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 6px;
+}
+
+.lib-add {
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  background: transparent;
+  border: 1px solid var(--field-border);
+  border-radius: 4px;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 0;
+}
+.lib-add:hover {
+  color: var(--text);
+  background: var(--active);
+}
+
+.shape-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 3px;
+}
+
+.shape-button {
+  width: 100%;
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 4px;
+}
+.shape-button:hover {
+  color: var(--text);
+  background: var(--active);
+}
+.shape-button.active {
+  color: var(--accent);
+  background: var(--active);
+  border-color: var(--active-border);
+}
+
+.lib-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* ── CENTER: Canvas ─────────────────────────────── */
+
+.canvas-area {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
   background: var(--bg);
-}
-
-.canvas-stage {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
 .canvas-wrap {
@@ -24,196 +291,120 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  overflow: hidden;
 }
 
-/* ── FLOATING STATUS ────────────────────────────── */
+#engine-canvas {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  background: var(--canvas-bg);
+  touch-action: none;
+}
 
-.floating-status {
-  position: fixed;
-  top: 16px;
-  left: 16px;
+.transport-overlay {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
   display: flex;
-  gap: 8px;
+  gap: 6px;
+  background: rgba(18, 20, 24, 0.88);
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--panel-border);
+  z-index: 5;
+}
+
+.transport-btn {
+  width: 32px;
+  height: 28px;
+  display: flex;
   align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  background: transparent;
+  border: 1px solid var(--field-border);
+  border-radius: 6px;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.transport-btn:hover {
+  color: var(--text);
+  background: var(--active);
+}
+.transport-btn.rec {
+  color: #e53e3e;
+}
+.transport-btn.rec:hover {
+  background: rgba(229, 62, 62, 0.12);
+}
+
+.status-overlay {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 10px;
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-dim);
-  background: rgba(18, 20, 24, 0.9);
-  padding: 6px 10px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  z-index: 10;
   pointer-events: none;
+  z-index: 5;
 }
 
-/* ── FLOATING TRANSPORT ─────────────────────────── */
+/* ── RIGHT PANEL: Inspector Tabs ────────────────── */
 
-.floating-transport {
-  position: fixed;
-  top: 16px;
-  left: 50%;
-  transform: translateX(-50%);
+.inspector-tabs {
   display: flex;
-  align-items: center;
-  gap: 6px;
-  background: rgba(18, 20, 24, 0.92);
-  padding: 6px 10px;
-  border-radius: 10px;
-  border: 1px solid var(--border);
-  z-index: 10;
+  border-bottom: 1px solid var(--panel-border);
+  flex-shrink: 0;
 }
 
-.floating-transport input[type="number"] {
-  width: 58px;
+.tab {
+  flex: 1;
+  padding: 8px 0;
+  font-size: 10px;
+  font-weight: 600;
   text-align: center;
-  padding: 3px 4px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  font-size: 10px;
-}
-
-.floating-transport select {
-  padding: 3px 4px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  font-size: 10px;
-}
-
-.floating-transport button {
-  font-size: 9px;
-  font-weight: 600;
-  padding: 4px 7px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  cursor: pointer;
-  white-space: nowrap;
-}
-.floating-transport button:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: var(--active-border);
-}
-
-/* ── FLOATING TOOLBAR ───────────────────────────── */
-
-.floating-toolbar {
-  position: fixed;
-  bottom: 24px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  gap: 4px;
-  background: rgba(18, 20, 24, 0.92);
-  padding: 6px 8px;
-  border-radius: 10px;
-  border: 1px solid var(--border);
-  z-index: 10;
-}
-
-.floating-toolbar .tool {
-  font-size: 10px;
-  font-weight: 600;
-  padding: 6px 12px;
   background: transparent;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  color: var(--text-dim);
-  cursor: pointer;
-  white-space: nowrap;
-}
-.floating-toolbar .tool:hover {
-  color: var(--text);
-  background: var(--active);
-}
-.floating-toolbar .tool.active {
-  color: var(--text);
-  background: var(--active);
-  border-color: var(--active-border);
-}
-
-/* ── FLOATING MINI-PANELS (shape, ball) ─────────── */
-
-.floating-mini-panel {
-  position: fixed;
-  bottom: 72px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  background: rgba(18, 20, 24, 0.92);
-  padding: 8px 10px;
-  border-radius: 10px;
-  border: 1px solid var(--border);
-  z-index: 10;
-  max-width: 420px;
-  justify-content: center;
-}
-
-.floating-mini-panel .shape-button {
-  font-size: 9px;
-  font-weight: 600;
-  padding: 4px 8px;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 5px;
+  border: none;
+  border-bottom: 2px solid transparent;
   color: var(--text-dim);
   cursor: pointer;
 }
-.floating-mini-panel .shape-button:hover {
+.tab:hover {
   color: var(--text);
-  background: var(--active);
 }
-.floating-mini-panel .shape-button.active {
-  color: var(--text);
-  background: var(--active);
-  border-color: var(--active-border);
+.tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
 }
 
-.floating-mini-panel .field.compact {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 80px;
-}
-.floating-mini-panel .field.compact span {
-  font-size: 9px;
-  color: var(--text-dim);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-/* ── FLOATING INSPECTOR ─────────────────────────── */
-
-.floating-inspector {
-  position: fixed;
-  right: 24px;
-  top: 80px;
-  width: 260px;
-  background: rgba(18, 20, 24, 0.95);
-  padding: 12px;
-  border-radius: 12px;
-  border: 1px solid var(--border);
-  z-index: 10;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  max-height: calc(100vh - 120px);
+.tab-content {
+  display: none;
+  flex: 1;
   overflow-y: auto;
+  padding: 0;
+}
+.tab-content.active {
+  display: block;
 }
 
-.inspector-block {
+/* ── Inspector Sections ─────────────────────────── */
+
+.inspector-section {
+  padding: 10px;
+  border-bottom: 1px solid var(--panel-border);
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
-.micro-title {
+.section-title {
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -221,30 +412,20 @@
   color: var(--text-dim);
 }
 
-.compact-grid {
-  display: grid;
-  gap: 4px;
-}
-.compact-grid.two {
-  grid-template-columns: 1fr 1fr;
-}
-.compact-grid.three {
-  grid-template-columns: 1fr 1fr 1fr;
-}
-
+/* Note grid */
 .note-grid {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 3px;
 }
 
 .note-cell {
   font-size: 9px;
   font-weight: 600;
-  padding: 4px 0;
+  padding: 5px 0;
   text-align: center;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid var(--border);
+  background: var(--field-bg);
+  border: 1px solid var(--field-border);
   border-radius: 4px;
   color: var(--text-dim);
   cursor: pointer;
@@ -254,17 +435,87 @@
   background: var(--active);
 }
 .note-cell.active {
-  color: var(--text);
-  background: var(--active);
-  border-color: var(--active-border);
+  color: var(--accent);
+  background: rgba(61, 216, 197, 0.1);
+  border-color: var(--accent);
 }
 
+/* Swatch grid */
 .swatch-grid {
   display: grid;
   grid-template-columns: repeat(6, 1fr);
   gap: 3px;
 }
 
+.swatch {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 4px;
+  background: var(--sw);
+  border: 2px solid transparent;
+  cursor: pointer;
+}
+.swatch:hover {
+  transform: scale(1.1);
+}
+.swatch.active {
+  border-color: #fff;
+}
+
+/* Field grids */
+.field-grid {
+  display: grid;
+  gap: 6px;
+}
+.field-grid.two {
+  grid-template-columns: 1fr 1fr;
+}
+.field-grid.three {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.field span {
+  font-size: 9px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.field output {
+  font-size: 9px;
+  color: var(--text-dim);
+  background: transparent;
+  border: 0;
+  text-align: right;
+}
+
+.full-input {
+  width: 100%;
+  padding: 5px 6px;
+  background: var(--field-bg);
+  border: 1px solid var(--field-border);
+  border-radius: 4px;
+}
+
+.small-btn {
+  align-self: end;
+  padding: 4px 8px;
+  font-size: 9px;
+  font-weight: 600;
+  background: var(--field-bg);
+  border: 1px solid var(--field-border);
+  border-radius: 4px;
+  cursor: pointer;
+}
+.small-btn:hover {
+  background: var(--active);
+}
+
+/* Action row */
 .action-row {
   display: flex;
   gap: 4px;
@@ -274,9 +525,9 @@
   font-size: 9px;
   font-weight: 600;
   padding: 5px 0;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid var(--border);
-  border-radius: 5px;
+  background: var(--field-bg);
+  border: 1px solid var(--field-border);
+  border-radius: 4px;
   color: var(--text-dim);
   cursor: pointer;
 }
@@ -285,35 +536,118 @@
   background: var(--active);
 }
 
-/* ── TOOL PANELS (draggable, draw/shape/text) ───── */
+/* ── FORM ELEMENTS ──────────────────────────────── */
 
-.tool-panel {
-  position: fixed;
-  background: rgba(18, 20, 24, 0.95);
-  padding: 10px;
-  border-radius: 10px;
-  border: 1px solid var(--border);
-  z-index: 12;
-  cursor: move;
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--text);
+  border: 0;
+}
+
+input[type="color"] {
+  width: 100%;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--field-border);
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+}
+
+input[type="number"],
+input[type="text"],
+select {
+  padding: 4px 5px;
+  background: var(--field-bg);
+  border: 1px solid var(--field-border);
+  border-radius: 4px;
+  font-size: 10px;
+}
+
+select {
+  cursor: pointer;
+}
+
+.dim {
+  color: var(--text-dim);
+  font-size: 10px;
+}
+
+/* ── UTILITIES ──────────────────────────────────── */
+
+.hidden {
+  display: none !important;
 }
 
 /* ── PRESENTATION MODE ──────────────────────────── */
 
-body.presentation .floating-status,
-body.presentation .floating-transport,
-body.presentation .floating-toolbar,
-body.presentation .floating-mini-panel,
-body.presentation .floating-inspector,
-body.presentation .tool-panel,
+body.presentation .topbar,
+body.presentation .panel-left,
+body.presentation .panel-right,
+body.presentation .transport-overlay,
+body.presentation .status-overlay,
 body.presentation .shortcut-hud {
   display: none !important;
+}
+
+body.presentation .app-body {
+  grid-template-columns: 1fr;
+}
+
+/* ── SHORTCUTS OVERLAY ──────────────────────────── */
+
+.shortcut-hud {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 100;
+}
+.shortcut-card {
+  width: min(88vw, 380px);
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border-radius: 10px;
+  border: 1px solid var(--panel-border);
+  background: var(--panel);
+}
+.shortcut-card p {
+  margin: 0;
+  font-size: 11px;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+/* ── CANVAS TEXT INPUT ──────────────────────────── */
+
+.canvas-text-input {
+  font:
+    600 18px "SF Mono",
+    "Fira Code",
+    monospace;
 }
 
 /* ── FONT STATUS ────────────────────────────────── */
 
 .font-status {
   position: fixed;
-  bottom: 80px;
+  bottom: 60px;
   left: 50%;
   transform: translateX(-50%);
   font-size: 10px;

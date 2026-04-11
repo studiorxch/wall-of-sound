@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ShatterEngine v1.0.0 | Wall of Sound</title>
+    <style>
+      body {
+        margin: 0;
+        background: #050505;
+        color: #fff;
+        font-family: monospace;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+      canvas {
+        border: 1px solid #333;
+        box-shadow: 0 0 20px rgba(255, 255, 255, 0.05);
+        cursor: crosshair;
+      }
+      #ui {
+        position: absolute;
+        top: 20px;
+        left: 20px;
+        pointer-events: none;
+      }
+      .msg {
+        color: #666;
+        font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="ui">
+      <h2>SHATTER_ENGINE v1.0.0</h2>
+      <p class="msg">CLICK TO INITIALIZE AUDIO & SPAWN AGENTS</p>
+      <p class="msg">STRUCTURES BREAK INTO EXISTENCE</p>
+    </div>
+
+    <canvas id="canvas"></canvas>
+
+    <script>
+      /**
+       * SHATTER ENGINE CORE
+       * Mapping: Structure -> Shape -> Fracture -> Sound
+       */
+
+      const canvas = document.getElementById("canvas");
+      const ctx = canvas.getContext("2d");
+      let width, height;
+      let audioCtx = null;
+
+      // --- System State ---
+      let shapes = [];
+      let balls = [];
+
+      // --- Initialization ---
+      function init() {
+        width = canvas.width = window.innerWidth;
+        height = canvas.height = window.innerHeight;
+
+        // Create initial "Wall" structure
+        createWall(width * 0.2, height * 0.5, width * 0.8, height * 0.5);
+      }
+
+      function initAudio() {
+        if (!audioCtx) {
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+      }
+
+      // --- Sound Logic ---
+      function triggerFractureSound(damage) {
+        if (!audioCtx) return;
+
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+
+        // Sound Rules: Micro fractures -> high pitch clicks; Collapse -> noise burst
+        const pitch = 200 + damage * 800;
+        osc.type = damage > 0.8 ? "sawtooth" : "sine";
+        osc.frequency.setValueAtTime(pitch, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(
+          10,
+          audioCtx.currentTime + 0.1,
+        );
+
+        gain.gain.setValueAtTime(Math.min(damage, 0.5), audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(
+          0.0001,
+          audioCtx.currentTime + 0.1,
+        );
+
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.1);
+      }
+
+      // --- Engine Logic ---
+      function createWall(x1, y1, x2, y2) {
+        shapes.push({
+          id: Math.random().toString(36),
+          integrity: 1.0,
+          fractureLevel: 0,
+          segments: [{ x1, y1, x2, y2 }],
+        });
+      }
+
+      function spawnBall(x, y) {
+        balls.push({
+          x: x,
+          y: y,
+          vx: (Math.random() - 0.5) * 10,
+          vy: (Math.random() - 0.5) * 10,
+          radius: 5,
+          speed: 5,
+        });
+      }
+
+      function applyDamage(shape, segmentIndex, amount) {
+        shape.integrity = Math.max(0, shape.integrity - amount);
+
+        // Fracture Thresholds
+        if (shape.integrity < 0.75) shape.fractureLevel = 1;
+        if (shape.integrity < 0.5) shape.fractureLevel = 2;
+        if (shape.integrity < 0.25) shape.fractureLevel = 3;
+
+        // Segment Fracturing logic
+        if (shape.integrity < 0.6 && Math.random() > 0.8) {
+          const seg = shape.segments[segmentIndex];
+          const midX = (seg.x1 + seg.x2) / 2 + (Math.random() - 0.5) * 10;
+          const midY = (seg.y1 + seg.y2) / 2 + (Math.random() - 0.5) * 10;
+
+          shape.segments.splice(
+            segmentIndex,
+            1,
+            { x1: seg.x1, y1: seg.y1, x2: midX, y2: midY },
+            { x1: midX, y1: midY, x2: seg.x2, y2: seg.y2 },
+          );
+        }
+      }
+
+      function update() {
+        ctx.fillStyle = "rgba(5, 5, 5, 0.3)"; // Trail effect
+        ctx.fillRect(0, 0, width, height);
+
+        // Update Balls
+        balls.forEach((ball, bIdx) => {
+          ball.x += ball.vx;
+          ball.y += ball.vy;
+
+          // Boundary bounce
+          if (ball.x < 0 || ball.x > width) ball.vx *= -1;
+          if (ball.y < 0 || ball.y > height) ball.vy *= -1;
+
+          // Collision Check against Shapes
+          shapes.forEach((shape, sIdx) => {
+            shape.segments.forEach((seg, segIdx) => {
+              // Simple distance-to-line collision
+              const d = distToSegment(
+                { x: ball.x, y: ball.y },
+                { x: seg.x1, y: seg.y1 },
+                { x: seg.x2, y: seg.y2 },
+              );
+
+              if (d < ball.radius + 2) {
+                ball.vx *= -1.1; // Energy gain on hit
+                ball.vy *= -1.1;
+
+                const damage = Math.abs(ball.vx * 0.02);
+                applyDamage(shape, segIdx, damage);
+                triggerFractureSound(damage);
+              }
+            });
+
+            if (shape.integrity <= 0) {
+              // Collapse event: trigger burst and remove
+              triggerFractureSound(1.5);
+              shapes.splice(sIdx, 1);
+            }
+          });
+        });
+
+        // Draw Shapes
+        shapes.forEach((shape) => {
+          ctx.beginPath();
+          ctx.strokeStyle = `rgba(255, 255, 255, ${shape.integrity})`;
+          ctx.lineWidth = shape.fractureLevel + 1;
+
+          shape.segments.forEach((seg) => {
+            // Add jitter based on fracture level
+            const jitter = shape.fractureLevel * 2;
+            const jX = (Math.random() - 0.5) * jitter;
+            const jY = (Math.random() - 0.5) * jitter;
+
+            ctx.moveTo(seg.x1 + jX, seg.y1 + jY);
+            ctx.lineTo(seg.x2 + jX, seg.y2 + jY);
+          });
+          ctx.stroke();
+        });
+
+        // Draw Balls
+        ctx.fillStyle = "#0ff";
+        balls.forEach((ball) => {
+          ctx.beginPath();
+          ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+          ctx.fill();
+        });
+
+        requestAnimationFrame(update);
+      }
+
+      // --- Helpers ---
+      function distToSegment(p, v, w) {
+        const l2 = Math.pow(v.x - w.x, 2) + Math.pow(v.y - w.y, 2);
+        if (l2 === 0)
+          return Math.sqrt(Math.pow(p.x - v.x, 2) + Math.pow(p.y - v.y, 2));
+        let t = ((p.x - v.x) * (w.x - v.x) + (p.y - v.y) * (w.y - v.y)) / l2;
+        t = Math.max(0, Math.min(1, t));
+        return Math.sqrt(
+          Math.pow(p.x - (v.x + t * (w.x - v.x)), 2) +
+            Math.pow(p.y - (v.y + t * (w.y - v.y)), 2),
+        );
+      }
+
+      // --- Events ---
+      window.addEventListener("mousedown", (e) => {
+        initAudio();
+        spawnBall(e.clientX, e.clientY);
+      });
+
+      window.addEventListener("resize", init);
+
+      init();
+      update();
+    </script>
+  </body>
+</html>

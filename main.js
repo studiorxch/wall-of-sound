@@ -177,10 +177,14 @@
     const oscillatorOutput = {
       enabled: true,
       handle: function handleOscillator(type, sourceObject) {
-        if (!state.audio.context || state.audio.context.state !== "running") {
+        var context = state.audio.context;
+        if (!context) {
           return;
         }
-        const context = state.audio.context;
+        if (context.state === "suspended") {
+          context.resume().catch(function () {});
+          return;
+        }
 
         const sound = sourceObject.sound;
         const freq =
@@ -266,6 +270,7 @@
       },
       balls: [],
       lines: [],
+      shapes: [],
       textObjects: [],
       backgroundDataUrl: null,
       backgroundImage: null,
@@ -275,6 +280,9 @@
       selectedLineId: null,
       selectedTextId: null,
       selectedBallId: null,
+      selectedShapeId: null,
+      selectedSegmentId: null,
+      multiSelection: [],
       ui: {
         cleanOutput: false,
         presentation:
@@ -327,7 +335,7 @@
       },
     };
 
-    document.querySelectorAll(".tool-panel").forEach(makePanelDraggable);
+    var heldKeys = new Set();
 
     normalizeSwarmConfig();
     renderer.resize(state.canvas.width, state.canvas.height);
@@ -368,6 +376,21 @@
       onSelectBall: function onSelectBall(ball) {
         selectObject("ball", ball.id);
       },
+      onSelectShape: function onSelectShape(shape) {
+        selectObject("shape", shape.id);
+      },
+      onSelectSegment: function onSelectSegment(shape, segment) {
+        state.multiSelection = [
+          { type: "shape", id: shape.id, segmentId: segment.id },
+        ];
+        syncLegacySelection();
+        syncSelectionPanel();
+        renderFrame();
+      },
+      onDoubleClickShape: function onDoubleClickShape(shape) {
+        shape.isExpanded = !shape.isExpanded;
+        renderFrame();
+      },
       onClearSelection: function onClearSelection() {
         clearSelection();
       },
@@ -375,6 +398,139 @@
         renderFrame();
       },
     });
+
+    global.addEventListener(
+      "pointerdown",
+      function initAudioOnGesture() {
+        ensureAudioContext();
+      },
+      { once: true },
+    );
+
+    // ── Handle Interaction (capture phase, runs before drawTools) ──
+    var handleDragMode = null;
+    var handleLastPoint = null;
+
+    function getCanvasCoordsLocal(e) {
+      var rect = canvas.getBoundingClientRect();
+      return {
+        x: (e.clientX - rect.left) * (canvas.width / rect.width),
+        y: (e.clientY - rect.top) * (canvas.height / rect.height),
+      };
+    }
+
+    function getSelectedShapeForHandle() {
+      if (!state.selectedShapeId || state.selectedSegmentId) {
+        return null;
+      }
+      var shape = (state.shapes || []).find(function (s) {
+        return s.id === state.selectedShapeId;
+      });
+      return shape && shape.bounds ? shape : null;
+    }
+
+    function getHandlePositions(shape) {
+      var b = shape.bounds;
+      var pad = 14;
+      var x = b.minX - pad;
+      var y = b.minY - pad;
+      var w = b.width + pad * 2;
+      var h = b.height + pad * 2;
+      return {
+        corners: [
+          [x, y],
+          [x + w, y],
+          [x, y + h],
+          [x + w, y + h],
+        ],
+        rotate: [x + w * 0.5, y - 18],
+      };
+    }
+
+    canvas.addEventListener(
+      "pointerdown",
+      function onHandleDown(e) {
+        if (state.tool !== "select") {
+          return;
+        }
+
+        var shape = getSelectedShapeForHandle();
+        if (!shape) {
+          return;
+        }
+
+        var pt = getCanvasCoordsLocal(e);
+        var handles = getHandlePositions(shape);
+        var hitRadius = 20;
+
+        // Check rotate handle
+        var rd = Math.hypot(pt.x - handles.rotate[0], pt.y - handles.rotate[1]);
+        if (rd <= hitRadius) {
+          handleDragMode = "rotate";
+          handleLastPoint = pt;
+          canvas.setPointerCapture(e.pointerId);
+          e.stopPropagation();
+          return;
+        }
+
+        // Check corner handles
+        for (var i = 0; i < handles.corners.length; i += 1) {
+          var cd = Math.hypot(
+            pt.x - handles.corners[i][0],
+            pt.y - handles.corners[i][1],
+          );
+          if (cd <= hitRadius) {
+            handleDragMode = "scale";
+            handleLastPoint = pt;
+            canvas.setPointerCapture(e.pointerId);
+            e.stopPropagation();
+            return;
+          }
+        }
+      },
+      true,
+    );
+
+    canvas.addEventListener(
+      "pointermove",
+      function onHandleMove(e) {
+        if (!handleDragMode || !handleLastPoint) {
+          return;
+        }
+
+        var shape = getSelectedShapeForHandle();
+        if (!shape) {
+          handleDragMode = null;
+          return;
+        }
+
+        var pt = getCanvasCoordsLocal(e);
+        var dx = pt.x - handleLastPoint.x;
+        handleLastPoint = pt;
+
+        if (handleDragMode === "rotate") {
+          SBE.ShapeSystem.rotateShape(shape, dx * 0.01);
+        } else if (handleDragMode === "scale") {
+          SBE.ShapeSystem.scaleShape(shape, 1 + dx * 0.01);
+        }
+
+        renderFrame();
+        e.stopPropagation();
+      },
+      true,
+    );
+
+    canvas.addEventListener(
+      "pointerup",
+      function onHandleUp(e) {
+        if (handleDragMode) {
+          handleDragMode = null;
+          handleLastPoint = null;
+          e.stopPropagation();
+        }
+      },
+      true,
+    );
 
     bindControls();
     await applyExampleScene();
@@ -552,6 +708,15 @@
         },
       );
 
+      if (elements.lineMechanic) {
+        elements.lineMechanic.addEventListener(
+          "change",
+          function updateMechanicType() {
+            applyInspectorMetadata();
+          },
+        );
+      }
+
       elements.lineStrength.addEventListener(
         "input",
         function updateBehaviorStrength() {
@@ -645,6 +810,15 @@
         },
       );
 
+      if (elements.duplicatePattern) {
+        elements.duplicatePattern.addEventListener(
+          "click",
+          async function onDuplicatePattern() {
+            await duplicatePatternGrid();
+          },
+        );
+      }
+
       elements.ballCount.addEventListener("input", function updateBallCount() {
         state.ballTool.count = clampInt(Number(elements.ballCount.value), 1, 8);
       });
@@ -672,6 +846,8 @@
       );
 
       global.addEventListener("keydown", async function onKeyDown(event) {
+        heldKeys.add(event.key.toLowerCase());
+
         if (textEditor && event.key === "Escape") {
           event.preventDefault();
           removeCanvasTextInput(false);
@@ -746,7 +922,38 @@
           event.preventDefault();
           await undo();
         }
+
+        if (event.key.toLowerCase() === "a") {
+          event.preventDefault();
+          selectAllObjects();
+        }
       });
+
+      global.addEventListener("keyup", function onKeyUp(event) {
+        heldKeys.delete(event.key.toLowerCase());
+      });
+    }
+
+    function selectAllObjects() {
+      if (state.ui.presentation) return;
+
+      state.multiSelection = [];
+
+      (state.shapes || []).forEach(function (s) {
+        state.multiSelection.push({ type: "shape", id: s.id });
+      });
+
+      (state.balls || []).forEach(function (b) {
+        state.multiSelection.push({ type: "ball", id: b.id });
+      });
+
+      (state.lines || []).forEach(function (l) {
+        state.multiSelection.push({ type: "line", id: l.id });
+      });
+
+      syncLegacySelection();
+      syncSelectionPanel();
+      renderFrame();
     }
 
     async function applyExampleScene() {
@@ -765,6 +972,10 @@
       );
       state.lines = lines;
       state.textObjects = texts.map(normalizeTextObject);
+      state.shapes =
+        SBE.ShapeSystem && Array.isArray(scene.shapes)
+          ? scene.shapes.map(SBE.ShapeSystem.hydrateShape)
+          : [];
       state.canvas.width = 1080;
       state.canvas.height = 1920;
       state.swarm = Object.assign({}, state.swarm, scene.swarm || {});
@@ -802,84 +1013,115 @@
       controls.syncShortcutVisibility(state.ui.shortcutsVisible);
     }
 
-    function updatePanels(tool) {
-      const panels = document.querySelectorAll(".tool-panel");
-
-      panels.forEach((p) => (p.style.display = "none"));
-
-      const map = {
-        draw: "#draw-panel",
-        shape: "#shape-panel",
-        text: "#text-panel",
-      };
-
-      if (map[tool]) {
-        const el = document.querySelector(map[tool]);
-        if (el) el.style.display = "block";
-      }
-    }
-
-    function makePanelDraggable(el) {
-      let isDragging = false;
-      let offsetX = 0;
-      let offsetY = 0;
-
-      el.style.position = "absolute";
-
-      el.addEventListener("pointerdown", (e) => {
-        isDragging = true;
-        offsetX = e.clientX - el.offsetLeft;
-        offsetY = e.clientY - el.offsetTop;
-        el.setPointerCapture(e.pointerId);
-      });
-
-      el.addEventListener("pointermove", (e) => {
-        if (!isDragging) return;
-
-        el.style.left = e.clientX - offsetX + "px";
-        el.style.top = e.clientY - offsetY + "px";
-      });
-
-      el.addEventListener("pointerup", () => {
-        isDragging = false;
-      });
+    function updatePanels() {
+      // Panel visibility is now handled by the fixed layout — no-op
     }
 
     function syncSelectionPanel() {
       const selection = getSelectedObject();
-      const activeNote = selection ? selection.midi.note : state.defaults.note;
+      const activeNote = selection
+        ? (selection.midi ? selection.midi.note : selection.note) ||
+          state.defaults.note
+        : state.defaults.note;
       controls.syncSelection(selection, ((activeNote % 12) + 12) % 12);
     }
 
     function getSelectedObject() {
-      if (state.selectedBallId) {
-        return (
-          state.balls.find((ball) => ball.id === state.selectedBallId) || null
-        );
+      if (state.multiSelection.length === 1) {
+        return resolveSelectionEntry(state.multiSelection[0]);
       }
-
-      if (state.selectedLineId) {
-        return (
-          state.lines.find((line) => line.id === state.selectedLineId) || null
-        );
+      if (state.multiSelection.length > 1) {
+        return resolveSelectionEntry(state.multiSelection[0]);
       }
-
-      if (state.selectedTextId) {
-        return (
-          state.textObjects.find(
-            (textObject) => textObject.id === state.selectedTextId,
-          ) || null
-        );
-      }
-
       return null;
     }
 
+    function resolveSelectionEntry(entry) {
+      if (!entry) return null;
+      if (entry.type === "ball") {
+        return (
+          state.balls.find(function (b) {
+            return b.id === entry.id;
+          }) || null
+        );
+      }
+      if (entry.type === "shape") {
+        var shape = (state.shapes || []).find(function (s) {
+          return s.id === entry.id;
+        });
+        if (!shape) return null;
+        if (entry.segmentId) {
+          var seg = shape.segments.find(function (s) {
+            return s.id === entry.segmentId;
+          });
+          return seg || shape;
+        }
+        return shape;
+      }
+      if (entry.type === "line") {
+        return (
+          state.lines.find(function (l) {
+            return l.id === entry.id;
+          }) || null
+        );
+      }
+      if (entry.type === "text") {
+        return (
+          state.textObjects.find(function (t) {
+            return t.id === entry.id;
+          }) || null
+        );
+      }
+      return null;
+    }
+
+    function getSelectedObjects() {
+      var results = [];
+      state.multiSelection.forEach(function (entry) {
+        var obj = resolveSelectionEntry(entry);
+        if (obj) results.push({ entry: entry, object: obj });
+      });
+      return results;
+    }
+
+    function isInSelection(type, id) {
+      return state.multiSelection.some(function (e) {
+        return e.type === type && e.id === id;
+      });
+    }
+
+    function syncLegacySelection() {
+      var first = state.multiSelection[0];
+      state.selectedBallId = first && first.type === "ball" ? first.id : null;
+      state.selectedLineId = first && first.type === "line" ? first.id : null;
+      state.selectedTextId = first && first.type === "text" ? first.id : null;
+      state.selectedShapeId = first && first.type === "shape" ? first.id : null;
+      state.selectedSegmentId =
+        first && first.segmentId ? first.segmentId : null;
+      syncShapeIdSet();
+    }
+
     function selectObject(type, id) {
-      state.selectedBallId = type === "ball" ? id : null;
-      state.selectedLineId = type === "line" ? id : null;
-      state.selectedTextId = type === "text" ? id : null;
-      const selected = getSelectedObject();
+      var isShift = heldKeys.has("shift");
+
+      if (isShift) {
+        var existingIndex = state.multiSelection.findIndex(function (e) {
+          return e.type === type && e.id === id;
+        });
+        if (existingIndex >= 0) {
+          state.multiSelection.splice(existingIndex, 1);
+        } else {
+          state.multiSelection.push({ type: type, id: id });
+        }
+      } else {
+        if (!isInSelection(type, id)) {
+          state.multiSelection = [{ type: type, id: id }];
+        }
+      }
+
+      syncLegacySelection();
+
+      var selected = getSelectedObject();
       if (selected && selected.midi) {
         state.defaults.note = selected.midi.note;
       }
@@ -888,11 +1130,25 @@
     }
 
     function clearSelection() {
-      state.selectedBallId = null;
-      state.selectedLineId = null;
-      state.selectedTextId = null;
+      state.multiSelection = [];
+      syncLegacySelection();
       syncSelectionPanel();
       renderFrame();
+    }
+
+    function syncShapeIdSet() {
+      var shapeIds = state.multiSelection
+        .filter(function (e) {
+          return e.type === "shape";
+        })
+        .map(function (e) {
+          return e.id;
+        });
+      if (shapeIds.length) {
+        state.selectedShapeIds = new Set(shapeIds);
+      } else {
+        state.selectedShapeIds = null;
+      }
     }
 
     function createFreehandStroke(points) {
@@ -915,20 +1171,35 @@
         return;
       }
 
+      if (!SBE.ShapeSystem) {
+        return;
+      }
+
+      pushHistory();
       const shapeFactory =
         SHAPE_LIBRARY[state.selectedShape] || SHAPE_LIBRARY.circle;
       const paths = shapeFactory(point, 240);
-      const segments = [];
-
-      paths.forEach((path) => {
-        pointsToSegments(smoothStroke(path, 1)).forEach((segment) => {
-          segments.push(segment);
-        });
+      const smoothedPaths = paths.map(function (path) {
+        return smoothStroke(path, 1);
       });
+      const settings = createLineSettingsFromInspector();
+      var shape = SBE.ShapeSystem.createShapeFromPoints(
+        state.selectedShape,
+        smoothedPaths,
+        point,
+        settings,
+      );
 
-      if (segments.length) {
-        createSegmentsBatch(segments);
+      if (shape) {
+        shape.segments.forEach(function (seg) {
+          seg.sound = buildSoundConfig(seg.note, seg.midiChannel);
+        });
+        state.shapes.push(shape);
+        selectObject("shape", shape.id);
       }
+
+      syncUI();
+      renderFrame();
     }
 
     function createSegmentsBatch(segments) {
@@ -1131,97 +1402,246 @@
     }
 
     function translateSelection(dx, dy) {
-      const selected = getSelectedObject();
-      if (!selected || state.ui.presentation) {
+      if (state.ui.presentation || !state.multiSelection.length) {
         return;
       }
 
-      if (selected.type === "ball") {
-        selected.x += dx;
-        selected.y += dy;
-        renderFrame();
-        return;
-      }
-
-      if (selected.type === "line") {
-        selected.x1 += dx;
-        selected.y1 += dy;
-        selected.x2 += dx;
-        selected.y2 += dy;
-        renderFrame();
-        return;
-      }
-
-      SBE.TextSystem.applyTransform(
-        selected,
-        {
-          x: selected.transform.x + dx,
-          y: selected.transform.y + dy,
-        },
-        state.canvas,
-        22,
-      );
-      syncUI();
+      state.multiSelection.forEach(function (entry) {
+        translateOneEntry(entry, dx, dy);
+      });
       renderFrame();
     }
 
+    function translateOneEntry(entry, dx, dy) {
+      if (entry.type === "ball") {
+        var ball = state.balls.find(function (b) {
+          return b.id === entry.id;
+        });
+        if (ball) {
+          ball.x += dx;
+          ball.y += dy;
+        }
+        return;
+      }
+
+      if (entry.type === "shape" && SBE.ShapeSystem) {
+        var shape = (state.shapes || []).find(function (s) {
+          return s.id === entry.id;
+        });
+        if (!shape) return;
+        if (entry.segmentId) {
+          var seg = shape.segments.find(function (s) {
+            return s.id === entry.segmentId;
+          });
+          if (seg) {
+            seg.x1 += dx;
+            seg.y1 += dy;
+            seg.x2 += dx;
+            seg.y2 += dy;
+          }
+        } else if (heldKeys.has("r")) {
+          SBE.ShapeSystem.rotateShape(shape, dx * 0.01);
+        } else if (heldKeys.has("s")) {
+          SBE.ShapeSystem.scaleShape(shape, 1 + dx * 0.01);
+        } else {
+          SBE.ShapeSystem.translateShape(shape, dx, dy);
+        }
+        return;
+      }
+
+      if (entry.type === "line") {
+        var line = state.lines.find(function (l) {
+          return l.id === entry.id;
+        });
+        if (line) {
+          line.x1 += dx;
+          line.y1 += dy;
+          line.x2 += dx;
+          line.y2 += dy;
+        }
+        return;
+      }
+
+      if (entry.type === "text") {
+        var text = state.textObjects.find(function (t) {
+          return t.id === entry.id;
+        });
+        if (text && text.transform) {
+          SBE.TextSystem.applyTransform(
+            text,
+            { x: text.transform.x + dx, y: text.transform.y + dy },
+            state.canvas,
+            22,
+          );
+        }
+      }
+    }
+
     function deleteSelectionObject() {
-      const selected = getSelectedObject();
-      if (!selected || state.ui.presentation) {
+      if (!state.multiSelection.length || state.ui.presentation) {
         return;
       }
 
       pushHistory();
-      if (selected.type === "ball") {
-        state.balls = state.balls.filter((ball) => ball.id !== selected.id);
+      var ballIds = new Set();
+      var shapeIds = new Set();
+      var lineIds = new Set();
+      var textIds = new Set();
+
+      state.multiSelection.forEach(function (entry) {
+        if (entry.type === "ball") ballIds.add(entry.id);
+        else if (entry.type === "shape") shapeIds.add(entry.id);
+        else if (entry.type === "line") lineIds.add(entry.id);
+        else if (entry.type === "text") textIds.add(entry.id);
+      });
+
+      if (ballIds.size) {
+        state.balls = state.balls.filter(function (b) {
+          return !ballIds.has(b.id);
+        });
         state.swarm.count = state.balls.length;
-      } else if (selected.type === "line") {
-        state.lines = state.lines.filter((line) => line.id !== selected.id);
-      } else {
-        state.textObjects = state.textObjects.filter(
-          (text) => text.id !== selected.id,
-        );
       }
+      if (shapeIds.size) {
+        state.shapes = state.shapes.filter(function (s) {
+          return !shapeIds.has(s.id);
+        });
+      }
+      if (lineIds.size) {
+        state.lines = state.lines.filter(function (l) {
+          return !lineIds.has(l.id);
+        });
+      }
+      if (textIds.size) {
+        state.textObjects = state.textObjects.filter(function (t) {
+          return !textIds.has(t.id);
+        });
+      }
+
       clearSelection();
       syncUI();
     }
 
-    async function duplicateSelectedObject() {
-      const selected = getSelectedObject();
-      if (!selected || state.ui.presentation) {
-        return;
-      }
+    var lastDuplicateDelta = { x: 20, y: 20 };
 
-      pushHistory();
-      if (selected.type === "ball") {
-        const copy = normalizeBall(clone(selected));
+    function duplicateOneEntry(entry, dx, dy) {
+      if (entry.type === "ball") {
+        var src = state.balls.find(function (b) {
+          return b.id === entry.id;
+        });
+        if (!src) return null;
+        var copy = normalizeBall(clone(src));
         copy.id = createBallId();
-        copy.x += 20;
-        copy.y += 20;
+        copy.x += dx;
+        copy.y += dy;
         state.balls.push(copy);
-        selectObject("ball", copy.id);
-      } else if (selected.type === "line") {
-        const raw = serializeLineObject(selected);
-        raw.id = undefined;
-        raw.x1 += 20;
-        raw.y1 += 20;
-        raw.x2 += 20;
-        raw.y2 += 20;
-        const line = normalizeLineObject(SBE.LineSystem.hydrateLine(raw));
-        state.lines.push(line);
-        selectObject("line", line.id);
-      } else {
-        const rawText = SBE.TextSystem.serializeTextObject(selected);
-        rawText.id = undefined;
-        rawText.transform.x += 20;
-        rawText.transform.y += 20;
-        const text = normalizeTextObject(
-          await SBE.TextSystem.hydrateTextObject(rawText),
-        );
-        state.textObjects.push(text);
-        selectObject("text", text.id);
+        return { type: "ball", id: copy.id };
       }
+      if (entry.type === "shape" && SBE.ShapeSystem) {
+        var src = (state.shapes || []).find(function (s) {
+          return s.id === entry.id;
+        });
+        if (!src) return null;
+        var copy = SBE.ShapeSystem.duplicateShape(src, 0);
+        SBE.ShapeSystem.translateShape(copy, dx, dy);
+        copy.segments.forEach(function (seg) {
+          rebuildSoundConfig(seg);
+        });
+        state.shapes.push(copy);
+        return { type: "shape", id: copy.id };
+      }
+      if (entry.type === "line") {
+        var src = state.lines.find(function (l) {
+          return l.id === entry.id;
+        });
+        if (!src) return null;
+        var raw = serializeLineObject(src);
+        raw.id = undefined;
+        raw.x1 += dx;
+        raw.y1 += dy;
+        raw.x2 += dx;
+        raw.y2 += dy;
+        var line = normalizeLineObject(SBE.LineSystem.hydrateLine(raw));
+        state.lines.push(line);
+        return { type: "line", id: line.id };
+      }
+      return null;
+    }
+
+    async function duplicateSelectedObject() {
+      if (!state.multiSelection.length || state.ui.presentation) return;
+      var dx = lastDuplicateDelta.x;
+      var dy = lastDuplicateDelta.y;
+      pushHistory();
+      var newSelection = [];
+      state.multiSelection.forEach(function (entry) {
+        var result = duplicateOneEntry(entry, dx, dy);
+        if (result) newSelection.push(result);
+      });
+      state.multiSelection = newSelection;
+      syncLegacySelection();
+      lastDuplicateDelta = { x: dx, y: dy };
+      state.swarm.count = state.balls.length;
+      syncSelectionPanel();
+      renderFrame();
       syncUI();
+    }
+
+    function getSelectionBounds() {
+      var minX = Infinity,
+        minY = Infinity,
+        maxX = -Infinity,
+        maxY = -Infinity;
+      state.multiSelection.forEach(function (entry) {
+        var obj = resolveSelectionEntry(entry);
+        if (!obj) return;
+        if (obj.bounds) {
+          minX = Math.min(minX, obj.bounds.minX);
+          minY = Math.min(minY, obj.bounds.minY);
+          maxX = Math.max(maxX, obj.bounds.maxX);
+          maxY = Math.max(maxY, obj.bounds.maxY);
+        } else if (typeof obj.x === "number") {
+          var r = obj.renderRadius || obj.radius || 10;
+          minX = Math.min(minX, obj.x - r);
+          minY = Math.min(minY, obj.y - r);
+          maxX = Math.max(maxX, obj.x + r);
+          maxY = Math.max(maxY, obj.y + r);
+        } else if (typeof obj.x1 === "number") {
+          minX = Math.min(minX, obj.x1, obj.x2);
+          minY = Math.min(minY, obj.y1, obj.y2);
+          maxX = Math.max(maxX, obj.x1, obj.x2);
+          maxY = Math.max(maxY, obj.y1, obj.y2);
+        }
+      });
+      return {
+        minX: minX,
+        minY: minY,
+        width: maxX - minX,
+        height: maxY - minY,
+      };
+    }
+
+    async function duplicatePatternGrid() {
+      if (!state.multiSelection.length || state.ui.presentation) return;
+      var cols = clampInt(Number(controls.elements.gridCols.value), 1, 20);
+      var rows = clampInt(Number(controls.elements.gridRows.value), 1, 20);
+      var gapX = Number(controls.elements.gridSpacingX.value) || 120;
+      var gapY = Number(controls.elements.gridSpacingY.value) || 120;
+      var bounds = getSelectionBounds();
+      var stepX = bounds.width + gapX;
+      var stepY = bounds.height + gapY;
+      pushHistory();
+      var entries = state.multiSelection.slice();
+      for (var gy = 0; gy < rows; gy += 1) {
+        for (var gx = 0; gx < cols; gx += 1) {
+          if (gx === 0 && gy === 0) continue;
+          entries.forEach(function (entry) {
+            duplicateOneEntry(entry, gx * stepX, gy * stepY);
+          });
+        }
+      }
+      state.swarm.count = state.balls.length;
+      syncUI();
+      renderFrame();
     }
 
     async function undo() {
@@ -1236,6 +1656,9 @@
       state.history.push({
         lines: state.lines.map(serializeLineObject),
         textObjects: state.textObjects.map(SBE.TextSystem.serializeTextObject),
+        shapes: SBE.ShapeSystem
+          ? state.shapes.map(SBE.ShapeSystem.serializeShape)
+          : [],
         balls: clone(state.balls),
         canvas: clone(state.canvas),
         swarm: clone(state.swarm),
@@ -1247,8 +1670,16 @@
     }
 
     function applyInspectorMetadata(pushToHistory) {
-      const selected = getSelectedObject();
-      if (!selected || selected.type === "ball") {
+      if (!state.multiSelection.length) {
+        state.defaults = readInspectorDefaults();
+        syncUI();
+        return;
+      }
+
+      var hasEditable = state.multiSelection.some(function (e) {
+        return e.type !== "ball";
+      });
+      if (!hasEditable) {
         state.defaults = readInspectorDefaults();
         syncUI();
         return;
@@ -1258,13 +1689,21 @@
         pushHistory();
       }
 
-      const patch = readInspectorPatch();
-      applyPatchToObject(selected, patch);
+      var patch = readInspectorPatch();
+
+      state.multiSelection.forEach(function (entry) {
+        var obj = resolveSelectionEntry(entry);
+        if (obj) applyPatchToOneEntry(entry, obj, patch);
+      });
+
       syncUI();
       renderFrame();
     }
 
     function readInspectorPatch() {
+      var mechanicValue = controls.elements.lineMechanic
+        ? controls.elements.lineMechanic.value
+        : "none";
       return {
         note: clampInt(Number(controls.elements.activeNote.value), 0, 127),
         thickness: clampInt(
@@ -1272,6 +1711,7 @@
           1,
           24,
         ),
+        mechanicType: mechanicValue === "none" ? null : mechanicValue,
         behaviorType:
           controls.elements.lineBehavior.value === "none"
             ? "normal"
@@ -1296,19 +1736,53 @@
       };
     }
 
-    function applyPatchToObject(object, patch) {
-      object.midi.note = patch.note;
-      object.note = patch.note;
-      object.midiChannel = object.midi.channel;
-      object.style.color = noteToColor(patch.note);
-      object.color = object.style.color;
-      object.style.thickness = patch.thickness;
-      object.thickness = patch.thickness;
-      object.behavior.type = patch.behaviorType;
-      object.behavior.strength = patch.behaviorStrength;
+    function applyPatchToOneEntry(entry, object, patch) {
+      var newColor = noteToColor(patch.note);
 
-      // Sync sound config from updated note
-      rebuildSoundConfig(object);
+      if (entry.type === "shape") {
+        var shape = (state.shapes || []).find(function (s) {
+          return s.id === entry.id;
+        });
+        if (shape) {
+          shape.segments.forEach(function (seg) {
+            seg.note = patch.note;
+            seg.color = newColor;
+            seg.thickness = patch.thickness;
+            seg.behavior.type = patch.behaviorType;
+            seg.behavior.strength = patch.behaviorStrength;
+            seg.mechanicType = patch.mechanicType;
+            rebuildSoundConfig(seg);
+          });
+          shape.mechanicType = patch.mechanicType;
+        }
+        return;
+      }
+
+      if (entry.type === "line") {
+        if (object.midi) {
+          object.midi.note = patch.note;
+          object.midiChannel = object.midi.channel;
+        }
+        object.note = patch.note;
+        if (object.style) {
+          object.style.color = newColor;
+          object.style.thickness = patch.thickness;
+        }
+        object.color = newColor;
+        object.thickness = patch.thickness;
+        if (object.behavior) {
+          object.behavior.type = patch.behaviorType;
+          object.behavior.strength = patch.behaviorStrength;
+        }
+        object.mechanicType = patch.mechanicType;
+        rebuildSoundConfig(object);
+        return;
+      }
+
+      if (entry.type === "ball") {
+        object.color = newColor;
+        return;
+      }
     }
 
     function applyNoteClass(noteClass, octaveHint) {
@@ -1482,6 +1956,7 @@
 
     function clearScene() {
       state.lines = [];
+      state.shapes = [];
       state.textObjects = [];
       state.balls = [];
       clearLoop();
@@ -1587,6 +2062,7 @@
         return;
       }
 
+      ensureAudioContext();
       isPlaying = true;
       state.running = true;
       state.transport.startedAt = performance.now();
@@ -1660,11 +2136,17 @@
         return;
       }
 
-      const activeForceLines = state.lines.concat(
-        SBE.TextSystem
-          ? SBE.TextSystem.getCollisionLines(state.textObjects || [])
-          : [],
-      );
+      const activeForceLines = state.lines
+        .concat(
+          SBE.TextSystem
+            ? SBE.TextSystem.getCollisionLines(state.textObjects || [])
+            : [],
+        )
+        .concat(
+          SBE.ShapeSystem && state.shapes
+            ? SBE.ShapeSystem.getCollisionSegments(state.shapes)
+            : [],
+        );
       SBE.EnginePhysics.applyForces(
         state.balls,
         activeForceLines,
@@ -1699,6 +2181,68 @@
 
     function renderFrame() {
       renderer.render(state, drawTools.getOverlays());
+      drawShapeIndicators();
+    }
+
+    function drawShapeIndicators() {
+      if (
+        !state.selectedShapeId ||
+        state.ui.cleanOutput ||
+        state.ui.presentation
+      ) {
+        return;
+      }
+
+      var shape = (state.shapes || []).find(function (s) {
+        return s.id === state.selectedShapeId;
+      });
+      if (!shape || !shape.bounds) {
+        return;
+      }
+
+      var b = shape.bounds;
+      if (b.width <= 0 && b.height <= 0) {
+        return;
+      }
+
+      var ctx = canvas.getContext("2d");
+      var pad = 14;
+      var x = b.minX - pad;
+      var y = b.minY - pad;
+      var w = b.width + pad * 2;
+      var h = b.height + pad * 2;
+
+      // Corner dots
+      ctx.save();
+      ctx.fillStyle = "#ffffff";
+      ctx.globalAlpha = 0.9;
+      var corners = [
+        [x, y],
+        [x + w, y],
+        [x, y + h],
+        [x + w, y + h],
+      ];
+      corners.forEach(function (c) {
+        ctx.beginPath();
+        ctx.arc(c[0], c[1], 4, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      // Rotation handle (top center)
+      var handleX = x + w * 0.5;
+      var handleY = y - 18;
+      ctx.strokeStyle = "rgba(255,255,255,0.5)";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(handleX, y);
+      ctx.lineTo(handleX, handleY);
+      ctx.stroke();
+      ctx.fillStyle = "#3dd8c5";
+      ctx.beginPath();
+      ctx.arc(handleX, handleY, 5, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.restore();
     }
 
     function setRunning(nextRunning) {
@@ -1754,6 +2298,10 @@
       return state.audio.context;
     }
 
+    function getExportDurationSec() {
+      return ((state.loop.bars * 60) / Math.max(1, state.bpm)) * 4;
+    }
+
     async function exportAllOutputs() {
       if (state.loop.exportBusy) {
         return;
@@ -1762,12 +2310,15 @@
       state.loop.exportBusy = true;
       controls.elements.engineStatus.textContent = "Exporting";
 
+      var durationSec = getExportDurationSec();
+      console.log("Export duration (expected):", durationSec.toFixed(3) + "s");
+
       try {
         SBE.SceneManager.downloadScene(state, "sbe-loop");
         await exportImage();
         if (state.loop.hasLoop) {
-          await exportVideo();
-          await exportAudio();
+          await exportVideo(durationSec);
+          await exportAudio(durationSec);
         }
       } finally {
         state.loop.exportBusy = false;
@@ -1785,40 +2336,89 @@
       downloadBlob(blob, "sbe-frame.png");
     }
 
-    async function exportVideo() {
+    async function exportVideo(durationSec) {
       if (!canvas.captureStream || !global.MediaRecorder) {
         return;
       }
 
-      const stream = canvas.captureStream(60);
-      const recorder = new MediaRecorder(stream, {
-        mimeType: "video/webm",
+      var TARGET_FPS = 30;
+      var FRAME_DURATION = 1000 / TARGET_FPS;
+      var durationMs = durationSec * 1000;
+
+      var stream = canvas.captureStream(TARGET_FPS);
+
+      var mimeType = "video/webm;codecs=vp9";
+      if (!MediaRecorder.isTypeSupported(mimeType)) {
+        mimeType = "video/webm";
+      }
+
+      var recorder = new MediaRecorder(stream, {
+        mimeType: mimeType,
+        videoBitsPerSecond: 5000000,
       });
-      const chunks = [];
+      var chunks = [];
       recorder.addEventListener("dataavailable", function onData(event) {
         if (event.data && event.data.size) {
           chunks.push(event.data);
         }
       });
 
-      const done = new Promise((resolve) => {
+      var done = new Promise(function (resolve) {
         recorder.addEventListener("stop", function onStop() {
           resolve();
         });
       });
 
       recorder.start();
-      await wait(state.loop.duration * 1000 || 2000);
-      recorder.stop();
+
+      var startTime = performance.now();
+
+      await new Promise(function (resolve) {
+        var lastFrame = startTime;
+
+        function captureLoop(now) {
+          if (now - startTime >= durationMs) {
+            recorder.stop();
+            resolve();
+            return;
+          }
+
+          if (now - lastFrame >= FRAME_DURATION) {
+            renderFrame();
+            lastFrame = now;
+          }
+
+          global.requestAnimationFrame(captureLoop);
+        }
+
+        global.requestAnimationFrame(captureLoop);
+      });
+
       await done;
-      stream.getTracks().forEach((track) => track.stop());
+      stream.getTracks().forEach(function (track) {
+        track.stop();
+      });
 
       if (chunks.length) {
-        downloadBlob(new Blob(chunks, { type: "video/webm" }), "sbe-loop.webm");
+        var blob = new Blob(chunks, { type: mimeType });
+        downloadBlob(blob, "sbe-loop.webm");
+
+        // Debug: log actual video duration
+        var url = URL.createObjectURL(blob);
+        var video = document.createElement("video");
+        video.preload = "metadata";
+        video.onloadedmetadata = function () {
+          console.log(
+            "Video duration (actual):",
+            video.duration.toFixed(3) + "s",
+          );
+          URL.revokeObjectURL(url);
+        };
+        video.src = url;
       }
     }
 
-    async function exportAudio() {
+    async function exportAudio(durationSec) {
       if (
         !state.loop.hasLoop ||
         !state.loop.events.length ||
@@ -1827,27 +2427,26 @@
         return;
       }
 
-      const sampleRate = 48000;
-      const offline = new OfflineAudioContext(
-        2,
-        Math.ceil(sampleRate * state.loop.duration),
-        sampleRate,
-      );
+      var sampleRate = 48000;
+      var totalSamples = Math.ceil(sampleRate * durationSec);
+      var offline = new OfflineAudioContext(2, totalSamples, sampleRate);
 
       state.loop.events.forEach(function (event) {
-        const sound = event.sound;
+        var sound = event.sound;
         if (!sound || !sound.enabled) {
           return;
         }
 
-        const freq =
-          typeof sound.frequency === "number" ? sound.frequency : 220;
-        const volume = typeof sound.volume === "number" ? sound.volume : 0.1;
-        const duration =
-          typeof sound.duration === "number" ? sound.duration : 0.18;
+        var freq = typeof sound.frequency === "number" ? sound.frequency : 220;
+        var volume = typeof sound.volume === "number" ? sound.volume : 0.1;
+        var dur = typeof sound.duration === "number" ? sound.duration : 0.18;
 
-        const oscillator = offline.createOscillator();
-        const gain = offline.createGain();
+        if (event.time >= durationSec) {
+          return;
+        }
+
+        var oscillator = offline.createOscillator();
+        var gain = offline.createGain();
 
         oscillator.type = "triangle";
         oscillator.frequency.value = freq;
@@ -1856,16 +2455,17 @@
           Math.max(0.0008, volume),
           event.time + 0.008,
         );
-        gain.gain.exponentialRampToValueAtTime(0.0001, event.time + duration);
+        gain.gain.exponentialRampToValueAtTime(0.0001, event.time + dur);
 
         oscillator.connect(gain);
         gain.connect(offline.destination);
         oscillator.start(event.time);
-        oscillator.stop(event.time + duration + 0.02);
+        oscillator.stop(event.time + dur + 0.02);
       });
 
-      const buffer = await offline.startRendering();
+      var buffer = await offline.startRendering();
       downloadBlob(encodeWav(buffer), "sbe-loop.wav");
+      console.log("Audio duration (actual):", buffer.duration.toFixed(3) + "s");
     }
 
     function normalizeSwarmConfig() {
@@ -2013,6 +2613,7 @@
       line.thickness = line.style.thickness;
       line.note = line.midi.note;
       line.midiChannel = line.midi.channel;
+      line.mechanicType = line.mechanicType || null;
       if (!line.interaction) {
         line.interaction = {
           highlightColor: "#ffffff",
@@ -2083,6 +2684,7 @@
         style: clone(line.style),
         midi: clone(line.midi),
         gravity: clone(line.gravity),
+        mechanicType: line.mechanicType || null,
       };
     }
   });
