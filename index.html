@@ -69,6 +69,26 @@
               <circle cx="7" cy="7" r="1.5" fill="currentColor" />
             </svg>
           </button>
+          <button class="tool" data-tool="emitter" title="Emitter (E)">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <circle
+                cx="7"
+                cy="7"
+                r="4"
+                stroke="#3dd8c5"
+                stroke-width="1.4"
+                fill="none"
+              />
+              <line
+                x1="7"
+                y1="7"
+                x2="7"
+                y2="13"
+                stroke="#3dd8c5"
+                stroke-width="1.4"
+              />
+            </svg>
+          </button>
         </div>
       </div>
 
@@ -668,6 +688,53 @@
               <button id="duplicate-pattern" type="button" style="flex: 1">
                 Duplicate Grid
               </button>
+            </div>
+          </section>
+
+          <section
+            class="inspector-section hidden"
+            id="emitter-inspector-block"
+          >
+            <h4 class="section-title">Emitter</h4>
+            <div class="field-grid two">
+              <label class="field">
+                <span>Rate (ms)</span>
+                <input
+                  id="emitter-rate"
+                  type="range"
+                  min="100"
+                  max="2000"
+                  step="50"
+                  value="500"
+                />
+                <output id="emitter-rate-value">500</output>
+              </label>
+              <label class="field">
+                <span>Vel X</span>
+                <input
+                  id="emitter-vx"
+                  type="range"
+                  min="-5"
+                  max="5"
+                  step="0.1"
+                  value="0"
+                />
+                <output id="emitter-vx-value">0.0</output>
+              </label>
+            </div>
+            <div class="field-grid two">
+              <label class="field">
+                <span>Vel Y</span>
+                <input
+                  id="emitter-vy"
+                  type="range"
+                  min="-5"
+                  max="5"
+                  step="0.1"
+                  value="0"
+                />
+                <output id="emitter-vy-value">0.0</output>
+              </label>
             </div>
           </section>
         </div>

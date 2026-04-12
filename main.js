@@ -321,6 +321,17 @@
       audio: {
         context: null,
       },
+      physics: {
+        gravity: { x: 0, y: 3.0 },
+        damping: 0.996,
+        maxSpeed: 20,
+      },
+      world: {
+        mode: "gravity",
+        strength: 3,
+        direction: { x: 0, y: 1 },
+      },
+      emitters: [],
       defaults: {
         midiChannel: 1,
         note: 60,
@@ -531,6 +542,53 @@
       },
       true,
     );
+
+    // ── Emitter Tool + Selection (capture phase) ──
+    canvas.addEventListener(
+      "pointerdown",
+      function onEmitterDown(e) {
+        var pt = getCanvasCoordsLocal(e);
+
+        // Emitter tool: place new emitter
+        if (state.tool === "emitter") {
+          var emitter = {
+            id: "emitter-" + Math.random().toString(36).slice(2, 8),
+            x: pt.x,
+            y: pt.y,
+            rate: 400,
+            lastSpawn: 0,
+            velocity: { x: 12, y: -6 },
+          };
+          state.emitters.push(emitter);
+          selectObject("emitter", emitter.id);
+          renderFrame();
+          e.stopPropagation();
+          return;
+        }
+
+        // Select tool: check emitter hit before drawTools runs
+        if (state.tool === "select") {
+          var hit = findEmitterAtPoint(state.emitters, pt, 24);
+          if (hit) {
+            selectObject("emitter", hit.id);
+            canvas.setPointerCapture(e.pointerId);
+            e.stopPropagation();
+            return;
+          }
+        }
+      },
+      true,
+    );
+
+    function findEmitterAtPoint(emitters, point, radius) {
+      for (var i = emitters.length - 1; i >= 0; i -= 1) {
+        var e = emitters[i];
+        if (Math.hypot(e.x - point.x, e.y - point.y) <= radius) {
+          return e;
+        }
+      }
+      return null;
+    }
 
     bindControls();
     await applyExampleScene();
@@ -845,6 +903,23 @@
         },
       );
 
+      // Emitter inspector bindings
+      if (elements.emitterRate) {
+        elements.emitterRate.addEventListener("input", function () {
+          applyEmitterInspector();
+        });
+      }
+      if (elements.emitterVx) {
+        elements.emitterVx.addEventListener("input", function () {
+          applyEmitterInspector();
+        });
+      }
+      if (elements.emitterVy) {
+        elements.emitterVy.addEventListener("input", function () {
+          applyEmitterInspector();
+        });
+      }
+
       global.addEventListener("keydown", async function onKeyDown(event) {
         heldKeys.add(event.key.toLowerCase());
 
@@ -906,6 +981,11 @@
           syncUI();
           return;
         }
+        if (event.key.toLowerCase() === "e") {
+          state.tool = "emitter";
+          syncUI();
+          return;
+        }
 
         if (event.key === "Delete" || event.key === "Backspace") {
           event.preventDefault();
@@ -951,6 +1031,10 @@
         state.multiSelection.push({ type: "line", id: l.id });
       });
 
+      (state.emitters || []).forEach(function (e) {
+        state.multiSelection.push({ type: "emitter", id: e.id });
+      });
+
       syncLegacySelection();
       syncSelectionPanel();
       renderFrame();
@@ -988,6 +1072,18 @@
         state.balls = state.balls.map(normalizeBall);
       }
       state.backgroundDataUrl = scene.background || null;
+      state.emitters = Array.isArray(scene.emitters)
+        ? scene.emitters.map(function (e) {
+            return {
+              id: e.id || "emitter-" + Math.random().toString(36).slice(2, 8),
+              x: e.x,
+              y: e.y,
+              rate: e.rate || 500,
+              lastSpawn: 0,
+              velocity: e.velocity || { x: 0, y: 0 },
+            };
+          })
+        : [];
       state.backgroundImage = state.backgroundDataUrl
         ? await loadImage(state.backgroundDataUrl)
         : null;
@@ -1024,6 +1120,71 @@
           state.defaults.note
         : state.defaults.note;
       controls.syncSelection(selection, ((activeNote % 12) + 12) % 12);
+
+      // Emitter panel visibility + sync
+      var isEmitter =
+        state.multiSelection.length === 1 &&
+        state.multiSelection[0].type === "emitter";
+      if (controls.elements.emitterInspectorBlock) {
+        controls.elements.emitterInspectorBlock.classList.toggle(
+          "hidden",
+          !isEmitter,
+        );
+      }
+      if (isEmitter && selection) {
+        if (controls.elements.emitterRate) {
+          controls.elements.emitterRate.value = String(selection.rate || 500);
+          if (controls.elements.emitterRateValue) {
+            controls.elements.emitterRateValue.textContent = String(
+              selection.rate || 500,
+            );
+          }
+        }
+        if (controls.elements.emitterVx) {
+          controls.elements.emitterVx.value = String(
+            selection.velocity ? selection.velocity.x : 0,
+          );
+          if (controls.elements.emitterVxValue) {
+            controls.elements.emitterVxValue.textContent = Number(
+              selection.velocity ? selection.velocity.x : 0,
+            ).toFixed(1);
+          }
+        }
+        if (controls.elements.emitterVy) {
+          controls.elements.emitterVy.value = String(
+            selection.velocity ? selection.velocity.y : 0,
+          );
+          if (controls.elements.emitterVyValue) {
+            controls.elements.emitterVyValue.textContent = Number(
+              selection.velocity ? selection.velocity.y : 0,
+            ).toFixed(1);
+          }
+        }
+      }
+    }
+
+    function applyEmitterInspector() {
+      if (
+        state.multiSelection.length !== 1 ||
+        state.multiSelection[0].type !== "emitter"
+      ) {
+        return;
+      }
+      var em = state.emitters.find(function (e) {
+        return e.id === state.multiSelection[0].id;
+      });
+      if (!em) return;
+
+      if (controls.elements.emitterRate) {
+        em.rate = Number(controls.elements.emitterRate.value) || 500;
+      }
+      if (controls.elements.emitterVx) {
+        em.velocity.x = Number(controls.elements.emitterVx.value) || 0;
+      }
+      if (controls.elements.emitterVy) {
+        em.velocity.y = Number(controls.elements.emitterVy.value) || 0;
+      }
+      renderFrame();
     }
 
     function getSelectedObject() {
@@ -1069,6 +1230,13 @@
         return (
           state.textObjects.find(function (t) {
             return t.id === entry.id;
+          }) || null
+        );
+      }
+      if (entry.type === "emitter") {
+        return (
+          state.emitters.find(function (em) {
+            return em.id === entry.id;
           }) || null
         );
       }
@@ -1475,6 +1643,16 @@
           );
         }
       }
+
+      if (entry.type === "emitter") {
+        var em = state.emitters.find(function (e) {
+          return e.id === entry.id;
+        });
+        if (em) {
+          em.x += dx;
+          em.y += dy;
+        }
+      }
     }
 
     function deleteSelectionObject() {
@@ -1487,12 +1665,14 @@
       var shapeIds = new Set();
       var lineIds = new Set();
       var textIds = new Set();
+      var emitterIds = new Set();
 
       state.multiSelection.forEach(function (entry) {
         if (entry.type === "ball") ballIds.add(entry.id);
         else if (entry.type === "shape") shapeIds.add(entry.id);
         else if (entry.type === "line") lineIds.add(entry.id);
         else if (entry.type === "text") textIds.add(entry.id);
+        else if (entry.type === "emitter") emitterIds.add(entry.id);
       });
 
       if (ballIds.size) {
@@ -1514,6 +1694,11 @@
       if (textIds.size) {
         state.textObjects = state.textObjects.filter(function (t) {
           return !textIds.has(t.id);
+        });
+      }
+      if (emitterIds.size) {
+        state.emitters = state.emitters.filter(function (e) {
+          return !emitterIds.has(e.id);
         });
       }
 
@@ -1563,6 +1748,22 @@
         var line = normalizeLineObject(SBE.LineSystem.hydrateLine(raw));
         state.lines.push(line);
         return { type: "line", id: line.id };
+      }
+      if (entry.type === "emitter") {
+        var src = state.emitters.find(function (e) {
+          return e.id === entry.id;
+        });
+        if (!src) return null;
+        var copy = {
+          id: "emitter-" + Math.random().toString(36).slice(2, 8),
+          x: src.x + dx,
+          y: src.y + dy,
+          rate: src.rate,
+          lastSpawn: 0,
+          velocity: { x: src.velocity.x, y: src.velocity.y },
+        };
+        state.emitters.push(copy);
+        return { type: "emitter", id: copy.id };
       }
       return null;
     }
@@ -1660,6 +1861,7 @@
           ? state.shapes.map(SBE.ShapeSystem.serializeShape)
           : [],
         balls: clone(state.balls),
+        emitters: clone(state.emitters),
         canvas: clone(state.canvas),
         swarm: clone(state.swarm),
         background: state.backgroundDataUrl,
@@ -1959,6 +2161,7 @@
       state.shapes = [];
       state.textObjects = [];
       state.balls = [];
+      state.emitters = [];
       clearLoop();
       clearSelection();
       state.swarm.count = 0;
@@ -2122,13 +2325,31 @@
       processQuantizeQueue();
       processLoopPlayback(transportTime);
 
-      while (frameAccumulator >= stepMs) {
-        tick((stepMs / 1000) * (state.bpm / 120), frameTime);
-        frameAccumulator -= stepMs;
-      }
+      const dt = delta / 1000; // real elapsed time
+      tick(dt, frameTime);
 
       renderFrame();
       loopId = global.requestAnimationFrame(loop);
+    }
+
+    function updateEmitters(now) {
+      state.emitters.forEach(function (emitter) {
+        if (state.balls.length >= 300) {
+          return;
+        }
+        if (now - emitter.lastSpawn < emitter.rate) {
+          return;
+        }
+        emitter.lastSpawn = now;
+        var ball = SBE.Swarm.createBall(state.canvas, state.swarm, false);
+        ball.x = emitter.x;
+        ball.y = emitter.y;
+        ball.vx = emitter.velocity.x;
+        ball.vy = emitter.velocity.y;
+        ball = normalizeBall(ball);
+        state.balls.push(ball);
+        state.swarm.count = state.balls.length;
+      });
     }
 
     function tick(dt, now) {
@@ -2136,26 +2357,172 @@
         return;
       }
 
-      const activeForceLines = state.lines
-        .concat(
-          SBE.TextSystem
-            ? SBE.TextSystem.getCollisionLines(state.textObjects || [])
-            : [],
-        )
-        .concat(
-          SBE.ShapeSystem && state.shapes
-            ? SBE.ShapeSystem.getCollisionSegments(state.shapes)
-            : [],
-        );
-      SBE.EnginePhysics.applyForces(
-        state.balls,
-        activeForceLines,
-        state.swarm,
-        dt,
-      );
-      SBE.EnginePhysics.updateSwarm(state.balls, dt);
+      var worldMode =
+        typeof state.world === "string"
+          ? state.world
+          : state.world && state.world.mode
+            ? state.world.mode
+            : "gravity";
 
+      if (worldMode === "gravity" || worldMode === "flow") {
+        var worldDirection =
+          state.world && state.world.direction
+            ? state.world.direction
+            : state.physics.gravity;
+        var worldStrength =
+          state.world && Number.isFinite(state.world.strength)
+            ? state.world.strength
+            : Math.hypot(state.physics.gravity.x, state.physics.gravity.y);
+        var damp = state.physics.damping;
+        var maxSpd = state.physics.maxSpeed;
+        var scale = dt * 60;
+
+        state.balls.forEach(function (ball) {
+          ball.vx += worldDirection.x * worldStrength * scale;
+          ball.vy += worldDirection.y * worldStrength * scale;
+          ball.vx *= damp;
+          ball.vy *= damp;
+
+          var spd = Math.hypot(ball.vx, ball.vy);
+          if (spd > maxSpd) {
+            var s = maxSpd / spd;
+            ball.vx *= s;
+            ball.vy *= s;
+          }
+
+          const MOTION_SCALE = 60;
+          ball.x += ball.vx * dt * MOTION_SCALE;
+          ball.y += ball.vy * dt * MOTION_SCALE;
+        });
+      }
+
+      // Emitters
+      updateEmitters(now);
+
+      if (worldMode === "zero-g" || worldMode === "swarm") {
+        const activeForceLines = state.lines
+          .concat(
+            SBE.TextSystem
+              ? SBE.TextSystem.getCollisionLines(state.textObjects || [])
+              : [],
+          )
+          .concat(
+            SBE.ShapeSystem && state.shapes
+              ? SBE.ShapeSystem.getCollisionSegments(state.shapes)
+              : [],
+          );
+        SBE.EnginePhysics.applyForces(
+          state.balls,
+          activeForceLines,
+          state.swarm,
+          dt,
+        );
+        SBE.EnginePhysics.updateSwarm(state.balls, dt);
+      }
+
+      // --- COLLISION (PATCHED) ---
       const collisions = SBE.Collision.detectCollisions(state, now);
+
+      // --- RAMP LOCK SYSTEM ---
+
+      const RAMP_HIT_PADDING = 14;
+
+      for (const ball of state.balls) {
+        for (const line of state.lines) {
+          const dx = line.x2 - line.x1;
+          const dy = line.y2 - line.y1;
+          const lenSq = dx * dx + dy * dy;
+          if (lenSq === 0) continue;
+
+          let t = ((ball.x - line.x1) * dx + (ball.y - line.y1) * dy) / lenSq;
+          t = Math.max(0, Math.min(1, t));
+
+          const RAMP_HIT_PADDING = 14;
+
+          for (const ball of state.balls) {
+            // 🔒 IF already on a ramp → ONLY follow that ramp
+            if (ball._ramp) {
+              const line = ball._ramp;
+
+              const dx = line.x2 - line.x1;
+              const dy = line.y2 - line.y1;
+              const len = Math.hypot(dx, dy);
+
+              const tx = dx / len;
+              const ty = dy / len;
+
+              // advance along ramp
+              ball._t += 0.01;
+
+              // release ONLY at end
+              if (ball._t >= 1) {
+                ball._ramp = null;
+                continue;
+              }
+
+              // stick to ramp
+              ball.x = line.x1 + dx * ball._t;
+              ball.y = line.y1 + dy * ball._t;
+
+              // velocity follows ramp
+              const speed = 2;
+              ball.vx = tx * speed;
+              ball.vy = ty * speed;
+
+              continue; // 🚫 IGNORE ALL OTHER RAMPS
+            }
+
+            // 🟢 ONLY try to grab a ramp if NOT already on one
+            for (const line of state.lines) {
+              const dx = line.x2 - line.x1;
+              const dy = line.y2 - line.y1;
+              const lenSq = dx * dx + dy * dy;
+              if (lenSq === 0) continue;
+
+              let t =
+                ((ball.x - line.x1) * dx + (ball.y - line.y1) * dy) / lenSq;
+              t = Math.max(0, Math.min(1, t));
+
+              const projX = line.x1 + t * dx;
+              const projY = line.y1 + t * dy;
+
+              const dist = Math.hypot(ball.x - projX, ball.y - projY);
+
+              // ✅ grab ramp
+              if (dist < ball.radius + RAMP_HIT_PADDING) {
+                ball._ramp = line;
+                ball._t = t;
+                break;
+              }
+            }
+          }
+
+          // 🔵 IF LOCKED → FORCE FOLLOW
+          if (ball._ramp === line) {
+            const len = Math.sqrt(lenSq);
+            const tx = dx / len;
+            const ty = dy / len;
+
+            // move along ramp
+            ball._t += 0.01; // speed control (adjust this!)
+
+            if (ball._t > 1) {
+              ball._ramp = null; // release at end
+              continue;
+            }
+
+            ball.x = line.x1 + ball._t * dx;
+            ball.y = line.y1 + ball._t * dy;
+
+            // velocity follows ramp
+            const speed = 2;
+            ball.vx = tx * speed;
+            ball.vy = ty * speed;
+          }
+        }
+      }
+
+      // ORIGINAL ENGINE COLLISION (keep this)
       const soundSources = SBE.Collision.resolveCollisions(
         state,
         collisions,
@@ -2181,7 +2548,60 @@
 
     function renderFrame() {
       renderer.render(state, drawTools.getOverlays());
+      drawEmitters();
       drawShapeIndicators();
+    }
+
+    function drawEmitters() {
+      if (!state.emitters.length) return;
+      var ctx = canvas.getContext("2d");
+      var isClean = state.ui.cleanOutput || state.ui.presentation;
+      var selectedIds = new Set();
+      state.multiSelection.forEach(function (e) {
+        if (e.type === "emitter") selectedIds.add(e.id);
+      });
+
+      state.emitters.forEach(function (em) {
+        ctx.save();
+
+        // Outer ring
+        ctx.beginPath();
+        ctx.arc(em.x, em.y, 14, 0, Math.PI * 2);
+        ctx.strokeStyle = "#3dd8c5";
+        ctx.lineWidth = 2;
+        ctx.globalAlpha = 0.8;
+        ctx.stroke();
+
+        // Center dot
+        ctx.beginPath();
+        ctx.arc(em.x, em.y, 4, 0, Math.PI * 2);
+        ctx.fillStyle = "#3dd8c5";
+        ctx.globalAlpha = 1;
+        ctx.fill();
+
+        // Velocity arrow
+        var vLen = Math.hypot(em.velocity.x, em.velocity.y);
+        if (vLen > 0.05) {
+          ctx.beginPath();
+          ctx.moveTo(em.x, em.y);
+          ctx.lineTo(em.x + em.velocity.x * 30, em.y + em.velocity.y * 30);
+          ctx.strokeStyle = "rgba(255,255,255,0.6)";
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+        }
+
+        // Selection highlight
+        if (!isClean && selectedIds.has(em.id)) {
+          ctx.beginPath();
+          ctx.arc(em.x, em.y, 22, 0, Math.PI * 2);
+          ctx.strokeStyle = "rgba(255,255,255,0.7)";
+          ctx.lineWidth = 2;
+          ctx.setLineDash([6, 4]);
+          ctx.stroke();
+        }
+
+        ctx.restore();
+      });
     }
 
     function drawShapeIndicators() {
@@ -2560,7 +2980,13 @@
         ball.vy = clamp(ball.vy, -720, 720);
         ball.collisionCount = counts.get(ball.id) || 0;
 
-        if (ball.collisionCount > 3) {
+        var worldMode =
+          typeof state.world === "string"
+            ? state.world
+            : state.world && state.world.mode
+              ? state.world.mode
+              : "gravity";
+        if (worldMode !== "gravity" && ball.collisionCount > 3) {
           ball.vx += (Math.random() - 0.5) * 18;
           ball.vy += (Math.random() - 0.5) * 18;
         }

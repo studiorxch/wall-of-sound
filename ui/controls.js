@@ -66,6 +66,15 @@
       ballSpread: byId("ball-spread"),
       ballSpreadValue: byId("ball-spread-value"),
 
+      // Emitter
+      emitterInspectorBlock: byId("emitter-inspector-block"),
+      emitterRate: byId("emitter-rate"),
+      emitterRateValue: byId("emitter-rate-value"),
+      emitterVx: byId("emitter-vx"),
+      emitterVxValue: byId("emitter-vx-value"),
+      emitterVy: byId("emitter-vy"),
+      emitterVyValue: byId("emitter-vy-value"),
+
       // Button collections
       shapeButtons: Array.from(document.querySelectorAll(".shape-button")),
       toolButtons: Array.from(document.querySelectorAll(".tool")),
@@ -94,6 +103,9 @@
     bindRange(elements.ballCount, elements.ballCountValue, 0);
     bindRange(elements.ballSpeed, elements.ballSpeedValue, 1);
     bindRange(elements.ballSpread, elements.ballSpreadValue, 2);
+    bindRange(elements.emitterRate, elements.emitterRateValue, 0);
+    bindRange(elements.emitterVx, elements.emitterVxValue, 1);
+    bindRange(elements.emitterVy, elements.emitterVyValue, 1);
 
     // Tab switching
     elements.inspectorTabs.forEach(function (tab) {
