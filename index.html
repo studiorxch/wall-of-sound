@@ -33,6 +33,19 @@
               />
             </svg>
           </button>
+          <button class="tool" data-tool="line" title="Line (L)">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <line
+                x1="2"
+                y1="12"
+                x2="12"
+                y2="2"
+                stroke="currentColor"
+                stroke-width="1.4"
+                stroke-linecap="round"
+              />
+            </svg>
+          </button>
           <button class="tool" data-tool="shape" title="Shape (S)">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
               <polygon
@@ -737,9 +750,57 @@
               </label>
             </div>
           </section>
-        </div>
 
-        <!-- Canvas Tab -->
+          <section class="inspector-section hidden" id="motion-inspector-block">
+            <h4 class="section-title">Motion</h4>
+            <label class="field">
+              <input id="motion-enabled" type="checkbox" />
+              <span>Enable</span>
+            </label>
+            <div class="field-grid two">
+              <label class="field">
+                <span>VX</span>
+                <input
+                  id="motion-vx"
+                  type="range"
+                  min="-200"
+                  max="200"
+                  step="1"
+                  value="0"
+                />
+                <output id="motion-vx-value">0</output>
+              </label>
+              <label class="field">
+                <span>VY</span>
+                <input
+                  id="motion-vy"
+                  type="range"
+                  min="-200"
+                  max="200"
+                  step="1"
+                  value="0"
+                />
+                <output id="motion-vy-value">0</output>
+              </label>
+            </div>
+            <label class="field">
+              <span>Rotate</span>
+              <input
+                id="motion-rot"
+                type="range"
+                min="-5"
+                max="5"
+                step="0.1"
+                value="0"
+              />
+              <output id="motion-rot-value">0.0</output>
+            </label>
+            <label class="field">
+              <input id="motion-loop" type="checkbox" checked />
+              <span>Loop</span>
+            </label>
+          </section>
+        </div>
         <div class="tab-content" data-tab-content="canvas">
           <section class="inspector-section">
             <h4 class="section-title">Canvas</h4>
@@ -756,6 +817,31 @@
           <section class="inspector-section">
             <h4 class="section-title">World</h4>
             <p class="dim">Global forces and behaviors — not yet active.</p>
+          </section>
+          <section class="inspector-section">
+            <h4 class="section-title">Sound Response</h4>
+            <div class="field-grid two">
+              <label class="field">
+                <input type="checkbox" id="density-harmonics-toggle" checked />
+                <span>Density Harmonics</span>
+              </label>
+              <label class="field">
+                <input type="checkbox" id="velocity-dynamics-toggle" checked />
+                <span>Velocity Dynamics</span>
+              </label>
+            </div>
+            <label class="field">
+              <span>Sensitivity</span>
+              <input
+                type="range"
+                id="sound-sensitivity"
+                min="0.5"
+                max="2"
+                step="0.1"
+                value="1.0"
+              />
+              <output id="sound-sensitivity-value">1.0</output>
+            </label>
           </section>
         </div>
       </aside>
@@ -775,6 +861,15 @@
       </div>
     </div>
 
+    <!-- Drop Zone Overlay -->
+    <div id="drop-overlay" class="hidden">
+      <div class="drop-message">
+        DROP AUDIO FILES HERE
+        <br />
+        <span>Assigned to current note</span>
+      </div>
+    </div>
+
     <!-- Engine scripts (unchanged) -->
     <script src="./engine/physics.js"></script>
     <script src="./engine/swarm.js"></script>
@@ -782,6 +877,7 @@
     <script src="./engine/textSystem.js"></script>
     <script src="./engine/shapeSystem.js"></script>
     <script src="./engine/shapeTransforms.js"></script>
+    <script src="./engine/motionSystem.js"></script>
     <script src="./engine/eventBus.js"></script>
     <script src="./engine/collision.js"></script>
     <script src="./midi/midiOut.js"></script>

@@ -419,6 +419,11 @@ body {
   gap: 3px;
 }
 
+.note-cell.flash {
+  background: #2cff88 !important;
+  color: #000;
+}
+
 .note-cell {
   font-size: 9px;
   font-weight: 600;
@@ -657,4 +662,34 @@ body.presentation .app-body {
   border-radius: 8px;
   z-index: 8;
   pointer-events: none;
+}
+
+/* ── DROP OVERLAY ───────────────────────────────── */
+
+#drop-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+#drop-overlay.hidden {
+  display: none;
+}
+
+.drop-message {
+  color: #fff;
+  font-size: 24px;
+  text-align: center;
+  font-family: "SF Mono", "Fira Code", monospace;
+  opacity: 0.9;
+  line-height: 1.6;
+}
+
+.drop-message span {
+  font-size: 14px;
+  color: var(--accent);
 }
