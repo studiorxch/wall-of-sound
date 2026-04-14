@@ -28,6 +28,36 @@
     "A#": "#7a62ff",
     B: "#ff59cb",
   };
+  // ── Sample System ─────────────────────────────
+
+  const sampleMap = {
+    0: [], // C
+    1: [], // C#
+    2: [],
+    3: [],
+    4: [],
+    5: [],
+    6: [],
+    7: [],
+    8: [],
+    9: [],
+    10: [],
+    11: [],
+  };
+  const noteIndexMap = {};
+  const noteActivity = {};
+  const noteVelocity = {};
+
+  function saveSamples() {
+    const data = {};
+
+    Object.keys(sampleMap).forEach((k) => {
+      data[k] = sampleMap[k].map((b) => b.duration); // placeholder metadata
+    });
+
+    localStorage.setItem("sampleMap", JSON.stringify(data));
+  }
+
   const SHAPE_LIBRARY = {
     circle: function circle(center, size) {
       return [
@@ -167,6 +197,112 @@
     const renderer = new SBE.CanvasRenderer(canvas);
     const midiOut = new SBE.MidiOut();
     const controls = SBE.Controls.createControls();
+    window.noteElements = {};
+
+    // ── Drag-and-Drop Overlay System ──
+    var dropOverlay = document.getElementById("drop-overlay");
+    var dragCounter = 0;
+
+    function showDropOverlay() {
+      if (dropOverlay) dropOverlay.classList.remove("hidden");
+    }
+
+    function hideDropOverlay() {
+      if (dropOverlay) dropOverlay.classList.add("hidden");
+    }
+
+    function showToast(message) {
+      var toast = document.getElementById("drop-toast");
+      if (!toast) {
+        toast = document.createElement("div");
+        toast.id = "drop-toast";
+        toast.style.cssText =
+          "position:fixed;bottom:80px;left:50%;transform:translateX(-50%);" +
+          "font:600 12px monospace;color:#3dd8c5;background:rgba(12,14,18,0.92);" +
+          "padding:8px 16px;border-radius:8px;border:1px solid rgba(61,216,197,0.3);" +
+          "z-index:10000;pointer-events:none;transition:opacity 0.3s";
+        document.body.appendChild(toast);
+      }
+      toast.textContent = message;
+      toast.style.opacity = "1";
+      clearTimeout(toast._timer);
+      toast._timer = setTimeout(function () {
+        toast.style.opacity = "0";
+      }, 2500);
+    }
+
+    global.addEventListener("dragenter", function onDragEnter(e) {
+      e.preventDefault();
+      dragCounter++;
+      if (dragCounter === 1) showDropOverlay();
+    });
+
+    global.addEventListener("dragover", function onDragOver(e) {
+      e.preventDefault();
+    });
+
+    global.addEventListener("dragleave", function onDragLeave(e) {
+      e.preventDefault();
+      dragCounter--;
+      if (dragCounter <= 0) {
+        dragCounter = 0;
+        hideDropOverlay();
+      }
+    });
+
+    global.addEventListener("drop", async function onDrop(e) {
+      e.preventDefault();
+      dragCounter = 0;
+      hideDropOverlay();
+
+      var files = Array.prototype.slice.call(e.dataTransfer.files);
+      if (!files.length) return;
+
+      var context = ensureAudioContext();
+      if (!context) return;
+      if (context.state !== "running") {
+        await context.resume().catch(function () {});
+      }
+
+      var note = state.defaults.note || 60;
+      var noteClass = note % 12;
+      var loaded = 0;
+
+      for (var i = 0; i < files.length; i++) {
+        var file = files[i];
+        if (!file.type.includes("audio")) continue;
+
+        try {
+          var buffer = await file.arrayBuffer();
+          var decoded = await context.decodeAudioData(buffer);
+
+          if (sampleMap[noteClass].length >= 3) {
+            sampleMap[noteClass].shift();
+          }
+
+          sampleMap[noteClass].push(decoded);
+          loaded++;
+        } catch (err) {
+          console.warn("Failed to decode:", file.name);
+        }
+      }
+
+      saveSamples();
+
+      if (loaded > 0) {
+        showToast("Loaded " + loaded + " sample(s) → " + NOTE_NAMES[noteClass]);
+      }
+    });
+
+    document.querySelectorAll("[data-note-class]").forEach((el) => {
+      el.dataset.note = String(Number(el.dataset.noteClass) % 12);
+    });
+
+    document.querySelectorAll("[data-note]").forEach((el) => {
+      const n = Number(el.dataset.note) % 12;
+      window.noteElements[n] = el;
+    });
+
     let textEditor = null;
     let textUpdateTimer = 0;
 
@@ -177,39 +313,38 @@
     const oscillatorOutput = {
       enabled: true,
       handle: function handleOscillator(type, sourceObject) {
-        var context = state.audio.context;
-        if (!context) {
-          return;
-        }
-        if (context.state === "suspended") {
-          context.resume().catch(function () {});
-          return;
-        }
+        const context = state.audio.context;
+        if (!context || context.state !== "running") return;
 
-        const sound = sourceObject.sound;
-        const freq =
-          typeof sound.frequency === "number" ? sound.frequency : 220;
-        const volume = typeof sound.volume === "number" ? sound.volume : 0.1;
-        const duration =
-          typeof sound.duration === "number" ? sound.duration : 0.05;
-        const now = context.currentTime;
+        const note = sourceObject.sound?.midi?.note || 60;
+        const noteClass = note % 12;
 
-        const oscillator = context.createOscillator();
-        const gain = context.createGain();
+        const bank = sampleMap[noteClass];
+        if (!bank || bank.length === 0) return;
 
-        oscillator.type = "triangle";
-        oscillator.frequency.value = freq;
-        gain.gain.setValueAtTime(0.0001, now);
-        gain.gain.exponentialRampToValueAtTime(
-          Math.max(0.0008, volume),
-          now + 0.008,
-        );
-        gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+        const index = noteIndexMap[noteClass] || 0;
+        const buffer = bank[index % bank.length];
+        noteIndexMap[noteClass] = index + 1;
 
-        oscillator.connect(gain);
-        gain.connect(context.destination);
-        oscillator.start(now);
-        oscillator.stop(now + duration + 0.02);
+        const source = context.createBufferSource();
+        const gainNode = context.createGain();
+
+        source.buffer = buffer;
+
+        noteActivity[noteClass] = performance.now();
+
+        const velocity = sourceObject.sound?.midi?.velocity || 80;
+        noteVelocity[noteClass] = velocity / 127;
+
+        const pitch = Math.pow(2, (note - 60) / 12);
+        source.playbackRate.value = pitch * (0.96 + Math.random() * 0.08);
+
+        gainNode.gain.value = 0.8;
+
+        source.connect(gainNode);
+        gainNode.connect(context.destination);
+
+        source.start();
       },
     };
 
@@ -225,9 +360,28 @@
 
         const channel =
           typeof sound.midi.channel === "number" ? sound.midi.channel : 1;
-        const note = typeof sound.midi.note === "number" ? sound.midi.note : 60;
-        const velocity =
+        const rawNote =
+          typeof sound.midi.note === "number" ? sound.midi.note : 60;
+        const density = getDensityLevel(state.collisionCount || 0);
+        let note = rawNote;
+        if (state.soundResponse && state.soundResponse.densityHarmonics) {
+          if (density === "mid") note = rawNote + 7;
+          if (density === "high") note = rawNote + 12;
+        }
+
+        let velocity =
           typeof sound.midi.velocity === "number" ? sound.midi.velocity : 80;
+        if (
+          state.soundResponse &&
+          state.soundResponse.velocityDynamics &&
+          sourceObject
+        ) {
+          var speed = Math.hypot(sourceObject.vx || 0, sourceObject.vy || 0);
+          var sens =
+            (state.soundResponse && state.soundResponse.sensitivity) || 1.0;
+          var scaled = speed * 20 * sens;
+          velocity = Math.min(127, Math.max(40, Math.round(scaled)));
+        }
 
         midiOut.sendNote(channel, note, velocity);
       },
@@ -332,6 +486,11 @@
         direction: { x: 0, y: 1 },
       },
       emitters: [],
+      soundResponse: {
+        densityHarmonics: true,
+        velocityDynamics: true,
+        sensitivity: 1.0,
+      },
       defaults: {
         midiChannel: 1,
         note: 60,
@@ -343,6 +502,13 @@
         textSize: 160,
         textScale: 1,
         textRotation: 0,
+      },
+      lineTool: {
+        step: 0,
+        startPoint: null,
+        previewEnd: null,
+        lengthInput: "",
+        isTyping: false,
       },
     };
 
@@ -412,8 +578,26 @@
 
     global.addEventListener(
       "pointerdown",
-      function initAudioOnGesture() {
-        ensureAudioContext();
+      async function initAudioOnGesture() {
+        const ctx = ensureAudioContext();
+        if (!ctx) return;
+
+        if (ctx.state !== "running") {
+          await ctx.resume();
+          console.log("🔊 AudioContext:", ctx.state);
+        }
+
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+
+        osc.frequency.value = 440;
+        gain.gain.value = 0.05;
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc.start();
+        osc.stop(ctx.currentTime + 0.05);
       },
       { once: true },
     );
@@ -590,8 +774,167 @@
       return null;
     }
 
+    // ── Line Tool (two-click, capture phase) ──
+    var SNAP_ANGLE = Math.PI / 12;
+    var FINE_SNAP_ANGLE = Math.PI / 36;
+
+    function getSnappedPoint(start, current) {
+      var dx = current.x - start.x;
+      var dy = current.y - start.y;
+      var angle = Math.atan2(dy, dx);
+      var length = Math.hypot(dx, dy);
+      var inc = heldKeys.has("alt") ? FINE_SNAP_ANGLE : SNAP_ANGLE;
+      var snapped = Math.round(angle / inc) * inc;
+      return {
+        x: start.x + Math.cos(snapped) * length,
+        y: start.y + Math.sin(snapped) * length,
+      };
+    }
+
+    function applyLengthConstraint(start, current, lengthValue) {
+      var dx = current.x - start.x;
+      var dy = current.y - start.y;
+      var angle = Math.atan2(dy, dx);
+      return {
+        x: start.x + Math.cos(angle) * lengthValue,
+        y: start.y + Math.sin(angle) * lengthValue,
+      };
+    }
+
+    function getLineFinalPoint(start, current) {
+      var pt = current;
+      if (heldKeys.has("shift")) {
+        pt = getSnappedPoint(start, pt);
+      }
+      var tool = state.lineTool;
+      if (tool.isTyping && tool.lengthInput) {
+        var len = parseFloat(tool.lengthInput);
+        if (!isNaN(len) && len > 0) {
+          pt = applyLengthConstraint(start, pt, len);
+        }
+      }
+      return pt;
+    }
+
+    function finalizeLineTool(endPoint) {
+      var tool = state.lineTool;
+      if (!tool.startPoint) return;
+      var final = getLineFinalPoint(tool.startPoint, endPoint);
+      var dx = final.x - tool.startPoint.x;
+      var dy = final.y - tool.startPoint.y;
+      if (Math.hypot(dx, dy) < 4) return;
+
+      pushHistory();
+      var settings = createLineSettingsFromInspector();
+      var raw = SBE.LineSystem.createLine(
+        {
+          x1: tool.startPoint.x,
+          y1: tool.startPoint.y,
+          x2: final.x,
+          y2: final.y,
+        },
+        settings,
+      );
+      var line = normalizeLineObject(raw);
+      state.lines.push(line);
+      selectObject("line", line.id);
+      syncUI();
+      renderFrame();
+
+      tool.step = 0;
+      tool.startPoint = null;
+      tool.previewEnd = null;
+      tool.lengthInput = "";
+      tool.isTyping = false;
+    }
+
+    canvas.addEventListener(
+      "pointerdown",
+      function onLineToolDown(e) {
+        if (state.tool !== "line") return;
+        var pt = getCanvasCoordsLocal(e);
+        var tool = state.lineTool;
+
+        if (tool.step === 0) {
+          tool.startPoint = pt;
+          tool.step = 1;
+          tool.previewEnd = pt;
+          e.stopPropagation();
+          return;
+        }
+
+        if (tool.step === 1) {
+          finalizeLineTool(pt);
+          e.stopPropagation();
+        }
+      },
+      true,
+    );
+
+    canvas.addEventListener(
+      "pointermove",
+      function onLineToolMove(e) {
+        if (state.tool !== "line" || state.lineTool.step !== 1) return;
+        state.lineTool.previewEnd = getCanvasCoordsLocal(e);
+        renderFrame();
+      },
+      true,
+    );
+
+    function drawLinePreview() {
+      var tool = state.lineTool;
+      if (
+        state.tool !== "line" ||
+        tool.step !== 1 ||
+        !tool.startPoint ||
+        !tool.previewEnd
+      )
+        return;
+
+      var end = getLineFinalPoint(tool.startPoint, tool.previewEnd);
+      var ctx = canvas.getContext("2d");
+      ctx.save();
+
+      // Preview line
+      ctx.beginPath();
+      ctx.moveTo(tool.startPoint.x, tool.startPoint.y);
+      ctx.lineTo(end.x, end.y);
+      ctx.strokeStyle = "rgba(255,255,255,0.5)";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 4]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Start dot
+      ctx.beginPath();
+      ctx.arc(tool.startPoint.x, tool.startPoint.y, 4, 0, Math.PI * 2);
+      ctx.fillStyle = "#3dd8c5";
+      ctx.fill();
+
+      // Length + angle label
+      var dx = end.x - tool.startPoint.x;
+      var dy = end.y - tool.startPoint.y;
+      var len = Math.hypot(dx, dy);
+      var angle = Math.atan2(dy, dx) * (180 / Math.PI);
+      var label = Math.round(len) + "px  " + angle.toFixed(1) + "°";
+      if (tool.isTyping && tool.lengthInput) {
+        label = tool.lengthInput + "px (typing)";
+      }
+      ctx.fillStyle = "rgba(255,255,255,0.7)";
+      ctx.font = "20px monospace";
+      ctx.fillText(
+        label,
+        (tool.startPoint.x + end.x) / 2 + 10,
+        (tool.startPoint.y + end.y) / 2 - 10,
+      );
+
+      ctx.restore();
+    }
+
     bindControls();
     await applyExampleScene();
+    state.lines[2].y1 += 100;
+    state.lines[2].y2 += 100;
     updateCanvasAspect();
     setViewClasses();
     syncUI();
@@ -920,6 +1263,86 @@
         });
       }
 
+      // Sound response bindings
+      if (elements.densityHarmonicsToggle) {
+        elements.densityHarmonicsToggle.addEventListener("change", function () {
+          state.soundResponse.densityHarmonics = this.checked;
+        });
+      }
+      if (elements.velocityDynamicsToggle) {
+        elements.velocityDynamicsToggle.addEventListener("change", function () {
+          state.soundResponse.velocityDynamics = this.checked;
+        });
+      }
+      if (elements.soundSensitivity) {
+        elements.soundSensitivity.addEventListener("input", function () {
+          state.soundResponse.sensitivity = Number(this.value);
+        });
+      }
+
+      // Motion inspector bindings
+      function getMotionShape() {
+        if (!state.selectedShapeId) return null;
+        return (
+          (state.shapes || []).find(function (s) {
+            return s.id === state.selectedShapeId;
+          }) || null
+        );
+      }
+
+      function ensureMotion(shape) {
+        if (!shape.motion) {
+          shape.motion = {
+            enabled: false,
+            vx: 0,
+            vy: 0,
+            angularVelocity: 0,
+            loop: true,
+          };
+        }
+      }
+
+      if (elements.motionEnabled) {
+        elements.motionEnabled.addEventListener("change", function () {
+          var shape = getMotionShape();
+          if (!shape) return;
+          ensureMotion(shape);
+          shape.motion.enabled = this.checked;
+        });
+      }
+      if (elements.motionVx) {
+        elements.motionVx.addEventListener("input", function () {
+          var shape = getMotionShape();
+          if (!shape) return;
+          ensureMotion(shape);
+          shape.motion.vx = Number(this.value);
+        });
+      }
+      if (elements.motionVy) {
+        elements.motionVy.addEventListener("input", function () {
+          var shape = getMotionShape();
+          if (!shape) return;
+          ensureMotion(shape);
+          shape.motion.vy = Number(this.value);
+        });
+      }
+      if (elements.motionRot) {
+        elements.motionRot.addEventListener("input", function () {
+          var shape = getMotionShape();
+          if (!shape) return;
+          ensureMotion(shape);
+          shape.motion.angularVelocity = Number(this.value);
+        });
+      }
+      if (elements.motionLoop) {
+        elements.motionLoop.addEventListener("change", function () {
+          var shape = getMotionShape();
+          if (!shape) return;
+          ensureMotion(shape);
+          shape.motion.loop = this.checked;
+        });
+      }
+
       global.addEventListener("keydown", async function onKeyDown(event) {
         heldKeys.add(event.key.toLowerCase());
 
@@ -985,6 +1408,58 @@
           state.tool = "emitter";
           syncUI();
           return;
+        }
+        if (event.key.toLowerCase() === "l") {
+          state.tool = "line";
+          state.lineTool.step = 0;
+          state.lineTool.startPoint = null;
+          state.lineTool.previewEnd = null;
+          state.lineTool.lengthInput = "";
+          state.lineTool.isTyping = false;
+          syncUI();
+          return;
+        }
+
+        // Line tool length input
+        if (state.tool === "line" && state.lineTool.step === 1) {
+          if (!isNaN(event.key) && event.key !== " ") {
+            event.preventDefault();
+            state.lineTool.isTyping = true;
+            state.lineTool.lengthInput += event.key;
+            renderFrame();
+            return;
+          }
+          if (event.key === ".") {
+            event.preventDefault();
+            state.lineTool.lengthInput += ".";
+            renderFrame();
+            return;
+          }
+          if (event.key === "Backspace") {
+            event.preventDefault();
+            state.lineTool.lengthInput = state.lineTool.lengthInput.slice(
+              0,
+              -1,
+            );
+            if (!state.lineTool.lengthInput) state.lineTool.isTyping = false;
+            renderFrame();
+            return;
+          }
+          if (event.key === "Enter" && state.lineTool.previewEnd) {
+            event.preventDefault();
+            finalizeLineTool(state.lineTool.previewEnd);
+            return;
+          }
+          if (event.key === "Escape") {
+            event.preventDefault();
+            state.lineTool.step = 0;
+            state.lineTool.startPoint = null;
+            state.lineTool.previewEnd = null;
+            state.lineTool.lengthInput = "";
+            state.lineTool.isTyping = false;
+            renderFrame();
+            return;
+          }
         }
 
         if (event.key === "Delete" || event.key === "Backspace") {
@@ -1089,11 +1564,51 @@
         : null;
       renderer.resize(state.canvas.width, state.canvas.height);
       updateCanvasAspect();
+      rebuildAudioBindings();
       clearSelection();
       clearLoop();
       resetTransportClock();
       syncUI();
       renderFrame();
+    }
+
+    function rebuildAudioBindings() {
+      // Lines: ensure note/midiChannel + rebuild sound
+      state.lines.forEach(function (line) {
+        if (line.note == null) line.note = 60;
+        if (line.midiChannel == null) line.midiChannel = 1;
+        if (line.midi) {
+          if (line.midi.note == null) line.midi.note = line.note;
+          if (line.midi.channel == null) line.midi.channel = line.midiChannel;
+        }
+        line.sound = buildSoundConfig(
+          line.midi ? line.midi.note : line.note,
+          line.midi ? line.midi.channel : line.midiChannel,
+        );
+      });
+
+      // Shapes: ensure note/midiChannel on every segment + rebuild sound
+      (state.shapes || []).forEach(function (shape) {
+        shape.segments.forEach(function (seg) {
+          if (seg.note == null) seg.note = 60;
+          if (seg.midiChannel == null) seg.midiChannel = 1;
+          seg.sound = buildSoundConfig(seg.note, seg.midiChannel);
+        });
+      });
+
+      // Text objects: ensure note/midiChannel + rebuild sound
+      (state.textObjects || []).forEach(function (text) {
+        if (text.note == null) text.note = 60;
+        if (text.midiChannel == null) text.midiChannel = 1;
+        if (text.midi) {
+          if (text.midi.note == null) text.midi.note = text.note;
+          if (text.midi.channel == null) text.midi.channel = text.midiChannel;
+        }
+        text.sound = buildSoundConfig(
+          text.midi ? text.midi.note : text.note,
+          text.midi ? text.midi.channel : text.midiChannel,
+        );
+      });
     }
 
     function updateCanvasAspect() {
@@ -1159,6 +1674,52 @@
               selection.velocity ? selection.velocity.y : 0,
             ).toFixed(1);
           }
+        }
+      }
+
+      // Motion panel visibility + sync
+      var isShape =
+        state.multiSelection.length === 1 &&
+        state.multiSelection[0].type === "shape";
+      if (controls.elements.motionInspectorBlock) {
+        controls.elements.motionInspectorBlock.classList.toggle(
+          "hidden",
+          !isShape,
+        );
+      }
+      if (isShape && selection) {
+        var m = selection.motion || {
+          enabled: false,
+          vx: 0,
+          vy: 0,
+          angularVelocity: 0,
+          loop: true,
+        };
+        if (controls.elements.motionEnabled) {
+          controls.elements.motionEnabled.checked = m.enabled;
+        }
+        if (controls.elements.motionVx) {
+          controls.elements.motionVx.value = String(m.vx);
+          if (controls.elements.motionVxValue) {
+            controls.elements.motionVxValue.textContent = String(m.vx);
+          }
+        }
+        if (controls.elements.motionVy) {
+          controls.elements.motionVy.value = String(m.vy);
+          if (controls.elements.motionVyValue) {
+            controls.elements.motionVyValue.textContent = String(m.vy);
+          }
+        }
+        if (controls.elements.motionRot) {
+          controls.elements.motionRot.value = String(m.angularVelocity);
+          if (controls.elements.motionRotValue) {
+            controls.elements.motionRotValue.textContent = Number(
+              m.angularVelocity,
+            ).toFixed(1);
+          }
+        }
+        if (controls.elements.motionLoop) {
+          controls.elements.motionLoop.checked = m.loop;
         }
       }
     }
@@ -2029,10 +2590,6 @@
     // ── Event Dispatch ───────────────────────────────────
 
     function dispatchCollisionEvent(sourceObject) {
-      if (!isPlaying) {
-        return;
-      }
-
       const currentTime = getTransportTime();
 
       if (!state.quantize.enabled) {
@@ -2352,10 +2909,42 @@
       });
     }
 
+    function getLoopDurationMs(bpm, bars) {
+      var beatsPerBar = 4;
+      var totalBeats = bars * beatsPerBar;
+      var beatDurationMs = 60000 / bpm;
+      return totalBeats * beatDurationMs;
+    }
+
+    function getLoopPhase(timeMs, loopDurationMs) {
+      if (!loopDurationMs || loopDurationMs <= 0) return 0;
+      return (timeMs % loopDurationMs) / loopDurationMs;
+    }
+
+    function getDensityLevel(count) {
+      if (count < 3) return "low";
+      if (count < 10) return "mid";
+      return "high";
+    }
+
+    function modulateNoteByPhase(note, phase) {
+      if (phase < 0.25) return note - 12;
+      if (phase < 0.75) return note;
+      return note + 12;
+    }
+
     function tick(dt, now) {
       if (!isPlaying) {
         return;
       }
+
+      // Compute loop phase
+      var bpm = state.bpm || 120;
+      var bars = (state.loop && state.loop.bars) || 8;
+      var loopMs = getLoopDurationMs(bpm, bars);
+      var transportTimeSec = getTransportTime();
+      var transportTimeMs = transportTimeSec * 1000;
+      state.loopPhase = getLoopPhase(transportTimeMs, loopMs);
 
       var worldMode =
         typeof state.world === "string"
@@ -2393,7 +2982,13 @@
           const MOTION_SCALE = 60;
           ball.x += ball.vx * dt * MOTION_SCALE;
           ball.y += ball.vy * dt * MOTION_SCALE;
+
+          const FLOOR_Y = state.canvas.height * 0.92;
+          if (ball.y > FLOOR_Y) {
+            ball._dead = true;
+          }
         });
+        state.balls = state.balls.filter((b) => !b._dead);
       }
 
       // Emitters
@@ -2420,109 +3015,16 @@
         SBE.EnginePhysics.updateSwarm(state.balls, dt);
       }
 
-      // --- COLLISION (PATCHED) ---
-      const collisions = SBE.Collision.detectCollisions(state, now);
-
-      // --- RAMP LOCK SYSTEM ---
-
-      const RAMP_HIT_PADDING = 14;
-
-      for (const ball of state.balls) {
-        for (const line of state.lines) {
-          const dx = line.x2 - line.x1;
-          const dy = line.y2 - line.y1;
-          const lenSq = dx * dx + dy * dy;
-          if (lenSq === 0) continue;
-
-          let t = ((ball.x - line.x1) * dx + (ball.y - line.y1) * dy) / lenSq;
-          t = Math.max(0, Math.min(1, t));
-
-          const RAMP_HIT_PADDING = 14;
-
-          for (const ball of state.balls) {
-            // 🔒 IF already on a ramp → ONLY follow that ramp
-            if (ball._ramp) {
-              const line = ball._ramp;
-
-              const dx = line.x2 - line.x1;
-              const dy = line.y2 - line.y1;
-              const len = Math.hypot(dx, dy);
-
-              const tx = dx / len;
-              const ty = dy / len;
-
-              // advance along ramp
-              ball._t += 0.01;
-
-              // release ONLY at end
-              if (ball._t >= 1) {
-                ball._ramp = null;
-                continue;
-              }
-
-              // stick to ramp
-              ball.x = line.x1 + dx * ball._t;
-              ball.y = line.y1 + dy * ball._t;
-
-              // velocity follows ramp
-              const speed = 2;
-              ball.vx = tx * speed;
-              ball.vy = ty * speed;
-
-              continue; // 🚫 IGNORE ALL OTHER RAMPS
-            }
-
-            // 🟢 ONLY try to grab a ramp if NOT already on one
-            for (const line of state.lines) {
-              const dx = line.x2 - line.x1;
-              const dy = line.y2 - line.y1;
-              const lenSq = dx * dx + dy * dy;
-              if (lenSq === 0) continue;
-
-              let t =
-                ((ball.x - line.x1) * dx + (ball.y - line.y1) * dy) / lenSq;
-              t = Math.max(0, Math.min(1, t));
-
-              const projX = line.x1 + t * dx;
-              const projY = line.y1 + t * dy;
-
-              const dist = Math.hypot(ball.x - projX, ball.y - projY);
-
-              // ✅ grab ramp
-              if (dist < ball.radius + RAMP_HIT_PADDING) {
-                ball._ramp = line;
-                ball._t = t;
-                break;
-              }
-            }
-          }
-
-          // 🔵 IF LOCKED → FORCE FOLLOW
-          if (ball._ramp === line) {
-            const len = Math.sqrt(lenSq);
-            const tx = dx / len;
-            const ty = dy / len;
-
-            // move along ramp
-            ball._t += 0.01; // speed control (adjust this!)
-
-            if (ball._t > 1) {
-              ball._ramp = null; // release at end
-              continue;
-            }
-
-            ball.x = line.x1 + ball._t * dx;
-            ball.y = line.y1 + ball._t * dy;
-
-            // velocity follows ramp
-            const speed = 2;
-            ball.vx = tx * speed;
-            ball.vy = ty * speed;
-          }
-        }
+      // Shape motion
+      if (SBE.MotionSystem && state.shapes && state.shapes.length) {
+        SBE.MotionSystem.updateAll(state.shapes, dt, {
+          width: state.canvas.width,
+          height: state.canvas.height,
+        });
       }
 
-      // ORIGINAL ENGINE COLLISION (keep this)
+      const collisions = SBE.Collision.detectCollisions(state, now);
+      state.collisionCount = collisions.length;
       const soundSources = SBE.Collision.resolveCollisions(
         state,
         collisions,
@@ -2536,11 +3038,9 @@
         }
       });
 
-      // Collision events — dispatch through event bus
       soundSources.forEach(function (source) {
-        if (source.line && source.line.sound) {
-          dispatchCollisionEvent(source.line);
-        }
+        if (!source.line || !source.line.sound) return;
+        dispatchCollisionEvent(source.line);
       });
 
       stabilizeBalls(collisions);
@@ -2550,11 +3050,75 @@
       renderer.render(state, drawTools.getOverlays());
       drawEmitters();
       drawShapeIndicators();
+      drawLinePreview();
+      drawSoundHUD();
+
+      if (!window.noteElements) return;
+
+      Object.keys(window.noteElements).forEach((n) => {
+        updateNoteVisual(Number(n), window.noteElements[n]);
+      });
+    }
+
+    function updateNoteVisual(noteClass, element) {
+      const last = noteActivity[noteClass];
+      if (!last) return;
+
+      const now = performance.now();
+      const elapsed = now - last;
+
+      const FLASH_MS = 120;
+
+      if (elapsed < FLASH_MS) {
+        const NOTE_KEYS = [
+          "C",
+          "C#",
+          "D",
+          "D#",
+          "E",
+          "F",
+          "F#",
+          "G",
+          "G#",
+          "A",
+          "A#",
+          "B",
+        ];
+        const color = NOTE_COLORS[NOTE_KEYS[noteClass]];
+        const velocity = noteVelocity[noteClass] || 0.5;
+        const fade = 1 - elapsed / FLASH_MS;
+
+        element.style.background = color;
+        element.style.opacity = Math.max(0.25, velocity * fade);
+      } else {
+        element.style.background = "";
+        element.style.opacity = "";
+      }
+    }
+
+    function drawSoundHUD() {
+      if (state.ui.cleanOutput || state.ui.presentation || !isPlaying) {
+        return;
+      }
+      var ctx = canvas.getContext("2d");
+      var density = getDensityLevel(state.collisionCount || 0);
+      ctx.save();
+      ctx.fillStyle = "rgba(255,255,255,0.7)";
+      ctx.font = "24px monospace";
+      ctx.fillText("Density: " + density.toUpperCase(), 20, 50);
+      const hasSamples = Object.values(sampleMap).some(
+        (bank) => bank && bank.length > 0,
+      );
+
+      const status = hasSamples ? "Samples: READY" : "Samples: EMPTY";
+
+      ctx.fillText(status, 20, 80);
+      ctx.restore();
     }
 
     function drawEmitters() {
       if (!state.emitters.length) return;
-      var ctx = canvas.getContext("2d");
+      const ctx = canvas.getContext("2d");
       var isClean = state.ui.cleanOutput || state.ui.presentation;
       var selectedIds = new Set();
       state.multiSelection.forEach(function (e) {
@@ -2695,6 +3259,18 @@
 
     function getBeatDuration() {
       return 60 / Math.max(1, state.bpm);
+    }
+
+    function shouldTriggerOnBeat(windowSize = 0.02, swing = 0.1) {
+      const beat = getTransportTime() / getBeatDuration();
+      let phase = beat % 1;
+
+      const isOffBeat = Math.floor(beat) % 2 === 1;
+      if (isOffBeat) {
+        phase = (phase + swing) % 1;
+      }
+
+      return phase < windowSize;
     }
 
     function getQuantizeGridTime() {
@@ -3098,8 +3674,8 @@
         y2: line.y2,
         color: line.color,
         thickness: line.thickness,
-        midiChannel: line.midiChannel,
-        note: line.note,
+        midiChannel: line.midiChannel != null ? line.midiChannel : 1,
+        note: line.note != null ? line.note : 60,
         velocityRange: [48, 110],
         life: line.life,
         behavior: {
@@ -3291,6 +3867,10 @@
 
   function mod(value, divisor) {
     return ((value % divisor) + divisor) % divisor;
+  }
+
+  function getDensityNorm(count) {
+    return Math.min(1, count / 12); // normalize (tweak later)
   }
 
   function createBallId() {

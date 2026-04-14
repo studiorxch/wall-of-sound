@@ -75,6 +75,17 @@
       emitterVy: byId("emitter-vy"),
       emitterVyValue: byId("emitter-vy-value"),
 
+      // Motion
+      motionInspectorBlock: byId("motion-inspector-block"),
+      motionEnabled: byId("motion-enabled"),
+      motionVx: byId("motion-vx"),
+      motionVxValue: byId("motion-vx-value"),
+      motionVy: byId("motion-vy"),
+      motionVyValue: byId("motion-vy-value"),
+      motionRot: byId("motion-rot"),
+      motionRotValue: byId("motion-rot-value"),
+      motionLoop: byId("motion-loop"),
+
       // Button collections
       shapeButtons: Array.from(document.querySelectorAll(".shape-button")),
       toolButtons: Array.from(document.querySelectorAll(".tool")),
@@ -94,6 +105,12 @@
       tabContents: Array.from(document.querySelectorAll(".tab-content")),
     };
 
+    const noteElements = window.noteElements || (window.noteElements = {});
+    elements.noteCells.forEach(function (slot) {
+      const note = Number(slot.dataset.noteClass || 0) + 60;
+      noteElements[note] = slot;
+    });
+
     // Bind range → output sync
     bindRange(elements.textSize, elements.textSizeValue, 0);
     bindRange(elements.textScale, elements.textScaleValue, 1);
@@ -106,6 +123,9 @@
     bindRange(elements.emitterRate, elements.emitterRateValue, 0);
     bindRange(elements.emitterVx, elements.emitterVxValue, 1);
     bindRange(elements.emitterVy, elements.emitterVyValue, 1);
+    bindRange(elements.motionVx, elements.motionVxValue, 0);
+    bindRange(elements.motionVy, elements.motionVyValue, 0);
+    bindRange(elements.motionRot, elements.motionRotValue, 1);
 
     // Tab switching
     elements.inspectorTabs.forEach(function (tab) {

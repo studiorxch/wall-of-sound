@@ -114,4 +114,15 @@
     });
     return proxies;
   };
+
+  // Patch hydrateShape to ensure note/midiChannel defaults on every segment
+  var originalHydrate = SS.hydrateShape;
+  SS.hydrateShape = function hydrateShapePatched(raw) {
+    var shape = originalHydrate(raw);
+    shape.segments.forEach(function (seg) {
+      if (seg.note == null) seg.note = 60;
+      if (seg.midiChannel == null) seg.midiChannel = 1;
+    });
+    return shape;
+  };
 })(window);
