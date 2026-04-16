@@ -10,7 +10,7 @@
     <!-- ── TOP BAR ──────────────────────────────────── -->
     <header id="topbar" class="topbar">
       <div class="topbar-left">
-        <span class="logo-id">WoS</span>
+        <span class="logo-id">Wallace</span>
         <div class="tool-group">
           <button class="tool active" data-tool="select" title="Select (V)">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
@@ -35,15 +35,7 @@
           </button>
           <button class="tool" data-tool="line" title="Line (L)">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <line
-                x1="2"
-                y1="12"
-                x2="12"
-                y2="2"
-                stroke="currentColor"
-                stroke-width="1.4"
-                stroke-linecap="round"
-              />
+              <line x1="2" y1="12" x2="12" y2="2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
             </svg>
           </button>
           <button class="tool" data-tool="shape" title="Shape (S)">
@@ -146,10 +138,7 @@
           />
           <span>Font</span>
         </label>
-        <label class="file-btn" title="BG">
-          <input id="background-file" type="file" accept="image/*" />
-          <span>BG</span>
-        </label>
+
       </div>
     </header>
 
@@ -309,47 +298,7 @@
           </div>
         </section>
 
-        <section class="library-section">
-          <h3 class="library-header">Ball Tool</h3>
-          <div class="lib-fields">
-            <label class="field">
-              <span>Count</span>
-              <input
-                id="ball-count"
-                type="range"
-                min="1"
-                max="8"
-                step="1"
-                value="1"
-              />
-              <output id="ball-count-value">1</output>
-            </label>
-            <label class="field">
-              <span>Speed</span>
-              <input
-                id="ball-speed"
-                type="range"
-                min="0.4"
-                max="3"
-                step="0.1"
-                value="1"
-              />
-              <output id="ball-speed-value">1.0</output>
-            </label>
-            <label class="field">
-              <span>Spread</span>
-              <input
-                id="ball-spread"
-                type="range"
-                min="0"
-                max="1"
-                step="0.05"
-                value="0.15"
-              />
-              <output id="ball-spread-value">0.15</output>
-            </label>
-          </div>
-        </section>
+     
       </aside>
 
       <!-- CENTER: Canvas -->
@@ -357,9 +306,18 @@
         <div class="canvas-wrap" id="canvas-wrap">
           <canvas id="engine-canvas" width="1080" height="1920"></canvas>
         </div>
+      </main>
 
-        <!-- Transport overlay -->
-        <div class="transport-overlay">
+      <!-- Transport (below canvas) -->
+      <div class="transport-bar">
+        <div class="transport-status">
+          <span id="engine-status">STOP</span>
+          <span id="scene-stats">0L 0T 0B</span>
+        </div>
+        <div class="transport-controls">
+          <button id="toggle-playback" class="transport-btn" title="Play/Pause">
+            &#9654;
+          </button>
           <button id="record-loop" class="transport-btn rec" title="Record">
             &#9679;
           </button>
@@ -376,12 +334,7 @@
             RE
           </button>
         </div>
-
-        <div class="status-overlay">
-          <span id="engine-status">STOP</span>
-          <span id="scene-stats">0L 0T 0B</span>
-        </div>
-      </main>
+      </div>
 
       <!-- RIGHT PANEL: Inspector -->
       <aside id="right-panel" class="panel panel-right">
@@ -555,6 +508,7 @@
                   <option value="attract">Attract</option>
                   <option value="repel">Repel</option>
                   <option value="orbital">Orbit</option>
+                  <option value="emitter">Emitter</option>
                 </select>
               </label>
               <label class="field">
@@ -568,6 +522,23 @@
                   value="1.4"
                 />
                 <output id="line-strength-value">1.4</output>
+              </label>
+            </div>
+            <div class="field-grid two hidden" id="behavior-emitter-fields">
+              <label class="field">
+                <span>Rate (ms)</span>
+                <input id="behavior-emitter-rate" type="range" min="100" max="2000" step="50" value="400" />
+                <output id="behavior-emitter-rate-value">400</o>
+              </label>
+              <label class="field">
+                <span>Vel X</span>
+                <input id="behavior-emitter-vx" type="range" min="-10" max="10" step="0.5" value="0" />
+                <output id="behavior-emitter-vx-value">0.0</o>
+              </label>
+              <label class="field">
+                <span>Vel Y</span>
+                <input id="behavior-emitter-vy" type="range" min="-10" max="10" step="0.5" value="0" />
+                <output id="behavior-emitter-vy-value">0.0</o>
               </label>
             </div>
           </section>
@@ -760,39 +731,18 @@
             <div class="field-grid two">
               <label class="field">
                 <span>VX</span>
-                <input
-                  id="motion-vx"
-                  type="range"
-                  min="-200"
-                  max="200"
-                  step="1"
-                  value="0"
-                />
+                <input id="motion-vx" type="range" min="-200" max="200" step="1" value="0" />
                 <output id="motion-vx-value">0</output>
               </label>
               <label class="field">
                 <span>VY</span>
-                <input
-                  id="motion-vy"
-                  type="range"
-                  min="-200"
-                  max="200"
-                  step="1"
-                  value="0"
-                />
+                <input id="motion-vy" type="range" min="-200" max="200" step="1" value="0" />
                 <output id="motion-vy-value">0</output>
               </label>
             </div>
             <label class="field">
               <span>Rotate</span>
-              <input
-                id="motion-rot"
-                type="range"
-                min="-5"
-                max="5"
-                step="0.1"
-                value="0"
-              />
+              <input id="motion-rot" type="range" min="-5" max="5" step="0.1" value="0" />
               <output id="motion-rot-value">0.0</output>
             </label>
             <label class="field">
@@ -809,6 +759,11 @@
               <input id="transparent-bg" type="checkbox" />
               <span>Transparent background</span>
             </label>
+                    <label class="file-btn" title="BG">
+          <input id="background-file" type="file" accept="image/*" />
+          <span>BG</span>
+        </label>
+
           </section>
         </div>
 
@@ -816,8 +771,84 @@
         <div class="tab-content" data-tab-content="world">
           <section class="inspector-section">
             <h4 class="section-title">World</h4>
-            <p class="dim">Global forces and behaviors — not yet active.</p>
+            <label class="field">
+              <span>Physics Mode</span>
+              <select id="world-mode">
+                <option value="gravity">Gravity</option>
+                <option value="planar">Planar</option>
+                <option value="zero-g">Zero-G</option>
+                <option value="swarm">Swarm</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Strength</span>
+              <input id="world-strength" type="range" min="0" max="20" step="0.5" value="3" />
+              <output id="world-strength-value">3.0</output>
+            </label>
           </section>
+
+
+                    <section class="inspector-section">
+            <h4 class="section-title">Particles</h4>
+              <section class="library-section">
+          <h3 class="library-header">Ball Tool</h3>
+          <div class="lib-fields">
+            <label class="field">
+              <span>Count</span>
+              <input
+                id="ball-count"
+                type="range"
+                min="1"
+                max="8"
+                step="1"
+                value="1"
+              />
+              <output id="ball-count-value">1</output>
+            </label>
+            <label class="field">
+              <span>Speed</span>
+              <input
+                id="ball-speed"
+                type="range"
+                min="0.4"
+                max="3"
+                step="0.1"
+                value="1"
+              />
+              <output id="ball-speed-value">1.0</output>
+            </label>
+            <label class="field">
+              <span>Spread</span>
+              <input
+                id="ball-spread"
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value="0.15"
+              />
+              <output id="ball-spread-value">0.15</output>
+            </label>
+          </div>
+          <div class="lib-fields" style="margin-top:6px">
+            <label class="field">
+              <span>Particle Shape</span>
+              <select id="particle-shape">
+                <option value="circle">Circle</option>
+                <option value="triangle">Triangle</option>
+                <option value="square">Square</option>
+              </select>
+
+          </div>
+        </section>
+         <label class="field">
+              <input id="particle-trail" type="checkbox" checked />
+              <span>Trail</span>
+            </label>
+            <button id="clear-balls">Clear Balls</button>
+          </section>
+
+
           <section class="inspector-section">
             <h4 class="section-title">Sound Response</h4>
             <div class="field-grid two">

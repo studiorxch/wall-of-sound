@@ -58,6 +58,10 @@
     localStorage.setItem("sampleMap", JSON.stringify(data));
   }
 
+  function clearBalls(state) {
+    state.balls.length = 0;
+  }
+
   const SHAPE_LIBRARY = {
     circle: function circle(center, size) {
       return [
@@ -231,6 +235,10 @@
       }, 2500);
     }
 
+    document.getElementById("clear-balls").onclick = () => {
+      clearBalls(state);
+    };
+
     global.addEventListener("dragenter", function onDragEnter(e) {
       e.preventDefault();
       dragCounter++;
@@ -342,7 +350,7 @@
         gainNode.gain.value = 0.8;
 
         source.connect(gainNode);
-        gainNode.connect(context.destination);
+        gainNode.connect(state.audio.masterGain || context.destination);
 
         source.start();
       },
@@ -421,6 +429,8 @@
         ballStyle: "core",
         radius: 6,
         color: "#f3f2ef",
+        particleShape: "circle",
+        trailEnabled: false,
       },
       balls: [],
       lines: [],
@@ -944,6 +954,17 @@
     function bindControls() {
       const elements = controls.elements;
 
+      if (elements.togglePlayback) {
+        elements.togglePlayback.addEventListener("click", function () {
+          togglePlayback();
+          if (elements.togglePlayback) {
+            elements.togglePlayback.innerHTML = isPlaying
+              ? "&#9646;&#9646;"
+              : "&#9654;";
+          }
+        });
+      }
+
       elements.recordLoop.addEventListener("click", function recordLoop() {
         ensureAudioContext();
         armLoopRecording();
@@ -1106,8 +1127,32 @@
         "change",
         function updateBehaviorType() {
           applyInspectorMetadata();
+          // Show/hide emitter fields
+          if (elements.behaviorEmitterFields) {
+            elements.behaviorEmitterFields.classList.toggle(
+              "hidden",
+              elements.lineBehavior.value !== "emitter",
+            );
+          }
         },
       );
+
+      // Behavior emitter field listeners
+      if (elements.behaviorEmitterRate) {
+        elements.behaviorEmitterRate.addEventListener("input", function () {
+          applyBehaviorEmitterFields();
+        });
+      }
+      if (elements.behaviorEmitterVx) {
+        elements.behaviorEmitterVx.addEventListener("input", function () {
+          applyBehaviorEmitterFields();
+        });
+      }
+      if (elements.behaviorEmitterVy) {
+        elements.behaviorEmitterVy.addEventListener("input", function () {
+          applyBehaviorEmitterFields();
+        });
+      }
 
       if (elements.lineMechanic) {
         elements.lineMechanic.addEventListener(
@@ -1239,6 +1284,22 @@
         },
       );
 
+      // Particle controls
+      if (elements.particleShape) {
+        elements.particleShape.addEventListener("change", function () {
+          state.swarm.particleShape = this.value;
+        });
+      }
+      if (elements.particleTrail) {
+        elements.particleTrail.addEventListener("change", function () {
+          state.swarm.trailEnabled = this.checked;
+          state.balls.forEach(function (ball) {
+            ball.trailEnabled = state.swarm.trailEnabled;
+            if (!ball.trailEnabled) ball.trail = [];
+          });
+        });
+      }
+
       elements.closeShortcuts.addEventListener(
         "click",
         function closeShortcuts() {
@@ -1277,6 +1338,33 @@
       if (elements.soundSensitivity) {
         elements.soundSensitivity.addEventListener("input", function () {
           state.soundResponse.sensitivity = Number(this.value);
+        });
+      }
+
+      // World mode bindings
+      if (elements.worldMode) {
+        elements.worldMode.addEventListener("change", function () {
+          var newMode = this.value;
+          state.world.mode = newMode;
+          // Gentle velocity adjustment on switch
+          state.balls.forEach(function (ball) {
+            var spd = Math.hypot(ball.vx, ball.vy) || 1;
+            if (newMode === "planar") {
+              ball.vx = (Math.random() - 0.5) * 2 * spd;
+              ball.vy = (Math.random() - 0.5) * 2 * spd;
+            } else if (newMode === "zero-g") {
+              ball.vx *= 0.7;
+              ball.vy *= 0.7;
+            } else if (newMode === "gravity") {
+              ball.vy += (0.5 + Math.random()) * 1;
+            }
+          });
+          renderFrame();
+        });
+      }
+      if (elements.worldStrength) {
+        elements.worldStrength.addEventListener("input", function () {
+          state.world.strength = Number(this.value);
         });
       }
 
@@ -1353,6 +1441,13 @@
         }
 
         if (isTypingTarget(event.target)) {
+          return;
+        }
+
+        if (event.key === " ") {
+          event.preventDefault();
+          togglePlayback();
+          syncUI();
           return;
         }
 
@@ -1622,6 +1717,11 @@
       controls.syncShapeSelection(state.selectedShape);
       syncSelectionPanel();
       controls.syncShortcutVisibility(state.ui.shortcutsVisible);
+      if (controls.elements.togglePlayback) {
+        controls.elements.togglePlayback.innerHTML = isPlaying
+          ? "&#9646;&#9646;"
+          : "&#9654;";
+      }
     }
 
     function updatePanels() {
@@ -1672,6 +1772,62 @@
           if (controls.elements.emitterVyValue) {
             controls.elements.emitterVyValue.textContent = Number(
               selection.velocity ? selection.velocity.y : 0,
+            ).toFixed(1);
+          }
+        }
+      }
+
+      // Behavior emitter fields visibility + sync
+      var showEmitterFields = false;
+      if (selection) {
+        var bType = null;
+        if (selection.behavior) bType = selection.behavior.type;
+        if (!bType && selection.segments && selection.segments.length) {
+          bType = selection.segments[0].behavior
+            ? selection.segments[0].behavior.type
+            : null;
+        }
+        showEmitterFields = bType === "emitter";
+      }
+      if (controls.elements.behaviorEmitterFields) {
+        controls.elements.behaviorEmitterFields.classList.toggle(
+          "hidden",
+          !showEmitterFields,
+        );
+      }
+      if (showEmitterFields && selection) {
+        var emData = selection.emitter;
+        if (!emData && selection.segments && selection.segments.length) {
+          emData = selection.segments[0].emitter;
+        }
+        emData = emData || { rate: 400, velocity: { x: 0, y: -2 } };
+        if (controls.elements.behaviorEmitterRate) {
+          controls.elements.behaviorEmitterRate.value = String(
+            emData.rate || 400,
+          );
+          if (controls.elements.behaviorEmitterRateValue) {
+            controls.elements.behaviorEmitterRateValue.textContent = String(
+              emData.rate || 400,
+            );
+          }
+        }
+        if (controls.elements.behaviorEmitterVx) {
+          controls.elements.behaviorEmitterVx.value = String(
+            emData.velocity ? emData.velocity.x : 0,
+          );
+          if (controls.elements.behaviorEmitterVxValue) {
+            controls.elements.behaviorEmitterVxValue.textContent = Number(
+              emData.velocity ? emData.velocity.x : 0,
+            ).toFixed(1);
+          }
+        }
+        if (controls.elements.behaviorEmitterVy) {
+          controls.elements.behaviorEmitterVy.value = String(
+            emData.velocity ? emData.velocity.y : 0,
+          );
+          if (controls.elements.behaviorEmitterVyValue) {
+            controls.elements.behaviorEmitterVyValue.textContent = Number(
+              emData.velocity ? emData.velocity.y : 0,
             ).toFixed(1);
           }
         }
@@ -1746,6 +1902,54 @@
         em.velocity.y = Number(controls.elements.emitterVy.value) || 0;
       }
       renderFrame();
+    }
+
+    function applyBehaviorEmitterFields() {
+      if (!state.multiSelection.length) return;
+      var rate = Number(controls.elements.behaviorEmitterRate.value) || 400;
+      var vx = Number(controls.elements.behaviorEmitterVx.value) || 0;
+      var vy = Number(controls.elements.behaviorEmitterVy.value) || 0;
+
+      state.multiSelection.forEach(function (entry) {
+        if (entry.type === "line") {
+          var line = state.lines.find(function (l) {
+            return l.id === entry.id;
+          });
+          if (line && line.behavior && line.behavior.type === "emitter") {
+            if (!line.emitter)
+              line.emitter = {
+                enabled: true,
+                rate: 400,
+                lastSpawn: 0,
+                velocity: { x: 0, y: -2 },
+              };
+            line.emitter.rate = rate;
+            line.emitter.velocity.x = vx;
+            line.emitter.velocity.y = vy;
+          }
+        }
+        if (entry.type === "shape") {
+          var shape = (state.shapes || []).find(function (s) {
+            return s.id === entry.id;
+          });
+          if (shape) {
+            shape.segments.forEach(function (seg) {
+              if (seg.behavior && seg.behavior.type === "emitter") {
+                if (!seg.emitter)
+                  seg.emitter = {
+                    enabled: true,
+                    rate: 400,
+                    lastSpawn: 0,
+                    velocity: { x: 0, y: -2 },
+                  };
+                seg.emitter.rate = rate;
+                seg.emitter.velocity.x = vx;
+                seg.emitter.velocity.y = vy;
+              }
+            });
+          }
+        }
+      });
     }
 
     function getSelectedObject() {
@@ -2116,7 +2320,7 @@
     }
 
     function spawnBallBurst(startPoint, endPoint) {
-      if (state.ui.presentation) {
+      if (state.ui.presentation || state.balls.length >= 800) {
         return;
       }
 
@@ -2728,6 +2932,13 @@
       syncUI();
     }
 
+    function clearBalls() {
+      state.balls = [];
+      state.swarm.count = 0;
+      renderFrame();
+      syncUI();
+    }
+
     function clearLoop() {
       clearLoopEvents();
       state.loop.armed = false;
@@ -2890,11 +3101,38 @@
     }
 
     function updateEmitters(now) {
+      var dt = 1 / 60;
       state.emitters.forEach(function (emitter) {
-        if (state.balls.length >= 300) {
+        if (state.balls.length >= 800) {
           return;
         }
-        if (now - emitter.lastSpawn < emitter.rate) {
+
+        // Emitter motion
+        if (emitter.motion && emitter.motion.enabled) {
+          if (emitter.motion.type === "drift") {
+            emitter.x += (emitter.velocity.x || 0) * dt * 10;
+            emitter.y += (emitter.velocity.y || 0) * dt * 10;
+          }
+          if (emitter.motion.type === "oscillate") {
+            var origin = emitter.motion.origin || {
+              x: emitter.x,
+              y: emitter.y,
+            };
+            if (!emitter.motion.origin)
+              emitter.motion.origin = { x: emitter.x, y: emitter.y };
+            var spd = emitter.motion.speed || 1;
+            var range = emitter.motion.range || 50;
+            emitter.x = origin.x + Math.sin(now * 0.001 * spd) * range;
+          }
+        }
+
+        // Timing modes
+        var rate = emitter.rate || 400;
+        if (emitter.timing && emitter.timing.mode === "pulse") {
+          rate = emitter.timing.interval || 500;
+        }
+
+        if (now - emitter.lastSpawn < rate) {
           return;
         }
         emitter.lastSpawn = now;
@@ -2906,6 +3144,89 @@
         ball = normalizeBall(ball);
         state.balls.push(ball);
         state.swarm.count = state.balls.length;
+      });
+    }
+
+    function getShapeCenter(shape) {
+      if (!shape.segments || !shape.segments.length) {
+        return { x: shape.position.x, y: shape.position.y };
+      }
+      var sx = 0,
+        sy = 0,
+        count = 0;
+      shape.segments.forEach(function (seg) {
+        sx += seg.x1 + seg.x2;
+        sy += seg.y1 + seg.y2;
+        count += 2;
+      });
+      return { x: sx / count, y: sy / count };
+    }
+
+    function getLineCenter(line) {
+      return {
+        x: (line.x1 + line.x2) * 0.5,
+        y: (line.y1 + line.y2) * 0.5,
+      };
+    }
+
+    function updateShapeEmitters(now) {
+      if (state.balls.length >= 800) return;
+
+      // Lines with emitter behavior
+      state.lines.forEach(function (line) {
+        if (!line.behavior || line.behavior.type !== "emitter") return;
+        if (!line.emitter) {
+          line.emitter = {
+            enabled: true,
+            rate: 400,
+            lastSpawn: 0,
+            velocity: { x: 0, y: -2 },
+          };
+        }
+        var em = line.emitter;
+        if (!em.enabled) return;
+        if (now - em.lastSpawn < (em.rate || 400)) return;
+        em.lastSpawn = now;
+
+        var center = getLineCenter(line);
+        var ball = SBE.Swarm.createBall(state.canvas, state.swarm, false);
+        ball.x = center.x;
+        ball.y = center.y;
+        ball.vx = em.velocity.x;
+        ball.vy = em.velocity.y;
+        ball = normalizeBall(ball);
+        state.balls.push(ball);
+        state.swarm.count = state.balls.length;
+      });
+
+      // Shapes with emitter behavior on segments
+      (state.shapes || []).forEach(function (shape) {
+        shape.segments.forEach(function (seg) {
+          if (!seg.behavior || seg.behavior.type !== "emitter") return;
+          if (!seg.emitter) {
+            seg.emitter = {
+              enabled: true,
+              rate: 400,
+              lastSpawn: 0,
+              velocity: { x: 0, y: -2 },
+            };
+          }
+          var em = seg.emitter;
+          if (!em.enabled) return;
+          if (now - em.lastSpawn < (em.rate || 400)) return;
+          em.lastSpawn = now;
+
+          var cx = (seg.x1 + seg.x2) * 0.5;
+          var cy = (seg.y1 + seg.y2) * 0.5;
+          var ball = SBE.Swarm.createBall(state.canvas, state.swarm, false);
+          ball.x = cx;
+          ball.y = cy;
+          ball.vx = em.velocity.x;
+          ball.vy = em.velocity.y;
+          ball = normalizeBall(ball);
+          state.balls.push(ball);
+          state.swarm.count = state.balls.length;
+        });
       });
     }
 
@@ -2953,6 +3274,11 @@
             ? state.world.mode
             : "gravity";
 
+      var damp = state.physics.damping;
+      var maxSpd = state.physics.maxSpeed;
+      var scale = dt * 60;
+      var MOTION_SCALE = 60;
+
       if (worldMode === "gravity" || worldMode === "flow") {
         var worldDirection =
           state.world && state.world.direction
@@ -2962,9 +3288,6 @@
           state.world && Number.isFinite(state.world.strength)
             ? state.world.strength
             : Math.hypot(state.physics.gravity.x, state.physics.gravity.y);
-        var damp = state.physics.damping;
-        var maxSpd = state.physics.maxSpeed;
-        var scale = dt * 60;
 
         state.balls.forEach(function (ball) {
           ball.vx += worldDirection.x * worldStrength * scale;
@@ -2979,23 +3302,83 @@
             ball.vy *= s;
           }
 
-          const MOTION_SCALE = 60;
           ball.x += ball.vx * dt * MOTION_SCALE;
           ball.y += ball.vy * dt * MOTION_SCALE;
 
-          const FLOOR_Y = state.canvas.height * 0.92;
+          var FLOOR_Y = state.canvas.height * 0.92;
           if (ball.y > FLOOR_Y) {
             ball._dead = true;
           }
         });
-        state.balls = state.balls.filter((b) => !b._dead);
+        state.balls = state.balls.filter(function (b) {
+          return !b._dead;
+        });
       }
 
-      // Emitters
-      updateEmitters(now);
+      if (worldMode === "planar") {
+        state.balls.forEach(function (ball) {
+          ball.vx *= damp;
+          ball.vy *= damp;
 
-      if (worldMode === "zero-g" || worldMode === "swarm") {
-        const activeForceLines = state.lines
+          var spd = Math.hypot(ball.vx, ball.vy);
+          if (spd > maxSpd) {
+            var s = maxSpd / spd;
+            ball.vx *= s;
+            ball.vy *= s;
+          }
+
+          ball.x += ball.vx * dt * MOTION_SCALE;
+          ball.y += ball.vy * dt * MOTION_SCALE;
+
+          // Bounce at canvas edges
+          var r = ball.radius || 6;
+          if (ball.x < r) {
+            ball.x = r;
+            ball.vx = Math.abs(ball.vx);
+          }
+          if (ball.x > state.canvas.width - r) {
+            ball.x = state.canvas.width - r;
+            ball.vx = -Math.abs(ball.vx);
+          }
+          if (ball.y < r) {
+            ball.y = r;
+            ball.vy = Math.abs(ball.vy);
+          }
+          if (ball.y > state.canvas.height - r) {
+            ball.y = state.canvas.height - r;
+            ball.vy = -Math.abs(ball.vy);
+          }
+        });
+      }
+
+      if (worldMode === "zero-g") {
+        var noise = 0.02;
+        state.balls.forEach(function (ball) {
+          ball.vx += (Math.random() - 0.5) * noise;
+          ball.vy += (Math.random() - 0.5) * noise;
+          ball.vx *= damp;
+          ball.vy *= damp;
+
+          var spd = Math.hypot(ball.vx, ball.vy);
+          if (spd > maxSpd) {
+            var s = maxSpd / spd;
+            ball.vx *= s;
+            ball.vy *= s;
+          }
+
+          ball.x += ball.vx * dt * MOTION_SCALE;
+          ball.y += ball.vy * dt * MOTION_SCALE;
+
+          // Wrap at edges
+          if (ball.x < 0) ball.x += state.canvas.width;
+          if (ball.x > state.canvas.width) ball.x -= state.canvas.width;
+          if (ball.y < 0) ball.y += state.canvas.height;
+          if (ball.y > state.canvas.height) ball.y -= state.canvas.height;
+        });
+      }
+
+      if (worldMode === "swarm") {
+        var activeForceLines = state.lines
           .concat(
             SBE.TextSystem
               ? SBE.TextSystem.getCollisionLines(state.textObjects || [])
@@ -3014,6 +3397,12 @@
         );
         SBE.EnginePhysics.updateSwarm(state.balls, dt);
       }
+
+      // Emitters (standalone)
+      updateEmitters(now);
+
+      // Shape-based emitters (behavior type === "emitter")
+      updateShapeEmitters(now);
 
       // Shape motion
       if (SBE.MotionSystem && state.shapes && state.shapes.length) {
@@ -3048,10 +3437,10 @@
 
     function renderFrame() {
       renderer.render(state, drawTools.getOverlays());
+      drawParticleOverlays();
       drawEmitters();
       drawShapeIndicators();
       drawLinePreview();
-      drawSoundHUD();
 
       if (!window.noteElements) return;
 
@@ -3116,6 +3505,63 @@
       ctx.restore();
     }
 
+    function drawParticleOverlays() {
+      if (!state.balls.length) return;
+      var ctx = canvas.getContext("2d");
+      var color = state.swarm.color || "#f3f2ef";
+
+      state.balls.forEach(function (ball) {
+        // Draw trail
+        if (ball.trailEnabled && ball.trail && ball.trail.length > 1) {
+          ctx.save();
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 1;
+          ctx.lineCap = "round";
+          for (var t = 1; t < ball.trail.length; t += 1) {
+            ctx.globalAlpha = (t / ball.trail.length) * 0.3;
+            ctx.beginPath();
+            ctx.moveTo(ball.trail[t - 1].x, ball.trail[t - 1].y);
+            ctx.lineTo(ball.trail[t].x, ball.trail[t].y);
+            ctx.stroke();
+          }
+          ctx.restore();
+        }
+
+        // Draw shape overlay for non-circle shapes
+        if (
+          ball.shapeId &&
+          ball.shapeId !== "circle" &&
+          SHAPE_LIBRARY[ball.shapeId]
+        ) {
+          var segments = SHAPE_LIBRARY[ball.shapeId](
+            { x: 0, y: 0 },
+            ball.renderRadius * 2,
+          );
+
+          ctx.save();
+          ctx.translate(ball.x, ball.y);
+          ctx.rotate(ball.rotation || 0);
+          ctx.strokeStyle = color;
+          ctx.lineWidth = Math.max(
+            1.5,
+            ball.renderRadius - ball.collisionRadius,
+          );
+          ctx.globalAlpha = 0.72 + ball.energy * 0.14;
+
+          segments.forEach(function (pts) {
+            ctx.beginPath();
+            pts.forEach(function (pt, i) {
+              if (i === 0) ctx.moveTo(pt.x, pt.y);
+              else ctx.lineTo(pt.x, pt.y);
+            });
+            ctx.stroke();
+          });
+
+          ctx.restore();
+        }
+      });
+    }
+
     function drawEmitters() {
       if (!state.emitters.length) return;
       const ctx = canvas.getContext("2d");
@@ -3126,6 +3572,12 @@
       });
 
       state.emitters.forEach(function (em) {
+        // Skip hidden emitters in visual render
+        if (em.hidden && isClean) {
+          ctx.save();
+          ctx.restore();
+          return;
+        }
         ctx.save();
 
         // Outer ring
@@ -3289,8 +3741,14 @@
         return null;
       }
 
-      const AudioCtor = global.AudioContext || global.webkitAudioContext;
+      var AudioCtor = global.AudioContext || global.webkitAudioContext;
       state.audio.context = new AudioCtor();
+
+      // Master gain node (~-12dB) to prevent clipping
+      state.audio.masterGain = state.audio.context.createGain();
+      state.audio.masterGain.gain.value = 0.25;
+      state.audio.masterGain.connect(state.audio.context.destination);
+
       return state.audio.context;
     }
 
@@ -3502,6 +3960,17 @@
       ball.style = ball.style || state.swarm.ballStyle || "core";
       ball.energy = Number.isFinite(ball.energy) ? ball.energy : 1;
       ball.collisionCount = 0;
+      // Shape particle fields
+      ball.shapeId = ball.shapeId || state.swarm.particleShape || "circle";
+      ball.rotation = ball.rotation || 0;
+      ball.angularVelocity = ball.angularVelocity || 0;
+      ball.alignToVelocity = ball.alignToVelocity || false;
+      ball.trail = ball.trail || [];
+      ball.trailEnabled =
+        ball.trailEnabled != null
+          ? ball.trailEnabled
+          : state.swarm.trailEnabled || false;
+      ball.trailLength = ball.trailLength || 10;
       return ball;
     }
 
@@ -3555,6 +4024,21 @@
         ball.vx = clamp(ball.vx, -720, 720);
         ball.vy = clamp(ball.vy, -720, 720);
         ball.collisionCount = counts.get(ball.id) || 0;
+
+        // Rotation update
+        if (ball.alignToVelocity) {
+          ball.rotation = Math.atan2(ball.vy, ball.vx);
+        } else if (ball.angularVelocity) {
+          ball.rotation = (ball.rotation || 0) + ball.angularVelocity * 0.016;
+        }
+
+        // Trail update
+        if (ball.trailEnabled && ball.trail) {
+          ball.trail.push({ x: ball.x, y: ball.y });
+          if (ball.trail.length > (ball.trailLength || 10)) {
+            ball.trail.shift();
+          }
+        }
 
         var worldMode =
           typeof state.world === "string"

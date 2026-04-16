@@ -34,6 +34,12 @@ body {
   line-height: 1.4;
 }
 
+@font-face {
+  font-family: "Wallace_Default";
+  src: url("./fonts/HelveticaNeueLight.otf") format("opentype");
+  font-display: swap;
+}
+
 button,
 input,
 select,
@@ -41,6 +47,30 @@ textarea,
 output {
   font: inherit;
   color: inherit;
+}
+
+.panel,
+.topbar,
+.tool,
+.section-title,
+.tab,
+.note-cell,
+.swatch,
+.small-btn,
+.action-row button {
+  user-select: none;
+}
+
+input,
+textarea,
+select {
+  user-select: text;
+}
+
+button,
+.tool,
+.swatch {
+  -webkit-user-drag: none;
 }
 
 /* ── APP GRID ───────────────────────────────────── */
@@ -68,9 +98,21 @@ body {
 .app-body {
   grid-row: 2;
   display: grid;
-  grid-template-columns: 220px 1fr 260px;
+  grid-template-columns: 220px 250px 1fr;
+  grid-template-rows: 1fr auto;
   height: 100%;
   overflow: hidden;
+}
+
+.panel-left {
+  grid-row: 1 / -1;
+}
+
+.panel-right {
+  grid-row: 1 / -1;
+  max-width: 250px;
+  width: 100%;
+  flex-shrink: 0;
 }
 
 /* ── TOP BAR ────────────────────────────────────── */
@@ -283,6 +325,11 @@ body {
   justify-content: center;
   overflow: hidden;
   background: var(--bg);
+  min-width: 0;
+}
+
+.canvas-fill #engine-canvas {
+  object-fit: cover;
 }
 
 .canvas-wrap {
@@ -302,18 +349,31 @@ body {
   touch-action: none;
 }
 
-.transport-overlay {
-  position: absolute;
-  bottom: 16px;
-  left: 50%;
-  transform: translateX(-50%);
+.transport-bar {
+  grid-column: 3;
   display: flex;
-  gap: 6px;
-  background: rgba(18, 20, 24, 0.88);
-  padding: 6px 10px;
-  border-radius: 10px;
-  border: 1px solid var(--panel-border);
-  z-index: 5;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 6px 0;
+  background: var(--panel);
+  border-top: 1px solid var(--panel-border);
+  flex-shrink: 0;
+}
+
+.transport-status {
+  display: flex;
+  gap: 8px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.transport-controls {
+  display: flex;
+  gap: 4px;
 }
 
 .transport-btn {
@@ -338,22 +398,6 @@ body {
 }
 .transport-btn.rec:hover {
   background: rgba(229, 62, 62, 0.12);
-}
-
-.status-overlay {
-  position: absolute;
-  top: 8px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  gap: 10px;
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-  pointer-events: none;
-  z-index: 5;
 }
 
 /* ── RIGHT PANEL: Inspector Tabs ────────────────── */
@@ -498,6 +542,20 @@ body {
   text-align: right;
 }
 
+.field.checkbox {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+
+.field.checkbox input {
+  margin: 0;
+}
+
+.field.checkbox span {
+  transform: translateY(1px);
+}
+
 .full-input {
   width: 100%;
   padding: 5px 6px;
@@ -603,14 +661,9 @@ select {
 body.presentation .topbar,
 body.presentation .panel-left,
 body.presentation .panel-right,
-body.presentation .transport-overlay,
-body.presentation .status-overlay,
+body.presentation .transport-bar,
 body.presentation .shortcut-hud {
   display: none !important;
-}
-
-body.presentation .app-body {
-  grid-template-columns: 1fr;
 }
 
 /* ── SHORTCUTS OVERLAY ──────────────────────────── */

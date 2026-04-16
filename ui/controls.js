@@ -8,6 +8,7 @@
       barCount: byId("bar-count"),
       quantizeEnabled: byId("quantize-enabled"),
       quantizeDivision: byId("quantize-division"),
+      togglePlayback: byId("toggle-playback"),
       recordLoop: byId("record-loop"),
       stopLoop: byId("stop-loop"),
       clearScene: byId("clear-scene"),
@@ -66,6 +67,19 @@
       ballSpread: byId("ball-spread"),
       ballSpreadValue: byId("ball-spread-value"),
 
+      // Particle
+      particleShape: byId("particle-shape"),
+      particleTrail: byId("particle-trail"),
+
+      // Behavior emitter fields
+      behaviorEmitterFields: byId("behavior-emitter-fields"),
+      behaviorEmitterRate: byId("behavior-emitter-rate"),
+      behaviorEmitterRateValue: byId("behavior-emitter-rate-value"),
+      behaviorEmitterVx: byId("behavior-emitter-vx"),
+      behaviorEmitterVxValue: byId("behavior-emitter-vx-value"),
+      behaviorEmitterVy: byId("behavior-emitter-vy"),
+      behaviorEmitterVyValue: byId("behavior-emitter-vy-value"),
+
       // Emitter
       emitterInspectorBlock: byId("emitter-inspector-block"),
       emitterRate: byId("emitter-rate"),
@@ -85,6 +99,11 @@
       motionRot: byId("motion-rot"),
       motionRotValue: byId("motion-rot-value"),
       motionLoop: byId("motion-loop"),
+
+      // World
+      worldMode: byId("world-mode"),
+      worldStrength: byId("world-strength"),
+      worldStrengthValue: byId("world-strength-value"),
 
       // Button collections
       shapeButtons: Array.from(document.querySelectorAll(".shape-button")),
@@ -126,6 +145,14 @@
     bindRange(elements.motionVx, elements.motionVxValue, 0);
     bindRange(elements.motionVy, elements.motionVyValue, 0);
     bindRange(elements.motionRot, elements.motionRotValue, 1);
+    bindRange(elements.worldStrength, elements.worldStrengthValue, 1);
+    bindRange(
+      elements.behaviorEmitterRate,
+      elements.behaviorEmitterRateValue,
+      0,
+    );
+    bindRange(elements.behaviorEmitterVx, elements.behaviorEmitterVxValue, 1);
+    bindRange(elements.behaviorEmitterVy, elements.behaviorEmitterVyValue, 1);
 
     // Tab switching
     elements.inspectorTabs.forEach(function (tab) {

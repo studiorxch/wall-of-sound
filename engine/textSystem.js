@@ -1,5 +1,6 @@
 (function initTextSystem(global) {
   const SBE = (global.SBE = global.SBE || {});
+  const DEFAULT_FONT = "Wallace_Default, sans-serif";
   const FONT_SCRIPT_SRC =
     "https://cdn.jsdelivr.net/npm/opentype.js@1.3.4/dist/opentype.min.js";
   const SVG_NS = "http://www.w3.org/2000/svg";
@@ -14,14 +15,17 @@
   }
 
   async function createTextObject(textSettings, lineSettings) {
+    const fontFile = textSettings.font.file || null;
+
     const geometry = await buildGeometry(
       textSettings.value,
-      textSettings.font.file,
+      fontFile,
       textSettings.font.size,
     );
-    const behaviorType = lineSettings.behavior.type === "none"
-      ? "normal"
-      : lineSettings.behavior.type;
+    const behaviorType =
+      lineSettings.behavior.type === "none"
+        ? "normal"
+        : lineSettings.behavior.type;
 
     return attachRuntime({
       id: nextTextId(),
@@ -137,8 +141,7 @@
         ? lineSettings.gravity.direction
         : textObject.gravity.direction || "down";
     textObject.gravity.strength =
-      lineSettings.gravity &&
-      typeof lineSettings.gravity.strength === "number"
+      lineSettings.gravity && typeof lineSettings.gravity.strength === "number"
         ? lineSettings.gravity.strength
         : textObject.gravity.strength || 0;
     if (typeof textSettings.groupId !== "undefined") {
@@ -190,23 +193,28 @@
       type: "text",
       value: rawTextObject.value || "",
       font: {
-        file: rawTextObject.font && rawTextObject.font.file
-          ? rawTextObject.font.file
-          : "",
-        name: rawTextObject.font && rawTextObject.font.name
-          ? rawTextObject.font.name
-          : "Uploaded font",
-        size: rawTextObject.font && rawTextObject.font.size
-          ? rawTextObject.font.size
-          : 160,
+        file:
+          rawTextObject.font && rawTextObject.font.file
+            ? rawTextObject.font.file
+            : "",
+        name:
+          rawTextObject.font && rawTextObject.font.name
+            ? rawTextObject.font.name
+            : "Uploaded font",
+        size:
+          rawTextObject.font && rawTextObject.font.size
+            ? rawTextObject.font.size
+            : 160,
       },
       transform: {
         x:
-          rawTextObject.transform && typeof rawTextObject.transform.x === "number"
+          rawTextObject.transform &&
+          typeof rawTextObject.transform.x === "number"
             ? rawTextObject.transform.x
             : 540,
         y:
-          rawTextObject.transform && typeof rawTextObject.transform.y === "number"
+          rawTextObject.transform &&
+          typeof rawTextObject.transform.y === "number"
             ? rawTextObject.transform.y
             : 960,
         scale:
@@ -252,15 +260,14 @@
       thickness: rawTextObject.thickness || 5,
       style: rawTextObject.style
         ? {
-            color: rawTextObject.style.color || rawTextObject.color || "#ff7a59",
+            color:
+              rawTextObject.style.color || rawTextObject.color || "#ff7a59",
             colorMode:
               rawTextObject.style.colorMode ||
               rawTextObject.colorMode ||
               "auto",
             thickness:
-              rawTextObject.style.thickness ||
-              rawTextObject.thickness ||
-              5,
+              rawTextObject.style.thickness || rawTextObject.thickness || 5,
           }
         : undefined,
       midi: rawTextObject.midi
@@ -312,10 +319,7 @@
       },
       midiChannel: textObject.midiChannel,
       note: textObject.note,
-      velocityRange: [
-        textObject.velocityRange[0],
-        textObject.velocityRange[1],
-      ],
+      velocityRange: [textObject.velocityRange[0], textObject.velocityRange[1]],
       life: textObject.life,
       behavior: {
         type: textObject.behavior.type,
@@ -360,8 +364,7 @@
 
   function applyTransform(textObject, nextTransform, canvas, snapThreshold) {
     const center = getCanvasCenter(canvas);
-    const threshold =
-      typeof snapThreshold === "number" ? snapThreshold : 18;
+    const threshold = typeof snapThreshold === "number" ? snapThreshold : 18;
 
     if (typeof nextTransform.x === "number") {
       textObject.transform.x = nextTransform.x;
@@ -403,7 +406,7 @@
 
   async function buildGeometry(value, fontFile, fontSize) {
     if (!fontFile) {
-      return emptyGeometry();
+      return buildCanvasFallbackGeometry(value, fontSize);
     }
 
     const font = await loadFont(fontFile);
@@ -417,6 +420,45 @@
     return {
       letters,
       bounds,
+    };
+  }
+
+  function buildCanvasFallbackGeometry(value, fontSize) {
+    const letters = [];
+    let penX = 0;
+
+    for (let i = 0; i < value.length; i++) {
+      const char = value[i];
+
+      // approximate width (fast + good enough)
+      const width = fontSize * 0.6;
+
+      const bounds = {
+        minX: penX,
+        minY: -fontSize,
+        maxX: penX + width,
+        maxY: 0,
+        width: width,
+        height: fontSize,
+        centerX: penX + width * 0.5,
+        centerY: -fontSize * 0.5,
+      };
+
+      letters.push({
+        char,
+        pathData: null, // 🚨 no Path2D
+        segments: [],
+        bounds,
+        lastHitAt: 0,
+        isFallback: true, // 🔥 flag for renderer
+      });
+
+      penX += width;
+    }
+
+    return {
+      letters,
+      bounds: combineBounds(letters.map((l) => l.bounds)),
     };
   }
 
@@ -435,9 +477,7 @@
       const char = value[index] || "";
       const path = glyph.getPath(penX, 0, fontSize);
       const pathData = commandsToPathData(path.commands || []);
-      const segments = pathData
-        ? samplePathData(path.commands || [], 4)
-        : [];
+      const segments = pathData ? samplePathData(path.commands || [], 4) : [];
       const bounds = segments.length
         ? getBoundsFromSegments(segments)
         : {
@@ -471,40 +511,42 @@
 
     textObjects.forEach((textObject) => {
       textObject.geometry.letters.forEach((letter, letterIndex) => {
-        const transformedSegments = letter.segments.map((segment, segmentIndex) => {
-          const transformed = transformSegment(segment, textObject);
-          return {
-            id:
-              textObject.id +
-              ":" +
-              String(letterIndex) +
-              ":" +
-              String(segmentIndex),
-            x1: transformed.x1,
-            y1: transformed.y1,
-            x2: transformed.x2,
-            y2: transformed.y2,
-            color: textObject.color,
-            thickness: textObject.thickness,
-            midiChannel: textObject.midiChannel,
-            note: textObject.note,
-            velocityRange: [
-              textObject.velocityRange[0],
-              textObject.velocityRange[1],
-            ],
-            behavior: {
-              type: textObject.behavior.type,
-              strength: textObject.behavior.strength,
-            },
-            sourceType: "text",
-            sourceTextObject: textObject,
-            sourceLetterIndex: letterIndex,
-            collisionGroupId:
-              textObject.interaction.mode === "word"
-                ? textObject.id
-                : textObject.id + ":" + String(letterIndex),
-          };
-        });
+        const transformedSegments = letter.segments.map(
+          (segment, segmentIndex) => {
+            const transformed = transformSegment(segment, textObject);
+            return {
+              id:
+                textObject.id +
+                ":" +
+                String(letterIndex) +
+                ":" +
+                String(segmentIndex),
+              x1: transformed.x1,
+              y1: transformed.y1,
+              x2: transformed.x2,
+              y2: transformed.y2,
+              color: textObject.color,
+              thickness: textObject.thickness,
+              midiChannel: textObject.midiChannel,
+              note: textObject.note,
+              velocityRange: [
+                textObject.velocityRange[0],
+                textObject.velocityRange[1],
+              ],
+              behavior: {
+                type: textObject.behavior.type,
+                strength: textObject.behavior.strength,
+              },
+              sourceType: "text",
+              sourceTextObject: textObject,
+              sourceLetterIndex: letterIndex,
+              collisionGroupId:
+                textObject.interaction.mode === "word"
+                  ? textObject.id
+                  : textObject.id + ":" + String(letterIndex),
+            };
+          },
+        );
 
         collisionLines.push.apply(collisionLines, transformedSegments);
       });
@@ -529,14 +571,24 @@
       return false;
     }
 
-    for (let index = 0; index < textObject.geometry.letters.length; index += 1) {
+    for (
+      let index = 0;
+      index < textObject.geometry.letters.length;
+      index += 1
+    ) {
       const letter = textObject.geometry.letters[index];
       if (!isPointInBounds(localPoint, letter.bounds, 8)) {
         continue;
       }
 
-      for (let segmentIndex = 0; segmentIndex < letter.segments.length; segmentIndex += 1) {
-        if (distanceToSegment(localPoint, letter.segments[segmentIndex]) <= 10) {
+      for (
+        let segmentIndex = 0;
+        segmentIndex < letter.segments.length;
+        segmentIndex += 1
+      ) {
+        if (
+          distanceToSegment(localPoint, letter.segments[segmentIndex]) <= 10
+        ) {
           return true;
         }
       }
