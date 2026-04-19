@@ -74,12 +74,6 @@
               <circle cx="7" cy="7" r="1.5" fill="currentColor" />
             </svg>
           </button>
-          <button class="tool" data-tool="mop" title="Mop (M)">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <path d="M2 3 Q5 1 8 4 Q11 7 9 11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none"/>
-              <circle cx="9" cy="11" r="2" stroke="currentColor" stroke-width="1.3" fill="none"/>
-            </svg>
-          </button>
         </div>
       </div>
 
@@ -283,109 +277,8 @@
             </button>
           </div>
         </section>
-<section class="inspector-section" id="note-section">
-            <h4 class="section-title">Note</h4>
-            <div id="note-grid" class="note-grid">
-              <button class="note-cell" type="button" data-note-class="0">
-                C
-              </button>
-              <button class="note-cell" type="button" data-note-class="1">
-                C#
-              </button>
-              <button class="note-cell" type="button" data-note-class="2">
-                D
-              </button>
-              <button class="note-cell" type="button" data-note-class="3">
-                D#
-              </button>
-              <button class="note-cell" type="button" data-note-class="4">
-                E
-              </button>
-              <button class="note-cell" type="button" data-note-class="5">
-                F
-              </button>
-              <button class="note-cell" type="button" data-note-class="6">
-                F#
-              </button>
-              <button class="note-cell" type="button" data-note-class="7">
-                G
-              </button>
-              <button class="note-cell" type="button" data-note-class="8">
-                G#
-              </button>
-              <button class="note-cell" type="button" data-note-class="9">
-                A
-              </button>
-              <button class="note-cell" type="button" data-note-class="10">
-                A#
-              </button>
-              <button class="note-cell" type="button" data-note-class="11">
-                B
-              </button>
-            </div>
-            <input id="active-note" type="hidden" value="60" />
-          </section>
+
      
-           <section class="inspector-section">
-            <h4 class="section-title">Actions</h4>
-            <div class="action-row">
-              <button id="duplicate-selection" type="button">Duplicate</button>
-              <button id="delete-selection" type="button">Delete</button>
-              <button id="undo-action" type="button">Undo</button>
-            </div>
-            </section>
-            <section class="inspector-section">
-            <h4 class="section-title">Pattern</h4>
-            <div class="field-grid two" style="margin-top: 6px">
-              <label class="field">
-                <span>Cols</span>
-                <input
-                  id="grid-cols"
-                  type="number"
-                  min="1"
-                  max="20"
-                  value="3"
-                />
-              </label>
-              <label class="field">
-                <span>Rows</span>
-                <input
-                  id="grid-rows"
-                  type="number"
-                  min="1"
-                  max="20"
-                  value="3"
-                />
-              </label>
-              <label class="field">
-                <span>X Gap</span>
-                <input
-                  id="grid-spacing-x"
-                  type="number"
-                  min="0"
-                  max="2000"
-                  value="120"
-                />
-              </label>
-              <label class="field">
-                <span>Y Gap</span>
-                <input
-                  id="grid-spacing-y"
-                  type="number"
-                  min="0"
-                  max="2000"
-                  value="120"
-                />
-              </label>
-            </div>
-            <div class="action-row" style="margin-top: 4px">
-              <button id="duplicate-pattern" type="button" style="flex: 1">
-                Duplicate Grid
-              </button>
-            </div>
-          </section>
-
-
       </aside>
 
       <!-- CENTER: Canvas -->
@@ -429,16 +322,55 @@
           <button class="tab active" data-tab="object">Object</button>
           <button class="tab" data-tab="canvas">Canvas</button>
           <button class="tab" data-tab="world">World</button>
-          <button class="tab" data-tab="sampler">Sampler</button>
-          <button class="tab" data-tab="music">Composition</button>
         </div>
 
         <!-- Object Tab -->
         <div class="tab-content active" data-tab-content="object">
-          
+          <section class="inspector-section" id="note-section">
+            <h4 class="section-title">Note</h4>
+            <div id="note-grid" class="note-grid">
+              <button class="note-cell" type="button" data-note-class="0">
+                C
+              </button>
+              <button class="note-cell" type="button" data-note-class="1">
+                C#
+              </button>
+              <button class="note-cell" type="button" data-note-class="2">
+                D
+              </button>
+              <button class="note-cell" type="button" data-note-class="3">
+                D#
+              </button>
+              <button class="note-cell" type="button" data-note-class="4">
+                E
+              </button>
+              <button class="note-cell" type="button" data-note-class="5">
+                F
+              </button>
+              <button class="note-cell" type="button" data-note-class="6">
+                F#
+              </button>
+              <button class="note-cell" type="button" data-note-class="7">
+                G
+              </button>
+              <button class="note-cell" type="button" data-note-class="8">
+                G#
+              </button>
+              <button class="note-cell" type="button" data-note-class="9">
+                A
+              </button>
+              <button class="note-cell" type="button" data-note-class="10">
+                A#
+              </button>
+              <button class="note-cell" type="button" data-note-class="11">
+                B
+              </button>
+            </div>
+            <input id="active-note" type="hidden" value="60" />
+          </section>
 
           <section class="inspector-section">
-            <h4 class="section-title">Outline</h4>
+            <h4 class="section-title">Appearance</h4>
             <div class="field-grid two">
               <label class="field">
                 <span>Color</span>
@@ -463,76 +395,90 @@
                 type="button"
                 data-color="#ff4b4b"
                 style="--sw: #ff4b4b"
-              >C</button>
+              ></button>
               <button
                 class="swatch"
                 type="button"
                 data-color="#ff6d39"
                 style="--sw: #ff6d39"
-              >C#</button>
+              ></button>
               <button
                 class="swatch"
                 type="button"
                 data-color="#ff9b1f"
                 style="--sw: #ff9b1f"
-              >D</button>
+              ></button>
               <button
                 class="swatch"
                 type="button"
                 data-color="#ffbf2f"
                 style="--sw: #ffbf2f"
-              >D#</button>
+              ></button>
               <button
                 class="swatch"
                 type="button"
                 data-color="#e5df45"
                 style="--sw: #e5df45"
-              >E</button>
+              ></button>
               <button
                 class="swatch"
                 type="button"
                 data-color="#b9e54f"
                 style="--sw: #b9e54f"
-              >F</button>
+              ></button>
               <button
                 class="swatch"
                 type="button"
                 data-color="#35cb68"
                 style="--sw: #35cb68"
-              >F#</button>
+              ></button>
               <button
                 class="swatch"
                 type="button"
                 data-color="#26d3a6"
                 style="--sw: #26d3a6"
-              >G</button>
+              ></button>
               <button
                 class="swatch"
                 type="button"
                 data-color="#2cc7dc"
                 style="--sw: #2cc7dc"
-              >G#</button>
+              ></button>
               <button
                 class="swatch"
                 type="button"
                 data-color="#498cff"
                 style="--sw: #498cff"
-              >A</button>
+              ></button>
               <button
                 class="swatch"
                 type="button"
                 data-color="#7a62ff"
                 style="--sw: #7a62ff"
-              >A#</button>
+              ></button>
               <button
                 class="swatch"
                 type="button"
                 data-color="#ff59cb"
                 style="--sw: #ff59cb"
-              >B</button>
+              ></button>
             </div>
           </section>
- <section class="inspector-section">
+
+          <section class="inspector-section">
+            <h4 class="section-title">Mechanic</h4>
+            <label class="field">
+              <span>Type</span>
+              <select id="line-mechanic">
+                <option value="none">None</option>
+                <option value="bumper-hard">Bumper (Hard)</option>
+                <option value="bumper-elastic">Bumper (Elastic)</option>
+                <option value="ramp">Ramp</option>
+              </select>
+            </label>
+          </section>
+
+          <section class="inspector-section">
             <h4 class="section-title">Behavior</h4>
             <div class="field-grid two">
               <label class="field">
@@ -565,18 +511,25 @@
                 <output id="behavior-emitter-rate-value">400</o>
               </label>
               <label class="field">
-                <span>Direction (°)</span>
-                <input id="behavior-emitter-direction" type="range" min="0" max="360" step="1" value="270" />
-                <output id="behavior-emitter-direction-value">270</o>
+                <span>Vel X</span>
+                <input id="behavior-emitter-vx" type="range" min="-10" max="10" step="0.5" value="0" />
+                <output id="behavior-emitter-vx-value">0.0</o>
               </label>
               <label class="field">
-                <span>Speed</span>
-                <input id="behavior-emitter-strength" type="range" min="0" max="20" step="0.5" value="6" />
-                <output id="behavior-emitter-strength-value">6.0</o>
+                <span>Vel Y</span>
+                <input id="behavior-emitter-vy" type="range" min="-10" max="10" step="0.5" value="0" />
+                <output id="behavior-emitter-vy-value">0.0</o>
+              </label>
+              <label class="field">
+                <span>Spawn Mode</span>
+                <select id="behavior-emitter-spawn-mode">
+                  <option value="center">Center</option>
+                  <option value="edge">Edge</option>
+                </select>
               </label>
               <label class="field checkbox">
-                <input id="behavior-emitter-mute" type="checkbox" />
-                <span>Mute</span>
+                <input id="behavior-emitter-silent" type="checkbox" />
+                <span>Silent</span>
               </label>
               <label class="field checkbox">
                 <input id="behavior-emitter-quantize" type="checkbox" />
@@ -588,20 +541,6 @@
               </label>
             </div>
           </section>
-          <section class="inspector-section">
-            <h4 class="section-title">Mechanic</h4>
-            <label class="field">
-              <span>Type</span>
-              <select id="line-mechanic">
-                <option value="none">None</option>
-                <option value="bumper-hard">Bumper (Hard)</option>
-                <option value="bumper-elastic">Bumper (Elastic)</option>
-                <option value="ramp">Ramp</option>
-              </select>
-            </label>
-          </section>
-
-         
 
           <section class="inspector-section" id="text-inspector-block">
             <h4 class="section-title">Text</h4>
@@ -679,7 +618,61 @@
             </div>
           </section>
 
-         
+          <section class="inspector-section">
+            <h4 class="section-title">Actions</h4>
+            <div class="action-row">
+              <button id="duplicate-selection" type="button">Duplicate</button>
+              <button id="delete-selection" type="button">Delete</button>
+              <button id="undo-action" type="button">Undo</button>
+            </div>
+            <div class="field-grid two" style="margin-top: 6px">
+              <label class="field">
+                <span>Cols</span>
+                <input
+                  id="grid-cols"
+                  type="number"
+                  min="1"
+                  max="20"
+                  value="3"
+                />
+              </label>
+              <label class="field">
+                <span>Rows</span>
+                <input
+                  id="grid-rows"
+                  type="number"
+                  min="1"
+                  max="20"
+                  value="3"
+                />
+              </label>
+              <label class="field">
+                <span>X Gap</span>
+                <input
+                  id="grid-spacing-x"
+                  type="number"
+                  min="0"
+                  max="2000"
+                  value="120"
+                />
+              </label>
+              <label class="field">
+                <span>Y Gap</span>
+                <input
+                  id="grid-spacing-y"
+                  type="number"
+                  min="0"
+                  max="2000"
+                  value="120"
+                />
+              </label>
+            </div>
+            <div class="action-row" style="margin-top: 4px">
+              <button id="duplicate-pattern" type="button" style="flex: 1">
+                Duplicate Grid
+              </button>
+            </div>
+          </section>
 
           <section class="inspector-section hidden" id="motion-inspector-block">
             <h4 class="section-title">Motion</h4>
@@ -743,14 +736,6 @@
               <span>Strength</span>
               <input id="world-strength" type="range" min="0" max="20" step="0.5" value="3" />
               <output id="world-strength-value">3.0</output>
-            </label>
-          </section>
-
-          <section class="inspector-section">
-            <h4 class="section-title">Feedback</h4>
-            <label class="field checkbox">
-              <input id="toggle-hit-count" type="checkbox" />
-              <span>Show Hit Count</span>
             </label>
           </section>
 
@@ -840,89 +825,6 @@
               />
               <output id="sound-sensitivity-value">1.0</output>
             </label>
-          </section>
-        </div>
-
-        <!-- Sampler Tab -->
-        <div class="tab-content" data-tab-content="sampler">
-          <section class="inspector-section">
-            <h4 class="section-title">Sample Banks</h4>
-            <p class="dim">Click a key to solo. Drag audio files onto canvas to assign.</p>
-            <div id="sampler-key-list" class="sampler-key-list"></div>
-          </section>
-          <section class="inspector-section">
-            <h4 class="section-title">Playback</h4>
-            <label class="field">
-              <span>Fallback Mode</span>
-              <span id="sampler-fallback-mode" class="sampler-fallback-mode">nearest</span>
-            </label>
-            <label class="field">
-              <span>Fallback</span>
-              <select id="sampler-fallback-select">
-                <option value="nearest">Nearest</option>
-                <option value="strict">Strict</option>
-              </select>
-            </label>
-          </section>
-        </div>
-
-        <!-- Composition Tab -->
-        <div class="tab-content" data-tab-content="music">
-          <section class="inspector-section">
-            <h4 class="section-title">Scale</h4>
-            <label class="field">
-              <span>Root</span>
-              <select id="music-root">
-                <option value="60">C4</option>
-                <option value="62">D4</option>
-                <option value="64">E4</option>
-                <option value="65">F4</option>
-                <option value="67">G4</option>
-                <option value="69">A4</option>
-                <option value="71">B4</option>
-              </select>
-            </label>
-            <label class="field">
-              <span>Scale</span>
-              <select id="music-scale">
-                <option value="pentatonic" selected>Pentatonic</option>
-                <option value="major">Major</option>
-                <option value="minor">Minor</option>
-              </select>
-            </label>
-          </section>
-          <section class="inspector-section" id="walker-voice-panel">
-            <h4 class="section-title">Walker Voice</h4>
-            <p class="dim" id="walker-voice-hint">Select a walker to edit</p>
-            <div id="walker-voice-controls" class="hidden">
-              <label class="field">
-                <span>Voice</span>
-                <div class="btn-group">
-                  <button class="btn-small" data-voice="lead">Lead</button>
-                  <button class="btn-small" data-voice="bass">Bass</button>
-                  <button class="btn-small" data-voice="perc">Perc</button>
-                </div>
-              </label>
-              <label class="field">
-                <span>Density</span>
-                <input id="walker-density" type="range" min="0" max="1" step="0.05" value="0.7" />
-                <output id="walker-density-value">0.7</output>
-              </label>
-              <label class="field">
-                <span>Octave</span>
-                <div class="btn-group">
-                  <button class="btn-small" data-octave="-2">-2</button>
-                  <button class="btn-small" data-octave="-1">-1</button>
-                  <button class="btn-small active" data-octave="0">0</button>
-                  <button class="btn-small" data-octave="1">+1</button>
-                  <button class="btn-small" data-octave="2">+2</button>
-                </div>
-              </label>
-              <label class="field checkbox">
-                <input id="walker-mute" type="checkbox" />
-                <span>Mute</span>
-              </label>
-            </div>
           </section>
         </div>
       </aside>

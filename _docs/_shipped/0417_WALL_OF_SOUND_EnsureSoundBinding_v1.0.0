@@ -1,0 +1,78 @@
+## Scope
+main.js only
+
+## Goal
+Ensure all emitters always have a valid sound object when samples are assigned
+
+---
+
+## Step 1 — Fix sample assignment path
+
+FIND where samples are dropped / assigned to lines or segments
+
+ENSURE:
+
+    object.sound = buildSoundConfig(file);
+
+This MUST happen at assignment time
+
+---
+
+## Step 2 — Safety fallback at spawn
+
+In BOTH emitter functions:
+
+ADD before using source.sound:
+
+    if (!source.sound) {
+        console.warn('Missing sound on emitter source', source);
+        return;
+    }
+
+---
+
+## Step 3 — Validate sound object structure
+
+Ensure buildSoundConfig returns:
+
+    {
+        buffer: AudioBuffer,
+        midi: { note: number },
+        rootNote: number
+    }
+
+---
+
+## Step 4 — Do NOT allow partial sound objects
+
+Add guard:
+
+    if (!sound.buffer) return;
+
+---
+
+## Step 5 — Debug log (temporary)
+
+Inside playback trigger:
+
+    console.log('PLAY', {
+        note: sound.midi?.note,
+        root: sound.rootNote,
+        hasBuffer: !!sound.buffer
+    });
+
+---
+
+## Expected Result
+
+- Lines with samples ALWAYS produce sound
+- Silent lines = truly empty (not broken)
+- No invisible failures
+
+---
+
+## Implementation Guide
+
+- Where: sample assignment + emitter spawn
+- Run: reload app
+- Expect: immediate sound when emitter active

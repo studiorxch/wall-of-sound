@@ -14,35 +14,6 @@
     "A#",
     "B",
   ];
-
-  const SCALE_MAPS = {
-    major: [0, 2, 4, 5, 7, 9, 11],
-    minor: [0, 2, 3, 5, 7, 8, 10],
-    pentatonic: [0, 2, 4, 7, 9],
-  };
-
-  const CHORDS = {
-    major: [0, 4, 7],
-    minor: [0, 3, 7],
-    seventh: [0, 4, 7, 10],
-  };
-
-  function quantizeToScale(note, root, scaleType) {
-    const scale = SCALE_MAPS[scaleType];
-    if (!scale) return note;
-    const offset = (((note - root) % 12) + 12) % 12;
-    const octave = Math.floor((note - root) / 12) * 12;
-    let closest = scale[0];
-    let minDist = Math.abs(offset - scale[0]);
-    for (let i = 1; i < scale.length; i++) {
-      const dist = Math.abs(offset - scale[i]);
-      if (dist < minDist) {
-        minDist = dist;
-        closest = scale[i];
-      }
-    }
-    return root + octave + closest;
-  }
   const NOTE_COLORS = {
     C: "#ff4b4b",
     "C#": "#ff6d39",
@@ -87,26 +58,8 @@
     localStorage.setItem("sampleMap", JSON.stringify(data));
   }
 
-  function getSampleForNote(noteClass) {
-    var samples = sampleMap[noteClass];
-    if (!samples || samples.length === 0) return null;
-    var bankState = (state &&
-      state.sampleBanks &&
-      state.sampleBanks[noteClass]) || { mode: "single", index: 0 };
-    switch (bankState.mode) {
-      case "roundRobin": {
-        var s = samples[bankState.index % samples.length];
-        bankState.index++;
-        return s;
-      }
-      case "random":
-        return samples[Math.floor(Math.random() * samples.length)];
-      case "stack":
-        return samples; // returns array — caller handles multi-play
-      case "single":
-      default:
-        return samples[0];
-    }
+  function clearBalls(state) {
+    state.balls.length = 0;
   }
 
   const SHAPE_LIBRARY = {
@@ -248,43 +201,6 @@
     const renderer = new SBE.CanvasRenderer(canvas);
     const midiOut = new SBE.MidiOut();
     const controls = SBE.Controls.createControls();
-    window._wos = {
-      get state() {
-        return state;
-      },
-      get controls() {
-        return controls;
-      },
-      spawnWalkerOnSelected: function () {
-        var sel = state.multiSelection[0];
-        if (!sel || sel.type !== "stroke") {
-          console.warn(
-            "[walker] Select a stroke first (type must be 'stroke')",
-          );
-          return;
-        }
-        var stroke = state.strokes.find(function (s) {
-          return s.id === sel.id;
-        });
-        var w = createWalkerFromStroke(stroke);
-        if (w) {
-          state.walkers.push(w);
-          console.log("[walker] Spawned:", w.id);
-        }
-      },
-      spawnWalkerOnStroke: function (stroke) {
-        var w = createWalkerFromStroke(stroke);
-        if (w) {
-          state.walkers.push(w);
-          console.log("[walker] Spawned:", w.id);
-        }
-        return w;
-      },
-      clearWalkers: function () {
-        state.walkers = [];
-        console.log("[walker] Cleared");
-      },
-    };
     window.noteElements = {};
 
     // ── Drag-and-Drop Overlay System ──
@@ -347,47 +263,42 @@
       dragCounter = 0;
       hideDropOverlay();
 
-      var files = Array.prototype.slice
-        .call(e.dataTransfer.files)
-        .filter(function (f) {
-          return f.type.includes("audio");
-        });
+      var files = Array.prototype.slice.call(e.dataTransfer.files);
       if (!files.length) return;
 
-      // Priority: hovered sampler row → clicked sampler row → selected object color
-      var noteClass = hoveredNoteClass;
-      if (noteClass == null) noteClass = state.sampler.activeNote;
-      if (noteClass == null) {
-        var selectedObj = getSelectedObject ? getSelectedObject() : null;
-        var objColor = getObjectColor(selectedObj);
-        if (objColor) noteClass = getNoteFromColor(objColor);
-      }
-      if (noteClass == null || isNaN(noteClass)) {
-        showToast("Select a sampler key or object to set the target note");
-        console.warn("[sampler] Drop ignored — no target note resolved");
-        return;
+      var context = ensureAudioContext();
+      if (!context) return;
+      if (context.state !== "running") {
+        await context.resume().catch(function () {});
       }
 
+      var note = state.defaults.note || 60;
+      var noteClass = note % 12;
       var loaded = 0;
-      await Promise.all(
-        files.map(async function (file) {
-          var ok = await loadSampleToNote(file, noteClass);
-          if (ok) loaded++;
-        }),
-      );
+
+      for (var i = 0; i < files.length; i++) {
+        var file = files[i];
+        if (!file.type.includes("audio")) continue;
+
+        try {
+          var buffer = await file.arrayBuffer();
+          var decoded = await context.decodeAudioData(buffer);
+
+          if (sampleMap[noteClass].length >= 3) {
+            sampleMap[noteClass].shift();
+          }
+
+          sampleMap[noteClass].push(decoded);
+          loaded++;
+        } catch (err) {
+          console.warn("Failed to decode:", file.name);
+        }
+      }
+
+      saveSamples();
 
       if (loaded > 0) {
-        saveSamples();
-        syncSamplerTab();
-        highlightActiveRow(noteClass);
         showToast("Loaded " + loaded + " sample(s) → " + NOTE_NAMES[noteClass]);
-        console.log(
-          "[sampler] Assigned",
-          loaded,
-          "sample(s) to noteClass",
-          noteClass,
-          NOTE_NAMES[noteClass],
-        );
       }
     });
 
@@ -413,74 +324,35 @@
         const context = state.audio.context;
         if (!context || context.state !== "running") return;
 
-        let note = sourceObject.sound?.midi?.note || 60;
-
-        // Scale quantization — applied before sampleMap lookup and pitch shift
-        if (state.audio.scale?.enabled) {
-          note = quantizeToScale(
-            note,
-            state.audio.scale.root,
-            state.audio.scale.type,
-          );
-        }
-
+        const note = sourceObject.sound?.midi?.note || 60;
         const noteClass = note % 12;
 
-        // Solo note class gate
-        if (
-          state.audio.soloNoteClass !== null &&
-          noteClass !== state.audio.soloNoteClass
-        )
-          return;
+        const bank = sampleMap[noteClass];
+        if (!bank || bank.length === 0) return;
 
-        // Resolve bank with fallback
-        let resolvedClass = noteClass;
-        let result = getSampleForNote(noteClass);
-        if (result === null) {
-          const fallbackMode = state.audio.fallbackMode || "nearest";
-          if (fallbackMode === "strict") return;
-          for (let offset = 1; offset <= 6; offset++) {
-            const lo = (noteClass - offset + 12) % 12;
-            const hi = (noteClass + offset) % 12;
-            if (sampleMap[lo] && sampleMap[lo].length > 0) {
-              resolvedClass = lo;
-              result = getSampleForNote(lo);
-              break;
-            }
-            if (sampleMap[hi] && sampleMap[hi].length > 0) {
-              resolvedClass = hi;
-              result = getSampleForNote(hi);
-              break;
-            }
-          }
-        }
-        if (result === null) return;
+        const index = noteIndexMap[noteClass] || 0;
+        const buffer = bank[index % bank.length];
+        noteIndexMap[noteClass] = index + 1;
+
+        const source = context.createBufferSource();
+        const gainNode = context.createGain();
+
+        source.buffer = buffer;
+
+        noteActivity[noteClass] = performance.now();
 
         const velocity = sourceObject.sound?.midi?.velocity || 80;
-        const root = sourceObject.sound?.rootNote ?? 60;
-        const pitch = Math.pow(2, (note - root) / 12);
-        noteActivity[noteClass] = performance.now();
         noteVelocity[noteClass] = velocity / 127;
 
-        // playSampleBuffer — plays one AudioBuffer
-        function playSampleBuffer(buffer) {
-          if (!buffer) return;
-          const source = context.createBufferSource();
-          const gainNode = context.createGain();
-          source.buffer = buffer;
-          source.playbackRate.value = pitch * (0.96 + Math.random() * 0.08);
-          gainNode.gain.value = 0.8;
-          source.connect(gainNode);
-          gainNode.connect(state.audio.masterGain || context.destination);
-          source.start();
-        }
+        const pitch = Math.pow(2, (note - 60) / 12);
+        source.playbackRate.value = pitch * (0.96 + Math.random() * 0.08);
 
-        // stack mode returns array; all others return single buffer
-        if (Array.isArray(result)) {
-          result.forEach(playSampleBuffer);
-        } else {
-          playSampleBuffer(result);
-        }
+        gainNode.gain.value = 0.8;
+
+        source.connect(gainNode);
+        gainNode.connect(state.audio.masterGain || context.destination);
+
+        source.start();
       },
     };
 
@@ -547,7 +419,6 @@
         division: 0.25,
       },
       quantizeQueue: [],
-      audioQueue: [],
       canvas: { width: 1080, height: 1920 },
       swarm: {
         count: 24,
@@ -569,7 +440,7 @@
       backgroundImage: null,
       collisionMemory: new Map(),
       tool: "select",
-      selectedShape: "straight",
+      selectedShape: "circle",
       selectedLineId: null,
       selectedTextId: null,
       selectedBallId: null,
@@ -582,11 +453,6 @@
           new URLSearchParams(global.location.search).get("mode") === "present",
         shortcutsVisible: false,
         transparentBackground: false,
-        debugHUD: false,
-        selectedNoteClass: 0,
-      },
-      sampler: {
-        activeNote: null,
       },
       ballTool: {
         count: 1,
@@ -618,21 +484,7 @@
       },
       audio: {
         context: null,
-        fallbackMode: "nearest",
-        soloNoteClass: null,
-        scale: {
-          root: 60,
-          type: "major",
-          enabled: true,
-        },
       },
-      sampleBanks: (function () {
-        var banks = {};
-        for (var i = 0; i < 12; i++) {
-          banks[i] = { mode: "single", index: 0 };
-        }
-        return banks;
-      })(),
       physics: {
         gravity: { x: 0, y: 3.0 },
         damping: 0.996,
@@ -647,9 +499,6 @@
         densityHarmonics: true,
         velocityDynamics: true,
         sensitivity: 1.0,
-      },
-      feedback: {
-        showHitCount: false,
       },
       defaults: {
         midiChannel: 1,
@@ -670,56 +519,12 @@
         lengthInput: "",
         isTyping: false,
       },
-      strokes: [],
-      walkers: [],
-      walker: {
-        enabled: true,
-        baseNote: 60,
-        speed: 0.0025,
-        triggerStep: 0.02,
-      },
-      music: {
-        enabled: true,
-        bpm: 120,
-        stepsPerBar: 16,
-        currentStep: 0,
-        lastStepTime: 0,
-        scale: {
-          root: 60,
-          type: "pentatonic",
-        },
-      },
-      harmony: {
-        enabled: true,
-        root: 60,
-        chordType: "minor",
-      },
-      progression: {
-        enabled: true,
-        steps: [
-          { chord: "minor", rootOffset: 0 },
-          { chord: "minor", rootOffset: 5 },
-          { chord: "major", rootOffset: 7 },
-          { chord: "minor", rootOffset: 0 },
-        ],
-      },
-      mopTool: {
-        activeStrokeId: null,
-        streamline: 0.65,
-        persistSpecks: false,
-      },
     };
 
     var heldKeys = new Set();
 
     normalizeSwarmConfig();
     renderer.resize(state.canvas.width, state.canvas.height);
-
-    // Surface stamp buffer — persistent ink accumulation
-    var surfaceCanvas = document.createElement("canvas");
-    surfaceCanvas.width = canvas.width;
-    surfaceCanvas.height = canvas.height;
-    var surfaceCtx = surfaceCanvas.getContext("2d");
 
     const drawTools = SBE.DrawTools.createDrawTools(canvas, state, {
       onTranslateSelection: function onTranslateSelection(dx, dy) {
@@ -937,116 +742,15 @@
       function onEmitterDown(e) {
         var pt = getCanvasCoordsLocal(e);
 
+
+
+
         // Select tool disabled for emitter (tool removed)
         // Emitters now only exist as line behaviors
       },
       true,
     );
 
-    // ── Mop Tool (capture phase) ──
-    canvas.addEventListener(
-      "pointerdown",
-      function onMopDown(e) {
-        if (state.tool !== "mop") return;
-        var pt = getCanvasCoordsLocal(e);
-        pushHistory();
-        var stroke = createStrokeObject(pt.x, pt.y);
-        state.strokes.push(stroke);
-        state.mopTool.activeStrokeId = stroke.id;
-        canvas.setPointerCapture(e.pointerId);
-        e.stopPropagation();
-        renderFrame();
-      },
-      true,
-    );
-
-    canvas.addEventListener(
-      "pointermove",
-      function onMopMove(e) {
-        if (state.tool !== "mop") return;
-        if (!state.mopTool.activeStrokeId) return;
-        var stroke = state.strokes.find(function (s) {
-          return s.id === state.mopTool.activeStrokeId;
-        });
-        if (!stroke) return;
-        var rawPt = getCanvasCoordsLocal(e);
-
-        var last = stroke.points[stroke.points.length - 1];
-
-        // Skip tiny segments — removes micro-jitter
-        if (last) {
-          var dx = rawPt.x - last.x;
-          var dy = rawPt.y - last.y;
-          var dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist < 1.5) return;
-
-          // Change 2 — pass speed to drip spawner
-          attemptDripSpawn(stroke, dist);
-        }
-
-        // Change 1 — factor = 1 - streamline (0.65 → factor 0.35 = smooth)
-        var factor = 1 - state.mopTool.streamline;
-        var smoothed = last ? smoothPoint(last, rawPt, factor) : rawPt;
-        stroke.points.push(smoothed);
-
-        renderFrame();
-      },
-      true,
-    );
-
-    canvas.addEventListener(
-      "pointerup",
-      function onMopUp(e) {
-        if (state.tool !== "mop") return;
-        if (!state.mopTool.activeStrokeId) return;
-        var stroke = state.strokes.find(function (s) {
-          return s.id === state.mopTool.activeStrokeId;
-        });
-        // Change 2 — flick drip burst on stroke end
-        if (stroke && stroke.points.length > 2) {
-          var pts = stroke.points;
-          var last = pts[pts.length - 1];
-          var prev = pts[pts.length - 2];
-          var fdx = last.x - prev.x;
-          var fdy = last.y - prev.y;
-          var flickSpeed = Math.sqrt(fdx * fdx + fdy * fdy);
-          if (flickSpeed > 2.5 && stroke.drips.length < MAX_DRIPS_PER_STROKE) {
-            var flickCount = Math.min(
-              3,
-              MAX_DRIPS_PER_STROKE - stroke.drips.length,
-            );
-            for (var fi = 0; fi < flickCount; fi++) {
-              stroke.drips.push({
-                x: last.x + (Math.random() - 0.5) * 4,
-                y: last.y + Math.random() * 6,
-                vx:
-                  (fdx / flickSpeed) * (1 + Math.random()) +
-                  (Math.random() - 0.5) * 0.8,
-                vy:
-                  (fdy / flickSpeed) * (1 + Math.random()) +
-                  Math.random() * 1.5,
-                radius: 3 + Math.random() * 3,
-                color: stroke.color,
-                life: 2 + Math.random() * 2,
-              });
-            }
-          }
-        }
-        state.mopTool.activeStrokeId = null;
-
-        // Analyze geometry before walker attaches
-        if (stroke) analyzeStroke(stroke);
-
-        // Auto-attach walker if enabled
-        if (stroke && state.walker.enabled) {
-          var w = createWalkerFromStroke(stroke);
-          if (w) state.walkers.push(w);
-        }
-
-        renderFrame();
-      },
-      true,
-    );
 
     // ── Line Tool (two-click, capture phase) ──
     var SNAP_ANGLE = Math.PI / 12;
@@ -1154,371 +858,6 @@
       },
       true,
     );
-
-    // ── Mop / Stroke System ──────────────────────────────
-
-    function createStrokeId() {
-      return "stroke-" + Math.random().toString(36).slice(2, 8);
-    }
-
-    // Change 1 — streamline helper
-    function smoothPoint(prev, current, factor) {
-      return {
-        x: prev.x + (current.x - prev.x) * factor,
-        y: prev.y + (current.y - prev.y) * factor,
-      };
-    }
-
-    function createStrokeObject(x, y) {
-      return {
-        id: createStrokeId(),
-        type: "stroke",
-        points: [{ x: x, y: y }],
-        width: 18,
-        color: normalizeColor(noteToColor(state.defaults.note)),
-        drips: [],
-        specks: [],
-        inkBudget: 1.0,
-        isCommitted: false,
-        renderMode: "ribbon",
-        sound: { enabled: false, note: null },
-        behavior: { isMuted: true },
-        mode: "annotation",
-        harmony: { role: 0 },
-        meta: { length: 1, curvature: 0, complexity: 0 },
-      };
-    }
-
-    // Change 4
-    var MAX_DRIPS_PER_STROKE = 40;
-
-    function stampDrip(drip) {
-      surfaceCtx.save();
-      surfaceCtx.globalAlpha = 0.4;
-      surfaceCtx.beginPath();
-      surfaceCtx.arc(drip.x, drip.y, drip.radius, 0, Math.PI * 2);
-      surfaceCtx.fillStyle = drip.color;
-      surfaceCtx.fill();
-      surfaceCtx.restore();
-    }
-
-    function stampSpeck(speck) {
-      surfaceCtx.save();
-      surfaceCtx.globalAlpha = 0.15;
-      surfaceCtx.beginPath();
-      surfaceCtx.arc(speck.x, speck.y, speck.size, 0, Math.PI * 2);
-      surfaceCtx.fillStyle = speck.color;
-      surfaceCtx.fill();
-      surfaceCtx.restore();
-    }
-
-    function attemptDripSpawn(stroke, speed) {
-      var pts = stroke.points;
-      if (!pts.length) return;
-      var anchor = pts[pts.length - 1];
-
-      // Change 2 — capped, visibility-boosted drip chance; speed-triggered
-      if (stroke.drips.length < MAX_DRIPS_PER_STROKE) {
-        var dripChance = Math.min(0.25, stroke.width * 0.03);
-        var speedThreshold = 1.2;
-        if ((speed || 0) > speedThreshold && Math.random() < dripChance) {
-          stroke.drips.push({
-            x: anchor.x + (Math.random() - 0.5) * 2,
-            y: anchor.y + Math.random() * 4,
-            vx: (Math.random() - 0.5) * 0.6,
-            vy: 1.2 + Math.random() * 1.0,
-            radius: 3 + Math.random() * 3,
-            color: stroke.color,
-            life: 2 + Math.random() * 2,
-          });
-        }
-      }
-
-      // Change 2 — stamp specks immediately, no particle lifecycle needed
-      if (Math.random() < 0.2) {
-        var speck = {
-          x: anchor.x + (Math.random() - 0.5) * 8,
-          y: anchor.y + (Math.random() - 0.5) * 8,
-          size: 2 + Math.random() * 3,
-          color: stroke.color,
-        };
-        stampSpeck(speck);
-      }
-    }
-
-    function updateStrokes(dt) {
-      var safeDt = dt || 1 / 60;
-      (state.strokes || []).forEach(function (stroke) {
-        // Change 3 — drip physics: gravity + drag
-        stroke.drips.forEach(function (d) {
-          d.vy += 0.25;
-          d.vx *= 0.98;
-          d.x += d.vx;
-          d.y += d.vy;
-          d.life -= safeDt;
-          // Change 1 — stamp on floor impact
-          if (d.y >= canvas.height - 2) {
-            stampDrip(d);
-            d.life = 0;
-          }
-        });
-        // Change 5 — drip lifecycle cleanup
-        stroke.drips = stroke.drips.filter(function (d) {
-          return d.life > 0;
-        });
-
-        // Mark committed when no active drawing and drips settled
-        if (
-          !state.mopTool.activeStrokeId ||
-          state.mopTool.activeStrokeId !== stroke.id
-        ) {
-          if (stroke.drips.length === 0) {
-            stroke.isCommitted = true;
-          }
-        }
-      });
-    }
-
-    function renderStrokes(ctx) {
-      (state.strokes || []).forEach(function (stroke) {
-        var pts = stroke.points;
-
-        // Draw base stroke path — Change 5: quadratic smoothing
-        if (pts.length >= 2) {
-          ctx.save();
-          ctx.strokeStyle = stroke.color;
-          ctx.lineWidth = stroke.width;
-          ctx.lineCap = "round";
-          ctx.lineJoin = "round";
-          ctx.globalAlpha = 0.82;
-          ctx.beginPath();
-          ctx.moveTo(pts[0].x, pts[0].y);
-          for (var i = 1; i < pts.length - 1; i++) {
-            var midX = (pts[i].x + pts[i + 1].x) / 2;
-            var midY = (pts[i].y + pts[i + 1].y) / 2;
-            ctx.quadraticCurveTo(pts[i].x, pts[i].y, midX, midY);
-          }
-          // Draw last segment to final point
-          var last = pts[pts.length - 1];
-          ctx.lineTo(last.x, last.y);
-          ctx.stroke();
-          ctx.restore();
-        }
-
-        // Change 8 — drip rendering
-        stroke.drips.forEach(function (d) {
-          ctx.save();
-          ctx.globalAlpha = Math.max(0, d.life * 0.7);
-          ctx.fillStyle = d.color;
-          ctx.beginPath();
-          ctx.arc(d.x, d.y, d.radius, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.restore();
-        });
-        // Specks now stamped immediately via stampSpeck — no particle rendering needed
-      });
-    }
-
-    // ── PathWalker System ────────────────────────────────
-
-    // ── Music Clock ──────────────────────────────────────
-
-    function updateClock(time) {
-      var msPerBeat = 60000 / (state.music.bpm || 120);
-      var msPerStep = msPerBeat / ((state.music.stepsPerBar || 16) / 4);
-      if (time - state.music.lastStepTime > msPerStep) {
-        state.music.lastStepTime = time;
-        state.music.currentStep =
-          (state.music.currentStep + 1) % (state.music.stepsPerBar || 16);
-      }
-    }
-
-    function getCurrentChord() {
-      var step = state.music.currentStep;
-      var steps = state.progression.steps;
-      var index = Math.floor(step / 4) % steps.length;
-      var prog = steps[index];
-      return {
-        chord: CHORDS[prog.chord] || CHORDS.minor,
-        root: state.harmony.root + prog.rootOffset,
-      };
-    }
-
-    function analyzeStroke(stroke) {
-      var pts = stroke.points;
-      var curvature = 0;
-      for (var i = 1; i < pts.length - 1; i++) {
-        var p0 = pts[i - 1];
-        var p1 = pts[i];
-        var p2 = pts[i + 1];
-        curvature += Math.abs(p2.x - p1.x - (p1.x - p0.x));
-      }
-      var len = Math.max(1, pts.length);
-      stroke.meta = {
-        length: len,
-        curvature: curvature,
-        complexity: curvature / len,
-      };
-    }
-
-    function mapWalkerToNote(w) {
-      var chordData = getCurrentChord();
-      var chord = chordData.chord;
-      var root = chordData.root;
-      var role =
-        w.stroke.harmony && w.stroke.harmony.role != null
-          ? w.stroke.harmony.role
-          : 0;
-      var tone = chord[role % chord.length];
-      var note = root + tone;
-      // Geometry influence — complex strokes add variation
-      var complexity = (w.stroke.meta && w.stroke.meta.complexity) || 0;
-      if (complexity > 0.5) {
-        note += Math.floor(Math.random() * 3);
-      }
-      if (w.music.voice === "bass") note -= 24;
-      if (w.music.voice === "lead") note += 12;
-      note += (w.music.octave || 0) * 12;
-      return note;
-    }
-
-    function shouldTrigger(w) {
-      var complexity = (w.stroke.meta && w.stroke.meta.complexity) || 0;
-      var chance = Math.min(1, complexity * 2);
-      return (
-        Math.random() <
-        chance * (w.music.density != null ? w.music.density : 0.7)
-      );
-    }
-
-    function updateWalkerMusic() {
-      var step = state.music.currentStep;
-      state.walkers.forEach(function (w) {
-        if (!state.music.enabled) return;
-        if (!w.music || w.music.mute) return;
-        if (w.music.lastStep === step) return;
-        w.music.lastStep = step;
-
-        if (!shouldTrigger(w)) return;
-
-        // Percussion mode
-        if (w.music.voice === "perc") {
-          playNote(36 + Math.floor(Math.random() * 4), 0.8);
-          return;
-        }
-
-        var note = mapWalkerToNote(w);
-        var velocity = 0.5 + Math.random() * 0.3;
-        playNote(note, velocity);
-      });
-    }
-
-    function createWalkerFromStroke(stroke) {
-      if (!stroke || !stroke.points || stroke.points.length < 2) return null;
-      return {
-        id: "w_" + Math.random().toString(36).slice(2),
-        stroke: stroke,
-        t: 0,
-        dir: 1,
-        speed: state.walker.speed,
-        lastTriggerT: -1,
-        noteOffset: Math.floor(Math.random() * 12),
-        music: {
-          voice: "lead",
-          density: 0.7,
-          octave: 0,
-          mute: false,
-          lastStep: -1,
-          mode: "pingpong",
-        },
-      };
-    }
-
-    function getStrokePoint(stroke, t) {
-      var pts = stroke.points;
-      var maxIdx = pts.length - 1;
-      var f = Math.max(0, Math.min(1, t)) * maxIdx;
-      var i = Math.floor(f);
-      var j = Math.min(i + 1, maxIdx);
-      var localT = f - i;
-      return {
-        x: pts[i].x + (pts[j].x - pts[i].x) * localT,
-        y: pts[i].y + (pts[j].y - pts[i].y) * localT,
-      };
-    }
-
-    // playNote — thin wrapper over dispatchCollisionEvent
-    function playNote(note, velocity) {
-      var quantized =
-        state.audio && state.audio.scale && state.audio.scale.enabled
-          ? quantizeToScale(
-              note,
-              state.audio.scale.root,
-              state.audio.scale.type,
-            )
-          : note;
-      var sourceObject = {
-        sound: buildSoundConfig(quantized, state.defaults.midiChannel || 1),
-      };
-      sourceObject.sound.midi.velocity = Math.round((velocity || 0.6) * 127);
-      dispatchCollisionEvent(sourceObject);
-    }
-
-    function updateWalkerMovement(w, dt) {
-      switch (w.music.mode) {
-        case "follow":
-          w.t += w.speed * dt * 60;
-          w.t = Math.max(0, Math.min(1, w.t));
-          break;
-        case "random":
-          w.t += (Math.random() - 0.5) * 0.05;
-          w.t = Math.max(0, Math.min(1, w.t));
-          break;
-        case "drift":
-          w.t += 0.01 * dt * 60 + Math.sin(performance.now() * 0.001) * 0.005;
-          if (w.t > 1) w.t -= 1;
-          if (w.t < 0) w.t += 1;
-          break;
-        case "pingpong":
-        default:
-          w.t += w.dir * w.speed * dt * 60;
-          if (w.t >= 1 || w.t <= 0) {
-            w.dir *= -1;
-            w.t = Math.max(0, Math.min(1, w.t));
-          }
-          break;
-      }
-    }
-
-    function updateWalkers(dt) {
-      if (!state.walker.enabled) return;
-      state.walkers.forEach(function (w) {
-        updateWalkerMovement(w, dt);
-      });
-    }
-
-    function drawWalkers(ctx) {
-      state.walkers.forEach(function (w) {
-        var p = getStrokePoint(w.stroke, w.t);
-        ctx.save();
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
-        ctx.fillStyle = "#ffffff";
-        ctx.globalAlpha = 0.9;
-        ctx.fill();
-        // Direction indicator dot
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, 2.5, 0, Math.PI * 2);
-        ctx.fillStyle = w.stroke.color || "#3dd8c5";
-        ctx.globalAlpha = 1;
-        ctx.fill();
-        ctx.restore();
-      });
-    }
-
-    // ── End PathWalker System ────────────────────────────
-
-    // ── End Mop / Stroke System ──────────────────────────
 
     function drawLinePreview() {
       var tool = state.lineTool;
@@ -1772,16 +1111,18 @@
           applyBehaviorEmitterFields();
         });
       }
-      if (elements.behaviorEmitterDirection) {
-        elements.behaviorEmitterDirection.addEventListener(
-          "input",
-          function () {
-            applyBehaviorEmitterFields();
-          },
-        );
+      if (elements.behaviorEmitterVx) {
+        elements.behaviorEmitterVx.addEventListener("input", function () {
+          applyBehaviorEmitterFields();
+        });
       }
-      if (elements.behaviorEmitterStrength) {
-        elements.behaviorEmitterStrength.addEventListener("input", function () {
+      if (elements.behaviorEmitterVy) {
+        elements.behaviorEmitterVy.addEventListener("input", function () {
+          applyBehaviorEmitterFields();
+        });
+      }
+      if (elements.behaviorEmitterSpawnMode) {
+        elements.behaviorEmitterSpawnMode.addEventListener("change", function () {
           applyBehaviorEmitterFields();
         });
       }
@@ -1791,20 +1132,14 @@
         });
       }
       if (elements.behaviorEmitterQuantize) {
-        elements.behaviorEmitterQuantize.addEventListener(
-          "change",
-          function () {
-            applyBehaviorEmitterFields();
-          },
-        );
+        elements.behaviorEmitterQuantize.addEventListener("change", function () {
+          applyBehaviorEmitterFields();
+        });
       }
       if (elements.behaviorEmitterQuantizeDiv) {
-        elements.behaviorEmitterQuantizeDiv.addEventListener(
-          "input",
-          function () {
-            applyBehaviorEmitterFields();
-          },
-        );
+        elements.behaviorEmitterQuantizeDiv.addEventListener("input", function () {
+          applyBehaviorEmitterFields();
+        });
       }
 
       if (elements.lineMechanic) {
@@ -1976,11 +1311,6 @@
           state.soundResponse.sensitivity = Number(this.value);
         });
       }
-      if (elements.toggleHitCount) {
-        elements.toggleHitCount.addEventListener("change", function () {
-          state.feedback.showHitCount = this.checked;
-        });
-      }
 
       // World mode bindings
       if (elements.worldMode) {
@@ -2008,96 +1338,6 @@
           state.world.strength = Number(this.value);
         });
       }
-
-      // Sampler tab bindings
-      var samplerFallbackSelect = document.getElementById(
-        "sampler-fallback-select",
-      );
-      if (samplerFallbackSelect) {
-        samplerFallbackSelect.addEventListener("change", function () {
-          state.audio.fallbackMode = this.value;
-          syncSamplerTab();
-        });
-      }
-
-      // Music tab bindings
-      var musicEnabled = document.getElementById("music-enabled");
-      if (musicEnabled) {
-        musicEnabled.addEventListener("change", function () {
-          state.music.enabled = this.checked;
-        });
-      }
-      var musicBpm = document.getElementById("music-bpm");
-      if (musicBpm) {
-        musicBpm.addEventListener("input", function () {
-          state.music.bpm = Math.max(
-            40,
-            Math.min(240, Number(this.value) || 120),
-          );
-        });
-      }
-      var musicSteps = document.getElementById("music-steps");
-      if (musicSteps) {
-        musicSteps.addEventListener("change", function () {
-          state.music.stepsPerBar = Number(this.value) || 16;
-          state.music.currentStep = 0;
-        });
-      }
-      var musicRoot = document.getElementById("music-root");
-      if (musicRoot) {
-        musicRoot.addEventListener("change", function () {
-          state.music.scale.root = Number(this.value);
-        });
-      }
-      var musicScale = document.getElementById("music-scale");
-      if (musicScale) {
-        musicScale.addEventListener("change", function () {
-          state.music.scale.type = this.value;
-        });
-      }
-
-      // Walker voice panel bindings
-      var walkerDensity = document.getElementById("walker-density");
-      if (walkerDensity) {
-        walkerDensity.addEventListener("input", function () {
-          var w = getSelectedWalker();
-          if (w) {
-            w.music.density = Number(this.value);
-            document.getElementById("walker-density-value").textContent =
-              this.value;
-          }
-        });
-      }
-      var walkerMute = document.getElementById("walker-mute");
-      if (walkerMute) {
-        walkerMute.addEventListener("change", function () {
-          var w = getSelectedWalker();
-          if (w) w.music.mute = this.checked;
-        });
-      }
-      document.querySelectorAll("[data-voice]").forEach(function (btn) {
-        btn.addEventListener("click", function () {
-          var w = getSelectedWalker();
-          if (!w) return;
-          w.music.voice = btn.dataset.voice;
-          document.querySelectorAll("[data-voice]").forEach(function (b) {
-            b.classList.toggle("active", b.dataset.voice === w.music.voice);
-          });
-        });
-      });
-      document.querySelectorAll("[data-octave]").forEach(function (btn) {
-        btn.addEventListener("click", function () {
-          var w = getSelectedWalker();
-          if (!w) return;
-          w.music.octave = Number(btn.dataset.octave);
-          document.querySelectorAll("[data-octave]").forEach(function (b) {
-            b.classList.toggle(
-              "active",
-              Number(b.dataset.octave) === w.music.octave,
-            );
-          });
-        });
-      });
 
       // Motion inspector bindings
       function getMotionShape() {
@@ -2227,11 +1467,6 @@
         }
         if (event.key.toLowerCase() === "b") {
           state.tool = "ball";
-          syncUI();
-          return;
-        }
-        if (event.key.toLowerCase() === "m") {
-          state.tool = "mop";
           syncUI();
           return;
         }
@@ -2429,204 +1664,12 @@
         state.canvas.width + " / " + state.canvas.height;
     }
 
-    function getSampleCount(noteClass) {
-      var bank = sampleMap[noteClass];
-      return bank ? bank.length : 0;
-    }
-
-    // ── Sampler Targeting ────────────────────────────────
-    var hoveredNoteClass = null;
-
-    function highlightActiveRow(noteClass) {
-      var container = document.getElementById("sampler-key-list");
-      if (!container) return;
-      container.querySelectorAll(".sampler-key").forEach(function (row) {
-        var nc = Number(row.dataset.noteClass);
-        row.classList.toggle("sampler-key--active", nc === noteClass);
-      });
-    }
-
-    function updateColorSwatch(color) {
-      if (!color) return;
-      var input = controls && controls.elements && controls.elements.lineColor;
-      if (!input) return;
-      input.value = color;
-    }
-
-    function highlightNoteCell(noteClass) {
-      document
-        .querySelectorAll(".note-cell[data-note-class]")
-        .forEach(function (cell) {
-          var nc = Number(cell.dataset.noteClass);
-          cell.classList.toggle("active", nc === noteClass);
-        });
-    }
-
-    async function loadSampleToNote(file, noteClass) {
-      if (noteClass === null || isNaN(noteClass)) {
-        console.warn("[sampler] No valid target note — drop ignored");
-        return false;
-      }
-      var context = ensureAudioContext();
-      if (!context) return false;
-      if (context.state !== "running") {
-        await context.resume().catch(function () {});
-      }
-      try {
-        var buf = await file.arrayBuffer();
-        var decoded = await context.decodeAudioData(buf);
-        if (!sampleMap[noteClass]) sampleMap[noteClass] = [];
-        if (sampleMap[noteClass].length >= 3) sampleMap[noteClass].shift();
-        sampleMap[noteClass].push(decoded);
-        if (state.sampleBanks && state.sampleBanks[noteClass]) {
-          state.sampleBanks[noteClass].index = 0;
-        }
-        return true;
-      } catch (err) {
-        console.warn("[sampler] Failed to decode:", file.name, err);
-        return false;
-      }
-    }
-
-    function syncSamplerTab() {
-      var container = document.getElementById("sampler-key-list");
-      if (!container) return;
-      var solo = state.audio.soloNoteClass;
-      var html = "";
-      for (var i = 0; i < 12; i++) {
-        var count = getSampleCount(i);
-        var isSolo = solo === i;
-        var dimmed = solo !== null && !isSolo;
-        var bankMode =
-          (state.sampleBanks[i] && state.sampleBanks[i].mode) || "single";
-        html +=
-          '<div class="sampler-key' +
-          (isSolo ? " sampler-key--solo" : "") +
-          (dimmed ? " sampler-key--dim" : "") +
-          '" data-note-class="' +
-          i +
-          '">' +
-          '<span class="sampler-key__name">' +
-          NOTE_NAMES[i] +
-          "</span>" +
-          '<span class="sampler-key__count">(' +
-          count +
-          ")</span>" +
-          (count > 1
-            ? '<select class="sampler-key__mode" data-nc="' +
-              i +
-              '" onclick="event.stopPropagation()">' +
-              ["single", "roundRobin", "random", "stack"]
-                .map(function (m) {
-                  return (
-                    '<option value="' +
-                    m +
-                    '"' +
-                    (bankMode === m ? " selected" : "") +
-                    ">" +
-                    m +
-                    "</option>"
-                  );
-                })
-                .join("") +
-              "</select>"
-            : "") +
-          "</div>";
-      }
-      container.innerHTML = html;
-
-      // Per-row bindings — click, hover, drag, drop
-      container.querySelectorAll(".sampler-key").forEach(function (el) {
-        var nc = Number(el.dataset.noteClass);
-
-        // Step 2 — click sets activeNote + highlights
-        el.addEventListener("click", function () {
-          state.sampler.activeNote = nc;
-          highlightActiveRow(nc);
-        });
-
-        // Double-click toggles solo
-        el.addEventListener("dblclick", function (e) {
-          e.stopPropagation();
-          state.audio.soloNoteClass =
-            state.audio.soloNoteClass === nc ? null : nc;
-          syncSamplerTab();
-        });
-
-        // Step 3 — hover tracks drop target
-        el.addEventListener("mouseenter", function () {
-          hoveredNoteClass = nc;
-        });
-        el.addEventListener("mouseleave", function () {
-          hoveredNoteClass = null;
-        });
-
-        // Dragover/dragleave visual feedback
-        el.addEventListener("dragover", function (e) {
-          e.preventDefault();
-          e.stopPropagation();
-          hoveredNoteClass = nc;
-          el.classList.add("sampler-key--drag-over");
-        });
-        el.addEventListener("dragleave", function () {
-          hoveredNoteClass = null;
-          el.classList.remove("sampler-key--drag-over");
-        });
-
-        // Step 5 — per-row drop: explicit note, no fallback to 0
-        el.addEventListener("drop", async function (e) {
-          e.preventDefault();
-          e.stopPropagation();
-          el.classList.remove("sampler-key--drag-over");
-          hoveredNoteClass = null;
-
-          var files = Array.prototype.slice
-            .call(e.dataTransfer.files)
-            .filter(function (f) {
-              return f.type.includes("audio");
-            });
-          if (!files.length) return;
-
-          var loaded = 0;
-          await Promise.all(
-            files.map(async function (file) {
-              var ok = await loadSampleToNote(file, nc);
-              if (ok) loaded++;
-            }),
-          );
-
-          if (loaded > 0) {
-            saveSamples();
-            syncSamplerTab();
-            state.sampler.activeNote = nc;
-            highlightActiveRow(nc);
-            showToast("Loaded " + loaded + " sample(s) → " + NOTE_NAMES[nc]);
-          }
-        });
-      });
-
-      // Mode select binding
-      container.querySelectorAll(".sampler-key__mode").forEach(function (sel) {
-        sel.addEventListener("change", function () {
-          var nc = Number(sel.dataset.nc);
-          state.sampleBanks[nc].mode = sel.value;
-          state.sampleBanks[nc].index = 0;
-        });
-      });
-
-      // Fallback mode display
-      var fallbackEl = document.getElementById("sampler-fallback-mode");
-      if (fallbackEl)
-        fallbackEl.textContent = state.audio.fallbackMode || "nearest";
-    }
-
     function syncUI() {
       controls.syncState(state);
       controls.syncTool(state.tool);
       controls.syncShapeSelection(state.selectedShape);
       syncSelectionPanel();
       controls.syncShortcutVisibility(state.ui.shortcutsVisible);
-      syncSamplerTab();
       if (controls.elements.togglePlayback) {
         controls.elements.togglePlayback.innerHTML = isPlaying
           ? "&#9646;&#9646;"
@@ -2645,7 +1688,6 @@
           state.defaults.note
         : state.defaults.note;
       controls.syncSelection(selection, ((activeNote % 12) + 12) % 12);
-      syncInspectorToObject(selection);
 
       // Behavior emitter fields visibility + sync
       var showEmitterFields = false;
@@ -2666,78 +1708,44 @@
         );
       }
       if (showEmitterFields && selection) {
-        var cfg =
-          selection.behavior && selection.behavior.type === "emitter"
-            ? selection.behavior.emitterConfig
-            : null;
+        var cfg = selection.behavior && selection.behavior.type === "emitter" ? selection.behavior.emitterConfig : null;
         if (!cfg && selection.segments && selection.segments.length) {
           var seg = selection.segments[0];
-          cfg =
-            seg.behavior && seg.behavior.type === "emitter"
-              ? seg.behavior.emitterConfig
-              : null;
+          cfg = seg.behavior && seg.behavior.type === "emitter" ? seg.behavior.emitterConfig : null;
         }
-        cfg = cfg || {
-          rate: 400,
-          direction: (270 * Math.PI) / 180,
-          strength: 6,
-          isMuted: false,
-          quantize: false,
-          quantizeDivision: 16,
-        };
-
-        // Backward compat: convert old emitterVx/Vy to direction+strength
-        if (cfg.direction == null) {
-          var oldVx = selection.behavior
-            ? selection.behavior.emitterVx || 0
-            : 0;
-          var oldVy = selection.behavior
-            ? selection.behavior.emitterVy || 0
-            : 0;
-          cfg.direction = Math.atan2(oldVy, oldVx);
-          cfg.strength = Math.hypot(oldVx, oldVy) || 6;
-        }
-
+        cfg = cfg || { rate: 400, spawnMode: "center", silent: false, quantize: false, quantizeDivision: 16 };
+        var vx = selection.behavior ? selection.behavior.emitterVx : 0;
+        var vy = selection.behavior ? selection.behavior.emitterVy : 0;
+        
         if (controls.elements.behaviorEmitterRate) {
           controls.elements.behaviorEmitterRate.value = String(cfg.rate || 400);
           if (controls.elements.behaviorEmitterRateValue) {
-            controls.elements.behaviorEmitterRateValue.textContent = String(
-              cfg.rate || 400,
-            );
+            controls.elements.behaviorEmitterRateValue.textContent = String(cfg.rate || 400);
           }
         }
-        if (controls.elements.behaviorEmitterDirection) {
-          var deg = Math.round(((cfg.direction || 0) * 180) / Math.PI);
-          controls.elements.behaviorEmitterDirection.value = String(
-            ((deg % 360) + 360) % 360,
-          );
-          if (controls.elements.behaviorEmitterDirectionValue) {
-            controls.elements.behaviorEmitterDirectionValue.textContent =
-              String(((deg % 360) + 360) % 360);
+        if (controls.elements.behaviorEmitterVx) {
+          controls.elements.behaviorEmitterVx.value = String(vx || 0);
+          if (controls.elements.behaviorEmitterVxValue) {
+            controls.elements.behaviorEmitterVxValue.textContent = Number(vx || 0).toFixed(1);
           }
         }
-        if (controls.elements.behaviorEmitterStrength) {
-          controls.elements.behaviorEmitterStrength.value = String(
-            cfg.strength != null ? cfg.strength : 6,
-          );
-          if (controls.elements.behaviorEmitterStrengthValue) {
-            controls.elements.behaviorEmitterStrengthValue.textContent = Number(
-              cfg.strength != null ? cfg.strength : 6,
-            ).toFixed(1);
+        if (controls.elements.behaviorEmitterVy) {
+          controls.elements.behaviorEmitterVy.value = String(vy || 0);
+          if (controls.elements.behaviorEmitterVyValue) {
+            controls.elements.behaviorEmitterVyValue.textContent = Number(vy || 0).toFixed(1);
           }
+        }
+        if (controls.elements.behaviorEmitterSpawnMode) {
+          controls.elements.behaviorEmitterSpawnMode.value = cfg.spawnMode || "center";
         }
         if (controls.elements.behaviorEmitterSilent) {
-          controls.elements.behaviorEmitterSilent.checked =
-            cfg.isMuted || false;
+          controls.elements.behaviorEmitterSilent.checked = cfg.silent || false;
         }
         if (controls.elements.behaviorEmitterQuantize) {
-          controls.elements.behaviorEmitterQuantize.checked =
-            cfg.quantize || false;
+          controls.elements.behaviorEmitterQuantize.checked = cfg.quantize || false;
         }
         if (controls.elements.behaviorEmitterQuantizeDiv) {
-          controls.elements.behaviorEmitterQuantizeDiv.value = String(
-            cfg.quantizeDivision || 16,
-          );
+          controls.elements.behaviorEmitterQuantizeDiv.value = String(cfg.quantizeDivision || 16);
         }
       }
 
@@ -2788,109 +1796,60 @@
       }
     }
 
-    function syncInspectorToObject(obj) {
-      if (!obj) return;
-
-      var color = getObjectColor(obj);
-
-      // Resolve note — prefer explicit midi/note, fall back to color mapping
-      var note =
-        obj.midi && typeof obj.midi.note === "number"
-          ? obj.midi.note
-          : typeof obj.note === "number"
-            ? obj.note
-            : null;
-
-      var noteClass = null;
-      if (note != null) {
-        noteClass = ((note % 12) + 12) % 12;
-      } else if (color) {
-        noteClass = getNoteFromColor(color);
-        if (noteClass != null) note = 48 + noteClass;
-      }
-
-      if (note != null) {
-        state.defaults.note = note;
-        state.ui.selectedNoteClass = ((note % 12) + 12) % 12;
-        controls.elements.activeNote.value = String(note);
-      }
-
-      // Step 4 — swatch always shows canonical hex color
-      updateColorSwatch(color || (note != null ? noteToColor(note) : null));
-
-      if (noteClass != null) {
-        state.sampler.activeNote = noteClass;
-        highlightActiveRow(noteClass);
-        highlightNoteCell(noteClass);
-      }
-
-      state.ui.isMuted = !!(obj.behavior && obj.behavior.isMuted);
-    }
-
     function applyBehaviorEmitterFields() {
       if (!state.multiSelection.length) return;
-
-      var rateEl =
-        controls.elements.behaviorEmitterRate ||
-        document.getElementById("behavior-emitter-rate");
-      var dirEl =
-        controls.elements.behaviorEmitterDirection ||
-        document.getElementById("behavior-emitter-direction");
-      var strengthEl =
-        controls.elements.behaviorEmitterStrength ||
-        document.getElementById("behavior-emitter-strength");
-      var muteEl =
-        controls.elements.behaviorEmitterSilent ||
-        document.getElementById("behavior-emitter-mute");
-      var quantizeEl =
-        controls.elements.behaviorEmitterQuantize ||
-        document.getElementById("behavior-emitter-quantize");
-      var quantizeDivEl =
-        controls.elements.behaviorEmitterQuantizeDiv ||
-        document.getElementById("behavior-emitter-quantize-div");
-
-      var rate = rateEl ? Math.max(100, Number(rateEl.value) || 400) : 400;
-      var dirDeg = dirEl ? Number(dirEl.value) : 270;
-      var direction = (dirDeg * Math.PI) / 180;
-      var strength = strengthEl ? Math.max(0, Number(strengthEl.value)) : 6;
-      var isMuted = muteEl ? muteEl.checked : false;
+      
+      // Use controls.elements or fallback to direct DOM access
+      var rateEl = controls.elements.behaviorEmitterRate || document.getElementById("behavior-emitter-rate");
+      var vxEl = controls.elements.behaviorEmitterVx || document.getElementById("behavior-emitter-vx");
+      var vyEl = controls.elements.behaviorEmitterVy || document.getElementById("behavior-emitter-vy");
+      var spawnModeEl = controls.elements.behaviorEmitterSpawnMode || document.getElementById("behavior-emitter-spawn-mode");
+      var silentEl = controls.elements.behaviorEmitterSilent || document.getElementById("behavior-emitter-silent");
+      var quantizeEl = controls.elements.behaviorEmitterQuantize || document.getElementById("behavior-emitter-quantize");
+      var quantizeDivEl = controls.elements.behaviorEmitterQuantizeDiv || document.getElementById("behavior-emitter-quantize-div");
+      
+      var rate = rateEl ? Number(rateEl.value) || 400 : 400;
+      var vx = vxEl ? Number(vxEl.value) || 0 : 0;
+      var vy = vyEl ? Number(vyEl.value) || 0 : 0;
+      var spawnMode = spawnModeEl ? spawnModeEl.value : "center";
+      var silent = silentEl ? silentEl.checked : false;
       var quantize = quantizeEl ? quantizeEl.checked : false;
-      var quantizeDivision = quantizeDivEl
-        ? Number(quantizeDivEl.value) || 16
-        : 16;
-
-      function applyToConfig(obj, cfg) {
-        cfg.rate = rate;
-        cfg.direction = direction;
-        cfg.strength = strength;
-        cfg.isMuted = isMuted;
-        cfg.quantize = quantize;
-        cfg.quantizeDivision = quantizeDivision;
-        // Also write to the object directly for collision gate
-        obj.isMuted = isMuted;
-      }
+      var quantizeDivision = quantizeDivEl ? Number(quantizeDivEl.value) || 16 : 16;
 
       state.multiSelection.forEach(function (entry) {
         if (entry.type === "line") {
           var line = state.lines.find(function (l) {
             return l.id === entry.id;
           });
-          if (!line || !line.behavior) return;
-          if (!line.behavior.emitterConfig)
-            line.behavior.emitterConfig = { lastSpawn: 0 };
-          applyToConfig(line, line.behavior.emitterConfig);
+          if (line && line.behavior && line.behavior.type === "emitter") {
+            if (!line.behavior.emitterConfig) line.behavior.emitterConfig = {};
+            line.behavior.emitterConfig.rate = rate;
+            line.behavior.emitterConfig.spawnMode = spawnMode;
+            line.behavior.emitterConfig.silent = silent;
+            line.behavior.emitterConfig.quantize = quantize;
+            line.behavior.emitterConfig.quantizeDivision = quantizeDivision;
+            line.behavior.emitterVx = vx;
+            line.behavior.emitterVy = vy;
+          }
         }
         if (entry.type === "shape") {
           var shape = (state.shapes || []).find(function (s) {
             return s.id === entry.id;
           });
-          if (!shape) return;
-          shape.segments.forEach(function (seg) {
-            if (!seg.behavior) return;
-            if (!seg.behavior.emitterConfig)
-              seg.behavior.emitterConfig = { lastSpawn: 0 };
-            applyToConfig(seg, seg.behavior.emitterConfig);
-          });
+          if (shape) {
+            shape.segments.forEach(function (seg) {
+              if (seg.behavior && seg.behavior.type === "emitter") {
+                if (!seg.behavior.emitterConfig) seg.behavior.emitterConfig = {};
+                seg.behavior.emitterConfig.rate = rate;
+                seg.behavior.emitterConfig.spawnMode = spawnMode;
+                seg.behavior.emitterConfig.silent = silent;
+                seg.behavior.emitterConfig.quantize = quantize;
+                seg.behavior.emitterConfig.quantizeDivision = quantizeDivision;
+                seg.behavior.emitterVx = vx;
+                seg.behavior.emitterVy = vy;
+              }
+            });
+          }
         }
       });
       renderFrame();
@@ -2904,17 +1863,6 @@
         return resolveSelectionEntry(state.multiSelection[0]);
       }
       return null;
-    }
-
-    function getSelectedWalker() {
-      // Walker is selected if the active stroke has a walker attached
-      var sel = state.multiSelection[0];
-      if (!sel || sel.type !== "stroke") return null;
-      return (
-        state.walkers.find(function (w) {
-          return w.stroke && w.stroke.id === sel.id;
-        }) || null
-      );
     }
 
     function resolveSelectionEntry(entry) {
@@ -3434,17 +2382,8 @@
         if (!src) return null;
         var copy = SBE.ShapeSystem.duplicateShape(src, 0);
         SBE.ShapeSystem.translateShape(copy, dx, dy);
-        copy.segments.forEach(function (seg, i) {
+        copy.segments.forEach(function (seg) {
           rebuildSoundConfig(seg);
-          // Preserve emitterConfig from source segment
-          var srcSeg = src.segments[i];
-          if (srcSeg && srcSeg.behavior && srcSeg.behavior.emitterConfig) {
-            if (!seg.behavior) seg.behavior = {};
-            seg.behavior.emitterConfig = clone(srcSeg.behavior.emitterConfig);
-            seg.behavior.emitterConfig.lastSpawn = 0;
-            seg.behavior.emitterVx = srcSeg.behavior.emitterVx;
-            seg.behavior.emitterVy = srcSeg.behavior.emitterVy;
-          }
         });
         state.shapes.push(copy);
         return { type: "shape", id: copy.id };
@@ -3461,13 +2400,6 @@
         raw.x2 += dx;
         raw.y2 += dy;
         var line = normalizeLineObject(SBE.LineSystem.hydrateLine(raw));
-        // Restore emitterConfig lost through hydrateLine
-        if (raw.behavior && raw.behavior.emitterConfig) {
-          line.behavior.emitterConfig = clone(raw.behavior.emitterConfig);
-          line.behavior.emitterConfig.lastSpawn = 0;
-          line.behavior.emitterVx = raw.behavior.emitterVx;
-          line.behavior.emitterVy = raw.behavior.emitterVy;
-        }
         state.lines.push(line);
         return { type: "line", id: line.id };
       }
@@ -3567,21 +2499,6 @@
           ? state.shapes.map(SBE.ShapeSystem.serializeShape)
           : [],
         balls: clone(state.balls),
-        strokes: state.strokes.map(function (s) {
-          return {
-            id: s.id,
-            type: s.type,
-            points: s.points.slice(),
-            width: s.width,
-            color: s.color,
-            renderMode: s.renderMode,
-            mode: s.mode,
-            sound: clone(s.sound),
-            behavior: clone(s.behavior),
-            specks: [],
-            drips: [],
-          };
-        }),
         // Emitters removed — now only exist as line behaviors
         canvas: clone(state.canvas),
         swarm: clone(state.swarm),
@@ -3674,19 +2591,17 @@
             seg.behavior.type = patch.behaviorType;
             seg.behavior.strength = patch.behaviorStrength;
             // Initialize emitterConfig when behavior is set to emitter
-            if (
-              patch.behaviorType === "emitter" &&
-              !seg.behavior.emitterConfig
-            ) {
+            if (patch.behaviorType === "emitter" && !seg.behavior.emitterConfig) {
               seg.behavior.emitterConfig = {
                 rate: 400,
-                direction: (270 * Math.PI) / 180,
-                strength: 6,
-                isMuted: false,
+                spawnMode: "center",
+                silent: false,
                 quantize: false,
                 quantizeDivision: 16,
                 lastSpawn: 0,
               };
+              seg.behavior.emitterVx = 0;
+              seg.behavior.emitterVy = 0;
             }
             seg.mechanicType = patch.mechanicType;
             rebuildSoundConfig(seg);
@@ -3712,19 +2627,17 @@
           object.behavior.type = patch.behaviorType;
           object.behavior.strength = patch.behaviorStrength;
           // Initialize emitterConfig when behavior is set to emitter
-          if (
-            patch.behaviorType === "emitter" &&
-            !object.behavior.emitterConfig
-          ) {
+          if (patch.behaviorType === "emitter" && !object.behavior.emitterConfig) {
             object.behavior.emitterConfig = {
               rate: 400,
-              direction: (270 * Math.PI) / 180,
-              strength: 6,
-              isMuted: false,
+              spawnMode: "center",
+              silent: false,
               quantize: false,
               quantizeDivision: 16,
               lastSpawn: 0,
             };
+            object.behavior.emitterVx = 0;
+            object.behavior.emitterVy = 0;
           }
         }
         object.mechanicType = patch.mechanicType;
@@ -3746,7 +2659,6 @@
         typeof octaveHint === "number" ? octaveHint : Math.floor(baseNote / 12);
       const note = clampInt(octave * 12 + noteClass, 0, 127);
       state.defaults.note = note;
-      state.ui.selectedNoteClass = ((noteClass % 12) + 12) % 12;
       controls.elements.activeNote.value = String(note);
       controls.elements.lineColor.value = noteToColor(note);
       applyInspectorMetadata();
@@ -3762,7 +2674,6 @@
         volume: 0.1,
         duration: 0.18,
         cooldownMs: 72,
-        rootNote: 60,
         midi: {
           channel: midiChannel,
           note: note,
@@ -3782,13 +2693,6 @@
     // ── Event Dispatch ───────────────────────────────────
 
     function dispatchCollisionEvent(sourceObject) {
-      if (!sourceObject?.sound?.midi) return;
-      if (isMuted(sourceObject)) return;
-      if (sourceObject.type === "text" && sourceObject.mode === "annotation")
-        return;
-      if (sourceObject.behavior?.emitterConfig?.isMuted) return;
-      if (sourceObject.behavior?.emitterConfig?.mute) return;
-
       const currentTime = getTransportTime();
 
       if (!state.quantize.enabled) {
@@ -3803,25 +2707,6 @@
         time: nextTime,
         sourceObject: sourceObject,
       });
-    }
-
-    // Queue an audio event from inside the physics loop — drains after physics
-    function queueAudioEvent(type, sourceObject) {
-      state.audioQueue.push({ type: type, sourceObject: sourceObject });
-    }
-
-    function processAudioQueue() {
-      var queue = state.audioQueue;
-      if (!queue.length) return;
-      state.audioQueue = [];
-      for (var i = 0; i < queue.length; i++) {
-        var evt = queue[i];
-        if (evt.type === "wall") {
-          eventBus.triggerEvent("wall", evt.sourceObject);
-        } else {
-          dispatchCollisionEvent(evt.sourceObject);
-        }
-      }
     }
 
     function processQuantizeQueue() {
@@ -3936,10 +2821,6 @@
       state.shapes = [];
       state.textObjects = [];
       state.balls = [];
-      state.strokes = [];
-      state.walkers = [];
-      state.mopTool.activeStrokeId = null;
-      surfaceCtx.clearRect(0, 0, surfaceCanvas.width, surfaceCanvas.height);
       state.emitters = [];
       clearLoop();
       clearSelection();
@@ -4125,103 +3006,75 @@
       state.lines.forEach(function (line) {
         if (!line.behavior || line.behavior.type !== "emitter") return;
 
-        if (!line.behavior.emitterConfig) {
-          line.behavior.emitterConfig = {
-            rate: 400,
-            direction: (270 * Math.PI) / 180,
-            strength: 6,
-            isMuted: false,
-            quantize: false,
-            quantizeDivision: 16,
-            lastSpawn: 0,
-            blueprint: {
-              note: 60,
-              velocityBase: 70,
-              velocityRange: [60, 120],
-              pitchDrift: 0.02,
-              retriggerMode: "energy",
-            },
-          };
-        }
-        var cfg = line.behavior.emitterConfig;
+        var cfg = line.behavior.emitterConfig || {
+          rate: 400,
+          spawnMode: "center",
+          silent: false,
+          quantize: false,
+          quantizeDivision: 16,
+          lastSpawn: 0,
+        };
 
-        // Backward compat
-        if (cfg.direction == null) {
-          cfg.direction = Math.atan2(
-            line.behavior.emitterVy || 0,
-            line.behavior.emitterVx || 0,
-          );
-          cfg.strength =
-            Math.hypot(
-              line.behavior.emitterVx || 0,
-              line.behavior.emitterVy || 0,
-            ) || 6;
+        // Emission rate check with quantize support
+        var rate = cfg.rate || 400;
+        if (cfg.quantize) {
+          var bpm = state.transport.bpm || 120;
+          var beatMs = (60 / bpm) * 1000;
+          var division = cfg.quantizeDivision || 16;
+          var gridUnit = beatMs / division;
+          rate = Math.max(100, Math.round(rate / gridUnit) * gridUnit);
         }
 
-        var intervalMs = cfg.quantize
-          ? (60000 / (state.bpm || 120)) * (4 / (cfg.quantizeDivision || 16))
-          : Math.max(100, cfg.rate || 400);
+        if (now - cfg.lastSpawn < rate) return;
+        cfg.lastSpawn = now;
 
-        if (now - cfg.lastSpawn < intervalMs) return;
-        cfg.lastSpawn = now - ((now - cfg.lastSpawn) % intervalMs);
+        // Direction from line geometry (angle defines direction)
+        var angle = Math.atan2(line.y2 - line.y1, line.x2 - line.x1);
+        var dirX = Math.cos(angle);
+        var dirY = Math.sin(angle);
 
-        var direction =
-          cfg.direction != null ? cfg.direction : (270 * Math.PI) / 180;
-        var strength = cfg.strength != null ? cfg.strength : 6;
-        var dirX = Math.cos(direction);
-        var dirY = Math.sin(direction);
+        // Behavior velocity adds to direction (combines line angle + velocity)
+        var behaviorVx = line.behavior.emitterVx || 0;
+        var behaviorVy = line.behavior.emitterVy || 0;
+        var speed = Math.hypot(behaviorVx, behaviorVy) || 6;
 
-        // Edge spawn: random point along line + offset to correct side
-        var dx = line.x2 - line.x1;
-        var dy = line.y2 - line.y1;
-        var len = Math.hypot(dx, dy) || 1;
-        var nx = -dy / len;
-        var ny = dx / len;
-        var dot = nx * dirX + ny * dirY;
-        var side = dot >= 0 ? 1 : -1;
-        var t = Math.random();
-        var spawnX = line.x1 + dx * t + nx * 8 * side;
-        var spawnY = line.y1 + dy * t + ny * 8 * side;
+        // FIXED: Combine direction + velocity
+        var finalVx = dirX * speed + behaviorVx;
+        var finalVy = dirY * speed + behaviorVy;
 
+        // Spawn position (center or edge offset)
+        var spawnX = line.x1;
+        var spawnY = line.y1;
+        if (cfg.spawnMode === "edge") {
+          var offset = 14;
+          spawnX += dirX * offset;
+          spawnY += dirY * offset;
+        }
+
+        // Create and configure ball
         var ball = SBE.Swarm.createBall(state.canvas, state.swarm, false);
-        // Offset along direction to clear geometry before collision window opens
-        ball.x = spawnX + dirX * 12;
-        ball.y = spawnY + dirY * 12;
-        ball.vx = dirX * strength;
-        ball.vy = dirY * strength;
+        ball.x = spawnX;
+        ball.y = spawnY;
+        ball.vx = finalVx;
+        ball.vy = finalVy;
+
+        // Normalize and add to state
         ball = normalizeBall(ball);
-        ball.sourceId = line.id;
-        ball.sourceType = "emitter";
-        ball.behavior = clone(line.behavior || {});
-        if (!line.sound) {
-          console.warn("[emitter] Missing sound on line", line.id);
-          return;
-        }
-        ball.sound = clone(line.sound);
-        ball._played = false;
-        var sourceNote =
-          (line && line.midi && typeof line.midi.note === "number"
-            ? line.midi.note
-            : null) ??
-          (line &&
-          line.sound &&
-          line.sound.midi &&
-          typeof line.sound.midi.note === "number"
-            ? line.sound.midi.note
-            : null) ??
-          (line && typeof line.note === "number" ? line.note : null) ??
-          60;
-        ball.blueprint = clone(
-          cfg.blueprint || {
-            note: sourceNote,
-            velocityBase: 70,
-            velocityRange: [60, 120],
-            pitchDrift: 0.02,
-            retriggerMode: "energy",
-          },
-        );
         state.balls.push(ball);
         state.swarm.count = state.balls.length;
+
+        // Sound trigger (unless silent)
+        if (!cfg.silent) {
+          triggerEvent("ballSpawned", {
+            id: ball.id,
+            x: ball.x,
+            y: ball.y,
+            sound: ball.sound,
+          });
+        }
+
+        // Persist config
+        line.behavior.emitterConfig = cfg;
       });
     }
 
@@ -4250,120 +3103,58 @@
     function updateShapeEmitters(now) {
       if (state.balls.length >= 800) return;
 
+      // Lines with emitter behavior
+      state.lines.forEach(function (line) {
+        if (!line.behavior || line.behavior.type !== "emitter") return;
+        if (!line.emitter) {
+          line.emitter = {
+            enabled: true,
+            rate: 400,
+            lastSpawn: 0,
+            velocity: { x: 0, y: -2 },
+          };
+        }
+        var em = line.emitter;
+        if (!em.enabled) return;
+        if (now - em.lastSpawn < (em.rate || 400)) return;
+        em.lastSpawn = now;
+
+        var center = getLineCenter(line);
+        var ball = SBE.Swarm.createBall(state.canvas, state.swarm, false);
+        ball.x = center.x;
+        ball.y = center.y;
+        ball.vx = em.velocity.x;
+        ball.vy = em.velocity.y;
+        ball = normalizeBall(ball);
+        state.balls.push(ball);
+        state.swarm.count = state.balls.length;
+      });
+
+      // Shapes with emitter behavior on segments
       (state.shapes || []).forEach(function (shape) {
         shape.segments.forEach(function (seg) {
           if (!seg.behavior || seg.behavior.type !== "emitter") return;
-
-          if (!seg.behavior.emitterConfig) {
-            seg.behavior.emitterConfig = {
+          if (!seg.emitter) {
+            seg.emitter = {
+              enabled: true,
               rate: 400,
-              direction: (270 * Math.PI) / 180,
-              strength: 6,
-              isMuted: false,
-              quantize: false,
-              quantizeDivision: 16,
               lastSpawn: 0,
-              blueprint: {
-                note: 60,
-                velocityBase: 70,
-                velocityRange: [60, 120],
-                pitchDrift: 0.02,
-                retriggerMode: "energy",
-              },
+              velocity: { x: 0, y: -2 },
             };
           }
-          var cfg = seg.behavior.emitterConfig;
+          var em = seg.emitter;
+          if (!em.enabled) return;
+          if (now - em.lastSpawn < (em.rate || 400)) return;
+          em.lastSpawn = now;
 
-          // Backward compat
-          if (cfg.direction == null) {
-            cfg.direction = Math.atan2(
-              seg.behavior.emitterVy || 0,
-              seg.behavior.emitterVx || 0,
-            );
-            cfg.strength =
-              Math.hypot(
-                seg.behavior.emitterVx || 0,
-                seg.behavior.emitterVy || 0,
-              ) || 6;
-          }
-
-          var intervalMs = cfg.quantize
-            ? (60000 / (state.bpm || 120)) * (4 / (cfg.quantizeDivision || 16))
-            : Math.max(100, cfg.rate || 400);
-
-          if (now - cfg.lastSpawn < intervalMs) return;
-          cfg.lastSpawn = now - ((now - cfg.lastSpawn) % intervalMs);
-
-          var direction =
-            cfg.direction != null ? cfg.direction : (270 * Math.PI) / 180;
-          var strength = cfg.strength != null ? cfg.strength : 6;
-          var dirX = Math.cos(direction);
-          var dirY = Math.sin(direction);
-
-          // Edge spawn from shape bounds
-          var bounds =
-            shape.bounds ||
-            (function () {
-              var xs = [seg.x1, seg.x2],
-                ys = [seg.y1, seg.y2];
-              shape.segments.forEach(function (s) {
-                xs.push(s.x1, s.x2);
-                ys.push(s.y1, s.y2);
-              });
-              return {
-                minX: Math.min.apply(null, xs),
-                maxX: Math.max.apply(null, xs),
-                minY: Math.min.apply(null, ys),
-                maxY: Math.max.apply(null, ys),
-              };
-            })();
-
-          var spawnX, spawnY;
-          if (Math.abs(dirX) > Math.abs(dirY)) {
-            spawnX = dirX > 0 ? bounds.maxX : bounds.minX;
-            spawnY = bounds.minY + Math.random() * (bounds.maxY - bounds.minY);
-          } else {
-            spawnX = bounds.minX + Math.random() * (bounds.maxX - bounds.minX);
-            spawnY = dirY > 0 ? bounds.maxY : bounds.minY;
-          }
-
+          var cx = (seg.x1 + seg.x2) * 0.5;
+          var cy = (seg.y1 + seg.y2) * 0.5;
           var ball = SBE.Swarm.createBall(state.canvas, state.swarm, false);
-          // Offset along direction to clear geometry before collision window opens
-          ball.x = spawnX + dirX * 12;
-          ball.y = spawnY + dirY * 12;
-          ball.vx = dirX * strength;
-          ball.vy = dirY * strength;
+          ball.x = cx;
+          ball.y = cy;
+          ball.vx = em.velocity.x;
+          ball.vy = em.velocity.y;
           ball = normalizeBall(ball);
-          ball.sourceId = seg.id;
-          ball.sourceType = "emitter";
-          ball.behavior = clone(seg.behavior || {});
-          if (!seg.sound) {
-            console.warn("[emitter] Missing sound on segment", seg.id);
-            return;
-          }
-          ball.sound = clone(seg.sound);
-          ball._played = false;
-          var sourceNote =
-            (seg && seg.midi && typeof seg.midi.note === "number"
-              ? seg.midi.note
-              : null) ??
-            (seg &&
-            seg.sound &&
-            seg.sound.midi &&
-            typeof seg.sound.midi.note === "number"
-              ? seg.sound.midi.note
-              : null) ??
-            (seg && typeof seg.note === "number" ? seg.note : null) ??
-            60;
-          ball.blueprint = clone(
-            cfg.blueprint || {
-              note: sourceNote,
-              velocityBase: 70,
-              velocityRange: [60, 120],
-              pitchDrift: 0.02,
-              retriggerMode: "energy",
-            },
-          );
           state.balls.push(ball);
           state.swarm.count = state.balls.length;
         });
@@ -4450,7 +3241,9 @@
             ball._dead = true;
           }
         });
-        // Dead ball cleanup now handled globally after collision pass
+        state.balls = state.balls.filter(function (b) {
+          return !b._dead;
+        });
       }
 
       if (worldMode === "planar") {
@@ -4550,69 +3343,6 @@
         });
       }
 
-      // Mop stroke drip physics
-      updateStrokes(dt);
-
-      // PathWalker update
-      updateClock(now);
-      updateWalkers(dt);
-      updateWalkerMusic();
-
-      // Drain audio queue — all physics/emitter/collision events batched here
-      processAudioQueue();
-
-      // Motion-driven sound expression with blueprint inheritance
-      state.balls.forEach(function (ball) {
-        if (!ball.sound || !ball.blueprint) return;
-        if (isMuted(ball)) return;
-
-        var speed = Math.hypot(ball.vx, ball.vy);
-
-        if (speed > 2.5 && !ball._played) {
-          var bp = ball.blueprint || {};
-          var base = bp.velocityBase || 70;
-          var range = bp.velocityRange || [60, 120];
-          var velocityBoost = clampInt(
-            base + (ball.hitCount || 0) * 20,
-            range[0],
-            range[1],
-          );
-
-          if (ball.sound.midi) {
-            ball.sound.midi.velocity = velocityBoost;
-          }
-
-          if (ball._baseFrequency) {
-            var driftAmount =
-              (bp.pitchDrift != null ? bp.pitchDrift : 0.02) * 2;
-            var drift = 1 + (Math.random() - 0.5) * driftAmount;
-            ball.sound.frequency = ball._baseFrequency * drift;
-          }
-
-          if (
-            ball.sound &&
-            ball.sound.midi &&
-            ball.blueprint &&
-            ball.blueprint.note !== undefined
-          ) {
-            ball.sound.midi.note = ball.blueprint.note;
-          }
-
-          queueAudioEvent("collision", ball);
-          ball._played = true;
-        }
-
-        if (speed < 1.2) {
-          ball._played = false;
-        }
-      });
-
-      // Temporarily hide spawn-immune balls from collision detection
-      const allBalls = state.balls;
-      state.balls = allBalls.filter(function (b) {
-        return now - b.spawnTime >= b.collisionDelay;
-      });
-
       const collisions = SBE.Collision.detectCollisions(state, now);
       state.collisionCount = collisions.length;
       const soundSources = SBE.Collision.resolveCollisions(
@@ -4621,64 +3351,25 @@
         now,
       );
 
-      // Restore all balls (immune + eligible)
-      state.balls = allBalls;
-
-      // Kill balls on collision — skip spawn-immune balls
-      collisions.forEach(function (collision) {
-        if (!collision.ball) return;
-        var b = collision.ball;
-        b.hitCount = (b.hitCount || 0) + 1;
-        if (b._dead) return;
-        if (now - b.spawnTime < b.collisionDelay) return;
-        if (b.hitCount > 1) {
-          b._dead = true;
-        }
-      });
-
       // Wall bounce events
       collisions.forEach(function (collision) {
         if (collision.type === "wall") {
-          queueAudioEvent("wall", wallSoundSource);
+          eventBus.triggerEvent("wall", wallSoundSource);
         }
       });
 
-      // Collision sound — triggered by the hit object (line/segment), not the ball
       soundSources.forEach(function (source) {
         if (!source.line || !source.line.sound) return;
-        if (isMuted(source.line)) return;
-        if (
-          source.line.sourceType === "text" &&
-          source.line.mode === "annotation"
-        )
-          return;
-        console.log("COLLISION SOUND SOURCE", {
-          note: source.line.sound?.midi?.note,
-          color: source.line.color,
-          type: "line",
-        });
-        queueAudioEvent("collision", source.line);
+        dispatchCollisionEvent(source.line);
       });
-
-      // Cleanup dead balls — runs every frame regardless of world mode
-      state.balls = state.balls.filter(function (b) {
-        return !b._dead;
-      });
-      state.swarm.count = state.balls.length;
 
       stabilizeBalls(collisions);
     }
 
     function renderFrame() {
       renderer.render(state, drawTools.getOverlays());
-      var ctx = canvas.getContext("2d");
-      // Change 3 — draw surface stamp layer first (persistent ink)
-      ctx.drawImage(surfaceCanvas, 0, 0);
-      renderStrokes(ctx);
-      drawWalkers(ctx);
       drawParticleOverlays();
-      drawDebugHUD();
-      drawMutedOverlays();
+      // Emitter drawing removed — emitters now only exist as line behaviors
       drawShapeIndicators();
       drawLinePreview();
 
@@ -4686,60 +3377,6 @@
 
       Object.keys(window.noteElements).forEach((n) => {
         updateNoteVisual(Number(n), window.noteElements[n]);
-      });
-    }
-
-    function drawMutedOverlays() {
-      var ctx = canvas.getContext("2d");
-
-      // Muted lines — draw dark stroke on top of renderer output
-      (state.lines || []).forEach(function (line) {
-        if (
-          !isMuted(line) &&
-          !(
-            line.behavior &&
-            line.behavior.emitterConfig &&
-            line.behavior.emitterConfig.isMuted
-          )
-        )
-          return;
-        var t = line.thickness || 3;
-        ctx.save();
-        ctx.globalAlpha = 0.3;
-        ctx.strokeStyle = "rgba(0,0,0,0.6)";
-        ctx.lineWidth = t + 4;
-        ctx.lineCap = "round";
-        ctx.beginPath();
-        ctx.moveTo(line.x1, line.y1);
-        ctx.lineTo(line.x2, line.y2);
-        ctx.stroke();
-        ctx.restore();
-      });
-
-      // Muted shape segments
-      (state.shapes || []).forEach(function (shape) {
-        (shape.segments || []).forEach(function (seg) {
-          if (
-            !isMuted(seg) &&
-            !(
-              seg.behavior &&
-              seg.behavior.emitterConfig &&
-              seg.behavior.emitterConfig.isMuted
-            )
-          )
-            return;
-          var t = seg.thickness || 3;
-          ctx.save();
-          ctx.globalAlpha = 0.3;
-          ctx.strokeStyle = "rgba(0,0,0,0.6)";
-          ctx.lineWidth = t + 4;
-          ctx.lineCap = "round";
-          ctx.beginPath();
-          ctx.moveTo(seg.x1, seg.y1);
-          ctx.lineTo(seg.x2, seg.y2);
-          ctx.stroke();
-          ctx.restore();
-        });
       });
     }
 
@@ -4853,50 +3490,7 @@
 
           ctx.restore();
         }
-
-        // Hit count overlay
-        if (state.feedback && state.feedback.showHitCount) {
-          ctx.save();
-          ctx.fillStyle = "white";
-          ctx.font = "10px monospace";
-          ctx.textAlign = "center";
-          ctx.fillText(
-            ball.hitCount || 0,
-            ball.x,
-            ball.y - (ball.renderRadius + 6),
-          );
-          ctx.restore();
-        }
       });
-    }
-
-    function drawDebugHUD() {
-      if (!state.ui.debugHUD) return;
-      if (!state.balls || !state.balls.length) return;
-      var ctx = canvas.getContext("2d");
-      ctx.save();
-      ctx.font = "10px monospace";
-      ctx.textAlign = "center";
-      state.balls.forEach(function (ball) {
-        if (!ball || !ball.sound || !ball.blueprint) return;
-        var note =
-          ball.sound.midi && ball.sound.midi.note != null
-            ? ball.sound.midi.note
-            : null;
-        var noteName =
-          note != null ? NOTE_NAMES[((note % 12) + 12) % 12] || "?" : "--";
-        var bpNote = ball.blueprint.note != null ? ball.blueprint.note : null;
-        var bpName =
-          bpNote != null ? NOTE_NAMES[((bpNote % 12) + 12) % 12] || "?" : "--";
-        var speed = Math.hypot(ball.vx || 0, ball.vy || 0).toFixed(1);
-        var played = ball._played ? "1" : "0";
-        var text = noteName + "/" + bpName + " v:" + speed + " p:" + played;
-        // Color: green = note matches blueprint, red = mismatch
-        ctx.fillStyle =
-          note === bpNote ? "rgba(100,255,180,0.9)" : "rgba(255,80,80,0.95)";
-        ctx.fillText(text, ball.x, ball.y - (ball.renderRadius + 10));
-      });
-      ctx.restore();
     }
 
     function drawShapeIndicators() {
@@ -5239,14 +3833,6 @@
       ball.style = ball.style || state.swarm.ballStyle || "core";
       ball.energy = Number.isFinite(ball.energy) ? ball.energy : 1;
       ball.collisionCount = 0;
-      ball.hitCount = 0;
-      ball._dead = false;
-      ball._played = false;
-      ball.spawnTime = performance.now();
-      ball.collisionDelay = 120;
-      if (ball.sound && typeof ball.sound.frequency === "number") {
-        ball._baseFrequency = ball.sound.frequency;
-      }
       // Shape particle fields
       ball.shapeId = ball.shapeId || state.swarm.particleShape || "circle";
       ball.rotation = ball.rotation || 0;
@@ -5453,11 +4039,6 @@
           type: line.behavior.type,
           strength: line.behavior.strength,
           velocityMultiplier: 1,
-          emitterConfig: line.behavior.emitterConfig
-            ? clone(line.behavior.emitterConfig)
-            : null,
-          emitterVx: line.behavior.emitterVx,
-          emitterVy: line.behavior.emitterVy,
         },
         style: clone(line.style),
         midi: clone(line.midi),
@@ -5613,40 +4194,6 @@
     return NOTE_COLORS[NOTE_NAMES[((note % 12) + 12) % 12]];
   }
 
-  function getNoteFromColor(color) {
-    if (!color) return null;
-    var result = findClosestNoteForColor(color);
-    return result != null ? ((result % 12) + 12) % 12 : null;
-  }
-
-  function normalizeColor(color) {
-    if (!color) return null;
-    if (color.startsWith("#")) return color.toLowerCase();
-    var match = color.match(/\d+/g);
-    if (!match) return color.toLowerCase();
-    var r = Number(match[0]);
-    var g = Number(match[1]);
-    var b = Number(match[2]);
-    return (
-      "#" +
-      [r, g, b]
-        .map(function (v) {
-          return v.toString(16).padStart(2, "0");
-        })
-        .join("")
-    );
-  }
-
-  function getObjectColor(obj) {
-    if (!obj) return null;
-    var color =
-      obj.color ||
-      obj.strokeColor ||
-      (obj.style && (obj.style.color || obj.style.stroke)) ||
-      null;
-    return normalizeColor(color);
-  }
-
   function findClosestNoteForColor(color) {
     const normalized = String(color || "").toLowerCase();
     for (let index = 0; index < NOTE_NAMES.length; index += 1) {
@@ -5659,10 +4206,6 @@
 
   function clamp(value, min, max) {
     return Math.max(min, Math.min(max, value));
-  }
-
-  function isMuted(obj) {
-    return !!(obj?.behavior?.isMuted || obj?.sound?.enabled === false);
   }
 
   function clampInt(value, min, max) {
