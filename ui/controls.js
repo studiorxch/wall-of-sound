@@ -75,19 +75,13 @@
       behaviorEmitterFields: byId("behavior-emitter-fields"),
       behaviorEmitterRate: byId("behavior-emitter-rate"),
       behaviorEmitterRateValue: byId("behavior-emitter-rate-value"),
-      behaviorEmitterVx: byId("behavior-emitter-vx"),
-      behaviorEmitterVxValue: byId("behavior-emitter-vx-value"),
-      behaviorEmitterVy: byId("behavior-emitter-vy"),
-      behaviorEmitterVyValue: byId("behavior-emitter-vy-value"),
-
-      // Emitter
-      emitterInspectorBlock: byId("emitter-inspector-block"),
-      emitterRate: byId("emitter-rate"),
-      emitterRateValue: byId("emitter-rate-value"),
-      emitterVx: byId("emitter-vx"),
-      emitterVxValue: byId("emitter-vx-value"),
-      emitterVy: byId("emitter-vy"),
-      emitterVyValue: byId("emitter-vy-value"),
+      behaviorEmitterDirection: byId("behavior-emitter-direction"),
+      behaviorEmitterDirectionValue: byId("behavior-emitter-direction-value"),
+      behaviorEmitterStrength: byId("behavior-emitter-strength"),
+      behaviorEmitterStrengthValue: byId("behavior-emitter-strength-value"),
+      behaviorEmitterSilent: byId("behavior-emitter-mute"), // renamed: mute
+      behaviorEmitterQuantize: byId("behavior-emitter-quantize"),
+      behaviorEmitterQuantizeDiv: byId("behavior-emitter-quantize-div"),
 
       // Motion
       motionInspectorBlock: byId("motion-inspector-block"),
@@ -104,6 +98,7 @@
       worldMode: byId("world-mode"),
       worldStrength: byId("world-strength"),
       worldStrengthValue: byId("world-strength-value"),
+      toggleHitCount: byId("toggle-hit-count"),
 
       // Button collections
       shapeButtons: Array.from(document.querySelectorAll(".shape-button")),
@@ -139,9 +134,6 @@
     bindRange(elements.ballCount, elements.ballCountValue, 0);
     bindRange(elements.ballSpeed, elements.ballSpeedValue, 1);
     bindRange(elements.ballSpread, elements.ballSpreadValue, 2);
-    bindRange(elements.emitterRate, elements.emitterRateValue, 0);
-    bindRange(elements.emitterVx, elements.emitterVxValue, 1);
-    bindRange(elements.emitterVy, elements.emitterVyValue, 1);
     bindRange(elements.motionVx, elements.motionVxValue, 0);
     bindRange(elements.motionVy, elements.motionVyValue, 0);
     bindRange(elements.motionRot, elements.motionRotValue, 1);
@@ -151,8 +143,16 @@
       elements.behaviorEmitterRateValue,
       0,
     );
-    bindRange(elements.behaviorEmitterVx, elements.behaviorEmitterVxValue, 1);
-    bindRange(elements.behaviorEmitterVy, elements.behaviorEmitterVyValue, 1);
+    bindRange(
+      elements.behaviorEmitterDirection,
+      elements.behaviorEmitterDirectionValue,
+      0,
+    );
+    bindRange(
+      elements.behaviorEmitterStrength,
+      elements.behaviorEmitterStrengthValue,
+      1,
+    );
 
     // Tab switching
     elements.inspectorTabs.forEach(function (tab) {
