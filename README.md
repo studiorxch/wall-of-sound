@@ -1,219 +1,215 @@
-# Sonic Canvas
+# 🧱 Wall of Sound (WOS)
 
-A visual system for generating music through motion, collision, and form.
+Wall of Sound is a physics-driven audiovisual engine where sound emerges from interaction.
 
----
-
-## Overview
-
-Sonic Canvas is a playable canvas where shapes, agents, and motion produce sound.
-
-Instead of sequencing notes on a timeline, Sonic Canvas lets you:
-
-- draw structures
-- release motion (balls / agents)
-- generate rhythm through interaction
-
-Sound is not placed — it emerges.
+Instead of composing on a timeline, WOS generates music through motion, collision, and behavior. Objects exist on a “Wall” and produce sound as they interact—turning composition into a dynamic system rather than a linear sequence.
 
 ---
 
-## Directory Structure
+## 🎯 Core Concept
 
-sonic-canvas
-├── engine
-│   ├── collision.js
-│   ├── lineSystem.js
-│   ├── physics.js
-│   ├── swarm.js
-│   └── textSystem.js
-├── index.html
-├── main.js
-├── midi
-│   └── midiOut.js
-├── README.md
-├── render
-│   └── canvasRenderer.js
-├── state
-│   ├── examplePreset.js
-│   └── sceneManager.js
-├── styles.css
-└── ui
-├── controls.js
-├── drawTools.js
-└── svgImporter.js
+WOS replaces traditional DAW sequencing with an **event-based sound system**:
+
+- Objects move through space
+- Interactions trigger sound events
+- Behaviors shape motion and rhythm
+- The system evolves continuously
+
+This enables **infinite variation with structural cohesion**.
 
 ---
 
-## Core Idea
+## 🧠 System Architecture
 
-Each movement in space creates a sonic event.
+WOS operates across three primary layers:
 
-form → motion → collision → sound → loop
+### 1. Data Layer
 
-- Geometry defines timing
-- Motion defines variation
-- Collisions trigger sound
+Defines the world state.
 
----
-
-## Modes (Current Direction)
-
-### Draw Mode
-
-Create shapes that act as rhythm structures.
-
-- freehand drawing (with smoothing)
-- shape / glyph library (loops, zig-zags, forms)
-- note → color mapping
+- Objects (shapes, strokes, emitters)
+- Properties (position, velocity, rotation)
+- Behaviors (emission, collision, forces)
 
 ---
 
-### Motion Mode
+### 2. Logic Layer
 
-Agents (balls / particles) move through space and generate sound.
+Processes motion and interaction.
 
-- continuous motion
-- emergent rhythm
-- organic timing
-
----
-
-### Hybrid (Emerging)
-
-Motion interacts with drawn structures.
-
-agents + geometry = controlled emergence
+- Physics engine (delta time, damping, velocity)
+- Behavior system (runs every frame)
+- Collision detection and response
+- Event dispatch system (eventBus)
 
 ---
 
-## Features
+### 3. Output Layer
 
-### Sound System
+Transforms events into sound.
 
-- MIDI / audio triggered by collision
-- note mapped visually to color
-- supports microsound + rhythmic systems
-
----
-
-### Loop System
-
-- BPM-based timing
-- bar-based recording (8 / 16 / 32)
-- quantized start
-- instant loop playback
+- Oscillator (monitor output)
+- MIDI output (Ableton / external gear)
+- Future: sampler + per-object sound mapping
 
 ---
 
-### Export
+## 🔊 Audio Model
 
-- video export (.webm)
-- audio export (.wav)
-- scene export (.json)
-- image export (.png)
+Sound is not placed—it is triggered.
 
----
+- Collisions → transient events (hits, notes)
+- Emitters → rhythmic generation
+- Motion → modulation (velocity, density, timing)
+- Groups → multi-voice coordination
 
-### Playable Canvas
+The system supports:
 
-- freehand drawing (smoothed)
-- direct manipulation (move / scale / rotate)
-- glyph-based structures instead of traditional typography
-- shape presets for fast composition
-
----
-
-## Philosophy
-
-Sonic Canvas is not a DAW.  
-Sonic Canvas is not a visualizer.
-
-It is a system where:
-
-each movement of form creates its own pattern of sound
-
-Inspired by early sci-fi concepts of visible sound structures,  
-but built as an interactive, generative instrument.
+- Loop-safe playback
+- BPM alignment (external or internal clock)
+- Layered generative structures
 
 ---
 
-## Current Focus
+## 🧩 Objects
 
-This project is actively evolving.
+All elements on the Wall are treated as **Objects**:
 
-Priority:
+- Strokes (drawn lines)
+- Shapes (grouped geometry)
+- Emitters (spawn particles/events)
+- Particles (temporary sound carriers)
 
-- playable interaction (drawing, placement, timing)
-- loop generation
-- export pipeline
+Objects can:
 
-Not yet prioritized:
-
-- advanced editing tools
-- UI polish
-- deep customization
-
----
-
-## Usage (Current)
-
-1. Draw or place shapes
-2. Assign notes (auto color)
-3. Add motion (balls / agents)
-4. Press record
-5. Capture loop
-6. Export or continue
+- Move
+- Collide
+- Emit
+- Hold behaviors
+- Trigger sound
 
 ---
 
-## Tech Notes
+## ⚙️ Behaviors
 
-- Canvas-based rendering
-- Collision-driven event system
-- Web Audio / MIDI integration
-- MediaRecorder for export
+Behaviors define how objects act.
 
----
+### Categories
 
-## Status
+**Emitters**
 
-Experimental / In Progress
+- Generate particles or events over time
+- Directional control via angle/dial
+- Spread, rate, and lifecycle control
 
-A live system under active iteration focused on:
+**Deflectors**
 
-- interaction feel
-- emergent behavior
-- musical output
+- Bumper (hard / elastic)
+- Rails / ramps (guided motion)
 
----
+**Fields**
 
-## Direction
-
-Sonic Canvas is evolving into:
-
-- a visual instrument
-- a loop generator
-- a shareable content system
+- Attract / repel forces within a radius
 
 ---
 
-## License
+## 🎨 The Wall
 
-(TBD)
+The “Wall” is the primary system surface.
 
----
-
-## StudioRich
-
-Built as part of the StudioRich system:
-
-Sound, motion, and structure as shared infrastructure.
+- Replaces traditional canvas metaphor
+- Holds all objects and interactions
+- Can scale to multiple walls (future)
+- Designed for both creation and presentation
 
 ---
 
-## One Line
+## 🛠 Tools
 
-Draw something.  
-Watch it move.  
-It makes music.
+### Mop Tool (Primary)
+
+Unified drawing + transform tool.
+
+- Draw strokes
+- Select objects
+- Move / rotate / scale
+- Save to shape library
+
+Legacy tools are being phased out in favor of a unified workflow.
+
+---
+
+## 🔁 Playback Model
+
+WOS runs continuously:
+
+- Behaviors execute every frame
+- Motion is time-based (deltaTime)
+- Sound events are triggered dynamically
+- No fixed timeline required
+
+Supports:
+
+- Passive (ambient playback)
+- Active (interactive performance)
+
+---
+
+## 📦 Project Structure
+
+/wall-of-sound
+/wall # UI + rendering layer
+/sound # audio + playback systems
+/docs # specs and system design
+index.html # main entry
+main.js # core engine loop
+controls.js # UI bindings
+
+---
+
+## 🚧 Current Focus
+
+- Object system unification
+- Behavior consistency across modes
+- Stable physics timing (deltaTime scaling)
+- Emitter refinement (direction + edge spawning)
+- Selection and transform system
+
+---
+
+## 🔮 Roadmap
+
+- Sampler integration (per-object sound)
+- Shape library + reusable assets
+- Multi-wall environments
+- Embeddable “Capsules” (shareable scenes)
+- Visual + audio sync systems
+- Generative playlist / loop engine integration
+
+---
+
+## 🧪 Philosophy
+
+WOS is not a DAW replacement.
+
+It is a **sound system**:
+
+- Emergent
+- Interactive
+- Spatial
+- Continuous
+
+It treats music as a **living structure**, not a fixed arrangement.
+
+---git checkout 385ebdc -- sound/
+
+## 👤 Author
+
+StudioRich  
+Brooklyn, NYC
+
+---
+
+## 📜 License
+
+TBD
