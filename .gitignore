@@ -1,3 +1,17 @@
 node_modules/
 .DS_Store
 .env
+sound/venv/
+__pycache__/
+.vscode
+
+# Sound
+sound/data/sources/*
+sound/data/slices/*
+sound/data/stems/*
+# Ignore audio anywhere inside sound data
+sound/data/**/*.wav
+sound/data/**/*.mp3
+sound/data/**/*.flac
+sound/data/**/*.m4a
+sound/data/**/*.aiff
