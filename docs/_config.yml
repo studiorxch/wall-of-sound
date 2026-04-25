@@ -1,0 +1,25 @@
+title: StudioRich Wall of Sound Dev Log
+description: Specs, logs, recovery notes, and implementation history for Wall + Sound.
+
+collections:
+  specs:
+    output: true
+    permalink: /specs/:path/
+  logs:
+    output: true
+    permalink: /logs/:path/
+
+defaults:
+  - scope:
+      path: ""
+      type: "specs"
+    values:
+      layout: spec
+  - scope:
+      path: ""
+      type: "logs"
+    values:
+      layout: log
+
+markdown: kramdown
+theme: minima
