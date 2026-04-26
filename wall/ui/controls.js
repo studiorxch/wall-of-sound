@@ -29,6 +29,9 @@
       lineColor: byId("line-color"),
       lineThickness: byId("line-thickness"),
       lineThicknessValue: byId("line-thickness-value"),
+      strokeWidth: byId("stroke-width"),
+      strokeWidthValue: byId("stroke-width-value"),
+      strokeWidthField: byId("stroke-width-field"),
       lineMechanic: byId("line-mechanic"),
       lineBehavior: byId("line-behavior"),
       lineStrength: byId("line-strength"),
@@ -73,15 +76,24 @@
 
       // Behavior emitter fields
       behaviorEmitterFields: byId("behavior-emitter-fields"),
+      // FLOW
       behaviorEmitterRate: byId("behavior-emitter-rate"),
       behaviorEmitterRateValue: byId("behavior-emitter-rate-value"),
+      behaviorEmitterDensity: byId("behavior-emitter-density"),
+      behaviorEmitterDensityValue: byId("behavior-emitter-density-value"),
+      // MOTION
       behaviorEmitterDirection: byId("behavior-emitter-direction"),
       behaviorEmitterDirectionValue: byId("behavior-emitter-direction-value"),
-      behaviorEmitterStrength: byId("behavior-emitter-strength"),
-      behaviorEmitterStrengthValue: byId("behavior-emitter-strength-value"),
-      behaviorEmitterSilent: byId("behavior-emitter-mute"), // renamed: mute
-      behaviorEmitterQuantize: byId("behavior-emitter-quantize"),
-      behaviorEmitterQuantizeDiv: byId("behavior-emitter-quantize-div"),
+      behaviorEmitterSpread: byId("behavior-emitter-spread"),
+      behaviorEmitterSpreadValue: byId("behavior-emitter-spread-value"),
+      behaviorEmitterSpeed: byId("behavior-emitter-speed"),
+      behaviorEmitterSpeedValue: byId("behavior-emitter-speed-value"),
+      // FORM
+      behaviorEmitterSize: byId("behavior-emitter-size"),
+      behaviorEmitterSizeValue: byId("behavior-emitter-size-value"),
+      behaviorEmitterLife: byId("behavior-emitter-life"),
+      behaviorEmitterLifeValue: byId("behavior-emitter-life-value"),
+      behaviorEmitterStyle: byId("behavior-emitter-style"),
 
       // Motion
       motionInspectorBlock: byId("motion-inspector-block"),
@@ -130,6 +142,7 @@
     bindRange(elements.textScale, elements.textScaleValue, 1);
     bindRange(elements.textRotation, elements.textRotationValue, 0);
     bindRange(elements.lineThickness, elements.lineThicknessValue, 0);
+    bindRange(elements.strokeWidth, elements.strokeWidthValue, 0);
     bindRange(elements.lineStrength, elements.lineStrengthValue, 1);
     bindRange(elements.ballCount, elements.ballCountValue, 0);
     bindRange(elements.ballSpeed, elements.ballSpeedValue, 1);
@@ -144,13 +157,33 @@
       0,
     );
     bindRange(
+      elements.behaviorEmitterDensity,
+      elements.behaviorEmitterDensityValue,
+      0,
+    );
+    bindRange(
       elements.behaviorEmitterDirection,
       elements.behaviorEmitterDirectionValue,
       0,
     );
     bindRange(
-      elements.behaviorEmitterStrength,
-      elements.behaviorEmitterStrengthValue,
+      elements.behaviorEmitterSpread,
+      elements.behaviorEmitterSpreadValue,
+      0,
+    );
+    bindRange(
+      elements.behaviorEmitterSpeed,
+      elements.behaviorEmitterSpeedValue,
+      0,
+    );
+    bindRange(
+      elements.behaviorEmitterSize,
+      elements.behaviorEmitterSizeValue,
+      1,
+    );
+    bindRange(
+      elements.behaviorEmitterLife,
+      elements.behaviorEmitterLifeValue,
       1,
     );
 
@@ -231,6 +264,15 @@
           return;
         }
 
+        // Strokes and groups don't use the legacy inspector fields — exit safely
+        if (selection.type === "stroke" || selection.type === "group") {
+          return;
+        }
+
+        function safeNum(v, fallback) {
+          return typeof v === "number" && isFinite(v) ? v : fallback || 0;
+        }
+
         var note = selection.midi ? selection.midi.note : selection.note;
         if (
           typeof note !== "number" &&
@@ -258,40 +300,65 @@
           selBehavior = selection.segments[0].behavior;
         }
         if (elements.lineThickness && selStyle) {
-          elements.lineThickness.value = String(selStyle.thickness);
+          elements.lineThickness.value = String(safeNum(selStyle.thickness, 3));
         }
         if (elements.lineThicknessValue && selStyle) {
-          elements.lineThicknessValue.textContent = String(selStyle.thickness);
+          elements.lineThicknessValue.textContent = String(
+            safeNum(selStyle.thickness, 3),
+          );
         }
         if (elements.lineBehavior && selBehavior) {
           elements.lineBehavior.value =
-            selBehavior.type === "normal" ? "none" : selBehavior.type;
+            selBehavior.type === "normal" ? "none" : selBehavior.type || "none";
         }
         if (elements.lineStrength && selBehavior) {
-          elements.lineStrength.value = String(selBehavior.strength);
+          elements.lineStrength.value = String(
+            safeNum(selBehavior.strength, 1),
+          );
         }
         if (elements.lineStrengthValue && selBehavior) {
-          elements.lineStrengthValue.textContent =
-            selBehavior.strength.toFixed(1);
+          elements.lineStrengthValue.textContent = safeNum(
+            selBehavior.strength,
+            1,
+          ).toFixed(1);
         }
 
-        if (selection.type === "text") {
-          elements.textContent.value = selection.value;
-          elements.textSize.value = String(selection.font.size);
+        if (selection.type === "text" && selection.transform) {
+          if (elements.textContent)
+            elements.textContent.value = selection.value || "";
+          if (elements.textSize)
+            elements.textSize.value = String(
+              safeNum(selection.font && selection.font.size, 16),
+            );
           if (elements.textSizeValue) {
-            elements.textSizeValue.textContent = String(selection.font.size);
+            elements.textSizeValue.textContent = String(
+              safeNum(selection.font && selection.font.size, 16),
+            );
           }
-          elements.textX.value = String(Math.round(selection.transform.x));
-          elements.textY.value = String(Math.round(selection.transform.y));
-          elements.textScale.value = String(selection.transform.scale);
+          if (elements.textX)
+            elements.textX.value = String(
+              Math.round(safeNum(selection.transform.x)),
+            );
+          if (elements.textY)
+            elements.textY.value = String(
+              Math.round(safeNum(selection.transform.y)),
+            );
+          if (elements.textScale)
+            elements.textScale.value = String(
+              safeNum(selection.transform.scale, 1),
+            );
           if (elements.textScaleValue) {
-            elements.textScaleValue.textContent = Number(
+            elements.textScaleValue.textContent = safeNum(
               selection.transform.scale,
+              1,
             ).toFixed(1);
           }
-          elements.textRotation.value = String(selection.transform.rotation);
+          if (elements.textRotation)
+            elements.textRotation.value = String(
+              safeNum(selection.transform.rotation),
+            );
           if (elements.textRotationValue) {
-            elements.textRotationValue.textContent = Number(
+            elements.textRotationValue.textContent = safeNum(
               selection.transform.rotation,
             ).toFixed(0);
           }

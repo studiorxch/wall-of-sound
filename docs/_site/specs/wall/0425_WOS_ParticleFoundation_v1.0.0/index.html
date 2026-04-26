@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Particle Foundation | Wall of Sound</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <link
+      rel="stylesheet"
+      href="/assets/css/style.css"
+    />
+  </head>
+
+  <body>
+    <header class="site-header">
+      <div class="site-header-inner">
+        <a class="site-title" href="/">
+          Wall of Sound
+        </a>
+
+        <nav class="site-nav" aria-label="Primary navigation">
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="page-content">
+      <div class="spec-shell">
+  <a class="back-link" href="/specs/">← Back to specs</a>
+
+  <div class="spec-kicker">
+    rendering / particle_system / active
+  </div>
+
+  <h1>Particle Foundation</h1>
+
+  <section class="spec-meta">
+    <div>
+      <strong>Doc ID</strong>
+      0425_WOS_ParticleFoundation_v1.0.0
+    </div>
+
+    <div>
+      <strong>Date</strong>
+      2026-04-25
+    </div>
+
+    <div>
+      <strong>Version</strong>
+      1.0.0
+    </div>
+
+    <div>
+      <strong>System</strong>
+      WOS
+    </div>
+
+    <div>
+      <strong>Domain</strong>
+      rendering
+    </div>
+
+    <div>
+      <strong>Component</strong>
+      particle_system
+    </div>
+
+    <div>
+      <strong>Type</strong>
+      core-spec
+    </div>
+
+    <div>
+      <strong>Priority</strong>
+      high
+    </div>
+
+    <div>
+      <strong>Risk</strong>
+      low
+    </div>
+
+    <div>
+      <strong>Status</strong>
+      active
+    </div>
+  </section>
+
+  
+  <p><strong>Summary:</strong> Defines the core particle simulation layer including motion, gravity, decay, and rendering. Serves as the foundational output system for all emitter and behavior-driven effects.</p>
+  
+
+  <article class="spec-body"><h1 id="0425_wos_particlefoundation_v100">0425_WOS_ParticleFoundation_v1.0.0</h1>
+
+<h1 id="date-04252026">Date: 04/25/2026</h1>
+
+<h1 id="system-particle_system">System: particle_system</h1>
+
+<h1 id="status-active-baseline">Status: ACTIVE BASELINE</h1>
+
+<hr />
+
+<h2 id="-purpose">🎯 PURPOSE</h2>
+
+<p>Establish a stable, deterministic particle system that:</p>
+
+<ul>
+  <li>Produces visible, physically believable motion</li>
+  <li>Matches legacy gravity-based behavior (arc + decay)</li>
+  <li>Serves as the unified output layer for all future emitter/behavior systems</li>
+</ul>
+
+<p>This system MUST work independently of UI and emitter logic.</p>
+
+<hr />
+
+<h2 id="-core-principle">🧠 CORE PRINCIPLE</h2>
+
+<p>Particles are NOT tied to emitters.</p>
+
+<p>Particles are the FINAL OUTPUT of:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>event → behavior → particle
+</code></pre></div></div>
+
+<p>This spec defines ONLY the particle layer.</p>
+
+<hr />
+
+<h2 id="-data-model">📦 DATA MODEL</h2>
+
+<p>Each particle MUST follow this structure:</p>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">type</span> <span class="nx">Particle</span> <span class="o">=</span> <span class="p">{</span>
+  <span class="na">x</span><span class="p">:</span> <span class="nx">number</span><span class="p">,</span>
+  <span class="na">y</span><span class="p">:</span> <span class="nx">number</span><span class="p">,</span>
+  <span class="na">vx</span><span class="p">:</span> <span class="nx">number</span><span class="p">,</span>
+  <span class="na">vy</span><span class="p">:</span> <span class="nx">number</span><span class="p">,</span>
+  <span class="na">life</span><span class="p">:</span> <span class="nx">number</span><span class="p">,</span>
+  <span class="na">maxLife</span><span class="p">:</span> <span class="nx">number</span><span class="p">,</span>
+  <span class="na">size</span><span class="p">:</span> <span class="nx">number</span><span class="p">,</span>
+  <span class="na">color</span><span class="p">:</span> <span class="nx">string</span><span class="p">,</span>
+  <span class="na">alpha</span><span class="p">:</span> <span class="nx">number</span>
+<span class="p">}</span>
+</code></pre></div></div>
+</article>
+</div>
+
+    </main>
+
+    <footer class="site-footer">
+      <div class="site-footer-inner footer-grid-6">
+        <section class="footer-brand">
+          <h2>Wall of Sound</h2>
+          <p>
+            Shared project memory for the StudioRich audio/visual system. Specs,
+            logs, recovery notes, and local portals live here.
+          </p>
+        </section>
+
+        <section class="footer-group">
+          <h2>Navigation</h2>
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Domains</h2>
+          <a href="/systems/wall/">Wall System</a>
+          <a href="/systems/sound/">Sound System</a>
+          <a href="/systems/">Systems Index</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Indexes</h2>
+          <a href="/specs/">Specs</a>
+          <a href="/logs/">Logs</a>
+          <a href="/components/wall/">Wall Components</a>
+          <a href="/components/sound/"
+            >Sound Components</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Local Portals</h2>
+          <a href="file:///Users/studio/Projects/wall-of-sound/wall/index.html"
+            >Wall App</a
+          >
+          <a
+            href="file:///Users/studio/Projects/wall-of-sound/sound/labeller.html"
+            >Sound Labeller</a
+          >
+          <a
+            href="file:///Users/studio/Projects/kinetic-master-engine/index.html"
+            >Kinetic Engine</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Recovery</h2>
+          <a href="/specs/">Implementation Specs</a>
+          <a href="/logs/">Session Logs</a>
+          <a href="/systems/sound/">Sound Recovery</a>
+          <a href="/systems/wall/">Wall Recovery</a>
+        </section>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>PerformancePass | Wall of Sound</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <link
+      rel="stylesheet"
+      href="/assets/css/style.css"
+    />
+  </head>
+
+  <body>
+    <header class="site-header">
+      <div class="site-header-inner">
+        <a class="site-title" href="/">
+          Wall of Sound
+        </a>
+
+        <nav class="site-nav" aria-label="Primary navigation">
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="page-content">
+      <div class="spec-shell">
+  <a class="back-link" href="/specs/">← Back to specs</a>
+
+  <div class="spec-kicker">
+    wall / audio_system / needs-review
+  </div>
+
+  <h1>PerformancePass</h1>
+
+  <section class="spec-meta">
+    <div>
+      <strong>Doc ID</strong>
+      0414_WALL_OF_SOUND_PerformancePass_v1.0.0
+    </div>
+
+    <div>
+      <strong>Date</strong>
+      2026-04-14
+    </div>
+
+    <div>
+      <strong>Version</strong>
+      1.0.0
+    </div>
+
+    <div>
+      <strong>System</strong>
+      WOS
+    </div>
+
+    <div>
+      <strong>Domain</strong>
+      wall
+    </div>
+
+    <div>
+      <strong>Component</strong>
+      audio_system
+    </div>
+
+    <div>
+      <strong>Type</strong>
+      legacy-spec
+    </div>
+
+    <div>
+      <strong>Priority</strong>
+      medium
+    </div>
+
+    <div>
+      <strong>Risk</strong>
+      unknown
+    </div>
+
+    <div>
+      <strong>Status</strong>
+      needs-review
+    </div>
+  </section>
+
+  
+  <p><strong>Summary:</strong> Imported legacy Wall of Sound spec. Needs review.</p>
+  
+
+  <article class="spec-body"><h1 id="0414_wall_of_sound_performancepass_v100">0414_WALL_OF_SOUND_PerformancePass_v1.0.0</h1>
+
+<h2 id="-objective">🎯 Objective</h2>
+
+<p>Prepare the app for OBS / streaming use by:</p>
+
+<ul>
+  <li>cleaning canvas (no HUD noise)</li>
+  <li>fixing transport controls (Play/Pause instead of Stop/Rec dependency)</li>
+  <li>introducing hidden edge-based emitters</li>
+  <li>adding motion + timing control to emitters</li>
+</ul>
+
+<p>DO NOT modify particle system, shape system, or lifecycle system.</p>
+
+<hr />
+
+<h2 id="-assumptions">🧠 Assumptions</h2>
+
+<ul>
+  <li>tick() drives physics + audio</li>
+  <li>emitters already exist</li>
+  <li>recording system exists but is tied incorrectly to transport</li>
+  <li>renderFrame() handles draw loop</li>
+</ul>
+
+<hr />
+
+<h1 id="-1-transport-system">✅ 1. TRANSPORT SYSTEM</h1>
+
+<h2 id="state">State</h2>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">state</span><span class="p">.</span><span class="nx">isPlaying</span> <span class="o">=</span> <span class="kc">true</span><span class="p">;</span>
+<span class="nx">state</span><span class="p">.</span><span class="nx">isRecording</span> <span class="o">=</span> <span class="kc">false</span><span class="p">;</span>
+</code></pre></div></div>
+
+<hr />
+
+<h2 id="tick-guard">Tick Guard</h2>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">if </span><span class="p">(</span><span class="o">!</span><span class="nx">state</span><span class="p">.</span><span class="nx">isPlaying</span><span class="p">)</span> <span class="k">return</span><span class="p">;</span>
+</code></pre></div></div>
+
+<hr />
+
+<h2 id="controls">Controls</h2>
+
+<p>Replace:</p>
+
+<ul>
+  <li>STOP ❌</li>
+  <li>REC (used as restart) ❌</li>
+</ul>
+
+<p>With:</p>
+
+<p>[ ▶ Play / ⏸ Pause ]<br />
+[ ● Record ]<br />
+[ ✖ Clear ]</p>
+
+<hr />
+
+<h2 id="behavior">Behavior</h2>
+
+<p>Play → resumes simulation<br />
+Pause → freezes simulation (no reset)<br />
+Record → independent<br />
+Clear → resets scene</p>
+
+<hr />
+
+<h1 id="-2-hud-cleanup">✅ 2. HUD CLEANUP</h1>
+
+<p>Remove from canvas:</p>
+<ul>
+  <li>debug text (e.g. STOP 4L OT 44B)</li>
+  <li>timing labels</li>
+</ul>
+
+<p>Move ABOVE transport:</p>
+
+<table>
+  <tbody>
+    <tr>
+      <td>Loop: X Bars</td>
+      <td>Time: XX:XX</td>
+    </tr>
+  </tbody>
+</table>
+
+<hr />
+
+<h1 id="-3-hidden-emitters">✅ 3. HIDDEN EMITTERS</h1>
+
+<h2 id="zones">Zones</h2>
+
+<ul>
+  <li>top-center / left / right</li>
+  <li>left-top / mid / bottom</li>
+  <li>right-top / mid / bottom</li>
+  <li>bottom-center / left / right</li>
+</ul>
+
+<hr />
+
+<h2 id="spawn">Spawn</h2>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">function</span> <span class="nf">spawnFromEdge</span><span class="p">(</span><span class="nx">zone</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">switch</span><span class="p">(</span><span class="nx">zone</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">case</span> <span class="dl">"</span><span class="s2">top-center</span><span class="dl">"</span><span class="p">:</span>
+      <span class="k">return</span> <span class="p">{</span>
+        <span class="na">x</span><span class="p">:</span> <span class="nx">width</span> <span class="o">/</span> <span class="mi">2</span><span class="p">,</span>
+        <span class="na">y</span><span class="p">:</span> <span class="o">-</span><span class="mi">10</span><span class="p">,</span>
+        <span class="na">vx</span><span class="p">:</span> <span class="nf">random</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+        <span class="na">vy</span><span class="p">:</span> <span class="nf">random</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+      <span class="p">};</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<hr />
+
+<h2 id="fields">Fields</h2>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">emitter</span><span class="p">.</span><span class="nx">hidden</span> <span class="o">=</span> <span class="kc">true</span><span class="p">;</span>
+<span class="nx">emitter</span><span class="p">.</span><span class="nx">zone</span> <span class="o">=</span> <span class="dl">"</span><span class="s2">top-center</span><span class="dl">"</span><span class="p">;</span>
+</code></pre></div></div>
+
+<hr />
+
+<h1 id="-4-emitter-motion">✅ 4. EMITTER MOTION</h1>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">emitter</span><span class="p">.</span><span class="nx">motion</span> <span class="o">=</span> <span class="p">{</span>
+  <span class="na">enabled</span><span class="p">:</span> <span class="kc">false</span><span class="p">,</span>
+  <span class="na">type</span><span class="p">:</span> <span class="dl">"</span><span class="s2">none</span><span class="dl">"</span> <span class="o">|</span> <span class="dl">"</span><span class="s2">drift</span><span class="dl">"</span> <span class="o">|</span> <span class="dl">"</span><span class="s2">oscillate</span><span class="dl">"</span><span class="p">,</span>
+  <span class="na">speed</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+  <span class="na">range</span><span class="p">:</span> <span class="mi">50</span><span class="p">,</span>
+  <span class="na">origin</span><span class="p">:</span> <span class="p">{</span> <span class="nx">x</span><span class="p">,</span> <span class="nx">y</span> <span class="p">}</span>
+<span class="p">};</span>
+</code></pre></div></div>
+
+<hr />
+
+<h2 id="update">Update</h2>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">function</span> <span class="nf">updateEmitterMotion</span><span class="p">(</span><span class="nx">e</span><span class="p">,</span> <span class="nx">t</span><span class="p">,</span> <span class="nx">dt</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">if </span><span class="p">(</span><span class="o">!</span><span class="nx">e</span><span class="p">.</span><span class="nx">motion</span><span class="p">.</span><span class="nx">enabled</span><span class="p">)</span> <span class="k">return</span><span class="p">;</span>
+
+  <span class="k">if </span><span class="p">(</span><span class="nx">e</span><span class="p">.</span><span class="nx">motion</span><span class="p">.</span><span class="nx">type</span> <span class="o">===</span> <span class="dl">"</span><span class="s2">drift</span><span class="dl">"</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nx">e</span><span class="p">.</span><span class="nx">x</span> <span class="o">+=</span> <span class="nx">e</span><span class="p">.</span><span class="nx">vx</span> <span class="o">*</span> <span class="nx">dt</span><span class="p">;</span>
+    <span class="nx">e</span><span class="p">.</span><span class="nx">y</span> <span class="o">+=</span> <span class="nx">e</span><span class="p">.</span><span class="nx">vy</span> <span class="o">*</span> <span class="nx">dt</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="k">if </span><span class="p">(</span><span class="nx">e</span><span class="p">.</span><span class="nx">motion</span><span class="p">.</span><span class="nx">type</span> <span class="o">===</span> <span class="dl">"</span><span class="s2">oscillate</span><span class="dl">"</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nx">e</span><span class="p">.</span><span class="nx">x</span> <span class="o">=</span> <span class="nx">e</span><span class="p">.</span><span class="nx">motion</span><span class="p">.</span><span class="nx">origin</span><span class="p">.</span><span class="nx">x</span> <span class="o">+</span> <span class="nb">Math</span><span class="p">.</span><span class="nf">sin</span><span class="p">(</span><span class="nx">t</span> <span class="o">*</span> <span class="nx">e</span><span class="p">.</span><span class="nx">motion</span><span class="p">.</span><span class="nx">speed</span><span class="p">)</span> <span class="o">*</span> <span class="nx">e</span><span class="p">.</span><span class="nx">motion</span><span class="p">.</span><span class="nx">range</span><span class="p">;</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<hr />
+
+<h1 id="-5-emitter-timing">✅ 5. EMITTER TIMING</h1>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">emitter</span><span class="p">.</span><span class="nx">timing</span> <span class="o">=</span> <span class="p">{</span>
+  <span class="na">mode</span><span class="p">:</span> <span class="dl">"</span><span class="s2">continuous</span><span class="dl">"</span> <span class="o">|</span> <span class="dl">"</span><span class="s2">pulse</span><span class="dl">"</span><span class="p">,</span>
+  <span class="na">rate</span><span class="p">:</span> <span class="mi">200</span><span class="p">,</span>
+  <span class="na">interval</span><span class="p">:</span> <span class="mi">500</span><span class="p">,</span>
+  <span class="na">lastSpawn</span><span class="p">:</span> <span class="mi">0</span>
+<span class="p">};</span>
+</code></pre></div></div>
+
+<hr />
+
+<h2 id="logic">Logic</h2>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">if </span><span class="p">(</span><span class="nx">emitter</span><span class="p">.</span><span class="nx">timing</span><span class="p">.</span><span class="nx">mode</span> <span class="o">===</span> <span class="dl">"</span><span class="s2">continuous</span><span class="dl">"</span><span class="p">)</span> <span class="p">{</span>
+  <span class="nf">spawn</span><span class="p">();</span>
+<span class="p">}</span>
+
+<span class="k">if </span><span class="p">(</span><span class="nx">emitter</span><span class="p">.</span><span class="nx">timing</span><span class="p">.</span><span class="nx">mode</span> <span class="o">===</span> <span class="dl">"</span><span class="s2">pulse</span><span class="dl">"</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">if </span><span class="p">(</span><span class="nx">time</span> <span class="o">-</span> <span class="nx">emitter</span><span class="p">.</span><span class="nx">timing</span><span class="p">.</span><span class="nx">lastSpawn</span> <span class="o">&gt;</span> <span class="nx">emitter</span><span class="p">.</span><span class="nx">timing</span><span class="p">.</span><span class="nx">interval</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nf">spawn</span><span class="p">();</span>
+    <span class="nx">emitter</span><span class="p">.</span><span class="nx">timing</span><span class="p">.</span><span class="nx">lastSpawn</span> <span class="o">=</span> <span class="nx">time</span><span class="p">;</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<hr />
+
+<h1 id="-implementation-guide">🚀 Implementation Guide</h1>
+
+<h2 id="where">WHERE</h2>
+
+<ul>
+  <li>main.js → tick(), emitter logic</li>
+  <li>controls.js → transport + emitter UI</li>
+  <li>index.html → layout</li>
+</ul>
+
+<hr />
+
+<h2 id="run">RUN</h2>
+
+<ul>
+  <li>toggle play/pause</li>
+  <li>verify emitters spawn from edges</li>
+  <li>test motion + timing</li>
+</ul>
+
+<hr />
+
+<h2 id="expect">EXPECT</h2>
+
+<ul>
+  <li>clean canvas</li>
+  <li>controlled emitters</li>
+  <li>stable playback</li>
+</ul>
+</article>
+</div>
+
+    </main>
+
+    <footer class="site-footer">
+      <div class="site-footer-inner footer-grid-6">
+        <section class="footer-brand">
+          <h2>Wall of Sound</h2>
+          <p>
+            Shared project memory for the StudioRich audio/visual system. Specs,
+            logs, recovery notes, and local portals live here.
+          </p>
+        </section>
+
+        <section class="footer-group">
+          <h2>Navigation</h2>
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Domains</h2>
+          <a href="/systems/wall/">Wall System</a>
+          <a href="/systems/sound/">Sound System</a>
+          <a href="/systems/">Systems Index</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Indexes</h2>
+          <a href="/specs/">Specs</a>
+          <a href="/logs/">Logs</a>
+          <a href="/components/wall/">Wall Components</a>
+          <a href="/components/sound/"
+            >Sound Components</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Local Portals</h2>
+          <a href="file:///Users/studio/Projects/wall-of-sound/wall/index.html"
+            >Wall App</a
+          >
+          <a
+            href="file:///Users/studio/Projects/wall-of-sound/sound/labeller.html"
+            >Sound Labeller</a
+          >
+          <a
+            href="file:///Users/studio/Projects/kinetic-master-engine/index.html"
+            >Kinetic Engine</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Recovery</h2>
+          <a href="/specs/">Implementation Specs</a>
+          <a href="/logs/">Session Logs</a>
+          <a href="/systems/sound/">Sound Recovery</a>
+          <a href="/systems/wall/">Wall Recovery</a>
+        </section>
+      </div>
+    </footer>
+  </body>
+</html>

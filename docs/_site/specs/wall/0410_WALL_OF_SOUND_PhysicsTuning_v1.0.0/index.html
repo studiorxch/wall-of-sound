@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>PhysicsTuning | Wall of Sound</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <link
+      rel="stylesheet"
+      href="/assets/css/style.css"
+    />
+  </head>
+
+  <body>
+    <header class="site-header">
+      <div class="site-header-inner">
+        <a class="site-title" href="/">
+          Wall of Sound
+        </a>
+
+        <nav class="site-nav" aria-label="Primary navigation">
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="page-content">
+      <div class="spec-shell">
+  <a class="back-link" href="/specs/">← Back to specs</a>
+
+  <div class="spec-kicker">
+    wall / physics / needs-review
+  </div>
+
+  <h1>PhysicsTuning</h1>
+
+  <section class="spec-meta">
+    <div>
+      <strong>Doc ID</strong>
+      0410_WALL_OF_SOUND_PhysicsTuning_v1.0.0
+    </div>
+
+    <div>
+      <strong>Date</strong>
+      2026-04-10
+    </div>
+
+    <div>
+      <strong>Version</strong>
+      1.0.0
+    </div>
+
+    <div>
+      <strong>System</strong>
+      WOS
+    </div>
+
+    <div>
+      <strong>Domain</strong>
+      wall
+    </div>
+
+    <div>
+      <strong>Component</strong>
+      physics
+    </div>
+
+    <div>
+      <strong>Type</strong>
+      legacy-spec
+    </div>
+
+    <div>
+      <strong>Priority</strong>
+      medium
+    </div>
+
+    <div>
+      <strong>Risk</strong>
+      unknown
+    </div>
+
+    <div>
+      <strong>Status</strong>
+      needs-review
+    </div>
+  </section>
+
+  
+  <p><strong>Summary:</strong> Imported legacy Wall of Sound spec. Needs review.</p>
+  
+
+  <article class="spec-body"><p>0410_WALL_OF_SOUND_PhysicsTuning_v1.0.0</p>
+
+<p>Generated: 04/10/2026</p>
+
+<hr />
+
+<h2 id="-objective">🎯 Objective</h2>
+
+<p>Fix “slow / floaty / clustered” motion after recent physics update.</p>
+
+<p>Current system is technically correct (dt-based), but values are no longer tuned for real-time physics.</p>
+
+<p>Goal:
+→ restore responsive, natural marble-run motion
+→ ensure emitters produce clean rhythmic flow
+→ DO NOT require manual tuning by user</p>
+
+<hr />
+
+<h2 id="️-constraints">⚠️ Constraints</h2>
+
+<ul>
+  <li>Do NOT rewrite physics engine</li>
+  <li>Do NOT modify emitter timing logic</li>
+  <li>Do NOT change collision system</li>
+  <li>Do NOT touch audio or export systems</li>
+  <li>Only adjust:
+    <ul>
+      <li>physics constants</li>
+      <li>emitter defaults</li>
+      <li>optional auto-normalization</li>
+    </ul>
+  </li>
+</ul>
+
+<hr />
+
+<h2 id="-problem-summary">🔍 Problem Summary</h2>
+
+<p>After fixing time scaling:</p>
+
+<ul>
+  <li>gravity is now correctly dt-based</li>
+  <li>emitter uses real-time ms</li>
+  <li>damping applies per frame</li>
+</ul>
+
+<p>BUT:</p>
+
+<p>Existing values were tuned for incorrect physics</p>
+
+<p>Result:</p>
+
+<ul>
+  <li>motion appears slow</li>
+  <li>balls cluster and lose energy</li>
+  <li>ramps do not carry motion properly</li>
+  <li>emitter produces dense “foam” instead of flow</li>
+</ul>
+
+<hr />
+
+<h2 id="-required-fixes">✅ Required Fixes</h2>
+
+<h3 id="1-retune-physics-defaults">1. Retune Physics Defaults</h3>
+
+<p>Update:</p>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">state</span><span class="p">.</span><span class="nx">physics</span> <span class="o">=</span> <span class="p">{</span>
+  <span class="na">gravity</span><span class="p">:</span> <span class="p">{</span> <span class="na">x</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="na">y</span><span class="p">:</span> <span class="mf">3.0</span> <span class="p">},</span>
+  <span class="na">damping</span><span class="p">:</span> <span class="mf">0.9997</span><span class="p">,</span>
+  <span class="na">maxSpeed</span><span class="p">:</span> <span class="mi">20</span><span class="p">,</span>
+<span class="p">};</span>
+</code></pre></div></div>
+
+<hr />
+
+<h3 id="2-normalize-gravity-scale-important">2. Normalize Gravity Scale (IMPORTANT)</h3>
+
+<p>Ensure gravity is consistent regardless of dt:</p>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">const</span> <span class="nx">gravityScale</span> <span class="o">=</span> <span class="nx">dt</span> <span class="o">*</span> <span class="mi">60</span><span class="p">;</span>
+
+<span class="nx">ball</span><span class="p">.</span><span class="nx">vx</span> <span class="o">+=</span> <span class="nx">state</span><span class="p">.</span><span class="nx">physics</span><span class="p">.</span><span class="nx">gravity</span><span class="p">.</span><span class="nx">x</span> <span class="o">*</span> <span class="nx">gravityScale</span><span class="p">;</span>
+<span class="nx">ball</span><span class="p">.</span><span class="nx">vy</span> <span class="o">+=</span> <span class="nx">state</span><span class="p">.</span><span class="nx">physics</span><span class="p">.</span><span class="nx">gravity</span><span class="p">.</span><span class="nx">y</span> <span class="o">*</span> <span class="nx">gravityScale</span><span class="p">;</span>
+</code></pre></div></div>
+
+<hr />
+
+<h3 id="3-improve-emitter-defaults">3. Improve Emitter Defaults</h3>
+
+<p>When creating new emitters, use:</p>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">rate</span><span class="p">:</span> <span class="mi">400</span><span class="p">,</span>
+<span class="nx">velocity</span><span class="p">:</span> <span class="p">{</span> <span class="nl">x</span><span class="p">:</span> <span class="mf">1.2</span><span class="p">,</span> <span class="nx">y</span><span class="p">:</span> <span class="mi">0</span> <span class="p">}</span>
+</code></pre></div></div>
+
+<p>NOT zero velocity.</p>
+
+<hr />
+
+<h3 id="4-prevent-ball-clumping-light-fix-only">4. Prevent Ball Clumping (Light Fix Only)</h3>
+
+<p>Add slight separation impulse when balls overlap:</p>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">if </span><span class="p">(</span><span class="nx">distance</span> <span class="o">&lt;</span> <span class="nx">minDistance</span><span class="p">)</span> <span class="p">{</span>
+  <span class="nf">applySeparation</span><span class="p">(</span><span class="nx">ballA</span><span class="p">,</span> <span class="nx">ballB</span><span class="p">,</span> <span class="mf">0.05</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>Keep minimal — do NOT introduce full physics system.</p>
+
+<hr />
+
+<h3 id="5-optional-adaptive-spawn-density">5. Optional: Adaptive Spawn Density</h3>
+
+<p>If emitter produces too many balls:</p>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">if </span><span class="p">(</span><span class="nx">state</span><span class="p">.</span><span class="nx">balls</span><span class="p">.</span><span class="nx">length</span> <span class="o">&gt;</span> <span class="mi">300</span><span class="p">)</span> <span class="k">return</span><span class="p">;</span>
+</code></pre></div></div>
+
+<hr />
+
+<h2 id="-expected-behavior">🧪 Expected Behavior</h2>
+
+<p>After fix:</p>
+
+<ul>
+  <li>balls fall with visible acceleration</li>
+  <li>ramps guide motion smoothly</li>
+  <li>emitters create clean streams (not clusters)</li>
+  <li>system feels responsive (no slow motion)</li>
+</ul>
+
+<hr />
+
+<h2 id="-do-not-do">🚫 Do NOT Do</h2>
+
+<ul>
+  <li>Do NOT rewrite collision system</li>
+  <li>Do NOT introduce new physics engine</li>
+  <li>Do NOT change dt pipeline</li>
+  <li>Do NOT add UI</li>
+  <li>Do NOT modify existing scene data format</li>
+</ul>
+
+<hr />
+
+<h2 id="-success-criteria">✅ Success Criteria</h2>
+
+<ul>
+  <li>emitter produces visible stream, not clumps</li>
+  <li>motion feels fast and responsive</li>
+  <li>ramps visibly influence direction</li>
+  <li>no regression in stability</li>
+</ul>
+
+<hr />
+
+<h2 id="-implementation-guide">⚡ Implementation Guide</h2>
+
+<ul>
+  <li>
+    <p>where:
+main.js → physics config + emitter creation</p>
+  </li>
+  <li>
+    <p>run:
+reload → place emitter → observe motion</p>
+  </li>
+  <li>
+    <p>expect:
+natural falling motion + clean rhythmic flow</p>
+  </li>
+</ul>
+</article>
+</div>
+
+    </main>
+
+    <footer class="site-footer">
+      <div class="site-footer-inner footer-grid-6">
+        <section class="footer-brand">
+          <h2>Wall of Sound</h2>
+          <p>
+            Shared project memory for the StudioRich audio/visual system. Specs,
+            logs, recovery notes, and local portals live here.
+          </p>
+        </section>
+
+        <section class="footer-group">
+          <h2>Navigation</h2>
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Domains</h2>
+          <a href="/systems/wall/">Wall System</a>
+          <a href="/systems/sound/">Sound System</a>
+          <a href="/systems/">Systems Index</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Indexes</h2>
+          <a href="/specs/">Specs</a>
+          <a href="/logs/">Logs</a>
+          <a href="/components/wall/">Wall Components</a>
+          <a href="/components/sound/"
+            >Sound Components</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Local Portals</h2>
+          <a href="file:///Users/studio/Projects/wall-of-sound/wall/index.html"
+            >Wall App</a
+          >
+          <a
+            href="file:///Users/studio/Projects/wall-of-sound/sound/labeller.html"
+            >Sound Labeller</a
+          >
+          <a
+            href="file:///Users/studio/Projects/kinetic-master-engine/index.html"
+            >Kinetic Engine</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Recovery</h2>
+          <a href="/specs/">Implementation Specs</a>
+          <a href="/logs/">Session Logs</a>
+          <a href="/systems/sound/">Sound Recovery</a>
+          <a href="/systems/wall/">Wall Recovery</a>
+        </section>
+      </div>
+    </footer>
+  </body>
+</html>

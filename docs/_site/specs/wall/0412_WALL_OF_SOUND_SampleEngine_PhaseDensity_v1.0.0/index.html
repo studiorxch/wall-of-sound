@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>SampleEngine PhaseDensity | Wall of Sound</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <link
+      rel="stylesheet"
+      href="/assets/css/style.css"
+    />
+  </head>
+
+  <body>
+    <header class="site-header">
+      <div class="site-header-inner">
+        <a class="site-title" href="/">
+          Wall of Sound
+        </a>
+
+        <nav class="site-nav" aria-label="Primary navigation">
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="page-content">
+      <div class="spec-shell">
+  <a class="back-link" href="/specs/">← Back to specs</a>
+
+  <div class="spec-kicker">
+    wall / audio_system / needs-review
+  </div>
+
+  <h1>SampleEngine PhaseDensity</h1>
+
+  <section class="spec-meta">
+    <div>
+      <strong>Doc ID</strong>
+      0412_WALL_OF_SOUND_SampleEngine_PhaseDensity_v1.0.0
+    </div>
+
+    <div>
+      <strong>Date</strong>
+      2026-04-12
+    </div>
+
+    <div>
+      <strong>Version</strong>
+      1.0.0
+    </div>
+
+    <div>
+      <strong>System</strong>
+      WOS
+    </div>
+
+    <div>
+      <strong>Domain</strong>
+      wall
+    </div>
+
+    <div>
+      <strong>Component</strong>
+      audio_system
+    </div>
+
+    <div>
+      <strong>Type</strong>
+      legacy-spec
+    </div>
+
+    <div>
+      <strong>Priority</strong>
+      medium
+    </div>
+
+    <div>
+      <strong>Risk</strong>
+      unknown
+    </div>
+
+    <div>
+      <strong>Status</strong>
+      needs-review
+    </div>
+  </section>
+
+  
+  <p><strong>Summary:</strong> Imported legacy Wall of Sound spec. Needs review.</p>
+  
+
+  <article class="spec-body"><h1 id="0412_wall_of_sound_sampleengine_phasedensity_v100">0412_WALL_OF_SOUND_SampleEngine_PhaseDensity_v1.0.0</h1>
+
+<p>Date: 04/12/2026</p>
+
+<hr />
+
+<h2 id="objective">Objective</h2>
+
+<p>Upgrade the sound system from reactive tone generation → structured sample-based composition</p>
+
+<p>Introduce:</p>
+
+<ul>
+  <li>Continuous density → pitch mapping</li>
+  <li>Phase-aware modulation → timing structure</li>
+  <li>Sample engine → real sonic identity</li>
+</ul>
+
+<hr />
+
+<h2 id="assumptions">Assumptions</h2>
+
+<ul>
+  <li>state.collisionCount exists</li>
+  <li>state.loopPhase exists</li>
+  <li>eventBus.triggerEvent works</li>
+  <li>midiOutput.handle works</li>
+  <li>oscillatorOutput.handle works</li>
+  <li>AudioContext initialized</li>
+</ul>
+
+<hr />
+
+<h2 id="step-1--continuous-density">STEP 1 — Continuous Density</h2>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">function</span> <span class="nf">getDensityValue</span><span class="p">(</span><span class="nx">count</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">return</span> <span class="nb">Math</span><span class="p">.</span><span class="nf">min</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nx">count</span> <span class="o">/</span> <span class="mi">12</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<hr />
+
+<h2 id="step-2--phase-modulation">STEP 2 — Phase Modulation</h2>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">function</span> <span class="nf">applyPhaseModulation</span><span class="p">(</span><span class="nx">note</span><span class="p">,</span> <span class="nx">phase</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">if </span><span class="p">(</span><span class="nx">phase</span> <span class="o">&lt;</span> <span class="mf">0.25</span><span class="p">)</span> <span class="k">return</span> <span class="nx">note</span> <span class="o">-</span> <span class="mi">12</span><span class="p">;</span>
+  <span class="k">if </span><span class="p">(</span><span class="nx">phase</span> <span class="o">&lt;</span> <span class="mf">0.75</span><span class="p">)</span> <span class="k">return</span> <span class="nx">note</span><span class="p">;</span>
+  <span class="k">return</span> <span class="nx">note</span> <span class="o">+</span> <span class="mi">12</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<hr />
+
+<h2 id="step-3--sample-engine">STEP 3 — Sample Engine</h2>
+
+<p>Create file:</p>
+
+<p>/audio/sampleEngine.js</p>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="p">(</span><span class="kd">function</span> <span class="nf">initSampleEngine</span><span class="p">(</span><span class="nb">global</span><span class="p">)</span> <span class="p">{</span>
+  <span class="kd">const</span> <span class="nx">SBE</span> <span class="o">=</span> <span class="p">(</span><span class="nb">global</span><span class="p">.</span><span class="nx">SBE</span> <span class="o">=</span> <span class="nb">global</span><span class="p">.</span><span class="nx">SBE</span> <span class="o">||</span> <span class="p">{});</span>
+
+  <span class="kd">const</span> <span class="nx">SampleEngine</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="na">context</span><span class="p">:</span> <span class="kc">null</span><span class="p">,</span>
+    <span class="na">buffers</span><span class="p">:</span> <span class="p">{},</span>
+    <span class="na">masterGain</span><span class="p">:</span> <span class="kc">null</span><span class="p">,</span>
+
+    <span class="k">async</span> <span class="nf">init</span><span class="p">(</span><span class="nx">context</span><span class="p">)</span> <span class="p">{</span>
+      <span class="k">this</span><span class="p">.</span><span class="nx">context</span> <span class="o">=</span> <span class="nx">context</span><span class="p">;</span>
+
+      <span class="k">this</span><span class="p">.</span><span class="nx">masterGain</span> <span class="o">=</span> <span class="nx">context</span><span class="p">.</span><span class="nf">createGain</span><span class="p">();</span>
+      <span class="k">this</span><span class="p">.</span><span class="nx">masterGain</span><span class="p">.</span><span class="nx">gain</span><span class="p">.</span><span class="nx">value</span> <span class="o">=</span> <span class="mf">0.8</span><span class="p">;</span>
+      <span class="k">this</span><span class="p">.</span><span class="nx">masterGain</span><span class="p">.</span><span class="nf">connect</span><span class="p">(</span><span class="nx">context</span><span class="p">.</span><span class="nx">destination</span><span class="p">);</span>
+
+      <span class="k">await</span> <span class="k">this</span><span class="p">.</span><span class="nf">loadSamples</span><span class="p">();</span>
+    <span class="p">},</span>
+
+    <span class="k">async</span> <span class="nf">loadSamples</span><span class="p">()</span> <span class="p">{</span>
+      <span class="kd">const</span> <span class="nx">sampleMap</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="na">low</span><span class="p">:</span> <span class="dl">"</span><span class="s2">/audio/samples/soft.wav</span><span class="dl">"</span><span class="p">,</span>
+        <span class="na">mid</span><span class="p">:</span> <span class="dl">"</span><span class="s2">/audio/samples/mid.wav</span><span class="dl">"</span><span class="p">,</span>
+        <span class="na">high</span><span class="p">:</span> <span class="dl">"</span><span class="s2">/audio/samples/hard.wav</span><span class="dl">"</span><span class="p">,</span>
+      <span class="p">};</span>
+
+      <span class="k">for </span><span class="p">(</span><span class="kd">const</span> <span class="p">[</span><span class="nx">key</span><span class="p">,</span> <span class="nx">url</span><span class="p">]</span> <span class="k">of</span> <span class="nb">Object</span><span class="p">.</span><span class="nf">entries</span><span class="p">(</span><span class="nx">sampleMap</span><span class="p">))</span> <span class="p">{</span>
+        <span class="kd">const</span> <span class="nx">res</span> <span class="o">=</span> <span class="k">await</span> <span class="nf">fetch</span><span class="p">(</span><span class="nx">url</span><span class="p">);</span>
+        <span class="kd">const</span> <span class="nx">arrayBuffer</span> <span class="o">=</span> <span class="k">await</span> <span class="nx">res</span><span class="p">.</span><span class="nf">arrayBuffer</span><span class="p">();</span>
+        <span class="kd">const</span> <span class="nx">buffer</span> <span class="o">=</span> <span class="k">await</span> <span class="k">this</span><span class="p">.</span><span class="nx">context</span><span class="p">.</span><span class="nf">decodeAudioData</span><span class="p">(</span><span class="nx">arrayBuffer</span><span class="p">);</span>
+        <span class="k">this</span><span class="p">.</span><span class="nx">buffers</span><span class="p">[</span><span class="nx">key</span><span class="p">]</span> <span class="o">=</span> <span class="nx">buffer</span><span class="p">;</span>
+      <span class="p">}</span>
+    <span class="p">},</span>
+
+    <span class="nf">play</span><span class="p">(</span><span class="nx">type</span><span class="p">,</span> <span class="nx">velocity</span> <span class="o">=</span> <span class="mi">80</span><span class="p">)</span> <span class="p">{</span>
+      <span class="k">if </span><span class="p">(</span><span class="o">!</span><span class="k">this</span><span class="p">.</span><span class="nx">buffers</span><span class="p">[</span><span class="nx">type</span><span class="p">])</span> <span class="k">return</span><span class="p">;</span>
+
+      <span class="kd">const</span> <span class="nx">source</span> <span class="o">=</span> <span class="k">this</span><span class="p">.</span><span class="nx">context</span><span class="p">.</span><span class="nf">createBufferSource</span><span class="p">();</span>
+      <span class="kd">const</span> <span class="nx">gain</span> <span class="o">=</span> <span class="k">this</span><span class="p">.</span><span class="nx">context</span><span class="p">.</span><span class="nf">createGain</span><span class="p">();</span>
+
+      <span class="nx">source</span><span class="p">.</span><span class="nx">buffer</span> <span class="o">=</span> <span class="k">this</span><span class="p">.</span><span class="nx">buffers</span><span class="p">[</span><span class="nx">type</span><span class="p">];</span>
+
+      <span class="kd">const</span> <span class="nx">normalized</span> <span class="o">=</span> <span class="nx">velocity</span> <span class="o">/</span> <span class="mi">127</span><span class="p">;</span>
+      <span class="nx">gain</span><span class="p">.</span><span class="nx">gain</span><span class="p">.</span><span class="nx">value</span> <span class="o">=</span> <span class="nb">Math</span><span class="p">.</span><span class="nf">max</span><span class="p">(</span><span class="mf">0.1</span><span class="p">,</span> <span class="nx">normalized</span><span class="p">);</span>
+
+      <span class="nx">source</span><span class="p">.</span><span class="nf">connect</span><span class="p">(</span><span class="nx">gain</span><span class="p">);</span>
+      <span class="nx">gain</span><span class="p">.</span><span class="nf">connect</span><span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="nx">masterGain</span><span class="p">);</span>
+
+      <span class="nx">source</span><span class="p">.</span><span class="nf">start</span><span class="p">();</span>
+    <span class="p">},</span>
+  <span class="p">};</span>
+
+  <span class="nx">SBE</span><span class="p">.</span><span class="nx">SampleEngine</span> <span class="o">=</span> <span class="nx">SampleEngine</span><span class="p">;</span>
+<span class="p">})(</span><span class="nb">window</span><span class="p">);</span>
+</code></pre></div></div>
+
+<hr />
+
+<h2 id="step-4--density--sample-type">STEP 4 — Density → Sample Type</h2>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">const</span> <span class="nx">densityVal</span> <span class="o">=</span> <span class="nf">getDensityValue</span><span class="p">(</span><span class="nx">state</span><span class="p">.</span><span class="nx">collisionCount</span> <span class="o">||</span> <span class="mi">0</span><span class="p">);</span>
+
+<span class="kd">let</span> <span class="nx">sampleType</span> <span class="o">=</span> <span class="dl">"</span><span class="s2">low</span><span class="dl">"</span><span class="p">;</span>
+<span class="k">if </span><span class="p">(</span><span class="nx">densityVal</span> <span class="o">&gt;</span> <span class="mf">0.66</span><span class="p">)</span> <span class="nx">sampleType</span> <span class="o">=</span> <span class="dl">"</span><span class="s2">high</span><span class="dl">"</span><span class="p">;</span>
+<span class="k">else</span> <span class="k">if </span><span class="p">(</span><span class="nx">densityVal</span> <span class="o">&gt;</span> <span class="mf">0.33</span><span class="p">)</span> <span class="nx">sampleType</span> <span class="o">=</span> <span class="dl">"</span><span class="s2">mid</span><span class="dl">"</span><span class="p">;</span>
+</code></pre></div></div>
+
+<hr />
+
+<h2 id="step-5--note-mapping">STEP 5 — Note Mapping</h2>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">let</span> <span class="nx">note</span> <span class="o">=</span> <span class="nx">rawNote</span><span class="p">;</span>
+
+<span class="k">if </span><span class="p">(</span><span class="nx">state</span><span class="p">.</span><span class="nx">soundResponse</span><span class="p">.</span><span class="nx">densityHarmonics</span><span class="p">)</span> <span class="p">{</span>
+  <span class="nx">note</span> <span class="o">=</span> <span class="nx">rawNote</span> <span class="o">+</span> <span class="nb">Math</span><span class="p">.</span><span class="nf">floor</span><span class="p">(</span><span class="nx">densityVal</span> <span class="o">*</span> <span class="mi">12</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<hr />
+
+<h2 id="step-6--phase-application">STEP 6 — Phase Application</h2>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">note</span> <span class="o">=</span> <span class="nf">applyPhaseModulation</span><span class="p">(</span><span class="nx">note</span><span class="p">,</span> <span class="nx">state</span><span class="p">.</span><span class="nx">loopPhase</span> <span class="o">||</span> <span class="mi">0</span><span class="p">);</span>
+</code></pre></div></div>
+
+<hr />
+
+<h2 id="step-7--trigger-sample">STEP 7 — Trigger Sample</h2>
+
+<p>Option A (replace oscillator):</p>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">SBE</span><span class="p">.</span><span class="nx">SampleEngine</span><span class="p">.</span><span class="nf">play</span><span class="p">(</span><span class="nx">sampleType</span><span class="p">,</span> <span class="nx">velocity</span><span class="p">);</span>
+<span class="k">return</span><span class="p">;</span>
+</code></pre></div></div>
+
+<p>Option B (layer):</p>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">SBE</span><span class="p">.</span><span class="nx">SampleEngine</span><span class="p">.</span><span class="nf">play</span><span class="p">(</span><span class="nx">sampleType</span><span class="p">,</span> <span class="nx">velocity</span><span class="p">);</span>
+</code></pre></div></div>
+
+<hr />
+
+<h2 id="step-8--initialize-engine">STEP 8 — Initialize Engine</h2>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">if </span><span class="p">(</span><span class="o">!</span><span class="nx">SBE</span><span class="p">.</span><span class="nx">SampleEngine</span><span class="p">.</span><span class="nx">context</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">await</span> <span class="nx">SBE</span><span class="p">.</span><span class="nx">SampleEngine</span><span class="p">.</span><span class="nf">init</span><span class="p">(</span><span class="nx">state</span><span class="p">.</span><span class="nx">audio</span><span class="p">.</span><span class="nx">context</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<hr />
+
+<h2 id="expected-result">Expected Result</h2>
+
+<ul>
+  <li>Density controls pitch + sample</li>
+  <li>Velocity controls loudness</li>
+  <li>Phase controls structure</li>
+  <li>System becomes musical, not reactive</li>
+</ul>
+
+<hr />
+
+<h2 id="implementation-guide">Implementation Guide</h2>
+
+<ul>
+  <li>
+    <p>where<br />
+add /audio/sampleEngine.js<br />
+update midiOutput.handle<br />
+update oscillatorOutput.handle</p>
+  </li>
+  <li>
+    <p>run<br />
+load samples → reload → test collisions</p>
+  </li>
+  <li>
+    <p>expect<br />
+evolving pitch<br />
+dynamic volume<br />
+sample-based sound identity</p>
+  </li>
+</ul>
+</article>
+</div>
+
+    </main>
+
+    <footer class="site-footer">
+      <div class="site-footer-inner footer-grid-6">
+        <section class="footer-brand">
+          <h2>Wall of Sound</h2>
+          <p>
+            Shared project memory for the StudioRich audio/visual system. Specs,
+            logs, recovery notes, and local portals live here.
+          </p>
+        </section>
+
+        <section class="footer-group">
+          <h2>Navigation</h2>
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Domains</h2>
+          <a href="/systems/wall/">Wall System</a>
+          <a href="/systems/sound/">Sound System</a>
+          <a href="/systems/">Systems Index</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Indexes</h2>
+          <a href="/specs/">Specs</a>
+          <a href="/logs/">Logs</a>
+          <a href="/components/wall/">Wall Components</a>
+          <a href="/components/sound/"
+            >Sound Components</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Local Portals</h2>
+          <a href="file:///Users/studio/Projects/wall-of-sound/wall/index.html"
+            >Wall App</a
+          >
+          <a
+            href="file:///Users/studio/Projects/wall-of-sound/sound/labeller.html"
+            >Sound Labeller</a
+          >
+          <a
+            href="file:///Users/studio/Projects/kinetic-master-engine/index.html"
+            >Kinetic Engine</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Recovery</h2>
+          <a href="/specs/">Implementation Specs</a>
+          <a href="/logs/">Session Logs</a>
+          <a href="/systems/sound/">Sound Recovery</a>
+          <a href="/systems/wall/">Wall Recovery</a>
+        </section>
+      </div>
+    </footer>
+  </body>
+</html>

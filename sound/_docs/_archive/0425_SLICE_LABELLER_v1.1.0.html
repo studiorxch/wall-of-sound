@@ -1,0 +1,94 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Slice Labeller</title>
+
+    <style>
+      body {
+        background: #f2f2f2;
+        font-family: sans-serif;
+        margin: 0;
+        padding: 30px;
+        color: #333;
+      }
+
+      .container {
+        max-width: 1400px;
+        margin: 0 auto;
+      }
+
+      .item {
+        margin-bottom: 40px;
+        padding: 20px;
+        background: #fff;
+        border-radius: 12px;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+      }
+
+      .track-title {
+        font-size: 14px;
+        margin-bottom: 12px;
+        color: #777;
+      }
+
+      .timeline {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+      }
+
+      /* =========================
+         SEGMENTS
+      ========================= */
+
+      .segment {
+        width: 140px;
+        height: 60px;
+        border-radius: 6px;
+        position: relative;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        color: #fff;
+      }
+
+      .segment.active {
+        outline: 3px solid #00ff88;
+      }
+
+      /* =========================
+         SECTION COLORS
+      ========================= */
+
+      .segment.intro {
+        background: #2c3e50;
+      }
+      .segment.build {
+        background: #2980b9;
+      }
+      .segment.peak {
+        background: #c0392b;
+      }
+      .segment.release {
+        background: #27ae60;
+      }
+      .segment.outro {
+        background: #7f8c8d;
+      }
+      .segment.ending {
+        outline: 2px solid yellow;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="container">
+      <div id="list"></div>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>

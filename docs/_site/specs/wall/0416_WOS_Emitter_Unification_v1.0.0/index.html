@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Emitter Unification | Wall of Sound</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <link
+      rel="stylesheet"
+      href="/assets/css/style.css"
+    />
+  </head>
+
+  <body>
+    <header class="site-header">
+      <div class="site-header-inner">
+        <a class="site-title" href="/">
+          Wall of Sound
+        </a>
+
+        <nav class="site-nav" aria-label="Primary navigation">
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="page-content">
+      <div class="spec-shell">
+  <a class="back-link" href="/specs/">← Back to specs</a>
+
+  <div class="spec-kicker">
+    wall / emitter_system / needs-review
+  </div>
+
+  <h1>Emitter Unification</h1>
+
+  <section class="spec-meta">
+    <div>
+      <strong>Doc ID</strong>
+      0416_WOS_Emitter_Unification_v1.0.0
+    </div>
+
+    <div>
+      <strong>Date</strong>
+      2026-04-16
+    </div>
+
+    <div>
+      <strong>Version</strong>
+      1.0.0
+    </div>
+
+    <div>
+      <strong>System</strong>
+      WOS
+    </div>
+
+    <div>
+      <strong>Domain</strong>
+      wall
+    </div>
+
+    <div>
+      <strong>Component</strong>
+      emitter_system
+    </div>
+
+    <div>
+      <strong>Type</strong>
+      legacy-spec
+    </div>
+
+    <div>
+      <strong>Priority</strong>
+      medium
+    </div>
+
+    <div>
+      <strong>Risk</strong>
+      unknown
+    </div>
+
+    <div>
+      <strong>Status</strong>
+      needs-review
+    </div>
+  </section>
+
+  
+  <p><strong>Summary:</strong> Imported legacy Wall of Sound spec. Needs review.</p>
+  
+
+  <article class="spec-body"><h1 id="0416_wos_emitter_unification_v100">0416_WOS_Emitter_Unification_v1.0.0</h1>
+<p>Generated: 04/16/2026</p>
+
+<hr />
+
+<h2 id="-goal">🎯 GOAL</h2>
+
+<p>Unify the emitter system.</p>
+
+<ul>
+  <li>Remove the <strong>Emitter Tool completely</strong></li>
+  <li>Move ALL emitter functionality into <strong>Behavior: Emitter</strong></li>
+  <li>Ensure system stability (no freezing, no tool conflicts)</li>
+</ul>
+
+<hr />
+
+<h2 id="-hard-rules">🚫 HARD RULES</h2>
+
+<ul>
+  <li>DO NOT add documentation files</li>
+  <li>DO NOT refactor unrelated systems</li>
+  <li>DO NOT change rendering pipeline</li>
+  <li>DO NOT modify save/load format unless required</li>
+  <li>ONLY modify:
+    <ul>
+      <li>emitter tool removal</li>
+      <li>behavior emitter upgrades</li>
+    </ul>
+  </li>
+</ul>
+
+<hr />
+
+<h1 id="-priority-1--remove-emitter-tool">🔴 PRIORITY 1 — REMOVE EMITTER TOOL</h1>
+
+<h2 id="remove-from-ui">Remove from UI</h2>
+
+<p>Delete emitter button:</p>
+
+<p><button class="tool" data-tool="emitter"></button></p>
+
+<hr />
+
+<h2 id="remove-tool-handling-logic">Remove tool handling logic</h2>
+
+<p>Search and DELETE all logic branches like:</p>
+
+<p>if (tool === “emitter”) { … }</p>
+
+<p>or</p>
+
+<p>case “emitter”:</p>
+
+<hr />
+
+<h2 id="remove-emitter-tool-inspector-block">Remove emitter tool inspector block</h2>
+
+<p>Delete:</p>
+
+<section id="emitter-inspector-block">
+
+---
+
+## Requirement
+
+- App must NOT freeze when switching tools
+- Ball tool must continue working after all actions
+
+---
+
+# 🟠 PRIORITY 2 — UNIFY EMITTER INTO BEHAVIOR
+
+Emitter must ONLY exist as:
+
+Behavior → Type → Emitter
+
+---
+
+## Extend existing emitter behavior
+
+Locate behavior logic:
+
+if (line.behavior.type === "emitter")
+
+---
+
+## Add required properties (SAFE DEFAULTS)
+
+behavior.emitter = behavior.emitter || {
+  rate: 400,
+  speed: 6,
+  spawnMode: "center",
+  silent: false,
+  quantize: false,
+  quantizeDivision: 16
+};
+
+---
+
+# 🟡 PRIORITY 3 — DIRECTIONAL EMISSION
+
+const angle = Math.atan2(line.y2 - line.y1, line.x2 - line.x1);
+
+const dirX = Math.cos(angle);
+const dirY = Math.sin(angle);
+
+ball.vx = dirX * behavior.emitter.speed;
+ball.vy = dirY * behavior.emitter.speed;
+
+---
+
+# 🟢 PRIORITY 4 — SPAWN MODE
+
+let spawnX = line.x1;
+let spawnY = line.y1;
+
+if (behavior.emitter.spawnMode === "edge") {
+  const offset = 14;
+  spawnX += dirX * offset;
+  spawnY += dirY * offset;
+}
+
+---
+
+# 🔵 PRIORITY 5 — SILENT MODE
+
+if (!behavior.emitter.silent) {
+  triggerSound(...);
+}
+
+line.color = "#000000";
+
+---
+
+# 🟣 PRIORITY 6 — QUANTIZED EMISSION
+
+if (behavior.emitter.quantize) {
+  const beatInterval = getQuantizedInterval(
+    state.bpm,
+    behavior.emitter.quantizeDivision
+  );
+
+  if (now - lastSpawn &lt; beatInterval) return;
+} else {
+  if (now - lastSpawn &lt; behavior.emitter.rate) return;
+}
+
+---
+
+# 🟤 PRIORITY 7 — SLOWER EMITTER RANGE
+
+rate: 100 → 8000 ms
+
+---
+
+# ⚫ PRIORITY 8 — STABILITY
+
+if (!behavior || !behavior.emitter) return;
+
+if (!Number.isFinite(ball.vx) || !Number.isFinite(ball.vy)) return;
+
+---
+
+# ✅ SUCCESS CRITERIA
+
+- Emitter tool removed
+- Behavior emitter works reliably
+- Directional emission works
+- No freezing
+- Ball tool remains functional
+
+---
+
+# 🧪 VALIDATION TEST
+
+1. Draw line  
+2. Set Behavior → Emitter  
+3. Rotate line → particles follow direction  
+4. Enable silent → no sound  
+5. Enable quantize → synced emission  
+6. Set slow rate → visible pacing  
+7. Use ball tool → still works  
+
+---
+
+## ⚡ MODEL TO USE
+
+Claude Haiku 4.5
+
+---
+
+## END
+</section>
+</article>
+</div>
+
+    </main>
+
+    <footer class="site-footer">
+      <div class="site-footer-inner footer-grid-6">
+        <section class="footer-brand">
+          <h2>Wall of Sound</h2>
+          <p>
+            Shared project memory for the StudioRich audio/visual system. Specs,
+            logs, recovery notes, and local portals live here.
+          </p>
+        </section>
+
+        <section class="footer-group">
+          <h2>Navigation</h2>
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Domains</h2>
+          <a href="/systems/wall/">Wall System</a>
+          <a href="/systems/sound/">Sound System</a>
+          <a href="/systems/">Systems Index</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Indexes</h2>
+          <a href="/specs/">Specs</a>
+          <a href="/logs/">Logs</a>
+          <a href="/components/wall/">Wall Components</a>
+          <a href="/components/sound/"
+            >Sound Components</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Local Portals</h2>
+          <a href="file:///Users/studio/Projects/wall-of-sound/wall/index.html"
+            >Wall App</a
+          >
+          <a
+            href="file:///Users/studio/Projects/wall-of-sound/sound/labeller.html"
+            >Sound Labeller</a
+          >
+          <a
+            href="file:///Users/studio/Projects/kinetic-master-engine/index.html"
+            >Kinetic Engine</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Recovery</h2>
+          <a href="/specs/">Implementation Specs</a>
+          <a href="/logs/">Session Logs</a>
+          <a href="/systems/sound/">Sound Recovery</a>
+          <a href="/systems/wall/">Wall Recovery</a>
+        </section>
+      </div>
+    </footer>
+  </body>
+</html>

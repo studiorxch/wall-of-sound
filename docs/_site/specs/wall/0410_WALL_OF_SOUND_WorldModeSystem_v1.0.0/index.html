@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>WorldModeSystem | Wall of Sound</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <link
+      rel="stylesheet"
+      href="/assets/css/style.css"
+    />
+  </head>
+
+  <body>
+    <header class="site-header">
+      <div class="site-header-inner">
+        <a class="site-title" href="/">
+          Wall of Sound
+        </a>
+
+        <nav class="site-nav" aria-label="Primary navigation">
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="page-content">
+      <div class="spec-shell">
+  <a class="back-link" href="/specs/">← Back to specs</a>
+
+  <div class="spec-kicker">
+    wall / world_system / needs-review
+  </div>
+
+  <h1>WorldModeSystem</h1>
+
+  <section class="spec-meta">
+    <div>
+      <strong>Doc ID</strong>
+      0410_WALL_OF_SOUND_WorldModeSystem_v1.0.0
+    </div>
+
+    <div>
+      <strong>Date</strong>
+      2026-04-10
+    </div>
+
+    <div>
+      <strong>Version</strong>
+      1.0.0
+    </div>
+
+    <div>
+      <strong>System</strong>
+      WOS
+    </div>
+
+    <div>
+      <strong>Domain</strong>
+      wall
+    </div>
+
+    <div>
+      <strong>Component</strong>
+      world_system
+    </div>
+
+    <div>
+      <strong>Type</strong>
+      legacy-spec
+    </div>
+
+    <div>
+      <strong>Priority</strong>
+      medium
+    </div>
+
+    <div>
+      <strong>Risk</strong>
+      unknown
+    </div>
+
+    <div>
+      <strong>Status</strong>
+      needs-review
+    </div>
+  </section>
+
+  
+  <p><strong>Summary:</strong> Imported legacy Wall of Sound spec. Needs review.</p>
+  
+
+  <article class="spec-body"><p>0410_WALL_OF_SOUND_WorldModeSystem_v1.0.0</p>
+
+<p>Generated: 04/10/2026</p>
+
+<hr />
+
+<h2 id="-objective">🎯 Objective</h2>
+
+<p>Introduce a clean <strong>World Mode System</strong> that provides total separation between:</p>
+
+<ul>
+  <li>Gravity-based physics (marble run / instrument)</li>
+  <li>Swarm-based behavior (ambient / emergent system)</li>
+</ul>
+
+<p>Goal:
+→ eliminate conflicting forces
+→ ensure predictable behavior
+→ enable fast switching between modes</p>
+
+<hr />
+
+<h2 id="️-constraints">⚠️ Constraints</h2>
+
+<ul>
+  <li>Do NOT rewrite physics engine</li>
+  <li>Do NOT modify emitter system</li>
+  <li>Do NOT change collision system</li>
+  <li>Do NOT affect audio/export pipeline</li>
+  <li>Only modify:
+    <ul>
+      <li>state definition</li>
+      <li>tick() logic</li>
+    </ul>
+  </li>
+</ul>
+
+<hr />
+
+<h2 id="-core-concept">🧱 Core Concept</h2>
+
+<p>Replace mixed-physics execution with <strong>exclusive world modes</strong></p>
+
+<pre><code class="language-txt">Gravity World → deterministic motion
+Swarm World → behavioral motion
+</code></pre>
+
+<hr />
+
+<h2 id="-implementation-requirements">🔧 Implementation Requirements</h2>
+
+<hr />
+
+<h3 id="1-add-world-state">1. Add World State</h3>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">state</span><span class="p">.</span><span class="nx">world</span> <span class="o">=</span> <span class="dl">"</span><span class="s2">gravity</span><span class="dl">"</span><span class="p">;</span> <span class="c1">// "gravity" | "swarm"</span>
+</code></pre></div></div>
+
+<hr />
+
+<h3 id="2-update-tick-execution">2. Update tick() Execution</h3>
+
+<p>Refactor physics section to:</p>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">if </span><span class="p">(</span><span class="nx">state</span><span class="p">.</span><span class="nx">world</span> <span class="o">===</span> <span class="dl">"</span><span class="s2">gravity</span><span class="dl">"</span><span class="p">)</span> <span class="p">{</span>
+  <span class="c1">// GRAVITY WORLD</span>
+  <span class="nf">applyGravity</span><span class="p">(</span><span class="nx">ball</span><span class="p">);</span>
+  <span class="nf">applyDamping</span><span class="p">(</span><span class="nx">ball</span><span class="p">);</span>
+  <span class="nf">clampSpeed</span><span class="p">(</span><span class="nx">ball</span><span class="p">);</span>
+
+  <span class="c1">// NO swarm logic here</span>
+<span class="p">}</span>
+
+<span class="k">if </span><span class="p">(</span><span class="nx">state</span><span class="p">.</span><span class="nx">world</span> <span class="o">===</span> <span class="dl">"</span><span class="s2">swarm</span><span class="dl">"</span><span class="p">)</span> <span class="p">{</span>
+  <span class="c1">// SWARM WORLD</span>
+  <span class="nf">updateSwarm</span><span class="p">(</span><span class="nx">state</span><span class="p">.</span><span class="nx">balls</span><span class="p">,</span> <span class="nx">dt</span><span class="p">);</span>
+
+  <span class="c1">// NO gravity here</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<hr />
+
+<h3 id="3-remove-mixed-logic">3. Remove Mixed Logic</h3>
+
+<p>Ensure these do NOT run together:</p>
+
+<ul>
+  <li>gravity + swarm</li>
+  <li>behavior forces + gravity</li>
+  <li>stabilization impulses in gravity mode</li>
+</ul>
+
+<hr />
+
+<h3 id="4-optional-stabilization-guard">4. Optional: Stabilization Guard</h3>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">if </span><span class="p">(</span><span class="nx">state</span><span class="p">.</span><span class="nx">world</span> <span class="o">!==</span> <span class="dl">"</span><span class="s2">gravity</span><span class="dl">"</span> <span class="o">&amp;&amp;</span> <span class="nx">ball</span><span class="p">.</span><span class="nx">collisionCount</span> <span class="o">&gt;</span> <span class="mi">3</span><span class="p">)</span> <span class="p">{</span>
+  <span class="nf">applyStabilization</span><span class="p">(</span><span class="nx">ball</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<hr />
+
+<h3 id="5-optional-ui-toggle">5. Optional UI Toggle</h3>
+
+<p>Simple toggle:</p>
+
+<div class="language-html highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nt">&lt;select</span> <span class="na">id=</span><span class="s">"world-mode"</span><span class="nt">&gt;</span>
+  <span class="nt">&lt;option</span> <span class="na">value=</span><span class="s">"gravity"</span><span class="nt">&gt;</span>Gravity<span class="nt">&lt;/option&gt;</span>
+  <span class="nt">&lt;option</span> <span class="na">value=</span><span class="s">"swarm"</span><span class="nt">&gt;</span>Swarm<span class="nt">&lt;/option&gt;</span>
+<span class="nt">&lt;/select&gt;</span>
+</code></pre></div></div>
+
+<p>Bind:</p>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">state</span><span class="p">.</span><span class="nx">world</span> <span class="o">=</span> <span class="nx">worldModeSelect</span><span class="p">.</span><span class="nx">value</span><span class="p">;</span>
+</code></pre></div></div>
+
+<hr />
+
+<h2 id="-expected-behavior">🧪 Expected Behavior</h2>
+
+<h3 id="gravity-mode">Gravity Mode</h3>
+
+<ul>
+  <li>balls fall naturally</li>
+  <li>ramps guide motion</li>
+  <li>emitters produce marble streams</li>
+  <li>predictable timing</li>
+</ul>
+
+<h3 id="swarm-mode">Swarm Mode</h3>
+
+<ul>
+  <li>particles cluster and orbit</li>
+  <li>emergent movement</li>
+  <li>ambient behavior</li>
+</ul>
+
+<hr />
+
+<h2 id="-do-not-do">🚫 Do NOT Do</h2>
+
+<ul>
+  <li>Do NOT partially mix modes</li>
+  <li>Do NOT run both systems simultaneously</li>
+  <li>Do NOT add conditional hacks inside physics</li>
+  <li>Do NOT modify emitter timing</li>
+</ul>
+
+<hr />
+
+<h2 id="-success-criteria">✅ Success Criteria</h2>
+
+<ul>
+  <li>switching modes instantly changes behavior</li>
+  <li>gravity mode has no swarm interference</li>
+  <li>swarm mode has no gravity influence</li>
+  <li>system remains stable and performant</li>
+</ul>
+
+<hr />
+
+<h2 id="-implementation-guide">⚡ Implementation Guide</h2>
+
+<ul>
+  <li>
+    <p>where:
+main.js → tick()</p>
+  </li>
+  <li>
+    <p>run:
+toggle state.world manually</p>
+  </li>
+  <li>
+    <p>expect:
+two completely different motion systems
+no conflicts or slow-motion behavior</p>
+  </li>
+</ul>
+</article>
+</div>
+
+    </main>
+
+    <footer class="site-footer">
+      <div class="site-footer-inner footer-grid-6">
+        <section class="footer-brand">
+          <h2>Wall of Sound</h2>
+          <p>
+            Shared project memory for the StudioRich audio/visual system. Specs,
+            logs, recovery notes, and local portals live here.
+          </p>
+        </section>
+
+        <section class="footer-group">
+          <h2>Navigation</h2>
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Domains</h2>
+          <a href="/systems/wall/">Wall System</a>
+          <a href="/systems/sound/">Sound System</a>
+          <a href="/systems/">Systems Index</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Indexes</h2>
+          <a href="/specs/">Specs</a>
+          <a href="/logs/">Logs</a>
+          <a href="/components/wall/">Wall Components</a>
+          <a href="/components/sound/"
+            >Sound Components</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Local Portals</h2>
+          <a href="file:///Users/studio/Projects/wall-of-sound/wall/index.html"
+            >Wall App</a
+          >
+          <a
+            href="file:///Users/studio/Projects/wall-of-sound/sound/labeller.html"
+            >Sound Labeller</a
+          >
+          <a
+            href="file:///Users/studio/Projects/kinetic-master-engine/index.html"
+            >Kinetic Engine</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Recovery</h2>
+          <a href="/specs/">Implementation Specs</a>
+          <a href="/logs/">Session Logs</a>
+          <a href="/systems/sound/">Sound Recovery</a>
+          <a href="/systems/wall/">Wall Recovery</a>
+        </section>
+      </div>
+    </footer>
+  </body>
+</html>

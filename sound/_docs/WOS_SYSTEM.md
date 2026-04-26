@@ -2,7 +2,11 @@
 project: Wall of Sound
 category: audio
 files_modified:
+source venv/bin/activate
+python /Users/studio/Projects/wall-of-sound/sound/tools/slicer.py
+python /Users/studio/Projects/wall-of-sound/sound/tools/bpm_normalize.py
 
+status: "in progress"
 next:
 
 summary: >
@@ -10,17 +14,14 @@ summary: >
 
 # github:
 
-git add .gitignore
-git commit -m "gitignore updated"
+git add .
+git commit -m "sound updated"
 git push
 
-# Build audio system
+# pipeline
 
-./pipeline.sh
-
-# Run live engine
-
-./run.sh
+./pipeline.sh # Build audio system
+./run.sh # Run live engine
 
 # directory structure
 
@@ -30,12 +31,14 @@ data/ → shared truth
 
 # execution
 
-Stable execution
-
 - always run from sound/
 - no path confusion
 - no cross-system bleed into wall/
 
-# Change Log
+# Technical Notes
 
-# April 24
+tree -I "venv"
+
+# Change Log (high-level)
+
+changes:

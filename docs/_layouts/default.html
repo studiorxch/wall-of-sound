@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>{{ page.title }} | {{ site.title }}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <link
+      rel="stylesheet"
+      href="{{ '/assets/css/style.css' | relative_url }}"
+    />
+  </head>
+
+  <body>
+    <header class="site-header">
+      <div class="site-header-inner">
+        <a class="site-title" href="{{ '/' | relative_url }}">
+          Wall of Sound
+        </a>
+
+        <nav class="site-nav" aria-label="Primary navigation">
+          <a href="{{ '/' | relative_url }}">Home</a>
+          <a href="{{ '/systems/wall/' | relative_url }}">Wall</a>
+          <a href="{{ '/systems/sound/' | relative_url }}">Sound</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="page-content{% if page.narrow %} narrow{% endif %}">
+      {{ content }}
+    </main>
+
+    <footer class="site-footer">
+      <div class="site-footer-inner footer-grid-6">
+        <section class="footer-brand">
+          <h2>Wall of Sound</h2>
+          <p>
+            Shared project memory for the StudioRich audio/visual system. Specs,
+            logs, recovery notes, and local portals live here.
+          </p>
+        </section>
+
+        <section class="footer-group">
+          <h2>Navigation</h2>
+          <a href="{{ '/' | relative_url }}">Home</a>
+          <a href="{{ '/systems/wall/' | relative_url }}">Wall</a>
+          <a href="{{ '/systems/sound/' | relative_url }}">Sound</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Domains</h2>
+          <a href="{{ '/systems/wall/' | relative_url }}">Wall System</a>
+          <a href="{{ '/systems/sound/' | relative_url }}">Sound System</a>
+          <a href="{{ '/systems/' | relative_url }}">Systems Index</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Indexes</h2>
+          <a href="{{ '/specs/' | relative_url }}">Specs</a>
+          <a href="{{ '/logs/' | relative_url }}">Logs</a>
+          <a href="{{ '/components/wall/' | relative_url }}">Wall Components</a>
+          <a href="{{ '/components/sound/' | relative_url }}"
+            >Sound Components</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Local Portals</h2>
+          <a href="file:///Users/studio/Projects/wall-of-sound/wall/index.html"
+            >Wall App</a
+          >
+          <a
+            href="file:///Users/studio/Projects/wall-of-sound/sound/labeller.html"
+            >Sound Labeller</a
+          >
+          <a
+            href="file:///Users/studio/Projects/kinetic-master-engine/index.html"
+            >Kinetic Engine</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Recovery</h2>
+          <a href="{{ '/specs/' | relative_url }}">Implementation Specs</a>
+          <a href="{{ '/logs/' | relative_url }}">Session Logs</a>
+          <a href="{{ '/systems/sound/' | relative_url }}">Sound Recovery</a>
+          <a href="{{ '/systems/wall/' | relative_url }}">Wall Recovery</a>
+        </section>
+      </div>
+    </footer>
+  </body>
+</html>

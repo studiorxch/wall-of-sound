@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>EmitterPhysicsFix | Wall of Sound</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <link
+      rel="stylesheet"
+      href="/assets/css/style.css"
+    />
+  </head>
+
+  <body>
+    <header class="site-header">
+      <div class="site-header-inner">
+        <a class="site-title" href="/">
+          Wall of Sound
+        </a>
+
+        <nav class="site-nav" aria-label="Primary navigation">
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="page-content">
+      <div class="spec-shell">
+  <a class="back-link" href="/specs/">← Back to specs</a>
+
+  <div class="spec-kicker">
+    wall / emitter_system / needs-review
+  </div>
+
+  <h1>EmitterPhysicsFix</h1>
+
+  <section class="spec-meta">
+    <div>
+      <strong>Doc ID</strong>
+      0410_WALL_OF_SOUND_EmitterPhysicsFix_v1.0.0
+    </div>
+
+    <div>
+      <strong>Date</strong>
+      2026-04-10
+    </div>
+
+    <div>
+      <strong>Version</strong>
+      1.0.0
+    </div>
+
+    <div>
+      <strong>System</strong>
+      WOS
+    </div>
+
+    <div>
+      <strong>Domain</strong>
+      wall
+    </div>
+
+    <div>
+      <strong>Component</strong>
+      emitter_system
+    </div>
+
+    <div>
+      <strong>Type</strong>
+      legacy-spec
+    </div>
+
+    <div>
+      <strong>Priority</strong>
+      medium
+    </div>
+
+    <div>
+      <strong>Risk</strong>
+      unknown
+    </div>
+
+    <div>
+      <strong>Status</strong>
+      needs-review
+    </div>
+  </section>
+
+  
+  <p><strong>Summary:</strong> Imported legacy Wall of Sound spec. Needs review.</p>
+  
+
+  <article class="spec-body"><p>0410_WALL_OF_SOUND_EmitterPhysicsFix_v1.0.0</p>
+
+<p>Generated: 04/10/2026</p>
+
+<hr />
+
+<h2 id="-objective">🎯 Objective</h2>
+
+<p>Fix slow-motion / floaty emitter + ball behavior caused by inconsistent time scaling between:</p>
+
+<ul>
+  <li>physics system (dt-based)</li>
+  <li>gravity (frame-based ❌)</li>
+  <li>emitter timing (real-time ms)</li>
+</ul>
+
+<p>Goal:
+→ restore responsive, real-time physics
+→ keep emitter timing accurate
+→ DO NOT change architecture or rewrite systems</p>
+
+<hr />
+
+<h2 id="️-constraints">⚠️ Constraints</h2>
+
+<ul>
+  <li>Do NOT refactor unrelated systems</li>
+  <li>Do NOT modify rendering pipeline</li>
+  <li>Do NOT change emitter API or UI</li>
+  <li>Only touch:
+    <ul>
+      <li>loop()</li>
+      <li>tick()</li>
+      <li>gravity application</li>
+    </ul>
+  </li>
+</ul>
+
+<hr />
+
+<h2 id="-problem-summary">🔍 Problem Summary</h2>
+
+<p>Current system mixes:</p>
+
+<ul>
+  <li>dt-scaled physics</li>
+  <li>frame-based gravity</li>
+  <li>real-time emitter timing</li>
+</ul>
+
+<p>Additionally:</p>
+
+<p>tick((stepMs / 1000) * (state.bpm / 120), frameTime);</p>
+
+<p>→ incorrectly ties physics speed to BPM</p>
+
+<p>Result:</p>
+
+<ul>
+  <li>slow motion feel</li>
+  <li>emitter desync</li>
+  <li>floaty behavior</li>
+</ul>
+
+<hr />
+
+<h2 id="-required-fixes">✅ Required Fixes</h2>
+
+<h3 id="1-remove-bpm-scaling-from-physics">1. Remove BPM scaling from physics</h3>
+
+<p>FIND:</p>
+
+<p>tick((stepMs / 1000) * (state.bpm / 120), frameTime);</p>
+
+<p>REPLACE WITH:</p>
+
+<p>tick(stepMs / 1000, frameTime);</p>
+
+<hr />
+
+<h3 id="2-make-gravity-time-based">2. Make gravity time-based</h3>
+
+<p>FIND:</p>
+
+<p>ball.vx += gx;
+ball.vy += gy;</p>
+
+<p>REPLACE WITH:</p>
+
+<p>ball.vx += gx _ dt _ 60;
+ball.vy += gy _ dt _ 60;</p>
+
+<hr />
+
+<h3 id="3-keep-emitter-timing-untouched">3. Keep emitter timing untouched</h3>
+
+<p>Emitter logic is already correct:</p>
+
+<p>if (now - emitter.lastSpawn &lt; emitter.rate) return;</p>
+
+<p>Do NOT modify this.</p>
+
+<hr />
+
+<h2 id="-expected-behavior-after-fix">🧪 Expected Behavior After Fix</h2>
+
+<ul>
+  <li>emitters produce consistent streams</li>
+  <li>ramps behave predictably</li>
+  <li>collisions feel tight</li>
+  <li>no slow-motion lag</li>
+  <li>system feels responsive at default BPM</li>
+</ul>
+
+<hr />
+
+<h2 id="-important-notes">🧠 Important Notes</h2>
+
+<ul>
+  <li>Physics should be time-based (dt)</li>
+  <li>Tempo should NOT affect simulation speed</li>
+  <li>Audio/loop system remains BPM-driven</li>
+  <li>Visual/physics system remains real-time</li>
+</ul>
+
+<hr />
+
+<h2 id="-do-not-do">🚫 Do NOT Do</h2>
+
+<ul>
+  <li>Do NOT introduce new physics systems</li>
+  <li>Do NOT add new dependencies</li>
+  <li>Do NOT refactor event system</li>
+  <li>Do NOT change emitter structure</li>
+  <li>Do NOT modify swarm logic</li>
+</ul>
+
+<hr />
+
+<h2 id="-success-criteria">✅ Success Criteria</h2>
+
+<ul>
+  <li>emitter stream visually matches expected rate</li>
+  <li>ball motion is responsive and stable</li>
+  <li>no perceived slow-motion</li>
+  <li>no regression in collisions or rendering</li>
+</ul>
+
+<hr />
+
+<h2 id="-implementation-guide">⚡ Implementation Guide</h2>
+
+<ul>
+  <li>
+    <p>where:
+main.js → loop(), tick()</p>
+  </li>
+  <li>
+    <p>run:
+reload app → place emitter → observe motion</p>
+  </li>
+  <li>
+    <p>expect:
+immediate improvement in speed + responsiveness</p>
+  </li>
+</ul>
+</article>
+</div>
+
+    </main>
+
+    <footer class="site-footer">
+      <div class="site-footer-inner footer-grid-6">
+        <section class="footer-brand">
+          <h2>Wall of Sound</h2>
+          <p>
+            Shared project memory for the StudioRich audio/visual system. Specs,
+            logs, recovery notes, and local portals live here.
+          </p>
+        </section>
+
+        <section class="footer-group">
+          <h2>Navigation</h2>
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Domains</h2>
+          <a href="/systems/wall/">Wall System</a>
+          <a href="/systems/sound/">Sound System</a>
+          <a href="/systems/">Systems Index</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Indexes</h2>
+          <a href="/specs/">Specs</a>
+          <a href="/logs/">Logs</a>
+          <a href="/components/wall/">Wall Components</a>
+          <a href="/components/sound/"
+            >Sound Components</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Local Portals</h2>
+          <a href="file:///Users/studio/Projects/wall-of-sound/wall/index.html"
+            >Wall App</a
+          >
+          <a
+            href="file:///Users/studio/Projects/wall-of-sound/sound/labeller.html"
+            >Sound Labeller</a
+          >
+          <a
+            href="file:///Users/studio/Projects/kinetic-master-engine/index.html"
+            >Kinetic Engine</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Recovery</h2>
+          <a href="/specs/">Implementation Specs</a>
+          <a href="/logs/">Session Logs</a>
+          <a href="/systems/sound/">Sound Recovery</a>
+          <a href="/systems/wall/">Wall Recovery</a>
+        </section>
+      </div>
+    </footer>
+  </body>
+</html>

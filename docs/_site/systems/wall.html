@@ -1,0 +1,635 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Wall System | Wall of Sound</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <link
+      rel="stylesheet"
+      href="/assets/css/style.css"
+    />
+  </head>
+
+  <body>
+    <header class="site-header">
+      <div class="site-header-inner">
+        <a class="site-title" href="/">
+          Wall of Sound
+        </a>
+
+        <nav class="site-nav" aria-label="Primary navigation">
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="page-content">
+      <h1 id="wall-system">Wall System</h1>
+
+<h2 id="current-focus">Current Focus</h2>
+
+<p>Visual / physics / interaction layer for Wall of Sound.</p>
+
+<h2 id="core-areas">Core Areas</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>Component</th>
+      <th>Status</th>
+      <th>Notes</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Object System</td>
+      <td>active</td>
+      <td>Unify strokes, shapes, groups, emitters</td>
+    </tr>
+    <tr>
+      <td>Mop Tool</td>
+      <td>active</td>
+      <td>Primary drawing and transform tool</td>
+    </tr>
+    <tr>
+      <td>Physics</td>
+      <td>active</td>
+      <td>Delta time, collision, damping, velocity</td>
+    </tr>
+    <tr>
+      <td>Emitters</td>
+      <td>active</td>
+      <td>Object-level behavior system</td>
+    </tr>
+    <tr>
+      <td>Particles</td>
+      <td>active</td>
+      <td>Visual/audio event carriers</td>
+    </tr>
+    <tr>
+      <td>Capsules</td>
+      <td>planned</td>
+      <td>Embeddable interactive scenes</td>
+    </tr>
+    <tr>
+      <td>UI Panels</td>
+      <td>active</td>
+      <td>Inspector, tools, presentation mode</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="boundary">Boundary</h2>
+
+<p>Wall docs should not modify the sound pipeline unless a spec explicitly crosses domains.</p>
+
+<h2 id="related-specs">Related Specs</h2>
+
+<div class="spec-list">
+  <div class="spec-row header">
+    <div>Date</div>
+    <div>Domain</div>
+    <div>Spec</div>
+    <div>Component</div>
+    <div>Version</div>
+    <div>Status</div>
+  </div>
+
+
+<div class="spec-row">
+<div class="spec-date">04/17/26</div>
+<div class="spec-domain">wall</div>
+<div class="spec-title">
+<a href="/specs/wall/0417_WALL_OF_SOUND_HitCounterFeedback_v1.0.0/">HitCounterFeedback</a>
+</div>
+<div class="spec-component">audio_system</div>
+<div class="spec-version">v1.0.0</div>
+<div class="spec-status">needs-review</div>
+<div class="spec-summary">Imported legacy Wall of Sound spec. Needs review.</div>
+</div>
+
+<div class="spec-row">
+<div class="spec-date">04/17/26</div>
+<div class="spec-domain">wall</div>
+<div class="spec-title">
+<a href="/specs/wall/0417_WALL_OF_SOUND_Fix_NoteSource_v1.0.0/">Fix NoteSource</a>
+</div>
+<div class="spec-component">audio_system</div>
+<div class="spec-version">v1.0.0</div>
+<div class="spec-status">needs-review</div>
+<div class="spec-summary">Imported legacy Wall of Sound spec. Needs review.</div>
+</div>
+
+<div class="spec-row">
+<div class="spec-date">04/17/26</div>
+<div class="spec-domain">wall</div>
+<div class="spec-title">
+<a href="/specs/wall/0417_WALL_OF_SOUND_EmitterBlueprint_v1.0.0/">EmitterBlueprint</a>
+</div>
+<div class="spec-component">emitter_system</div>
+<div class="spec-version">v1.0.0</div>
+<div class="spec-status">needs-review</div>
+<div class="spec-summary">Imported legacy Wall of Sound spec. Needs review.</div>
+</div>
+
+<div class="spec-row">
+<div class="spec-date">04/17/26</div>
+<div class="spec-domain">wall</div>
+<div class="spec-title">
+<a href="/specs/wall/0417_WALL_OF_SOUND_EmitterBlueprint_FINAL_v1.0.1/">EmitterBlueprint FINAL</a>
+</div>
+<div class="spec-component">emitter_system</div>
+<div class="spec-version">v1.0.1</div>
+<div class="spec-status">needs-review</div>
+<div class="spec-summary">Imported legacy Wall of Sound spec. Needs review.</div>
+</div>
+
+<div class="spec-row">
+<div class="spec-date">04/17/26</div>
+<div class="spec-domain">wall</div>
+<div class="spec-title">
+<a href="/specs/wall/0417_WALL_OF_SOUND_DebugHUD_v1.0.0/">DebugHUD</a>
+</div>
+<div class="spec-component">ui</div>
+<div class="spec-version">v1.0.0</div>
+<div class="spec-status">needs-review</div>
+<div class="spec-summary">Imported legacy Wall of Sound spec. Needs review.</div>
+</div>
+
+<div class="spec-row">
+<div class="spec-date">04/17/26</div>
+<div class="spec-domain">wall</div>
+<div class="spec-title">
+<a href="/specs/wall/0417_UI_Clarity_Sampler_Inspector_v1.0.0/">UI Clarity Sampler Inspector</a>
+</div>
+<div class="spec-component">ui</div>
+<div class="spec-version">v1.0.0</div>
+<div class="spec-status">needs-review</div>
+<div class="spec-summary">Imported legacy Wall of Sound spec. Needs review.</div>
+</div>
+
+<div class="spec-row">
+<div class="spec-date">04/17/26</div>
+<div class="spec-domain">wall</div>
+<div class="spec-title">
+<a href="/specs/wall/0417_WOS_LineToParticleBlueprint_v1.0.0/">LineToParticleBlueprint</a>
+</div>
+<div class="spec-component">line_tool</div>
+<div class="spec-version">v1.0.0</div>
+<div class="spec-status">needs-review</div>
+<div class="spec-summary">Imported legacy Wall of Sound spec. Needs review.</div>
+</div>
+
+<div class="spec-row">
+<div class="spec-date">04/17/26</div>
+<div class="spec-domain">wall</div>
+<div class="spec-title">
+<a href="/specs/wall/0417_WOS_EmitterFix_v1.0.0/">EmitterFix</a>
+</div>
+<div class="spec-component">emitter_system</div>
+<div class="spec-version">v1.0.0</div>
+<div class="spec-status">needs-review</div>
+<div class="spec-summary">Imported legacy Wall of Sound spec. Needs review.</div>
+</div>
+
+<div class="spec-row">
+<div class="spec-date">04/17/26</div>
+<div class="spec-domain">wall</div>
+<div class="spec-title">
+<a href="/specs/wall/0417_WALL_OF_SOUND_mainjs_patch_v1.0.0/">mainjs patch</a>
+</div>
+<div class="spec-component">audio_system</div>
+<div class="spec-version">v1.0.0</div>
+<div class="spec-status">needs-review</div>
+<div class="spec-summary">Imported legacy Wall of Sound spec. Needs review.</div>
+</div>
+
+<div class="spec-row">
+<div class="spec-date">04/17/26</div>
+<div class="spec-domain">wall</div>
+<div class="spec-title">
+<a href="/specs/wall/0417_WALL_OF_SOUND_ScaleLock_v1.0.0/">ScaleLock</a>
+</div>
+<div class="spec-component">audio_system</div>
+<div class="spec-version">v1.0.0</div>
+<div class="spec-status">needs-review</div>
+<div class="spec-summary">Imported legacy Wall of Sound spec. Needs review.</div>
+</div>
+
+<div class="spec-row">
+<div class="spec-date">04/17/26</div>
+<div class="spec-domain">wall</div>
+<div class="spec-title">
+<a href="/specs/wall/0417_WALL_OF_SOUND_ParticleExpression_v3.5.0/">ParticleExpression</a>
+</div>
+<div class="spec-component">audio_system</div>
+<div class="spec-version">v3.5.0</div>
+<div class="spec-status">needs-review</div>
+<div class="spec-summary">Imported legacy Wall of Sound spec. Needs review.</div>
+</div>
+
+<div class="spec-row">
+<div class="spec-date">04/17/26</div>
+<div class="spec-domain">wall</div>
+<div class="spec-title">
+<a href="/specs/wall/0417_WALL_OF_SOUND_MASTER_Pack_v1.1.0/">MASTER Pack</a>
+</div>
+<div class="spec-component">audio_system</div>
+<div class="spec-version">v1.1.0</div>
+<div class="spec-status">needs-review</div>
+<div class="spec-summary">Imported legacy Wall of Sound spec. Needs review.</div>
+</div>
+
+<div class="spec-row">
+<div class="spec-date">04/16/26</div>
+<div class="spec-domain">wall</div>
+<div class="spec-title">
+<a href="/specs/wall/0416_WOS_ParticleCleanup_v1.0.0/">ParticleCleanup</a>
+</div>
+<div class="spec-component">particle_system</div>
+<div class="spec-version">v1.0.0</div>
+<div class="spec-status">needs-review</div>
+<div class="spec-summary">Imported legacy Wall of Sound spec. Needs review.</div>
+</div>
+
+<div class="spec-row">
+<div class="spec-date">04/16/26</div>
+<div class="spec-domain">wall</div>
+<div class="spec-title">
+<a href="/specs/wall/0416_WOS_Emitter_Unification_v1.0.0/">Emitter Unification</a>
+</div>
+<div class="spec-component">emitter_system</div>
+<div class="spec-version">v1.0.0</div>
+<div class="spec-status">needs-review</div>
+<div class="spec-summary">Imported legacy Wall of Sound spec. Needs review.</div>
+</div>
+
+<div class="spec-row">
+<div class="spec-date">04/16/26</div>
+<div class="spec-domain">wall</div>
+<div class="spec-title">
+<a href="/specs/wall/0416_WOS_EmitterDirectionRefactor_v1.0.0/">EmitterDirectionRefactor</a>
+</div>
+<div class="spec-component">emitter_system</div>
+<div class="spec-version">v1.0.0</div>
+<div class="spec-status">needs-review</div>
+<div class="spec-summary">Imported legacy Wall of Sound spec. Needs review.</div>
+</div>
+
+<div class="spec-row">
+<div class="spec-date">04/16/26</div>
+<div class="spec-domain">wall</div>
+<div class="spec-title">
+<a href="/specs/wall/0416_WALL_OF_SOUND_EmitterSystem_Workflow_v1.0.0/">EmitterSystem Workflow</a>
+</div>
+<div class="spec-component">emitter_system</div>
+<div class="spec-version">v1.0.0</div>
+<div class="spec-status">needs-review</div>
+<div class="spec-summary">Imported legacy Wall of Sound spec. Needs review.</div>
+</div>
+
+<div class="spec-row">
+<div class="spec-date">04/16/26</div>
+<div class="spec-domain">wall</div>
+<div class="spec-title">
+<a href="/specs/wall/0416_WALL_OF_SOUND_EmitterQuantizeSystem_v1.0.0/">EmitterQuantizeSystem</a>
+</div>
+<div class="spec-component">emitter_system</div>
+<div class="spec-version">v1.0.0</div>
+<div class="spec-status">needs-review</div>
+<div class="spec-summary">Imported legacy Wall of Sound spec. Needs review.</div>
+</div>
+
+<div class="spec-row">
+<div class="spec-date">04/16/26</div>
+<div class="spec-domain">wall</div>
+<div class="spec-title">
+<a href="/specs/wall/0416_WOS_SpawnCollisionImmunity_v1.0.0/">SpawnCollisionImmunity</a>
+</div>
+<div class="spec-component">general</div>
+<div class="spec-version">v1.0.0</div>
+<div class="spec-status">needs-review</div>
+<div class="spec-summary">Imported legacy Wall of Sound spec. Needs review.</div>
+</div>
+
+<div class="spec-row">
+<div class="spec-date">04/15/26</div>
+<div class="spec-domain">wall</div>
+<div class="spec-title">
+<a href="/specs/wall/0415_WOS_SystemStabilityPass_v1.1/">SystemStabilityPass</a>
+</div>
+<div class="spec-component">general</div>
+<div class="spec-version">v1.1.0</div>
+<div class="spec-status">needs-review</div>
+<div class="spec-summary">Imported legacy Wall of Sound spec. Needs review.</div>
+</div>
+
+<div class="spec-row">
+<div class="spec-date">04/14/26</div>
+<div class="spec-domain">wall</div>
+<div class="spec-title">
+<a href="/specs/wall/0414_WALL_OF_SOUND_PhysicsModes_v1.0.0/">PhysicsModes</a>
+</div>
+<div class="spec-component">physics</div>
+<div class="spec-version">v1.0.0</div>
+<div class="spec-status">needs-review</div>
+<div class="spec-summary">Imported legacy Wall of Sound spec. Needs review.</div>
+</div>
+
+<div class="spec-row">
+<div class="spec-date">04/14/26</div>
+<div class="spec-domain">wall</div>
+<div class="spec-title">
+<a href="/specs/wall/0414_WALL_OF_SOUND_PerformancePass_v1.0.0/">PerformancePass</a>
+</div>
+<div class="spec-component">audio_system</div>
+<div class="spec-version">v1.0.0</div>
+<div class="spec-status">needs-review</div>
+<div class="spec-summary">Imported legacy Wall of Sound spec. Needs review.</div>
+</div>
+
+<div class="spec-row">
+<div class="spec-date">04/14/26</div>
+<div class="spec-domain">wall</div>
+<div class="spec-title">
+<a href="/specs/wall/0414_WALL_OF_SOUND_ShapeParticles_v1.0.0/">ShapeParticles</a>
+</div>
+<div class="spec-component">audio_system</div>
+<div class="spec-version">v1.0.0</div>
+<div class="spec-status">needs-review</div>
+<div class="spec-summary">Imported legacy Wall of Sound spec. Needs review.</div>
+</div>
+
+<div class="spec-row">
+<div class="spec-date">04/13/26</div>
+<div class="spec-domain">wall</div>
+<div class="spec-title">
+<a href="/specs/wall/0413_WALL_OF_SOUND_MotionUI_v1/">MotionUI</a>
+</div>
+<div class="spec-component">ui</div>
+<div class="spec-version">v1.0.0</div>
+<div class="spec-status">needs-review</div>
+<div class="spec-summary">Imported legacy Wall of Sound spec. Needs review.</div>
+</div>
+
+<div class="spec-row">
+<div class="spec-date">04/13/26</div>
+<div class="spec-domain">wall</div>
+<div class="spec-title">
+<a href="/specs/wall/0413_WALL_OF_SOUND_MotionCore_v1/">MotionCore</a>
+</div>
+<div class="spec-component">audio_system</div>
+<div class="spec-version">v1.0.0</div>
+<div class="spec-status">needs-review</div>
+<div class="spec-summary">Imported legacy Wall of Sound spec. Needs review.</div>
+</div>
+
+<div class="spec-row">
+<div class="spec-date">04/13/26</div>
+<div class="spec-domain">wall</div>
+<div class="spec-title">
+<a href="/specs/wall/0413_WALL_OF_SOUND_LineTool_v2.1.0_FULL/">LineTool</a>
+</div>
+<div class="spec-component">audio_system</div>
+<div class="spec-version">v2.1.0</div>
+<div class="spec-status">needs-review</div>
+<div class="spec-summary">Imported legacy Wall of Sound spec. Needs review.</div>
+</div>
+
+<div class="spec-row">
+<div class="spec-date">04/13/26</div>
+<div class="spec-domain">wall</div>
+<div class="spec-title">
+<a href="/specs/wall/0413_WALL_OF_SOUND_DragDropFix_v1/">DragDropFix</a>
+</div>
+<div class="spec-component">audio_system</div>
+<div class="spec-version">v1.0.0</div>
+<div class="spec-status">needs-review</div>
+<div class="spec-summary">Imported legacy Wall of Sound spec. Needs review.</div>
+</div>
+
+<div class="spec-row">
+<div class="spec-date">04/13/26</div>
+<div class="spec-domain">wall</div>
+<div class="spec-title">
+<a href="/specs/wall/0413_WALL_OF_SOUND_AudioStateFix_v1/">AudioStateFix</a>
+</div>
+<div class="spec-component">audio_system</div>
+<div class="spec-version">v1.0.0</div>
+<div class="spec-status">needs-review</div>
+<div class="spec-summary">Imported legacy Wall of Sound spec. Needs review.</div>
+</div>
+
+<div class="spec-row">
+<div class="spec-date">04/12/26</div>
+<div class="spec-domain">wall</div>
+<div class="spec-title">
+<a href="/specs/wall/0412_WALL_OF_SOUND_UI_SoundResponse_v1.0.0/">UI SoundResponse</a>
+</div>
+<div class="spec-component">ui</div>
+<div class="spec-version">v1.0.0</div>
+<div class="spec-status">needs-review</div>
+<div class="spec-summary">Imported legacy Wall of Sound spec. Needs review.</div>
+</div>
+
+<div class="spec-row">
+<div class="spec-date">04/12/26</div>
+<div class="spec-domain">wall</div>
+<div class="spec-title">
+<a href="/specs/wall/0412_WALL_OF_SOUND_SampleVariation+Cleanup_v1.1.0/">SampleVariation + Cleanup</a>
+</div>
+<div class="spec-component">audio_system</div>
+<div class="spec-version">v1.1.0</div>
+<div class="spec-status">needs-review</div>
+<div class="spec-summary">Imported legacy Wall of Sound spec. Needs review.</div>
+</div>
+
+<div class="spec-row">
+<div class="spec-date">04/12/26</div>
+<div class="spec-domain">wall</div>
+<div class="spec-title">
+<a href="/specs/wall/0412_WALL_OF_SOUND_SampleEngine_PhaseDensity_v1.0.0/">SampleEngine PhaseDensity</a>
+</div>
+<div class="spec-component">audio_system</div>
+<div class="spec-version">v1.0.0</div>
+<div class="spec-status">needs-review</div>
+<div class="spec-summary">Imported legacy Wall of Sound spec. Needs review.</div>
+</div>
+
+<div class="spec-row">
+<div class="spec-date">04/12/26</div>
+<div class="spec-domain">wall</div>
+<div class="spec-title">
+<a href="/specs/wall/0412_WALL_OF_SOUND_FullFix_AudioAndCleanup_v1.0.0/">FullFix AudioAndCleanup</a>
+</div>
+<div class="spec-component">audio_system</div>
+<div class="spec-version">v1.0.0</div>
+<div class="spec-status">needs-review</div>
+<div class="spec-summary">Imported legacy Wall of Sound spec. Needs review.</div>
+</div>
+
+<div class="spec-row">
+<div class="spec-date">04/10/26</div>
+<div class="spec-domain">wall</div>
+<div class="spec-title">
+<a href="/specs/wall/0410_WALL_OF_SOUND_WorldPanel_v1.0.0/">WorldPanel</a>
+</div>
+<div class="spec-component">world_system</div>
+<div class="spec-version">v1.0.0</div>
+<div class="spec-status">needs-review</div>
+<div class="spec-summary">Imported legacy Wall of Sound spec. Needs review.</div>
+</div>
+
+<div class="spec-row">
+<div class="spec-date">04/10/26</div>
+<div class="spec-domain">wall</div>
+<div class="spec-title">
+<a href="/specs/wall/0410_WALL_OF_SOUND_EmitterPhysicsFix_v1.0.0/">EmitterPhysicsFix</a>
+</div>
+<div class="spec-component">emitter_system</div>
+<div class="spec-version">v1.0.0</div>
+<div class="spec-status">needs-review</div>
+<div class="spec-summary">Imported legacy Wall of Sound spec. Needs review.</div>
+</div>
+
+<div class="spec-row">
+<div class="spec-date">04/10/26</div>
+<div class="spec-domain">wall</div>
+<div class="spec-title">
+<a href="/specs/wall/0410_WALL_OF_SOUND_WorldModeSystem_v1.0.0/">WorldModeSystem</a>
+</div>
+<div class="spec-component">world_system</div>
+<div class="spec-version">v1.0.0</div>
+<div class="spec-status">needs-review</div>
+<div class="spec-summary">Imported legacy Wall of Sound spec. Needs review.</div>
+</div>
+
+<div class="spec-row">
+<div class="spec-date">04/10/26</div>
+<div class="spec-domain">wall</div>
+<div class="spec-title">
+<a href="/specs/wall/0410_WALL_OF_SOUND_PhysicsTuning_v1.0.0/">PhysicsTuning</a>
+</div>
+<div class="spec-component">physics</div>
+<div class="spec-version">v1.0.0</div>
+<div class="spec-status">needs-review</div>
+<div class="spec-summary">Imported legacy Wall of Sound spec. Needs review.</div>
+</div>
+
+<div class="spec-row">
+<div class="spec-date">04/10/26</div>
+<div class="spec-domain">wall</div>
+<div class="spec-title">
+<a href="/specs/wall/0410_WALL_OF_SOUND_PhysicsSpeedFix_v1.0/">PhysicsSpeedFix</a>
+</div>
+<div class="spec-component">physics</div>
+<div class="spec-version">v1.0.0</div>
+<div class="spec-status">needs-review</div>
+<div class="spec-summary">Imported legacy Wall of Sound spec. Needs review.</div>
+</div>
+
+<div class="spec-row">
+<div class="spec-date">04/10/26</div>
+<div class="spec-domain">wall</div>
+<div class="spec-title">
+<a href="/specs/wall/0410_WALL_OF_SOUND_ExportSyncFix_v1.0.0/">ExportSyncFix</a>
+</div>
+<div class="spec-component">audio_system</div>
+<div class="spec-version">v1.0.0</div>
+<div class="spec-status">needs-review</div>
+<div class="spec-summary">Imported legacy Wall of Sound spec. Needs review.</div>
+</div>
+
+<div class="spec-row">
+<div class="spec-date">04/10/26</div>
+<div class="spec-domain">wall</div>
+<div class="spec-title">
+<a href="/specs/wall/0410_WALL_OF_SOUND_EmitterUI_v1.0.0/">EmitterUI</a>
+</div>
+<div class="spec-component">emitter_system</div>
+<div class="spec-version">v1.0.0</div>
+<div class="spec-status">needs-review</div>
+<div class="spec-summary">Imported legacy Wall of Sound spec. Needs review.</div>
+</div>
+
+<div class="spec-row">
+<div class="spec-date">04/09/26</div>
+<div class="spec-domain">wall</div>
+<div class="spec-title">
+<a href="/specs/wall/0409_WALL_OF_SOUND_ShapeTransformDuplicate_v1.0.0/">ShapeTransformDuplicate</a>
+</div>
+<div class="spec-component">audio_system</div>
+<div class="spec-version">v1.0.0</div>
+<div class="spec-status">needs-review</div>
+<div class="spec-summary">Imported legacy Wall of Sound spec. Needs review.</div>
+</div>
+
+
+</div>
+
+
+    </main>
+
+    <footer class="site-footer">
+      <div class="site-footer-inner footer-grid-6">
+        <section class="footer-brand">
+          <h2>Wall of Sound</h2>
+          <p>
+            Shared project memory for the StudioRich audio/visual system. Specs,
+            logs, recovery notes, and local portals live here.
+          </p>
+        </section>
+
+        <section class="footer-group">
+          <h2>Navigation</h2>
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Domains</h2>
+          <a href="/systems/wall/">Wall System</a>
+          <a href="/systems/sound/">Sound System</a>
+          <a href="/systems/">Systems Index</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Indexes</h2>
+          <a href="/specs/">Specs</a>
+          <a href="/logs/">Logs</a>
+          <a href="/components/wall/">Wall Components</a>
+          <a href="/components/sound/"
+            >Sound Components</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Local Portals</h2>
+          <a href="file:///Users/studio/Projects/wall-of-sound/wall/index.html"
+            >Wall App</a
+          >
+          <a
+            href="file:///Users/studio/Projects/wall-of-sound/sound/labeller.html"
+            >Sound Labeller</a
+          >
+          <a
+            href="file:///Users/studio/Projects/kinetic-master-engine/index.html"
+            >Kinetic Engine</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Recovery</h2>
+          <a href="/specs/">Implementation Specs</a>
+          <a href="/logs/">Session Logs</a>
+          <a href="/systems/sound/">Sound Recovery</a>
+          <a href="/systems/wall/">Wall Recovery</a>
+        </section>
+      </div>
+    </footer>
+  </body>
+</html>

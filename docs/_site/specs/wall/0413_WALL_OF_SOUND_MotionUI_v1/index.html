@@ -1,0 +1,452 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>MotionUI | Wall of Sound</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <link
+      rel="stylesheet"
+      href="/assets/css/style.css"
+    />
+  </head>
+
+  <body>
+    <header class="site-header">
+      <div class="site-header-inner">
+        <a class="site-title" href="/">
+          Wall of Sound
+        </a>
+
+        <nav class="site-nav" aria-label="Primary navigation">
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="page-content">
+      <div class="spec-shell">
+  <a class="back-link" href="/specs/">← Back to specs</a>
+
+  <div class="spec-kicker">
+    wall / ui / needs-review
+  </div>
+
+  <h1>MotionUI</h1>
+
+  <section class="spec-meta">
+    <div>
+      <strong>Doc ID</strong>
+      0413_WALL_OF_SOUND_MotionUI_v1
+    </div>
+
+    <div>
+      <strong>Date</strong>
+      2026-04-13
+    </div>
+
+    <div>
+      <strong>Version</strong>
+      1.0.0
+    </div>
+
+    <div>
+      <strong>System</strong>
+      WOS
+    </div>
+
+    <div>
+      <strong>Domain</strong>
+      wall
+    </div>
+
+    <div>
+      <strong>Component</strong>
+      ui
+    </div>
+
+    <div>
+      <strong>Type</strong>
+      legacy-spec
+    </div>
+
+    <div>
+      <strong>Priority</strong>
+      medium
+    </div>
+
+    <div>
+      <strong>Risk</strong>
+      unknown
+    </div>
+
+    <div>
+      <strong>Status</strong>
+      needs-review
+    </div>
+  </section>
+
+  
+  <p><strong>Summary:</strong> Imported legacy Wall of Sound spec. Needs review.</p>
+  
+
+  <article class="spec-body"><h1 id="0413_wall_of_sound_motionui_v100">0413_WALL_OF_SOUND_MotionUI_v1.0.0</h1>
+
+<p>Generated: 04/13/2026</p>
+
+<hr />
+
+<h2 id="-objective">🎯 Objective</h2>
+
+<p>Install a minimal Motion UI into the existing Inspector panel that:</p>
+
+<ul>
+  <li>attaches motion to selected shapes</li>
+  <li>updates in real-time (no reload required)</li>
+  <li>does not break existing systems</li>
+  <li>uses existing state + selection model</li>
+</ul>
+
+<hr />
+
+<h2 id="-assumptions">🧠 Assumptions</h2>
+
+<ul>
+  <li><code class="language-plaintext highlighter-rouge">state.shapes</code> exists</li>
+  <li><code class="language-plaintext highlighter-rouge">state.selectedShapeId</code> is used for selection</li>
+  <li>Inspector UI already exists</li>
+  <li><code class="language-plaintext highlighter-rouge">ui/controls.js</code> handles inspector bindings</li>
+  <li>MotionSystem is already installed and running</li>
+</ul>
+
+<hr />
+
+<h2 id="️-constraints-critical">⚠️ Constraints (CRITICAL)</h2>
+
+<ul>
+  <li>DO NOT modify ShapeSystem behavior</li>
+  <li>DO NOT modify rendering pipeline</li>
+  <li>DO NOT introduce new global state</li>
+  <li>ONLY extend UI + interaction layer</li>
+  <li>Motion must be attached per-shape (<code class="language-plaintext highlighter-rouge">shape.motion</code>)</li>
+</ul>
+
+<hr />
+
+<h2 id="-step-1--add-motion-ui-block">🧱 STEP 1 — Add Motion UI Block</h2>
+
+<h3 id="file-indexhtml">File: <code class="language-plaintext highlighter-rouge">index.html</code></h3>
+
+<p>Insert inside <code class="language-plaintext highlighter-rouge">&lt;aside id="inspector"&gt;</code><br />
+Place AFTER Behavior block</p>
+
+<div class="language-html highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nt">&lt;section</span> <span class="na">class=</span><span class="s">"inspector-block"</span> <span class="na">id=</span><span class="s">"motion-block"</span><span class="nt">&gt;</span>
+  <span class="nt">&lt;p</span> <span class="na">class=</span><span class="s">"micro-title"</span><span class="nt">&gt;</span>Motion<span class="nt">&lt;/p&gt;</span>
+
+  <span class="nt">&lt;label</span> <span class="na">class=</span><span class="s">"mini-toggle"</span><span class="nt">&gt;</span>
+    <span class="nt">&lt;input</span> <span class="na">id=</span><span class="s">"motion-enabled"</span> <span class="na">type=</span><span class="s">"checkbox"</span> <span class="nt">/&gt;</span>
+    <span class="nt">&lt;span&gt;</span>Enable<span class="nt">&lt;/span&gt;</span>
+  <span class="nt">&lt;/label&gt;</span>
+
+  <span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">"compact-grid two"</span><span class="nt">&gt;</span>
+    <span class="nt">&lt;label</span> <span class="na">class=</span><span class="s">"field compact"</span><span class="nt">&gt;</span>
+      <span class="nt">&lt;span&gt;</span>VX<span class="nt">&lt;/span&gt;</span>
+      <span class="nt">&lt;input</span>
+        <span class="na">id=</span><span class="s">"motion-vx"</span>
+        <span class="na">type=</span><span class="s">"range"</span>
+        <span class="na">min=</span><span class="s">"-200"</span>
+        <span class="na">max=</span><span class="s">"200"</span>
+        <span class="na">step=</span><span class="s">"1"</span>
+        <span class="na">value=</span><span class="s">"0"</span>
+      <span class="nt">/&gt;</span>
+      <span class="nt">&lt;output</span> <span class="na">id=</span><span class="s">"motion-vx-value"</span><span class="nt">&gt;</span>0<span class="nt">&lt;/output&gt;</span>
+    <span class="nt">&lt;/label&gt;</span>
+
+    <span class="nt">&lt;label</span> <span class="na">class=</span><span class="s">"field compact"</span><span class="nt">&gt;</span>
+      <span class="nt">&lt;span&gt;</span>VY<span class="nt">&lt;/span&gt;</span>
+      <span class="nt">&lt;input</span>
+        <span class="na">id=</span><span class="s">"motion-vy"</span>
+        <span class="na">type=</span><span class="s">"range"</span>
+        <span class="na">min=</span><span class="s">"-200"</span>
+        <span class="na">max=</span><span class="s">"200"</span>
+        <span class="na">step=</span><span class="s">"1"</span>
+        <span class="na">value=</span><span class="s">"0"</span>
+      <span class="nt">/&gt;</span>
+      <span class="nt">&lt;output</span> <span class="na">id=</span><span class="s">"motion-vy-value"</span><span class="nt">&gt;</span>0<span class="nt">&lt;/output&gt;</span>
+    <span class="nt">&lt;/label&gt;</span>
+  <span class="nt">&lt;/div&gt;</span>
+
+  <span class="nt">&lt;label</span> <span class="na">class=</span><span class="s">"field compact"</span><span class="nt">&gt;</span>
+    <span class="nt">&lt;span&gt;</span>Rotate<span class="nt">&lt;/span&gt;</span>
+    <span class="nt">&lt;input</span> <span class="na">id=</span><span class="s">"motion-rot"</span> <span class="na">type=</span><span class="s">"range"</span> <span class="na">min=</span><span class="s">"-5"</span> <span class="na">max=</span><span class="s">"5"</span> <span class="na">step=</span><span class="s">"0.1"</span> <span class="na">value=</span><span class="s">"0"</span> <span class="nt">/&gt;</span>
+    <span class="nt">&lt;output</span> <span class="na">id=</span><span class="s">"motion-rot-value"</span><span class="nt">&gt;</span>0<span class="nt">&lt;/output&gt;</span>
+  <span class="nt">&lt;/label&gt;</span>
+
+  <span class="nt">&lt;label</span> <span class="na">class=</span><span class="s">"mini-toggle"</span><span class="nt">&gt;</span>
+    <span class="nt">&lt;input</span> <span class="na">id=</span><span class="s">"motion-loop"</span> <span class="na">type=</span><span class="s">"checkbox"</span> <span class="na">checked</span> <span class="nt">/&gt;</span>
+    <span class="nt">&lt;span&gt;</span>Loop<span class="nt">&lt;/span&gt;</span>
+  <span class="nt">&lt;/label&gt;</span>
+<span class="nt">&lt;/section&gt;</span>
+</code></pre></div></div>
+
+<hr />
+
+<h2 id="-step-2--wire-motion-controls">🧱 STEP 2 — Wire Motion Controls</h2>
+
+<h3 id="file-uicontrolsjs">File: <code class="language-plaintext highlighter-rouge">ui/controls.js</code></h3>
+
+<p>Add at bottom of file:</p>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">// --- MOTION UI ---</span>
+
+<span class="kd">const</span> <span class="nx">motionEnabled</span> <span class="o">=</span> <span class="nb">document</span><span class="p">.</span><span class="nf">getElementById</span><span class="p">(</span><span class="dl">"</span><span class="s2">motion-enabled</span><span class="dl">"</span><span class="p">);</span>
+<span class="kd">const</span> <span class="nx">motionVX</span> <span class="o">=</span> <span class="nb">document</span><span class="p">.</span><span class="nf">getElementById</span><span class="p">(</span><span class="dl">"</span><span class="s2">motion-vx</span><span class="dl">"</span><span class="p">);</span>
+<span class="kd">const</span> <span class="nx">motionVY</span> <span class="o">=</span> <span class="nb">document</span><span class="p">.</span><span class="nf">getElementById</span><span class="p">(</span><span class="dl">"</span><span class="s2">motion-vy</span><span class="dl">"</span><span class="p">);</span>
+<span class="kd">const</span> <span class="nx">motionRot</span> <span class="o">=</span> <span class="nb">document</span><span class="p">.</span><span class="nf">getElementById</span><span class="p">(</span><span class="dl">"</span><span class="s2">motion-rot</span><span class="dl">"</span><span class="p">);</span>
+<span class="kd">const</span> <span class="nx">motionLoop</span> <span class="o">=</span> <span class="nb">document</span><span class="p">.</span><span class="nf">getElementById</span><span class="p">(</span><span class="dl">"</span><span class="s2">motion-loop</span><span class="dl">"</span><span class="p">);</span>
+
+<span class="kd">const</span> <span class="nx">motionVXVal</span> <span class="o">=</span> <span class="nb">document</span><span class="p">.</span><span class="nf">getElementById</span><span class="p">(</span><span class="dl">"</span><span class="s2">motion-vx-value</span><span class="dl">"</span><span class="p">);</span>
+<span class="kd">const</span> <span class="nx">motionVYVal</span> <span class="o">=</span> <span class="nb">document</span><span class="p">.</span><span class="nf">getElementById</span><span class="p">(</span><span class="dl">"</span><span class="s2">motion-vy-value</span><span class="dl">"</span><span class="p">);</span>
+<span class="kd">const</span> <span class="nx">motionRotVal</span> <span class="o">=</span> <span class="nb">document</span><span class="p">.</span><span class="nf">getElementById</span><span class="p">(</span><span class="dl">"</span><span class="s2">motion-rot-value</span><span class="dl">"</span><span class="p">);</span>
+
+<span class="kd">function</span> <span class="nf">getSelectedShape</span><span class="p">()</span> <span class="p">{</span>
+  <span class="k">return</span> <span class="nx">state</span><span class="p">.</span><span class="nx">shapes</span><span class="p">.</span><span class="nf">find</span><span class="p">((</span><span class="nx">s</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="nx">s</span><span class="p">.</span><span class="nx">id</span> <span class="o">===</span> <span class="nx">state</span><span class="p">.</span><span class="nx">selectedShapeId</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="kd">function</span> <span class="nf">ensureMotion</span><span class="p">(</span><span class="nx">shape</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">if </span><span class="p">(</span><span class="o">!</span><span class="nx">shape</span><span class="p">.</span><span class="nx">motion</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nx">shape</span><span class="p">.</span><span class="nx">motion</span> <span class="o">=</span> <span class="p">{</span>
+      <span class="na">enabled</span><span class="p">:</span> <span class="kc">false</span><span class="p">,</span>
+      <span class="na">vx</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+      <span class="na">vy</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+      <span class="na">angularVelocity</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+      <span class="na">loop</span><span class="p">:</span> <span class="kc">true</span><span class="p">,</span>
+    <span class="p">};</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="c1">// ENABLE</span>
+<span class="nx">motionEnabled</span><span class="p">.</span><span class="nf">addEventListener</span><span class="p">(</span><span class="dl">"</span><span class="s2">change</span><span class="dl">"</span><span class="p">,</span> <span class="p">()</span> <span class="o">=&gt;</span> <span class="p">{</span>
+  <span class="kd">const</span> <span class="nx">shape</span> <span class="o">=</span> <span class="nf">getSelectedShape</span><span class="p">();</span>
+  <span class="k">if </span><span class="p">(</span><span class="o">!</span><span class="nx">shape</span><span class="p">)</span> <span class="k">return</span><span class="p">;</span>
+
+  <span class="nf">ensureMotion</span><span class="p">(</span><span class="nx">shape</span><span class="p">);</span>
+  <span class="nx">shape</span><span class="p">.</span><span class="nx">motion</span><span class="p">.</span><span class="nx">enabled</span> <span class="o">=</span> <span class="nx">motionEnabled</span><span class="p">.</span><span class="nx">checked</span><span class="p">;</span>
+<span class="p">});</span>
+
+<span class="c1">// VX</span>
+<span class="nx">motionVX</span><span class="p">.</span><span class="nf">addEventListener</span><span class="p">(</span><span class="dl">"</span><span class="s2">input</span><span class="dl">"</span><span class="p">,</span> <span class="p">()</span> <span class="o">=&gt;</span> <span class="p">{</span>
+  <span class="kd">const</span> <span class="nx">shape</span> <span class="o">=</span> <span class="nf">getSelectedShape</span><span class="p">();</span>
+  <span class="k">if </span><span class="p">(</span><span class="o">!</span><span class="nx">shape</span><span class="p">)</span> <span class="k">return</span><span class="p">;</span>
+
+  <span class="nf">ensureMotion</span><span class="p">(</span><span class="nx">shape</span><span class="p">);</span>
+  <span class="nx">shape</span><span class="p">.</span><span class="nx">motion</span><span class="p">.</span><span class="nx">vx</span> <span class="o">=</span> <span class="nf">parseFloat</span><span class="p">(</span><span class="nx">motionVX</span><span class="p">.</span><span class="nx">value</span><span class="p">);</span>
+  <span class="nx">motionVXVal</span><span class="p">.</span><span class="nx">textContent</span> <span class="o">=</span> <span class="nx">motionVX</span><span class="p">.</span><span class="nx">value</span><span class="p">;</span>
+<span class="p">});</span>
+
+<span class="c1">// VY</span>
+<span class="nx">motionVY</span><span class="p">.</span><span class="nf">addEventListener</span><span class="p">(</span><span class="dl">"</span><span class="s2">input</span><span class="dl">"</span><span class="p">,</span> <span class="p">()</span> <span class="o">=&gt;</span> <span class="p">{</span>
+  <span class="kd">const</span> <span class="nx">shape</span> <span class="o">=</span> <span class="nf">getSelectedShape</span><span class="p">();</span>
+  <span class="k">if </span><span class="p">(</span><span class="o">!</span><span class="nx">shape</span><span class="p">)</span> <span class="k">return</span><span class="p">;</span>
+
+  <span class="nf">ensureMotion</span><span class="p">(</span><span class="nx">shape</span><span class="p">);</span>
+  <span class="nx">shape</span><span class="p">.</span><span class="nx">motion</span><span class="p">.</span><span class="nx">vy</span> <span class="o">=</span> <span class="nf">parseFloat</span><span class="p">(</span><span class="nx">motionVY</span><span class="p">.</span><span class="nx">value</span><span class="p">);</span>
+  <span class="nx">motionVYVal</span><span class="p">.</span><span class="nx">textContent</span> <span class="o">=</span> <span class="nx">motionVY</span><span class="p">.</span><span class="nx">value</span><span class="p">;</span>
+<span class="p">});</span>
+
+<span class="c1">// ROTATION</span>
+<span class="nx">motionRot</span><span class="p">.</span><span class="nf">addEventListener</span><span class="p">(</span><span class="dl">"</span><span class="s2">input</span><span class="dl">"</span><span class="p">,</span> <span class="p">()</span> <span class="o">=&gt;</span> <span class="p">{</span>
+  <span class="kd">const</span> <span class="nx">shape</span> <span class="o">=</span> <span class="nf">getSelectedShape</span><span class="p">();</span>
+  <span class="k">if </span><span class="p">(</span><span class="o">!</span><span class="nx">shape</span><span class="p">)</span> <span class="k">return</span><span class="p">;</span>
+
+  <span class="nf">ensureMotion</span><span class="p">(</span><span class="nx">shape</span><span class="p">);</span>
+  <span class="nx">shape</span><span class="p">.</span><span class="nx">motion</span><span class="p">.</span><span class="nx">angularVelocity</span> <span class="o">=</span> <span class="nf">parseFloat</span><span class="p">(</span><span class="nx">motionRot</span><span class="p">.</span><span class="nx">value</span><span class="p">);</span>
+  <span class="nx">motionRotVal</span><span class="p">.</span><span class="nx">textContent</span> <span class="o">=</span> <span class="nx">motionRot</span><span class="p">.</span><span class="nx">value</span><span class="p">;</span>
+<span class="p">});</span>
+
+<span class="c1">// LOOP</span>
+<span class="nx">motionLoop</span><span class="p">.</span><span class="nf">addEventListener</span><span class="p">(</span><span class="dl">"</span><span class="s2">change</span><span class="dl">"</span><span class="p">,</span> <span class="p">()</span> <span class="o">=&gt;</span> <span class="p">{</span>
+  <span class="kd">const</span> <span class="nx">shape</span> <span class="o">=</span> <span class="nf">getSelectedShape</span><span class="p">();</span>
+  <span class="k">if </span><span class="p">(</span><span class="o">!</span><span class="nx">shape</span><span class="p">)</span> <span class="k">return</span><span class="p">;</span>
+
+  <span class="nf">ensureMotion</span><span class="p">(</span><span class="nx">shape</span><span class="p">);</span>
+  <span class="nx">shape</span><span class="p">.</span><span class="nx">motion</span><span class="p">.</span><span class="nx">loop</span> <span class="o">=</span> <span class="nx">motionLoop</span><span class="p">.</span><span class="nx">checked</span><span class="p">;</span>
+<span class="p">});</span>
+</code></pre></div></div>
+
+<hr />
+
+<h2 id="-step-3--sync-ui-on-selection">🧱 STEP 3 — Sync UI on Selection</h2>
+
+<h3 id="file-uicontrolsjs-or-selection-handler-file">File: <code class="language-plaintext highlighter-rouge">ui/controls.js</code> OR selection handler file</h3>
+
+<p>Add function:</p>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">function</span> <span class="nf">updateMotionUI</span><span class="p">(</span><span class="nx">shape</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">if </span><span class="p">(</span><span class="o">!</span><span class="nx">shape</span><span class="p">)</span> <span class="k">return</span><span class="p">;</span>
+
+  <span class="kd">const</span> <span class="nx">m</span> <span class="o">=</span> <span class="nx">shape</span><span class="p">.</span><span class="nx">motion</span> <span class="o">||</span> <span class="p">{</span>
+    <span class="na">enabled</span><span class="p">:</span> <span class="kc">false</span><span class="p">,</span>
+    <span class="na">vx</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+    <span class="na">vy</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+    <span class="na">angularVelocity</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+    <span class="na">loop</span><span class="p">:</span> <span class="kc">true</span><span class="p">,</span>
+  <span class="p">};</span>
+
+  <span class="nx">motionEnabled</span><span class="p">.</span><span class="nx">checked</span> <span class="o">=</span> <span class="nx">m</span><span class="p">.</span><span class="nx">enabled</span><span class="p">;</span>
+  <span class="nx">motionVX</span><span class="p">.</span><span class="nx">value</span> <span class="o">=</span> <span class="nx">m</span><span class="p">.</span><span class="nx">vx</span><span class="p">;</span>
+  <span class="nx">motionVY</span><span class="p">.</span><span class="nx">value</span> <span class="o">=</span> <span class="nx">m</span><span class="p">.</span><span class="nx">vy</span><span class="p">;</span>
+  <span class="nx">motionRot</span><span class="p">.</span><span class="nx">value</span> <span class="o">=</span> <span class="nx">m</span><span class="p">.</span><span class="nx">angularVelocity</span><span class="p">;</span>
+  <span class="nx">motionLoop</span><span class="p">.</span><span class="nx">checked</span> <span class="o">=</span> <span class="nx">m</span><span class="p">.</span><span class="nx">loop</span><span class="p">;</span>
+
+  <span class="nx">motionVXVal</span><span class="p">.</span><span class="nx">textContent</span> <span class="o">=</span> <span class="nx">m</span><span class="p">.</span><span class="nx">vx</span><span class="p">;</span>
+  <span class="nx">motionVYVal</span><span class="p">.</span><span class="nx">textContent</span> <span class="o">=</span> <span class="nx">m</span><span class="p">.</span><span class="nx">vy</span><span class="p">;</span>
+  <span class="nx">motionRotVal</span><span class="p">.</span><span class="nx">textContent</span> <span class="o">=</span> <span class="nx">m</span><span class="p">.</span><span class="nx">angularVelocity</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<hr />
+
+<h3 id="hook-it-into-selection-flow">Hook it into selection flow</h3>
+
+<p>Find where shape selection occurs (likely <code class="language-plaintext highlighter-rouge">onSelectShape</code> or <code class="language-plaintext highlighter-rouge">selectShape()</code>)</p>
+
+<p>Add:</p>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">const</span> <span class="nx">shape</span> <span class="o">=</span> <span class="nf">getSelectedShape</span><span class="p">();</span>
+<span class="nf">updateMotionUI</span><span class="p">(</span><span class="nx">shape</span><span class="p">);</span>
+</code></pre></div></div>
+
+<hr />
+
+<h2 id="-expected-behavior">🧪 Expected Behavior</h2>
+
+<ol>
+  <li>Select a shape</li>
+  <li>Open Inspector</li>
+  <li>Enable Motion</li>
+  <li>Adjust sliders</li>
+</ol>
+
+<p>Result:</p>
+
+<ul>
+  <li>shape moves immediately</li>
+  <li>no refresh required</li>
+  <li>motion persists in state</li>
+</ul>
+
+<hr />
+
+<h2 id="-do-not">🚫 Do NOT</h2>
+
+<ul>
+  <li>do NOT mutate segments directly</li>
+  <li>do NOT bypass ShapeSystem transforms</li>
+  <li>do NOT create global motion state</li>
+  <li>do NOT add animation loops outside main tick</li>
+</ul>
+
+<hr />
+
+<h2 id="-success-criteria">✅ Success Criteria</h2>
+
+<ul>
+  <li>Motion UI appears in inspector</li>
+  <li>Values update correctly when selecting shapes</li>
+  <li>Motion changes apply instantly</li>
+  <li>No console errors</li>
+  <li>No interference with existing tools</li>
+</ul>
+
+<hr />
+
+<h2 id="-implementation-guide">⚡ Implementation Guide</h2>
+
+<p><strong>where</strong></p>
+
+<ul>
+  <li><code class="language-plaintext highlighter-rouge">index.html</code> → inspector block</li>
+  <li><code class="language-plaintext highlighter-rouge">ui/controls.js</code> → event + sync logic</li>
+</ul>
+
+<p><strong>run</strong></p>
+
+<ul>
+  <li>reload app</li>
+  <li>select shape → enable motion</li>
+</ul>
+
+<p><strong>expect</strong></p>
+
+<ul>
+  <li>real-time movement + rotation</li>
+  <li>loop wrapping if enabled</li>
+</ul>
+</article>
+</div>
+
+    </main>
+
+    <footer class="site-footer">
+      <div class="site-footer-inner footer-grid-6">
+        <section class="footer-brand">
+          <h2>Wall of Sound</h2>
+          <p>
+            Shared project memory for the StudioRich audio/visual system. Specs,
+            logs, recovery notes, and local portals live here.
+          </p>
+        </section>
+
+        <section class="footer-group">
+          <h2>Navigation</h2>
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Domains</h2>
+          <a href="/systems/wall/">Wall System</a>
+          <a href="/systems/sound/">Sound System</a>
+          <a href="/systems/">Systems Index</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Indexes</h2>
+          <a href="/specs/">Specs</a>
+          <a href="/logs/">Logs</a>
+          <a href="/components/wall/">Wall Components</a>
+          <a href="/components/sound/"
+            >Sound Components</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Local Portals</h2>
+          <a href="file:///Users/studio/Projects/wall-of-sound/wall/index.html"
+            >Wall App</a
+          >
+          <a
+            href="file:///Users/studio/Projects/wall-of-sound/sound/labeller.html"
+            >Sound Labeller</a
+          >
+          <a
+            href="file:///Users/studio/Projects/kinetic-master-engine/index.html"
+            >Kinetic Engine</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Recovery</h2>
+          <a href="/specs/">Implementation Specs</a>
+          <a href="/logs/">Session Logs</a>
+          <a href="/systems/sound/">Sound Recovery</a>
+          <a href="/systems/wall/">Wall Recovery</a>
+        </section>
+      </div>
+    </footer>
+  </body>
+</html>
