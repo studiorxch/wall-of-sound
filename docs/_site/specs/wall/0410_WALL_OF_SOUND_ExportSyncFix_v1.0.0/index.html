@@ -1,0 +1,433 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>ExportSyncFix | Wall of Sound</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <link
+      rel="stylesheet"
+      href="/assets/css/style.css"
+    />
+  </head>
+
+  <body>
+    <header class="site-header">
+      <div class="site-header-inner">
+        <a class="site-title" href="/">
+          Wall of Sound
+        </a>
+
+        <nav class="site-nav" aria-label="Primary navigation">
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="page-content">
+      <div class="spec-shell">
+  <a class="back-link" href="/specs/">← Back to specs</a>
+
+  <div class="spec-kicker">
+    wall / audio_system / needs-review
+  </div>
+
+  <h1>ExportSyncFix</h1>
+
+  <section class="spec-meta">
+    <div>
+      <strong>Doc ID</strong>
+      0410_WALL_OF_SOUND_ExportSyncFix_v1.0.0
+    </div>
+
+    <div>
+      <strong>Date</strong>
+      2026-04-10
+    </div>
+
+    <div>
+      <strong>Version</strong>
+      1.0.0
+    </div>
+
+    <div>
+      <strong>System</strong>
+      WOS
+    </div>
+
+    <div>
+      <strong>Domain</strong>
+      wall
+    </div>
+
+    <div>
+      <strong>Component</strong>
+      audio_system
+    </div>
+
+    <div>
+      <strong>Type</strong>
+      legacy-spec
+    </div>
+
+    <div>
+      <strong>Priority</strong>
+      medium
+    </div>
+
+    <div>
+      <strong>Risk</strong>
+      unknown
+    </div>
+
+    <div>
+      <strong>Status</strong>
+      needs-review
+    </div>
+  </section>
+
+  
+  <p><strong>Summary:</strong> Imported legacy Wall of Sound spec. Needs review.</p>
+  
+
+  <article class="spec-body"><p>0410_WALL_OF_SOUND_ExportSyncFix_v1.0.0</p>
+
+<p>Generated: 04/10/2026</p>
+
+<hr />
+
+<h2 id="-objective">🎯 Objective</h2>
+
+<p>Fix export desynchronization between <code class="language-plaintext highlighter-rouge">.wav</code> (audio) and <code class="language-plaintext highlighter-rouge">.webm</code> (video) so that:</p>
+
+<ul>
+  <li>durations match exactly (end-to-end)</li>
+  <li>playback is frame-stable (no choppiness)</li>
+  <li>exports are reliable for production use</li>
+</ul>
+
+<hr />
+
+<h2 id="️-current-issue">⚠️ Current Issue</h2>
+
+<p>Observed:</p>
+
+<ul>
+  <li>Audio duration: ~16.00s</li>
+  <li>Video duration: ~15.10s</li>
+  <li>Video appears choppy / uneven</li>
+</ul>
+
+<p>This indicates:</p>
+
+<ul>
+  <li>independent timing systems (audio vs MediaRecorder)</li>
+  <li>dropped frames or unstable FPS</li>
+  <li>recorder stopping early or not aligned with loop duration</li>
+</ul>
+
+<hr />
+
+<h2 id="-system-context-do-not-break">🧱 System Context (DO NOT BREAK)</h2>
+
+<ul>
+  <li>Loop system is BPM + bar based</li>
+  <li>Export pipeline uses:
+    <ul>
+      <li><code class="language-plaintext highlighter-rouge">.wav</code> (audio)</li>
+      <li><code class="language-plaintext highlighter-rouge">.webm</code> (canvas capture via MediaRecorder)</li>
+      <li><code class="language-plaintext highlighter-rouge">.png</code> (snapshot)</li>
+    </ul>
+  </li>
+  <li>Render loop uses canvas + requestAnimationFrame</li>
+  <li>Physics + swarm + collision run in real time</li>
+</ul>
+
+<p>DO NOT:</p>
+
+<ul>
+  <li>rewrite architecture</li>
+  <li>remove MediaRecorder</li>
+  <li>touch audio generation logic</li>
+  <li>modify shape / physics / collision systems</li>
+</ul>
+
+<p>ONLY fix timing + export synchronization</p>
+
+<hr />
+
+<h2 id="-required-behavior">✅ Required Behavior</h2>
+
+<h3 id="1-single-source-of-truth-mandatory">1. Single Source of Truth (MANDATORY)</h3>
+
+<p>All export timing must derive from:</p>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">durationSec</span> <span class="o">=</span> <span class="p">((</span><span class="nx">bars</span> <span class="o">*</span> <span class="mi">60</span><span class="p">)</span> <span class="o">/</span> <span class="nx">bpm</span><span class="p">)</span> <span class="o">*</span> <span class="mi">4</span><span class="p">;</span>
+</code></pre></div></div>
+
+<p>Example:</p>
+
+<ul>
+  <li>120 BPM</li>
+  <li>8 bars → 16 seconds</li>
+</ul>
+
+<hr />
+
+<h3 id="2-shared-start--stop-timing">2. Shared Start / Stop Timing</h3>
+
+<p>Audio and video MUST:</p>
+
+<ul>
+  <li>start from same timestamp</li>
+  <li>stop from same condition</li>
+</ul>
+
+<p>NO independent timers</p>
+
+<hr />
+
+<h3 id="3-stable-frame-rate">3. Stable Frame Rate</h3>
+
+<p>Video MUST:</p>
+
+<ul>
+  <li>run at fixed FPS (30fps)</li>
+  <li>avoid frame drops affecting duration</li>
+</ul>
+
+<hr />
+
+<h3 id="4-matching-output">4. Matching Output</h3>
+
+<p>Final result:</p>
+
+<ul>
+  <li>audio.duration === video.duration (±0.05s max)</li>
+  <li>no early cutoff</li>
+  <li>no drift</li>
+</ul>
+
+<hr />
+
+<h2 id="-implementation-requirements">🔧 Implementation Requirements</h2>
+
+<h3 id="a-lock-duration">A. Lock Duration</h3>
+
+<p>Add a shared export timer:</p>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">const</span> <span class="nx">durationSec</span> <span class="o">=</span> <span class="p">((</span><span class="nx">bars</span> <span class="o">*</span> <span class="mi">60</span><span class="p">)</span> <span class="o">/</span> <span class="nx">bpm</span><span class="p">)</span> <span class="o">*</span> <span class="mi">4</span><span class="p">;</span>
+<span class="kd">const</span> <span class="nx">durationMs</span> <span class="o">=</span> <span class="nx">durationSec</span> <span class="o">*</span> <span class="mi">1000</span><span class="p">;</span>
+
+<span class="kd">const</span> <span class="nx">startTime</span> <span class="o">=</span> <span class="nx">performance</span><span class="p">.</span><span class="nf">now</span><span class="p">();</span>
+
+<span class="kd">function</span> <span class="nf">shouldStop</span><span class="p">(</span><span class="nx">now</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">return</span> <span class="nx">now</span> <span class="o">-</span> <span class="nx">startTime</span> <span class="o">&gt;=</span> <span class="nx">durationMs</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>Use this for BOTH:</p>
+
+<ul>
+  <li>stopping audio</li>
+  <li>stopping MediaRecorder</li>
+</ul>
+
+<hr />
+
+<h3 id="b-lock-canvas-capture-fps">B. Lock Canvas Capture FPS</h3>
+
+<p>Replace any dynamic capture with:</p>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">const</span> <span class="nx">stream</span> <span class="o">=</span> <span class="nx">canvas</span><span class="p">.</span><span class="nf">captureStream</span><span class="p">(</span><span class="mi">30</span><span class="p">);</span>
+</code></pre></div></div>
+
+<p>DO NOT omit FPS</p>
+
+<hr />
+
+<h3 id="c-stabilize-render-loop">C. Stabilize Render Loop</h3>
+
+<p>Throttle rendering to consistent frame pacing:</p>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">const</span> <span class="nx">TARGET_FPS</span> <span class="o">=</span> <span class="mi">30</span><span class="p">;</span>
+<span class="kd">const</span> <span class="nx">FRAME_DURATION</span> <span class="o">=</span> <span class="mi">1000</span> <span class="o">/</span> <span class="nx">TARGET_FPS</span><span class="p">;</span>
+
+<span class="kd">let</span> <span class="nx">lastFrameTime</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+
+<span class="kd">function</span> <span class="nf">renderLoop</span><span class="p">(</span><span class="nx">now</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">if </span><span class="p">(</span><span class="nx">now</span> <span class="o">-</span> <span class="nx">lastFrameTime</span> <span class="o">&gt;=</span> <span class="nx">FRAME_DURATION</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nf">drawFrame</span><span class="p">();</span>
+    <span class="nx">lastFrameTime</span> <span class="o">=</span> <span class="nx">now</span><span class="p">;</span>
+  <span class="p">}</span>
+  <span class="nf">requestAnimationFrame</span><span class="p">(</span><span class="nx">renderLoop</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<hr />
+
+<h3 id="d-mediarecorder-config">D. MediaRecorder Config</h3>
+
+<p>Ensure stable encoding:</p>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">const</span> <span class="nx">recorder</span> <span class="o">=</span> <span class="k">new</span> <span class="nc">MediaRecorder</span><span class="p">(</span><span class="nx">stream</span><span class="p">,</span> <span class="p">{</span>
+  <span class="na">mimeType</span><span class="p">:</span> <span class="dl">"</span><span class="s2">video/webm;codecs=vp9</span><span class="dl">"</span><span class="p">,</span>
+  <span class="na">videoBitsPerSecond</span><span class="p">:</span> <span class="mi">5000000</span><span class="p">,</span>
+<span class="p">});</span>
+</code></pre></div></div>
+
+<hr />
+
+<h3 id="e-audio-start-sync">E. Audio Start Sync</h3>
+
+<p>Capture audio start time:</p>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">const</span> <span class="nx">audioStartTime</span> <span class="o">=</span> <span class="nx">audioContext</span><span class="p">.</span><span class="nx">currentTime</span><span class="p">;</span>
+</code></pre></div></div>
+
+<p>Optional: use this to align visuals if needed</p>
+
+<hr />
+
+<h3 id="f-unified-stop">F. Unified Stop</h3>
+
+<p>Inside main loop:</p>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">if </span><span class="p">(</span><span class="nf">shouldStop</span><span class="p">(</span><span class="nx">performance</span><span class="p">.</span><span class="nf">now</span><span class="p">()))</span> <span class="p">{</span>
+  <span class="nf">stopAudio</span><span class="p">();</span>
+  <span class="nx">recorder</span><span class="p">.</span><span class="nf">stop</span><span class="p">();</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>No setTimeout allowed for stopping</p>
+
+<hr />
+
+<h3 id="g-debug-logging-required">G. Debug Logging (REQUIRED)</h3>
+
+<p>Log durations after export:</p>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">console</span><span class="p">.</span><span class="nf">log</span><span class="p">(</span><span class="dl">"</span><span class="s2">Expected:</span><span class="dl">"</span><span class="p">,</span> <span class="nx">durationSec</span><span class="p">);</span>
+
+<span class="nx">video</span><span class="p">.</span><span class="nx">onloadedmetadata</span> <span class="o">=</span> <span class="p">()</span> <span class="o">=&gt;</span> <span class="p">{</span>
+  <span class="nx">console</span><span class="p">.</span><span class="nf">log</span><span class="p">(</span><span class="dl">"</span><span class="s2">Video duration:</span><span class="dl">"</span><span class="p">,</span> <span class="nx">video</span><span class="p">.</span><span class="nx">duration</span><span class="p">);</span>
+<span class="p">};</span>
+
+<span class="nx">audio</span><span class="p">.</span><span class="nx">onloadedmetadata</span> <span class="o">=</span> <span class="p">()</span> <span class="o">=&gt;</span> <span class="p">{</span>
+  <span class="nx">console</span><span class="p">.</span><span class="nf">log</span><span class="p">(</span><span class="dl">"</span><span class="s2">Audio duration:</span><span class="dl">"</span><span class="p">,</span> <span class="nx">audio</span><span class="p">.</span><span class="nx">duration</span><span class="p">);</span>
+<span class="p">};</span>
+</code></pre></div></div>
+
+<hr />
+
+<h2 id="-constraints">🚫 Constraints</h2>
+
+<ul>
+  <li>DO NOT introduce async drift</li>
+  <li>DO NOT rely on setTimeout for duration</li>
+  <li>DO NOT create separate clocks</li>
+  <li>DO NOT rewrite unrelated systems</li>
+  <li>DO NOT degrade performance of render loop</li>
+</ul>
+
+<hr />
+
+<h2 id="-deliverables">✅ Deliverables</h2>
+
+<p>Claude must return:</p>
+
+<ol>
+  <li>Exact code changes (diff-style or full functions)</li>
+  <li>Clear insertion points (file + location)</li>
+  <li>No pseudocode — fully working code only</li>
+</ol>
+
+<hr />
+
+<h2 id="-success-criteria">🧪 Success Criteria</h2>
+
+<p>After fix:</p>
+
+<ul>
+  <li>8 bar @ 120 BPM export = 16.00s video + audio</li>
+  <li>No visible stutter in playback</li>
+  <li>Repeat exports are consistent</li>
+  <li>WebM loops cleanly with WAV</li>
+</ul>
+
+<hr />
+
+<h2 id="-implementation-guide">⚡ Implementation Guide</h2>
+
+<ul>
+  <li>where: main loop + export logic + MediaRecorder setup</li>
+  <li>run: export 8-bar loop at 120 BPM</li>
+  <li>expect: perfectly aligned audio/video durations + smooth playback</li>
+</ul>
+</article>
+</div>
+
+    </main>
+
+    <footer class="site-footer">
+      <div class="site-footer-inner footer-grid-6">
+        <section class="footer-brand">
+          <h2>Wall of Sound</h2>
+          <p>
+            Shared project memory for the StudioRich audio/visual system. Specs,
+            logs, recovery notes, and local portals live here.
+          </p>
+        </section>
+
+        <section class="footer-group">
+          <h2>Navigation</h2>
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Domains</h2>
+          <a href="/systems/wall/">Wall System</a>
+          <a href="/systems/sound/">Sound System</a>
+          <a href="/systems/">Systems Index</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Indexes</h2>
+          <a href="/specs/">Specs</a>
+          <a href="/logs/">Logs</a>
+          <a href="/components/wall/">Wall Components</a>
+          <a href="/components/sound/"
+            >Sound Components</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Local Portals</h2>
+          <a href="file:///Users/studio/Projects/wall-of-sound/wall/index.html"
+            >Wall App</a
+          >
+          <a
+            href="file:///Users/studio/Projects/wall-of-sound/sound/labeller.html"
+            >Sound Labeller</a
+          >
+          <a
+            href="file:///Users/studio/Projects/kinetic-master-engine/index.html"
+            >Kinetic Engine</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Recovery</h2>
+          <a href="/specs/">Implementation Specs</a>
+          <a href="/logs/">Session Logs</a>
+          <a href="/systems/sound/">Sound Recovery</a>
+          <a href="/systems/wall/">Wall Recovery</a>
+        </section>
+      </div>
+    </footer>
+  </body>
+</html>

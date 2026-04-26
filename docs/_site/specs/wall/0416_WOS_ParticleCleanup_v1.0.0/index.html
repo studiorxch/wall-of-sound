@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>ParticleCleanup | Wall of Sound</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <link
+      rel="stylesheet"
+      href="/assets/css/style.css"
+    />
+  </head>
+
+  <body>
+    <header class="site-header">
+      <div class="site-header-inner">
+        <a class="site-title" href="/">
+          Wall of Sound
+        </a>
+
+        <nav class="site-nav" aria-label="Primary navigation">
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="page-content">
+      <div class="spec-shell">
+  <a class="back-link" href="/specs/">← Back to specs</a>
+
+  <div class="spec-kicker">
+    wall / particle_system / needs-review
+  </div>
+
+  <h1>ParticleCleanup</h1>
+
+  <section class="spec-meta">
+    <div>
+      <strong>Doc ID</strong>
+      0416_WOS_ParticleCleanup_v1.0.0
+    </div>
+
+    <div>
+      <strong>Date</strong>
+      2026-04-16
+    </div>
+
+    <div>
+      <strong>Version</strong>
+      1.0.0
+    </div>
+
+    <div>
+      <strong>System</strong>
+      WOS
+    </div>
+
+    <div>
+      <strong>Domain</strong>
+      wall
+    </div>
+
+    <div>
+      <strong>Component</strong>
+      particle_system
+    </div>
+
+    <div>
+      <strong>Type</strong>
+      legacy-spec
+    </div>
+
+    <div>
+      <strong>Priority</strong>
+      medium
+    </div>
+
+    <div>
+      <strong>Risk</strong>
+      unknown
+    </div>
+
+    <div>
+      <strong>Status</strong>
+      needs-review
+    </div>
+  </section>
+
+  
+  <p><strong>Summary:</strong> Imported legacy Wall of Sound spec. Needs review.</p>
+  
+
+  <article class="spec-body"><h1 id="0416_wos_particlecleanup_v100">0416_WOS_ParticleCleanup_v1.0.0</h1>
+
+<p>Generated: 04/16/2026</p>
+
+<hr />
+
+<h2 id="-objective">🎯 Objective</h2>
+
+<p>Ensure all particles (balls) are removed immediately after collision and cleaned from the system every frame.</p>
+
+<hr />
+
+<h2 id="-assumptions">🧠 Assumptions</h2>
+
+<ul>
+  <li>Particles are stored in a central array (e.g. state.balls)</li>
+  <li>Collision system already exists</li>
+  <li>Main loop (tick/update) runs continuously</li>
+</ul>
+
+<hr />
+
+<h2 id="-step-1--add-death-flag">🔧 Step 1 — Add Death Flag</h2>
+
+<p>Each particle must include:</p>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">ball</span><span class="p">.</span><span class="nx">_dead</span> <span class="o">=</span> <span class="kc">false</span><span class="p">;</span>
+</code></pre></div></div>
+
+<hr />
+
+<h2 id="-step-2--kill-on-collision">🔧 Step 2 — Kill on Collision</h2>
+
+<p>Inject into collision handler:</p>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">function</span> <span class="nf">onCollision</span><span class="p">(</span><span class="nx">ball</span><span class="p">,</span> <span class="nx">target</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">if </span><span class="p">(</span><span class="nx">ball</span><span class="p">.</span><span class="nx">_dead</span><span class="p">)</span> <span class="k">return</span><span class="p">;</span>
+  <span class="nx">ball</span><span class="p">.</span><span class="nx">_dead</span> <span class="o">=</span> <span class="kc">true</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<hr />
+
+<h2 id="-step-3--cleanup-pass">🔧 Step 3 — Cleanup Pass</h2>
+
+<p>In main loop:</p>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">function</span> <span class="nf">tick</span><span class="p">(</span><span class="nx">dt</span><span class="p">)</span> <span class="p">{</span>
+  <span class="nf">updatePhysics</span><span class="p">(</span><span class="nx">dt</span><span class="p">);</span>
+  <span class="nf">handleCollisions</span><span class="p">();</span>
+
+  <span class="c1">// cleanup dead particles</span>
+  <span class="nx">state</span><span class="p">.</span><span class="nx">balls</span> <span class="o">=</span> <span class="nx">state</span><span class="p">.</span><span class="nx">balls</span><span class="p">.</span><span class="nf">filter</span><span class="p">(</span><span class="nx">ball</span> <span class="o">=&gt;</span> <span class="o">!</span><span class="nx">ball</span><span class="p">.</span><span class="nx">_dead</span><span class="p">);</span>
+
+  <span class="nf">render</span><span class="p">();</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<hr />
+
+<h2 id="-validation-checklist">🧪 Validation Checklist</h2>
+
+<ul>
+  <li>Particle disappears on impact</li>
+  <li>Particle count does not increase over time</li>
+  <li>No ghost collisions</li>
+  <li>Scene remains clean</li>
+</ul>
+
+<hr />
+
+<h2 id="-final-model">🧠 Final Model</h2>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">collision</span> <span class="err">→</span> <span class="nx">ball</span><span class="p">.</span><span class="nx">_dead</span> <span class="o">=</span> <span class="kc">true</span> <span class="err">→</span> <span class="nx">cleanup</span> <span class="nx">removes</span> <span class="nx">ball</span>
+</code></pre></div></div>
+
+<hr />
+
+<h2 id="implementation-guide">Implementation Guide</h2>
+
+<ul>
+  <li>Where code goes: collision handler + main tick loop</li>
+  <li>What to run: simulate collisions</li>
+  <li>What to expect: particles disappear and do not accumulate</li>
+</ul>
+</article>
+</div>
+
+    </main>
+
+    <footer class="site-footer">
+      <div class="site-footer-inner footer-grid-6">
+        <section class="footer-brand">
+          <h2>Wall of Sound</h2>
+          <p>
+            Shared project memory for the StudioRich audio/visual system. Specs,
+            logs, recovery notes, and local portals live here.
+          </p>
+        </section>
+
+        <section class="footer-group">
+          <h2>Navigation</h2>
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Domains</h2>
+          <a href="/systems/wall/">Wall System</a>
+          <a href="/systems/sound/">Sound System</a>
+          <a href="/systems/">Systems Index</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Indexes</h2>
+          <a href="/specs/">Specs</a>
+          <a href="/logs/">Logs</a>
+          <a href="/components/wall/">Wall Components</a>
+          <a href="/components/sound/"
+            >Sound Components</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Local Portals</h2>
+          <a href="file:///Users/studio/Projects/wall-of-sound/wall/index.html"
+            >Wall App</a
+          >
+          <a
+            href="file:///Users/studio/Projects/wall-of-sound/sound/labeller.html"
+            >Sound Labeller</a
+          >
+          <a
+            href="file:///Users/studio/Projects/kinetic-master-engine/index.html"
+            >Kinetic Engine</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Recovery</h2>
+          <a href="/specs/">Implementation Specs</a>
+          <a href="/logs/">Session Logs</a>
+          <a href="/systems/sound/">Sound Recovery</a>
+          <a href="/systems/wall/">Wall Recovery</a>
+        </section>
+      </div>
+    </footer>
+  </body>
+</html>

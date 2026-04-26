@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>SystemStabilityPass | Wall of Sound</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <link
+      rel="stylesheet"
+      href="/assets/css/style.css"
+    />
+  </head>
+
+  <body>
+    <header class="site-header">
+      <div class="site-header-inner">
+        <a class="site-title" href="/">
+          Wall of Sound
+        </a>
+
+        <nav class="site-nav" aria-label="Primary navigation">
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="page-content">
+      <div class="spec-shell">
+  <a class="back-link" href="/specs/">← Back to specs</a>
+
+  <div class="spec-kicker">
+    wall / general / needs-review
+  </div>
+
+  <h1>SystemStabilityPass</h1>
+
+  <section class="spec-meta">
+    <div>
+      <strong>Doc ID</strong>
+      0415_WOS_SystemStabilityPass_v1.1
+    </div>
+
+    <div>
+      <strong>Date</strong>
+      2026-04-15
+    </div>
+
+    <div>
+      <strong>Version</strong>
+      1.1.0
+    </div>
+
+    <div>
+      <strong>System</strong>
+      WOS
+    </div>
+
+    <div>
+      <strong>Domain</strong>
+      wall
+    </div>
+
+    <div>
+      <strong>Component</strong>
+      general
+    </div>
+
+    <div>
+      <strong>Type</strong>
+      legacy-spec
+    </div>
+
+    <div>
+      <strong>Priority</strong>
+      medium
+    </div>
+
+    <div>
+      <strong>Risk</strong>
+      unknown
+    </div>
+
+    <div>
+      <strong>Status</strong>
+      needs-review
+    </div>
+  </section>
+
+  
+  <p><strong>Summary:</strong> Imported legacy Wall of Sound spec. Needs review.</p>
+  
+
+  <article class="spec-body"><p>0415_WOS_SystemStabilityPass_v1.1.0</p>
+
+<p>Generated: 04/15/2026</p>
+
+<hr />
+
+<h2 id="-goal">🎯 GOAL</h2>
+
+<p>Stabilize the core interaction loop:</p>
+
+<p>motion → collision → sound</p>
+
+<p>Restore system reliability for recording and live use.</p>
+
+<p>DO NOT add new features.
+DO NOT refactor architecture.</p>
+
+<hr />
+
+<h2 id="-priority-1--physics-integrity">🔴 PRIORITY 1 — PHYSICS INTEGRITY</h2>
+
+<p>Fix and restore:</p>
+
+<ul>
+  <li>Line collision detection</li>
+  <li>Shape collision via ShapeSystem segments</li>
+  <li>Bumper (hard + elastic) behavior</li>
+  <li>Collision highlight feedback</li>
+</ul>
+
+<h3 id="requirements">Requirements</h3>
+
+<ul>
+  <li>Balls must NOT pass through geometry</li>
+  <li>Collisions must trigger reliably</li>
+  <li>ShapeSystem.getCollisionSegments() must be respected</li>
+  <li>Collision system must remain the single source of truth</li>
+</ul>
+
+<hr />
+
+<h2 id="-priority-2--ball-lifecycle-control">🟠 PRIORITY 2 — BALL LIFECYCLE CONTROL</h2>
+
+<p>Implement minimal agent control to prevent overflow.</p>
+
+<h3 id="add">Add:</h3>
+
+<p>clearBalls(state)</p>
+
+<ul>
+  <li>removes ALL balls only</li>
+  <li>does NOT remove shapes, lines, or emitters</li>
+</ul>
+
+<p>MAX_BALLS cap</p>
+
+<ul>
+  <li>prevent spawning beyond limit</li>
+  <li>safe default: 800</li>
+</ul>
+
+<h3 id="constraints">Constraints</h3>
+
+<ul>
+  <li>No changes to geometry</li>
+  <li>No changes to emitter definitions</li>
+  <li>No scene reset behavior</li>
+</ul>
+
+<hr />
+
+<h2 id="-priority-3--emitter-regression-fix">🟡 PRIORITY 3 — EMITTER REGRESSION FIX</h2>
+
+<p>Emitter must behave as a behavior, not a system.</p>
+
+<h3 id="fix">Fix:</h3>
+
+<ul>
+  <li>Restore all existing behaviors (attract, repel, orbital)</li>
+  <li>Restore collision highlight on emitter interactions</li>
+  <li>Ensure emitter does NOT override physics or collision</li>
+</ul>
+
+<h3 id="rules">Rules:</h3>
+
+<p>Emitter MUST:</p>
+
+<ul>
+  <li>spawn balls only</li>
+  <li>respect physics system</li>
+  <li>respect collision system</li>
+  <li>NOT modify geometry or collision logic</li>
+</ul>
+
+<hr />
+
+<h2 id="-priority-4--audio-normalization">🟢 PRIORITY 4 — AUDIO NORMALIZATION</h2>
+
+<p>Implement basic gain control.</p>
+
+<h3 id="add-1">Add:</h3>
+
+<ul>
+  <li>Master gain node</li>
+  <li>Reduce overall output level (~ -12 dB target)</li>
+  <li>Prevent clipping during rapid collisions</li>
+</ul>
+
+<h3 id="constraints-1">Constraints:</h3>
+
+<ul>
+  <li>Do NOT modify MIDI system</li>
+  <li>Do NOT add UI for audio</li>
+</ul>
+
+<hr />
+
+<h2 id="-system-boundary-rules-critical">🧱 SYSTEM BOUNDARY RULES (CRITICAL)</h2>
+
+<p>DO NOT merge or refactor systems.</p>
+
+<p>Maintain strict separation:</p>
+
+<ol>
+  <li>Shape System
+    <ul>
+      <li>geometry only</li>
+      <li>provides collision segments</li>
+    </ul>
+  </li>
+  <li>Collision System
+    <ul>
+      <li>handles all interaction detection</li>
+      <li>must NOT be replaced or bypassed</li>
+    </ul>
+  </li>
+  <li>Ball System
+    <ul>
+      <li>movement and lifecycle only</li>
+      <li>must NOT modify geometry</li>
+    </ul>
+  </li>
+  <li>Behavior System
+    <ul>
+      <li>modifies motion or spawning only</li>
+      <li>must NOT override physics or collision</li>
+    </ul>
+  </li>
+</ol>
+
+<hr />
+
+<h2 id="-do-not-touch">🚫 DO NOT TOUCH</h2>
+
+<ul>
+  <li>Saving system</li>
+  <li>Sampler / audio file management</li>
+  <li>UI layout or panels</li>
+  <li>Grid duplication system</li>
+  <li>Rendering pipeline</li>
+  <li>Scene serialization</li>
+</ul>
+
+<hr />
+
+<h2 id="-success-criteria">✅ SUCCESS CRITERIA</h2>
+
+<ul>
+  <li>Collisions are 100% reliable</li>
+  <li>Balls do not pass through shapes or lines</li>
+  <li>Emitters no longer break system behavior</li>
+  <li>System is stable under high ball counts</li>
+  <li>Audio output is balanced and usable for OBS recording</li>
+</ul>
+
+<hr />
+
+<h2 id="-validation-test">🧪 VALIDATION TEST</h2>
+
+<ol>
+  <li>Draw shape</li>
+  <li>Add balls</li>
+  <li>Observe:
+    <ul>
+      <li>collisions trigger consistently</li>
+      <li>bumpers behave correctly</li>
+      <li>no geometry pass-through</li>
+    </ul>
+  </li>
+  <li>Add emitter:
+    <ul>
+      <li>system remains stable</li>
+      <li>behaviors still work</li>
+    </ul>
+  </li>
+  <li>Spawn many balls:
+    <ul>
+      <li>system does not overflow or freeze</li>
+    </ul>
+  </li>
+  <li>Record via OBS:
+    <ul>
+      <li>audio is not clipping</li>
+    </ul>
+  </li>
+</ol>
+
+<hr />
+
+<h2 id="end">END</h2>
+</article>
+</div>
+
+    </main>
+
+    <footer class="site-footer">
+      <div class="site-footer-inner footer-grid-6">
+        <section class="footer-brand">
+          <h2>Wall of Sound</h2>
+          <p>
+            Shared project memory for the StudioRich audio/visual system. Specs,
+            logs, recovery notes, and local portals live here.
+          </p>
+        </section>
+
+        <section class="footer-group">
+          <h2>Navigation</h2>
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Domains</h2>
+          <a href="/systems/wall/">Wall System</a>
+          <a href="/systems/sound/">Sound System</a>
+          <a href="/systems/">Systems Index</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Indexes</h2>
+          <a href="/specs/">Specs</a>
+          <a href="/logs/">Logs</a>
+          <a href="/components/wall/">Wall Components</a>
+          <a href="/components/sound/"
+            >Sound Components</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Local Portals</h2>
+          <a href="file:///Users/studio/Projects/wall-of-sound/wall/index.html"
+            >Wall App</a
+          >
+          <a
+            href="file:///Users/studio/Projects/wall-of-sound/sound/labeller.html"
+            >Sound Labeller</a
+          >
+          <a
+            href="file:///Users/studio/Projects/kinetic-master-engine/index.html"
+            >Kinetic Engine</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Recovery</h2>
+          <a href="/specs/">Implementation Specs</a>
+          <a href="/logs/">Session Logs</a>
+          <a href="/systems/sound/">Sound Recovery</a>
+          <a href="/systems/wall/">Wall Recovery</a>
+        </section>
+      </div>
+    </footer>
+  </body>
+</html>

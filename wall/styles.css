@@ -73,6 +73,10 @@ button,
   -webkit-user-drag: none;
 }
 
+#transparent-bg {
+  display: none !important;
+}
+
 /* ── APP GRID ───────────────────────────────────── */
 
 body {
@@ -134,9 +138,35 @@ body {
   user-select: none;
 }
 
+.stage,
+.canvas-stage,
+.canvas-wrap {
+  position: relative;
+}
+
 .tool-group {
   display: flex;
-  gap: 2px;
+  position: absolute;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+
+  flex-direction: column;
+  gap: 10px;
+
+  width: 44px;
+  z-index: 12;
+
+  opacity: 0.5;
+  transition: opacity 0.2s ease;
+}
+.tool-group button {
+  width: 40px;
+  height: 40px;
+}
+
+.tool-group:hover {
+  opacity: 1;
 }
 
 .tool {
@@ -182,20 +212,20 @@ body {
 .topbar button,
 .file-btn span,
 .toggle-btn span {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 600;
-  padding: 4px 7px;
+  padding: 4px 8px;
   background: var(--field-bg);
-  border: 1px solid var(--field-border);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 4px;
   cursor: pointer;
   white-space: nowrap;
+  opacity: 0.6;
 }
 .topbar button:hover,
 .file-btn span:hover,
 .toggle-btn span:hover {
-  background: var(--active);
-  border-color: var(--active-border);
+  opacity: 1;
 }
 
 .file-btn,
@@ -454,6 +484,20 @@ body {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text-dim);
+}
+
+/* Note strip / global color-note selector */
+.note-floating {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 12;
+  pointer-events: auto;
+}
+
+.note-floating .section-title {
+  display: none;
 }
 
 /* Note grid */
@@ -832,4 +876,113 @@ body.presentation .shortcut-hud {
 .sampler-key--active {
   outline: 2px solid rgba(255, 255, 255, 0.5);
   background: rgba(255, 255, 255, 0.08);
+}
+
+/* ── Shape Library ─────────────────────────────────────── */
+.shape-lib-toolbar {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.btn-danger {
+  color: #ff6d6d;
+  border-color: rgba(255, 100, 100, 0.3);
+}
+
+.shape-lib-list {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.shape-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  background: var(--surface2, rgba(255, 255, 255, 0.05));
+  border-radius: 6px;
+  padding: 6px 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.shape-card:hover {
+  background: var(--surface3, rgba(255, 255, 255, 0.1));
+}
+
+.shape-card__preview {
+  flex-shrink: 0;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.shape-card__info {
+  flex: 1;
+  min-width: 0;
+}
+
+.shape-card__name {
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.shape-card__meta {
+  font-size: 10px;
+  color: var(--text-dim, rgba(255, 255, 255, 0.4));
+  margin-top: 1px;
+}
+
+.shape-card__actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.shape-card__btn {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.07);
+  color: inherit;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.1s;
+}
+
+.shape-card__btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.shape-card__btn--delete {
+  color: #ff6d6d;
+  border-color: rgba(255, 100, 100, 0.25);
+}
+
+.shape-card__btn--delete:hover {
+  background: rgba(255, 100, 100, 0.15);
+}
+
+/* Shape card active (selected for placement) */
+.shape-card--active {
+  outline: 2px solid var(--accent, #3dd8c5);
+  background: rgba(61, 216, 197, 0.1);
+}
+
+/* ── Emitter Inspector Groups ───────────────────────── */
+.inspector-group-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim, rgba(255, 255, 255, 0.35));
+  margin-top: 10px;
+  margin-bottom: 4px;
+  padding-left: 2px;
 }

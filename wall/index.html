@@ -11,104 +11,10 @@
     <header id="topbar" class="topbar">
       <div class="topbar-left">
         <span class="logo-id">Wallace</span>
-        <div class="tool-group">
-          <button class="tool active" data-tool="select" title="Select (V)">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <path
-                d="M2 1L12 7L7 8.5L5 13L2 1Z"
-                stroke="currentColor"
-                stroke-width="1.4"
-                stroke-linejoin="round"
-              />
-            </svg>
-          </button>
-          <button class="tool" data-tool="draw" title="Draw (D)">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <path
-                d="M2 12L11 3M11 3L8 2.5M11 3L10.5 6"
-                stroke="currentColor"
-                stroke-width="1.4"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-            </svg>
-          </button>
-          <button class="tool" data-tool="line" title="Line (L)">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <line x1="2" y1="12" x2="12" y2="2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
-            </svg>
-          </button>
-          <button class="tool" data-tool="shape" title="Shape (S)">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <polygon
-                points="7,1 13,11 1,11"
-                stroke="currentColor"
-                stroke-width="1.4"
-                fill="none"
-              />
-            </svg>
-          </button>
-          <button class="tool" data-tool="text" title="Text (T)">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <text
-                x="3"
-                y="12"
-                font-size="12"
-                font-weight="700"
-                fill="currentColor"
-              >
-                A
-              </text>
-            </svg>
-          </button>
-          <button class="tool" data-tool="ball" title="Ball (B)">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <circle
-                cx="7"
-                cy="7"
-                r="5"
-                stroke="currentColor"
-                stroke-width="1.4"
-                fill="none"
-              />
-              <circle cx="7" cy="7" r="1.5" fill="currentColor" />
-            </svg>
-          </button>
-          <button class="tool" data-tool="mop" title="Mop (M)">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <path d="M2 3 Q5 1 8 4 Q11 7 9 11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none"/>
-              <circle cx="9" cy="11" r="2" stroke="currentColor" stroke-width="1.3" fill="none"/>
-            </svg>
-          </button>
-        </div>
+        
       </div>
 
-      <div class="topbar-center">
-        <input
-          id="bpm-input"
-          type="number"
-          min="60"
-          max="180"
-          step="0.1"
-          value="120.0"
-          title="BPM"
-        />
-        <select id="bar-count" title="Bars">
-          <option value="8">8 Bars</option>
-          <option value="16">16 Bars</option>
-          <option value="32">32 Bars</option>
-        </select>
-        <select id="quantize-division" title="Division">
-          <option value="0.25">1/4</option>
-          <option value="0.125">1/8</option>
-          <option value="0.0625">1/16</option>
-        </select>
-        <label class="toggle-btn" title="Quantize">
-          <input id="quantize-enabled" type="checkbox" />
-          <span>Q</span>
-        </label>
-      </div>
-
+     
       <div class="topbar-right">
         <button id="load-example" title="Demo">Demo</button>
         <label class="file-btn" title="Open">
@@ -283,48 +189,8 @@
             </button>
           </div>
         </section>
-<section class="inspector-section" id="note-section">
-            <h4 class="section-title">Note</h4>
-            <div id="note-grid" class="note-grid">
-              <button class="note-cell" type="button" data-note-class="0">
-                C
-              </button>
-              <button class="note-cell" type="button" data-note-class="1">
-                C#
-              </button>
-              <button class="note-cell" type="button" data-note-class="2">
-                D
-              </button>
-              <button class="note-cell" type="button" data-note-class="3">
-                D#
-              </button>
-              <button class="note-cell" type="button" data-note-class="4">
-                E
-              </button>
-              <button class="note-cell" type="button" data-note-class="5">
-                F
-              </button>
-              <button class="note-cell" type="button" data-note-class="6">
-                F#
-              </button>
-              <button class="note-cell" type="button" data-note-class="7">
-                G
-              </button>
-              <button class="note-cell" type="button" data-note-class="8">
-                G#
-              </button>
-              <button class="note-cell" type="button" data-note-class="9">
-                A
-              </button>
-              <button class="note-cell" type="button" data-note-class="10">
-                A#
-              </button>
-              <button class="note-cell" type="button" data-note-class="11">
-                B
-              </button>
-            </div>
-            <input id="active-note" type="hidden" value="60" />
-          </section>
+<!-- NOTE STRIP MOVED INTO CANVAS AREA -->
+
      
            <section class="inspector-section">
             <h4 class="section-title">Actions</h4>
@@ -388,15 +254,121 @@
 
       </aside>
 
-      <!-- CENTER: Canvas -->
+      <!-- CENTER: Stage -->
+
+
+        
       <main class="canvas-area">
         <div class="canvas-wrap" id="canvas-wrap">
           <canvas id="engine-canvas" width="1080" height="1920"></canvas>
         </div>
+<section class="note-floating" id="note-section" aria-label="Global note strip">
+<div id="note-grid" class="note-grid">
+              <button class="note-cell" type="button" data-note-class="0">
+                C
+              </button>
+              <button class="note-cell" type="button" data-note-class="1">
+                C#
+              </button>
+              <button class="note-cell" type="button" data-note-class="2">
+                D
+              </button>
+              <button class="note-cell" type="button" data-note-class="3">
+                D#
+              </button>
+              <button class="note-cell" type="button" data-note-class="4">
+                E
+              </button>
+              <button class="note-cell" type="button" data-note-class="5">
+                F
+              </button>
+              <button class="note-cell" type="button" data-note-class="6">
+                F#
+              </button>
+              <button class="note-cell" type="button" data-note-class="7">
+                G
+              </button>
+              <button class="note-cell" type="button" data-note-class="8">
+                G#
+              </button>
+              <button class="note-cell" type="button" data-note-class="9">
+                A
+              </button>
+              <button class="note-cell" type="button" data-note-class="10">
+                A#
+              </button>
+              <button class="note-cell" type="button" data-note-class="11">
+                B
+              </button>
+            </div>
+            <input id="active-note" type="hidden" value="60" />
+          </section>
+<div class="tool-group">
+          <!-- Select deprecated — pen tool handles select/transform. Hidden but keyboard shortcut preserved. -->
+          <button class="tool" data-tool="select" title="Select (V)" style="display:none">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M2 1L12 7L7 8.5L5 13L2 1Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+            </svg>
+          </button>
+          <button class="tool active" data-tool="pen" title="Pen (P · D · M)">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M2 3 Q5 1 8 4 Q11 7 9 11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none"/>
+              <circle cx="9" cy="11" r="2" stroke="currentColor" stroke-width="1.3" fill="none"/>
+            </svg>
+          </button>
+          <!-- Shape deprecated — pen shape mode covers this. Hidden but keyboard shortcut preserved. -->
+          <button class="tool" data-tool="shape" title="Shape (S)" style="display:none">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <polygon points="7,1 13,11 1,11" stroke="currentColor" stroke-width="1.4" fill="none"/>
+            </svg>
+          </button>
+          <button class="tool" data-tool="text" title="Text (T)">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <text x="3" y="12" font-size="12" font-weight="700" fill="currentColor">A</text>
+            </svg>
+          </button>
+          <button class="tool" data-tool="ball" title="Ball (B)">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.4" fill="none"/>
+              <circle cx="7" cy="7" r="1.5" fill="currentColor"/>
+            </svg>
+          </button>
+        </div>
       </main>
 
+<!-- TOOL GROUP MOVED INTO CANVAS AREA -->
+
+        
       <!-- Transport (below canvas) -->
       <div class="transport-bar">
+         <div class="topbar-center">
+        <input
+          id="bpm-input"
+          type="number"
+          min="60"
+          max="180"
+          step="0.1"
+          value="120.0"
+          title="BPM"
+        />
+        <select id="bar-count" title="Bars">
+          <option value="8">8 Bars</option>
+          <option value="16">16 Bars</option>
+          <option value="32">32 Bars</option>
+        </select>
+        <select id="quantize-division" title="Division">
+          <option value="0.25">1/4</option>
+          <option value="0.125">1/8</option>
+          <option value="0.0625">1/16</option>
+        </select>
+        <label class="toggle-btn" title="Quantize">
+          <input id="quantize-enabled" type="checkbox" />
+          <span>Q</span>
+        </label>
+      </div>
+
+
+
         <div class="transport-status">
           <span id="engine-status">STOP</span>
           <span id="scene-stats">0L 0T 0B</span>
@@ -427,17 +399,18 @@
       <aside id="right-panel" class="panel panel-right">
         <div class="inspector-tabs">
           <button class="tab active" data-tab="object">Object</button>
-          <button class="tab" data-tab="canvas">Canvas</button>
-          <button class="tab" data-tab="world">World</button>
+          <button class="tab" data-tab="canvas">Wall</button>
+          <button class="tab" data-tab="world">Playback</button>
           <button class="tab" data-tab="sampler">Sampler</button>
           <button class="tab" data-tab="music">Composition</button>
+          <button class="tab" data-tab="shapes">Shapes</button>
         </div>
 
         <!-- Object Tab -->
         <div class="tab-content active" data-tab-content="object">
           
 
-          <section class="inspector-section">
+          <section class="inspector-section" id="color-section">
             <h4 class="section-title">Outline</h4>
             <div class="field-grid two">
               <label class="field">
@@ -456,83 +429,22 @@
                 />
                 <output id="line-thickness-value">5</output>
               </label>
+              <label class="field" id="stroke-width-field" style="display:none">
+                <span>Stroke Width</span>
+                <input
+                  id="stroke-width"
+                  type="range"
+                  min="1"
+                  max="48"
+                  step="1"
+                  value="18"
+                />
+                <output id="stroke-width-value">18</o>
+              </label>
             </div>
-            <div class="swatch-grid">
-              <button
-                class="swatch"
-                type="button"
-                data-color="#ff4b4b"
-                style="--sw: #ff4b4b"
-              >C</button>
-              <button
-                class="swatch"
-                type="button"
-                data-color="#ff6d39"
-                style="--sw: #ff6d39"
-              >C#</button>
-              <button
-                class="swatch"
-                type="button"
-                data-color="#ff9b1f"
-                style="--sw: #ff9b1f"
-              >D</button>
-              <button
-                class="swatch"
-                type="button"
-                data-color="#ffbf2f"
-                style="--sw: #ffbf2f"
-              >D#</button>
-              <button
-                class="swatch"
-                type="button"
-                data-color="#e5df45"
-                style="--sw: #e5df45"
-              >E</button>
-              <button
-                class="swatch"
-                type="button"
-                data-color="#b9e54f"
-                style="--sw: #b9e54f"
-              >F</button>
-              <button
-                class="swatch"
-                type="button"
-                data-color="#35cb68"
-                style="--sw: #35cb68"
-              >F#</button>
-              <button
-                class="swatch"
-                type="button"
-                data-color="#26d3a6"
-                style="--sw: #26d3a6"
-              >G</button>
-              <button
-                class="swatch"
-                type="button"
-                data-color="#2cc7dc"
-                style="--sw: #2cc7dc"
-              >G#</button>
-              <button
-                class="swatch"
-                type="button"
-                data-color="#498cff"
-                style="--sw: #498cff"
-              >A</button>
-              <button
-                class="swatch"
-                type="button"
-                data-color="#7a62ff"
-                style="--sw: #7a62ff"
-              >A#</button>
-              <button
-                class="swatch"
-                type="button"
-                data-color="#ff59cb"
-                style="--sw: #ff59cb"
-              >B</button>
-            </div>
+            <!-- Skittles swatch grid removed: note strip is the color-note selector. -->
           </section>
- <section class="inspector-section">
+ <section class="inspector-section" id="behavior-section">
             <h4 class="section-title">Behavior</h4>
             <div class="field-grid two">
               <label class="field">
@@ -586,9 +498,32 @@
                 <span>Div</span>
                 <input id="behavior-emitter-quantize-div" type="number" min="1" max="64" value="16" />
               </label>
+              <label class="field">
+                <span>Spread (°)</span>
+                <input id="behavior-emitter-spread" type="range" min="0" max="60" step="1" value="15" />
+                <output id="behavior-emitter-spread-value">15</o>
+              </label>
+              <label class="field">
+                <span>Size</span>
+                <input id="behavior-emitter-size" type="range" min="1" max="10" step="0.5" value="3" />
+                <output id="behavior-emitter-size-value">3</o>
+              </label>
+              <label class="field">
+                <span>Life (s)</span>
+                <input id="behavior-emitter-life" type="range" min="0.2" max="3" step="0.1" value="1.2" />
+                <output id="behavior-emitter-life-value">1.2</o>
+              </label>
+              <label class="field">
+                <span>Style</span>
+                <select id="behavior-emitter-style">
+                  <option value="dot">Dot</option>
+                  <option value="streak">Streak</option>
+                  <option value="glow">Glow</option>
+                </select>
+              </label>
             </div>
           </section>
-          <section class="inspector-section">
+          <section class="inspector-section" id="mechanic-section">
             <h4 class="section-title">Mechanic</h4>
             <label class="field">
               <span>Type</span>
@@ -712,15 +647,14 @@
         </div>
         <div class="tab-content" data-tab-content="canvas">
           <section class="inspector-section">
-            <h4 class="section-title">Canvas</h4>
+            <h4 class="section-title">Wall</h4>
             <p class="dim">1080 × 1920 (Portrait)</p>
-            <label class="field">
-              <input id="transparent-bg" type="checkbox" />
-              <span>Transparent background</span>
-            </label>
+<label class="field hidden-control">
+  <input id="transparent-bg" type="checkbox" />
+</label>
                     <label class="file-btn" title="BG">
           <input id="background-file" type="file" accept="image/*" />
-          <span>BG</span>
+          <span>Image Background</span>
         </label>
 
           </section>
@@ -729,7 +663,7 @@
         <!-- World Tab -->
         <div class="tab-content" data-tab-content="world">
           <section class="inspector-section">
-            <h4 class="section-title">World</h4>
+            <h4 class="section-title">Playback</h4>
             <label class="field">
               <span>Physics Mode</span>
               <select id="world-mode">
@@ -799,7 +733,7 @@
           </div>
           <div class="lib-fields" style="margin-top:6px">
             <label class="field">
-              <span>Particle Shape</span>
+              <span>Agent Shape</span>
               <select id="particle-shape">
                 <option value="circle">Circle</option>
                 <option value="triangle">Triangle</option>
@@ -863,6 +797,22 @@
                 <option value="strict">Strict</option>
               </select>
             </label>
+          </section>
+        </div>
+
+        </div>
+
+        <!-- Shapes Library Tab -->
+        <div class="tab-content" data-tab-content="shapes">
+          <section class="inspector-section">
+            <h4 class="section-title">Shape Library</h4>
+            <div class="shape-lib-toolbar">
+              <button id="shape-lib-save" class="btn-small" title="Save selected stroke (K)">Save selected</button>
+              <button id="shape-lib-refresh" class="btn-small" title="Reload from storage">↺</button>
+              <button id="shape-lib-clear" class="btn-small btn-danger" title="Delete all shapes">Clear all</button>
+            </div>
+            <p class="dim" id="shape-lib-empty" style="display:none">No shapes saved yet.<br>Draw a stroke, select it, press K.</p>
+            <div id="shape-lib-list" class="shape-lib-list"></div>
           </section>
         </div>
 
@@ -961,6 +911,7 @@
     <script src="./engine/motionSystem.js"></script>
     <script src="./engine/eventBus.js"></script>
     <script src="./engine/collision.js"></script>
+    <script src="./engine/particleSystem.js"></script>
     <script src="./midi/midiOut.js"></script>
     <script src="./render/canvasRenderer.js"></script>
     <script src="./state/examplePreset.js"></script>

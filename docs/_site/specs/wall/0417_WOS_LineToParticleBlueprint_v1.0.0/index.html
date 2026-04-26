@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>LineToParticleBlueprint | Wall of Sound</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <link
+      rel="stylesheet"
+      href="/assets/css/style.css"
+    />
+  </head>
+
+  <body>
+    <header class="site-header">
+      <div class="site-header-inner">
+        <a class="site-title" href="/">
+          Wall of Sound
+        </a>
+
+        <nav class="site-nav" aria-label="Primary navigation">
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="page-content">
+      <div class="spec-shell">
+  <a class="back-link" href="/specs/">← Back to specs</a>
+
+  <div class="spec-kicker">
+    wall / line_tool / needs-review
+  </div>
+
+  <h1>LineToParticleBlueprint</h1>
+
+  <section class="spec-meta">
+    <div>
+      <strong>Doc ID</strong>
+      0417_WOS_LineToParticleBlueprint_v1.0.0
+    </div>
+
+    <div>
+      <strong>Date</strong>
+      2026-04-17
+    </div>
+
+    <div>
+      <strong>Version</strong>
+      1.0.0
+    </div>
+
+    <div>
+      <strong>System</strong>
+      WOS
+    </div>
+
+    <div>
+      <strong>Domain</strong>
+      wall
+    </div>
+
+    <div>
+      <strong>Component</strong>
+      line_tool
+    </div>
+
+    <div>
+      <strong>Type</strong>
+      legacy-spec
+    </div>
+
+    <div>
+      <strong>Priority</strong>
+      medium
+    </div>
+
+    <div>
+      <strong>Risk</strong>
+      unknown
+    </div>
+
+    <div>
+      <strong>Status</strong>
+      needs-review
+    </div>
+  </section>
+
+  
+  <p><strong>Summary:</strong> Imported legacy Wall of Sound spec. Needs review.</p>
+  
+
+  <article class="spec-body"><h1 id="0417_wos_linetoparticleblueprint_v100">0417_WOS_LineToParticleBlueprint_v1.0.0</h1>
+<p>Date: 04/17
+Project: Wall of Sound Engine
+Phase: Step 3 — Line → Particle Blueprint</p>
+
+<hr />
+
+<h2 id="objective">Objective</h2>
+<p>Convert emitters from collision-triggered sound sources into particle-driven sound systems.</p>
+
+<hr />
+
+<h2 id="assumptions">Assumptions</h2>
+<ul>
+  <li>Existing emitter system is working</li>
+  <li>dispatchCollisionEvent({ sound: … }) is stable</li>
+  <li>state.balls lifecycle is stable</li>
+  <li>tick() loop controls motion + collisions</li>
+</ul>
+
+<hr />
+
+<h2 id="step-1--attach-sound-to-particles">Step 1 — Attach Sound to Particles</h2>
+
+<h3 id="in-updatebehavioremitters">In updateBehaviorEmitters</h3>
+
+<p>After creating ball:</p>
+
+<p>ADD:</p>
+
+<p>ball.sourceId = line.id;
+ball.sourceType = “emitter”;
+ball.sound = line.sound;
+ball._soundFired = false;</p>
+
+<hr />
+
+<h3 id="in-updateshapeemitters">In updateShapeEmitters</h3>
+
+<p>After creating ball:</p>
+
+<p>ADD:</p>
+
+<p>ball.sourceId = seg.id;
+ball.sourceType = “emitter”;
+ball.sound = seg.sound;
+ball._soundFired = false;</p>
+
+<hr />
+
+<h2 id="step-2--remove-emitter-sound-trigger">Step 2 — Remove Emitter Sound Trigger</h2>
+
+<h3 id="in-both-emitter-functions">In BOTH emitter functions</h3>
+
+<p>REMOVE:</p>
+
+<p>dispatchCollisionEvent({ sound: line.sound });
+dispatchCollisionEvent({ sound: seg.sound });</p>
+
+<hr />
+
+<h2 id="step-3--move-sound-trigger-to-particle-lifecycle">Step 3 — Move Sound Trigger to Particle Lifecycle</h2>
+
+<h3 id="inside-tick">Inside tick()</h3>
+
+<p>AFTER movement update and BEFORE collision resolution:</p>
+
+<p>ADD:</p>
+
+<p>state.balls.forEach(function (ball) {
+  if (!ball.sound) return;</p>
+
+<p>if (!ball._soundFired) {
+    dispatchCollisionEvent(ball);
+    ball._soundFired = true;
+  }
+});</p>
+
+<hr />
+
+<h2 id="step-4--safety-guard-required">Step 4 — Safety Guard (Required)</h2>
+
+<p>Ensure dispatchCollisionEvent supports particle input:</p>
+
+<p>function dispatchCollisionEvent(sourceObject) {
+  if (!sourceObject || !sourceObject.sound) return;</p>
+
+<p>if (sourceObject.isMuted) return;</p>
+
+<p>if (
+    sourceObject.behavior &amp;&amp;
+    sourceObject.behavior.emitterConfig &amp;&amp;
+    sourceObject.behavior.emitterConfig.isMuted
+  ) return;</p>
+
+<p>const currentTime = getTransportTime();</p>
+
+<p>if (!state.quantize.enabled) {
+    eventBus.triggerEvent(“collision”, sourceObject);
+    recordLoopEvent(sourceObject, currentTime);
+    return;
+  }</p>
+
+<p>const gridTime = getQuantizeGridTime();
+  const nextTime = Math.ceil(currentTime / gridTime) * gridTime;</p>
+
+<p>state.quantizeQueue.push({
+    time: nextTime,
+    sourceObject: sourceObject,
+  });
+}</p>
+
+<hr />
+
+<h2 id="expected-behavior">Expected Behavior</h2>
+
+<ul>
+  <li>Emitters spawn particles ONLY (no direct sound)</li>
+  <li>Particles trigger sound once on birth</li>
+  <li>Sound system no longer depends on collision</li>
+  <li>Spatial sound begins to emerge</li>
+</ul>
+
+<hr />
+
+<h2 id="optional-extensions-do-not-implement-yet">Optional Extensions (DO NOT IMPLEMENT YET)</h2>
+
+<ul>
+  <li>Beat-based retriggering</li>
+  <li>Velocity-based sound triggering</li>
+  <li>Position-based sound zones</li>
+</ul>
+
+<hr />
+
+<h2 id="implementation-guide">Implementation Guide</h2>
+
+<ul>
+  <li>Where:
+    <ul>
+      <li>updateBehaviorEmitters</li>
+      <li>updateShapeEmitters</li>
+      <li>tick()</li>
+    </ul>
+  </li>
+  <li>Run:
+    <ul>
+      <li>Reload app</li>
+      <li>Create emitter</li>
+      <li>Observe particle sound without collisions</li>
+    </ul>
+  </li>
+  <li>Expect:
+    <ul>
+      <li>Each particle plays sound once on spawn</li>
+      <li>No emitter-based sound firing</li>
+    </ul>
+  </li>
+</ul>
+</article>
+</div>
+
+    </main>
+
+    <footer class="site-footer">
+      <div class="site-footer-inner footer-grid-6">
+        <section class="footer-brand">
+          <h2>Wall of Sound</h2>
+          <p>
+            Shared project memory for the StudioRich audio/visual system. Specs,
+            logs, recovery notes, and local portals live here.
+          </p>
+        </section>
+
+        <section class="footer-group">
+          <h2>Navigation</h2>
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Domains</h2>
+          <a href="/systems/wall/">Wall System</a>
+          <a href="/systems/sound/">Sound System</a>
+          <a href="/systems/">Systems Index</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Indexes</h2>
+          <a href="/specs/">Specs</a>
+          <a href="/logs/">Logs</a>
+          <a href="/components/wall/">Wall Components</a>
+          <a href="/components/sound/"
+            >Sound Components</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Local Portals</h2>
+          <a href="file:///Users/studio/Projects/wall-of-sound/wall/index.html"
+            >Wall App</a
+          >
+          <a
+            href="file:///Users/studio/Projects/wall-of-sound/sound/labeller.html"
+            >Sound Labeller</a
+          >
+          <a
+            href="file:///Users/studio/Projects/kinetic-master-engine/index.html"
+            >Kinetic Engine</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Recovery</h2>
+          <a href="/specs/">Implementation Specs</a>
+          <a href="/logs/">Session Logs</a>
+          <a href="/systems/sound/">Sound Recovery</a>
+          <a href="/systems/wall/">Wall Recovery</a>
+        </section>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -284,6 +284,79 @@
         state.walkers = [];
         console.log("[walker] Cleared");
       },
+      // Shape library
+      saveSelectedShape: function () {
+        saveSelectedShape();
+      },
+      loadShapes: function () {
+        return loadShapes();
+      },
+      createShapeInstance: function (shape, position) {
+        return createShapeInstance(shape, position);
+      },
+      saveShapeFromStroke: function (stroke, name) {
+        return saveShapeFromStroke(stroke, name);
+      },
+      getSelectedStroke: function () {
+        return getSelectedStroke();
+      },
+      // Grouping system
+      createGroup: function (strokeIds) {
+        return createGroup(strokeIds);
+      },
+      dissolveGroup: function (groupId) {
+        dissolveGroup(groupId);
+      },
+      translateGroup: function (groupId, dx, dy) {
+        translateGroup(groupId, dx, dy);
+        renderFrame();
+      },
+      scaleGroup: function (groupId, factor) {
+        scaleGroup(groupId, factor);
+        renderFrame();
+      },
+      rotateGroup: function (groupId, dAngle) {
+        rotateGroup(groupId, dAngle);
+        renderFrame();
+      },
+      getGroupForStroke: function (stroke) {
+        return getGroupForStroke(stroke);
+      },
+      groupSelected: function () {
+        var ids = Array.from(state.selection.strokeIds);
+        if (ids.length < 2) {
+          console.warn(
+            "[group] Shift+click 2+ strokes first, then call groupSelected()",
+          );
+          return null;
+        }
+        var g = createGroup(ids);
+        state.selection.groupId = g.id;
+        state.selection.strokeIds.clear();
+        renderFrame();
+        return g;
+      },
+      // Behavior pipeline
+      processBehaviors: function (now) {
+        return processBehaviors(now != null ? now : performance.now());
+      },
+      setBehavior: function (strokeOrId, behavior) {
+        var s =
+          typeof strokeOrId === "string"
+            ? getStrokeById(strokeOrId)
+            : strokeOrId;
+        if (s) {
+          s.behavior = behavior;
+          console.log("[emitter] created on stroke", s.id, behavior);
+        }
+      },
+      setGroupBehavior: function (groupId, behavior) {
+        var g = state.groups[groupId];
+        if (g) {
+          g.behavior = behavior;
+          console.log("[emitter] created on group", groupId, behavior);
+        }
+      },
     };
     window.noteElements = {};
 
@@ -588,6 +661,13 @@
       sampler: {
         activeNote: null,
       },
+      selection: {
+        strokeId: null, // single primary selection (for handles, inspector)
+        strokeIds: new Set(), // multi-select set for grouping + deletion
+        groupId: null, // selected group (if stroke belongs to group)
+      },
+      groups: {}, // id → GroupNode (wrapper layer over strokes)
+      particles: [], // emitter particles { x, y, vx, vy, life, color }
       ballTool: {
         count: 1,
         speed: 1,
@@ -656,12 +736,24 @@
         note: 60,
         color: noteToColor(60),
         thickness: 5,
+        strokeWidth: 18,
         behaviorType: "normal",
         behaviorStrength: 1.4,
         textValue: "SWARM",
         textSize: 160,
         textScale: 1,
         textRotation: 0,
+        autoWalker: false,
+      },
+      transform: {
+        active: false,
+        type: "move", // "move" | "scale" | "rotate"
+        start: null,
+        targetId: null,
+        origin: null, // centroid for rotate, anchor corner for scale
+        startBounds: null, // bounding box at drag start for scale
+        startAngle: null, // angle at drag start for rotate
+        startWidth: null, // stroke.width at drag start for scale
       },
       lineTool: {
         step: 0,
@@ -703,16 +795,59 @@
           { chord: "minor", rootOffset: 0 },
         ],
       },
-      mopTool: {
+      penTool: {
+        mode: "freehand", // "freehand" | "shape" | "line" | "place-shape"
+        selectedLibraryShape: null, // active library shape for place-shape mode
+        isDrawing: false,
+        currentStroke: null, // in-flight buffer { points: [] }
+        previewPoint: null,
+        dragThreshold: 8,
+        shapeCloseThreshold: 20,
+        lastPointer: null,
+        // freehand-specific
         activeStrokeId: null,
         streamline: 0.65,
         persistSpecks: false,
+      },
+      grid: {
+        enabled: false,
+        size: 20,
+        snap: true,
       },
     };
 
     var heldKeys = new Set();
 
     normalizeSwarmConfig();
+    // Step 5 — state.objects is a non-breaking alias for state.strokes
+    // DO NOT replace state.lines / state.shapes / state.balls / state.textObjects
+    Object.defineProperty(state, "objects", {
+      get: function () {
+        return state.strokes;
+      },
+      set: function (v) {
+        state.strokes = v;
+      },
+      enumerable: false,
+    });
+    // StyleState — named alias to state.defaults (spec: single source of truth for drawing style)
+    var StyleState = state.defaults;
+
+    // Share state.particles with SBE.ParticleSystem so both systems read the same array
+    if (window.SBE && SBE.ParticleSystem) {
+      SBE.ParticleSystem.particles = state.particles;
+    }
+
+    // Temporary: verify state.particles reference never replaced
+    (function () {
+      var last = state.particles;
+      setInterval(function () {
+        if (state.particles !== last) {
+          console.warn("[particles] ARRAY REPLACED — reference broken");
+          last = state.particles;
+        }
+      }, 500);
+    })();
     renderer.resize(state.canvas.width, state.canvas.height);
 
     // Surface stamp buffer — persistent ink accumulation
@@ -944,15 +1079,390 @@
     );
 
     // ── Mop Tool (capture phase) ──
+
+    // Snap to 8 directions (45° increments) when Shift held
+    function constrainAngle(start, current) {
+      var dx = current.x - start.x;
+      var dy = current.y - start.y;
+      var angle = Math.atan2(dy, dx);
+      var snap = Math.PI / 4;
+      var snapped = Math.round(angle / snap) * snap;
+      var dist = Math.hypot(dx, dy);
+      return {
+        x: start.x + Math.cos(snapped) * dist,
+        y: start.y + Math.sin(snapped) * dist,
+      };
+    }
+
+    // ALT — axis lock (horizontal or vertical from start)
+    function axisLock(start, current) {
+      var dx = current.x - start.x;
+      var dy = current.y - start.y;
+      if (Math.abs(dx) > Math.abs(dy)) {
+        return { x: current.x, y: start.y }; // horizontal
+      }
+      return { x: start.x, y: current.y }; // vertical
+    }
+
+    function moveStroke(stroke, dx, dy) {
+      stroke.points = stroke.points.map(function (p) {
+        return { x: p.x + dx, y: p.y + dy };
+      });
+    }
+
+    function getStrokeBounds(stroke) {
+      var pts = stroke.points;
+      var minX = pts[0].x,
+        maxX = pts[0].x;
+      var minY = pts[0].y,
+        maxY = pts[0].y;
+      for (var i = 1; i < pts.length; i++) {
+        if (pts[i].x < minX) minX = pts[i].x;
+        if (pts[i].x > maxX) maxX = pts[i].x;
+        if (pts[i].y < minY) minY = pts[i].y;
+        if (pts[i].y > maxY) maxY = pts[i].y;
+      }
+      return {
+        minX: minX,
+        minY: minY,
+        maxX: maxX,
+        maxY: maxY,
+        w: maxX - minX || 1,
+        h: maxY - minY || 1,
+      };
+    }
+
+    function getStrokeCentroid(stroke) {
+      var pts = stroke.points;
+      var sx = 0,
+        sy = 0;
+      for (var i = 0; i < pts.length; i++) {
+        sx += pts[i].x;
+        sy += pts[i].y;
+      }
+      return { x: sx / pts.length, y: sy / pts.length };
+    }
+
+    var HANDLE_R = 7; // hit radius px
+
+    // Returns handle descriptors for a selected stroke
+    function getTransformHandles(stroke) {
+      var b = getStrokeBounds(stroke);
+      var pad = 18;
+      var l = b.minX - pad,
+        r = b.maxX + pad;
+      var t = b.minY - pad,
+        bot = b.maxY + pad;
+      var cx = (l + r) / 2;
+      return {
+        // 4 scale corners
+        nw: { x: l, y: t, type: "scale", anchor: { x: r, y: bot } },
+        ne: { x: r, y: t, type: "scale", anchor: { x: l, y: bot } },
+        sw: { x: l, y: bot, type: "scale", anchor: { x: r, y: t } },
+        se: { x: r, y: bot, type: "scale", anchor: { x: l, y: t } },
+        // rotate handle above top-center
+        rotate: { x: cx, y: t - 28, type: "rotate" },
+      };
+    }
+
+    function hitTestHandles(pt, stroke) {
+      var handles = getTransformHandles(stroke);
+      var keys = Object.keys(handles);
+      for (var i = 0; i < keys.length; i++) {
+        var h = handles[keys[i]];
+        if (Math.hypot(pt.x - h.x, pt.y - h.y) <= HANDLE_R + 4) {
+          return h;
+        }
+      }
+      return null;
+    }
+
+    // Scale all points from anchor — width derived from baseWidth * scale (non-destructive)
+    function scaleStroke(stroke, anchor, scaleFactor) {
+      stroke.points = stroke.points.map(function (p) {
+        return {
+          x: anchor.x + (p.x - anchor.x) * scaleFactor,
+          y: anchor.y + (p.y - anchor.y) * scaleFactor,
+        };
+      });
+      // Task 1+2 — accumulate scale, derive width from baseWidth to prevent drift
+      if (!stroke.baseWidth) stroke.baseWidth = stroke.width || 18;
+      if (!stroke.scale) stroke.scale = 1;
+      stroke.scale *= scaleFactor;
+      stroke.width = stroke.baseWidth * stroke.scale;
+      // Task 5 — clamp
+      stroke.width = Math.max(0.5, Math.min(stroke.width, 100));
+      console.log("[scale]", stroke.scale.toFixed(3), stroke.width.toFixed(1)); // Task 6 — temp
+    }
+
+    // Rotate all points around centroid by delta angle
+    function rotateStroke(stroke, cx, cy, dAngle) {
+      var cos = Math.cos(dAngle);
+      var sin = Math.sin(dAngle);
+      stroke.points = stroke.points.map(function (p) {
+        var dx = p.x - cx;
+        var dy = p.y - cy;
+        return {
+          x: cx + dx * cos - dy * sin,
+          y: cy + dx * sin + dy * cos,
+        };
+      });
+    }
+
+    function commitShapeStroke(closed) {
+      var cs = state.penTool.currentStroke;
+      if (!cs || cs.points.length < 2) {
+        state.penTool.currentStroke = null;
+        state.penTool.isDrawing = false;
+        state.penTool.previewPoint = null;
+        renderFrame();
+        return;
+      }
+      if (closed) {
+        cs.points.push({ x: cs.points[0].x, y: cs.points[0].y });
+      }
+      // Build full stroke object from in-flight buffer
+      var stroke = createStrokeObject(cs.points[0].x, cs.points[0].y);
+      stroke.points = cs.points.slice();
+      pushHistory();
+      state.strokes.push(stroke);
+      state.penTool.currentStroke = null;
+      state.penTool.isDrawing = false;
+      state.penTool.previewPoint = null;
+      analyzeStroke(stroke);
+      if (state.walker.enabled && state.defaults.autoWalker) {
+        var w = createWalkerFromStroke(stroke);
+        if (w) state.walkers.push(w);
+      }
+      renderFrame();
+    }
+
+    // Line mode commit — creates a 2-point stroke
+    function commitLineStroke(start, end) {
+      var stroke = createStrokeObject(start.x, start.y);
+      stroke.points = [
+        { x: start.x, y: start.y },
+        { x: end.x, y: end.y },
+      ];
+      pushHistory();
+      state.strokes.push(stroke);
+      state.penTool.currentStroke = null;
+      state.penTool.isDrawing = false;
+      state.penTool.previewPoint = null;
+      analyzeStroke(stroke);
+      if (state.walker.enabled && state.defaults.autoWalker) {
+        var w = createWalkerFromStroke(stroke);
+        if (w) state.walkers.push(w);
+      }
+      renderFrame();
+    }
+
+    // Track pointer-down position for drag-vs-click detection
+    var mopDownPt = null;
+    var mopDidDrag = false;
+
     canvas.addEventListener(
       "pointerdown",
       function onMopDown(e) {
-        if (state.tool !== "mop") return;
-        var pt = getCanvasCoordsLocal(e);
+        if (state.tool !== "pen") return;
+        var rawPt = getCanvasCoordsLocal(e);
+        var pt = snapPoint(rawPt);
+        mopDownPt = rawPt;
+        mopDidDrag = false;
+
+        // Handle hit-test — check group handles first, then single-stroke handles
+        if (state.selection.groupId) {
+          var gb = computeGroupBounds(state.selection.groupId);
+          if (gb) {
+            var pad = 22;
+            var gL = gb.minX - pad,
+              gR = gb.maxX + pad;
+            var gT = gb.minY - pad,
+              gBot = gb.maxY + pad;
+            var gCx = (gL + gR) / 2,
+              gRotY = gT - 28;
+            var gPivot = computePivot(state.groups[state.selection.groupId]);
+
+            var gHandles = [
+              { x: gL, y: gT, type: "scale", anchor: { x: gR, y: gBot } },
+              { x: gR, y: gT, type: "scale", anchor: { x: gL, y: gBot } },
+              { x: gL, y: gBot, type: "scale", anchor: { x: gR, y: gT } },
+              { x: gR, y: gBot, type: "scale", anchor: { x: gL, y: gT } },
+              { x: gCx, y: gRotY, type: "rotate" },
+            ];
+
+            for (var gi = 0; gi < gHandles.length; gi++) {
+              var gh = gHandles[gi];
+              if (Math.hypot(rawPt.x - gh.x, rawPt.y - gh.y) <= HANDLE_R + 6) {
+                state.transform.active = true;
+                state.transform.type = gh.type;
+                state.transform.start = rawPt;
+                state.transform.targetId = state.selection.groupId; // group id
+                state.transform.origin =
+                  gh.type === "rotate" ? gPivot : gh.anchor;
+                state.transform.startAngle = Math.atan2(
+                  rawPt.y - gPivot.y,
+                  rawPt.x - gPivot.x,
+                );
+                canvas.setPointerCapture(e.pointerId);
+                e.stopPropagation();
+                return;
+              }
+            }
+          }
+        }
+
+        // Handle hit-test — check scale/rotate handles on selected stroke
+        var selectedStroke = state.selection.strokeId
+          ? state.strokes.find(function (s) {
+              return s.id === state.selection.strokeId;
+            })
+          : null;
+        if (selectedStroke) {
+          var handle = hitTestHandles(rawPt, selectedStroke);
+          if (handle) {
+            var cen = getStrokeCentroid(selectedStroke);
+            state.transform.active = true;
+            state.transform.type = handle.type;
+            state.transform.start = rawPt;
+            state.transform.targetId = selectedStroke.id;
+            state.transform.origin =
+              handle.type === "rotate" ? cen : handle.anchor;
+            state.transform.startBounds = getStrokeBounds(selectedStroke);
+            state.transform.startAngle = Math.atan2(
+              rawPt.y - cen.y,
+              rawPt.x - cen.x,
+            );
+            state.transform.startWidth = selectedStroke.width;
+            canvas.setPointerCapture(e.pointerId);
+            e.stopPropagation();
+            return;
+          }
+        }
+
+        // Selection + transform always take priority — use raw coords for transform precision
+        var hit = getStrokeAtPoint(rawPt);
+        if (hit) {
+          state.penTool.isDrawing = false;
+
+          if (e.shiftKey) {
+            // Shift+click — toggle stroke into multi-select set
+            if (state.selection.strokeIds.has(hit.id)) {
+              state.selection.strokeIds.delete(hit.id);
+            } else {
+              state.selection.strokeIds.add(hit.id);
+            }
+            state.selection.strokeId = hit.id; // last-clicked
+            selectObject("stroke", hit.id);
+            renderFrame();
+            return;
+          }
+
+          // Normal click — resolve group membership first
+          var grp = getGroupForStroke(hit);
+          state.selection.strokeIds.clear();
+
+          if (grp) {
+            // Stroke belongs to group — select the group as primary target
+            state.selection.groupId = grp.id;
+            state.selection.strokeId = null; // group is the target, not the individual stroke
+          } else {
+            state.selection.strokeId = hit.id;
+            state.selection.strokeIds.add(hit.id);
+            state.selection.groupId = null;
+          }
+
+          state.transform.active = true;
+          state.transform.start = rawPt;
+          state.transform.targetId = hit.id; // still track actual hit for pointermove
+          selectObject("stroke", hit.id);
+          canvas.setPointerCapture(e.pointerId);
+          e.stopPropagation();
+          renderFrame();
+          return;
+        }
+
+        // No hit — clear stroke selection
+        if (state.selection.strokeId) {
+          state.selection.strokeId = null;
+          state.selection.strokeIds.clear();
+          state.selection.groupId = null;
+          state.multiSelection = state.multiSelection.filter(function (e) {
+            return e.type !== "stroke";
+          });
+          syncSelectionPanel();
+        }
+
+        // Place-shape mode — stamp library shape at click point
+        if (state.penTool.mode === "place-shape") {
+          var libShape = state.penTool.selectedLibraryShape;
+          if (libShape) {
+            createShapeInstance(libShape, pt);
+          }
+          e.stopPropagation();
+          return;
+        }
+        if (state.penTool.mode === "shape") {
+          var cs = state.penTool.currentStroke;
+
+          if (!cs) {
+            state.penTool.currentStroke = { points: [{ x: pt.x, y: pt.y }] };
+            state.penTool.isDrawing = true;
+          } else {
+            var first = cs.points[0];
+            var dx = pt.x - first.x;
+            var dy = pt.y - first.y;
+            if (
+              cs.points.length > 2 &&
+              Math.sqrt(dx * dx + dy * dy) < state.penTool.shapeCloseThreshold
+            ) {
+              commitShapeStroke(true);
+              e.stopPropagation();
+              return;
+            }
+            var newPt = { x: pt.x, y: pt.y };
+            if (e.altKey && cs.points.length > 0) {
+              newPt = axisLock(cs.points[cs.points.length - 1], pt);
+            } else if (e.shiftKey && cs.points.length > 0) {
+              newPt = constrainAngle(cs.points[cs.points.length - 1], pt);
+            }
+            cs.points.push(newPt);
+          }
+          state.penTool.previewPoint = pt;
+          e.stopPropagation();
+          canvas.setPointerCapture(e.pointerId);
+          renderFrame();
+          return;
+        }
+
+        // Line mode — 2-click
+        if (state.penTool.mode === "line") {
+          var cs = state.penTool.currentStroke;
+          if (!cs) {
+            state.penTool.currentStroke = { points: [{ x: pt.x, y: pt.y }] };
+            state.penTool.isDrawing = true;
+          } else {
+            var start = cs.points[0];
+            var endPt = e.altKey
+              ? axisLock(start, pt)
+              : e.shiftKey
+                ? constrainAngle(start, pt)
+                : pt;
+            commitLineStroke(start, endPt);
+          }
+          state.penTool.previewPoint = pt;
+          e.stopPropagation();
+          canvas.setPointerCapture(e.pointerId);
+          renderFrame();
+          return;
+        }
+
+        // Freehand mode — start stroke immediately
+        state.penTool.isDrawing = true;
         pushHistory();
         var stroke = createStrokeObject(pt.x, pt.y);
         state.strokes.push(stroke);
-        state.mopTool.activeStrokeId = stroke.id;
+        state.penTool.activeStrokeId = stroke.id;
         canvas.setPointerCapture(e.pointerId);
         e.stopPropagation();
         renderFrame();
@@ -963,33 +1473,251 @@
     canvas.addEventListener(
       "pointermove",
       function onMopMove(e) {
-        if (state.tool !== "mop") return;
-        if (!state.mopTool.activeStrokeId) return;
+        if (state.tool !== "pen") return;
+
+        // Transform — move / scale / rotate selected stroke OR group
+        if (state.transform.active) {
+          var cur = getCanvasCoordsLocal(e);
+          var isGroupTransform = !!state.groups[state.transform.targetId];
+
+          if (isGroupTransform) {
+            // Target is a group id — dispatch to group transform functions
+            var gid = state.transform.targetId;
+            if (state.transform.type === "move") {
+              var dx = cur.x - state.transform.start.x;
+              var dy = cur.y - state.transform.start.y;
+              translateGroup(gid, dx, dy);
+              state.transform.start = cur;
+            } else if (state.transform.type === "scale") {
+              var anchor = state.transform.origin;
+              var d0 = Math.hypot(
+                state.transform.start.x - anchor.x,
+                state.transform.start.y - anchor.y,
+              );
+              var d1 = Math.hypot(cur.x - anchor.x, cur.y - anchor.y);
+              if (d0 > 1) {
+                scaleGroup(gid, d1 / d0);
+                state.transform.start = cur;
+              }
+            } else if (state.transform.type === "rotate") {
+              var cen = state.transform.origin;
+              var curA = Math.atan2(cur.y - cen.y, cur.x - cen.x);
+              var prevA = Math.atan2(
+                state.transform.start.y - cen.y,
+                state.transform.start.x - cen.x,
+              );
+              rotateGroup(gid, curA - prevA);
+              state.transform.start = cur;
+            }
+            renderFrame();
+            return;
+          }
+
+          // Target is a single stroke
+          var stroke = state.strokes.find(function (s) {
+            return s.id === state.transform.targetId;
+          });
+          if (stroke) {
+            if (state.transform.type === "move") {
+              var dx = cur.x - state.transform.start.x;
+              var dy = cur.y - state.transform.start.y;
+              // If stroke belongs to a group, move all group strokes together
+              var grp = getGroupForStroke(stroke);
+              if (grp) {
+                translateGroup(grp.id, dx, dy);
+              } else {
+                moveStroke(stroke, dx, dy);
+              }
+              state.transform.start = cur;
+            } else if (state.transform.type === "scale") {
+              var anchor = state.transform.origin;
+              var d0 = Math.hypot(
+                state.transform.start.x - anchor.x,
+                state.transform.start.y - anchor.y,
+              );
+              var d1 = Math.hypot(cur.x - anchor.x, cur.y - anchor.y);
+              if (d0 > 1) {
+                var factor = d1 / d0;
+                var grp = getGroupForStroke(stroke);
+                if (grp) {
+                  scaleGroup(grp.id, factor);
+                } else {
+                  scaleStroke(stroke, anchor, factor);
+                }
+                state.transform.start = cur;
+              }
+            } else if (state.transform.type === "rotate") {
+              var cen = state.transform.origin;
+              var curAngle = Math.atan2(cur.y - cen.y, cur.x - cen.x);
+              var prevAngle = Math.atan2(
+                state.transform.start.y - cen.y,
+                state.transform.start.x - cen.x,
+              );
+              var dAngle = curAngle - prevAngle;
+              var grp = getGroupForStroke(stroke);
+              if (grp) {
+                rotateGroup(grp.id, dAngle);
+              } else {
+                rotateStroke(stroke, cen.x, cen.y, dAngle);
+              }
+              state.transform.start = cur;
+            }
+            renderFrame();
+          }
+          return;
+        }
+
+        if (state.penTool.mode === "shape") {
+          if (!state.penTool.isDrawing) return;
+          var cur = snapPoint(getCanvasCoordsLocal(e));
+
+          // Drag detection — if dragged past threshold, fall back to freehand for this stroke
+          if (mopDownPt && !mopDidDrag) {
+            var dd = Math.hypot(cur.x - mopDownPt.x, cur.y - mopDownPt.y);
+            if (dd > state.penTool.dragThreshold) {
+              mopDidDrag = true;
+              // Promote to freehand: commit what we have so far and start a free stroke
+              state.penTool.currentStroke = null;
+              state.penTool.isDrawing = false;
+              state.penTool.mode = "freehand";
+              pushHistory();
+              var stroke = createStrokeObject(mopDownPt.x, mopDownPt.y);
+              state.strokes.push(stroke);
+              state.penTool.activeStrokeId = stroke.id;
+              // continue into freehand logic below
+            }
+          }
+
+          if (state.penTool.mode === "shape") {
+            // Still in shape mode — update preview point
+            var cs = state.penTool.currentStroke;
+            if (cs && cs.points.length > 0) {
+              var last = cs.points[cs.points.length - 1];
+              if (e.altKey) {
+                cur = axisLock(last, cur);
+              } else if (e.shiftKey) {
+                cur = constrainAngle(last, cur);
+              }
+              state.penTool.previewPoint = cur;
+            }
+            renderFrame();
+
+            // Draw shape preview overlay
+            var ctx = canvas.getContext("2d");
+            if (cs && cs.points.length > 0) {
+              ctx.save();
+              ctx.beginPath();
+              var last = cs.points[cs.points.length - 1];
+              ctx.moveTo(last.x, last.y);
+              ctx.lineTo(cur.x, cur.y);
+              ctx.strokeStyle = "rgba(255,255,255,0.4)";
+              ctx.lineWidth = 1.5;
+              ctx.setLineDash([4, 4]);
+              ctx.stroke();
+              ctx.setLineDash([]);
+              // Close indicator
+              var first = cs.points[0];
+              var cdx = cur.x - first.x;
+              var cdy = cur.y - first.y;
+              if (
+                cs.points.length > 2 &&
+                Math.sqrt(cdx * cdx + cdy * cdy) <
+                  state.penTool.shapeCloseThreshold
+              ) {
+                ctx.beginPath();
+                ctx.arc(
+                  first.x,
+                  first.y,
+                  state.penTool.shapeCloseThreshold,
+                  0,
+                  Math.PI * 2,
+                );
+                ctx.strokeStyle = "rgba(61,216,197,0.6)";
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+              }
+              ctx.restore();
+            }
+            return;
+          }
+          // Fell through to freehand — fall into code below
+        }
+
+        if (!state.penTool.activeStrokeId) return;
         var stroke = state.strokes.find(function (s) {
-          return s.id === state.mopTool.activeStrokeId;
+          return s.id === state.penTool.activeStrokeId;
         });
         if (!stroke) return;
         var rawPt = getCanvasCoordsLocal(e);
-
         var last = stroke.points[stroke.points.length - 1];
 
-        // Skip tiny segments — removes micro-jitter
         if (last) {
           var dx = rawPt.x - last.x;
           var dy = rawPt.y - last.y;
           var dist = Math.sqrt(dx * dx + dy * dy);
           if (dist < 1.5) return;
-
-          // Change 2 — pass speed to drip spawner
           attemptDripSpawn(stroke, dist);
         }
 
-        // Change 1 — factor = 1 - streamline (0.65 → factor 0.35 = smooth)
-        var factor = 1 - state.mopTool.streamline;
+        var factor = 1 - state.penTool.streamline;
         var smoothed = last ? smoothPoint(last, rawPt, factor) : rawPt;
         stroke.points.push(smoothed);
-
         renderFrame();
+      },
+      true,
+    );
+
+    // Line mode preview on move (separate listener — no pointer capture needed)
+    canvas.addEventListener(
+      "pointermove",
+      function onPenLineModeMove(e) {
+        if (state.tool !== "pen") return;
+        if (state.penTool.mode !== "line") return;
+        if (!state.penTool.isDrawing) return;
+        var cur = snapPoint(getCanvasCoordsLocal(e));
+        if (e.altKey) {
+          var cs = state.penTool.currentStroke;
+          if (cs && cs.points.length > 0) {
+            cur = axisLock(cs.points[0], cur);
+          }
+        } else if (e.shiftKey) {
+          var cs = state.penTool.currentStroke;
+          if (cs && cs.points.length > 0) {
+            cur = constrainAngle(cs.points[0], cur);
+          }
+        }
+        state.penTool.previewPoint = cur;
+        renderFrame();
+        // Draw line preview overlay
+        var cs = state.penTool.currentStroke;
+        if (cs && cs.points.length > 0) {
+          var ctx = canvas.getContext("2d");
+          ctx.save();
+          ctx.beginPath();
+          ctx.moveTo(cs.points[0].x, cs.points[0].y);
+          ctx.lineTo(cur.x, cur.y);
+          ctx.strokeStyle = "rgba(255,255,255,0.4)";
+          ctx.lineWidth = 1.5;
+          ctx.setLineDash([6, 4]);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.beginPath();
+          ctx.arc(cs.points[0].x, cs.points[0].y, 4, 0, Math.PI * 2);
+          ctx.fillStyle = "#3dd8c5";
+          ctx.fill();
+          ctx.restore();
+        }
+      },
+      true,
+    );
+
+    canvas.addEventListener(
+      "dblclick",
+      function onMopDblClick(e) {
+        if (state.tool !== "pen") return;
+        if (state.penTool.mode !== "shape" || !state.penTool.isDrawing) return;
+        e.stopPropagation();
+        commitShapeStroke(false);
       },
       true,
     );
@@ -997,12 +1725,33 @@
     canvas.addEventListener(
       "pointerup",
       function onMopUp(e) {
-        if (state.tool !== "mop") return;
-        if (!state.mopTool.activeStrokeId) return;
+        if (state.tool !== "pen") return;
+
+        // Reset transform regardless of mode
+        if (state.transform.active) {
+          state.transform.active = false;
+          state.transform.type = "move";
+          state.transform.start = null;
+          state.transform.targetId = null;
+          state.transform.origin = null;
+          state.transform.startBounds = null;
+          state.transform.startAngle = null;
+          state.transform.startWidth = null;
+          return;
+        }
+
+        // Shape mode — pointerup does not commit; only dblclick/Enter/close does
+        if (state.penTool.mode === "shape") {
+          mopDownPt = null;
+          return;
+        }
+
+        if (!state.penTool.activeStrokeId) return;
         var stroke = state.strokes.find(function (s) {
-          return s.id === state.mopTool.activeStrokeId;
+          return s.id === state.penTool.activeStrokeId;
         });
-        // Change 2 — flick drip burst on stroke end
+
+        // Flick drip burst
         if (stroke && stroke.points.length > 2) {
           var pts = stroke.points;
           var last = pts[pts.length - 1];
@@ -1032,21 +1781,49 @@
             }
           }
         }
-        state.mopTool.activeStrokeId = null;
+        state.penTool.activeStrokeId = null;
+        state.penTool.isDrawing = false;
+        mopDownPt = null;
 
-        // Analyze geometry before walker attaches
         if (stroke) analyzeStroke(stroke);
-
-        // Auto-attach walker if enabled
         if (stroke && state.walker.enabled) {
           var w = createWalkerFromStroke(stroke);
           if (w) state.walkers.push(w);
         }
-
         renderFrame();
       },
       true,
     );
+
+    // Reset drawing state on pointer leave / cancel (prevents stuck isDrawing)
+    canvas.addEventListener("pointerleave", function onPenLeave() {
+      if (state.tool !== "pen") return;
+      if (state.penTool.mode === "freehand") {
+        // Only reset freehand — shape/line keep isDrawing across moves
+        if (state.penTool.activeStrokeId) {
+          state.penTool.activeStrokeId = null;
+          state.penTool.isDrawing = false;
+        }
+      }
+    });
+
+    canvas.addEventListener("pointercancel", function onPenCancel() {
+      if (state.tool !== "pen") return;
+      state.transform.active = false;
+      state.transform.type = "move";
+      state.transform.start = null;
+      state.transform.targetId = null;
+      state.transform.origin = null;
+      state.transform.startBounds = null;
+      state.transform.startAngle = null;
+      state.transform.startWidth = null;
+      state.penTool.activeStrokeId = null;
+      state.penTool.isDrawing = false;
+      state.penTool.currentStroke = null;
+      state.penTool.previewPoint = null;
+      mopDownPt = null;
+      renderFrame();
+    });
 
     // ── Line Tool (two-click, capture phase) ──
     var SNAP_ANGLE = Math.PI / 12;
@@ -1125,22 +1902,8 @@
     canvas.addEventListener(
       "pointerdown",
       function onLineToolDown(e) {
+        // Line tool disabled — mop is the primary drawing system
         if (state.tool !== "line") return;
-        var pt = getCanvasCoordsLocal(e);
-        var tool = state.lineTool;
-
-        if (tool.step === 0) {
-          tool.startPoint = pt;
-          tool.step = 1;
-          tool.previewEnd = pt;
-          e.stopPropagation();
-          return;
-        }
-
-        if (tool.step === 1) {
-          finalizeLineTool(pt);
-          e.stopPropagation();
-        }
       },
       true,
     );
@@ -1148,9 +1911,7 @@
     canvas.addEventListener(
       "pointermove",
       function onLineToolMove(e) {
-        if (state.tool !== "line" || state.lineTool.step !== 1) return;
-        state.lineTool.previewEnd = getCanvasCoordsLocal(e);
-        renderFrame();
+        // Line tool disabled
       },
       true,
     );
@@ -1169,24 +1930,48 @@
       };
     }
 
-    function createStrokeObject(x, y) {
+    // ── Unified Object Factory (compat layer) ────────────
+    function createObject(opts) {
       return {
-        id: createStrokeId(),
-        type: "stroke",
-        points: [{ x: x, y: y }],
-        width: 18,
-        color: normalizeColor(noteToColor(state.defaults.note)),
-        drips: [],
-        specks: [],
-        inkBudget: 1.0,
-        isCommitted: false,
-        renderMode: "ribbon",
-        sound: { enabled: false, note: null },
-        behavior: { isMuted: true },
-        mode: "annotation",
-        harmony: { role: 0 },
-        meta: { length: 1, curvature: 0, complexity: 0 },
+        id: "obj_" + Math.random().toString(36).slice(2),
+        type: opts.type || "stroke",
+        points: opts.points || [],
+        note: null,
+        color: null,
+        behavior: null,
+        physics: null,
       };
+    }
+
+    // Step 3 — note-first identity: note drives color, not the reverse
+    function assignNoteToObject(obj, noteClass) {
+      obj.note = noteClass;
+      obj.color = NOTE_COLORS[NOTE_NAMES[((noteClass % 12) + 12) % 12]] || null;
+    }
+
+    function createStrokeObject(x, y) {
+      var noteClass = ((state.defaults.note % 12) + 12) % 12;
+      var base = createObject({ type: "stroke", points: [{ x: x, y: y }] });
+      base.note = noteClass;
+      // Task 5 — use drawing defaults so inspector color/width feed new strokes
+      base.color =
+        state.defaults.color ||
+        normalizeColor(NOTE_COLORS[NOTE_NAMES[noteClass]]);
+      var bw = state.defaults.strokeWidth || 18;
+      base.width = bw;
+      base.baseWidth = bw;
+      base.scale = 1;
+      base.drips = [];
+      base.specks = [];
+      base.inkBudget = 1.0;
+      base.isCommitted = false;
+      base.renderMode = "ribbon";
+      base.sound = { enabled: false, note: null };
+      base.behavior = { isMuted: true };
+      base.mode = "annotation";
+      base.harmony = { role: 0 };
+      base.meta = { length: 1, curvature: 0, complexity: 0 };
+      return base;
     }
 
     // Change 4
@@ -1269,8 +2054,8 @@
 
         // Mark committed when no active drawing and drips settled
         if (
-          !state.mopTool.activeStrokeId ||
-          state.mopTool.activeStrokeId !== stroke.id
+          !state.penTool.activeStrokeId ||
+          state.penTool.activeStrokeId !== stroke.id
         ) {
           if (stroke.drips.length === 0) {
             stroke.isCommitted = true;
@@ -1283,8 +2068,47 @@
       (state.strokes || []).forEach(function (stroke) {
         var pts = stroke.points;
 
-        // Draw base stroke path — Change 5: quadratic smoothing
+        // Selection highlight — primary selection OR multi-select set OR group membership
+        var isSelected =
+          stroke.id === state.selection.strokeId ||
+          state.selection.strokeIds.has(stroke.id);
+        // Also highlight all siblings of a selected group
+        if (
+          !isSelected &&
+          state.selection.groupId &&
+          stroke._groupId === state.selection.groupId
+        ) {
+          isSelected = true;
+        }
+        if (!isSelected && state.selection.strokeId && stroke._groupId) {
+          var selStrokeForGroup = state.strokes.find(function (s) {
+            return s.id === state.selection.strokeId;
+          });
+          isSelected = !!(
+            selStrokeForGroup &&
+            selStrokeForGroup._groupId &&
+            selStrokeForGroup._groupId === stroke._groupId
+          );
+        }
         if (pts.length >= 2) {
+          if (isSelected) {
+            ctx.save();
+            ctx.strokeStyle = "#ffffff";
+            ctx.lineWidth = (stroke.width || 18) + 6;
+            ctx.lineCap = "round";
+            ctx.lineJoin = "round";
+            ctx.globalAlpha = 0.35;
+            ctx.beginPath();
+            ctx.moveTo(pts[0].x, pts[0].y);
+            for (var hi = 1; hi < pts.length - 1; hi++) {
+              var hmX = (pts[hi].x + pts[hi + 1].x) / 2;
+              var hmY = (pts[hi].y + pts[hi + 1].y) / 2;
+              ctx.quadraticCurveTo(pts[hi].x, pts[hi].y, hmX, hmY);
+            }
+            ctx.lineTo(pts[pts.length - 1].x, pts[pts.length - 1].y);
+            ctx.stroke();
+            ctx.restore();
+          }
           ctx.save();
           ctx.strokeStyle = stroke.color;
           ctx.lineWidth = stroke.width;
@@ -1317,11 +2141,319 @@
         });
         // Specks now stamped immediately via stampSpeck — no particle rendering needed
       });
+
+      // Draw transform handles on selected stroke
+      var selId = state.selection.strokeId;
+      if (selId) {
+        var selStroke = state.strokes.find(function (s) {
+          return s.id === selId;
+        });
+        if (selStroke && selStroke.points.length >= 2) {
+          var handles = getTransformHandles(selStroke);
+          var hKeys = Object.keys(handles);
+          ctx.save();
+
+          // Bounding box
+          var b = getStrokeBounds(selStroke);
+          var pad = 18;
+          ctx.strokeStyle = "rgba(255,255,255,0.25)";
+          ctx.lineWidth = 1;
+          ctx.setLineDash([4, 4]);
+          ctx.strokeRect(
+            b.minX - pad,
+            b.minY - pad,
+            b.w + pad * 2,
+            b.h + pad * 2,
+          );
+          ctx.setLineDash([]);
+
+          // Rotate connector line
+          var cx = (b.minX - pad + b.maxX + pad) / 2;
+          ctx.beginPath();
+          ctx.moveTo(cx, b.minY - pad);
+          ctx.lineTo(cx, handles.rotate.y + HANDLE_R);
+          ctx.strokeStyle = "rgba(255,255,255,0.25)";
+          ctx.stroke();
+
+          // Draw each handle
+          hKeys.forEach(function (key) {
+            var h = handles[key];
+            var isRotate = h.type === "rotate";
+            var isActive =
+              state.transform.active && state.transform.targetId === selId;
+            ctx.beginPath();
+            if (isRotate) {
+              ctx.arc(h.x, h.y, HANDLE_R, 0, Math.PI * 2);
+            } else {
+              ctx.rect(
+                h.x - HANDLE_R,
+                h.y - HANDLE_R,
+                HANDLE_R * 2,
+                HANDLE_R * 2,
+              );
+            }
+            ctx.fillStyle = isRotate ? "#3dd8c5" : "#ffffff";
+            ctx.globalAlpha = isActive ? 1.0 : 0.85;
+            ctx.fill();
+            ctx.strokeStyle = "rgba(0,0,0,0.4)";
+            ctx.lineWidth = 1;
+            ctx.stroke();
+          });
+
+          ctx.restore();
+        }
+      }
+
+      // Draw group bounding box + handles when a group is selected
+      if (state.selection.groupId) {
+        var gb = computeGroupBounds(state.selection.groupId);
+        if (gb) {
+          var pad = 22;
+          var gL = gb.minX - pad,
+            gR = gb.maxX + pad;
+          var gT = gb.minY - pad,
+            gBot = gb.maxY + pad;
+          var gCx = (gL + gR) / 2;
+          ctx.save();
+
+          // Dashed bounding box — teal for group (distinct from single-stroke white)
+          ctx.strokeStyle = "rgba(61,216,197,0.5)";
+          ctx.lineWidth = 1.5;
+          ctx.setLineDash([6, 4]);
+          ctx.strokeRect(gL, gT, gR - gL, gBot - gT);
+          ctx.setLineDash([]);
+
+          // Corner scale handles
+          var gCorners = [
+            { x: gL, y: gT },
+            { x: gR, y: gT },
+            { x: gL, y: gBot },
+            { x: gR, y: gBot },
+          ];
+          gCorners.forEach(function (c) {
+            ctx.beginPath();
+            ctx.rect(
+              c.x - HANDLE_R,
+              c.y - HANDLE_R,
+              HANDLE_R * 2,
+              HANDLE_R * 2,
+            );
+            ctx.fillStyle = "#3dd8c5";
+            ctx.globalAlpha = 0.85;
+            ctx.fill();
+            ctx.strokeStyle = "rgba(0,0,0,0.4)";
+            ctx.lineWidth = 1;
+            ctx.stroke();
+          });
+
+          // Rotate handle above top-center
+          var gRotY = gT - 28;
+          ctx.beginPath();
+          ctx.moveTo(gCx, gT);
+          ctx.lineTo(gCx, gRotY + HANDLE_R);
+          ctx.strokeStyle = "rgba(61,216,197,0.35)";
+          ctx.lineWidth = 1;
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.arc(gCx, gRotY, HANDLE_R, 0, Math.PI * 2);
+          ctx.fillStyle = "#3dd8c5";
+          ctx.globalAlpha = 0.85;
+          ctx.fill();
+          ctx.strokeStyle = "rgba(0,0,0,0.4)";
+          ctx.lineWidth = 1;
+          ctx.stroke();
+
+          ctx.restore();
+        }
+      }
+
+      // Render in-flight shape builder currentStroke
+      var cs = state.penTool.currentStroke;
+      if (cs && cs.points.length > 0) {
+        var csColor = noteToColor(state.defaults.note) || "#ffffff";
+        ctx.save();
+        ctx.strokeStyle = csColor;
+        ctx.lineWidth = 18;
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        ctx.globalAlpha = 0.55;
+        ctx.setLineDash([6, 6]);
+        ctx.beginPath();
+        ctx.moveTo(cs.points[0].x, cs.points[0].y);
+        for (var ci = 1; ci < cs.points.length; ci++) {
+          ctx.lineTo(cs.points[ci].x, cs.points[ci].y);
+        }
+        ctx.stroke();
+        ctx.setLineDash([]);
+        // Draw placed point dots
+        ctx.globalAlpha = 0.9;
+        cs.points.forEach(function (p, idx) {
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, idx === 0 ? 5 : 3, 0, Math.PI * 2);
+          ctx.fillStyle = idx === 0 ? "#3dd8c5" : csColor;
+          ctx.fill();
+        });
+        ctx.restore();
+      }
     }
 
     // ── PathWalker System ────────────────────────────────
 
     // ── Music Clock ──────────────────────────────────────
+
+    // ── Behavior Pipeline ────────────────────────────────────────────────────
+
+    function emitParticleFromStroke(stroke, b) {
+      if (!stroke.points || stroke.points.length < 2) return;
+      var p = stroke.points[Math.floor(stroke.points.length / 2)];
+      var vx = b.velocity ? b.velocity.x : 0;
+      var vy = b.velocity ? b.velocity.y : -2;
+      console.log("[emitter] firing", { x: p.x, y: p.y }, "stroke:", stroke.id);
+      var cfg = {
+        x: p.x + (Math.random() - 0.5) * 6,
+        y: p.y,
+        vx: vx + (Math.random() - 0.5) * 0.5,
+        vy: vy + (Math.random() - 0.5) * 0.5,
+        size: 2,
+        life: 1.2,
+        color: stroke.color || "#ffffff",
+        type: "dot",
+      };
+      if (window.SBE && SBE.ParticleSystem) {
+        SBE.ParticleSystem.spawn(cfg);
+      } else {
+        state.particles.push(
+          Object.assign({ maxLife: cfg.life, _dead: false }, cfg),
+        );
+      }
+      console.log("[particles] count", state.particles.length);
+    }
+
+    function getRandomPointOnStroke(stroke) {
+      var pts = stroke.points;
+      if (!pts || pts.length < 2) return (pts && pts[0]) || { x: 0, y: 0 };
+      var i = Math.floor(Math.random() * (pts.length - 1));
+      var a = pts[i];
+      var b = pts[i + 1];
+      var t = Math.random();
+      return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+    }
+
+    function processEmitter(stroke, b, now) {
+      if (!SBE || !SBE.ParticleSystem || !SBE.ParticleSystem.spawn) {
+        console.warn("[emitter] ParticleSystem not ready");
+        return;
+      }
+      // Defaults per spec
+      var rate = typeof b.rate === "number" ? b.rate : 16;
+      var density = typeof b.density === "number" ? b.density : 4;
+      var direction = typeof b.direction === "number" ? b.direction : 270;
+      var spread = typeof b.spread === "number" ? b.spread : 25;
+      var speed = typeof b.speed === "number" ? b.speed : 18;
+      var size = typeof b.size === "number" ? b.size : 2;
+      var life = typeof b.life === "number" ? b.life : 1.2;
+      var style = b.particleType || b.style || "dot";
+
+      if (!b.lastEmit) b.lastEmit = 0;
+      if (now - b.lastEmit < rate) return;
+      b.lastEmit = now;
+
+      // Spawn `density` particles per emission
+      for (var d = 0; d < density; d++) {
+        var baseAngle = direction * (Math.PI / 180);
+        var spreadRad = spread * (Math.PI / 180);
+        var angle = baseAngle + (Math.random() - 0.5) * spreadRad;
+        var mag = speed * (0.8 + Math.random() * 0.4);
+        var vx = Math.cos(angle) * mag;
+        var vy = Math.sin(angle) * mag;
+
+        if (!stroke.points || !stroke.points.length) continue;
+        var pos = getRandomPointOnStroke(stroke);
+
+        SBE.ParticleSystem.spawn({
+          x: pos.x,
+          y: pos.y,
+          vx: vx,
+          vy: vy,
+          size: size,
+          life: life,
+          color: stroke.color || "#ffffff",
+          type: style,
+        });
+      }
+    }
+
+    function processGroupEmitter(group, b, now) {
+      if (!b.rate) b.rate = 200;
+      if (!b.lastEmit) b.lastEmit = 0;
+      if (!b.velocity) b.velocity = { x: 0, y: -2 };
+      if (now - b.lastEmit < b.rate) return;
+      b.lastEmit = now;
+      var strokeIds = getGroupChildrenDeep(group.id);
+      strokeIds.forEach(function (id) {
+        var stroke = getStrokeById(id);
+        if (stroke) emitParticleFromStroke(stroke, b);
+      });
+    }
+
+    function processBehaviors(now) {
+      var emitterCount = 0;
+      // Group-level behaviors
+      Object.values(state.groups).forEach(function (group) {
+        var b = group.behavior;
+        if (!b) return;
+        if (b.type === "emitter") {
+          emitterCount++;
+          processGroupEmitter(group, b, now);
+        }
+      });
+      // Stroke-level behaviors
+      state.strokes.forEach(function (stroke) {
+        var b = stroke.behavior;
+        if (!b && stroke.mechanic === "emitter") {
+          stroke.behavior = {
+            type: "emitter",
+            rate: stroke.emit ? stroke.emit.rate : 200,
+            lastEmit: 0,
+            velocity: stroke.emit ? stroke.emit.velocity : { x: 0, y: -2 },
+          };
+          delete stroke.mechanic;
+          delete stroke.emit;
+          b = stroke.behavior;
+        }
+        if (!b) return;
+        if (b.type === "emitter") {
+          emitterCount++;
+          processEmitter(stroke, b, now);
+        }
+      });
+      if (emitterCount > 0) console.log("[emitter] updating", emitterCount);
+    }
+
+    function updateParticles(dt) {
+      if (window.SBE && SBE.ParticleSystem) {
+        var bounds = {
+          minX: -100,
+          minY: -100,
+          maxX: state.canvas.width + 100,
+          maxY: state.canvas.height + 100,
+        };
+        SBE.ParticleSystem.update(dt, bounds);
+      } else {
+        // Fallback — inline update
+        state.particles.forEach(function (p) {
+          p.x += p.vx;
+          p.y += p.vy;
+          p.vy += 0.04;
+          p.life -= dt * 0.0008;
+        });
+        for (var i = state.particles.length - 1; i >= 0; i--) {
+          if (state.particles[i].life <= 0) state.particles.splice(i, 1);
+        }
+      }
+    }
+
+    // ── End Behavior Pipeline ────────────────────────────────────────────────
 
     function updateClock(time) {
       var msPerBeat = 60000 / (state.music.bpm || 120);
@@ -1521,53 +2653,7 @@
     // ── End Mop / Stroke System ──────────────────────────
 
     function drawLinePreview() {
-      var tool = state.lineTool;
-      if (
-        state.tool !== "line" ||
-        tool.step !== 1 ||
-        !tool.startPoint ||
-        !tool.previewEnd
-      )
-        return;
-
-      var end = getLineFinalPoint(tool.startPoint, tool.previewEnd);
-      var ctx = canvas.getContext("2d");
-      ctx.save();
-
-      // Preview line
-      ctx.beginPath();
-      ctx.moveTo(tool.startPoint.x, tool.startPoint.y);
-      ctx.lineTo(end.x, end.y);
-      ctx.strokeStyle = "rgba(255,255,255,0.5)";
-      ctx.lineWidth = 2;
-      ctx.setLineDash([6, 4]);
-      ctx.stroke();
-      ctx.setLineDash([]);
-
-      // Start dot
-      ctx.beginPath();
-      ctx.arc(tool.startPoint.x, tool.startPoint.y, 4, 0, Math.PI * 2);
-      ctx.fillStyle = "#3dd8c5";
-      ctx.fill();
-
-      // Length + angle label
-      var dx = end.x - tool.startPoint.x;
-      var dy = end.y - tool.startPoint.y;
-      var len = Math.hypot(dx, dy);
-      var angle = Math.atan2(dy, dx) * (180 / Math.PI);
-      var label = Math.round(len) + "px  " + angle.toFixed(1) + "°";
-      if (tool.isTyping && tool.lengthInput) {
-        label = tool.lengthInput + "px (typing)";
-      }
-      ctx.fillStyle = "rgba(255,255,255,0.7)";
-      ctx.font = "20px monospace";
-      ctx.fillText(
-        label,
-        (tool.startPoint.x + end.x) / 2 + 10,
-        (tool.startPoint.y + end.y) / 2 - 10,
-      );
-
-      ctx.restore();
+      // Line tool disabled — mop is the primary drawing system
     }
 
     bindControls();
@@ -1579,6 +2665,406 @@
     syncUI();
     updatePanels(state.tool);
     renderFrame();
+
+    // Behavior + particle loop — runs every frame independent of playback state
+    var behaviorLastTime = 0;
+    // updateEmitters — spec-compliant entry point, delegates to processBehaviors
+    function updateEmitters(strokes, dt) {
+      if (!strokes || !strokes.length) return;
+      if (!window.SBE || !SBE.ParticleSystem || !SBE.ParticleSystem.spawn) {
+        console.warn("[emitter] ParticleSystem not ready");
+        return;
+      }
+      processBehaviors(performance.now());
+    }
+
+    function behaviorLoop(now) {
+      var dt = behaviorLastTime
+        ? Math.min(40, now - behaviorLastTime) / 1000
+        : 0.016;
+      behaviorLastTime = now;
+      processBehaviors(now);
+      updateParticles(dt);
+      // Drive render when stopped — playback loop handles it when playing
+      if (!isPlaying && state.particles.length > 0) renderFrame();
+      requestAnimationFrame(behaviorLoop);
+    }
+    requestAnimationFrame(behaviorLoop);
+
+    // ── Grid System ──────────────────────────────────────
+
+    function isPointNearSegment(p, a, b, threshold) {
+      var thr = threshold != null ? threshold : 8;
+      var dx = b.x - a.x;
+      var dy = b.y - a.y;
+      var lengthSq = dx * dx + dy * dy;
+      if (lengthSq === 0) return Math.hypot(p.x - a.x, p.y - a.y) < thr;
+      var t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / lengthSq;
+      t = Math.max(0, Math.min(1, t));
+      var projX = a.x + t * dx;
+      var projY = a.y + t * dy;
+      return Math.hypot(p.x - projX, p.y - projY) < thr;
+    }
+
+    function getStrokeAtPoint(pt) {
+      for (var i = state.strokes.length - 1; i >= 0; i--) {
+        var s = state.strokes[i];
+        if (!s.points || s.points.length < 2) continue;
+        for (var j = 0; j < s.points.length - 1; j++) {
+          if (isPointNearSegment(pt, s.points[j], s.points[j + 1])) {
+            return s;
+          }
+        }
+      }
+      return null;
+    }
+
+    function snapPoint(pt) {
+      if (!state.grid.enabled || !state.grid.snap) return pt;
+      var g = state.grid.size;
+      return {
+        x: Math.round(pt.x / g) * g,
+        y: Math.round(pt.y / g) * g,
+      };
+    }
+
+    function drawGrid(ctx, width, height) {
+      if (!state.grid.enabled) return;
+      var g = state.grid.size;
+      ctx.save();
+      ctx.globalAlpha = 0.08;
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 1;
+      for (var x = 0; x < width; x += g) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, height);
+        ctx.stroke();
+      }
+      for (var y = 0; y < height; y += g) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(width, y);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    // ── Shape Library ────────────────────────────────────
+
+    function normalizePoints(points) {
+      var minX = Math.min.apply(
+        null,
+        points.map(function (p) {
+          return p.x;
+        }),
+      );
+      var minY = Math.min.apply(
+        null,
+        points.map(function (p) {
+          return p.y;
+        }),
+      );
+      return points.map(function (p) {
+        return { x: p.x - minX, y: p.y - minY };
+      });
+    }
+
+    function saveShapeFromStroke(stroke, name) {
+      if (!stroke || !stroke.points || stroke.points.length < 2) return null;
+      var shapeName = name || "custom";
+      var normalized = normalizePoints(stroke.points);
+      var shape = {
+        id: "shape_" + Math.random().toString(36).slice(2),
+        name: shapeName,
+        points: normalized,
+      };
+      try {
+        var shapes = JSON.parse(localStorage.getItem("wos_shapes") || "[]");
+        shapes.push(shape);
+        localStorage.setItem("wos_shapes", JSON.stringify(shapes));
+      } catch (e) {
+        console.warn("[shapes] localStorage save failed:", e);
+      }
+      return shape;
+    }
+
+    function loadShapes() {
+      try {
+        return JSON.parse(localStorage.getItem("wos_shapes") || "[]");
+      } catch (e) {
+        return [];
+      }
+    }
+
+    function createShapeInstance(shape, position) {
+      if (!shape || !shape.points || shape.points.length < 2) return null;
+      var pos = position || { x: 100, y: 100 };
+      var pts = shape.points.map(function (p) {
+        return { x: p.x + pos.x, y: p.y + pos.y };
+      });
+      var stroke = createStrokeObject(pts[0].x, pts[0].y);
+      stroke.points = pts;
+      pushHistory();
+      state.strokes.push(stroke);
+      analyzeStroke(stroke);
+      if (state.walker.enabled && state.defaults.autoWalker) {
+        var w = createWalkerFromStroke(stroke);
+        if (w) state.walkers.push(w);
+      }
+      renderFrame();
+      return stroke;
+    }
+
+    function getSelectedStroke() {
+      return (
+        state.strokes.find(function (s) {
+          return s.id === state.selection.strokeId;
+        }) || null
+      );
+    }
+
+    function saveSelectedShape() {
+      var stroke = getSelectedStroke();
+      if (!stroke) {
+        showToast("Select a stroke first (Pen tool)");
+        return;
+      }
+      var name = window.prompt("Shape name?", "custom");
+      if (name === null) return; // cancelled
+      var shape = saveShapeFromStroke(stroke, name || "custom");
+      if (shape) showToast("Saved shape: " + shape.name);
+    }
+
+    // ── Object Grouping System (v1.1.0) ──────────────────────────────────────
+    // Wrapper layer on top of state.strokes. No engine changes.
+
+    function identityTransform() {
+      return { x: 0, y: 0, rotation: 0, scale: 1 };
+    }
+
+    // Recursively collect all leaf strokeIds from a group (handles nested groups)
+    function getGroupChildrenDeep(groupId) {
+      var result = [];
+      var stack = [groupId];
+      while (stack.length) {
+        var id = stack.pop();
+        if (state.groups[id]) {
+          var g = state.groups[id];
+          // Push nested child groups onto stack
+          g.children.forEach(function (cid) {
+            stack.push(cid);
+          });
+          // Add direct stroke members
+          g.strokeIds.forEach(function (sid) {
+            result.push(sid);
+          });
+        }
+      }
+      return result;
+    }
+
+    // Compute pivot for a group (centroid of all member strokes, or manual)
+    function computePivot(group) {
+      if (group.pivot && group.pivot.mode === "manual") {
+        return { x: group.pivot.x, y: group.pivot.y };
+      }
+      var strokeIds = getGroupChildrenDeep(group.id);
+      var totalX = 0,
+        totalY = 0,
+        totalPts = 0;
+      strokeIds.forEach(function (sid) {
+        var stroke = state.strokes.find(function (s) {
+          return s.id === sid;
+        });
+        if (!stroke) return;
+        stroke.points.forEach(function (p) {
+          totalX += p.x;
+          totalY += p.y;
+          totalPts++;
+        });
+      });
+      if (!totalPts) return { x: 0, y: 0 };
+      return { x: totalX / totalPts, y: totalY / totalPts };
+    }
+
+    function createGroup(strokeIds, childGroupIds) {
+      var id =
+        "group_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6);
+      var children = (childGroupIds || []).slice();
+      var group = {
+        id: id,
+        type: "group",
+        strokeIds: strokeIds.slice(),
+        parentId: null,
+        children: children,
+        transform: identityTransform(),
+        pivot: { x: 0, y: 0, mode: "centroid" },
+      };
+      // Tag strokes with their group
+      strokeIds.forEach(function (sid) {
+        var stroke = state.strokes.find(function (s) {
+          return s.id === sid;
+        });
+        if (stroke) stroke._groupId = id;
+      });
+      // Tag nested groups with their parent
+      children.forEach(function (cid) {
+        if (state.groups[cid]) state.groups[cid].parentId = id;
+      });
+      state.groups[id] = group;
+      console.log(
+        "[group] Created:",
+        id,
+        "strokes:",
+        strokeIds.length,
+        "childGroups:",
+        children.length,
+      );
+      return group;
+    }
+
+    function dissolveGroup(groupId) {
+      var group = state.groups[groupId];
+      if (!group) return;
+      // Remove _groupId from direct strokes
+      group.strokeIds.forEach(function (sid) {
+        var stroke = state.strokes.find(function (s) {
+          return s.id === sid;
+        });
+        if (stroke) delete stroke._groupId;
+      });
+      // Unparent child groups
+      group.children.forEach(function (cid) {
+        if (state.groups[cid]) state.groups[cid].parentId = null;
+      });
+      delete state.groups[groupId];
+    }
+
+    function getGroupForStroke(stroke) {
+      if (!stroke._groupId) return null;
+      return state.groups[stroke._groupId] || null;
+    }
+
+    function getStrokesInGroup(groupId) {
+      var strokeIds = getGroupChildrenDeep(groupId);
+      return strokeIds
+        .map(function (sid) {
+          return state.strokes.find(function (s) {
+            return s.id === sid;
+          });
+        })
+        .filter(Boolean);
+    }
+
+    // Translate: move all deep children
+    function translateGroup(groupId, dx, dy) {
+      var group = state.groups[groupId];
+      if (!group) return;
+      group.transform.x += dx;
+      group.transform.y += dy;
+      getStrokesInGroup(groupId).forEach(function (stroke) {
+        moveStroke(stroke, dx, dy);
+      });
+    }
+
+    // Scale: scale all deep children around group pivot
+    function scaleGroup(groupId, factor) {
+      var group = state.groups[groupId];
+      if (!group) return;
+      group.transform.scale *= factor;
+      var pivot = computePivot(group);
+      getStrokesInGroup(groupId).forEach(function (stroke) {
+        scaleStroke(stroke, { x: pivot.x, y: pivot.y }, factor);
+      });
+    }
+
+    // Rotate: rotate all deep children around group pivot
+    function rotateGroup(groupId, dAngle) {
+      var group = state.groups[groupId];
+      if (!group) return;
+      group.transform.rotation += dAngle;
+      var pivot = computePivot(group);
+      getStrokesInGroup(groupId).forEach(function (stroke) {
+        rotateStroke(stroke, pivot.x, pivot.y, dAngle);
+      });
+    }
+
+    // Delete a single stroke (removes from state.strokes + any group membership)
+    function deleteStroke(strokeId) {
+      var stroke = state.strokes.find(function (s) {
+        return s.id === strokeId;
+      });
+      if (stroke && stroke._groupId) {
+        var group = state.groups[stroke._groupId];
+        if (group) {
+          group.strokeIds = group.strokeIds.filter(function (sid) {
+            return sid !== strokeId;
+          });
+          if (group.strokeIds.length === 0 && group.children.length === 0) {
+            dissolveGroup(stroke._groupId); // auto-dissolve empty groups
+          }
+        }
+      }
+      state.strokes = state.strokes.filter(function (s) {
+        return s.id !== strokeId;
+      });
+      // Also remove any walkers attached to this stroke
+      state.walkers = state.walkers.filter(function (w) {
+        return !w.stroke || w.stroke.id !== strokeId;
+      });
+    }
+
+    // ── End Grouping System ──────────────────────────────────────────────────
+
+    function getStrokeById(id) {
+      return (
+        state.strokes.find(function (s) {
+          return s.id === id;
+        }) || null
+      );
+    }
+
+    function computeGroupBounds(groupId) {
+      var strokeIds = getGroupChildrenDeep(groupId);
+      var minX = Infinity,
+        minY = Infinity,
+        maxX = -Infinity,
+        maxY = -Infinity;
+      strokeIds.forEach(function (sid) {
+        var s = getStrokeById(sid);
+        if (!s) return;
+        s.points.forEach(function (p) {
+          if (p.x < minX) minX = p.x;
+          if (p.y < minY) minY = p.y;
+          if (p.x > maxX) maxX = p.x;
+          if (p.y > maxY) maxY = p.y;
+        });
+      });
+      if (!isFinite(minX)) return null;
+      return {
+        minX: minX,
+        minY: minY,
+        maxX: maxX,
+        maxY: maxY,
+        w: maxX - minX || 1,
+        h: maxY - minY || 1,
+      };
+    }
+
+    // Apply style properties to all selected strokes (single or group)
+    function applyStyleToSelection(style) {
+      if (state.selection.groupId) {
+        var ids = getGroupChildrenDeep(state.selection.groupId);
+        ids.forEach(function (id) {
+          var s = getStrokeById(id);
+          if (s) Object.assign(s, style);
+        });
+      } else if (state.selection.strokeId) {
+        var s = getStrokeById(state.selection.strokeId);
+        if (s) Object.assign(s, style);
+      }
+    }
 
     function bindControls() {
       const elements = controls.elements;
@@ -1780,32 +3266,26 @@
           },
         );
       }
-      if (elements.behaviorEmitterStrength) {
-        elements.behaviorEmitterStrength.addEventListener("input", function () {
-          applyBehaviorEmitterFields();
-        });
-      }
-      if (elements.behaviorEmitterSilent) {
-        elements.behaviorEmitterSilent.addEventListener("change", function () {
-          applyBehaviorEmitterFields();
-        });
-      }
-      if (elements.behaviorEmitterQuantize) {
-        elements.behaviorEmitterQuantize.addEventListener(
-          "change",
-          function () {
-            applyBehaviorEmitterFields();
-          },
-        );
-      }
-      if (elements.behaviorEmitterQuantizeDiv) {
-        elements.behaviorEmitterQuantizeDiv.addEventListener(
-          "input",
-          function () {
-            applyBehaviorEmitterFields();
-          },
-        );
-      }
+      var emitterInputs = [
+        "behaviorEmitterRate",
+        "behaviorEmitterDensity",
+        "behaviorEmitterDirection",
+        "behaviorEmitterSpread",
+        "behaviorEmitterSpeed",
+        "behaviorEmitterSize",
+        "behaviorEmitterLife",
+        "behaviorEmitterStyle",
+      ];
+      emitterInputs.forEach(function (name) {
+        if (elements[name]) {
+          elements[name].addEventListener("input", function () {
+            applyInspectorMetadata(false);
+          });
+          elements[name].addEventListener("change", function () {
+            applyInspectorMetadata(false);
+          });
+        }
+      });
 
       if (elements.lineMechanic) {
         elements.lineMechanic.addEventListener(
@@ -1829,6 +3309,15 @@
           applyInspectorMetadata(false);
         },
       );
+
+      if (elements.strokeWidth) {
+        elements.strokeWidth.addEventListener(
+          "input",
+          function updateStrokeWidth() {
+            applyInspectorMetadata(false);
+          },
+        );
+      }
 
       elements.lineColor.addEventListener("input", function syncDisplayColor() {
         const nextNote = findClosestNoteForColor(elements.lineColor.value);
@@ -2020,6 +3509,40 @@
         });
       }
 
+      // Shape Library tab bindings
+      var shapeLibSave = document.getElementById("shape-lib-save");
+      if (shapeLibSave) {
+        shapeLibSave.addEventListener("click", function () {
+          saveSelectedShape();
+          syncShapeLibraryTab(true);
+        });
+      }
+      var shapeLibRefresh = document.getElementById("shape-lib-refresh");
+      if (shapeLibRefresh) {
+        shapeLibRefresh.addEventListener("click", function () {
+          syncShapeLibraryTab();
+        });
+      }
+      var shapeLibClear = document.getElementById("shape-lib-clear");
+      if (shapeLibClear) {
+        shapeLibClear.addEventListener("click", function () {
+          if (!window.confirm("Delete all saved shapes?")) return;
+          try {
+            localStorage.removeItem("wos_shapes");
+          } catch (e) {}
+          syncShapeLibraryTab();
+        });
+      }
+
+      // Refresh shape library when Shapes tab is clicked
+      document.querySelectorAll("[data-tab]").forEach(function (btn) {
+        if (btn.dataset.tab === "shapes") {
+          btn.addEventListener("click", function () {
+            syncShapeLibraryTab(true); // force — tab may just have become active
+          });
+        }
+      });
+
       // Music tab bindings
       var musicEnabled = document.getElementById("music-enabled");
       if (musicEnabled) {
@@ -2205,9 +3728,9 @@
             await duplicateSelectedObject();
             return;
           }
-          state.tool = "draw";
+          // D key now activates mop (primary drawing tool)
+          state.tool = "pen";
           syncUI();
-          updatePanels(state.tool);
           return;
         }
         if (
@@ -2231,20 +3754,80 @@
           return;
         }
         if (event.key.toLowerCase() === "m") {
-          state.tool = "mop";
+          state.tool = "pen";
           syncUI();
           return;
         }
-        if (event.key.toLowerCase() === "l") {
-          state.tool = "line";
-          state.lineTool.step = 0;
-          state.lineTool.startPoint = null;
-          state.lineTool.previewEnd = null;
-          state.lineTool.lengthInput = "";
-          state.lineTool.isTyping = false;
+        if (event.key.toLowerCase() === "p") {
+          state.tool = "pen";
           syncUI();
           return;
         }
+        // G — toggle grid
+        if (
+          event.key.toLowerCase() === "g" &&
+          !(event.metaKey || event.ctrlKey)
+        ) {
+          state.grid.enabled = !state.grid.enabled;
+          renderFrame();
+          return;
+        }
+        // K — save selected stroke as shape
+        if (
+          event.key.toLowerCase() === "k" &&
+          !(event.metaKey || event.ctrlKey)
+        ) {
+          saveSelectedShape();
+          syncShapeLibraryTab(true);
+          return;
+        }
+
+        // Pen tool keyboard controls (shape + line modes)
+        if (state.tool === "pen" && state.penTool.isDrawing) {
+          // Escape — cancel in-progress stroke
+          if (event.key === "Escape") {
+            state.penTool.currentStroke = null;
+            state.penTool.isDrawing = false;
+            state.penTool.previewPoint = null;
+            renderFrame();
+            return;
+          }
+          // Enter — commit (shape = open path, line = finalize)
+          if (event.key === "Enter") {
+            event.preventDefault();
+            if (state.penTool.mode === "shape") commitShapeStroke(false);
+            else if (
+              state.penTool.mode === "line" &&
+              state.penTool.currentStroke
+            ) {
+              var cs = state.penTool.currentStroke;
+              if (state.penTool.previewPoint && cs.points.length > 0) {
+                commitLineStroke(cs.points[0], state.penTool.previewPoint);
+              }
+            }
+            return;
+          }
+          // Backspace — remove last placed point (shape only)
+          if (
+            event.key === "Backspace" &&
+            state.penTool.mode === "shape" &&
+            state.penTool.currentStroke
+          ) {
+            event.preventDefault();
+            var cs = state.penTool.currentStroke;
+            if (cs.points.length > 1) {
+              cs.points.pop();
+            } else {
+              state.penTool.currentStroke = null;
+              state.penTool.isDrawing = false;
+            }
+            renderFrame();
+            return;
+          }
+        }
+
+        // L key — line tool disabled, mop is primary drawing system
+        // if (event.key.toLowerCase() === "l") { ... }
 
         // Line tool length input
         if (state.tool === "line" && state.lineTool.step === 1) {
@@ -2375,6 +3958,24 @@
       state.backgroundImage = state.backgroundDataUrl
         ? await loadImage(state.backgroundDataUrl)
         : null;
+
+      // WOS stroke + group layer restoration
+      state.strokes = Array.isArray(scene.strokes) ? scene.strokes : [];
+      state.groups =
+        scene.groups &&
+        typeof scene.groups === "object" &&
+        !Array.isArray(scene.groups)
+          ? scene.groups
+          : {};
+      // Re-tag _groupId on strokes from restored groups
+      Object.values(state.groups).forEach(function (group) {
+        (group.strokeIds || []).forEach(function (sid) {
+          var stroke = state.strokes.find(function (s) {
+            return s.id === sid;
+          });
+          if (stroke) stroke._groupId = group.id;
+        });
+      });
       renderer.resize(state.canvas.width, state.canvas.height);
       updateCanvasAspect();
       rebuildAudioBindings();
@@ -2486,6 +4087,127 @@
         console.warn("[sampler] Failed to decode:", file.name, err);
         return false;
       }
+    }
+
+    // ── Shape Library UI ─────────────────────────────────
+
+    function makeShapePreviewSVG(points, size) {
+      if (!points || points.length < 2) return "";
+      var sz = size || 48;
+      var pad = 4;
+      var xs = points.map(function (p) {
+        return p.x;
+      });
+      var ys = points.map(function (p) {
+        return p.y;
+      });
+      var minX = Math.min.apply(null, xs);
+      var minY = Math.min.apply(null, ys);
+      var maxX = Math.max.apply(null, xs);
+      var maxY = Math.max.apply(null, ys);
+      var w = maxX - minX || 1;
+      var h = maxY - minY || 1;
+      var scale = Math.min((sz - pad * 2) / w, (sz - pad * 2) / h);
+      var ox = pad + (sz - pad * 2 - w * scale) / 2;
+      var oy = pad + (sz - pad * 2 - h * scale) / 2;
+      var d = points
+        .map(function (p, i) {
+          var tx = (p.x - minX) * scale + ox;
+          var ty = (p.y - minY) * scale + oy;
+          return (i === 0 ? "M" : "L") + tx.toFixed(1) + " " + ty.toFixed(1);
+        })
+        .join(" ");
+      return (
+        '<svg width="' +
+        sz +
+        '" height="' +
+        sz +
+        '" viewBox="0 0 ' +
+        sz +
+        " " +
+        sz +
+        '" xmlns="http://www.w3.org/2000/svg">' +
+        '<path d="' +
+        d +
+        '" stroke="rgba(255,255,255,0.7)" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>' +
+        "</svg>"
+      );
+    }
+
+    function syncShapeLibraryTab(force) {
+      var container = document.getElementById("shape-lib-list");
+      var emptyMsg = document.getElementById("shape-lib-empty");
+      if (!container) return;
+
+      // Skip when tab is not visible, unless explicitly forced
+      var tabContent = container.closest("[data-tab-content]");
+      if (!force && tabContent && !tabContent.classList.contains("active"))
+        return;
+
+      var shapes = loadShapes();
+
+      if (emptyMsg) emptyMsg.style.display = shapes.length ? "none" : "block";
+
+      if (!shapes.length) {
+        container.innerHTML = "";
+        return;
+      }
+
+      container.innerHTML = shapes
+        .map(function (shape, idx) {
+          var preview = makeShapePreviewSVG(shape.points, 48);
+          var pts = shape.points ? shape.points.length : 0;
+          return (
+            '<div class="shape-card" data-shape-id="' +
+            shape.id +
+            '">' +
+            '<div class="shape-card__preview">' +
+            preview +
+            "</div>" +
+            '<div class="shape-card__info">' +
+            '<div class="shape-card__name">' +
+            (shape.name || "shape") +
+            "</div>" +
+            '<div class="shape-card__meta">' +
+            pts +
+            " pts</div>" +
+            "</div>" +
+            '<div class="shape-card__actions">' +
+            '<button class="shape-card__btn" data-action="place" data-idx="' +
+            idx +
+            '">Place</button>' +
+            '<button class="shape-card__btn shape-card__btn--delete" data-action="delete" data-idx="' +
+            idx +
+            '">✕</button>' +
+            "</div>" +
+            "</div>"
+          );
+        })
+        .join("");
+
+      // Bind place and delete
+      container.querySelectorAll("[data-action]").forEach(function (btn) {
+        btn.addEventListener("click", function (e) {
+          e.stopPropagation();
+          var idx = Number(btn.dataset.idx);
+          var shapes = loadShapes();
+          if (btn.dataset.action === "place") {
+            var shape = shapes[idx];
+            if (shape) {
+              var cx = state.canvas.width / 2 - 100 + Math.random() * 200;
+              var cy = state.canvas.height / 2 - 100 + Math.random() * 200;
+              createShapeInstance(shape, { x: cx, y: cy });
+              showToast("Placed: " + shape.name);
+            }
+          } else if (btn.dataset.action === "delete") {
+            shapes.splice(idx, 1);
+            try {
+              localStorage.setItem("wos_shapes", JSON.stringify(shapes));
+            } catch (e) {}
+            syncShapeLibraryTab();
+          }
+        });
+      });
     }
 
     function syncSamplerTab() {
@@ -2627,6 +4349,7 @@
       syncSelectionPanel();
       controls.syncShortcutVisibility(state.ui.shortcutsVisible);
       syncSamplerTab();
+      syncShapeLibraryTab();
       if (controls.elements.togglePlayback) {
         controls.elements.togglePlayback.innerHTML = isPlaying
           ? "&#9646;&#9646;"
@@ -2639,22 +4362,174 @@
     }
 
     function syncSelectionPanel() {
-      const selection = getSelectedObject();
-      const activeNote = selection
-        ? (selection.midi ? selection.midi.note : selection.note) ||
-          state.defaults.note
+      // Guard — state.selection may not be initialized
+      if (!state.selection) return;
+
+      // Resolve the actual target — group takes priority over single stroke
+      var target = null;
+      if (state.selection.groupId) {
+        target = state.groups[state.selection.groupId] || null;
+      } else if (state.selection.strokeId) {
+        target = getStrokeById(state.selection.strokeId);
+      }
+
+      var isObjectMode = !!target;
+      var hasSelection = isObjectMode || !!getSelectedObject();
+      var isCanvasMode = !hasSelection;
+      var el = controls.elements;
+
+      // ── Canvas Mode (no selection) — show drawing defaults, hide object-only sections ──
+      if (isCanvasMode) {
+        if (el.lineColor)
+          el.lineColor.value = state.defaults.color || "#ff4d4d";
+        if (el.strokeWidth) {
+          var dw = String(Math.round(state.defaults.strokeWidth || 18));
+          el.strokeWidth.value = dw;
+          if (el.strokeWidthValue) el.strokeWidthValue.textContent = dw;
+        }
+        // Show drawing controls
+        if (el.colorSection) el.colorSection.style.display = "";
+        if (el.strokeWidthField) el.strokeWidthField.style.display = "";
+        // Hide object-only controls
+        if (el.behaviorSection) el.behaviorSection.style.display = "none";
+        if (el.mechanicSection) el.mechanicSection.style.display = "none";
+        if (el.behaviorEmitterFields)
+          el.behaviorEmitterFields.classList.add("hidden");
+        controls.syncSelection(null, ((state.defaults.note % 12) + 12) % 12);
+        syncInspectorToObject(null);
+        return;
+      }
+
+      // For the legacy inspector (lines/shapes/text/balls), fall back to multiSelection
+      var legacySelection =
+        !target || target.type === "stroke" || target.type === "group"
+          ? null
+          : target;
+      if (!target) {
+        legacySelection = getSelectedObject();
+      }
+
+      var activeNote = legacySelection
+        ? (legacySelection.midi
+            ? legacySelection.midi.note
+            : legacySelection.note) || state.defaults.note
         : state.defaults.note;
-      controls.syncSelection(selection, ((activeNote % 12) + 12) % 12);
-      syncInspectorToObject(selection);
+      controls.syncSelection(legacySelection, ((activeNote % 12) + 12) % 12);
+      syncInspectorToObject(legacySelection);
+
+      // ── Object mode — restore sections, reset controls, populate from target ──
+      if (el.colorSection) el.colorSection.style.display = "";
+      if (el.behaviorSection) el.behaviorSection.style.display = "";
+      if (el.mechanicSection) el.mechanicSection.style.display = "";
+      // Task 1 — reset inspector controls before applying target state
+      if (el.lineColor) el.lineColor.value = "#ff4d4d";
+      if (el.strokeWidth) {
+        el.strokeWidth.value = "18";
+        if (el.strokeWidthValue) el.strokeWidthValue.textContent = "18";
+      }
+      if (el.lineBehavior) el.lineBehavior.value = "none";
+      if (el.lineStrength) el.lineStrength.value = "1";
+      if (el.lineStrengthValue) el.lineStrengthValue.textContent = "1";
+      // Emitter reset — all to spec defaults
+      var eReset = function (name, valName, def) {
+        if (el[name]) {
+          el[name].value = String(def);
+          if (el[valName]) el[valName].textContent = String(def);
+        }
+      };
+      eReset("behaviorEmitterRate", "behaviorEmitterRateValue", 16);
+      eReset("behaviorEmitterDensity", "behaviorEmitterDensityValue", 4);
+      eReset("behaviorEmitterDirection", "behaviorEmitterDirectionValue", 270);
+      eReset("behaviorEmitterSpread", "behaviorEmitterSpreadValue", 25);
+      eReset("behaviorEmitterSpeed", "behaviorEmitterSpeedValue", 18);
+      eReset("behaviorEmitterSize", "behaviorEmitterSizeValue", 2);
+      eReset("behaviorEmitterLife", "behaviorEmitterLifeValue", 1.2);
+      if (el.behaviorEmitterStyle) el.behaviorEmitterStyle.value = "dot";
+
+      // Task 2 — populate from target
+      var behaviorTarget = target || legacySelection;
+      if (behaviorTarget && behaviorTarget.color && el.lineColor) {
+        el.lineColor.value = behaviorTarget.color;
+      }
+      if (target && target.type === "stroke" && el.strokeWidth) {
+        var bw = target.baseWidth || target.width || 18;
+        el.strokeWidth.value = String(Math.round(bw));
+        if (el.strokeWidthValue)
+          el.strokeWidthValue.textContent = String(Math.round(bw));
+      }
+      if (behaviorTarget && behaviorTarget.behavior) {
+        var tb = behaviorTarget.behavior;
+        if (el.lineBehavior && tb.type && tb.type !== "normal") {
+          el.lineBehavior.value = tb.type;
+        }
+        if (tb.type === "emitter") {
+          var setField = function (el, valEl, v) {
+            if (el) {
+              el.value = String(v);
+              if (valEl) valEl.textContent = String(v);
+            }
+          };
+          setField(
+            el.behaviorEmitterRate,
+            el.behaviorEmitterRateValue,
+            tb.rate || 16,
+          );
+          setField(
+            el.behaviorEmitterDensity,
+            el.behaviorEmitterDensityValue,
+            tb.density || 4,
+          );
+          setField(
+            el.behaviorEmitterDirection,
+            el.behaviorEmitterDirectionValue,
+            tb.direction || 270,
+          );
+          setField(
+            el.behaviorEmitterSpread,
+            el.behaviorEmitterSpreadValue,
+            tb.spread || 25,
+          );
+          setField(
+            el.behaviorEmitterSpeed,
+            el.behaviorEmitterSpeedValue,
+            tb.speed || 18,
+          );
+          setField(
+            el.behaviorEmitterSize,
+            el.behaviorEmitterSizeValue,
+            tb.size || 2,
+          );
+          setField(
+            el.behaviorEmitterLife,
+            el.behaviorEmitterLifeValue,
+            tb.life || 1.2,
+          );
+          if (el.behaviorEmitterStyle)
+            el.behaviorEmitterStyle.value = tb.style || "dot";
+        }
+      }
+
+      // Show/hide strokeWidth field based on stroke selection
+      var isStrokeSelected = !!(target && target.type === "stroke");
+      if (controls.elements.strokeWidthField) {
+        controls.elements.strokeWidthField.style.display = isStrokeSelected
+          ? ""
+          : "none";
+      }
+      // (strokeWidth value already populated in the reset+apply block above)
 
       // Behavior emitter fields visibility + sync
       var showEmitterFields = false;
-      if (selection) {
+      if (legacySelection) {
         var bType = null;
-        if (selection.behavior) bType = selection.behavior.type;
-        if (!bType && selection.segments && selection.segments.length) {
-          bType = selection.segments[0].behavior
-            ? selection.segments[0].behavior.type
+        if (legacySelection.behavior) bType = legacySelection.behavior.type;
+        if (
+          !bType &&
+          legacySelection.segments &&
+          legacySelection.segments.length
+        ) {
+          bType = legacySelection.segments[0].behavior
+            ? legacySelection.segments[0].behavior.type
             : null;
         }
         showEmitterFields = bType === "emitter";
@@ -2665,81 +4540,7 @@
           !showEmitterFields,
         );
       }
-      if (showEmitterFields && selection) {
-        var cfg =
-          selection.behavior && selection.behavior.type === "emitter"
-            ? selection.behavior.emitterConfig
-            : null;
-        if (!cfg && selection.segments && selection.segments.length) {
-          var seg = selection.segments[0];
-          cfg =
-            seg.behavior && seg.behavior.type === "emitter"
-              ? seg.behavior.emitterConfig
-              : null;
-        }
-        cfg = cfg || {
-          rate: 400,
-          direction: (270 * Math.PI) / 180,
-          strength: 6,
-          isMuted: false,
-          quantize: false,
-          quantizeDivision: 16,
-        };
-
-        // Backward compat: convert old emitterVx/Vy to direction+strength
-        if (cfg.direction == null) {
-          var oldVx = selection.behavior
-            ? selection.behavior.emitterVx || 0
-            : 0;
-          var oldVy = selection.behavior
-            ? selection.behavior.emitterVy || 0
-            : 0;
-          cfg.direction = Math.atan2(oldVy, oldVx);
-          cfg.strength = Math.hypot(oldVx, oldVy) || 6;
-        }
-
-        if (controls.elements.behaviorEmitterRate) {
-          controls.elements.behaviorEmitterRate.value = String(cfg.rate || 400);
-          if (controls.elements.behaviorEmitterRateValue) {
-            controls.elements.behaviorEmitterRateValue.textContent = String(
-              cfg.rate || 400,
-            );
-          }
-        }
-        if (controls.elements.behaviorEmitterDirection) {
-          var deg = Math.round(((cfg.direction || 0) * 180) / Math.PI);
-          controls.elements.behaviorEmitterDirection.value = String(
-            ((deg % 360) + 360) % 360,
-          );
-          if (controls.elements.behaviorEmitterDirectionValue) {
-            controls.elements.behaviorEmitterDirectionValue.textContent =
-              String(((deg % 360) + 360) % 360);
-          }
-        }
-        if (controls.elements.behaviorEmitterStrength) {
-          controls.elements.behaviorEmitterStrength.value = String(
-            cfg.strength != null ? cfg.strength : 6,
-          );
-          if (controls.elements.behaviorEmitterStrengthValue) {
-            controls.elements.behaviorEmitterStrengthValue.textContent = Number(
-              cfg.strength != null ? cfg.strength : 6,
-            ).toFixed(1);
-          }
-        }
-        if (controls.elements.behaviorEmitterSilent) {
-          controls.elements.behaviorEmitterSilent.checked =
-            cfg.isMuted || false;
-        }
-        if (controls.elements.behaviorEmitterQuantize) {
-          controls.elements.behaviorEmitterQuantize.checked =
-            cfg.quantize || false;
-        }
-        if (controls.elements.behaviorEmitterQuantizeDiv) {
-          controls.elements.behaviorEmitterQuantizeDiv.value = String(
-            cfg.quantizeDivision || 16,
-          );
-        }
-      }
+      // (Legacy engine emitter sync removed — stroke emitter controls populated in Task 2 block above)
 
       // Motion panel visibility + sync
       var isShape =
@@ -2751,8 +4552,8 @@
           !isShape,
         );
       }
-      if (isShape && selection) {
-        var m = selection.motion || {
+      if (isShape && legacySelection) {
+        var m = legacySelection.motion || {
           enabled: false,
           vx: 0,
           vy: 0,
@@ -2793,18 +4594,19 @@
 
       var color = getObjectColor(obj);
 
-      // Resolve note — prefer explicit midi/note, fall back to color mapping
+      // Step 4 — note-first: prefer obj.note (unified field), then midi.note, then color fallback
       var note =
-        obj.midi && typeof obj.midi.note === "number"
-          ? obj.midi.note
-          : typeof obj.note === "number"
-            ? obj.note
+        typeof obj.note === "number"
+          ? obj.note
+          : obj.midi && typeof obj.midi.note === "number"
+            ? obj.midi.note
             : null;
 
       var noteClass = null;
       if (note != null) {
         noteClass = ((note % 12) + 12) % 12;
       } else if (color) {
+        // Color fallback only when no note field set (legacy objects)
         noteClass = getNoteFromColor(color);
         if (noteClass != null) note = 48 + noteClass;
       }
@@ -2815,9 +4617,9 @@
         controls.elements.activeNote.value = String(note);
       }
 
-      // Step 4 — swatch always shows canonical hex color
       updateColorSwatch(color || (note != null ? noteToColor(note) : null));
 
+      // Step 6 — sampler sync when stroke selected
       if (noteClass != null) {
         state.sampler.activeNote = noteClass;
         highlightActiveRow(noteClass);
@@ -2919,6 +4721,13 @@
 
     function resolveSelectionEntry(entry) {
       if (!entry) return null;
+      if (entry.type === "stroke") {
+        return (
+          state.strokes.find(function (s) {
+            return s.id === entry.id;
+          }) || null
+        );
+      }
       if (entry.type === "ball") {
         return (
           state.balls.find(function (b) {
@@ -3369,9 +5178,50 @@
     }
 
     function deleteSelectionObject() {
-      if (!state.multiSelection.length || state.ui.presentation) {
+      if (state.ui.presentation) return;
+
+      // Delete selected group (all strokes in it)
+      if (state.selection.groupId) {
+        pushHistory();
+        var gid = state.selection.groupId;
+        var strokeIdsToDelete = getGroupChildrenDeep(gid);
+        strokeIdsToDelete.forEach(function (sid) {
+          deleteStroke(sid);
+        });
+        dissolveGroup(gid);
+        state.selection.groupId = null;
+        state.selection.strokeId = null;
+        state.selection.strokeIds.clear();
+        renderFrame();
+        syncUI();
         return;
       }
+
+      // Delete individually selected strokes
+      if (state.selection.strokeIds.size > 0) {
+        pushHistory();
+        state.selection.strokeIds.forEach(function (sid) {
+          deleteStroke(sid);
+        });
+        state.selection.strokeIds.clear();
+        state.selection.strokeId = null;
+        renderFrame();
+        syncUI();
+        return;
+      }
+
+      // Delete single stroke (legacy path)
+      if (state.selection.strokeId) {
+        pushHistory();
+        deleteStroke(state.selection.strokeId);
+        state.selection.strokeId = null;
+        renderFrame();
+        syncUI();
+        return;
+      }
+
+      // Fallback — delete legacy engine objects (lines, shapes, balls, text)
+      if (!state.multiSelection.length) return;
 
       pushHistory();
       var ballIds = new Set();
@@ -3645,17 +5495,24 @@
 
     function readInspectorDefaults() {
       const patch = readInspectorPatch();
+      var sw = controls.elements.strokeWidth
+        ? Number(controls.elements.strokeWidth.value)
+        : 18;
       return {
         midiChannel: state.defaults.midiChannel,
         note: patch.note,
-        color: noteToColor(patch.note),
+        color: controls.elements.lineColor
+          ? controls.elements.lineColor.value
+          : noteToColor(patch.note),
         thickness: patch.thickness,
+        strokeWidth: !isNaN(sw) && sw >= 1 ? sw : 18,
         behaviorType: patch.behaviorType,
         behaviorStrength: patch.behaviorStrength,
         textValue: controls.elements.textContent.value,
         textSize: clampInt(Number(controls.elements.textSize.value), 24, 420),
         textScale: Number(controls.elements.textScale.value),
         textRotation: Number(controls.elements.textRotation.value),
+        autoWalker: state.defaults.autoWalker,
       };
     }
 
@@ -3735,6 +5592,91 @@
       if (entry.type === "ball") {
         object.color = newColor;
         return;
+      }
+
+      if (entry.type === "stroke") {
+        if (!object) return;
+
+        // Task 4 — route to object (object mode) — never to state.defaults here
+        // (state.defaults are updated via applyInspectorMetadata when nothing is selected)
+        object.color = newColor;
+        object.note = patch.note;
+
+        // Stroke width from controls.strokeWidth — never from patch.thickness
+        if (controls.elements.strokeWidth) {
+          var sw = Number(controls.elements.strokeWidth.value);
+          if (!isNaN(sw) && sw >= 1) {
+            object.baseWidth = sw;
+            object.width = sw * (object.scale || 1);
+          }
+        }
+
+        // Behavior — never touches color/width
+        var bType = patch.behaviorType === "normal" ? null : patch.behaviorType;
+        if (bType === "emitter") {
+          var existing =
+            object.behavior && object.behavior.type === "emitter"
+              ? object.behavior
+              : {};
+          var el = controls.elements;
+          object.behavior = {
+            type: "emitter",
+            rate: el.behaviorEmitterRate
+              ? Number(el.behaviorEmitterRate.value) || 16
+              : existing.rate || 16,
+            density: el.behaviorEmitterDensity
+              ? Number(el.behaviorEmitterDensity.value) || 4
+              : existing.density || 4,
+            direction: el.behaviorEmitterDirection
+              ? Number(el.behaviorEmitterDirection.value) || 270
+              : existing.direction || 270,
+            spread: el.behaviorEmitterSpread
+              ? Number(el.behaviorEmitterSpread.value) || 25
+              : existing.spread || 25,
+            speed: el.behaviorEmitterSpeed
+              ? Number(el.behaviorEmitterSpeed.value) || 18
+              : existing.speed || 18,
+            size: el.behaviorEmitterSize
+              ? Number(el.behaviorEmitterSize.value) || 2
+              : existing.size || 2,
+            life: el.behaviorEmitterLife
+              ? Number(el.behaviorEmitterLife.value) || 1.2
+              : existing.life || 1.2,
+            style: el.behaviorEmitterStyle
+              ? el.behaviorEmitterStyle.value || "dot"
+              : existing.style || "dot",
+            lastEmit: existing.lastEmit || 0,
+          };
+          console.log(
+            "[emitter] created on stroke via UI",
+            object.id,
+            object.behavior,
+          );
+        } else if (bType) {
+          object.behavior = Object.assign({}, object.behavior, { type: bType });
+        } else {
+          object.behavior = null;
+        }
+
+        console.log(
+          "[stroke update]",
+          object.id,
+          "width:",
+          object.width,
+          "behavior:",
+          object.behavior,
+        );
+        return;
+      }
+    }
+
+    // When nothing is selected, inspector changes update drawing defaults
+    function applyDefaultsFromInspector() {
+      var el = controls.elements;
+      if (el.lineColor) state.defaults.color = el.lineColor.value;
+      if (el.strokeWidth) {
+        var sw = Number(el.strokeWidth.value);
+        if (!isNaN(sw) && sw >= 1) state.defaults.strokeWidth = sw;
       }
     }
 
@@ -3938,7 +5880,17 @@
       state.balls = [];
       state.strokes = [];
       state.walkers = [];
-      state.mopTool.activeStrokeId = null;
+      state.groups = {};
+      state.particles.length = 0;
+      if (window.SBE && SBE.ParticleSystem)
+        SBE.ParticleSystem.particles = state.particles;
+      state.selection.strokeId = null;
+      state.selection.strokeIds.clear();
+      state.selection.groupId = null;
+      state.penTool.activeStrokeId = null;
+      state.penTool.currentStroke = null;
+      state.penTool.isDrawing = false;
+      state.penTool.previewPoint = null;
       surfaceCtx.clearRect(0, 0, surfaceCanvas.width, surfaceCanvas.height);
       state.emitters = [];
       clearLoop();
@@ -4652,11 +6604,12 @@
           source.line.mode === "annotation"
         )
           return;
-        console.log("COLLISION SOUND SOURCE", {
-          note: source.line.sound?.midi?.note,
-          color: source.line.color,
-          type: "line",
-        });
+        // Tag hit time for visual flash feedback
+        source.line.lastHitAt = performance.now();
+        // Mechanic-aware collision particles
+        if (window.SBE && SBE.ParticleSystem) {
+          emitCollisionParticles(source.ball, source.line);
+        }
         queueAudioEvent("collision", source.line);
       });
 
@@ -4672,10 +6625,14 @@
     function renderFrame() {
       renderer.render(state, drawTools.getOverlays());
       var ctx = canvas.getContext("2d");
-      // Change 3 — draw surface stamp layer first (persistent ink)
+      // Grid — drawn before all stroke/walker content
+      drawGrid(ctx, canvas.width, canvas.height);
+      // Surface stamp layer (persistent ink)
       ctx.drawImage(surfaceCanvas, 0, 0);
       renderStrokes(ctx);
       drawWalkers(ctx);
+      renderParticles(ctx);
+      drawHitFeedback(ctx);
       drawParticleOverlays();
       drawDebugHUD();
       drawMutedOverlays();
@@ -4686,6 +6643,133 @@
 
       Object.keys(window.noteElements).forEach((n) => {
         updateNoteVisual(Number(n), window.noteElements[n]);
+      });
+    }
+
+    // ── Collision Particle Emission ───────────────────────────────────────────
+
+    var MAX_COLLISION_PARTICLES = 20;
+
+    function emitCollisionBurst(x, y, ball, line, count, type) {
+      var speed = Math.hypot(ball.vx || 0, ball.vy || 0);
+      var n = Math.min(MAX_COLLISION_PARTICLES, count);
+      var color = line.color || "#ffffff";
+      for (var i = 0; i < n; i++) {
+        if (!SBE.ParticleSystem.spawn) break;
+        var angle = Math.random() * Math.PI * 2;
+        var mag = speed * (0.3 + Math.random() * 0.7);
+        SBE.ParticleSystem.spawn({
+          x: x,
+          y: y,
+          vx: Math.cos(angle) * mag,
+          vy: Math.sin(angle) * mag,
+          size: 2 + Math.random() * 3,
+          life: 0.5 + Math.random() * 0.6,
+          color: color,
+          type: type,
+        });
+      }
+    }
+
+    function emitCollisionSurfaceTrail(x, y, ball, line) {
+      var dir = Math.atan2(ball.vy || 0, ball.vx || 0);
+      var color = line.color || "#ffffff";
+      for (var i = 0; i < 4; i++) {
+        var offset = i * 2;
+        SBE.ParticleSystem.spawn({
+          x: x - Math.cos(dir) * offset,
+          y: y - Math.sin(dir) * offset,
+          vx: (ball.vx || 0) * 0.3,
+          vy: (ball.vy || 0) * 0.3,
+          size: 2,
+          life: 0.8,
+          color: color,
+          type: "streak",
+        });
+      }
+    }
+
+    function emitCollisionParticles(ball, line) {
+      if (!ball || !line) return;
+      // Use ball position — it's at the impact point after physics resolution
+      var x = ball.x;
+      var y = ball.y;
+      var mechanic = line.mechanicType || "default";
+
+      switch (mechanic) {
+        case "bumper-hard":
+          emitCollisionBurst(x, y, ball, line, 16, "glow");
+          break;
+        case "bumper-elastic":
+          emitCollisionBurst(x, y, ball, line, 10, "streak");
+          break;
+        case "ramp":
+          emitCollisionSurfaceTrail(x, y, ball, line);
+          break;
+        default:
+          emitCollisionBurst(x, y, ball, line, 6, "dot");
+      }
+    }
+
+    // ── End Collision Particles ───────────────────────────────────────────────
+
+    function renderParticles(ctx) {
+      if (window.SBE && SBE.ParticleSystem) {
+        SBE.ParticleSystem.render(ctx);
+      } else if (state.particles.length) {
+        ctx.save();
+        state.particles.forEach(function (p) {
+          ctx.globalAlpha = Math.max(0, p.life) * 0.85;
+          ctx.fillStyle = p.color || "#ffffff";
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, 2.5, 0, Math.PI * 2);
+          ctx.fill();
+        });
+        ctx.globalAlpha = 1;
+        ctx.restore();
+      }
+    }
+
+    function drawHitFeedback(ctx) {
+      var now = performance.now();
+      var HIT_MS = 120;
+
+      // Flash lines on collision hit
+      (state.lines || []).forEach(function (line) {
+        if (!line.lastHitAt) return;
+        var dt = now - line.lastHitAt;
+        if (dt >= HIT_MS) return;
+        var fade = 1 - dt / HIT_MS;
+        ctx.save();
+        ctx.strokeStyle = line.color || "#ffffff";
+        ctx.lineWidth = (line.thickness || 3) + 4;
+        ctx.lineCap = "round";
+        ctx.globalAlpha = fade * 0.8;
+        ctx.beginPath();
+        ctx.moveTo(line.x1, line.y1);
+        ctx.lineTo(line.x2, line.y2);
+        ctx.stroke();
+        ctx.restore();
+      });
+
+      // Flash shapes (segments) on collision hit
+      (state.shapes || []).forEach(function (shape) {
+        (shape.segments || []).forEach(function (seg) {
+          if (!seg.lastHitAt) return;
+          var dt = now - seg.lastHitAt;
+          if (dt >= HIT_MS) return;
+          var fade = 1 - dt / HIT_MS;
+          ctx.save();
+          ctx.strokeStyle = seg.color || "#ffffff";
+          ctx.lineWidth = (seg.thickness || 3) + 4;
+          ctx.lineCap = "round";
+          ctx.globalAlpha = fade * 0.8;
+          ctx.beginPath();
+          ctx.moveTo(seg.x1, seg.y1);
+          ctx.lineTo(seg.x2, seg.y2);
+          ctx.stroke();
+          ctx.restore();
+        });
       });
     }
 

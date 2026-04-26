@@ -1,0 +1,164 @@
+{
+  "tracks": [
+    {
+      "id": "JUG-20260424-06",
+      "bpm": 124.0,
+      "slices": [
+        {
+          "label": "A",
+          "file": "data/sources/house_124/JUG-20260424-06-A_bpm124.wav",
+          "status": "CLEAN"
+        },
+        {
+          "label": "B",
+          "file": "data/sources/house_124/JUG-20260424-06-B_bpm124.wav",
+          "status": "CLEAN"
+        }
+      ]
+    },
+    {
+      "id": "JUG-20260424-04",
+      "bpm": 124.0,
+      "slices": [
+        {
+          "label": "B",
+          "file": "data/sources/house_124/JUG-20260424-04-B_bpm124.wav",
+          "status": "CLEAN"
+        }
+      ]
+    },
+    {
+      "id": "JUG-20260424-02",
+      "bpm": 124.0,
+      "slices": [
+        {
+          "label": "A",
+          "file": "data/sources/house_124/JUG-20260424-02-A_bpm124.wav",
+          "status": "CLEAN"
+        },
+        {
+          "label": "B",
+          "file": "data/sources/house_124/JUG-20260424-02-B_bpm124.wav",
+          "status": "CLEAN"
+        }
+      ]
+    },
+    {
+      "id": "JUG-20260424-07",
+      "bpm": 124.0,
+      "slices": [
+        {
+          "label": "A",
+          "file": "data/sources/house_124/JUG-20260424-07-A_bpm124.wav",
+          "status": "CLEAN"
+        },
+        {
+          "label": "B",
+          "file": "data/sources/house_124/JUG-20260424-07-B_bpm124.wav",
+          "status": "CLEAN"
+        }
+      ]
+    },
+    {
+      "id": "JUG-20260424-05",
+      "bpm": 124.0,
+      "slices": [
+        {
+          "label": "A",
+          "file": "data/sources/house_124/JUG-20260424-05-A_bpm124.wav",
+          "status": "CLEAN"
+        },
+        {
+          "label": "B",
+          "file": "data/sources/house_124/JUG-20260424-05-B_bpm124.wav",
+          "status": "CLEAN"
+        }
+      ]
+    },
+    {
+      "id": "JUG-20260424-01",
+      "bpm": 124.0,
+      "slices": [
+        {
+          "label": "A",
+          "file": "data/sources/house_124/JUG-20260424-01-A_bpm124.wav",
+          "status": "CLEAN"
+        },
+        {
+          "label": "B",
+          "file": "data/sources/house_124/JUG-20260424-01-B_bpm124.wav",
+          "status": "CLEAN"
+        }
+      ]
+    },
+    {
+      "id": "JUG-20260424-03",
+      "bpm": 124.0,
+      "slices": [
+        {
+          "label": "A",
+          "file": "data/sources/house_124/JUG-20260424-03-A_bpm124.wav",
+          "status": "CLEAN"
+        },
+        {
+          "label": "B",
+          "file": "data/sources/house_124/JUG-20260424-03-B_bpm124.wav",
+          "status": "CLEAN"
+        }
+      ]
+    },
+    {
+      "id": "JUG-20260424-10",
+      "bpm": 124.0,
+      "slices": [
+        {
+          "label": "A",
+          "file": "data/sources/house_124/JUG-20260424-10-A_bpm124.wav",
+          "status": "CLEAN"
+        },
+        {
+          "label": "C",
+          "file": "data/sources/house_124/JUG-20260424-10-C_bpm124.wav",
+          "status": "CLEAN"
+        },
+        {
+          "label": "D",
+          "file": "data/sources/house_124/JUG-20260424-10-D_bpm124.wav",
+          "status": "CLEAN"
+        }
+      ]
+    },
+    {
+      "id": "JUG-20260424-09",
+      "bpm": 124.0,
+      "slices": [
+        {
+          "label": "A",
+          "file": "data/sources/house_124/JUG-20260424-09-A_bpm124.wav",
+          "status": "CLEAN"
+        },
+        {
+          "label": "B",
+          "file": "data/sources/house_124/JUG-20260424-09-B_bpm124.wav",
+          "status": "CLEAN"
+        }
+      ]
+    },
+    {
+      "id": "JUG-20260424-08",
+      "bpm": 124.0,
+      "slices": [
+        {
+          "label": "A",
+          "file": "data/sources/house_124/JUG-20260424-08-A_bpm124.wav",
+          "status": "CLEAN"
+        },
+        {
+          "label": "B",
+          "file": "data/sources/house_124/JUG-20260424-08-B_bpm124.wav",
+          "status": "CLEAN"
+        }
+      ]
+    }
+  ]
+}

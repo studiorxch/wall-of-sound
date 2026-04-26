@@ -1,0 +1,384 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>EmitterUI | Wall of Sound</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <link
+      rel="stylesheet"
+      href="/assets/css/style.css"
+    />
+  </head>
+
+  <body>
+    <header class="site-header">
+      <div class="site-header-inner">
+        <a class="site-title" href="/">
+          Wall of Sound
+        </a>
+
+        <nav class="site-nav" aria-label="Primary navigation">
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="page-content">
+      <div class="spec-shell">
+  <a class="back-link" href="/specs/">← Back to specs</a>
+
+  <div class="spec-kicker">
+    wall / emitter_system / needs-review
+  </div>
+
+  <h1>EmitterUI</h1>
+
+  <section class="spec-meta">
+    <div>
+      <strong>Doc ID</strong>
+      0410_WALL_OF_SOUND_EmitterUI_v1.0.0
+    </div>
+
+    <div>
+      <strong>Date</strong>
+      2026-04-10
+    </div>
+
+    <div>
+      <strong>Version</strong>
+      1.0.0
+    </div>
+
+    <div>
+      <strong>System</strong>
+      WOS
+    </div>
+
+    <div>
+      <strong>Domain</strong>
+      wall
+    </div>
+
+    <div>
+      <strong>Component</strong>
+      emitter_system
+    </div>
+
+    <div>
+      <strong>Type</strong>
+      legacy-spec
+    </div>
+
+    <div>
+      <strong>Priority</strong>
+      medium
+    </div>
+
+    <div>
+      <strong>Risk</strong>
+      unknown
+    </div>
+
+    <div>
+      <strong>Status</strong>
+      needs-review
+    </div>
+  </section>
+
+  
+  <p><strong>Summary:</strong> Imported legacy Wall of Sound spec. Needs review.</p>
+  
+
+  <article class="spec-body"><p>0410_WALL_OF_SOUND_EmitterUI_v1.0.0</p>
+
+<p>Generated: 04/10/2026</p>
+
+<hr />
+
+<h2 id="-objective">🎯 Objective</h2>
+
+<p>Expose the emitter system as a first-class interactive tool with minimal UI, enabling:</p>
+
+<ul>
+  <li>visual placement of emitters</li>
+  <li>control over spawn rate (rhythm)</li>
+  <li>control over initial velocity (direction)</li>
+  <li>selection and movement like shapes</li>
+</ul>
+
+<hr />
+
+<h2 id="️-scope">⚠️ Scope</h2>
+
+<p>DO:</p>
+
+<ul>
+  <li>render emitters</li>
+  <li>allow selection + dragging</li>
+  <li>add emitter tool</li>
+  <li>add small inspector panel</li>
+</ul>
+
+<p>DO NOT:</p>
+
+<ul>
+  <li>redesign UI</li>
+  <li>add complex controls</li>
+  <li>change physics system</li>
+</ul>
+
+<hr />
+
+<h2 id="-system-model">🧱 System Model</h2>
+
+<pre><code class="language-txt">emitter → spawn → gravity → motion → collision → sound
+</code></pre>
+
+<hr />
+
+<h2 id="-implementation-requirements">🔧 Implementation Requirements</h2>
+
+<hr />
+
+<h3 id="1-state">1. State</h3>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">state</span><span class="p">.</span><span class="nx">emitters</span> <span class="o">=</span> <span class="p">[];</span>
+<span class="nx">state</span><span class="p">.</span><span class="nx">selectedEmitterId</span> <span class="o">=</span> <span class="kc">null</span><span class="p">;</span>
+</code></pre></div></div>
+
+<hr />
+
+<h3 id="2-emitter-data-model">2. Emitter Data Model</h3>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">type</span> <span class="nx">Emitter</span> <span class="o">=</span> <span class="p">{</span>
+  <span class="na">id</span><span class="p">:</span> <span class="nx">string</span><span class="p">;</span>
+  <span class="nl">x</span><span class="p">:</span> <span class="nx">number</span><span class="p">;</span>
+  <span class="nl">y</span><span class="p">:</span> <span class="nx">number</span><span class="p">;</span>
+  <span class="nl">rate</span><span class="p">:</span> <span class="nx">number</span><span class="p">;</span>
+  <span class="nl">lastSpawn</span><span class="p">:</span> <span class="nx">number</span><span class="p">;</span>
+  <span class="nl">velocity</span><span class="p">:</span> <span class="p">{</span> <span class="na">x</span><span class="p">:</span> <span class="nx">number</span><span class="p">;</span> <span class="nl">y</span><span class="p">:</span> <span class="nx">number</span> <span class="p">};</span>
+<span class="p">};</span>
+</code></pre></div></div>
+
+<hr />
+
+<h3 id="3-render-emitters">3. Render Emitters</h3>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">function</span> <span class="nf">drawEmitters</span><span class="p">(</span><span class="nx">ctx</span><span class="p">,</span> <span class="nx">emitters</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">for </span><span class="p">(</span><span class="kd">const</span> <span class="nx">e</span> <span class="k">of</span> <span class="nx">emitters</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nx">ctx</span><span class="p">.</span><span class="nf">beginPath</span><span class="p">();</span>
+    <span class="nx">ctx</span><span class="p">.</span><span class="nf">arc</span><span class="p">(</span><span class="nx">e</span><span class="p">.</span><span class="nx">x</span><span class="p">,</span> <span class="nx">e</span><span class="p">.</span><span class="nx">y</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="nb">Math</span><span class="p">.</span><span class="nx">PI</span> <span class="o">*</span> <span class="mi">2</span><span class="p">);</span>
+    <span class="nx">ctx</span><span class="p">.</span><span class="nx">fillStyle</span> <span class="o">=</span> <span class="dl">"</span><span class="s2">#00ffcc</span><span class="dl">"</span><span class="p">;</span>
+    <span class="nx">ctx</span><span class="p">.</span><span class="nf">fill</span><span class="p">();</span>
+
+    <span class="nx">ctx</span><span class="p">.</span><span class="nf">beginPath</span><span class="p">();</span>
+    <span class="nx">ctx</span><span class="p">.</span><span class="nf">moveTo</span><span class="p">(</span><span class="nx">e</span><span class="p">.</span><span class="nx">x</span><span class="p">,</span> <span class="nx">e</span><span class="p">.</span><span class="nx">y</span><span class="p">);</span>
+    <span class="nx">ctx</span><span class="p">.</span><span class="nf">lineTo</span><span class="p">(</span><span class="nx">e</span><span class="p">.</span><span class="nx">x</span> <span class="o">+</span> <span class="nx">e</span><span class="p">.</span><span class="nx">velocity</span><span class="p">.</span><span class="nx">x</span> <span class="o">*</span> <span class="mi">10</span><span class="p">,</span> <span class="nx">e</span><span class="p">.</span><span class="nx">y</span> <span class="o">+</span> <span class="nx">e</span><span class="p">.</span><span class="nx">velocity</span><span class="p">.</span><span class="nx">y</span> <span class="o">*</span> <span class="mi">10</span><span class="p">);</span>
+    <span class="nx">ctx</span><span class="p">.</span><span class="nx">strokeStyle</span> <span class="o">=</span> <span class="dl">"</span><span class="s2">#ffffff</span><span class="dl">"</span><span class="p">;</span>
+    <span class="nx">ctx</span><span class="p">.</span><span class="nf">stroke</span><span class="p">();</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>Insert into render pipeline.</p>
+
+<hr />
+
+<h3 id="4-tool">4. Tool</h3>
+
+<p>Add to toolbar:</p>
+
+<div class="language-html highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nt">&lt;button</span> <span class="na">class=</span><span class="s">"tool"</span> <span class="na">data-tool=</span><span class="s">"emitter"</span><span class="nt">&gt;</span>Emitter<span class="nt">&lt;/button&gt;</span>
+</code></pre></div></div>
+
+<hr />
+
+<h3 id="5-placement">5. Placement</h3>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">if </span><span class="p">(</span><span class="nx">tool</span> <span class="o">===</span> <span class="dl">"</span><span class="s2">emitter</span><span class="dl">"</span><span class="p">)</span> <span class="p">{</span>
+  <span class="nx">state</span><span class="p">.</span><span class="nx">emitters</span><span class="p">.</span><span class="nf">push</span><span class="p">({</span>
+    <span class="na">id</span><span class="p">:</span> <span class="nf">generateId</span><span class="p">(),</span>
+    <span class="na">x</span><span class="p">:</span> <span class="nx">pointer</span><span class="p">.</span><span class="nx">x</span><span class="p">,</span>
+    <span class="na">y</span><span class="p">:</span> <span class="nx">pointer</span><span class="p">.</span><span class="nx">y</span><span class="p">,</span>
+    <span class="na">rate</span><span class="p">:</span> <span class="mi">500</span><span class="p">,</span>
+    <span class="na">lastSpawn</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+    <span class="na">velocity</span><span class="p">:</span> <span class="p">{</span> <span class="na">x</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="na">y</span><span class="p">:</span> <span class="mi">0</span> <span class="p">},</span>
+  <span class="p">});</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<hr />
+
+<h3 id="6-selection">6. Selection</h3>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">function</span> <span class="nf">findEmitterAtPoint</span><span class="p">(</span><span class="nx">emitters</span><span class="p">,</span> <span class="nx">point</span><span class="p">,</span> <span class="nx">r</span> <span class="o">=</span> <span class="mi">20</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">return</span> <span class="nx">emitters</span><span class="p">.</span><span class="nf">find</span><span class="p">((</span><span class="nx">e</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="p">{</span>
+    <span class="kd">const</span> <span class="nx">dx</span> <span class="o">=</span> <span class="nx">e</span><span class="p">.</span><span class="nx">x</span> <span class="o">-</span> <span class="nx">point</span><span class="p">.</span><span class="nx">x</span><span class="p">;</span>
+    <span class="kd">const</span> <span class="nx">dy</span> <span class="o">=</span> <span class="nx">e</span><span class="p">.</span><span class="nx">y</span> <span class="o">-</span> <span class="nx">point</span><span class="p">.</span><span class="nx">y</span><span class="p">;</span>
+    <span class="k">return</span> <span class="nb">Math</span><span class="p">.</span><span class="nf">sqrt</span><span class="p">(</span><span class="nx">dx</span> <span class="o">*</span> <span class="nx">dx</span> <span class="o">+</span> <span class="nx">dy</span> <span class="o">*</span> <span class="nx">dy</span><span class="p">)</span> <span class="o">&lt;</span> <span class="nx">r</span><span class="p">;</span>
+  <span class="p">});</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<hr />
+
+<h3 id="7-dragging">7. Dragging</h3>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">if </span><span class="p">(</span><span class="nx">selectedEmitter</span><span class="p">)</span> <span class="p">{</span>
+  <span class="nx">selectedEmitter</span><span class="p">.</span><span class="nx">x</span> <span class="o">+=</span> <span class="nx">dx</span><span class="p">;</span>
+  <span class="nx">selectedEmitter</span><span class="p">.</span><span class="nx">y</span> <span class="o">+=</span> <span class="nx">dy</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<hr />
+
+<h3 id="8-inspector-panel-minimal">8. Inspector Panel (Minimal)</h3>
+
+<div class="language-html highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nt">&lt;div</span> <span class="na">id=</span><span class="s">"emitter-panel"</span><span class="nt">&gt;</span>
+  <span class="nt">&lt;label&gt;</span>Rate<span class="nt">&lt;/label&gt;</span>
+  <span class="nt">&lt;input</span> <span class="na">type=</span><span class="s">"range"</span> <span class="na">min=</span><span class="s">"100"</span> <span class="na">max=</span><span class="s">"2000"</span> <span class="na">step=</span><span class="s">"50"</span> <span class="nt">/&gt;</span>
+
+  <span class="nt">&lt;label&gt;</span>Velocity X<span class="nt">&lt;/label&gt;</span>
+  <span class="nt">&lt;input</span> <span class="na">type=</span><span class="s">"range"</span> <span class="na">min=</span><span class="s">"-5"</span> <span class="na">max=</span><span class="s">"5"</span> <span class="na">step=</span><span class="s">"0.1"</span> <span class="nt">/&gt;</span>
+
+  <span class="nt">&lt;label&gt;</span>Velocity Y<span class="nt">&lt;/label&gt;</span>
+  <span class="nt">&lt;input</span> <span class="na">type=</span><span class="s">"range"</span> <span class="na">min=</span><span class="s">"-5"</span> <span class="na">max=</span><span class="s">"5"</span> <span class="na">step=</span><span class="s">"0.1"</span> <span class="nt">/&gt;</span>
+<span class="nt">&lt;/div&gt;</span>
+</code></pre></div></div>
+
+<hr />
+
+<h3 id="9-binding">9. Binding</h3>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">emitter</span><span class="p">.</span><span class="nx">rate</span> <span class="o">=</span> <span class="nx">rateInput</span><span class="p">.</span><span class="nx">value</span><span class="p">;</span>
+<span class="nx">emitter</span><span class="p">.</span><span class="nx">velocity</span><span class="p">.</span><span class="nx">x</span> <span class="o">=</span> <span class="nx">vxInput</span><span class="p">.</span><span class="nx">value</span><span class="p">;</span>
+<span class="nx">emitter</span><span class="p">.</span><span class="nx">velocity</span><span class="p">.</span><span class="nx">y</span> <span class="o">=</span> <span class="nx">vyInput</span><span class="p">.</span><span class="nx">value</span><span class="p">;</span>
+</code></pre></div></div>
+
+<hr />
+
+<h2 id="-musical-mapping">🎧 Musical Mapping</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>Rate</th>
+      <th>Musical Meaning</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1000ms</td>
+      <td>1/4 note</td>
+    </tr>
+    <tr>
+      <td>500ms</td>
+      <td>1/8 note</td>
+    </tr>
+    <tr>
+      <td>250ms</td>
+      <td>1/16 note</td>
+    </tr>
+  </tbody>
+</table>
+
+<hr />
+
+<h2 id="-test-setup">🧪 Test Setup</h2>
+
+<ul>
+  <li>place emitter at top</li>
+  <li>set rate = 500</li>
+  <li>set velocity = {0,0}</li>
+  <li>enable gravity</li>
+  <li>draw ramps</li>
+</ul>
+
+<hr />
+
+<h2 id="-expected-behavior">✅ Expected Behavior</h2>
+
+<ul>
+  <li>emitter visible</li>
+  <li>draggable</li>
+  <li>spawns balls consistently</li>
+  <li>rhythm controlled by rate</li>
+</ul>
+
+<hr />
+
+<h2 id="-implementation-guide">⚡ Implementation Guide</h2>
+
+<ul>
+  <li>where: canvasRenderer.js, drawTools.js, main.js</li>
+  <li>run: place emitter + ramps</li>
+  <li>expect: playable marble-run rhythm system</li>
+</ul>
+</article>
+</div>
+
+    </main>
+
+    <footer class="site-footer">
+      <div class="site-footer-inner footer-grid-6">
+        <section class="footer-brand">
+          <h2>Wall of Sound</h2>
+          <p>
+            Shared project memory for the StudioRich audio/visual system. Specs,
+            logs, recovery notes, and local portals live here.
+          </p>
+        </section>
+
+        <section class="footer-group">
+          <h2>Navigation</h2>
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Domains</h2>
+          <a href="/systems/wall/">Wall System</a>
+          <a href="/systems/sound/">Sound System</a>
+          <a href="/systems/">Systems Index</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Indexes</h2>
+          <a href="/specs/">Specs</a>
+          <a href="/logs/">Logs</a>
+          <a href="/components/wall/">Wall Components</a>
+          <a href="/components/sound/"
+            >Sound Components</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Local Portals</h2>
+          <a href="file:///Users/studio/Projects/wall-of-sound/wall/index.html"
+            >Wall App</a
+          >
+          <a
+            href="file:///Users/studio/Projects/wall-of-sound/sound/labeller.html"
+            >Sound Labeller</a
+          >
+          <a
+            href="file:///Users/studio/Projects/kinetic-master-engine/index.html"
+            >Kinetic Engine</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Recovery</h2>
+          <a href="/specs/">Implementation Specs</a>
+          <a href="/logs/">Session Logs</a>
+          <a href="/systems/sound/">Sound Recovery</a>
+          <a href="/systems/wall/">Wall Recovery</a>
+        </section>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,71 @@
+---
+layout: default
+---
+
+<div class="spec-shell">
+  <a class="back-link" href="{{ '/specs/' | relative_url }}">← Back to specs</a>
+
+  <div class="spec-kicker">
+    {{ page.domain }} / {{ page.component }} / {{ page.status }}
+  </div>
+
+  <h1>{{ page.title }}</h1>
+
+  <section class="spec-meta">
+    <div>
+      <strong>Doc ID</strong>
+      {{ page.doc_id }}
+    </div>
+
+    <div>
+      <strong>Date</strong>
+      {{ page.date | date: "%Y-%m-%d" }}
+    </div>
+
+    <div>
+      <strong>Version</strong>
+      {{ page.version }}
+    </div>
+
+    <div>
+      <strong>System</strong>
+      {{ page.system }}
+    </div>
+
+    <div>
+      <strong>Domain</strong>
+      {{ page.domain }}
+    </div>
+
+    <div>
+      <strong>Component</strong>
+      {{ page.component }}
+    </div>
+
+    <div>
+      <strong>Type</strong>
+      {{ page.type }}
+    </div>
+
+    <div>
+      <strong>Priority</strong>
+      {{ page.priority }}
+    </div>
+
+    <div>
+      <strong>Risk</strong>
+      {{ page.risk }}
+    </div>
+
+    <div>
+      <strong>Status</strong>
+      {{ page.status }}
+    </div>
+  </section>
+
+  {% if page.summary %}
+  <p><strong>Summary:</strong> {{ page.summary }}</p>
+  {% endif %}
+
+  <article class="spec-body">{{ content }}</article>
+</div>

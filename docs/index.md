@@ -3,7 +3,7 @@ layout: default
 title: Home
 ---
 
-# StudioRich Wall of Sound Dev Log
+# Wall of Sound
 
 This is the shared project memory for Wall of Sound.
 

@@ -1,10 +1,15 @@
 ---
 Project: Wall of Sound
 File: AUDIO_JUG_PLAYER_v*.py
-Summary: >
-blah, blah, blah
+summary: >
+  JUG_PLAYER is a modular audio playback engine designed to generate continuous
+  variation from a pool of loopable stems. It selects and combines musical layers
+  (e.g., drums, bass, melody) at defined musical intervals, enabling a cohesive
+  but non-repetitive playback system. Built for real-time or batch use, it supports
+  BPM-aligned transitions, randomized selection with constraints, and structured
+  loop cycling for infinite playback scenarios.
 
-Date: April 24, 2026
+started: April 24, 2026
 ---
 
 # v1.3.0

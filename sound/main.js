@@ -55,7 +55,8 @@ async function loadBuffer(path) {
 // =========================
 
 function getStemPath(slice, stem) {
-  return `data/stems/_temp/htdemucs/${slice.id}/${stem}.wav`;
+  const sliceIndex = slice.id.split("_slice_")[1];
+  return `data/stems/_temp/htdemucs/slice_${sliceIndex}/${stem}.wav`;
 }
 
 // =========================
