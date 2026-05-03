@@ -1,0 +1,547 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>EmitterDirectionRefactor | Wall of Sound</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <link
+      rel="stylesheet"
+      href="/assets/css/style.css"
+    />
+  </head>
+
+  <body>
+    <header class="site-header">
+      <div class="site-header-inner">
+        <a class="site-title" href="/">
+          Wall of Sound
+        </a>
+
+        <nav class="site-nav" aria-label="Primary navigation">
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="page-content">
+      <div class="spec-shell">
+  <a class="back-link" href="/specs/">← Back to specs</a>
+
+  <div class="spec-kicker">
+    wall / emitter_system / needs-review
+  </div>
+
+  <h1>EmitterDirectionRefactor</h1>
+
+  <section class="spec-meta">
+    <div>
+      <strong>Doc ID</strong>
+      0416_WOS_EmitterDirectionRefactor_v1.0.0
+    </div>
+
+    <div>
+      <strong>Date</strong>
+      2026-04-16
+    </div>
+
+    <div>
+      <strong>Version</strong>
+      1.0.0
+    </div>
+
+    <div>
+      <strong>System</strong>
+      WOS
+    </div>
+
+    <div>
+      <strong>Domain</strong>
+      wall
+    </div>
+
+    <div>
+      <strong>Component</strong>
+      emitter_system
+    </div>
+
+    <div>
+      <strong>Type</strong>
+      legacy-spec
+    </div>
+
+    <div>
+      <strong>Priority</strong>
+      medium
+    </div>
+
+    <div>
+      <strong>Risk</strong>
+      unknown
+    </div>
+
+    <div>
+      <strong>Status</strong>
+      needs-review
+    </div>
+  </section>
+
+  
+  <p><strong>Summary:</strong> Imported legacy Wall of Sound spec. Needs review.</p>
+  
+
+  <article class="spec-body"><h1 id="0416_wos_emitterdirectionrefactor_v100">0416_WOS_EmitterDirectionRefactor_v1.0.0</h1>
+
+<p>Generated: 04/16/2026</p>
+
+<h2 id="scope">Scope</h2>
+<p>Refactor emitter behavior into a simpler directional model that removes the current ambiguity between:</p>
+<ul>
+  <li>center vs edge spawning</li>
+  <li>velocity X / velocity Y</li>
+  <li>rotation vs direction responsibility</li>
+</ul>
+
+<p>This update replaces the current emitter spawn controls with a unified edge-based directional system.</p>
+
+<hr />
+
+<h2 id="assumptions">Assumptions</h2>
+
+<ul>
+  <li>Emitters are behaviors attached to lines and shapes, not standalone objects</li>
+  <li>Lines and shapes may still be partially separate systems internally, but emitter behavior should feel consistent across both</li>
+  <li>Current velocity X / velocity Y controls are difficult to understand and should be removed from the UI</li>
+  <li>Shape rotation may still be useful for geometry itself, but emitter direction should not depend on forcing users to rotate shapes just to get a precise angle</li>
+  <li>A single angle control is preferred because it is simpler and supports precise directional control</li>
+</ul>
+
+<hr />
+
+<h2 id="core-decision">Core Decision</h2>
+
+<h3 id="remove">Remove</h3>
+<ul>
+  <li><code class="language-plaintext highlighter-rouge">spawnMode</code> (<code class="language-plaintext highlighter-rouge">center</code> / <code class="language-plaintext highlighter-rouge">edge</code>)</li>
+  <li><code class="language-plaintext highlighter-rouge">velocity.x</code></li>
+  <li><code class="language-plaintext highlighter-rouge">velocity.y</code></li>
+</ul>
+
+<h3 id="keep">Keep</h3>
+<ul>
+  <li><code class="language-plaintext highlighter-rouge">strength</code></li>
+</ul>
+
+<h3 id="add--replace-with">Add / Replace With</h3>
+<ul>
+  <li><code class="language-plaintext highlighter-rouge">direction</code> (single dial / angle control)</li>
+  <li>edge-based spawning only</li>
+</ul>
+
+<hr />
+
+<h2 id="new-behavior-model">New Behavior Model</h2>
+
+<div class="language-ts highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nf">geometry </span><span class="p">(</span><span class="nx">line</span> <span class="o">/</span> <span class="nx">shape</span><span class="p">)</span>
+  <span class="err">→</span> <span class="nx">edge</span><span class="o">-</span><span class="nx">side</span> <span class="nx">selection</span>
+  <span class="err">→</span> <span class="nx">spawn</span> <span class="nx">point</span> <span class="nx">on</span> <span class="nx">boundary</span>
+  <span class="err">→</span> <span class="nx">direction</span> <span class="nx">angle</span>
+  <span class="err">→</span> <span class="nx">strength</span>
+  <span class="err">→</span> <span class="nx">motion</span>
+</code></pre></div></div>
+
+<p>This should collapse the current three emitter controls into one simpler directional model.</p>
+
+<hr />
+
+<h2 id="ux-rule">UX Rule</h2>
+
+<h3 id="center-mode-is-removed">Center mode is removed</h3>
+<p>Center spawning is no longer needed.</p>
+
+<h3 id="edge-spawning-is-always-used">Edge spawning is always used</h3>
+<p>All particles emit from the boundary of the source geometry.</p>
+
+<h3 id="direction-must-define-two-things-at-once">Direction must define two things at once</h3>
+<ol>
+  <li>which side is used for spawning</li>
+  <li>which direction the emitted particles travel</li>
+</ol>
+
+<p>This creates a simpler mental model:</p>
+<ul>
+  <li>point the emitter</li>
+  <li>particles spawn from the relevant edge</li>
+  <li>particles travel in that direction</li>
+</ul>
+
+<hr />
+
+<h2 id="ui-changes">UI Changes</h2>
+
+<h3 id="remove-these-controls">Remove these controls</h3>
+<ul>
+  <li>Spawn Mode</li>
+  <li>Velocity X</li>
+  <li>Velocity Y</li>
+</ul>
+
+<h3 id="keep-1">Keep</h3>
+<ul>
+  <li>Strength</li>
+</ul>
+
+<h3 id="add">Add</h3>
+<ul>
+  <li>Direction Dial</li>
+</ul>
+
+<h4 id="direction-dial">Direction Dial</h4>
+<ul>
+  <li>Range: <code class="language-plaintext highlighter-rouge">0–360°</code> or <code class="language-plaintext highlighter-rouge">0–2π</code></li>
+  <li>This is the primary emitter control</li>
+  <li>It determines:
+    <ul>
+      <li>active edge side</li>
+      <li>travel direction</li>
+    </ul>
+  </li>
+</ul>
+
+<hr />
+
+<h2 id="direction-model">Direction Model</h2>
+
+<div class="language-ts highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">direction</span><span class="p">:</span> <span class="kr">number</span> <span class="c1">// radians</span>
+</code></pre></div></div>
+
+<p>Derived values:</p>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">const</span> <span class="nx">dirX</span> <span class="o">=</span> <span class="nb">Math</span><span class="p">.</span><span class="nf">cos</span><span class="p">(</span><span class="nx">direction</span><span class="p">);</span>
+<span class="kd">const</span> <span class="nx">dirY</span> <span class="o">=</span> <span class="nb">Math</span><span class="p">.</span><span class="nf">sin</span><span class="p">(</span><span class="nx">direction</span><span class="p">);</span>
+</code></pre></div></div>
+
+<p>These values should be used internally only.<br />
+The user should no longer interact with raw X/Y velocity values in the UI.</p>
+
+<hr />
+
+<h2 id="shape-edge-side-selection">Shape Edge-Side Selection</h2>
+
+<p>For shapes, use the dominant direction axis to determine which boundary side is active.</p>
+
+<h3 id="rules">Rules</h3>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">if </span><span class="p">(</span><span class="nb">Math</span><span class="p">.</span><span class="nf">abs</span><span class="p">(</span><span class="nx">dirX</span><span class="p">)</span> <span class="o">&gt;</span> <span class="nb">Math</span><span class="p">.</span><span class="nf">abs</span><span class="p">(</span><span class="nx">dirY</span><span class="p">))</span> <span class="p">{</span>
+  <span class="nx">edge</span> <span class="o">=</span> <span class="nx">dirX</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="p">?</span> <span class="dl">"</span><span class="s2">right</span><span class="dl">"</span> <span class="p">:</span> <span class="dl">"</span><span class="s2">left</span><span class="dl">"</span><span class="p">;</span>
+<span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+  <span class="nx">edge</span> <span class="o">=</span> <span class="nx">dirY</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="p">?</span> <span class="dl">"</span><span class="s2">bottom</span><span class="dl">"</span> <span class="p">:</span> <span class="dl">"</span><span class="s2">top</span><span class="dl">"</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<h3 id="result">Result</h3>
+<ul>
+  <li>direction pointing mostly upward → spawn from top edge</li>
+  <li>direction pointing mostly downward → spawn from bottom edge</li>
+  <li>direction pointing mostly left → spawn from left edge</li>
+  <li>direction pointing mostly right → spawn from right edge</li>
+</ul>
+
+<h3 id="spawn-point-on-shape">Spawn Point on Shape</h3>
+<p>Once edge side is selected, choose a random point along that side of the shape bounds.</p>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">function</span> <span class="nf">getShapeEdgePoint</span><span class="p">(</span><span class="nx">shape</span><span class="p">,</span> <span class="nx">edge</span><span class="p">)</span> <span class="p">{</span>
+  <span class="kd">const</span> <span class="nx">b</span> <span class="o">=</span> <span class="nx">shape</span><span class="p">.</span><span class="nx">bounds</span><span class="p">;</span>
+
+  <span class="k">if </span><span class="p">(</span><span class="nx">edge</span> <span class="o">===</span> <span class="dl">"</span><span class="s2">top</span><span class="dl">"</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="p">{</span>
+      <span class="na">x</span><span class="p">:</span> <span class="nf">randomBetween</span><span class="p">(</span><span class="nx">b</span><span class="p">.</span><span class="nx">minX</span><span class="p">,</span> <span class="nx">b</span><span class="p">.</span><span class="nx">maxX</span><span class="p">),</span>
+      <span class="na">y</span><span class="p">:</span> <span class="nx">b</span><span class="p">.</span><span class="nx">minY</span><span class="p">,</span>
+    <span class="p">};</span>
+  <span class="p">}</span>
+
+  <span class="k">if </span><span class="p">(</span><span class="nx">edge</span> <span class="o">===</span> <span class="dl">"</span><span class="s2">bottom</span><span class="dl">"</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="p">{</span>
+      <span class="na">x</span><span class="p">:</span> <span class="nf">randomBetween</span><span class="p">(</span><span class="nx">b</span><span class="p">.</span><span class="nx">minX</span><span class="p">,</span> <span class="nx">b</span><span class="p">.</span><span class="nx">maxX</span><span class="p">),</span>
+      <span class="na">y</span><span class="p">:</span> <span class="nx">b</span><span class="p">.</span><span class="nx">maxY</span><span class="p">,</span>
+    <span class="p">};</span>
+  <span class="p">}</span>
+
+  <span class="k">if </span><span class="p">(</span><span class="nx">edge</span> <span class="o">===</span> <span class="dl">"</span><span class="s2">left</span><span class="dl">"</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="p">{</span>
+      <span class="na">x</span><span class="p">:</span> <span class="nx">b</span><span class="p">.</span><span class="nx">minX</span><span class="p">,</span>
+      <span class="na">y</span><span class="p">:</span> <span class="nf">randomBetween</span><span class="p">(</span><span class="nx">b</span><span class="p">.</span><span class="nx">minY</span><span class="p">,</span> <span class="nx">b</span><span class="p">.</span><span class="nx">maxY</span><span class="p">),</span>
+    <span class="p">};</span>
+  <span class="p">}</span>
+
+  <span class="k">return</span> <span class="p">{</span>
+    <span class="na">x</span><span class="p">:</span> <span class="nx">b</span><span class="p">.</span><span class="nx">maxX</span><span class="p">,</span>
+    <span class="na">y</span><span class="p">:</span> <span class="nf">randomBetween</span><span class="p">(</span><span class="nx">b</span><span class="p">.</span><span class="nx">minY</span><span class="p">,</span> <span class="nx">b</span><span class="p">.</span><span class="nx">maxY</span><span class="p">),</span>
+  <span class="p">};</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<hr />
+
+<h2 id="line-edge-side-selection">Line Edge-Side Selection</h2>
+
+<p>Lines do not have top/bottom/left/right in the same way shapes do.<br />
+For lines, determine the active side using the line normal.</p>
+
+<h3 id="line-direction">Line Direction</h3>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">const</span> <span class="nx">dx</span> <span class="o">=</span> <span class="nx">line</span><span class="p">.</span><span class="nx">x2</span> <span class="o">-</span> <span class="nx">line</span><span class="p">.</span><span class="nx">x1</span><span class="p">;</span>
+<span class="kd">const</span> <span class="nx">dy</span> <span class="o">=</span> <span class="nx">line</span><span class="p">.</span><span class="nx">y2</span> <span class="o">-</span> <span class="nx">line</span><span class="p">.</span><span class="nx">y1</span><span class="p">;</span>
+<span class="kd">const</span> <span class="nx">length</span> <span class="o">=</span> <span class="nb">Math</span><span class="p">.</span><span class="nf">hypot</span><span class="p">(</span><span class="nx">dx</span><span class="p">,</span> <span class="nx">dy</span><span class="p">);</span>
+
+<span class="kd">const</span> <span class="nx">nx</span> <span class="o">=</span> <span class="o">-</span><span class="nx">dy</span> <span class="o">/</span> <span class="nx">length</span><span class="p">;</span>
+<span class="kd">const</span> <span class="nx">ny</span> <span class="o">=</span> <span class="nx">dx</span> <span class="o">/</span> <span class="nx">length</span><span class="p">;</span>
+</code></pre></div></div>
+
+<h3 id="side-selection">Side Selection</h3>
+<p>Use the emitter direction against the line normal:</p>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">const</span> <span class="nx">dot</span> <span class="o">=</span> <span class="nx">nx</span> <span class="o">*</span> <span class="nx">dirX</span> <span class="o">+</span> <span class="nx">ny</span> <span class="o">*</span> <span class="nx">dirY</span><span class="p">;</span>
+<span class="kd">const</span> <span class="nx">side</span> <span class="o">=</span> <span class="nx">dot</span> <span class="o">&gt;=</span> <span class="mi">0</span> <span class="p">?</span> <span class="mi">1</span> <span class="p">:</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+</code></pre></div></div>
+
+<p>This determines which side of the line is considered the active spawning side.</p>
+
+<h3 id="spawn-point-on-line">Spawn Point on Line</h3>
+<p>Spawn from a random point along the line:</p>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">function</span> <span class="nf">getLineEdgePoint</span><span class="p">(</span><span class="nx">line</span><span class="p">)</span> <span class="p">{</span>
+  <span class="kd">const</span> <span class="nx">t</span> <span class="o">=</span> <span class="nb">Math</span><span class="p">.</span><span class="nf">random</span><span class="p">();</span>
+  <span class="k">return</span> <span class="p">{</span>
+    <span class="na">x</span><span class="p">:</span> <span class="nx">line</span><span class="p">.</span><span class="nx">x1</span> <span class="o">+</span> <span class="p">(</span><span class="nx">line</span><span class="p">.</span><span class="nx">x2</span> <span class="o">-</span> <span class="nx">line</span><span class="p">.</span><span class="nx">x1</span><span class="p">)</span> <span class="o">*</span> <span class="nx">t</span><span class="p">,</span>
+    <span class="na">y</span><span class="p">:</span> <span class="nx">line</span><span class="p">.</span><span class="nx">y1</span> <span class="o">+</span> <span class="p">(</span><span class="nx">line</span><span class="p">.</span><span class="nx">y2</span> <span class="o">-</span> <span class="nx">line</span><span class="p">.</span><span class="nx">y1</span><span class="p">)</span> <span class="o">*</span> <span class="nx">t</span><span class="p">,</span>
+  <span class="p">};</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>Note: this gives the position on the line. The line-side choice should be used for visual indication and optional small offset if needed.</p>
+
+<hr />
+
+<h2 id="optional-spawn-offset-for-lines">Optional Spawn Offset for Lines</h2>
+
+<p>To make line-side behavior visually clearer, allow a small spawn offset away from the line using the chosen normal side.</p>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">const</span> <span class="nx">offset</span> <span class="o">=</span> <span class="mi">8</span> <span class="o">*</span> <span class="nx">side</span><span class="p">;</span>
+
+<span class="nx">spawn</span><span class="p">.</span><span class="nx">x</span> <span class="o">+=</span> <span class="nx">nx</span> <span class="o">*</span> <span class="nx">offset</span><span class="p">;</span>
+<span class="nx">spawn</span><span class="p">.</span><span class="nx">y</span> <span class="o">+=</span> <span class="nx">ny</span> <span class="o">*</span> <span class="nx">offset</span><span class="p">;</span>
+</code></pre></div></div>
+
+<p>This is recommended because it makes line-side emission more visually understandable.</p>
+
+<hr />
+
+<h2 id="final-spawn-resolver">Final Spawn Resolver</h2>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">function</span> <span class="nf">resolveEmitterSpawn</span><span class="p">(</span><span class="nx">source</span><span class="p">,</span> <span class="nx">direction</span><span class="p">)</span> <span class="p">{</span>
+  <span class="kd">const</span> <span class="nx">dirX</span> <span class="o">=</span> <span class="nb">Math</span><span class="p">.</span><span class="nf">cos</span><span class="p">(</span><span class="nx">direction</span><span class="p">);</span>
+  <span class="kd">const</span> <span class="nx">dirY</span> <span class="o">=</span> <span class="nb">Math</span><span class="p">.</span><span class="nf">sin</span><span class="p">(</span><span class="nx">direction</span><span class="p">);</span>
+
+  <span class="k">if </span><span class="p">(</span><span class="nx">source</span><span class="p">.</span><span class="nx">segments</span> <span class="o">&amp;&amp;</span> <span class="nx">source</span><span class="p">.</span><span class="nx">bounds</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kd">let</span> <span class="nx">edge</span><span class="p">;</span>
+    <span class="k">if </span><span class="p">(</span><span class="nb">Math</span><span class="p">.</span><span class="nf">abs</span><span class="p">(</span><span class="nx">dirX</span><span class="p">)</span> <span class="o">&gt;</span> <span class="nb">Math</span><span class="p">.</span><span class="nf">abs</span><span class="p">(</span><span class="nx">dirY</span><span class="p">))</span> <span class="p">{</span>
+      <span class="nx">edge</span> <span class="o">=</span> <span class="nx">dirX</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="p">?</span> <span class="dl">"</span><span class="s2">right</span><span class="dl">"</span> <span class="p">:</span> <span class="dl">"</span><span class="s2">left</span><span class="dl">"</span><span class="p">;</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+      <span class="nx">edge</span> <span class="o">=</span> <span class="nx">dirY</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="p">?</span> <span class="dl">"</span><span class="s2">bottom</span><span class="dl">"</span> <span class="p">:</span> <span class="dl">"</span><span class="s2">top</span><span class="dl">"</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="k">return</span> <span class="nf">getShapeEdgePoint</span><span class="p">(</span><span class="nx">source</span><span class="p">,</span> <span class="nx">edge</span><span class="p">);</span>
+  <span class="p">}</span>
+
+  <span class="k">if </span><span class="p">(</span><span class="k">typeof</span> <span class="nx">source</span><span class="p">.</span><span class="nx">x1</span> <span class="o">===</span> <span class="dl">"</span><span class="s2">number</span><span class="dl">"</span> <span class="o">&amp;&amp;</span> <span class="k">typeof</span> <span class="nx">source</span><span class="p">.</span><span class="nx">x2</span> <span class="o">===</span> <span class="dl">"</span><span class="s2">number</span><span class="dl">"</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="nf">getLineEdgePoint</span><span class="p">(</span><span class="nx">source</span><span class="p">);</span>
+  <span class="p">}</span>
+
+  <span class="k">return</span> <span class="p">{</span> <span class="na">x</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="na">y</span><span class="p">:</span> <span class="mi">0</span> <span class="p">};</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<hr />
+
+<h2 id="velocity--motion">Velocity / Motion</h2>
+
+<p>Strength now controls emitted speed only.</p>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">ball</span><span class="p">.</span><span class="nx">vx</span> <span class="o">=</span> <span class="nb">Math</span><span class="p">.</span><span class="nf">cos</span><span class="p">(</span><span class="nx">direction</span><span class="p">)</span> <span class="o">*</span> <span class="nx">strength</span><span class="p">;</span>
+<span class="nx">ball</span><span class="p">.</span><span class="nx">vy</span> <span class="o">=</span> <span class="nb">Math</span><span class="p">.</span><span class="nf">sin</span><span class="p">(</span><span class="nx">direction</span><span class="p">)</span> <span class="o">*</span> <span class="nx">strength</span><span class="p">;</span>
+</code></pre></div></div>
+
+<h3 id="rule">Rule</h3>
+<ul>
+  <li>direction = angle</li>
+  <li>strength = speed</li>
+</ul>
+
+<p>These roles should remain separate and clear.</p>
+
+<hr />
+
+<h2 id="visual-feedback-requirements">Visual Feedback Requirements</h2>
+
+<p>To make the new system understandable, add visual feedback:</p>
+
+<h3 id="required">Required</h3>
+<ul>
+  <li>direction arrow</li>
+  <li>active edge highlight</li>
+</ul>
+
+<h3 id="for-shapes">For Shapes</h3>
+<ul>
+  <li>highlight top / bottom / left / right edge currently selected</li>
+</ul>
+
+<h3 id="for-lines">For Lines</h3>
+<ul>
+  <li>show arrow direction</li>
+  <li>optionally show slight side offset or side indicator</li>
+</ul>
+
+<p>This is important so users can see:</p>
+<ul>
+  <li>where particles are coming from</li>
+  <li>why that side was chosen</li>
+</ul>
+
+<hr />
+
+<h2 id="backward-compatibility">Backward Compatibility</h2>
+
+<p>When older scenes are loaded:</p>
+
+<h3 id="if-old-velocity-fields-exist">If old velocity fields exist</h3>
+<p>Convert them into direction + strength:</p>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">const</span> <span class="nx">direction</span> <span class="o">=</span> <span class="nb">Math</span><span class="p">.</span><span class="nf">atan2</span><span class="p">(</span><span class="nx">oldVelocityY</span><span class="p">,</span> <span class="nx">oldVelocityX</span><span class="p">);</span>
+<span class="kd">const</span> <span class="nx">strength</span> <span class="o">=</span> <span class="nb">Math</span><span class="p">.</span><span class="nf">hypot</span><span class="p">(</span><span class="nx">oldVelocityX</span><span class="p">,</span> <span class="nx">oldVelocityY</span><span class="p">);</span>
+</code></pre></div></div>
+
+<h3 id="if-old-spawn-mode-exists">If old spawn mode exists</h3>
+<p>Ignore it and default to edge-based emission.</p>
+
+<hr />
+
+<h2 id="constraints">Constraints</h2>
+
+<ul>
+  <li>Do not reintroduce standalone emitter objects</li>
+  <li>Do not keep center spawning in the new UI</li>
+  <li>Do not expose raw velocity X/Y in the inspector</li>
+  <li>Do not make users rotate a shape just to control emitter angle</li>
+  <li>Keep system behavior consistent across both lines and shapes, even if their underlying code paths still differ internally</li>
+</ul>
+
+<hr />
+
+<h2 id="expected-result">Expected Result</h2>
+
+<p>The emitter system should now feel like a single spatial instrument:</p>
+
+<ul>
+  <li>all emission comes from edges</li>
+  <li>one dial controls where particles come from</li>
+  <li>one dial controls where particles go</li>
+  <li>strength controls how fast they travel</li>
+</ul>
+
+<p>The user should not have to think in raw velocity numbers anymore.</p>
+
+<hr />
+
+<h2 id="validation-checklist">Validation Checklist</h2>
+
+<ul class="task-list">
+  <li class="task-list-item"><input type="checkbox" class="task-list-item-checkbox" disabled="disabled" />Spawn Mode removed from inspector</li>
+  <li class="task-list-item"><input type="checkbox" class="task-list-item-checkbox" disabled="disabled" />Velocity X removed from inspector</li>
+  <li class="task-list-item"><input type="checkbox" class="task-list-item-checkbox" disabled="disabled" />Velocity Y removed from inspector</li>
+  <li class="task-list-item"><input type="checkbox" class="task-list-item-checkbox" disabled="disabled" />Direction dial added</li>
+  <li class="task-list-item"><input type="checkbox" class="task-list-item-checkbox" disabled="disabled" />Shapes emit from top/bottom/left/right edges based on direction</li>
+  <li class="task-list-item"><input type="checkbox" class="task-list-item-checkbox" disabled="disabled" />Lines emit from the correct side based on line normal and direction</li>
+  <li class="task-list-item"><input type="checkbox" class="task-list-item-checkbox" disabled="disabled" />Strength affects speed only</li>
+  <li class="task-list-item"><input type="checkbox" class="task-list-item-checkbox" disabled="disabled" />Old scenes with velocity values still load correctly</li>
+  <li class="task-list-item"><input type="checkbox" class="task-list-item-checkbox" disabled="disabled" />No center spawning remains in emitter behavior</li>
+  <li class="task-list-item"><input type="checkbox" class="task-list-item-checkbox" disabled="disabled" />Visual feedback clearly shows active direction and spawn side</li>
+</ul>
+
+<hr />
+
+<h2 id="implementation-guide">Implementation Guide</h2>
+
+<ul>
+  <li><strong>Where code goes:</strong> emitter behavior logic, inspector UI, scene hydration for backward compatibility</li>
+  <li><strong>What to run:</strong> reload app and test direction dial through full 360° on both lines and shapes</li>
+  <li><strong>What to expect:</strong> a simpler, edge-only emitter model with intuitive directional control</li>
+</ul>
+</article>
+</div>
+
+    </main>
+
+    <footer class="site-footer">
+      <div class="site-footer-inner footer-grid-6">
+        <section class="footer-brand">
+          <h2>Wall of Sound</h2>
+          <p>
+            Shared project memory for the StudioRich audio/visual system. Specs,
+            logs, recovery notes, and local portals live here.
+          </p>
+        </section>
+
+        <section class="footer-group">
+          <h2>Navigation</h2>
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Domains</h2>
+          <a href="/systems/wall/">Wall System</a>
+          <a href="/systems/sound/">Sound System</a>
+          <a href="/systems/">Systems Index</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Indexes</h2>
+          <a href="/specs/">Specs</a>
+          <a href="/logs/">Logs</a>
+          <a href="/components/wall/">Wall Components</a>
+          <a href="/components/sound/"
+            >Sound Components</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Local Portals</h2>
+          <a href="file:///Users/studio/Projects/wall-of-sound/wall/index.html"
+            >Wall App</a
+          >
+          <a
+            href="file:///Users/studio/Projects/wall-of-sound/sound/labeller.html"
+            >Sound Labeller</a
+          >
+          <a
+            href="file:///Users/studio/Projects/kinetic-master-engine/index.html"
+            >Kinetic Engine</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Recovery</h2>
+          <a href="/specs/">Implementation Specs</a>
+          <a href="/logs/">Session Logs</a>
+          <a href="/systems/sound/">Sound Recovery</a>
+          <a href="/systems/wall/">Wall Recovery</a>
+        </section>
+      </div>
+    </footer>
+  </body>
+</html>

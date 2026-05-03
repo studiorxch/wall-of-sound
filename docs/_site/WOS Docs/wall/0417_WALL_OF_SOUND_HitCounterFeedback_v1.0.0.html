@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>HitCounterFeedback | Wall of Sound</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <link
+      rel="stylesheet"
+      href="/assets/css/style.css"
+    />
+  </head>
+
+  <body>
+    <header class="site-header">
+      <div class="site-header-inner">
+        <a class="site-title" href="/">
+          Wall of Sound
+        </a>
+
+        <nav class="site-nav" aria-label="Primary navigation">
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="page-content">
+      <div class="spec-shell">
+  <a class="back-link" href="/specs/">← Back to specs</a>
+
+  <div class="spec-kicker">
+    wall / audio_system / needs-review
+  </div>
+
+  <h1>HitCounterFeedback</h1>
+
+  <section class="spec-meta">
+    <div>
+      <strong>Doc ID</strong>
+      0417_WALL_OF_SOUND_HitCounterFeedback_v1.0.0
+    </div>
+
+    <div>
+      <strong>Date</strong>
+      2026-04-17
+    </div>
+
+    <div>
+      <strong>Version</strong>
+      1.0.0
+    </div>
+
+    <div>
+      <strong>System</strong>
+      WOS
+    </div>
+
+    <div>
+      <strong>Domain</strong>
+      wall
+    </div>
+
+    <div>
+      <strong>Component</strong>
+      audio_system
+    </div>
+
+    <div>
+      <strong>Type</strong>
+      legacy-spec
+    </div>
+
+    <div>
+      <strong>Priority</strong>
+      medium
+    </div>
+
+    <div>
+      <strong>Risk</strong>
+      unknown
+    </div>
+
+    <div>
+      <strong>Status</strong>
+      needs-review
+    </div>
+  </section>
+
+  
+  <p><strong>Summary:</strong> Imported legacy Wall of Sound spec. Needs review.</p>
+  
+
+  <article class="spec-body"><p>0417_WALL_OF_SOUND_HitCounterFeedback_v1.0.0.md</p>
+
+<h1 id="0417_wall_of_sound_hitcounterfeedback_v100">0417_WALL_OF_SOUND_HitCounterFeedback_v1.0.0</h1>
+
+<h2 id="context">Context</h2>
+
+<p>Particle spawning and lifecycle entry (birth phase) are now stable.</p>
+
+<p>Next step is introducing a <strong>feedback layer</strong> that exposes particle interaction behavior without modifying core physics or lifecycle logic.</p>
+
+<p>This step introduces a <strong>lifetime hit counter</strong> and a <strong>toggleable visual overlay</strong>.</p>
+
+<hr />
+
+<h2 id="goal">Goal</h2>
+
+<p>Add a <strong>Hit Counter Feedback Layer</strong> that:</p>
+
+<ul>
+  <li>tracks lifetime collisions per particle</li>
+  <li>optionally renders hit count visually</li>
+  <li>does NOT alter particle death logic (yet)</li>
+  <li>prepares system for multi-stage lifecycle</li>
+</ul>
+
+<hr />
+
+<h2 id="assumptions">Assumptions</h2>
+
+<ul>
+  <li>Particles (“balls”) already exist in <code class="language-plaintext highlighter-rouge">state.balls</code></li>
+  <li>Collision system produces <code class="language-plaintext highlighter-rouge">collisions</code></li>
+  <li><code class="language-plaintext highlighter-rouge">_dead</code> lifecycle flag is already implemented</li>
+  <li><code class="language-plaintext highlighter-rouge">normalizeBall()</code> initializes particle state</li>
+  <li><code class="language-plaintext highlighter-rouge">drawParticleOverlays()</code> handles visual overlays</li>
+</ul>
+
+<hr />
+
+<h2 id="core-concept">Core Concept</h2>
+
+<p>collisionCount → per-frame (physics resolution)
+hitCount       → lifetime (behavior / lifecycle)</p>
+
+<hr />
+
+<h2 id="task-1--add-lifetime-hit-counter">TASK 1 — Add Lifetime Hit Counter</h2>
+
+<h3 id="in-normalizeball">In <code class="language-plaintext highlighter-rouge">normalizeBall()</code></h3>
+
+<p>ball.hitCount = 0;</p>
+
+<hr />
+
+<h2 id="task-2--increment-on-collision">TASK 2 — Increment on Collision</h2>
+
+<p>collisions.forEach(function (collision) {
+  if (!collision.ball) return;</p>
+
+<p>const ball = collision.ball;</p>
+
+<table>
+  <tbody>
+    <tr>
+      <td>ball.hitCount = (ball.hitCount</td>
+      <td> </td>
+      <td>0) + 1;</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>if (!ball._dead) {
+    ball._dead = true;
+  }
+});</p>
+
+<hr />
+
+<h2 id="task-3--add-feedback-toggle-state">TASK 3 — Add Feedback Toggle State</h2>
+
+<p>feedback: {
+  showHitCount: false
+},</p>
+
+<hr />
+
+<h2 id="task-4--hook-ui-toggle">TASK 4 — Hook UI Toggle</h2>
+
+<p>elements.toggleHitCount.addEventListener(“change”, function () {
+  state.feedback.showHitCount = this.checked;
+});</p>
+
+<hr />
+
+<h2 id="task-5--render-hit-count-overlay">TASK 5 — Render Hit Count Overlay</h2>
+
+<p>if (state.feedback &amp;&amp; state.feedback.showHitCount) {
+  ctx.save();</p>
+
+<p>ctx.fillStyle = “white”;
+  ctx.font = “10px monospace”;
+  ctx.textAlign = “center”;</p>
+
+<p>ctx.fillText(
+    ball.hitCount || 0,
+    ball.x,
+    ball.y - (ball.renderRadius + 6)
+  );</p>
+
+<p>ctx.restore();
+}</p>
+
+<hr />
+
+<h2 id="implementation-guide">Implementation Guide</h2>
+
+<p>Where code goes:</p>
+<ul>
+  <li>normalizeBall()</li>
+  <li>collision loop</li>
+  <li>state</li>
+  <li>drawParticleOverlays()</li>
+</ul>
+
+<p>What to run:</p>
+<ul>
+  <li>enable toggle</li>
+  <li>spawn particles</li>
+</ul>
+
+<p>What to expect:</p>
+<ul>
+  <li>particles display hit count values</li>
+</ul>
+</article>
+</div>
+
+    </main>
+
+    <footer class="site-footer">
+      <div class="site-footer-inner footer-grid-6">
+        <section class="footer-brand">
+          <h2>Wall of Sound</h2>
+          <p>
+            Shared project memory for the StudioRich audio/visual system. Specs,
+            logs, recovery notes, and local portals live here.
+          </p>
+        </section>
+
+        <section class="footer-group">
+          <h2>Navigation</h2>
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Domains</h2>
+          <a href="/systems/wall/">Wall System</a>
+          <a href="/systems/sound/">Sound System</a>
+          <a href="/systems/">Systems Index</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Indexes</h2>
+          <a href="/specs/">Specs</a>
+          <a href="/logs/">Logs</a>
+          <a href="/components/wall/">Wall Components</a>
+          <a href="/components/sound/"
+            >Sound Components</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Local Portals</h2>
+          <a href="file:///Users/studio/Projects/wall-of-sound/wall/index.html"
+            >Wall App</a
+          >
+          <a
+            href="file:///Users/studio/Projects/wall-of-sound/sound/labeller.html"
+            >Sound Labeller</a
+          >
+          <a
+            href="file:///Users/studio/Projects/kinetic-master-engine/index.html"
+            >Kinetic Engine</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Recovery</h2>
+          <a href="/specs/">Implementation Specs</a>
+          <a href="/logs/">Session Logs</a>
+          <a href="/systems/sound/">Sound Recovery</a>
+          <a href="/systems/wall/">Wall Recovery</a>
+        </section>
+      </div>
+    </footer>
+  </body>
+</html>

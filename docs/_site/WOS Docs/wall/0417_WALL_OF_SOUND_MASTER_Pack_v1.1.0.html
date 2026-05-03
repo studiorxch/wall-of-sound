@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>MASTER Pack | Wall of Sound</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <link
+      rel="stylesheet"
+      href="/assets/css/style.css"
+    />
+  </head>
+
+  <body>
+    <header class="site-header">
+      <div class="site-header-inner">
+        <a class="site-title" href="/">
+          Wall of Sound
+        </a>
+
+        <nav class="site-nav" aria-label="Primary navigation">
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="page-content">
+      <div class="spec-shell">
+  <a class="back-link" href="/specs/">← Back to specs</a>
+
+  <div class="spec-kicker">
+    wall / audio_system / needs-review
+  </div>
+
+  <h1>MASTER Pack</h1>
+
+  <section class="spec-meta">
+    <div>
+      <strong>Doc ID</strong>
+      0417_WALL_OF_SOUND_MASTER_Pack_v1.1.0
+    </div>
+
+    <div>
+      <strong>Date</strong>
+      2026-04-17
+    </div>
+
+    <div>
+      <strong>Version</strong>
+      1.1.0
+    </div>
+
+    <div>
+      <strong>System</strong>
+      WOS
+    </div>
+
+    <div>
+      <strong>Domain</strong>
+      wall
+    </div>
+
+    <div>
+      <strong>Component</strong>
+      audio_system
+    </div>
+
+    <div>
+      <strong>Type</strong>
+      legacy-spec
+    </div>
+
+    <div>
+      <strong>Priority</strong>
+      medium
+    </div>
+
+    <div>
+      <strong>Risk</strong>
+      unknown
+    </div>
+
+    <div>
+      <strong>Status</strong>
+      needs-review
+    </div>
+  </section>
+
+  
+  <p><strong>Summary:</strong> Imported legacy Wall of Sound spec. Needs review.</p>
+  
+
+  <article class="spec-body"><h1 id="0417_wall_of_sound_master_pack_v110">0417_WALL_OF_SOUND_MASTER_Pack_v1.1.0</h1>
+
+<h2 id="scope">Scope</h2>
+<p>main.js only</p>
+
+<h2 id="includes">Includes</h2>
+<ul>
+  <li>Stability Pack (mute, fallback, duplication, guide surfaces)</li>
+  <li>Text System (in-canvas multiline + annotation/sound modes)</li>
+</ul>
+
+<hr />
+
+<h1 id="part-1--stability-fixes">PART 1 — STABILITY FIXES</h1>
+
+<h2 id="1-mute-system-hard-gate">1. Mute System (Hard Gate)</h2>
+
+<p>Ensure all sound paths check:</p>
+
+<p>if (sourceObject?.behavior?.isMuted) return;
+if (sourceObject?.sound?.enabled === false) return;</p>
+
+<p>Normalize:
+behavior.isMuted = !!behavior.isMuted;</p>
+
+<hr />
+
+<h2 id="2-silent-guide-surfaces">2. Silent Guide Surfaces</h2>
+
+<p>Add:
+sound.enabled = true</p>
+
+<p>Gate:
+if (obj.sound?.enabled === false) return;</p>
+
+<p>Optional:
+mechanicType = “guide”</p>
+
+<hr />
+
+<h2 id="3-fallback-control">3. Fallback Control</h2>
+
+<p>Add to state:</p>
+
+<p>state.audio.fallbackMode = “nearest”; // or “strict”</p>
+
+<p>Strict mode:</p>
+
+<p>if (!sampleMap[noteClass]) return;</p>
+
+<p>Nearest mode:
+(keep existing nearest-bank fallback)</p>
+
+<hr />
+
+<h2 id="4-sample-visibility-debug">4. Sample Visibility (Debug)</h2>
+
+<p>Add log:</p>
+
+<p>console.log(“PLAY NOTE”, {
+  note,
+  noteClass,
+  resolvedClass,
+  fallbackMode: state.audio.fallbackMode,
+  sampleCount: bank ? bank.length : 0
+});</p>
+
+<hr />
+
+<h2 id="5-duplicate-preservation">5. Duplicate Preservation</h2>
+
+<p>When duplicating:</p>
+
+<p>newObj.note = original.note;
+newObj.sound = clone(original.sound);
+newObj.behavior = clone(original.behavior);</p>
+
+<p>DO NOT use state.defaults.note</p>
+
+<hr />
+
+<h1 id="part-2--text-system">PART 2 — TEXT SYSTEM</h1>
+
+<h2 id="text-object">Text Object</h2>
+
+<p>{
+  type: “text”,
+  x,
+  y,
+  lines: [],
+  mode: “annotation”, // or “sound”
+  note,
+  sound
+}</p>
+
+<hr />
+
+<h2 id="state">State</h2>
+
+<p>state.ui.textEditing = {
+  active: false,
+  x: 0,
+  y: 0,
+  lines: [””],
+  caretLine: 0,
+  caretChar: 0
+};</p>
+
+<hr />
+
+<h2 id="start-editing">Start Editing</h2>
+
+<p>On canvas click:</p>
+
+<p>state.ui.textEditing.active = true;
+state.ui.textEditing.x = mouseX;
+state.ui.textEditing.y = mouseY;</p>
+
+<hr />
+
+<h2 id="controls">Controls</h2>
+
+<p>Enter → new line<br />
+Backspace → delete<br />
+Cmd/Ctrl + Enter → commit<br />
+Esc → cancel</p>
+
+<hr />
+
+<h2 id="commit">Commit</h2>
+
+<p>function createTextObjectFromEditor() {
+  const e = state.ui.textEditing;</p>
+
+<p>addObject({
+    type: “text”,
+    x: e.x,
+    y: e.y,
+    lines: […e.lines],
+    mode: “annotation”,
+    note: state.defaults.note,
+    sound: null
+  });
+}</p>
+
+<hr />
+
+<h2 id="rendering">Rendering</h2>
+
+<p>const lineHeight = 18;</p>
+
+<p>text.lines.forEach((line, i) =&gt; {
+  ctx.fillText(line, text.x, text.y + i * lineHeight);
+});</p>
+
+<hr />
+
+<h2 id="caret">Caret</h2>
+
+<p>Draw caret using ctx.measureText</p>
+
+<hr />
+
+<h2 id="mode-behavior">Mode Behavior</h2>
+
+<p>Annotation:</p>
+
+<p>if (obj.type === “text” &amp;&amp; obj.mode === “annotation”) return;</p>
+
+<p>Sound:</p>
+<ul>
+  <li>participates in collision</li>
+  <li>triggers note</li>
+</ul>
+
+<hr />
+
+<h2 id="visual">Visual</h2>
+
+<p>Annotation:</p>
+<ul>
+  <li>low opacity</li>
+</ul>
+
+<p>Sound:</p>
+<ul>
+  <li>full color</li>
+  <li>reacts to hits</li>
+</ul>
+
+<hr />
+
+<h1 id="result">RESULT</h1>
+
+<ul>
+  <li>Stable sampler behavior</li>
+  <li>Predictable mute + silent ramps</li>
+  <li>Reliable duplication</li>
+  <li>In-world text authoring</li>
+  <li>Multiline support</li>
+  <li>Text as annotation + instrument</li>
+</ul>
+
+<hr />
+
+<h2 id="implementation-guide">Implementation Guide</h2>
+
+<ul>
+  <li>Where: main.js</li>
+  <li>Run: reload and test emitters, mute, fallback modes, text tool</li>
+  <li>Expect: stable instrument workflow + in-canvas text system</li>
+</ul>
+</article>
+</div>
+
+    </main>
+
+    <footer class="site-footer">
+      <div class="site-footer-inner footer-grid-6">
+        <section class="footer-brand">
+          <h2>Wall of Sound</h2>
+          <p>
+            Shared project memory for the StudioRich audio/visual system. Specs,
+            logs, recovery notes, and local portals live here.
+          </p>
+        </section>
+
+        <section class="footer-group">
+          <h2>Navigation</h2>
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Domains</h2>
+          <a href="/systems/wall/">Wall System</a>
+          <a href="/systems/sound/">Sound System</a>
+          <a href="/systems/">Systems Index</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Indexes</h2>
+          <a href="/specs/">Specs</a>
+          <a href="/logs/">Logs</a>
+          <a href="/components/wall/">Wall Components</a>
+          <a href="/components/sound/"
+            >Sound Components</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Local Portals</h2>
+          <a href="file:///Users/studio/Projects/wall-of-sound/wall/index.html"
+            >Wall App</a
+          >
+          <a
+            href="file:///Users/studio/Projects/wall-of-sound/sound/labeller.html"
+            >Sound Labeller</a
+          >
+          <a
+            href="file:///Users/studio/Projects/kinetic-master-engine/index.html"
+            >Kinetic Engine</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Recovery</h2>
+          <a href="/specs/">Implementation Specs</a>
+          <a href="/logs/">Session Logs</a>
+          <a href="/systems/sound/">Sound Recovery</a>
+          <a href="/systems/wall/">Wall Recovery</a>
+        </section>
+      </div>
+    </footer>
+  </body>
+</html>

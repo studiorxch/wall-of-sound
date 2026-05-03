@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>SampleVariation + Cleanup | Wall of Sound</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <link
+      rel="stylesheet"
+      href="/assets/css/style.css"
+    />
+  </head>
+
+  <body>
+    <header class="site-header">
+      <div class="site-header-inner">
+        <a class="site-title" href="/">
+          Wall of Sound
+        </a>
+
+        <nav class="site-nav" aria-label="Primary navigation">
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="page-content">
+      <div class="spec-shell">
+  <a class="back-link" href="/specs/">← Back to specs</a>
+
+  <div class="spec-kicker">
+    wall / audio_system / needs-review
+  </div>
+
+  <h1>SampleVariation + Cleanup</h1>
+
+  <section class="spec-meta">
+    <div>
+      <strong>Doc ID</strong>
+      0412_WALL_OF_SOUND_SampleVariation+Cleanup_v1.1.0
+    </div>
+
+    <div>
+      <strong>Date</strong>
+      2026-04-12
+    </div>
+
+    <div>
+      <strong>Version</strong>
+      1.1.0
+    </div>
+
+    <div>
+      <strong>System</strong>
+      WOS
+    </div>
+
+    <div>
+      <strong>Domain</strong>
+      wall
+    </div>
+
+    <div>
+      <strong>Component</strong>
+      audio_system
+    </div>
+
+    <div>
+      <strong>Type</strong>
+      legacy-spec
+    </div>
+
+    <div>
+      <strong>Priority</strong>
+      medium
+    </div>
+
+    <div>
+      <strong>Risk</strong>
+      unknown
+    </div>
+
+    <div>
+      <strong>Status</strong>
+      needs-review
+    </div>
+  </section>
+
+  
+  <p><strong>Summary:</strong> Imported legacy Wall of Sound spec. Needs review.</p>
+  
+
+  <article class="spec-body"><p>0412_WALL_OF_SOUND_SampleVariation+Cleanup_v1.1.0</p>
+
+<h1 id="wall-of-sound--sample-variation--physics-cleanup-final">Wall of Sound — Sample Variation + Physics Cleanup (FINAL)</h1>
+
+<h2 id="assumptions">Assumptions</h2>
+
+<ul>
+  <li>Local server (127.0.0.1:5501)</li>
+  <li>Samples in /audio/samples/</li>
+  <li>Collision system already firing</li>
+</ul>
+
+<hr />
+
+<h1 id="1-sample-system-fix-variation">1. SAMPLE SYSTEM (FIX VARIATION)</h1>
+
+<h2 id="replace-sample-storage">Replace sample storage</h2>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">const</span> <span class="nx">samples</span> <span class="o">=</span> <span class="p">{</span>
+  <span class="na">low</span><span class="p">:</span> <span class="p">[],</span>
+  <span class="na">mid</span><span class="p">:</span> <span class="p">[],</span>
+  <span class="na">high</span><span class="p">:</span> <span class="p">[],</span>
+<span class="p">};</span>
+</code></pre></div></div>
+
+<hr />
+
+<h2 id="load-all-samples-not-one">Load ALL samples (not one)</h2>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">async</span> <span class="kd">function</span> <span class="nf">loadSamples</span><span class="p">(</span><span class="nx">context</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">if </span><span class="p">(</span><span class="nx">samples</span><span class="p">.</span><span class="nx">low</span><span class="p">.</span><span class="nx">length</span><span class="p">)</span> <span class="k">return</span><span class="p">;</span>
+
+  <span class="kd">const</span> <span class="nx">map</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="na">low</span><span class="p">:</span> <span class="p">[</span>
+      <span class="dl">"</span><span class="s2">/audio/samples/kick1.wav</span><span class="dl">"</span><span class="p">,</span>
+      <span class="dl">"</span><span class="s2">/audio/samples/kick2.wav</span><span class="dl">"</span><span class="p">,</span>
+      <span class="dl">"</span><span class="s2">/audio/samples/kick3.wav</span><span class="dl">"</span><span class="p">,</span>
+    <span class="p">],</span>
+    <span class="na">mid</span><span class="p">:</span> <span class="p">[</span>
+      <span class="dl">"</span><span class="s2">/audio/samples/snare1.wav</span><span class="dl">"</span><span class="p">,</span>
+      <span class="dl">"</span><span class="s2">/audio/samples/snare2.wav</span><span class="dl">"</span><span class="p">,</span>
+      <span class="dl">"</span><span class="s2">/audio/samples/snare3.wav</span><span class="dl">"</span><span class="p">,</span>
+    <span class="p">],</span>
+    <span class="na">high</span><span class="p">:</span> <span class="p">[</span>
+      <span class="dl">"</span><span class="s2">/audio/samples/hat1.wav</span><span class="dl">"</span><span class="p">,</span>
+      <span class="dl">"</span><span class="s2">/audio/samples/hat2.wav</span><span class="dl">"</span><span class="p">,</span>
+      <span class="dl">"</span><span class="s2">/audio/samples/hat3.wav</span><span class="dl">"</span><span class="p">,</span>
+    <span class="p">],</span>
+  <span class="p">};</span>
+
+  <span class="k">for </span><span class="p">(</span><span class="kd">const</span> <span class="nx">key</span> <span class="k">in</span> <span class="nx">map</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nx">samples</span><span class="p">[</span><span class="nx">key</span><span class="p">]</span> <span class="o">=</span> <span class="p">[];</span>
+
+    <span class="k">for </span><span class="p">(</span><span class="kd">const</span> <span class="nx">url</span> <span class="k">of</span> <span class="nx">map</span><span class="p">[</span><span class="nx">key</span><span class="p">])</span> <span class="p">{</span>
+      <span class="kd">const</span> <span class="nx">res</span> <span class="o">=</span> <span class="k">await</span> <span class="nf">fetch</span><span class="p">(</span><span class="nx">url</span><span class="p">);</span>
+      <span class="kd">const</span> <span class="nx">buf</span> <span class="o">=</span> <span class="k">await</span> <span class="nx">res</span><span class="p">.</span><span class="nf">arrayBuffer</span><span class="p">();</span>
+      <span class="kd">const</span> <span class="nx">decoded</span> <span class="o">=</span> <span class="k">await</span> <span class="nx">context</span><span class="p">.</span><span class="nf">decodeAudioData</span><span class="p">(</span><span class="nx">buf</span><span class="p">);</span>
+
+      <span class="nx">samples</span><span class="p">[</span><span class="nx">key</span><span class="p">].</span><span class="nf">push</span><span class="p">(</span><span class="nx">decoded</span><span class="p">);</span>
+    <span class="p">}</span>
+
+    <span class="nx">console</span><span class="p">.</span><span class="nf">log</span><span class="p">(</span><span class="dl">"</span><span class="s2">✅ loaded bank:</span><span class="dl">"</span><span class="p">,</span> <span class="nx">key</span><span class="p">,</span> <span class="nx">samples</span><span class="p">[</span><span class="nx">key</span><span class="p">].</span><span class="nx">length</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<hr />
+
+<h1 id="2-collision-audio-real-variation">2. COLLISION AUDIO (REAL VARIATION)</h1>
+
+<p>Replace your handler with:</p>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">handle</span><span class="p">:</span> <span class="nf">function </span><span class="p">(</span><span class="nx">type</span><span class="p">,</span> <span class="nx">sourceObject</span><span class="p">)</span> <span class="p">{</span>
+  <span class="kd">const</span> <span class="nx">context</span> <span class="o">=</span> <span class="nx">state</span><span class="p">.</span><span class="nx">audio</span><span class="p">.</span><span class="nx">context</span><span class="p">;</span>
+  <span class="k">if </span><span class="p">(</span><span class="o">!</span><span class="nx">context</span> <span class="o">||</span> <span class="nx">context</span><span class="p">.</span><span class="nx">state</span> <span class="o">!==</span> <span class="dl">"</span><span class="s2">running</span><span class="dl">"</span><span class="p">)</span> <span class="k">return</span><span class="p">;</span>
+
+  <span class="kd">const</span> <span class="nx">sampleType</span> <span class="o">=</span> <span class="nf">classifyCollision</span><span class="p">(</span><span class="nx">sourceObject</span><span class="p">,</span> <span class="nx">state</span><span class="p">);</span>
+  <span class="kd">const</span> <span class="nx">bank</span> <span class="o">=</span> <span class="nx">samples</span><span class="p">[</span><span class="nx">sampleType</span><span class="p">];</span>
+
+  <span class="k">if </span><span class="p">(</span><span class="o">!</span><span class="nx">bank</span> <span class="o">||</span> <span class="nx">bank</span><span class="p">.</span><span class="nx">length</span> <span class="o">===</span> <span class="mi">0</span><span class="p">)</span> <span class="k">return</span><span class="p">;</span>
+
+  <span class="kd">const</span> <span class="nx">buffer</span> <span class="o">=</span> <span class="nx">bank</span><span class="p">[</span><span class="nb">Math</span><span class="p">.</span><span class="nf">floor</span><span class="p">(</span><span class="nb">Math</span><span class="p">.</span><span class="nf">random</span><span class="p">()</span> <span class="o">*</span> <span class="nx">bank</span><span class="p">.</span><span class="nx">length</span><span class="p">)];</span>
+
+  <span class="kd">const</span> <span class="nx">source</span> <span class="o">=</span> <span class="nx">context</span><span class="p">.</span><span class="nf">createBufferSource</span><span class="p">();</span>
+  <span class="kd">const</span> <span class="nx">gainNode</span> <span class="o">=</span> <span class="nx">context</span><span class="p">.</span><span class="nf">createGain</span><span class="p">();</span>
+
+  <span class="nx">source</span><span class="p">.</span><span class="nx">buffer</span> <span class="o">=</span> <span class="nx">buffer</span><span class="p">;</span>
+
+  <span class="c1">// 🎯 pitch from MIDI note</span>
+  <span class="kd">const</span> <span class="nx">note</span> <span class="o">=</span> <span class="nx">sourceObject</span><span class="p">.</span><span class="nx">sound</span><span class="p">?.</span><span class="nx">midi</span><span class="p">?.</span><span class="nx">note</span> <span class="o">||</span> <span class="mi">60</span><span class="p">;</span>
+  <span class="kd">const</span> <span class="nx">pitch</span> <span class="o">=</span> <span class="nb">Math</span><span class="p">.</span><span class="nf">pow</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="p">(</span><span class="nx">note</span> <span class="o">-</span> <span class="mi">60</span><span class="p">)</span> <span class="o">/</span> <span class="mi">12</span><span class="p">);</span>
+
+  <span class="nx">source</span><span class="p">.</span><span class="nx">playbackRate</span><span class="p">.</span><span class="nx">value</span> <span class="o">=</span>
+    <span class="nx">pitch</span> <span class="o">*</span> <span class="p">(</span><span class="mf">0.96</span> <span class="o">+</span> <span class="nb">Math</span><span class="p">.</span><span class="nf">random</span><span class="p">()</span> <span class="o">*</span> <span class="mf">0.08</span><span class="p">);</span>
+
+  <span class="nx">gainNode</span><span class="p">.</span><span class="nx">gain</span><span class="p">.</span><span class="nx">value</span> <span class="o">=</span> <span class="mf">0.8</span><span class="p">;</span>
+
+  <span class="nx">source</span><span class="p">.</span><span class="nf">connect</span><span class="p">(</span><span class="nx">gainNode</span><span class="p">);</span>
+  <span class="nx">gainNode</span><span class="p">.</span><span class="nf">connect</span><span class="p">(</span><span class="nx">context</span><span class="p">.</span><span class="nx">destination</span><span class="p">);</span>
+
+  <span class="nx">source</span><span class="p">.</span><span class="nf">start</span><span class="p">();</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<hr />
+
+<h1 id="3-remove-oscillator">3. REMOVE OSCILLATOR</h1>
+
+<p>Delete ALL oscillator sound code.</p>
+
+<hr />
+
+<h1 id="4-ball-cleanup-no-floor-stacking">4. BALL CLEANUP (NO FLOOR STACKING)</h1>
+
+<h2 id="replace-floor-logic">Replace floor logic:</h2>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">const</span> <span class="nx">FLOOR_Y</span> <span class="o">=</span> <span class="nx">state</span><span class="p">.</span><span class="nx">canvas</span><span class="p">.</span><span class="nx">height</span> <span class="o">*</span> <span class="mf">0.92</span><span class="p">;</span>
+
+<span class="nx">state</span><span class="p">.</span><span class="nx">balls</span><span class="p">.</span><span class="nf">forEach</span><span class="p">((</span><span class="nx">ball</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="p">{</span>
+  <span class="k">if </span><span class="p">(</span><span class="nx">ball</span><span class="p">.</span><span class="nx">y</span> <span class="o">&gt;</span> <span class="nx">FLOOR_Y</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nx">ball</span><span class="p">.</span><span class="nx">_dead</span> <span class="o">=</span> <span class="kc">true</span><span class="p">;</span>
+  <span class="p">}</span>
+<span class="p">});</span>
+</code></pre></div></div>
+
+<h2 id="after-physics-loop">After physics loop:</h2>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">state</span><span class="p">.</span><span class="nx">balls</span> <span class="o">=</span> <span class="nx">state</span><span class="p">.</span><span class="nx">balls</span><span class="p">.</span><span class="nf">filter</span><span class="p">((</span><span class="nx">b</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="o">!</span><span class="nx">b</span><span class="p">.</span><span class="nx">_dead</span><span class="p">);</span>
+</code></pre></div></div>
+
+<hr />
+
+<h1 id="5-force-collision-events">5. FORCE COLLISION EVENTS</h1>
+
+<p>Replace collision dispatch with:</p>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">soundSources</span><span class="p">.</span><span class="nf">forEach</span><span class="p">((</span><span class="nx">source</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="p">{</span>
+  <span class="k">if </span><span class="p">(</span><span class="o">!</span><span class="nx">source</span><span class="p">.</span><span class="nx">line</span> <span class="o">||</span> <span class="o">!</span><span class="nx">source</span><span class="p">.</span><span class="nx">line</span><span class="p">.</span><span class="nx">sound</span><span class="p">)</span> <span class="k">return</span><span class="p">;</span>
+  <span class="nf">dispatchCollisionEvent</span><span class="p">(</span><span class="nx">source</span><span class="p">.</span><span class="nx">line</span><span class="p">);</span>
+<span class="p">});</span>
+</code></pre></div></div>
+
+<hr />
+
+<h1 id="6-collision-classification">6. COLLISION CLASSIFICATION</h1>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">function</span> <span class="nf">classifyCollision</span><span class="p">(</span><span class="nx">sourceObject</span><span class="p">,</span> <span class="nx">state</span><span class="p">)</span> <span class="p">{</span>
+  <span class="kd">const</span> <span class="nx">vx</span> <span class="o">=</span> <span class="nx">sourceObject</span><span class="p">.</span><span class="nx">vx</span> <span class="o">||</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="kd">const</span> <span class="nx">vy</span> <span class="o">=</span> <span class="nx">sourceObject</span><span class="p">.</span><span class="nx">vy</span> <span class="o">||</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="kd">const</span> <span class="nx">speed</span> <span class="o">=</span> <span class="nb">Math</span><span class="p">.</span><span class="nf">hypot</span><span class="p">(</span><span class="nx">vx</span><span class="p">,</span> <span class="nx">vy</span><span class="p">);</span>
+
+  <span class="k">if </span><span class="p">(</span><span class="nx">vy</span> <span class="o">&gt;</span> <span class="mi">6</span> <span class="o">&amp;&amp;</span> <span class="nx">speed</span> <span class="o">&gt;</span> <span class="mi">8</span><span class="p">)</span> <span class="k">return</span> <span class="dl">"</span><span class="s2">low</span><span class="dl">"</span><span class="p">;</span>
+  <span class="k">if </span><span class="p">(</span><span class="nx">speed</span> <span class="o">&gt;</span> <span class="mi">5</span><span class="p">)</span> <span class="k">return</span> <span class="dl">"</span><span class="s2">mid</span><span class="dl">"</span><span class="p">;</span>
+  <span class="k">return</span> <span class="dl">"</span><span class="s2">high</span><span class="dl">"</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<hr />
+
+<h1 id="expected-result">EXPECTED RESULT</h1>
+
+<ul>
+  <li>Different samples per hit</li>
+  <li>Pitch changes across lines</li>
+  <li>No ball pile at floor</li>
+  <li>Continuous emitter flow</li>
+  <li>System feels musical, not repetitive</li>
+</ul>
+</article>
+</div>
+
+    </main>
+
+    <footer class="site-footer">
+      <div class="site-footer-inner footer-grid-6">
+        <section class="footer-brand">
+          <h2>Wall of Sound</h2>
+          <p>
+            Shared project memory for the StudioRich audio/visual system. Specs,
+            logs, recovery notes, and local portals live here.
+          </p>
+        </section>
+
+        <section class="footer-group">
+          <h2>Navigation</h2>
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Domains</h2>
+          <a href="/systems/wall/">Wall System</a>
+          <a href="/systems/sound/">Sound System</a>
+          <a href="/systems/">Systems Index</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Indexes</h2>
+          <a href="/specs/">Specs</a>
+          <a href="/logs/">Logs</a>
+          <a href="/components/wall/">Wall Components</a>
+          <a href="/components/sound/"
+            >Sound Components</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Local Portals</h2>
+          <a href="file:///Users/studio/Projects/wall-of-sound/wall/index.html"
+            >Wall App</a
+          >
+          <a
+            href="file:///Users/studio/Projects/wall-of-sound/sound/labeller.html"
+            >Sound Labeller</a
+          >
+          <a
+            href="file:///Users/studio/Projects/kinetic-master-engine/index.html"
+            >Kinetic Engine</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Recovery</h2>
+          <a href="/specs/">Implementation Specs</a>
+          <a href="/logs/">Session Logs</a>
+          <a href="/systems/sound/">Sound Recovery</a>
+          <a href="/systems/wall/">Wall Recovery</a>
+        </section>
+      </div>
+    </footer>
+  </body>
+</html>

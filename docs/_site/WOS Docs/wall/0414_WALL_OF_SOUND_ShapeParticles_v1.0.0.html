@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>ShapeParticles | Wall of Sound</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <link
+      rel="stylesheet"
+      href="/assets/css/style.css"
+    />
+  </head>
+
+  <body>
+    <header class="site-header">
+      <div class="site-header-inner">
+        <a class="site-title" href="/">
+          Wall of Sound
+        </a>
+
+        <nav class="site-nav" aria-label="Primary navigation">
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="page-content">
+      <div class="spec-shell">
+  <a class="back-link" href="/specs/">← Back to specs</a>
+
+  <div class="spec-kicker">
+    wall / audio_system / needs-review
+  </div>
+
+  <h1>ShapeParticles</h1>
+
+  <section class="spec-meta">
+    <div>
+      <strong>Doc ID</strong>
+      0414_WALL_OF_SOUND_ShapeParticles_v1.0.0
+    </div>
+
+    <div>
+      <strong>Date</strong>
+      2026-04-14
+    </div>
+
+    <div>
+      <strong>Version</strong>
+      1.0.0
+    </div>
+
+    <div>
+      <strong>System</strong>
+      WOS
+    </div>
+
+    <div>
+      <strong>Domain</strong>
+      wall
+    </div>
+
+    <div>
+      <strong>Component</strong>
+      audio_system
+    </div>
+
+    <div>
+      <strong>Type</strong>
+      legacy-spec
+    </div>
+
+    <div>
+      <strong>Priority</strong>
+      medium
+    </div>
+
+    <div>
+      <strong>Risk</strong>
+      unknown
+    </div>
+
+    <div>
+      <strong>Status</strong>
+      needs-review
+    </div>
+  </section>
+
+  
+  <p><strong>Summary:</strong> Imported legacy Wall of Sound spec. Needs review.</p>
+  
+
+  <article class="spec-body"><h1 id="0414_wall_of_sound_shapeparticles_v100">0414_WALL_OF_SOUND_ShapeParticles_v1.0.0</h1>
+
+<h2 id="-objective">🎯 Objective</h2>
+
+<p>Transform particles into shape-driven entities using SHAPE_LIBRARY.</p>
+
+<p>Goals:</p>
+<ul>
+  <li>Shape-based identity</li>
+  <li>Rotation modes</li>
+  <li>Optional trails</li>
+  <li>Physics compatibility</li>
+</ul>
+
+<hr />
+
+<h2 id="-particle-schema">🧩 Particle Schema</h2>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">const</span> <span class="nx">DEFAULT_PARTICLE</span> <span class="o">=</span> <span class="p">{</span>
+  <span class="na">x</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="na">y</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+  <span class="na">vx</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="na">vy</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+  <span class="na">shapeId</span><span class="p">:</span> <span class="dl">"</span><span class="s2">circle</span><span class="dl">"</span><span class="p">,</span>
+  <span class="na">rotation</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+  <span class="na">angularVelocity</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+  <span class="na">alignToVelocity</span><span class="p">:</span> <span class="kc">false</span><span class="p">,</span>
+  <span class="na">collidable</span><span class="p">:</span> <span class="kc">true</span><span class="p">,</span>
+  <span class="na">radius</span><span class="p">:</span> <span class="mi">4</span><span class="p">,</span>
+  <span class="na">mass</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+  <span class="na">color</span><span class="p">:</span> <span class="dl">"</span><span class="s2">#ffffff</span><span class="dl">"</span><span class="p">,</span>
+  <span class="na">opacity</span><span class="p">:</span> <span class="mf">0.8</span><span class="p">,</span>
+  <span class="na">trail</span><span class="p">:</span> <span class="p">[],</span>
+  <span class="na">trailEnabled</span><span class="p">:</span> <span class="kc">false</span><span class="p">,</span>
+  <span class="na">trailLength</span><span class="p">:</span> <span class="mi">10</span>
+<span class="p">};</span>
+</code></pre></div></div>
+
+<hr />
+
+<h2 id="️-shape-binding">⚙️ Shape Binding</h2>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">function</span> <span class="nf">buildShapeInstance</span><span class="p">(</span><span class="nx">p</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">return</span> <span class="nx">SHAPE_LIBRARY</span><span class="p">[</span><span class="nx">p</span><span class="p">.</span><span class="nx">shapeId</span><span class="p">](</span>
+    <span class="p">{</span> <span class="na">x</span><span class="p">:</span> <span class="nx">p</span><span class="p">.</span><span class="nx">x</span><span class="p">,</span> <span class="na">y</span><span class="p">:</span> <span class="nx">p</span><span class="p">.</span><span class="nx">y</span> <span class="p">},</span>
+    <span class="nx">p</span><span class="p">.</span><span class="nx">radius</span> <span class="o">*</span> <span class="mi">2</span>
+  <span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<hr />
+
+<h2 id="-rotation">🔁 Rotation</h2>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">function</span> <span class="nf">updateRotation</span><span class="p">(</span><span class="nx">p</span><span class="p">,</span> <span class="nx">dt</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">if </span><span class="p">(</span><span class="nx">p</span><span class="p">.</span><span class="nx">alignToVelocity</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nx">p</span><span class="p">.</span><span class="nx">rotation</span> <span class="o">=</span> <span class="nb">Math</span><span class="p">.</span><span class="nf">atan2</span><span class="p">(</span><span class="nx">p</span><span class="p">.</span><span class="nx">vy</span><span class="p">,</span> <span class="nx">p</span><span class="p">.</span><span class="nx">vx</span><span class="p">);</span>
+  <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+    <span class="nx">p</span><span class="p">.</span><span class="nx">rotation</span> <span class="o">+=</span> <span class="nx">p</span><span class="p">.</span><span class="nx">angularVelocity</span> <span class="o">*</span> <span class="nx">dt</span><span class="p">;</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<hr />
+
+<h2 id="-trails">✨ Trails</h2>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">function</span> <span class="nf">updateTrail</span><span class="p">(</span><span class="nx">p</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">if </span><span class="p">(</span><span class="o">!</span><span class="nx">p</span><span class="p">.</span><span class="nx">trailEnabled</span><span class="p">)</span> <span class="k">return</span><span class="p">;</span>
+  <span class="nx">p</span><span class="p">.</span><span class="nx">trail</span><span class="p">.</span><span class="nf">push</span><span class="p">({</span> <span class="na">x</span><span class="p">:</span> <span class="nx">p</span><span class="p">.</span><span class="nx">x</span><span class="p">,</span> <span class="na">y</span><span class="p">:</span> <span class="nx">p</span><span class="p">.</span><span class="nx">y</span> <span class="p">});</span>
+  <span class="k">if </span><span class="p">(</span><span class="nx">p</span><span class="p">.</span><span class="nx">trail</span><span class="p">.</span><span class="nx">length</span> <span class="o">&gt;</span> <span class="nx">p</span><span class="p">.</span><span class="nx">trailLength</span><span class="p">)</span> <span class="nx">p</span><span class="p">.</span><span class="nx">trail</span><span class="p">.</span><span class="nf">shift</span><span class="p">();</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<hr />
+
+<h2 id="-rendering">🎨 Rendering</h2>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">function</span> <span class="nf">renderParticle</span><span class="p">(</span><span class="nx">ctx</span><span class="p">,</span> <span class="nx">p</span><span class="p">)</span> <span class="p">{</span>
+  <span class="kd">const</span> <span class="nx">segments</span> <span class="o">=</span> <span class="nf">buildShapeInstance</span><span class="p">(</span><span class="nx">p</span><span class="p">);</span>
+
+  <span class="nx">ctx</span><span class="p">.</span><span class="nf">save</span><span class="p">();</span>
+  <span class="nx">ctx</span><span class="p">.</span><span class="nf">translate</span><span class="p">(</span><span class="nx">p</span><span class="p">.</span><span class="nx">x</span><span class="p">,</span> <span class="nx">p</span><span class="p">.</span><span class="nx">y</span><span class="p">);</span>
+  <span class="nx">ctx</span><span class="p">.</span><span class="nf">rotate</span><span class="p">(</span><span class="nx">p</span><span class="p">.</span><span class="nx">rotation</span><span class="p">);</span>
+
+  <span class="nx">ctx</span><span class="p">.</span><span class="nx">strokeStyle</span> <span class="o">=</span> <span class="nx">p</span><span class="p">.</span><span class="nx">color</span><span class="p">;</span>
+  <span class="nx">ctx</span><span class="p">.</span><span class="nx">globalAlpha</span> <span class="o">=</span> <span class="nx">p</span><span class="p">.</span><span class="nx">opacity</span><span class="p">;</span>
+
+  <span class="nx">segments</span><span class="p">.</span><span class="nf">forEach</span><span class="p">(</span><span class="nx">segment</span> <span class="o">=&gt;</span> <span class="p">{</span>
+    <span class="nx">ctx</span><span class="p">.</span><span class="nf">beginPath</span><span class="p">();</span>
+    <span class="nx">segment</span><span class="p">.</span><span class="nf">forEach</span><span class="p">((</span><span class="nx">pt</span><span class="p">,</span> <span class="nx">i</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="p">{</span>
+      <span class="kd">const</span> <span class="nx">x</span> <span class="o">=</span> <span class="nx">pt</span><span class="p">.</span><span class="nx">x</span> <span class="o">-</span> <span class="nx">p</span><span class="p">.</span><span class="nx">x</span><span class="p">;</span>
+      <span class="kd">const</span> <span class="nx">y</span> <span class="o">=</span> <span class="nx">pt</span><span class="p">.</span><span class="nx">y</span> <span class="o">-</span> <span class="nx">p</span><span class="p">.</span><span class="nx">y</span><span class="p">;</span>
+      <span class="k">if </span><span class="p">(</span><span class="nx">i</span> <span class="o">===</span> <span class="mi">0</span><span class="p">)</span> <span class="nx">ctx</span><span class="p">.</span><span class="nf">moveTo</span><span class="p">(</span><span class="nx">x</span><span class="p">,</span> <span class="nx">y</span><span class="p">);</span>
+      <span class="k">else</span> <span class="nx">ctx</span><span class="p">.</span><span class="nf">lineTo</span><span class="p">(</span><span class="nx">x</span><span class="p">,</span> <span class="nx">y</span><span class="p">);</span>
+    <span class="p">});</span>
+    <span class="nx">ctx</span><span class="p">.</span><span class="nf">stroke</span><span class="p">();</span>
+  <span class="p">});</span>
+
+  <span class="nx">ctx</span><span class="p">.</span><span class="nf">restore</span><span class="p">();</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<hr />
+
+<h2 id="️-collision-toggle">⚙️ Collision Toggle</h2>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">state</span><span class="p">.</span><span class="nx">world</span><span class="p">.</span><span class="nx">particleCollision</span> <span class="o">=</span> <span class="kc">true</span><span class="p">;</span>
+</code></pre></div></div>
+
+<hr />
+
+<h2 id="️-ui">🎛️ UI</h2>
+
+<p>Particle Shape: circle | triangle | square<br />
+Rotation: off | free | align<br />
+Trail: on/off<br />
+Collision: on/off</p>
+
+<hr />
+
+<h2 id="-implementation-guide">🚀 Implementation Guide</h2>
+
+<ul>
+  <li>Replace particle rendering</li>
+  <li>Add rotation + trail updates</li>
+  <li>Keep physics intact</li>
+</ul>
+
+<p>Expected:</p>
+<ul>
+  <li>expressive particles</li>
+  <li>readable motion</li>
+  <li>identity-driven visuals</li>
+</ul>
+</article>
+</div>
+
+    </main>
+
+    <footer class="site-footer">
+      <div class="site-footer-inner footer-grid-6">
+        <section class="footer-brand">
+          <h2>Wall of Sound</h2>
+          <p>
+            Shared project memory for the StudioRich audio/visual system. Specs,
+            logs, recovery notes, and local portals live here.
+          </p>
+        </section>
+
+        <section class="footer-group">
+          <h2>Navigation</h2>
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Domains</h2>
+          <a href="/systems/wall/">Wall System</a>
+          <a href="/systems/sound/">Sound System</a>
+          <a href="/systems/">Systems Index</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Indexes</h2>
+          <a href="/specs/">Specs</a>
+          <a href="/logs/">Logs</a>
+          <a href="/components/wall/">Wall Components</a>
+          <a href="/components/sound/"
+            >Sound Components</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Local Portals</h2>
+          <a href="file:///Users/studio/Projects/wall-of-sound/wall/index.html"
+            >Wall App</a
+          >
+          <a
+            href="file:///Users/studio/Projects/wall-of-sound/sound/labeller.html"
+            >Sound Labeller</a
+          >
+          <a
+            href="file:///Users/studio/Projects/kinetic-master-engine/index.html"
+            >Kinetic Engine</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Recovery</h2>
+          <a href="/specs/">Implementation Specs</a>
+          <a href="/logs/">Session Logs</a>
+          <a href="/systems/sound/">Sound Recovery</a>
+          <a href="/systems/wall/">Wall Recovery</a>
+        </section>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Fix NoteSource | Wall of Sound</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <link
+      rel="stylesheet"
+      href="/assets/css/style.css"
+    />
+  </head>
+
+  <body>
+    <header class="site-header">
+      <div class="site-header-inner">
+        <a class="site-title" href="/">
+          Wall of Sound
+        </a>
+
+        <nav class="site-nav" aria-label="Primary navigation">
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="page-content">
+      <div class="spec-shell">
+  <a class="back-link" href="/specs/">← Back to specs</a>
+
+  <div class="spec-kicker">
+    wall / audio_system / needs-review
+  </div>
+
+  <h1>Fix NoteSource</h1>
+
+  <section class="spec-meta">
+    <div>
+      <strong>Doc ID</strong>
+      0417_WALL_OF_SOUND_Fix_NoteSource_v1.0.0
+    </div>
+
+    <div>
+      <strong>Date</strong>
+      2026-04-17
+    </div>
+
+    <div>
+      <strong>Version</strong>
+      1.0.0
+    </div>
+
+    <div>
+      <strong>System</strong>
+      WOS
+    </div>
+
+    <div>
+      <strong>Domain</strong>
+      wall
+    </div>
+
+    <div>
+      <strong>Component</strong>
+      audio_system
+    </div>
+
+    <div>
+      <strong>Type</strong>
+      legacy-spec
+    </div>
+
+    <div>
+      <strong>Priority</strong>
+      medium
+    </div>
+
+    <div>
+      <strong>Risk</strong>
+      unknown
+    </div>
+
+    <div>
+      <strong>Status</strong>
+      needs-review
+    </div>
+  </section>
+
+  
+  <p><strong>Summary:</strong> Imported legacy Wall of Sound spec. Needs review.</p>
+  
+
+  <article class="spec-body"><h1 id="0417_wall_of_sound_fix_notesource_v100">0417_WALL_OF_SOUND_Fix_NoteSource_v1.0.0</h1>
+
+<h2 id="scope">Scope</h2>
+<p>Single-file update: <code class="language-plaintext highlighter-rouge">main.js</code><br />
+Goal: Fix emitter note source so particles inherit the correct note (not defaulting to C)</p>
+
+<hr />
+
+<h2 id="problem">Problem</h2>
+
+<p>Particles are always using note 60 (C), even when lines are set to other notes.</p>
+
+<p>Debug HUD confirms:</p>
+<ul>
+  <li><code class="language-plaintext highlighter-rouge">ball.blueprint.note = 60</code></li>
+  <li><code class="language-plaintext highlighter-rouge">ball.sound.midi.note = 60</code></li>
+</ul>
+
+<p>This means the issue is at emitter spawn time, not playback.</p>
+
+<hr />
+
+<h2 id="root-cause">Root Cause</h2>
+
+<p>Emitter spawn logic is reading from:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>line.note
+</code></pre></div></div>
+
+<p>But the UI updates:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>line.midi.note
+</code></pre></div></div>
+
+<p>So the system is using a stale note source.</p>
+
+<hr />
+
+<h2 id="required-fix">Required Fix</h2>
+
+<h3 id="update-both-emitter-spawn-functions">Update BOTH emitter spawn functions</h3>
+
+<hr />
+
+<h3 id="find">FIND</h3>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>const sourceNote =
+  (line &amp;&amp; typeof line.note === "number" ? line.note : null) ??
+  (seg &amp;&amp; typeof seg.note === "number" ? seg.note : null) ??
+  60;
+</code></pre></div></div>
+
+<hr />
+
+<h3 id="replace-with">REPLACE WITH</h3>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>const sourceNote =
+  (line &amp;&amp; line.midi &amp;&amp; typeof line.midi.note === "number"
+    ? line.midi.note
+    : null) ??
+  (seg &amp;&amp; seg.midi &amp;&amp; typeof seg.midi.note === "number"
+    ? seg.midi.note
+    : null) ??
+  60;
+</code></pre></div></div>
+
+<hr />
+
+<h2 id="important-notes">Important Notes</h2>
+
+<ul>
+  <li>Do NOT modify blueprint structure</li>
+  <li>Do NOT modify motion logic</li>
+  <li>Do NOT modify sample system</li>
+  <li>Only fix note source at spawn</li>
+</ul>
+
+<hr />
+
+<h2 id="expected-result">Expected Result</h2>
+
+<ul>
+  <li>Each emitter produces correct pitch</li>
+  <li>Debug HUD shows matching values (e.g. D#/D#)</li>
+  <li>No more global C-note behavior</li>
+</ul>
+
+<hr />
+
+<h2 id="validation">Validation</h2>
+
+<ol>
+  <li>Create multiple lines with different notes</li>
+  <li>Enable emitter behavior</li>
+  <li>
+    <p>Enable debug HUD:</p>
+
+    <p>_wos.state.ui.debugHUD = true</p>
+  </li>
+  <li>Confirm:
+    <ul>
+      <li>blueprint.note matches line note</li>
+      <li>sound.midi.note matches blueprint.note</li>
+    </ul>
+  </li>
+</ol>
+
+<hr />
+
+<h2 id="implementation-guide">Implementation Guide</h2>
+
+<ul>
+  <li>Where: main.js → emitter spawn logic</li>
+  <li>Run: reload app</li>
+  <li>Expect: emitters produce correct notes</li>
+</ul>
+</article>
+</div>
+
+    </main>
+
+    <footer class="site-footer">
+      <div class="site-footer-inner footer-grid-6">
+        <section class="footer-brand">
+          <h2>Wall of Sound</h2>
+          <p>
+            Shared project memory for the StudioRich audio/visual system. Specs,
+            logs, recovery notes, and local portals live here.
+          </p>
+        </section>
+
+        <section class="footer-group">
+          <h2>Navigation</h2>
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Domains</h2>
+          <a href="/systems/wall/">Wall System</a>
+          <a href="/systems/sound/">Sound System</a>
+          <a href="/systems/">Systems Index</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Indexes</h2>
+          <a href="/specs/">Specs</a>
+          <a href="/logs/">Logs</a>
+          <a href="/components/wall/">Wall Components</a>
+          <a href="/components/sound/"
+            >Sound Components</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Local Portals</h2>
+          <a href="file:///Users/studio/Projects/wall-of-sound/wall/index.html"
+            >Wall App</a
+          >
+          <a
+            href="file:///Users/studio/Projects/wall-of-sound/sound/labeller.html"
+            >Sound Labeller</a
+          >
+          <a
+            href="file:///Users/studio/Projects/kinetic-master-engine/index.html"
+            >Kinetic Engine</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Recovery</h2>
+          <a href="/specs/">Implementation Specs</a>
+          <a href="/logs/">Session Logs</a>
+          <a href="/systems/sound/">Sound Recovery</a>
+          <a href="/systems/wall/">Wall Recovery</a>
+        </section>
+      </div>
+    </footer>
+  </body>
+</html>

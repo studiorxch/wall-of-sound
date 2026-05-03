@@ -1,0 +1,384 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Stroke Adapter Stabilization + UI Reduction | Wall of Sound</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <link
+      rel="stylesheet"
+      href="/assets/css/style.css"
+    />
+  </head>
+
+  <body>
+    <header class="site-header">
+      <div class="site-header-inner">
+        <a class="site-title" href="/">
+          Wall of Sound
+        </a>
+
+        <nav class="site-nav" aria-label="Primary navigation">
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="page-content">
+      <div class="spec-shell">
+  <a class="back-link" href="/specs/">← Back to specs</a>
+
+  <div class="spec-kicker">
+    wall / stroke_adapter / active
+  </div>
+
+  <h1>Stroke Adapter Stabilization + UI Reduction</h1>
+
+  <section class="spec-meta">
+    <div>
+      <strong>Doc ID</strong>
+      0426_WOS_StrokeAdapterStability_UIReduction_v1.0.0
+    </div>
+
+    <div>
+      <strong>Date</strong>
+      2026-04-26
+    </div>
+
+    <div>
+      <strong>Version</strong>
+      1.0.0
+    </div>
+
+    <div>
+      <strong>System</strong>
+      WOS
+    </div>
+
+    <div>
+      <strong>Domain</strong>
+      wall
+    </div>
+
+    <div>
+      <strong>Component</strong>
+      stroke_adapter
+    </div>
+
+    <div>
+      <strong>Type</strong>
+      stability-spec
+    </div>
+
+    <div>
+      <strong>Priority</strong>
+      critical
+    </div>
+
+    <div>
+      <strong>Risk</strong>
+      low
+    </div>
+
+    <div>
+      <strong>Status</strong>
+      active
+    </div>
+  </section>
+
+  
+  <p><strong>Summary:</strong> Stabilizes stroke-to-line adapter system, restores note/color assignment, fixes emitter trigger behavior, and reduces UI clutter by removing legacy Shapes panel.</p>
+  
+
+  <article class="spec-body"><h1 id="-purpose">🎯 PURPOSE</h1>
+
+<p>Fix fragmentation between Mop strokes and engine lines without modifying engine modules.</p>
+
+<p>Restore:</p>
+
+<ul>
+  <li>stroke integrity (no segment behavior)</li>
+  <li>note/color assignment system</li>
+  <li>proper emitter triggering</li>
+  <li>simplified UI</li>
+</ul>
+
+<hr />
+
+<h1 id="-current-issues">🚨 CURRENT ISSUES</h1>
+
+<ol>
+  <li>Mop strokes are broken into segments and treated independently</li>
+  <li>Note → color assignment no longer works</li>
+  <li>Key press triggers emitters globally</li>
+  <li>Shapes UI panel adds confusion and is no longer needed</li>
+</ol>
+
+<hr />
+
+<h1 id="-core-principle">🧠 CORE PRINCIPLE</h1>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>strokes[] = source of truth
+state.lines[] = derived (engine-only)
+</code></pre></div></div>
+
+<p>Segments must never behave independently from their parent stroke.</p>
+
+<hr />
+
+<h1 id="-implementation">🔧 IMPLEMENTATION</h1>
+
+<h2 id="1-stroke--line-adapter-existing">1. STROKE → LINE ADAPTER (EXISTING)</h2>
+
+<p>Keep existing:</p>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nf">strokeToLines</span><span class="p">(</span><span class="nx">stroke</span><span class="p">);</span>
+</code></pre></div></div>
+
+<p>But enforce:</p>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">line</span><span class="p">.</span><span class="nx">_strokeId</span> <span class="o">=</span> <span class="nx">stroke</span><span class="p">.</span><span class="nx">id</span><span class="p">;</span>
+<span class="nx">line</span><span class="p">.</span><span class="nx">_isDerived</span> <span class="o">=</span> <span class="kc">true</span><span class="p">;</span>
+</code></pre></div></div>
+
+<hr />
+
+<h2 id="2-collision-aggregation-critical">2. COLLISION AGGREGATION (CRITICAL)</h2>
+
+<p>Replace per-line reactions with per-stroke:</p>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">const</span> <span class="nx">hitStrokeIds</span> <span class="o">=</span> <span class="k">new</span> <span class="nc">Set</span><span class="p">();</span>
+
+<span class="k">for </span><span class="p">(</span><span class="kd">const</span> <span class="nx">line</span> <span class="k">of</span> <span class="nx">state</span><span class="p">.</span><span class="nx">lines</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">if </span><span class="p">(</span><span class="nx">line</span><span class="p">.</span><span class="nx">_strokeId</span> <span class="o">&amp;&amp;</span> <span class="nf">checkCollision</span><span class="p">(</span><span class="nx">p</span><span class="p">,</span> <span class="nx">line</span><span class="p">))</span> <span class="p">{</span>
+    <span class="nx">hitStrokeIds</span><span class="p">.</span><span class="nf">add</span><span class="p">(</span><span class="nx">line</span><span class="p">.</span><span class="nx">_strokeId</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="k">for </span><span class="p">(</span><span class="kd">const</span> <span class="nx">id</span> <span class="k">of</span> <span class="nx">hitStrokeIds</span><span class="p">)</span> <span class="p">{</span>
+  <span class="nf">triggerStrokeCollision</span><span class="p">(</span><span class="nx">id</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>No direct reaction to individual segments.</p>
+
+<hr />
+
+<h2 id="3-render-from-strokes-not-lines">3. RENDER FROM STROKES (NOT LINES)</h2>
+
+<p>Ensure Mop strokes render as continuous paths:</p>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">function</span> <span class="nf">drawStroke</span><span class="p">(</span><span class="nx">stroke</span><span class="p">)</span> <span class="p">{</span>
+  <span class="kd">const</span> <span class="nx">pts</span> <span class="o">=</span> <span class="nx">stroke</span><span class="p">.</span><span class="nx">points</span><span class="p">;</span>
+  <span class="k">if </span><span class="p">(</span><span class="o">!</span><span class="nx">pts</span><span class="p">.</span><span class="nx">length</span><span class="p">)</span> <span class="k">return</span><span class="p">;</span>
+
+  <span class="nx">ctx</span><span class="p">.</span><span class="nf">beginPath</span><span class="p">();</span>
+  <span class="nx">ctx</span><span class="p">.</span><span class="nf">moveTo</span><span class="p">(</span><span class="nx">pts</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="nx">x</span><span class="p">,</span> <span class="nx">pts</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="nx">y</span><span class="p">);</span>
+
+  <span class="k">for </span><span class="p">(</span><span class="kd">let</span> <span class="nx">i</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span> <span class="nx">i</span> <span class="o">&lt;</span> <span class="nx">pts</span><span class="p">.</span><span class="nx">length</span><span class="p">;</span> <span class="nx">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nx">ctx</span><span class="p">.</span><span class="nf">lineTo</span><span class="p">(</span><span class="nx">pts</span><span class="p">[</span><span class="nx">i</span><span class="p">].</span><span class="nx">x</span><span class="p">,</span> <span class="nx">pts</span><span class="p">[</span><span class="nx">i</span><span class="p">].</span><span class="nx">y</span><span class="p">);</span>
+  <span class="p">}</span>
+
+  <span class="nx">ctx</span><span class="p">.</span><span class="nf">stroke</span><span class="p">();</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>state.lines must not be used for visual rendering.</p>
+
+<hr />
+
+<h2 id="4-note--color-system-restore">4. NOTE / COLOR SYSTEM RESTORE</h2>
+
+<p>Reintroduce vertical note selector.</p>
+
+<p>UI layout:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>C
+C#
+D
+D#
+E
+F
+F#
+G
+G#
+A
+A#
+B
+</code></pre></div></div>
+
+<p>Each note button:</p>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">onclick</span> <span class="o">=</span> <span class="p">()</span> <span class="o">=&gt;</span> <span class="p">{</span>
+  <span class="nx">WOS</span><span class="p">.</span><span class="nx">currentNote</span> <span class="o">=</span> <span class="nx">note</span><span class="p">;</span>
+  <span class="nx">WOS</span><span class="p">.</span><span class="nx">mode</span> <span class="o">=</span> <span class="dl">"</span><span class="s2">assign</span><span class="dl">"</span><span class="p">;</span>
+<span class="p">};</span>
+</code></pre></div></div>
+
+<hr />
+
+<h2 id="5-apply-note-on-stroke-commit">5. APPLY NOTE ON STROKE COMMIT</h2>
+
+<p>When stroke completes:</p>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">stroke</span><span class="p">.</span><span class="nx">note</span> <span class="o">=</span> <span class="nx">WOS</span><span class="p">.</span><span class="nx">currentNote</span><span class="p">;</span>
+<span class="nx">stroke</span><span class="p">.</span><span class="nx">color</span> <span class="o">=</span> <span class="nf">noteToColor</span><span class="p">(</span><span class="nx">WOS</span><span class="p">.</span><span class="nx">currentNote</span><span class="p">);</span>
+</code></pre></div></div>
+
+<hr />
+
+<h2 id="6-input-mode-separation">6. INPUT MODE SEPARATION</h2>
+
+<p>Add mode system:</p>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">WOS</span><span class="p">.</span><span class="nx">mode</span> <span class="o">=</span> <span class="dl">"</span><span class="s2">assign</span><span class="dl">"</span><span class="p">;</span> <span class="c1">// or "play"</span>
+</code></pre></div></div>
+
+<p>Key handling:</p>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">function</span> <span class="nf">onKeyPress</span><span class="p">(</span><span class="nx">note</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">if </span><span class="p">(</span><span class="nx">WOS</span><span class="p">.</span><span class="nx">mode</span> <span class="o">===</span> <span class="dl">"</span><span class="s2">assign</span><span class="dl">"</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nf">assignNoteToSelection</span><span class="p">(</span><span class="nx">note</span><span class="p">);</span>
+  <span class="p">}</span> <span class="k">else</span> <span class="k">if </span><span class="p">(</span><span class="nx">WOS</span><span class="p">.</span><span class="nx">mode</span> <span class="o">===</span> <span class="dl">"</span><span class="s2">play</span><span class="dl">"</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nf">triggerEmitters</span><span class="p">(</span><span class="nx">note</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<hr />
+
+<h2 id="7-fix-emitter-trigger-scope">7. FIX EMITTER TRIGGER SCOPE</h2>
+
+<p>Remove global trigger:</p>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nf">triggerEmitters</span><span class="p">(</span><span class="nx">note</span><span class="p">);</span> <span class="c1">// ❌ remove from global input</span>
+</code></pre></div></div>
+
+<p>Only trigger inside play mode.</p>
+
+<hr />
+
+<h2 id="8-ui-reduction">8. UI REDUCTION</h2>
+
+<p>Remove entire Shapes block:</p>
+
+<ul>
+  <li>delete Shapes panel DOM</li>
+  <li>remove related event handlers</li>
+  <li>remove shape creation tools</li>
+</ul>
+
+<p>Mop becomes primary geometry tool.</p>
+
+<hr />
+
+<h1 id="-validation">🧪 VALIDATION</h1>
+
+<ul class="task-list">
+  <li class="task-list-item"><input type="checkbox" class="task-list-item-checkbox" disabled="disabled" />Mop stroke renders as continuous shape</li>
+  <li class="task-list-item"><input type="checkbox" class="task-list-item-checkbox" disabled="disabled" />No visible segment artifacts</li>
+  <li class="task-list-item"><input type="checkbox" class="task-list-item-checkbox" disabled="disabled" />Particles collide correctly</li>
+  <li class="task-list-item"><input type="checkbox" class="task-list-item-checkbox" disabled="disabled" />Note buttons assign color to strokes</li>
+  <li class="task-list-item"><input type="checkbox" class="task-list-item-checkbox" disabled="disabled" />Key press does NOT trigger emitters unless in play mode</li>
+  <li class="task-list-item"><input type="checkbox" class="task-list-item-checkbox" disabled="disabled" />Shapes panel is removed</li>
+</ul>
+
+<hr />
+
+<h1 id="-non-goals">🚫 NON-GOALS</h1>
+
+<ul>
+  <li>No engine rewrites</li>
+  <li>No particle system redesign</li>
+  <li>No collision system rewrite</li>
+  <li>No object system migration</li>
+</ul>
+
+<hr />
+
+<h1 id="-success">🔥 SUCCESS</h1>
+
+<p>User draws a Mop stroke:</p>
+
+<ul>
+  <li>appears as one continuous object</li>
+  <li>reacts as one object</li>
+  <li>carries note + color</li>
+  <li>triggers particles correctly</li>
+  <li>UI is simplified</li>
+</ul>
+
+<hr />
+
+<h1 id="-notes">💬 NOTES</h1>
+
+<p>This spec formalizes the adapter approach as a stable intermediate architecture.</p>
+
+<p>Prevents repeated regressions caused by segment-level logic and mixed input modes.</p>
+</article>
+</div>
+
+    </main>
+
+    <footer class="site-footer">
+      <div class="site-footer-inner footer-grid-6">
+        <section class="footer-brand">
+          <h2>Wall of Sound</h2>
+          <p>
+            Shared project memory for the StudioRich audio/visual system. Specs,
+            logs, recovery notes, and local portals live here.
+          </p>
+        </section>
+
+        <section class="footer-group">
+          <h2>Navigation</h2>
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Domains</h2>
+          <a href="/systems/wall/">Wall System</a>
+          <a href="/systems/sound/">Sound System</a>
+          <a href="/systems/">Systems Index</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Indexes</h2>
+          <a href="/specs/">Specs</a>
+          <a href="/logs/">Logs</a>
+          <a href="/components/wall/">Wall Components</a>
+          <a href="/components/sound/"
+            >Sound Components</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Local Portals</h2>
+          <a href="file:///Users/studio/Projects/wall-of-sound/wall/index.html"
+            >Wall App</a
+          >
+          <a
+            href="file:///Users/studio/Projects/wall-of-sound/sound/labeller.html"
+            >Sound Labeller</a
+          >
+          <a
+            href="file:///Users/studio/Projects/kinetic-master-engine/index.html"
+            >Kinetic Engine</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Recovery</h2>
+          <a href="/specs/">Implementation Specs</a>
+          <a href="/logs/">Session Logs</a>
+          <a href="/systems/sound/">Sound Recovery</a>
+          <a href="/systems/wall/">Wall Recovery</a>
+        </section>
+      </div>
+    </footer>
+  </body>
+</html>

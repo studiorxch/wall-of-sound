@@ -73,6 +73,7 @@
     10: [],
     11: [],
   };
+
   const noteIndexMap = {};
   const noteActivity = {};
   const noteVelocity = {};
@@ -87,7 +88,7 @@
     localStorage.setItem("sampleMap", JSON.stringify(data));
   }
 
-  function getSampleForNote(noteClass) {
+  function getSampleForNote(state, noteClass) {
     var samples = sampleMap[noteClass];
     if (!samples || samples.length === 0) return null;
     var bankState = (state &&
@@ -284,9 +285,191 @@
         state.walkers = [];
         console.log("[walker] Cleared");
       },
+      clearParticles: function () {
+        state.particles = [];
+        if (window.SBE && SBE.ParticleSystem)
+          SBE.ParticleSystem.particles = state.particles;
+        console.log("[particles] Cleared");
+      },
+      clearDuplicationDelta: function () {
+        clearDuplicationDelta();
+        console.log("[dup] Delta cleared");
+      },
+      getDuplicationDelta: function () {
+        return state.duplication;
+      },
+      // Path factories (light integration — spec 0426)
+      createLinePath: function (a, b, opts) {
+        return createLinePath(a, b, opts);
+      },
+      createCirclePath: function (cx, cy, radius) {
+        return createCirclePath(cx, cy, radius);
+      },
+      spawnWalkerOnPath: function (path, opts) {
+        var w = createWalkerOnPath(path, opts);
+        state.walkers.push(w);
+        console.log("[walker] Spawned on path:", w.id, path.type);
+        return w;
+      },
       // Shape library
       saveSelectedShape: function () {
         saveSelectedShape();
+      },
+      // ── MIDI Bank / Graph API ───────────────────────────────────────────
+      midi: {
+        cartridges: function () {
+          return state.midiCartridges;
+        },
+        banks: function () {
+          return state.midiBanks;
+        },
+        points: function () {
+          return state.midiPoints;
+        },
+        graphs: function () {
+          return state.graphs;
+        },
+        projectSelected: function () {
+          var stroke = getSelectedStroke();
+          if (!stroke) {
+            console.warn("[MIDI] Select a stroke first");
+            return;
+          }
+          var bank = getMidiBank(state.activeMidiBankId);
+          if (!bank) {
+            console.warn("[MIDI] No active bank — drop a .mid file first");
+            return;
+          }
+          var graph = buildGraphFromStroke(stroke);
+          assignBankToGraph(bank.id, graph.id);
+          projectMidiToGraph(bank.id, graph.id);
+          renderFrame();
+          console.log("[MIDI] Projected bank", bank.id, "→ graph", graph.id);
+        },
+        setRepeat: function (bankId, value) {
+          var bank = getMidiBank(bankId);
+          if (bank) {
+            bank.repeat = !!value;
+            console.log("[MIDI] repeat=", bank.repeat, bankId);
+          }
+        },
+      },
+      midiPoints: {
+        list: function () {
+          return state.midiPoints;
+        },
+        clearBank: function (bankId) {
+          state.midiPoints = state.midiPoints.filter(function (p) {
+            return p.bankId !== bankId;
+          });
+          renderFrame();
+        },
+        resetBank: function (bankId) {
+          state.midiPoints.forEach(function (p) {
+            if (p.bankId === bankId) p.consumed = false;
+          });
+          var bank = getMidiBank(bankId);
+          if (bank) bank.consumed = false;
+          renderFrame();
+        },
+      },
+      // ── End MIDI API ─────────────────────────────────────────────────────
+      // ── Test / Debug API ──────────────────────────────────────────────
+      test: {
+        playStroke: function (id) {
+          emitEvent({
+            type: "test",
+            sourceId: id,
+            energy: 1,
+            channel: "default",
+            data: { note: 60 },
+          });
+          console.log("[test] emitEvent for stroke:", id);
+        },
+        listStrokes: function () {
+          return state.strokes.map(function (s) {
+            return {
+              id: s.id,
+              samples: (s.samples && s.samples.length) || 0,
+              note: s.note,
+              channel: s.channel,
+            };
+          });
+        },
+        audioState: function () {
+          return {
+            context: state.audio.context && state.audio.context.state,
+            masterGain:
+              state.audio.masterGain && state.audio.masterGain.gain.value,
+            activeVoices: state.audio.activeVoices
+              ? state.audio.activeVoices.size
+              : 0,
+          };
+        },
+        listStrokeSamples: function () {
+          return state.strokes.map(function (s) {
+            return {
+              id: s.id,
+              samples: s.samples ? s.samples.length : 0,
+            };
+          });
+        },
+        activeNotes: function () {
+          return Object.keys(sampleMap).map(function (k) {
+            return { note: k, count: sampleMap[k].length };
+          });
+        },
+        forcePlay: function () {
+          var ctx = state.audio.context;
+          if (!ctx) {
+            console.warn("[TEST FAIL] No audio context");
+            return;
+          }
+          var buffer = sampleMap[0] && sampleMap[0][0];
+          if (!buffer) {
+            console.warn("[TEST FAIL] No sample in sampleMap[0]");
+            return;
+          }
+          var source = ctx.createBufferSource();
+          var gain = ctx.createGain();
+          source.buffer = buffer;
+          gain.gain.value = 0.5;
+          source.connect(gain);
+          gain.connect(ctx.destination);
+          source.start();
+          console.log("[TEST] forced playback");
+        },
+      },
+      sound: {
+        testFallback: function (note) {
+          playFallbackInstrument(note != null ? note : 60, 80);
+        },
+      },
+      debug: {
+        setAudioLogs: function (enabled) {
+          state.debug = state.debug || {};
+          state.debug.audioLogs = !!enabled;
+          console.log("[DEBUG] audioLogs:", state.debug.audioLogs);
+        },
+        getMidiState: function () {
+          return {
+            cartridges: state.midiCartridges.length,
+            banks: state.midiBanks.length,
+            points: state.midiPoints.length,
+            graphs: Object.keys(state.graphs).length,
+            activeBankId: state.activeMidiBankId,
+          };
+        },
+        injectTestPoint: function () {
+          state._midiDebugPoint = true;
+          renderFrame();
+          console.log("[DEBUG] test point will appear on next render");
+        },
+        setVisualMode: function (mode) {
+          state.debug.visualMode = mode === "full" ? "full" : "clean";
+          console.log("[DEBUG] visualMode:", state.debug.visualMode);
+          renderFrame();
+        },
       },
       loadShapes: function () {
         return loadShapes();
@@ -357,6 +540,34 @@
           console.log("[emitter] created on group", groupId, behavior);
         }
       },
+      // Particle profile API
+      spawnProfile: function (name, x, y, color, dir) {
+        if (window.SBE && SBE.ParticleSystem)
+          SBE.ParticleSystem.spawnProfile(name, x, y, color, dir);
+      },
+      particleProfiles: function () {
+        return window.SBE && SBE.ParticleSystem
+          ? SBE.ParticleSystem.profiles
+          : {};
+      },
+      // Object system bridge
+      strokeToLines: function (stroke) {
+        strokeToLines(stroke);
+      },
+      rebuildLines: function () {
+        // Re-bridge all existing strokes (call after loading a scene)
+        state.lines = state.lines.filter(function (l) {
+          return !l._strokeId;
+        });
+        state.strokes.forEach(function (s) {
+          strokeToLines(s);
+        });
+        console.log(
+          "[bridge] rebuilt",
+          state.strokes.length,
+          "strokes → state.lines",
+        );
+      },
     };
     window.noteElements = {};
 
@@ -420,14 +631,93 @@
       dragCounter = 0;
       hideDropOverlay();
 
-      var files = Array.prototype.slice
-        .call(e.dataTransfer.files)
-        .filter(function (f) {
-          return f.type.includes("audio");
-        });
+      var allFiles = Array.prototype.slice.call(e.dataTransfer.files);
+
+      // ── MIDI drop — handle .mid files before audio filter ─────────────────
+      var midiFiles = allFiles.filter(function (f) {
+        return (
+          f.name.toLowerCase().endsWith(".mid") ||
+          f.name.toLowerCase().endsWith(".midi") ||
+          f.type === "audio/midi" ||
+          f.type === "audio/x-midi"
+        );
+      });
+      if (midiFiles.length && window.SBE && SBE.MidiImporter) {
+        for (var mi = 0; mi < midiFiles.length; mi++) {
+          var cartridge = await SBE.MidiImporter.loadMidiFile(midiFiles[mi]);
+          if (cartridge) {
+            state.midiCartridges.push(cartridge);
+            // Create bank wrapper
+            var bank = SBE.MidiImporter.createMidiBank(cartridge);
+            state.midiBanks.push(bank);
+            state.activeMidiBankId = bank.id;
+            showToast(
+              "MIDI bank loaded: " +
+                bank.name +
+                " (" +
+                cartridge.notes.length +
+                " notes)",
+            );
+            console.log(
+              "[MIDI DROP] cartridge:",
+              cartridge.id,
+              "bank:",
+              bank.id,
+            );
+            // If a stroke is selected → build graph, project visuals, AND attach cartridge for time-based playback
+            var sel = getSelectedStroke();
+            if (sel) {
+              var graph = buildGraphFromStroke(sel);
+              assignBankToGraph(bank.id, graph.id);
+              projectMidiToGraph(bank.id, graph.id);
+              // Attach cartridge to each stroke in the graph for tickCartridgeForWalker
+              graph.strokeIds.forEach(function (sid) {
+                var gs = getStrokeById(sid);
+                if (!gs) return;
+                SBE.MidiImporter.attachMidiToStroke(gs, cartridge);
+                // speed = 1.0 (default) — transport time IS MIDI time, no compression
+              });
+              showToast("MIDI projected → graph_" + graph.id.slice(-6));
+              renderFrame();
+            }
+          }
+        }
+        if (midiFiles.length === allFiles.length) return;
+      }
+      // ── End MIDI drop ─────────────────────────────────────────────────────
+
+      var files = allFiles.filter(function (f) {
+        return f.type.includes("audio");
+      });
       if (!files.length) return;
 
-      // Priority: hovered sampler row → clicked sampler row → selected object color
+      // Priority 1: selected stroke → assign to object (new per-stroke instrument path)
+      // Priority 2: hovered sampler row → note-based (classic sampler path)
+      // Priority 3: active sampler note → note-based fallback
+      var selectedStroke =
+        typeof getSelectedStroke === "function" ? getSelectedStroke() : null;
+
+      if (selectedStroke && hoveredNoteClass == null) {
+        // Object sampler path — drop goes to the selected stroke
+        console.log(
+          "[DROP ROUTE] → stroke path, strokeId:",
+          selectedStroke.id,
+          "(deselect stroke or hover sampler row to load into sampleMap)",
+        );
+        var loaded = 0;
+        await Promise.all(
+          files.map(async function (file) {
+            var ok = await loadSampleToStroke(file, selectedStroke.id);
+            if (ok) loaded++;
+          }),
+        );
+        if (loaded > 0) {
+          showToast("Loaded " + loaded + " sample(s) → stroke");
+        }
+        return;
+      }
+
+      // Classic note-based sampler path
       var noteClass = hoveredNoteClass;
       if (noteClass == null) noteClass = state.sampler.activeNote;
       if (noteClass == null) {
@@ -435,9 +725,19 @@
         var objColor = getObjectColor(selectedObj);
         if (objColor) noteClass = getNoteFromColor(objColor);
       }
+      console.log(
+        "[DROP ROUTE] noteClass:",
+        noteClass,
+        "hoveredNoteClass:",
+        hoveredNoteClass,
+        "activeNote:",
+        state.sampler.activeNote,
+      );
       if (noteClass == null || isNaN(noteClass)) {
-        showToast("Select a sampler key or object to set the target note");
-        console.warn("[sampler] Drop ignored — no target note resolved");
+        showToast("Select a sampler key or stroke to assign sound");
+        console.warn(
+          "[sampler] Drop ignored — no target note or stroke resolved",
+        );
         return;
       }
 
@@ -479,78 +779,603 @@
     // ── Event Bus ────────────────────────────────────────
     const eventBus = new SBE.EventBus();
 
-    // ── Oscillator Output ────────────────────────────────
-    const oscillatorOutput = {
-      enabled: true,
-      handle: function handleOscillator(type, sourceObject) {
-        const context = state.audio.context;
-        if (!context || context.state !== "running") return;
+    // ── WOS Event System v1.0.0 ─────────────────────────────────────────────
+    // Canonical channel map — routes events to MIDI channels
+    var CHANNEL_MAP = {
+      default: { midiChannel: 1 },
+      percussion: { midiChannel: 2 },
+      fx: { midiChannel: 3 },
+      melodic: { midiChannel: 4 },
+      ambient: { midiChannel: 5 },
+      midi: { midiChannel: 6 },
+    };
 
-        let note = sourceObject.sound?.midi?.note || 60;
+    // Per-channel voicing profiles — shape how each channel sounds post-emission.
+    // Voicing is applied after event emission, not in the event system itself.
+    var CHANNEL_PROFILES = {
+      default: {
+        gainScale: 1.0, // neutral
+        velocityCurve: 1.5, // perceptual standard
+        allowStack: true, // multi-layer playback allowed
+        densitySensitivity: 1.0, // normal density response
+      },
+      percussion: {
+        gainScale: 1.2, // punchy — percussion needs presence
+        velocityCurve: 1.2, // more linear — transients should feel direct
+        allowStack: false, // prevent stacking; percussion clutters fast
+        densitySensitivity: 1.4, // pulls back harder in dense scenes
+      },
+      melodic: {
+        gainScale: 0.9, // slightly softer — sits under percussion
+        velocityCurve: 1.6, // more compressed — wider expressive range
+        allowStack: true,
+        densitySensitivity: 0.8, // more resilient in dense scenes
+      },
+      ambient: {
+        gainScale: 0.6, // soft background layer
+        velocityCurve: 2.0, // heavily compressed — stays quiet, feels wide
+        allowStack: true,
+        densitySensitivity: 0.5, // barely affected by density
+      },
+      fx: {
+        gainScale: 0.8,
+        velocityCurve: 1.5,
+        allowStack: true,
+        densitySensitivity: 0.7,
+      },
+    };
 
-        // Scale quantization — applied before sampleMap lookup and pitch shift
-        if (state.audio.scale?.enabled) {
-          note = quantizeToScale(
-            note,
-            state.audio.scale.root,
-            state.audio.scale.type,
-          );
+    // Energy normalization: raw value → 0–1
+    function normalizeEnergy(raw, max) {
+      if (max == null) max = 10;
+      return Math.max(0, Math.min(1, raw / max));
+    }
+
+    // Frame-based deduplication (clears every frame via state.frame)
+    var _recentEvents = new Set();
+    var _recentEventsFrame = 0;
+
+    function shouldDedupe(event) {
+      if (event.frame !== _recentEventsFrame) {
+        _recentEvents.clear();
+        _recentEventsFrame = event.frame;
+      }
+      var key =
+        (event.sourceId || "") +
+        "-" +
+        (event.targetId || "") +
+        "-" +
+        event.frame;
+      if (_recentEvents.has(key)) return true;
+      _recentEvents.add(key);
+      return false;
+    }
+
+    // Normalize and fill defaults on an event object
+    function normalizeWOSEvent(e) {
+      return {
+        id: e.id || "ev_" + Math.random().toString(36).slice(2, 8),
+        type: e.type || "unknown",
+        channel: e.channel || "default",
+        time: e.time != null ? e.time : performance.now(),
+        frame: e.frame != null ? e.frame : state.frame || 0,
+        position: e.position || { x: 0, y: 0 },
+        energy: e.energy != null ? Math.max(0, Math.min(1, e.energy)) : 0,
+        sourceId: e.sourceId || null,
+        targetId: e.targetId || null,
+        tags: e.tags || [],
+        data: e.data || {},
+        useScale: e.useScale !== false, // default true; false = chromatic freedom
+      };
+    }
+
+    // Main emit entry point — normalizes, dedupes, then routes
+    function getFallbackBridgeNote(type) {
+      switch (type) {
+        case "collision":
+          return 60;
+        case "walker":
+          return 72;
+        case "emit":
+          return 67;
+        default:
+          return 60;
+      }
+    }
+
+    function emitEvent(e) {
+      if (!e.sourceId) {
+        console.error("[EVENT ERROR] Missing sourceId", e);
+        return;
+      }
+      var event = normalizeWOSEvent(e);
+      if (shouldDedupe(event)) return;
+
+      if (state.debug && state.debug.audioLogs)
+        console.log("[EVENT SOURCE]", event.sourceId);
+
+      // Debug log
+      if (state.debug && state.debug.info) {
+        console.log(
+          "[EVENT]",
+          event.type,
+          event.channel,
+          event.data && event.data.note,
+          event.energy.toFixed(2),
+        );
+      }
+
+      // 🔥 Bridge into existing EventBus — non-breaking, preserves all existing triggerEvent calls
+      var velocity =
+        event.data && typeof event.data.velocity === "number"
+          ? event.data.velocity
+          : Math.floor(event.energy * 127);
+      if (event.type === "midi") velocity = normalizeMidiVelocity(velocity);
+      var route =
+        CHANNEL_MAP[event.channel] ||
+        CHANNEL_MAP[event.type] ||
+        CHANNEL_MAP["default"];
+
+      // Resolve bridge note: prefer stroke-authored note from event.data, else type fallback
+      var bridgeNote =
+        event.data && typeof event.data.note === "number"
+          ? event.data.note
+          : getFallbackBridgeNote(event.type);
+
+      // Resolve stroke FIRST — merge its sound identity with event note/velocity
+      var stroke = state.strokes.find(function (s) {
+        return s.id === event.sourceId;
+      });
+      if (!stroke) {
+        console.error(
+          "[FATAL AUDIO] No stroke resolved for sourceId:",
+          event.sourceId,
+        );
+      }
+      var mergedSound = Object.assign(
+        {},
+        stroke && stroke.sound ? stroke.sound : {},
+        {
+          enabled: true, // eventBus gate: sound.enabled must be true
+          event: event.type, // eventBus gate: sound.event must match triggerEvent type
+          midi: {
+            note: bridgeNote,
+            velocity: velocity,
+            channel: route.midiChannel,
+          },
+        },
+      );
+
+      eventBus.triggerEvent(event.type, {
+        id: event.sourceId,
+        sourceId: event.sourceId,
+        vx: 0,
+        vy: 0,
+        wosChannel: event.channel, // string key for CHANNEL_PROFILES lookup
+        useScale: event.useScale, // per-stroke chromatic freedom flag
+        sound: mergedSound,
+      });
+    }
+
+    // ── WOS Canonical Collision Emitter ──────────────────────────────────────
+    // Call this alongside eventBus.triggerEvent to layer in the new event system
+    function emitCollisionEvent(a, b, impact, point) {
+      // Prefer stroke-authored channel/note if source is a stroke-backed object
+      var strokeSrc =
+        a && a.strokeId
+          ? state.strokes.find(function (s) {
+              return s.id === a.strokeId;
+            })
+          : null;
+      emitEvent({
+        type: "collision",
+        channel:
+          (strokeSrc && strokeSrc.channel) || (a && a.channel) || "default",
+        energy: normalizeEnergy(impact != null ? impact : 5),
+        sourceId: (a && a.strokeId) || (a && a.id),
+        targetId: b && b.id,
+        position: point || { x: 0, y: 0 },
+        useScale: strokeSrc ? strokeSrc.useScale !== false : true,
+        data: {
+          note: (strokeSrc && strokeSrc.note) || (a && a.note) || 60,
+        },
+      });
+    }
+
+    function emitWalkerEvent(walker) {
+      // Walker audio gate: keep walkers moving visually but silence them when disabled
+      if (state.walker && state.walker.audioEnabled === false) return;
+
+      // Debug force: override with guaranteed full-energy test event
+      if (state.walker && state.walker.debugForceSound) {
+        emitEvent({
+          type: "walker",
+          channel: "default",
+          energy: 1,
+          sourceId: walker && walker.id,
+          data: { note: 60 },
+        });
+        return;
+      }
+
+      var wSrc =
+        walker && walker.strokeId
+          ? state.strokes.find(function (s) {
+              return s.id === walker.strokeId;
+            })
+          : null;
+      emitEvent({
+        type: "walker",
+        channel:
+          (wSrc && wSrc.channel) || (walker && walker.channel) || "default",
+        energy: 0.3,
+        sourceId: (walker && walker.strokeId) || (walker && walker.id),
+        position: {
+          x: (walker && walker.x) || 0,
+          y: (walker && walker.y) || 0,
+        },
+        useScale: wSrc ? wSrc.useScale !== false : true,
+        data: {
+          note: (wSrc && wSrc.note) || (walker && walker.note) || 72,
+        },
+      });
+    }
+    // ── End WOS Event System ─────────────────────────────────────────────────
+
+    // ── Audio: Voice Lifecycle ───────────────────────────────
+    // Fades and stops all active voices for an object/stroke, then removes from registry.
+    // fadeMs defaults to 80ms — fast enough to feel immediate, soft enough to avoid clicks.
+    function stopVoicesForObject(objectId, fadeMs) {
+      if (!state.audio || !state.audio.activeVoices) return;
+      var voices = state.audio.activeVoices.get(objectId);
+      if (!voices || !voices.length) return;
+      var ctx = state.audio.context;
+      if (!ctx) return;
+      var now = ctx.currentTime;
+      var fadeSeconds = (fadeMs != null ? fadeMs : 80) / 1000;
+      voices.forEach(function (voice) {
+        try {
+          voice.gain.gain.cancelScheduledValues(now);
+          voice.gain.gain.setValueAtTime(voice.gain.gain.value, now);
+          voice.gain.gain.linearRampToValueAtTime(0.0001, now + fadeSeconds);
+          voice.source.stop(now + fadeSeconds);
+        } catch (err) {
+          // Voice already ended — safe to ignore
         }
+      });
+      state.audio.activeVoices.delete(objectId);
+    }
 
-        const noteClass = note % 12;
+    // ── Audio: Density ───────────────────────────────────
+    // Computes the density attenuation factor for a given density level + channel profile.
+    // Isolated so the math is testable and reusable without touching the sampler.
+    function computeDensityFactor(densityLevel, profile) {
+      var weight =
+        densityLevel === "high" ? 0.3 : densityLevel === "mid" ? 0.15 : 0;
+      return 1 - weight * (profile.densitySensitivity || 1.0);
+    }
 
-        // Solo note class gate
-        if (
-          state.audio.soloNoteClass !== null &&
-          noteClass !== state.audio.soloNoteClass
-        )
-          return;
+    // ── Audio: Velocity ───────────────────────────────────
+    // Computes final playback gain from velocity, channel profile, and scene density.
+    // All gain decisions live here — handle() just calls this.
+    function computeVelocityGain(velocity, profile, densityLevel) {
+      var normalized = velocity / 127;
+      // Power curve: profile drives compression shape per channel role
+      var shaped = Math.pow(normalized, profile.velocityCurve);
+      // Soft-knee floor: prevents quiet hits from vanishing entirely
+      var boosted = normalized * 0.25;
+      var curved = Math.max(shaped, boosted);
+      var densityFactor = computeDensityFactor(densityLevel, profile);
+      // Chain: curve → channel scale → density → hard clamp
+      return Math.min(
+        1.0,
+        (0.2 + curved * 0.8) * profile.gainScale * densityFactor,
+      );
+    }
 
-        // Resolve bank with fallback
-        let resolvedClass = noteClass;
-        let result = getSampleForNote(noteClass);
+    // ── Audio: Sampling ───────────────────────────────────
+    // Resolves the note, resolved noteClass, and sample buffer(s) from sourceObject.
+    // Encapsulates: scale quantization, bank fallback, intelligent tier selection.
+    // Returns null if nothing playable was found.
+    function resolveNoteAndSample(sourceObject) {
+      if (state.debug && state.debug.audioLogs)
+        console.log("[RESOLVE INPUT]", {
+          sourceId: sourceObject && sourceObject.id,
+          note:
+            sourceObject &&
+            sourceObject.sound &&
+            sourceObject.sound.midi &&
+            sourceObject.sound.midi.note,
+          hasStroke: !!(sourceObject && sourceObject.id),
+        });
+      var note =
+        (sourceObject.sound &&
+          sourceObject.sound.midi &&
+          sourceObject.sound.midi.note) ||
+        60;
+
+      // Scale quantization — gated per stroke via useScale flag (default: true)
+      // stroke.useScale = false → chromatic freedom; omitted or true → snap to scale
+      var useScale = sourceObject.useScale !== false;
+      if (useScale && state.audio.scale && state.audio.scale.enabled) {
+        note = quantizeToScale(
+          note,
+          state.audio.scale.root,
+          state.audio.scale.type,
+        );
+      }
+
+      var noteClass = note % 12;
+
+      // Solo gate
+      if (
+        state.audio.soloNoteClass !== null &&
+        noteClass !== state.audio.soloNoteClass
+      ) {
+        return null;
+      }
+
+      // Object sampler: prefer stroke.samples if the source has its own buffers.
+      // Fallback to global sampleMap if stroke has no samples loaded.
+      var resolvedClass = noteClass;
+      var result = null;
+
+      // Walker → stroke resolution: checks direct stroke match first, then walker.strokeId
+      function resolveSourceStroke(obj) {
+        if (!obj || !obj.id) return null;
+        var stroke = state.strokes.find(function (s) {
+          return s.id === obj.id;
+        });
+        if (stroke) return stroke;
+        var walker = state.walkers.find(function (w) {
+          return w.id === obj.id;
+        });
+        if (walker && walker.strokeId) {
+          return state.strokes.find(function (s) {
+            return s.id === walker.strokeId;
+          });
+        }
+        return null;
+      }
+      var srcStroke = resolveSourceStroke(sourceObject);
+      if (state.debug && state.debug.audioLogs) {
+        console.log("[RESOLVED STROKE]", {
+          inputId: sourceObject && sourceObject.id,
+          strokeId: srcStroke && srcStroke.id,
+          samples:
+            srcStroke && srcStroke.samples ? srcStroke.samples.length : 0,
+        });
+        console.log("[AUDIO CHECK]", {
+          sourceId: sourceObject.id,
+          hasStrokeSamples:
+            srcStroke && srcStroke.samples && srcStroke.samples.length,
+          hasSound: !!sourceObject.sound,
+          midi: sourceObject.sound && sourceObject.sound.midi,
+        });
+        console.log("[MIDI SAMPLE ROUTE]", {
+          fullNote:
+            sourceObject.sound &&
+            sourceObject.sound.midi &&
+            sourceObject.sound.midi.note,
+          noteClass: noteClass,
+          hasStrokeSamples: !!(
+            srcStroke &&
+            srcStroke.samples &&
+            srcStroke.samples.length
+          ),
+          globalSampleCount: sampleMap[noteClass]
+            ? sampleMap[noteClass].length
+            : 0,
+        });
+      }
+
+      if (srcStroke && srcStroke.samples && srcStroke.samples.length > 0) {
+        // Per-stroke instrument: pick a sample (random within the stroke's bank)
+        var idx = Math.floor(Math.random() * srcStroke.samples.length);
+        result = srcStroke.samples[idx];
+      } else {
+        // Classic note-based fallback
+        result = getSampleForNote(state, noteClass);
         if (result === null) {
-          const fallbackMode = state.audio.fallbackMode || "nearest";
-          if (fallbackMode === "strict") return;
-          for (let offset = 1; offset <= 6; offset++) {
-            const lo = (noteClass - offset + 12) % 12;
-            const hi = (noteClass + offset) % 12;
+          var fallbackMode = state.audio.fallbackMode || "nearest";
+          if (fallbackMode === "strict") return null;
+          for (var offset = 1; offset <= 6; offset++) {
+            var lo = (noteClass - offset + 12) % 12;
+            var hi = (noteClass + offset) % 12;
             if (sampleMap[lo] && sampleMap[lo].length > 0) {
               resolvedClass = lo;
-              result = getSampleForNote(lo);
+              result = getSampleForNote(state, lo);
               break;
             }
             if (sampleMap[hi] && sampleMap[hi].length > 0) {
               resolvedClass = hi;
-              result = getSampleForNote(hi);
+              result = getSampleForNote(state, hi);
               break;
             }
           }
         }
-        if (result === null) return;
+      }
+      if (result === null) {
+        if (state.debug && state.debug.audioLogs)
+          console.warn("[AUDIO FAIL] No sample resolved", {
+            noteClass: noteClass,
+            sampleMap: sampleMap[noteClass],
+            sourceId: sourceObject && sourceObject.id,
+          });
+        return null;
+      }
 
-        const velocity = sourceObject.sound?.midi?.velocity || 80;
-        const root = sourceObject.sound?.rootNote ?? 60;
+      // Intelligent tier-based sample selection (opt-in via state.audio.intelligentSampling)
+      // LOW  < 40  → first sample only (stable, unobtrusive)
+      // MID  < 90  → round-robin (controlled variation)
+      // HIGH ≥ 90  → bank mode drives selection (raw expression)
+      var velocity =
+        (sourceObject.sound &&
+          sourceObject.sound.midi &&
+          sourceObject.sound.midi.velocity) ||
+        80;
+      if (state.audio && state.audio.intelligentSampling) {
+        var bankSamples = sampleMap[resolvedClass];
+        if (bankSamples && bankSamples.length > 1) {
+          var bankSt = (state.sampleBanks &&
+            state.sampleBanks[resolvedClass]) || { index: 0 };
+          if (velocity < 40) {
+            result = bankSamples[0];
+          } else if (velocity < 90) {
+            result = bankSamples[bankSt.index % bankSamples.length];
+            bankSt.index = (bankSt.index || 0) + 1;
+            if (state.sampleBanks) state.sampleBanks[resolvedClass] = bankSt;
+          }
+        }
+      }
+
+      return {
+        note: note,
+        noteClass: noteClass,
+        resolvedClass: resolvedClass,
+        result: result,
+      };
+    }
+
+    // ── Oscillator Output ─────────────────────────────────
+    // handle() is an orchestrator — it calls the audio modules above and plays.
+    // No gain math, no bank logic, no density calculation lives here.
+    const oscillatorOutput = {
+      enabled: true,
+      handle: function handleOscillator(type, sourceObject) {
+        const context = ensureAudioContext();
+        if (!context) return;
+        if (context.state !== "running") {
+          context.resume().catch(function () {}); // attempt resume; bail if still not running
+          if (context.state !== "running") return;
+        }
+
+        // Hard guard — reject objects without a valid identity and midi note
+        if (
+          !sourceObject ||
+          !sourceObject.id ||
+          !sourceObject.sound ||
+          !sourceObject.sound.midi ||
+          typeof sourceObject.sound.midi.note !== "number"
+        ) {
+          if (state.debug && state.debug.audioLogs)
+            console.warn(
+              "[AUDIO SKIP] Invalid playable sourceObject",
+              sourceObject,
+            );
+          return;
+        }
+
+        // Resolve note + sample (returns null if nothing to play)
+        var resolved = resolveNoteAndSample(sourceObject);
+        if (!resolved) return;
+
+        var note = resolved.note;
+        var noteClass = resolved.noteClass;
+        var resolvedClass = resolved.resolvedClass;
+        var result = resolved.result;
+
+        const velocity =
+          (sourceObject.sound &&
+            sourceObject.sound.midi &&
+            sourceObject.sound.midi.velocity) ||
+          80;
+        const root =
+          (sourceObject.sound && sourceObject.sound.rootNote) != null
+            ? sourceObject.sound.rootNote
+            : 60;
         const pitch = Math.pow(2, (note - root) / 12);
+
         noteActivity[noteClass] = performance.now();
         noteVelocity[noteClass] = velocity / 127;
 
-        // playSampleBuffer — plays one AudioBuffer
-        function playSampleBuffer(buffer) {
-          if (!buffer) return;
-          const source = context.createBufferSource();
-          const gainNode = context.createGain();
-          source.buffer = buffer;
-          source.playbackRate.value = pitch * (0.96 + Math.random() * 0.08);
-          gainNode.gain.value = 0.8;
-          source.connect(gainNode);
-          gainNode.connect(state.audio.masterGain || context.destination);
-          source.start();
+        if (state.debug && state.debug.info) {
+          console.log("[AUDIO FLOW]", {
+            sourceId: sourceObject && sourceObject.id,
+            resolvedNote: note,
+            noteClass: noteClass,
+            resolvedClass: resolvedClass,
+            hasSample: !!result,
+            isArray: Array.isArray(result),
+          });
         }
 
-        // stack mode returns array; all others return single buffer
+        // Resolve channel voicing profile
+        var wosChannel = sourceObject.wosChannel || "default";
+        var profile =
+          CHANNEL_PROFILES[wosChannel] || CHANNEL_PROFILES["default"];
+        var densityLevel = getDensityLevel(state.collisionCount || 0);
+
+        // Compute gain via dedicated module
+        var velocityGain = computeVelocityGain(velocity, profile, densityLevel);
+
+        if (state.debug && state.debug.info) {
+          console.log(
+            "[SAMPLER]",
+            "ch:" + wosChannel,
+            "noteClass:" + resolvedClass,
+            "vel:" + velocity,
+            "gain:" + velocityGain.toFixed(2),
+            "curve:" + profile.velocityCurve,
+          );
+          console.log(
+            "[DENSITY]",
+            densityLevel,
+            "count:" + (state.collisionCount || 0),
+            "factor:" + computeDensityFactor(densityLevel, profile).toFixed(2),
+          );
+        }
+
+        // Play — stack gated by profile and density
+        function playSampleBuffer(buffer) {
+          if (!buffer) {
+            if (state.debug && state.debug.info)
+              if (state.debug && state.debug.audioLogs)
+                console.warn("[AUDIO FAIL] buffer missing");
+            return;
+          }
+          try {
+            const source = context.createBufferSource();
+            const gainNode = context.createGain();
+            source.buffer = buffer;
+            source.playbackRate.value = pitch * (0.96 + Math.random() * 0.08);
+            gainNode.gain.value = velocityGain;
+            source.connect(gainNode);
+            gainNode.connect(state.audio.masterGain || context.destination);
+
+            // Voice registry: track active voices by owner so they can be stopped on delete
+            var ownerId = (sourceObject && sourceObject.id) || "global";
+            if (!state.audio.activeVoices) state.audio.activeVoices = new Map();
+            if (!state.audio.activeVoices.has(ownerId)) {
+              state.audio.activeVoices.set(ownerId, []);
+            }
+            var voiceEntry = { source: source, gain: gainNode };
+            state.audio.activeVoices.get(ownerId).push(voiceEntry);
+
+            source.onended = function () {
+              var voices =
+                state.audio.activeVoices &&
+                state.audio.activeVoices.get(ownerId);
+              if (voices) {
+                var idx = voices.indexOf(voiceEntry);
+                if (idx !== -1) voices.splice(idx, 1);
+                if (voices.length === 0)
+                  state.audio.activeVoices.delete(ownerId);
+              }
+            };
+
+            source.start();
+          } catch (err) {
+            console.error("[AUDIO ERROR]", err);
+          }
+        }
+
         if (Array.isArray(result)) {
-          result.forEach(playSampleBuffer);
+          if (!profile.allowStack || densityLevel === "high") {
+            playSampleBuffer(result[0]);
+          } else {
+            result.forEach(playSampleBuffer);
+          }
         } else {
           playSampleBuffer(result);
         }
@@ -705,6 +1530,7 @@
           type: "major",
           enabled: true,
         },
+        activeVoices: null, // Map<ownerId, [{source, gain}]> — initialized on first use
       },
       sampleBanks: (function () {
         var banks = {};
@@ -754,7 +1580,18 @@
         startBounds: null, // bounding box at drag start for scale
         startAngle: null, // angle at drag start for rotate
         startWidth: null, // stroke.width at drag start for scale
+        originPt: null, // cursor position at drag start (for delta capture)
+        rotationAccum: 0, // accumulated rotation angle during current drag
       },
+      duplication: {
+        dx: 0,
+        dy: 0,
+        rotation: 0,
+        scale: 1,
+        valid: false,
+      },
+      cursor: { x: 0, y: 0 }, // live canvas cursor position for overlays
+      frame: 0, // monotonically increasing render frame counter
       lineTool: {
         step: 0,
         startPoint: null,
@@ -769,7 +1606,57 @@
         baseNote: 60,
         speed: 0.0025,
         triggerStep: 0.02,
+        audioEnabled: false, // false → walkers silent by default; collision-driven audio controlled by triggerOthers
+        collisionEnabled: false, // future-safe flag: walker↔object collisions (not yet implemented)
+        triggerOthers: true, // true → walker hitting OTHER strokes produces sound even when audioEnabled=false
+        debugForceSound: false, // true → walker always emits at full energy for audio testing
       },
+      createPreset: {
+        withWalker: true, // new strokes get a walker by default
+        walkerAudioSelf: true, // walker self-sound on by default
+        triggerOthers: true, // walker always triggers other strokes (non-negotiable default)
+      },
+      midiCartridges: [], // loaded MIDI cartridges — { id, name, bpm, notes, length }
+      midiBanks: [], // bank wrappers { id, cartridgeId, graphId, samples, repeat, consumed }
+      midiPoints: [], // projected note points { id, graphId, bankId, strokeId, t, note, ... }
+      graphs: {}, // graphId → { id, strokeIds, bankId, mode, closed }
+      activeMidiBankId: null, // most recently loaded bank
+      debug: {
+        walkers: false,
+        paths: false,
+        info: false,
+        audioLogs: false, // gates per-frame audio spam logs
+        visualMode: "clean", // "clean" = low stroke alpha, no segment flash | "full" = original
+      },
+      motion: {
+        enabled: true,
+        autoBake: false,
+        showPath: false,
+        mode: "pingpong",
+        rate: 40,
+        spread: 0.3,
+        particleSpeed: 120,
+        size: 3,
+        life: 1.0,
+        type: "dot",
+        color: "#ffffff",
+        colorSource: "note",
+      },
+      // motionBrush = creation-time preset only (spec 0428_WOS_MotionBrush_Decoupling)
+      // state.motion is kept as inert legacy — motionBrush is the live write target
+      motionBrush: {
+        enabled: false,
+        mode: "pingpong",
+        rate: 40,
+        spread: 0.3,
+        particleSpeed: 120,
+        size: 3,
+        life: 1.0,
+        type: "dot",
+        colorSource: "note",
+        color: "#ffffff",
+      },
+      defaultRenderMode: "visible", // applied to newly drawn strokes
       music: {
         enabled: true,
         bpm: 120,
@@ -817,6 +1704,14 @@
     };
 
     var heldKeys = new Set();
+    // Direct exposure — sampleMap is closure-scoped, state is now defined
+    window._wos = window._wos || {};
+    window._wos.sampleMap = sampleMap;
+    window._wos.state = state;
+    window._wos.audioState = state.audio;
+    console.log("[WOS DEBUG] sampleMap:", sampleMap);
+    console.log("[WOS DEBUG] audioState:", state.audio);
+    var input = { shift: false }; // reliable modifier state for non-event contexts
 
     normalizeSwarmConfig();
     // Step 5 — state.objects is a non-breaking alias for state.strokes
@@ -832,6 +1727,25 @@
     });
     // StyleState — named alias to state.defaults (spec: single source of truth for drawing style)
     var StyleState = state.defaults;
+
+    // ── WOS Mode System ───────────────────────────────────────────────────────
+    // Controls whether key input assigns notes or triggers emitters
+    window.WOS = window.WOS || {};
+    WOS.mode = "assign"; // "assign" | "play"
+    WOS.currentNote = state.defaults.note || 60;
+    if (!state.defaults.channel) state.defaults.channel = "default";
+
+    WOS.setMode = function (m) {
+      WOS.mode = m;
+      console.log("[WOS] mode →", m);
+    };
+    WOS.setNote = function (note) {
+      WOS.currentNote = note;
+      state.defaults.note = note;
+      state.defaults.color = noteToColor(note);
+      syncUI();
+    };
+    // ── End WOS Mode System ───────────────────────────────────────────────────
 
     // Share state.particles with SBE.ParticleSystem so both systems read the same array
     if (window.SBE && SBE.ParticleSystem) {
@@ -1104,10 +2018,53 @@
       return { x: start.x, y: current.y }; // vertical
     }
 
+    // Snap angle to nearest increment (default 15° = π/12)
+    function snapAngle(angle, increment) {
+      if (increment == null) increment = Math.PI / 12;
+      return Math.round(angle / increment) * increment;
+    }
+
+    // Unified constrain helper (spec: getConstrainedPoint)
+    // mode "angle" = 45° snap, mode "axis" = H/V lock
+    function getConstrainedPoint(prev, current, mode) {
+      if (mode === "axis") return axisLock(prev, current);
+      return constrainAngle(prev, current); // default: 45° angle snap
+    }
+
+    function ensureSingleWalker(strokeId) {
+      var matching = state.walkers.filter(function (w) {
+        return w.strokeId === strokeId;
+      });
+      if (matching.length <= 1) return;
+      // Keep the first, remove the rest
+      var kept = false;
+      state.walkers = state.walkers.filter(function (w) {
+        if (w.strokeId !== strokeId) return true;
+        if (!kept) {
+          kept = true;
+          return true;
+        }
+        return false;
+      });
+    }
+
+    function invalidateStrokeRuntime(strokeId) {
+      // Force walkers to resample on next frame — path reference refreshed in update loop
+      state.walkers.forEach(function (w) {
+        if (w.strokeId === strokeId) {
+          w.t = w.t % 1;
+          if (w.t < 0) w.t += 1;
+        }
+      });
+    }
+
     function moveStroke(stroke, dx, dy) {
       stroke.points = stroke.points.map(function (p) {
         return { x: p.x + dx, y: p.y + dy };
       });
+      removeLinesForStroke(stroke.id);
+      strokeToLines(stroke);
+      invalidateStrokeRuntime(stroke.id);
     }
 
     function getStrokeBounds(stroke) {
@@ -1192,7 +2149,9 @@
       stroke.width = stroke.baseWidth * stroke.scale;
       // Task 5 — clamp
       stroke.width = Math.max(0.5, Math.min(stroke.width, 100));
-      console.log("[scale]", stroke.scale.toFixed(3), stroke.width.toFixed(1)); // Task 6 — temp
+      removeLinesForStroke(stroke.id);
+      strokeToLines(stroke);
+      invalidateStrokeRuntime(stroke.id);
     }
 
     // Rotate all points around centroid by delta angle
@@ -1207,6 +2166,9 @@
           y: cy + dx * sin + dy * cos,
         };
       });
+      removeLinesForStroke(stroke.id);
+      strokeToLines(stroke);
+      invalidateStrokeRuntime(stroke.id);
     }
 
     function commitShapeStroke(closed) {
@@ -1224,16 +2186,27 @@
       // Build full stroke object from in-flight buffer
       var stroke = createStrokeObject(cs.points[0].x, cs.points[0].y);
       stroke.points = cs.points.slice();
+      // Apply current WOS note + color (spec item 5)
+      if (window.WOS) {
+        stroke.note = WOS.currentNote;
+        stroke.color = noteToColor(WOS.currentNote);
+      }
       pushHistory();
       state.strokes.push(stroke);
       state.penTool.currentStroke = null;
       state.penTool.isDrawing = false;
       state.penTool.previewPoint = null;
       analyzeStroke(stroke);
-      if (state.walker.enabled && state.defaults.autoWalker) {
+      strokeToLines(stroke); // bridge to collision/sound pipeline
+      if (state.createPreset.withWalker) {
         var w = createWalkerFromStroke(stroke);
-        if (w) state.walkers.push(w);
+        if (w) {
+          w.audioSelf = !!state.createPreset.walkerAudioSelf;
+          w.triggerOthers = state.createPreset.triggerOthers !== false;
+          state.walkers.push(w);
+        }
       }
+
       renderFrame();
     }
 
@@ -1244,16 +2217,27 @@
         { x: start.x, y: start.y },
         { x: end.x, y: end.y },
       ];
+      // Apply current WOS note + color (spec item 5)
+      if (window.WOS) {
+        stroke.note = WOS.currentNote;
+        stroke.color = noteToColor(WOS.currentNote);
+      }
       pushHistory();
       state.strokes.push(stroke);
       state.penTool.currentStroke = null;
       state.penTool.isDrawing = false;
       state.penTool.previewPoint = null;
       analyzeStroke(stroke);
-      if (state.walker.enabled && state.defaults.autoWalker) {
+      strokeToLines(stroke); // bridge to collision/sound pipeline
+      if (state.createPreset.withWalker) {
         var w = createWalkerFromStroke(stroke);
-        if (w) state.walkers.push(w);
+        if (w) {
+          w.audioSelf = !!state.createPreset.walkerAudioSelf;
+          w.triggerOthers = state.createPreset.triggerOthers !== false;
+          state.walkers.push(w);
+        }
       }
+
       renderFrame();
     }
 
@@ -1269,6 +2253,48 @@
         var pt = snapPoint(rawPt);
         mopDownPt = rawPt;
         mopDidDrag = false;
+
+        // Handle hit-test — multi-select handles first
+        if (
+          state.selection.strokeIds &&
+          state.selection.strokeIds.size > 1 &&
+          !state.selection.groupId
+        ) {
+          var mIds2 = Array.from(state.selection.strokeIds);
+          var mb2 = computeStrokeSetBounds(mIds2);
+          if (mb2) {
+            var mPad2 = 14,
+              HR2 = HANDLE_R || 5;
+            var mL2 = mb2.minX - mPad2,
+              mR2 = mb2.maxX + mPad2;
+            var mT2 = mb2.minY - mPad2,
+              mBot2 = mb2.maxY + mPad2;
+            var mCx2 = (mL2 + mR2) / 2;
+            var mPivot = { x: mCx2, y: (mT2 + mBot2) / 2 };
+            var mRotY2 = mT2 - 22;
+            var mHandles = [
+              { x: mL2, y: mT2, type: "scale", anchor: { x: mR2, y: mBot2 } },
+              { x: mR2, y: mT2, type: "scale", anchor: { x: mL2, y: mBot2 } },
+              { x: mL2, y: mBot2, type: "scale", anchor: { x: mR2, y: mT2 } },
+              { x: mR2, y: mBot2, type: "scale", anchor: { x: mL2, y: mT2 } },
+              { x: mCx2, y: mRotY2, type: "rotate" },
+            ];
+            for (var mi = 0; mi < mHandles.length; mi++) {
+              var mh = mHandles[mi];
+              if (Math.hypot(rawPt.x - mh.x, rawPt.y - mh.y) <= HR2 + 6) {
+                state.transform.active = true;
+                state.transform.type = mh.type;
+                state.transform.start = rawPt;
+                state.transform.targetId = "__multi__";
+                state.transform.origin =
+                  mh.type === "rotate" ? mPivot : mh.anchor;
+                canvas.setPointerCapture(e.pointerId);
+                e.stopPropagation();
+                return;
+              }
+            }
+          }
+        }
 
         // Handle hit-test — check group handles first, then single-stroke handles
         if (state.selection.groupId) {
@@ -1325,6 +2351,8 @@
             state.transform.active = true;
             state.transform.type = handle.type;
             state.transform.start = rawPt;
+            state.transform.originPt = rawPt;
+            state.transform.rotationAccum = 0; // reset on every new transform
             state.transform.targetId = selectedStroke.id;
             state.transform.origin =
               handle.type === "rotate" ? cen : handle.anchor;
@@ -1346,36 +2374,74 @@
           state.penTool.isDrawing = false;
 
           if (e.shiftKey) {
-            // Shift+click — toggle stroke into multi-select set
+            // Force exit group mode — group+stroke hybrid is never valid
+            if (state.selection.groupId) {
+              state.selection.groupId = null;
+              state.selection.strokeIds.clear();
+            }
+            // Toggle stroke into multi-select set
             if (state.selection.strokeIds.has(hit.id)) {
               state.selection.strokeIds.delete(hit.id);
             } else {
               state.selection.strokeIds.add(hit.id);
             }
-            state.selection.strokeId = hit.id; // last-clicked
-            selectObject("stroke", hit.id);
+            state.selection.strokeId = hit.id;
+            state.selection.groupId = null; // redundant safety — belt and suspenders
+            // Sync multiSelection array
+            state.multiSelection = Array.from(state.selection.strokeIds).map(
+              function (id) {
+                return { type: "stroke", id: id };
+              },
+            );
+            syncLegacySelection();
+            syncSelectionPanel();
+            renderFrame();
+            return;
+          }
+
+          // If clicking inside an existing multi-select, preserve it and start move
+          var isAlreadyMultiSelected =
+            state.selection.strokeIds &&
+            state.selection.strokeIds.size > 1 &&
+            state.selection.strokeIds.has(hit.id);
+
+          if (isAlreadyMultiSelected) {
+            // Keep all selected strokes — just activate transform
+            state.selection.strokeId = hit.id;
+            state.selection.groupId = null;
+            state.transform.active = true;
+            state.transform.start = rawPt;
+            state.transform.targetId = hit.id;
+            canvas.setPointerCapture(e.pointerId);
+            e.stopPropagation();
             renderFrame();
             return;
           }
 
           // Normal click — resolve group membership first
           var grp = getGroupForStroke(hit);
-          state.selection.strokeIds.clear();
 
           if (grp) {
-            // Stroke belongs to group — select the group as primary target
-            state.selection.groupId = grp.id;
-            state.selection.strokeId = null; // group is the target, not the individual stroke
-          } else {
-            state.selection.strokeId = hit.id;
-            state.selection.strokeIds.add(hit.id);
-            state.selection.groupId = null;
+            // Hard group-only selection — never leak strokeId when group is active
+            selectGroupOnly(grp.id);
+            state.transform.active = true;
+            state.transform.type = "move";
+            state.transform.start = rawPt;
+            state.transform.originPt = rawPt;
+            state.transform.targetId = grp.id;
+            canvas.setPointerCapture(e.pointerId);
+            e.stopPropagation();
+            renderFrame();
+            return;
           }
 
+          // Non-group stroke
+          selectStrokesOnly([hit.id]);
           state.transform.active = true;
+          state.transform.type = "move";
           state.transform.start = rawPt;
-          state.transform.targetId = hit.id; // still track actual hit for pointermove
-          selectObject("stroke", hit.id);
+          state.transform.originPt = rawPt;
+          state.transform.targetId = hit.id;
           canvas.setPointerCapture(e.pointerId);
           e.stopPropagation();
           renderFrame();
@@ -1459,6 +2525,7 @@
 
         // Freehand mode — start stroke immediately
         state.penTool.isDrawing = true;
+        state.penTool.constraintAnchor = { x: pt.x, y: pt.y };
         pushHistory();
         var stroke = createStrokeObject(pt.x, pt.y);
         state.strokes.push(stroke);
@@ -1478,7 +2545,20 @@
         // Transform — move / scale / rotate selected stroke OR group
         if (state.transform.active) {
           var cur = getCanvasCoordsLocal(e);
-          var isGroupTransform = !!state.groups[state.transform.targetId];
+          state.cursor.x = cur.x;
+          state.cursor.y = cur.y;
+          // Safety: if strokeIds is populated, group cannot win (priority rule)
+          if (
+            state.selection.groupId &&
+            state.selection.strokeIds &&
+            state.selection.strokeIds.size > 0
+          ) {
+            state.selection.groupId = null;
+          }
+          // Group transform only fires if selection still has this group active
+          var isGroupTransform =
+            !!state.groups[state.transform.targetId] &&
+            state.selection.groupId === state.transform.targetId;
 
           if (isGroupTransform) {
             // Target is a group id — dispatch to group transform functions
@@ -1501,12 +2581,67 @@
               }
             } else if (state.transform.type === "rotate") {
               var cen = state.transform.origin;
-              var curA = Math.atan2(cur.y - cen.y, cur.x - cen.x);
+              var rawA = Math.atan2(cur.y - cen.y, cur.x - cen.x);
               var prevA = Math.atan2(
                 state.transform.start.y - cen.y,
                 state.transform.start.x - cen.x,
               );
-              rotateGroup(gid, curA - prevA);
+              if (input.shift) {
+                rawA = snapAngle(rawA);
+                prevA = snapAngle(prevA);
+              }
+              var dA = rawA - prevA;
+              state.transform.rotationAccum += dA;
+              rotateGroup(gid, dA);
+              state.transform.start = cur;
+            }
+            renderFrame();
+            return;
+          }
+
+          // __multi__ transform dispatch (must be before stroke lookup — targetId is not a stroke id)
+          if (state.transform.targetId === "__multi__") {
+            var mIds = Array.from(state.selection.strokeIds || []);
+            if (state.transform.type === "move") {
+              var dx = cur.x - state.transform.start.x;
+              var dy = cur.y - state.transform.start.y;
+              mIds.forEach(function (id) {
+                var s = getStrokeById(id);
+                if (s) moveStroke(s, dx, dy);
+              });
+              state.transform.start = cur;
+            } else if (state.transform.type === "scale") {
+              var anchor = state.transform.origin;
+              var d0 = Math.hypot(
+                state.transform.start.x - anchor.x,
+                state.transform.start.y - anchor.y,
+              );
+              var d1 = Math.hypot(cur.x - anchor.x, cur.y - anchor.y);
+              if (d0 > 1) {
+                var factor = d1 / d0;
+                mIds.forEach(function (id) {
+                  var s = getStrokeById(id);
+                  if (s) scaleStroke(s, anchor, factor);
+                });
+                state.transform.start = cur;
+              }
+            } else if (state.transform.type === "rotate") {
+              var cen = state.transform.origin;
+              var rawAngle = Math.atan2(cur.y - cen.y, cur.x - cen.x);
+              var prevAngle = Math.atan2(
+                state.transform.start.y - cen.y,
+                state.transform.start.x - cen.x,
+              );
+              if (input.shift) {
+                rawAngle = snapAngle(rawAngle);
+                prevAngle = snapAngle(prevAngle);
+              }
+              var dAngle = rawAngle - prevAngle;
+              state.transform.rotationAccum += dAngle;
+              mIds.forEach(function (id) {
+                var s = getStrokeById(id);
+                if (s) rotateStroke(s, cen.x, cen.y, dAngle);
+              });
               state.transform.start = cur;
             }
             renderFrame();
@@ -1518,13 +2653,22 @@
             return s.id === state.transform.targetId;
           });
           if (stroke) {
+            // Only escalate to group transform if group is still the active selection
+            var useGroupTransform = !!(
+              state.selection.groupId &&
+              (!state.selection.strokeIds ||
+                state.selection.strokeIds.size === 0)
+            );
             if (state.transform.type === "move") {
               var dx = cur.x - state.transform.start.x;
               var dy = cur.y - state.transform.start.y;
-              // If stroke belongs to a group, move all group strokes together
-              var grp = getGroupForStroke(stroke);
-              if (grp) {
-                translateGroup(grp.id, dx, dy);
+              if (useGroupTransform) {
+                var grp = getGroupForStroke(stroke);
+                if (grp) {
+                  translateGroup(grp.id, dx, dy);
+                } else {
+                  moveStroke(stroke, dx, dy);
+                }
               } else {
                 moveStroke(stroke, dx, dy);
               }
@@ -1538,9 +2682,13 @@
               var d1 = Math.hypot(cur.x - anchor.x, cur.y - anchor.y);
               if (d0 > 1) {
                 var factor = d1 / d0;
-                var grp = getGroupForStroke(stroke);
-                if (grp) {
-                  scaleGroup(grp.id, factor);
+                if (useGroupTransform) {
+                  var grp = getGroupForStroke(stroke);
+                  if (grp) {
+                    scaleGroup(grp.id, factor);
+                  } else {
+                    scaleStroke(stroke, anchor, factor);
+                  }
                 } else {
                   scaleStroke(stroke, anchor, factor);
                 }
@@ -1548,15 +2696,24 @@
               }
             } else if (state.transform.type === "rotate") {
               var cen = state.transform.origin;
-              var curAngle = Math.atan2(cur.y - cen.y, cur.x - cen.x);
+              var rawCurAngle = Math.atan2(cur.y - cen.y, cur.x - cen.x);
               var prevAngle = Math.atan2(
                 state.transform.start.y - cen.y,
                 state.transform.start.x - cen.x,
               );
-              var dAngle = curAngle - prevAngle;
-              var grp = getGroupForStroke(stroke);
-              if (grp) {
-                rotateGroup(grp.id, dAngle);
+              if (input.shift) {
+                rawCurAngle = snapAngle(rawCurAngle);
+                prevAngle = snapAngle(prevAngle);
+              }
+              var dAngle = rawCurAngle - prevAngle;
+              state.transform.rotationAccum += dAngle;
+              if (useGroupTransform) {
+                var grp = getGroupForStroke(stroke);
+                if (grp) {
+                  rotateGroup(grp.id, dAngle);
+                } else {
+                  rotateStroke(stroke, cen.x, cen.y, dAngle);
+                }
               } else {
                 rotateStroke(stroke, cen.x, cen.y, dAngle);
               }
@@ -1649,19 +2806,38 @@
         });
         if (!stroke) return;
         var rawPt = getCanvasCoordsLocal(e);
+        state.cursor.x = rawPt.x;
+        state.cursor.y = rawPt.y;
         var last = stroke.points[stroke.points.length - 1];
 
+        // Constrained mode: anchor-based straight segment
+        if (e.shiftKey || e.altKey) {
+          var anchor =
+            state.penTool.constraintAnchor || stroke.points[0] || last;
+          var constrained = e.shiftKey
+            ? constrainAngle(anchor, rawPt)
+            : axisLock(anchor, rawPt);
+          // Replace stroke with clean 2-point segment — no micro-points, no smoothing
+          stroke.points = [
+            { x: anchor.x, y: anchor.y },
+            { x: constrained.x, y: constrained.y },
+          ];
+          renderFrame();
+          return;
+        }
+
+        // Freehand: normal sampling pipeline
         if (last) {
           var dx = rawPt.x - last.x;
           var dy = rawPt.y - last.y;
           var dist = Math.sqrt(dx * dx + dy * dy);
           if (dist < 1.5) return;
-          attemptDripSpawn(stroke, dist);
         }
 
         var factor = 1 - state.penTool.streamline;
-        var smoothed = last ? smoothPoint(last, rawPt, factor) : rawPt;
-        stroke.points.push(smoothed);
+        var finalPt = last ? smoothPoint(last, rawPt, factor) : rawPt;
+        stroke.points.push(finalPt);
+
         renderFrame();
       },
       true,
@@ -1729,9 +2905,39 @@
 
         // Reset transform regardless of mode
         if (state.transform.active) {
+          // Record move delta for chained duplication
+          if (
+            state.transform.type === "move" &&
+            state.transform.originPt &&
+            state.transform.start
+          ) {
+            var endPt = state.transform.start; // start is updated to cur on every move
+            var oPt = state.transform.originPt;
+            var ddx = endPt.x - oPt.x;
+            var ddy = endPt.y - oPt.y;
+            if (Math.abs(ddx) > 1 || Math.abs(ddy) > 1) {
+              state.duplication.dx = ddx;
+              state.duplication.dy = ddy;
+              state.duplication.rotation = 0;
+              state.duplication.scale = 1;
+              state.duplication.valid = true;
+            }
+          } else if (state.transform.type === "rotate") {
+            // Record accumulated rotation for chained duplication
+            var accum = state.transform.rotationAccum || 0;
+            if (Math.abs(accum) > 0.01) {
+              state.duplication.dx = 0;
+              state.duplication.dy = 0;
+              state.duplication.rotation = accum;
+              state.duplication.scale = 1;
+              state.duplication.valid = true;
+            }
+          }
           state.transform.active = false;
           state.transform.type = "move";
           state.transform.start = null;
+          state.transform.originPt = null;
+          state.transform.rotationAccum = 0;
           state.transform.targetId = null;
           state.transform.origin = null;
           state.transform.startBounds = null;
@@ -1752,44 +2958,83 @@
         });
 
         // Flick drip burst
-        if (stroke && stroke.points.length > 2) {
-          var pts = stroke.points;
-          var last = pts[pts.length - 1];
-          var prev = pts[pts.length - 2];
-          var fdx = last.x - prev.x;
-          var fdy = last.y - prev.y;
-          var flickSpeed = Math.sqrt(fdx * fdx + fdy * fdy);
-          if (flickSpeed > 2.5 && stroke.drips.length < MAX_DRIPS_PER_STROKE) {
-            var flickCount = Math.min(
-              3,
-              MAX_DRIPS_PER_STROKE - stroke.drips.length,
-            );
-            for (var fi = 0; fi < flickCount; fi++) {
-              stroke.drips.push({
-                x: last.x + (Math.random() - 0.5) * 4,
-                y: last.y + Math.random() * 6,
-                vx:
-                  (fdx / flickSpeed) * (1 + Math.random()) +
-                  (Math.random() - 0.5) * 0.8,
-                vy:
-                  (fdy / flickSpeed) * (1 + Math.random()) +
-                  Math.random() * 1.5,
-                radius: 3 + Math.random() * 3,
-                color: stroke.color,
-                life: 2 + Math.random() * 2,
-              });
-            }
-          }
-        }
+        // Flick drip burst disabled — drip system paused, competes with Trail presets
         state.penTool.activeStrokeId = null;
         state.penTool.isDrawing = false;
+        state.penTool.constraintAnchor = null;
         mopDownPt = null;
 
         if (stroke) analyzeStroke(stroke);
-        if (stroke && state.walker.enabled) {
-          var w = createWalkerFromStroke(stroke);
-          if (w) state.walkers.push(w);
+        // Apply current WOS note + color (spec item 5)
+        if (stroke && window.WOS) {
+          stroke.note = WOS.currentNote;
+          stroke.color = noteToColor(WOS.currentNote);
         }
+        // Apply pre-configured render mode
+        if (stroke) {
+          stroke.renderMode = state.defaultRenderMode || "visible";
+          stroke.outlineVisible = stroke.renderMode === "visible";
+        }
+        // New draw resets duplication delta
+        clearDuplicationDelta();
+
+        // ── Stamp stroke.motion.fx from motionBrush at creation time ──
+        // Always copied so each stroke owns its trail config independently
+        if (stroke) {
+          stroke.motion = stroke.motion || {};
+          stroke.motion.fx = {
+            colorSource:
+              (state.motionBrush && state.motionBrush.colorSource) || "note",
+            color: (state.motionBrush && state.motionBrush.color) || "#ffffff",
+            style: (state.motionBrush && state.motionBrush.style) || "orbit",
+            rate: (state.motionBrush && state.motionBrush.rate) || 40,
+            spread: (state.motionBrush && state.motionBrush.spread) || 0.3,
+            speed:
+              (state.motionBrush && state.motionBrush.particleSpeed) || 120,
+            size: (state.motionBrush && state.motionBrush.size) || 3,
+            life: (state.motionBrush && state.motionBrush.life) || 1,
+            type: (state.motionBrush && state.motionBrush.type) || "dot",
+          };
+          if (state.motionBrush && state.motionBrush.mode) {
+            stroke.motion.mode = state.motionBrush.mode;
+          }
+        }
+
+        // ── Motion autoBake — walker without stored stroke ──
+        if (stroke && state.motionBrush && state.motionBrush.enabled) {
+          var w = createWalkerFromStroke(stroke);
+          if (w) {
+            state.walkers.push(w);
+            // Remove stroke from state — path is baked into walker
+            var si = state.strokes.indexOf(stroke);
+            if (si !== -1) state.strokes.splice(si, 1);
+          }
+          renderFrame();
+          return;
+        }
+
+        if (stroke) strokeToLines(stroke); // bridge to collision/sound pipeline
+        if (stroke && state.createPreset.withWalker) {
+          var w = createWalkerFromStroke(stroke);
+          if (w) {
+            w.audioSelf = !!state.createPreset.walkerAudioSelf;
+            w.triggerOthers = state.createPreset.triggerOthers !== false;
+            initWalkerGraph(w, stroke); // inherit graphId/bankId if stroke has one
+            state.walkers.push(w);
+          }
+        }
+
+        // ── Auto-select newly drawn stroke → Object inspector shows Behavior panel ──
+        if (stroke) {
+          state.selection.strokeId = stroke.id;
+          state.selection.strokeIds.clear();
+          state.selection.strokeIds.add(stroke.id);
+          state.selection.groupId = null;
+          state.multiSelection = [{ type: "stroke", id: stroke.id }];
+          syncLegacySelection();
+          syncSelectionPanel();
+        }
+
         renderFrame();
       },
       true,
@@ -1952,7 +3197,10 @@
     function createStrokeObject(x, y) {
       var noteClass = ((state.defaults.note % 12) + 12) % 12;
       var base = createObject({ type: "stroke", points: [{ x: x, y: y }] });
-      base.note = noteClass;
+      base.note = state.defaults.note || 60; // full MIDI note (pitch intent)
+      base.channel = state.defaults.channel || "default"; // voicing role
+      base.useScale = true; // opt-out per stroke with stroke.useScale = false
+      base.samples = []; // per-stroke instrument buffers (AudioBuffer[])
       // Task 5 — use drawing defaults so inspector color/width feed new strokes
       base.color =
         state.defaults.color ||
@@ -1965,7 +3213,8 @@
       base.specks = [];
       base.inkBudget = 1.0;
       base.isCommitted = false;
-      base.renderMode = "ribbon";
+      base.renderMode = state.defaultRenderMode || "visible";
+      base.outlineVisible = base.renderMode !== "hidden";
       base.sound = { enabled: false, note: null };
       base.behavior = { isMuted: true };
       base.mode = "annotation";
@@ -2090,7 +3339,38 @@
             selStrokeForGroup._groupId === stroke._groupId
           );
         }
+        // renderMode: "visible" (default) | "ghost" | "hidden"
+        var rm =
+          stroke.renderMode ||
+          (stroke.outlineVisible === false ? "hidden" : "visible");
+        // During active drawing: always show ghost preview so artist sees the path
+        var isActivelyDrawing = stroke.id === state.penTool.activeStrokeId;
+        if (isActivelyDrawing && rm !== "visible") {
+          // Temporary draw-phase ghost — not tied to renderMode, input feedback only
+          if (pts.length >= 2) {
+            ctx.save();
+            ctx.strokeStyle = stroke.color || "#ffffff";
+            ctx.lineWidth = stroke.width || 18;
+            ctx.lineCap = "round";
+            ctx.lineJoin = "round";
+            ctx.globalAlpha = 0.35;
+            ctx.setLineDash([6, 6]);
+            ctx.beginPath();
+            ctx.moveTo(pts[0].x, pts[0].y);
+            for (var di = 1; di < pts.length - 1; di++) {
+              var dMidX = (pts[di].x + pts[di + 1].x) / 2;
+              var dMidY = (pts[di].y + pts[di + 1].y) / 2;
+              ctx.quadraticCurveTo(pts[di].x, pts[di].y, dMidX, dMidY);
+            }
+            ctx.lineTo(pts[pts.length - 1].x, pts[pts.length - 1].y);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.restore();
+          }
+          return; // skip normal render passes for this stroke while drawing
+        }
         if (pts.length >= 2) {
+          // Selection halo — always shown for selected strokes regardless of renderMode
           if (isSelected) {
             ctx.save();
             ctx.strokeStyle = "#ffffff";
@@ -2109,24 +3389,30 @@
             ctx.stroke();
             ctx.restore();
           }
-          ctx.save();
-          ctx.strokeStyle = stroke.color;
-          ctx.lineWidth = stroke.width;
-          ctx.lineCap = "round";
-          ctx.lineJoin = "round";
-          ctx.globalAlpha = 0.82;
-          ctx.beginPath();
-          ctx.moveTo(pts[0].x, pts[0].y);
-          for (var i = 1; i < pts.length - 1; i++) {
-            var midX = (pts[i].x + pts[i + 1].x) / 2;
-            var midY = (pts[i].y + pts[i + 1].y) / 2;
-            ctx.quadraticCurveTo(pts[i].x, pts[i].y, midX, midY);
+          if (rm === "visible") {
+            ctx.save();
+            ctx.strokeStyle = stroke.color;
+            ctx.lineWidth = stroke.width;
+            ctx.lineCap = "round";
+            ctx.lineJoin = "round";
+            // Clean visual mode: stroke is structure only, low alpha
+            var cleanMode = state.debug && state.debug.visualMode === "clean";
+            ctx.globalAlpha = cleanMode
+              ? 0.3
+              : (stroke.opacity != null ? stroke.opacity : 1) * 0.82;
+            ctx.beginPath();
+            ctx.moveTo(pts[0].x, pts[0].y);
+            for (var i = 1; i < pts.length - 1; i++) {
+              var midX = (pts[i].x + pts[i + 1].x) / 2;
+              var midY = (pts[i].y + pts[i + 1].y) / 2;
+              ctx.quadraticCurveTo(pts[i].x, pts[i].y, midX, midY);
+            }
+            var last = pts[pts.length - 1];
+            ctx.lineTo(last.x, last.y);
+            ctx.stroke();
+            ctx.restore();
           }
-          // Draw last segment to final point
-          var last = pts[pts.length - 1];
-          ctx.lineTo(last.x, last.y);
-          ctx.stroke();
-          ctx.restore();
+          // rm === "hidden" → no stroke draw, walker and selection halo still active
         }
 
         // Change 8 — drip rendering
@@ -2142,9 +3428,13 @@
         // Specks now stamped immediately via stampSpeck — no particle rendering needed
       });
 
-      // Draw transform handles on selected stroke
+      // Draw transform handles on selected stroke (suppressed for group/multi-select)
       var selId = state.selection.strokeId;
-      if (selId) {
+      var shouldDrawSingleHandles =
+        selId &&
+        !state.selection.groupId &&
+        (!state.selection.strokeIds || state.selection.strokeIds.size <= 1);
+      if (shouldDrawSingleHandles) {
         var selStroke = state.strokes.find(function (s) {
           return s.id === selId;
         });
@@ -2200,6 +3490,108 @@
             ctx.stroke();
           });
 
+          ctx.restore();
+        }
+      }
+
+      // Draw multi-select bounding box + handles when 2+ strokes selected without a group
+      if (
+        state.selection.strokeIds &&
+        state.selection.strokeIds.size > 1 &&
+        !state.selection.groupId
+      ) {
+        var mIds = Array.from(state.selection.strokeIds);
+        var mb = computeStrokeSetBounds(mIds);
+        if (mb) {
+          var mPad = 14;
+          var mL = mb.minX - mPad,
+            mR = mb.maxX + mPad;
+          var mT = mb.minY - mPad,
+            mBot = mb.maxY + mPad;
+          var mCx = (mL + mR) / 2;
+          ctx.save();
+          // Dashed bounding box
+          ctx.strokeStyle = "rgba(61,216,197,0.4)";
+          ctx.lineWidth = 1;
+          ctx.setLineDash([4, 6]);
+          ctx.strokeRect(mL, mT, mR - mL, mBot - mT);
+          ctx.setLineDash([]);
+          // Scale corner handles
+          var HR = HANDLE_R || 5;
+          [
+            [mL, mT],
+            [mR, mT],
+            [mL, mBot],
+            [mR, mBot],
+          ].forEach(function (c) {
+            ctx.beginPath();
+            ctx.arc(c[0], c[1], HR, 0, Math.PI * 2);
+            ctx.fillStyle = "#ffffff";
+            ctx.globalAlpha = 0.85;
+            ctx.fill();
+            ctx.strokeStyle = "rgba(0,0,0,0.4)";
+            ctx.lineWidth = 1;
+            ctx.stroke();
+          });
+          // Rotate handle above centre
+          var mRotY = mT - 22;
+          ctx.beginPath();
+          ctx.moveTo(mCx, mT);
+          ctx.lineTo(mCx, mRotY + HR);
+          ctx.strokeStyle = "rgba(61,216,197,0.4)";
+          ctx.lineWidth = 1;
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.arc(mCx, mRotY, HR, 0, Math.PI * 2);
+          ctx.fillStyle = "#3dd8c5";
+          ctx.globalAlpha = 0.85;
+          ctx.fill();
+          ctx.strokeStyle = "rgba(0,0,0,0.4)";
+          ctx.lineWidth = 1;
+          ctx.stroke();
+          ctx.restore();
+        }
+      }
+
+      // Ghost preview of next duplicate position (when duplication delta is valid)
+      if (
+        state.duplication &&
+        state.duplication.valid &&
+        (Math.abs(state.duplication.dx) > 0.5 ||
+          Math.abs(state.duplication.dy) > 0.5)
+      ) {
+        var ghostTargets = getSelectedStrokeTargets();
+        if (ghostTargets.length > 0 && ghostTargets.length <= 8) {
+          // cap for perf
+          ctx.save();
+          ctx.globalAlpha = 0.18;
+          ctx.strokeStyle = "#3dd8c5";
+          ctx.lineWidth = 2;
+          ctx.setLineDash([4, 6]);
+          ghostTargets.forEach(function (gs) {
+            var gpts = gs.points;
+            if (!gpts || gpts.length < 2) return;
+            var gdx = state.duplication.dx,
+              gdy = state.duplication.dy;
+            ctx.beginPath();
+            ctx.moveTo(gpts[0].x + gdx, gpts[0].y + gdy);
+            for (var gpi = 1; gpi < gpts.length - 1; gpi++) {
+              var gmx = (gpts[gpi].x + gpts[gpi + 1].x) / 2 + gdx;
+              var gmy = (gpts[gpi].y + gpts[gpi + 1].y) / 2 + gdy;
+              ctx.quadraticCurveTo(
+                gpts[gpi].x + gdx,
+                gpts[gpi].y + gdy,
+                gmx,
+                gmy,
+              );
+            }
+            ctx.lineTo(
+              gpts[gpts.length - 1].x + gdx,
+              gpts[gpts.length - 1].y + gdy,
+            );
+            ctx.stroke();
+          });
+          ctx.setLineDash([]);
           ctx.restore();
         }
       }
@@ -2440,12 +3832,12 @@
         };
         SBE.ParticleSystem.update(dt, bounds);
       } else {
-        // Fallback — inline update
+        // Fallback — inline update (dt in seconds, life in seconds, vx/vy pre-scaled to px/frame)
         state.particles.forEach(function (p) {
           p.x += p.vx;
           p.y += p.vy;
-          p.vy += 0.04;
-          p.life -= dt * 0.0008;
+          p.vy += 0.001; // subtle gravity px/frame
+          p.life -= dt; // dt in seconds matches life spawn value
         });
         for (var i = state.particles.length - 1; i >= 0; i--) {
           if (state.particles[i].life <= 0) state.particles.splice(i, 1);
@@ -2498,13 +3890,14 @@
       var chord = chordData.chord;
       var root = chordData.root;
       var role =
-        w.stroke.harmony && w.stroke.harmony.role != null
+        w.stroke && w.stroke.harmony && w.stroke.harmony.role != null
           ? w.stroke.harmony.role
           : 0;
       var tone = chord[role % chord.length];
       var note = root + tone;
       // Geometry influence — complex strokes add variation
-      var complexity = (w.stroke.meta && w.stroke.meta.complexity) || 0;
+      var complexity =
+        (w.stroke && w.stroke.meta && w.stroke.meta.complexity) || 0;
       if (complexity > 0.5) {
         note += Math.floor(Math.random() * 3);
       }
@@ -2515,7 +3908,8 @@
     }
 
     function shouldTrigger(w) {
-      var complexity = (w.stroke.meta && w.stroke.meta.complexity) || 0;
+      var complexity =
+        (w.stroke && w.stroke.meta && w.stroke.meta.complexity) || 0;
       var chance = Math.min(1, complexity * 2);
       return (
         Math.random() <
@@ -2535,24 +3929,164 @@
 
         // Percussion mode
         if (w.music.voice === "perc") {
-          playNote(36 + Math.floor(Math.random() * 4), 0.8);
+          playNote(36 + Math.floor(Math.random() * 4), 0.8, w.strokeId);
           return;
         }
 
         var note = mapWalkerToNote(w);
         var velocity = 0.5 + Math.random() * 0.3;
-        playNote(note, velocity);
+        playNote(note, velocity, w.strokeId);
       });
+    }
+
+    // ── FX System (spec 0428_WOS_FXSystem_Unification_v1.0.0) ─────────────────
+    var FX_STYLES = {
+      orbit: {
+        rate: 60,
+        spread: 0.1,
+        speed: 100,
+        size: 2,
+        life: 1.5,
+        type: "dot",
+      },
+      comet: {
+        rate: 80,
+        spread: 0.2,
+        speed: 300,
+        size: 4,
+        life: 0.4,
+        type: "streak",
+      },
+      dust: {
+        rate: 120,
+        spread: 1.8,
+        speed: 40,
+        size: 2,
+        life: 2.5,
+        type: "dot",
+      },
+      burst: {
+        rate: 200,
+        spread: 6.28,
+        speed: 200,
+        size: 5,
+        life: 0.5,
+        type: "dot",
+      },
+      ribbon: {
+        rate: 30,
+        spread: 0.05,
+        speed: 80,
+        size: 3,
+        life: 3.0,
+        type: "streak",
+      },
+    };
+
+    // Read fx from stroke.motion, migrating flat fields if needed (backward compat)
+    function getFX(stroke) {
+      var m = stroke.motion || {};
+      if (m.fx) return m.fx;
+      // Migrate flat fields → fx
+      var fx = {
+        rate: m.rate != null ? m.rate : 40,
+        spread: m.spread != null ? m.spread : 0.3,
+        speed: m.speed != null ? m.speed : 120,
+        size: m.size != null ? m.size : 3,
+        life: m.life != null ? m.life : 1.0,
+        type: m.type || "dot",
+        colorSource: m.colorSource || "note",
+        color: m.color || "#ffffff",
+        style: null,
+      };
+      if (!stroke.motion) stroke.motion = {};
+      stroke.motion.fx = fx;
+      return fx;
+    }
+
+    function resolveFXColor(stroke) {
+      // stroke.color is always the source of truth unless explicitly overridden with "custom"
+      // and fx.color is actually set to something different.
+      // If custom color matches stroke color, still shows stroke color (no conflict).
+      if (!stroke.motion || !stroke.motion.fx) {
+        return stroke.color || "#ffffff";
+      }
+      var fx = stroke.motion.fx;
+      if (
+        fx.colorSource === "custom" &&
+        fx.color &&
+        fx.color !== stroke.color
+      ) {
+        return fx.color;
+      }
+      return stroke.color || "#ffffff";
+    }
+
+    function applyFXStyle(stroke, style) {
+      if (style === "off") {
+        // Turn off emitter on all walkers attached to this stroke
+        state.walkers.forEach(function (w) {
+          if (w.strokeId === stroke.id) w.emitter.enabled = false;
+        });
+        if (!stroke.motion) stroke.motion = {};
+        if (!stroke.motion.fx) stroke.motion.fx = {};
+        stroke.motion.fx.style = "off";
+        return;
+      }
+      var base = FX_STYLES[style];
+      if (!base) return;
+      if (!stroke.motion) stroke.motion = {};
+      if (!stroke.motion.fx) stroke.motion.fx = {};
+      Object.assign(stroke.motion.fx, base);
+      stroke.motion.fx.style = style;
+      // Re-enable walker emitter when a real style is chosen
+      state.walkers.forEach(function (w) {
+        if (w.strokeId === stroke.id) w.emitter.enabled = true;
+      });
+    }
+
+    // Detect geometric closure: stroke is closed if endpoints are within threshold
+    function isStrokeClosed(stroke, threshold) {
+      var pts = stroke.points;
+      if (!pts || pts.length < 3) return false;
+      var dx = pts[0].x - pts[pts.length - 1].x;
+      var dy = pts[0].y - pts[pts.length - 1].y;
+      var dist = Math.sqrt(dx * dx + dy * dy);
+      return dist <= (threshold != null ? threshold : 40);
     }
 
     function createWalkerFromStroke(stroke) {
       if (!stroke || !stroke.points || stroke.points.length < 2) return null;
+      var modeSpeed = {
+        loop: 0.0012 * 60,
+        pingpong: 0.0035 * 60,
+        tunnel: 0.0028 * 60,
+      };
+      var motionMode =
+        (stroke.motion && stroke.motion.mode) ||
+        (state.motionBrush && state.motionBrush.mode) ||
+        (isStrokeClosed(stroke) ? "loop" : "pingpong");
+      var baseSpeed =
+        modeSpeed[motionMode] != null
+          ? modeSpeed[motionMode]
+          : state.walker.speed * 60;
       return {
         id: "w_" + Math.random().toString(36).slice(2),
         stroke: stroke,
+        strokeId: stroke.id,
+        color: stroke.color || "#ffffff",
+        path: {
+          type: "stroke",
+          points: stroke.points,
+          closed: isStrokeClosed(stroke),
+        },
         t: 0,
         dir: 1,
-        speed: state.walker.speed,
+        speed: baseSpeed,
+        _speedNormalized: true,
+        x: stroke.points[0].x,
+        y: stroke.points[0].y,
+        motionMode: motionMode,
         lastTriggerT: -1,
         noteOffset: Math.floor(Math.random() * 12),
         music: {
@@ -2563,9 +4097,26 @@
           lastStep: -1,
           mode: "pingpong",
         },
+        emitter: (function () {
+          // Resolve fx: stroke.motion.fx → getFX migration → motionBrush fallback
+          var fx = stroke.motion ? getFX(stroke) : null;
+          var mb = state.motionBrush;
+          return {
+            enabled: true,
+            rate: (fx && fx.rate) || (mb && mb.rate) || 40,
+            spread: (fx && fx.spread) || (mb && mb.spread) || 0.3,
+            speed: (fx && fx.speed) || (mb && mb.particleSpeed) || 120,
+            size: (fx && fx.size) || (mb && mb.size) || 3,
+            life: (fx && fx.life) || (mb && mb.life) || 1.0,
+            type: (fx && fx.type) || (mb && mb.type) || "dot",
+            color: stroke.motion ? resolveFXColor(stroke) : "#ffffff",
+          };
+        })(),
+        _emitAcc: 0,
       };
     }
 
+    // Internal — only called by samplePath
     function getStrokePoint(stroke, t) {
       var pts = stroke.points;
       var maxIdx = pts.length - 1;
@@ -2579,8 +4130,117 @@
       };
     }
 
+    // Single source of truth for all path position sampling
+    function samplePath(path, t) {
+      if (path.type === "stroke") {
+        if (path.closed) {
+          // Wrap t for seamless looping on closed strokes
+          var wt = t % 1;
+          if (wt < 0) wt += 1;
+          return getStrokePoint({ points: path.points }, wt);
+        }
+        return getStrokePoint({ points: path.points }, t);
+      }
+      if (path.type === "line") {
+        var lt = path.closed ? t % 1 : Math.max(0, Math.min(1, t));
+        return {
+          x: path.a.x + (path.b.x - path.a.x) * lt,
+          y: path.a.y + (path.b.y - path.a.y) * lt,
+        };
+      }
+      if (path.type === "circle") {
+        var angle = (t % 1) * Math.PI * 2;
+        return {
+          x: path.cx + Math.cos(angle) * path.r,
+          y: path.cy + Math.sin(angle) * path.r,
+        };
+      }
+      // Fallback — treat unknown types as stroke
+      return getStrokePoint({ points: path.points }, t);
+    }
+
+    function sampleTangent(path, t) {
+      var eps = 0.001;
+      var p1 = samplePath(path, t);
+      var p2 = samplePath(path, t + eps);
+      var dx = p2.x - p1.x;
+      var dy = p2.y - p1.y;
+      var len = Math.sqrt(dx * dx + dy * dy) || 1;
+      return { x: dx / len, y: dy / len };
+    }
+
+    function spawnParticleUnified(cfg, dt) {
+      // Clamp life to sane max — guards against stale particles from old broken system
+      if (cfg.life != null) cfg.life = Math.min(cfg.life, 5);
+      var hasSBE = !!(
+        window.SBE &&
+        SBE.ParticleSystem &&
+        SBE.ParticleSystem.spawn
+      );
+      if (hasSBE) {
+        SBE.ParticleSystem.spawn(cfg);
+      } else {
+        var frameScale = dt || 1 / 60;
+        var fallback = Object.assign({ maxLife: cfg.life, _dead: false }, cfg);
+        fallback.vx = cfg.vx * frameScale;
+        fallback.vy = cfg.vy * frameScale;
+        state.particles.push(fallback);
+      }
+    }
+
+    // Path factories — lightweight plain objects, no class
+    function createLinePath(a, b, opts) {
+      opts = opts || {};
+      return { type: "line", a: a, b: b, closed: !!opts.closed };
+    }
+
+    function createCirclePath(cx, cy, r) {
+      return { type: "circle", cx: cx, cy: cy, r: r, closed: true };
+    }
+
+    // Walker factory for non-stroke paths (line, circle)
+    function createWalkerOnPath(path, opts) {
+      opts = opts || {};
+      var rawSpeed = opts.speed != null ? opts.speed : state.walker.speed * 60;
+      var w = {
+        id: "w_" + Math.random().toString(36).slice(2),
+        stroke: null,
+        path: path,
+        t: opts.t != null ? opts.t : 0,
+        dir: 1,
+        speed: rawSpeed,
+        _speedNormalized: true,
+        x: 0,
+        y: 0,
+        motionMode: opts.motionMode || (path.closed ? "loop" : "pingpong"),
+        lastTriggerT: -1,
+        noteOffset: Math.floor(Math.random() * 12),
+        music: {
+          voice: opts.voice || "lead",
+          density: opts.density != null ? opts.density : 0.7,
+          octave: 0,
+          mute: false,
+          lastStep: -1,
+          mode: "pingpong",
+        },
+        emitter: {
+          enabled: false, // off by default — enable per-stroke via motionBrush or inspector
+          rate: 40,
+          spread: 0.3,
+          speed: 120,
+          size: 3,
+          life: 1.0,
+        },
+        _emitAcc: 0,
+      };
+      var pos = samplePath(path, w.t);
+      w.x = pos.x;
+      w.y = pos.y;
+      return w;
+    }
+
     // playNote — thin wrapper over dispatchCollisionEvent
-    function playNote(note, velocity) {
+    function playNote(note, velocity, strokeId) {
       var quantized =
         state.audio && state.audio.scale && state.audio.scale.enabled
           ? quantizeToScale(
@@ -2589,17 +4249,55 @@
               state.audio.scale.type,
             )
           : note;
+      var resolvedId = strokeId || "playnote_" + note;
       var sourceObject = {
+        id: resolvedId,
+        strokeId: strokeId || null,
         sound: buildSoundConfig(quantized, state.defaults.midiChannel || 1),
       };
       sourceObject.sound.midi.velocity = Math.round((velocity || 0.6) * 127);
+      if (!strokeId) {
+        console.error(
+          "[FATAL AUDIO] No stroke resolved for sourceId:",
+          resolvedId,
+        );
+      }
       dispatchCollisionEvent(sourceObject);
     }
 
     function updateWalkerMovement(w, dt) {
+      // Refresh path geometry from live stroke — transforms replace stroke.points reference
+      if (w.strokeId && w.path && w.path.type === "stroke") {
+        var liveStroke = state.strokes.find(function (s) {
+          return s.id === w.strokeId;
+        });
+        if (liveStroke && liveStroke.points !== w.path.points) {
+          w.path.points = liveStroke.points;
+          w.path.closed = isStrokeClosed(liveStroke);
+        }
+      }
+
+      // One-time speed normalization for legacy walkers missing the flag
+      if (!w._speedNormalized) {
+        w.speed = w.speed * 60;
+        w._speedNormalized = true;
+      }
+
+      // One-time runtime log — fires once per walker to confirm live speed + mode
+      if (!w._logged) {
+        console.log("[WALKER RUNTIME]", {
+          id: w.id,
+          strokeId: w.strokeId,
+          motionMode: w.motionMode,
+          speed: w.speed,
+        });
+        w._logged = true;
+      }
+
+      // Legacy music.mode paths — preserved, dt-normalized
       switch (w.music.mode) {
         case "follow":
-          w.t += w.speed * dt * 60;
+          w.t += w.speed * dt;
           w.t = Math.max(0, Math.min(1, w.t));
           break;
         case "random":
@@ -2607,18 +4305,203 @@
           w.t = Math.max(0, Math.min(1, w.t));
           break;
         case "drift":
-          w.t += 0.01 * dt * 60 + Math.sin(performance.now() * 0.001) * 0.005;
+          w.t += 0.01 * dt + Math.sin(performance.now() * 0.001) * 0.005;
           if (w.t > 1) w.t -= 1;
           if (w.t < 0) w.t += 1;
           break;
         case "pingpong":
         default:
-          w.t += w.dir * w.speed * dt * 60;
-          if (w.t >= 1 || w.t <= 0) {
-            w.dir *= -1;
+          // Dispatch to motionMode for spec-aligned modes
+          var motionMode = w.motionMode || "pingpong";
+          if (motionMode === "loop") {
+            if (w.path && w.path.closed) {
+              w.t += w.speed * dt;
+              w.t = w.t % 1;
+              if (w.t < 0) w.t += 1;
+            } else {
+              // Open path — loop doesn't apply, fall back to pingpong
+              w.motionMode = "pingpong";
+              w.t += w.dir * w.speed * dt;
+              if (w.t >= 1 || w.t <= 0) {
+                w.dir *= -1;
+                w.t = Math.max(0, Math.min(1, w.t));
+              }
+            }
+          } else if (motionMode === "tunnel") {
+            // Tunnel: continuous forward traversal, wraps at both ends regardless of closure
+            w.dir = 1;
+            w.t += w.speed * dt;
+            w.t = w.t % 1;
+            if (w.t < 0) w.t += 1;
+          } else if (motionMode === "once") {
+            w.t += w.dir * w.speed * dt;
             w.t = Math.max(0, Math.min(1, w.t));
+          } else {
+            // pingpong (default)
+            w.t += w.dir * w.speed * dt;
+            if (w.t >= 1 || w.t <= 0) {
+              w.dir *= -1;
+              w.t = Math.max(0, Math.min(1, w.t));
+            }
           }
           break;
+      }
+
+      // Store position — resolved here, not at render time
+      var pos;
+      if (w.path) {
+        pos = samplePath(w.path, w.t);
+      } else {
+        pos = getStrokePoint(w.stroke, w.t);
+      }
+      w.x = pos.x;
+      w.y = pos.y;
+
+      // ── MIDI Cartridge time-based playback (primary audio path) ───────────
+      if (w.strokeId && window.SBE && SBE.MidiImporter) {
+        var cartStroke = state.strokes.find(function (s) {
+          return s.id === w.strokeId;
+        });
+        if (cartStroke && cartStroke.midiCartridge) {
+          var _tNow = getTransportTime();
+          if (state.debug && state.debug.audioLogs) {
+            var _cart = state.midiCartridges.find(function (c) {
+              return c.id === cartStroke.midiCartridge.cartridgeId;
+            });
+            var _bpm = _cart ? _cart.bpm || 120 : 120;
+            var _beatTime = _cart ? (_tNow * _bpm) / 60 : 0;
+            console.log("[MIDI DEBUG]", {
+              beatTime: _beatTime.toFixed(3),
+              localTime: _cart ? (_beatTime % _cart.length).toFixed(3) : "?",
+              cartridgeBeats: _cart ? _cart.length.toFixed(2) : "?",
+              bpm: _bpm,
+              cursor: cartStroke.midiCartridge.cursor,
+            });
+          }
+          SBE.MidiImporter.tickCartridgeForWalker(
+            w,
+            cartStroke,
+            _tNow,
+            state,
+            function onCartridgeNote(stroke, note) {
+              var safeVelocity = normalizeMidiVelocity(note.velocity);
+              // Fallback always fires — confirms timing even without samples
+              playFallbackInstrument(note.note, safeVelocity);
+              // Also route through sampler if stroke has samples
+              if (stroke.samples && stroke.samples.length > 0) {
+                emitEvent({
+                  type: "midi",
+                  sourceId: stroke.id,
+                  energy: safeVelocity / 127,
+                  channel: "melodic",
+                  useScale: false,
+                  data: {
+                    note: note.note,
+                    velocity: safeVelocity,
+                    source: "midiCartridge",
+                  },
+                });
+              }
+              if (state.debug && state.debug.audioLogs) {
+                console.log("[MIDI NOTE FIRE]", {
+                  fullNote: note.note,
+                  noteClass: note.note % 12,
+                  velocity: safeVelocity,
+                  strokeId: stroke.id,
+                });
+              }
+            },
+          );
+          // Sync walker.t to MIDI beat position with pingpong — walker follows transport
+          var mc = cartStroke.midiCartridge;
+          if (mc) {
+            var _syncCart = state.midiCartridges.find(function (c) {
+              return c.id === mc.cartridgeId;
+            });
+            if (_syncCart && _syncCart.length) {
+              var _bpmSync = _syncCart.bpm || 120;
+              var _beatSync = (_tNow * _bpmSync) / 60;
+              var _cycle = Math.floor(_beatSync / _syncCart.length);
+              var _phase = _beatSync % _syncCart.length;
+              var _fwd = _cycle % 2 === 0;
+              var _local = _fwd ? _phase : _syncCart.length - _phase;
+              w.t = _local / _syncCart.length; // 0..1, mirrors playhead direction
+            }
+          }
+        }
+      }
+      // ── Spatial MIDI points — visuals + optional debug audio ──────────────
+      if (state.debug && state.debug.midiPointsAudio) {
+        triggerMidiPointsForWalker(w);
+      }
+      // ── End MIDI ──────────────────────────────────────────────────────────
+
+      w.history = w.history || [];
+      w.history.push({ x: w.x, y: w.y });
+      if (w.history.length > 100) {
+        w.history.shift();
+      }
+
+      if (w.emitter && w.emitter.enabled && w.path) {
+        // Resolve live FX config — reads from stroke.motion.fx each frame (never cached)
+        var liveStrokeForFX = w.strokeId
+          ? state.strokes.find(function (s) {
+              return s.id === w.strokeId;
+            })
+          : w.stroke;
+        var liveFX =
+          liveStrokeForFX && liveStrokeForFX.motion
+            ? getFX(liveStrokeForFX)
+            : null;
+        var e = w.emitter;
+
+        var fxRate = liveFX && liveFX.rate != null ? liveFX.rate : e.rate;
+        var fxSpread =
+          liveFX && liveFX.spread != null ? liveFX.spread : e.spread;
+        var fxSpeed = liveFX && liveFX.speed != null ? liveFX.speed : e.speed;
+        var fxSize = liveFX && liveFX.size != null ? liveFX.size : e.size;
+        var fxLife = liveFX && liveFX.life != null ? liveFX.life : e.life;
+        var fxType = liveFX && liveFX.type ? liveFX.type : e.type || "dot";
+        var fxColor = liveStrokeForFX
+          ? resolveFXColor(liveStrokeForFX)
+          : e.color || "#ffffff";
+
+        // Tunnel mode: emit aligned to path tangent, narrow spread, flow feel
+        var isTunnel = w.motionMode === "tunnel";
+
+        w._emitAcc += dt * fxRate;
+        while (w._emitAcc >= 1) {
+          w._emitAcc -= 1;
+          var tang = sampleTangent(w.path, w.t);
+          var angle, ox, oy;
+          if (isTunnel) {
+            // Tangent-aligned: particles flow forward along path
+            angle = Math.atan2(tang.y, tang.x);
+            angle += (Math.random() - 0.5) * 0.15; // minimal spread — stays inside
+            // Normal offset for "inside tube" feel
+            var norm = { x: -tang.y, y: tang.x };
+            ox = norm.x * (Math.random() - 0.5) * 4;
+            oy = norm.y * (Math.random() - 0.5) * 4;
+          } else {
+            angle = Math.atan2(tang.y, tang.x);
+            angle += (Math.random() - 0.5) * fxSpread;
+            ox = 0;
+            oy = 0;
+          }
+          spawnParticleUnified(
+            {
+              x: w.x + ox,
+              y: w.y + oy,
+              vx: Math.cos(angle) * fxSpeed,
+              vy: Math.sin(angle) * fxSpeed,
+              size: fxSize,
+              life: fxLife,
+              color: fxColor,
+              type: fxType,
+            },
+            dt,
+          );
+        }
       }
     }
 
@@ -2630,21 +4513,75 @@
     }
 
     function drawWalkers(ctx) {
+      var cleanMode = state.debug && state.debug.visualMode === "clean";
+      // Always draw walker dot — debug flags only add extra overlays
       state.walkers.forEach(function (w) {
-        var p = getStrokePoint(w.stroke, w.t);
-        ctx.save();
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
-        ctx.fillStyle = "#ffffff";
-        ctx.globalAlpha = 0.9;
-        ctx.fill();
-        // Direction indicator dot
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, 2.5, 0, Math.PI * 2);
-        ctx.fillStyle = w.stroke.color || "#3dd8c5";
-        ctx.globalAlpha = 1;
-        ctx.fill();
-        ctx.restore();
+        var px = w.x != null ? w.x : 0;
+        var py = w.y != null ? w.y : 0;
+
+        // Walker dot — always visible, larger and red for MIDI-attached walkers
+        (function () {
+          var hasMidi = !!(
+            w.strokeId &&
+            (function () {
+              var s = state.strokes.find(function (s) {
+                return s.id === w.strokeId;
+              });
+              return s && s.midiCartridge;
+            })()
+          );
+          var r = hasMidi ? 7 : 5;
+          var innerColor = hasMidi
+            ? "#ff4d4d"
+            : w.color || (w.stroke && w.stroke.color) || "#3dd8c5";
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(px, py, r, 0, Math.PI * 2);
+          ctx.fillStyle = "#ffffff";
+          ctx.globalAlpha = 0.9;
+          ctx.fill();
+          ctx.beginPath();
+          ctx.arc(px, py, r - 2.5, 0, Math.PI * 2);
+          ctx.fillStyle = innerColor;
+          ctx.globalAlpha = 1;
+          ctx.fill();
+          ctx.restore();
+        })();
+
+        // Path outline — shown when debug.paths is on
+        if (
+          state.debug.paths &&
+          w.path &&
+          w.path.points &&
+          w.path.points.length >= 2
+        ) {
+          ctx.save();
+          ctx.strokeStyle = "rgba(255,255,255,0.2)";
+          ctx.lineWidth = 1;
+          ctx.setLineDash([4, 4]);
+          ctx.beginPath();
+          var pts = w.path.points;
+          ctx.moveTo(pts[0].x, pts[0].y);
+          for (var i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+          if (w.path.closed) ctx.closePath();
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.restore();
+        }
+
+        // Info text — shown when debug.info is on
+        if (state.debug.info) {
+          ctx.save();
+          ctx.fillStyle = "#ffffff";
+          ctx.globalAlpha = 0.8;
+          ctx.font = "10px monospace";
+          ctx.fillText(
+            "t:" + w.t.toFixed(2) + " " + (w.motionMode || ""),
+            px + 8,
+            py + 4,
+          );
+          ctx.restore();
+        }
       });
     }
 
@@ -2657,6 +4594,39 @@
     }
 
     bindControls();
+
+    // ── Creation Preset UI ───────────────────────────────────────────────────
+    (function createPresetUI() {
+      if (document.getElementById("wos-preset-ui")) return;
+      var panel = document.createElement("div");
+      panel.id = "wos-preset-ui";
+      panel.style.cssText =
+        "position:fixed;bottom:12px;right:12px;background:rgba(0,0,0,0.82);color:#eff2f6;padding:10px 14px;font:600 12px monospace;border-radius:8px;border:1px solid rgba(255,255,255,0.1);z-index:9999;line-height:1.8";
+      panel.innerHTML =
+        "<div style='margin-bottom:6px;color:#3dd8c5'>Creation Preset</div>" +
+        "<label style='display:block'><input type='checkbox' id='preset-walker'> Add Walker on Draw</label>" +
+        "<label style='display:block'><input type='checkbox' id='preset-self'> Walker Self Sound</label>";
+      document.body.appendChild(panel);
+
+      var walkerToggle = document.getElementById("preset-walker");
+      var selfToggle = document.getElementById("preset-self");
+      walkerToggle.checked = state.createPreset.withWalker;
+      selfToggle.checked = state.createPreset.walkerAudioSelf;
+
+      walkerToggle.addEventListener("change", function () {
+        state.createPreset.withWalker = walkerToggle.checked;
+        console.log("[PRESET] withWalker:", state.createPreset.withWalker);
+      });
+      selfToggle.addEventListener("change", function () {
+        state.createPreset.walkerAudioSelf = selfToggle.checked;
+        console.log(
+          "[PRESET] walkerAudioSelf:",
+          state.createPreset.walkerAudioSelf,
+        );
+      });
+    })();
+    // ── End Creation Preset UI ───────────────────────────────────────────────
+
     await applyExampleScene();
     state.lines[2].y1 += 100;
     state.lines[2].y2 += 100;
@@ -2808,10 +4778,15 @@
       pushHistory();
       state.strokes.push(stroke);
       analyzeStroke(stroke);
-      if (state.walker.enabled && state.defaults.autoWalker) {
+      if (state.createPreset.withWalker) {
         var w = createWalkerFromStroke(stroke);
-        if (w) state.walkers.push(w);
+        if (w) {
+          w.audioSelf = !!state.createPreset.walkerAudioSelf;
+          w.triggerOthers = state.createPreset.triggerOthers !== false;
+          state.walkers.push(w);
+        }
       }
+
       renderFrame();
       return stroke;
     }
@@ -2913,6 +4888,7 @@
         if (state.groups[cid]) state.groups[cid].parentId = id;
       });
       state.groups[id] = group;
+      clearDuplicationDelta();
       console.log(
         "[group] Created:",
         id,
@@ -2921,6 +4897,16 @@
         "childGroups:",
         children.length,
       );
+      // Immediately select the new group
+      if (typeof syncLegacySelection === "function") {
+        state.selection.groupId = id;
+        state.selection.strokeId = null;
+        if (state.selection.strokeIds) state.selection.strokeIds.clear();
+        state.multiSelection = [{ type: "group", id: id }];
+        syncLegacySelection();
+        if (typeof syncSelectionPanel === "function") syncSelectionPanel();
+        renderFrame();
+      }
       return group;
     }
 
@@ -2992,6 +4978,9 @@
 
     // Delete a single stroke (removes from state.strokes + any group membership)
     function deleteStroke(strokeId) {
+      // Fade/stop any playing samples owned by this stroke before removing it
+      stopVoicesForObject(strokeId, 80);
+
       var stroke = state.strokes.find(function (s) {
         return s.id === strokeId;
       });
@@ -3009,6 +4998,8 @@
       state.strokes = state.strokes.filter(function (s) {
         return s.id !== strokeId;
       });
+      // Remove the bridge lines created for this stroke
+      removeLinesForStroke(strokeId);
       // Also remove any walkers attached to this stroke
       state.walkers = state.walkers.filter(function (w) {
         return !w.stroke || w.stroke.id !== strokeId;
@@ -3016,6 +5007,19 @@
     }
 
     // ── End Grouping System ──────────────────────────────────────────────────
+
+    // Apply a function to all selected strokes (multi-select or single)
+    function applyToSelection(fn) {
+      if (state.selection.strokeIds && state.selection.strokeIds.size > 0) {
+        state.selection.strokeIds.forEach(function (id) {
+          var s = getStrokeById(id);
+          if (s) fn(s);
+        });
+      } else {
+        var s = getSelectedStroke();
+        if (s) fn(s);
+      }
+    }
 
     function getStrokeById(id) {
       return (
@@ -3054,17 +5058,574 @@
 
     // Apply style properties to all selected strokes (single or group)
     function applyStyleToSelection(style) {
-      if (state.selection.groupId) {
-        var ids = getGroupChildrenDeep(state.selection.groupId);
-        ids.forEach(function (id) {
-          var s = getStrokeById(id);
-          if (s) Object.assign(s, style);
+      var targets = getSelectedStrokeTargets();
+      targets.forEach(function (s) {
+        Object.assign(s, style);
+        // Color change: reset fx.colorSource to "note" so resolveFXColor uses stroke.color
+        if (style.color !== undefined) {
+          if (s.motion && s.motion.fx) {
+            s.motion.fx.colorSource = "note";
+            s.motion.fx.color = style.color; // keep in sync for consistency
+          }
+        }
+        applyStrokeUpdates(s);
+      });
+      renderFrame();
+    }
+
+    // Hard invariant: group selection and stroke selection are mutually exclusive
+    // Priority: strokeIds > strokeId > groupId
+    function resolveTransformTargets() {
+      if (state.selection.strokeIds && state.selection.strokeIds.size > 0) {
+        return Array.from(state.selection.strokeIds)
+          .map(function (id) {
+            return state.strokes.find(function (s) {
+              return s.id === id;
+            });
+          })
+          .filter(Boolean);
+      }
+      if (state.selection.strokeId) {
+        var s = state.strokes.find(function (st) {
+          return st.id === state.selection.strokeId;
         });
-      } else if (state.selection.strokeId) {
-        var s = getStrokeById(state.selection.strokeId);
-        if (s) Object.assign(s, style);
+        return s ? [s] : [];
+      }
+      if (state.selection.groupId) {
+        return typeof getGroupChildrenDeep === "function"
+          ? getGroupChildrenDeep(state.selection.groupId)
+              .map(function (id) {
+                return state.strokes.find(function (s) {
+                  return s.id === id;
+                });
+              })
+              .filter(Boolean)
+          : [];
+      }
+      return [];
+    }
+
+    function clearDuplicationDelta() {
+      state.duplication.valid = false;
+      state.duplication.dx = 0;
+      state.duplication.dy = 0;
+      state.duplication.rotation = 0;
+      state.duplication.scale = 1;
+    }
+
+    function enforceSelectionMode() {
+      if (state.selection.groupId) {
+        if (state.selection.strokeIds) state.selection.strokeIds.clear();
+        state.selection.strokeId = null;
       }
     }
+
+    function selectGroupOnly(groupId) {
+      state.selection.groupId = groupId;
+      state.selection.strokeId = null;
+      if (state.selection.strokeIds) state.selection.strokeIds.clear();
+      state.multiSelection = [{ type: "group", id: groupId }];
+      syncLegacySelection();
+      syncSelectionPanel();
+      renderFrame();
+    }
+
+    function selectStrokesOnly(ids) {
+      state.selection.groupId = null;
+      state.selection.strokeId = ids.length === 1 ? ids[0] : null;
+      state.selection.strokeIds = new Set(ids);
+      state.multiSelection = ids.map(function (id) {
+        return { type: "stroke", id: id };
+      });
+      syncLegacySelection();
+      syncSelectionPanel();
+      renderFrame();
+    }
+
+    function getSelectedStrokeTargets() {
+      if (state.selection.groupId) {
+        return getGroupChildrenDeep(state.selection.groupId)
+          .map(getStrokeById)
+          .filter(Boolean);
+      }
+      if (state.selection.strokeIds && state.selection.strokeIds.size > 0) {
+        return Array.from(state.selection.strokeIds)
+          .map(getStrokeById)
+          .filter(Boolean);
+      }
+      if (state.selection.strokeId) {
+        var s = getStrokeById(state.selection.strokeId);
+        return s ? [s] : [];
+      }
+      return [];
+    }
+
+    function ungroupSelected() {
+      var groupId = state.selection.groupId;
+      if (!groupId || !state.groups[groupId]) return;
+      var childIds = getGroupChildrenDeep(groupId);
+      // Clear _groupId from strokes
+      childIds.forEach(function (sid) {
+        var s = getStrokeById(sid);
+        if (s) delete s._groupId;
+      });
+      delete state.groups[groupId];
+      selectStrokesOnly(childIds);
+    }
+
+    function computeStrokeSetBounds(ids) {
+      var minX = Infinity,
+        minY = Infinity,
+        maxX = -Infinity,
+        maxY = -Infinity;
+      ids.forEach(function (id) {
+        var s = getStrokeById(id);
+        if (!s || !s.points) return;
+        s.points.forEach(function (p) {
+          if (p.x < minX) minX = p.x;
+          if (p.y < minY) minY = p.y;
+          if (p.x > maxX) maxX = p.x;
+          if (p.y > maxY) maxY = p.y;
+        });
+      });
+      if (!isFinite(minX)) return null;
+      return {
+        minX: minX,
+        minY: minY,
+        maxX: maxX,
+        maxY: maxY,
+        w: maxX - minX || 1,
+        h: maxY - minY || 1,
+      };
+    }
+
+    function isDerivedStrokeLine(line) {
+      return !!(line && (line._isDerived || line._strokeId));
+    }
+
+    function rebuildDerivedState() {
+      // Remove every stroke-derived bridge line regardless of marker version
+      state.lines = (state.lines || []).filter(function (l) {
+        return !isDerivedStrokeLine(l);
+      });
+      // Rebuild bridge lines from current strokes only
+      (state.strokes || []).forEach(function (s) {
+        strokeToLines(s);
+      });
+      // Re-tag _groupId from restored group map
+      Object.values(state.groups || {}).forEach(function (group) {
+        (group.strokeIds || []).forEach(function (sid) {
+          var stroke = getStrokeById(sid);
+          if (stroke) stroke._groupId = group.id;
+        });
+      });
+      // Refresh walker path refs or drop orphan walkers
+      (state.walkers || []).forEach(function (w) {
+        if (w.strokeId && w.path && w.path.type === "stroke") {
+          var stroke = getStrokeById(w.strokeId);
+          if (stroke) {
+            w.stroke = stroke;
+            w.path.points = stroke.points;
+            w.path.closed = isStrokeClosed(stroke);
+          } else {
+            w._dead = true;
+          }
+        }
+      });
+      state.walkers = (state.walkers || []).filter(function (w) {
+        return !w._dead;
+      });
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // ── MIDI Ink System v1.0.0 ───────────────────────────────────────────
+    // ═══════════════════════════════════════════════════════════════════════
+
+    // ── Fallback instrument — audible sine even with no samples ────────────
+    // ── MIDI velocity floor — keeps soft notes audible ─────────────────────
+    function normalizeMidiVelocity(velocity) {
+      var v = typeof velocity === "number" ? velocity : 100;
+      return Math.max(72, Math.min(127, Math.round(v)));
+    }
+
+    function playFallbackInstrument(note, velocity) {
+      var ctx = ensureAudioContext();
+      if (!ctx) return;
+      var osc = ctx.createOscillator();
+      var gain = ctx.createGain();
+      var freq = 440 * Math.pow(2, (note - 69) / 12);
+      var now = ctx.currentTime;
+      var safeVelocity = normalizeMidiVelocity(velocity);
+      var peakGain = 0.3 + (safeVelocity / 127) * 0.7;
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.linearRampToValueAtTime(peakGain, now + 0.008);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.32);
+      osc.connect(gain);
+      gain.connect(state.audio.masterGain || ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.34);
+    }
+
+    // ── Bank helpers ───────────────────────────────────────────────────────
+    function getMidiBank(id) {
+      if (!id) return null;
+      return (
+        state.midiBanks.find(function (b) {
+          return b.id === id;
+        }) || null
+      );
+    }
+
+    function getMidiCartridge(id) {
+      if (!id) return null;
+      return (
+        state.midiCartridges.find(function (c) {
+          return c.id === id;
+        }) || null
+      );
+    }
+
+    // ── Graph builders ─────────────────────────────────────────────────────
+    function getStrokeEndpoints(stroke) {
+      var pts = stroke.points;
+      if (!pts || pts.length < 2) return null;
+      return { start: pts[0], end: pts[pts.length - 1] };
+    }
+
+    function isStrokeConnected(a, b, threshold) {
+      var eps = getStrokeEndpoints(a);
+      var epb = getStrokeEndpoints(b);
+      if (!eps || !epb) return false;
+      var thr = threshold != null ? threshold : 12;
+      function dist(p, q) {
+        return Math.hypot(p.x - q.x, p.y - q.y);
+      }
+      return (
+        dist(eps.end, epb.start) <= thr ||
+        dist(eps.end, epb.end) <= thr ||
+        dist(eps.start, epb.start) <= thr ||
+        dist(eps.start, epb.end) <= thr
+      );
+    }
+
+    function buildGraphFromStroke(startStroke) {
+      var graphId =
+        "graph_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6);
+      var visited = {};
+      var order = [];
+      var queue = [startStroke];
+      visited[startStroke.id] = true;
+
+      while (queue.length) {
+        var current = queue.shift();
+        order.push(current.id);
+        // Find first unvisited neighbor by endpoint proximity
+        for (var i = 0; i < state.strokes.length; i++) {
+          var s = state.strokes[i];
+          if (visited[s.id]) continue;
+          if (isStrokeConnected(current, s)) {
+            visited[s.id] = true;
+            queue.push(s);
+          }
+        }
+      }
+
+      var graph = {
+        id: graphId,
+        strokeIds: order,
+        bankId: null,
+        mode: "deterministic",
+        closed: false,
+        createdAt: Date.now(),
+      };
+      state.graphs[graphId] = graph;
+      console.log("[GRAPH] Built:", graphId, "strokes:", order.length);
+      return graph;
+    }
+
+    function assignBankToGraph(bankId, graphId) {
+      var graph = state.graphs[graphId];
+      var bank = getMidiBank(bankId);
+      if (!graph || !bank) return;
+      graph.bankId = bankId;
+      bank.graphId = graphId;
+      graph.strokeIds.forEach(function (sid) {
+        var s = getStrokeById(sid);
+        if (!s) return;
+        s.graphId = graphId;
+        s.bankId = bankId;
+      });
+      console.log(
+        "[MIDI] Bank",
+        bankId,
+        "→ graph",
+        graphId,
+        "strokes:",
+        graph.strokeIds.length,
+      );
+    }
+
+    function getGraphStrokes(graphId) {
+      var graph = state.graphs[graphId];
+      if (!graph) return [];
+      return graph.strokeIds.map(getStrokeById).filter(Boolean);
+    }
+
+    // ── Graph geometry ─────────────────────────────────────────────────────
+    function getStrokeLength(stroke) {
+      var pts = stroke.points;
+      var len = 0;
+      for (var i = 1; i < pts.length; i++) {
+        len += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+      }
+      return len || 1;
+    }
+
+    function getGraphLength(graph) {
+      return (
+        graph.strokeIds.reduce(function (acc, sid) {
+          var s = getStrokeById(sid);
+          return acc + (s ? getStrokeLength(s) : 0);
+        }, 0) || 1
+      );
+    }
+
+    // Returns { strokeId, t, x, y } for a given distance along the graph
+    function projectDistanceToGraph(graph, distance) {
+      var remaining = distance;
+      for (var i = 0; i < graph.strokeIds.length; i++) {
+        var s = getStrokeById(graph.strokeIds[i]);
+        if (!s) continue;
+        var sl = getStrokeLength(s);
+        if (remaining <= sl) {
+          // Local t within this stroke
+          var t = Math.max(0, Math.min(1, remaining / sl));
+          var pos = getStrokePoint(s, t);
+          return { strokeId: s.id, t: t, x: pos.x, y: pos.y };
+        }
+        remaining -= sl;
+      }
+      // Past end — clamp to last stroke end
+      var last = getStrokeById(graph.strokeIds[graph.strokeIds.length - 1]);
+      if (last) {
+        var pos = getStrokePoint(last, 1);
+        return { strokeId: last.id, t: 1, x: pos.x, y: pos.y };
+      }
+      return null;
+    }
+
+    // ── MIDI Projection ────────────────────────────────────────────────────
+    function projectMidiToGraph(bankId, graphId) {
+      var bank = getMidiBank(bankId);
+      var graph = state.graphs[graphId];
+      if (!bank || !graph) return;
+      var cartridge = getMidiCartridge(bank.cartridgeId);
+      if (!cartridge || !cartridge.notes.length) return;
+
+      var graphLen = getGraphLength(graph);
+      var cartLen = cartridge.length || 1;
+
+      cartridge.notes.forEach(function (note) {
+        var norm = note.time / cartLen; // 0..1 in MIDI time
+        var dist = norm * graphLen; // distance along graph
+        var placed = projectDistanceToGraph(graph, dist);
+        if (!placed) return;
+
+        var mp = {
+          id: "mp_" + Math.random().toString(36).slice(2, 10),
+          graphId: graphId,
+          bankId: bankId,
+          cartridgeId: cartridge.id,
+          strokeId: placed.strokeId,
+          t: placed.t,
+          note: note.note,
+          velocity: note.velocity,
+          duration: note.duration,
+          color: note.color || noteToColor(note.note),
+          locked: true,
+          selected: false,
+          consumed: false,
+          x: placed.x,
+          y: placed.y,
+        };
+        state.midiPoints.push(mp);
+      });
+
+      console.log("[MIDI PROJECT]", {
+        notes: cartridge.notes.length,
+        cartLen: cartLen,
+        graphLen: graphLen,
+        pointsAdded: state.midiPoints.filter(function (p) {
+          return p.graphId === graphId;
+        }).length,
+        graphId: graphId,
+      });
+    }
+
+    // ── Bank consumption lifecycle ─────────────────────────────────────────
+    function updateBankConsumption(bankId) {
+      var bank = getMidiBank(bankId);
+      if (!bank) return;
+      var points = state.midiPoints.filter(function (p) {
+        return p.bankId === bankId;
+      });
+      if (!points.length) return;
+      var done = points.every(function (p) {
+        return p.consumed;
+      });
+      if (!done) return;
+      if (bank.repeat) {
+        points.forEach(function (p) {
+          p.consumed = false;
+        });
+        bank.consumed = false;
+        if (state.debug && state.debug.audioLogs)
+          console.log("[MIDI] Bank", bankId, "recycled");
+      } else {
+        bank.consumed = true;
+        if (state.debug && state.debug.audioLogs)
+          console.log("[MIDI] Bank", bankId, "consumed");
+      }
+    }
+
+    // ── MIDI Point spatial trigger ─────────────────────────────────────────
+    function triggerMidiPointsForWalker(walker) {
+      if (!state.midiPoints.length) return;
+
+      // Resolve graphId/bankId live from the stroke — handles walkers created before MIDI was attached
+      var liveStroke = walker.strokeId ? getStrokeById(walker.strokeId) : null;
+      var graphId =
+        walker.graphId || (liveStroke && liveStroke.graphId) || null;
+      var bankId = walker.bankId || (liveStroke && liveStroke.bankId) || null;
+      // Update walker so future frames don't need to re-resolve
+      if (graphId && !walker.graphId) walker.graphId = graphId;
+      if (bankId && !walker.bankId) walker.bankId = bankId;
+
+      var threshold = 0.02; // wider window — walker advances ~0.003 per frame at default speed
+      var triggered = false;
+
+      state.midiPoints.forEach(function (p) {
+        if (p.consumed) return;
+
+        // Path 1: same stroke — t-based match
+        if (p.strokeId === walker.strokeId) {
+          if (Math.abs(p.t - walker.t) < threshold) {
+            playFallbackInstrument(
+              p.note,
+              p.velocity != null ? p.velocity : 100,
+            );
+            p.consumed = true;
+            triggered = true;
+            if (state.debug && state.debug.audioLogs)
+              console.log(
+                "[MIDI POINT]",
+                p.note,
+                "t:",
+                p.t.toFixed(3),
+                "walker.t:",
+                walker.t.toFixed(3),
+              );
+          }
+          return;
+        }
+
+        // Path 2: same graph — XY proximity on other strokes
+        if (
+          graphId &&
+          p.graphId === graphId &&
+          (!bankId || p.bankId === bankId)
+        ) {
+          var dx = walker.x - p.x;
+          var dy = walker.y - p.y;
+          if (dx * dx + dy * dy < 49) {
+            playFallbackInstrument(
+              p.note,
+              p.velocity != null ? p.velocity : 100,
+            );
+            p.consumed = true;
+            triggered = true;
+            if (state.debug && state.debug.audioLogs)
+              console.log(
+                "[MIDI POINT] graph hit",
+                p.note,
+                "t:",
+                p.t.toFixed(3),
+              );
+          }
+        }
+      });
+
+      if (triggered && bankId) updateBankConsumption(bankId);
+    }
+
+    // ── Render MIDI Points ─────────────────────────────────────────────────
+    function renderMidiPoints(ctx) {
+      // Debug fallback: inject one visible test point if state is empty but strokes exist
+      if (
+        state.midiPoints.length === 0 &&
+        state.strokes.length > 0 &&
+        state._midiDebugPoint
+      ) {
+        var dbgStroke = state.strokes[0];
+        state.midiPoints.push({
+          id: "debug_mp",
+          graphId: null,
+          bankId: null,
+          strokeId: dbgStroke.id,
+          t: 0.5,
+          note: 60,
+          velocity: 100,
+          duration: 0.25,
+          color: "#ff0",
+          locked: false,
+          selected: false,
+          consumed: false,
+          x: 0,
+          y: 0,
+        });
+        console.log("[MIDI DEBUG] Injected test point on stroke", dbgStroke.id);
+        state._midiDebugPoint = false;
+      }
+
+      if (!state.midiPoints.length) return;
+      state.midiPoints.forEach(function (p) {
+        var stroke = getStrokeById(p.strokeId);
+        if (!stroke) return;
+        // Recalculate live position
+        var pos = getStrokePoint(stroke, p.t);
+        p.x = pos.x;
+        p.y = pos.y;
+
+        var alpha = p.consumed ? 0.15 : p.locked ? 0.7 : 1.0;
+        var radius = p.consumed ? 2 : p.locked ? 5 : 6;
+
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = p.color || noteToColor(p.note);
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      });
+    }
+
+    // ── Walker setup for graph ─────────────────────────────────────────────
+    function initWalkerGraph(walker, stroke) {
+      if (!stroke.graphId) return;
+      var graph = state.graphs[stroke.graphId];
+      if (!graph) return;
+      walker.graphId = stroke.graphId;
+      walker.bankId = stroke.bankId || null;
+      walker.connectionMode = "closed";
+      walker.graphStrokeOrder = graph.strokeIds.slice();
+      walker.graphStrokeIndex = graph.strokeIds.indexOf(stroke.id);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // ── End MIDI Ink System ──────────────────────────────────────────────
+    // ═══════════════════════════════════════════════════════════════════════
 
     function bindControls() {
       const elements = controls.elements;
@@ -3150,7 +5711,46 @@
       );
 
       elements.saveScene.addEventListener("click", function saveScene() {
-        SBE.SceneManager.downloadScene(state, "sbe-scene");
+        var scene = {
+          version: "wos-scene-v2",
+          canvas: clone(state.canvas),
+          swarm: clone(state.swarm),
+          balls: clone(state.balls || []),
+          shapes: clone(state.shapes || []),
+          textObjects: clone(state.textObjects || []),
+          background: state.backgroundDataUrl || null,
+          lines: clone(
+            (state.lines || []).filter(function (l) {
+              return !isDerivedStrokeLine(l);
+            }),
+          ),
+          strokes: clone(state.strokes || []),
+          groups: clone(state.groups || {}),
+          walkers: clone(state.walkers || []),
+        };
+        console.log("[save]", {
+          strokes: scene.strokes.length,
+          groups: Object.keys(scene.groups || {}).length,
+          walkers: scene.walkers.length,
+          lines: scene.lines.length,
+        });
+        // Own download — bypasses SceneManager which may reserialize state directly
+        try {
+          var json = JSON.stringify(scene, null, 2);
+          var blob = new Blob([json], { type: "application/json" });
+          var url = URL.createObjectURL(blob);
+          var a = document.createElement("a");
+          a.href = url;
+          a.download = "wos-scene.json";
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        } catch (err) {
+          console.error("[save] failed", err);
+          // Fallback to SceneManager
+          SBE.SceneManager.downloadScene(scene, "wos-scene");
+        }
       });
 
       elements.sceneFile.addEventListener(
@@ -3232,9 +5832,159 @@
         });
       });
 
+      // ── Live inspector propagation functions ─────────────────────────────────
+
+      function applyNoteColorToSelection(note) {
+        var color = noteToColor(note);
+        var targets =
+          typeof getSelectedStrokeTargets === "function"
+            ? getSelectedStrokeTargets()
+            : [];
+        if (targets.length > 0) {
+          targets.forEach(function (s) {
+            s.color = color;
+            // Reset fx so renderer uses updated stroke.color
+            if (s.motion && s.motion.fx) {
+              s.motion.fx.colorSource = "note";
+              s.motion.fx.color = color;
+            }
+            applyStrokeUpdates(s);
+          });
+          renderFrame();
+          return;
+        }
+        // No selection — update defaults only
+        state.defaults.color = color;
+        renderFrame();
+      }
+
+      function applyModeToStroke(stroke) {
+        if (!stroke || !stroke.motion) return;
+        var mode = stroke.motion.mode;
+        if (!mode) return;
+        // Speed presets per mode — ensures walker actually moves at a visible rate
+        var modeSpeed = {
+          loop: 0.0012 * 60,
+          pingpong: 0.0035 * 60,
+          tunnel: 0.0028 * 60,
+        };
+        state.walkers.forEach(function (w) {
+          if (w.strokeId === stroke.id) {
+            w.motionMode = mode;
+            if (modeSpeed[mode] != null) w.speed = modeSpeed[mode];
+            console.log(
+              "[MODE APPLY]",
+              mode,
+              "speed:",
+              w.speed,
+              "strokeId:",
+              stroke.id,
+              "walkerId:",
+              w.id,
+            );
+          }
+        });
+      }
+
+      function applyStrokeWidth(stroke) {
+        if (!stroke) return;
+        var t = stroke.width;
+        stroke.thickness = t;
+        if (stroke.segments) {
+          stroke.segments.forEach(function (s) {
+            s.thickness = t;
+          });
+        }
+      }
+
+      var MOTION_PRESETS = {
+        drift: {
+          walker: { speed: 0.0012 * 60, mode: "loop" },
+          emission: { rate: 120, spread: 0.4, life: 1.8, size: 2 },
+        },
+        pulse: {
+          walker: { speed: 0.0035 * 60, mode: "pingpong" },
+          emission: { rate: 40, spread: 0.1, life: 0.4, size: 3 },
+        },
+        tunnel: {
+          walker: { speed: 0.0028 * 60, mode: "tunnel" },
+        },
+      };
+
+      function applyPresetToWalkers(stroke) {
+        if (!stroke || !stroke.motionPreset) return;
+        var preset = MOTION_PRESETS[stroke.motionPreset];
+        if (!preset) return;
+        state.walkers.forEach(function (w) {
+          if (w.strokeId === stroke.id) {
+            if (preset.walker) Object.assign(w, preset.walker);
+            if (preset.emission && w.emitter)
+              Object.assign(w.emitter, preset.emission);
+          }
+        });
+      }
+
+      function applyMotionPreset(stroke, id) {
+        var preset = MOTION_PRESETS[id];
+        if (!preset || !stroke) return;
+        stroke.motionPreset = id;
+        if (!stroke.motion) stroke.motion = {};
+        if (preset.walker) Object.assign(stroke.motion, preset.walker);
+        if (preset.emission) {
+          var fx = getFX(stroke);
+          Object.assign(fx, preset.emission);
+        }
+        applyStrokeUpdates(stroke);
+      }
+
+      function refreshStrokeBridgeLines(stroke) {
+        // Sync derived state.lines color + thickness with live stroke values.
+        // Keeps collision/sound data current without rebuilding the whole bridge.
+        if (!stroke) return;
+        state.lines.forEach(function (l) {
+          if (l._strokeId === stroke.id && l._isDerived) {
+            l.color = stroke.color;
+            l.thickness = stroke.width;
+            if (l.style) {
+              l.style.color = stroke.color;
+              l.style.thickness = stroke.width;
+            }
+          }
+        });
+      }
+
+      function applyStrokeUpdates(stroke) {
+        if (!stroke) return;
+        applyStrokeWidth(stroke);
+        applyModeToStroke(stroke);
+        applyPresetToWalkers(stroke);
+        refreshStrokeBridgeLines(stroke);
+        invalidateStrokeRuntime(stroke.id);
+        ensureSingleWalker(stroke.id);
+        renderFrame();
+      }
+
       elements.noteCells.forEach((cell) => {
         cell.addEventListener("click", function chooseNoteClass() {
-          applyNoteClass(Number(cell.dataset.noteClass));
+          if (window.WOS && WOS.mode === "play") {
+            // Play mode — note cells do NOT assign; emitters run via behaviorLoop
+            return;
+          }
+          // Assign mode — set WOS.currentNote (full MIDI note, preserving current octave)
+          var noteClass = Number(cell.dataset.noteClass);
+          var octave = Math.floor(
+            (WOS.currentNote || state.defaults.note || 60) / 12,
+          );
+          var fullNote = clampInt(octave * 12 + noteClass, 0, 127);
+          WOS.currentNote = fullNote;
+          applyNoteColorToSelection(fullNote);
+          // Update visual selection
+          elements.noteCells.forEach(function (c) {
+            c.classList.toggle(
+              "active",
+              Number(c.dataset.noteClass) === noteClass,
+            );
+          });
         });
       });
 
@@ -3303,24 +6053,120 @@
         },
       );
 
-      elements.lineThickness.addEventListener(
-        "input",
-        function updateThickness() {
-          applyInspectorMetadata(false);
-        },
-      );
-
-      if (elements.strokeWidth) {
-        elements.strokeWidth.addEventListener(
+      if (elements.lineThickness) {
+        elements.lineThickness.addEventListener(
           "input",
-          function updateStrokeWidth() {
+          function updateThickness() {
             applyInspectorMetadata(false);
           },
         );
       }
 
+      if (elements.strokeWidth) {
+        elements.strokeWidth.addEventListener(
+          "input",
+          function updateStrokeWidth() {
+            var sw = Number(elements.strokeWidth.value);
+            if (isNaN(sw) || sw < 1) return;
+            var targets =
+              typeof getSelectedStrokeTargets === "function"
+                ? getSelectedStrokeTargets()
+                : [];
+            if (targets.length > 0) {
+              targets.forEach(function (stroke) {
+                stroke.baseWidth = sw;
+                stroke.scale = 1;
+                stroke.width = sw;
+                applyStrokeUpdates(stroke);
+              });
+              renderFrame();
+              return;
+            }
+            state.defaults.strokeWidth = sw;
+            applyInspectorMetadata(false);
+          },
+        );
+      }
+
+      // ── Hide Outline checkbox binding ──
+      (function bindRenderMode() {
+        var btn = document.getElementById("toggle-visibility");
+        if (!btn) return;
+
+        function getCurrentMode() {
+          var stroke = getSelectedStroke();
+          return stroke
+            ? stroke.renderMode || "visible"
+            : state.defaultRenderMode || "visible";
+        }
+
+        function updateBtn() {
+          var mode = getCurrentMode();
+          btn.textContent = mode === "hidden" ? "👁‍🗨" : "👁";
+          btn.title =
+            mode === "hidden"
+              ? "Outline hidden — click to show"
+              : "Outline visible — click to hide";
+        }
+
+        btn.addEventListener("click", function () {
+          var targets =
+            typeof getSelectedStrokeTargets === "function"
+              ? getSelectedStrokeTargets()
+              : [];
+          if (targets.length > 0) {
+            var nextMode = targets.some(function (s) {
+              return (s.renderMode || "visible") !== "hidden";
+            })
+              ? "hidden"
+              : "visible";
+            targets.forEach(function (s) {
+              s.renderMode = nextMode;
+              s.outlineVisible = nextMode !== "hidden";
+              applyStrokeUpdates(s);
+            });
+            updateBtn();
+            renderFrame();
+            return;
+          }
+          state.defaultRenderMode =
+            state.defaultRenderMode === "hidden" ? "visible" : "hidden";
+          updateBtn();
+          renderFrame();
+        });
+
+        // Sync button state when selection changes
+        var orig = window._wos_syncBehaviorPanel;
+        window._wos_syncBehaviorPanel = function () {
+          updateBtn();
+          if (orig) orig();
+        };
+
+        updateBtn();
+      })();
+
       elements.lineColor.addEventListener("input", function syncDisplayColor() {
-        const nextNote = findClosestNoteForColor(elements.lineColor.value);
+        var color = elements.lineColor.value;
+        var targets =
+          typeof getSelectedStrokeTargets === "function"
+            ? getSelectedStrokeTargets()
+            : [];
+        if (targets.length > 0) {
+          targets.forEach(function (s) {
+            s.color = color;
+            // Reset fx so resolveFXColor uses the updated stroke.color
+            if (s.motion && s.motion.fx) {
+              s.motion.fx.colorSource = "note";
+              s.motion.fx.color = color;
+            }
+            applyStrokeUpdates(s);
+          });
+          renderFrame();
+          return;
+        }
+        // No selection — persist default for future strokes
+        state.defaults.color = color;
+        var nextNote = findClosestNoteForColor(color);
         if (nextNote !== null) {
           applyNoteClass(nextNote % 12, Math.floor(state.defaults.note / 12));
         }
@@ -3685,8 +6531,414 @@
         });
       }
 
+      // ── Motion Brush Panel bindings (state.motion) ──────────────────────────
+      (function bindMotionBrushPanel() {
+        // Motion Brush tab → writes to state.motionBrush (creation-time preset only)
+        var PRESETS = {
+          orbit: {
+            rate: 60,
+            spread: 0.1,
+            particleSpeed: 100,
+            size: 2,
+            life: 1.5,
+            mode: "loop",
+          },
+          comet: {
+            rate: 80,
+            spread: 0.2,
+            particleSpeed: 300,
+            size: 4,
+            life: 0.4,
+            mode: "pingpong",
+          },
+          dust: {
+            rate: 120,
+            spread: 1.8,
+            particleSpeed: 40,
+            size: 1.5,
+            life: 2.5,
+            mode: "pingpong",
+          },
+          burst: {
+            rate: 200,
+            spread: 6.28,
+            particleSpeed: 200,
+            size: 5,
+            life: 0.5,
+            mode: "pingpong",
+          },
+          ribbon: {
+            rate: 30,
+            spread: 0.05,
+            particleSpeed: 80,
+            size: 3,
+            life: 3.0,
+            mode: "loop",
+          },
+        };
+
+        function byId(id) {
+          return document.getElementById(id);
+        }
+
+        function syncPanelToState() {
+          var m = state.motionBrush;
+          var el;
+          if ((el = byId("motion-brush-enabled"))) el.checked = !!m.enabled;
+          if ((el = byId("motion-brush-autobake"))) el.checked = !!m.autoBake;
+          if ((el = byId("motion-color-source")))
+            el.value = m.colorSource || "note";
+          if ((el = byId("motion-brush-mode"))) el.value = m.mode || "pingpong";
+          if ((el = byId("motion-brush-color"))) {
+            el.value = m.color || "#ffffff";
+            el.disabled = m.colorSource !== "custom";
+          }
+          if ((el = byId("motion-brush-rate"))) {
+            el.value = m.rate;
+            if (byId("motion-brush-rate-value"))
+              byId("motion-brush-rate-value").textContent = m.rate;
+          }
+          if ((el = byId("motion-brush-spread"))) {
+            el.value = m.spread;
+            if (byId("motion-brush-spread-value"))
+              byId("motion-brush-spread-value").textContent = Number(
+                m.spread,
+              ).toFixed(2);
+          }
+          if ((el = byId("motion-brush-speed"))) {
+            el.value = m.particleSpeed;
+            if (byId("motion-brush-speed-value"))
+              byId("motion-brush-speed-value").textContent = m.particleSpeed;
+          }
+          if ((el = byId("motion-brush-size"))) {
+            el.value = m.size;
+            if (byId("motion-brush-size-value"))
+              byId("motion-brush-size-value").textContent = m.size;
+          }
+          if ((el = byId("motion-brush-life"))) {
+            el.value = m.life;
+            if (byId("motion-brush-life-value"))
+              byId("motion-brush-life-value").textContent = Number(
+                m.life,
+              ).toFixed(1);
+          }
+        }
+
+        function wire(id, key, transform, outputId, outputFmt) {
+          var el = byId(id);
+          if (!el) return;
+          el.addEventListener("input", function () {
+            state.motionBrush[key] = transform
+              ? transform(this.value)
+              : this.value;
+            if (outputId) {
+              var out = byId(outputId);
+              if (out)
+                out.textContent = outputFmt
+                  ? outputFmt(state.motionBrush[key])
+                  : state.motionBrush[key];
+            }
+          });
+        }
+
+        var enEl = byId("motion-brush-enabled");
+        if (enEl)
+          enEl.addEventListener("change", function () {
+            state.motionBrush.enabled = this.checked;
+          });
+
+        var bakeEl = byId("motion-brush-autobake");
+        if (bakeEl)
+          bakeEl.addEventListener("change", function () {
+            state.motionBrush.autoBake = this.checked;
+          });
+
+        // Color source select — note / stroke / custom
+        var colorSourceEl = byId("motion-color-source");
+        if (colorSourceEl)
+          colorSourceEl.addEventListener("change", function () {
+            state.motionBrush.colorSource = this.value;
+            var picker = byId("motion-brush-color");
+            if (picker) picker.disabled = this.value !== "custom";
+          });
+
+        var colorEl = byId("motion-brush-color");
+        if (colorEl) {
+          colorEl.disabled = state.motionBrush.colorSource !== "custom";
+          colorEl.addEventListener("input", function () {
+            state.motionBrush.color = this.value;
+            state.motionBrush.colorSource = "custom";
+            var src = byId("motion-color-source");
+            if (src) src.value = "custom";
+          });
+        }
+
+        // Swatch clicks
+        var swatchCont = byId("motion-brush-swatches");
+        if (swatchCont) {
+          swatchCont.addEventListener("click", function (e) {
+            var btn = e.target.closest("[data-color]");
+            if (!btn) return;
+            state.motionBrush.color = btn.dataset.color;
+            state.motionBrush.colorSource = "custom";
+            var picker = byId("motion-brush-color");
+            if (picker) {
+              picker.value = btn.dataset.color;
+              picker.disabled = false;
+            }
+            var src = byId("motion-color-source");
+            if (src) src.value = "custom";
+          });
+        }
+
+        var modeEl = byId("motion-brush-mode");
+        if (modeEl)
+          modeEl.addEventListener("change", function () {
+            state.motionBrush.mode = this.value;
+          });
+
+        wire(
+          "motion-brush-rate",
+          "rate",
+          Number,
+          "motion-brush-rate-value",
+          null,
+        );
+        wire(
+          "motion-brush-spread",
+          "spread",
+          Number,
+          "motion-brush-spread-value",
+          function (v) {
+            return v.toFixed(2);
+          },
+        );
+        wire(
+          "motion-brush-speed",
+          "particleSpeed",
+          Number,
+          "motion-brush-speed-value",
+          null,
+        );
+        wire(
+          "motion-brush-size",
+          "size",
+          Number,
+          "motion-brush-size-value",
+          null,
+        );
+        wire(
+          "motion-brush-life",
+          "life",
+          Number,
+          "motion-brush-life-value",
+          function (v) {
+            return v.toFixed(1);
+          },
+        );
+
+        // Preset buttons
+        document
+          .querySelectorAll("[data-motion-preset]")
+          .forEach(function (btn) {
+            btn.addEventListener("click", function () {
+              var preset = PRESETS[this.dataset.motionPreset];
+              if (!preset) return;
+              Object.assign(state.motionBrush, preset);
+              syncPanelToState();
+            });
+          });
+
+        // Initial sync
+        syncPanelToState();
+      })();
+
+      // ── Behavior Panel bindings (Phase 1 — wires to state.motion) ────────────
+      (function bindBehaviorPanel() {
+        // Behavior Panel → writes to selected stroke's stroke.motion.fx (FX system)
+
+        function byId(id) {
+          return document.getElementById(id);
+        }
+
+        // Get or initialize stroke motion + fx — never null after this
+        function getSelectedFX() {
+          var stroke = getSelectedStroke();
+          if (!stroke) return null;
+          if (!stroke.motion) stroke.motion = { mode: "pingpong" };
+          return getFX(stroke); // creates stroke.motion.fx if missing
+        }
+
+        function getSelectedMotion() {
+          var stroke = getSelectedStroke();
+          if (!stroke) return null;
+          if (!stroke.motion) stroke.motion = { mode: "pingpong" };
+          return stroke.motion;
+        }
+
+        function syncToSelection() {
+          var stroke = getSelectedStroke();
+          if (!stroke) return;
+          var m = getSelectedMotion();
+          var fx = getSelectedFX();
+          var el;
+          // Mode
+          if ((el = byId("bp-mode"))) el.value = m.mode || "pingpong";
+          // FX color
+          if ((el = byId("bp-fx-color-source")))
+            el.value = fx.colorSource || "note";
+          if ((el = byId("bp-fx-color"))) {
+            el.value = fx.color || stroke.color || "#ffffff";
+            el.disabled = false; // always enabled — clicking auto-switches to custom
+            el.style.opacity = fx.colorSource === "custom" ? "1" : "0.5";
+          }
+          // Particle type
+          if ((el = byId("bp-type"))) el.value = fx.type || "dot";
+          // Advanced sliders
+          if ((el = byId("bp-rate"))) {
+            el.value = fx.rate;
+            if (byId("bp-rate-value"))
+              byId("bp-rate-value").textContent = fx.rate;
+          }
+          if ((el = byId("bp-spread"))) {
+            el.value = fx.spread;
+            if (byId("bp-spread-value"))
+              byId("bp-spread-value").textContent = Number(fx.spread).toFixed(
+                2,
+              );
+          }
+          if ((el = byId("bp-speed"))) {
+            el.value = fx.speed;
+            if (byId("bp-speed-value"))
+              byId("bp-speed-value").textContent = fx.speed;
+          }
+          if ((el = byId("bp-size"))) {
+            el.value = fx.size;
+            if (byId("bp-size-value"))
+              byId("bp-size-value").textContent = fx.size;
+          }
+          if ((el = byId("bp-life"))) {
+            el.value = fx.life;
+            if (byId("bp-life-value"))
+              byId("bp-life-value").textContent = Number(fx.life).toFixed(1);
+          }
+          // Active style indicator
+          document.querySelectorAll("[data-bp-style]").forEach(function (btn) {
+            btn.classList.toggle("active", btn.dataset.bpStyle === fx.style);
+          });
+        }
+
+        // Mode (goes on stroke.motion directly)
+        var modeEl = byId("bp-mode");
+        if (modeEl)
+          modeEl.addEventListener("change", function () {
+            var m = getSelectedMotion();
+            if (m) {
+              m.mode = this.value;
+              console.log(
+                "[MODE DROPDOWN]",
+                this.value,
+                "stroke:",
+                getSelectedStroke() && getSelectedStroke().id,
+              );
+              applyStrokeUpdates(getSelectedStroke());
+            }
+          });
+
+        // FX color source
+        var csEl = byId("bp-fx-color-source");
+        if (csEl)
+          csEl.addEventListener("change", function () {
+            var fx = getSelectedFX();
+            if (!fx) return;
+            fx.colorSource = this.value;
+            var picker = byId("bp-fx-color");
+            if (picker)
+              picker.style.opacity = this.value === "custom" ? "1" : "0.5";
+          });
+
+        // FX color picker
+        var cpEl = byId("bp-fx-color");
+        if (cpEl) {
+          cpEl.addEventListener("input", function () {
+            var fx = getSelectedFX();
+            if (!fx) return;
+            fx.color = this.value;
+            fx.colorSource = "custom";
+            var src = byId("bp-fx-color-source");
+            if (src) src.value = "custom";
+            cpEl.disabled = false;
+          });
+        }
+
+        // Advanced slider helper — writes to fx
+        function wireFXRange(id, key, outputId, fmt) {
+          var el = byId(id);
+          if (!el) return;
+          el.addEventListener("input", function () {
+            var fx = getSelectedFX();
+            if (!fx) return;
+            fx[key] = Number(this.value);
+            var out = byId(outputId);
+            if (out) out.textContent = fmt ? fmt(fx[key]) : fx[key];
+          });
+        }
+
+        function wireFXSelect(id, key) {
+          var el = byId(id);
+          if (!el) return;
+          el.addEventListener("change", function () {
+            var fx = getSelectedFX();
+            if (fx) fx[key] = this.value;
+          });
+        }
+
+        wireFXSelect("bp-type", "type");
+        wireFXRange("bp-rate", "rate", "bp-rate-value", null);
+        wireFXRange("bp-spread", "spread", "bp-spread-value", function (v) {
+          return v.toFixed(2);
+        });
+        wireFXRange("bp-speed", "speed", "bp-speed-value", null);
+        wireFXRange("bp-size", "size", "bp-size-value", null);
+        wireFXRange("bp-life", "life", "bp-life-value", function (v) {
+          return v.toFixed(1);
+        });
+
+        // FX Style buttons — apply preset params to fx and mark active
+        document.querySelectorAll("[data-bp-style]").forEach(function (btn) {
+          btn.addEventListener("click", function () {
+            var stroke = getSelectedStroke();
+            if (!stroke) return;
+            applyFXStyle(stroke, this.dataset.bpStyle);
+            syncToSelection();
+          });
+        });
+
+        // Expose for selection pipeline
+        window._wos_syncBehaviorPanel = syncToSelection;
+
+        syncToSelection();
+      })();
+
+      // ── Trail Debug Panel bindings ────────────────────────────────────────────
+      (function bindDebugPanel() {
+        function wire(id, key) {
+          var el = document.getElementById(id);
+          if (!el) return;
+          el.checked = state.debug[key];
+          el.addEventListener("change", function () {
+            state.debug[key] = this.checked;
+            renderFrame();
+          });
+        }
+        wire("debug-walkers", "walkers");
+        wire("debug-paths", "paths");
+        wire("debug-info", "info");
+      })();
+
       global.addEventListener("keydown", async function onKeyDown(event) {
         heldKeys.add(event.key.toLowerCase());
+        if (event.key === "Shift") input.shift = true;
 
         if (textEditor && event.key === "Escape") {
           event.preventDefault();
@@ -3725,7 +6977,14 @@
         if (event.key.toLowerCase() === "d") {
           if (event.metaKey || event.ctrlKey) {
             event.preventDefault();
-            await duplicateSelectedObject();
+            if (
+              state.selection.groupId &&
+              state.groups[state.selection.groupId]
+            ) {
+              duplicateGroupSelection(state.selection.groupId);
+            } else {
+              await duplicateSelectedObject();
+            }
             return;
           }
           // D key now activates mop (primary drawing tool)
@@ -3761,6 +7020,40 @@
         if (event.key.toLowerCase() === "p") {
           state.tool = "pen";
           syncUI();
+          return;
+        }
+        // Ctrl/Cmd+Shift+G — ungroup
+        if (
+          event.key.toLowerCase() === "g" &&
+          (event.metaKey || event.ctrlKey) &&
+          event.shiftKey
+        ) {
+          event.preventDefault();
+          ungroupSelected();
+          return;
+        }
+
+        // Ctrl/Cmd+G — group selected strokes
+        if (
+          event.key.toLowerCase() === "g" &&
+          (event.metaKey || event.ctrlKey)
+        ) {
+          event.preventDefault();
+          var strokeEntries = state.multiSelection.filter(function (e) {
+            return e.type === "stroke";
+          });
+          if (strokeEntries.length > 1) {
+            var ids = strokeEntries.map(function (e) {
+              return e.id;
+            });
+            var grp = createGroup(ids);
+            if (grp) {
+              state.multiSelection = [{ type: "group", id: grp.id }];
+              syncLegacySelection();
+              syncSelectionPanel();
+              renderFrame();
+            }
+          }
           return;
         }
         // G — toggle grid
@@ -3895,6 +7188,7 @@
 
       global.addEventListener("keyup", function onKeyUp(event) {
         heldKeys.delete(event.key.toLowerCase());
+        if (event.key === "Shift") input.shift = false;
       });
     }
 
@@ -3902,6 +7196,11 @@
       if (state.ui.presentation) return;
 
       state.multiSelection = [];
+
+      // Mop strokes — primary selectable objects
+      (state.strokes || []).forEach(function (s) {
+        state.multiSelection.push({ type: "stroke", id: s.id });
+      });
 
       (state.shapes || []).forEach(function (s) {
         state.multiSelection.push({ type: "shape", id: s.id });
@@ -3911,11 +7210,38 @@
         state.multiSelection.push({ type: "ball", id: b.id });
       });
 
-      (state.lines || []).forEach(function (l) {
-        state.multiSelection.push({ type: "line", id: l.id });
-      });
+      // Non-derived lines only (exclude stroke bridge lines)
+      (state.lines || [])
+        .filter(function (l) {
+          return !l._isDerived;
+        })
+        .forEach(function (l) {
+          state.multiSelection.push({ type: "line", id: l.id });
+        });
 
-      // Emitters removed — now only exist as line behaviors
+      // Set stroke selection state for the inspector
+      if (
+        state.multiSelection.length === 1 &&
+        state.multiSelection[0].type === "stroke"
+      ) {
+        state.selection.strokeId = state.multiSelection[0].id;
+        state.selection.strokeIds.clear();
+        state.selection.strokeIds.add(state.multiSelection[0].id);
+      } else if (
+        state.multiSelection.some(function (e) {
+          return e.type === "stroke";
+        })
+      ) {
+        state.selection.strokeId = null;
+        state.selection.strokeIds.clear();
+        state.multiSelection
+          .filter(function (e) {
+            return e.type === "stroke";
+          })
+          .forEach(function (e) {
+            state.selection.strokeIds.add(e.id);
+          });
+      }
 
       syncLegacySelection();
       syncSelectionPanel();
@@ -3959,7 +7285,7 @@
         ? await loadImage(state.backgroundDataUrl)
         : null;
 
-      // WOS stroke + group layer restoration
+      // WOS stroke + group + walker layer restoration
       state.strokes = Array.isArray(scene.strokes) ? scene.strokes : [];
       state.groups =
         scene.groups &&
@@ -3967,6 +7293,13 @@
         !Array.isArray(scene.groups)
           ? scene.groups
           : {};
+      state.walkers = Array.isArray(scene.walkers) ? scene.walkers : [];
+      console.log("[load]", {
+        strokes: state.strokes.length,
+        groups: Object.keys(state.groups || {}).length,
+        walkers: state.walkers.length,
+        lines: (state.lines || []).length,
+      });
       // Re-tag _groupId on strokes from restored groups
       Object.values(state.groups).forEach(function (group) {
         (group.strokeIds || []).forEach(function (sid) {
@@ -3979,6 +7312,7 @@
       renderer.resize(state.canvas.width, state.canvas.height);
       updateCanvasAspect();
       rebuildAudioBindings();
+      rebuildDerivedState();
       clearSelection();
       clearLoop();
       resetTransportClock();
@@ -4082,6 +7416,45 @@
         if (state.sampleBanks && state.sampleBanks[noteClass]) {
           state.sampleBanks[noteClass].index = 0;
         }
+        console.log(
+          "[LOAD SAMPLE]",
+          noteClass,
+          decoded,
+          "total in bank:",
+          sampleMap[noteClass].length,
+        );
+        return true;
+      } catch (err) {
+        console.error("[LOAD FAIL]", file.name, err);
+        return false;
+      }
+    }
+
+    // ── Object Sampler — per-stroke sample assignment ─────────────────────────
+    async function loadSampleToStroke(file, strokeId) {
+      var stroke = state.strokes.find(function (s) {
+        return s.id === strokeId;
+      });
+      if (!stroke) {
+        console.warn("[sampler] Stroke not found:", strokeId);
+        return false;
+      }
+      var context = ensureAudioContext();
+      if (!context) return false;
+      if (context.state !== "running") {
+        await context.resume().catch(function () {});
+      }
+      try {
+        var buf = await file.arrayBuffer();
+        var decoded = await context.decodeAudioData(buf);
+        if (!stroke.samples) stroke.samples = [];
+        if (stroke.samples.length >= 4) stroke.samples.shift(); // keep latest 4
+        stroke.samples.push(decoded);
+        console.log(
+          "[sampler] Assigned sample → stroke",
+          strokeId,
+          "(" + stroke.samples.length + " sample(s) loaded)",
+        );
         return true;
       } catch (err) {
         console.warn("[sampler] Failed to decode:", file.name, err);
@@ -4364,6 +7737,7 @@
     function syncSelectionPanel() {
       // Guard — state.selection may not be initialized
       if (!state.selection) return;
+      enforceSelectionMode(); // hard invariant: group and stroke are mutually exclusive
 
       // Resolve the actual target — group takes priority over single stroke
       var target = null;
@@ -4378,7 +7752,7 @@
       var isCanvasMode = !hasSelection;
       var el = controls.elements;
 
-      // ── Canvas Mode (no selection) — show drawing defaults, hide object-only sections ──
+      // ── Canvas Mode (no selection) — show drawing defaults ──
       if (isCanvasMode) {
         if (el.lineColor)
           el.lineColor.value = state.defaults.color || "#ff4d4d";
@@ -4387,24 +7761,21 @@
           el.strokeWidth.value = dw;
           if (el.strokeWidthValue) el.strokeWidthValue.textContent = dw;
         }
-        // Show drawing controls
-        if (el.colorSection) el.colorSection.style.display = "";
-        if (el.strokeWidthField) el.strokeWidthField.style.display = "";
-        // Hide object-only controls
-        if (el.behaviorSection) el.behaviorSection.style.display = "none";
-        if (el.mechanicSection) el.mechanicSection.style.display = "none";
-        if (el.behaviorEmitterFields)
-          el.behaviorEmitterFields.classList.add("hidden");
+        // renderInspector(null) hides all object panels via hidden class
         controls.syncSelection(null, ((state.defaults.note % 12) + 12) % 12);
         syncInspectorToObject(null);
         return;
       }
 
-      // For the legacy inspector (lines/shapes/text/balls), fall back to multiSelection
+      // Pass the real selection to syncSelection — getInspectorState handles all types.
+      // For legacy field population (lines/shapes/text/balls), resolve legacySelection.
+      var selectionForInspector = target || getSelectedObject();
       var legacySelection =
-        !target || target.type === "stroke" || target.type === "group"
-          ? null
-          : target;
+        selectionForInspector &&
+        (selectionForInspector.type === "stroke" ||
+          selectionForInspector.type === "group")
+          ? selectionForInspector // strokes/groups now pass through — no longer nulled
+          : selectionForInspector;
       if (!target) {
         legacySelection = getSelectedObject();
       }
@@ -4414,13 +7785,18 @@
             ? legacySelection.midi.note
             : legacySelection.note) || state.defaults.note
         : state.defaults.note;
-      controls.syncSelection(legacySelection, ((activeNote % 12) + 12) % 12);
+      controls.syncSelection(
+        selectionForInspector,
+        ((activeNote % 12) + 12) % 12,
+      );
+      // Sync Behavior Panel to newly selected stroke
+      if (typeof window._wos_syncBehaviorPanel === "function") {
+        window._wos_syncBehaviorPanel();
+      }
       syncInspectorToObject(legacySelection);
 
-      // ── Object mode — restore sections, reset controls, populate from target ──
-      if (el.colorSection) el.colorSection.style.display = "";
-      if (el.behaviorSection) el.behaviorSection.style.display = "";
-      if (el.mechanicSection) el.mechanicSection.style.display = "";
+      // ── Object mode — reset controls, populate from target ──
+      // Panel visibility owned by renderInspector via controls.syncSelection above.
       // Task 1 — reset inspector controls before applying target state
       if (el.lineColor) el.lineColor.value = "#ff4d4d";
       if (el.strokeWidth) {
@@ -4509,13 +7885,18 @@
         }
       }
 
-      // Show/hide strokeWidth field based on stroke selection
-      var isStrokeSelected = !!(target && target.type === "stroke");
+      // Show/hide strokeWidth field — true for single or multi stroke selection
+      var isStrokeSelected =
+        getSelectedStrokeTargets().length > 0 ||
+        !!(target && target.type === "stroke") ||
+        (state.selection.strokeIds && state.selection.strokeIds.size > 0);
       if (controls.elements.strokeWidthField) {
         controls.elements.strokeWidthField.style.display = isStrokeSelected
           ? ""
           : "none";
       }
+      // Show outline-visible checkbox for strokes; sync its state
+      // Toggle button icon synced via _wos_syncBehaviorPanel (see bindRenderMode)
       // (strokeWidth value already populated in the reset+apply block above)
 
       // Behavior emitter fields visibility + sync
@@ -4542,16 +7923,11 @@
       }
       // (Legacy engine emitter sync removed — stroke emitter controls populated in Task 2 block above)
 
-      // Motion panel visibility + sync
+      // Motion panel visibility — owned by renderInspector via controls.syncSelection.
+      // Field population still gated on isShape (object motion fields only apply to shapes).
       var isShape =
         state.multiSelection.length === 1 &&
         state.multiSelection[0].type === "shape";
-      if (controls.elements.motionInspectorBlock) {
-        controls.elements.motionInspectorBlock.classList.toggle(
-          "hidden",
-          !isShape,
-        );
-      }
       if (isShape && legacySelection) {
         var m = legacySelection.motion || {
           enabled: false,
@@ -4781,6 +8157,7 @@
     }
 
     function syncLegacySelection() {
+      enforceSelectionMode(); // hard invariant: group and stroke are mutually exclusive
       var first = state.multiSelection[0];
       state.selectedBallId = first && first.type === "ball" ? first.id : null;
       state.selectedLineId = first && first.type === "line" ? first.id : null;
@@ -5265,6 +8642,16 @@
     var lastDuplicateDelta = { x: 20, y: 20 };
 
     function duplicateOneEntry(entry, dx, dy) {
+      // If duplication delta is valid, prefer it over static lastDuplicateDelta
+      if (
+        state.duplication &&
+        state.duplication.valid &&
+        (Math.abs(state.duplication.dx) > 0.5 ||
+          Math.abs(state.duplication.dy) > 0.5)
+      ) {
+        dx = state.duplication.dx;
+        dy = state.duplication.dy;
+      }
       if (entry.type === "ball") {
         var src = state.balls.find(function (b) {
           return b.id === entry.id;
@@ -5321,7 +8708,147 @@
         state.lines.push(line);
         return { type: "line", id: line.id };
       }
+      if (entry.type === "stroke") {
+        var src = getStrokeById(entry.id);
+        if (!src) return null;
+
+        var copy = clone(src);
+        copy.id = createStrokeId();
+        copy.points = src.points.map(function (p) {
+          return { x: p.x + dx, y: p.y + dy };
+        });
+        // Apply rotation delta if present
+        if (
+          state.duplication.valid &&
+          Math.abs(state.duplication.rotation) > 0.01
+        ) {
+          var cPoints = copy.points;
+          var cx = 0,
+            cy = 0;
+          cPoints.forEach(function (p) {
+            cx += p.x;
+            cy += p.y;
+          });
+          cx /= cPoints.length;
+          cy /= cPoints.length;
+          var cos = Math.cos(state.duplication.rotation);
+          var sin = Math.sin(state.duplication.rotation);
+          copy.points = cPoints.map(function (p) {
+            var rx = p.x - cx,
+              ry = p.y - cy;
+            return { x: cx + rx * cos - ry * sin, y: cy + rx * sin + ry * cos };
+          });
+        }
+        copy.drips = [];
+        copy.specks = [];
+        copy._groupId = null;
+        copy.outlineVisible = src.outlineVisible !== false;
+
+        state.strokes.push(copy);
+        strokeToLines(copy);
+
+        // Duplicate walker if source has one
+        var srcWalker = state.walkers.find(function (w) {
+          return w.strokeId === src.id;
+        });
+        if (srcWalker) {
+          var w = createWalkerFromStroke(copy);
+          if (w) {
+            w.t = srcWalker.t || 0;
+            w.dir = srcWalker.dir || 1;
+            w.motionMode = srcWalker.motionMode || w.motionMode;
+            w.speed = srcWalker.speed || w.speed;
+            state.walkers.push(w);
+            ensureSingleWalker(copy.id);
+          }
+        }
+
+        return { type: "stroke", id: copy.id };
+      }
+      if (entry.type === "group") {
+        // Delegate to duplicateGroupSelection — it correctly updates selection for repeat Cmd+D
+        var g = duplicateGroupSelection(entry.id);
+        return g ? { type: "group", id: g.id } : null;
+      }
       return null;
+    }
+
+    function duplicateGroupSelection(groupId) {
+      var group = state.groups[groupId];
+      if (!group) return null;
+      var dx = lastDuplicateDelta.x;
+      var dy = lastDuplicateDelta.y;
+      pushHistory();
+      var sourceIds = getGroupChildrenDeep(groupId);
+      var newIds = [];
+      sourceIds.forEach(function (sid) {
+        var s = getStrokeById(sid);
+        if (!s) return;
+        var copy = clone(s);
+        copy.id = createStrokeId();
+        copy.points = s.points.map(function (p) {
+          return { x: p.x + dx, y: p.y + dy };
+        });
+        // Apply rotation delta around each copy's own centroid
+        if (
+          state.duplication.valid &&
+          Math.abs(state.duplication.rotation) > 0.01
+        ) {
+          var gPoints = copy.points;
+          var gcx = 0,
+            gcy = 0;
+          gPoints.forEach(function (p) {
+            gcx += p.x;
+            gcy += p.y;
+          });
+          gcx /= gPoints.length;
+          gcy /= gPoints.length;
+          var gCos = Math.cos(state.duplication.rotation);
+          var gSin = Math.sin(state.duplication.rotation);
+          copy.points = gPoints.map(function (p) {
+            var rx = p.x - gcx,
+              ry = p.y - gcy;
+            return {
+              x: gcx + rx * gCos - ry * gSin,
+              y: gcy + rx * gSin + ry * gCos,
+            };
+          });
+        }
+        copy.drips = [];
+        copy.specks = [];
+        delete copy._groupId;
+        copy.outlineVisible = s.outlineVisible !== false;
+        copy.renderMode = s.renderMode || "visible";
+        state.strokes.push(copy);
+        strokeToLines(copy);
+        // Duplicate walker
+        var srcWalker = state.walkers.find(function (w) {
+          return w.strokeId === s.id;
+        });
+        if (srcWalker) {
+          var w = createWalkerFromStroke(copy);
+          if (w) {
+            w.t = srcWalker.t || 0;
+            w.dir = srcWalker.dir || 1;
+            w.motionMode = srcWalker.motionMode || w.motionMode;
+            w.speed = srcWalker.speed || w.speed;
+            state.walkers.push(w);
+            ensureSingleWalker(copy.id);
+          }
+        }
+        newIds.push(copy.id);
+      });
+      if (!newIds.length) return null;
+      var newGroup = createGroup(newIds);
+      // Select the new group — repeated Cmd+D now duplicates the new one
+      state.selection.groupId = newGroup.id;
+      state.selection.strokeId = null;
+      state.selection.strokeIds.clear();
+      state.multiSelection = [{ type: "group", id: newGroup.id }];
+      syncLegacySelection();
+      syncSelectionPanel();
+      renderFrame();
+      return newGroup;
     }
 
     async function duplicateSelectedObject() {
@@ -5330,12 +8857,27 @@
       var dy = lastDuplicateDelta.y;
       pushHistory();
       var newSelection = [];
-      state.multiSelection.forEach(function (entry) {
-        var result = duplicateOneEntry(entry, dx, dy);
-        if (result) newSelection.push(result);
-      });
+      // Group selection routes to dedicated function that updates selection correctly
+      if (state.selection.groupId && state.groups[state.selection.groupId]) {
+        duplicateGroupSelection(state.selection.groupId);
+        return;
+      } else {
+        state.multiSelection.forEach(function (entry) {
+          var result = duplicateOneEntry(entry, dx, dy);
+          if (result) newSelection.push(result);
+        });
+      }
       state.multiSelection = newSelection;
       syncLegacySelection();
+      // Set strokeId for stroke duplicates so Object inspector shows the new stroke
+      var firstNew = newSelection[0];
+      if (firstNew && firstNew.type === "stroke") {
+        state.selection.strokeId = firstNew.id;
+        state.selection.strokeIds = state.selection.strokeIds || new Set();
+        state.selection.strokeIds.clear();
+        state.selection.strokeIds.add(firstNew.id);
+        state.selection.groupId = null;
+      }
       lastDuplicateDelta = { x: dx, y: dy };
       state.swarm.count = state.balls.length;
       syncSelectionPanel();
@@ -5411,28 +8953,39 @@
 
     function pushHistory() {
       state.history.push({
-        lines: state.lines.map(serializeLineObject),
+        // Exclude derived stroke bridge lines — rebuilt on restore
+        lines: state.lines
+          .filter(function (l) {
+            return !isDerivedStrokeLine(l);
+          })
+          .map(serializeLineObject),
         textObjects: state.textObjects.map(SBE.TextSystem.serializeTextObject),
         shapes: SBE.ShapeSystem
           ? state.shapes.map(SBE.ShapeSystem.serializeShape)
           : [],
         balls: clone(state.balls),
+        groups: clone(state.groups || {}),
+        walkers: clone(state.walkers || []),
         strokes: state.strokes.map(function (s) {
           return {
             id: s.id,
             type: s.type,
             points: s.points.slice(),
             width: s.width,
+            baseWidth: s.baseWidth,
+            scale: s.scale,
             color: s.color,
-            renderMode: s.renderMode,
+            renderMode: s.renderMode || "visible",
             mode: s.mode,
             sound: clone(s.sound),
             behavior: clone(s.behavior),
+            motion: s.motion ? clone(s.motion) : null,
+            outlineVisible: s.outlineVisible !== false,
+            opacity: s.opacity != null ? s.opacity : 1,
             specks: [],
             drips: [],
           };
         }),
-        // Emitters removed — now only exist as line behaviors
         canvas: clone(state.canvas),
         swarm: clone(state.swarm),
         background: state.backgroundDataUrl,
@@ -5473,45 +9026,48 @@
       renderFrame();
     }
 
+    function safeGetValue(el) {
+      if (!el) return undefined;
+      if (el.type === "checkbox") return el.checked;
+      return el.value;
+    }
+
+    function safeGetNumber(el, fallback) {
+      var v = safeGetValue(el);
+      if (v === undefined) return fallback;
+      var n = Number(v);
+      return isNaN(n) ? fallback : n;
+    }
+
     function readInspectorPatch() {
-      var mechanicValue = controls.elements.lineMechanic
-        ? controls.elements.lineMechanic.value
-        : "none";
+      var el = controls.elements;
+      var mechanicValue = safeGetValue(el.lineMechanic) || "none";
+      var behaviorValue = safeGetValue(el.lineBehavior) || "none";
       return {
-        note: clampInt(Number(controls.elements.activeNote.value), 0, 127),
-        thickness: clampInt(
-          Number(controls.elements.lineThickness.value),
-          1,
-          24,
-        ),
+        note: clampInt(safeGetNumber(el.activeNote, 60), 0, 127),
+        thickness: clampInt(safeGetNumber(el.lineThickness, 3), 1, 24),
         mechanicType: mechanicValue === "none" ? null : mechanicValue,
-        behaviorType:
-          controls.elements.lineBehavior.value === "none"
-            ? "normal"
-            : controls.elements.lineBehavior.value,
-        behaviorStrength: Number(controls.elements.lineStrength.value),
+        behaviorType: behaviorValue === "none" ? "normal" : behaviorValue,
+        behaviorStrength: safeGetNumber(el.lineStrength, 1),
       };
     }
 
     function readInspectorDefaults() {
-      const patch = readInspectorPatch();
-      var sw = controls.elements.strokeWidth
-        ? Number(controls.elements.strokeWidth.value)
-        : 18;
+      var patch = readInspectorPatch();
+      var el = controls.elements;
+      var sw = safeGetNumber(el.strokeWidth, 18);
       return {
         midiChannel: state.defaults.midiChannel,
         note: patch.note,
-        color: controls.elements.lineColor
-          ? controls.elements.lineColor.value
-          : noteToColor(patch.note),
+        color: safeGetValue(el.lineColor) || noteToColor(patch.note),
         thickness: patch.thickness,
-        strokeWidth: !isNaN(sw) && sw >= 1 ? sw : 18,
+        strokeWidth: sw >= 1 ? sw : 18,
         behaviorType: patch.behaviorType,
         behaviorStrength: patch.behaviorStrength,
-        textValue: controls.elements.textContent.value,
-        textSize: clampInt(Number(controls.elements.textSize.value), 24, 420),
-        textScale: Number(controls.elements.textScale.value),
-        textRotation: Number(controls.elements.textRotation.value),
+        textValue: safeGetValue(el.textContent) || "",
+        textSize: clampInt(safeGetNumber(el.textSize, 48), 24, 420),
+        textScale: safeGetNumber(el.textScale, 1),
+        textRotation: safeGetNumber(el.textRotation, 0),
         autoWalker: state.defaults.autoWalker,
       };
     }
@@ -5603,12 +9159,11 @@
         object.note = patch.note;
 
         // Stroke width from controls.strokeWidth — never from patch.thickness
-        if (controls.elements.strokeWidth) {
-          var sw = Number(controls.elements.strokeWidth.value);
-          if (!isNaN(sw) && sw >= 1) {
-            object.baseWidth = sw;
-            object.width = sw * (object.scale || 1);
-          }
+        var sw = safeGetNumber(controls.elements.strokeWidth, null);
+        if (sw !== null && sw >= 1) {
+          object.baseWidth = sw;
+          object.width = sw * (object.scale || 1);
+          applyStrokeWidth(object);
         }
 
         // Behavior — never touches color/width
@@ -5688,6 +9243,11 @@
         typeof octaveHint === "number" ? octaveHint : Math.floor(baseNote / 12);
       const note = clampInt(octave * 12 + noteClass, 0, 127);
       state.defaults.note = note;
+      state.defaults.color = noteToColor(note);
+      // Keep WOS.currentNote in sync
+      if (window.WOS) {
+        WOS.currentNote = note;
+      }
       state.ui.selectedNoteClass = ((noteClass % 12) + 12) % 12;
       controls.elements.activeNote.value = String(note);
       controls.elements.lineColor.value = noteToColor(note);
@@ -5734,7 +9294,44 @@
       const currentTime = getTransportTime();
 
       if (!state.quantize.enabled) {
-        eventBus.triggerEvent("collision", sourceObject);
+        var sourceId = null;
+        if (sourceObject.strokeId) {
+          sourceId = sourceObject.strokeId;
+        } else if (sourceObject.id) {
+          sourceId = sourceObject.id;
+        }
+        if (!sourceId) {
+          console.warn(
+            "[EVENT DROP] collision cannot resolve sourceId",
+            sourceObject,
+          );
+          return;
+        }
+        if (state.debug && state.debug.audioLogs)
+          console.log("[COLLISION RESOLVED]", {
+            id: sourceObject.id,
+            strokeId: sourceObject.strokeId,
+            note:
+              sourceObject.note ||
+              (sourceObject.sound &&
+                sourceObject.sound.midi &&
+                sourceObject.sound.midi.note) ||
+              60,
+          });
+        emitEvent({
+          type: "collision",
+          sourceId: sourceId,
+          energy: 1,
+          channel: sourceObject.channel || "default",
+          data: {
+            note:
+              sourceObject.note ||
+              (sourceObject.sound &&
+                sourceObject.sound.midi &&
+                sourceObject.sound.midi.note) ||
+              60,
+          },
+        });
         recordLoopEvent(sourceObject, currentTime);
         return;
       }
@@ -5759,7 +9356,11 @@
       for (var i = 0; i < queue.length; i++) {
         var evt = queue[i];
         if (evt.type === "wall") {
-          eventBus.triggerEvent("wall", evt.sourceObject);
+          if (state.debug && state.debug.audioLogs)
+            console.log(
+              "[AUDIO SKIP] wall event ignored by sampler path",
+              evt.sourceObject,
+            );
         } else {
           dispatchCollisionEvent(evt.sourceObject);
         }
@@ -5779,7 +9380,44 @@
       const remaining = [];
       state.quantizeQueue.forEach((entry) => {
         if (entry.time <= now) {
-          eventBus.triggerEvent("collision", entry.sourceObject);
+          var sourceId = null;
+          if (entry.sourceObject.strokeId) {
+            sourceId = entry.sourceObject.strokeId;
+          } else if (entry.sourceObject.id) {
+            sourceId = entry.sourceObject.id;
+          }
+          if (!sourceId) {
+            console.warn(
+              "[EVENT DROP] collision cannot resolve sourceId (quantize)",
+              entry.sourceObject,
+            );
+            return;
+          }
+          if (state.debug && state.debug.audioLogs)
+            console.log("[COLLISION RESOLVED]", {
+              id: entry.sourceObject.id,
+              strokeId: entry.sourceObject.strokeId,
+              note:
+                entry.sourceObject.note ||
+                (entry.sourceObject.sound &&
+                  entry.sourceObject.sound.midi &&
+                  entry.sourceObject.sound.midi.note) ||
+                60,
+            });
+          emitEvent({
+            type: "collision",
+            sourceId: sourceId,
+            energy: 1,
+            channel: entry.sourceObject.channel || "default",
+            data: {
+              note:
+                entry.sourceObject.note ||
+                (entry.sourceObject.sound &&
+                  entry.sourceObject.sound.midi &&
+                  entry.sourceObject.sound.midi.note) ||
+                60,
+            },
+          });
           recordLoopEvent(entry.sourceObject, entry.time);
           return;
         }
@@ -5969,6 +9607,67 @@
         },
       };
     }
+
+    // ── strokeToLines ─────────────────────────────────────────────────────────
+    // Bridge: converts a committed Mop stroke into state.lines segments so that
+    // collision, sound, and MIDI operate on it — no engine changes needed.
+
+    function strokeToLines(stroke) {
+      if (!stroke || !stroke.points || stroke.points.length < 2) return;
+      if (!SBE || !SBE.LineSystem) return;
+
+      var pts = stroke.points;
+      var settings = {
+        midiChannel: state.defaults.midiChannel,
+        note: stroke.note != null ? stroke.note : state.defaults.note,
+        velocityRange: [48, 110],
+        life: 9999,
+        behavior: {
+          type: state.defaults.behaviorType || "normal",
+          strength: state.defaults.behaviorStrength || 1.4,
+          velocityMultiplier: 1,
+        },
+        color: stroke.color || noteToColor(state.defaults.note),
+        thickness: stroke.width || state.defaults.strokeWidth || 18,
+        style: {
+          color: stroke.color || noteToColor(state.defaults.note),
+          colorMode: "auto",
+          thickness: stroke.width || state.defaults.strokeWidth || 18,
+        },
+        gravity: { enabled: false, direction: "down", strength: 0 },
+        // Back-reference so collision/flash can reach the stroke
+        _strokeId: stroke.id,
+      };
+
+      for (var i = 0; i < pts.length - 1; i++) {
+        var seg = {
+          x1: pts[i].x,
+          y1: pts[i].y,
+          x2: pts[i + 1].x,
+          y2: pts[i + 1].y,
+        };
+        try {
+          var raw = SBE.LineSystem.createLine(seg, settings);
+          var line = normalizeLineObject(raw);
+          // Tag so we can remove these lines if the stroke is deleted
+          line._strokeId = stroke.id;
+          line.strokeId = stroke.id; // collision resolution reads strokeId (no underscore)
+          line._isDerived = true; // marks as adapter-generated, not user-created
+          state.lines.push(line);
+        } catch (e) {
+          // LineSystem unavailable — skip silently
+        }
+      }
+    }
+
+    // Remove all state.lines generated from a stroke (call on stroke deletion)
+    function removeLinesForStroke(strokeId) {
+      state.lines = state.lines.filter(function (l) {
+        return l._strokeId !== strokeId;
+      });
+    }
+
+    // ── End strokeToLines ─────────────────────────────────────────────────────
 
     function createTextSettings(point, value) {
       return {
@@ -6565,6 +10264,26 @@
         return now - b.spawnTime >= b.collisionDelay;
       });
 
+      // Inject walker proxies — walkers collide with lines and trigger the struck line's sound
+      var walkerProxies =
+        state.walker && state.walker.enabled
+          ? state.walkers.map(function (w) {
+              return {
+                id: w.id,
+                strokeId: w.strokeId,
+                x: w.x,
+                y: w.y,
+                vx: 0,
+                vy: 0,
+                radius: 8,
+                spawnTime: 0,
+                collisionDelay: 0,
+                _isWalkerProxy: true,
+              };
+            })
+          : [];
+      state.balls = state.balls.concat(walkerProxies);
+
       const collisions = SBE.Collision.detectCollisions(state, now);
       state.collisionCount = collisions.length;
       const soundSources = SBE.Collision.resolveCollisions(
@@ -6573,13 +10292,19 @@
         now,
       );
 
+      // Remove walker proxies — restore balls to eligible set only
+      state.balls = state.balls.filter(function (b) {
+        return !b._isWalkerProxy;
+      });
+
       // Restore all balls (immune + eligible)
       state.balls = allBalls;
 
-      // Kill balls on collision — skip spawn-immune balls
+      // Kill balls on collision — skip spawn-immune balls and walker proxies
       collisions.forEach(function (collision) {
         if (!collision.ball) return;
         var b = collision.ball;
+        if (b._isWalkerProxy) return; // walkers are persistent — never killed
         b.hitCount = (b.hitCount || 0) + 1;
         if (b._dead) return;
         if (now - b.spawnTime < b.collisionDelay) return;
@@ -6610,6 +10335,65 @@
         if (window.SBE && SBE.ParticleSystem) {
           emitCollisionParticles(source.ball, source.line);
         }
+        if (state.debug && state.debug.audioLogs)
+          console.log("[COLLISION INPUT]", {
+            id: source.line.id,
+            strokeId: source.line.strokeId,
+            note: source.line.note,
+          });
+
+        // Walker audio control — applies ONLY to walker proxies, never to real balls
+        if (source.ball && source.ball._isWalkerProxy) {
+          var isSelfStroke =
+            source.line.strokeId &&
+            source.ball.strokeId === source.line.strokeId;
+          // Per-walker flags take priority; fall back to global state.walker flags
+          var walkerAudioSelf =
+            source.ball.audioSelf != null
+              ? source.ball.audioSelf
+              : !!(state.walker && state.walker.audioEnabled);
+          var triggerOthers =
+            source.ball.triggerOthers != null
+              ? source.ball.triggerOthers
+              : state.walker && state.walker.triggerOthers !== false;
+
+          var shouldPlay;
+          if (isSelfStroke) {
+            // Walker → own stroke: only plays when audioSelf = true
+            shouldPlay = walkerAudioSelf;
+          } else {
+            // Walker → other stroke: ALWAYS plays (triggerOthers is non-negotiable per spec)
+            shouldPlay = true;
+          }
+
+          if (!shouldPlay) {
+            if (state.debug && state.debug.audioLogs)
+              console.log("[WALKER FILTER] Suppressed", {
+                isSelf: isSelfStroke,
+                audioSelf: walkerAudioSelf,
+                triggerOthers: triggerOthers,
+                walkerStroke: source.ball.strokeId,
+                targetStroke: source.line.strokeId,
+              });
+            return;
+          }
+
+          if (state.debug && state.debug.audioLogs)
+            console.log("[WALKER → STROKE AUDIO]", {
+              isSelf: isSelfStroke,
+              walkerStroke: source.ball.strokeId,
+              targetStroke: source.line.strokeId,
+            });
+          emitCollisionEvent(
+            { id: source.line.strokeId, strokeId: source.line.strokeId },
+            source.ball,
+            1.0,
+            source.closestPoint || { x: 0, y: 0 },
+          );
+          return;
+        }
+
+        // Default ball path — unchanged
         queueAudioEvent("collision", source.line);
       });
 
@@ -6623,13 +10407,22 @@
     }
 
     function renderFrame() {
-      renderer.render(state, drawTools.getOverlays());
+      state.frame = (state.frame || 0) + 1;
+      // Pass renderer a filtered state view — derived stroke-bridge lines are invisible
+      // to the renderer (they duplicate renderStrokes) but stay in state.lines for collision
+      var renderState = Object.assign({}, state, {
+        lines: state.lines.filter(function (l) {
+          return !l._isDerived;
+        }),
+      });
+      renderer.render(renderState, drawTools.getOverlays());
       var ctx = canvas.getContext("2d");
       // Grid — drawn before all stroke/walker content
       drawGrid(ctx, canvas.width, canvas.height);
       // Surface stamp layer (persistent ink)
       ctx.drawImage(surfaceCanvas, 0, 0);
       renderStrokes(ctx);
+      renderMidiPoints(ctx);
       drawWalkers(ctx);
       renderParticles(ctx);
       drawHitFeedback(ctx);
@@ -6639,6 +10432,108 @@
       drawShapeIndicators();
       drawLinePreview();
 
+      // ── Rotation guide overlay (arc, ticks, snap indicators, degree label) ──
+      if (
+        state.transform.active &&
+        state.transform.type === "rotate" &&
+        state.transform.origin
+      ) {
+        var ro = state.transform.origin;
+        var radius = 48;
+        var rCtx = ctx;
+        var isSnapping = heldKeys && heldKeys.has("shift");
+        var accumDeg = (state.transform.rotationAccum * 180) / Math.PI;
+        rCtx.save();
+
+        // Arc ring
+        rCtx.beginPath();
+        rCtx.arc(ro.x, ro.y, radius, 0, Math.PI * 2);
+        rCtx.strokeStyle = "rgba(0,255,208,0.18)";
+        rCtx.lineWidth = 1;
+        rCtx.stroke();
+
+        // Tick marks every 15° (24 ticks)
+        for (var ti = 0; ti < 24; ti++) {
+          var ta = ti * (Math.PI / 12);
+          var isCardinal = ti % 6 === 0; // 0/90/180/270
+          var tickLen = isCardinal ? 8 : 4;
+          rCtx.beginPath();
+          rCtx.moveTo(
+            ro.x + Math.cos(ta) * (radius - tickLen),
+            ro.y + Math.sin(ta) * (radius - tickLen),
+          );
+          rCtx.lineTo(
+            ro.x + Math.cos(ta) * radius,
+            ro.y + Math.sin(ta) * radius,
+          );
+          rCtx.strokeStyle = isCardinal
+            ? "rgba(0,255,208,0.45)"
+            : "rgba(0,255,208,0.2)";
+          rCtx.lineWidth = isCardinal ? 1.5 : 1;
+          rCtx.stroke();
+        }
+
+        // Current angle indicator line from origin
+        var accumRad = state.transform.rotationAccum;
+        // Determine current absolute angle (start angle + accumulated)
+        var startA = state.transform.startAngle || 0;
+        var indicatorA = startA + accumRad;
+        rCtx.beginPath();
+        rCtx.moveTo(ro.x, ro.y);
+        rCtx.lineTo(
+          ro.x + Math.cos(indicatorA) * (radius + 10),
+          ro.y + Math.sin(indicatorA) * (radius + 10),
+        );
+        rCtx.strokeStyle = isSnapping ? "#00ffd0" : "rgba(0,255,208,0.55)";
+        rCtx.lineWidth = isSnapping ? 1.5 : 1;
+        rCtx.stroke();
+
+        // Sync isSnapping with input.shift (more reliable than heldKeys)
+        isSnapping = input.shift;
+
+        // Snap highlight: bright tick at nearest 15° when Shift held
+        if (isSnapping) {
+          var snappedA = snapAngle(indicatorA);
+          rCtx.beginPath();
+          rCtx.arc(
+            ro.x + Math.cos(snappedA) * radius,
+            ro.y + Math.sin(snappedA) * radius,
+            3,
+            0,
+            Math.PI * 2,
+          );
+          rCtx.fillStyle = "#00ffd0";
+          rCtx.globalAlpha = 0.9;
+          rCtx.fill();
+          rCtx.globalAlpha = 1;
+        }
+
+        // Degree label — large bold, dark background pill for contrast
+        var labelSign = accumDeg >= 0 ? "+" : "";
+        var labelText = labelSign + accumDeg.toFixed(1) + "°";
+        var labelX = state.cursor.x + 10;
+        var labelY = state.cursor.y - 10;
+        rCtx.font = "bold 15px monospace";
+        var labelMetrics = rCtx.measureText(labelText);
+        var labelW = labelMetrics.width + 12;
+        var labelH = 22;
+        // Background pill
+        rCtx.fillStyle = "rgba(0,0,0,0.65)";
+        rCtx.beginPath();
+        if (rCtx.roundRect) {
+          rCtx.roundRect(labelX, labelY - labelH + 4, labelW, labelH, 4);
+        } else {
+          rCtx.rect(labelX, labelY - labelH + 4, labelW, labelH);
+        }
+        rCtx.fill();
+        // Label text
+        rCtx.fillStyle = "#00ffd0";
+        rCtx.globalAlpha = 1;
+        rCtx.fillText(labelText, labelX + 6, labelY - 1);
+
+        rCtx.restore();
+      }
+
       if (!window.noteElements) return;
 
       Object.keys(window.noteElements).forEach((n) => {
@@ -6646,68 +10541,67 @@
       });
     }
 
-    // ── Collision Particle Emission ───────────────────────────────────────────
+    // ── Collision Particle Emission (profile-based) ───────────────────────────
 
     var MAX_COLLISION_PARTICLES = 20;
 
-    function emitCollisionBurst(x, y, ball, line, count, type) {
-      var speed = Math.hypot(ball.vx || 0, ball.vy || 0);
-      var n = Math.min(MAX_COLLISION_PARTICLES, count);
-      var color = line.color || "#ffffff";
-      for (var i = 0; i < n; i++) {
-        if (!SBE.ParticleSystem.spawn) break;
-        var angle = Math.random() * Math.PI * 2;
-        var mag = speed * (0.3 + Math.random() * 0.7);
-        SBE.ParticleSystem.spawn({
-          x: x,
-          y: y,
-          vx: Math.cos(angle) * mag,
-          vy: Math.sin(angle) * mag,
-          size: 2 + Math.random() * 3,
-          life: 0.5 + Math.random() * 0.6,
-          color: color,
-          type: type,
-        });
-      }
-    }
-
-    function emitCollisionSurfaceTrail(x, y, ball, line) {
-      var dir = Math.atan2(ball.vy || 0, ball.vx || 0);
-      var color = line.color || "#ffffff";
-      for (var i = 0; i < 4; i++) {
-        var offset = i * 2;
-        SBE.ParticleSystem.spawn({
-          x: x - Math.cos(dir) * offset,
-          y: y - Math.sin(dir) * offset,
-          vx: (ball.vx || 0) * 0.3,
-          vy: (ball.vy || 0) * 0.3,
-          size: 2,
-          life: 0.8,
-          color: color,
-          type: "streak",
-        });
-      }
-    }
-
     function emitCollisionParticles(ball, line) {
       if (!ball || !line) return;
-      // Use ball position — it's at the impact point after physics resolution
+      // Walker proxies do not emit collision smoke
+      if (ball._isWalkerProxy) return;
+      if (
+        !window.SBE ||
+        !SBE.ParticleSystem ||
+        !SBE.ParticleSystem.spawnProfile
+      )
+        return;
+
       var x = ball.x;
       var y = ball.y;
+      var color = line.color || "#ffffff";
+      var speed = Math.hypot(ball.vx || 0, ball.vy || 0);
       var mechanic = line.mechanicType || "default";
+
+      // Direction from ball velocity (impact angle)
+      var dirDeg = Math.atan2(ball.vy || 0, ball.vx || 0) * (180 / Math.PI);
+
+      // Smoke scale — reduce to 25% of original to avoid visual dominance
+      var SMOKE = 0.25;
 
       switch (mechanic) {
         case "bumper-hard":
-          emitCollisionBurst(x, y, ball, line, 16, "glow");
+          SBE.ParticleSystem.spawnProfile("burst", x, y, color, dirDeg, {
+            count: Math.max(
+              1,
+              Math.round(Math.min(MAX_COLLISION_PARTICLES, 16) * SMOKE),
+            ),
+            type: "glow",
+            speed: [speed * 0.5, speed * 1.2],
+          });
           break;
         case "bumper-elastic":
-          emitCollisionBurst(x, y, ball, line, 10, "streak");
+          SBE.ParticleSystem.spawnProfile("streak", x, y, color, dirDeg, {
+            count: Math.max(
+              1,
+              Math.round(Math.min(MAX_COLLISION_PARTICLES, 10) * SMOKE),
+            ),
+            speed: [speed * 0.4, speed * 1.0],
+          });
           break;
         case "ramp":
-          emitCollisionSurfaceTrail(x, y, ball, line);
+          SBE.ParticleSystem.spawnProfile("dust", x, y, color, dirDeg, {
+            count: Math.max(1, Math.round(4 * SMOKE)),
+            spread: 15,
+            speed: [speed * 0.2, speed * 0.4],
+          });
           break;
         default:
-          emitCollisionBurst(x, y, ball, line, 6, "dot");
+          SBE.ParticleSystem.spawnProfile("burst", x, y, color, null, {
+            count: Math.max(
+              1,
+              Math.round(Math.min(MAX_COLLISION_PARTICLES, 6) * SMOKE),
+            ),
+          });
       }
     }
 
@@ -6734,8 +10628,9 @@
       var now = performance.now();
       var HIT_MS = 120;
 
-      // Flash lines on collision hit
+      // Flash lines on collision hit — skip derived stroke bridge lines (visual noise)
       (state.lines || []).forEach(function (line) {
+        if (line._isDerived) return; // bridge lines flash as segment highlight — skip
         if (!line.lastHitAt) return;
         var dt = now - line.lastHitAt;
         if (dt >= HIT_MS) return;

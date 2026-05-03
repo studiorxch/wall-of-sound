@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>mainjs patch | Wall of Sound</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <link
+      rel="stylesheet"
+      href="/assets/css/style.css"
+    />
+  </head>
+
+  <body>
+    <header class="site-header">
+      <div class="site-header-inner">
+        <a class="site-title" href="/">
+          Wall of Sound
+        </a>
+
+        <nav class="site-nav" aria-label="Primary navigation">
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="page-content">
+      <div class="spec-shell">
+  <a class="back-link" href="/specs/">← Back to specs</a>
+
+  <div class="spec-kicker">
+    wall / audio_system / needs-review
+  </div>
+
+  <h1>mainjs patch</h1>
+
+  <section class="spec-meta">
+    <div>
+      <strong>Doc ID</strong>
+      0417_WALL_OF_SOUND_mainjs_patch_v1.0.0
+    </div>
+
+    <div>
+      <strong>Date</strong>
+      2026-04-17
+    </div>
+
+    <div>
+      <strong>Version</strong>
+      1.0.0
+    </div>
+
+    <div>
+      <strong>System</strong>
+      WOS
+    </div>
+
+    <div>
+      <strong>Domain</strong>
+      wall
+    </div>
+
+    <div>
+      <strong>Component</strong>
+      audio_system
+    </div>
+
+    <div>
+      <strong>Type</strong>
+      legacy-spec
+    </div>
+
+    <div>
+      <strong>Priority</strong>
+      medium
+    </div>
+
+    <div>
+      <strong>Risk</strong>
+      unknown
+    </div>
+
+    <div>
+      <strong>Status</strong>
+      needs-review
+    </div>
+  </section>
+
+  
+  <p><strong>Summary:</strong> Imported legacy Wall of Sound spec. Needs review.</p>
+  
+
+  <article class="spec-body"><h1 id="0417_wall_of_sound_mainjs_patch_v100">0417_WALL_OF_SOUND_mainjs_patch_v1.0.0</h1>
+
+<h2 id="scope">Scope</h2>
+<p>Single-file patch: <code class="language-plaintext highlighter-rouge">main.js</code></p>
+
+<p>Applies motion-driven sound triggering to particles by replacing one-shot birth triggers with velocity-based expression logic.</p>
+
+<hr />
+
+<h2 id="change-1--tick-sound-loop-rewrite">Change 1 — tick() Sound Loop Rewrite</h2>
+
+<h3 id="find-or-equivalent-pattern">FIND (or equivalent pattern)</h3>
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">if </span><span class="p">(</span><span class="o">!</span><span class="nx">ball</span><span class="p">.</span><span class="nx">sound</span><span class="p">)</span> <span class="k">return</span><span class="p">;</span>
+<span class="k">if </span><span class="p">(</span><span class="nx">ball</span><span class="p">.</span><span class="nx">_soundFired</span><span class="p">)</span> <span class="k">return</span><span class="p">;</span>
+
+<span class="nf">dispatchCollisionEvent</span><span class="p">(</span><span class="nx">ball</span><span class="p">);</span>
+<span class="nx">ball</span><span class="p">.</span><span class="nx">_soundFired</span> <span class="o">=</span> <span class="kc">true</span><span class="p">;</span>
+</code></pre></div></div>
+
+<h3 id="replace-with">REPLACE WITH</h3>
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">if </span><span class="p">(</span><span class="o">!</span><span class="nx">ball</span><span class="p">.</span><span class="nx">sound</span><span class="p">)</span> <span class="k">return</span><span class="p">;</span>
+
+<span class="kd">const</span> <span class="nx">speed</span> <span class="o">=</span> <span class="nb">Math</span><span class="p">.</span><span class="nf">hypot</span><span class="p">(</span><span class="nx">ball</span><span class="p">.</span><span class="nx">vx</span><span class="p">,</span> <span class="nx">ball</span><span class="p">.</span><span class="nx">vy</span><span class="p">);</span>
+
+<span class="c1">// Trigger on motion, not birth</span>
+<span class="k">if </span><span class="p">(</span><span class="nx">speed</span> <span class="o">&gt;</span> <span class="mf">2.5</span> <span class="o">&amp;&amp;</span> <span class="o">!</span><span class="nx">ball</span><span class="p">.</span><span class="nx">_played</span><span class="p">)</span> <span class="p">{</span>
+
+  <span class="c1">// Velocity-based MIDI scaling</span>
+  <span class="kd">const</span> <span class="nx">velocityBoost</span> <span class="o">=</span> <span class="nb">Math</span><span class="p">.</span><span class="nf">min</span><span class="p">(</span><span class="mi">127</span><span class="p">,</span> <span class="mi">60</span> <span class="o">+</span> <span class="p">(</span><span class="nx">ball</span><span class="p">.</span><span class="nx">hitCount</span> <span class="o">||</span> <span class="mi">0</span><span class="p">)</span> <span class="o">*</span> <span class="mi">20</span><span class="p">);</span>
+
+  <span class="k">if </span><span class="p">(</span><span class="nx">ball</span><span class="p">.</span><span class="nx">sound</span><span class="p">.</span><span class="nx">midi</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nx">ball</span><span class="p">.</span><span class="nx">sound</span><span class="p">.</span><span class="nx">midi</span><span class="p">.</span><span class="nx">velocity</span> <span class="o">=</span> <span class="nx">velocityBoost</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="c1">// Micro pitch drift to prevent static repetition</span>
+  <span class="k">if </span><span class="p">(</span><span class="k">typeof</span> <span class="nx">ball</span><span class="p">.</span><span class="nx">sound</span><span class="p">.</span><span class="nx">frequency</span> <span class="o">===</span> <span class="dl">"</span><span class="s2">number</span><span class="dl">"</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kd">const</span> <span class="nx">drift</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">+</span> <span class="p">(</span><span class="nb">Math</span><span class="p">.</span><span class="nf">random</span><span class="p">()</span> <span class="o">-</span> <span class="mf">0.5</span><span class="p">)</span> <span class="o">*</span> <span class="mf">0.04</span><span class="p">;</span> <span class="c1">// ±2%</span>
+    <span class="nx">ball</span><span class="p">.</span><span class="nx">sound</span><span class="p">.</span><span class="nx">frequency</span> <span class="o">*=</span> <span class="nx">drift</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="nf">dispatchCollisionEvent</span><span class="p">(</span><span class="nx">ball</span><span class="p">);</span>
+  <span class="nx">ball</span><span class="p">.</span><span class="nx">_played</span> <span class="o">=</span> <span class="kc">true</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="c1">// Reset gate when particle slows down</span>
+<span class="k">if </span><span class="p">(</span><span class="nx">speed</span> <span class="o">&lt;</span> <span class="mf">1.2</span><span class="p">)</span> <span class="p">{</span>
+  <span class="nx">ball</span><span class="p">.</span><span class="nx">_played</span> <span class="o">=</span> <span class="kc">false</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<hr />
+
+<h2 id="change-2--emitter-initialization-update">Change 2 — Emitter Initialization Update</h2>
+
+<h3 id="find-both-emitter-functions">FIND (both emitter functions)</h3>
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">ball</span><span class="p">.</span><span class="nx">_soundFired</span> <span class="o">=</span> <span class="kc">false</span><span class="p">;</span>
+</code></pre></div></div>
+
+<h3 id="replace-with-1">REPLACE WITH</h3>
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">ball</span><span class="p">.</span><span class="nx">_played</span> <span class="o">=</span> <span class="kc">false</span><span class="p">;</span>
+</code></pre></div></div>
+
+<hr />
+
+<h2 id="change-3--normalizeball-initialization">Change 3 — normalizeBall Initialization</h2>
+
+<h3 id="add">ADD</h3>
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">ball</span><span class="p">.</span><span class="nx">_played</span> <span class="o">=</span> <span class="kc">false</span><span class="p">;</span>
+</code></pre></div></div>
+
+<hr />
+
+<h2 id="remove-deprecated-state">Remove Deprecated State</h2>
+
+<h3 id="delete-all">DELETE ALL</h3>
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">ball</span><span class="p">.</span><span class="nx">_soundFired</span>
+</code></pre></div></div>
+
+<hr />
+
+<h2 id="assumptions">Assumptions</h2>
+
+<ul>
+  <li><code class="language-plaintext highlighter-rouge">ball.vx</code>, <code class="language-plaintext highlighter-rouge">ball.vy</code> exist and are numeric</li>
+  <li><code class="language-plaintext highlighter-rouge">dispatchCollisionEvent()</code> is the correct sound trigger</li>
+  <li><code class="language-plaintext highlighter-rouge">ball.hitCount</code> is incremented elsewhere (fallback = 0)</li>
+  <li><code class="language-plaintext highlighter-rouge">ball.sound</code> may contain:
+    <ul>
+      <li><code class="language-plaintext highlighter-rouge">midi.velocity</code></li>
+      <li><code class="language-plaintext highlighter-rouge">frequency</code></li>
+    </ul>
+  </li>
+</ul>
+
+<hr />
+
+<h2 id="expected-behavior">Expected Behavior</h2>
+
+<ul>
+  <li>No sound on spawn</li>
+  <li>Sound triggered only by motion energy</li>
+  <li>Faster particles = louder/stronger hits</li>
+  <li>Subtle pitch variation prevents repetition fatigue</li>
+  <li>Natural retrigger cycle based on slowdown → reacceleration</li>
+</ul>
+
+<hr />
+
+<h2 id="implementation-guide">Implementation Guide</h2>
+
+<ul>
+  <li>Where: <code class="language-plaintext highlighter-rouge">main.js</code> → inside <code class="language-plaintext highlighter-rouge">tick()</code> particle loop + emitter + normalizeBall</li>
+  <li>Run: reload app</li>
+  <li>Expect: particles behave like expressive instruments, not one-shot triggers</li>
+</ul>
+</article>
+</div>
+
+    </main>
+
+    <footer class="site-footer">
+      <div class="site-footer-inner footer-grid-6">
+        <section class="footer-brand">
+          <h2>Wall of Sound</h2>
+          <p>
+            Shared project memory for the StudioRich audio/visual system. Specs,
+            logs, recovery notes, and local portals live here.
+          </p>
+        </section>
+
+        <section class="footer-group">
+          <h2>Navigation</h2>
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Domains</h2>
+          <a href="/systems/wall/">Wall System</a>
+          <a href="/systems/sound/">Sound System</a>
+          <a href="/systems/">Systems Index</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Indexes</h2>
+          <a href="/specs/">Specs</a>
+          <a href="/logs/">Logs</a>
+          <a href="/components/wall/">Wall Components</a>
+          <a href="/components/sound/"
+            >Sound Components</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Local Portals</h2>
+          <a href="file:///Users/studio/Projects/wall-of-sound/wall/index.html"
+            >Wall App</a
+          >
+          <a
+            href="file:///Users/studio/Projects/wall-of-sound/sound/labeller.html"
+            >Sound Labeller</a
+          >
+          <a
+            href="file:///Users/studio/Projects/kinetic-master-engine/index.html"
+            >Kinetic Engine</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Recovery</h2>
+          <a href="/specs/">Implementation Specs</a>
+          <a href="/logs/">Session Logs</a>
+          <a href="/systems/sound/">Sound Recovery</a>
+          <a href="/systems/wall/">Wall Recovery</a>
+        </section>
+      </div>
+    </footer>
+  </body>
+</html>

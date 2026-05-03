@@ -1,0 +1,379 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>MotionCore | Wall of Sound</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <link
+      rel="stylesheet"
+      href="/assets/css/style.css"
+    />
+  </head>
+
+  <body>
+    <header class="site-header">
+      <div class="site-header-inner">
+        <a class="site-title" href="/">
+          Wall of Sound
+        </a>
+
+        <nav class="site-nav" aria-label="Primary navigation">
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="page-content">
+      <div class="spec-shell">
+  <a class="back-link" href="/specs/">← Back to specs</a>
+
+  <div class="spec-kicker">
+    wall / audio_system / needs-review
+  </div>
+
+  <h1>MotionCore</h1>
+
+  <section class="spec-meta">
+    <div>
+      <strong>Doc ID</strong>
+      0413_WALL_OF_SOUND_MotionCore_v1
+    </div>
+
+    <div>
+      <strong>Date</strong>
+      2026-04-13
+    </div>
+
+    <div>
+      <strong>Version</strong>
+      1.0.0
+    </div>
+
+    <div>
+      <strong>System</strong>
+      WOS
+    </div>
+
+    <div>
+      <strong>Domain</strong>
+      wall
+    </div>
+
+    <div>
+      <strong>Component</strong>
+      audio_system
+    </div>
+
+    <div>
+      <strong>Type</strong>
+      legacy-spec
+    </div>
+
+    <div>
+      <strong>Priority</strong>
+      medium
+    </div>
+
+    <div>
+      <strong>Risk</strong>
+      unknown
+    </div>
+
+    <div>
+      <strong>Status</strong>
+      needs-review
+    </div>
+  </section>
+
+  
+  <p><strong>Summary:</strong> Imported legacy Wall of Sound spec. Needs review.</p>
+  
+
+  <article class="spec-body"><h1 id="0413_wall_of_sound_motioncore_v100">0413_WALL_OF_SOUND_MotionCore_v1.0.0</h1>
+
+<p>Generated: 04/13/2026</p>
+
+<hr />
+
+<h2 id="-goal">🎯 Goal</h2>
+
+<p>Introduce a minimal motion system for shapes that:</p>
+
+<ul>
+  <li>supports basic XY movement and rotation</li>
+  <li>loops cleanly (no drift or runaway values)</li>
+  <li>is deterministic (same loop = same result)</li>
+  <li>integrates into existing Shape system without breaking anything</li>
+</ul>
+
+<hr />
+
+<h2 id="-assumptions">🧠 Assumptions</h2>
+
+<ul>
+  <li><code class="language-plaintext highlighter-rouge">state.shapes</code> exists</li>
+  <li>each shape has:
+    <ul>
+      <li><code class="language-plaintext highlighter-rouge">position {x, y}</code></li>
+      <li><code class="language-plaintext highlighter-rouge">rotation</code></li>
+    </ul>
+  </li>
+  <li>render system already reads these values</li>
+  <li>main loop exists (<code class="language-plaintext highlighter-rouge">tick</code> or similar)</li>
+</ul>
+
+<hr />
+
+<h2 id="-data-model-extension">🧱 Data Model Extension</h2>
+
+<p>Add motion to Shape:</p>
+
+<div class="language-ts highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">type</span> <span class="nx">Motion</span> <span class="o">=</span> <span class="p">{</span>
+  <span class="na">enabled</span><span class="p">:</span> <span class="nx">boolean</span><span class="p">;</span>
+
+  <span class="c1">// translation</span>
+  <span class="nl">vx</span><span class="p">:</span> <span class="kr">number</span><span class="p">;</span> <span class="c1">// units per second</span>
+  <span class="nl">vy</span><span class="p">:</span> <span class="kr">number</span><span class="p">;</span>
+
+  <span class="c1">// rotation</span>
+  <span class="nl">angularVelocity</span><span class="p">:</span> <span class="kr">number</span><span class="p">;</span> <span class="c1">// radians per second</span>
+
+  <span class="c1">// loop behavior</span>
+  <span class="nl">loop</span><span class="p">:</span> <span class="nx">boolean</span><span class="p">;</span>
+<span class="p">};</span>
+</code></pre></div></div>
+
+<p>Extend Shape:</p>
+
+<div class="language-ts highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">type</span> <span class="nx">Shape</span> <span class="o">=</span> <span class="p">{</span>
+  <span class="p">...</span>
+  <span class="nx">motion</span><span class="p">?:</span> <span class="nx">Motion</span><span class="p">;</span>
+<span class="p">};</span>
+</code></pre></div></div>
+
+<hr />
+
+<h2 id="️-core-motion-engine">⚙️ Core Motion Engine</h2>
+
+<h3 id="new-enginemotionsystemjs">NEW: <code class="language-plaintext highlighter-rouge">engine/motionSystem.js</code></h3>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">// engine/motionSystem.js</span>
+
+<span class="kd">const</span> <span class="nx">MotionSystem</span> <span class="o">=</span> <span class="p">(()</span> <span class="o">=&gt;</span> <span class="p">{</span>
+  <span class="kd">function</span> <span class="nf">updateShapeMotion</span><span class="p">(</span><span class="nx">shape</span><span class="p">,</span> <span class="nx">dt</span><span class="p">,</span> <span class="nx">bounds</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kd">const</span> <span class="nx">m</span> <span class="o">=</span> <span class="nx">shape</span><span class="p">.</span><span class="nx">motion</span><span class="p">;</span>
+    <span class="k">if </span><span class="p">(</span><span class="o">!</span><span class="nx">m</span> <span class="o">||</span> <span class="o">!</span><span class="nx">m</span><span class="p">.</span><span class="nx">enabled</span><span class="p">)</span> <span class="k">return</span><span class="p">;</span>
+
+    <span class="c1">// --- POSITION UPDATE ---</span>
+    <span class="nx">shape</span><span class="p">.</span><span class="nx">position</span><span class="p">.</span><span class="nx">x</span> <span class="o">+=</span> <span class="nx">m</span><span class="p">.</span><span class="nx">vx</span> <span class="o">*</span> <span class="nx">dt</span><span class="p">;</span>
+    <span class="nx">shape</span><span class="p">.</span><span class="nx">position</span><span class="p">.</span><span class="nx">y</span> <span class="o">+=</span> <span class="nx">m</span><span class="p">.</span><span class="nx">vy</span> <span class="o">*</span> <span class="nx">dt</span><span class="p">;</span>
+
+    <span class="c1">// --- ROTATION UPDATE ---</span>
+    <span class="nx">shape</span><span class="p">.</span><span class="nx">rotation</span> <span class="o">+=</span> <span class="nx">m</span><span class="p">.</span><span class="nx">angularVelocity</span> <span class="o">*</span> <span class="nx">dt</span><span class="p">;</span>
+
+    <span class="c1">// --- LOOPING (WRAP AROUND CANVAS) ---</span>
+    <span class="k">if </span><span class="p">(</span><span class="nx">m</span><span class="p">.</span><span class="nx">loop</span> <span class="o">&amp;&amp;</span> <span class="nx">bounds</span><span class="p">)</span> <span class="p">{</span>
+      <span class="nx">shape</span><span class="p">.</span><span class="nx">position</span><span class="p">.</span><span class="nx">x</span> <span class="o">=</span> <span class="nf">wrap</span><span class="p">(</span><span class="nx">shape</span><span class="p">.</span><span class="nx">position</span><span class="p">.</span><span class="nx">x</span><span class="p">,</span> <span class="nx">bounds</span><span class="p">.</span><span class="nx">width</span><span class="p">);</span>
+      <span class="nx">shape</span><span class="p">.</span><span class="nx">position</span><span class="p">.</span><span class="nx">y</span> <span class="o">=</span> <span class="nf">wrap</span><span class="p">(</span><span class="nx">shape</span><span class="p">.</span><span class="nx">position</span><span class="p">.</span><span class="nx">y</span><span class="p">,</span> <span class="nx">bounds</span><span class="p">.</span><span class="nx">height</span><span class="p">);</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+
+  <span class="kd">function</span> <span class="nf">wrap</span><span class="p">(</span><span class="nx">value</span><span class="p">,</span> <span class="nx">max</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">if </span><span class="p">(</span><span class="nx">value</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span> <span class="k">return</span> <span class="nx">value</span> <span class="o">+</span> <span class="nx">max</span><span class="p">;</span>
+    <span class="k">if </span><span class="p">(</span><span class="nx">value</span> <span class="o">&gt;</span> <span class="nx">max</span><span class="p">)</span> <span class="k">return</span> <span class="nx">value</span> <span class="o">-</span> <span class="nx">max</span><span class="p">;</span>
+    <span class="k">return</span> <span class="nx">value</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="kd">function</span> <span class="nf">updateAll</span><span class="p">(</span><span class="nx">shapes</span><span class="p">,</span> <span class="nx">dt</span><span class="p">,</span> <span class="nx">bounds</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">for </span><span class="p">(</span><span class="kd">let</span> <span class="nx">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="nx">i</span> <span class="o">&lt;</span> <span class="nx">shapes</span><span class="p">.</span><span class="nx">length</span><span class="p">;</span> <span class="nx">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+      <span class="nf">updateShapeMotion</span><span class="p">(</span><span class="nx">shapes</span><span class="p">[</span><span class="nx">i</span><span class="p">],</span> <span class="nx">dt</span><span class="p">,</span> <span class="nx">bounds</span><span class="p">);</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+
+  <span class="k">return</span> <span class="p">{</span>
+    <span class="nx">updateAll</span><span class="p">,</span>
+  <span class="p">};</span>
+<span class="p">})();</span>
+</code></pre></div></div>
+
+<hr />
+
+<h2 id="-integration">🔌 Integration</h2>
+
+<h3 id="1-add-script-to-indexhtml">1. Add script to <code class="language-plaintext highlighter-rouge">index.html</code></h3>
+
+<div class="language-html highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nt">&lt;script </span><span class="na">src=</span><span class="s">"./engine/motionSystem.js"</span><span class="nt">&gt;&lt;/script&gt;</span>
+</code></pre></div></div>
+
+<p>Place it after:</p>
+
+<div class="language-html highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nt">&lt;script </span><span class="na">src=</span><span class="s">"./engine/shapeSystem.js"</span><span class="nt">&gt;&lt;/script&gt;</span>
+</code></pre></div></div>
+
+<hr />
+
+<h3 id="2-hook-into-main-loop-mainjs">2. Hook into main loop (<code class="language-plaintext highlighter-rouge">main.js</code>)</h3>
+
+<p>Find your main tick:</p>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">function</span> <span class="nf">tick</span><span class="p">(</span><span class="nx">time</span><span class="p">)</span> <span class="p">{</span>
+</code></pre></div></div>
+
+<p>Add BEFORE render:</p>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">const</span> <span class="nx">dt</span> <span class="o">=</span> <span class="p">(</span><span class="nx">time</span> <span class="o">-</span> <span class="nx">lastTime</span><span class="p">)</span> <span class="o">/</span> <span class="mi">1000</span><span class="p">;</span>
+<span class="nx">lastTime</span> <span class="o">=</span> <span class="nx">time</span><span class="p">;</span>
+
+<span class="c1">// --- MOTION UPDATE ---</span>
+<span class="nx">MotionSystem</span><span class="p">.</span><span class="nf">updateAll</span><span class="p">(</span><span class="nx">state</span><span class="p">.</span><span class="nx">shapes</span><span class="p">,</span> <span class="nx">dt</span><span class="p">,</span> <span class="p">{</span>
+  <span class="na">width</span><span class="p">:</span> <span class="nx">canvas</span><span class="p">.</span><span class="nx">width</span><span class="p">,</span>
+  <span class="na">height</span><span class="p">:</span> <span class="nx">canvas</span><span class="p">.</span><span class="nx">height</span><span class="p">,</span>
+<span class="p">});</span>
+</code></pre></div></div>
+
+<hr />
+
+<h2 id="-test-setup">🧪 Test Setup</h2>
+
+<h3 id="add-a-test-shape-with-motion">Add a test shape with motion</h3>
+
+<p>Drop this somewhere after shape creation:</p>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">const</span> <span class="nx">testShape</span> <span class="o">=</span> <span class="p">{</span>
+  <span class="na">id</span><span class="p">:</span> <span class="dl">"</span><span class="s2">test-motion-1</span><span class="dl">"</span><span class="p">,</span>
+  <span class="na">kind</span><span class="p">:</span> <span class="dl">"</span><span class="s2">square</span><span class="dl">"</span><span class="p">,</span>
+  <span class="na">position</span><span class="p">:</span> <span class="p">{</span> <span class="na">x</span><span class="p">:</span> <span class="mi">300</span><span class="p">,</span> <span class="na">y</span><span class="p">:</span> <span class="mi">600</span> <span class="p">},</span>
+  <span class="na">rotation</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+  <span class="na">scale</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+  <span class="na">segments</span><span class="p">:</span> <span class="p">[],</span>
+
+  <span class="na">motion</span><span class="p">:</span> <span class="p">{</span>
+    <span class="na">enabled</span><span class="p">:</span> <span class="kc">true</span><span class="p">,</span>
+    <span class="na">vx</span><span class="p">:</span> <span class="mi">40</span><span class="p">,</span> <span class="c1">// horizontal drift</span>
+    <span class="na">vy</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+    <span class="na">angularVelocity</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span> <span class="c1">// slow spin</span>
+    <span class="na">loop</span><span class="p">:</span> <span class="kc">true</span><span class="p">,</span>
+  <span class="p">},</span>
+<span class="p">};</span>
+
+<span class="nx">state</span><span class="p">.</span><span class="nx">shapes</span><span class="p">.</span><span class="nf">push</span><span class="p">(</span><span class="nx">testShape</span><span class="p">);</span>
+</code></pre></div></div>
+
+<hr />
+
+<h2 id="-expected-behavior">🔁 Expected Behavior</h2>
+
+<ul>
+  <li>shape moves steadily across screen</li>
+  <li>wraps cleanly at edges</li>
+  <li>rotates continuously</li>
+  <li>no jitter</li>
+  <li>no acceleration drift</li>
+</ul>
+
+<hr />
+
+<h2 id="-constraints">🚫 Constraints</h2>
+
+<ul>
+  <li>NO physics integration yet</li>
+  <li>NO inspector UI</li>
+  <li>NO easing / curves</li>
+  <li>NO multiple motion layers</li>
+  <li>deterministic only</li>
+</ul>
+
+<hr />
+
+<h2 id="-next-step-do-not-build-yet">⚡ Next Step (Do NOT build yet)</h2>
+
+<ul>
+  <li>motion presets (orbit, oscillate)</li>
+  <li>motion per segment</li>
+  <li>BPM-synced motion</li>
+  <li>motion → audio coupling</li>
+</ul>
+
+<hr />
+
+<h2 id="final-principle">Final Principle</h2>
+
+<p>Motion should:</p>
+
+<ul>
+  <li>enhance timing</li>
+  <li>not override structure</li>
+  <li>remain predictable</li>
+</ul>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>geometry defines pattern
+motion defines variation
+</code></pre></div></div>
+</article>
+</div>
+
+    </main>
+
+    <footer class="site-footer">
+      <div class="site-footer-inner footer-grid-6">
+        <section class="footer-brand">
+          <h2>Wall of Sound</h2>
+          <p>
+            Shared project memory for the StudioRich audio/visual system. Specs,
+            logs, recovery notes, and local portals live here.
+          </p>
+        </section>
+
+        <section class="footer-group">
+          <h2>Navigation</h2>
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Domains</h2>
+          <a href="/systems/wall/">Wall System</a>
+          <a href="/systems/sound/">Sound System</a>
+          <a href="/systems/">Systems Index</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Indexes</h2>
+          <a href="/specs/">Specs</a>
+          <a href="/logs/">Logs</a>
+          <a href="/components/wall/">Wall Components</a>
+          <a href="/components/sound/"
+            >Sound Components</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Local Portals</h2>
+          <a href="file:///Users/studio/Projects/wall-of-sound/wall/index.html"
+            >Wall App</a
+          >
+          <a
+            href="file:///Users/studio/Projects/wall-of-sound/sound/labeller.html"
+            >Sound Labeller</a
+          >
+          <a
+            href="file:///Users/studio/Projects/kinetic-master-engine/index.html"
+            >Kinetic Engine</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Recovery</h2>
+          <a href="/specs/">Implementation Specs</a>
+          <a href="/logs/">Session Logs</a>
+          <a href="/systems/sound/">Sound Recovery</a>
+          <a href="/systems/wall/">Wall Recovery</a>
+        </section>
+      </div>
+    </footer>
+  </body>
+</html>

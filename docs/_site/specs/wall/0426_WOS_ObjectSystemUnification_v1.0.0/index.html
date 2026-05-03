@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Object System Unification | Wall of Sound</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <link
+      rel="stylesheet"
+      href="/assets/css/style.css"
+    />
+  </head>
+
+  <body>
+    <header class="site-header">
+      <div class="site-header-inner">
+        <a class="site-title" href="/">
+          Wall of Sound
+        </a>
+
+        <nav class="site-nav" aria-label="Primary navigation">
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="page-content">
+      <div class="spec-shell">
+  <a class="back-link" href="/specs/">← Back to specs</a>
+
+  <div class="spec-kicker">
+    wall / geometry_pipeline / active
+  </div>
+
+  <h1>Object System Unification</h1>
+
+  <section class="spec-meta">
+    <div>
+      <strong>Doc ID</strong>
+      0426_WOS_ObjectSystemUnification_v1.0.0
+    </div>
+
+    <div>
+      <strong>Date</strong>
+      2026-04-26
+    </div>
+
+    <div>
+      <strong>Version</strong>
+      1.0.0
+    </div>
+
+    <div>
+      <strong>System</strong>
+      WOS
+    </div>
+
+    <div>
+      <strong>Domain</strong>
+      wall
+    </div>
+
+    <div>
+      <strong>Component</strong>
+      geometry_pipeline
+    </div>
+
+    <div>
+      <strong>Type</strong>
+      core-spec
+    </div>
+
+    <div>
+      <strong>Priority</strong>
+      critical
+    </div>
+
+    <div>
+      <strong>Risk</strong>
+      medium
+    </div>
+
+    <div>
+      <strong>Status</strong>
+      active
+    </div>
+  </section>
+
+  
+  <p><strong>Summary:</strong> Unifies demo geometry and Mop-drawn geometry into a single object-based system so that particles, collision, and behaviors operate consistently across all drawn elements.</p>
+  
+
+  <article class="spec-body"><h1 id="-purpose">🎯 PURPOSE</h1>
+
+<p>Eliminate the split between:</p>
+
+<ul>
+  <li>demoLines (legacy system)</li>
+  <li>Mop-drawn shapes (new system)</li>
+</ul>
+
+<p>Replace both with a single unified:</p>
+
+<p>objects[]</p>
+
+<p>All systems must operate ONLY on this unified structure.</p>
+
+<hr />
+
+<h1 id="-problem">🚨 PROBLEM</h1>
+
+<p>demoLines → collision → particles ✔
+mop shapes → render only ❌</p>
+
+<hr />
+
+<h1 id="-core-principle">🧠 CORE PRINCIPLE</h1>
+
+<p>INPUT → OBJECTS[] → SYSTEMS</p>
+
+<p>No alternate paths.</p>
+
+<hr />
+
+<h1 id="-data-model">📦 DATA MODEL</h1>
+
+<p>type Segment = { x1, y1, x2, y2 }</p>
+
+<p>type Object = {
+id,
+segments[],
+strokeWidth,
+color,
+behavior?,
+mechanic?
+}</p>
+
+<hr />
+
+<h1 id="-implementation">🔧 IMPLEMENTATION</h1>
+
+<h2 id="global-store">GLOBAL STORE</h2>
+
+<p>window.WOS = window.WOS || {};
+WOS.objects = [];</p>
+
+<hr />
+
+<h2 id="delete-legacy">DELETE LEGACY</h2>
+
+<p>Remove:</p>
+
+<ul>
+  <li>demoLines</li>
+  <li>all references</li>
+  <li>separate collision/render paths</li>
+</ul>
+
+<hr />
+
+<h2 id="demo--objects">DEMO → OBJECTS</h2>
+
+<p>function createLineObject(x1,y1,x2,y2,opts={}) {
+return {
+id: crypto.randomUUID(),
+segments: [{ x1,y1,x2,y2 }],
+strokeWidth: opts.strokeWidth || 3,
+color: opts.color || “#fff”
+}
+}</p>
+
+<p>WOS.objects = [
+createLineObject(200,200,600,250),
+createLineObject(300,400,700,450)
+]</p>
+
+<hr />
+
+<h2 id="mop--objects">MOP → OBJECTS</h2>
+
+<p>function buildSegments(points){
+const segs=[]
+for(let i=0;i&lt;points.length-1;i++){
+segs.push({
+x1:points.x,
+y1:points.y,
+x2:points.x,
+y2:points.y
+})
+}
+return segs
+}</p>
+
+<p>WOS.objects.push({
+id: crypto.randomUUID(),
+segments: buildSegments(stroke.points),
+strokeWidth: stroke.width,
+color: stroke.color
+})</p>
+
+<hr />
+
+<h2 id="collision-critical">COLLISION (CRITICAL)</h2>
+
+<p>for (const obj of WOS.objects) {
+for (const seg of obj.segments) {
+checkCollision(p, seg)
+}
+}</p>
+
+<hr />
+
+<h2 id="render">RENDER</h2>
+
+<p>for (const obj of WOS.objects) {
+for (const seg of obj.segments) {
+drawSegment(seg, obj)
+}
+}</p>
+
+<hr />
+
+<h1 id="-validation">🧪 VALIDATION</h1>
+
+<ul>
+  <li>Mop lines collide ✔</li>
+  <li>Demo lines collide ✔</li>
+  <li>No system difference ✔</li>
+</ul>
+
+<hr />
+
+<h1 id="-success">🔥 SUCCESS</h1>
+
+<p>Everything = Objects
+Particles hit everything</p>
+
+<hr />
+</article>
+</div>
+
+    </main>
+
+    <footer class="site-footer">
+      <div class="site-footer-inner footer-grid-6">
+        <section class="footer-brand">
+          <h2>Wall of Sound</h2>
+          <p>
+            Shared project memory for the StudioRich audio/visual system. Specs,
+            logs, recovery notes, and local portals live here.
+          </p>
+        </section>
+
+        <section class="footer-group">
+          <h2>Navigation</h2>
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Domains</h2>
+          <a href="/systems/wall/">Wall System</a>
+          <a href="/systems/sound/">Sound System</a>
+          <a href="/systems/">Systems Index</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Indexes</h2>
+          <a href="/specs/">Specs</a>
+          <a href="/logs/">Logs</a>
+          <a href="/components/wall/">Wall Components</a>
+          <a href="/components/sound/"
+            >Sound Components</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Local Portals</h2>
+          <a href="file:///Users/studio/Projects/wall-of-sound/wall/index.html"
+            >Wall App</a
+          >
+          <a
+            href="file:///Users/studio/Projects/wall-of-sound/sound/labeller.html"
+            >Sound Labeller</a
+          >
+          <a
+            href="file:///Users/studio/Projects/kinetic-master-engine/index.html"
+            >Kinetic Engine</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Recovery</h2>
+          <a href="/specs/">Implementation Specs</a>
+          <a href="/logs/">Session Logs</a>
+          <a href="/systems/sound/">Sound Recovery</a>
+          <a href="/systems/wall/">Wall Recovery</a>
+        </section>
+      </div>
+    </footer>
+  </body>
+</html>

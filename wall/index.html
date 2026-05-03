@@ -11,10 +11,8 @@
     <header id="topbar" class="topbar">
       <div class="topbar-left">
         <span class="logo-id">Wallace</span>
-        
       </div>
 
-     
       <div class="topbar-right">
         <button id="load-example" title="Demo">Demo</button>
         <label class="file-btn" title="Open">
@@ -37,273 +35,43 @@
     <!-- ── MAIN LAYOUT ──────────────────────────────── -->
     <div class="app-body">
       <!-- LEFT PANEL: Libraries -->
-      <aside id="left-panel" class="panel panel-left">
-        <section class="library-section">
-          <h3 class="library-header">
-            Shapes <button class="lib-add" type="button">+</button>
-          </h3>
-          <div class="shape-grid" id="shape-grid">
-            <button
-              class="shape-button active"
-              data-shape="circle"
-              title="Circle"
-            >
-              <svg width="28" height="28" viewBox="0 0 28 28">
-                <circle
-                  cx="14"
-                  cy="14"
-                  r="10"
-                  stroke="currentColor"
-                  stroke-width="1.4"
-                  fill="none"
-                />
-              </svg>
-            </button>
-            <button class="shape-button" data-shape="square" title="Square">
-              <svg width="28" height="28" viewBox="0 0 28 28">
-                <rect
-                  x="4"
-                  y="4"
-                  width="20"
-                  height="20"
-                  stroke="currentColor"
-                  stroke-width="1.4"
-                  fill="none"
-                />
-              </svg>
-            </button>
-            <button class="shape-button" data-shape="triangle" title="Triangle">
-              <svg width="28" height="28" viewBox="0 0 28 28">
-                <polygon
-                  points="14,3 25,25 3,25"
-                  stroke="currentColor"
-                  stroke-width="1.4"
-                  fill="none"
-                />
-              </svg>
-            </button>
-            <button class="shape-button" data-shape="rounded-loop" title="Loop">
-              <svg width="28" height="28" viewBox="0 0 28 28">
-                <ellipse
-                  cx="14"
-                  cy="14"
-                  rx="11"
-                  ry="8"
-                  stroke="currentColor"
-                  stroke-width="1.4"
-                  fill="none"
-                />
-              </svg>
-            </button>
-            <button class="shape-button" data-shape="zig-zag" title="Zig-Zag">
-              <svg width="28" height="28" viewBox="0 0 28 28">
-                <polyline
-                  points="3,8 8,20 13,8 18,20 23,8"
-                  stroke="currentColor"
-                  stroke-width="1.4"
-                  fill="none"
-                />
-              </svg>
-            </button>
-            <button class="shape-button" data-shape="sine" title="Sine">
-              <svg width="28" height="28" viewBox="0 0 28 28">
-                <path
-                  d="M3,14 C7,4 11,4 14,14 C17,24 21,24 25,14"
-                  stroke="currentColor"
-                  stroke-width="1.4"
-                  fill="none"
-                />
-              </svg>
-            </button>
-            <button class="shape-button" data-shape="straight" title="Line">
-              <svg width="28" height="28" viewBox="0 0 28 28">
-                <line
-                  x1="3"
-                  y1="14"
-                  x2="25"
-                  y2="14"
-                  stroke="currentColor"
-                  stroke-width="1.4"
-                />
-              </svg>
-            </button>
-            <button class="shape-button" data-shape="x-form" title="X">
-              <svg width="28" height="28" viewBox="0 0 28 28">
-                <line
-                  x1="5"
-                  y1="5"
-                  x2="23"
-                  y2="23"
-                  stroke="currentColor"
-                  stroke-width="1.4"
-                />
-                <line
-                  x1="23"
-                  y1="5"
-                  x2="5"
-                  y2="23"
-                  stroke="currentColor"
-                  stroke-width="1.4"
-                />
-              </svg>
-            </button>
-            <button class="shape-button" data-shape="v-form" title="V">
-              <svg width="28" height="28" viewBox="0 0 28 28">
-                <polyline
-                  points="5,5 14,23 23,5"
-                  stroke="currentColor"
-                  stroke-width="1.4"
-                  fill="none"
-                />
-              </svg>
-            </button>
-            <button class="shape-button" data-shape="l-form" title="L">
-              <svg width="28" height="28" viewBox="0 0 28 28">
-                <polyline
-                  points="7,5 7,23 23,23"
-                  stroke="currentColor"
-                  stroke-width="1.4"
-                  fill="none"
-                />
-              </svg>
-            </button>
-            <button class="shape-button" data-shape="m-form" title="M">
-              <svg width="28" height="28" viewBox="0 0 28 28">
-                <polyline
-                  points="3,23 3,5 14,16 25,5 25,23"
-                  stroke="currentColor"
-                  stroke-width="1.4"
-                  fill="none"
-                />
-              </svg>
-            </button>
-            <button class="shape-button" data-shape="c-form" title="C">
-              <svg width="28" height="28" viewBox="0 0 28 28">
-                <path
-                  d="M22,7 A9,9 0 1,0 22,21"
-                  stroke="currentColor"
-                  stroke-width="1.4"
-                  fill="none"
-                />
-              </svg>
-            </button>
-          </div>
-        </section>
-<!-- NOTE STRIP MOVED INTO CANVAS AREA -->
-
-     
-           <section class="inspector-section">
-            <h4 class="section-title">Actions</h4>
-            <div class="action-row">
-              <button id="duplicate-selection" type="button">Duplicate</button>
-              <button id="delete-selection" type="button">Delete</button>
-              <button id="undo-action" type="button">Undo</button>
-            </div>
-            </section>
-            <section class="inspector-section">
-            <h4 class="section-title">Pattern</h4>
-            <div class="field-grid two" style="margin-top: 6px">
-              <label class="field">
-                <span>Cols</span>
-                <input
-                  id="grid-cols"
-                  type="number"
-                  min="1"
-                  max="20"
-                  value="3"
-                />
-              </label>
-              <label class="field">
-                <span>Rows</span>
-                <input
-                  id="grid-rows"
-                  type="number"
-                  min="1"
-                  max="20"
-                  value="3"
-                />
-              </label>
-              <label class="field">
-                <span>X Gap</span>
-                <input
-                  id="grid-spacing-x"
-                  type="number"
-                  min="0"
-                  max="2000"
-                  value="120"
-                />
-              </label>
-              <label class="field">
-                <span>Y Gap</span>
-                <input
-                  id="grid-spacing-y"
-                  type="number"
-                  min="0"
-                  max="2000"
-                  value="120"
-                />
-              </label>
-            </div>
-            <div class="action-row" style="margin-top: 4px">
-              <button id="duplicate-pattern" type="button" style="flex: 1">
-                Duplicate Grid
-              </button>
-            </div>
-          </section>
-
-
+      <aside id="left-panel" class="panel panel-left" hidden>
+        <!-- Actions (Duplicate/Delete/Undo) and Pattern inputs moved to keyboard shortcuts.
+             Panels hidden — IDs preserved for JS bindings. -->
+        <button id="duplicate-selection" style="display:none" type="button">Duplicate</button>
+        <button id="delete-selection" style="display:none" type="button">Delete</button>
+        <button id="undo-action" style="display:none" type="button">Undo</button>
+        <div id="pattern-section" style="display:none">
+          <input type="number" id="grid-cols" value="3" />
+          <input type="number" id="grid-rows" value="3" />
+          <input type="number" id="grid-spacing-x" value="120" />
+          <input type="number" id="grid-spacing-y" value="120" />
+          <button id="duplicate-pattern" type="button">Duplicate</button>
+        </div>
       </aside>
 
-      <!-- CENTER: Stage -->
-
-
-        
+      <!-- CENTER: Canvas -->
       <main class="canvas-area">
+        <!-- Note column overlay — canvas-left, vertically centered -->
+        <div class="note-column" id="note-section" aria-label="Note selector">
+          <button class="note-cell active" data-note-class="0">C</button>
+          <button class="note-cell" data-note-class="1">C#</button>
+          <button class="note-cell" data-note-class="2">D</button>
+          <button class="note-cell" data-note-class="3">D#</button>
+          <button class="note-cell" data-note-class="4">E</button>
+          <button class="note-cell" data-note-class="5">F</button>
+          <button class="note-cell" data-note-class="6">F#</button>
+          <button class="note-cell" data-note-class="7">G</button>
+          <button class="note-cell" data-note-class="8">G#</button>
+          <button class="note-cell" data-note-class="9">A</button>
+          <button class="note-cell" data-note-class="10">A#</button>
+          <button class="note-cell" data-note-class="11">B</button>
+          <input id="active-note" type="hidden" value="60" />
+        </div>
         <div class="canvas-wrap" id="canvas-wrap">
           <canvas id="engine-canvas" width="1080" height="1920"></canvas>
         </div>
-<section class="note-floating" id="note-section" aria-label="Global note strip">
-<div id="note-grid" class="note-grid">
-              <button class="note-cell" type="button" data-note-class="0">
-                C
-              </button>
-              <button class="note-cell" type="button" data-note-class="1">
-                C#
-              </button>
-              <button class="note-cell" type="button" data-note-class="2">
-                D
-              </button>
-              <button class="note-cell" type="button" data-note-class="3">
-                D#
-              </button>
-              <button class="note-cell" type="button" data-note-class="4">
-                E
-              </button>
-              <button class="note-cell" type="button" data-note-class="5">
-                F
-              </button>
-              <button class="note-cell" type="button" data-note-class="6">
-                F#
-              </button>
-              <button class="note-cell" type="button" data-note-class="7">
-                G
-              </button>
-              <button class="note-cell" type="button" data-note-class="8">
-                G#
-              </button>
-              <button class="note-cell" type="button" data-note-class="9">
-                A
-              </button>
-              <button class="note-cell" type="button" data-note-class="10">
-                A#
-              </button>
-              <button class="note-cell" type="button" data-note-class="11">
-                B
-              </button>
-            </div>
-            <input id="active-note" type="hidden" value="60" />
-          </section>
-<div class="tool-group">
+        <div class="tool-group">
           <!-- Select deprecated — pen tool handles select/transform. Hidden but keyboard shortcut preserved. -->
           <button class="tool" data-tool="select" title="Select (V)" style="display:none">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
@@ -336,39 +104,33 @@
         </div>
       </main>
 
-<!-- TOOL GROUP MOVED INTO CANVAS AREA -->
-
-        
       <!-- Transport (below canvas) -->
       <div class="transport-bar">
-         <div class="topbar-center">
-        <input
-          id="bpm-input"
-          type="number"
-          min="60"
-          max="180"
-          step="0.1"
-          value="120.0"
-          title="BPM"
-        />
-        <select id="bar-count" title="Bars">
-          <option value="8">8 Bars</option>
-          <option value="16">16 Bars</option>
-          <option value="32">32 Bars</option>
-        </select>
-        <select id="quantize-division" title="Division">
-          <option value="0.25">1/4</option>
-          <option value="0.125">1/8</option>
-          <option value="0.0625">1/16</option>
-        </select>
-        <label class="toggle-btn" title="Quantize">
-          <input id="quantize-enabled" type="checkbox" />
-          <span>Q</span>
-        </label>
-      </div>
-
-
-
+        <div class="topbar-center">
+          <input
+            id="bpm-input"
+            type="number"
+            min="60"
+            max="180"
+            step="0.1"
+            value="120.0"
+            title="BPM"
+          />
+          <select id="bar-count" title="Bars">
+            <option value="8">8 Bars</option>
+            <option value="16">16 Bars</option>
+            <option value="32">32 Bars</option>
+          </select>
+          <select id="quantize-division" title="Division">
+            <option value="0.25">1/4</option>
+            <option value="0.125">1/8</option>
+            <option value="0.0625">1/16</option>
+          </select>
+          <label class="toggle-btn" title="Quantize">
+            <input id="quantize-enabled" type="checkbox" />
+            <span>Q</span>
+          </label>
+        </div>
         <div class="transport-status">
           <span id="engine-status">STOP</span>
           <span id="scene-stats">0L 0T 0B</span>
@@ -399,11 +161,12 @@
       <aside id="right-panel" class="panel panel-right">
         <div class="inspector-tabs">
           <button class="tab active" data-tab="object">Object</button>
-          <button class="tab" data-tab="canvas">Wall</button>
-          <button class="tab" data-tab="world">Playback</button>
+          <button class="tab" data-tab="canvas">Canvas</button>
+          <button class="tab" data-tab="world">World</button>
           <button class="tab" data-tab="sampler">Sampler</button>
           <button class="tab" data-tab="music">Composition</button>
           <button class="tab" data-tab="shapes">Shapes</button>
+          <button class="tab" data-tab="motion" hidden>Motion</button>
         </div>
 
         <!-- Object Tab -->
@@ -416,18 +179,6 @@
               <label class="field">
                 <span>Color</span>
                 <input id="line-color" type="color" value="#ff4b4b" disabled />
-              </label>
-              <label class="field">
-                <span>Thickness</span>
-                <input
-                  id="line-thickness"
-                  type="range"
-                  min="1"
-                  max="24"
-                  step="1"
-                  value="5"
-                />
-                <output id="line-thickness-value">5</output>
               </label>
               <label class="field" id="stroke-width-field" style="display:none">
                 <span>Stroke Width</span>
@@ -442,7 +193,10 @@
                 <output id="stroke-width-value">18</o>
               </label>
             </div>
-            <!-- Skittles swatch grid removed: note strip is the color-note selector. -->
+            <div class="field" id="outline-visible-field" style="margin-top:4px;display:flex;align-items:center;gap:8px">
+              <span>Outline</span>
+              <button id="toggle-visibility" class="btn-small" title="Toggle outline visibility" style="font-size:16px;padding:2px 8px">👁</button>
+            </div>
           </section>
  <section class="inspector-section" id="behavior-section">
             <h4 class="section-title">Behavior</h4>
@@ -470,57 +224,62 @@
                 <output id="line-strength-value">1.4</output>
               </label>
             </div>
-            <div class="field-grid two hidden" id="behavior-emitter-fields">
-              <label class="field">
-                <span>Rate (ms)</span>
-                <input id="behavior-emitter-rate" type="range" min="100" max="8000" step="50" value="400" />
-                <output id="behavior-emitter-rate-value">400</o>
-              </label>
-              <label class="field">
-                <span>Direction (°)</span>
-                <input id="behavior-emitter-direction" type="range" min="0" max="360" step="1" value="270" />
-                <output id="behavior-emitter-direction-value">270</o>
-              </label>
-              <label class="field">
-                <span>Speed</span>
-                <input id="behavior-emitter-strength" type="range" min="0" max="20" step="0.5" value="6" />
-                <output id="behavior-emitter-strength-value">6.0</o>
-              </label>
-              <label class="field checkbox">
-                <input id="behavior-emitter-mute" type="checkbox" />
-                <span>Mute</span>
-              </label>
-              <label class="field checkbox">
-                <input id="behavior-emitter-quantize" type="checkbox" />
-                <span>Quantize</span>
-              </label>
-              <label class="field">
-                <span>Div</span>
-                <input id="behavior-emitter-quantize-div" type="number" min="1" max="64" value="16" />
-              </label>
-              <label class="field">
-                <span>Spread (°)</span>
-                <input id="behavior-emitter-spread" type="range" min="0" max="60" step="1" value="15" />
-                <output id="behavior-emitter-spread-value">15</o>
-              </label>
-              <label class="field">
-                <span>Size</span>
-                <input id="behavior-emitter-size" type="range" min="1" max="10" step="0.5" value="3" />
-                <output id="behavior-emitter-size-value">3</o>
-              </label>
-              <label class="field">
-                <span>Life (s)</span>
-                <input id="behavior-emitter-life" type="range" min="0.2" max="3" step="0.1" value="1.2" />
-                <output id="behavior-emitter-life-value">1.2</o>
-              </label>
-              <label class="field">
-                <span>Style</span>
-                <select id="behavior-emitter-style">
-                  <option value="dot">Dot</option>
-                  <option value="streak">Streak</option>
-                  <option value="glow">Glow</option>
-                </select>
-              </label>
+            <div class="hidden" id="behavior-emitter-fields">
+              <!-- FLOW -->
+              <div class="inspector-group-label">Flow</div>
+              <div class="field-grid two">
+                <label class="field">
+                  <span>Rate (ms)</span>
+                  <input id="behavior-emitter-rate" type="range" min="16" max="2000" step="16" value="16" />
+                  <output id="behavior-emitter-rate-value">16</o>
+                </label>
+                <label class="field">
+                  <span>Density</span>
+                  <input id="behavior-emitter-density" type="range" min="1" max="16" step="1" value="4" />
+                  <output id="behavior-emitter-density-value">4</o>
+                </label>
+              </div>
+              <!-- MOTION -->
+              <div class="inspector-group-label">Motion</div>
+              <div class="field-grid two">
+                <label class="field">
+                  <span>Direction (°)</span>
+                  <input id="behavior-emitter-direction" type="range" min="0" max="360" step="1" value="270" />
+                  <output id="behavior-emitter-direction-value">270</o>
+                </label>
+                <label class="field">
+                  <span>Spread (°)</span>
+                  <input id="behavior-emitter-spread" type="range" min="0" max="180" step="1" value="25" />
+                  <output id="behavior-emitter-spread-value">25</o>
+                </label>
+                <label class="field">
+                  <span>Speed</span>
+                  <input id="behavior-emitter-speed" type="range" min="1" max="60" step="1" value="18" />
+                  <output id="behavior-emitter-speed-value">18</o>
+                </label>
+              </div>
+              <!-- FORM -->
+              <div class="inspector-group-label">Form</div>
+              <div class="field-grid two">
+                <label class="field">
+                  <span>Size</span>
+                  <input id="behavior-emitter-size" type="range" min="1" max="10" step="0.5" value="2" />
+                  <output id="behavior-emitter-size-value">2</o>
+                </label>
+                <label class="field">
+                  <span>Life (s)</span>
+                  <input id="behavior-emitter-life" type="range" min="0.1" max="5" step="0.1" value="1.2" />
+                  <output id="behavior-emitter-life-value">1.2</o>
+                </label>
+                <label class="field">
+                  <span>Style</span>
+                  <select id="behavior-emitter-style">
+                    <option value="dot">Dot</option>
+                    <option value="streak">Streak</option>
+                    <option value="glow">Glow</option>
+                  </select>
+                </label>
+              </div>
             </div>
           </section>
           <section class="inspector-section" id="mechanic-section">
@@ -644,17 +403,114 @@
               <span>Loop</span>
             </label>
           </section>
+
+          <!-- Behavior Panel — Phase 1 additive (spec 0428_WOS_BehaviorPanel_v1.0.0) -->
+          <section class="inspector-section hidden" id="behavior-panel">
+            <h4 class="section-title">Behavior</h4>
+
+            <!-- Mode selector -->
+            <label class="field">
+              <span>Mode</span>
+              <select id="bp-mode">
+                <option value="pingpong">Ping-Pong</option>
+                <option value="loop">Loop</option>
+                <option value="once">Once</option>
+                <option value="tunnel">Tunnel</option>
+              </select>
+            </label>
+
+            <!-- FX -->
+            <div>
+              <div class="inspector-group-label">Trail Style</div>
+              <div class="motion-presets" style="margin-top:4px">
+                <button class="btn-small" data-bp-style="off">Off</button>
+                <button class="btn-small" data-bp-style="orbit">Orbit</button>
+                <button class="btn-small" data-bp-style="comet">Comet</button>
+                <button class="btn-small" data-bp-style="dust">Dust</button>
+                <button class="btn-small" data-bp-style="burst">Burst</button>
+                <button class="btn-small" data-bp-style="ribbon">Ribbon</button>
+              </div>
+            </div>
+
+            <div class="field-grid two" style="margin-top:6px">
+              <label class="field">
+                <span>Color</span>
+                <select id="bp-fx-color-source">
+                  <option value="note">Note</option>
+                  <option value="custom">Custom</option>
+                </select>
+              </label>
+              <label class="field" style="flex-direction:row;align-items:center;gap:6px">
+                <span></span>
+                <input id="bp-fx-color" type="color" value="#ffffff" style="width:32px;height:22px;padding:0;border:none;cursor:pointer" />
+              </label>
+            </div>
+
+            <details style="margin-top:4px">
+              <summary class="inspector-group-label" style="cursor:pointer;list-style:none;padding:4px 0">Advanced</summary>
+              <div style="display:flex;flex-direction:column;gap:4px;padding-top:4px">
+                <label class="field">
+                  <span>Rate <output id="bp-rate-value">40</output>/s</span>
+                  <input id="bp-rate" type="range" min="1" max="200" step="1" value="40" />
+                </label>
+                <label class="field">
+                  <span>Spread <output id="bp-spread-value">0.30</output></span>
+                  <input id="bp-spread" type="range" min="0" max="6.28" step="0.01" value="0.3" />
+                </label>
+                <label class="field">
+                  <span>Speed <output id="bp-speed-value">120</output></span>
+                  <input id="bp-speed" type="range" min="10" max="600" step="10" value="120" />
+                </label>
+                <label class="field">
+                  <span>Size <output id="bp-size-value">3</output></span>
+                  <input id="bp-size" type="range" min="1" max="20" step="0.5" value="3" />
+                </label>
+                <label class="field">
+                  <span>Life <output id="bp-life-value">1.0</output>s</span>
+                  <input id="bp-life" type="range" min="0.1" max="5" step="0.1" value="1.0" />
+                </label>
+                <label class="field">
+                  <span>Particle</span>
+                  <select id="bp-type">
+                    <option value="dot">Dot</option>
+                    <option value="streak">Streak</option>
+                    <option value="glow">Glow</option>
+                  </select>
+                </label>
+              </div>
+            </details>
+
+            <!-- Trail Debug Panel -->
+            <section id="trail-debug-panel" class="inspector-section" style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.08)">
+              <h4 class="section-title">Debug</h4>
+              <div style="display:flex;flex-direction:column;gap:4px">
+                <label class="field checkbox">
+                  <input type="checkbox" id="debug-walkers" />
+                  <span>Show Walkers</span>
+                </label>
+                <label class="field checkbox">
+                  <input type="checkbox" id="debug-paths" />
+                  <span>Show Paths</span>
+                </label>
+                <label class="field checkbox">
+                  <input type="checkbox" id="debug-info" />
+                  <span>Show Info</span>
+                </label>
+              </div>
+            </section>
+          </section>
         </div>
         <div class="tab-content" data-tab-content="canvas">
           <section class="inspector-section">
-            <h4 class="section-title">Wall</h4>
+            <h4 class="section-title">Canvas</h4>
             <p class="dim">1080 × 1920 (Portrait)</p>
-<label class="field hidden-control">
-  <input id="transparent-bg" type="checkbox" />
-</label>
+            <label class="field">
+              <input id="transparent-bg" type="checkbox" />
+              <span>Transparent background</span>
+            </label>
                     <label class="file-btn" title="BG">
           <input id="background-file" type="file" accept="image/*" />
-          <span>Image Background</span>
+          <span>BG</span>
         </label>
 
           </section>
@@ -663,7 +519,7 @@
         <!-- World Tab -->
         <div class="tab-content" data-tab-content="world">
           <section class="inspector-section">
-            <h4 class="section-title">Playback</h4>
+            <h4 class="section-title">World</h4>
             <label class="field">
               <span>Physics Mode</span>
               <select id="world-mode">
@@ -733,7 +589,7 @@
           </div>
           <div class="lib-fields" style="margin-top:6px">
             <label class="field">
-              <span>Agent Shape</span>
+              <span>Particle Shape</span>
               <select id="particle-shape">
                 <option value="circle">Circle</option>
                 <option value="triangle">Triangle</option>
@@ -875,6 +731,96 @@
             </div>
           </section>
         </div>
+
+        <!-- Motion Brush Tab -->
+        <div class="tab-content" data-tab-content="motion" id="motion-panel" hidden>
+          <section class="inspector-section">
+            <h4 class="section-title">Motion Brush</h4>
+            <div class="field-grid two">
+              <label class="field checkbox">
+                <input id="motion-brush-enabled" type="checkbox" />
+                <span>Enabled</span>
+              </label>
+              <label class="field checkbox">
+                <input id="motion-brush-autobake" type="checkbox" />
+                <span>Auto-Bake</span>
+              </label>
+            </div>
+            <label class="field">
+              <span>Mode</span>
+              <select id="motion-brush-mode">
+                <option value="pingpong">Ping-Pong</option>
+                <option value="loop">Loop</option>
+                <option value="once">Once</option>
+              </select>
+            </label>
+          </section>
+
+          <section class="inspector-section">
+            <h4 class="section-title">Trail</h4>
+            <div class="field-grid two">
+              <label class="field">
+                <span>Source</span>
+                <select id="motion-color-source">
+                  <option value="note">Note</option>
+                  <option value="custom">Custom</option>
+                </select>
+              </label>
+              <label class="field" style="flex-direction:row;align-items:center;gap:6px">
+                <span>Color</span>
+                <input id="motion-brush-color" type="color" value="#ffffff" style="width:32px;height:22px;padding:0;border:none;cursor:pointer" />
+              </label>
+            </div>
+            <div class="motion-color-grid" id="motion-brush-swatches">
+              <button class="motion-color-swatch" data-color="#ff4b4b" style="background:#ff4b4b"></button>
+              <button class="motion-color-swatch" data-color="#ff9b1f" style="background:#ff9b1f"></button>
+              <button class="motion-color-swatch" data-color="#e5df45" style="background:#e5df45"></button>
+              <button class="motion-color-swatch" data-color="#35cb68" style="background:#35cb68"></button>
+              <button class="motion-color-swatch" data-color="#26d3a6" style="background:#26d3a6"></button>
+              <button class="motion-color-swatch" data-color="#3dd8c5" style="background:#3dd8c5"></button>
+              <button class="motion-color-swatch" data-color="#498cff" style="background:#498cff"></button>
+              <button class="motion-color-swatch" data-color="#7a62ff" style="background:#7a62ff"></button>
+              <button class="motion-color-swatch" data-color="#ff59cb" style="background:#ff59cb"></button>
+              <button class="motion-color-swatch" data-color="#ffffff" style="background:#ffffff"></button>
+            </div>
+            <details>
+              <summary style="font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--text-dim);cursor:pointer;padding:4px 0">Emitter</summary>
+              <div style="display:flex;flex-direction:column;gap:4px;padding-top:6px">
+                <label class="field">
+                  <span>Rate <output id="motion-brush-rate-value">40</output>/s</span>
+                  <input id="motion-brush-rate" type="range" min="1" max="200" step="1" value="40" />
+                </label>
+                <label class="field">
+                  <span>Spread <output id="motion-brush-spread-value">0.30</output></span>
+                  <input id="motion-brush-spread" type="range" min="0" max="6.28" step="0.01" value="0.3" />
+                </label>
+                <label class="field">
+                  <span>Speed <output id="motion-brush-speed-value">120</output></span>
+                  <input id="motion-brush-speed" type="range" min="10" max="600" step="10" value="120" />
+                </label>
+                <label class="field">
+                  <span>Size <output id="motion-brush-size-value">3</output></span>
+                  <input id="motion-brush-size" type="range" min="1" max="20" step="0.5" value="3" />
+                </label>
+                <label class="field">
+                  <span>Life <output id="motion-brush-life-value">1.0</output>s</span>
+                  <input id="motion-brush-life" type="range" min="0.1" max="5" step="0.1" value="1.0" />
+                </label>
+              </div>
+            </details>
+          </section>
+
+          <section class="inspector-section">
+            <h4 class="section-title">Presets</h4>
+            <div class="motion-presets">
+              <button class="btn-small" data-motion-preset="orbit">Orbit</button>
+              <button class="btn-small" data-motion-preset="comet">Comet</button>
+              <button class="btn-small" data-motion-preset="dust">Dust</button>
+              <button class="btn-small" data-motion-preset="burst">Burst</button>
+              <button class="btn-small" data-motion-preset="ribbon">Ribbon</button>
+            </div>
+          </section>
+        </div>
       </aside>
     </div>
 
@@ -918,6 +864,9 @@
     <script src="./state/sceneManager.js"></script>
     <script src="./ui/controls.js"></script>
     <script src="./ui/drawTools.js"></script>
+    <!-- MIDI Import system -->
+    <script src="https://cdn.jsdelivr.net/npm/@tonejs/midi/build/Midi.min.js"></script>
+    <script src="./midi/midiImporter.js"></script>
     <script src="./main.js"></script>
   </body>
 </html>
