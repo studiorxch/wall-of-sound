@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Inspector State System | Wall of Sound</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <link
+      rel="stylesheet"
+      href="/assets/css/style.css"
+    />
+  </head>
+
+  <body>
+    <header class="site-header">
+      <div class="site-header-inner">
+        <a class="site-title" href="/">
+          Wall of Sound
+        </a>
+
+        <nav class="site-nav" aria-label="Primary navigation">
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="page-content">
+      <h1 id="0426_wos_inspectorstatesystem_v100">0426_WOS_InspectorStateSystem_v1.0.0</h1>
+
+<p>Version: v1.0.0<br />
+Date: 04/26/2026<br />
+Status: Draft</p>
+
+<hr />
+
+<h2 id="objective">Objective</h2>
+
+<p>Unify all inspector UI behavior under a single deterministic system:</p>
+
+<blockquote>
+  <p>selection → inspector state → UI render</p>
+</blockquote>
+
+<p>Eliminate:</p>
+
+<ul>
+  <li>scattered visibility toggles</li>
+  <li>early return logic blocking UI</li>
+  <li>duplicated panel systems (tab vs inspector)</li>
+  <li>hidden feature behavior</li>
+</ul>
+
+<p>Ensure all current and future tools (motion, emitter, text, etc.) are grouped and displayed consistently.</p>
+
+<hr />
+
+<h2 id="core-principle">Core Principle</h2>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Selection is the single source of truth for inspector UI
+</code></pre></div></div>
+
+<p>No panel should decide its own visibility.</p>
+
+<p>Architecture Overview
+selection → getInspectorState() → renderInspector() → UI
+Patch 1 — Inspector State Model</p>
+
+<p>Create a centralized function:</p>
+
+<p>function getInspectorState(selection) {
+if (!selection) {
+return {
+mode: “none”,
+show: {}
+};
+}</p>
+
+<p>switch (selection.type) {
+case “stroke”:
+return {
+mode: “stroke”,
+show: {
+outline: true,
+behavior: true,
+mechanic: true,
+motion: true,
+emitter: true,
+text: false
+}
+};</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>case "group":
+  return {
+    mode: "group",
+    show: {
+      outline: true,
+      behavior: true,
+      mechanic: false,
+      motion: true,
+      emitter: true,
+      text: false
+    }
+  };
+
+case "text":
+  return {
+    mode: "text",
+    show: {
+      outline: false,
+      behavior: false,
+      mechanic: false,
+      motion: true,
+      emitter: false,
+      text: true
+    }
+  };
+
+default:
+  return {
+    mode: "unknown",
+    show: {}
+  };
+</code></pre></div></div>
+
+<p>}
+}
+Patch 2 — Inspector Renderer</p>
+
+<p>Create a single render function:</p>
+
+<p>function renderInspector(state, elements) {
+toggle(elements.motionInspectorBlock, state.show.motion);
+toggle(elements.textInspectorBlock, state.show.text);</p>
+
+<p>toggle(byId(“behavior-section”), state.show.behavior);
+toggle(byId(“mechanic-section”), state.show.mechanic);
+toggle(byId(“outline-section”), state.show.outline);
+toggle(byId(“emitter-section”), state.show.emitter);
+}</p>
+
+<p>function toggle(el, show) {
+if (!el) return;
+el.classList.toggle(“hidden”, !show);
+}
+Patch 3 — Replace syncSelection Logic</p>
+
+<p>Inside syncSelection():</p>
+
+<p>const inspectorState = getInspectorState(selection);
+renderInspector(inspectorState, elements);
+Patch 4 — Remove Early Return (Critical)</p>
+
+<p>Remove any logic like:</p>
+
+<p>if (selection.type === “stroke” || selection.type === “group”) {
+return;
+}</p>
+
+<p>This blocks UI updates and causes hidden panels.</p>
+
+<p>Patch 5 — Panel Classification</p>
+
+<p>Each inspector block must belong to a category:</p>
+
+<p>Panel Key
+Motion motion
+Behavior behavior
+Mechanic mechanic
+Outline outline
+Text text
+Emitter emitter</p>
+
+<p>Each panel must have:</p>
+
+<section id="motion-inspector-block" class="hidden"></section>
+<p>Patch 6 — Naming Rule (Important)</p>
+
+<p>All inspector panels must follow:</p>
+
+<p>{feature}-inspector-block</p>
+
+<p>Examples:</p>
+
+<p>motion-inspector-block
+emitter-inspector-block
+text-inspector-block
+Patch 7 — Future Tool Integration</p>
+
+<p>When adding a new tool:</p>
+
+<p>Step 1 — Add capability flag
+show: {
+newFeature: true
+}
+Step 2 — Add panel</p>
+
+<section id="newFeature-inspector-block"></section>
+<p>Step 3 — Register in renderer
+toggle(byId(“newFeature-inspector-block”), state.show.newFeature);</p>
+
+<p>No additional logic required.</p>
+
+<p>Optional Upgrade — Capability-Based Model (Future)</p>
+
+<p>Instead of hardcoding by type:</p>
+
+<p>selection.capabilities = {
+motion: true,
+emitter: true,
+behavior: true
+};</p>
+
+<p>Then:</p>
+
+<p>toggle(motionPanel, selection.capabilities.motion);</p>
+
+<p>This removes switch statements entirely.</p>
+
+<p>Debug Hooks</p>
+
+<p>Add temporary logs:</p>
+
+<p>console.log(“[Inspector]”, selection.type, inspectorState);
+Done Criteria
+Selecting a stroke shows motion + emitter panels
+Selecting text shows text panel only
+No panel remains permanently hidden
+No UI depends on manual tab switching
+New tools integrate without modifying core logic
+Implementation Guide
+where code goes
+controls.js → replace syncSelection logic, add helper functions
+what to run
+reload app → draw line → select → observe inspector
+what to expect
+panels appear consistently based on selection, no hidden features</p>
+
+<hr />
+
+<h2 id="-what-this-unlocks-important">🧠 What this unlocks (important)</h2>
+
+<p>Once this is in place:</p>
+
+<ul>
+  <li>Motion brush becomes <strong>visible and intentional</strong></li>
+  <li>Future tools don’t break UI</li>
+  <li>You stop chasing “why didn’t this show?”</li>
+  <li>Inspector becomes <strong>predictable</strong></li>
+</ul>
+
+<hr />
+
+    </main>
+
+    <footer class="site-footer">
+      <div class="site-footer-inner footer-grid-6">
+        <section class="footer-brand">
+          <h2>Wall of Sound</h2>
+          <p>
+            Shared project memory for the StudioRich audio/visual system. Specs,
+            logs, recovery notes, and local portals live here.
+          </p>
+        </section>
+
+        <section class="footer-group">
+          <h2>Navigation</h2>
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Domains</h2>
+          <a href="/systems/wall/">Wall System</a>
+          <a href="/systems/sound/">Sound System</a>
+          <a href="/systems/">Systems Index</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Indexes</h2>
+          <a href="/specs/">Specs</a>
+          <a href="/logs/">Logs</a>
+          <a href="/components/wall/">Wall Components</a>
+          <a href="/components/sound/"
+            >Sound Components</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Local Portals</h2>
+          <a href="file:///Users/studio/Projects/wall-of-sound/wall/index.html"
+            >Wall App</a
+          >
+          <a
+            href="file:///Users/studio/Projects/wall-of-sound/sound/labeller.html"
+            >Sound Labeller</a
+          >
+          <a
+            href="file:///Users/studio/Projects/kinetic-master-engine/index.html"
+            >Kinetic Engine</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Recovery</h2>
+          <a href="/specs/">Implementation Specs</a>
+          <a href="/logs/">Session Logs</a>
+          <a href="/systems/sound/">Sound Recovery</a>
+          <a href="/systems/wall/">Wall Recovery</a>
+        </section>
+      </div>
+    </footer>
+  </body>
+</html>

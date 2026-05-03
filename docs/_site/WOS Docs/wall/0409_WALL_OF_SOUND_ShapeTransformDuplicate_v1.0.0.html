@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>ShapeTransformDuplicate | Wall of Sound</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <link
+      rel="stylesheet"
+      href="/assets/css/style.css"
+    />
+  </head>
+
+  <body>
+    <header class="site-header">
+      <div class="site-header-inner">
+        <a class="site-title" href="/">
+          Wall of Sound
+        </a>
+
+        <nav class="site-nav" aria-label="Primary navigation">
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="page-content">
+      <div class="spec-shell">
+  <a class="back-link" href="/specs/">← Back to specs</a>
+
+  <div class="spec-kicker">
+    wall / audio_system / needs-review
+  </div>
+
+  <h1>ShapeTransformDuplicate</h1>
+
+  <section class="spec-meta">
+    <div>
+      <strong>Doc ID</strong>
+      0409_WALL_OF_SOUND_ShapeTransformDuplicate_v1.0.0
+    </div>
+
+    <div>
+      <strong>Date</strong>
+      2026-04-09
+    </div>
+
+    <div>
+      <strong>Version</strong>
+      1.0.0
+    </div>
+
+    <div>
+      <strong>System</strong>
+      WOS
+    </div>
+
+    <div>
+      <strong>Domain</strong>
+      wall
+    </div>
+
+    <div>
+      <strong>Component</strong>
+      audio_system
+    </div>
+
+    <div>
+      <strong>Type</strong>
+      legacy-spec
+    </div>
+
+    <div>
+      <strong>Priority</strong>
+      medium
+    </div>
+
+    <div>
+      <strong>Risk</strong>
+      unknown
+    </div>
+
+    <div>
+      <strong>Status</strong>
+      needs-review
+    </div>
+  </section>
+
+  
+  <p><strong>Summary:</strong> Imported legacy Wall of Sound spec. Needs review.</p>
+  
+
+  <article class="spec-body"><p>0410_WALL_OF_SOUND_ShapeSystem_FixPack_v1.2.0_PROMPT</p>
+
+<h2 id="context">Context</h2>
+
+<p>We are stabilizing the shape system. Shapes are now selectable with bounding boxes, but multiple core behaviors are broken or incomplete.</p>
+
+<p>This is a fix-only pass.
+Do NOT redesign architecture.
+Do NOT introduce new systems.
+Do NOT modify engine/collision/mechanics beyond wiring.</p>
+
+<hr />
+
+<h1 id="objective">OBJECTIVE</h1>
+
+<p>Make shapes behave as first-class objects with:</p>
+
+<ul>
+  <li>correct duplication</li>
+  <li>working transforms</li>
+  <li>consistent color + sound behavior</li>
+  <li>proper clearing</li>
+  <li>reliable audio initialization</li>
+</ul>
+
+<hr />
+
+<h1 id="fix-1--mechanictype-not-preserved">FIX 1 — MechanicType not preserved</h1>
+
+<p>Ensure duplicateShape preserves:</p>
+
+<ul>
+  <li>mechanicType</li>
+  <li>behavior</li>
+  <li>midi</li>
+  <li>style</li>
+</ul>
+
+<p>After copying each segment:
+rebuildSoundConfig(segment)</p>
+
+<hr />
+
+<h1 id="fix-2--clearscene">FIX 2 — clearScene</h1>
+
+<p>Add:
+state.shapes = [];</p>
+
+<hr />
+
+<h1 id="fix-3--rotate--scale">FIX 3 — Rotate / Scale</h1>
+
+<p>Add heldKeys system:</p>
+
+<p>const heldKeys = new Set();</p>
+
+<p>window.addEventListener(“keydown”, e =&gt; {
+heldKeys.add(e.key.toLowerCase());
+});</p>
+
+<p>window.addEventListener(“keyup”, e =&gt; {
+heldKeys.delete(e.key.toLowerCase());
+});</p>
+
+<p>Modify translateSelection:</p>
+
+<p>if (state.selectedShapeId &amp;&amp; SBE.ShapeSystem) {
+const shape = state.shapes.find(s =&gt; s.id === state.selectedShapeId);
+if (!shape) return;</p>
+
+<p>if (state.selectedSegmentId) {
+// segment logic
+} else {
+if (heldKeys.has(“r”)) {
+SBE.ShapeSystem.rotateShape(shape, dx _ 0.01);
+} else if (heldKeys.has(“s”)) {
+SBE.ShapeSystem.scaleShape(shape, 1 + dx _ 0.01);
+} else {
+SBE.ShapeSystem.translateShape(shape, dx, dy);
+}
+}</p>
+
+<p>renderFrame();
+return;
+}</p>
+
+<hr />
+
+<h1 id="fix-4--visual-indicators">FIX 4 — Visual indicators</h1>
+
+<ul>
+  <li>draw 4 corner points</li>
+  <li>draw rotation indicator (top center)</li>
+  <li>cursor states:
+grab / rotate / resize</li>
+</ul>
+
+<hr />
+
+<h1 id="fix-5--color">FIX 5 — Color</h1>
+
+<p>Apply to all segments:</p>
+
+<p>shape.segments.forEach(seg =&gt; {
+seg.style.color = newColor;
+seg.color = newColor;
+});</p>
+
+<hr />
+
+<h1 id="fix-6--sound-for-shapes">FIX 6 — Sound for shapes</h1>
+
+<p>After creating segments:</p>
+
+<p>normalizeLineObject(segment)
+rebuildSoundConfig(segment)</p>
+
+<hr />
+
+<h1 id="fix-7--audio-init">FIX 7 — Audio init</h1>
+
+<p>window.addEventListener(“pointerdown”, () =&gt; {
+ensureAudioContext();
+}, { once: true });</p>
+
+<hr />
+
+<h1 id="constraints">CONSTRAINTS</h1>
+
+<ul>
+  <li>no architecture changes</li>
+  <li>no new systems</li>
+  <li>no mechanic changes</li>
+</ul>
+
+<hr />
+
+<h1 id="done">DONE</h1>
+
+<ul>
+  <li>duplicate preserves behavior</li>
+  <li>clear removes shapes</li>
+  <li>rotate/scale work</li>
+  <li>color applies globally</li>
+  <li>sound works for new shapes</li>
+  <li>audio initializes properly</li>
+  <li>bounding box shows indicators</li>
+</ul>
+
+<hr />
+
+<h1 id="output">OUTPUT</h1>
+
+<p>Return:</p>
+
+<ul>
+  <li>exact code changes</li>
+  <li>file names</li>
+  <li>minimal comments</li>
+</ul>
+</article>
+</div>
+
+    </main>
+
+    <footer class="site-footer">
+      <div class="site-footer-inner footer-grid-6">
+        <section class="footer-brand">
+          <h2>Wall of Sound</h2>
+          <p>
+            Shared project memory for the StudioRich audio/visual system. Specs,
+            logs, recovery notes, and local portals live here.
+          </p>
+        </section>
+
+        <section class="footer-group">
+          <h2>Navigation</h2>
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Domains</h2>
+          <a href="/systems/wall/">Wall System</a>
+          <a href="/systems/sound/">Sound System</a>
+          <a href="/systems/">Systems Index</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Indexes</h2>
+          <a href="/specs/">Specs</a>
+          <a href="/logs/">Logs</a>
+          <a href="/components/wall/">Wall Components</a>
+          <a href="/components/sound/"
+            >Sound Components</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Local Portals</h2>
+          <a href="file:///Users/studio/Projects/wall-of-sound/wall/index.html"
+            >Wall App</a
+          >
+          <a
+            href="file:///Users/studio/Projects/wall-of-sound/sound/labeller.html"
+            >Sound Labeller</a
+          >
+          <a
+            href="file:///Users/studio/Projects/kinetic-master-engine/index.html"
+            >Kinetic Engine</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Recovery</h2>
+          <a href="/specs/">Implementation Specs</a>
+          <a href="/logs/">Session Logs</a>
+          <a href="/systems/sound/">Sound Recovery</a>
+          <a href="/systems/wall/">Wall Recovery</a>
+        </section>
+      </div>
+    </footer>
+  </body>
+</html>

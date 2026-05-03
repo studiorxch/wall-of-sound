@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>UI Clarity Sampler Inspector | Wall of Sound</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <link
+      rel="stylesheet"
+      href="/assets/css/style.css"
+    />
+  </head>
+
+  <body>
+    <header class="site-header">
+      <div class="site-header-inner">
+        <a class="site-title" href="/">
+          Wall of Sound
+        </a>
+
+        <nav class="site-nav" aria-label="Primary navigation">
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="page-content">
+      <div class="spec-shell">
+  <a class="back-link" href="/specs/">← Back to specs</a>
+
+  <div class="spec-kicker">
+    wall / ui / needs-review
+  </div>
+
+  <h1>UI Clarity Sampler Inspector</h1>
+
+  <section class="spec-meta">
+    <div>
+      <strong>Doc ID</strong>
+      0417_UI_Clarity_Sampler_Inspector_v1.0.0
+    </div>
+
+    <div>
+      <strong>Date</strong>
+      2026-04-17
+    </div>
+
+    <div>
+      <strong>Version</strong>
+      1.0.0
+    </div>
+
+    <div>
+      <strong>System</strong>
+      WOS
+    </div>
+
+    <div>
+      <strong>Domain</strong>
+      wall
+    </div>
+
+    <div>
+      <strong>Component</strong>
+      ui
+    </div>
+
+    <div>
+      <strong>Type</strong>
+      legacy-spec
+    </div>
+
+    <div>
+      <strong>Priority</strong>
+      medium
+    </div>
+
+    <div>
+      <strong>Risk</strong>
+      unknown
+    </div>
+
+    <div>
+      <strong>Status</strong>
+      needs-review
+    </div>
+  </section>
+
+  
+  <p><strong>Summary:</strong> Imported legacy Wall of Sound spec. Needs review.</p>
+  
+
+  <article class="spec-body"><h1 id="0417_ui_clarity_sampler_inspector_v100">0417_UI_Clarity_Sampler_Inspector_v1.0.0</h1>
+
+<h2 id="scope">Scope</h2>
+<p>main.js only (UI + state sync)
+NO new systems
+NO refactors of audio/engine</p>
+
+<hr />
+
+<h2 id="goal">Goal</h2>
+<p>Fix UI clarity and trust by:</p>
+
+<ul>
+  <li>Syncing inspector with selected object</li>
+  <li>Separating object vs sampler concerns</li>
+  <li>Making sample usage visible</li>
+  <li>Labeling note/color system clearly</li>
+</ul>
+
+<hr />
+
+<h1 id="part-1--inspector-sync-critical">PART 1 — INSPECTOR SYNC (CRITICAL)</h1>
+
+<h2 id="problem">Problem</h2>
+<p>Selecting objects does NOT update:</p>
+<ul>
+  <li>color swatch</li>
+  <li>note selection</li>
+  <li>mute state</li>
+</ul>
+
+<h2 id="fix">Fix</h2>
+
+<p>On object select:</p>
+
+<p>function syncInspectorToObject(obj) {
+  if (!obj) return;</p>
+
+<p>state.defaults.note = obj.note;
+  state.ui.selectedNoteClass = obj.note % 12;</p>
+
+<p>state.ui.selectedColor = obj.color;</p>
+
+<p>state.ui.isMuted = !!obj.behavior?.isMuted;
+}</p>
+
+<p>Call this in:</p>
+<ul>
+  <li>selection handler</li>
+  <li>click selection</li>
+  <li>duplicate select</li>
+</ul>
+
+<hr />
+
+<h2 id="color-swatch-sync">Color Swatch Sync</h2>
+
+<p>When object selected:</p>
+
+<p>setColorSwatch(obj.color);
+highlightNoteCell(obj.note % 12);</p>
+
+<hr />
+
+<h1 id="part-2--sampler-tab-separation">PART 2 — SAMPLER TAB (SEPARATION)</h1>
+
+<h2 id="problem-1">Problem</h2>
+<p>“NOTE” section is inside Object tab → confusing</p>
+
+<h2 id="fix-1">Fix</h2>
+
+<p>Move sampler UI into:</p>
+
+<p>UI Tabs:</p>
+<ul>
+  <li>Object</li>
+  <li>Canvas</li>
+  <li>World</li>
+  <li>Sampler  &lt;– NEW</li>
+</ul>
+
+<hr />
+
+<h2 id="sampler-tab-contents">Sampler Tab Contents</h2>
+
+<ul>
+  <li>12 keys (C → B)</li>
+  <li>sample count per key</li>
+  <li>solo toggle</li>
+  <li>fallback mode display</li>
+</ul>
+
+<hr />
+
+<h1 id="part-3--sample-visibility">PART 3 — SAMPLE VISIBILITY</h1>
+
+<h2 id="add-helper">Add helper</h2>
+
+<p>function getSampleCount(noteClass) {
+  const bank = sampleMap[noteClass];
+  return bank ? bank.length : 0;
+}</p>
+
+<hr />
+
+<h2 id="render-counts">Render counts</h2>
+
+<p>Each key displays:</p>
+
+<p>C   (2)
+C#  (0)
+D   (1)</p>
+
+<hr />
+
+<h2 id="optional-highlight">Optional highlight</h2>
+
+<p>If fallback used:</p>
+
+<p>if (noteClass !== resolvedClass) {
+  drawDimmedKey(noteClass);
+}</p>
+
+<hr />
+
+<h1 id="part-4--solo-control-ui">PART 4 — SOLO CONTROL UI</h1>
+
+<h2 id="state-already-exists">State (already exists)</h2>
+
+<p>state.audio.soloNoteClass = null;</p>
+
+<hr />
+
+<h2 id="ui-behavior">UI behavior</h2>
+
+<p>Click key:</p>
+
+<p>state.audio.soloNoteClass =
+  state.audio.soloNoteClass === noteClass ? null : noteClass;</p>
+
+<hr />
+
+<h2 id="visual">Visual</h2>
+
+<ul>
+  <li>active key = bright</li>
+  <li>others = dim</li>
+</ul>
+
+<hr />
+
+<h1 id="part-5--color-labeling">PART 5 — COLOR LABELING</h1>
+
+<h2 id="problem-2">Problem</h2>
+<p>Colors are abstract → must map mentally</p>
+
+<h2 id="fix-2">Fix</h2>
+
+<p>Add labels:</p>
+
+<p>[C] [C#] [D] [D#] [E] …</p>
+
+<hr />
+
+<h2 id="implementation">Implementation</h2>
+
+<p>const NOTE_LABELS = [
+  “C”,”C#”,”D”,”D#”,”E”,
+  “F”,”F#”,”G”,”G#”,”A”,”A#”,”B”
+];</p>
+
+<p>Render label under swatch.</p>
+
+<hr />
+
+<h1 id="part-6--object-vs-sampler-split">PART 6 — OBJECT VS SAMPLER SPLIT</h1>
+
+<h2 id="object-tab-shows-only">Object Tab shows ONLY:</h2>
+
+<ul>
+  <li>note</li>
+  <li>color</li>
+  <li>behavior</li>
+  <li>mechanic</li>
+  <li>mute</li>
+  <li>sound.enabled</li>
+  <li>motion</li>
+</ul>
+
+<hr />
+
+<h2 id="sampler-tab-shows-only">Sampler Tab shows ONLY:</h2>
+
+<ul>
+  <li>sample banks</li>
+  <li>key counts</li>
+  <li>solo</li>
+  <li>fallbackMode</li>
+</ul>
+
+<hr />
+
+<h1 id="result">RESULT</h1>
+
+<ul>
+  <li>Inspector reflects selected object instantly</li>
+  <li>Color always matches actual note</li>
+  <li>Sample ownership is visible</li>
+  <li>No more blind sample behavior</li>
+  <li>Sampler logic separated from object editing</li>
+</ul>
+
+<hr />
+
+<h2 id="implementation-guide">Implementation Guide</h2>
+
+<ul>
+  <li>Where: main.js</li>
+  <li>Run: reload → select objects → verify inspector updates</li>
+  <li>Expect:
+    <ul>
+      <li>color swatch updates on selection</li>
+      <li>note highlights correctly</li>
+      <li>sampler tab shows counts per key</li>
+      <li>solo key isolates playback</li>
+    </ul>
+  </li>
+</ul>
+</article>
+</div>
+
+    </main>
+
+    <footer class="site-footer">
+      <div class="site-footer-inner footer-grid-6">
+        <section class="footer-brand">
+          <h2>Wall of Sound</h2>
+          <p>
+            Shared project memory for the StudioRich audio/visual system. Specs,
+            logs, recovery notes, and local portals live here.
+          </p>
+        </section>
+
+        <section class="footer-group">
+          <h2>Navigation</h2>
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Domains</h2>
+          <a href="/systems/wall/">Wall System</a>
+          <a href="/systems/sound/">Sound System</a>
+          <a href="/systems/">Systems Index</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Indexes</h2>
+          <a href="/specs/">Specs</a>
+          <a href="/logs/">Logs</a>
+          <a href="/components/wall/">Wall Components</a>
+          <a href="/components/sound/"
+            >Sound Components</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Local Portals</h2>
+          <a href="file:///Users/studio/Projects/wall-of-sound/wall/index.html"
+            >Wall App</a
+          >
+          <a
+            href="file:///Users/studio/Projects/wall-of-sound/sound/labeller.html"
+            >Sound Labeller</a
+          >
+          <a
+            href="file:///Users/studio/Projects/kinetic-master-engine/index.html"
+            >Kinetic Engine</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Recovery</h2>
+          <a href="/specs/">Implementation Specs</a>
+          <a href="/logs/">Session Logs</a>
+          <a href="/systems/sound/">Sound Recovery</a>
+          <a href="/systems/wall/">Wall Recovery</a>
+        </section>
+      </div>
+    </footer>
+  </body>
+</html>

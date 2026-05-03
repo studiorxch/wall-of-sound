@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Particle Profile System | Wall of Sound</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <link
+      rel="stylesheet"
+      href="/assets/css/style.css"
+    />
+  </head>
+
+  <body>
+    <header class="site-header">
+      <div class="site-header-inner">
+        <a class="site-title" href="/">
+          Wall of Sound
+        </a>
+
+        <nav class="site-nav" aria-label="Primary navigation">
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="page-content">
+      <div class="spec-shell">
+  <a class="back-link" href="/specs/">← Back to specs</a>
+
+  <div class="spec-kicker">
+    wall / particle_system / active
+  </div>
+
+  <h1>Particle Profile System</h1>
+
+  <section class="spec-meta">
+    <div>
+      <strong>Doc ID</strong>
+      0426_WOS_ParticleProfileSystem_v1.0.0
+    </div>
+
+    <div>
+      <strong>Date</strong>
+      2026-04-26
+    </div>
+
+    <div>
+      <strong>Version</strong>
+      1.0.0
+    </div>
+
+    <div>
+      <strong>System</strong>
+      WOS
+    </div>
+
+    <div>
+      <strong>Domain</strong>
+      wall
+    </div>
+
+    <div>
+      <strong>Component</strong>
+      particle_system
+    </div>
+
+    <div>
+      <strong>Type</strong>
+      core-spec
+    </div>
+
+    <div>
+      <strong>Priority</strong>
+      high
+    </div>
+
+    <div>
+      <strong>Risk</strong>
+      low
+    </div>
+
+    <div>
+      <strong>Status</strong>
+      active
+    </div>
+  </section>
+
+  
+  <p><strong>Summary:</strong> Introduces a particle profile layer that enables user-defined control over particle appearance, motion, and behavior. Replaces hardcoded particle values with configurable presets.</p>
+  
+
+  <article class="spec-body"><h1 id="-purpose">🎯 PURPOSE</h1>
+
+<p>Replace hardcoded particle behavior with a profile-based system that allows:</p>
+
+<ul>
+  <li>consistent particle design</li>
+  <li>expressive control over motion and appearance</li>
+  <li>clear and visible particle output</li>
+</ul>
+
+<p>This system must restore particle “feel” (size, motion, presence) while remaining compatible with the current particle engine.</p>
+
+<hr />
+
+<h1 id="-core-principles">🧠 CORE PRINCIPLES</h1>
+
+<ul>
+  <li>Particles are defined by <strong>profiles</strong>, not inline values</li>
+  <li>Profiles must be <strong>simple, readable, and editable</strong></li>
+  <li>System must remain <strong>deterministic and performant</strong></li>
+  <li>Particles must be <strong>visually obvious by default</strong></li>
+  <li>No silent fallback to weak defaults</li>
+</ul>
+
+<hr />
+
+<h1 id="-data-model">📦 DATA MODEL</h1>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">type</span> <span class="nx">ParticleProfile</span> <span class="o">=</span> <span class="p">{</span>
+  <span class="na">size</span><span class="p">:</span> <span class="p">[</span><span class="nx">number</span><span class="p">,</span> <span class="nx">number</span><span class="p">],</span>
+  <span class="na">speed</span><span class="p">:</span> <span class="p">[</span><span class="nx">number</span><span class="p">,</span> <span class="nx">number</span><span class="p">],</span>
+  <span class="na">life</span><span class="p">:</span> <span class="p">[</span><span class="nx">number</span><span class="p">,</span> <span class="nx">number</span><span class="p">],</span>
+  <span class="na">count</span><span class="p">:</span> <span class="nx">number</span><span class="p">,</span>
+  <span class="na">spread</span><span class="p">:</span> <span class="nx">number</span><span class="p">,</span>
+  <span class="na">gravity</span><span class="p">:</span> <span class="nx">number</span><span class="p">,</span>
+  <span class="na">drag</span><span class="p">:</span> <span class="nx">number</span><span class="p">,</span>
+  <span class="na">layer</span><span class="p">:</span> <span class="dl">"</span><span class="s2">front</span><span class="dl">"</span> <span class="o">|</span> <span class="dl">"</span><span class="s2">behind</span><span class="dl">"</span>
+<span class="p">}</span>
+
+<span class="nx">PROFILE</span> <span class="nx">REGISTRY</span>
+
+<span class="nx">Define</span> <span class="nx">a</span> <span class="nb">global</span> <span class="nx">registry</span><span class="p">:</span>
+
+<span class="kd">const</span> <span class="nx">PARTICLE_PROFILES</span> <span class="o">=</span> <span class="p">{</span>
+  <span class="na">burst</span><span class="p">:</span> <span class="p">{</span> <span class="p">...</span> <span class="p">},</span>
+  <span class="na">dust</span><span class="p">:</span> <span class="p">{</span> <span class="p">...</span> <span class="p">},</span>
+  <span class="na">glow</span><span class="p">:</span> <span class="p">{</span> <span class="p">...</span> <span class="p">}</span>
+<span class="p">};</span>
+
+<span class="nx">Profiles</span> <span class="nx">must</span><span class="p">:</span>
+
+<span class="nx">use</span> <span class="nx">meaningful</span> <span class="nx">ranges</span>
+<span class="k">default</span> <span class="nx">to</span> <span class="nx">visible</span><span class="p">,</span> <span class="nx">high</span><span class="o">-</span><span class="nx">energy</span> <span class="nx">output</span>
+<span class="nx">avoid</span> <span class="nx">tiny</span> <span class="nf">values </span><span class="p">(</span><span class="nx">e</span><span class="p">.</span><span class="nx">g</span><span class="p">.</span> <span class="nx">size</span> <span class="o">&lt;</span> <span class="mi">6</span><span class="nx">px</span><span class="p">)</span>
+<span class="err">🔧</span> <span class="nx">CORE</span> <span class="nx">FUNCTION</span>
+
+<span class="nx">Implement</span><span class="p">:</span>
+
+<span class="nf">spawnProfile</span><span class="p">(</span><span class="nx">profileName</span><span class="p">,</span> <span class="nx">x</span><span class="p">,</span> <span class="nx">y</span><span class="p">,</span> <span class="nx">color</span><span class="p">)</span>
+
+<span class="nx">Behavior</span><span class="p">:</span>
+
+<span class="nx">Look</span> <span class="nx">up</span> <span class="nx">profile</span>
+<span class="nx">Loop</span> <span class="nx">count</span> <span class="nx">times</span>
+<span class="nx">Randomize</span><span class="p">:</span>
+<span class="nx">size</span>
+<span class="nx">speed</span>
+<span class="nx">life</span>
+<span class="nx">Apply</span> <span class="nx">direction</span> <span class="nx">using</span> <span class="nx">spread</span>
+<span class="nx">Spawn</span> <span class="nx">particles</span> <span class="nx">using</span> <span class="nx">existing</span> <span class="nx">createParticle</span>
+<span class="err">🔄</span> <span class="nx">EXECUTION</span> <span class="nx">FLOW</span>
+<span class="nx">event</span> <span class="err">→</span> <span class="nf">spawnProfile</span><span class="p">(</span><span class="nx">profile</span><span class="p">)</span> <span class="err">→</span> <span class="nx">particles</span><span class="p">[]</span> <span class="err">→</span> <span class="nx">update</span> <span class="err">→</span> <span class="nx">render</span>
+<span class="err">🎨</span> <span class="nx">RENDER</span> <span class="nc">LAYER </span><span class="p">(</span><span class="nx">VISIBILITY</span> <span class="nx">REQUIREMENT</span><span class="p">)</span>
+
+<span class="nx">Particles</span> <span class="nx">must</span> <span class="nx">be</span> <span class="nx">visible</span> <span class="nx">without</span> <span class="nx">requiring</span> <span class="nx">tuning</span><span class="p">.</span>
+
+<span class="nx">Minimum</span> <span class="nx">visibility</span> <span class="nx">requirements</span><span class="p">:</span>
+
+<span class="nx">Default</span> <span class="nx">size</span> <span class="err">≥</span> <span class="mi">8</span><span class="nx">px</span>
+<span class="nx">Speed</span> <span class="nx">must</span> <span class="nx">produce</span> <span class="nx">noticeable</span> <span class="nx">motion</span>
+<span class="nx">Life</span> <span class="nx">must</span> <span class="nx">allow</span> <span class="nx">readable</span> <span class="nx">motion</span>
+<span class="nx">Count</span> <span class="nx">must</span> <span class="nx">be</span> <span class="nx">sufficient</span> <span class="nx">to</span> <span class="nx">form</span> <span class="nx">a</span> <span class="nx">visible</span> <span class="nx">system</span>
+<span class="err">🔗</span> <span class="nx">INTEGRATION</span> <span class="nx">POINTS</span>
+
+<span class="nx">Profiles</span> <span class="nx">must</span> <span class="nx">be</span> <span class="nx">usable</span> <span class="k">from</span><span class="p">:</span>
+
+<span class="nx">emitter</span> <span class="nx">system</span>
+<span class="nx">collision</span> <span class="nx">system</span>
+<span class="nx">object</span> <span class="nx">behaviors</span>
+<span class="nx">debug</span><span class="o">/</span><span class="nx">test</span> <span class="nx">triggers</span>
+<span class="err">🧪</span> <span class="nx">VALIDATION</span> <span class="nx">CHECKLIST</span>
+
+<span class="nx">System</span> <span class="nx">is</span> <span class="nx">working</span> <span class="nx">when</span><span class="p">:</span>
+
+ <span class="dl">"</span><span class="s2">burst</span><span class="dl">"</span> <span class="nx">produces</span> <span class="nx">large</span><span class="p">,</span> <span class="nx">visible</span> <span class="nx">outward</span> <span class="nx">particles</span>
+ <span class="dl">"</span><span class="s2">dust</span><span class="dl">"</span> <span class="nx">produces</span> <span class="nx">trailing</span> <span class="nx">motion</span> <span class="nx">behind</span> <span class="nx">objects</span>
+ <span class="dl">"</span><span class="s2">glow</span><span class="dl">"</span> <span class="nx">produces</span> <span class="nx">slow</span><span class="p">,</span> <span class="nx">ambient</span> <span class="nx">particles</span>
+ <span class="nx">particles</span> <span class="nx">are</span> <span class="nx">clearly</span> <span class="nx">visible</span> <span class="nx">without</span> <span class="nx">manual</span> <span class="nx">tuning</span>
+ <span class="nx">profile</span> <span class="nx">changes</span> <span class="nx">immediately</span> <span class="nx">affect</span> <span class="nx">behavior</span>
+<span class="err">🚫</span> <span class="nx">NON</span><span class="o">-</span><span class="nx">GOALS</span>
+<span class="nx">No</span> <span class="nx">UI</span> <span class="nx">panel</span> <span class="nx">required</span> <span class="k">in</span> <span class="k">this</span> <span class="nx">version</span>
+<span class="nx">No</span> <span class="nx">emitter</span> <span class="nx">redesign</span>
+<span class="nx">No</span> <span class="nx">collision</span> <span class="nx">changes</span>
+<span class="nx">No</span> <span class="nx">layering</span> <span class="nx">overhaul</span>
+<span class="err">🔜</span> <span class="nx">FUTURE</span> <span class="nx">EXTENSIONS</span>
+<span class="nx">Bind</span> <span class="nx">profiles</span> <span class="nx">to</span> <span class="nx">objects</span>
+<span class="nx">Add</span> <span class="nx">UI</span> <span class="nx">control</span> <span class="nx">panel</span>
+<span class="nx">Connect</span> <span class="nx">to</span> <span class="nx">emitter</span> <span class="nx">inspector</span>
+<span class="nx">Enable</span> <span class="nx">per</span><span class="o">-</span><span class="nx">shape</span> <span class="nx">particle</span> <span class="nx">presets</span>
+<span class="err">💬</span> <span class="nx">NOTES</span>
+
+<span class="nx">This</span> <span class="nx">system</span> <span class="nx">restores</span> <span class="nx">expressive</span> <span class="nx">particle</span> <span class="nx">behavior</span> <span class="nx">by</span> <span class="nx">removing</span> <span class="nx">hardcoded</span> <span class="nx">defaults</span> <span class="nx">and</span> <span class="nx">replacing</span> <span class="nx">them</span> <span class="kd">with</span> <span class="nx">user</span><span class="o">-</span><span class="nx">definable</span> <span class="nx">profiles</span><span class="p">.</span>
+
+<span class="nx">Particles</span> <span class="nx">must</span> <span class="nx">feel</span> <span class="dl">"</span><span class="s2">alive</span><span class="dl">"</span> <span class="nx">by</span> <span class="k">default</span><span class="p">,</span> <span class="nx">not</span> <span class="nx">minimal</span> <span class="nx">or</span> <span class="nx">invisible</span><span class="p">.</span>
+
+<span class="nx">Do</span> <span class="nx">not</span> <span class="nx">introduce</span> <span class="nx">weak</span> <span class="nx">fallback</span> <span class="nx">values</span> <span class="nx">that</span> <span class="nx">reduce</span> <span class="nx">visibility</span> <span class="nx">or</span> <span class="nx">motion</span><span class="p">.</span>
+
+
+<span class="o">---</span>
+</code></pre></div></div>
+</article>
+</div>
+
+    </main>
+
+    <footer class="site-footer">
+      <div class="site-footer-inner footer-grid-6">
+        <section class="footer-brand">
+          <h2>Wall of Sound</h2>
+          <p>
+            Shared project memory for the StudioRich audio/visual system. Specs,
+            logs, recovery notes, and local portals live here.
+          </p>
+        </section>
+
+        <section class="footer-group">
+          <h2>Navigation</h2>
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Domains</h2>
+          <a href="/systems/wall/">Wall System</a>
+          <a href="/systems/sound/">Sound System</a>
+          <a href="/systems/">Systems Index</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Indexes</h2>
+          <a href="/specs/">Specs</a>
+          <a href="/logs/">Logs</a>
+          <a href="/components/wall/">Wall Components</a>
+          <a href="/components/sound/"
+            >Sound Components</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Local Portals</h2>
+          <a href="file:///Users/studio/Projects/wall-of-sound/wall/index.html"
+            >Wall App</a
+          >
+          <a
+            href="file:///Users/studio/Projects/wall-of-sound/sound/labeller.html"
+            >Sound Labeller</a
+          >
+          <a
+            href="file:///Users/studio/Projects/kinetic-master-engine/index.html"
+            >Kinetic Engine</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Recovery</h2>
+          <a href="/specs/">Implementation Specs</a>
+          <a href="/logs/">Session Logs</a>
+          <a href="/systems/sound/">Sound Recovery</a>
+          <a href="/systems/wall/">Wall Recovery</a>
+        </section>
+      </div>
+    </footer>
+  </body>
+</html>

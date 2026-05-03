@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>PhysicsModes | Wall of Sound</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <link
+      rel="stylesheet"
+      href="/assets/css/style.css"
+    />
+  </head>
+
+  <body>
+    <header class="site-header">
+      <div class="site-header-inner">
+        <a class="site-title" href="/">
+          Wall of Sound
+        </a>
+
+        <nav class="site-nav" aria-label="Primary navigation">
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="page-content">
+      <div class="spec-shell">
+  <a class="back-link" href="/specs/">← Back to specs</a>
+
+  <div class="spec-kicker">
+    wall / physics / needs-review
+  </div>
+
+  <h1>PhysicsModes</h1>
+
+  <section class="spec-meta">
+    <div>
+      <strong>Doc ID</strong>
+      0414_WALL_OF_SOUND_PhysicsModes_v1.0.0
+    </div>
+
+    <div>
+      <strong>Date</strong>
+      2026-04-14
+    </div>
+
+    <div>
+      <strong>Version</strong>
+      1.0.0
+    </div>
+
+    <div>
+      <strong>System</strong>
+      WOS
+    </div>
+
+    <div>
+      <strong>Domain</strong>
+      wall
+    </div>
+
+    <div>
+      <strong>Component</strong>
+      physics
+    </div>
+
+    <div>
+      <strong>Type</strong>
+      legacy-spec
+    </div>
+
+    <div>
+      <strong>Priority</strong>
+      medium
+    </div>
+
+    <div>
+      <strong>Risk</strong>
+      unknown
+    </div>
+
+    <div>
+      <strong>Status</strong>
+      needs-review
+    </div>
+  </section>
+
+  
+  <p><strong>Summary:</strong> Imported legacy Wall of Sound spec. Needs review.</p>
+  
+
+  <article class="spec-body"><h1 id="0414_wall_of_sound_physicsmodes_v100">0414_WALL_OF_SOUND_PhysicsModes_v1.0.0</h1>
+
+<h2 id="-objective">🎯 Objective</h2>
+
+<p>Implement a unified physics system that supports multiple world behaviors:</p>
+<ul>
+  <li>Directional Gravity (pinball / front view)</li>
+  <li>Planar (billiards / top-down)</li>
+  <li>Zero-G (space / water)</li>
+</ul>
+
+<p>System must be centralized, emitter-compatible, and support clean live switching.</p>
+
+<hr />
+
+<h2 id="-core-principle">🧠 Core Principle</h2>
+
+<p>Velocity evolves based on physics mode. All motion flows through a single controller.</p>
+
+<hr />
+
+<h2 id="-architecture">🧩 Architecture</h2>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">const</span> <span class="nx">PHYSICS_MODE</span> <span class="o">=</span> <span class="p">{</span>
+  <span class="na">GRAVITY</span><span class="p">:</span> <span class="dl">"</span><span class="s2">gravity</span><span class="dl">"</span><span class="p">,</span>
+  <span class="na">PLANAR</span><span class="p">:</span> <span class="dl">"</span><span class="s2">planar</span><span class="dl">"</span><span class="p">,</span>
+  <span class="na">ZERO_G</span><span class="p">:</span> <span class="dl">"</span><span class="s2">zero_g</span><span class="dl">"</span>
+<span class="p">};</span>
+
+<span class="kd">let</span> <span class="nx">physicsMode</span> <span class="o">=</span> <span class="nx">PHYSICS_MODE</span><span class="p">.</span><span class="nx">GRAVITY</span><span class="p">;</span>
+
+<span class="kd">let</span> <span class="nx">gravity</span> <span class="o">=</span> <span class="p">{</span> <span class="na">x</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="na">y</span><span class="p">:</span> <span class="mi">1</span> <span class="p">};</span>
+<span class="kd">let</span> <span class="nx">gravityStrength</span> <span class="o">=</span> <span class="mf">9.8</span><span class="p">;</span>
+
+<span class="kd">const</span> <span class="nx">DRAG</span> <span class="o">=</span> <span class="mf">0.98</span><span class="p">;</span>
+</code></pre></div></div>
+
+<hr />
+
+<h2 id="️-core-pipeline">⚙️ Core Pipeline</h2>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">function</span> <span class="nf">applyPhysics</span><span class="p">(</span><span class="nx">p</span><span class="p">,</span> <span class="nx">dt</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">switch </span><span class="p">(</span><span class="nx">physicsMode</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">case</span> <span class="nx">PHYSICS_MODE</span><span class="p">.</span><span class="nx">GRAVITY</span><span class="p">:</span>
+      <span class="nf">applyDirectionalGravity</span><span class="p">(</span><span class="nx">p</span><span class="p">,</span> <span class="nx">dt</span><span class="p">);</span>
+      <span class="k">break</span><span class="p">;</span>
+    <span class="k">case</span> <span class="nx">PHYSICS_MODE</span><span class="p">.</span><span class="nx">PLANAR</span><span class="p">:</span>
+      <span class="nf">applyPlanar</span><span class="p">(</span><span class="nx">p</span><span class="p">,</span> <span class="nx">dt</span><span class="p">);</span>
+      <span class="k">break</span><span class="p">;</span>
+    <span class="k">case</span> <span class="nx">PHYSICS_MODE</span><span class="p">.</span><span class="nx">ZERO_G</span><span class="p">:</span>
+      <span class="nf">applyZeroG</span><span class="p">(</span><span class="nx">p</span><span class="p">,</span> <span class="nx">dt</span><span class="p">);</span>
+      <span class="k">break</span><span class="p">;</span>
+  <span class="p">}</span>
+  <span class="nf">applyDrag</span><span class="p">(</span><span class="nx">p</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<hr />
+
+<h2 id="-modes">🔵 Modes</h2>
+
+<h3 id="gravity">Gravity</h3>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">function</span> <span class="nf">applyDirectionalGravity</span><span class="p">(</span><span class="nx">p</span><span class="p">,</span> <span class="nx">dt</span><span class="p">)</span> <span class="p">{</span>
+  <span class="nx">p</span><span class="p">.</span><span class="nx">vx</span> <span class="o">+=</span> <span class="nx">gravity</span><span class="p">.</span><span class="nx">x</span> <span class="o">*</span> <span class="nx">gravityStrength</span> <span class="o">*</span> <span class="nx">dt</span><span class="p">;</span>
+  <span class="nx">p</span><span class="p">.</span><span class="nx">vy</span> <span class="o">+=</span> <span class="nx">gravity</span><span class="p">.</span><span class="nx">y</span> <span class="o">*</span> <span class="nx">gravityStrength</span> <span class="o">*</span> <span class="nx">dt</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<hr />
+
+<h3 id="planar">Planar</h3>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">function</span> <span class="nf">applyPlanar</span><span class="p">(</span><span class="nx">p</span><span class="p">,</span> <span class="nx">dt</span><span class="p">)</span> <span class="p">{}</span>
+</code></pre></div></div>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">function</span> <span class="nf">applyBounds</span><span class="p">(</span><span class="nx">p</span><span class="p">,</span> <span class="nx">bounds</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">if </span><span class="p">(</span><span class="nx">p</span><span class="p">.</span><span class="nx">x</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="o">||</span> <span class="nx">p</span><span class="p">.</span><span class="nx">x</span> <span class="o">&gt;</span> <span class="nx">bounds</span><span class="p">.</span><span class="nx">width</span><span class="p">)</span> <span class="nx">p</span><span class="p">.</span><span class="nx">vx</span> <span class="o">*=</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+  <span class="k">if </span><span class="p">(</span><span class="nx">p</span><span class="p">.</span><span class="nx">y</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="o">||</span> <span class="nx">p</span><span class="p">.</span><span class="nx">y</span> <span class="o">&gt;</span> <span class="nx">bounds</span><span class="p">.</span><span class="nx">height</span><span class="p">)</span> <span class="nx">p</span><span class="p">.</span><span class="nx">vy</span> <span class="o">*=</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<hr />
+
+<h3 id="zero-g">Zero-G</h3>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">function</span> <span class="nf">applyZeroG</span><span class="p">(</span><span class="nx">p</span><span class="p">,</span> <span class="nx">dt</span><span class="p">)</span> <span class="p">{</span>
+  <span class="kd">const</span> <span class="nx">noise</span> <span class="o">=</span> <span class="mf">0.02</span><span class="p">;</span>
+  <span class="nx">p</span><span class="p">.</span><span class="nx">vx</span> <span class="o">+=</span> <span class="p">(</span><span class="nb">Math</span><span class="p">.</span><span class="nf">random</span><span class="p">()</span> <span class="o">-</span> <span class="mf">0.5</span><span class="p">)</span> <span class="o">*</span> <span class="nx">noise</span><span class="p">;</span>
+  <span class="nx">p</span><span class="p">.</span><span class="nx">vy</span> <span class="o">+=</span> <span class="p">(</span><span class="nb">Math</span><span class="p">.</span><span class="nf">random</span><span class="p">()</span> <span class="o">-</span> <span class="mf">0.5</span><span class="p">)</span> <span class="o">*</span> <span class="nx">noise</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<hr />
+
+<h2 id="drag">Drag</h2>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">function</span> <span class="nf">applyDrag</span><span class="p">(</span><span class="nx">p</span><span class="p">)</span> <span class="p">{</span>
+  <span class="nx">p</span><span class="p">.</span><span class="nx">vx</span> <span class="o">*=</span> <span class="nx">DRAG</span><span class="p">;</span>
+  <span class="nx">p</span><span class="p">.</span><span class="nx">vy</span> <span class="o">*=</span> <span class="nx">DRAG</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<hr />
+
+<h2 id="emitters">Emitters</h2>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">function</span> <span class="nf">getInitialVelocity</span><span class="p">()</span> <span class="p">{</span>
+  <span class="k">switch </span><span class="p">(</span><span class="nx">physicsMode</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">case</span> <span class="nx">PHYSICS_MODE</span><span class="p">.</span><span class="nx">GRAVITY</span><span class="p">:</span>
+      <span class="k">return</span> <span class="p">{</span> <span class="na">vx</span><span class="p">:</span> <span class="nf">random</span><span class="p">(</span><span class="o">-</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">),</span> <span class="na">vy</span><span class="p">:</span> <span class="nf">random</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span> <span class="p">};</span>
+    <span class="k">case</span> <span class="nx">PHYSICS_MODE</span><span class="p">.</span><span class="nx">PLANAR</span><span class="p">:</span>
+      <span class="k">return</span> <span class="p">{</span> <span class="na">vx</span><span class="p">:</span> <span class="nf">random</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span> <span class="na">vy</span><span class="p">:</span> <span class="nf">random</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span> <span class="p">};</span>
+    <span class="k">case</span> <span class="nx">PHYSICS_MODE</span><span class="p">.</span><span class="nx">ZERO_G</span><span class="p">:</span>
+      <span class="k">return</span> <span class="p">{</span> <span class="na">vx</span><span class="p">:</span> <span class="nf">random</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="na">vy</span><span class="p">:</span> <span class="nf">random</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span> <span class="p">};</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<hr />
+
+<h2 id="mode-switch">Mode Switch</h2>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">function</span> <span class="nf">setPhysicsMode</span><span class="p">(</span><span class="nx">mode</span><span class="p">)</span> <span class="p">{</span>
+  <span class="nx">physicsMode</span> <span class="o">=</span> <span class="nx">mode</span><span class="p">;</span>
+
+  <span class="k">for </span><span class="p">(</span><span class="kd">const</span> <span class="nx">p</span> <span class="k">of</span> <span class="nx">particles</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kd">const</span> <span class="nx">speed</span> <span class="o">=</span> <span class="nb">Math</span><span class="p">.</span><span class="nf">hypot</span><span class="p">(</span><span class="nx">p</span><span class="p">.</span><span class="nx">vx</span><span class="p">,</span> <span class="nx">p</span><span class="p">.</span><span class="nx">vy</span><span class="p">);</span>
+
+    <span class="k">if </span><span class="p">(</span><span class="nx">mode</span> <span class="o">===</span> <span class="nx">PHYSICS_MODE</span><span class="p">.</span><span class="nx">PLANAR</span><span class="p">)</span> <span class="p">{</span>
+      <span class="nx">p</span><span class="p">.</span><span class="nx">vx</span> <span class="o">=</span> <span class="nf">random</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="nx">speed</span><span class="p">;</span>
+      <span class="nx">p</span><span class="p">.</span><span class="nx">vy</span> <span class="o">=</span> <span class="nf">random</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="nx">speed</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="k">if </span><span class="p">(</span><span class="nx">mode</span> <span class="o">===</span> <span class="nx">PHYSICS_MODE</span><span class="p">.</span><span class="nx">GRAVITY</span><span class="p">)</span> <span class="p">{</span>
+      <span class="nx">p</span><span class="p">.</span><span class="nx">vy</span> <span class="o">+=</span> <span class="nf">random</span><span class="p">(</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">1.5</span><span class="p">);</span>
+    <span class="p">}</span>
+
+    <span class="k">if </span><span class="p">(</span><span class="nx">mode</span> <span class="o">===</span> <span class="nx">PHYSICS_MODE</span><span class="p">.</span><span class="nx">ZERO_G</span><span class="p">)</span> <span class="p">{</span>
+      <span class="nx">p</span><span class="p">.</span><span class="nx">vx</span> <span class="o">*=</span> <span class="mf">0.7</span><span class="p">;</span>
+      <span class="nx">p</span><span class="p">.</span><span class="nx">vy</span> <span class="o">*=</span> <span class="mf">0.7</span><span class="p">;</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<hr />
+
+<h2 id="-implementation-guide">🚀 Implementation Guide</h2>
+
+<ul>
+  <li>Place in: engine/physicsSystem.js</li>
+  <li>Call applyPhysics() in tick loop before collisions</li>
+  <li>Replace all direct velocity updates</li>
+  <li>Update emitters to use getInitialVelocity()</li>
+</ul>
+
+<p>Expected: clean switching, stable motion, no snapping.</p>
+</article>
+</div>
+
+    </main>
+
+    <footer class="site-footer">
+      <div class="site-footer-inner footer-grid-6">
+        <section class="footer-brand">
+          <h2>Wall of Sound</h2>
+          <p>
+            Shared project memory for the StudioRich audio/visual system. Specs,
+            logs, recovery notes, and local portals live here.
+          </p>
+        </section>
+
+        <section class="footer-group">
+          <h2>Navigation</h2>
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Domains</h2>
+          <a href="/systems/wall/">Wall System</a>
+          <a href="/systems/sound/">Sound System</a>
+          <a href="/systems/">Systems Index</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Indexes</h2>
+          <a href="/specs/">Specs</a>
+          <a href="/logs/">Logs</a>
+          <a href="/components/wall/">Wall Components</a>
+          <a href="/components/sound/"
+            >Sound Components</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Local Portals</h2>
+          <a href="file:///Users/studio/Projects/wall-of-sound/wall/index.html"
+            >Wall App</a
+          >
+          <a
+            href="file:///Users/studio/Projects/wall-of-sound/sound/labeller.html"
+            >Sound Labeller</a
+          >
+          <a
+            href="file:///Users/studio/Projects/kinetic-master-engine/index.html"
+            >Kinetic Engine</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Recovery</h2>
+          <a href="/specs/">Implementation Specs</a>
+          <a href="/logs/">Session Logs</a>
+          <a href="/systems/sound/">Sound Recovery</a>
+          <a href="/systems/wall/">Wall Recovery</a>
+        </section>
+      </div>
+    </footer>
+  </body>
+</html>

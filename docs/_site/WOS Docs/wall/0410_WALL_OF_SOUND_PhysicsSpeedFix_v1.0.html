@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>PhysicsSpeedFix | Wall of Sound</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <link
+      rel="stylesheet"
+      href="/assets/css/style.css"
+    />
+  </head>
+
+  <body>
+    <header class="site-header">
+      <div class="site-header-inner">
+        <a class="site-title" href="/">
+          Wall of Sound
+        </a>
+
+        <nav class="site-nav" aria-label="Primary navigation">
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="page-content">
+      <div class="spec-shell">
+  <a class="back-link" href="/specs/">← Back to specs</a>
+
+  <div class="spec-kicker">
+    wall / physics / needs-review
+  </div>
+
+  <h1>PhysicsSpeedFix</h1>
+
+  <section class="spec-meta">
+    <div>
+      <strong>Doc ID</strong>
+      0410_WALL_OF_SOUND_PhysicsSpeedFix_v1.0
+    </div>
+
+    <div>
+      <strong>Date</strong>
+      2026-04-10
+    </div>
+
+    <div>
+      <strong>Version</strong>
+      1.0.0
+    </div>
+
+    <div>
+      <strong>System</strong>
+      WOS
+    </div>
+
+    <div>
+      <strong>Domain</strong>
+      wall
+    </div>
+
+    <div>
+      <strong>Component</strong>
+      physics
+    </div>
+
+    <div>
+      <strong>Type</strong>
+      legacy-spec
+    </div>
+
+    <div>
+      <strong>Priority</strong>
+      medium
+    </div>
+
+    <div>
+      <strong>Risk</strong>
+      unknown
+    </div>
+
+    <div>
+      <strong>Status</strong>
+      needs-review
+    </div>
+  </section>
+
+  
+  <p><strong>Summary:</strong> Imported legacy Wall of Sound spec. Needs review.</p>
+  
+
+  <article class="spec-body"><p>0410_WALL_OF_SOUND_PhysicsSpeedFix_v1.0.0</p>
+
+<p>We already switched to real-time dt, but motion is still too slow.</p>
+
+<p>Root issue:
+Velocity was originally tuned for per-frame motion, but now uses dt (seconds), causing extremely small displacement.</p>
+
+<p>Make the following exact changes:</p>
+
+<ol>
+  <li>In tick(), replace position integration:</li>
+</ol>
+
+<p>FROM:
+ball.x += ball.vx * dt;
+ball.y += ball.vy * dt;</p>
+
+<p>TO:
+const MOTION_SCALE = 60;
+ball.x += ball.vx * dt * MOTION_SCALE;
+ball.y += ball.vy * dt * MOTION_SCALE;</p>
+
+<ol>
+  <li>Reduce damping:</li>
+</ol>
+
+<p>FROM:
+damping: 0.9999</p>
+
+<p>TO:
+damping: 0.996</p>
+
+<ol>
+  <li>Increase emitter default velocity:</li>
+</ol>
+
+<p>FROM:
+velocity: { x: 3, y: -2 }</p>
+
+<p>TO:
+velocity: { x: 12, y: -6 }</p>
+
+<p>Do not modify:</p>
+<ul>
+  <li>collision system</li>
+  <li>emitter timing</li>
+  <li>world mode logic</li>
+</ul>
+
+<p>Goal:
+Restore responsive, fast motion while keeping dt-based simulation.</p>
+</article>
+</div>
+
+    </main>
+
+    <footer class="site-footer">
+      <div class="site-footer-inner footer-grid-6">
+        <section class="footer-brand">
+          <h2>Wall of Sound</h2>
+          <p>
+            Shared project memory for the StudioRich audio/visual system. Specs,
+            logs, recovery notes, and local portals live here.
+          </p>
+        </section>
+
+        <section class="footer-group">
+          <h2>Navigation</h2>
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Domains</h2>
+          <a href="/systems/wall/">Wall System</a>
+          <a href="/systems/sound/">Sound System</a>
+          <a href="/systems/">Systems Index</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Indexes</h2>
+          <a href="/specs/">Specs</a>
+          <a href="/logs/">Logs</a>
+          <a href="/components/wall/">Wall Components</a>
+          <a href="/components/sound/"
+            >Sound Components</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Local Portals</h2>
+          <a href="file:///Users/studio/Projects/wall-of-sound/wall/index.html"
+            >Wall App</a
+          >
+          <a
+            href="file:///Users/studio/Projects/wall-of-sound/sound/labeller.html"
+            >Sound Labeller</a
+          >
+          <a
+            href="file:///Users/studio/Projects/kinetic-master-engine/index.html"
+            >Kinetic Engine</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Recovery</h2>
+          <a href="/specs/">Implementation Specs</a>
+          <a href="/logs/">Session Logs</a>
+          <a href="/systems/sound/">Sound Recovery</a>
+          <a href="/systems/wall/">Wall Recovery</a>
+        </section>
+      </div>
+    </footer>
+  </body>
+</html>

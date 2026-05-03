@@ -1,0 +1,538 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>AudioStateFix | Wall of Sound</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <link
+      rel="stylesheet"
+      href="/assets/css/style.css"
+    />
+  </head>
+
+  <body>
+    <header class="site-header">
+      <div class="site-header-inner">
+        <a class="site-title" href="/">
+          Wall of Sound
+        </a>
+
+        <nav class="site-nav" aria-label="Primary navigation">
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="page-content">
+      <div class="spec-shell">
+  <a class="back-link" href="/specs/">← Back to specs</a>
+
+  <div class="spec-kicker">
+    wall / audio_system / needs-review
+  </div>
+
+  <h1>AudioStateFix</h1>
+
+  <section class="spec-meta">
+    <div>
+      <strong>Doc ID</strong>
+      0413_WALL_OF_SOUND_AudioStateFix_v1
+    </div>
+
+    <div>
+      <strong>Date</strong>
+      2026-04-13
+    </div>
+
+    <div>
+      <strong>Version</strong>
+      1.0.0
+    </div>
+
+    <div>
+      <strong>System</strong>
+      WOS
+    </div>
+
+    <div>
+      <strong>Domain</strong>
+      wall
+    </div>
+
+    <div>
+      <strong>Component</strong>
+      audio_system
+    </div>
+
+    <div>
+      <strong>Type</strong>
+      legacy-spec
+    </div>
+
+    <div>
+      <strong>Priority</strong>
+      medium
+    </div>
+
+    <div>
+      <strong>Risk</strong>
+      unknown
+    </div>
+
+    <div>
+      <strong>Status</strong>
+      needs-review
+    </div>
+  </section>
+
+  
+  <p><strong>Summary:</strong> Imported legacy Wall of Sound spec. Needs review.</p>
+  
+
+  <article class="spec-body"><h1 id="0413_wall_of_sound_audiostatefix_v100">0413_WALL_OF_SOUND_AudioStateFix_v1.0.0</h1>
+
+<p>Generated: 04/13/2026</p>
+
+<hr />
+
+<h2 id="-objective">🎯 Objective</h2>
+
+<p>Fix critical issue where:</p>
+
+<ol>
+  <li>Undo breaks sound playback</li>
+  <li>Saved JSON scenes lose sound functionality</li>
+</ol>
+
+<p>Ensure:</p>
+
+<blockquote>
+  <p>Sound is ALWAYS reproducible from scene data alone</p>
+</blockquote>
+
+<hr />
+
+<h2 id="-core-principle">🧠 Core Principle</h2>
+
+<p>Audio must be <strong>derived state</strong>, not stored runtime state.</p>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">scene</span> <span class="err">→</span> <span class="nx">geometry</span> <span class="err">→</span> <span class="nx">collision</span> <span class="err">→</span> <span class="nx">sound</span>
+</code></pre></div></div>
+
+<p>NOT:</p>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">scene</span> <span class="o">+</span> <span class="nx">hidden</span> <span class="nx">runtime</span> <span class="nx">state</span> <span class="err">→</span> <span class="nx">sound</span>
+</code></pre></div></div>
+
+<hr />
+
+<h2 id="-problems-identified">🔥 Problems Identified</h2>
+
+<h3 id="1-undo-does-not-restore-audio-bindings">1. Undo does not restore audio bindings</h3>
+
+<ul>
+  <li><code class="language-plaintext highlighter-rouge">applyScene()</code> restores geometry only</li>
+  <li>Audio system is not reinitialized</li>
+</ul>
+
+<hr />
+
+<h3 id="2-json-serialization-is-incomplete">2. JSON serialization is incomplete</h3>
+
+<ul>
+  <li><code class="language-plaintext highlighter-rouge">note</code> and <code class="language-plaintext highlighter-rouge">midiChannel</code> may be missing or undefined</li>
+  <li>Causes silent collisions after reload</li>
+</ul>
+
+<hr />
+
+<h3 id="3-audio-system-relies-on-stale-runtime-state">3. Audio system relies on stale runtime state</h3>
+
+<ul>
+  <li>MIDI triggers depend on previous session state</li>
+  <li>Not rebuilt after undo/load</li>
+</ul>
+
+<hr />
+
+<h2 id="-required-fixes">✅ Required Fixes</h2>
+
+<hr />
+
+<h2 id="-fix-1--enforce-segment-audio-integrity">🧱 FIX 1 — Enforce Segment Audio Integrity</h2>
+
+<h3 id="update-segment-definition">Update Segment Definition</h3>
+
+<div class="language-ts highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">type</span> <span class="nx">Segment</span> <span class="o">=</span> <span class="p">{</span>
+  <span class="na">id</span><span class="p">:</span> <span class="kr">string</span><span class="p">;</span>
+  <span class="nl">type</span><span class="p">:</span> <span class="kr">string</span><span class="p">;</span>
+
+  <span class="nl">x1</span><span class="p">:</span> <span class="kr">number</span><span class="p">;</span>
+  <span class="nl">y1</span><span class="p">:</span> <span class="kr">number</span><span class="p">;</span>
+  <span class="nl">x2</span><span class="p">:</span> <span class="kr">number</span><span class="p">;</span>
+  <span class="nl">y2</span><span class="p">:</span> <span class="kr">number</span><span class="p">;</span>
+
+  <span class="nl">color</span><span class="p">:</span> <span class="kr">string</span><span class="p">;</span>
+  <span class="nl">thickness</span><span class="p">:</span> <span class="kr">number</span><span class="p">;</span>
+
+  <span class="nl">note</span><span class="p">:</span> <span class="kr">number</span><span class="p">;</span> <span class="c1">// REQUIRED</span>
+  <span class="nl">midiChannel</span><span class="p">:</span> <span class="kr">number</span><span class="p">;</span> <span class="c1">// REQUIRED</span>
+
+  <span class="nl">behavior</span><span class="p">?:</span> <span class="kr">string</span><span class="p">;</span>
+<span class="p">};</span>
+</code></pre></div></div>
+
+<h3 id="rule">Rule</h3>
+
+<ul>
+  <li><code class="language-plaintext highlighter-rouge">note</code> and <code class="language-plaintext highlighter-rouge">midiChannel</code> must NEVER be undefined</li>
+  <li>Assign defaults during creation AND hydration</li>
+</ul>
+
+<hr />
+
+<h2 id="-fix-2--safe-serialization">🧱 FIX 2 — Safe Serialization</h2>
+
+<h3 id="file-scenemanagerjs-or-shapesystemjs">File: sceneManager.js OR shapeSystem.js</h3>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">function</span> <span class="nf">serializeSegment</span><span class="p">(</span><span class="nx">seg</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">return</span> <span class="p">{</span>
+    <span class="na">id</span><span class="p">:</span> <span class="nx">seg</span><span class="p">.</span><span class="nx">id</span><span class="p">,</span>
+    <span class="na">type</span><span class="p">:</span> <span class="nx">seg</span><span class="p">.</span><span class="nx">type</span><span class="p">,</span>
+    <span class="na">x1</span><span class="p">:</span> <span class="nx">seg</span><span class="p">.</span><span class="nx">x1</span><span class="p">,</span>
+    <span class="na">y1</span><span class="p">:</span> <span class="nx">seg</span><span class="p">.</span><span class="nx">y1</span><span class="p">,</span>
+    <span class="na">x2</span><span class="p">:</span> <span class="nx">seg</span><span class="p">.</span><span class="nx">x2</span><span class="p">,</span>
+    <span class="na">y2</span><span class="p">:</span> <span class="nx">seg</span><span class="p">.</span><span class="nx">y2</span><span class="p">,</span>
+    <span class="na">color</span><span class="p">:</span> <span class="nx">seg</span><span class="p">.</span><span class="nx">color</span><span class="p">,</span>
+    <span class="na">thickness</span><span class="p">:</span> <span class="nx">seg</span><span class="p">.</span><span class="nx">thickness</span><span class="p">,</span>
+
+    <span class="na">note</span><span class="p">:</span> <span class="nx">seg</span><span class="p">.</span><span class="nx">note</span> <span class="o">??</span> <span class="mi">60</span><span class="p">,</span> <span class="c1">// default middle C</span>
+    <span class="na">midiChannel</span><span class="p">:</span> <span class="nx">seg</span><span class="p">.</span><span class="nx">midiChannel</span> <span class="o">??</span> <span class="mi">1</span><span class="p">,</span> <span class="c1">// default channel</span>
+
+    <span class="na">behavior</span><span class="p">:</span> <span class="nx">seg</span><span class="p">.</span><span class="nx">behavior</span> <span class="o">??</span> <span class="dl">"</span><span class="s2">none</span><span class="dl">"</span><span class="p">,</span>
+  <span class="p">};</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<hr />
+
+<h2 id="-fix-3--safe-hydration">🧱 FIX 3 — Safe Hydration</h2>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">function</span> <span class="nf">hydrateSegment</span><span class="p">(</span><span class="nx">raw</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">return</span> <span class="p">{</span>
+    <span class="p">...</span><span class="nx">raw</span><span class="p">,</span>
+
+    <span class="na">note</span><span class="p">:</span> <span class="nx">raw</span><span class="p">.</span><span class="nx">note</span> <span class="o">??</span> <span class="mi">60</span><span class="p">,</span>
+    <span class="na">midiChannel</span><span class="p">:</span> <span class="nx">raw</span><span class="p">.</span><span class="nx">midiChannel</span> <span class="o">??</span> <span class="mi">1</span><span class="p">,</span>
+
+    <span class="na">behavior</span><span class="p">:</span> <span class="nx">raw</span><span class="p">.</span><span class="nx">behavior</span> <span class="o">??</span> <span class="dl">"</span><span class="s2">none</span><span class="dl">"</span><span class="p">,</span>
+  <span class="p">};</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>Apply this for:</p>
+
+<ul>
+  <li>lines</li>
+  <li>shapes</li>
+  <li>ALL segment sources</li>
+</ul>
+
+<hr />
+
+<h2 id="-fix-4--rebuild-audio-after-scene-load">🧱 FIX 4 — Rebuild Audio After Scene Load</h2>
+
+<h3 id="file-mainjs">File: main.js</h3>
+
+<h3 id="add">Add:</h3>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">function</span> <span class="nf">rebuildAudioBindings</span><span class="p">(</span><span class="nx">state</span><span class="p">)</span> <span class="p">{</span>
+  <span class="kd">const</span> <span class="nx">segments</span> <span class="o">=</span> <span class="p">[];</span>
+
+  <span class="c1">// lines</span>
+  <span class="nx">state</span><span class="p">.</span><span class="nx">lines</span><span class="p">.</span><span class="nf">forEach</span><span class="p">((</span><span class="nx">line</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="nx">segments</span><span class="p">.</span><span class="nf">push</span><span class="p">(</span><span class="nx">line</span><span class="p">));</span>
+
+  <span class="c1">// shapes</span>
+  <span class="nx">state</span><span class="p">.</span><span class="nx">shapes</span><span class="p">.</span><span class="nf">forEach</span><span class="p">((</span><span class="nx">shape</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="p">{</span>
+    <span class="nx">shape</span><span class="p">.</span><span class="nx">segments</span><span class="p">.</span><span class="nf">forEach</span><span class="p">((</span><span class="nx">seg</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="nx">segments</span><span class="p">.</span><span class="nf">push</span><span class="p">(</span><span class="nx">seg</span><span class="p">));</span>
+  <span class="p">});</span>
+
+  <span class="c1">// validate</span>
+  <span class="nx">segments</span><span class="p">.</span><span class="nf">forEach</span><span class="p">((</span><span class="nx">seg</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="p">{</span>
+    <span class="k">if </span><span class="p">(</span><span class="nx">seg</span><span class="p">.</span><span class="nx">note</span> <span class="o">==</span> <span class="kc">null</span><span class="p">)</span> <span class="nx">seg</span><span class="p">.</span><span class="nx">note</span> <span class="o">=</span> <span class="mi">60</span><span class="p">;</span>
+    <span class="k">if </span><span class="p">(</span><span class="nx">seg</span><span class="p">.</span><span class="nx">midiChannel</span> <span class="o">==</span> <span class="kc">null</span><span class="p">)</span> <span class="nx">seg</span><span class="p">.</span><span class="nx">midiChannel</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+  <span class="p">});</span>
+
+  <span class="c1">// optional: future MIDI cache rebuild here</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<hr />
+
+<h3 id="modify-applyscene">Modify applyScene()</h3>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">function</span> <span class="nf">applyScene</span><span class="p">(</span><span class="nx">scene</span><span class="p">)</span> <span class="p">{</span>
+  <span class="c1">// existing logic</span>
+  <span class="nx">state</span><span class="p">.</span><span class="nx">lines</span> <span class="o">=</span> <span class="nx">scene</span><span class="p">.</span><span class="nx">lines</span> <span class="o">||</span> <span class="p">[];</span>
+  <span class="nx">state</span><span class="p">.</span><span class="nx">shapes</span> <span class="o">=</span> <span class="nx">scene</span><span class="p">.</span><span class="nx">shapes</span> <span class="o">||</span> <span class="p">[];</span>
+
+  <span class="c1">// NEW</span>
+  <span class="nf">rebuildAudioBindings</span><span class="p">(</span><span class="nx">state</span><span class="p">);</span>
+
+  <span class="nf">renderFrame</span><span class="p">();</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<hr />
+
+<h2 id="-fix-5--fix-undo-pipeline">🧱 FIX 5 — Fix Undo Pipeline</h2>
+
+<p>Wherever undo restores state:</p>
+
+<h3 id="before-broken">BEFORE (broken)</h3>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nf">applyScene</span><span class="p">(</span><span class="nx">prevState</span><span class="p">);</span>
+</code></pre></div></div>
+
+<h3 id="after-correct">AFTER (correct)</h3>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nf">applyScene</span><span class="p">(</span><span class="nx">prevState</span><span class="p">);</span>
+<span class="nf">rebuildAudioBindings</span><span class="p">(</span><span class="nx">state</span><span class="p">);</span>
+</code></pre></div></div>
+
+<hr />
+
+<h2 id="-fix-6--stateless-audio-trigger">🧱 FIX 6 — Stateless Audio Trigger</h2>
+
+<h3 id="file-midioutjs-or-collision-handler">File: midiOut.js OR collision handler</h3>
+
+<h3 id="replace">Replace:</h3>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nf">playNote</span><span class="p">(</span><span class="nx">segment</span><span class="p">);</span>
+</code></pre></div></div>
+
+<h3 id="with">With:</h3>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nf">playNote</span><span class="p">({</span>
+  <span class="na">note</span><span class="p">:</span> <span class="nx">segment</span><span class="p">.</span><span class="nx">note</span><span class="p">,</span>
+  <span class="na">velocity</span><span class="p">:</span> <span class="mi">100</span><span class="p">,</span>
+  <span class="na">channel</span><span class="p">:</span> <span class="nx">segment</span><span class="p">.</span><span class="nx">midiChannel</span><span class="p">,</span>
+<span class="p">});</span>
+</code></pre></div></div>
+
+<hr />
+
+<h3 id="ensure-playnote-is-pure">Ensure playNote is PURE</h3>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">function</span> <span class="nf">playNote</span><span class="p">({</span> <span class="nx">note</span><span class="p">,</span> <span class="nx">velocity</span> <span class="o">=</span> <span class="mi">100</span><span class="p">,</span> <span class="nx">channel</span> <span class="o">=</span> <span class="mi">1</span> <span class="p">})</span> <span class="p">{</span>
+  <span class="k">if </span><span class="p">(</span><span class="nx">note</span> <span class="o">==</span> <span class="kc">null</span><span class="p">)</span> <span class="k">return</span><span class="p">;</span>
+
+  <span class="c1">// send MIDI event</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>NO dependency on:</p>
+
+<ul>
+  <li>previous note</li>
+  <li>cached channel</li>
+  <li>global state</li>
+</ul>
+
+<hr />
+
+<h2 id="-fix-7--debug-guard-temporary">🧱 FIX 7 — Debug Guard (Temporary)</h2>
+
+<p>Add validation:</p>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">function</span> <span class="nf">validateSegments</span><span class="p">(</span><span class="nx">state</span><span class="p">)</span> <span class="p">{</span>
+  <span class="kd">const</span> <span class="nx">allSegments</span> <span class="o">=</span> <span class="p">[];</span>
+
+  <span class="nx">state</span><span class="p">.</span><span class="nx">lines</span><span class="p">.</span><span class="nf">forEach</span><span class="p">((</span><span class="nx">l</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="nx">allSegments</span><span class="p">.</span><span class="nf">push</span><span class="p">(</span><span class="nx">l</span><span class="p">));</span>
+  <span class="nx">state</span><span class="p">.</span><span class="nx">shapes</span><span class="p">.</span><span class="nf">forEach</span><span class="p">((</span><span class="nx">s</span><span class="p">)</span> <span class="o">=&gt;</span>
+    <span class="nx">s</span><span class="p">.</span><span class="nx">segments</span><span class="p">.</span><span class="nf">forEach</span><span class="p">((</span><span class="nx">seg</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="nx">allSegments</span><span class="p">.</span><span class="nf">push</span><span class="p">(</span><span class="nx">seg</span><span class="p">)),</span>
+  <span class="p">);</span>
+
+  <span class="nx">allSegments</span><span class="p">.</span><span class="nf">forEach</span><span class="p">((</span><span class="nx">seg</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="p">{</span>
+    <span class="k">if </span><span class="p">(</span><span class="nx">seg</span><span class="p">.</span><span class="nx">note</span> <span class="o">==</span> <span class="kc">null</span><span class="p">)</span> <span class="p">{</span>
+      <span class="nx">console</span><span class="p">.</span><span class="nf">warn</span><span class="p">(</span><span class="dl">"</span><span class="s2">Missing note:</span><span class="dl">"</span><span class="p">,</span> <span class="nx">seg</span><span class="p">.</span><span class="nx">id</span><span class="p">);</span>
+    <span class="p">}</span>
+  <span class="p">});</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>Call after:</p>
+
+<ul>
+  <li>applyScene</li>
+  <li>undo</li>
+</ul>
+
+<hr />
+
+<h2 id="-test-plan">🧪 Test Plan</h2>
+
+<h3 id="test-1--undo-stability">Test 1 — Undo Stability</h3>
+
+<ol>
+  <li>Draw shape</li>
+  <li>Assign notes</li>
+  <li>Undo</li>
+  <li>Redo</li>
+</ol>
+
+<p>✅ Expected:</p>
+
+<ul>
+  <li>sound still triggers</li>
+</ul>
+
+<hr />
+
+<h3 id="test-2--json-roundtrip">Test 2 — JSON Roundtrip</h3>
+
+<ol>
+  <li>Create scene</li>
+  <li>Save JSON</li>
+  <li>Reload JSON</li>
+</ol>
+
+<p>✅ Expected:</p>
+
+<ul>
+  <li>identical sound behavior</li>
+</ul>
+
+<hr />
+
+<h3 id="test-3--mixed-system">Test 3 — Mixed System</h3>
+
+<ol>
+  <li>Lines + Shapes</li>
+  <li>Assign different notes</li>
+  <li>Run swarm</li>
+</ol>
+
+<p>✅ Expected:</p>
+
+<ul>
+  <li>all collisions produce sound</li>
+</ul>
+
+<hr />
+
+<h2 id="-constraints">🚫 Constraints</h2>
+
+<p>DO NOT:</p>
+
+<ul>
+  <li>modify physics engine</li>
+  <li>modify collision system logic</li>
+  <li>add new audio features</li>
+  <li>change UI</li>
+</ul>
+
+<p>ONLY:</p>
+
+<ul>
+  <li>stabilize audio state consistency</li>
+</ul>
+
+<hr />
+
+<h2 id="-success-criteria">🧭 Success Criteria</h2>
+
+<p>✔ Undo never breaks sound
+✔ JSON reload preserves sound
+✔ No segment exists without note
+✔ Audio is 100% derived from scene</p>
+
+<hr />
+
+<h2 id="-implementation-guide">⚡ Implementation Guide</h2>
+
+<ul>
+  <li><strong>Where:</strong> <code class="language-plaintext highlighter-rouge">sceneManager.js</code>, <code class="language-plaintext highlighter-rouge">main.js</code>, segment serialize/hydrate, <code class="language-plaintext highlighter-rouge">midiOut.js</code></li>
+  <li><strong>Run:</strong> Undo + Save/Load test cycle</li>
+  <li><strong>Expect:</strong> Sound persists across ALL state transitions</li>
+</ul>
+
+<hr />
+
+<h2 id="-version-notes">🧬 Version Notes</h2>
+
+<p>v1.0.0</p>
+
+<ul>
+  <li>Initial stabilization pass for audio-state consistency</li>
+  <li>Introduces rebuildAudioBindings system</li>
+  <li>Enforces segment audio integrity</li>
+</ul>
+</article>
+</div>
+
+    </main>
+
+    <footer class="site-footer">
+      <div class="site-footer-inner footer-grid-6">
+        <section class="footer-brand">
+          <h2>Wall of Sound</h2>
+          <p>
+            Shared project memory for the StudioRich audio/visual system. Specs,
+            logs, recovery notes, and local portals live here.
+          </p>
+        </section>
+
+        <section class="footer-group">
+          <h2>Navigation</h2>
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Domains</h2>
+          <a href="/systems/wall/">Wall System</a>
+          <a href="/systems/sound/">Sound System</a>
+          <a href="/systems/">Systems Index</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Indexes</h2>
+          <a href="/specs/">Specs</a>
+          <a href="/logs/">Logs</a>
+          <a href="/components/wall/">Wall Components</a>
+          <a href="/components/sound/"
+            >Sound Components</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Local Portals</h2>
+          <a href="file:///Users/studio/Projects/wall-of-sound/wall/index.html"
+            >Wall App</a
+          >
+          <a
+            href="file:///Users/studio/Projects/wall-of-sound/sound/labeller.html"
+            >Sound Labeller</a
+          >
+          <a
+            href="file:///Users/studio/Projects/kinetic-master-engine/index.html"
+            >Kinetic Engine</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Recovery</h2>
+          <a href="/specs/">Implementation Specs</a>
+          <a href="/logs/">Session Logs</a>
+          <a href="/systems/sound/">Sound Recovery</a>
+          <a href="/systems/wall/">Wall Recovery</a>
+        </section>
+      </div>
+    </footer>
+  </body>
+</html>

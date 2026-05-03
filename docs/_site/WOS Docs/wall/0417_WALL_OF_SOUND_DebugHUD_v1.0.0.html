@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>DebugHUD | Wall of Sound</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <link
+      rel="stylesheet"
+      href="/assets/css/style.css"
+    />
+  </head>
+
+  <body>
+    <header class="site-header">
+      <div class="site-header-inner">
+        <a class="site-title" href="/">
+          Wall of Sound
+        </a>
+
+        <nav class="site-nav" aria-label="Primary navigation">
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="page-content">
+      <div class="spec-shell">
+  <a class="back-link" href="/specs/">← Back to specs</a>
+
+  <div class="spec-kicker">
+    wall / ui / needs-review
+  </div>
+
+  <h1>DebugHUD</h1>
+
+  <section class="spec-meta">
+    <div>
+      <strong>Doc ID</strong>
+      0417_WALL_OF_SOUND_DebugHUD_v1.0.0
+    </div>
+
+    <div>
+      <strong>Date</strong>
+      2026-04-17
+    </div>
+
+    <div>
+      <strong>Version</strong>
+      1.0.0
+    </div>
+
+    <div>
+      <strong>System</strong>
+      WOS
+    </div>
+
+    <div>
+      <strong>Domain</strong>
+      wall
+    </div>
+
+    <div>
+      <strong>Component</strong>
+      ui
+    </div>
+
+    <div>
+      <strong>Type</strong>
+      legacy-spec
+    </div>
+
+    <div>
+      <strong>Priority</strong>
+      medium
+    </div>
+
+    <div>
+      <strong>Risk</strong>
+      unknown
+    </div>
+
+    <div>
+      <strong>Status</strong>
+      needs-review
+    </div>
+  </section>
+
+  
+  <p><strong>Summary:</strong> Imported legacy Wall of Sound spec. Needs review.</p>
+  
+
+  <article class="spec-body"><h1 id="0417_wall_of_sound_debughud_v100md">0417_WALL_OF_SOUND_DebugHUD_v1.0.0.md</h1>
+
+<h2 id="scope">Scope</h2>
+<p>Single-file patch: <code class="language-plaintext highlighter-rouge">main.js</code><br />
+Goal: Add visual debug overlay to inspect Blueprint + Sound state per particle</p>
+
+<hr />
+
+<h2 id="step-45--visual-blueprint-debug-hud">Step 4.5 — Visual Blueprint Debug HUD</h2>
+
+<p>This step adds a lightweight overlay to display:</p>
+
+<ul>
+  <li>Particle note (actual sound note)</li>
+  <li>Blueprint note (expected note)</li>
+  <li>Velocity</li>
+  <li>Played state (_played)</li>
+</ul>
+
+<hr />
+
+<h2 id="1-add-debug-toggle">1. Add Debug Toggle</h2>
+
+<p>Add near state.ui:</p>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">state</span><span class="p">.</span><span class="nx">ui</span><span class="p">.</span><span class="nx">debugHUD</span> <span class="o">=</span> <span class="kc">true</span><span class="p">;</span>
+</code></pre></div></div>
+
+<hr />
+
+<h2 id="2-add-debug-draw-function">2. Add Debug Draw Function</h2>
+
+<p>Add BELOW drawParticleOverlays():</p>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">function</span> <span class="nf">drawDebugHUD</span><span class="p">()</span> <span class="p">{</span>
+  <span class="k">if </span><span class="p">(</span><span class="o">!</span><span class="nx">state</span><span class="p">.</span><span class="nx">ui</span><span class="p">.</span><span class="nx">debugHUD</span><span class="p">)</span> <span class="k">return</span><span class="p">;</span>
+  <span class="k">if </span><span class="p">(</span><span class="o">!</span><span class="nx">state</span><span class="p">.</span><span class="nx">balls</span> <span class="o">||</span> <span class="o">!</span><span class="nx">state</span><span class="p">.</span><span class="nx">balls</span><span class="p">.</span><span class="nx">length</span><span class="p">)</span> <span class="k">return</span><span class="p">;</span>
+
+  <span class="kd">const</span> <span class="nx">ctx</span> <span class="o">=</span> <span class="nx">canvas</span><span class="p">.</span><span class="nf">getContext</span><span class="p">(</span><span class="dl">"</span><span class="s2">2d</span><span class="dl">"</span><span class="p">);</span>
+
+  <span class="nx">ctx</span><span class="p">.</span><span class="nf">save</span><span class="p">();</span>
+  <span class="nx">ctx</span><span class="p">.</span><span class="nx">font</span> <span class="o">=</span> <span class="dl">"</span><span class="s2">10px monospace</span><span class="dl">"</span><span class="p">;</span>
+  <span class="nx">ctx</span><span class="p">.</span><span class="nx">textAlign</span> <span class="o">=</span> <span class="dl">"</span><span class="s2">center</span><span class="dl">"</span><span class="p">;</span>
+
+  <span class="nx">state</span><span class="p">.</span><span class="nx">balls</span><span class="p">.</span><span class="nf">forEach</span><span class="p">(</span><span class="nf">function </span><span class="p">(</span><span class="nx">ball</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">if </span><span class="p">(</span><span class="o">!</span><span class="nx">ball</span> <span class="o">||</span> <span class="o">!</span><span class="nx">ball</span><span class="p">.</span><span class="nx">sound</span> <span class="o">||</span> <span class="o">!</span><span class="nx">ball</span><span class="p">.</span><span class="nx">blueprint</span><span class="p">)</span> <span class="k">return</span><span class="p">;</span>
+
+    <span class="kd">const</span> <span class="nx">note</span> <span class="o">=</span> <span class="nx">ball</span><span class="p">.</span><span class="nx">sound</span><span class="p">?.</span><span class="nx">midi</span><span class="p">?.</span><span class="nx">note</span> <span class="o">??</span> <span class="dl">"</span><span class="s2">--</span><span class="dl">"</span><span class="p">;</span>
+    <span class="kd">const</span> <span class="nx">noteName</span> <span class="o">=</span> <span class="nx">NOTE_NAMES</span><span class="p">[</span><span class="nx">note</span> <span class="o">%</span> <span class="mi">12</span><span class="p">]</span> <span class="o">||</span> <span class="dl">"</span><span class="s2">?</span><span class="dl">"</span><span class="p">;</span>
+
+    <span class="kd">const</span> <span class="nx">bpNote</span> <span class="o">=</span> <span class="nx">ball</span><span class="p">.</span><span class="nx">blueprint</span><span class="p">?.</span><span class="nx">note</span> <span class="o">??</span> <span class="dl">"</span><span class="s2">--</span><span class="dl">"</span><span class="p">;</span>
+    <span class="kd">const</span> <span class="nx">bpName</span> <span class="o">=</span> <span class="nx">NOTE_NAMES</span><span class="p">[</span><span class="nx">bpNote</span> <span class="o">%</span> <span class="mi">12</span><span class="p">]</span> <span class="o">||</span> <span class="dl">"</span><span class="s2">?</span><span class="dl">"</span><span class="p">;</span>
+
+    <span class="kd">const</span> <span class="nx">speed</span> <span class="o">=</span> <span class="nb">Math</span><span class="p">.</span><span class="nf">hypot</span><span class="p">(</span><span class="nx">ball</span><span class="p">.</span><span class="nx">vx</span> <span class="o">||</span> <span class="mi">0</span><span class="p">,</span> <span class="nx">ball</span><span class="p">.</span><span class="nx">vy</span> <span class="o">||</span> <span class="mi">0</span><span class="p">).</span><span class="nf">toFixed</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+    <span class="kd">const</span> <span class="nx">played</span> <span class="o">=</span> <span class="nx">ball</span><span class="p">.</span><span class="nx">_played</span> <span class="p">?</span> <span class="dl">"</span><span class="s2">1</span><span class="dl">"</span> <span class="p">:</span> <span class="dl">"</span><span class="s2">0</span><span class="dl">"</span><span class="p">;</span>
+
+    <span class="kd">const</span> <span class="nx">text</span> <span class="o">=</span> <span class="s2">`</span><span class="p">${</span><span class="nx">noteName</span><span class="p">}</span><span class="s2">/</span><span class="p">${</span><span class="nx">bpName</span><span class="p">}</span><span class="s2"> v:</span><span class="p">${</span><span class="nx">speed</span><span class="p">}</span><span class="s2"> p:</span><span class="p">${</span><span class="nx">played</span><span class="p">}</span><span class="s2">`</span><span class="p">;</span>
+
+    <span class="nx">ctx</span><span class="p">.</span><span class="nx">fillStyle</span> <span class="o">=</span> <span class="dl">"</span><span class="s2">rgba(255,255,255,0.8)</span><span class="dl">"</span><span class="p">;</span>
+    <span class="nx">ctx</span><span class="p">.</span><span class="nf">fillText</span><span class="p">(</span><span class="nx">text</span><span class="p">,</span> <span class="nx">ball</span><span class="p">.</span><span class="nx">x</span><span class="p">,</span> <span class="nx">ball</span><span class="p">.</span><span class="nx">y</span> <span class="o">-</span> <span class="p">(</span><span class="nx">ball</span><span class="p">.</span><span class="nx">renderRadius</span> <span class="o">+</span> <span class="mi">10</span><span class="p">));</span>
+  <span class="p">});</span>
+
+  <span class="nx">ctx</span><span class="p">.</span><span class="nf">restore</span><span class="p">();</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<hr />
+
+<h2 id="3-hook-into-render-loop">3. Hook Into Render Loop</h2>
+
+<p>Inside renderFrame(), AFTER drawParticleOverlays():</p>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nf">drawDebugHUD</span><span class="p">();</span>
+</code></pre></div></div>
+
+<hr />
+
+<h2 id="4-optional-color-coding-mismatch-highlight">4. Optional Color Coding (mismatch highlight)</h2>
+
+<p>Replace fillStyle line with:</p>
+
+<div class="language-js highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">ctx</span><span class="p">.</span><span class="nx">fillStyle</span> <span class="o">=</span>
+  <span class="nx">note</span> <span class="o">===</span> <span class="nx">bpNote</span>
+    <span class="p">?</span> <span class="dl">"</span><span class="s2">rgba(100,255,180,0.9)</span><span class="dl">"</span>   <span class="c1">// correct</span>
+    <span class="p">:</span> <span class="dl">"</span><span class="s2">rgba(255,80,80,0.95)</span><span class="dl">"</span><span class="p">;</span>   <span class="c1">// mismatch</span>
+</code></pre></div></div>
+
+<hr />
+
+<h2 id="expected-result">Expected Result</h2>
+
+<p>Each particle displays:</p>
+
+<div class="language-text highlighter-rouge"><div class="highlight"><pre class="highlight"><code>C/D# v:3.2 p:1
+</code></pre></div></div>
+
+<p>Meaning:</p>
+<ul>
+  <li>Actual note = C</li>
+  <li>Blueprint note = D#</li>
+  <li>Velocity = 3.2</li>
+  <li>Played state = triggered</li>
+</ul>
+
+<hr />
+
+<h2 id="usage">Usage</h2>
+
+<ul>
+  <li>Spawn particles</li>
+  <li>Watch text above each particle</li>
+  <li>Look for mismatches (red text)</li>
+</ul>
+
+<hr />
+
+<h2 id="implementation-guide">Implementation Guide</h2>
+
+<ul>
+  <li>Where: <code class="language-plaintext highlighter-rouge">main.js</code> → render layer only</li>
+  <li>Run: reload app</li>
+  <li>Expect: live note debugging directly on particles</li>
+</ul>
+</article>
+</div>
+
+    </main>
+
+    <footer class="site-footer">
+      <div class="site-footer-inner footer-grid-6">
+        <section class="footer-brand">
+          <h2>Wall of Sound</h2>
+          <p>
+            Shared project memory for the StudioRich audio/visual system. Specs,
+            logs, recovery notes, and local portals live here.
+          </p>
+        </section>
+
+        <section class="footer-group">
+          <h2>Navigation</h2>
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Domains</h2>
+          <a href="/systems/wall/">Wall System</a>
+          <a href="/systems/sound/">Sound System</a>
+          <a href="/systems/">Systems Index</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Indexes</h2>
+          <a href="/specs/">Specs</a>
+          <a href="/logs/">Logs</a>
+          <a href="/components/wall/">Wall Components</a>
+          <a href="/components/sound/"
+            >Sound Components</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Local Portals</h2>
+          <a href="file:///Users/studio/Projects/wall-of-sound/wall/index.html"
+            >Wall App</a
+          >
+          <a
+            href="file:///Users/studio/Projects/wall-of-sound/sound/labeller.html"
+            >Sound Labeller</a
+          >
+          <a
+            href="file:///Users/studio/Projects/kinetic-master-engine/index.html"
+            >Kinetic Engine</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Recovery</h2>
+          <a href="/specs/">Implementation Specs</a>
+          <a href="/logs/">Session Logs</a>
+          <a href="/systems/sound/">Sound Recovery</a>
+          <a href="/systems/wall/">Wall Recovery</a>
+        </section>
+      </div>
+    </footer>
+  </body>
+</html>

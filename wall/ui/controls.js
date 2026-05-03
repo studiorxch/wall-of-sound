@@ -250,29 +250,23 @@
         });
       },
       syncSelection: function syncSelection(selection, activeNoteClass) {
-        var hasSelection = !!selection;
+        // ── Inspector State System (spec 0426_WOS_InspectorStateSystem_v1.0.0) ──
+        var inspectorState = getInspectorState(selection);
+        renderInspector(inspectorState, elements);
+        console.log(
+          "[Inspector]",
+          selection ? selection.type : "none",
+          inspectorState,
+        );
 
-        // Show/hide text section
-        if (elements.textInspectorBlock) {
-          elements.textInspectorBlock.classList.toggle(
-            "hidden",
-            !selection || selection.type !== "text",
-          );
-        }
-
-        if (!hasSelection) {
-          return;
-        }
-
-        // Strokes and groups don't use the legacy inspector fields — exit safely
-        if (selection.type === "stroke" || selection.type === "group") {
-          return;
-        }
+        // ── Field population (only when selection has content) ──
+        if (!selection) return;
 
         function safeNum(v, fallback) {
           return typeof v === "number" && isFinite(v) ? v : fallback || 0;
         }
 
+        // Note field — all selectable types that carry a note
         var note = selection.midi ? selection.midi.note : selection.note;
         if (
           typeof note !== "number" &&
@@ -281,9 +275,11 @@
         ) {
           note = selection.segments[0].note;
         }
-        if (typeof note === "number") {
+        if (typeof note === "number" && elements.activeNote) {
           elements.activeNote.value = String(note);
         }
+
+        // Mechanic / behavior / style fields — strokes, lines, shapes
         if (elements.lineMechanic) {
           var mechVal = selection.mechanicType;
           if (!mechVal && selection.segments && selection.segments.length) {
@@ -323,6 +319,7 @@
           ).toFixed(1);
         }
 
+        // Text fields — only when type is text
         if (selection.type === "text" && selection.transform) {
           if (elements.textContent)
             elements.textContent.value = selection.value || "";
@@ -330,11 +327,10 @@
             elements.textSize.value = String(
               safeNum(selection.font && selection.font.size, 16),
             );
-          if (elements.textSizeValue) {
+          if (elements.textSizeValue)
             elements.textSizeValue.textContent = String(
               safeNum(selection.font && selection.font.size, 16),
             );
-          }
           if (elements.textX)
             elements.textX.value = String(
               Math.round(safeNum(selection.transform.x)),
@@ -347,21 +343,19 @@
             elements.textScale.value = String(
               safeNum(selection.transform.scale, 1),
             );
-          if (elements.textScaleValue) {
+          if (elements.textScaleValue)
             elements.textScaleValue.textContent = safeNum(
               selection.transform.scale,
               1,
             ).toFixed(1);
-          }
           if (elements.textRotation)
             elements.textRotation.value = String(
               safeNum(selection.transform.rotation),
             );
-          if (elements.textRotationValue) {
+          if (elements.textRotationValue)
             elements.textRotationValue.textContent = safeNum(
               selection.transform.rotation,
             ).toFixed(0);
-          }
         }
       },
       syncShortcutVisibility: function syncShortcutVisibility(visible) {
@@ -385,6 +379,110 @@
 
   function byId(id) {
     return document.getElementById(id);
+  }
+
+  // ── Inspector State System ─────────────────────────────────────────────────
+  // Maps selection type → which panels should be visible.
+  // Real panel IDs used (mapped from spec):
+  //   outline   → color-section
+  //   behavior  → behavior-section
+  //   mechanic  → mechanic-section
+  //   text      → text-inspector-block
+  //   motion    → motion-inspector-block (legacy object transform — NOT shown for strokes)
+  //   emitter   → behavior-emitter-fields
+  // Strokes switch to the Motion Brush tab ([data-tab="motion"]) instead of motion-inspector-block.
+
+  function getInspectorState(selection) {
+    if (!selection) {
+      return {
+        mode: "none",
+        show: {
+          outline: false,
+          behavior: false,
+          mechanic: false,
+          motion: false,
+          emitter: false,
+          text: false,
+        },
+      };
+    }
+
+    switch (selection.type) {
+      case "stroke":
+        return {
+          mode: "stroke",
+          show: {
+            outline: true,
+            // legacy panels hidden — behavior-panel (new system) replaces them for strokes
+            behavior: false,
+            mechanic: false,
+            motion: false,
+            emitter: false,
+            text: false,
+            behaviorPanel: true,
+          },
+        };
+
+      case "group":
+        return {
+          mode: "group",
+          show: {
+            outline: true, // color/width/visibility controls shown for groups
+            behavior: false, // legacy behavior panel hidden for groups
+            mechanic: false,
+            motion: false, // legacy motion (VX/VY) hidden for groups
+            emitter: false,
+            text: false,
+            behaviorPanel: false,
+            groupPanel: true,
+          },
+        };
+
+      case "text":
+        return {
+          mode: "text",
+          show: {
+            outline: false,
+            behavior: false,
+            mechanic: false,
+            motion: true,
+            emitter: false,
+            text: true,
+            behaviorPanel: false,
+          },
+        };
+
+      default:
+        // Lines, shapes, balls — show everything except text
+        return {
+          mode: selection.type || "unknown",
+          show: {
+            outline: true,
+            behavior: true,
+            mechanic: true,
+            motion: true,
+            emitter: true,
+            text: false,
+            behaviorPanel: false,
+          },
+        };
+    }
+  }
+
+  function renderInspector(state, elements) {
+    togglePanel("color-section", state.show.outline);
+    togglePanel("behavior-section", state.show.behavior);
+    togglePanel("mechanic-section", state.show.mechanic);
+    togglePanel("text-inspector-block", state.show.text);
+    togglePanel("motion-inspector-block", state.show.motion);
+    togglePanel("behavior-emitter-fields", state.show.emitter);
+    togglePanel("behavior-panel", !!state.show.behaviorPanel);
+  }
+
+  function togglePanel(id, show) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.classList.toggle("hidden", !show);
   }
 
   SBE.Controls = {

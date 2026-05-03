@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>ScaleLock | Wall of Sound</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <link
+      rel="stylesheet"
+      href="/assets/css/style.css"
+    />
+  </head>
+
+  <body>
+    <header class="site-header">
+      <div class="site-header-inner">
+        <a class="site-title" href="/">
+          Wall of Sound
+        </a>
+
+        <nav class="site-nav" aria-label="Primary navigation">
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="page-content">
+      <div class="spec-shell">
+  <a class="back-link" href="/specs/">← Back to specs</a>
+
+  <div class="spec-kicker">
+    wall / audio_system / needs-review
+  </div>
+
+  <h1>ScaleLock</h1>
+
+  <section class="spec-meta">
+    <div>
+      <strong>Doc ID</strong>
+      0417_WALL_OF_SOUND_ScaleLock_v1.0.0
+    </div>
+
+    <div>
+      <strong>Date</strong>
+      2026-04-17
+    </div>
+
+    <div>
+      <strong>Version</strong>
+      1.0.0
+    </div>
+
+    <div>
+      <strong>System</strong>
+      WOS
+    </div>
+
+    <div>
+      <strong>Domain</strong>
+      wall
+    </div>
+
+    <div>
+      <strong>Component</strong>
+      audio_system
+    </div>
+
+    <div>
+      <strong>Type</strong>
+      legacy-spec
+    </div>
+
+    <div>
+      <strong>Priority</strong>
+      medium
+    </div>
+
+    <div>
+      <strong>Risk</strong>
+      unknown
+    </div>
+
+    <div>
+      <strong>Status</strong>
+      needs-review
+    </div>
+  </section>
+
+  
+  <p><strong>Summary:</strong> Imported legacy Wall of Sound spec. Needs review.</p>
+  
+
+  <article class="spec-body"><h2 id="scope">Scope</h2>
+
+<p>main.js only</p>
+
+<hr />
+
+<h2 id="goal">Goal</h2>
+
+<p>Constrain all note output (emitters + collisions) to a musical scale while preserving hybrid fallback + pitch shifting.</p>
+
+<hr />
+
+<h2 id="step-1--add-scale-config-to-state">Step 1 — Add scale config to state</h2>
+
+<p>Locate state initialization.</p>
+
+<p>Add:</p>
+
+<table>
+  <tbody>
+    <tr>
+      <td>state.audio = state.audio</td>
+      <td> </td>
+      <td>{};</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>state.audio.scale = {
+root: 60, // MIDI C4
+type: “major”, // “major”, “minor”, “pentatonic”
+enabled: true
+};</p>
+
+<hr />
+
+<h2 id="step-2--define-scale-maps">Step 2 — Define scale maps</h2>
+
+<p>Add near top of file:</p>
+
+<p>const SCALE_MAPS = {
+major: [0, 2, 4, 5, 7, 9, 11],
+minor: [0, 2, 3, 5, 7, 8, 10],
+pentatonic: [0, 2, 4, 7, 9]
+};</p>
+
+<hr />
+
+<h2 id="step-3--add-quantizetoscale">Step 3 — Add quantizeToScale()</h2>
+
+<p>function quantizeToScale(note, root, scaleType) {
+const scale = SCALE_MAPS[scaleType];
+if (!scale) return note;</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>const offset = note - root;
+const octave = Math.floor(offset / 12) * 12;
+const noteInOctave = offset % 12;
+
+let closest = scale[0];
+let minDist = Math.abs(noteInOctave - scale[0]);
+
+for (let i = 1; i &lt; scale.length; i++) {
+    const dist = Math.abs(noteInOctave - scale[i]);
+    if (dist &lt; minDist) {
+        minDist = dist;
+        closest = scale[i];
+    }
+}
+
+return root + octave + closest;
+</code></pre></div></div>
+
+<p>}</p>
+
+<hr />
+
+<h2 id="step-4--apply-before-playback">Step 4 — Apply BEFORE playback</h2>
+
+<p>Find where note is finalized before playbackRate is calculated.</p>
+
+<p>Insert:</p>
+
+<p>if (state.audio.scale?.enabled) {
+note = quantizeToScale(
+note,
+state.audio.scale.root,
+state.audio.scale.type
+);
+}</p>
+
+<hr />
+
+<h2 id="step-5--do-not-modify-fallback-logic">Step 5 — DO NOT modify fallback logic</h2>
+
+<p>Keep:</p>
+
+<ul>
+  <li>sampleMap lookup</li>
+  <li>nearest-bank fallback</li>
+  <li>playbackRate pitch shifting</li>
+</ul>
+
+<p>UNCHANGED</p>
+
+<hr />
+
+<h2 id="expected-result">Expected Result</h2>
+
+<ul>
+  <li>All notes snap to musical scale</li>
+  <li>Fallback still works</li>
+  <li>Pitch shifting still works</li>
+  <li>Waterfall patterns become harmonic sequences</li>
+</ul>
+</article>
+</div>
+
+    </main>
+
+    <footer class="site-footer">
+      <div class="site-footer-inner footer-grid-6">
+        <section class="footer-brand">
+          <h2>Wall of Sound</h2>
+          <p>
+            Shared project memory for the StudioRich audio/visual system. Specs,
+            logs, recovery notes, and local portals live here.
+          </p>
+        </section>
+
+        <section class="footer-group">
+          <h2>Navigation</h2>
+          <a href="/">Home</a>
+          <a href="/systems/wall/">Wall</a>
+          <a href="/systems/sound/">Sound</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Domains</h2>
+          <a href="/systems/wall/">Wall System</a>
+          <a href="/systems/sound/">Sound System</a>
+          <a href="/systems/">Systems Index</a>
+        </section>
+
+        <section class="footer-group">
+          <h2>Indexes</h2>
+          <a href="/specs/">Specs</a>
+          <a href="/logs/">Logs</a>
+          <a href="/components/wall/">Wall Components</a>
+          <a href="/components/sound/"
+            >Sound Components</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Local Portals</h2>
+          <a href="file:///Users/studio/Projects/wall-of-sound/wall/index.html"
+            >Wall App</a
+          >
+          <a
+            href="file:///Users/studio/Projects/wall-of-sound/sound/labeller.html"
+            >Sound Labeller</a
+          >
+          <a
+            href="file:///Users/studio/Projects/kinetic-master-engine/index.html"
+            >Kinetic Engine</a
+          >
+        </section>
+
+        <section class="footer-group">
+          <h2>Recovery</h2>
+          <a href="/specs/">Implementation Specs</a>
+          <a href="/logs/">Session Logs</a>
+          <a href="/systems/sound/">Sound Recovery</a>
+          <a href="/systems/wall/">Wall Recovery</a>
+        </section>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -11,9 +11,9 @@ Instead of composing on a timeline, WOS generates music through motion, collisio
 WOS replaces traditional DAW sequencing with an **event-based sound system**:
 
 - Objects move through space
-- Interactions trigger sound events
+- Interactions generate events
+- Events trigger sound
 - Behaviors shape motion and rhythm
-- The system evolves continuously
 
 This enables **infinite variation with structural cohesion**.
 
@@ -21,7 +21,7 @@ This enables **infinite variation with structural cohesion**.
 
 ## 🧠 System Architecture
 
-WOS operates across three primary layers:
+WOS operates across four primary layers:
 
 ### 1. Data Layer
 
@@ -40,17 +40,59 @@ Processes motion and interaction.
 - Physics engine (delta time, damping, velocity)
 - Behavior system (runs every frame)
 - Collision detection and response
-- Event dispatch system (eventBus)
 
 ---
 
-### 3. Output Layer
+### 3. Event Layer (Core Runtime)
+
+Decouples interaction from sound.
+
+```text
+Wall → Event → Sound
+```
+
+- All interactions produce events (collision, emission, lifecycle)
+- Events are dispatched through a central EventBus
+- Events carry context (position, velocity, energy, source)
+
+This ensures:
+
+- Visual systems do not directly control audio
+- Audio systems can evolve independently
+- The same event stream can power real-time playback and export
+
+---
+
+### 4. Sound Layer
 
 Transforms events into sound.
 
 - Oscillator (monitor output)
 - MIDI output (Ableton / external gear)
-- Future: sampler + per-object sound mapping
+- Future: sampler + sound engine
+
+---
+
+## 🔁 Bidirectional System
+
+WOS supports two directions of interaction:
+
+### 1. Interaction → Sound (Primary)
+
+- Collisions trigger notes
+- Emitters generate rhythm
+- Motion shapes timing and dynamics
+
+### 2. Sound → Visual (Reactive)
+
+- Audio analysis feeds back into the system
+- Visuals respond through the same event pipeline
+
+```text
+audio → event → wall response
+```
+
+This avoids tight coupling between audio and visuals.
 
 ---
 
@@ -78,7 +120,7 @@ All elements on the Wall are treated as **Objects**:
 - Strokes (drawn lines)
 - Shapes (grouped geometry)
 - Emitters (spawn particles/events)
-- Particles (temporary sound carriers)
+- Particles (temporary carriers)
 
 Objects can:
 
@@ -86,7 +128,7 @@ Objects can:
 - Collide
 - Emit
 - Hold behaviors
-- Trigger sound
+- Trigger events
 
 ---
 
@@ -119,8 +161,8 @@ The “Wall” is the primary system surface.
 
 - Replaces traditional canvas metaphor
 - Holds all objects and interactions
-- Can scale to multiple walls (future)
 - Designed for both creation and presentation
+- Supports portrait and landscape (stream + export)
 
 ---
 
@@ -145,8 +187,8 @@ WOS runs continuously:
 
 - Behaviors execute every frame
 - Motion is time-based (deltaTime)
-- Sound events are triggered dynamically
-- No fixed timeline required
+- Events are triggered dynamically
+- Sound responds in real-time
 
 Supports:
 
@@ -157,40 +199,45 @@ Supports:
 
 ## 📦 Project Structure
 
+```
 /wall-of-sound
-/wall # UI + rendering layer
-/sound # audio + playback systems
-/docs # specs and system design
-index.html # main entry
-main.js # core engine loop
-controls.js # UI bindings
+  /wall        # visual + physics systems
+  /sound       # audio engines (MIDI, future sampler)
+  /core        # event system + shared runtime (EventBus)
+  /docs        # specs and system design
+
+  index.html   # entry point
+  main.js      # engine loop
+  controls.js  # UI bindings
+```
 
 ---
 
 ## 🚧 Current Focus
 
-- Object system unification
-- Behavior consistency across modes
-- Stable physics timing (deltaTime scaling)
-- Emitter refinement (direction + edge spawning)
-- Selection and transform system
+- Object system unification (shapes, strokes, groups)
+- Stable physics + motion feel
+- Collision consistency + event quality
+- Emitter refinement (direction, density, lifecycle)
+- Selection + transform system
 
 ---
 
 ## 🔮 Roadmap
 
-- Sampler integration (per-object sound)
-- Shape library + reusable assets
+- Event schema refinement (energy, velocity, timing)
+- Minimal sound engine (event → tone mapping)
+- Sampler integration (per-object sound profiles)
+- Shape + sound libraries
 - Multi-wall environments
 - Embeddable “Capsules” (shareable scenes)
-- Visual + audio sync systems
-- Generative playlist / loop engine integration
+- Stream + export modes (OBS / MP4 / WAV)
 
 ---
 
 ## 🧪 Philosophy
 
-WOS is not a DAW replacement.
+WOS is not a DAW.
 
 It is a **sound system**:
 
@@ -201,11 +248,11 @@ It is a **sound system**:
 
 It treats music as a **living structure**, not a fixed arrangement.
 
----git checkout 385ebdc -- sound/
+---
 
 ## 👤 Author
 
-StudioRich  
+StudioRich
 Brooklyn, NYC
 
 ---
