@@ -7,49 +7,39 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <!-- ── CONTEXTUAL MENU PLACEHOLDER (future command home) ── -->
-    <div id="context-menu" style="display:none" aria-hidden="true">
-      <button data-cmd="new">New</button>
-      <button data-cmd="open">Open</button>
-      <button data-cmd="save">Save</button>
-      <button data-cmd="demo">Demo World</button>
-    </div>
-
-    <!-- ── TOP BAR ──────────────────────────────────── -->
-    <header id="topbar" class="topbar">
-      <div class="topbar-left">
-        <span class="logo-id">Wallace</span>
-      </div>
-
-      <div class="topbar-right">
-        <button id="load-example" title="Demo">Demo</button>
-        <label class="file-btn" title="Open">
-          <input id="scene-file" type="file" accept="application/json" />
-          <span>Open</span>
-        </label>
-        <button id="save-scene" title="Save">Save</button>
-        <label class="file-btn" title="Font">
-          <input
-            id="text-font-file"
-            type="file"
-            accept=".ttf,.otf,.woff,.woff2,font/ttf,font/otf,font/woff,font/woff2"
-          />
-          <span>Font</span>
-        </label>
-
-      </div>
-    </header>
+    <!-- Buttons preserved as hidden for bindControls compatibility -->
+    <button id="load-example" style="display: none">Demo</button>
+    <label style="display: none"
+      ><input id="scene-file" type="file" accept="application/json"
+    /></label>
+    <button id="save-scene" style="display: none">Save</button>
+    <label style="display: none"
+      ><input
+        id="text-font-file"
+        type="file"
+        accept=".ttf,.otf,.woff,.woff2,font/ttf,font/otf,font/woff,font/woff2"
+    /></label>
 
     <!-- ── MAIN LAYOUT ──────────────────────────────── -->
     <div class="app-body">
+      <!-- LEFT RAIL -->
+      <div id="left-rail">
+        <div class="rail-icon"></div>
+      </div>
       <!-- LEFT PANEL: Libraries -->
       <aside id="left-panel" class="panel panel-left" hidden>
         <!-- Actions (Duplicate/Delete/Undo) and Pattern inputs moved to keyboard shortcuts.
              Panels hidden — IDs preserved for JS bindings. -->
-        <button id="duplicate-selection" style="display:none" type="button">Duplicate</button>
-        <button id="delete-selection" style="display:none" type="button">Delete</button>
-        <button id="undo-action" style="display:none" type="button">Undo</button>
-        <div id="pattern-section" style="display:none">
+        <button id="duplicate-selection" style="display: none" type="button">
+          Duplicate
+        </button>
+        <button id="delete-selection" style="display: none" type="button">
+          Delete
+        </button>
+        <button id="undo-action" style="display: none" type="button">
+          Undo
+        </button>
+        <div id="pattern-section" style="display: none">
           <input type="number" id="grid-cols" value="3" />
           <input type="number" id="grid-rows" value="3" />
           <input type="number" id="grid-spacing-x" value="120" />
@@ -76,37 +66,87 @@
           <button class="note-cell" data-note-class="11">B</button>
           <input id="active-note" type="hidden" value="60" />
         </div>
+        <div id="stage-grid"></div>
+        <div id="canvas-tool-subbar" class="canvas-tool-subbar"></div>
         <div class="canvas-wrap" id="canvas-wrap">
           <canvas id="engine-canvas" width="1080" height="1920"></canvas>
         </div>
         <div class="tool-group">
           <!-- Select deprecated — pen tool handles select/transform. Hidden but keyboard shortcut preserved. -->
-          <button class="tool" data-tool="select" title="Select (V)" style="display:none">
+          <button
+            class="tool"
+            data-tool="select"
+            title="Select (V)"
+            style="display: none"
+          >
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <path d="M2 1L12 7L7 8.5L5 13L2 1Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+              <path
+                d="M2 1L12 7L7 8.5L5 13L2 1Z"
+                stroke="currentColor"
+                stroke-width="1.4"
+                stroke-linejoin="round"
+              />
             </svg>
           </button>
           <button class="tool active" data-tool="pen" title="Pen (P · D · M)">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <path d="M2 3 Q5 1 8 4 Q11 7 9 11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none"/>
-              <circle cx="9" cy="11" r="2" stroke="currentColor" stroke-width="1.3" fill="none"/>
+              <path
+                d="M2 3 Q5 1 8 4 Q11 7 9 11"
+                stroke="currentColor"
+                stroke-width="1.6"
+                stroke-linecap="round"
+                fill="none"
+              />
+              <circle
+                cx="9"
+                cy="11"
+                r="2"
+                stroke="currentColor"
+                stroke-width="1.3"
+                fill="none"
+              />
             </svg>
           </button>
           <!-- Shape deprecated — pen shape mode covers this. Hidden but keyboard shortcut preserved. -->
-          <button class="tool" data-tool="shape" title="Shape (S)" style="display:none">
+          <button
+            class="tool"
+            data-tool="shape"
+            title="Shape (S)"
+            style="display: none"
+          >
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <polygon points="7,1 13,11 1,11" stroke="currentColor" stroke-width="1.4" fill="none"/>
+              <polygon
+                points="7,1 13,11 1,11"
+                stroke="currentColor"
+                stroke-width="1.4"
+                fill="none"
+              />
             </svg>
           </button>
           <button class="tool" data-tool="text" title="Text (T)">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <text x="3" y="12" font-size="12" font-weight="700" fill="currentColor">A</text>
+              <text
+                x="3"
+                y="12"
+                font-size="12"
+                font-weight="700"
+                fill="currentColor"
+              >
+                A
+              </text>
             </svg>
           </button>
           <button class="tool" data-tool="ball" title="Ball (B)">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.4" fill="none"/>
-              <circle cx="7" cy="7" r="1.5" fill="currentColor"/>
+              <circle
+                cx="7"
+                cy="7"
+                r="5"
+                stroke="currentColor"
+                stroke-width="1.4"
+                fill="none"
+              />
+              <circle cx="7" cy="7" r="1.5" fill="currentColor" />
             </svg>
           </button>
         </div>
@@ -169,414 +209,336 @@
       <aside id="right-panel" class="panel panel-right">
         <div class="inspector-tabs">
           <button class="tab active" data-tab="object">Object</button>
-          <button class="tab" data-tab="canvas">Canvas</button>
+          <button class="tab" data-tab="canvas">Frame</button>
           <button class="tab" data-tab="world">World</button>
-          <button class="tab" data-tab="sampler">Sampler</button>
-          <button class="tab" data-tab="music">Composition</button>
-          <button class="tab" data-tab="shapes">Shapes</button>
           <button class="tab" data-tab="motion" hidden>Motion</button>
         </div>
 
-        <!-- Object Tab -->
+        <!-- Object Tab — flat collapsible section system -->
         <div class="tab-content active" data-tab-content="object">
-          
-
-          <section class="inspector-section" id="color-section">
-            <h4 class="section-title">Outline</h4>
-            <div class="field-grid two">
-              <label class="field">
-                <span>Color</span>
-                <input id="line-color" type="color" value="#ff4b4b" disabled />
-              </label>
-              <label class="field" id="stroke-width-field" style="display:none">
-                <span>Stroke Width</span>
-                <input
-                  id="stroke-width"
-                  type="range"
-                  min="1"
-                  max="48"
-                  step="1"
-                  value="18"
-                />
-                <output id="stroke-width-value">18</o>
-              </label>
-            </div>
-            <div class="field" id="outline-visible-field" style="margin-top:4px;display:flex;align-items:center;gap:8px">
-              <span>Outline</span>
-              <button id="toggle-visibility" class="btn-small" title="Toggle outline visibility" style="font-size:16px;padding:2px 8px">👁</button>
-            </div>
-          </section>
- <section class="inspector-section" id="behavior-section">
-            <h4 class="section-title">Behavior</h4>
-            <div class="field-grid two">
-              <label class="field">
-                <span>Type</span>
-                <select id="line-behavior">
-                  <option value="none">None</option>
-                  <option value="attract">Attract</option>
-                  <option value="repel">Repel</option>
-                  <option value="orbital">Orbit</option>
-                  <option value="emitter">Emitter</option>
-                </select>
-              </label>
-              <label class="field">
-                <span>Strength</span>
-                <input
-                  id="line-strength"
-                  type="range"
-                  min="0"
-                  max="5"
-                  step="0.1"
-                  value="1.4"
-                />
-                <output id="line-strength-value">1.4</output>
-              </label>
-            </div>
-            <div class="hidden" id="behavior-emitter-fields">
-              <!-- FLOW -->
-              <div class="inspector-group-label">Flow</div>
-              <div class="field-grid two">
-                <label class="field">
-                  <span>Rate (ms)</span>
-                  <input id="behavior-emitter-rate" type="range" min="16" max="2000" step="16" value="16" />
-                  <output id="behavior-emitter-rate-value">16</o>
-                </label>
-                <label class="field">
-                  <span>Density</span>
-                  <input id="behavior-emitter-density" type="range" min="1" max="16" step="1" value="4" />
-                  <output id="behavior-emitter-density-value">4</o>
-                </label>
-              </div>
-              <!-- MOTION -->
-              <div class="inspector-group-label">Motion</div>
-              <div class="field-grid two">
-                <label class="field">
-                  <span>Direction (°)</span>
-                  <input id="behavior-emitter-direction" type="range" min="0" max="360" step="1" value="270" />
-                  <output id="behavior-emitter-direction-value">270</o>
-                </label>
-                <label class="field">
-                  <span>Spread (°)</span>
-                  <input id="behavior-emitter-spread" type="range" min="0" max="180" step="1" value="25" />
-                  <output id="behavior-emitter-spread-value">25</o>
-                </label>
-                <label class="field">
-                  <span>Speed</span>
-                  <input id="behavior-emitter-speed" type="range" min="1" max="60" step="1" value="18" />
-                  <output id="behavior-emitter-speed-value">18</o>
-                </label>
-              </div>
-              <!-- FORM -->
-              <div class="inspector-group-label">Form</div>
-              <div class="field-grid two">
-                <label class="field">
-                  <span>Size</span>
-                  <input id="behavior-emitter-size" type="range" min="1" max="10" step="0.5" value="2" />
-                  <output id="behavior-emitter-size-value">2</o>
-                </label>
-                <label class="field">
-                  <span>Life (s)</span>
-                  <input id="behavior-emitter-life" type="range" min="0.1" max="5" step="0.1" value="1.2" />
-                  <output id="behavior-emitter-life-value">1.2</o>
-                </label>
-                <label class="field">
-                  <span>Style</span>
-                  <select id="behavior-emitter-style">
-                    <option value="dot">Dot</option>
-                    <option value="streak">Streak</option>
-                    <option value="glow">Glow</option>
-                  </select>
-                </label>
-              </div>
-            </div>
-          </section>
-          <section class="inspector-section" id="mechanic-section">
-            <h4 class="section-title">Mechanic</h4>
-            <label class="field">
-              <span>Type</span>
-              <select id="line-mechanic">
-                <option value="none">None</option>
-                <option value="bumper-hard">Bumper (Hard)</option>
-                <option value="bumper-elastic">Bumper (Elastic)</option>
-                <option value="ramp">Ramp</option>
-              </select>
-            </label>
-          </section>
-
-         
-
-          <section class="inspector-section" id="text-inspector-block">
-            <h4 class="section-title">Text</h4>
-            <input
-              id="text-content"
-              type="text"
-              value="SWARM"
-              placeholder="Content"
-              class="full-input"
-            />
-            <div class="field-grid three">
-              <label class="field">
-                <span>X</span>
-                <input
-                  id="text-x"
-                  type="number"
-                  min="-4000"
-                  max="4000"
-                  step="1"
-                  value="540"
-                />
-              </label>
-              <label class="field">
-                <span>Y</span>
-                <input
-                  id="text-y"
-                  type="number"
-                  min="-4000"
-                  max="4000"
-                  step="1"
-                  value="960"
-                />
-              </label>
-              <button id="center-text" type="button" class="small-btn">
-                Center
+          <div id="inspector-object">
+            <!-- OBJECT section -->
+            <div class="insp-section" data-section="object">
+              <button class="insp-section-header open" data-toggle="object">
+                <span class="insp-chevron">▼</span> OBJECT
               </button>
-            </div>
-            <div class="field-grid three">
-              <label class="field">
-                <span>Size</span>
-                <input
-                  id="text-size"
-                  type="range"
-                  min="24"
-                  max="420"
-                  step="1"
-                  value="160"
-                />
-                <output id="text-size-value">160</output>
-              </label>
-              <label class="field">
-                <span>Scale</span>
-                <input
-                  id="text-scale"
-                  type="range"
-                  min="0.1"
-                  max="8"
-                  step="0.1"
-                  value="1"
-                />
-                <output id="text-scale-value">1.0</output>
-              </label>
-              <label class="field">
-                <span>Rotate</span>
-                <input
-                  id="text-rotation"
-                  type="range"
-                  min="-180"
-                  max="180"
-                  step="1"
-                  value="0"
-                />
-                <output id="text-rotation-value">0</output>
-              </label>
-            </div>
-          </section>
-
-         
-
-          <section class="inspector-section hidden" id="motion-inspector-block">
-            <h4 class="section-title">Motion</h4>
-            <label class="field">
-              <input id="motion-enabled" type="checkbox" />
-              <span>Enable</span>
-            </label>
-            <div class="field-grid two">
-              <label class="field">
-                <span>VX</span>
-                <input id="motion-vx" type="range" min="-200" max="200" step="1" value="0" />
-                <output id="motion-vx-value">0</output>
-              </label>
-              <label class="field">
-                <span>VY</span>
-                <input id="motion-vy" type="range" min="-200" max="200" step="1" value="0" />
-                <output id="motion-vy-value">0</output>
-              </label>
-            </div>
-            <label class="field">
-              <span>Rotate</span>
-              <input id="motion-rot" type="range" min="-5" max="5" step="0.1" value="0" />
-              <output id="motion-rot-value">0.0</output>
-            </label>
-            <label class="field">
-              <input id="motion-loop" type="checkbox" checked />
-              <span>Loop</span>
-            </label>
-          </section>
-
-          <!-- Behavior Panel — Phase 1 additive (spec 0428_WOS_BehaviorPanel_v1.0.0) -->
-          <section class="inspector-section hidden" id="behavior-panel">
-            <h4 class="section-title">Behavior</h4>
-
-            <!-- Mode selector -->
-            <label class="field">
-              <span>Mode</span>
-              <select id="bp-mode">
-                <option value="pingpong">Ping-Pong</option>
-                <option value="loop">Loop</option>
-                <option value="once">Once</option>
-                <option value="tunnel">Tunnel</option>
-              </select>
-            </label>
-
-            <!-- FX -->
-            <div>
-              <div class="inspector-group-label">Trail Style</div>
-              <div class="motion-presets" style="margin-top:4px">
-                <button class="btn-small" data-bp-style="off">Off</button>
-                <button class="btn-small" data-bp-style="orbit">Orbit</button>
-                <button class="btn-small" data-bp-style="comet">Comet</button>
-                <button class="btn-small" data-bp-style="dust">Dust</button>
-                <button class="btn-small" data-bp-style="burst">Burst</button>
-                <button class="btn-small" data-bp-style="ribbon">Ribbon</button>
+              <div class="insp-section-body">
+                <div class="insp-row">
+                  <label class="insp-label" for="obj-fill">Fill Color</label>
+                  <div class="insp-control">
+                    <input id="obj-fill" type="color" value="#ff4b4b" />
+                  </div>
+                </div>
+                <div class="insp-row">
+                  <label class="insp-label" for="obj-strokeWidth"
+                    >Stroke Width</label
+                  >
+                  <div class="insp-control insp-slider-num">
+                    <input
+                      id="obj-strokeWidth"
+                      type="range"
+                      min="1"
+                      max="100"
+                      step="1"
+                      value="18"
+                    />
+                    <input
+                      id="obj-strokeWidth-num"
+                      type="number"
+                      min="1"
+                      max="100"
+                      value="18"
+                    />
+                  </div>
+                </div>
+                <div class="insp-row">
+                  <label class="insp-label" for="obj-visible">Visible</label>
+                  <div class="insp-control">
+                    <input id="obj-visible" type="checkbox" checked />
+                  </div>
+                </div>
               </div>
             </div>
 
-            <div class="field-grid two" style="margin-top:6px">
-              <label class="field">
-                <span>Color</span>
-                <select id="bp-fx-color-source">
-                  <option value="note">Note</option>
-                  <option value="custom">Custom</option>
-                </select>
-              </label>
-              <label class="field" style="flex-direction:row;align-items:center;gap:6px">
-                <span></span>
-                <input id="bp-fx-color" type="color" value="#ffffff" style="width:32px;height:22px;padding:0;border:none;cursor:pointer" />
-              </label>
+            <!-- WALKER section -->
+            <div class="insp-section" data-section="walker">
+              <button class="insp-section-header" data-toggle="walker">
+                <span class="insp-chevron">▶</span> WALKER
+              </button>
+              <div class="insp-section-body" style="display: none">
+                <div class="insp-row">
+                  <label class="insp-label" for="obj-walker">Enabled</label>
+                  <div class="insp-control">
+                    <input id="obj-walker" type="checkbox" />
+                  </div>
+                </div>
+                <div class="insp-row">
+                  <label class="insp-label" for="obj-motionMode">Mode</label>
+                  <div class="insp-control">
+                    <select id="obj-motionMode">
+                      <option value="pingpong">Ping-Pong</option>
+                      <option value="loop">Loop</option>
+                      <option value="tunnel">Tunnel</option>
+                      <option value="once">Once</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="insp-row">
+                  <label class="insp-label" for="obj-trailStyle">Trail</label>
+                  <div class="insp-control">
+                    <select id="obj-trailStyle">
+                      <option value="off">Off</option>
+                      <option value="on">On</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            <details style="margin-top:4px">
-              <summary class="inspector-group-label" style="cursor:pointer;list-style:none;padding:4px 0">Advanced</summary>
-              <div style="display:flex;flex-direction:column;gap:4px;padding-top:4px">
-                <label class="field">
-                  <span>Rate <output id="bp-rate-value">40</output>/s</span>
-                  <input id="bp-rate" type="range" min="1" max="200" step="1" value="40" />
-                </label>
-                <label class="field">
-                  <span>Spread <output id="bp-spread-value">0.30</output></span>
-                  <input id="bp-spread" type="range" min="0" max="6.28" step="0.01" value="0.3" />
-                </label>
-                <label class="field">
-                  <span>Speed <output id="bp-speed-value">120</output></span>
-                  <input id="bp-speed" type="range" min="10" max="600" step="10" value="120" />
-                </label>
-                <label class="field">
-                  <span>Size <output id="bp-size-value">3</output></span>
-                  <input id="bp-size" type="range" min="1" max="20" step="0.5" value="3" />
-                </label>
-                <label class="field">
-                  <span>Life <output id="bp-life-value">1.0</output>s</span>
-                  <input id="bp-life" type="range" min="0.1" max="5" step="0.1" value="1.0" />
-                </label>
-                <label class="field">
-                  <span>Particle</span>
-                  <select id="bp-type">
-                    <option value="dot">Dot</option>
-                    <option value="streak">Streak</option>
-                    <option value="glow">Glow</option>
-                  </select>
-                </label>
+            <!-- SOUND section -->
+            <div class="insp-section" data-section="sound">
+              <button class="insp-section-header" data-toggle="sound">
+                <span class="insp-chevron">▶</span> SOUND
+              </button>
+              <div class="insp-section-body" style="display: none">
+                <div class="insp-row">
+                  <label class="insp-label" for="obj-soundSource">Source</label>
+                  <div class="insp-control">
+                    <select id="obj-soundSource">
+                      <option value="off">Off</option>
+                      <option value="synth">Synth</option>
+                      <option value="sample">Sample</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="insp-row">
+                  <label class="insp-label" for="obj-bankId">Bank</label>
+                  <div class="insp-control">
+                    <select id="obj-bankId">
+                      <option value="">None</option>
+                      <option value="bank_1">Bank 1</option>
+                      <option value="bank_2">Bank 2</option>
+                      <option value="bank_3">Bank 3</option>
+                      <option value="bank_4">Bank 4</option>
+                      <option value="bank_5">Bank 5</option>
+                      <option value="bank_6">Bank 6</option>
+                      <option value="bank_7">Bank 7</option>
+                      <option value="bank_8">Bank 8</option>
+                      <option value="bank_9">Bank 9</option>
+                      <option value="bank_10">Bank 10</option>
+                      <option value="bank_11">Bank 11</option>
+                      <option value="bank_12">Bank 12</option>
+                      <option value="bank_13">Bank 13</option>
+                      <option value="bank_14">Bank 14</option>
+                      <option value="bank_15">Bank 15</option>
+                      <option value="bank_16">Bank 16</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="insp-row">
+                  <label class="insp-label" for="obj-noteClass">Note</label>
+                  <div class="insp-control">
+                    <select id="obj-noteClass">
+                      <option value="0">C</option>
+                      <option value="1">C#</option>
+                      <option value="2">D</option>
+                      <option value="3">D#</option>
+                      <option value="4">E</option>
+                      <option value="5">F</option>
+                      <option value="6">F#</option>
+                      <option value="7">G</option>
+                      <option value="8">G#</option>
+                      <option value="9">A</option>
+                      <option value="10">A#</option>
+                      <option value="11">B</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="insp-row">
+                  <label class="insp-label" for="obj-octave">Octave</label>
+                  <div class="insp-control">
+                    <input
+                      id="obj-octave"
+                      type="number"
+                      min="0"
+                      max="8"
+                      value="4"
+                      style="width: 52px"
+                    />
+                  </div>
+                </div>
+                <div class="insp-row">
+                  <label class="insp-label" for="obj-soundRole">Role</label>
+                  <div class="insp-control">
+                    <select id="obj-soundRole">
+                      <option value="drum">Drum</option>
+                      <option value="bass">Bass</option>
+                      <option value="lead">Lead</option>
+                      <option value="pad">Pad</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="insp-row">
+                  <label class="insp-label" for="obj-soundTrigger"
+                    >Trigger</label
+                  >
+                  <div class="insp-control">
+                    <select id="obj-soundTrigger">
+                      <option value="impact">Impact</option>
+                      <option value="continuous">Continuous</option>
+                    </select>
+                  </div>
+                </div>
               </div>
-            </details>
-
-            <!-- Trail Debug Panel -->
-            <section id="trail-debug-panel" class="inspector-section" style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.08)">
-              <h4 class="section-title">Debug</h4>
-              <div style="display:flex;flex-direction:column;gap:4px">
-                <label class="field checkbox">
-                  <input type="checkbox" id="debug-walkers" />
-                  <span>Show Walkers</span>
-                </label>
-                <label class="field checkbox">
-                  <input type="checkbox" id="debug-paths" />
-                  <span>Show Paths</span>
-                </label>
-                <label class="field checkbox">
-                  <input type="checkbox" id="debug-info" />
-                  <span>Show Info</span>
-                </label>
-              </div>
-            </section>
-          </section>
+            </div>
+          </div>
         </div>
         <div class="tab-content" data-tab-content="canvas">
-          <section class="inspector-section">
-            <h4 class="section-title">Canvas</h4>
-            <label class="field">
-              <span>Frame</span>
-              <select id="frame-select">
-                <option value="portrait">Portrait (1080×1920)</option>
-                <option value="landscape">Landscape (1920×1080)</option>
-              </select>
-            </label>
-            <label class="field">
-              <input id="transparent-bg" type="checkbox" />
-              <span>Transparent background</span>
-            </label>
-            <label class="file-btn" title="BG">
+          <div class="insp-row">
+            <span class="insp-label">Resolution</span>
+            <span class="insp-value">1080 × 1920</span>
+          </div>
+          <div class="insp-row">
+            <label class="insp-label" for="viewport-mode">Format</label>
+            <select id="viewport-mode">
+              <option value="portrait">9:16</option>
+              <option value="landscape">16:9</option>
+            </select>
+          </div>
+          <div class="insp-row">
+            <label class="insp-label" for="transparent-bg"
+              >Transparent Frame</label
+            >
+            <input id="transparent-bg" type="checkbox" />
+          </div>
+          <div class="insp-row">
+            <label class="insp-label" for="show-paths">Show Paths</label>
+            <input id="show-paths" type="checkbox" checked />
+          </div>
+          <div class="insp-row">
+            <span class="insp-label">Wall Background</span>
+            <label class="insp-file-btn">
               <input id="background-file" type="file" accept="image/*" />
-              <span>BG</span>
+              <span>Choose File</span>
             </label>
-          </section>
+          </div>
         </div>
 
         <!-- World Tab -->
         <div class="tab-content" data-tab-content="world">
-          <section class="inspector-section">
-            <h4 class="section-title">World</h4>
-            <label class="field">
-              <span>Physics Mode</span>
-              <select id="world-mode">
-                <option value="gravity">Gravity</option>
-                <option value="planar">Planar</option>
-                <option value="zero-g">Zero-G</option>
-                <option value="swarm">Swarm</option>
-              </select>
-            </label>
-            <label class="field">
-              <span>Strength</span>
-              <input id="world-strength" type="range" min="0" max="20" step="0.5" value="3" />
+          <div class="insp-row">
+            <label class="insp-label" for="world-mode">Physics Mode</label>
+            <select id="world-mode">
+              <option value="gravity">Gravity</option>
+              <option value="planar">Planar</option>
+              <option value="zero-g">Zero-G</option>
+              <option value="swarm">Swarm</option>
+            </select>
+          </div>
+          <div class="insp-row">
+            <label class="insp-label" for="world-strength">Strength</label>
+            <div class="insp-slider-num">
+              <input
+                id="world-strength"
+                type="range"
+                min="0"
+                max="20"
+                step="0.5"
+                value="3"
+              />
               <output id="world-strength-value">3.0</output>
-            </label>
-          </section>
-
-          <section class="inspector-section">
-            <h4 class="section-title">Feedback</h4>
-            <label class="field checkbox">
-              <input id="toggle-hit-count" type="checkbox" />
-              <span>Show Hit Count</span>
-            </label>
-          </section>
-
-
-          <section class="inspector-section">
-            <button id="clear-balls">Clear Balls</button>
-          </section>
-
-          <!-- Sound Response hidden — system not yet validated -->
-          <section class="inspector-section" style="display:none">
-            <h4 class="section-title">Sound Response</h4>
-            <div class="field-grid two">
-              <label class="field">
-                <input type="checkbox" id="density-harmonics-toggle" checked />
-                <span>Density Harmonics</span>
-              </label>
-              <label class="field">
-                <input type="checkbox" id="velocity-dynamics-toggle" checked />
-                <span>Velocity Dynamics</span>
-              </label>
             </div>
-            <label class="field">
-              <span>Sensitivity</span>
+          </div>
+
+          <div class="insp-section-divider">Feedback</div>
+
+          <div class="insp-row">
+            <label class="insp-label" for="toggle-hit-count"
+              >Show Hit Count</label
+            >
+            <input id="toggle-hit-count" type="checkbox" />
+          </div>
+
+          <div class="insp-section-divider">Particles</div>
+
+          <div class="insp-row">
+            <label class="insp-label" for="ball-count">Count</label>
+            <div class="insp-slider-num">
+              <input
+                id="ball-count"
+                type="range"
+                min="1"
+                max="8"
+                step="1"
+                value="1"
+              />
+              <output id="ball-count-value">1</output>
+            </div>
+          </div>
+          <div class="insp-row">
+            <label class="insp-label" for="ball-speed">Speed</label>
+            <div class="insp-slider-num">
+              <input
+                id="ball-speed"
+                type="range"
+                min="0.4"
+                max="3"
+                step="0.1"
+                value="1"
+              />
+              <output id="ball-speed-value">1.0</output>
+            </div>
+          </div>
+          <div class="insp-row">
+            <label class="insp-label" for="ball-spread">Spread</label>
+            <div class="insp-slider-num">
+              <input
+                id="ball-spread"
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value="0.15"
+              />
+              <output id="ball-spread-value">0.15</output>
+            </div>
+          </div>
+          <div class="insp-row">
+            <label class="insp-label" for="particle-shape">Shape</label>
+            <select id="particle-shape">
+              <option value="circle">Circle</option>
+              <option value="triangle">Triangle</option>
+              <option value="square">Square</option>
+            </select>
+          </div>
+          <div class="insp-row">
+            <label class="insp-label" for="particle-trail">Trail</label>
+            <input id="particle-trail" type="checkbox" checked />
+          </div>
+          <div class="insp-row">
+            <span class="insp-label"></span>
+            <button id="clear-balls" style="width: 100%">Clear Balls</button>
+          </div>
+
+          <div class="insp-section-divider">Sound Response</div>
+
+          <div class="insp-row">
+            <label class="insp-label" for="density-harmonics-toggle"
+              >Density Harmonics</label
+            >
+            <input id="density-harmonics-toggle" type="checkbox" checked />
+          </div>
+          <div class="insp-row">
+            <label class="insp-label" for="velocity-dynamics-toggle"
+              >Velocity Dynamics</label
+            >
+            <input id="velocity-dynamics-toggle" type="checkbox" checked />
+          </div>
+          <div class="insp-row">
+            <label class="insp-label" for="sound-sensitivity"
+              >Sensitivity</label
+            >
+            <div class="insp-slider-num">
               <input
                 type="range"
                 id="sound-sensitivity"
@@ -586,127 +548,25 @@
                 value="1.0"
               />
               <output id="sound-sensitivity-value">1.0</output>
-            </label>
-          </section>
-
-          <!-- Particle tool inputs hidden — moved to tool state (spec 0506) -->
-          <div style="display:none">
-            <input id="ball-count" type="range" min="1" max="8" step="1" value="1" />
-            <output id="ball-count-value">1</output>
-            <input id="ball-speed" type="range" min="0.4" max="3" step="0.1" value="1" />
-            <output id="ball-speed-value">1.0</output>
-            <input id="ball-spread" type="range" min="0" max="1" step="0.05" value="0.15" />
-            <output id="ball-spread-value">0.15</output>
-            <select id="particle-shape">
-              <option value="circle">Circle</option>
-              <option value="triangle">Triangle</option>
-              <option value="square">Square</option>
-            </select>
-            <input id="particle-trail" type="checkbox" checked />
+            </div>
           </div>
-        </div>
 
-        <!-- Sampler Tab -->
-        <div class="tab-content" data-tab-content="sampler">
-          <section class="inspector-section">
-            <h4 class="section-title">Sample Banks</h4>
-            <p class="dim">Click a key to solo. Drag audio files onto canvas to assign.</p>
-            <div id="sampler-key-list" class="sampler-key-list"></div>
-          </section>
-          <section class="inspector-section">
-            <h4 class="section-title">Playback</h4>
-            <label class="field">
-              <span>Fallback Mode</span>
-              <span id="sampler-fallback-mode" class="sampler-fallback-mode">nearest</span>
-            </label>
-            <label class="field">
-              <span>Fallback</span>
-              <select id="sampler-fallback-select">
-                <option value="nearest">Nearest</option>
-                <option value="strict">Strict</option>
-              </select>
-            </label>
-          </section>
+          <div class="insp-section-divider">Sampler</div>
+          <p
+            class="dim"
+            style="padding: 4px 0 6px; font-size: 10px; opacity: 0.5"
+          >
+            Drag audio files onto canvas to assign.
+          </p>
+          <div id="sampler-key-list" class="sampler-key-list"></div>
         </div>
-
-        </div>
-
-        <!-- Shapes Library Tab -->
-        <div class="tab-content" data-tab-content="shapes">
-          <section class="inspector-section">
-            <h4 class="section-title">Shape Library</h4>
-            <div class="shape-lib-toolbar">
-              <button id="shape-lib-save" class="btn-small" title="Save selected stroke (K)">Save selected</button>
-              <button id="shape-lib-refresh" class="btn-small" title="Reload from storage">↺</button>
-              <button id="shape-lib-clear" class="btn-small btn-danger" title="Delete all shapes">Clear all</button>
-            </div>
-            <p class="dim" id="shape-lib-empty" style="display:none">No shapes saved yet.<br>Draw a stroke, select it, press K.</p>
-            <div id="shape-lib-list" class="shape-lib-list"></div>
-          </section>
-        </div>
-
-        <!-- Composition Tab -->
-        <div class="tab-content" data-tab-content="music">
-          <section class="inspector-section">
-            <h4 class="section-title">Scale</h4>
-            <label class="field">
-              <span>Root</span>
-              <select id="music-root">
-                <option value="60">C4</option>
-                <option value="62">D4</option>
-                <option value="64">E4</option>
-                <option value="65">F4</option>
-                <option value="67">G4</option>
-                <option value="69">A4</option>
-                <option value="71">B4</option>
-              </select>
-            </label>
-            <label class="field">
-              <span>Scale</span>
-              <select id="music-scale">
-                <option value="pentatonic" selected>Pentatonic</option>
-                <option value="major">Major</option>
-                <option value="minor">Minor</option>
-              </select>
-            </label>
-          </section>
-          <section class="inspector-section" id="walker-voice-panel">
-            <h4 class="section-title">Walker Voice</h4>
-            <p class="dim" id="walker-voice-hint">Select a walker to edit</p>
-            <div id="walker-voice-controls" class="hidden">
-              <label class="field">
-                <span>Voice</span>
-                <div class="btn-group">
-                  <button class="btn-small" data-voice="lead">Lead</button>
-                  <button class="btn-small" data-voice="bass">Bass</button>
-                  <button class="btn-small" data-voice="perc">Perc</button>
-                </div>
-              </label>
-              <label class="field">
-                <span>Density</span>
-                <input id="walker-density" type="range" min="0" max="1" step="0.05" value="0.7" />
-                <output id="walker-density-value">0.7</output>
-              </label>
-              <label class="field">
-                <span>Octave</span>
-                <div class="btn-group">
-                  <button class="btn-small" data-octave="-2">-2</button>
-                  <button class="btn-small" data-octave="-1">-1</button>
-                  <button class="btn-small active" data-octave="0">0</button>
-                  <button class="btn-small" data-octave="1">+1</button>
-                  <button class="btn-small" data-octave="2">+2</button>
-                </div>
-              </label>
-              <label class="field checkbox">
-                <input id="walker-mute" type="checkbox" />
-                <span>Mute</span>
-              </label>
-            </div>
-          </section>
-        </div>
-
         <!-- Motion Brush Tab -->
-        <div class="tab-content" data-tab-content="motion" id="motion-panel" hidden>
+        <div
+          class="tab-content"
+          data-tab-content="motion"
+          id="motion-panel"
+          hidden
+        >
           <section class="inspector-section">
             <h4 class="section-title">Motion Brush</h4>
             <div class="field-grid two">
@@ -739,45 +599,167 @@
                   <option value="custom">Custom</option>
                 </select>
               </label>
-              <label class="field" style="flex-direction:row;align-items:center;gap:6px">
+              <label
+                class="field"
+                style="flex-direction: row; align-items: center; gap: 6px"
+              >
                 <span>Color</span>
-                <input id="motion-brush-color" type="color" value="#ffffff" style="width:32px;height:22px;padding:0;border:none;cursor:pointer" />
+                <input
+                  id="motion-brush-color"
+                  type="color"
+                  value="#ffffff"
+                  style="
+                    width: 32px;
+                    height: 22px;
+                    padding: 0;
+                    border: none;
+                    cursor: pointer;
+                  "
+                />
               </label>
             </div>
             <div class="motion-color-grid" id="motion-brush-swatches">
-              <button class="motion-color-swatch" data-color="#ff4b4b" style="background:#ff4b4b"></button>
-              <button class="motion-color-swatch" data-color="#ff9b1f" style="background:#ff9b1f"></button>
-              <button class="motion-color-swatch" data-color="#e5df45" style="background:#e5df45"></button>
-              <button class="motion-color-swatch" data-color="#35cb68" style="background:#35cb68"></button>
-              <button class="motion-color-swatch" data-color="#26d3a6" style="background:#26d3a6"></button>
-              <button class="motion-color-swatch" data-color="#3dd8c5" style="background:#3dd8c5"></button>
-              <button class="motion-color-swatch" data-color="#498cff" style="background:#498cff"></button>
-              <button class="motion-color-swatch" data-color="#7a62ff" style="background:#7a62ff"></button>
-              <button class="motion-color-swatch" data-color="#ff59cb" style="background:#ff59cb"></button>
-              <button class="motion-color-swatch" data-color="#ffffff" style="background:#ffffff"></button>
+              <button
+                class="motion-color-swatch"
+                data-color="#ff4b4b"
+                style="background: #ff4b4b"
+              ></button>
+              <button
+                class="motion-color-swatch"
+                data-color="#ff9b1f"
+                style="background: #ff9b1f"
+              ></button>
+              <button
+                class="motion-color-swatch"
+                data-color="#e5df45"
+                style="background: #e5df45"
+              ></button>
+              <button
+                class="motion-color-swatch"
+                data-color="#35cb68"
+                style="background: #35cb68"
+              ></button>
+              <button
+                class="motion-color-swatch"
+                data-color="#26d3a6"
+                style="background: #26d3a6"
+              ></button>
+              <button
+                class="motion-color-swatch"
+                data-color="#3dd8c5"
+                style="background: #3dd8c5"
+              ></button>
+              <button
+                class="motion-color-swatch"
+                data-color="#498cff"
+                style="background: #498cff"
+              ></button>
+              <button
+                class="motion-color-swatch"
+                data-color="#7a62ff"
+                style="background: #7a62ff"
+              ></button>
+              <button
+                class="motion-color-swatch"
+                data-color="#ff59cb"
+                style="background: #ff59cb"
+              ></button>
+              <button
+                class="motion-color-swatch"
+                data-color="#ffffff"
+                style="background: #ffffff"
+              ></button>
             </div>
             <details>
-              <summary style="font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--text-dim);cursor:pointer;padding:4px 0">Emitter</summary>
-              <div style="display:flex;flex-direction:column;gap:4px;padding-top:6px">
+              <summary
+                style="
+                  font-size: 10px;
+                  font-weight: 600;
+                  letter-spacing: 0.06em;
+                  text-transform: uppercase;
+                  color: var(--text-dim);
+                  cursor: pointer;
+                  padding: 4px 0;
+                "
+              >
+                Emitter
+              </summary>
+              <div
+                style="
+                  display: flex;
+                  flex-direction: column;
+                  gap: 4px;
+                  padding-top: 6px;
+                "
+              >
                 <label class="field">
-                  <span>Rate <output id="motion-brush-rate-value">40</output>/s</span>
-                  <input id="motion-brush-rate" type="range" min="1" max="200" step="1" value="40" />
+                  <span
+                    >Rate
+                    <output id="motion-brush-rate-value">40</output>/s</span
+                  >
+                  <input
+                    id="motion-brush-rate"
+                    type="range"
+                    min="1"
+                    max="200"
+                    step="1"
+                    value="40"
+                  />
                 </label>
                 <label class="field">
-                  <span>Spread <output id="motion-brush-spread-value">0.30</output></span>
-                  <input id="motion-brush-spread" type="range" min="0" max="6.28" step="0.01" value="0.3" />
+                  <span
+                    >Spread
+                    <output id="motion-brush-spread-value">0.30</output></span
+                  >
+                  <input
+                    id="motion-brush-spread"
+                    type="range"
+                    min="0"
+                    max="6.28"
+                    step="0.01"
+                    value="0.3"
+                  />
                 </label>
                 <label class="field">
-                  <span>Speed <output id="motion-brush-speed-value">120</output></span>
-                  <input id="motion-brush-speed" type="range" min="10" max="600" step="10" value="120" />
+                  <span
+                    >Speed
+                    <output id="motion-brush-speed-value">120</output></span
+                  >
+                  <input
+                    id="motion-brush-speed"
+                    type="range"
+                    min="10"
+                    max="600"
+                    step="10"
+                    value="120"
+                  />
                 </label>
                 <label class="field">
-                  <span>Size <output id="motion-brush-size-value">3</output></span>
-                  <input id="motion-brush-size" type="range" min="1" max="20" step="0.5" value="3" />
+                  <span
+                    >Size <output id="motion-brush-size-value">3</output></span
+                  >
+                  <input
+                    id="motion-brush-size"
+                    type="range"
+                    min="1"
+                    max="20"
+                    step="0.5"
+                    value="3"
+                  />
                 </label>
                 <label class="field">
-                  <span>Life <output id="motion-brush-life-value">1.0</output>s</span>
-                  <input id="motion-brush-life" type="range" min="0.1" max="5" step="0.1" value="1.0" />
+                  <span
+                    >Life
+                    <output id="motion-brush-life-value">1.0</output>s</span
+                  >
+                  <input
+                    id="motion-brush-life"
+                    type="range"
+                    min="0.1"
+                    max="5"
+                    step="0.1"
+                    value="1.0"
+                  />
                 </label>
               </div>
             </details>
@@ -786,11 +768,19 @@
           <section class="inspector-section">
             <h4 class="section-title">Presets</h4>
             <div class="motion-presets">
-              <button class="btn-small" data-motion-preset="orbit">Orbit</button>
-              <button class="btn-small" data-motion-preset="comet">Comet</button>
+              <button class="btn-small" data-motion-preset="orbit">
+                Orbit
+              </button>
+              <button class="btn-small" data-motion-preset="comet">
+                Comet
+              </button>
               <button class="btn-small" data-motion-preset="dust">Dust</button>
-              <button class="btn-small" data-motion-preset="burst">Burst</button>
-              <button class="btn-small" data-motion-preset="ribbon">Ribbon</button>
+              <button class="btn-small" data-motion-preset="burst">
+                Burst
+              </button>
+              <button class="btn-small" data-motion-preset="ribbon">
+                Ribbon
+              </button>
             </div>
           </section>
         </div>
@@ -837,9 +827,173 @@
     <script src="./state/sceneManager.js"></script>
     <script src="./ui/controls.js"></script>
     <script src="./ui/drawTools.js"></script>
-    <!-- MIDI Import system -->
     <script src="https://cdn.jsdelivr.net/npm/@tonejs/midi/build/Midi.min.js"></script>
     <script src="./midi/midiImporter.js"></script>
     <script src="./main.js"></script>
+
+    <!-- ── Right Overlay Panel (Sampler / Library) ─────────────────────── -->
+    <div id="overlay-panel" class="overlay-panel" aria-hidden="true">
+      <div class="overlay-panel__inner">
+        <div class="overlay-panel__header">
+          <span id="overlay-panel-title" class="overlay-panel__title"
+            >Sampler</span
+          >
+          <button
+            id="overlay-panel-close"
+            class="overlay-panel__close"
+            aria-label="Close"
+          >
+            ✕
+          </button>
+        </div>
+        <div class="overlay-panel__body">
+          <!-- SAMPLER VIEW -->
+          <div id="overlay-view-sampler" class="overlay-view">
+            <p
+              class="dim"
+              style="font-size: 10px; opacity: 0.5; padding: 4px 0 8px"
+            >
+              Select a bank, then drag audio files onto the canvas.
+            </p>
+            <div id="bank-grid" class="bank-grid"></div>
+            <div
+              style="
+                margin-top: 10px;
+                font-size: 9px;
+                opacity: 0.4;
+                letter-spacing: 0.06em;
+                text-transform: uppercase;
+              "
+            >
+              Active bank receives dropped audio
+            </div>
+          </div>
+
+          <!-- LIBRARY VIEW -->
+          <div
+            id="overlay-view-library"
+            class="overlay-view"
+            style="display: none"
+          >
+            <p
+              class="dim"
+              style="font-size: 10px; opacity: 0.5; padding: 4px 0 8px"
+            >
+              Shape library. Click to insert.
+            </p>
+            <div id="shape-library-list"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="overlay-backdrop" class="overlay-backdrop"></div>
+
+    <!-- ── Context Menu ──────────────────────────────────────────────────── -->
+    <ul id="canvas-context-menu" class="ctx-menu" style="display: none">
+      <li class="ctx-item" data-action="demo">Demo</li>
+      <li class="ctx-item" data-action="open">Open</li>
+      <li class="ctx-item" data-action="save">Save</li>
+      <li class="ctx-divider"></li>
+      <li class="ctx-item" data-action="sampler">Sampler ›</li>
+      <li class="ctx-item" data-action="library">Library ›</li>
+    </ul>
+
+    <script>
+      (function () {
+        var panel = document.getElementById("overlay-panel");
+        var backdrop = document.getElementById("overlay-backdrop");
+        var ctxMenu = document.getElementById("canvas-context-menu");
+        var titleEl = document.getElementById("overlay-panel-title");
+        var views = {
+          sampler: "overlay-view-sampler",
+          library: "overlay-view-library",
+        };
+
+        function openPanel(view) {
+          Object.values(views).forEach(function (id) {
+            document.getElementById(id).style.display = "none";
+          });
+          var el = document.getElementById(views[view]);
+          if (el) el.style.display = "";
+          titleEl.textContent = view.charAt(0).toUpperCase() + view.slice(1);
+          panel.classList.add("open");
+          backdrop.classList.add("open");
+          panel.setAttribute("aria-hidden", "false");
+          // Sync sampler-key-list into overlay if needed
+          if (view === "sampler") {
+            var src = document.getElementById("sampler-key-list");
+            var dest = document.getElementById("sampler-key-list-overlay");
+            if (src && dest && src.children.length && !dest.children.length) {
+              Array.from(src.children).forEach(function (c) {
+                dest.appendChild(c.cloneNode(true));
+              });
+            }
+          }
+        }
+
+        function closePanel() {
+          panel.classList.remove("open");
+          backdrop.classList.remove("open");
+          panel.setAttribute("aria-hidden", "true");
+        }
+
+        function closeCtx() {
+          ctxMenu.style.display = "none";
+        }
+
+        // Context menu — right-click on canvas area
+        var canvasWrap = document.getElementById("canvas-wrap");
+        if (canvasWrap) {
+          canvasWrap.addEventListener("contextmenu", function (e) {
+            e.preventDefault();
+            ctxMenu.style.left = e.clientX + "px";
+            ctxMenu.style.top = e.clientY + "px";
+            ctxMenu.style.display = "";
+          });
+        }
+
+        document.addEventListener("click", closeCtx);
+        document.addEventListener("keydown", function (e) {
+          if (e.key === "Escape") {
+            closeCtx();
+            closePanel();
+          }
+        });
+
+        ctxMenu.addEventListener("click", function (e) {
+          var item = e.target.closest(".ctx-item");
+          if (!item) return;
+          var action = item.dataset.action;
+          closeCtx();
+          if (action === "sampler" || action === "library") {
+            openPanel(action);
+            return;
+          }
+          // Delegate to existing buttons
+          var map = {
+            demo: "load-example",
+            open: "scene-file",
+            save: "save-scene",
+          };
+          var btnId = map[action];
+          if (btnId) {
+            var btn = document.getElementById(btnId);
+            if (btn) btn.click();
+            return;
+          }
+          // Fallback: look for top bar buttons by text
+          document
+            .querySelectorAll("header button, nav button, .top-bar button")
+            .forEach(function (b) {
+              if (b.textContent.trim().toLowerCase() === action) b.click();
+            });
+        });
+
+        document
+          .getElementById("overlay-panel-close")
+          .addEventListener("click", closePanel);
+        backdrop.addEventListener("click", closePanel);
+      })();
+    </script>
   </body>
 </html>
