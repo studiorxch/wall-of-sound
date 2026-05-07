@@ -4627,9 +4627,7 @@
     })();
     // ── End Creation Preset UI ───────────────────────────────────────────────
 
-    await applyExampleScene();
-    state.lines[2].y1 += 100;
-    state.lines[2].y2 += 100;
+    await loadEmptyWorld();
     updateCanvasAspect();
     setViewClasses();
     syncUI();
@@ -5709,6 +5707,19 @@
           renderFrame();
         },
       );
+
+      if (elements.frameSelect) {
+        elements.frameSelect.addEventListener("change", function onFrameSelect() {
+          var isLandscape = elements.frameSelect.value === "landscape";
+          state.canvas.width = isLandscape ? 1920 : 1080;
+          state.canvas.height = isLandscape ? 1080 : 1920;
+          canvas.width = state.canvas.width;
+          canvas.height = state.canvas.height;
+          renderer.resize(state.canvas.width, state.canvas.height);
+          updateCanvasAspect();
+          renderFrame();
+        });
+      }
 
       elements.saveScene.addEventListener("click", function saveScene() {
         var scene = {
@@ -7246,6 +7257,11 @@
       syncLegacySelection();
       syncSelectionPanel();
       renderFrame();
+    }
+
+    async function loadEmptyWorld() {
+      state.swarm.count = 0;
+      await applyScene({ lines: [], balls: [], strokes: [], shapes: [], textObjects: [] });
     }
 
     async function applyExampleScene() {

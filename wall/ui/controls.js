@@ -20,6 +20,7 @@
       textFontFile: byId("text-font-file"),
       backgroundFile: byId("background-file"),
       transparentBg: byId("transparent-bg"),
+      frameSelect: byId("frame-select"),
       textFontStatus: byId("text-font-status"),
       engineStatus: byId("engine-status"),
       sceneStats: byId("scene-stats"),

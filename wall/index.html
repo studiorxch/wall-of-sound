@@ -7,6 +7,14 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
+    <!-- ── CONTEXTUAL MENU PLACEHOLDER (future command home) ── -->
+    <div id="context-menu" style="display:none" aria-hidden="true">
+      <button data-cmd="new">New</button>
+      <button data-cmd="open">Open</button>
+      <button data-cmd="save">Save</button>
+      <button data-cmd="demo">Demo World</button>
+    </div>
+
     <!-- ── TOP BAR ──────────────────────────────────── -->
     <header id="topbar" class="topbar">
       <div class="topbar-left">
@@ -503,16 +511,21 @@
         <div class="tab-content" data-tab-content="canvas">
           <section class="inspector-section">
             <h4 class="section-title">Canvas</h4>
-            <p class="dim">1080 × 1920 (Portrait)</p>
+            <label class="field">
+              <span>Frame</span>
+              <select id="frame-select">
+                <option value="portrait">Portrait (1080×1920)</option>
+                <option value="landscape">Landscape (1920×1080)</option>
+              </select>
+            </label>
             <label class="field">
               <input id="transparent-bg" type="checkbox" />
               <span>Transparent background</span>
             </label>
-                    <label class="file-btn" title="BG">
-          <input id="background-file" type="file" accept="image/*" />
-          <span>BG</span>
-        </label>
-
+            <label class="file-btn" title="BG">
+              <input id="background-file" type="file" accept="image/*" />
+              <span>BG</span>
+            </label>
           </section>
         </div>
 
@@ -545,68 +558,12 @@
           </section>
 
 
-                    <section class="inspector-section">
-            <h4 class="section-title">Particles</h4>
-              <section class="library-section">
-          <h3 class="library-header">Ball Tool</h3>
-          <div class="lib-fields">
-            <label class="field">
-              <span>Count</span>
-              <input
-                id="ball-count"
-                type="range"
-                min="1"
-                max="8"
-                step="1"
-                value="1"
-              />
-              <output id="ball-count-value">1</output>
-            </label>
-            <label class="field">
-              <span>Speed</span>
-              <input
-                id="ball-speed"
-                type="range"
-                min="0.4"
-                max="3"
-                step="0.1"
-                value="1"
-              />
-              <output id="ball-speed-value">1.0</output>
-            </label>
-            <label class="field">
-              <span>Spread</span>
-              <input
-                id="ball-spread"
-                type="range"
-                min="0"
-                max="1"
-                step="0.05"
-                value="0.15"
-              />
-              <output id="ball-spread-value">0.15</output>
-            </label>
-          </div>
-          <div class="lib-fields" style="margin-top:6px">
-            <label class="field">
-              <span>Particle Shape</span>
-              <select id="particle-shape">
-                <option value="circle">Circle</option>
-                <option value="triangle">Triangle</option>
-                <option value="square">Square</option>
-              </select>
-
-          </div>
-        </section>
-         <label class="field">
-              <input id="particle-trail" type="checkbox" checked />
-              <span>Trail</span>
-            </label>
+          <section class="inspector-section">
             <button id="clear-balls">Clear Balls</button>
           </section>
 
-
-          <section class="inspector-section">
+          <!-- Sound Response hidden — system not yet validated -->
+          <section class="inspector-section" style="display:none">
             <h4 class="section-title">Sound Response</h4>
             <div class="field-grid two">
               <label class="field">
@@ -631,6 +588,22 @@
               <output id="sound-sensitivity-value">1.0</output>
             </label>
           </section>
+
+          <!-- Particle tool inputs hidden — moved to tool state (spec 0506) -->
+          <div style="display:none">
+            <input id="ball-count" type="range" min="1" max="8" step="1" value="1" />
+            <output id="ball-count-value">1</output>
+            <input id="ball-speed" type="range" min="0.4" max="3" step="0.1" value="1" />
+            <output id="ball-speed-value">1.0</output>
+            <input id="ball-spread" type="range" min="0" max="1" step="0.05" value="0.15" />
+            <output id="ball-spread-value">0.15</output>
+            <select id="particle-shape">
+              <option value="circle">Circle</option>
+              <option value="triangle">Triangle</option>
+              <option value="square">Square</option>
+            </select>
+            <input id="particle-trail" type="checkbox" checked />
+          </div>
         </div>
 
         <!-- Sampler Tab -->
