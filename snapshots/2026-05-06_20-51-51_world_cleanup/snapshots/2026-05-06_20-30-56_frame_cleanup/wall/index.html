@@ -1,0 +1,999 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Wall of Sound</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <!-- Buttons preserved as hidden for bindControls compatibility -->
+    <button id="load-example" style="display: none">Demo</button>
+    <label style="display: none"
+      ><input id="scene-file" type="file" accept="application/json"
+    /></label>
+    <button id="save-scene" style="display: none">Save</button>
+    <label style="display: none"
+      ><input
+        id="text-font-file"
+        type="file"
+        accept=".ttf,.otf,.woff,.woff2,font/ttf,font/otf,font/woff,font/woff2"
+    /></label>
+
+    <!-- ── MAIN LAYOUT ──────────────────────────────── -->
+    <div class="app-body">
+      <!-- LEFT RAIL -->
+      <div id="left-rail">
+        <div class="rail-icon"></div>
+      </div>
+      <!-- LEFT PANEL: Libraries -->
+      <aside id="left-panel" class="panel panel-left" hidden>
+        <!-- Actions (Duplicate/Delete/Undo) and Pattern inputs moved to keyboard shortcuts.
+             Panels hidden — IDs preserved for JS bindings. -->
+        <button id="duplicate-selection" style="display: none" type="button">
+          Duplicate
+        </button>
+        <button id="delete-selection" style="display: none" type="button">
+          Delete
+        </button>
+        <button id="undo-action" style="display: none" type="button">
+          Undo
+        </button>
+        <div id="pattern-section" style="display: none">
+          <input type="number" id="grid-cols" value="3" />
+          <input type="number" id="grid-rows" value="3" />
+          <input type="number" id="grid-spacing-x" value="120" />
+          <input type="number" id="grid-spacing-y" value="120" />
+          <button id="duplicate-pattern" type="button">Duplicate</button>
+        </div>
+      </aside>
+
+      <!-- CENTER: Canvas -->
+      <main class="canvas-area">
+        <!-- Note column overlay — canvas-left, vertically centered -->
+        <div class="note-column" id="note-section" aria-label="Note selector">
+          <button class="note-cell active" data-note-class="0">C</button>
+          <button class="note-cell" data-note-class="1">C#</button>
+          <button class="note-cell" data-note-class="2">D</button>
+          <button class="note-cell" data-note-class="3">D#</button>
+          <button class="note-cell" data-note-class="4">E</button>
+          <button class="note-cell" data-note-class="5">F</button>
+          <button class="note-cell" data-note-class="6">F#</button>
+          <button class="note-cell" data-note-class="7">G</button>
+          <button class="note-cell" data-note-class="8">G#</button>
+          <button class="note-cell" data-note-class="9">A</button>
+          <button class="note-cell" data-note-class="10">A#</button>
+          <button class="note-cell" data-note-class="11">B</button>
+          <input id="active-note" type="hidden" value="60" />
+        </div>
+        <div id="stage-grid"></div>
+        <div id="canvas-tool-subbar" class="canvas-tool-subbar"></div>
+        <div class="canvas-wrap" id="canvas-wrap">
+          <canvas id="engine-canvas" width="1080" height="1920"></canvas>
+        </div>
+        <div class="tool-group">
+          <!-- Select deprecated — pen tool handles select/transform. Hidden but keyboard shortcut preserved. -->
+          <button
+            class="tool"
+            data-tool="select"
+            title="Select (V)"
+            style="display: none"
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path
+                d="M2 1L12 7L7 8.5L5 13L2 1Z"
+                stroke="currentColor"
+                stroke-width="1.4"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </button>
+          <button class="tool active" data-tool="pen" title="Pen (P · D · M)">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path
+                d="M2 3 Q5 1 8 4 Q11 7 9 11"
+                stroke="currentColor"
+                stroke-width="1.6"
+                stroke-linecap="round"
+                fill="none"
+              />
+              <circle
+                cx="9"
+                cy="11"
+                r="2"
+                stroke="currentColor"
+                stroke-width="1.3"
+                fill="none"
+              />
+            </svg>
+          </button>
+          <!-- Shape deprecated — pen shape mode covers this. Hidden but keyboard shortcut preserved. -->
+          <button
+            class="tool"
+            data-tool="shape"
+            title="Shape (S)"
+            style="display: none"
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <polygon
+                points="7,1 13,11 1,11"
+                stroke="currentColor"
+                stroke-width="1.4"
+                fill="none"
+              />
+            </svg>
+          </button>
+          <button class="tool" data-tool="text" title="Text (T)">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <text
+                x="3"
+                y="12"
+                font-size="12"
+                font-weight="700"
+                fill="currentColor"
+              >
+                A
+              </text>
+            </svg>
+          </button>
+          <button class="tool" data-tool="ball" title="Ball (B)">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <circle
+                cx="7"
+                cy="7"
+                r="5"
+                stroke="currentColor"
+                stroke-width="1.4"
+                fill="none"
+              />
+              <circle cx="7" cy="7" r="1.5" fill="currentColor" />
+            </svg>
+          </button>
+        </div>
+      </main>
+
+      <!-- Transport (below canvas) -->
+      <div class="transport-bar">
+        <div class="topbar-center">
+          <input
+            id="bpm-input"
+            type="number"
+            min="60"
+            max="180"
+            step="0.1"
+            value="120.0"
+            title="BPM"
+          />
+          <select id="bar-count" title="Bars">
+            <option value="8">8 Bars</option>
+            <option value="16">16 Bars</option>
+            <option value="32">32 Bars</option>
+          </select>
+          <select id="quantize-division" title="Division">
+            <option value="0.25">1/4</option>
+            <option value="0.125">1/8</option>
+            <option value="0.0625">1/16</option>
+          </select>
+          <label class="toggle-btn" title="Quantize">
+            <input id="quantize-enabled" type="checkbox" />
+            <span>Q</span>
+          </label>
+        </div>
+        <div class="transport-status">
+          <span id="engine-status">STOP</span>
+          <span id="scene-stats">0L 0T 0B</span>
+        </div>
+        <div class="transport-controls">
+          <button id="toggle-playback" class="transport-btn" title="Play/Pause">
+            &#9654;
+          </button>
+          <button id="record-loop" class="transport-btn rec" title="Record">
+            &#9679;
+          </button>
+          <button id="stop-loop" class="transport-btn" title="Stop">
+            &#9632;
+          </button>
+          <button id="clear-scene" class="transport-btn" title="Clear">
+            &#10005;
+          </button>
+          <button id="export-loop" class="transport-btn hidden" title="Export">
+            EXP
+          </button>
+          <button id="retake-loop" class="transport-btn hidden" title="Retake">
+            RE
+          </button>
+        </div>
+      </div>
+
+      <!-- RIGHT PANEL: Inspector -->
+      <aside id="right-panel" class="panel panel-right">
+        <div class="inspector-tabs">
+          <button class="tab active" data-tab="object">Object</button>
+          <button class="tab" data-tab="canvas">Frame</button>
+          <button class="tab" data-tab="world">World</button>
+          <button class="tab" data-tab="motion" hidden>Motion</button>
+        </div>
+
+        <!-- Object Tab — flat collapsible section system -->
+        <div class="tab-content active" data-tab-content="object">
+          <div id="inspector-object">
+            <!-- OBJECT section -->
+            <div class="insp-section" data-section="object">
+              <button class="insp-section-header open" data-toggle="object">
+                <span class="insp-chevron">▼</span> OBJECT
+              </button>
+              <div class="insp-section-body">
+                <div class="insp-row">
+                  <label class="insp-label" for="obj-fill">Fill Color</label>
+                  <div class="insp-control">
+                    <input id="obj-fill" type="color" value="#ff4b4b" />
+                  </div>
+                </div>
+                <div class="insp-row">
+                  <label class="insp-label" for="obj-strokeWidth"
+                    >Stroke Width</label
+                  >
+                  <div class="insp-control insp-slider-num">
+                    <input
+                      id="obj-strokeWidth"
+                      type="range"
+                      min="1"
+                      max="100"
+                      step="1"
+                      value="18"
+                    />
+                    <input
+                      id="obj-strokeWidth-num"
+                      type="number"
+                      min="1"
+                      max="100"
+                      value="18"
+                    />
+                  </div>
+                </div>
+                <div class="insp-row">
+                  <label class="insp-label" for="obj-visible">Visible</label>
+                  <div class="insp-control">
+                    <input id="obj-visible" type="checkbox" checked />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- WALKER section -->
+            <div class="insp-section" data-section="walker">
+              <button class="insp-section-header" data-toggle="walker">
+                <span class="insp-chevron">▶</span> WALKER
+              </button>
+              <div class="insp-section-body" style="display: none">
+                <div class="insp-row">
+                  <label class="insp-label" for="obj-walker">Enabled</label>
+                  <div class="insp-control">
+                    <input id="obj-walker" type="checkbox" />
+                  </div>
+                </div>
+                <div class="insp-row">
+                  <label class="insp-label" for="obj-motionMode">Mode</label>
+                  <div class="insp-control">
+                    <select id="obj-motionMode">
+                      <option value="pingpong">Ping-Pong</option>
+                      <option value="loop">Loop</option>
+                      <option value="tunnel">Tunnel</option>
+                      <option value="once">Once</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="insp-row">
+                  <label class="insp-label" for="obj-trailStyle">Trail</label>
+                  <div class="insp-control">
+                    <select id="obj-trailStyle">
+                      <option value="off">Off</option>
+                      <option value="on">On</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- SOUND section -->
+            <div class="insp-section" data-section="sound">
+              <button class="insp-section-header" data-toggle="sound">
+                <span class="insp-chevron">▶</span> SOUND
+              </button>
+              <div class="insp-section-body" style="display: none">
+                <div class="insp-row">
+                  <label class="insp-label" for="obj-soundSource">Source</label>
+                  <div class="insp-control">
+                    <select id="obj-soundSource">
+                      <option value="off">Off</option>
+                      <option value="synth">Synth</option>
+                      <option value="sample">Sample</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="insp-row">
+                  <label class="insp-label" for="obj-bankId">Bank</label>
+                  <div class="insp-control">
+                    <select id="obj-bankId">
+                      <option value="">None</option>
+                      <option value="bank_1">Bank 1</option>
+                      <option value="bank_2">Bank 2</option>
+                      <option value="bank_3">Bank 3</option>
+                      <option value="bank_4">Bank 4</option>
+                      <option value="bank_5">Bank 5</option>
+                      <option value="bank_6">Bank 6</option>
+                      <option value="bank_7">Bank 7</option>
+                      <option value="bank_8">Bank 8</option>
+                      <option value="bank_9">Bank 9</option>
+                      <option value="bank_10">Bank 10</option>
+                      <option value="bank_11">Bank 11</option>
+                      <option value="bank_12">Bank 12</option>
+                      <option value="bank_13">Bank 13</option>
+                      <option value="bank_14">Bank 14</option>
+                      <option value="bank_15">Bank 15</option>
+                      <option value="bank_16">Bank 16</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="insp-row">
+                  <label class="insp-label" for="obj-noteClass">Note</label>
+                  <div class="insp-control">
+                    <select id="obj-noteClass">
+                      <option value="0">C</option>
+                      <option value="1">C#</option>
+                      <option value="2">D</option>
+                      <option value="3">D#</option>
+                      <option value="4">E</option>
+                      <option value="5">F</option>
+                      <option value="6">F#</option>
+                      <option value="7">G</option>
+                      <option value="8">G#</option>
+                      <option value="9">A</option>
+                      <option value="10">A#</option>
+                      <option value="11">B</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="insp-row">
+                  <label class="insp-label" for="obj-octave">Octave</label>
+                  <div class="insp-control">
+                    <input
+                      id="obj-octave"
+                      type="number"
+                      min="0"
+                      max="8"
+                      value="4"
+                      style="width: 52px"
+                    />
+                  </div>
+                </div>
+                <div class="insp-row">
+                  <label class="insp-label" for="obj-soundRole">Role</label>
+                  <div class="insp-control">
+                    <select id="obj-soundRole">
+                      <option value="drum">Drum</option>
+                      <option value="bass">Bass</option>
+                      <option value="lead">Lead</option>
+                      <option value="pad">Pad</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="insp-row">
+                  <label class="insp-label" for="obj-soundTrigger"
+                    >Trigger</label
+                  >
+                  <div class="insp-control">
+                    <select id="obj-soundTrigger">
+                      <option value="impact">Impact</option>
+                      <option value="continuous">Continuous</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="tab-content" data-tab-content="canvas">
+          <div class="insp-row">
+            <span class="insp-label">Resolution</span>
+            <span class="insp-value">1080 × 1920</span>
+          </div>
+          <div class="insp-row">
+            <label class="insp-label" for="viewport-mode">Format</label>
+            <select id="viewport-mode">
+              <option value="portrait">9:16</option>
+              <option value="landscape">16:9</option>
+            </select>
+          </div>
+          <div class="insp-row">
+            <label class="insp-label" for="transparent-bg"
+              >Transparent Frame</label
+            >
+            <input id="transparent-bg" type="checkbox" />
+          </div>
+          <div class="insp-row">
+            <label class="insp-label" for="show-paths">Show Paths</label>
+            <input id="show-paths" type="checkbox" checked />
+          </div>
+          <div class="insp-row">
+            <span class="insp-label">Wall Background</span>
+            <label class="insp-file-btn">
+              <input id="background-file" type="file" accept="image/*" />
+              <span>Choose File</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- World Tab -->
+        <div class="tab-content" data-tab-content="world">
+          <div class="insp-row">
+            <label class="insp-label" for="world-mode">Physics Mode</label>
+            <select id="world-mode">
+              <option value="gravity">Gravity</option>
+              <option value="planar">Planar</option>
+              <option value="zero-g">Zero-G</option>
+              <option value="swarm">Swarm</option>
+            </select>
+          </div>
+          <div class="insp-row">
+            <label class="insp-label" for="world-strength">Strength</label>
+            <div class="insp-slider-num">
+              <input
+                id="world-strength"
+                type="range"
+                min="0"
+                max="20"
+                step="0.5"
+                value="3"
+              />
+              <output id="world-strength-value">3.0</output>
+            </div>
+          </div>
+
+          <div class="insp-section-divider">Feedback</div>
+
+          <div class="insp-row">
+            <label class="insp-label" for="toggle-hit-count"
+              >Show Hit Count</label
+            >
+            <input id="toggle-hit-count" type="checkbox" />
+          </div>
+
+          <div class="insp-section-divider">Particles</div>
+
+          <div class="insp-row">
+            <label class="insp-label" for="ball-count">Count</label>
+            <div class="insp-slider-num">
+              <input
+                id="ball-count"
+                type="range"
+                min="1"
+                max="8"
+                step="1"
+                value="1"
+              />
+              <output id="ball-count-value">1</output>
+            </div>
+          </div>
+          <div class="insp-row">
+            <label class="insp-label" for="ball-speed">Speed</label>
+            <div class="insp-slider-num">
+              <input
+                id="ball-speed"
+                type="range"
+                min="0.4"
+                max="3"
+                step="0.1"
+                value="1"
+              />
+              <output id="ball-speed-value">1.0</output>
+            </div>
+          </div>
+          <div class="insp-row">
+            <label class="insp-label" for="ball-spread">Spread</label>
+            <div class="insp-slider-num">
+              <input
+                id="ball-spread"
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value="0.15"
+              />
+              <output id="ball-spread-value">0.15</output>
+            </div>
+          </div>
+          <div class="insp-row">
+            <label class="insp-label" for="particle-shape">Shape</label>
+            <select id="particle-shape">
+              <option value="circle">Circle</option>
+              <option value="triangle">Triangle</option>
+              <option value="square">Square</option>
+            </select>
+          </div>
+          <div class="insp-row">
+            <label class="insp-label" for="particle-trail">Trail</label>
+            <input id="particle-trail" type="checkbox" checked />
+          </div>
+          <div class="insp-row">
+            <span class="insp-label"></span>
+            <button id="clear-balls" style="width: 100%">Clear Balls</button>
+          </div>
+
+          <div class="insp-section-divider">Sound Response</div>
+
+          <div class="insp-row">
+            <label class="insp-label" for="density-harmonics-toggle"
+              >Density Harmonics</label
+            >
+            <input id="density-harmonics-toggle" type="checkbox" checked />
+          </div>
+          <div class="insp-row">
+            <label class="insp-label" for="velocity-dynamics-toggle"
+              >Velocity Dynamics</label
+            >
+            <input id="velocity-dynamics-toggle" type="checkbox" checked />
+          </div>
+          <div class="insp-row">
+            <label class="insp-label" for="sound-sensitivity"
+              >Sensitivity</label
+            >
+            <div class="insp-slider-num">
+              <input
+                type="range"
+                id="sound-sensitivity"
+                min="0.5"
+                max="2"
+                step="0.1"
+                value="1.0"
+              />
+              <output id="sound-sensitivity-value">1.0</output>
+            </div>
+          </div>
+
+          <div class="insp-section-divider">Sampler</div>
+          <p
+            class="dim"
+            style="padding: 4px 0 6px; font-size: 10px; opacity: 0.5"
+          >
+            Drag audio files onto canvas to assign.
+          </p>
+          <div id="sampler-key-list" class="sampler-key-list"></div>
+        </div>
+        <!-- Motion Brush Tab -->
+        <div
+          class="tab-content"
+          data-tab-content="motion"
+          id="motion-panel"
+          hidden
+        >
+          <section class="inspector-section">
+            <h4 class="section-title">Motion Brush</h4>
+            <div class="field-grid two">
+              <label class="field checkbox">
+                <input id="motion-brush-enabled" type="checkbox" />
+                <span>Enabled</span>
+              </label>
+              <label class="field checkbox">
+                <input id="motion-brush-autobake" type="checkbox" />
+                <span>Auto-Bake</span>
+              </label>
+            </div>
+            <label class="field">
+              <span>Mode</span>
+              <select id="motion-brush-mode">
+                <option value="pingpong">Ping-Pong</option>
+                <option value="loop">Loop</option>
+                <option value="once">Once</option>
+              </select>
+            </label>
+          </section>
+
+          <section class="inspector-section">
+            <h4 class="section-title">Trail</h4>
+            <div class="field-grid two">
+              <label class="field">
+                <span>Source</span>
+                <select id="motion-color-source">
+                  <option value="note">Note</option>
+                  <option value="custom">Custom</option>
+                </select>
+              </label>
+              <label
+                class="field"
+                style="flex-direction: row; align-items: center; gap: 6px"
+              >
+                <span>Color</span>
+                <input
+                  id="motion-brush-color"
+                  type="color"
+                  value="#ffffff"
+                  style="
+                    width: 32px;
+                    height: 22px;
+                    padding: 0;
+                    border: none;
+                    cursor: pointer;
+                  "
+                />
+              </label>
+            </div>
+            <div class="motion-color-grid" id="motion-brush-swatches">
+              <button
+                class="motion-color-swatch"
+                data-color="#ff4b4b"
+                style="background: #ff4b4b"
+              ></button>
+              <button
+                class="motion-color-swatch"
+                data-color="#ff9b1f"
+                style="background: #ff9b1f"
+              ></button>
+              <button
+                class="motion-color-swatch"
+                data-color="#e5df45"
+                style="background: #e5df45"
+              ></button>
+              <button
+                class="motion-color-swatch"
+                data-color="#35cb68"
+                style="background: #35cb68"
+              ></button>
+              <button
+                class="motion-color-swatch"
+                data-color="#26d3a6"
+                style="background: #26d3a6"
+              ></button>
+              <button
+                class="motion-color-swatch"
+                data-color="#3dd8c5"
+                style="background: #3dd8c5"
+              ></button>
+              <button
+                class="motion-color-swatch"
+                data-color="#498cff"
+                style="background: #498cff"
+              ></button>
+              <button
+                class="motion-color-swatch"
+                data-color="#7a62ff"
+                style="background: #7a62ff"
+              ></button>
+              <button
+                class="motion-color-swatch"
+                data-color="#ff59cb"
+                style="background: #ff59cb"
+              ></button>
+              <button
+                class="motion-color-swatch"
+                data-color="#ffffff"
+                style="background: #ffffff"
+              ></button>
+            </div>
+            <details>
+              <summary
+                style="
+                  font-size: 10px;
+                  font-weight: 600;
+                  letter-spacing: 0.06em;
+                  text-transform: uppercase;
+                  color: var(--text-dim);
+                  cursor: pointer;
+                  padding: 4px 0;
+                "
+              >
+                Emitter
+              </summary>
+              <div
+                style="
+                  display: flex;
+                  flex-direction: column;
+                  gap: 4px;
+                  padding-top: 6px;
+                "
+              >
+                <label class="field">
+                  <span
+                    >Rate
+                    <output id="motion-brush-rate-value">40</output>/s</span
+                  >
+                  <input
+                    id="motion-brush-rate"
+                    type="range"
+                    min="1"
+                    max="200"
+                    step="1"
+                    value="40"
+                  />
+                </label>
+                <label class="field">
+                  <span
+                    >Spread
+                    <output id="motion-brush-spread-value">0.30</output></span
+                  >
+                  <input
+                    id="motion-brush-spread"
+                    type="range"
+                    min="0"
+                    max="6.28"
+                    step="0.01"
+                    value="0.3"
+                  />
+                </label>
+                <label class="field">
+                  <span
+                    >Speed
+                    <output id="motion-brush-speed-value">120</output></span
+                  >
+                  <input
+                    id="motion-brush-speed"
+                    type="range"
+                    min="10"
+                    max="600"
+                    step="10"
+                    value="120"
+                  />
+                </label>
+                <label class="field">
+                  <span
+                    >Size <output id="motion-brush-size-value">3</output></span
+                  >
+                  <input
+                    id="motion-brush-size"
+                    type="range"
+                    min="1"
+                    max="20"
+                    step="0.5"
+                    value="3"
+                  />
+                </label>
+                <label class="field">
+                  <span
+                    >Life
+                    <output id="motion-brush-life-value">1.0</output>s</span
+                  >
+                  <input
+                    id="motion-brush-life"
+                    type="range"
+                    min="0.1"
+                    max="5"
+                    step="0.1"
+                    value="1.0"
+                  />
+                </label>
+              </div>
+            </details>
+          </section>
+
+          <section class="inspector-section">
+            <h4 class="section-title">Presets</h4>
+            <div class="motion-presets">
+              <button class="btn-small" data-motion-preset="orbit">
+                Orbit
+              </button>
+              <button class="btn-small" data-motion-preset="comet">
+                Comet
+              </button>
+              <button class="btn-small" data-motion-preset="dust">Dust</button>
+              <button class="btn-small" data-motion-preset="burst">
+                Burst
+              </button>
+              <button class="btn-small" data-motion-preset="ribbon">
+                Ribbon
+              </button>
+            </div>
+          </section>
+        </div>
+      </aside>
+    </div>
+
+    <!-- Status text (hidden) -->
+    <p class="font-status hidden" id="text-font-status">No font loaded.</p>
+
+    <!-- Shortcuts overlay -->
+    <div id="shortcut-hud" class="shortcut-hud hidden">
+      <div class="shortcut-card">
+        <p><strong>Shortcuts</strong></p>
+        <p>V Select · D Draw · S Shape · T Text · B Ball</p>
+        <p>Cmd+D Duplicate · Delete Remove · Cmd+Z Undo</p>
+        <p>Tab Presentation · ? Shortcuts</p>
+        <button id="close-shortcuts">Close</button>
+      </div>
+    </div>
+
+    <!-- Drop Zone Overlay -->
+    <div id="drop-overlay" class="hidden">
+      <div class="drop-message">
+        DROP AUDIO FILES HERE
+        <br />
+        <span>Assigned to current note</span>
+      </div>
+    </div>
+
+    <!-- Engine scripts (unchanged) -->
+    <script src="./engine/physics.js"></script>
+    <script src="./engine/swarm.js"></script>
+    <script src="./engine/lineSystem.js"></script>
+    <script src="./engine/textSystem.js"></script>
+    <script src="./engine/shapeSystem.js"></script>
+    <script src="./engine/shapeTransforms.js"></script>
+    <script src="./engine/motionSystem.js"></script>
+    <script src="./engine/eventBus.js"></script>
+    <script src="./engine/collision.js"></script>
+    <script src="./engine/particleSystem.js"></script>
+    <script src="./midi/midiOut.js"></script>
+    <script src="./render/canvasRenderer.js"></script>
+    <script src="./state/examplePreset.js"></script>
+    <script src="./state/sceneManager.js"></script>
+    <script src="./ui/controls.js"></script>
+    <script src="./ui/drawTools.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tonejs/midi/build/Midi.min.js"></script>
+    <script src="./midi/midiImporter.js"></script>
+    <script src="./main.js"></script>
+
+    <!-- ── Right Overlay Panel (Sampler / Library) ─────────────────────── -->
+    <div id="overlay-panel" class="overlay-panel" aria-hidden="true">
+      <div class="overlay-panel__inner">
+        <div class="overlay-panel__header">
+          <span id="overlay-panel-title" class="overlay-panel__title"
+            >Sampler</span
+          >
+          <button
+            id="overlay-panel-close"
+            class="overlay-panel__close"
+            aria-label="Close"
+          >
+            ✕
+          </button>
+        </div>
+        <div class="overlay-panel__body">
+          <!-- SAMPLER VIEW -->
+          <div id="overlay-view-sampler" class="overlay-view">
+            <p
+              class="dim"
+              style="font-size: 10px; opacity: 0.5; padding: 4px 0 8px"
+            >
+              Select a bank, then drag audio files onto the canvas.
+            </p>
+            <div id="bank-grid" class="bank-grid"></div>
+            <div
+              style="
+                margin-top: 10px;
+                font-size: 9px;
+                opacity: 0.4;
+                letter-spacing: 0.06em;
+                text-transform: uppercase;
+              "
+            >
+              Active bank receives dropped audio
+            </div>
+          </div>
+
+          <!-- LIBRARY VIEW -->
+          <div
+            id="overlay-view-library"
+            class="overlay-view"
+            style="display: none"
+          >
+            <p
+              class="dim"
+              style="font-size: 10px; opacity: 0.5; padding: 4px 0 8px"
+            >
+              Shape library. Click to insert.
+            </p>
+            <div id="shape-library-list"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="overlay-backdrop" class="overlay-backdrop"></div>
+
+    <!-- ── Context Menu ──────────────────────────────────────────────────── -->
+    <ul id="canvas-context-menu" class="ctx-menu" style="display: none">
+      <li class="ctx-item" data-action="demo">Demo</li>
+      <li class="ctx-item" data-action="open">Open</li>
+      <li class="ctx-item" data-action="save">Save</li>
+      <li class="ctx-divider"></li>
+      <li class="ctx-item" data-action="sampler">Sampler ›</li>
+      <li class="ctx-item" data-action="library">Library ›</li>
+    </ul>
+
+    <script>
+      (function () {
+        var panel = document.getElementById("overlay-panel");
+        var backdrop = document.getElementById("overlay-backdrop");
+        var ctxMenu = document.getElementById("canvas-context-menu");
+        var titleEl = document.getElementById("overlay-panel-title");
+        var views = {
+          sampler: "overlay-view-sampler",
+          library: "overlay-view-library",
+        };
+
+        function openPanel(view) {
+          Object.values(views).forEach(function (id) {
+            document.getElementById(id).style.display = "none";
+          });
+          var el = document.getElementById(views[view]);
+          if (el) el.style.display = "";
+          titleEl.textContent = view.charAt(0).toUpperCase() + view.slice(1);
+          panel.classList.add("open");
+          backdrop.classList.add("open");
+          panel.setAttribute("aria-hidden", "false");
+          // Sync sampler-key-list into overlay if needed
+          if (view === "sampler") {
+            var src = document.getElementById("sampler-key-list");
+            var dest = document.getElementById("sampler-key-list-overlay");
+            if (src && dest && src.children.length && !dest.children.length) {
+              Array.from(src.children).forEach(function (c) {
+                dest.appendChild(c.cloneNode(true));
+              });
+            }
+          }
+        }
+
+        function closePanel() {
+          panel.classList.remove("open");
+          backdrop.classList.remove("open");
+          panel.setAttribute("aria-hidden", "true");
+        }
+
+        function closeCtx() {
+          ctxMenu.style.display = "none";
+        }
+
+        // Context menu — right-click on canvas area
+        var canvasWrap = document.getElementById("canvas-wrap");
+        if (canvasWrap) {
+          canvasWrap.addEventListener("contextmenu", function (e) {
+            e.preventDefault();
+            ctxMenu.style.left = e.clientX + "px";
+            ctxMenu.style.top = e.clientY + "px";
+            ctxMenu.style.display = "";
+          });
+        }
+
+        document.addEventListener("click", closeCtx);
+        document.addEventListener("keydown", function (e) {
+          if (e.key === "Escape") {
+            closeCtx();
+            closePanel();
+          }
+        });
+
+        ctxMenu.addEventListener("click", function (e) {
+          var item = e.target.closest(".ctx-item");
+          if (!item) return;
+          var action = item.dataset.action;
+          closeCtx();
+          if (action === "sampler" || action === "library") {
+            openPanel(action);
+            return;
+          }
+          // Delegate to existing buttons
+          var map = {
+            demo: "load-example",
+            open: "scene-file",
+            save: "save-scene",
+          };
+          var btnId = map[action];
+          if (btnId) {
+            var btn = document.getElementById(btnId);
+            if (btn) btn.click();
+            return;
+          }
+          // Fallback: look for top bar buttons by text
+          document
+            .querySelectorAll("header button, nav button, .top-bar button")
+            .forEach(function (b) {
+              if (b.textContent.trim().toLowerCase() === action) b.click();
+            });
+        });
+
+        document
+          .getElementById("overlay-panel-close")
+          .addEventListener("click", closePanel);
+        backdrop.addEventListener("click", closePanel);
+      })();
+    </script>
+  </body>
+</html>

@@ -58,6 +58,15 @@
     B: "#ff59cb",
   };
   // ── Sample System ─────────────────────────────
+  // Note/color/midi helpers
+  function noteClassToColor(nc) {
+    return NOTE_COLORS[NOTE_NAMES[((nc % 12) + 12) % 12]] || "#888888";
+  }
+  function noteToMidi(noteClass, octave) {
+    return (
+      (octave != null ? octave : 4) * 12 + ((((noteClass || 0) % 12) + 12) % 12)
+    );
+  }
 
   const sampleMap = {
     0: [], // C
@@ -315,7 +324,140 @@
       saveSelectedShape: function () {
         saveSelectedShape();
       },
-      // ── MIDI Bank / Graph API ───────────────────────────────────────────
+      // ── Camera API ──────────────────────────────────────────────────────
+      camera: {
+        followWalker: function (walkerId) {
+          var id = walkerId || (state.walkers[0] && state.walkers[0].id);
+          if (!id) {
+            console.warn("[CAMERA] No walker to follow");
+            return;
+          }
+          state.camera.mode = "follow";
+          state.camera.follow.walkerId = id;
+          console.log("[CAMERA] Following walker:", id);
+        },
+        free: function () {
+          state.camera.mode = "free";
+          state.camera.follow.walkerId = null;
+          console.log("[CAMERA] Free mode");
+        },
+        zoomTo: function (zoom) {
+          state.camera.targetZoom = clamp(
+            zoom,
+            state.camera.zoomLimits.min,
+            state.camera.zoomLimits.max,
+          );
+        },
+        reset: function () {
+          state.camera.targetX = 0;
+          state.camera.targetY = 0;
+          state.camera.targetZoom = 1;
+          state.camera.mode = "free";
+        },
+        fitToStroke: function (strokeId) {
+          var s = getStrokeById(strokeId) || getSelectedStroke();
+          if (!s || !s.points || !s.points.length) return;
+          var xs = s.points.map(function (p) {
+            return p.x;
+          });
+          var ys = s.points.map(function (p) {
+            return p.y;
+          });
+          var minX = Math.min.apply(null, xs),
+            maxX = Math.max.apply(null, xs);
+          var minY = Math.min.apply(null, ys),
+            maxY = Math.max.apply(null, ys);
+          var cx = (minX + maxX) / 2,
+            cy = (minY + maxY) / 2;
+          var w = maxX - minX || 100,
+            h = maxY - minY || 100;
+          var zoom = Math.min(canvas.width / w, canvas.height / h) * 0.75;
+          state.camera.targetX = cx;
+          state.camera.targetY = cy;
+          state.camera.targetZoom = clamp(
+            zoom,
+            state.camera.zoomLimits.min,
+            state.camera.zoomLimits.max,
+          );
+          state.camera.mode = "free";
+        },
+      },
+      // ── End Camera API ──────────────────────────────────────────────────
+      // ── Inspector API ────────────────────────────────────────────────────
+      banks: {
+        list: function () {
+          return state.banks;
+        },
+        active: function () {
+          return getActiveBank();
+        },
+        select: function (idOrIndex) {
+          var b =
+            typeof idOrIndex === "number"
+              ? state.banks[idOrIndex]
+              : state.banks.find(function (b) {
+                  return b.id === idOrIndex;
+                });
+          if (b) {
+            state.activeBankId = b.id;
+            renderBankGrid();
+          }
+        },
+        colorToMidi: function (color) {
+          return colorToMidi(color);
+        },
+      },
+      inspector: {
+        updateSelected: function (path, value) {
+          updateSelected(path, value);
+        },
+        getSelectedObjects: function () {
+          return getSelectedObjectsNorm();
+        },
+        setDeep: function (obj, path, value) {
+          setDeep(obj, path, value);
+        },
+        getDeep: function (obj, path) {
+          return getDeep(obj, path);
+        },
+        sync: function () {
+          renderInspector();
+        },
+      },
+      // ── End Inspector API ────────────────────────────────────────────────
+      preview: {
+        play: function (opts) {
+          var note = opts && opts.note != null ? opts.note : 60;
+          var velocity = opts && opts.velocity != null ? opts.velocity : 100;
+          var channel = opts && opts.channel != null ? opts.channel : 1;
+          try {
+            playFallbackInstrument(note, velocity);
+          } catch (e) {
+            console.warn("[PREVIEW ERROR]", e);
+          }
+        },
+      },
+      labels: {
+        list: function () {
+          return state.labels;
+        },
+        clear: function () {
+          state.labels = [];
+          state.activeLabelId = null;
+          state.textEditing = false;
+          renderFrame();
+        },
+        remove: function (id) {
+          removeLabel(id);
+          renderFrame();
+        },
+        add: function (x, y, text) {
+          var l = createLabelAt(x || 0, y || 0);
+          if (text) l.text = text;
+          renderFrame();
+          return l;
+        },
+      },
       midi: {
         cartridges: function () {
           return state.midiCartridges;
@@ -443,6 +585,26 @@
       sound: {
         testFallback: function (note) {
           playFallbackInstrument(note != null ? note : 60, 80);
+        },
+        test: function (note, velocity) {
+          playFallbackInstrument(
+            note != null ? note : 60,
+            velocity != null ? velocity : 100,
+          );
+        },
+      },
+      testSound: function (note, velocity) {
+        playTestTone(note, velocity);
+      },
+      audioEngine: {
+        unlock: function () {
+          AudioEngine.unlock();
+        },
+        state: function () {
+          return AudioEngine.getState();
+        },
+        test: function (note, vel) {
+          playTestTone(note || 60, vel || 100);
         },
       },
       debug: {
@@ -692,6 +854,25 @@
       if (!files.length) return;
 
       // Priority 1: selected stroke → assign to object (new per-stroke instrument path)
+      // Priority 0: active bank (v2 system — always wins if set)
+      if (state.activeBankId) {
+        var bankLoaded = 0;
+        await Promise.all(
+          files.map(async function (file) {
+            var ok = await loadSampleToActiveBank(file);
+            if (ok) bankLoaded++;
+          }),
+        );
+        if (bankLoaded > 0) {
+          renderBankGrid();
+          showToast(
+            "Loaded " + bankLoaded + " sample(s) → " + state.activeBankId,
+          );
+        }
+        return;
+      }
+
+      // Priority 1: selected stroke
       // Priority 2: hovered sampler row → note-based (classic sampler path)
       // Priority 3: active sampler note → note-based fallback
       var selectedStroke =
@@ -734,7 +915,7 @@
         state.sampler.activeNote,
       );
       if (noteClass == null || isNaN(noteClass)) {
-        showToast("Select a sampler key or stroke to assign sound");
+        showToast("Select a bank or object to assign sound");
         console.warn(
           "[sampler] Drop ignored — no target note or stroke resolved",
         );
@@ -788,6 +969,7 @@
       melodic: { midiChannel: 4 },
       ambient: { midiChannel: 5 },
       midi: { midiChannel: 6 },
+      particle: { midiChannel: 4 }, // particle interactions → melodic channel
     };
 
     // Per-channel voicing profiles — shape how each channel sounds post-emission.
@@ -883,6 +1065,62 @@
       }
     }
 
+    // ── Event → Stroke resolver ───────────────────────────────────────────
+    // Emitting objects (balls, walkers, lines) are not strokes — resolve ownership.
+    function resolveEventStroke(event) {
+      if (!event || !event.sourceId) return null;
+
+      // 1. Direct stroke match (fast path — sourceId IS a stroke id)
+      var direct = state.strokes.find(function (s) {
+        return s.id === event.sourceId;
+      });
+      if (direct) return direct;
+
+      // 2. Ball → strokeId bridge
+      var ball = state.balls.find(function (b) {
+        return b.id === event.sourceId;
+      });
+      if (ball && ball.strokeId) {
+        var bs = state.strokes.find(function (s) {
+          return s.id === ball.strokeId;
+        });
+        if (bs) return bs;
+      }
+
+      // 3. Walker → strokeId bridge
+      var walker = state.walkers.find(function (w) {
+        return w.id === event.sourceId;
+      });
+      if (walker && walker.strokeId) {
+        var ws = state.strokes.find(function (s) {
+          return s.id === walker.strokeId;
+        });
+        if (ws) return ws;
+      }
+
+      // 4. Line → _strokeId bridge (derived collision segments)
+      var line = state.lines.find(function (l) {
+        return l.id === event.sourceId;
+      });
+      if (line && line._strokeId) {
+        var ls = state.strokes.find(function (s) {
+          return s.id === line._strokeId;
+        });
+        if (ls) return ls;
+      }
+
+      // 5. targetId fallback (for collision events that name the struck object)
+      if (event.targetId) {
+        var ts = state.strokes.find(function (s) {
+          return s.id === event.targetId;
+        });
+        if (ts) return ts;
+      }
+
+      return null;
+    }
+    // ── End event stroke resolver ─────────────────────────────────────────
+
     function emitEvent(e) {
       if (!e.sourceId) {
         console.error("[EVENT ERROR] Missing sourceId", e);
@@ -922,15 +1160,17 @@
           ? event.data.note
           : getFallbackBridgeNote(event.type);
 
-      // Resolve stroke FIRST — merge its sound identity with event note/velocity
-      var stroke = state.strokes.find(function (s) {
-        return s.id === event.sourceId;
-      });
+      // Resolve stroke — emitter (ball/walker/line) → owning stroke → sound
+      var stroke = resolveEventStroke(event);
       if (!stroke) {
-        console.error(
-          "[FATAL AUDIO] No stroke resolved for sourceId:",
-          event.sourceId,
-        );
+        if (state.debug && state.debug.audioLogs) {
+          console.warn("[AUDIO ROUTE FAIL] No stroke resolved", {
+            sourceId: event.sourceId,
+            targetId: event.targetId,
+            type: event.type,
+          });
+        }
+        return;
       }
       var mergedSound = Object.assign(
         {},
@@ -947,12 +1187,12 @@
       );
 
       eventBus.triggerEvent(event.type, {
-        id: event.sourceId,
-        sourceId: event.sourceId,
+        id: stroke.id, // resolved stroke id — not emitter id
+        sourceId: stroke.id,
         vx: 0,
         vy: 0,
-        wosChannel: event.channel, // string key for CHANNEL_PROFILES lookup
-        useScale: event.useScale, // per-stroke chromatic freedom flag
+        wosChannel: event.channel,
+        useScale: event.useScale,
         sound: mergedSound,
       });
     }
@@ -1485,6 +1725,8 @@
       },
       sampler: {
         activeNote: null,
+        activeNoteClass: 0, // 0–11 (C–B)
+        activeOctave: 4, // default octave 4
       },
       selection: {
         strokeId: null, // single primary selection (for handles, inspector)
@@ -1539,6 +1781,13 @@
         }
         return banks;
       })(),
+      // ── Generic 16-slot bank system (v2) ──────────────────────────────
+      banks: (function () {
+        return Array.from({ length: 16 }, function (_, i) {
+          return { id: "bank_" + (i + 1), samples: [], color: null, label: "" };
+        });
+      })(),
+      viewportMode: "portrait", // "portrait" | "landscape"
       physics: {
         gravity: { x: 0, y: 3.0 },
         damping: 0.996,
@@ -1570,6 +1819,37 @@
         textScale: 1,
         textRotation: 0,
         autoWalker: false,
+      },
+      // ── Canvas Tool Sub-Bar state (creation defaults, not object properties) ──
+      tools: {
+        brush: {
+          fill: noteToColor(60),
+          stroke: noteToColor(60),
+          strokeWidth: 18,
+          walkerEnabled: true, // new strokes get a walker by default
+          trailEnabled: false,
+          soundSource: "synth", // "off" | "synth" | "sample"
+          soundRole: "drum", // "drum" | "bass" | "lead" | "pad"
+          sound: { trigger: "continuous" }, // engine-canonical trigger state
+        },
+        ball: {
+          fill: "#f3f2ef",
+          stroke: "#222222",
+          radius: 8,
+          velocity: 2,
+          bounciness: 0.9,
+        },
+        text: {
+          fill: "#ffffff",
+          fontSize: 14,
+          multiline: true,
+        },
+        walker: {
+          mode: "pingpong",
+          speed: 1,
+          trailStyle: "off",
+          selfSoundEnabled: false,
+        },
       },
       transform: {
         active: false,
@@ -1611,10 +1891,23 @@
         triggerOthers: true, // true → walker hitting OTHER strokes produces sound even when audioEnabled=false
         debugForceSound: false, // true → walker always emits at full energy for audio testing
       },
-      createPreset: {
-        withWalker: true, // new strokes get a walker by default
-        walkerAudioSelf: true, // walker self-sound on by default
-        triggerOthers: true, // walker always triggers other strokes (non-negotiable default)
+
+      camera: {
+        x: 0,
+        y: 0,
+        zoom: 1,
+        targetX: 0,
+        targetY: 0,
+        targetZoom: 1,
+        mode: "free", // "free" | "follow"
+        follow: { walkerId: null, lerp: 0.08 },
+        zoomLimits: { min: 0.2, max: 8 },
+      },
+      labels: [], // world-space text labels
+      activeLabelId: null, // id of label currently being edited
+      textEditing: false, // true while label keyboard capture is active
+      view: {
+        showPaths: true, // toggle stroke line visibility (walkers/particles always shown)
       },
       midiCartridges: [], // loaded MIDI cartridges — { id, name, bpm, notes, length }
       midiBanks: [], // bank wrappers { id, cartridgeId, graphId, samples, repeat, consumed }
@@ -1861,10 +2154,14 @@
 
     function getCanvasCoordsLocal(e) {
       var rect = canvas.getBoundingClientRect();
-      return {
-        x: (e.clientX - rect.left) * (canvas.width / rect.width),
-        y: (e.clientY - rect.top) * (canvas.height / rect.height),
-      };
+      // Raw canvas pixel position
+      var sx = (e.clientX - rect.left) * (canvas.width / rect.width);
+      var sy = (e.clientY - rect.top) * (canvas.height / rect.height);
+      // Unproject through camera: screen → world
+      var cam = state.camera;
+      var wx = (sx - canvas.width / 2) / cam.zoom + cam.x;
+      var wy = (sy - canvas.height / 2) / cam.zoom + cam.y;
+      return { x: wx, y: wy };
     }
 
     function getSelectedShapeForHandle() {
@@ -2186,10 +2483,9 @@
       // Build full stroke object from in-flight buffer
       var stroke = createStrokeObject(cs.points[0].x, cs.points[0].y);
       stroke.points = cs.points.slice();
-      // Apply current WOS note + color (spec item 5)
+      // Keep note in sync but DO NOT override color — brush fill is source of truth
       if (window.WOS) {
         stroke.note = WOS.currentNote;
-        stroke.color = noteToColor(WOS.currentNote);
       }
       pushHistory();
       state.strokes.push(stroke);
@@ -2198,15 +2494,13 @@
       state.penTool.previewPoint = null;
       analyzeStroke(stroke);
       strokeToLines(stroke); // bridge to collision/sound pipeline
-      if (state.createPreset.withWalker) {
+      if (state.tools.brush.walkerEnabled) {
         var w = createWalkerFromStroke(stroke);
         if (w) {
-          w.audioSelf = !!state.createPreset.walkerAudioSelf;
-          w.triggerOthers = state.createPreset.triggerOthers !== false;
+          applyTrail(w, stroke);
           state.walkers.push(w);
         }
       }
-
       renderFrame();
     }
 
@@ -2217,10 +2511,8 @@
         { x: start.x, y: start.y },
         { x: end.x, y: end.y },
       ];
-      // Apply current WOS note + color (spec item 5)
       if (window.WOS) {
         stroke.note = WOS.currentNote;
-        stroke.color = noteToColor(WOS.currentNote);
       }
       pushHistory();
       state.strokes.push(stroke);
@@ -2229,15 +2521,13 @@
       state.penTool.previewPoint = null;
       analyzeStroke(stroke);
       strokeToLines(stroke); // bridge to collision/sound pipeline
-      if (state.createPreset.withWalker) {
-        var w = createWalkerFromStroke(stroke);
-        if (w) {
-          w.audioSelf = !!state.createPreset.walkerAudioSelf;
-          w.triggerOthers = state.createPreset.triggerOthers !== false;
-          state.walkers.push(w);
+      if (state.tools.brush.walkerEnabled) {
+        var wl = createWalkerFromStroke(stroke);
+        if (wl) {
+          applyTrail(wl, stroke);
+          state.walkers.push(wl);
         }
       }
-
       renderFrame();
     }
 
@@ -2965,10 +3255,8 @@
         mopDownPt = null;
 
         if (stroke) analyzeStroke(stroke);
-        // Apply current WOS note + color (spec item 5)
         if (stroke && window.WOS) {
           stroke.note = WOS.currentNote;
-          stroke.color = noteToColor(WOS.currentNote);
         }
         // Apply pre-configured render mode
         if (stroke) {
@@ -3014,13 +3302,12 @@
         }
 
         if (stroke) strokeToLines(stroke); // bridge to collision/sound pipeline
-        if (stroke && state.createPreset.withWalker) {
-          var w = createWalkerFromStroke(stroke);
-          if (w) {
-            w.audioSelf = !!state.createPreset.walkerAudioSelf;
-            w.triggerOthers = state.createPreset.triggerOthers !== false;
-            initWalkerGraph(w, stroke); // inherit graphId/bankId if stroke has one
-            state.walkers.push(w);
+        if (stroke && state.tools.brush.walkerEnabled) {
+          var wm = createWalkerFromStroke(stroke);
+          if (wm) {
+            applyTrail(wm, stroke);
+            initWalkerGraph(wm, stroke);
+            state.walkers.push(wm);
           }
         }
 
@@ -3194,6 +3481,11 @@
       obj.color = NOTE_COLORS[NOTE_NAMES[((noteClass % 12) + 12) % 12]] || null;
     }
 
+    function applyTrail(walker, stroke) {
+      if (!walker.emitter) walker.emitter = { enabled: false };
+      walker.emitter.enabled = !!(stroke && stroke.trailEnabled);
+    }
+
     function createStrokeObject(x, y) {
       var noteClass = ((state.defaults.note % 12) + 12) % 12;
       var base = createObject({ type: "stroke", points: [{ x: x, y: y }] });
@@ -3215,11 +3507,29 @@
       base.isCommitted = false;
       base.renderMode = state.defaultRenderMode || "visible";
       base.outlineVisible = base.renderMode !== "hidden";
-      base.sound = { enabled: false, note: null };
-      base.behavior = { isMuted: true };
+      base.behavior = { isMuted: false };
       base.mode = "annotation";
       base.harmony = { role: 0 };
       base.meta = { length: 1, curvature: 0, complexity: 0 };
+      base.trailEnabled = !!state.tools.brush.trailEnabled;
+      base.sound = {
+        enabled: true,
+        note: null,
+        source: state.tools.brush.soundSource || "synth",
+        role: state.tools.brush.soundRole || "drum",
+        trigger:
+          (state.tools.brush.sound && state.tools.brush.sound.trigger) ||
+          "continuous",
+        midi: {
+          note: noteToMidi(
+            state.sampler.activeNoteClass,
+            state.sampler.activeOctave,
+          ),
+        },
+      };
+      base.noteClass = state.sampler.activeNoteClass;
+      base.octave = state.sampler.activeOctave;
+      base.bankId = state.activeBankId || null;
       return base;
     }
 
@@ -3314,6 +3624,7 @@
     }
 
     function renderStrokes(ctx) {
+      if (state.view && state.view.showPaths === false) return;
       (state.strokes || []).forEach(function (stroke) {
         var pts = stroke.points;
 
@@ -3392,14 +3703,21 @@
           if (rm === "visible") {
             ctx.save();
             ctx.strokeStyle = stroke.color;
-            ctx.lineWidth = stroke.width;
             ctx.lineCap = "round";
             ctx.lineJoin = "round";
             // Clean visual mode: stroke is structure only, low alpha
             var cleanMode = state.debug && state.debug.visualMode === "clean";
-            ctx.globalAlpha = cleanMode
+            var baseAlpha = cleanMode
               ? 0.3
               : (stroke.opacity != null ? stroke.opacity : 1) * 0.82;
+            var energy = stroke._hitEnergy || 0;
+            // Hit pulse: width expansion + glow + alpha boost
+            ctx.lineWidth = (stroke.width || 18) + energy * 8;
+            ctx.globalAlpha = Math.min(1, baseAlpha + energy * 0.4);
+            if (energy > 0.05) {
+              ctx.shadowColor = stroke.color;
+              ctx.shadowBlur = energy * 18;
+            }
             ctx.beginPath();
             ctx.moveTo(pts[0].x, pts[0].y);
             for (var i = 1; i < pts.length - 1; i++) {
@@ -3410,6 +3728,7 @@
             var last = pts[pts.length - 1];
             ctx.lineTo(last.x, last.y);
             ctx.stroke();
+            ctx.shadowBlur = 0;
             ctx.restore();
           }
           // rm === "hidden" → no stroke draw, walker and selection halo still active
@@ -4265,6 +4584,335 @@
       dispatchCollisionEvent(sourceObject);
     }
 
+    // ═══════════════════════════════════════════════════════════════════════
+    // ── Particle Interaction System ──────────────────────────────────────
+    // Particles (walkers, future balls/emitters) interact with any stroke
+    // by proximity, not just self-path. Sound ownership stays on strokes.
+    // ═══════════════════════════════════════════════════════════════════════
+
+    function distancePointToSegment(px, py, x1, y1, x2, y2) {
+      var dx = x2 - x1,
+        dy = y2 - y1;
+      var lenSq = dx * dx + dy * dy;
+      if (lenSq === 0) return Math.hypot(px - x1, py - y1);
+      var t = Math.max(
+        0,
+        Math.min(1, ((px - x1) * dx + (py - y1) * dy) / lenSq),
+      );
+      return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
+    }
+
+    function isNearStroke(px, py, stroke, threshold) {
+      if (!stroke || !stroke.points || stroke.points.length < 2) return false;
+      var pts = stroke.points;
+      for (var i = 0; i < pts.length - 1; i++) {
+        if (
+          distancePointToSegment(
+            px,
+            py,
+            pts[i].x,
+            pts[i].y,
+            pts[i + 1].x,
+            pts[i + 1].y,
+          ) < threshold
+        )
+          return true;
+      }
+      return false;
+    }
+
+    // ── Synth Roles — fallback sound when no sample is loaded ────────────
+    function midiToFreq(note) {
+      return 440 * Math.pow(2, (note - 69) / 12);
+    }
+
+    // ── AudioEngine — single shared WebAudio context for all WOS sound ─────
+    var AudioEngine = {
+      ctx: null,
+      masterGain: null,
+      unlocked: false,
+
+      init: function () {
+        if (!this.ctx) {
+          var Ctor = window.AudioContext || window.webkitAudioContext;
+          if (!Ctor) {
+            console.warn("[AUDIO ENGINE] WebAudio unsupported");
+            return null;
+          }
+          this.ctx = new Ctor();
+          this.masterGain = this.ctx.createGain();
+          this.masterGain.gain.value = 0.85;
+          this.masterGain.connect(this.ctx.destination);
+          // Sync to state so existing pipeline sees the same context
+          state.audio.context = this.ctx;
+          state.audio.masterGain = this.masterGain;
+        }
+        return this.ctx;
+      },
+
+      unlock: function () {
+        var engine = this;
+        var ctx = this.init();
+        if (!ctx) return;
+        if (ctx.state === "suspended") {
+          ctx
+            .resume()
+            .then(function () {
+              engine.unlocked = ctx.state === "running";
+              console.log("[AUDIO ENGINE]", ctx.state);
+            })
+            .catch(function (err) {
+              console.warn("[AUDIO ENGINE] resume failed", err);
+            });
+        } else {
+          this.unlocked = ctx.state === "running";
+        }
+      },
+
+      output: function () {
+        this.init();
+        return this.masterGain || this.ctx.destination;
+      },
+
+      getState: function () {
+        this.init();
+        return {
+          context: this.ctx ? this.ctx.state : "missing",
+          unlocked: this.unlocked,
+          masterGain: this.masterGain ? this.masterGain.gain.value : null,
+        };
+      },
+    };
+    // ── End AudioEngine ───────────────────────────────────────────────────
+
+    function playDrum(note, velocity) {
+      var ctx = ensureAudioContext();
+      if (!ctx) return;
+      var now = ctx.currentTime;
+      var osc = ctx.createOscillator();
+      var gain = ctx.createGain();
+      var vol = Math.max(0.1, velocity / 127) * 0.8;
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(120, now);
+      osc.frequency.exponentialRampToValueAtTime(40, now + 0.12);
+      gain.gain.setValueAtTime(vol, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+      osc.connect(gain);
+      gain.connect(AudioEngine.output());
+      osc.start(now);
+      osc.stop(now + 0.2);
+    }
+
+    function playBass(note, velocity) {
+      var ctx = ensureAudioContext();
+      if (!ctx) return;
+      var now = ctx.currentTime;
+      var osc = ctx.createOscillator();
+      var gain = ctx.createGain();
+      var vol = Math.max(0.1, velocity / 127) * 0.6;
+      osc.type = "triangle";
+      osc.frequency.value = midiToFreq(Math.max(24, Math.min(note, 60)));
+      gain.gain.setValueAtTime(vol, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+      osc.connect(gain);
+      gain.connect(AudioEngine.output());
+      osc.start(now);
+      osc.stop(now + 0.5);
+    }
+
+    function playLead(note, velocity) {
+      var ctx = ensureAudioContext();
+      if (!ctx) return;
+      var now = ctx.currentTime;
+      var osc = ctx.createOscillator();
+      var gain = ctx.createGain();
+      var vol = Math.max(0.1, velocity / 127) * 0.45;
+      osc.type = "sawtooth";
+      osc.frequency.value = midiToFreq(note);
+      gain.gain.setValueAtTime(vol, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.55);
+      osc.connect(gain);
+      gain.connect(AudioEngine.output());
+      osc.start(now);
+      osc.stop(now + 0.6);
+    }
+
+    function playPad(note, velocity) {
+      var ctx = ensureAudioContext();
+      if (!ctx) return;
+      var now = ctx.currentTime;
+      var osc = ctx.createOscillator();
+      var gain = ctx.createGain();
+      var vol = Math.max(0.05, velocity / 127) * 0.35;
+      osc.type = "sine";
+      osc.frequency.value = midiToFreq(note);
+      gain.gain.setValueAtTime(0, now);
+      gain.gain.linearRampToValueAtTime(vol, now + 0.4);
+      gain.gain.linearRampToValueAtTime(0, now + 1.5);
+      osc.connect(gain);
+      gain.connect(AudioEngine.output());
+      osc.start(now);
+      osc.stop(now + 1.6);
+    }
+
+    function playSynth(stroke, note, velocity) {
+      var role = (stroke && stroke.sound && stroke.sound.role) || "drum";
+      console.log("[PLAY SYNTH]", role, note, velocity);
+      switch (role) {
+        case "drum":
+          return playDrum(note, velocity);
+        case "bass":
+          return playBass(note, velocity);
+        case "lead":
+          return playLead(note, velocity);
+        case "pad":
+          return playPad(note, velocity);
+        default:
+          return playDrum(note, velocity); // safety fallback
+      }
+    }
+
+    function resolveSound(stroke, note, velocity) {
+      var src = (stroke.sound && stroke.sound.source) || "synth";
+      if (src === "off") return;
+      if (src === "sample") return; // event pipeline handles samples — no synth fallback
+      playSynth(stroke, note, velocity);
+    }
+    // ── End Synth Roles ───────────────────────────────────────────────────
+
+    function playTestTone(note, velocity) {
+      var ctx = AudioEngine.init();
+      if (!ctx) return;
+      if (ctx.state !== "running") {
+        console.warn("[TEST SOUND] AudioContext not running:", ctx.state);
+        return;
+      }
+      var n = note != null ? note : 60;
+      var v = velocity != null ? velocity : 100;
+      var freq = 440 * Math.pow(2, (n - 69) / 12);
+      var osc = ctx.createOscillator();
+      var gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(v / 127, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+      osc.connect(gain);
+      gain.connect(AudioEngine.output());
+      osc.start();
+      osc.stop(ctx.currentTime + 0.45);
+    }
+
+    function exciteStroke(stroke, particle, nowMs) {
+      // Rate limit: prevent stacking (90ms gap)
+      if (stroke._lastFire && nowMs - stroke._lastFire < 90) return;
+      stroke._lastFire = nowMs;
+      if (state.debug && state.debug.audioLogs)
+        console.log("[CONT]", stroke.id);
+      playSound(stroke, particle);
+    }
+
+    // Impact hit — called only from processParticleInteractions impact branch
+    function exciteStrokeImpact(stroke, particle, nowMs) {
+      if (state.debug && state.debug.audioLogs)
+        console.log("[IMPACT]", stroke.id);
+      playSound(stroke, particle);
+    }
+
+    // Shared sound dispatcher — plays based on source only, no trigger branching
+    function playSound(stroke, particle) {
+      var sound = stroke.sound;
+      if (!sound || sound.source === "off") return;
+      var note =
+        sound.midi && sound.midi.note != null
+          ? sound.midi.note
+          : stroke.note || 60;
+      var velocity =
+        sound.midi && sound.midi.velocity != null ? sound.midi.velocity : 100;
+      if (sound.source === "synth") {
+        playSynth(stroke, note, velocity);
+        return;
+      }
+      if (sound.source === "sample") {
+        // Primary: resolve from stroke's assigned bank
+        var bankBuffer = resolveSampleFromBank(stroke);
+        if (bankBuffer) {
+          playBuffer(bankBuffer, velocity / 127);
+          return;
+        }
+        // No bank sample — emit event for legacy sampleMap path
+        emitEvent({
+          type: "particle",
+          sourceId: stroke.id,
+          targetId: particle ? particle.strokeId || particle.id : stroke.id,
+          energy: velocity / 127,
+          channel: "default",
+          data: { note: note, velocity: velocity },
+        });
+        return;
+      }
+    }
+
+    function processParticleInteractions(particle) {
+      var px =
+        particle.x != null
+          ? particle.x
+          : (particle.position && particle.position.x) || 0;
+      var py =
+        particle.y != null
+          ? particle.y
+          : (particle.position && particle.position.y) || 0;
+      var radius = 40;
+      var nowMs = performance.now();
+      var MIN_IMPACT_GAP = 120;
+
+      if (!particle._hitCooldowns) particle._hitCooldowns = {};
+      if (!particle._lastImpactTime) particle._lastImpactTime = 0;
+      var cooldowns = particle._hitCooldowns;
+
+      state.strokes.forEach(function (stroke) {
+        if (!stroke || !stroke.points || stroke.points.length < 2) return;
+        if (particle.strokeId && stroke.id === particle.strokeId) {
+          if (particle.ignoreOwnStroke !== false) return;
+        }
+        if (!stroke.sound || !stroke.sound.enabled) return;
+
+        var isNear = isNearStroke(px, py, stroke, radius);
+        var wasNear = !!cooldowns[stroke.id];
+        var trigger = stroke.sound.trigger || "impact";
+
+        // Visual hit energy
+        if (isNear) {
+          stroke._hitEnergy = 1.0;
+          stroke._hitTime = nowMs;
+        }
+
+        // ── CONTINUOUS ────────────────────────────────────────────────────
+        if (trigger === "continuous") {
+          if (isNear) exciteStroke(stroke, particle, nowMs);
+          cooldowns[stroke.id] = !!isNear;
+        }
+
+        // ── IMPACT ────────────────────────────────────────────────────────
+        else {
+          if (isNear && !wasNear) {
+            if (nowMs - particle._lastImpactTime > MIN_IMPACT_GAP) {
+              particle._lastImpactTime = nowMs;
+              cooldowns[stroke.id] = true;
+              exciteStrokeImpact(stroke, particle, nowMs);
+            } else {
+              cooldowns[stroke.id] = true; // mark hit, skip audio (too soon)
+            }
+          } else if (!isNear && wasNear) {
+            cooldowns[stroke.id] = false;
+          }
+        }
+      });
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // ── End Particle Interaction System ─────────────────────────────────
+    // ═══════════════════════════════════════════════════════════════════════
+
     function updateWalkerMovement(w, dt) {
       // Refresh path geometry from live stroke — transforms replace stroke.points reference
       if (w.strokeId && w.path && w.path.type === "stroke") {
@@ -4436,6 +5084,10 @@
       }
       // ── End MIDI ──────────────────────────────────────────────────────────
 
+      // ── Particle interactions — walker excites any nearby non-self stroke ──
+      processParticleInteractions(w);
+      // ── End particle interactions ─────────────────────────────────────────
+
       w.history = w.history || [];
       w.history.push({ x: w.x, y: w.y });
       if (w.history.length > 100) {
@@ -4466,38 +5118,21 @@
           ? resolveFXColor(liveStrokeForFX)
           : e.color || "#ffffff";
 
-        // Tunnel mode: emit aligned to path tangent, narrow spread, flow feel
-        var isTunnel = w.motionMode === "tunnel";
-
-        w._emitAcc += dt * fxRate;
+        w._emitAcc += dt * 60; // fixed rate: ~60 particles/sec
         while (w._emitAcc >= 1) {
           w._emitAcc -= 1;
-          var tang = sampleTangent(w.path, w.t);
-          var angle, ox, oy;
-          if (isTunnel) {
-            // Tangent-aligned: particles flow forward along path
-            angle = Math.atan2(tang.y, tang.x);
-            angle += (Math.random() - 0.5) * 0.15; // minimal spread — stays inside
-            // Normal offset for "inside tube" feel
-            var norm = { x: -tang.y, y: tang.x };
-            ox = norm.x * (Math.random() - 0.5) * 4;
-            oy = norm.y * (Math.random() - 0.5) * 4;
-          } else {
-            angle = Math.atan2(tang.y, tang.x);
-            angle += (Math.random() - 0.5) * fxSpread;
-            ox = 0;
-            oy = 0;
-          }
+          var vx = w.vx || 0;
+          var vy = w.vy || 0;
           spawnParticleUnified(
             {
-              x: w.x + ox,
-              y: w.y + oy,
-              vx: Math.cos(angle) * fxSpeed,
-              vy: Math.sin(angle) * fxSpeed,
-              size: fxSize,
-              life: fxLife,
+              x: w.x - vx * 2,
+              y: w.y - vy * 2,
+              vx: (Math.random() - 0.5) * 20,
+              vy: (Math.random() - 0.5) * 20,
+              size: 3,
+              life: 0.6,
               color: fxColor,
-              type: fxType,
+              type: "dot",
             },
             dt,
           );
@@ -4507,6 +5142,14 @@
 
     function updateWalkers(dt) {
       if (!state.walker.enabled) return;
+      // Decay stroke hit energy each frame
+      var now = performance.now();
+      state.strokes.forEach(function (stroke) {
+        if (!stroke._hitEnergy) return;
+        var elapsed = now - (stroke._hitTime || now);
+        stroke._hitEnergy = Math.max(0, stroke._hitEnergy - 0.003 * elapsed);
+        stroke._hitTime = now;
+      });
       state.walkers.forEach(function (w) {
         updateWalkerMovement(w, dt);
       });
@@ -4593,41 +5236,194 @@
       // Line tool disabled — mop is the primary drawing system
     }
 
-    bindControls();
-
-    // ── Creation Preset UI ───────────────────────────────────────────────────
-    (function createPresetUI() {
-      if (document.getElementById("wos-preset-ui")) return;
-      var panel = document.createElement("div");
-      panel.id = "wos-preset-ui";
-      panel.style.cssText =
-        "position:fixed;bottom:12px;right:12px;background:rgba(0,0,0,0.82);color:#eff2f6;padding:10px 14px;font:600 12px monospace;border-radius:8px;border:1px solid rgba(255,255,255,0.1);z-index:9999;line-height:1.8";
-      panel.innerHTML =
-        "<div style='margin-bottom:6px;color:#3dd8c5'>Creation Preset</div>" +
-        "<label style='display:block'><input type='checkbox' id='preset-walker'> Add Walker on Draw</label>" +
-        "<label style='display:block'><input type='checkbox' id='preset-self'> Walker Self Sound</label>";
-      document.body.appendChild(panel);
-
-      var walkerToggle = document.getElementById("preset-walker");
-      var selfToggle = document.getElementById("preset-self");
-      walkerToggle.checked = state.createPreset.withWalker;
-      selfToggle.checked = state.createPreset.walkerAudioSelf;
-
-      walkerToggle.addEventListener("change", function () {
-        state.createPreset.withWalker = walkerToggle.checked;
-        console.log("[PRESET] withWalker:", state.createPreset.withWalker);
+    // Inspector section toggles — init before bindControls so crash there doesn't block
+    document.querySelectorAll(".insp-section-header").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var body = btn
+          .closest(".insp-section")
+          .querySelector(".insp-section-body");
+        var isOpen = btn.classList.contains("open");
+        body.style.display = isOpen ? "none" : "";
+        btn.classList.toggle("open", !isOpen);
+        btn.querySelector(".insp-chevron").textContent = isOpen ? "▶" : "▼";
       });
-      selfToggle.addEventListener("change", function () {
-        state.createPreset.walkerAudioSelf = selfToggle.checked;
-        console.log(
-          "[PRESET] walkerAudioSelf:",
-          state.createPreset.walkerAudioSelf,
-        );
+    });
+
+    try {
+      bindControls();
+    } catch (e) {
+      console.warn("[WOS] bindControls error (non-fatal):", e.message);
+    }
+
+    // ── Camera input handlers ──────────────────────────────────────────────
+    (function bindCameraInput() {
+      var ZOOM_FACTOR = 1.1;
+      var _panning = false;
+      var _spaceDown = false;
+
+      // Zoom on wheel
+      canvas.addEventListener(
+        "wheel",
+        function onWheel(e) {
+          e.preventDefault();
+          var cam = state.camera;
+          var dir = e.deltaY > 0 ? 1 / ZOOM_FACTOR : ZOOM_FACTOR;
+          // Zoom toward cursor position
+          var rect = canvas.getBoundingClientRect();
+          var sx = (e.clientX - rect.left) * (canvas.width / rect.width);
+          var sy = (e.clientY - rect.top) * (canvas.height / rect.height);
+          var newZoom = clamp(
+            cam.targetZoom * dir,
+            cam.zoomLimits.min,
+            cam.zoomLimits.max,
+          );
+          // Adjust target so cursor stays fixed in world space
+          cam.targetX += ((sx - canvas.width / 2) / cam.zoom) * (1 - dir);
+          cam.targetY += ((sy - canvas.height / 2) / cam.zoom) * (1 - dir);
+          cam.targetZoom = newZoom;
+          renderFrame();
+        },
+        { passive: false },
+      );
+
+      // Pan: middle mouse button or Space+drag
+      global.addEventListener("keydown", function (e) {
+        if (e.code === "Space" && !isTypingTarget(e.target)) _spaceDown = true;
+      });
+      global.addEventListener("keyup", function (e) {
+        if (e.code === "Space") {
+          _spaceDown = false;
+          _panning = false;
+        }
+      });
+
+      canvas.addEventListener("pointerdown", function onCamDown(e) {
+        if (e.button === 1 || _spaceDown) {
+          _panning = true;
+          canvas.setPointerCapture(e.pointerId);
+          e.preventDefault();
+        }
+      });
+      canvas.addEventListener("pointermove", function onCamMove(e) {
+        if (!_panning) return;
+        var cam = state.camera;
+        cam.targetX -= e.movementX / cam.zoom;
+        cam.targetY -= e.movementY / cam.zoom;
+        renderFrame();
+      });
+      canvas.addEventListener("pointerup", function () {
+        _panning = false;
+      });
+      canvas.addEventListener("pointercancel", function () {
+        _panning = false;
       });
     })();
-    // ── End Creation Preset UI ───────────────────────────────────────────────
+    // ── End camera input ───────────────────────────────────────────────────
 
-    await loadEmptyWorld();
+    // Unlock AudioEngine on first user gesture — required by browser autoplay policy
+    ["pointerdown", "click", "keydown"].forEach(function (evtName) {
+      window.addEventListener(
+        evtName,
+        function () {
+          AudioEngine.unlock();
+        },
+        { once: true },
+      );
+    });
+
+    // ── Show Paths toggle ───────────────────────────────────────────────────
+    (function bindShowPaths() {
+      var el = document.getElementById("show-paths");
+      if (!el) return;
+      el.checked = state.view.showPaths !== false;
+      el.addEventListener("change", function () {
+        state.view.showPaths = el.checked;
+        renderFrame();
+      });
+    })();
+    // ── End show paths ─────────────────────────────────────────────────────
+
+    // Slider ↔ number sync for obj-strokeWidth
+    (function bindSliderNum() {
+      var slider = document.getElementById("obj-strokeWidth");
+      var num = document.getElementById("obj-strokeWidth-num");
+      if (!slider || !num) return;
+      slider.addEventListener("input", function () {
+        num.value = slider.value;
+      });
+      num.addEventListener("input", function () {
+        var v = Math.max(1, Math.min(100, Number(num.value)));
+        slider.value = v;
+        // Also fire the bound inspector setter
+        slider.dispatchEvent(new Event("input"));
+      });
+    })();
+
+    // Viewport mode
+    applyViewportMode();
+    (function bindViewportMode() {
+      var sel = document.getElementById("viewport-mode");
+      if (!sel) return;
+      sel.addEventListener("change", function () {
+        state.viewportMode = sel.value;
+        applyViewportMode();
+      });
+    })();
+    // ── End inspector collapsibles ────────────────────────────────────────
+
+    // ── Text Tool canvas handler ────────────────────────────────────────────
+    canvas.addEventListener("pointerdown", function onTextToolDown(e) {
+      if (state.tool !== "text") return;
+
+      var rect = canvas.getBoundingClientRect();
+      var sx = (e.clientX - rect.left) * (canvas.width / rect.width);
+      var sy = (e.clientY - rect.top) * (canvas.height / rect.height);
+
+      // Commit any active edit first
+      if (state.textEditing && state.activeLabelId) {
+        var cur = getLabelById(state.activeLabelId);
+        if (cur && !cur.text) removeLabel(cur.id);
+        state.textEditing = false;
+      }
+
+      // Hit-test existing labels
+      var hit = getLabelAtScreen(sx, sy);
+      if (hit) {
+        state.activeLabelId = hit.id;
+        state.textEditing = true;
+        e.stopPropagation();
+        renderFrame();
+        return;
+      }
+
+      // Create new label at world position
+      var cam = state.camera;
+      var wx = (sx - canvas.width / 2) / cam.zoom + cam.x;
+      var wy = (sy - canvas.height / 2) / cam.zoom + cam.y;
+      var label = createLabelAt(wx, wy);
+      state.activeLabelId = label.id;
+      state.textEditing = true;
+      e.stopPropagation();
+      renderFrame();
+    });
+    // ── End text tool handler ───────────────────────────────────────────────
+
+    // ── Creation Preset UI ───────────────────────────────────────────────────
+
+    await applyExampleScene();
+    // One-time migration: ensure all strokes have complete sound config + are unmuted
+    state.strokes.forEach(function (s) {
+      if (!s.sound) s.sound = {};
+      if (!s.sound.role) s.sound.role = "drum";
+      if (!s.sound.source) s.sound.source = "synth";
+      if (!s.sound.trigger) s.sound.trigger = "continuous";
+      s.sound.enabled = true;
+      if (!s.behavior) s.behavior = {};
+      s.behavior.isMuted = false;
+    });
+    renderBankGrid();
+    state.lines[2].y1 += 100;
+    state.lines[2].y2 += 100;
     updateCanvasAspect();
     setViewClasses();
     syncUI();
@@ -4776,15 +5572,6 @@
       pushHistory();
       state.strokes.push(stroke);
       analyzeStroke(stroke);
-      if (state.createPreset.withWalker) {
-        var w = createWalkerFromStroke(stroke);
-        if (w) {
-          w.audioSelf = !!state.createPreset.walkerAudioSelf;
-          w.triggerOthers = state.createPreset.triggerOthers !== false;
-          state.walkers.push(w);
-        }
-      }
-
       renderFrame();
       return stroke;
     }
@@ -5261,7 +6048,7 @@
       gain.gain.linearRampToValueAtTime(peakGain, now + 0.008);
       gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.32);
       osc.connect(gain);
-      gain.connect(state.audio.masterGain || ctx.destination);
+      gain.connect(AudioEngine.output());
       osc.start(now);
       osc.stop(now + 0.34);
     }
@@ -5625,6 +6412,587 @@
     // ── End MIDI Ink System ──────────────────────────────────────────────
     // ═══════════════════════════════════════════════════════════════════════
 
+    // ═══════════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════════════
+    // ── Canvas Tool Sub-Bar ──────────────────────────────────────────────
+    // ═══════════════════════════════════════════════════════════════════════
+
+    function _tsbField(labelText, control, root) {
+      var grp = document.createElement("div");
+      grp.className = "canvas-tool-subbar__group";
+      var lbl = document.createElement("label");
+      var sp = document.createElement("span");
+      sp.textContent = labelText;
+      lbl.appendChild(sp);
+      lbl.appendChild(control);
+      grp.appendChild(lbl);
+      root.appendChild(grp);
+    }
+
+    function _tsbColor(val, onChange) {
+      var el = document.createElement("input");
+      el.type = "color";
+      el.value = val;
+      el.addEventListener("input", function () {
+        onChange(el.value);
+      });
+      return el;
+    }
+
+    function _tsbNumber(val, onChange, opts) {
+      var el = document.createElement("input");
+      el.type = "number";
+      el.value = val;
+      if (opts) {
+        if (opts.min != null) el.min = opts.min;
+        if (opts.max != null) el.max = opts.max;
+        if (opts.step) el.step = opts.step;
+      }
+      el.addEventListener("input", function () {
+        var n = Number(el.value);
+        if (Number.isFinite(n)) onChange(n);
+      });
+      return el;
+    }
+
+    function _tsbSelect(val, options, onChange) {
+      var el = document.createElement("select");
+      options.forEach(function (o) {
+        var opt = document.createElement("option");
+        opt.value = o;
+        opt.textContent = o;
+        el.appendChild(opt);
+      });
+      el.value = val;
+      el.addEventListener("change", function () {
+        onChange(el.value);
+      });
+      return el;
+    }
+
+    function _tsbCheck(val, onChange) {
+      var el = document.createElement("input");
+      el.type = "checkbox";
+      el.checked = !!val;
+      el.addEventListener("change", function () {
+        onChange(el.checked);
+      });
+      return el;
+    }
+
+    function renderCanvasToolSubBar() {
+      var root = document.getElementById("canvas-tool-subbar");
+      if (!root) return;
+      root.innerHTML = "";
+
+      // Tool name badge
+      var badge = document.createElement("span");
+      badge.className = "canvas-tool-subbar__tool-name";
+      var toolName =
+        {
+          pen: "Brush",
+          ball: "Ball",
+          text: "Text",
+          select: "Select",
+          shape: "Shape",
+        }[state.tool] || state.tool;
+      badge.textContent = toolName;
+      root.appendChild(badge);
+
+      var t = state.tools;
+
+      if (state.tool === "pen") {
+        var b = t.brush;
+        _tsbField(
+          "Fill",
+          _tsbColor(b.fill, function (v) {
+            b.fill = v;
+            b.stroke = v;
+            // Sync to existing defaults so stroke color reflects sub-bar
+            state.defaults.color = v;
+            syncUI();
+          }),
+          root,
+        );
+        _tsbField(
+          "Width",
+          _tsbNumber(
+            b.strokeWidth,
+            function (v) {
+              b.strokeWidth = Math.max(1, v);
+              state.defaults.strokeWidth = b.strokeWidth;
+            },
+            { min: 1, step: 1 },
+          ),
+          root,
+        );
+        _tsbField(
+          "Walker",
+          _tsbCheck(b.walkerEnabled, function (v) {
+            b.walkerEnabled = v;
+          }),
+          root,
+        );
+        _tsbField(
+          "Trail",
+          _tsbCheck(b.trailEnabled, function (v) {
+            b.trailEnabled = v;
+          }),
+          root,
+        );
+        _tsbField(
+          "Source",
+          _tsbSelect(b.soundSource, ["synth", "sample", "off"], function (v) {
+            b.soundSource = v;
+          }),
+          root,
+        );
+        _tsbField(
+          "Role",
+          _tsbSelect(
+            b.soundRole,
+            ["drum", "bass", "lead", "pad"],
+            function (v) {
+              b.soundRole = v;
+            },
+          ),
+          root,
+        );
+        _tsbField(
+          "Trigger",
+          _tsbSelect(b.sound.trigger, ["impact", "continuous"], function (v) {
+            b.sound.trigger = v;
+          }),
+          root,
+        );
+        return;
+      }
+
+      if (state.tool === "ball") {
+        var b = t.ball;
+        _tsbField(
+          "Fill",
+          _tsbColor(b.fill, function (v) {
+            b.fill = v;
+          }),
+          root,
+        );
+        _tsbField(
+          "Radius",
+          _tsbNumber(
+            b.radius,
+            function (v) {
+              b.radius = Math.max(1, v);
+              state.swarm.collisionRadius = b.radius;
+              state.swarm.renderRadius = b.radius * 2.3;
+            },
+            { min: 1, step: 1 },
+          ),
+          root,
+        );
+        _tsbField(
+          "Speed",
+          _tsbNumber(
+            b.velocity,
+            function (v) {
+              b.velocity = Math.max(0, v);
+              state.ballTool.speed = b.velocity;
+            },
+            { min: 0, step: 0.1 },
+          ),
+          root,
+        );
+        _tsbField(
+          "Bounce",
+          _tsbNumber(
+            b.bounciness,
+            function (v) {
+              b.bounciness = clamp(v, 0, 1);
+            },
+            { min: 0, max: 1, step: 0.05 },
+          ),
+          root,
+        );
+        return;
+      }
+
+      if (state.tool === "text") {
+        var tx = t.text;
+        _tsbField(
+          "Color",
+          _tsbColor(tx.fill, function (v) {
+            tx.fill = v;
+          }),
+          root,
+        );
+        _tsbField(
+          "Size",
+          _tsbNumber(
+            tx.fontSize,
+            function (v) {
+              tx.fontSize = Math.max(8, v);
+              state.defaults.textSize = tx.fontSize;
+            },
+            { min: 8, step: 1 },
+          ),
+          root,
+        );
+        _tsbField(
+          "Multiline",
+          _tsbCheck(tx.multiline, function (v) {
+            tx.multiline = v;
+          }),
+          root,
+        );
+        return;
+      }
+
+      if (state.tool === "walker") {
+        var wk = t.walker;
+        _tsbField(
+          "Mode",
+          _tsbSelect(
+            wk.mode,
+            ["pingpong", "loop", "once", "tunnel"],
+            function (v) {
+              wk.mode = v;
+            },
+          ),
+          root,
+        );
+        _tsbField(
+          "Speed",
+          _tsbNumber(
+            wk.speed,
+            function (v) {
+              wk.speed = Math.max(0, v);
+              state.walker.speed = wk.speed * 0.0025;
+            },
+            { min: 0, step: 0.1 },
+          ),
+          root,
+        );
+        _tsbField(
+          "Trail",
+          _tsbSelect(
+            wk.trailStyle,
+            ["off", "orbit", "comet", "dust", "burst", "ribbon"],
+            function (v) {
+              wk.trailStyle = v;
+            },
+          ),
+          root,
+        );
+        _tsbField(
+          "Self Sound",
+          _tsbCheck(wk.selfSoundEnabled, function (v) {
+            wk.selfSoundEnabled = v;
+          }),
+          root,
+        );
+        return;
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // ── End Canvas Tool Sub-Bar ──────────────────────────────────────────
+    // ═══════════════════════════════════════════════════════════════════════
+
+    // ── Label System (Text Tool) ─────────────────────────────────────────
+    // ═══════════════════════════════════════════════════════════════════════
+
+    function createLabelId() {
+      return "lbl_" + Math.random().toString(36).slice(2, 9);
+    }
+
+    function getLabelById(id) {
+      return (
+        state.labels.find(function (l) {
+          return l.id === id;
+        }) || null
+      );
+    }
+
+    function removeLabel(id) {
+      state.labels = state.labels.filter(function (l) {
+        return l.id !== id;
+      });
+    }
+
+    function createLabelAt(worldX, worldY) {
+      var label = {
+        id: createLabelId(),
+        x: worldX,
+        y: worldY,
+        text: "",
+        style: "text", // "text" | "box"
+        size: 14,
+        color: "#ffffff",
+        padding: 8,
+        radius: 10,
+        bg: "rgba(0,0,0,0.6)",
+        border: "rgba(255,255,255,0.2)",
+        align: "center",
+        visible: true,
+      };
+      state.labels.push(label);
+      return label;
+    }
+
+    // Hit-test: returns label whose rendered position is within radius of screen point
+    function getLabelAtScreen(sx, sy) {
+      var cam = state.camera;
+      var hitR = 20;
+      for (var i = state.labels.length - 1; i >= 0; i--) {
+        var l = state.labels[i];
+        if (!l.visible) continue;
+        // Project world → screen
+        var scx = (l.x - cam.x) * cam.zoom + canvas.width / 2;
+        var scy = (l.y - cam.y) * cam.zoom + canvas.height / 2;
+        if (Math.hypot(sx - scx, sy - scy) < hitR) return l;
+      }
+      return null;
+    }
+
+    // Rounded rect helper (also used by renderLabelBox)
+    function roundRectPath(ctx, x, y, w, h, r) {
+      r = Math.min(r, w / 2, h / 2);
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.lineTo(x + w - r, y);
+      ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+      ctx.lineTo(x + w, y + h - r);
+      ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+      ctx.lineTo(x + r, y + h);
+      ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+      ctx.lineTo(x, y + r);
+      ctx.quadraticCurveTo(x, y, x + r, y);
+      ctx.closePath();
+    }
+
+    function renderMultiLineText(
+      ctx,
+      label,
+      scx,
+      scy,
+      fontSize,
+      lines,
+      lineHeight,
+    ) {
+      var startY = scy - ((lines.length - 1) * lineHeight) / 2;
+      ctx.fillStyle = label.color;
+      lines.forEach(function (line, i) {
+        ctx.fillText(line, scx, startY + i * lineHeight);
+      });
+      // Cursor blink when actively editing this label
+      if (state.activeLabelId === label.id && state.textEditing) {
+        var lastLine = lines[lines.length - 1];
+        var cx =
+          scx +
+          (label.align === "left"
+            ? ctx.measureText(lastLine).width
+            : label.align === "right"
+              ? -ctx.measureText(lastLine).width
+              : 0);
+        var cy = startY + (lines.length - 1) * lineHeight;
+        if (Math.floor(performance.now() / 500) % 2 === 0) {
+          ctx.beginPath();
+          ctx.moveTo(
+            cx +
+              ctx.measureText(lastLine).width *
+                (label.align === "center" ? 0.5 : 1) +
+              2,
+            cy - fontSize * 0.5,
+          );
+          ctx.lineTo(
+            cx +
+              ctx.measureText(lastLine).width *
+                (label.align === "center" ? 0.5 : 1) +
+              2,
+            cy + fontSize * 0.5,
+          );
+          ctx.strokeStyle = label.color;
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+        }
+      }
+    }
+
+    function renderLabelBox(ctx, label, scx, scy, fontSize, lines, lineHeight) {
+      var widths = lines.map(function (line) {
+        return ctx.measureText(line).width;
+      });
+      var maxW = Math.max.apply(null, widths.concat([20]));
+      var pad = label.padding;
+      var boxW = maxW + pad * 2;
+      var boxH = lines.length * lineHeight + pad * 2;
+      var bx = scx - boxW / 2;
+      var by = scy - boxH / 2;
+      roundRectPath(ctx, bx, by, boxW, boxH, label.radius);
+      ctx.fillStyle = label.bg;
+      ctx.fill();
+      ctx.strokeStyle = label.border;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      renderMultiLineText(ctx, label, scx, scy, fontSize, lines, lineHeight);
+    }
+
+    function renderLabels(ctx) {
+      if (!state.labels.length) return;
+      var cam = state.camera;
+      state.labels.forEach(function (label) {
+        if (!label.visible) return;
+        // Project world → screen (labels render in screen space for zoom-stable size)
+        var scx = (label.x - cam.x) * cam.zoom + canvas.width / 2;
+        var scy = (label.y - cam.y) * cam.zoom + canvas.height / 2;
+        ctx.save();
+        var fontSize = Math.max(10, label.size); // fixed screen size regardless of zoom
+        var lineHeight = fontSize * 1.35;
+        var lines = (
+          label.text || (state.activeLabelId === label.id ? "" : "")
+        ).split("\n");
+        // Show placeholder when empty and editing
+        if (label.text === "" && state.activeLabelId === label.id) lines = [""];
+        ctx.font = fontSize + "px monospace";
+        ctx.textAlign = label.align;
+        ctx.textBaseline = "middle";
+        if (label.style === "box") {
+          renderLabelBox(ctx, label, scx, scy, fontSize, lines, lineHeight);
+        } else {
+          renderMultiLineText(
+            ctx,
+            label,
+            scx,
+            scy,
+            fontSize,
+            lines,
+            lineHeight,
+          );
+        }
+        // Selection ring
+        if (state.activeLabelId === label.id) {
+          ctx.beginPath();
+          ctx.arc(scx, scy, fontSize * 0.4 + 6, 0, Math.PI * 2);
+          ctx.strokeStyle = "rgba(61,216,197,0.5)";
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        }
+        ctx.restore();
+      });
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // ── End Label System ─────────────────────────────────────────────────
+    // ═══════════════════════════════════════════════════════════════════════
+
+    // ── Inspector binding — called on every selection change ─────────────
+    // Only these IDs are allowed. Called AFTER renderInspector.
+    function bind(id, setter) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      el.oninput = function () {
+        var value = el.type === "checkbox" ? el.checked : el.value;
+        setter(value);
+        renderFrame();
+      };
+    }
+
+    function bindInspector(obj) {
+      if (!obj) return;
+      if (!obj.sound)
+        obj.sound = {
+          source: "synth",
+          role: "drum",
+          trigger: "impact",
+          midi: { note: 60 },
+        };
+      if (!obj.sound.midi) obj.sound.midi = { note: obj.note || 60 };
+
+      // Object
+      bind("obj-fill", function (v) {
+        obj.color = v;
+        if (!obj.visual) obj.visual = {};
+        obj.visual.fill = v;
+      });
+      bind("obj-strokeWidth", function (v) {
+        var n = Number(v);
+        obj.width = n;
+        obj.baseWidth = n;
+        if (!obj.visual) obj.visual = {};
+        obj.visual.strokeWidth = n;
+        var out = document.getElementById("obj-strokeWidth-out");
+        if (out) out.value = n;
+      });
+      bind("obj-visible", function (v) {
+        obj.renderMode = v ? "visible" : "hidden";
+        obj.outlineVisible = !!v;
+      });
+
+      // Walker
+      bind("obj-walker", function (v) {
+        obj.walker = v;
+        if (v) {
+          var existing = state.walkers.find(function (w) {
+            return w.strokeId === obj.id;
+          });
+          if (!existing) {
+            var nw = createWalkerFromStroke(obj);
+            if (nw) state.walkers.push(nw);
+          }
+        } else {
+          state.walkers = state.walkers.filter(function (w) {
+            return w.strokeId !== obj.id;
+          });
+        }
+      });
+      bind("obj-motionMode", function (v) {
+        state.walkers.forEach(function (w) {
+          if (w.strokeId === obj.id) w.motionMode = v;
+        });
+      });
+      bind("obj-trailStyle", function (v) {
+        obj.trailEnabled = v !== "off";
+        state.walkers.forEach(function (w) {
+          if (w.strokeId !== obj.id) return;
+          if (!w.emitter) w.emitter = {};
+          w.emitter.enabled = v !== "off";
+        });
+      });
+
+      // Sound — writes directly to obj.sound
+      bind("obj-soundSource", function (v) {
+        obj.sound.source = v;
+      });
+      bind("obj-soundRole", function (v) {
+        obj.sound.role = v;
+      });
+      bind("obj-soundTrigger", function (v) {
+        obj.sound.trigger = v;
+      });
+      bind("obj-bankId", function (v) {
+        obj.bankId = v || null;
+        state.activeBankId = v || null;
+        renderBankGrid();
+      });
+      bind("obj-noteClass", function (v) {
+        var nc = Number(v);
+        obj.noteClass = nc;
+        var color = noteClassToColor(nc);
+        obj.color = color;
+        if (obj.visual) obj.visual.fill = color;
+        if (obj.sound && obj.sound.midi)
+          obj.sound.midi.note = noteToMidi(nc, obj.octave || 4);
+        renderFrame();
+      });
+      bind("obj-octave", function (v) {
+        var oct = Math.max(0, Math.min(8, Number(v)));
+        obj.octave = oct;
+        if (obj.sound && obj.sound.midi)
+          obj.sound.midi.note = noteToMidi(obj.noteClass || 0, oct);
+      });
+    }
+    // ── End bindInspector ────────────────────────────────────────────────
+
     function bindControls() {
       const elements = controls.elements;
 
@@ -5707,19 +7075,6 @@
           renderFrame();
         },
       );
-
-      if (elements.frameSelect) {
-        elements.frameSelect.addEventListener("change", function onFrameSelect() {
-          var isLandscape = elements.frameSelect.value === "landscape";
-          state.canvas.width = isLandscape ? 1920 : 1080;
-          state.canvas.height = isLandscape ? 1080 : 1920;
-          canvas.width = state.canvas.width;
-          canvas.height = state.canvas.height;
-          renderer.resize(state.canvas.width, state.canvas.height);
-          updateCanvasAspect();
-          renderFrame();
-        });
-      }
 
       elements.saveScene.addEventListener("click", function saveScene() {
         var scene = {
@@ -5999,19 +7354,20 @@
         });
       });
 
-      elements.lineBehavior.addEventListener(
-        "change",
-        function updateBehaviorType() {
-          applyInspectorMetadata();
-          // Show/hide emitter fields
-          if (elements.behaviorEmitterFields) {
-            elements.behaviorEmitterFields.classList.toggle(
-              "hidden",
-              elements.lineBehavior.value !== "emitter",
-            );
-          }
-        },
-      );
+      if (elements.lineBehavior)
+        elements.lineBehavior.addEventListener(
+          "change",
+          function updateBehaviorType() {
+            applyInspectorMetadata();
+            // Show/hide emitter fields
+            if (elements.behaviorEmitterFields) {
+              elements.behaviorEmitterFields.classList.toggle(
+                "hidden",
+                elements.lineBehavior.value !== "emitter",
+              );
+            }
+          },
+        );
 
       // Behavior emitter field listeners
       if (elements.behaviorEmitterRate) {
@@ -6057,12 +7413,13 @@
         );
       }
 
-      elements.lineStrength.addEventListener(
-        "input",
-        function updateBehaviorStrength() {
-          applyInspectorMetadata(false);
-        },
-      );
+      if (elements.lineStrength)
+        elements.lineStrength.addEventListener(
+          "input",
+          function updateBehaviorStrength() {
+            applyInspectorMetadata(false);
+          },
+        );
 
       if (elements.lineThickness) {
         elements.lineThickness.addEventListener(
@@ -6156,32 +7513,39 @@
         updateBtn();
       })();
 
-      elements.lineColor.addEventListener("input", function syncDisplayColor() {
-        var color = elements.lineColor.value;
-        var targets =
-          typeof getSelectedStrokeTargets === "function"
-            ? getSelectedStrokeTargets()
-            : [];
-        if (targets.length > 0) {
-          targets.forEach(function (s) {
-            s.color = color;
-            // Reset fx so resolveFXColor uses the updated stroke.color
-            if (s.motion && s.motion.fx) {
-              s.motion.fx.colorSource = "note";
-              s.motion.fx.color = color;
+      if (elements.lineColor)
+        elements.lineColor.addEventListener(
+          "input",
+          function syncDisplayColor() {
+            var color = elements.lineColor.value;
+            var targets =
+              typeof getSelectedStrokeTargets === "function"
+                ? getSelectedStrokeTargets()
+                : [];
+            if (targets.length > 0) {
+              targets.forEach(function (s) {
+                s.color = color;
+                // Reset fx so resolveFXColor uses the updated stroke.color
+                if (s.motion && s.motion.fx) {
+                  s.motion.fx.colorSource = "note";
+                  s.motion.fx.color = color;
+                }
+                applyStrokeUpdates(s);
+              });
+              renderFrame();
+              return;
             }
-            applyStrokeUpdates(s);
-          });
-          renderFrame();
-          return;
-        }
-        // No selection — persist default for future strokes
-        state.defaults.color = color;
-        var nextNote = findClosestNoteForColor(color);
-        if (nextNote !== null) {
-          applyNoteClass(nextNote % 12, Math.floor(state.defaults.note / 12));
-        }
-      });
+            // No selection — persist default for future strokes
+            state.defaults.color = color;
+            var nextNote = findClosestNoteForColor(color);
+            if (nextNote !== null) {
+              applyNoteClass(
+                nextNote % 12,
+                Math.floor(state.defaults.note / 12),
+              );
+            }
+          },
+        );
 
       elements.colorSwatches.forEach((swatch) => {
         swatch.addEventListener("click", function syncSwatchColor() {
@@ -6957,6 +8321,36 @@
           return;
         }
 
+        // ── Label editing mode — captures all keys ────────────────────────
+        if (state.textEditing && state.activeLabelId) {
+          var _editLabel = getLabelById(state.activeLabelId);
+          if (_editLabel) {
+            event.preventDefault();
+            if (event.key === "Escape") {
+              // Cancel — remove empty label, deselect
+              if (!_editLabel.text) removeLabel(_editLabel.id);
+              state.textEditing = false;
+              state.activeLabelId = null;
+            } else if (event.key === "Backspace") {
+              _editLabel.text = _editLabel.text.slice(0, -1);
+            } else if (event.key === "Enter") {
+              if (event.shiftKey) {
+                // Shift+Enter — commit
+                if (!_editLabel.text) removeLabel(_editLabel.id);
+                state.textEditing = false;
+                state.activeLabelId = null;
+              } else {
+                _editLabel.text += "\n";
+              }
+            } else if (event.key.length === 1) {
+              _editLabel.text += event.key;
+            }
+            renderFrame();
+            return; // block all other shortcuts while editing
+          }
+        }
+        // ── End label editing ─────────────────────────────────────────────
+
         if (isTypingTarget(event.target)) {
           return;
         }
@@ -7259,11 +8653,6 @@
       renderFrame();
     }
 
-    async function loadEmptyWorld() {
-      state.swarm.count = 0;
-      await applyScene({ lines: [], balls: [], strokes: [], shapes: [], textObjects: [] });
-    }
-
     async function applyExampleScene() {
       await applyScene(SBE.ExampleScene);
       resetTransportClock();
@@ -7378,6 +8767,55 @@
     function updateCanvasAspect() {
       canvasWrap.style.aspectRatio =
         state.canvas.width + " / " + state.canvas.height;
+    }
+
+    function applyViewportMode() {
+      var isLandscape = state.viewportMode === "landscape";
+      var w = isLandscape ? 1920 : 1080;
+      var h = isLandscape ? 1080 : 1920;
+
+      // 1. Real engine canvas resize
+      if (canvas.width !== w || canvas.height !== h) {
+        canvas.width = w;
+        canvas.height = h;
+      }
+
+      // 2. state.canvas tracks dimensions for coordinate math
+      state.canvas.width = w;
+      state.canvas.height = h;
+
+      // 3. Surface (ink) canvas must match
+      if (typeof surfaceCanvas !== "undefined" && surfaceCanvas) {
+        surfaceCanvas.width = w;
+        surfaceCanvas.height = h;
+      }
+
+      // 4. Renderer resize (recalculates projection)
+      if (typeof renderer !== "undefined" && renderer && renderer.resize) {
+        renderer.resize(w, h);
+      }
+
+      // 5. Wrapper class drives CSS framing
+      var wrap = document.querySelector(".canvas-wrap");
+      if (wrap) {
+        wrap.classList.remove("viewport-portrait", "viewport-landscape");
+        wrap.classList.add(
+          isLandscape ? "viewport-landscape" : "viewport-portrait",
+        );
+      }
+
+      // 6. Sync UI select
+      var sel = document.getElementById("viewport-mode");
+      if (sel) sel.value = state.viewportMode;
+
+      // 7. Re-render at new resolution
+      if (typeof renderFrame === "function") renderFrame();
+
+      console.log(
+        "[FRAME] Format:",
+        isLandscape ? "16:9" : "9:16",
+        w + "×" + h,
+      );
     }
 
     function getSampleCount(noteClass) {
@@ -7599,6 +9037,143 @@
       });
     }
 
+    // ── Bank System v2 ────────────────────────────────────────────────────
+    // Color → MIDI note (pitch layer is visual, independent of banks)
+    function colorToMidi(color) {
+      if (!color) return 60;
+      // Hash hex color to 0-127 range
+      var hex = color.replace("#", "");
+      var r = parseInt(hex.substr(0, 2), 16) || 0;
+      var g = parseInt(hex.substr(2, 2), 16) || 0;
+      var b = parseInt(hex.substr(4, 2), 16) || 0;
+      return Math.round(((r * 0.299 + g * 0.587 + b * 0.114) / 255) * 127);
+    }
+
+    function getActiveBank() {
+      return (
+        state.banks.find(function (b) {
+          return b.id === state.activeBankId;
+        }) || state.banks[0]
+      );
+    }
+
+    function getBankIndex(bankId) {
+      return state.banks.findIndex(function (b) {
+        return b.id === bankId;
+      });
+    }
+
+    function resolveSampleFromBank(stroke) {
+      if (!stroke || !stroke.bankId) return null;
+      var bank = state.banks.find(function (b) {
+        return b.id === stroke.bankId;
+      });
+      if (!bank || !bank.samples.length) return null;
+      return bank.samples[0]; // simple: first sample (round-robin can extend later)
+    }
+
+    function playBuffer(audioBuffer, gainValue) {
+      var ctx = AudioEngine.init();
+      if (!ctx) return;
+      if (ctx.state !== "running") {
+        ctx.resume().catch(function () {});
+        return;
+      }
+      try {
+        var source = ctx.createBufferSource();
+        var gain = ctx.createGain();
+        source.buffer = audioBuffer;
+        gain.gain.setValueAtTime(
+          Math.max(0.001, gainValue || 0.8),
+          ctx.currentTime,
+        );
+        source.connect(gain);
+        gain.connect(AudioEngine.output());
+        source.start();
+      } catch (e) {
+        console.warn("[PLAY BUFFER]", e);
+      }
+    }
+
+    function renderBankGrid() {
+      var container = document.getElementById("bank-grid");
+      if (!container) return;
+      container.innerHTML = "";
+      var selStroke =
+        typeof getSelectedStroke === "function" ? getSelectedStroke() : null;
+      state.banks.forEach(function (bank) {
+        var isActive = bank.id === state.activeBankId;
+        var isStrokeBank = selStroke && selStroke.bankId === bank.id;
+        var btn = document.createElement("button");
+        btn.className =
+          "bank-slot" +
+          (isActive ? " bank-slot--active" : "") +
+          (bank.samples.length > 0 ? " bank-slot--filled" : "") +
+          (isStrokeBank ? " bank-slot--stroke" : "");
+        btn.title = bank.label || "Bank " + (getBankIndex(bank.id) + 1);
+        btn.innerHTML =
+          '<span class="bank-slot__num">' +
+          (getBankIndex(bank.id) + 1) +
+          "</span>" +
+          (bank.samples.length
+            ? '<span class="bank-slot__count">' +
+              bank.samples.length +
+              "</span>"
+            : "");
+        if (bank.color) btn.style.borderColor = bank.color;
+        btn.addEventListener("click", function () {
+          state.activeBankId = bank.id;
+          // Reassign currently selected stroke to this bank
+          var sel =
+            typeof getSelectedStroke === "function"
+              ? getSelectedStroke()
+              : null;
+          if (sel) {
+            sel.bankId = bank.id;
+            console.log("[BANK] Reassigned stroke", sel.id, "→", bank.id);
+          }
+          renderBankGrid();
+          console.log(
+            "[BANK] Active:",
+            bank.id,
+            "samples:",
+            bank.samples.length,
+          );
+        });
+        container.appendChild(btn);
+      });
+    }
+
+    async function loadSampleToActiveBank(file) {
+      var bank = getActiveBank();
+      var context = ensureAudioContext();
+      if (!context) return false;
+      if (context.state !== "running")
+        await context.resume().catch(function () {});
+      try {
+        var arrayBuffer = await file.arrayBuffer();
+        var decoded = await context.decodeAudioData(arrayBuffer);
+        bank.samples.push(decoded);
+        // Also push to sampleMap for backwards compat with existing audio pipeline
+        // Map to noteClass based on bank index
+        var nc = getBankIndex(bank.id) % 12;
+        if (!sampleMap[nc]) sampleMap[nc] = [];
+        sampleMap[nc].push(decoded);
+        renderBankGrid();
+        console.log(
+          "[BANK] Loaded to",
+          bank.id,
+          "— total:",
+          bank.samples.length,
+        );
+        return true;
+      } catch (e) {
+        console.warn("[BANK] Load failed:", e);
+        return false;
+      }
+    }
+    // ── End Bank System v2 ────────────────────────────────────────────────
+
     function syncSamplerTab() {
       var container = document.getElementById("sampler-key-list");
       if (!container) return;
@@ -7748,11 +9323,215 @@
 
     function updatePanels() {
       // Panel visibility is now handled by the fixed layout — no-op
+      renderCanvasToolSubBar();
     }
+
+    // ── Inspector binding utilities ────────────────────────────────────────
+    // setDeep: write a dot-path value into an object (e.g. "visual.fill")
+    function setDeep(obj, path, value) {
+      if (!obj) return;
+      var keys = path.split(".");
+      var target = obj;
+      while (keys.length > 1) {
+        var k = keys.shift();
+        if (target[k] == null) target[k] = {};
+        target = target[k];
+      }
+      target[keys[0]] = value;
+    }
+
+    // getDeep: read a dot-path value from an object
+    function getDeep(obj, path) {
+      if (!obj) return undefined;
+      var keys = path.split(".");
+      var cur = obj;
+      for (var i = 0; i < keys.length; i++) {
+        if (cur == null) return undefined;
+        cur = cur[keys[i]];
+      }
+      return cur;
+    }
+
+    // getSelectedObjectsNorm: normalized list of selected objects (strokes + balls + text + shapes)
+    function getSelectedObjectsNorm() {
+      var results = [];
+      // Strokes (primary WOS objects)
+      if (state.selection.strokeIds && state.selection.strokeIds.size > 0) {
+        state.selection.strokeIds.forEach(function (id) {
+          var s = getStrokeById(id);
+          if (s) results.push(s);
+        });
+      } else if (state.selection.strokeId) {
+        var s = getStrokeById(state.selection.strokeId);
+        if (s) results.push(s);
+      }
+      // Legacy objects via multiSelection
+      if (!results.length) {
+        state.multiSelection.forEach(function (entry) {
+          var obj = resolveSelectionEntry(entry);
+          if (obj) results.push(obj);
+        });
+      }
+      return results;
+    }
+
+    // updateSelected: write a dot-path value to all selected objects
+    function updateSelected(path, value) {
+      var objects = getSelectedObjectsNorm();
+      if (!objects.length) return;
+
+      objects.forEach(function (obj) {
+        setDeep(obj, path, value);
+
+        // Lightweight legacy field sync — keeps flat properties in sync with visual.*
+        if (path === "visual.fill" || path === "color") {
+          obj.color = value;
+          // Sync bridge lines
+          if (obj.id) {
+            state.lines.forEach(function (l) {
+              if (l._strokeId === obj.id && l._isDerived) {
+                l.color = value;
+                if (l.style) l.style.color = value;
+              }
+            });
+          }
+        }
+        if (path === "visual.strokeWidth" || path === "width") {
+          obj.width = value;
+          obj.baseWidth = value;
+          if (obj.id) {
+            state.lines.forEach(function (l) {
+              if (l._strokeId === obj.id && l._isDerived) {
+                l.thickness = value;
+                if (l.style) l.style.thickness = value;
+              }
+            });
+          }
+        }
+        if (path === "visual.visible") {
+          obj.renderMode = value ? "visible" : "hidden";
+          obj.outlineVisible = !!value;
+        }
+        if (path === "music.midi.note" || path === "music.midiNote") {
+          // Keep legacy note field in sync
+          if (typeof value === "number") obj.note = value;
+        }
+      });
+
+      renderFrame();
+      renderInspector(); // keep UI in sync after every update
+
+      // Preview note when MIDI note is changed
+      if (
+        (path === "music.midi.note" || path === "music.midiNote") &&
+        typeof value === "number"
+      ) {
+        try {
+          if (window._wos && _wos.preview && _wos.preview.play) {
+            _wos.preview.play({ note: value, velocity: 100, channel: 1 });
+          }
+        } catch (e) {
+          console.warn("[PREVIEW]", e);
+        }
+      }
+    }
+
+    // renderInspector: sync DOM controls to the primary selected object
+    function renderInspector() {
+      var objects = getSelectedObjectsNorm();
+      var el = controls && controls.elements;
+      if (!el) return;
+
+      if (!objects.length) {
+        if (el.lineColor)
+          el.lineColor.value = state.defaults.color || "#ff4d4d";
+        if (el.strokeWidth)
+          el.strokeWidth.value = String(state.defaults.strokeWidth || 18);
+        return;
+      }
+
+      var obj = objects[0];
+      var isMixed = objects.length > 1;
+
+      var fill = (obj.visual && obj.visual.fill) || obj.color || "#ff4d4d";
+      var width =
+        (obj.visual && obj.visual.strokeWidth) ||
+        obj.baseWidth ||
+        obj.width ||
+        18;
+
+      if (el.lineColor) el.lineColor.value = fill;
+      if (el.strokeWidth) el.strokeWidth.value = String(Math.round(width));
+
+      // MIDI note
+      var midiNoteEl = document.getElementById("midi-note");
+      if (midiNoteEl) {
+        var mn =
+          (obj.sound && obj.sound.midi && obj.sound.midi.note) ||
+          obj.note ||
+          60;
+        midiNoteEl.value = isMixed ? "" : String(mn);
+      }
+      // Sound section (old IDs)
+      var srcEl = document.getElementById("insp-sound-source");
+      var roleEl = document.getElementById("insp-sound-role");
+      var trigEl = document.getElementById("insp-sound-trigger");
+      if (obj.sound) {
+        if (srcEl) srcEl.value = obj.sound.source || "synth";
+        if (roleEl) roleEl.value = obj.sound.role || "drum";
+        if (trigEl) trigEl.value = obj.sound.trigger || "continuous";
+      }
+
+      // New obj-* inspector fields
+      (function syncNewInspector() {
+        function setEl(id, value) {
+          var el = document.getElementById(id);
+          if (!el) return;
+          if (el.type === "checkbox") el.checked = !!value;
+          else el.value = value != null ? value : "";
+        }
+        setEl("obj-fill", obj.color || "#ff4b4b");
+        setEl("obj-strokeWidth", Math.round(obj.baseWidth || obj.width || 18));
+        setEl("obj-visible", obj.renderMode !== "hidden");
+        var walker = state.walkers.find(function (w) {
+          return w.strokeId === obj.id;
+        });
+        setEl("obj-walker", !!walker);
+        setEl(
+          "obj-motionMode",
+          walker ? walker.motionMode || "pingpong" : "pingpong",
+        );
+        setEl(
+          "obj-trailStyle",
+          obj.trailEnabled ||
+            (walker && walker.emitter && walker.emitter.enabled)
+            ? "on"
+            : "off",
+        );
+        if (obj.sound) {
+          setEl("obj-soundSource", obj.sound.source || "off");
+          setEl("obj-soundRole", obj.sound.role || "drum");
+          setEl("obj-soundTrigger", obj.sound.trigger || "impact");
+        }
+        setEl("obj-bankId", obj.bankId || "");
+        setEl(
+          "obj-noteClass",
+          obj.noteClass != null ? String(obj.noteClass) : "0",
+        );
+        setEl("obj-octave", obj.octave != null ? obj.octave : 4);
+        var swOut = document.getElementById("obj-strokeWidth-out");
+        if (swOut) swOut.value = Math.round(obj.baseWidth || obj.width || 18);
+      })();
+    }
+    // ── End inspector binding utilities ───────────────────────────────────
 
     function syncSelectionPanel() {
       // Guard — state.selection may not be initialized
       if (!state.selection) return;
+      // Sync inspector — render then bind to selected object
+      var _inspObj = getSelectedObjectsNorm()[0] || null;
+      renderInspector();
+      bindInspector(_inspObj);
       enforceSelectionMode(); // hard invariant: group and stroke are mutually exclusive
 
       // Resolve the actual target — group takes priority over single stroke
@@ -9307,6 +11086,31 @@
       if (sourceObject.behavior?.emitterConfig?.isMuted) return;
       if (sourceObject.behavior?.emitterConfig?.mute) return;
 
+      // Resolve owning stroke to check trigger routing
+      var ownerStroke = resolveEventStroke({
+        sourceId: sourceObject.strokeId || sourceObject.id,
+      });
+      if (ownerStroke) {
+        var trigger =
+          (ownerStroke.sound && ownerStroke.sound.trigger) || "impact";
+        if (trigger !== "impact") return; // collision events only fire impact strokes
+
+        // Synth source: play role synth directly, skip event pipeline
+        var src = ownerStroke.sound && ownerStroke.sound.source;
+        if (src === "off") return;
+        if (src === "synth") {
+          var note = ownerStroke.note || sourceObject.note || 60;
+          var vel =
+            (sourceObject.sound &&
+              sourceObject.sound.midi &&
+              sourceObject.sound.midi.velocity) ||
+            80;
+          playSynth(ownerStroke, note, vel);
+          return;
+        }
+        // src === "sample" or undefined → fall through to existing event pipeline
+      }
+
       const currentTime = getTransportTime();
 
       if (!state.quantize.enabled) {
@@ -10061,6 +11865,24 @@
       return note + 12;
     }
 
+    function updateCamera() {
+      var cam = state.camera;
+      // Follow mode — lock target to walker
+      if (cam.mode === "follow" && cam.follow.walkerId) {
+        var fw = state.walkers.find(function (w) {
+          return w.id === cam.follow.walkerId;
+        });
+        if (fw) {
+          cam.targetX = fw.x;
+          cam.targetY = fw.y;
+        }
+      }
+      // Smooth interpolation
+      cam.x += (cam.targetX - cam.x) * 0.1;
+      cam.y += (cam.targetY - cam.y) * 0.1;
+      cam.zoom += (cam.targetZoom - cam.zoom) * 0.1;
+    }
+
     function tick(dt, now) {
       if (!isPlaying) {
         return;
@@ -10222,6 +12044,7 @@
 
       // PathWalker update
       updateClock(now);
+      updateCamera();
       updateWalkers(dt);
       updateWalkerMusic();
 
@@ -10433,6 +12256,14 @@
       });
       renderer.render(renderState, drawTools.getOverlays());
       var ctx = canvas.getContext("2d");
+
+      // ── Camera transform — world space draw calls ─────────────────────────
+      var cam = state.camera;
+      ctx.save();
+      ctx.translate(canvas.width / 2, canvas.height / 2);
+      ctx.scale(cam.zoom, cam.zoom);
+      ctx.translate(-cam.x, -cam.y);
+
       // Grid — drawn before all stroke/walker content
       drawGrid(ctx, canvas.width, canvas.height);
       // Surface stamp layer (persistent ink)
@@ -10442,11 +12273,18 @@
       drawWalkers(ctx);
       renderParticles(ctx);
       drawHitFeedback(ctx);
+      drawMutedOverlays(ctx);
+      drawShapeIndicators(ctx);
+      drawLinePreview();
+
+      ctx.restore();
+      // ── End camera transform — screen space overlays follow ───────────────
+
+      // Labels render in screen space (zoom-stable font size)
+      renderLabels(ctx);
+
       drawParticleOverlays();
       drawDebugHUD();
-      drawMutedOverlays();
-      drawShapeIndicators();
-      drawLinePreview();
 
       // ── Rotation guide overlay (arc, ticks, snap indicators, degree label) ──
       if (
@@ -10684,8 +12522,8 @@
       });
     }
 
-    function drawMutedOverlays() {
-      var ctx = canvas.getContext("2d");
+    function drawMutedOverlays(passedCtx) {
+      var ctx = passedCtx || canvas.getContext("2d");
 
       // Muted lines — draw dark stroke on top of renderer output
       (state.lines || []).forEach(function (line) {
@@ -10894,7 +12732,8 @@
       ctx.restore();
     }
 
-    function drawShapeIndicators() {
+    function drawShapeIndicators(passedCtx) {
+      var _siCtx = passedCtx;
       if (
         !state.selectedShapeId ||
         state.ui.cleanOutput ||
@@ -11004,26 +12843,7 @@
     }
 
     function ensureAudioContext() {
-      if (state.audio.context) {
-        if (state.audio.context.state === "suspended") {
-          state.audio.context.resume().catch(function ignoreResumeError() {});
-        }
-        return state.audio.context;
-      }
-
-      if (!global.AudioContext && !global.webkitAudioContext) {
-        return null;
-      }
-
-      var AudioCtor = global.AudioContext || global.webkitAudioContext;
-      state.audio.context = new AudioCtor();
-
-      // Master gain node (~-12dB) to prevent clipping
-      state.audio.masterGain = state.audio.context.createGain();
-      state.audio.masterGain.gain.value = 0.25;
-      state.audio.masterGain.connect(state.audio.context.destination);
-
-      return state.audio.context;
+      return AudioEngine.init();
     }
 
     function getExportDurationSec() {
