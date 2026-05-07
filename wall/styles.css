@@ -1,5 +1,6 @@
 :root {
   color-scheme: dark;
+  --wall-safe-padding: 48px;
   --bg: #0c0d0f;
   --panel: #131416;
   --panel-border: rgba(255, 255, 255, 0.06);
@@ -399,6 +400,7 @@ body {
   overflow: hidden;
   background: #030405; /* WALL */
   min-width: 0;
+  padding: var(--wall-safe-padding);
 }
 
 .canvas-fill #engine-canvas {

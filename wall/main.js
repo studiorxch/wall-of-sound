@@ -5410,20 +5410,8 @@
 
     // ── Creation Preset UI ───────────────────────────────────────────────────
 
-    await applyExampleScene();
-    // One-time migration: ensure all strokes have complete sound config + are unmuted
-    state.strokes.forEach(function (s) {
-      if (!s.sound) s.sound = {};
-      if (!s.sound.role) s.sound.role = "drum";
-      if (!s.sound.source) s.sound.source = "synth";
-      if (!s.sound.trigger) s.sound.trigger = "continuous";
-      s.sound.enabled = true;
-      if (!s.behavior) s.behavior = {};
-      s.behavior.isMuted = false;
-    });
+    await applyScene({ lines: [], strokes: [], balls: [], walkers: [], groups: {}, shapes: [], textObjects: [] });
     renderBankGrid();
-    state.lines[2].y1 += 100;
-    state.lines[2].y2 += 100;
     updateCanvasAspect();
     setViewClasses();
     syncUI();

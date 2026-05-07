@@ -395,14 +395,10 @@
         </div>
         <div class="tab-content" data-tab-content="canvas">
           <div class="insp-row">
-            <span class="insp-label">Resolution</span>
-            <span class="insp-value">1080 × 1920</span>
-          </div>
-          <div class="insp-row">
-            <label class="insp-label" for="viewport-mode">Format</label>
+            <label class="insp-label" for="viewport-mode">Frame</label>
             <select id="viewport-mode">
-              <option value="portrait">9:16</option>
-              <option value="landscape">16:9</option>
+              <option value="portrait">Portrait (1080×1920)</option>
+              <option value="landscape">Landscape (1920×1080)</option>
             </select>
           </div>
           <div class="insp-row">
@@ -459,106 +455,39 @@
             <input id="toggle-hit-count" type="checkbox" />
           </div>
 
-          <div class="insp-section-divider">Particles</div>
+          <div class="insp-section-divider">World Actions</div>
 
-          <div class="insp-row">
-            <label class="insp-label" for="ball-count">Count</label>
-            <div class="insp-slider-num">
-              <input
-                id="ball-count"
-                type="range"
-                min="1"
-                max="8"
-                step="1"
-                value="1"
-              />
-              <output id="ball-count-value">1</output>
-            </div>
-          </div>
-          <div class="insp-row">
-            <label class="insp-label" for="ball-speed">Speed</label>
-            <div class="insp-slider-num">
-              <input
-                id="ball-speed"
-                type="range"
-                min="0.4"
-                max="3"
-                step="0.1"
-                value="1"
-              />
-              <output id="ball-speed-value">1.0</output>
-            </div>
-          </div>
-          <div class="insp-row">
-            <label class="insp-label" for="ball-spread">Spread</label>
-            <div class="insp-slider-num">
-              <input
-                id="ball-spread"
-                type="range"
-                min="0"
-                max="1"
-                step="0.05"
-                value="0.15"
-              />
-              <output id="ball-spread-value">0.15</output>
-            </div>
-          </div>
-          <div class="insp-row">
-            <label class="insp-label" for="particle-shape">Shape</label>
-            <select id="particle-shape">
-              <option value="circle">Circle</option>
-              <option value="triangle">Triangle</option>
-              <option value="square">Square</option>
-            </select>
-          </div>
-          <div class="insp-row">
-            <label class="insp-label" for="particle-trail">Trail</label>
-            <input id="particle-trail" type="checkbox" checked />
-          </div>
           <div class="insp-row">
             <span class="insp-label"></span>
             <button id="clear-balls" style="width: 100%">Clear Balls</button>
           </div>
 
-          <div class="insp-section-divider">Sound Response</div>
+          <!-- Particle tool state — hidden, kept for JS bindings -->
+          <div style="display: none">
+            <input id="ball-count" type="range" min="1" max="8" step="1" value="1" />
+            <output id="ball-count-value">1</output>
+            <input id="ball-speed" type="range" min="0.4" max="3" step="0.1" value="1" />
+            <output id="ball-speed-value">1.0</output>
+            <input id="ball-spread" type="range" min="0" max="1" step="0.05" value="0.15" />
+            <output id="ball-spread-value">0.15</output>
+            <select id="particle-shape">
+              <option value="circle">Circle</option>
+              <option value="triangle">Triangle</option>
+              <option value="square">Square</option>
+            </select>
+            <input id="particle-trail" type="checkbox" checked />
+          </div>
 
-          <div class="insp-row">
-            <label class="insp-label" for="density-harmonics-toggle"
-              >Density Harmonics</label
-            >
+          <!-- Sound Response — hidden pending validation -->
+          <div style="display: none">
             <input id="density-harmonics-toggle" type="checkbox" checked />
-          </div>
-          <div class="insp-row">
-            <label class="insp-label" for="velocity-dynamics-toggle"
-              >Velocity Dynamics</label
-            >
             <input id="velocity-dynamics-toggle" type="checkbox" checked />
-          </div>
-          <div class="insp-row">
-            <label class="insp-label" for="sound-sensitivity"
-              >Sensitivity</label
-            >
-            <div class="insp-slider-num">
-              <input
-                type="range"
-                id="sound-sensitivity"
-                min="0.5"
-                max="2"
-                step="0.1"
-                value="1.0"
-              />
-              <output id="sound-sensitivity-value">1.0</output>
-            </div>
+            <input id="sound-sensitivity" type="range" min="0.5" max="2" step="0.1" value="1.0" />
+            <output id="sound-sensitivity-value">1.0</output>
           </div>
 
-          <div class="insp-section-divider">Sampler</div>
-          <p
-            class="dim"
-            style="padding: 4px 0 6px; font-size: 10px; opacity: 0.5"
-          >
-            Drag audio files onto canvas to assign.
-          </p>
-          <div id="sampler-key-list" class="sampler-key-list"></div>
+          <!-- Sampler moved to overlay panel -->
+          <div id="sampler-key-list" class="sampler-key-list" style="display: none"></div>
         </div>
         <!-- Motion Brush Tab -->
         <div
@@ -890,9 +819,10 @@
 
     <!-- ── Context Menu ──────────────────────────────────────────────────── -->
     <ul id="canvas-context-menu" class="ctx-menu" style="display: none">
-      <li class="ctx-item" data-action="demo">Demo</li>
+      <li class="ctx-item" data-action="new">New</li>
       <li class="ctx-item" data-action="open">Open</li>
       <li class="ctx-item" data-action="save">Save</li>
+      <li class="ctx-item" data-action="demo">Demo World</li>
       <li class="ctx-divider"></li>
       <li class="ctx-item" data-action="sampler">Sampler ›</li>
       <li class="ctx-item" data-action="library">Library ›</li>
@@ -971,6 +901,7 @@
           }
           // Delegate to existing buttons
           var map = {
+            new: "clear-scene",
             demo: "load-example",
             open: "scene-file",
             save: "save-scene",
