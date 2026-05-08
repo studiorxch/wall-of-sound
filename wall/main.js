@@ -2096,6 +2096,30 @@
     window._wos.audioState = state.audio;
 
     // ── Grid debug helpers ─────────────────────────────────────────────────
+    window._wos.debugRegistry = function debugRegistry() {
+      return window.SBE && window.SBE.Registry ? window.SBE.Registry : null;
+    };
+    window._wos.listRegistryStatus = function listRegistryStatus() {
+      var registry = window.SBE && window.SBE.Registry;
+      if (!registry) return null;
+      var output = {};
+      Object.keys(registry).forEach(function (key) {
+        if (key === "statuses" || key === "validate") return;
+        var group = registry[key];
+        if (!group || typeof group !== "object") return;
+        output[key] = Object.keys(group).map(function (id) {
+          var item = group[id];
+          return { id: item.id, label: item.label, status: item.status, visibleIn: item.visibleIn || [] };
+        });
+      });
+      return output;
+    };
+    window._wos.validateRegistry = function validateRegistry() {
+      var registry = window.SBE && window.SBE.Registry;
+      if (!registry || !registry.validate) return null;
+      return registry.validate();
+    };
+
     window._wos.debugGridLayers = function () {
       return (state.world.layers || []).filter(function (l) { return l.type === "grid"; });
     };
