@@ -307,6 +307,95 @@
       getDuplicationDelta: function () {
         return state.duplication;
       },
+      debugSelection: function debugSelection() {
+        var strokeIds = state.selection && state.selection.strokeIds
+          ? Array.from(state.selection.strokeIds) : [];
+        var refs = typeof getSelectedObjectRefs === "function" ? getSelectedObjectRefs() : [];
+        var primary = typeof getPrimarySelectedObjectRef === "function" ? getPrimarySelectedObjectRef() : null;
+        return {
+          tool: state.tool,
+          activeElement: document.activeElement && document.activeElement.tagName
+            ? document.activeElement.tagName.toLowerCase() : null,
+          multiSelection: state.multiSelection || [],
+          selection: {
+            strokeId: state.selection && state.selection.strokeId,
+            strokeIds: strokeIds,
+            groupId: state.selection && state.selection.groupId,
+          },
+          legacy: {
+            selectedShapeId: state.selectedShapeId,
+            selectedBallId: state.selectedBallId,
+            selectedLineId: state.selectedLineId,
+            selectedTextId: state.selectedTextId,
+          },
+          resolved: { primary: primary, refs: refs },
+          counts: {
+            strokes: state.strokes.length,
+            walkers: state.walkers.length,
+            lines: state.lines.length,
+            balls: state.balls.length,
+            shapes: state.shapes.length,
+            textObjects: state.textObjects.length,
+            groups: Object.keys(state.groups || {}).length,
+          },
+        };
+      },
+      testDelete: function () {
+        return deleteSelectedObject();
+      },
+      testDuplicate: function () {
+        return duplicateSelectedObject();
+      },
+      forceDeleteFirstSelectedStroke: function forceDeleteFirstSelectedStroke() {
+        var id =
+          (state.selection && state.selection.strokeId) ||
+          (state.selection && state.selection.strokeIds && Array.from(state.selection.strokeIds)[0]) ||
+          (state.multiSelection && state.multiSelection.find(function (x) { return x.type === "stroke"; }) &&
+            state.multiSelection.find(function (x) { return x.type === "stroke"; }).id);
+        console.log("[FORCE DELETE STROKE] id:", id);
+        if (!id) { console.warn("[FORCE DELETE STROKE] no stroke id found"); return false; }
+        var before = { strokes: state.strokes.length, walkers: state.walkers.length, lines: state.lines.length };
+        state.strokes = state.strokes.filter(function (s) { return s.id !== id; });
+        state.walkers = state.walkers.filter(function (w) { return w.strokeId !== id && !(w.stroke && w.stroke.id === id); });
+        state.lines = state.lines.filter(function (l) { return l._strokeId !== id && l.strokeId !== id; });
+        clearSelection();
+        renderFrame();
+        syncUI();
+        var after = { strokes: state.strokes.length, walkers: state.walkers.length, lines: state.lines.length };
+        console.log("[FORCE DELETE STROKE]", { before: before, after: after });
+        return true;
+      },
+      forceDuplicateFirstSelectedStroke: function forceDuplicateFirstSelectedStroke() {
+        var id =
+          (state.selection && state.selection.strokeId) ||
+          (state.selection && state.selection.strokeIds && Array.from(state.selection.strokeIds)[0]) ||
+          (state.multiSelection && state.multiSelection.find(function (x) { return x.type === "stroke"; }) &&
+            state.multiSelection.find(function (x) { return x.type === "stroke"; }).id);
+        console.log("[FORCE DUPLICATE STROKE] id:", id);
+        if (!id) { console.warn("[FORCE DUPLICATE STROKE] no stroke id found"); return null; }
+        var source = state.strokes.find(function (s) { return s.id === id; });
+        if (!source) { console.warn("[FORCE DUPLICATE STROKE] source missing:", id); return null; }
+        pushHistory();
+        var copy = JSON.parse(JSON.stringify(source));
+        copy.id = "stroke-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7);
+        copy.points = (copy.points || []).map(function (p) { return { x: p.x + 20, y: p.y + 20 }; });
+        copy.drips = []; copy.specks = []; delete copy._groupId;
+        state.strokes.push(copy);
+        if (typeof strokeToLines === "function") strokeToLines(copy);
+        var srcWalker = state.walkers.find(function (w) { return w.strokeId === source.id || (w.stroke && w.stroke.id === source.id); });
+        if (srcWalker && typeof createWalkerFromStroke === "function") {
+          var walker = createWalkerFromStroke(copy);
+          if (walker) state.walkers.push(walker);
+        }
+        clearSelection();
+        state.selection.strokeId = copy.id;
+        state.selection.strokeIds = new Set([copy.id]);
+        state.selection.groupId = null;
+        state.multiSelection = [{ type: "stroke", id: copy.id }];
+        syncLegacySelection(); syncSelectionPanel(); renderFrame(); syncUI();
+        console.log("[FORCE DUPLICATE STROKE] duplicated:", copy.id);
+        return copy;
+      },
       // Path factories (light integration — spec 0426)
       createLinePath: function (a, b, opts) {
         return createLinePath(a, b, opts);
@@ -844,6 +933,7 @@
             }
           }
         }
+        if (controls.syncGridUI) controls.syncGridUI(state);
         if (midiFiles.length === allFiles.length) return;
       }
       // ── End MIDI drop ─────────────────────────────────────────────────────
@@ -1688,7 +1778,7 @@
       audioQueue: [],
       canvas: { width: 1080, height: 1920 },
       swarm: {
-        count: 24,
+        count: 0,
         speed: 1.4,
         randomness: 0.22,
         collisionRadius: 6,
@@ -1797,7 +1887,9 @@
         mode: "gravity",
         strength: 3,
         direction: { x: 0, y: 1 },
+        layers: [], // WorldLayer[] — grid and future layer types
       },
+      gridBanks: {}, // cartridgeId → extended bank with typed events
       soundResponse: {
         densityHarmonics: true,
         velocityDynamics: true,
@@ -2002,6 +2094,90 @@
     window._wos.sampleMap = sampleMap;
     window._wos.state = state;
     window._wos.audioState = state.audio;
+
+    // ── Grid debug helpers ─────────────────────────────────────────────────
+    window._wos.debugGridLayers = function () {
+      return (state.world.layers || []).filter(function (l) { return l.type === "grid"; });
+    };
+    window._wos.debugGridBlocks = function (layerId) {
+      var layer = (state.world.layers || []).find(function (l) { return l.id === layerId; });
+      return layer ? layer.blocks : [];
+    };
+    window._wos.addBankToGridLayer = function (cartridgeId, options) {
+      // cartridgeId optional — defaults to activeMidiBankId
+      var cid = cartridgeId || state.activeMidiBankId;
+      if (!cid) { console.warn("[WOS GRID] No active MIDI bank"); return null; }
+      var layer = addBankToGridLayer(cid, options);
+      if (layer) renderFrame();
+      return layer;
+    };
+    window._wos.regenerateFirstGridLayer = function () {
+      var layer = (state.world.layers || []).find(function (l) { return l.type === "grid"; });
+      if (!layer) { console.warn("[WOS GRID] No grid layer found"); return null; }
+      var result = regenerateGridLayer(layer.id);
+      if (result) renderFrame();
+      return result;
+    };
+    window._wos.regenerateGridLayer = function (layerId, overrides) {
+      var result = regenerateGridLayer(layerId, overrides);
+      if (result) renderFrame();
+      return result;
+    };
+    window._wos.debugGridStats = function () {
+      return (state.world.layers || [])
+        .filter(function (l) { return l.type === "grid"; })
+        .map(function (layer) {
+          var g = layer.grid;
+          var blocks = layer.blocks || [];
+          var bankId = layer.source && layer.source.bankId;
+          var bank = bankId ? state.gridBanks[bankId] : null;
+          var cartridge = bank ? state.midiCartridges.find(function (c) { return c.id === bank.id; }) : null;
+          var sourceNotes = cartridge ? cartridge.notes.length : 0;
+          var gridEvents = bank ? (bank.events || []).length : 0;
+
+          var cellSet = new Set();
+          var noteSet = new Set();
+          var ncSet = new Set();
+          var pitchMin = Infinity, pitchMax = -Infinity;
+          var startMin = Infinity, startMax = -Infinity, endMax = -Infinity;
+
+          blocks.forEach(function (b) {
+            cellSet.add(b.col + "," + b.row);
+            noteSet.add(b.note);
+            ncSet.add(b.noteClass);
+            if (b.note < pitchMin) pitchMin = b.note;
+            if (b.note > pitchMax) pitchMax = b.note;
+            if (b.startBeat < startMin) startMin = b.startBeat;
+            if (b.startBeat > startMax) startMax = b.startBeat;
+            var end = b.startBeat + b.durationBeats;
+            if (end > endMax) endMax = end;
+          });
+
+          return {
+            layerId: layer.id,
+            name: layer.name,
+            bankId: bankId,
+            sourceNotes: sourceNotes,
+            gridEvents: gridEvents,
+            gridBlocks: blocks.length,
+            occupiedCells: cellSet.size,
+            collisions: blocks.length - cellSet.size,
+            uniqueNotes: noteSet.size,
+            uniqueNoteClasses: ncSet.size,
+            pitchMin: pitchMin === Infinity ? null : pitchMin,
+            pitchMax: pitchMax === -Infinity ? null : pitchMax,
+            startBeatMin: startMin === Infinity ? null : +startMin.toFixed(3),
+            startBeatMax: startMax === -Infinity ? null : +startMax.toFixed(3),
+            endBeatMax: endMax === -Infinity ? null : +endMax.toFixed(3),
+            columns: g.columns,
+            rows: g.rows,
+            cellSize: g.cellSize,
+            gap: g.gap,
+            placementMode: g.placementMode,
+            fitMode: g.fitMode,
+          };
+        });
+    };
     console.log("[WOS DEBUG] sampleMap:", sampleMap);
     console.log("[WOS DEBUG] audioState:", state.audio);
     var input = { shift: false }; // reliable modifier state for non-event contexts
@@ -5249,6 +5425,8 @@
       });
     });
 
+    bindGlobalKeyboardShortcuts();
+
     try {
       bindControls();
     } catch (e) {
@@ -5288,7 +5466,7 @@
 
       // Pan: middle mouse button or Space+drag
       global.addEventListener("keydown", function (e) {
-        if (e.code === "Space" && !isTypingTarget(e.target)) _spaceDown = true;
+        if (e.code === "Space" && !isTypingTarget()) _spaceDown = true;
       });
       global.addEventListener("keyup", function (e) {
         if (e.code === "Space") {
@@ -5366,6 +5544,7 @@
       if (!sel) return;
       sel.addEventListener("change", function () {
         state.viewportMode = sel.value;
+        sel.blur();
         applyViewportMode();
       });
     })();
@@ -5437,8 +5616,25 @@
       behaviorLastTime = now;
       processBehaviors(now);
       updateParticles(dt);
+
+      // Material simulation — runs continuously so deformation animates even when stopped
+      var materialActive = false;
+      if (window.SBE && SBE.MaterialSystem && !isPlaying) {
+        SBE.MaterialSystem.updateAll(state.lines, dt);
+        materialActive = state.lines.some(function (l) {
+          if (!l.material || l.material.type === "rigid") return false;
+          return (
+            l.material.waveEnergy > 0.005 ||
+            Math.abs(l.material.angle) > 0.005 ||
+            l.material.recoilPhase > 0.005
+          );
+        });
+      }
+
       // Drive render when stopped — playback loop handles it when playing
-      if (!isPlaying && state.particles.length > 0) renderFrame();
+      if (!isPlaying && (state.particles.length > 0 || materialActive)) {
+        renderFrame();
+      }
       requestAnimationFrame(behaviorLoop);
     }
     requestAnimationFrame(behaviorLoop);
@@ -6058,6 +6254,132 @@
           return c.id === id;
         }) || null
       );
+    }
+
+    // ── Grid Layer System ──────────────────────────────────────────────────
+    function getGridSystem() {
+      return (window.SBE && SBE.GridSystem) || null;
+    }
+
+    function getOrCreateGridBank(cartridge) {
+      if (!cartridge) return null;
+      var GS = getGridSystem();
+      if (!GS) return null;
+      if (!state.gridBanks[cartridge.id]) {
+        state.gridBanks[cartridge.id] = GS.createMidiBankFromCartridge(cartridge);
+      }
+      return state.gridBanks[cartridge.id];
+    }
+
+    function addBankToGridLayer(cartridgeId, options) {
+      var GS = getGridSystem();
+      if (!GS) {
+        console.warn("[WOS GRID] GridSystem not loaded");
+        return null;
+      }
+      var cartridge = getMidiCartridge(cartridgeId);
+      if (!cartridge) {
+        console.warn("[WOS GRID] Cannot add to grid layer: cartridge not found:", cartridgeId);
+        return null;
+      }
+      var bank = getOrCreateGridBank(cartridge);
+      if (!bank || !bank.events || !bank.events.length) {
+        console.warn("[WOS GRID] Cannot generate grid: no MIDI bank events");
+        return null;
+      }
+
+      // Find existing grid layer for this bank or create new one
+      var layer = (state.world.layers || []).find(function (l) {
+        return l.type === "grid" && l.source && l.source.bankId === bank.id;
+      });
+
+      if (!layer) {
+        // Auto-number new grid layers
+        var existing = (state.world.layers || []).filter(function (l) { return l.type === "grid"; });
+        var num = String(existing.length + 1).padStart(2, "0");
+        layer = GS.createGridLayerFromMidiBank(bank.id, Object.assign({ name: "Environment Grid " + num }, options || {}));
+        if (!layer) return null;
+        state.world.layers = state.world.layers || [];
+        state.world.layers.push(layer);
+      }
+
+      // Generate blocks
+      layer.blocks = GS.generateGridBlocksFromMidiBank(bank, layer.grid, layer.id, state.canvas.width, state.canvas.height);
+      console.log("[WOS GRID] Layer ready:", layer.id, "blocks:", layer.blocks.length);
+      return layer;
+    }
+
+    function regenerateGridLayer(layerId, gridSettingsOverride) {
+      var GS = getGridSystem();
+      if (!GS) return null;
+      var layer = (state.world.layers || []).find(function (l) { return l.id === layerId; });
+      if (!layer || layer.type !== "grid") {
+        console.warn("[WOS GRID] regenerateGridLayer: layer not found:", layerId);
+        return null;
+      }
+      if (gridSettingsOverride) {
+        Object.assign(layer.grid, gridSettingsOverride);
+      }
+      var cartridgeId = null;
+      // bank.id === cartridge.id (from createMidiBankFromCartridge)
+      var bankId = layer.source && layer.source.bankId;
+      var bank = bankId ? state.gridBanks[bankId] : null;
+      if (!bank) {
+        // Fallback: build from cartridge matching bankId
+        var cart = getMidiCartridge(bankId);
+        bank = cart ? getOrCreateGridBank(cart) : null;
+      }
+      if (!bank) {
+        console.warn("[WOS GRID] regenerateGridLayer: bank not found for layer", layerId);
+        return null;
+      }
+      layer.blocks = GS.generateGridBlocksFromMidiBank(bank, layer.grid, layer.id, state.canvas.width, state.canvas.height);
+      return layer;
+    }
+
+    function renderGridLayers(ctx) {
+      var GS = getGridSystem();
+      if (!GS || !state.world || !state.world.layers || !state.world.layers.length) return;
+      var currentBeat = 0;
+      var beatDuration = 60 / Math.max(1, state.bpm);
+      if (isPlaying) {
+        currentBeat = getTransportTime() / beatDuration;
+      }
+      state.world.layers.forEach(function (layer) {
+        if (layer.type !== "grid" || !layer.visible) return;
+        var prevBeat = layer._prevBeat != null ? layer._prevBeat : currentBeat;
+        GS.updateGridLayerPlaybackState(layer, currentBeat);
+        if (isPlaying) {
+          processGridLayerPlayback(layer, currentBeat, prevBeat);
+        }
+        layer._prevBeat = currentBeat;
+        GS.renderGridLayer(ctx, layer, state);
+      });
+    }
+
+    function processGridLayerPlayback(layer, currentBeat, previousBeat) {
+      if (!layer.blocks || !layer.blocks.length) return;
+      // Detect transport loop/reset: if beat jumped backward, clear fired set
+      if (currentBeat < previousBeat - 0.5) {
+        layer._firedEvents = null;
+      }
+      if (!layer._firedEvents) layer._firedEvents = new Set();
+      // Cycle key: quantize to integer beat-cycle to allow loop re-firing
+      var cycleBeat = Math.floor(currentBeat);
+      layer.blocks.forEach(function (block) {
+        // Fire when block startBeat crosses the window [previousBeat, currentBeat)
+        if (block.startBeat >= previousBeat && block.startBeat < currentBeat) {
+          var fireKey = block.sourceEventId + "@" + Math.floor(block.startBeat * 8);
+          if (!layer._firedEvents.has(fireKey)) {
+            layer._firedEvents.add(fireKey);
+            triggerGridBlockSound(block, layer);
+          }
+        }
+      });
+    }
+
+    function triggerGridBlockSound(block, layer) {
+      playFallbackInstrument(block.note, block.velocity);
     }
 
     // ── Graph builders ─────────────────────────────────────────────────────
@@ -6981,6 +7303,140 @@
     }
     // ── End bindInspector ────────────────────────────────────────────────
 
+    function bindGlobalKeyboardShortcuts() {
+      if (window._wosKeyboardBound) {
+        console.warn("[KEYBOARD] already bound");
+        return;
+      }
+      window._wosKeyboardBound = true;
+
+      global.addEventListener("keydown", async function onKeyDown(event) {
+        heldKeys.add(event.key.toLowerCase());
+        if (event.key === "Shift") input.shift = true;
+
+        if (textEditor && event.key === "Escape") {
+          event.preventDefault();
+          removeCanvasTextInput(false);
+          return;
+        }
+
+        if (state.textEditing && state.activeLabelId) {
+          var _editLabel = getLabelById(state.activeLabelId);
+          if (_editLabel) {
+            event.preventDefault();
+            if (event.key === "Escape") {
+              if (!_editLabel.text) removeLabel(_editLabel.id);
+              state.textEditing = false;
+              state.activeLabelId = null;
+            } else if (event.key === "Backspace") {
+              _editLabel.text = _editLabel.text.slice(0, -1);
+            } else if (event.key === "Enter") {
+              if (event.shiftKey) {
+                if (!_editLabel.text) removeLabel(_editLabel.id);
+                state.textEditing = false;
+                state.activeLabelId = null;
+              } else {
+                _editLabel.text += "\n";
+              }
+            } else if (event.key.length === 1) {
+              _editLabel.text += event.key;
+            }
+            renderFrame();
+            return;
+          }
+        }
+
+        if (isTypingTarget()) {
+          return;
+        }
+
+        console.log("[KEYDOWN TRACE]", {
+          key: event.key, code: event.code,
+          meta: event.metaKey, ctrl: event.ctrlKey, shift: event.shiftKey,
+          activeElement: document.activeElement && document.activeElement.tagName
+            ? document.activeElement.tagName.toLowerCase() : null,
+        });
+
+        // Cmd+D — duplicate (must precede plain D)
+        if (event.key && event.key.toLowerCase() === "d" && (event.metaKey || event.ctrlKey)) {
+          event.preventDefault();
+          event.stopPropagation();
+          console.log("[DUPLICATE KEY] before", window._wos.debugSelection());
+          var _dupResult = await duplicateSelectedObject();
+          console.log("[DUPLICATE KEY] result", _dupResult);
+          return;
+        }
+
+        // Delete / Backspace
+        if (event.key === "Delete" || event.key === "Backspace") {
+          event.preventDefault();
+          event.stopPropagation();
+          console.log("[DELETE KEY] before", window._wos.debugSelection());
+          var _delResult = deleteSelectedObject();
+          console.log("[DELETE KEY] result", _delResult);
+          return;
+        }
+
+        if (event.key === " ") { event.preventDefault(); togglePlayback(); syncUI(); return; }
+        if (event.key === "Tab") { event.preventDefault(); togglePresentationMode(); return; }
+        if (event.key === "?") { event.preventDefault(); toggleShortcuts(); return; }
+
+        if (event.key.toLowerCase() === "v") { state.tool = "select"; syncUI(); return; }
+        if (event.key.toLowerCase() === "d") { state.tool = "pen"; syncUI(); return; }
+        if (event.key.toLowerCase() === "s" && !(event.metaKey || event.ctrlKey)) { state.tool = "shape"; syncUI(); updatePanels(state.tool); return; }
+        if (event.key.toLowerCase() === "t") { state.tool = "text"; syncUI(); updatePanels(state.tool); return; }
+        if (event.key.toLowerCase() === "b") { state.tool = "ball"; syncUI(); return; }
+        if (event.key.toLowerCase() === "m") { state.tool = "pen"; syncUI(); return; }
+        if (event.key.toLowerCase() === "p") { state.tool = "pen"; syncUI(); return; }
+
+        if (event.key.toLowerCase() === "g" && (event.metaKey || event.ctrlKey) && event.shiftKey) {
+          event.preventDefault(); ungroupSelected(); return;
+        }
+        if (event.key.toLowerCase() === "g" && (event.metaKey || event.ctrlKey)) {
+          event.preventDefault();
+          var strokeEntries = state.multiSelection.filter(function (e) { return e.type === "stroke"; });
+          if (strokeEntries.length > 1) {
+            var ids = strokeEntries.map(function (e) { return e.id; });
+            var grp = createGroup(ids);
+            if (grp) { state.multiSelection = [{ type: "group", id: grp.id }]; syncLegacySelection(); syncSelectionPanel(); renderFrame(); }
+          }
+          return;
+        }
+        if (event.key.toLowerCase() === "g" && !(event.metaKey || event.ctrlKey)) {
+          state.grid.enabled = !state.grid.enabled; renderFrame(); return;
+        }
+        if (event.key.toLowerCase() === "k" && !(event.metaKey || event.ctrlKey)) {
+          saveSelectedShape(); syncShapeLibraryTab(true); return;
+        }
+
+        if (state.tool === "pen" && state.penTool.isDrawing) {
+          if (event.key === "Escape") { state.penTool.currentStroke = null; state.penTool.isDrawing = false; state.penTool.previewPoint = null; renderFrame(); return; }
+          if (event.key === "Enter") { event.preventDefault(); if (state.penTool.mode === "shape") commitShapeStroke(false); else if (state.penTool.mode === "line" && state.penTool.currentStroke) { var cs = state.penTool.currentStroke; if (state.penTool.previewPoint && cs.points.length > 0) commitLineStroke(cs.points[0], state.penTool.previewPoint); } return; }
+          if (event.key === "Backspace" && state.penTool.mode === "shape" && state.penTool.currentStroke) { event.preventDefault(); var cs2 = state.penTool.currentStroke; if (cs2.points.length > 1) cs2.points.pop(); else { state.penTool.currentStroke = null; state.penTool.isDrawing = false; } renderFrame(); return; }
+        }
+
+        if (state.tool === "line" && state.lineTool.step === 1) {
+          if (!isNaN(event.key) && event.key !== " ") { event.preventDefault(); state.lineTool.isTyping = true; state.lineTool.lengthInput += event.key; renderFrame(); return; }
+          if (event.key === ".") { event.preventDefault(); state.lineTool.lengthInput += "."; renderFrame(); return; }
+          if (event.key === "Backspace") { event.preventDefault(); state.lineTool.lengthInput = state.lineTool.lengthInput.slice(0,-1); if (!state.lineTool.lengthInput) state.lineTool.isTyping = false; renderFrame(); return; }
+          if (event.key === "Enter" && state.lineTool.previewEnd) { event.preventDefault(); finalizeLineTool(state.lineTool.previewEnd); return; }
+          if (event.key === "Escape") { event.preventDefault(); state.lineTool.step = 0; state.lineTool.startPoint = null; state.lineTool.previewEnd = null; state.lineTool.lengthInput = ""; state.lineTool.isTyping = false; renderFrame(); return; }
+        }
+
+        var modifier = event.metaKey || event.ctrlKey;
+        if (!modifier) return;
+        if (event.key.toLowerCase() === "z") { event.preventDefault(); await undo(); }
+        if (event.key.toLowerCase() === "a") { event.preventDefault(); selectAllObjects(); }
+      }, true);
+
+      global.addEventListener("keyup", function onKeyUp(event) {
+        heldKeys.delete(event.key.toLowerCase());
+        if (event.key === "Shift") input.shift = false;
+      });
+
+      console.log("[KEYBOARD] bound");
+    }
+
     function bindControls() {
       const elements = controls.elements;
 
@@ -7544,7 +8000,7 @@
         });
       });
 
-      elements.textContent.addEventListener(
+      if (elements.textContent) elements.textContent.addEventListener(
         "input",
         function updateTextContent() {
           state.defaults.textValue = elements.textContent.value;
@@ -7552,7 +8008,7 @@
         },
       );
 
-      elements.textSize.addEventListener("input", function updateTextSize() {
+      if (elements.textSize) elements.textSize.addEventListener("input", function updateTextSize() {
         state.defaults.textSize = clampInt(
           Number(elements.textSize.value),
           24,
@@ -7561,19 +8017,19 @@
         scheduleSelectedTextRefresh();
       });
 
-      elements.textX.addEventListener("input", function updateTextX() {
+      if (elements.textX) elements.textX.addEventListener("input", function updateTextX() {
         applySelectedTextTransform({ x: Number(elements.textX.value) });
       });
 
-      elements.textY.addEventListener("input", function updateTextY() {
+      if (elements.textY) elements.textY.addEventListener("input", function updateTextY() {
         applySelectedTextTransform({ y: Number(elements.textY.value) });
       });
 
-      elements.textScale.addEventListener("input", function updateTextScale() {
+      if (elements.textScale) elements.textScale.addEventListener("input", function updateTextScale() {
         applySelectedTextTransform({ scale: Number(elements.textScale.value) });
       });
 
-      elements.textRotation.addEventListener(
+      if (elements.textRotation) elements.textRotation.addEventListener(
         "input",
         function updateTextRotation() {
           applySelectedTextTransform({
@@ -7582,7 +8038,7 @@
         },
       );
 
-      elements.centerText.addEventListener("click", function centerText() {
+      if (elements.centerText) elements.centerText.addEventListener("click", function centerText() {
         centerSelectedText();
       });
 
@@ -7684,6 +8140,7 @@
       if (elements.worldMode) {
         elements.worldMode.addEventListener("change", function () {
           var newMode = this.value;
+          this.blur();
           state.world.mode = newMode;
           // Gentle velocity adjustment on switch
           state.balls.forEach(function (ball) {
@@ -7704,6 +8161,26 @@
       if (elements.worldStrength) {
         elements.worldStrength.addEventListener("input", function () {
           state.world.strength = Number(this.value);
+        });
+      }
+
+      // Material type binding
+      var materialTypeEl = document.getElementById("material-type");
+      if (materialTypeEl) {
+        materialTypeEl.addEventListener("change", function () {
+          var type = this.value;
+          this.blur();
+          if (!window.SBE || !SBE.MaterialSystem) return;
+          state.multiSelection.forEach(function (sel) {
+            var obj = null;
+            if (sel.type === "line") {
+              obj = state.lines.find(function (l) { return l.id === sel.id; });
+            } else if (sel.type === "stroke") {
+              obj = state.strokes.find(function (s) { return s.id === sel.id; });
+            }
+            if (obj) SBE.MaterialSystem.setMaterialType(obj, type);
+          });
+          renderFrame();
         });
       }
 
@@ -8299,6 +8776,7 @@
         wire("debug-info", "info");
       })();
 
+      if (!window._wosKeyboardBound) {
       global.addEventListener("keydown", async function onKeyDown(event) {
         heldKeys.add(event.key.toLowerCase());
         if (event.key === "Shift") input.shift = true;
@@ -8339,7 +8817,41 @@
         }
         // ── End label editing ─────────────────────────────────────────────
 
-        if (isTypingTarget(event.target)) {
+        if (isTypingTarget()) {
+          return;
+        }
+
+        console.log("[KEYDOWN TRACE]", {
+          key: event.key,
+          code: event.code,
+          meta: event.metaKey,
+          ctrl: event.ctrlKey,
+          shift: event.shiftKey,
+          activeElement: document.activeElement && document.activeElement.tagName
+            ? document.activeElement.tagName.toLowerCase() : null,
+        });
+
+        if (event.key === "Delete" || event.key === "Backspace") {
+          event.preventDefault();
+          event.stopPropagation();
+          console.log("[DELETE KEY] before", window._wos.debugSelection());
+          var _delResult = deleteSelectedObject();
+          console.log("[DELETE KEY] result", _delResult);
+          console.log("[DELETE KEY] after", window._wos.debugSelection());
+          return;
+        }
+
+        if (
+          event.key &&
+          event.key.toLowerCase() === "d" &&
+          (event.metaKey || event.ctrlKey)
+        ) {
+          event.preventDefault();
+          event.stopPropagation();
+          console.log("[DUPLICATE KEY] before", window._wos.debugSelection());
+          var _dupResult = await duplicateSelectedObject();
+          console.log("[DUPLICATE KEY] result", _dupResult);
+          console.log("[DUPLICATE KEY] after", window._wos.debugSelection());
           return;
         }
 
@@ -8368,19 +8880,7 @@
           return;
         }
         if (event.key.toLowerCase() === "d") {
-          if (event.metaKey || event.ctrlKey) {
-            event.preventDefault();
-            if (
-              state.selection.groupId &&
-              state.groups[state.selection.groupId]
-            ) {
-              duplicateGroupSelection(state.selection.groupId);
-            } else {
-              await duplicateSelectedObject();
-            }
-            return;
-          }
-          // D key now activates mop (primary drawing tool)
+          // D key activates mop (primary drawing tool) — Cmd+D handled above
           state.tool = "pen";
           syncUI();
           return;
@@ -8557,12 +9057,6 @@
           }
         }
 
-        if (event.key === "Delete" || event.key === "Backspace") {
-          event.preventDefault();
-          deleteSelectionObject();
-          return;
-        }
-
         const modifier = event.metaKey || event.ctrlKey;
         if (!modifier) {
           return;
@@ -8583,6 +9077,7 @@
         heldKeys.delete(event.key.toLowerCase());
         if (event.key === "Shift") input.shift = false;
       });
+      } // end if (!window._wosKeyboardBound)
     }
 
     function selectAllObjects() {
@@ -8668,7 +9163,7 @@
       state.balls = Array.isArray(scene.balls)
         ? scene.balls.map(normalizeBall)
         : [];
-      if (!state.balls.length) {
+      if (!state.balls.length && state.swarm.count > 0) {
         SBE.Swarm.syncSwarmCount(state, true);
         state.balls = state.balls.map(normalizeBall);
       }
@@ -9300,6 +9795,7 @@
       controls.syncShapeSelection(state.selectedShape);
       syncSelectionPanel();
       controls.syncShortcutVisibility(state.ui.shortcutsVisible);
+      if (controls.syncGridUI) controls.syncGridUI(state);
       syncSamplerTab();
       syncShapeLibraryTab();
       if (controls.elements.togglePlayback) {
@@ -9786,6 +10282,14 @@
       }
 
       state.ui.isMuted = !!(obj.behavior && obj.behavior.isMuted);
+
+      // Sync material type selector
+      var matSel = document.getElementById("material-type");
+      if (matSel && obj.material && obj.material.type) {
+        matSel.value = obj.material.type;
+      } else if (matSel) {
+        matSel.value = "rigid";
+      }
     }
 
     function applyBehaviorEmitterFields() {
@@ -9865,6 +10369,55 @@
         return resolveSelectionEntry(state.multiSelection[0]);
       }
       return null;
+    }
+
+    function getPrimarySelectedObjectRef() {
+      if (state.multiSelection && state.multiSelection.length) {
+        return state.multiSelection[0];
+      }
+      if (state.selection) {
+        if (state.selection.strokeId) {
+          return { type: "stroke", id: state.selection.strokeId };
+        }
+        if (state.selection.strokeIds && state.selection.strokeIds.size) {
+          return { type: "stroke", id: Array.from(state.selection.strokeIds)[0] };
+        }
+        if (state.selection.groupId) {
+          return { type: "group", id: state.selection.groupId };
+        }
+      }
+      if (state.selectedShapeId) return { type: "shape", id: state.selectedShapeId };
+      if (state.selectedBallId) return { type: "ball", id: state.selectedBallId };
+      if (state.selectedLineId) return { type: "line", id: state.selectedLineId };
+      if (state.selectedTextId) return { type: "text", id: state.selectedTextId };
+      return null;
+    }
+
+    function getSelectedObjectRefs() {
+      var refs = [];
+      if (state.multiSelection && state.multiSelection.length) {
+        refs = refs.concat(state.multiSelection);
+      }
+      if (state.selection) {
+        if (state.selection.strokeId) refs.push({ type: "stroke", id: state.selection.strokeId });
+        if (state.selection.strokeIds && state.selection.strokeIds.size) {
+          Array.from(state.selection.strokeIds).forEach(function (id) {
+            refs.push({ type: "stroke", id: id });
+          });
+        }
+        if (state.selection.groupId) refs.push({ type: "group", id: state.selection.groupId });
+      }
+      if (state.selectedShapeId) refs.push({ type: "shape", id: state.selectedShapeId });
+      if (state.selectedBallId) refs.push({ type: "ball", id: state.selectedBallId });
+      if (state.selectedLineId) refs.push({ type: "line", id: state.selectedLineId });
+      if (state.selectedTextId) refs.push({ type: "text", id: state.selectedTextId });
+      var seen = {};
+      return refs.filter(function (ref) {
+        var key = ref.type + ":" + ref.id;
+        if (!ref.id || seen[key]) return false;
+        seen[key] = true;
+        return true;
+      });
     }
 
     function getSelectedWalker() {
@@ -10337,6 +10890,93 @@
       }
     }
 
+    function deleteStrokeById(strokeId) {
+      if (!strokeId) return;
+      deleteStroke(strokeId);
+      if (state.selection) {
+        if (state.selection.strokeId === strokeId) state.selection.strokeId = null;
+        if (state.selection.strokeIds) state.selection.strokeIds.delete(strokeId);
+      }
+      state.multiSelection = (state.multiSelection || []).filter(function (sel) {
+        return !(sel.type === "stroke" && sel.id === strokeId);
+      });
+    }
+
+    function deleteObjectByRef(ref) {
+      if (!ref || !ref.id) return;
+      switch (ref.type) {
+        case "stroke":
+          deleteStrokeById(ref.id);
+          break;
+        case "shape":
+          state.shapes = state.shapes.filter(function (s) { return s.id !== ref.id; });
+          break;
+        case "ball":
+          state.balls = state.balls.filter(function (b) { return b.id !== ref.id; });
+          state.swarm.count = state.balls.length;
+          break;
+        case "line":
+          state.lines = state.lines.filter(function (l) { return l.id !== ref.id; });
+          break;
+        case "text":
+          state.textObjects = state.textObjects.filter(function (t) { return t.id !== ref.id; });
+          break;
+        case "group":
+          var grp = state.groups && state.groups[ref.id];
+          if (grp) {
+            var sids = grp.strokeIds || grp.children || [];
+            sids.forEach(function (sid) { deleteStrokeById(sid); });
+            if (typeof dissolveGroup === "function") dissolveGroup(ref.id);
+            else delete state.groups[ref.id];
+          }
+          if (state.selection && state.selection.groupId === ref.id) state.selection.groupId = null;
+          break;
+      }
+    }
+
+    function deleteSelectedObject() {
+      if (state.ui.presentation) return false;
+      var refs = getSelectedObjectRefs();
+      if (!refs.length) {
+        console.warn("[DELETE] Nothing selected");
+        return false;
+      }
+      pushHistory();
+      refs.forEach(function (ref) { deleteObjectByRef(ref); });
+      clearSelection();
+      renderFrame();
+      syncUI();
+      console.log("[DELETE] Deleted", refs.map(function (r) { return r.type + ":" + r.id; }));
+      return true;
+    }
+
+    function getDuplicateDelta() {
+      if (
+        state.duplication &&
+        state.duplication.valid &&
+        (Math.abs(state.duplication.dx) > 0.5 || Math.abs(state.duplication.dy) > 0.5)
+      ) {
+        return { dx: state.duplication.dx, dy: state.duplication.dy };
+      }
+      return { dx: lastDuplicateDelta ? lastDuplicateDelta.x : 20, dy: lastDuplicateDelta ? lastDuplicateDelta.y : 20 };
+    }
+
+    function selectDuplicatedObject(type, id) {
+      clearSelection();
+      if (type === "stroke") {
+        if (state.selection) {
+          state.selection.strokeId = id;
+          state.selection.strokeIds = new Set([id]);
+        }
+        state.multiSelection = [{ type: "stroke", id: id }];
+        return;
+      }
+      if (type === "shape") { state.selectedShapeId = id; state.multiSelection = [{ type: "shape", id: id }]; return; }
+      if (type === "ball") { state.selectedBallId = id; state.multiSelection = [{ type: "ball", id: id }]; return; }
+      if (type === "line") { state.selectedLineId = id; state.multiSelection = [{ type: "line", id: id }]; return; }
+      if (type === "text") { state.selectedTextId = id; state.multiSelection = [{ type: "text", id: id }]; }
+    }
+
     function deleteSelectionObject() {
       if (state.ui.presentation) return;
 
@@ -10635,37 +11275,28 @@
     }
 
     async function duplicateSelectedObject() {
-      if (!state.multiSelection.length || state.ui.presentation) return;
-      var dx = lastDuplicateDelta.x;
-      var dy = lastDuplicateDelta.y;
+      if (state.ui.presentation) return null;
+      var ref = getPrimarySelectedObjectRef();
+      if (!ref) {
+        console.warn("[DUPLICATE] Nothing selected");
+        return null;
+      }
       pushHistory();
-      var newSelection = [];
-      // Group selection routes to dedicated function that updates selection correctly
-      if (state.selection.groupId && state.groups[state.selection.groupId]) {
-        duplicateGroupSelection(state.selection.groupId);
-        return;
-      } else {
-        state.multiSelection.forEach(function (entry) {
-          var result = duplicateOneEntry(entry, dx, dy);
-          if (result) newSelection.push(result);
-        });
+      var delta = getDuplicateDelta();
+      var result = duplicateOneEntry(ref, delta.dx, delta.dy);
+      if (!result) {
+        console.warn("[DUPLICATE] Failed", ref);
+        return null;
       }
-      state.multiSelection = newSelection;
+      // Update lastDuplicateDelta for chained Cmd+D
+      lastDuplicateDelta = { x: delta.dx, y: delta.dy };
+      selectDuplicatedObject(result.type, result.id);
       syncLegacySelection();
-      // Set strokeId for stroke duplicates so Object inspector shows the new stroke
-      var firstNew = newSelection[0];
-      if (firstNew && firstNew.type === "stroke") {
-        state.selection.strokeId = firstNew.id;
-        state.selection.strokeIds = state.selection.strokeIds || new Set();
-        state.selection.strokeIds.clear();
-        state.selection.strokeIds.add(firstNew.id);
-        state.selection.groupId = null;
-      }
-      lastDuplicateDelta = { x: dx, y: dy };
-      state.swarm.count = state.balls.length;
       syncSelectionPanel();
+      state.swarm.count = state.balls.length;
       renderFrame();
       syncUI();
+      console.log("[DUPLICATE]", ref.type + ":" + ref.id, "→", result.id, delta);
     }
 
     function getSelectionBounds() {
@@ -11516,6 +12147,13 @@
       state.transport.startedAt = performance.now();
       lastFrameTime = 0;
       frameAccumulator = 0;
+      // Reset grid layer playback state so no burst fires on resume
+      (state.world.layers || []).forEach(function (layer) {
+        if (layer.type === "grid") {
+          layer._prevBeat = null;
+          layer._firedEvents = null;
+        }
+      });
       loop();
       syncUI();
     }
@@ -12231,6 +12869,16 @@
       state.swarm.count = state.balls.length;
 
       stabilizeBalls(collisions);
+
+      // Material simulation pass — inject energy then advance simulation
+      if (window.SBE && SBE.MaterialSystem) {
+        collisions.forEach(function (c) {
+          if (c.type === "line" && c.line) {
+            SBE.MaterialSystem.injectCollisionEnergy(c.line, c);
+          }
+        });
+        SBE.MaterialSystem.updateAll(state.lines, dt);
+      }
     }
 
     function renderFrame() {
@@ -12254,6 +12902,8 @@
 
       // Grid — drawn before all stroke/walker content
       drawGrid(ctx, canvas.width, canvas.height);
+      // Environment grid layers (MIDI-derived world map)
+      renderGridLayers(ctx);
       // Surface stamp layer (persistent ink)
       ctx.drawImage(surfaceCanvas, 0, 0);
       renderStrokes(ctx);
@@ -13197,6 +13847,11 @@
         };
       }
 
+      // Material system — ensure every line has a material object
+      if (window.SBE && SBE.MaterialSystem) {
+        SBE.MaterialSystem.hydrateMaterial(line);
+      }
+
       // Build sound config from note/channel
       line.sound = buildSoundConfig(line.midi.note, line.midi.channel);
 
@@ -13498,11 +14153,15 @@
     return JSON.parse(JSON.stringify(value));
   }
 
-  function isTypingTarget(target) {
-    const tagName =
-      target && target.tagName ? target.tagName.toLowerCase() : "";
+  function isTypingTarget() {
+    var el = document.activeElement;
+    if (!el) return false;
+    var tag = el.tagName ? el.tagName.toLowerCase() : "";
     return (
-      tagName === "input" || tagName === "textarea" || tagName === "select"
+      tag === "input" ||
+      tag === "textarea" ||
+      tag === "select" ||
+      el.isContentEditable === true
     );
   }
 

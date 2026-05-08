@@ -102,10 +102,21 @@ body {
 .app-body {
   grid-row: 1;
   display: grid;
-  grid-template-columns: 50px 250px 1fr;
-  grid-template-rows: 1fr auto;
+  grid-template-columns: 50px minmax(0, 1fr) 250px;
+  grid-template-rows: minmax(0, 1fr) auto;
   height: 100%;
   overflow: hidden;
+}
+
+#left-rail {
+  grid-column: 1;
+  grid-row: 1 / -1;
+}
+
+#left-panel {
+  display: none !important;
+  grid-column: auto !important;
+  grid-row: auto !important;
 }
 
 .panel-left {
@@ -114,11 +125,15 @@ body {
   width: 250px;
   min-width: 250px;
   max-width: 250px;
-  display: flex;
   flex-direction: column;
   padding: 10px 6px;
   box-sizing: border-box;
   overflow: hidden;
+}
+
+/* Explicitly suppress — prevents implicit grid column creation */
+#left-panel {
+  display: none !important;
 }
 
 #left-panel .action-row {
@@ -151,13 +166,18 @@ body {
   box-sizing: border-box;
 }
 
+#right-panel,
 .panel-right {
-  grid-column: 2;
+  grid-column: 3;
   grid-row: 1 / -1;
+  width: 250px;
+  min-width: 250px;
   max-width: 250px;
-  width: 100%;
+  min-height: 0;
   flex-shrink: 0;
-  overflow-y: auto;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 /* ── TOP BAR ────────────────────────────────────── */
@@ -310,8 +330,6 @@ body {
 
 .panel-right {
   border-left: 1px solid var(--panel-border);
-  display: flex;
-  flex-direction: column;
 }
 
 /* ── LEFT PANEL: Libraries ──────────────────────── */
@@ -390,7 +408,7 @@ body {
 /* ── CENTER: Canvas ─────────────────────────────── */
 
 .canvas-area {
-  grid-column: 3;
+  grid-column: 2;
   grid-row: 1;
   position: relative;
   display: flex;
@@ -400,6 +418,7 @@ body {
   overflow: hidden;
   background: #030405; /* WALL */
   min-width: 0;
+  min-height: 0;
   padding: var(--wall-safe-padding);
 }
 
@@ -443,7 +462,7 @@ body {
 }
 
 .transport-bar {
-  grid-column: 3;
+  grid-column: 2;
   grid-row: 2;
   display: flex;
   align-items: center;
@@ -528,6 +547,7 @@ body {
 .tab-content {
   display: none;
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 0;
 }

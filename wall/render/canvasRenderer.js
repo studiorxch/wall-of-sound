@@ -138,6 +138,22 @@
     }
   }
 
+  function buildLinePath(context, line) {
+    var pts =
+      window.SBE && SBE.MaterialSystem
+        ? SBE.MaterialSystem.getDisplacementPoints(line, 14)
+        : null;
+    if (pts && pts.length > 1) {
+      context.beginPath();
+      context.moveTo(pts[0].x, pts[0].y);
+      for (var i = 1; i < pts.length; i++) context.lineTo(pts[i].x, pts[i].y);
+    } else {
+      context.beginPath();
+      context.moveTo(line.x1, line.y1);
+      context.lineTo(line.x2, line.y2);
+    }
+  }
+
   function drawLines(context, lines, selectedLineId, cleanOutput) {
     const now = performance.now();
 
@@ -180,9 +196,7 @@
         context.shadowBlur = shadowBlur;
       }
 
-      context.beginPath();
-      context.moveTo(line.x1, line.y1);
-      context.lineTo(line.x2, line.y2);
+      buildLinePath(context, line);
       context.stroke();
 
       // --- selection overlay ---
@@ -190,6 +204,7 @@
         context.strokeStyle = "rgba(255,255,255,0.9)";
         context.lineWidth = thickness + 4;
         context.globalAlpha = 0.25;
+        buildLinePath(context, line);
         context.stroke();
       }
 

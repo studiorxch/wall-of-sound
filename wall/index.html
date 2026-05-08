@@ -230,9 +230,7 @@
                   </div>
                 </div>
                 <div class="insp-row">
-                  <label class="insp-label" for="obj-strokeWidth"
-                    >Stroke Width</label
-                  >
+                  <label class="insp-label" for="obj-strokeWidth">Stroke Width</label>
                   <div class="insp-control insp-slider-num">
                     <input
                       id="obj-strokeWidth"
@@ -379,9 +377,7 @@
                   </div>
                 </div>
                 <div class="insp-row">
-                  <label class="insp-label" for="obj-soundTrigger"
-                    >Trigger</label
-                  >
+                  <label class="insp-label" for="obj-soundTrigger">Trigger</label>
                   <div class="insp-control">
                     <select id="obj-soundTrigger">
                       <option value="impact">Impact</option>
@@ -391,75 +387,205 @@
                 </div>
               </div>
             </div>
+
+            <!-- MATERIAL section -->
+            <div class="insp-section" data-section="material">
+              <button class="insp-section-header" data-toggle="material">
+                <span class="insp-chevron">▶</span> MATERIAL
+              </button>
+              <div class="insp-section-body" style="display: none">
+                <div class="insp-row">
+                  <label class="insp-label" for="material-type">Type</label>
+                  <div class="insp-control">
+                    <select id="material-type">
+                      <option value="rigid">Rigid</option>
+                      <option value="oscillating">Oscillating</option>
+                      <option value="pendulum">Pendulum</option>
+                      <option value="elastic">Elastic</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
         <div class="tab-content" data-tab-content="canvas">
-          <div class="insp-row">
-            <label class="insp-label" for="viewport-mode">Frame</label>
-            <select id="viewport-mode">
-              <option value="portrait">Portrait (1080×1920)</option>
-              <option value="landscape">Landscape (1920×1080)</option>
-            </select>
-          </div>
-          <div class="insp-row">
-            <label class="insp-label" for="transparent-bg"
-              >Transparent Frame</label
-            >
-            <input id="transparent-bg" type="checkbox" />
-          </div>
-          <div class="insp-row">
-            <label class="insp-label" for="show-paths">Show Paths</label>
-            <input id="show-paths" type="checkbox" checked />
-          </div>
-          <div class="insp-row">
-            <span class="insp-label">Wall Background</span>
-            <label class="insp-file-btn">
-              <input id="background-file" type="file" accept="image/*" />
-              <span>Choose File</span>
-            </label>
+          <div class="insp-section" data-section="frame">
+            <button class="insp-section-header open" data-toggle="frame">
+              <span class="insp-chevron">▼</span> FRAME
+            </button>
+            <div class="insp-section-body">
+              <div class="insp-row">
+                <label class="insp-label" for="viewport-mode">Frame</label>
+                <div class="insp-control">
+                  <select id="viewport-mode">
+                    <option value="portrait">Portrait (1080×1920)</option>
+                    <option value="landscape">Landscape (1920×1080)</option>
+                  </select>
+                </div>
+              </div>
+              <div class="insp-row">
+                <label class="insp-label" for="transparent-bg">Transparent Frame</label>
+                <div class="insp-control">
+                  <input id="transparent-bg" type="checkbox" />
+                </div>
+              </div>
+              <div class="insp-row">
+                <label class="insp-label" for="show-paths">Show Paths</label>
+                <div class="insp-control">
+                  <input id="show-paths" type="checkbox" checked />
+                </div>
+              </div>
+              <div class="insp-row">
+                <label class="insp-label" for="background-file">Wall Background</label>
+                <div class="insp-control">
+                  <label class="insp-file-btn">
+                    <input id="background-file" type="file" accept="image/*" />
+                    <span>Choose File</span>
+                  </label>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
         <!-- World Tab -->
         <div class="tab-content" data-tab-content="world">
-          <div class="insp-row">
-            <label class="insp-label" for="world-mode">Physics Mode</label>
-            <select id="world-mode">
-              <option value="gravity">Gravity</option>
-              <option value="planar">Planar</option>
-              <option value="zero-g">Zero-G</option>
-              <option value="swarm">Swarm</option>
-            </select>
-          </div>
-          <div class="insp-row">
-            <label class="insp-label" for="world-strength">Strength</label>
-            <div class="insp-slider-num">
-              <input
-                id="world-strength"
-                type="range"
-                min="0"
-                max="20"
-                step="0.5"
-                value="3"
-              />
-              <output id="world-strength-value">3.0</output>
+          <div class="insp-section" data-section="world">
+            <button class="insp-section-header open" data-toggle="world">
+              <span class="insp-chevron">▼</span> WORLD
+            </button>
+            <div class="insp-section-body">
+              <div class="insp-row">
+                <label class="insp-label" for="world-mode">Physics Mode</label>
+                <div class="insp-control">
+                  <select id="world-mode">
+                    <option value="gravity">Gravity</option>
+                    <option value="planar">Planar</option>
+                    <option value="zero-g">Zero-G</option>
+                    <option value="swarm">Swarm</option>
+                  </select>
+                </div>
+              </div>
+              <div class="insp-row">
+                <label class="insp-label" for="world-strength">Strength</label>
+                <div class="insp-control insp-slider-num">
+                  <input
+                    id="world-strength"
+                    type="range"
+                    min="0"
+                    max="20"
+                    step="0.5"
+                    value="3"
+                  />
+                  <output id="world-strength-value">3.0</output>
+                </div>
+              </div>
             </div>
           </div>
 
-          <div class="insp-section-divider">Feedback</div>
-
-          <div class="insp-row">
-            <label class="insp-label" for="toggle-hit-count"
-              >Show Hit Count</label
-            >
-            <input id="toggle-hit-count" type="checkbox" />
+          <div class="insp-section" data-section="feedback">
+            <button class="insp-section-header open" data-toggle="feedback">
+              <span class="insp-chevron">▼</span> FEEDBACK
+            </button>
+            <div class="insp-section-body">
+              <div class="insp-row">
+                <label class="insp-label" for="toggle-hit-count">Show Hit Count</label>
+                <div class="insp-control">
+                  <input id="toggle-hit-count" type="checkbox" />
+                </div>
+              </div>
+            </div>
           </div>
 
-          <div class="insp-section-divider">World Actions</div>
+          <div class="insp-section" data-section="world-actions">
+            <button class="insp-section-header open" data-toggle="world-actions">
+              <span class="insp-chevron">▼</span> WORLD ACTIONS
+            </button>
+            <div class="insp-section-body">
+              <button id="clear-balls" type="button" class="wide-btn">Clear Balls</button>
+            </div>
+          </div>
 
-          <div class="insp-row">
-            <span class="insp-label"></span>
-            <button id="clear-balls" style="width: 100%">Clear Balls</button>
+          <div class="insp-section" data-section="world-layers">
+            <button class="insp-section-header open" data-toggle="world-layers">
+              <span class="insp-chevron">▼</span> WORLD LAYERS
+            </button>
+            <div class="insp-section-body">
+              <div class="insp-row">
+                <label class="insp-label">MIDI Bank</label>
+                <div class="insp-control">
+                  <select id="grid-bank-select">
+                    <option value="">— no bank loaded —</option>
+                  </select>
+                </div>
+              </div>
+              <div class="insp-row">
+                <div class="insp-control">
+                  <button id="add-bank-to-grid" type="button" class="wide-btn">Add Bank to Grid Layer</button>
+                </div>
+              </div>
+              <div class="insp-row">
+                <label class="insp-label" for="grid-columns">Columns</label>
+                <div class="insp-control insp-slider-num">
+                  <input id="grid-columns" type="range" min="4" max="256" step="1" value="32" />
+                  <output id="grid-columns-value">32</output>
+                </div>
+              </div>
+              <div class="insp-row">
+                <label class="insp-label" for="grid-rows">Rows</label>
+                <div class="insp-control insp-slider-num">
+                  <input id="grid-rows" type="range" min="4" max="256" step="1" value="18" />
+                  <output id="grid-rows-value">18</output>
+                </div>
+              </div>
+              <div class="insp-row">
+                <label class="insp-label" for="grid-placement-mode">Placement</label>
+                <div class="insp-control">
+                  <select id="grid-placement-mode">
+                    <option value="timeX_pitchY">Time × Pitch</option>
+                    <option value="timeX_noteClassY">Time × Note Class</option>
+                    <option value="packedTimeGrid">Packed Time Grid</option>
+                  </select>
+                </div>
+              </div>
+              <div class="insp-row">
+                <label class="insp-label" for="grid-block-style">Block Style</label>
+                <div class="insp-control">
+                  <select id="grid-block-style">
+                    <option value="solid_note_tile">Solid Note Tile</option>
+                    <option value="rounded_note_block">Rounded Note Block</option>
+                    <option value="pixel_note_cell">Pixel Note Cell</option>
+                  </select>
+                </div>
+              </div>
+              <div class="insp-row">
+                <label class="insp-label" for="grid-color-mode">Color Mode</label>
+                <div class="insp-control">
+                  <select id="grid-color-mode">
+                    <option value="noteClass">Note Class</option>
+                    <option value="velocity">Velocity</option>
+                  </select>
+                </div>
+              </div>
+              <div class="insp-row">
+                <label class="insp-label" for="grid-fit-mode">Fit Mode</label>
+                <div class="insp-control">
+                  <select id="grid-fit-mode">
+                    <option value="fixedCell">Fixed Cell</option>
+                    <option value="fitFrame">Fit Frame</option>
+                  </select>
+                </div>
+              </div>
+              <div class="insp-row">
+                <div class="insp-control">
+                  <button id="regenerate-grid" type="button" class="wide-btn">Regenerate Grid</button>
+                </div>
+              </div>
+              <div id="grid-layer-list" class="insp-row" style="flex-direction:column;gap:2px;">
+                <!-- populated by JS -->
+              </div>
+            </div>
           </div>
 
           <!-- Particle tool state — hidden, kept for JS bindings -->
@@ -750,6 +876,8 @@
     <script src="./engine/eventBus.js"></script>
     <script src="./engine/collision.js"></script>
     <script src="./engine/particleSystem.js"></script>
+    <script src="./engine/materialSystem.js"></script>
+    <script src="./engine/gridSystem.js"></script>
     <script src="./midi/midiOut.js"></script>
     <script src="./render/canvasRenderer.js"></script>
     <script src="./state/examplePreset.js"></script>
