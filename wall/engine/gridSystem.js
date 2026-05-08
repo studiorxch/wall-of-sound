@@ -5,6 +5,62 @@
 (function initGridSystem(global) {
   var SBE = (global.SBE = global.SBE || {});
 
+  // ── Bauhaus Palettes ─────────────────────────────────────────────────────────
+  // Colors are read left-to-right from the palette screenshot.
+  // note class → colors[noteClass % colors.length]  (wraps safely)
+  var BAUHAUS_PALETTES = {
+    exhibition1923: {
+      id: "exhibition1923", name: "Exhibition 1923",
+      background: "#f3eee1",
+      colors: ["#2c2c2c", "#e64f99", "#f6c000", "#3b7b9e", "#e65f3e", "#3c8b67"],
+    },
+    modernNoir: {
+      id: "modernNoir", name: "Modern Noir",
+      background: "#1a1a1a",
+      colors: ["#e8682a", "#1a7a6e", "#f0c420", "#f07daa", "#4060cc"],
+    },
+    primary: {
+      id: "primary", name: "Primary",
+      background: "#f5f5f0",
+      colors: ["#cc2222", "#f0c020", "#2266cc", "#1a1a1a"],
+    },
+    kandinsky: {
+      id: "kandinsky", name: "Kandinsky",
+      background: "#f0ece4",
+      colors: ["#6699dd", "#f08020", "#cc2222", "#44ddaa", "#1a1a1a"],
+    },
+    albers: {
+      id: "albers", name: "Albers",
+      background: "#f5f0e8",
+      colors: ["#cc1818", "#5040aa", "#f0c000", "#1a1a1a", "#d4800a"],
+    },
+    moholyNagy: {
+      id: "moholyNagy", name: "Moholy-Nagy",
+      background: "#f2f0eb",
+      colors: ["#cc1830", "#208850", "#e87030", "#40c8c0", "#1a2888"],
+    },
+    sunset: {
+      id: "sunset", name: "Sunset",
+      background: "#f8ede0",
+      colors: ["#e86060", "#e88840", "#e8b070", "#d8c898", "#a0bb88"],
+    },
+    ocean: {
+      id: "ocean", name: "Ocean",
+      background: "#e8f0f2",
+      colors: ["#0a1e26", "#1a6e7a", "#40c8c0", "#e8e0c0", "#d4a020"],
+    },
+  };
+
+  // ── Bauhaus Finishes ─────────────────────────────────────────────────────────
+  var BAUHAUS_FINISHES = {
+    clean:     { id: "clean",     name: "Clean" },
+    paperSoft: { id: "paperSoft", name: "Paper Soft" },
+    inkWash:   { id: "inkWash",   name: "Ink Wash" },
+  };
+
+  var DEFAULT_PALETTE_ID = "exhibition1923";
+  var DEFAULT_FINISH_ID  = "paperSoft";
+
   // ── Note color (12 note classes, same hue map as midiImporter) ──────────────
   var NOTE_COLORS = [
     "#ff4d4d", // C
@@ -118,6 +174,99 @@
   var _idCounter = 0;
   function genId(prefix) {
     return prefix + "_" + Date.now() + "_" + (++_idCounter);
+  }
+
+  // ── Color helpers ─────────────────────────────────────────────────────────────
+  function hexToRgb(hex) {
+    var h = hex.replace("#", "");
+    if (h.length === 3) h = h[0]+h[0]+h[1]+h[1]+h[2]+h[2];
+    return {
+      r: parseInt(h.substring(0, 2), 16),
+      g: parseInt(h.substring(2, 4), 16),
+      b: parseInt(h.substring(4, 6), 16),
+    };
+  }
+
+  function rgbaFromHex(hex, alpha) {
+    var c = hexToRgb(hex);
+    return "rgba(" + c.r + "," + c.g + "," + c.b + "," + (alpha != null ? alpha : 1) + ")";
+  }
+
+  function lightenHex(hex, amount) {
+    var c = hexToRgb(hex);
+    var a = amount != null ? amount : 0.4;
+    var r = Math.round(Math.min(255, c.r + (255 - c.r) * a));
+    var g = Math.round(Math.min(255, c.g + (255 - c.g) * a));
+    var b = Math.round(Math.min(255, c.b + (255 - c.b) * a));
+    return "rgb(" + r + "," + g + "," + b + ")";
+  }
+
+  function muteHex(hex, amount) {
+    var c = hexToRgb(hex);
+    var a = amount != null ? amount : 0.35;
+    var mid = 128;
+    var r = Math.round(c.r + (mid - c.r) * a);
+    var g = Math.round(c.g + (mid - c.g) * a);
+    var b = Math.round(c.b + (mid - c.b) * a);
+    return "rgb(" + r + "," + g + "," + b + ")";
+  }
+
+  // ── getPaletteColor ──────────────────────────────────────────────────────────
+  function getPaletteColor(noteClass, palette) {
+    var colors = palette && palette.colors && palette.colors.length
+      ? palette.colors
+      : NOTE_COLORS;
+    var nc = ((noteClass % 12) + 12) % 12;
+    return colors[nc % colors.length];
+  }
+
+  // ── applyBauhausFinish ───────────────────────────────────────────────────────
+  function applyBauhausFinish(ctx, finishId, x, y, w, h, palette) {
+    if (!finishId || finishId === "clean") return;
+
+    if (finishId === "paperSoft") {
+      // Warm paper veil
+      ctx.save();
+      ctx.globalAlpha = 0.07;
+      ctx.fillStyle = palette.background;
+      ctx.fillRect(x, y, w, h);
+
+      // Film-grain speckles (max 180 dots — safe for dense grids)
+      var speckCount = Math.min(180, Math.floor((w * h) / 2200));
+      ctx.fillStyle = "#2c2c2c";
+      for (var i = 0; i < speckCount; i++) {
+        ctx.globalAlpha = Math.random() * 0.055;
+        ctx.fillRect(x + Math.random() * w, y + Math.random() * h, 1, 1);
+      }
+      ctx.globalAlpha = 1;
+      ctx.restore();
+      return;
+    }
+
+    if (finishId === "inkWash") {
+      // Vertical column atmosphere inspired by infra-01 — static sine phase, no audio
+      var colCount = 20;
+      var colW = w / colCount;
+      ctx.save();
+      for (var c = 0; c < colCount; c++) {
+        var phase = (c / colCount) * Math.PI * 2.7;
+        var pressure = Math.sin(phase) * 0.5 + 0.5;
+        var cx = x + c * colW;
+        var colors = palette.colors;
+
+        var grad = ctx.createLinearGradient(0, y, 0, y + h);
+        grad.addColorStop(0.0,  rgbaFromHex(colors[0 % colors.length], 0.04));
+        grad.addColorStop(0.42, rgbaFromHex(colors[1 % colors.length], 0.04 + pressure * 0.07));
+        grad.addColorStop(0.75, rgbaFromHex(colors[2 % colors.length], 0.02 + pressure * 0.04));
+        grad.addColorStop(1.0,  rgbaFromHex(palette.background, 0.06));
+
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = grad;
+        ctx.fillRect(cx, y, colW + 1, h);
+      }
+      ctx.restore();
+      return;
+    }
   }
 
   // ── getNoteColor ─────────────────────────────────────────────────────────────
@@ -255,6 +404,7 @@
 
         var noteClass = evt.noteClass != null ? evt.noteClass : (evt.note % 12);
         var velNorm = Math.max(0, Math.min(1, (evt.velocity || 64) / 127));
+        var durNorm = Math.max(0, Math.min(1, (evt.durationBeats || 0.25) / 2));
         var x = col * (cellSize + gap);
         var y = row * (cellSize + gap);
         var baseAlpha = g.opacityMode === "velocity" ? (0.35 + velNorm * 0.65) : 1;
@@ -269,12 +419,16 @@
           id: genId("block"),
           layerId: layerId,
           sourceEventId: evt.id,
+          sourceIndex: evt.index != null ? evt.index : idx,
           bankId: bank.id,
           note: evt.note,
           noteClass: noteClass,
           velocity: evt.velocity || 64,
+          velocityNorm: velNorm,
           startBeat: startBeat,
           durationBeats: evt.durationBeats || 0.5,
+          durationNorm: durNorm,
+          accentKind: noteClass % 4,
           col: col,
           row: row,
           x: x,
@@ -422,6 +576,121 @@
     ctx.restore();
   }
 
+  // ── renderBauhausGridBlock ───────────────────────────────────────────────────
+  function renderBauhausGridBlock(ctx, block, style, renderState) {
+    var size = block.width; // square tile
+    var isActive = block.active;
+    var pulse = block._pulse != null ? block._pulse : (isActive ? 1 : 0);
+    var baseAlpha = block.baseAlpha != null ? block.baseAlpha : 1;
+    var color = block._resolvedColor || block.color; // palette-resolved or raw
+
+    // ── sub-5px: base square + optional center dot ───────────────────────────
+    if (size < 5) {
+      ctx.save();
+      if (isActive && pulse > 0) {
+        ctx.globalAlpha = Math.min(1, baseAlpha + pulse * 0.5);
+        ctx.fillStyle = color;
+        ctx.fillRect(block.x, block.y, size, size);
+        ctx.globalAlpha = pulse * 0.9;
+        ctx.fillStyle = "#ffffff";
+        var dot = Math.max(1, Math.floor(size * 0.4));
+        ctx.fillRect(
+          block.x + Math.floor((size - dot) / 2),
+          block.y + Math.floor((size - dot) / 2),
+          dot, dot
+        );
+      } else {
+        ctx.globalAlpha = baseAlpha * 0.72;
+        ctx.fillStyle = muteHex(color, 0.3);
+        ctx.fillRect(block.x, block.y, size, size);
+      }
+      ctx.restore();
+      return;
+    }
+
+    // ── sub-8px: brightness/opacity only, no scaling or stroke ───────────────
+    if (size < 8) {
+      ctx.save();
+      ctx.globalAlpha = isActive
+        ? Math.min(1, baseAlpha * (1 + pulse * 0.55))
+        : baseAlpha * 0.72;
+      ctx.fillStyle = isActive ? lightenHex(color, pulse * 0.3) : muteHex(color, 0.3);
+      ctx.fillRect(block.x, block.y, size, size);
+      ctx.restore();
+      return;
+    }
+
+    // ── normal tiles ─────────────────────────────────────────────────────────
+    var velNorm = block.velocityNorm != null ? block.velocityNorm : 0.5;
+    var durNorm = block.durationNorm != null ? block.durationNorm : 0.25;
+    var accentKind = block.accentKind != null ? block.accentKind : 0;
+
+    var maxScale = size >= 16 ? 1.08 : 1.04;
+    var scale = 1 + (maxScale - 1) * pulse;
+    var w = size * scale;
+    var h = size * scale;
+    var x = block.x + (size - w) / 2;
+    var y = block.y + (size - h) / 2;
+
+    var mutedColor = muteHex(color, 0.3);
+    var accentColor = lightenHex(color, 0.35 + pulse * 0.25);
+    var tileAlpha = isActive
+      ? Math.min(1, baseAlpha * (0.82 + pulse * 0.28))
+      : baseAlpha * 0.72;
+    var accentAlpha = (0.45 + velNorm * 0.35) + (isActive ? pulse * 0.35 : 0);
+
+    ctx.save();
+
+    // Base tile
+    ctx.globalAlpha = tileAlpha;
+    ctx.fillStyle = isActive ? lightenHex(mutedColor, pulse * 0.18) : mutedColor;
+    ctx.fillRect(x, y, w, h);
+
+    // Accent mark
+    var accentScale = 0.35 + velNorm * 0.45;
+    var accentSize = Math.max(1, size * accentScale);
+    accentSize *= 0.85 + durNorm * 0.3;
+    if (isActive) accentSize *= 1 + pulse * 0.15;
+
+    var cx = x + w / 2;
+    var cy = y + h / 2;
+
+    ctx.globalAlpha = Math.min(1, accentAlpha);
+    ctx.fillStyle = accentColor;
+
+    if (accentKind === 0) {
+      var r = accentSize / 2;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (accentKind === 1) {
+      var bh = Math.max(1, accentSize * 0.28);
+      ctx.fillRect(cx - accentSize / 2, cy - bh / 2, accentSize, bh);
+    } else if (accentKind === 2) {
+      var bw = Math.max(1, accentSize * 0.28);
+      ctx.fillRect(cx - bw / 2, cy - accentSize / 2, bw, accentSize);
+    } else {
+      var hs = accentSize / 2;
+      ctx.fillRect(cx - hs, cy - hs, accentSize, accentSize);
+    }
+
+    // Active pulse: white inset stroke + note-color glow
+    if (isActive && pulse > 0.05) {
+      var inset = Math.max(1, size * 0.07);
+      ctx.globalAlpha = 0.45 + pulse * 0.45;
+      ctx.strokeStyle = "rgba(255,255,255,0.9)";
+      ctx.lineWidth = Math.max(1, size * 0.05);
+      ctx.strokeRect(x + inset, y + inset, w - inset * 2, h - inset * 2);
+
+      ctx.globalAlpha = pulse * 0.22;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = Math.max(2, size * 0.14);
+      ctx.strokeRect(x - 1, y - 1, w + 2, h + 2);
+    }
+
+    ctx.restore();
+  }
+
   // ── renderGridLayer ──────────────────────────────────────────────────────────
   function renderGridLayer(ctx, layer, renderState) {
     if (!layer || !layer.visible || !layer.blocks || !layer.blocks.length) return;
@@ -430,7 +699,6 @@
     var canvasW = renderState.canvas ? renderState.canvas.width : 1080;
     var canvasH = renderState.canvas ? renderState.canvas.height : 1920;
 
-    // Use fitFrame cellSize if applicable
     var cellSize = g.cellSize;
     if (g.fitMode === "fitFrame") {
       cellSize = computeFitCellSize(g, canvasW, canvasH);
@@ -441,30 +709,59 @@
     var offsetX = Math.round((canvasW - gridW) / 2);
     var offsetY = Math.round((canvasH - gridH) / 2);
 
+    var isBauhaus = layer.renderer && layer.renderer.id === "bauhausMinimal";
+
+    // Resolve palette + finish for Bauhaus layers
+    var palette = null;
+    var finishId = "clean";
+    if (isBauhaus) {
+      var paletteId = (layer.renderer && layer.renderer.paletteId) || DEFAULT_PALETTE_ID;
+      finishId = (layer.renderer && layer.renderer.finishId) || DEFAULT_FINISH_ID;
+      palette = BAUHAUS_PALETTES[paletteId] || BAUHAUS_PALETTES[DEFAULT_PALETTE_ID];
+
+      // Fill full canvas with palette background (this layer IS the background)
+      ctx.save();
+      ctx.fillStyle = palette.background;
+      ctx.fillRect(0, 0, canvasW, canvasH);
+      ctx.restore();
+    }
+
     ctx.save();
     ctx.translate(offsetX, offsetY);
 
-    // If fitFrame, rescale block positions on the fly
+    // Tile rendering — inject _resolvedColor for Bauhaus
     if (g.fitMode === "fitFrame" && cellSize !== g.cellSize) {
-      var scale = (cellSize + g.gap) / Math.max(1, g.cellSize + g.gap);
       layer.blocks.forEach(function (block) {
         var style = BLOCK_LIBRARY[block.styleId] || BLOCK_LIBRARY.solid_note_tile;
-        // Compute screen x/y from col/row using current cellSize
         var bx = block.col * (cellSize + g.gap);
         var by = block.row * (cellSize + g.gap);
-        var bw = cellSize;
-        var bh = cellSize;
-        // Temporarily override for render only
         var saved = { x: block.x, y: block.y, width: block.width, height: block.height };
-        block.x = bx; block.y = by; block.width = bw; block.height = bh;
-        renderGridBlock(ctx, block, style, renderState);
+        block.x = bx; block.y = by; block.width = cellSize; block.height = cellSize;
+        if (isBauhaus) {
+          block._resolvedColor = palette ? getPaletteColor(block.noteClass, palette) : block.color;
+          renderBauhausGridBlock(ctx, block, style, renderState);
+          block._resolvedColor = null;
+        } else {
+          renderGridBlock(ctx, block, style, renderState);
+        }
         block.x = saved.x; block.y = saved.y; block.width = saved.width; block.height = saved.height;
       });
     } else {
       layer.blocks.forEach(function (block) {
         var style = BLOCK_LIBRARY[block.styleId] || BLOCK_LIBRARY.solid_note_tile;
-        renderGridBlock(ctx, block, style, renderState);
+        if (isBauhaus) {
+          block._resolvedColor = palette ? getPaletteColor(block.noteClass, palette) : block.color;
+          renderBauhausGridBlock(ctx, block, style, renderState);
+          block._resolvedColor = null;
+        } else {
+          renderGridBlock(ctx, block, style, renderState);
+        }
       });
+    }
+
+    // Apply finish overlay in grid coordinate space
+    if (isBauhaus && palette && finishId !== "clean") {
+      applyBauhausFinish(ctx, finishId, 0, 0, gridW, gridH, palette);
     }
 
     ctx.restore();
@@ -515,6 +812,17 @@
     updateGridLayerPlaybackState: updateGridLayerPlaybackState,
     renderGridLayer: renderGridLayer,
     renderGridBlock: renderGridBlock,
+    renderBauhausGridBlock: renderBauhausGridBlock,
+    hexToRgb: hexToRgb,
+    rgbaFromHex: rgbaFromHex,
+    lightenHex: lightenHex,
+    muteHex: muteHex,
+    getPaletteColor: getPaletteColor,
+    applyBauhausFinish: applyBauhausFinish,
+    BAUHAUS_PALETTES: BAUHAUS_PALETTES,
+    BAUHAUS_FINISHES: BAUHAUS_FINISHES,
+    DEFAULT_PALETTE_ID: DEFAULT_PALETTE_ID,
+    DEFAULT_FINISH_ID: DEFAULT_FINISH_ID,
     createMidiBankFromCartridge: createMidiBankFromCartridge,
   };
 })(window);

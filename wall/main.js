@@ -2259,11 +2259,16 @@
             layerId:       layer.id,
             label:         layer.label || layer.name,
             rendererId:    layer.renderer ? layer.renderer.id : null,
+            paletteId:     layer.renderer ? layer.renderer.paletteId : null,
+            finishId:      layer.renderer ? layer.renderer.finishId  : null,
+            visualLanguage:g ? g.visualLanguage : null,
+            visualVersion: g ? g.visualVersion : null,
             sourceBankId:  resolved.bankId,
             sourceCartridgeId: resolved.cartridgeId,
             sourceNotes:   sourceNotes,
             playbackEvents:playbackEvents,
             gridBlocks:    blocks.length,
+            activeBlocks:  blocks.filter(function (b) { return b.active; }).length,
             columns:       g ? g.columns : null,
             rows:          g ? g.rows : null,
             cellSize:      g ? g.cellSize : null,
@@ -2274,6 +2279,87 @@
           };
         });
     };
+    // ── _wos.bauhaus — palette + finish debug API ──────────────────────────────
+    window._wos.bauhaus = (function () {
+      function getBauhausLayer() {
+        return (state.world.layers || []).find(function (l) {
+          return l.type === "grid" && l.renderer && l.renderer.id === "bauhausMinimal";
+        }) || null;
+      }
+      function getAllBauhausLayers() {
+        return (state.world.layers || []).filter(function (l) {
+          return l.type === "grid" && l.renderer && l.renderer.id === "bauhausMinimal";
+        });
+      }
+
+      return {
+        listPalettes: function () {
+          var GS = getGridSystem();
+          if (!GS) return [];
+          return Object.values(GS.BAUHAUS_PALETTES).map(function (p) {
+            return { id: p.id, name: p.name, colors: p.colors, background: p.background };
+          });
+        },
+        setPalette: function (paletteId) {
+          var GS = getGridSystem();
+          if (!GS || !GS.BAUHAUS_PALETTES[paletteId]) {
+            console.warn("[BAUHAUS] Unknown palette:", paletteId,
+              "— available:", Object.keys(GS ? GS.BAUHAUS_PALETTES : {}));
+            return false;
+          }
+          getAllBauhausLayers().forEach(function (l) { l.renderer.paletteId = paletteId; });
+          renderFrame();
+          return paletteId;
+        },
+        getPalette: function () {
+          var l = getBauhausLayer();
+          return l ? (l.renderer.paletteId || "exhibition1923") : null;
+        },
+
+        listFinishes: function () {
+          var GS = getGridSystem();
+          if (!GS) return [];
+          return Object.values(GS.BAUHAUS_FINISHES).map(function (f) {
+            return { id: f.id, name: f.name };
+          });
+        },
+        setFinish: function (finishId) {
+          var GS = getGridSystem();
+          if (!GS || !GS.BAUHAUS_FINISHES[finishId]) {
+            console.warn("[BAUHAUS] Unknown finish:", finishId,
+              "— available:", Object.keys(GS ? GS.BAUHAUS_FINISHES : {}));
+            return false;
+          }
+          getAllBauhausLayers().forEach(function (l) { l.renderer.finishId = finishId; });
+          renderFrame();
+          return finishId;
+        },
+        getFinish: function () {
+          var l = getBauhausLayer();
+          return l ? (l.renderer.finishId || "paperSoft") : null;
+        },
+
+        getState: function () {
+          var l = getBauhausLayer();
+          if (!l) return null;
+          return {
+            paletteId:     l.renderer.paletteId     || "exhibition1923",
+            finishId:      l.renderer.finishId       || "paperSoft",
+            rendererId:    l.renderer.id,
+            visualLanguage:l.grid && l.grid.visualLanguage,
+            visualVersion: l.grid && l.grid.visualVersion,
+            gridBlocks:    l.blocks ? l.blocks.length : 0,
+            activeBlocks:  l.blocks ? l.blocks.filter(function (b) { return b.active; }).length : 0,
+          };
+        },
+
+        regenerate: function () {
+          var l = window._wos.generateBauhausGrid();
+          return l ? { gridBlocks: l.blocks.length } : null;
+        },
+      };
+    })();
+
     console.log("[WOS DEBUG] sampleMap:", sampleMap);
     console.log("[WOS DEBUG] audioState:", state.audio);
     var input = { shift: false }; // reliable modifier state for non-event contexts
@@ -7039,6 +7125,13 @@
         wrapMode:      "wrapRows",
       };
 
+      // Preserve palette/finish across regeneration
+      var prevGrid = (state.world.layers || []).find(function (l) {
+        return l.type === "grid" && l.renderer && l.renderer.id === canonical.rendererId;
+      });
+      var prevPaletteId = prevGrid && prevGrid.renderer.paletteId;
+      var prevFinishId  = prevGrid && prevGrid.renderer.finishId;
+
       // One canonical grid layer — replace all existing grid layers
       state.world.layers = (state.world.layers || []).filter(function (l) {
         return l.type !== "grid";
@@ -7052,8 +7145,15 @@
 
       layer.label    = "Bauhaus Grid";
       layer.status   = "active";
-      layer.renderer = { id: canonical.rendererId };
+      layer.renderer = {
+        id:        canonical.rendererId,
+        version:   "1.2.0",
+        paletteId: prevPaletteId || GS.DEFAULT_PALETTE_ID,
+        finishId:  prevFinishId  || GS.DEFAULT_FINISH_ID,
+      };
       layer.audio    = { channelId: canonical.audioChannelId };
+      layer.grid.visualLanguage = "bauhausMinimal";
+      layer.grid.visualVersion  = "1.2.0";
       layer.source   = { type: "midiBank", bankId: sourceBankId, cartridgeId: sourceCartridgeId };
 
       // Generate blocks from the same event set used for counting
@@ -7088,15 +7188,25 @@
     }
 
     function isBauhausBlockActive(block) {
-      // Primary: MIDI playback bridge activeNotes
       var activeNotes = state.midiPlayback && state.midiPlayback.activeNotes
         ? state.midiPlayback.activeNotes : [];
       if (activeNotes.some(function (n) {
-        return n && (n.id === block.sourceEventId || n.index === block.sequenceIndex);
+        return n && (
+          n.id === block.sourceEventId ||
+          n.index === block.sourceIndex ||
+          n.index === block.sequenceIndex
+        );
       })) return true;
-      // Fallback: noteActivity within 120ms
       var na = noteActivity[block.noteClass];
-      return na && (performance.now() - na) < 120;
+      return !!na && (performance.now() - na) < 120;
+    }
+
+    function getBauhausBlockPulse(block) {
+      if (!block.active) return 0;
+      var last = typeof block.noteClass === "number" ? noteActivity[block.noteClass] : null;
+      if (!last) return 1;
+      var age = performance.now() - last;
+      return Math.max(0, 1 - age / 160);
     }
 
     function renderGridLayers(ctx) {
@@ -7113,6 +7223,7 @@
         if (layer.blocks) {
           layer.blocks.forEach(function (block) {
             block.active = isBauhausBlockActive(block);
+            block._pulse = getBauhausBlockPulse(block);
           });
         }
         var prevBeat = layer._prevBeat != null ? layer._prevBeat : currentBeat;
