@@ -74,7 +74,7 @@ button,
   -webkit-user-drag: none;
 }
 
-#transparent-bg {
+body.presentation #transparent-bg {
   display: none !important;
 }
 
@@ -1675,3 +1675,13 @@ body.presentation .shortcut-hud {
   padding: 3px 6px;
   cursor: pointer;
 }
+
+/* ── Registry Status Spine — 0508_WOS_RegistryStatusSpine_v1.0.0 ── */
+[data-status="active"]       { opacity: 1; }
+[data-status="available"]    { opacity: 0.92; }
+[data-status="selected"]     { opacity: 1; outline: 1px solid var(--accent); }
+[data-status="experimental"] { opacity: 0.78; }
+[data-status="legacy"]       { opacity: 0.55; filter: grayscale(0.35); }
+[data-status="disabled"]     { opacity: 0.38; pointer-events: none; }
+[data-status="unhooked"]     { opacity: 0.55; border-style: dashed; }
+[data-status="error"]        { opacity: 1; border-color: var(--danger, #ff4d4d); }
