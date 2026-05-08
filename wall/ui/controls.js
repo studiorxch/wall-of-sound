@@ -114,18 +114,10 @@
       toggleHitCount: byId("toggle-hit-count"),
 
       // Grid Layer
-      gridBankSelect: byId("grid-bank-select"),
-      addBankToGrid: byId("add-bank-to-grid"),
-      gridColumns: byId("grid-columns"),
-      gridColumnsValue: byId("grid-columns-value"),
-      gridRows: byId("grid-rows"),
-      gridRowsValue: byId("grid-rows-value"),
-      gridPlacementMode: byId("grid-placement-mode"),
-      gridBlockStyle: byId("grid-block-style"),
-      gridColorMode: byId("grid-color-mode"),
-      gridFitMode: byId("grid-fit-mode"),
-      regenerateGrid: byId("regenerate-grid"),
-      gridLayerList: byId("grid-layer-list"),
+      gridBankSelect:    byId("grid-bank-select"),
+      generateBauhausGrid: byId("generate-bauhaus-grid"),
+      clearGridLayers:   byId("clear-grid-layers"),
+      gridLayerList:     byId("grid-layer-list"),
 
       // Button collections
       shapeButtons: Array.from(document.querySelectorAll(".shape-button")),
@@ -166,8 +158,6 @@
     bindRange(elements.motionVy, elements.motionVyValue, 0);
     bindRange(elements.motionRot, elements.motionRotValue, 1);
     bindRange(elements.worldStrength, elements.worldStrengthValue, 1);
-    bindRange(elements.gridColumns, elements.gridColumnsValue, 0);
-    bindRange(elements.gridRows, elements.gridRowsValue, 0);
     bindRange(
       elements.behaviorEmitterRate,
       elements.behaviorEmitterRateValue,
@@ -291,61 +281,44 @@
     function bindGridLayerControls() {
       var el = elements;
 
-      if (el.addBankToGrid) {
-        el.addBankToGrid.addEventListener("click", function () {
-          if (window._wos && window._wos.addBankToGridLayer) {
+      if (el.generateBauhausGrid) {
+        el.generateBauhausGrid.addEventListener("click", function () {
+          if (window._wos && window._wos.generateBauhausGrid) {
             var bankId = el.gridBankSelect ? el.gridBankSelect.value : null;
-            window._wos.addBankToGridLayer(bankId || undefined);
+            window._wos.generateBauhausGrid(bankId || undefined);
             syncGridLayerList();
           }
         });
       }
 
-      if (el.regenerateGrid) {
-        el.regenerateGrid.addEventListener("click", function () {
-          var overrides = currentGridSettingsFromUI();
-          if (window._wos && window._wos.regenerateFirstGridLayer) {
-            // Apply overrides to first grid layer before regenerating
-            var layers = window._wos.debugGridLayers ? window._wos.debugGridLayers() : [];
-            if (layers.length && overrides) {
-              Object.assign(layers[0].grid, overrides);
-            }
-            window._wos.regenerateFirstGridLayer();
+      if (el.clearGridLayers) {
+        el.clearGridLayers.addEventListener("click", function () {
+          if (window._wos && window._wos.clearGridLayers) {
+            window._wos.clearGridLayers();
             syncGridLayerList();
           }
         });
       }
 
-      // Sync grid bank select when state changes (called by syncState)
+      // Sync grid bank select when state changes (called by syncState / syncGridUI)
       el._syncGridBankSelect = function (appState) {
         if (!el.gridBankSelect) return;
-        var banks = appState.midiCartridges || [];
+        var cartridges = appState.midiCartridges || [];
         var current = el.gridBankSelect.value;
-        el.gridBankSelect.innerHTML = banks.length
-          ? banks.map(function (c) {
-              return '<option value="' + c.id + '">' + (c.name || c.id) + '</option>';
+        el.gridBankSelect.innerHTML = cartridges.length
+          ? cartridges.map(function (c) {
+              var noteCount = c.notes ? c.notes.length : 0;
+              var label = (c.name || c.id) + (noteCount ? " — " + noteCount + " notes" : "");
+              return '<option value="' + c.id + '">' + label + "</option>";
             }).join("")
           : '<option value="">— no bank loaded —</option>';
-        if (current && banks.find(function (c) { return c.id === current; })) {
+        if (current && cartridges.find(function (c) { return c.id === current; })) {
           el.gridBankSelect.value = current;
         } else if (appState.activeMidiBankId) {
-          // activeMidiBankId is a bank id; match to cartridge via cartridgeId
           var activeBank = (appState.midiBanks || []).find(function (b) { return b.id === appState.activeMidiBankId; });
           if (activeBank) el.gridBankSelect.value = activeBank.cartridgeId || activeBank.id;
         }
       };
-    }
-
-    function currentGridSettingsFromUI() {
-      var el = elements;
-      var settings = {};
-      if (el.gridColumns) settings.columns = Number(el.gridColumns.value);
-      if (el.gridRows) settings.rows = Number(el.gridRows.value);
-      if (el.gridPlacementMode) settings.placementMode = el.gridPlacementMode.value;
-      if (el.gridBlockStyle) settings.blockStyleId = el.gridBlockStyle.value;
-      if (el.gridColorMode) settings.colorMode = el.gridColorMode.value;
-      if (el.gridFitMode) settings.fitMode = el.gridFitMode.value;
-      return settings;
     }
 
     function syncGridLayerList() {
@@ -354,12 +327,16 @@
       var layers = window._wos && window._wos.debugGridLayers ? window._wos.debugGridLayers() : [];
       el.gridLayerList.innerHTML = layers.length
         ? layers.map(function (l) {
-            return '<div style="font-size:11px;color:#aaa;padding:2px 0;">'
-              + (l.visible ? "●" : "○") + " " + l.name
-              + " (" + (l.blocks ? l.blocks.length : 0) + " blocks)"
-              + "</div>";
+            var blockCount = l.blocks ? l.blocks.length : 0;
+            var bankId = l.source && l.source.bankId;
+            return '<div style="font-size:11px;color:#aaa;padding:3px 0;">'
+              + (l.visible ? "●" : "○") + " "
+              + "<span style='color:#ccc;font-weight:600;'>" + (l.label || l.name) + "</span>"
+              + "<br><span style='padding-left:10px;'>" + blockCount + " tiles"
+              + (bankId ? " · " + bankId.slice(0, 12) + "…" : "")
+              + "</span></div>";
           }).join("")
-        : "";
+        : '<div style="font-size:10px;color:#666;padding:4px 0;">No grid layers</div>';
     }
 
     return {

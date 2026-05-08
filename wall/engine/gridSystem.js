@@ -63,6 +63,36 @@
     RANDOM_WALK: "randomWalk",
   };
 
+  // ── Canonical Bauhaus grid — one path, no user-facing options ───────────────
+  var CANONICAL_BAUHAUS_GRID = {
+    rendererId:    "bauhausMinimal",
+    layerType:     "grid",
+    role:          "environment",
+    placementMode: "packedTimeGrid",
+    fitMode:       "fitFrame",
+    tileStyle:     "square",
+    colorMode:     "noteClass",
+    blockStyleId:  "solid_note_tile",
+    audioChannelId:"gridNotes",
+    padding:       24,
+    gap:           1,
+    minCellSize:   4,
+    maxCellSize:   120,
+  };
+
+  // ── computePackedGridDimensions ──────────────────────────────────────────────
+  function computePackedGridDimensions(noteCount, width, height) {
+    var safeCount = Math.max(1, noteCount || 1);
+    var aspect = (width || 1080) / (height || 1920);
+    var columns = Math.ceil(Math.sqrt(safeCount * aspect));
+    var rows = Math.ceil(safeCount / columns);
+    while (columns * rows < safeCount) {
+      columns += 1;
+      rows = Math.ceil(safeCount / columns);
+    }
+    return { columns: columns, rows: rows };
+  }
+
   // ── Default grid settings ────────────────────────────────────────────────────
   var DEFAULT_GRID_SETTINGS = {
     columns: 32,
@@ -473,6 +503,8 @@
     BLOCK_LIBRARY: BLOCK_LIBRARY,
     GRID_PLACEMENT_MODES: GRID_PLACEMENT_MODES,
     DEFAULT_GRID_SETTINGS: DEFAULT_GRID_SETTINGS,
+    CANONICAL_BAUHAUS_GRID: CANONICAL_BAUHAUS_GRID,
+    computePackedGridDimensions: computePackedGridDimensions,
     NOTE_COLORS: NOTE_COLORS,
     getNoteColor: getNoteColor,
     computeFitCellSize: computeFitCellSize,

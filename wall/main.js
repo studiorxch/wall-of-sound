@@ -2015,6 +2015,7 @@
         activeNotes: [],
         lastTriggeredNotes: [],
         debug: false,
+        legacyWalkerAudioEnabled: false,
       },
       debug: {
         walkers: false,
@@ -2209,8 +2210,8 @@
       var layer = (state.world.layers || []).find(function (l) { return l.id === layerId; });
       return layer ? layer.blocks : [];
     };
+    // Legacy helpers — still available for DevTools use
     window._wos.addBankToGridLayer = function (cartridgeId, options) {
-      // cartridgeId optional — defaults to activeMidiBankId
       var cid = cartridgeId || state.activeMidiBankId;
       if (!cid) { console.warn("[WOS GRID] No active MIDI bank"); return null; }
       var layer = addBankToGridLayer(cid, options);
@@ -2229,58 +2230,47 @@
       if (result) renderFrame();
       return result;
     };
+    // Canonical Bauhaus path
+    window._wos.generateBauhausGrid = function (bankId) {
+      var layer = generateBauhausGrid(bankId);
+      if (layer) renderFrame();
+      return layer;
+    };
+    window._wos.clearGridLayers = function () {
+      var removed = clearGridLayers();
+      renderFrame();
+      return removed;
+    };
     window._wos.debugGridStats = function () {
       return (state.world.layers || [])
         .filter(function (l) { return l.type === "grid"; })
         .map(function (layer) {
           var g = layer.grid;
           var blocks = layer.blocks || [];
-          var bankId = layer.source && layer.source.bankId;
-          var bank = bankId ? state.gridBanks[bankId] : null;
-          var cartridge = bank ? state.midiCartridges.find(function (c) { return c.id === bank.id; }) : null;
-          var sourceNotes = cartridge ? cartridge.notes.length : 0;
-          var gridEvents = bank ? (bank.events || []).length : 0;
-
-          var cellSet = new Set();
-          var noteSet = new Set();
-          var ncSet = new Set();
-          var pitchMin = Infinity, pitchMax = -Infinity;
-          var startMin = Infinity, startMax = -Infinity, endMax = -Infinity;
-
-          blocks.forEach(function (b) {
-            cellSet.add(b.col + "," + b.row);
-            noteSet.add(b.note);
-            ncSet.add(b.noteClass);
-            if (b.note < pitchMin) pitchMin = b.note;
-            if (b.note > pitchMax) pitchMax = b.note;
-            if (b.startBeat < startMin) startMin = b.startBeat;
-            if (b.startBeat > startMax) startMax = b.startBeat;
-            var end = b.startBeat + b.durationBeats;
-            if (end > endMax) endMax = end;
-          });
+          var sourceRef = layer.source && (layer.source.cartridgeId || layer.source.bankId);
+          var resolved = resolveMidiBankAndCartridge(sourceRef);
+          var sourceNotes = resolved.cartridge && resolved.cartridge.notes
+            ? resolved.cartridge.notes.length : 0;
+          var playbackEvents = getMidiPlaybackEventsForResolvedSource(
+            resolved.bank, resolved.cartridge
+          ).length;
 
           return {
-            layerId: layer.id,
-            name: layer.name,
-            bankId: bankId,
-            sourceNotes: sourceNotes,
-            gridEvents: gridEvents,
-            gridBlocks: blocks.length,
-            occupiedCells: cellSet.size,
-            collisions: blocks.length - cellSet.size,
-            uniqueNotes: noteSet.size,
-            uniqueNoteClasses: ncSet.size,
-            pitchMin: pitchMin === Infinity ? null : pitchMin,
-            pitchMax: pitchMax === -Infinity ? null : pitchMax,
-            startBeatMin: startMin === Infinity ? null : +startMin.toFixed(3),
-            startBeatMax: startMax === -Infinity ? null : +startMax.toFixed(3),
-            endBeatMax: endMax === -Infinity ? null : +endMax.toFixed(3),
-            columns: g.columns,
-            rows: g.rows,
-            cellSize: g.cellSize,
-            gap: g.gap,
-            placementMode: g.placementMode,
-            fitMode: g.fitMode,
+            layerId:       layer.id,
+            label:         layer.label || layer.name,
+            rendererId:    layer.renderer ? layer.renderer.id : null,
+            sourceBankId:  resolved.bankId,
+            sourceCartridgeId: resolved.cartridgeId,
+            sourceNotes:   sourceNotes,
+            playbackEvents:playbackEvents,
+            gridBlocks:    blocks.length,
+            columns:       g ? g.columns : null,
+            rows:          g ? g.rows : null,
+            cellSize:      g ? g.cellSize : null,
+            gap:           g ? g.gap : null,
+            fitMode:       g ? g.fitMode : null,
+            placementMode: g ? g.placementMode : null,
+            countMatch:    blocks.length === sourceNotes,
           };
         });
     };
@@ -5315,29 +5305,31 @@
             state,
             function onCartridgeNote(stroke, note) {
               var safeVelocity = normalizeMidiVelocity(note.velocity);
-              // Fallback always fires — confirms timing even without samples
+              var noteClass = ((note.note % 12) + 12) % 12;
+
+              // Visual meter stays alive regardless of audio mute state
+              noteActivity[noteClass] = performance.now();
+              noteVelocity[noteClass] = safeVelocity / 127;
+
+              if (!state.midiPlayback || state.midiPlayback.legacyWalkerAudioEnabled !== true) {
+                if (state.debug && state.debug.audioLogs) {
+                  console.log("[MIDI LEGACY WALKER MUTED]", {
+                    note: note.note, velocity: safeVelocity,
+                    strokeId: stroke && stroke.id,
+                  });
+                }
+                return;
+              }
+
               playFallbackInstrument(note.note, safeVelocity);
-              // Also route through sampler if stroke has samples
-              if (stroke.samples && stroke.samples.length > 0) {
+              if (stroke && stroke.samples && stroke.samples.length > 0) {
                 emitEvent({
                   type: "midi",
                   sourceId: stroke.id,
                   energy: safeVelocity / 127,
                   channel: "melodic",
                   useScale: false,
-                  data: {
-                    note: note.note,
-                    velocity: safeVelocity,
-                    source: "midiCartridge",
-                  },
-                });
-              }
-              if (state.debug && state.debug.audioLogs) {
-                console.log("[MIDI NOTE FIRE]", {
-                  fullNote: note.note,
-                  noteClass: note.note % 12,
-                  velocity: safeVelocity,
-                  strokeId: stroke.id,
+                  data: { note: note.note, velocity: safeVelocity, source: "legacyWalkerMidi" },
                 });
               }
             },
@@ -5828,6 +5820,14 @@
       return [];
     }
 
+    function getMidiPlaybackLengthBeats(bank, cartridge, events) {
+      if (cartridge && cartridge.length) return cartridge.length;
+      if (bank && bank.length) return bank.length;
+      return events.reduce(function (max, event) {
+        return Math.max(max, event.startBeat + event.durationBeats);
+      }, 0);
+    }
+
     function processMidiPlayback(currentBeat, previousBeat) {
       if (!state.midiPlayback || state.midiPlayback.enabled === false) return;
       if (!isPlaying) return;
@@ -5839,15 +5839,20 @@
         return;
       }
 
-      var loopBars = state.loop && state.loop.bars ? state.loop.bars : 8;
-      var loopBeats = loopBars * 4;
-      var wrapped = currentBeat < previousBeat;
+      // Resolve active bank/cartridge for source length and repeat flag
+      var resolved = resolveMidiBankAndCartridge(null);
+      var sourceLengthBeats = getMidiPlaybackLengthBeats(resolved.bank, resolved.cartridge, events);
+      var shouldLoop = !!(resolved.bank && resolved.bank.repeat);
+      var loopBeats = shouldLoop ? sourceLengthBeats : 0;
+
+      var wrapped = shouldLoop && currentBeat < previousBeat;
       var triggered = [];
       var now = performance.now();
 
       events.forEach(function (event) {
         var eventBeat = event.startBeat;
-        if (loopBeats > 0) {
+        // Only fold into loop window when looping is active
+        if (shouldLoop && loopBeats > 0) {
           eventBeat = ((eventBeat % loopBeats) + loopBeats) % loopBeats;
         }
 
@@ -5856,7 +5861,7 @@
           : eventBeat > previousBeat && eventBeat <= currentBeat;
         if (!crossed) return;
 
-        var cycle = loopBeats > 0 ? Math.floor(currentBeat / loopBeats) : 0;
+        var cycle = (shouldLoop && loopBeats > 0) ? Math.floor(currentBeat / loopBeats) : 0;
         var key = event.id + "::" + cycle;
         if (state.midiPlayback.firedNoteKeys.has(key)) return;
         state.midiPlayback.firedNoteKeys.add(key);
@@ -5877,10 +5882,10 @@
       state.midiPlayback.lastTriggeredNotes = triggered;
 
       state.midiPlayback.activeNotes = events.filter(function (event) {
-        var localBeat = loopBeats > 0
+        var localBeat = (shouldLoop && loopBeats > 0)
           ? ((currentBeat % loopBeats) + loopBeats) % loopBeats
           : currentBeat;
-        var start = loopBeats > 0
+        var start = (shouldLoop && loopBeats > 0)
           ? ((event.startBeat % loopBeats) + loopBeats) % loopBeats
           : event.startBeat;
         return localBeat >= start && localBeat <= start + event.durationBeats;
@@ -6151,6 +6156,10 @@
         debug: function (enabled) {
           state.midiPlayback.debug = !!enabled;
           return state.midiPlayback.debug;
+        },
+        legacyWalkerAudio: function (enabled) {
+          state.midiPlayback.legacyWalkerAudioEnabled = !!enabled;
+          return state.midiPlayback.legacyWalkerAudioEnabled;
         },
       };
     }
@@ -6899,6 +6908,197 @@
       return layer;
     }
 
+    // ── Canonical Bauhaus grid generator ──────────────────────────────────────
+    // ── Bank/cartridge resolver — handles bank id, cartridge id, or active id ──
+    function resolveMidiBankAndCartridge(inputId) {
+      var id = inputId || state.activeMidiBankId || null;
+      // Last resort: first cartridge
+      if (!id && state.midiCartridges && state.midiCartridges[0]) {
+        id = state.midiCartridges[0].id;
+      }
+      var banks = state.midiBanks || [];
+      var cartridges = state.midiCartridges || [];
+
+      var bank = null;
+      var cartridge = null;
+
+      if (id) {
+        bank = banks.find(function (b) { return b && b.id === id; }) || null;
+        cartridge = cartridges.find(function (c) { return c && c.id === id; }) || null;
+      }
+
+      // Input was a cartridge id — find its bank
+      if (cartridge && !bank) {
+        bank = banks.find(function (b) {
+          return b && (b.cartridgeId === cartridge.id || b.sourceCartridgeId === cartridge.id);
+        }) || null;
+      }
+
+      // Input was a bank id — find its cartridge
+      if (bank && !cartridge) {
+        var cid = bank.cartridgeId || bank.sourceCartridgeId || null;
+        if (cid) cartridge = cartridges.find(function (c) { return c && c.id === cid; }) || null;
+      }
+
+      // Fallback: older paths use same id for both bank and cartridge
+      if (bank && !cartridge) {
+        cartridge = cartridges.find(function (c) { return c && c.id === bank.id; }) || null;
+      }
+
+      // If we have a cartridge but no real bank, synthesize a minimal bank wrapper
+      if (cartridge && !bank) {
+        bank = { id: cartridge.id, cartridgeId: cartridge.id,
+                 name: cartridge.name || "Imported MIDI", events: null };
+      }
+
+      return {
+        inputId:     id,
+        bank:        bank,
+        cartridge:   cartridge,
+        bankId:      bank ? bank.id : null,
+        cartridgeId: cartridge ? cartridge.id : null,
+      };
+    }
+
+    // ── Event source for a resolved bank/cartridge (mirrors normalizeMidiPlaybackEvent) ──
+    function getMidiPlaybackEventsForResolvedSource(bank, cartridge) {
+      if (bank && Array.isArray(bank.events) && bank.events.length) {
+        return bank.events.map(normalizeMidiPlaybackEvent).filter(Boolean);
+      }
+      if (bank && Array.isArray(bank.notes) && bank.notes.length) {
+        return bank.notes.map(normalizeMidiPlaybackEvent).filter(Boolean);
+      }
+      if (cartridge && Array.isArray(cartridge.notes) && cartridge.notes.length) {
+        return cartridge.notes.map(normalizeMidiPlaybackEvent).filter(Boolean);
+      }
+      return [];
+    }
+
+    function generateBauhausGrid(selectedBankId) {
+      var GS = getGridSystem();
+      if (!GS) { console.warn("[BAUHAUS GRID] GridSystem not loaded"); return null; }
+
+      var resolved = resolveMidiBankAndCartridge(selectedBankId);
+      var bank = resolved.bank;
+      var cartridge = resolved.cartridge;
+
+      if (!bank && !cartridge) {
+        console.warn("[BAUHAUS GRID] Drop a MIDI file first");
+        return null;
+      }
+      if (!cartridge) {
+        console.warn("[BAUHAUS GRID] Cartridge not found:", {
+          inputId: resolved.inputId, bankId: resolved.bankId,
+          activeMidiBankId: state.activeMidiBankId,
+        });
+        return null;
+      }
+
+      // Ensure grid bank (event-expanded form) exists
+      var gridBank = getOrCreateGridBank(cartridge);
+
+      // Events: prefer expanded grid bank, fall back through resolved sources
+      var events = getMidiPlaybackEventsForResolvedSource(gridBank || bank, cartridge);
+      if (!events.length) {
+        console.warn("[BAUHAUS GRID] No MIDI events found for source", {
+          bankId: resolved.bankId, cartridgeId: resolved.cartridgeId,
+        });
+        return null;
+      }
+
+      var sourceBankId     = (gridBank || bank).id;
+      var sourceCartridgeId = cartridge.id;
+
+      // Compute canonical dimensions from event count + frame
+      var canvasW = state.canvas.width || 1080;
+      var canvasH = state.canvas.height || 1920;
+      var canonical = GS.CANONICAL_BAUHAUS_GRID;
+      var dims = GS.computePackedGridDimensions(events.length, canvasW, canvasH);
+      var cellSize = GS.computeFitCellSize(
+        { columns: dims.columns, rows: dims.rows, framePadding: canonical.padding,
+          gap: canonical.gap, minCellSize: canonical.minCellSize, maxCellSize: canonical.maxCellSize },
+        canvasW, canvasH
+      );
+
+      var gridSettings = {
+        columns:       dims.columns,
+        rows:          dims.rows,
+        cellSize:      cellSize,
+        gap:           canonical.gap,
+        placementMode: canonical.placementMode,
+        fitMode:       canonical.fitMode,
+        colorMode:     canonical.colorMode,
+        blockStyleId:  canonical.blockStyleId,
+        framePadding:  canonical.padding,
+        minCellSize:   canonical.minCellSize,
+        maxCellSize:   canonical.maxCellSize,
+        quantizeBeats: 0,
+        pitchRange:    { min: 36, max: 84 },
+        sizeMode:      "none",
+        opacityMode:   "none",
+        wrapMode:      "wrapRows",
+      };
+
+      // One canonical grid layer — replace all existing grid layers
+      state.world.layers = (state.world.layers || []).filter(function (l) {
+        return l.type !== "grid";
+      });
+
+      var layer = GS.createGridLayerFromMidiBank(sourceBankId, {
+        name: "Bauhaus Grid",
+        grid: gridSettings,
+      });
+      if (!layer) return null;
+
+      layer.label    = "Bauhaus Grid";
+      layer.status   = "active";
+      layer.renderer = { id: canonical.rendererId };
+      layer.audio    = { channelId: canonical.audioChannelId };
+      layer.source   = { type: "midiBank", bankId: sourceBankId, cartridgeId: sourceCartridgeId };
+
+      // Generate blocks from the same event set used for counting
+      var bankForBlocks = gridBank || { id: sourceBankId, events: events.map(function (e) { return e.raw || e; }) };
+      layer.blocks = GS.generateGridBlocksFromMidiBank(bankForBlocks, gridSettings, layer.id, canvasW, canvasH);
+
+      state.world.layers.push(layer);
+
+      var playbackEvents = getMidiNoteEventsForPlayback().length;
+      var sourceNotes    = events.length;
+      var gridBlocks     = layer.blocks.length;
+
+      if (sourceNotes !== gridBlocks) {
+        console.warn("[BAUHAUS GRID] Count mismatch", {
+          sourceNotes: sourceNotes, playbackEvents: playbackEvents, gridBlocks: gridBlocks,
+        });
+      }
+
+      console.log("[BAUHAUS GRID] Generated", {
+        bankId: sourceBankId, cartridgeId: sourceCartridgeId,
+        sourceNotes: sourceNotes, playbackEvents: playbackEvents,
+        gridBlocks: gridBlocks, columns: dims.columns, rows: dims.rows, cellSize: cellSize,
+      });
+
+      return layer;
+    }
+
+    function clearGridLayers() {
+      var before = (state.world.layers || []).filter(function (l) { return l.type === "grid"; }).length;
+      state.world.layers = (state.world.layers || []).filter(function (l) { return l.type !== "grid"; });
+      return before;
+    }
+
+    function isBauhausBlockActive(block) {
+      // Primary: MIDI playback bridge activeNotes
+      var activeNotes = state.midiPlayback && state.midiPlayback.activeNotes
+        ? state.midiPlayback.activeNotes : [];
+      if (activeNotes.some(function (n) {
+        return n && (n.id === block.sourceEventId || n.index === block.sequenceIndex);
+      })) return true;
+      // Fallback: noteActivity within 120ms
+      var na = noteActivity[block.noteClass];
+      return na && (performance.now() - na) < 120;
+    }
+
     function renderGridLayers(ctx) {
       var GS = getGridSystem();
       if (!GS || !state.world || !state.world.layers || !state.world.layers.length) return;
@@ -6909,8 +7109,13 @@
       }
       state.world.layers.forEach(function (layer) {
         if (layer.type !== "grid" || !layer.visible) return;
+        // Update active flag using canonical bridge first, fallback to beat window
+        if (layer.blocks) {
+          layer.blocks.forEach(function (block) {
+            block.active = isBauhausBlockActive(block);
+          });
+        }
         var prevBeat = layer._prevBeat != null ? layer._prevBeat : currentBeat;
-        GS.updateGridLayerPlaybackState(layer, currentBeat);
         if (isPlaying) {
           processGridLayerPlayback(layer, currentBeat, prevBeat);
         }
@@ -7150,6 +7355,9 @@
     // ── MIDI Point spatial trigger ─────────────────────────────────────────
     function triggerMidiPointsForWalker(walker) {
       if (!state.midiPoints.length) return;
+      // Audio from MIDI points is a legacy path — muted unless explicitly enabled
+      var midiPointsAudioEnabled = state.midiPlayback &&
+        state.midiPlayback.legacyWalkerAudioEnabled === true;
 
       // Resolve graphId/bankId live from the stroke — handles walkers created before MIDI was attached
       var liveStroke = walker.strokeId ? getStrokeById(walker.strokeId) : null;
@@ -7169,21 +7377,14 @@
         // Path 1: same stroke — t-based match
         if (p.strokeId === walker.strokeId) {
           if (Math.abs(p.t - walker.t) < threshold) {
-            playFallbackInstrument(
-              p.note,
-              p.velocity != null ? p.velocity : 100,
-            );
+            if (midiPointsAudioEnabled) {
+              playFallbackInstrument(p.note, p.velocity != null ? p.velocity : 100);
+            }
             p.consumed = true;
             triggered = true;
             if (state.debug && state.debug.audioLogs)
-              console.log(
-                "[MIDI POINT]",
-                p.note,
-                "t:",
-                p.t.toFixed(3),
-                "walker.t:",
-                walker.t.toFixed(3),
-              );
+              console.log("[MIDI POINT]", p.note, "t:", p.t.toFixed(3),
+                "walker.t:", walker.t.toFixed(3), "audio:", midiPointsAudioEnabled);
           }
           return;
         }
@@ -7197,19 +7398,14 @@
           var dx = walker.x - p.x;
           var dy = walker.y - p.y;
           if (dx * dx + dy * dy < 49) {
-            playFallbackInstrument(
-              p.note,
-              p.velocity != null ? p.velocity : 100,
-            );
+            if (midiPointsAudioEnabled) {
+              playFallbackInstrument(p.note, p.velocity != null ? p.velocity : 100);
+            }
             p.consumed = true;
             triggered = true;
             if (state.debug && state.debug.audioLogs)
-              console.log(
-                "[MIDI POINT] graph hit",
-                p.note,
-                "t:",
-                p.t.toFixed(3),
-              );
+              console.log("[MIDI POINT] graph hit", p.note, "t:", p.t.toFixed(3),
+                "audio:", midiPointsAudioEnabled);
           }
         }
       });
@@ -13473,6 +13669,11 @@
       renderer.render(renderState, drawTools.getOverlays());
       var ctx = canvas.getContext("2d");
 
+      // ── Frame-space: environment grid layers — not affected by camera ────────
+      ctx.save();
+      renderGridLayers(ctx);
+      ctx.restore();
+
       // ── Camera transform — world space draw calls ─────────────────────────
       var cam = state.camera;
       ctx.save();
@@ -13482,8 +13683,6 @@
 
       // Grid — drawn before all stroke/walker content
       drawGrid(ctx, canvas.width, canvas.height);
-      // Environment grid layers (MIDI-derived world map)
-      renderGridLayers(ctx);
       // Surface stamp layer (persistent ink)
       ctx.drawImage(surfaceCanvas, 0, 0);
       renderStrokes(ctx);
