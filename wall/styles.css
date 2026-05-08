@@ -709,6 +709,13 @@ body {
   background: var(--active);
 }
 
+.secondary-btn {
+  opacity: 0.55;
+}
+.secondary-btn:hover {
+  opacity: 1;
+}
+
 /* Action row */
 .action-row {
   display: flex;
@@ -1878,4 +1885,20 @@ body.presentation .shortcut-hud {
 
 .system-hud__validation[data-state="error"] {
   color: #ff6b6b;
+}
+
+.system-hud__row--value .system-hud__value,
+.system-hud__value {
+  color: var(--text);
+  font-size: 10px;
+  font-weight: 700;
+  text-align: right;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.system-hud__validation[data-state="warn"] {
+  color: #e0c56b;
 }

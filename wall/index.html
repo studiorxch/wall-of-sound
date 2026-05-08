@@ -522,64 +522,12 @@
               </div>
               <div class="insp-row">
                 <div class="insp-control">
-                  <button id="add-bank-to-grid" type="button" class="wide-btn">Add Bank to Grid Layer</button>
-                </div>
-              </div>
-              <div class="insp-row">
-                <label class="insp-label" for="grid-columns">Columns</label>
-                <div class="insp-control insp-slider-num">
-                  <input id="grid-columns" type="range" min="4" max="256" step="1" value="32" />
-                  <output id="grid-columns-value">32</output>
-                </div>
-              </div>
-              <div class="insp-row">
-                <label class="insp-label" for="grid-rows">Rows</label>
-                <div class="insp-control insp-slider-num">
-                  <input id="grid-rows" type="range" min="4" max="256" step="1" value="18" />
-                  <output id="grid-rows-value">18</output>
-                </div>
-              </div>
-              <div class="insp-row">
-                <label class="insp-label" for="grid-placement-mode">Placement</label>
-                <div class="insp-control">
-                  <select id="grid-placement-mode">
-                    <option value="timeX_pitchY">Time × Pitch</option>
-                    <option value="timeX_noteClassY">Time × Note Class</option>
-                    <option value="packedTimeGrid">Packed Time Grid</option>
-                  </select>
-                </div>
-              </div>
-              <div class="insp-row">
-                <label class="insp-label" for="grid-block-style">Block Style</label>
-                <div class="insp-control">
-                  <select id="grid-block-style">
-                    <option value="solid_note_tile">Solid Note Tile</option>
-                    <option value="rounded_note_block">Rounded Note Block</option>
-                    <option value="pixel_note_cell">Pixel Note Cell</option>
-                  </select>
-                </div>
-              </div>
-              <div class="insp-row">
-                <label class="insp-label" for="grid-color-mode">Color Mode</label>
-                <div class="insp-control">
-                  <select id="grid-color-mode">
-                    <option value="noteClass">Note Class</option>
-                    <option value="velocity">Velocity</option>
-                  </select>
-                </div>
-              </div>
-              <div class="insp-row">
-                <label class="insp-label" for="grid-fit-mode">Fit Mode</label>
-                <div class="insp-control">
-                  <select id="grid-fit-mode">
-                    <option value="fixedCell">Fixed Cell</option>
-                    <option value="fitFrame">Fit Frame</option>
-                  </select>
+                  <button id="generate-bauhaus-grid" type="button" class="wide-btn">Generate Bauhaus Grid</button>
                 </div>
               </div>
               <div class="insp-row">
                 <div class="insp-control">
-                  <button id="regenerate-grid" type="button" class="wide-btn">Regenerate Grid</button>
+                  <button id="clear-grid-layers" type="button" class="wide-btn secondary-btn">Clear Grid</button>
                 </div>
               </div>
               <div id="grid-layer-list" class="insp-row" style="flex-direction:column;gap:2px;">
