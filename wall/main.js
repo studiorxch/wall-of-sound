@@ -2006,6 +2006,16 @@
       midiPoints: [], // projected note points { id, graphId, bankId, strokeId, t, note, ... }
       graphs: {}, // graphId → { id, strokeIds, bankId, mode, closed }
       activeMidiBankId: null, // most recently loaded bank
+      midiPlayback: {
+        enabled: true,
+        source: "activeBank",
+        lastBeat: 0,
+        lastTransportRunId: 0,
+        firedNoteKeys: new Set(),
+        activeNotes: [],
+        lastTriggeredNotes: [],
+        debug: false,
+      },
       debug: {
         walkers: false,
         paths: false,
@@ -5696,42 +5706,252 @@
 
     var systemHudRefreshId = null;
 
+    // Safe counter — works for arrays, Sets, Maps, plain objects, or missing values
+    function countItems(value) {
+      if (!value) return 0;
+      if (Array.isArray(value)) return value.length;
+      if (value instanceof Set) return value.size;
+      if (value instanceof Map) return value.size;
+      if (typeof value === "object") return Object.keys(value).length;
+      return 0;
+    }
+
+    function getRuntimeBeat() {
+      if (!state || !state.transport) return 0;
+      var elapsed = state.transport.elapsedBeforeRun || 0;
+      if (isPlaying && state.transport.startedAt) {
+        elapsed += (performance.now() - state.transport.startedAt) / 1000;
+      }
+      var bpm = state.bpm || 120;
+      return elapsed * (bpm / 60);
+    }
+
+    function getWorldLayerCountByType(type) {
+      var layers = state.world && state.world.layers ? state.world.layers : [];
+      return layers.filter(function (l) { return l && l.type === type; }).length;
+    }
+
+    function countGridBlocks() {
+      var layers = state.world && state.world.layers ? state.world.layers : [];
+      return layers.reduce(function (total, l) {
+        return total + countItems(l && l.blocks);
+      }, 0);
+    }
+
+    function countSourceNotes() {
+      return (state.midiCartridges || []).reduce(function (total, c) {
+        return total + countItems(c && c.notes);
+      }, 0);
+    }
+
+    // ── MIDI Playback Bridge ──────────────────────────────────────────────────
+
+    function getCurrentTransportBeat() {
+      return getRuntimeBeat();
+    }
+
+    function getActiveMidiPlaybackBank() {
+      if (!state.activeMidiBankId) return null;
+      return (state.midiBanks || []).find(function (bank) {
+        return bank && bank.id === state.activeMidiBankId;
+      }) || null;
+    }
+
+    function getCartridgeForMidiBank(bank) {
+      if (!bank) return null;
+      if (bank.cartridgeId) {
+        var byCartridgeId = (state.midiCartridges || []).find(function (cart) {
+          return cart && cart.id === bank.cartridgeId;
+        });
+        if (byCartridgeId) return byCartridgeId;
+      }
+      return (state.midiCartridges || []).find(function (cart) {
+        return cart && cart.id === bank.id;
+      }) || null;
+    }
+
+    function normalizeMidiPlaybackEvent(raw, index) {
+      if (!raw) return null;
+
+      var note =
+        typeof raw.note === "number" ? raw.note :
+        typeof raw.midi === "number" ? raw.midi :
+        typeof raw.midiNote === "number" ? raw.midiNote :
+        typeof raw.pitch === "number" ? raw.pitch : 60;
+
+      var velocity =
+        typeof raw.velocity === "number" ? raw.velocity :
+        typeof raw.vel === "number" ? raw.vel : 90;
+
+      if (velocity > 0 && velocity <= 1) velocity = Math.round(velocity * 127);
+      velocity = Math.max(1, Math.min(127, Math.round(velocity)));
+
+      var bpm = state.bpm || 120;
+      var startBeat =
+        typeof raw.startBeat === "number" ? raw.startBeat :
+        typeof raw.beat === "number" ? raw.beat :
+        typeof raw.timeBeats === "number" ? raw.timeBeats :
+        (typeof raw.ticks === "number" && raw.ppq) ? raw.ticks / raw.ppq :
+        typeof raw.time === "number" ? raw.time * (bpm / 60) : 0;
+
+      var durationBeats =
+        typeof raw.durationBeats === "number" ? raw.durationBeats :
+        typeof raw.duration === "number" ? raw.duration * (bpm / 60) :
+        (typeof raw.durationTicks === "number" && raw.ppq) ? raw.durationTicks / raw.ppq :
+        0.25;
+
+      return {
+        id: raw.id || "midi_note_" + index,
+        index: index,
+        note: note,
+        velocity: velocity,
+        startBeat: startBeat,
+        durationBeats: Math.max(0.01, durationBeats),
+        noteClass: ((note % 12) + 12) % 12,
+        raw: raw,
+      };
+    }
+
+    function getMidiNoteEventsForPlayback() {
+      var bank = getActiveMidiPlaybackBank();
+      var cartridge = getCartridgeForMidiBank(bank);
+
+      if (bank && Array.isArray(bank.events) && bank.events.length) {
+        return bank.events.map(normalizeMidiPlaybackEvent).filter(Boolean);
+      }
+      if (bank && Array.isArray(bank.notes) && bank.notes.length) {
+        return bank.notes.map(normalizeMidiPlaybackEvent).filter(Boolean);
+      }
+      if (cartridge && Array.isArray(cartridge.notes) && cartridge.notes.length) {
+        return cartridge.notes.map(normalizeMidiPlaybackEvent).filter(Boolean);
+      }
+      return [];
+    }
+
+    function processMidiPlayback(currentBeat, previousBeat) {
+      if (!state.midiPlayback || state.midiPlayback.enabled === false) return;
+      if (!isPlaying) return;
+
+      var events = getMidiNoteEventsForPlayback();
+      if (!events.length) {
+        state.midiPlayback.activeNotes = [];
+        state.midiPlayback.lastTriggeredNotes = [];
+        return;
+      }
+
+      var loopBars = state.loop && state.loop.bars ? state.loop.bars : 8;
+      var loopBeats = loopBars * 4;
+      var wrapped = currentBeat < previousBeat;
+      var triggered = [];
+      var now = performance.now();
+
+      events.forEach(function (event) {
+        var eventBeat = event.startBeat;
+        if (loopBeats > 0) {
+          eventBeat = ((eventBeat % loopBeats) + loopBeats) % loopBeats;
+        }
+
+        var crossed = wrapped
+          ? eventBeat > previousBeat || eventBeat <= currentBeat
+          : eventBeat > previousBeat && eventBeat <= currentBeat;
+        if (!crossed) return;
+
+        var cycle = loopBeats > 0 ? Math.floor(currentBeat / loopBeats) : 0;
+        var key = event.id + "::" + cycle;
+        if (state.midiPlayback.firedNoteKeys.has(key)) return;
+        state.midiPlayback.firedNoteKeys.add(key);
+
+        playFallbackInstrument(event.note, event.velocity);
+        noteActivity[event.noteClass] = now;
+        noteVelocity[event.noteClass] = event.velocity / 127;
+
+        triggered.push({
+          id: event.id,
+          note: event.note,
+          velocity: event.velocity,
+          startBeat: event.startBeat,
+          noteClass: event.noteClass,
+        });
+      });
+
+      state.midiPlayback.lastTriggeredNotes = triggered;
+
+      state.midiPlayback.activeNotes = events.filter(function (event) {
+        var localBeat = loopBeats > 0
+          ? ((currentBeat % loopBeats) + loopBeats) % loopBeats
+          : currentBeat;
+        var start = loopBeats > 0
+          ? ((event.startBeat % loopBeats) + loopBeats) % loopBeats
+          : event.startBeat;
+        return localBeat >= start && localBeat <= start + event.durationBeats;
+      });
+
+      if (state.midiPlayback.debug && triggered.length) {
+        console.log("[MIDI PLAYBACK]", {
+          currentBeat: currentBeat,
+          previousBeat: previousBeat,
+          triggered: triggered,
+        });
+      }
+    }
+
+    function getSelectedCount() {
+      if (state.selection && state.selection.strokeIds) return countItems(state.selection.strokeIds);
+      return countItems(state.multiSelection);
+    }
+
     function getSystemHudData() {
       var registryStatus =
         window._wos && window._wos.listRegistryStatus
-          ? window._wos.listRegistryStatus()
-          : null;
+          ? window._wos.listRegistryStatus() : null;
       var registryValidation =
         window._wos && window._wos.validateRegistry
-          ? window._wos.validateRegistry()
-          : null;
+          ? window._wos.validateRegistry() : null;
       var schemaValidation =
         window._wos && window._wos.validateSchemas
-          ? window._wos.validateSchemas()
-          : null;
+          ? window._wos.validateSchemas() : null;
       var schemas = window.SBE && window.SBE.Schemas;
+      var currentBeat = getRuntimeBeat();
 
       return {
-        registryStatus: registryStatus,
+        registryStatus:     registryStatus,
         registryValidation: registryValidation,
-        schemaValidation: schemaValidation,
-        schemaGroups: schemas ? Object.keys(schemas) : [],
+        schemaValidation:   schemaValidation,
+        schemaGroups:       schemas ? Object.keys(schemas) : [],
         runtime: {
-          tool: state.tool,
-          frame: state.frame || 0,
-          viewportMode: state.viewportMode || "—",
-          strokes: state.strokes.length,
-          walkers: state.walkers.length,
-          lines: state.lines.length,
-          balls: state.balls.length,
-          shapes: state.shapes.length,
-          textObjects: state.textObjects.length,
-          worldLayers: state.world && state.world.layers ? state.world.layers.length : 0,
-          midiCartridges: state.midiCartridges.length,
-          midiBanks: state.midiBanks.length,
-          gridBanks: Object.keys(state.gridBanks || {}).length,
-          activeMidiBankId: state.activeMidiBankId,
-          playing: !!isPlaying,
+          tool:                state.tool || "none",
+          frame:               state.frame || 0,
+          viewportMode:        state.viewportMode || "unknown",
+          playing:             !!isPlaying,
+          bpm:                 state.bpm || 120,
+          loopBars:            state.loop && state.loop.bars ? state.loop.bars : 0,
+          currentBeat:         Number(currentBeat.toFixed(2)),
+          strokes:             countItems(state.strokes),
+          walkers:             countItems(state.walkers),
+          lines:               countItems(state.lines),
+          balls:               countItems(state.balls),
+          shapes:              countItems(state.shapes),
+          textObjects:         countItems(state.textObjects),
+          particles:           countItems(state.particles),
+          selectedCount:       getSelectedCount(),
+          worldLayers:         countItems(state.world && state.world.layers),
+          gridLayers:          getWorldLayerCountByType("grid"),
+          objectLayers:        getWorldLayerCountByType("objectLayer"),
+          interactionOverlays: getWorldLayerCountByType("interactionOverlay"),
+          dataOverlays:        getWorldLayerCountByType("dataOverlay"),
+          devOverlays:         getWorldLayerCountByType("devOverlay"),
+          midiCartridges:      countItems(state.midiCartridges),
+          midiBanks:           countItems(state.midiBanks),
+          activeMidiBankId:    state.activeMidiBankId || "none",
+          gridBanks:           countItems(state.gridBanks),
+          gridBlocks:          countGridBlocks(),
+          sourceNotes:         countSourceNotes(),
+          activeVoices:        state.audio && state.audio.activeVoices
+                                 ? countItems(state.audio.activeVoices) : 0,
+          midiPlaybackEnabled: !!(state.midiPlayback && state.midiPlayback.enabled),
+          midiPlaybackEvents:  getMidiNoteEventsForPlayback().length,
+          midiActiveNotes:     countItems(state.midiPlayback && state.midiPlayback.activeNotes),
+          midiLastTriggered:   countItems(state.midiPlayback && state.midiPlayback.lastTriggeredNotes),
         },
       };
     }
@@ -5754,12 +5974,23 @@
       );
     }
 
+    // Registry status rows — value shown as badge
     function makeHudRow(label, status) {
       return (
         '<div class="system-hud__row">' +
         '<span class="system-hud__name">' + escapeHudHtml(label) + "</span>" +
         '<span class="system-hud__badge" data-status="' + escapeHudHtml(status || "available") + '">' +
         escapeHudHtml(status || "available") + "</span>" +
+        "</div>"
+      );
+    }
+
+    // Runtime / schema count rows — value shown as plain text
+    function makeHudValueRow(label, value) {
+      return (
+        '<div class="system-hud__row system-hud__row--value">' +
+        '<span class="system-hud__name">' + escapeHudHtml(label) + "</span>" +
+        '<span class="system-hud__value">' + escapeHudHtml(String(value)) + "</span>" +
         "</div>"
       );
     }
@@ -5772,23 +6003,27 @@
       if (!summaryEl || !registryEl || !schemasEl || !runtimeEl) return;
 
       var data = getSystemHudData();
+      var r = data.runtime;
+
       var regErrors = data.registryValidation && data.registryValidation.errors
         ? data.registryValidation.errors.length : 0;
       var schemaErrors = data.schemaValidation && data.schemaValidation.errors
         ? data.schemaValidation.errors.length : 0;
+      var liveObjects = r.strokes + r.walkers + r.balls + r.shapes + r.textObjects + r.particles;
 
       summaryEl.innerHTML =
-        makeHudMetric("Reg Errors", regErrors) +
+        makeHudMetric("Reg Errors",    regErrors) +
         makeHudMetric("Schema Errors", schemaErrors) +
-        makeHudMetric("Layers", data.runtime.worldLayers);
+        makeHudMetric("Live Objects",  liveObjects);
 
+      // Registry: group summary row then item rows
       var registryHtml = "";
       if (!data.registryStatus) {
         registryHtml = '<div class="system-hud__validation" data-state="error">Registry helpers missing</div>';
       } else {
         Object.keys(data.registryStatus).forEach(function (groupName) {
           var items = data.registryStatus[groupName] || [];
-          registryHtml += '<div class="system-hud__validation">' + escapeHudHtml(groupName) + "</div>";
+          registryHtml += makeHudValueRow(groupName, items.length);
           items.forEach(function (item) {
             registryHtml += makeHudRow(item.label || item.id, item.status);
           });
@@ -5796,20 +6031,21 @@
       }
       registryEl.innerHTML = registryHtml;
 
+      // Schemas: value rows only
       var schemaState = schemaErrors ? "error" : "ok";
+      var schemaWarnings = data.schemaValidation && data.schemaValidation.warnings
+        ? data.schemaValidation.warnings.length : 0;
       var schemaHtml =
         '<div class="system-hud__validation" data-state="' + schemaState + '">' +
-        (schemaErrors ? "Schema errors: " + schemaErrors : "Schemas OK") +
-        "</div>" +
-        makeHudRow("Top-level schemas", String(data.schemaGroups.length)) +
-        makeHudRow("Object schemas", String(
+        (schemaErrors ? "Schema errors: " + schemaErrors : "Schemas OK") + "</div>" +
+        makeHudValueRow("Top-level schemas", data.schemaGroups.length) +
+        makeHudValueRow("Object schemas",
           window.SBE && SBE.Schemas && SBE.Schemas.Objects
-            ? Object.keys(SBE.Schemas.Objects).length - 1 : 0
-        )) +
-        makeHudRow("Runtime groups", String(
+            ? Object.keys(SBE.Schemas.Objects).length - 1 : 0) +
+        makeHudValueRow("Runtime groups",
           window.SBE && SBE.Schemas && SBE.Schemas.Runtime
-            ? Object.keys(SBE.Schemas.Runtime).length : 0
-        ));
+            ? Object.keys(SBE.Schemas.Runtime).length : 0) +
+        makeHudValueRow("Warnings", schemaWarnings);
 
       if (data.schemaValidation && data.schemaValidation.errors && data.schemaValidation.errors.length) {
         data.schemaValidation.errors.forEach(function (err) {
@@ -5818,21 +6054,34 @@
       }
       schemasEl.innerHTML = schemaHtml;
 
-      var r = data.runtime;
+      // Runtime: all value rows
       runtimeEl.innerHTML =
-        makeHudRow("Tool",         r.tool) +
-        makeHudRow("Frame",        String(r.frame)) +
-        makeHudRow("Viewport",     r.viewportMode) +
-        makeHudRow("Playing",      String(r.playing)) +
-        makeHudRow("Strokes",      String(r.strokes)) +
-        makeHudRow("Walkers",      String(r.walkers)) +
-        makeHudRow("Lines",        String(r.lines)) +
-        makeHudRow("Balls",        String(r.balls)) +
-        makeHudRow("Shapes",       String(r.shapes)) +
-        makeHudRow("Text",         String(r.textObjects)) +
-        makeHudRow("World Layers", String(r.worldLayers)) +
-        makeHudRow("MIDI Banks",   String(r.midiBanks)) +
-        makeHudRow("Grid Banks",   String(r.gridBanks));
+        makeHudValueRow("Tool",          r.tool) +
+        makeHudValueRow("Playing",       String(r.playing)) +
+        makeHudValueRow("BPM",           r.bpm) +
+        makeHudValueRow("Beat",          r.currentBeat) +
+        makeHudValueRow("Frame",         r.frame) +
+        makeHudValueRow("Viewport",      r.viewportMode) +
+        makeHudValueRow("Strokes",       r.strokes) +
+        makeHudValueRow("Walkers",       r.walkers) +
+        makeHudValueRow("Lines",         r.lines) +
+        makeHudValueRow("Balls",         r.balls) +
+        makeHudValueRow("Shapes",        r.shapes) +
+        makeHudValueRow("Text",          r.textObjects) +
+        makeHudValueRow("Particles",     r.particles) +
+        makeHudValueRow("Selected",      r.selectedCount) +
+        makeHudValueRow("World Layers",  r.worldLayers) +
+        makeHudValueRow("Grid Layers",   r.gridLayers) +
+        makeHudValueRow("Grid Blocks",   r.gridBlocks) +
+        makeHudValueRow("Source Notes",  r.sourceNotes) +
+        makeHudValueRow("MIDI Banks",    r.midiBanks) +
+        makeHudValueRow("Active Bank",   r.activeMidiBankId) +
+        makeHudValueRow("Grid Banks",    r.gridBanks) +
+        makeHudValueRow("Active Voices", r.activeVoices) +
+        makeHudValueRow("MIDI Playback",  String(r.midiPlaybackEnabled)) +
+        makeHudValueRow("MIDI Events",    r.midiPlaybackEvents) +
+        makeHudValueRow("MIDI Active",    r.midiActiveNotes) +
+        makeHudValueRow("MIDI Triggered", r.midiLastTriggered);
     }
 
     function toggleSystemHud(forceOpen) {
@@ -5873,6 +6122,37 @@
       window._wos.renderSystemHud  = renderSystemHud;
       window._wos.toggleSystemHud  = toggleSystemHud;
       window._wos.getSystemHudData = getSystemHudData;
+
+      window._wos.midiPlayback = {
+        enable: function () {
+          state.midiPlayback.enabled = true;
+          return state.midiPlayback;
+        },
+        disable: function () {
+          state.midiPlayback.enabled = false;
+          return state.midiPlayback;
+        },
+        state: function () {
+          return state.midiPlayback;
+        },
+        events: function () {
+          return getMidiNoteEventsForPlayback();
+        },
+        testFirst: function () {
+          var events = getMidiNoteEventsForPlayback();
+          if (!events.length) {
+            console.warn("[MIDI PLAYBACK] No events available — drop a .mid file first");
+            return null;
+          }
+          var event = events[0];
+          playFallbackInstrument(event.note, event.velocity);
+          return event;
+        },
+        debug: function (enabled) {
+          state.midiPlayback.debug = !!enabled;
+          return state.midiPlayback.debug;
+        },
+      };
     }
 
     bindSystemHud();
@@ -12429,6 +12709,13 @@
       state.transport.startedAt = performance.now();
       lastFrameTime = 0;
       frameAccumulator = 0;
+      // Reset MIDI playback so no burst fires on start
+      if (state.midiPlayback) {
+        state.midiPlayback.lastBeat = getCurrentTransportBeat();
+        state.midiPlayback.firedNoteKeys.clear();
+        state.midiPlayback.activeNotes = [];
+        state.midiPlayback.lastTriggeredNotes = [];
+      }
       // Reset grid layer playback state so no burst fires on resume
       (state.world.layers || []).forEach(function (layer) {
         if (layer.type === "grid") {
@@ -12456,6 +12743,10 @@
       state.running = false;
       state.transport.startedAt = 0;
       state.quantizeQueue = [];
+      if (state.midiPlayback) {
+        state.midiPlayback.activeNotes = [];
+        state.midiPlayback.lastTriggeredNotes = [];
+      }
 
       if (loopId) {
         global.cancelAnimationFrame(loopId);
@@ -13161,6 +13452,13 @@
         });
         SBE.MaterialSystem.updateAll(state.lines, dt);
       }
+
+      // MIDI playback — sequence notes from active bank against transport beat
+      var _currentMidiBeat = getCurrentTransportBeat();
+      var _previousMidiBeat = state.midiPlayback && typeof state.midiPlayback.lastBeat === "number"
+        ? state.midiPlayback.lastBeat : _currentMidiBeat;
+      processMidiPlayback(_currentMidiBeat, _previousMidiBeat);
+      if (state.midiPlayback) state.midiPlayback.lastBeat = _currentMidiBeat;
     }
 
     function renderFrame() {
