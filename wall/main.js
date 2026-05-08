@@ -2120,6 +2120,78 @@
       return registry.validate();
     };
 
+    window._wos.debugSchemas = function debugSchemas() {
+      return window.SBE && window.SBE.Schemas ? window.SBE.Schemas : null;
+    };
+
+    window._wos.validateSchemas = function validateSchemas() {
+      var schemas = window.SBE && window.SBE.Schemas;
+      var registry = window.SBE && window.SBE.Registry;
+      var errors = [];
+      var warnings = [];
+
+      if (!schemas) {
+        errors.push("SBE.Schemas is missing");
+        return { errors: errors, warnings: warnings };
+      }
+
+      function checkField(schemaName, fieldName, descriptor) {
+        if (!descriptor || typeof descriptor !== "object") {
+          errors.push(schemaName + "." + fieldName + " is not a field descriptor");
+          return;
+        }
+
+        if (typeof descriptor.persistent !== "boolean") {
+          warnings.push(schemaName + "." + fieldName + " missing persistent boolean");
+        }
+
+        if (typeof descriptor.runtime !== "boolean") {
+          warnings.push(schemaName + "." + fieldName + " missing runtime boolean");
+        }
+
+        if (descriptor.persistent === true && descriptor.runtime === true) {
+          errors.push(schemaName + "." + fieldName + " cannot be both persistent and runtime");
+        }
+      }
+
+      function walkSchema(schemaName, schema) {
+        if (!schema || typeof schema !== "object") {
+          errors.push(schemaName + " is not an object");
+          return;
+        }
+
+        Object.keys(schema).forEach(function (key) {
+          var value = schema[key];
+
+          if (
+            value &&
+            typeof value === "object" &&
+            Object.prototype.hasOwnProperty.call(value, "default")
+          ) {
+            checkField(schemaName, key, value);
+            return;
+          }
+
+          if (value && typeof value === "object") {
+            walkSchema(schemaName + "." + key, value);
+          }
+        });
+      }
+
+      Object.keys(schemas).forEach(function (schemaName) {
+        walkSchema(schemaName, schemas[schemaName]);
+      });
+
+      if (registry && registry.statuses && schemas.Layer && schemas.Layer.status) {
+        var defaultStatus = schemas.Layer.status.default;
+        if (!registry.statuses[defaultStatus]) {
+          errors.push("Layer.status default is not a registered status: " + defaultStatus);
+        }
+      }
+
+      return { errors: errors, warnings: warnings };
+    };
+
     window._wos.debugGridLayers = function () {
       return (state.world.layers || []).filter(function (l) { return l.type === "grid"; });
     };
@@ -5619,6 +5691,192 @@
     setViewClasses();
     syncUI();
     updatePanels(state.tool);
+
+    // ── System HUD ────────────────────────────────────────────────────────────
+
+    var systemHudRefreshId = null;
+
+    function getSystemHudData() {
+      var registryStatus =
+        window._wos && window._wos.listRegistryStatus
+          ? window._wos.listRegistryStatus()
+          : null;
+      var registryValidation =
+        window._wos && window._wos.validateRegistry
+          ? window._wos.validateRegistry()
+          : null;
+      var schemaValidation =
+        window._wos && window._wos.validateSchemas
+          ? window._wos.validateSchemas()
+          : null;
+      var schemas = window.SBE && window.SBE.Schemas;
+
+      return {
+        registryStatus: registryStatus,
+        registryValidation: registryValidation,
+        schemaValidation: schemaValidation,
+        schemaGroups: schemas ? Object.keys(schemas) : [],
+        runtime: {
+          tool: state.tool,
+          frame: state.frame || 0,
+          viewportMode: state.viewportMode || "—",
+          strokes: state.strokes.length,
+          walkers: state.walkers.length,
+          lines: state.lines.length,
+          balls: state.balls.length,
+          shapes: state.shapes.length,
+          textObjects: state.textObjects.length,
+          worldLayers: state.world && state.world.layers ? state.world.layers.length : 0,
+          midiCartridges: state.midiCartridges.length,
+          midiBanks: state.midiBanks.length,
+          gridBanks: Object.keys(state.gridBanks || {}).length,
+          activeMidiBankId: state.activeMidiBankId,
+          playing: !!isPlaying,
+        },
+      };
+    }
+
+    function escapeHudHtml(value) {
+      return String(value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    function makeHudMetric(label, value) {
+      return (
+        '<div class="system-hud__metric">' +
+        '<span class="system-hud__metric-label">' + escapeHudHtml(label) + "</span>" +
+        '<span class="system-hud__metric-value">' + escapeHudHtml(String(value)) + "</span>" +
+        "</div>"
+      );
+    }
+
+    function makeHudRow(label, status) {
+      return (
+        '<div class="system-hud__row">' +
+        '<span class="system-hud__name">' + escapeHudHtml(label) + "</span>" +
+        '<span class="system-hud__badge" data-status="' + escapeHudHtml(status || "available") + '">' +
+        escapeHudHtml(status || "available") + "</span>" +
+        "</div>"
+      );
+    }
+
+    function renderSystemHud() {
+      var summaryEl  = document.getElementById("system-hud-summary");
+      var registryEl = document.getElementById("system-hud-registry");
+      var schemasEl  = document.getElementById("system-hud-schemas");
+      var runtimeEl  = document.getElementById("system-hud-runtime");
+      if (!summaryEl || !registryEl || !schemasEl || !runtimeEl) return;
+
+      var data = getSystemHudData();
+      var regErrors = data.registryValidation && data.registryValidation.errors
+        ? data.registryValidation.errors.length : 0;
+      var schemaErrors = data.schemaValidation && data.schemaValidation.errors
+        ? data.schemaValidation.errors.length : 0;
+
+      summaryEl.innerHTML =
+        makeHudMetric("Reg Errors", regErrors) +
+        makeHudMetric("Schema Errors", schemaErrors) +
+        makeHudMetric("Layers", data.runtime.worldLayers);
+
+      var registryHtml = "";
+      if (!data.registryStatus) {
+        registryHtml = '<div class="system-hud__validation" data-state="error">Registry helpers missing</div>';
+      } else {
+        Object.keys(data.registryStatus).forEach(function (groupName) {
+          var items = data.registryStatus[groupName] || [];
+          registryHtml += '<div class="system-hud__validation">' + escapeHudHtml(groupName) + "</div>";
+          items.forEach(function (item) {
+            registryHtml += makeHudRow(item.label || item.id, item.status);
+          });
+        });
+      }
+      registryEl.innerHTML = registryHtml;
+
+      var schemaState = schemaErrors ? "error" : "ok";
+      var schemaHtml =
+        '<div class="system-hud__validation" data-state="' + schemaState + '">' +
+        (schemaErrors ? "Schema errors: " + schemaErrors : "Schemas OK") +
+        "</div>" +
+        makeHudRow("Top-level schemas", String(data.schemaGroups.length)) +
+        makeHudRow("Object schemas", String(
+          window.SBE && SBE.Schemas && SBE.Schemas.Objects
+            ? Object.keys(SBE.Schemas.Objects).length - 1 : 0
+        )) +
+        makeHudRow("Runtime groups", String(
+          window.SBE && SBE.Schemas && SBE.Schemas.Runtime
+            ? Object.keys(SBE.Schemas.Runtime).length : 0
+        ));
+
+      if (data.schemaValidation && data.schemaValidation.errors && data.schemaValidation.errors.length) {
+        data.schemaValidation.errors.forEach(function (err) {
+          schemaHtml += '<div class="system-hud__validation" data-state="error">' + escapeHudHtml(err) + "</div>";
+        });
+      }
+      schemasEl.innerHTML = schemaHtml;
+
+      var r = data.runtime;
+      runtimeEl.innerHTML =
+        makeHudRow("Tool",         r.tool) +
+        makeHudRow("Frame",        String(r.frame)) +
+        makeHudRow("Viewport",     r.viewportMode) +
+        makeHudRow("Playing",      String(r.playing)) +
+        makeHudRow("Strokes",      String(r.strokes)) +
+        makeHudRow("Walkers",      String(r.walkers)) +
+        makeHudRow("Lines",        String(r.lines)) +
+        makeHudRow("Balls",        String(r.balls)) +
+        makeHudRow("Shapes",       String(r.shapes)) +
+        makeHudRow("Text",         String(r.textObjects)) +
+        makeHudRow("World Layers", String(r.worldLayers)) +
+        makeHudRow("MIDI Banks",   String(r.midiBanks)) +
+        makeHudRow("Grid Banks",   String(r.gridBanks));
+    }
+
+    function toggleSystemHud(forceOpen) {
+      var hud    = document.getElementById("system-hud");
+      var toggle = document.getElementById("system-hud-toggle");
+      if (!hud || !toggle) return;
+
+      var shouldOpen = typeof forceOpen === "boolean"
+        ? forceOpen
+        : hud.classList.contains("hidden");
+
+      hud.classList.toggle("hidden", !shouldOpen);
+      hud.setAttribute("aria-hidden", shouldOpen ? "false" : "true");
+      toggle.setAttribute("aria-expanded", shouldOpen ? "true" : "false");
+      toggle.dataset.open = shouldOpen ? "true" : "false";
+
+      if (state.ui) state.ui.systemHudVisible = shouldOpen;
+
+      if (systemHudRefreshId) {
+        clearInterval(systemHudRefreshId);
+        systemHudRefreshId = null;
+      }
+
+      if (shouldOpen) {
+        renderSystemHud();
+        systemHudRefreshId = setInterval(renderSystemHud, 500);
+      }
+    }
+
+    function bindSystemHud() {
+      var toggle = document.getElementById("system-hud-toggle");
+      var close  = document.getElementById("system-hud-close");
+
+      if (toggle) toggle.addEventListener("click", function () { toggleSystemHud(); });
+      if (close)  close.addEventListener("click",  function () { toggleSystemHud(false); });
+
+      window._wos = window._wos || {};
+      window._wos.renderSystemHud  = renderSystemHud;
+      window._wos.toggleSystemHud  = toggleSystemHud;
+      window._wos.getSystemHudData = getSystemHudData;
+    }
+
+    bindSystemHud();
+
     renderFrame();
 
     // Behavior + particle loop — runs every frame independent of playback state
