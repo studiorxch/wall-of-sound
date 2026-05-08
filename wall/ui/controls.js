@@ -113,6 +113,20 @@
       worldStrengthValue: byId("world-strength-value"),
       toggleHitCount: byId("toggle-hit-count"),
 
+      // Grid Layer
+      gridBankSelect: byId("grid-bank-select"),
+      addBankToGrid: byId("add-bank-to-grid"),
+      gridColumns: byId("grid-columns"),
+      gridColumnsValue: byId("grid-columns-value"),
+      gridRows: byId("grid-rows"),
+      gridRowsValue: byId("grid-rows-value"),
+      gridPlacementMode: byId("grid-placement-mode"),
+      gridBlockStyle: byId("grid-block-style"),
+      gridColorMode: byId("grid-color-mode"),
+      gridFitMode: byId("grid-fit-mode"),
+      regenerateGrid: byId("regenerate-grid"),
+      gridLayerList: byId("grid-layer-list"),
+
       // Button collections
       shapeButtons: Array.from(document.querySelectorAll(".shape-button")),
       toolButtons: Array.from(document.querySelectorAll(".tool")),
@@ -152,6 +166,8 @@
     bindRange(elements.motionVy, elements.motionVyValue, 0);
     bindRange(elements.motionRot, elements.motionRotValue, 1);
     bindRange(elements.worldStrength, elements.worldStrengthValue, 1);
+    bindRange(elements.gridColumns, elements.gridColumnsValue, 0);
+    bindRange(elements.gridRows, elements.gridRowsValue, 0);
     bindRange(
       elements.behaviorEmitterRate,
       elements.behaviorEmitterRateValue,
@@ -188,18 +204,163 @@
       1,
     );
 
-    // Tab switching
-    elements.inspectorTabs.forEach(function (tab) {
-      tab.addEventListener("click", function onTabClick() {
-        var tabId = tab.dataset.tab;
-        elements.inspectorTabs.forEach(function (t) {
-          t.classList.toggle("active", t.dataset.tab === tabId);
+    // Tab switching — scoped to right panel, hard inline style for reliability
+    bindInspectorTabs();
+
+    function bindInspectorTabs() {
+      var panel = document.getElementById("right-panel");
+      if (!panel) return;
+
+      var tabs = Array.from(panel.querySelectorAll(".inspector-tabs .tab[data-tab]"));
+      var contents = Array.from(panel.querySelectorAll(".tab-content[data-tab-content]"));
+
+      function activateInspectorTab(target) {
+        tabs.forEach(function (tab) {
+          tab.classList.toggle("active", tab.dataset.tab === target);
         });
-        elements.tabContents.forEach(function (tc) {
-          tc.classList.toggle("active", tc.dataset.tabContent === tabId);
+
+        contents.forEach(function (content) {
+          var isActive = content.dataset.tabContent === target;
+          content.classList.toggle("active", isActive);
+          content.style.display = isActive ? "block" : "none";
+          content.style.visibility = isActive ? "visible" : "";
+        });
+
+        var activeContent = panel.querySelector(
+          '.tab-content[data-tab-content="' + target + '"]'
+        );
+
+        if (!activeContent) {
+          console.warn("[INSPECTOR TAB FAIL] Missing content for:", target);
+          return;
+        }
+
+        if (activeContent.children.length === 0) {
+          console.warn("[INSPECTOR TAB FAIL] Empty content for:", target);
+        }
+      }
+
+      tabs.forEach(function (tab) {
+        tab.addEventListener("click", function (event) {
+          event.preventDefault();
+          event.stopPropagation();
+          activateInspectorTab(tab.dataset.tab);
         });
       });
-    });
+
+      window._wos = window._wos || {};
+      window._wos.activateInspectorTab = activateInspectorTab;
+      window._wos.auditInspectorTabs = function auditInspectorTabs() {
+        var report = {
+          rightPanelChildren: Array.from(panel.children).map(function (el) {
+            return {
+              tag: el.tagName,
+              id: el.id || "",
+              className: el.className || "",
+              tabContent: el.dataset ? el.dataset.tabContent || "" : "",
+              text: el.textContent.trim().slice(0, 80),
+            };
+          }),
+          tabs: tabs.map(function (tab) {
+            return { tab: tab.dataset.tab, active: tab.classList.contains("active"), text: tab.textContent.trim() };
+          }),
+          contents: contents.map(function (content) {
+            var styles = getComputedStyle(content);
+            return {
+              tabContent: content.dataset.tabContent,
+              active: content.classList.contains("active"),
+              childCount: content.children.length,
+              display: styles.display,
+              height: content.getBoundingClientRect().height,
+              text: content.textContent.trim().slice(0, 120),
+            };
+          }),
+        };
+        console.table(report.contents);
+        return report;
+      };
+
+      // Set initial state — activate whichever tab has active class, or first tab
+      var initialTab = tabs.find(function (t) { return t.classList.contains("active"); }) || tabs[0];
+      if (initialTab) activateInspectorTab(initialTab.dataset.tab);
+    }
+
+    // ── Grid Layer Controls ────────────────────────────────────────────────
+    bindGridLayerControls();
+
+    function bindGridLayerControls() {
+      var el = elements;
+
+      if (el.addBankToGrid) {
+        el.addBankToGrid.addEventListener("click", function () {
+          if (window._wos && window._wos.addBankToGridLayer) {
+            var bankId = el.gridBankSelect ? el.gridBankSelect.value : null;
+            window._wos.addBankToGridLayer(bankId || undefined);
+            syncGridLayerList();
+          }
+        });
+      }
+
+      if (el.regenerateGrid) {
+        el.regenerateGrid.addEventListener("click", function () {
+          var overrides = currentGridSettingsFromUI();
+          if (window._wos && window._wos.regenerateFirstGridLayer) {
+            // Apply overrides to first grid layer before regenerating
+            var layers = window._wos.debugGridLayers ? window._wos.debugGridLayers() : [];
+            if (layers.length && overrides) {
+              Object.assign(layers[0].grid, overrides);
+            }
+            window._wos.regenerateFirstGridLayer();
+            syncGridLayerList();
+          }
+        });
+      }
+
+      // Sync grid bank select when state changes (called by syncState)
+      el._syncGridBankSelect = function (appState) {
+        if (!el.gridBankSelect) return;
+        var banks = appState.midiCartridges || [];
+        var current = el.gridBankSelect.value;
+        el.gridBankSelect.innerHTML = banks.length
+          ? banks.map(function (c) {
+              return '<option value="' + c.id + '">' + (c.name || c.id) + '</option>';
+            }).join("")
+          : '<option value="">— no bank loaded —</option>';
+        if (current && banks.find(function (c) { return c.id === current; })) {
+          el.gridBankSelect.value = current;
+        } else if (appState.activeMidiBankId) {
+          // activeMidiBankId is a bank id; match to cartridge via cartridgeId
+          var activeBank = (appState.midiBanks || []).find(function (b) { return b.id === appState.activeMidiBankId; });
+          if (activeBank) el.gridBankSelect.value = activeBank.cartridgeId || activeBank.id;
+        }
+      };
+    }
+
+    function currentGridSettingsFromUI() {
+      var el = elements;
+      var settings = {};
+      if (el.gridColumns) settings.columns = Number(el.gridColumns.value);
+      if (el.gridRows) settings.rows = Number(el.gridRows.value);
+      if (el.gridPlacementMode) settings.placementMode = el.gridPlacementMode.value;
+      if (el.gridBlockStyle) settings.blockStyleId = el.gridBlockStyle.value;
+      if (el.gridColorMode) settings.colorMode = el.gridColorMode.value;
+      if (el.gridFitMode) settings.fitMode = el.gridFitMode.value;
+      return settings;
+    }
+
+    function syncGridLayerList() {
+      var el = elements;
+      if (!el.gridLayerList) return;
+      var layers = window._wos && window._wos.debugGridLayers ? window._wos.debugGridLayers() : [];
+      el.gridLayerList.innerHTML = layers.length
+        ? layers.map(function (l) {
+            return '<div style="font-size:11px;color:#aaa;padding:2px 0;">'
+              + (l.visible ? "●" : "○") + " " + l.name
+              + " (" + (l.blocks ? l.blocks.length : 0) + " blocks)"
+              + "</div>";
+          }).join("")
+        : "";
+    }
 
     return {
       elements: elements,
@@ -363,6 +524,10 @@
         if (elements.shortcutHud) {
           elements.shortcutHud.classList.toggle("hidden", !visible);
         }
+      },
+      syncGridUI: function syncGridUI(appState) {
+        if (elements._syncGridBankSelect) elements._syncGridBankSelect(appState);
+        syncGridLayerList();
       },
     };
   }

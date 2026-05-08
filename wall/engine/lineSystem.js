@@ -271,6 +271,7 @@
           }
         : undefined,
       groupId: rawLine.groupId || null,
+      material: rawLine.material ? Object.assign({}, rawLine.material) : undefined,
       interaction: rawLine.interaction
         ? {
             highlightColor:
