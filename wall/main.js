@@ -1812,12 +1812,38 @@
         transparentBackground: false,
         debugHUD: false,
         selectedNoteClass: 0,
+        activeDrawer: null,
       },
       sampler: {
         activeNote: null,
         activeNoteClass: 0, // 0–11 (C–B)
         activeOctave: 4, // default octave 4
       },
+      // ── GlyphLab (legacy — kept for glyphDrawer.js compatibility) ──────────
+      glyphs: {
+        activeNote:   "C",
+        renderer:     "square",
+        colorMode:    "duotone",
+        size:         64,
+        insertReady:  false,
+        insertNote:   null,
+        insertScale:  1.0,
+        tool:         "select",
+      },
+      glyphLibrary: {
+        saved:   [],
+        recent:  [],
+      },
+      // ── SymbolSystem ──────────────────────────────────────────────────────
+      symbols: {
+        activeSetId:      null,  // String | null — managed by SBE.SymbolSystem
+        activeSlotKey:    "A",   // SINGLE authoritative slot — preview, placement, export all derive from this
+        placementSize:    48,    // px
+        placementPalette: null,  // SymbolPalette override | null = use set default
+      },
+      // ── SymbolObjects — world-space placed symbol instances ───────────────
+      symbolObjects:           [],    // SymbolObject[]
+      selectedSymbolObjectId:  null,  // String | null
       selection: {
         strokeId: null, // single primary selection (for handles, inspector)
         strokeIds: new Set(), // multi-select set for grouping + deletion
@@ -2016,6 +2042,75 @@
         lastTriggeredNotes: [],
         debug: false,
         legacyWalkerAudioEnabled: false,
+        playheadEventIndex: null,
+        playheadEventId: null,
+        playheadBeat: 0,
+      },
+      signalActivity: {
+        active: new Map(),   // cellId → { energy, activatedAt, decayMs, velocity, sourceId }
+        pending: [],         // [{ cellId, energy, meta, fireAt }]
+      },
+      demo: {
+        enabled:   false,
+        autoStart: false,
+      },
+      layerControls: {
+        atmosphere: { visible: true,  opacity: 1.0, solo: false },
+        terrain:    { visible: true,  opacity: 1.0, solo: false },
+        signals:    { visible: true,  opacity: 1.0, solo: false },
+        walkers:    { visible: true,  opacity: 1.0, solo: false },
+        midi:       { visible: true,  opacity: 1.0, solo: false },
+        ecology:    { visible: true,  opacity: 1.0, solo: false },
+        debug:      { visible: false, opacity: 1.0, solo: false },
+      },
+      infiniteWorld: {
+        enabled:        false,
+        autoStart:      false,
+        density:        0.35,
+        energy:         0.45,
+        tickMs:         180,
+        maxEvents:      260,
+        beatCursor:     0,
+        sourceIndex:    0,
+        mode:           "sparseField",
+        simulatedAudio: true,
+        terrainBankId:  null,
+        terrainLayerId: null,
+        probeId:        null,
+      },
+      routeWorld: {
+        active:        false,
+        world:         null,
+        routes:        [],
+        segments:      [],
+        actors:        [],
+        eventZones:    [],
+        skins:         [],
+        cameraRigs:    [],
+        surfaceAnchors:[],
+        camera:        null,   // initialised on first use via SBE.RouteCamera.makeCamera()
+        // Foundation Protocols — Human Aquarium v1.0.0
+        clock:         null,   // initialised on first use via SBE.UniversalClock.makeClock()
+        env:           null,   // initialised on first use via SBE.EnvironmentState.makeEnvironment()
+        comms:         null,   // initialised on first use via SBE.CommsSystem.makeCommsStore()
+        // Spatial Infrastructure v1.1.0
+        spatial:       null,   // initialised on first use or via buildPhase1World()
+        // Director Mode v1.0.0
+        director:      null,   // initialised on first use via SBE.DirectorMode.makeDirectorState()
+        tripPlan:      null,   // placeholder itinerary model (future spec)
+        // Reference Geography Layer v1.0.0
+        referenceGeography: null,  // initialised on first use via SBE.ReferenceGeographyLayer.makeDefaultState()
+        // Basemap Foundation v1.0.0
+        basemap:      null,   // initialised on first use via SBE.BasemapRenderer.makeDefaultState()
+        // Presentation mode — "portrait" | "landscape" | "dual"
+        presentationMode: "portrait",
+        runtime: {
+          elapsedSec:      0,
+          activeRouteId:   null,
+          activeActorId:   null,
+          activeSegmentId: null,
+          triggeredEventIds: new Set(),
+        },
       },
       debug: {
         walkers: false,
@@ -2105,6 +2200,7 @@
     window._wos.sampleMap = sampleMap;
     window._wos.state = state;
     window._wos.audioState = state.audio;
+    window._wos.renderFrame = renderFrame;  // exposed for UI controls
 
     // ── Grid debug helpers ─────────────────────────────────────────────────
     window._wos.debugRegistry = function debugRegistry() {
@@ -2255,27 +2351,92 @@
             resolved.bank, resolved.cartridge
           ).length;
 
+          var vp = layer.renderer && layer.renderer.viewport;
+          var vpEnabled = !!(vp && vp.enabled && vp.mode !== "full");
+          var mp = state.midiPlayback;
+          var phIdx = mp ? mp.playheadEventIndex : null;
+          var phId  = mp ? mp.playheadEventId    : null;
+          var phBlock = phIdx != null || phId != null
+            ? blocks.find(function (b) {
+                return (phIdx != null && b.sourceIndex === phIdx) ||
+                       (phId  != null && b.sourceEventId === phId);
+              })
+            : null;
+          var vpCols = vp ? (vp.cols || 7)  : null;
+          var vpRows = vp ? (vp.rows || 11) : null;
+          var vpSC   = vp ? (vp.startCol || 0) : null;
+          var vpSR   = vp ? (vp.startRow  || 0) : null;
+          var visibleBlocks = blocks.length;
+          if (vpEnabled && g) {
+            visibleBlocks = blocks.filter(function (b) {
+              return b.col >= vpSC && b.col < vpSC + vpCols &&
+                     b.row >= vpSR && b.row < vpSR + vpRows;
+            }).length;
+          }
+
           return {
-            layerId:       layer.id,
-            label:         layer.label || layer.name,
-            rendererId:    layer.renderer ? layer.renderer.id : null,
-            paletteId:     layer.renderer ? layer.renderer.paletteId : null,
-            finishId:      layer.renderer ? layer.renderer.finishId  : null,
-            visualLanguage:g ? g.visualLanguage : null,
-            visualVersion: g ? g.visualVersion : null,
-            sourceBankId:  resolved.bankId,
+            layerId:        layer.id,
+            label:          layer.label || layer.name,
+            rendererId:     layer.renderer ? layer.renderer.id : null,
+            paletteId:      layer.renderer ? layer.renderer.paletteId : null,
+            finishId:       layer.renderer ? layer.renderer.finishId  : null,
+            visualLanguage: g ? g.visualLanguage : null,
+            visualVersion:  g ? g.visualVersion  : null,
+            sourceBankId:   resolved.bankId,
             sourceCartridgeId: resolved.cartridgeId,
-            sourceNotes:   sourceNotes,
-            playbackEvents:playbackEvents,
-            gridBlocks:    blocks.length,
-            activeBlocks:  blocks.filter(function (b) { return b.active; }).length,
-            columns:       g ? g.columns : null,
-            rows:          g ? g.rows : null,
-            cellSize:      g ? g.cellSize : null,
-            gap:           g ? g.gap : null,
-            fitMode:       g ? g.fitMode : null,
-            placementMode: g ? g.placementMode : null,
-            countMatch:    blocks.length === sourceNotes,
+            sourceNotes:    sourceNotes,
+            playbackEvents: playbackEvents,
+            totalBlocks:    blocks.length,
+            gridBlocks:     blocks.length,
+            visibleBlocks:  visibleBlocks,
+            activeBlocks:   blocks.filter(function (b) { return b.active; }).length,
+            viewportEnabled:       vpEnabled,
+            viewportMode:          vp ? (vp.mode || "full") : "full",
+            viewportFollowPlayback:vp ? !!vp.followPlayback : false,
+            followTarget:          vp ? (vp.followTarget || "timeline") : null,
+            followSmoothing:       vp && vp.followSmoothing != null ? vp.followSmoothing : 0.08,
+            followTargetUpdateMs:  vp && vp.followTargetUpdateMs != null ? vp.followTargetUpdateMs : 120,
+            timelineProgress:      vp ? (vp._timelineProgress != null ? vp._timelineProgress : null) : null,
+            timelineIndex:         vp ? (vp._timelineIndex    != null ? vp._timelineIndex    : null) : null,
+            targetStartCol:        vp ? (vp.targetStartCol    != null ? vp.targetStartCol    : null) : null,
+            targetStartRow:        vp ? (vp.targetStartRow    != null ? vp.targetStartRow    : null) : null,
+            smoothStartCol:        vp ? (vp._smoothCol        != null ? vp._smoothCol        : null) : null,
+            smoothStartRow:        vp ? (vp._smoothRow        != null ? vp._smoothRow        : null) : null,
+            viewportCols:          vpCols,
+            viewportRows:          vpRows,
+            viewportStartCol:      vpSC,
+            viewportStartRow:      vpSR,
+            playheadEventIndex:    phIdx,
+            playheadBlockCol:      phBlock ? phBlock.col : null,
+            playheadBlockRow:      phBlock ? phBlock.row : null,
+            columns:        g ? g.columns : null,
+            rows:           g ? g.rows    : null,
+            cellSize:       g ? g.cellSize : null,
+            gap:            g ? g.gap      : null,
+            fitMode:        g ? g.fitMode  : null,
+            placementMode:  g ? g.placementMode : null,
+            countMatch:     blocks.length === sourceNotes,
+            patternVocabularyVersion: (function () {
+              var GS = getGridSystem();
+              return GS ? GS.BAUHAUS_PATTERN_VOCABULARY_VERSION : null;
+            })(),
+            patternCount:   (function () {
+              var GS = getGridSystem();
+              return GS ? GS.BAUHAUS_PATTERN_IDS.length : null;
+            })(),
+            reactivityMode:    layer.renderer && layer.renderer.reactivity
+              ? (layer.renderer.reactivity.enabled ? layer.renderer.reactivity.mode : "off")
+              : "off",
+            reactivityEnabled: !!(layer.renderer && layer.renderer.reactivity &&
+              layer.renderer.reactivity.enabled),
+            tileStyleId:         layer.renderer && layer.renderer.tileStyle
+              ? (layer.renderer.tileStyle.id || null) : null,
+            tileStyle:           layer.renderer ? (layer.renderer.tileStyle || null) : null,
+            notePatternOverrides: layer.renderer ? (layer.renderer.notePatternOverrides || {}) : {},
+            patternFamilies: (function () {
+              var GS = getGridSystem();
+              return GS ? Object.keys(GS.BAUHAUS_FAMILY_PATTERNS) : [];
+            })(),
           };
         });
     };
@@ -2357,8 +2518,1028 @@
           var l = window._wos.generateBauhausGrid();
           return l ? { gridBlocks: l.blocks.length } : null;
         },
+
+        // ── Viewport ────────────────────────────────────────────────────────
+        getViewport: function () {
+          var l = getBauhausLayer();
+          if (!l || !l.renderer.viewport) return null;
+          var vp = l.renderer.viewport;
+          var mp = state.midiPlayback;
+          return Object.assign({}, vp, {
+            followTarget:        vp.followTarget        || "timeline",
+            followSmoothing:     vp.followSmoothing     != null ? vp.followSmoothing     : 0.08,
+            followTargetUpdateMs:vp.followTargetUpdateMs != null ? vp.followTargetUpdateMs : 120,
+            timelineProgress:    vp._timelineProgress   != null ? vp._timelineProgress   : null,
+            timelineIndex:       vp._timelineIndex      != null ? vp._timelineIndex       : null,
+            targetStartCol:      vp.targetStartCol      != null ? vp.targetStartCol      : vp.startCol,
+            targetStartRow:      vp.targetStartRow      != null ? vp.targetStartRow      : vp.startRow,
+            smoothStartCol:      vp._smoothCol          != null ? vp._smoothCol           : null,
+            smoothStartRow:      vp._smoothRow          != null ? vp._smoothRow           : null,
+            playheadEventIndex:  mp ? mp.playheadEventIndex : null,
+            playheadEventId:     mp ? mp.playheadEventId    : null,
+            playheadBeat:        mp ? mp.playheadBeat        : 0,
+          });
+        },
+
+        setViewportMode: function (mode) {
+          var MODES = { full: true, portraitStudy: true, landscapeStudy: true };
+          if (!MODES[mode]) {
+            console.warn("[BAUHAUS] Unknown viewport mode:", mode, "— use: full | portraitStudy | landscapeStudy");
+            return false;
+          }
+          getAllBauhausLayers().forEach(function (l) {
+            if (!l.renderer.viewport) l.renderer.viewport = {};
+            var vp = l.renderer.viewport;
+            vp.mode = mode;
+            if (mode === "full") {
+              vp.enabled = false;
+            } else {
+              vp.enabled = true;
+              if (mode === "portraitStudy"  && !vp._userSet) { vp.cols = 7;  vp.rows = 11; }
+              if (mode === "landscapeStudy" && !vp._userSet) { vp.cols = 12; vp.rows = 6; }
+            }
+          });
+          renderFrame();
+          return mode;
+        },
+
+        setViewport: function (cols, rows, startCol, startRow) {
+          getAllBauhausLayers().forEach(function (l) {
+            if (!l.renderer.viewport) l.renderer.viewport = {};
+            var vp = l.renderer.viewport;
+            var g = l.grid;
+            vp.cols     = Math.max(1, Math.min(cols     || 7,  g.columns));
+            vp.rows     = Math.max(1, Math.min(rows     || 11, g.rows));
+            vp.startCol = Math.max(0, Math.min(startCol || 0, Math.max(0, g.columns - vp.cols)));
+            vp.startRow = Math.max(0, Math.min(startRow || 0, Math.max(0, g.rows    - vp.rows)));
+            vp.enabled  = true;
+            vp._userSet = true;
+            if (!vp.mode || vp.mode === "full") vp.mode = "portraitStudy";
+          });
+          renderFrame();
+          return this.getViewport();
+        },
+
+        nudgeViewport: function (dx, dy) {
+          getAllBauhausLayers().forEach(function (l) {
+            if (!l.renderer.viewport || !l.renderer.viewport.enabled) return;
+            var vp = l.renderer.viewport;
+            var g  = l.grid;
+            vp.startCol = Math.max(0, Math.min((vp.startCol || 0) + (dx || 0), Math.max(0, g.columns - (vp.cols || 7))));
+            vp.startRow = Math.max(0, Math.min((vp.startRow || 0) + (dy || 0), Math.max(0, g.rows    - (vp.rows || 11))));
+          });
+          renderFrame();
+          return this.getViewport();
+        },
+
+        resetViewport: function () {
+          getAllBauhausLayers().forEach(function (l) {
+            var GS = getGridSystem();
+            l.renderer.viewport = GS ? Object.assign({}, GS.DEFAULT_VIEWPORT) : {
+              enabled: false, mode: "full", cols: 7, rows: 11,
+              startCol: 0, startRow: 0, followPlayback: false, padding: 24,
+            };
+          });
+          renderFrame();
+          return this.getViewport();
+        },
+
+        setViewportFollowPlayback: function (enabled) {
+          getAllBauhausLayers().forEach(function (l) {
+            if (!l.renderer.viewport) l.renderer.viewport = {};
+            l.renderer.viewport.followPlayback = !!enabled;
+          });
+          return !!enabled;
+        },
+
+        listPatterns: function () {
+          var GS = getGridSystem();
+          return GS ? GS.BAUHAUS_PATTERN_IDS.slice() : [];
+        },
+
+        setReactivity: function (mode) {
+          var valid = { off: true, playhead: true, noteClass: true };
+          if (!valid[mode]) {
+            console.warn("[BAUHAUS] Unknown reactivity mode:", mode,
+              "— use: off | playhead | noteClass");
+            return false;
+          }
+          getAllBauhausLayers().forEach(function (l) {
+            if (!l.renderer.reactivity) l.renderer.reactivity = {};
+            l.renderer.reactivity.mode    = mode;
+            l.renderer.reactivity.enabled = mode !== "off";
+          });
+          renderFrame();
+          return mode;
+        },
+
+        getReactivity: function () {
+          var l = getBauhausLayer();
+          if (!l || !l.renderer.reactivity) return "off";
+          var rx = l.renderer.reactivity;
+          return (rx.enabled && rx.mode) ? rx.mode : "off";
+        },
+
+        setViewportFollowTarget: function (target) {
+          var valid = { timeline: true, event: true };
+          if (!valid[target]) {
+            console.warn("[BAUHAUS] Unknown followTarget:", target, "— use: timeline | event");
+            return false;
+          }
+          getAllBauhausLayers().forEach(function (l) {
+            if (!l.renderer.viewport) l.renderer.viewport = {};
+            l.renderer.viewport.followTarget = target;
+            l.renderer.viewport._smoothCol = null;
+            l.renderer.viewport._smoothRow = null;
+          });
+          return target;
+        },
+
+        // ── Tile style API ──────────────────────────────────────────────────
+        listTileStyles: function () {
+          var GS = getGridSystem();
+          if (!GS) return [];
+          return Object.keys(GS.BAUHAUS_TILE_STYLES).map(function (id) {
+            var ts = GS.BAUHAUS_TILE_STYLES[id];
+            return { id: id, name: ts.name, shapeScale: ts.shapeScale };
+          });
+        },
+
+        setTileStyle: function (id) {
+          var GS = getGridSystem();
+          if (!GS) return false;
+          var ts = GS.BAUHAUS_TILE_STYLES[id];
+          if (!ts) {
+            console.warn("[BAUHAUS] Unknown tile style:", id,
+              "— use:", Object.keys(GS.BAUHAUS_TILE_STYLES).join(" | "));
+            return false;
+          }
+          getAllBauhausLayers().forEach(function (l) {
+            l.renderer.tileStyle = Object.assign({}, ts);
+          });
+          renderFrame();
+          return id;
+        },
+
+        getTileStyle: function () {
+          var l = getBauhausLayer();
+          if (!l || !l.renderer.tileStyle) return null;
+          return Object.assign({}, l.renderer.tileStyle);
+        },
+
+        // ── Note→pattern map API ────────────────────────────────────────────
+        getNotePatternMap: function () {
+          var GS = getGridSystem();
+          var l  = getBauhausLayer();
+          if (!GS || !l) return null;
+          return GS.getBauhausNotePatternMap(l);
+        },
+
+        setNotePatternFamily: function (noteClass, family) {
+          var GS = getGridSystem();
+          if (!GS) return false;
+          if (!GS.BAUHAUS_FAMILY_PATTERNS[family]) {
+            console.warn("[BAUHAUS] Unknown family:", family,
+              "— use:", Object.keys(GS.BAUHAUS_FAMILY_PATTERNS).join(" | "));
+            return false;
+          }
+          var nc = parseInt(noteClass, 10);
+          if (isNaN(nc) || nc < 0 || nc > 11) {
+            console.warn("[BAUHAUS] noteClass must be 0-11"); return false;
+          }
+          getAllBauhausLayers().forEach(function (l) {
+            if (!l.renderer.notePatternOverrides) l.renderer.notePatternOverrides = {};
+            l.renderer.notePatternOverrides[nc] = family;
+          });
+          // Sync to GS module-level overrides
+          var l = getBauhausLayer();
+          GS.setActiveNotePatternOverrides(l ? (l.renderer.notePatternOverrides || {}) : {});
+          // Bust per-block pattern cache so blocks re-resolve on next frame
+          getAllBauhausLayers().forEach(function (l) {
+            (l.blocks || []).forEach(function (b) { b.patternId = null; });
+          });
+          renderFrame();
+          return { noteClass: nc, family: family };
+        },
+
+        clearNotePatternOverrides: function () {
+          var GS = getGridSystem();
+          if (!GS) return false;
+          getAllBauhausLayers().forEach(function (l) {
+            l.renderer.notePatternOverrides = {};
+            (l.blocks || []).forEach(function (b) { b.patternId = null; });
+          });
+          GS.setActiveNotePatternOverrides({});
+          renderFrame();
+          return true;
+        },
       };
     })();
+
+    // ── Layer governance helpers ───────────────────────────────────────────────
+    var LAYER_CONTROL_IDS = ["atmosphere","terrain","signals","walkers","midi","ecology","debug"];
+
+    function isLayerVisible(id) {
+      var lc = state.layerControls;
+      if (!lc || !lc[id]) return true;
+      var hasSolo = LAYER_CONTROL_IDS.some(function (k) { return lc[k] && lc[k].solo; });
+      if (hasSolo) return !!(lc[id].solo);
+      return lc[id].visible !== false;
+    }
+
+    function getLayerOpacity(id) {
+      var lc = state.layerControls;
+      if (!lc || !lc[id]) return 1.0;
+      return lc[id].opacity != null ? lc[id].opacity : 1.0;
+    }
+
+    // ── _wos.routeWorld — route world console API ────────────────────────────
+    window._wos.routeWorld = (function () {
+      function rw() { return state.routeWorld; }
+
+      return {
+
+        createManualRoute: function (name, points, options) {
+          var opts = options || {};
+          var routeId = makeId("route");
+          var worldId = makeId("rworld");
+
+          // Build cumulative distances
+          var dist = computePolylineDistances(points);
+          var route = {
+            id:              routeId,
+            name:            name || "Route",
+            start: {
+              label: opts.startLabel || "Home",
+              lat: null, lng: null,
+              x: points[0] ? points[0].x : 0,
+              y: points[0] ? points[0].y : 0,
+            },
+            end: {
+              label: opts.endLabel || "Destination",
+              lat: null, lng: null,
+              x: points[points.length - 1] ? points[points.length - 1].x : 0,
+              y: points[points.length - 1] ? points[points.length - 1].y : 0,
+            },
+            distanceMeters: dist.total,
+            durationSec:    opts.durationSec || 7200,
+            points:         points.slice(),
+            segments:       [],
+            metadata:       opts.metadata || {},
+            _totalPixelLength:    dist.total,
+            _cumulativeDistances: dist.cumulative,
+            _skinSeed: Math.floor(Math.random() * 1e8),
+          };
+
+          // Auto-generate route segments proportionally
+          var segTypes = ["local", "road", "highway", "road", "waterfront", "road"];
+          var skinHints = ["residential", "suburban", "suburban", "suburban", "waterfront", "suburban"];
+          var segCount  = Math.max(2, Math.floor(points.length / 2));
+          var segments  = [];
+          for (var si = 0; si < segCount; si++) {
+            var st = si / segCount;
+            var et = (si + 1) / segCount;
+            var seg = {
+              id:                  makeId("seg"),
+              routeId:             routeId,
+              index:               si,
+              type:                segTypes[si % segTypes.length],
+              startT:              st,
+              endT:                et,
+              startDistanceMeters: st * dist.total,
+              endDistanceMeters:   et * dist.total,
+              speedLimitKph:       50,
+              mood:                "neutral",
+              density:             0.35,
+              cameraHint:          "follow",
+              skinHint:            skinHints[si % skinHints.length],
+              eventPoolIds:        [],
+            };
+            segments.push(seg);
+            route.segments.push(seg.id);
+          }
+
+          // Create world
+          var world = {
+            id:            worldId,
+            name:          opts.worldName || name || "Route World",
+            version:       "1.0.0",
+            provider:      { type: "manual", sourceId: null, attribution: "" },
+            routeId:       routeId,
+            activeCameraId:"route-follow",
+            durationSec:   opts.durationSec || 7200,
+            loopMode:      opts.loopMode || "destination",
+            mood:          opts.mood || "night-drive",
+            timeOfDay:     opts.timeOfDay || "night",
+            weather:       opts.weather || "clear",
+            layers: {
+              map:      true, skin:     true, traffic:  true,
+              ecology:  true, events:   true, surfaces: true, subway: false,
+            },
+          };
+
+          // Default skin
+          var skin = {
+            id: makeId("skin"), routeWorldId: worldId,
+            style: opts.skinStyle || "wos-map",
+            buildingDensity: opts.buildingDensity != null ? opts.buildingDensity : 0.35,
+            waterDensity:    opts.waterDensity    != null ? opts.waterDensity    : 0.15,
+            greenDensity:    opts.greenDensity    != null ? opts.greenDensity    : 0.2,
+            roadRenderMode:     "signal-line",
+            buildingRenderMode: "grid-symbol",
+            waterRenderMode:    "organic-void",
+            paletteId:    "nightMap",
+            glyphSystemId:"bauhaus",
+          };
+
+          // Default camera rig
+          var rig = {
+            id: "route-follow", mode: "follow", targetActorId: "hero-car",
+            zoom: 1.8, targetZoom: 1.8,
+            lookAhead: 0.035, smoothing: 0.08, drift: 0.15,
+            viewLayout: "single",
+          };
+
+          var w = rw();
+          w.world         = world;
+          w.routes.push(route);
+          segments.forEach(function (s) { w.segments.push(s); });
+          w.skins.push(skin);
+          w.cameraRigs.push(rig);
+          w.runtime.activeRouteId = routeId;
+
+          console.log("[RouteWorld] manual route created:", routeId,
+            points.length, "points,", segments.length, "segments,",
+            dist.total.toFixed(0), "px total length");
+          return route;
+        },
+
+        addHeroCar: function (routeId) {
+          var w = rw();
+          var rid = routeId || (w.runtime && w.runtime.activeRouteId);
+          // Remove existing hero-car if present
+          w.actors = w.actors.filter(function (a) { return a.id !== "hero-car"; });
+          var AN_init = SBE && SBE.AgentNeeds;
+          var actor = {
+            id: "hero-car", type: "vehicle", role: "driver",
+            routeId: rid,
+            t: 0, speed: 1, x: 0, y: 0, heading: 0,
+            visual: { color: "#f6d36b", radius: 8, trail: true, halo: true },
+            audio:  { enabled: false, role: "traffic" },
+            needs:  AN_init ? AN_init.makeNeeds() : null,
+          };
+          w.actors.push(actor);
+          w.runtime.activeActorId = "hero-car";
+          // Prime starting position
+          var route = w.routes.find(function (r) { return r.id === rid; });
+          if (route) {
+            var pos = sampleRoutePolyline(route, 0);
+            actor.x = pos.x; actor.y = pos.y; actor.heading = pos.heading;
+            var cam = _rwEnsureCamera(w);
+            cam.x = pos.x; cam.y = pos.y;
+            cam.targetX = pos.x; cam.targetY = pos.y;
+          }
+          console.log("[RouteWorld] hero-car added, route:", rid);
+          return actor;
+        },
+
+        addEventZone: function (routeId, t, config) {
+          var w = rw();
+          var cfg = config || {};
+          var zone = {
+            id:           cfg.id || makeId("zone"),
+            label:        cfg.label || "Event Zone",
+            routeId:      routeId || w.runtime.activeRouteId,
+            t:            t != null ? t : 0.5,
+            radiusMeters: cfg.radiusMeters || 100,
+            type:         cfg.type || "ambient",
+            rarity:       cfg.rarity != null ? cfg.rarity : 1,
+            cooldownSec:  cfg.cooldownSec || 300,
+            conditions: {
+              weather:      (cfg.conditions && cfg.conditions.weather)      || [],
+              timeOfDay:    (cfg.conditions && cfg.conditions.timeOfDay)    || [],
+              segmentTypes: (cfg.conditions && cfg.conditions.segmentTypes) || [],
+            },
+            actions:          cfg.actions || [],
+            lastTriggeredAt:  0,
+          };
+          w.eventZones.push(zone);
+          console.log("[RouteWorld] event zone added:", zone.id, "at t=", t);
+          return zone;
+        },
+
+        setCameraMode: function (mode) {
+          var valid = ["overview", "follow", "cinematic", "dual"];
+          if (!valid.includes(mode)) {
+            console.warn("[RouteWorld] unknown camera mode:", mode, "— use:", valid.join(" | "));
+            return;
+          }
+          var w = rw();
+          var cam = _rwEnsureCamera(w);
+          var RC = SBE && SBE.RouteCamera;
+          if (RC) {
+            RC.setMode(cam, mode); // all mode changes must go through setMode() — never assign cam.mode directly
+          } else {
+            cam.mode = mode; // fallback if RouteCamera not loaded
+          }
+          if (mode === "dual") {
+            console.warn("[RouteWorld] dual camera: not fully rendered in v1, storing mode");
+          }
+          var rig = w.cameraRigs.find(function (c) { return c.id === "route-follow"; });
+          if (rig) rig.mode = mode;
+          renderFrame();
+          console.log("[RouteWorld] camera mode:", mode);
+          return mode;
+        },
+
+        setCameraOption: function (key, value) {
+          var cam = _rwEnsureCamera(rw());
+          if (!(key in cam)) { console.warn("[RouteWorld] unknown camera option:", key); return; }
+          cam[key] = value;
+          renderFrame();
+          return cam[key];
+        },
+
+        setSkin: function (style) {
+          var w = rw();
+          var skin = w.skins[0];
+          if (!skin) { console.warn("[RouteWorld] no skin to update"); return; }
+          skin.style = style;
+          renderFrame();
+          console.log("[RouteWorld] skin style:", style);
+          return skin;
+        },
+
+        start: function () {
+          var w = rw();
+          _rwEnsureSpatialBootstrap(w);  // guarantee world + route + actor exist
+          if (!w.world) { console.warn("[RouteWorld] no world — call createManualRoute first"); return; }
+          w.active = true;
+          w.runtime.elapsedSec = 0;
+          w.runtime.triggeredEventIds = new Set();
+          // Reset actor progress
+          w.actors.forEach(function (a) { a.t = 0; });
+          renderFrame();
+          console.log("[RouteWorld] started");
+          return w.world;
+        },
+
+        stop: function () {
+          rw().active = false;
+          renderFrame();
+          console.log("[RouteWorld] stopped");
+        },
+
+        reset: function () {
+          var w = rw();
+          w.active = false;
+          w.world          = null;
+          w.routes         = [];
+          w.actors         = [];
+          w.eventZones     = [];
+          w.skins          = [];
+          w.cameraRigs     = [];
+          w.surfaceAnchors = [];
+          w.segments       = [];
+          w.camera = null; // will be re-created fresh on next use
+          w.runtime = {
+            elapsedSec: 0, activeRouteId: null, activeActorId: null,
+            activeSegmentId: null, triggeredEventIds: new Set(),
+          };
+          renderFrame();
+          console.log("[RouteWorld] reset");
+        },
+
+        state: function () {
+          var w = rw();
+          return {
+            active:        w.active,
+            world:         w.world,
+            routeCount:    w.routes.length,
+            actorCount:    w.actors.length,
+            segmentCount:  (w.segments || []).length,
+            eventZoneCount:w.eventZones.length,
+            skinCount:     w.skins.length,
+            cameraRigCount:w.cameraRigs.length,
+            runtime: Object.assign({}, w.runtime, {
+              triggeredEventIds: Array.from(w.runtime.triggeredEventIds || []),
+            }),
+            heroActor: w.actors.find(function (a) { return a.id === "hero-car"; }) || null,
+          };
+        },
+
+        // ── Ingestion methods ──────────────────────────────────────────────
+
+        importGeoJSONRoute: function (geojson, options) {
+          var RI = SBE.RouteIngestion;
+          if (!RI) { console.error("[RouteWorld] SBE.RouteIngestion not loaded"); return null; }
+          var result = RI.importGeoJSON(geojson, state.canvas, options);
+          if (!result) return null;
+          return _rwIngestResult(result, options);
+        },
+
+        importEncodedPolyline: function (encoded, options) {
+          var RI = SBE.RouteIngestion;
+          if (!RI) { console.error("[RouteWorld] SBE.RouteIngestion not loaded"); return null; }
+          var result = RI.importEncodedPolyline(encoded, state.canvas, options);
+          if (!result) return null;
+          return _rwIngestResult(result, options);
+        },
+
+        normalizeGeoRoute: function (points, options) {
+          var RI = SBE.RouteIngestion;
+          if (!RI) { console.error("[RouteWorld] SBE.RouteIngestion not loaded"); return null; }
+          return RI.normalizeRoutePoints(points);
+        },
+
+        fitRouteToCanvas: function (routeId, options) {
+          var RI = SBE.RouteIngestion;
+          if (!RI) { console.error("[RouteWorld] SBE.RouteIngestion not loaded"); return null; }
+          var w = rw();
+          _rwEnsureSpatialBootstrap(w);  // guarantee route exists before lookup
+          var route = w.routes.find(function (r) { return r.id === (routeId || w.runtime.activeRouteId); });
+          if (!route) { console.warn("[RouteWorld] fitRouteToCanvas: route not found:", routeId); return null; }
+          var pad = options && options.padding != null ? options.padding : 120;
+          RI.fitRouteToCanvas(route, state.canvas, pad);
+          // Reset camera to new start position
+          var cam2 = _rwEnsureCamera(w);
+          if (route.points && route.points[0]) {
+            cam2.x = route.points[0].x; cam2.y = route.points[0].y;
+            cam2.targetX = cam2.x; cam2.targetY = cam2.y;
+            cam2._overviewFitted = false;
+          }
+          renderFrame();
+          console.log("[RouteWorld] route re-fitted to canvas:", route.id);
+          return route;
+        },
+
+        routeStats: function (routeId) {
+          var RI = SBE.RouteIngestion;
+          if (!RI) { console.error("[RouteWorld] SBE.RouteIngestion not loaded"); return null; }
+          var w = rw();
+          var route = w.routes.find(function (r) { return r.id === (routeId || w.runtime.activeRouteId); });
+          if (!route) { console.warn("[RouteWorld] routeStats: no route found"); return null; }
+          return RI.routeStats(route);
+        },
+      };
+    })();
+
+    // ── Shared ingestion helper (used by importGeoJSONRoute + importEncodedPolyline) ──
+    function _rwIngestResult(result, options) {
+      var w = state.routeWorld;
+      var route    = result.route;
+      var segments = result.segments;
+
+      // Ensure world record exists
+      if (!w.world) {
+        w.world = {
+          id:            makeId("rworld"),
+          name:          (options && options.worldName) || route.name || "Route World",
+          version:       "1.0.0",
+          provider:      { type: route.metadata && route.metadata.providerType || "geojson", sourceId: null, attribution: "" },
+          routeId:       route.id,
+          activeCameraId:"route-follow",
+          durationSec:   route.durationSec,
+          loopMode:      (options && options.loopMode) || "destination",
+          mood:          (options && options.mood) || "night-drive",
+          timeOfDay:     (options && options.timeOfDay) || "night",
+          weather:       (options && options.weather) || "clear",
+          layers: { map: true, skin: true, traffic: true, ecology: true, events: true, surfaces: true, subway: false,
+                    // Corridor Renderer v1.0.0 layer toggles
+                    terrain: true,    // route spine + district bands
+                    signals: true,    // POIs + scenic moments
+                    walkers: true,    // actor markers + camera reticle
+                    debug:   false,   // labels + spatial diagnostics
+                    atmosphere: true, // future: weather overlays
+                  },
+        };
+      } else {
+        w.world.routeId = route.id;
+        w.world.durationSec = route.durationSec;
+        w.world.provider.type = route.metadata && route.metadata.providerType || "geojson";
+      }
+
+      // Default skin if none
+      if (!w.skins.length) {
+        w.skins.push({
+          id: makeId("skin"), routeWorldId: w.world.id,
+          style: "wos-map",
+          buildingDensity: 0.35, waterDensity: 0.15, greenDensity: 0.2,
+          roadRenderMode: "signal-line", buildingRenderMode: "grid-symbol", waterRenderMode: "organic-void",
+          paletteId: "nightMap", glyphSystemId: "bauhaus",
+        });
+      }
+
+      // Default camera rig if none
+      if (!w.cameraRigs.length) {
+        w.cameraRigs.push({
+          id: "route-follow", mode: "follow", targetActorId: "hero-car",
+          zoom: 1.8, targetZoom: 1.8,
+          lookAhead: 0.035, smoothing: 0.08, drift: 0.15, viewLayout: "single",
+        });
+      }
+
+      w.routes.push(route);
+      segments.forEach(function (s) { w.segments.push(s); });
+      w.runtime.activeRouteId = route.id;
+
+      console.log("[RouteWorld] route ingested:", route.id,
+        route.points.length + " pts,",
+        segments.length + " segs,",
+        Math.round(route.distanceMeters) + "m,",
+        route.durationSec + "s"
+      );
+      return route;
+    }
+
+    // ── _wos.layers — layer governance console API ─────────────────────────────
+    window._wos.layers = {
+      list: function () {
+        var lc = state.layerControls;
+        return LAYER_CONTROL_IDS.map(function (id) {
+          var ctrl = lc[id] || { visible: true, opacity: 1.0, solo: false };
+          return { id: id, visible: ctrl.visible, opacity: ctrl.opacity, solo: ctrl.solo, computed: isLayerVisible(id) };
+        });
+      },
+      show: function (id) {
+        if (!state.layerControls[id]) { console.warn("[layers] unknown id:", id); return; }
+        state.layerControls[id].visible = true;
+        renderFrame();
+      },
+      hide: function (id) {
+        if (!state.layerControls[id]) { console.warn("[layers] unknown id:", id); return; }
+        state.layerControls[id].visible = false;
+        renderFrame();
+      },
+      setOpacity: function (id, v) {
+        if (!state.layerControls[id]) { console.warn("[layers] unknown id:", id); return; }
+        state.layerControls[id].opacity = Math.max(0, Math.min(1, v));
+        renderFrame();
+      },
+      solo: function (id) {
+        if (!state.layerControls[id]) { console.warn("[layers] unknown id:", id); return; }
+        LAYER_CONTROL_IDS.forEach(function (k) { state.layerControls[k].solo = (k === id); });
+        renderFrame();
+      },
+      clearSolo: function () {
+        LAYER_CONTROL_IDS.forEach(function (k) { state.layerControls[k].solo = false; });
+        renderFrame();
+      },
+    };
+
+    // ── _wos.spatial — spatial infrastructure debug console API ──────────────
+    window._wos.spatial = {
+      // Print a compact summary of the loaded spatial world
+      summary: function () {
+        var rw = state.routeWorld;
+        _rwEnsureSpatialBootstrap(rw);
+        var SI = SBE && SBE.SpatialInfrastructure;
+        var spatial = rw && rw.spatial;
+        if (!spatial) { console.log("[spatial] no spatial world loaded"); return null; }
+        var s = SI ? SI.summary(spatial) : null;
+        console.log("[spatial] summary:", s);
+        console.log("[spatial] routes:", rw.routes.length, "· activeRouteId:", rw.runtime && rw.runtime.activeRouteId);
+        return s;
+      },
+      // Snapshot the current world inspector state
+      inspector: function () {
+        var rw = state.routeWorld;
+        var WI = SBE && SBE.WorldInspector;
+        if (!WI) { console.log("[spatial] WorldInspector not loaded"); return null; }
+        var snap = WI.snapshot(rw, rw.clock, rw.env, rw.comms);
+        console.log("[spatial] inspector:", snap);
+        return snap;
+      },
+      // Toggle debug labels on/off
+      debug: function (on) {
+        var rw = state.routeWorld;
+        if (rw && rw.world && rw.world.layers) {
+          rw.world.layers.debug = on !== false;
+          renderFrame();
+          console.log("[spatial] debug labels:", rw.world.layers.debug ? "ON" : "OFF");
+        }
+      },
+      // Toggle a specific corridor layer (terrain|signals|walkers|atmosphere)
+      layer: function (name, on) {
+        var rw = state.routeWorld;
+        if (rw && rw.world && rw.world.layers) {
+          rw.world.layers[name] = on !== false;
+          renderFrame();
+          console.log("[spatial] layer", name, ":", rw.world.layers[name] ? "ON" : "OFF");
+        }
+      },
+      // Score spatial interest at current camera position
+      interest: function () {
+        var rw = state.routeWorld;
+        var SI = SBE && SBE.SpatialInfrastructure;
+        if (!SI || !rw || !rw.spatial || !rw.camera) { console.log("[spatial] not ready"); return; }
+        var cam = rw.camera;
+        var score = SI.spatialInterest(rw.spatial, { x: cam.x, y: cam.y }, rw.env, rw.clock);
+        console.log("[spatial] interest at camera (" + Math.round(cam.x) + "," + Math.round(cam.y) + "):", score.toFixed(3));
+        return score;
+      },
+    };
+
+    // ── _wos.director — Director Mode console API ────────────────────────────
+    window._wos.director = {
+      // Get/print current director snapshot
+      snapshot: function () {
+        var rw = state.routeWorld;
+        var DM = SBE && SBE.DirectorMode;
+        var d = rw && rw.director;
+        if (!d) { console.log("[director] not initialised"); return null; }
+        var snap = DM ? DM.snapshotDirector(d) : d;
+        console.log("[director]", snap);
+        return snap;
+      },
+      // Switch director mode: "survey" | "follow" | "cinema" | "god"
+      mode: function (m) {
+        var rw = state.routeWorld;
+        var DM = SBE && SBE.DirectorMode;
+        var d  = _rwEnsureDirector(rw);
+        if (DM) DM.setMode(d, m);
+        else d.mode = m;
+        console.log("[director] mode →", d.mode);
+        if (window._wos.syncRouteWorldStatus) window._wos.syncRouteWorldStatus();
+      },
+      // Pause simulation
+      pause: function () {
+        var rw = state.routeWorld;
+        var DM = SBE && SBE.DirectorMode;
+        var d  = _rwEnsureDirector(rw);
+        if (DM) DM.pause(d); else d.simulation.paused = true;
+        console.log("[director] paused");
+      },
+      // Resume simulation
+      resume: function () {
+        var rw = state.routeWorld;
+        var DM = SBE && SBE.DirectorMode;
+        var d  = _rwEnsureDirector(rw);
+        if (DM) DM.resume(d); else d.simulation.paused = false;
+        console.log("[director] resumed");
+      },
+      // Set simulation speed multiplier (0.1 – 8)
+      speed: function (s) {
+        var rw = state.routeWorld;
+        var DM = SBE && SBE.DirectorMode;
+        var d  = _rwEnsureDirector(rw);
+        if (DM) DM.setSpeed(d, s); else d.simulation.speed = s;
+        console.log("[director] speed →", d.simulation.speed);
+      },
+      // Scrub route progress (0–1). Pass null to return to live.
+      progress: function (t) {
+        var rw = state.routeWorld;
+        var DM = SBE && SBE.DirectorMode;
+        var d  = _rwEnsureDirector(rw);
+        if (DM) DM.setRouteProgress(d, t); else d.simulation.routeProgressOverride = t == null ? null : Math.max(0, Math.min(1, t));
+        console.log("[director] progress →", d.simulation.routeProgressOverride);
+      },
+      // Set world hour (0–23.99). Activates reality overrides.
+      time: function (h) {
+        var rw = state.routeWorld;
+        var d  = _rwEnsureDirector(rw);
+        d.reality.useOverrides = true;
+        d.reality.timeHour = ((h % 24) + 24) % 24;
+        console.log("[director] timeHour →", d.reality.timeHour.toFixed(2));
+      },
+      // Set weather archetype. Activates reality overrides.
+      weather: function (w) {
+        var rw = state.routeWorld;
+        var d  = _rwEnsureDirector(rw);
+        d.reality.useOverrides = true;
+        d.reality.weatherType = w;
+        console.log("[director] weather →", w);
+      },
+      // Set season. Activates reality overrides.
+      season: function (s) {
+        var rw = state.routeWorld;
+        var d  = _rwEnsureDirector(rw);
+        d.reality.useOverrides = true;
+        d.reality.season = s;
+        console.log("[director] season →", s);
+      },
+      // Fit route and reset manual camera to overview
+      fit: function () {
+        var rw = state.routeWorld;
+        var DM = SBE && SBE.DirectorMode;
+        var d  = _rwEnsureDirector(rw);
+        if (d.manualCamera) d.manualCamera._primed = false;  // forces re-prime on next render
+        window._wos.routeWorld && window._wos.routeWorld.fitRouteToCanvas(null, { padding: 120 });
+        console.log("[director] fit — manual camera will re-prime");
+      },
+      // Reset to survey mode at current camera position
+      resetView: function () {
+        var rw = state.routeWorld;
+        var DM = SBE && SBE.DirectorMode;
+        var d  = _rwEnsureDirector(rw);
+        if (DM) DM.setMode(d, "survey");
+        if (d.manualCamera) d.manualCamera._primed = false;
+        console.log("[director] reset to survey");
+      },
+      // Disable reality overrides (return to live simulation)
+      liveMode: function () {
+        var rw = state.routeWorld;
+        var d  = _rwEnsureDirector(rw);
+        d.reality.useOverrides = false;
+        console.log("[director] live mode — overrides disabled");
+      },
+    };
+
+    // ── _wos.geo — Reference Geography Layer console API ─────────────────────
+    window._wos.geo = {
+      // Toggle a geographic sub-layer: "water" | "roads" | "bridges" | "parks" | "districts"
+      toggle: function (layer) {
+        var rw = state.routeWorld;
+        var rg = _rwEnsureReferenceGeo(rw);
+        var current = rg.layers[layer] !== false;
+        var RGL = SBE && SBE.ReferenceGeographyLayer;
+        if (RGL) RGL.setLayerVisible(rg, layer, !current);
+        else rg.layers[layer] = !current;
+        renderFrame();
+        console.log("[geo] layer", layer, "→", rg.layers[layer] ? "ON" : "OFF");
+      },
+      // Set visual style: "muted" | "wireframe" | "cinematic"
+      style: function (mode) {
+        var rw = state.routeWorld;
+        var rg = _rwEnsureReferenceGeo(rw);
+        var RGL = SBE && SBE.ReferenceGeographyLayer;
+        if (RGL) RGL.setStyle(rg, mode); else rg.style = mode;
+        renderFrame();
+        console.log("[geo] style →", rg.style);
+      },
+      // Set master opacity (0–1)
+      opacity: function (v) {
+        var rw = state.routeWorld;
+        var rg = _rwEnsureReferenceGeo(rw);
+        var RGL = SBE && SBE.ReferenceGeographyLayer;
+        if (RGL) RGL.setOpacity(rg, v); else rg.opacity = Math.max(0, Math.min(1, v));
+        renderFrame();
+        console.log("[geo] opacity →", rg.opacity.toFixed(2));
+      },
+      // Enable / disable the entire layer
+      enable: function (on) {
+        var rw = state.routeWorld;
+        var rg = _rwEnsureReferenceGeo(rw);
+        rg.enabled = on !== false;
+        renderFrame();
+        console.log("[geo] enabled →", rg.enabled);
+      },
+      // Print current state snapshot
+      snapshot: function () {
+        var rw = state.routeWorld;
+        var rg = _rwEnsureReferenceGeo(rw);
+        var snap = { enabled: rg.enabled, style: rg.style, opacity: rg.opacity, layers: Object.assign({}, rg.layers) };
+        console.log("[geo]", snap);
+        return snap;
+      },
+    };
+
+    // ── _wos.map — Basemap console API ────────────────────────────────────────
+    window._wos.map = {
+      // Enable / disable basemap
+      enable: function (on) {
+        var rw = state.routeWorld;
+        var bm = _rwEnsureBasemap(rw);
+        bm.enabled = on !== false;
+        renderFrame();
+        console.log("[map] enabled →", bm.enabled);
+      },
+      // Set master opacity (0–1)
+      opacity: function (v) {
+        var rw = state.routeWorld;
+        var bm = _rwEnsureBasemap(rw);
+        bm.opacity = Math.max(0, Math.min(1, v));
+        renderFrame();
+        console.log("[map] opacity →", bm.opacity.toFixed(2));
+      },
+      // Set style: "dark" | "muted" | "blueprint" | "wireframe"
+      style: function (s) {
+        var rw = state.routeWorld;
+        var bm = _rwEnsureBasemap(rw);
+        bm.style = s;
+        renderFrame();
+        console.log("[map] style →", bm.style);
+      },
+      // Set tile zoom level (enables zoom lock)
+      zoom: function (z) {
+        var rw = state.routeWorld;
+        var bm = _rwEnsureBasemap(rw);
+        bm.zoom = Math.max(8, Math.min(17, Math.round(z)));
+        bm.zoomLocked = true;
+        renderFrame();
+        console.log("[map] zoom locked →", bm.zoom);
+      },
+      // Release zoom lock (auto-zoom based on camera scale)
+      autoZoom: function () {
+        var rw = state.routeWorld;
+        var bm = _rwEnsureBasemap(rw);
+        bm.zoomLocked = false;
+        renderFrame();
+        console.log("[map] zoom → auto");
+      },
+      // Enable tile debug overlay
+      debug: function (on) {
+        var rw = state.routeWorld;
+        if (rw && rw.world && rw.world.layers) {
+          rw.world.layers.debug = on !== false;
+          renderFrame();
+          console.log("[map] debug →", rw.world.layers.debug);
+        }
+      },
+      // Print tile cache stats
+      cache: function () {
+        var BM = SBE && SBE.BasemapRenderer;
+        var stats = BM ? BM.cacheStats() : null;
+        console.log("[map] cache:", stats);
+        return stats;
+      },
+      // Clear tile cache
+      clearCache: function () {
+        var BM = SBE && SBE.BasemapRenderer;
+        if (BM) BM.clearCache();
+        renderFrame();
+      },
+      // List currently visible tile keys
+      visibleTiles: function () {
+        var rw = state.routeWorld;
+        var bm = rw && rw.basemap;
+        var tiles = bm && bm.visibleTiles ? bm.visibleTiles : [];
+        console.log("[map] visible tiles (Z=" + (bm && bm._lastZ) + "):", tiles);
+        console.log("[map] drawn:", bm && bm._lastDrawn, " pending:", bm && bm._lastPending);
+        return tiles.slice();
+      },
+      // Print full basemap state snapshot
+      snapshot: function () {
+        var rw = state.routeWorld;
+        var bm = _rwEnsureBasemap(rw);
+        var snap = {
+          enabled: bm.enabled, opacity: bm.opacity, style: bm.style,
+          zoom: bm.zoom, zoomLocked: bm.zoomLocked,
+          lastZ: bm._lastZ, drawn: bm._lastDrawn, pending: bm._lastPending,
+          presentationMode: rw.presentationMode,
+        };
+        console.log("[map]", snap);
+        return snap;
+      },
+    };
+
+    // ── _wos.demo — demo mode console API ─────────────────────────────────────
+    window._wos.demo = {
+      state: function () { return Object.assign({}, state.demo); },
+      enable: function () {
+        state.demo.enabled = true;
+        console.log("[demo] enabled");
+      },
+      disable: function () {
+        state.demo.enabled = false;
+        console.log("[demo] disabled");
+      },
+      toggle: function () {
+        state.demo.enabled = !state.demo.enabled;
+        console.log("[demo]", state.demo.enabled ? "enabled" : "disabled");
+        return state.demo.enabled;
+      },
+    };
+
+    // ── _wos.auditHiddenArtifacts ──────────────────────────────────────────────
+    window._wos.auditHiddenArtifacts = function auditHiddenArtifacts() {
+      var result = {
+        autoRunning:  [],
+        hiddenState:  [],
+        orphanedRefs: [],
+        staleFields:  [],
+      };
+
+      // Check IW auto-start
+      if (state.infiniteWorld && state.infiniteWorld.autoStart) {
+        result.autoRunning.push({ id: "infiniteWorld.autoStart", value: true, note: "will auto-start IW on load" });
+      }
+      if (state.demo && state.demo.autoStart) {
+        result.autoRunning.push({ id: "demo.autoStart", value: true, note: "will auto-start demo on load" });
+      }
+
+      // Check for orphaned _signalEnergy refs on blocks
+      var oldEnergyBlocks = 0;
+      (state.world.layers || []).forEach(function (layer) {
+        if (layer.type !== "grid") return;
+        (layer.blocks || []).forEach(function (b) {
+          if (b._signalEnergy != null) oldEnergyBlocks++;
+        });
+      });
+      if (oldEnergyBlocks > 0) result.staleFields.push({ id: "_signalEnergy", count: oldEnergyBlocks, note: "legacy flat field — use block._signal.energy" });
+
+      // Check for walkers without trail/idHash infrastructure
+      var legacyWalkers = (state.walkers || []).filter(function (w) { return !w._idHash; });
+      if (legacyWalkers.length) result.orphanedRefs.push({ id: "walker._idHash", count: legacyWalkers.length, note: "walkers missing trail/idHash — created before PlayheadReadability spec" });
+
+      // Report layerControls state
+      result.layerControls = LAYER_CONTROL_IDS.map(function (id) {
+        return { id: id, visible: isLayerVisible(id), opacity: getLayerOpacity(id) };
+      });
+
+      console.table && console.table(result.autoRunning.concat(result.staleFields).concat(result.orphanedRefs));
+      return result;
+    };
 
     console.log("[WOS DEBUG] sampleMap:", sampleMap);
     console.log("[WOS DEBUG] audioState:", state.audio);
@@ -2646,6 +3827,152 @@
       },
       true,
     );
+
+    // ── Symbol Placement + Symbol Selection ──────────────────────────────────
+
+    var _symDragLast   = null;   // last world point during symbol drag/transform
+    var _symHandleMode = null;  // "move" | "rotate" | "scale" for active symbol gesture
+
+    // Placement mode: pointermove updates ghost position
+    canvas.addEventListener("pointermove", function onSymbolMove(e) {
+      var SOS = global.SBE && global.SBE.SymbolObjectSystem;
+
+      // Update placement ghost regardless of active drag
+      if (state.tool === "symbol-place" && state.symbols.activeSlotKey) {
+        var pt = getCanvasCoordsLocal(e);
+        _symGhost.visible = true;
+        _symGhost.wx = pt.x;
+        _symGhost.wy = pt.y;
+        renderFrame();
+        return;
+      }
+      _symGhost.visible = false;
+
+      // Handle drag for selected symbol object
+      if (_symHandleMode && state.selectedSymbolObjectId && SOS) {
+        var pt = getCanvasCoordsLocal(e);
+        var dx = pt.x - _symDragLast.x;
+        var obj = state.symbolObjects.find(function (o) { return o.id === state.selectedSymbolObjectId; });
+        if (obj) {
+          if (_symHandleMode === "move") {
+            obj.x += dx;
+            obj.y += (pt.y - _symDragLast.y);
+          } else if (_symHandleMode === "rotate") {
+            obj.rotation = (obj.rotation || 0) + dx * 0.02;
+          } else if (_symHandleMode === "scale") {
+            obj.scale = Math.max(0.1, (obj.scale || 1) + dx * 0.01);
+          }
+          _symDragLast = pt;
+          renderFrame();
+        }
+        return;
+      }
+    });
+
+    // Placement mode: pointerdown places object
+    canvas.addEventListener("pointerdown", function onSymbolDown(e) {
+      var SS  = global.SBE && global.SBE.SymbolSystem;
+      var SOS = global.SBE && global.SBE.SymbolObjectSystem;
+      if (!SS || !SOS) return;
+
+      var pt = getCanvasCoordsLocal(e);
+
+      // ── Placement mode ──────────────────────────────────────────────────
+      if (state.tool === "symbol-place") {
+        var sym = state.symbols;
+        if (!sym.activeSlotKey || !sym.activeSetId) return;
+
+        var obj = SOS.createSymbolObject(sym.activeSetId, sym.activeSlotKey, pt.x, pt.y, {
+          scale:          1,
+          rotation:       0,
+          paletteOverride: sym.placementPalette || null,
+        });
+        state.symbolObjects.push(obj);
+        state.selectedSymbolObjectId = obj.id;
+        // Exit placement mode, return to select
+        state.tool = "select";
+        _symGhost.visible = false;
+        syncUI();
+        renderFrame();
+        e.stopPropagation();
+        return;
+      }
+
+      // ── Select mode: handle hit test ─────────────────────────────────────
+      if (state.tool !== "select") return;
+
+      var selId  = state.selectedSymbolObjectId;
+      var selObj = selId ? state.symbolObjects.find(function (o) { return o.id === selId; }) : null;
+
+      // Check if clicking a handle on the selected object
+      if (selObj && SOS) {
+        var b   = SOS.getBounds(selObj);
+        var pad = 8;
+        var hr  = 10;  // hit radius for handles
+
+        // Rotate handle check
+        var rx  = b.minX + b.w / 2;
+        var ry  = b.minY - pad - 16;
+        if (Math.hypot(pt.x - rx, pt.y - ry) <= hr) {
+          _symHandleMode = "rotate";
+          _symDragLast   = pt;
+          canvas.setPointerCapture(e.pointerId);
+          e.stopPropagation();
+          return;
+        }
+
+        // Corner scale handle check
+        var corners = [
+          [b.minX - pad, b.minY - pad],
+          [b.maxX + pad, b.minY - pad],
+          [b.minX - pad, b.maxY + pad],
+          [b.maxX + pad, b.maxY + pad],
+        ];
+        for (var ci = 0; ci < corners.length; ci++) {
+          if (Math.hypot(pt.x - corners[ci][0], pt.y - corners[ci][1]) <= hr) {
+            _symHandleMode = "scale";
+            _symDragLast   = pt;
+            canvas.setPointerCapture(e.pointerId);
+            e.stopPropagation();
+            return;
+          }
+        }
+      }
+
+      // Hit test symbol objects to select and begin move drag
+      var hit = SOS ? SOS.hitTest(state.symbolObjects, pt.x, pt.y) : null;
+      if (hit) {
+        state.selectedSymbolObjectId = hit.id;
+        _symHandleMode = "move";
+        _symDragLast   = pt;
+        canvas.setPointerCapture(e.pointerId);
+        renderFrame();
+        e.stopPropagation();
+        return;
+      }
+
+      // Miss — deselect
+      if (state.selectedSymbolObjectId) {
+        state.selectedSymbolObjectId = null;
+        renderFrame();
+        // Don't stopPropagation — allow other select behavior to continue
+      }
+    }, /* capture */ true);
+
+    canvas.addEventListener("pointerup", function onSymbolUp(e) {
+      if (_symHandleMode) {
+        _symHandleMode = null;
+        _symDragLast   = null;
+        renderFrame();
+      }
+    }, /* capture */ true);
+
+    canvas.addEventListener("pointerleave", function () {
+      if (state.tool === "symbol-place") {
+        _symGhost.visible = false;
+        renderFrame();
+      }
+    });
 
     // ── Mop Tool (capture phase) ──
 
@@ -4747,8 +6074,15 @@
         modeSpeed[motionMode] != null
           ? modeSpeed[motionMode]
           : state.walker.speed * 60;
+      var wId = "w_" + Math.random().toString(36).slice(2);
+      var wIdHash = (function(s) {
+        var h = 0;
+        for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+        return h;
+      })(wId);
       return {
-        id: "w_" + Math.random().toString(36).slice(2),
+        id: wId,
+        _idHash: wIdHash,
         stroke: stroke,
         strokeId: stroke.id,
         color: stroke.color || "#ffffff",
@@ -4763,6 +6097,8 @@
         _speedNormalized: true,
         x: stroke.points[0].x,
         y: stroke.points[0].y,
+        trail: [],
+        _lastTrailSample: 0,
         motionMode: motionMode,
         lastTriggerT: -1,
         noteOffset: Math.floor(Math.random() * 12),
@@ -5363,6 +6699,15 @@
       w.x = pos.x;
       w.y = pos.y;
 
+      // Trail sampling — time-throttled to ~80ms intervals for readable residue
+      var trailNow = performance.now();
+      if (!w.trail) w.trail = [];
+      if (trailNow - (w._lastTrailSample || 0) >= 80) {
+        w.trail.push({ x: w.x, y: w.y, t: trailNow });
+        if (w.trail.length > 16) w.trail.shift();
+        w._lastTrailSample = trailNow;
+      }
+
       // ── MIDI Cartridge time-based playback (primary audio path) ───────────
       if (w.strokeId && window.SBE && SBE.MidiImporter) {
         var cartStroke = state.strokes.find(function (s) {
@@ -5516,13 +6861,60 @@
     }
 
     function drawWalkers(ctx) {
+      if (!isLayerVisible("walkers")) return;
+      var walkerLayerAlpha = getLayerOpacity("walkers");
       var cleanMode = state.debug && state.debug.visualMode === "clean";
-      // Always draw walker dot — debug flags only add extra overlays
+      var now = performance.now();
+      var TRAIL_MAX_AGE = 1100; // ms — full trail history window
+
+      ctx.save();
+      ctx.globalAlpha = walkerLayerAlpha;
       state.walkers.forEach(function (w) {
         var px = w.x != null ? w.x : 0;
         var py = w.y != null ? w.y : 0;
+        var walkerColor = w.color || (w.stroke && w.stroke.color) || "#3dd8c5";
+        var speedNorm = Math.min(1, (w.speed || 0) / 0.25);
 
-        // Walker dot — always visible, larger and red for MIDI-attached walkers
+        // ── Motion Trail — architectural residue, drawn first ────────────────
+        var trail = w.trail;
+        if (trail && trail.length > 1) {
+          ctx.save();
+          for (var ti = 0; ti < trail.length; ti++) {
+            var pt = trail[ti];
+            var age = now - pt.t;
+            if (age > TRAIL_MAX_AGE) continue;
+            var frac = 1 - age / TRAIL_MAX_AGE;
+            ctx.globalAlpha = 0.02 + frac * 0.20;
+            ctx.fillStyle = walkerColor;
+            // 2×2 square marks — segmented infrastructure aesthetic
+            ctx.fillRect(pt.x - 1, pt.y - 1, 2, 2);
+          }
+          ctx.restore();
+        }
+
+        // ── Playhead Halo — electrical pressure, drawn before core ──────────
+        (function () {
+          var idHash = w._idHash || 0;
+          var pulse = 0.65
+            + Math.sin(now * 0.008 + (idHash % 1000) * 0.0063) * 0.12
+            + speedNorm * 0.22;
+          var haloRadius = 16 + speedNorm * 6;
+          var haloAlpha  = pulse * 0.18;
+          try {
+            var hrd = ctx.createRadialGradient(px, py, 0, px, py, haloRadius);
+            hrd.addColorStop(0, walkerColor);
+            hrd.addColorStop(1, "transparent");
+            ctx.save();
+            ctx.globalAlpha = haloAlpha;
+            ctx.fillStyle = hrd;
+            ctx.beginPath();
+            ctx.arc(px, py, haloRadius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+          } catch (e) {}
+        })();
+
+        // ── Walker core dot ──────────────────────────────────────────────────
         (function () {
           var hasMidi = !!(
             w.strokeId &&
@@ -5534,9 +6926,7 @@
             })()
           );
           var r = hasMidi ? 7 : 5;
-          var innerColor = hasMidi
-            ? "#ff4d4d"
-            : w.color || (w.stroke && w.stroke.color) || "#3dd8c5";
+          var innerColor = hasMidi ? "#ff4d4d" : walkerColor;
           ctx.save();
           ctx.beginPath();
           ctx.arc(px, py, r, 0, Math.PI * 2);
@@ -5551,7 +6941,7 @@
           ctx.restore();
         })();
 
-        // Path outline — shown when debug.paths is on
+        // ── Path outline — debug only ────────────────────────────────────────
         if (
           state.debug.paths &&
           w.path &&
@@ -5572,7 +6962,7 @@
           ctx.restore();
         }
 
-        // Info text — shown when debug.info is on
+        // ── Info text — debug only ───────────────────────────────────────────
         if (state.debug.info) {
           ctx.save();
           ctx.fillStyle = "#ffffff";
@@ -5586,6 +6976,7 @@
           ctx.restore();
         }
       });
+      ctx.restore();
     }
 
     // ── End PathWalker System ────────────────────────────
@@ -5650,7 +7041,9 @@
 
       // Pan: middle mouse button or Space+drag
       global.addEventListener("keydown", function (e) {
-        if (e.code === "Space" && !isTypingTarget()) _spaceDown = true;
+        if (e.code === "Space" && !isTypingTarget() && !(window._wos && window._wos._shortcutsSuspended)) {
+          _spaceDown = true;
+        }
       });
       global.addEventListener("keyup", function (e) {
         if (e.code === "Space") {
@@ -5681,6 +7074,84 @@
       });
     })();
     // ── End camera input ───────────────────────────────────────────────────
+
+    // ── Director Mode canvas pointer events (survey pan/zoom) ────────────────
+    (function bindDirectorPointerEvents() {
+      function isDirectorSurvey() {
+        var rw = state.routeWorld;
+        var d  = rw && rw.director;
+        return d && d.enabled && d.mode === "survey";
+      }
+      function getCanvasScale() {
+        var rect = canvas.getBoundingClientRect();
+        return rect.width ? (canvas.width / rect.width) : 1;
+      }
+
+      canvas.addEventListener("pointerdown", function onDirDown(e) {
+        if (!isDirectorSurvey()) return;
+        // Only primary mouse button for survey pan (middle is used by general cam pan)
+        if (e.button !== 0) return;
+        var rw  = state.routeWorld;
+        var DM  = SBE && SBE.DirectorMode;
+        var d   = rw && rw.director;
+        if (!d || !DM) return;
+        var rect  = canvas.getBoundingClientRect();
+        var scl   = getCanvasScale();
+        var cx    = (e.clientX - rect.left) * scl;
+        var cy    = (e.clientY - rect.top)  * scl;
+        DM.pointerDown(d, cx, cy);
+        canvas.setPointerCapture(e.pointerId);
+        e.stopPropagation();
+      });
+
+      canvas.addEventListener("pointermove", function onDirMove(e) {
+        if (!isDirectorSurvey()) return;
+        var rw  = state.routeWorld;
+        var DM  = SBE && SBE.DirectorMode;
+        var d   = rw && rw.director;
+        if (!d || !DM || !d.manualCamera.isPanning) return;
+        var rect  = canvas.getBoundingClientRect();
+        var scl   = getCanvasScale();
+        var cx    = (e.clientX - rect.left) * scl;
+        var cy    = (e.clientY - rect.top)  * scl;
+        DM.pointerMove(d, cx, cy, 1);  // scl already folded into coords
+        renderFrame();
+        e.stopPropagation();
+      });
+
+      canvas.addEventListener("pointerup", function onDirUp() {
+        var rw = state.routeWorld;
+        var DM = SBE && SBE.DirectorMode;
+        var d  = rw && rw.director;
+        if (d && DM) DM.pointerUp(d);
+      });
+
+      canvas.addEventListener("pointercancel", function () {
+        var rw = state.routeWorld;
+        var DM = SBE && SBE.DirectorMode;
+        var d  = rw && rw.director;
+        if (d && DM) DM.pointerUp(d);
+      });
+
+      // Wheel zoom in survey mode — fires alongside existing wheel handler;
+      // we short-circuit the route-world zoom first.
+      canvas.addEventListener("wheel", function onDirWheel(e) {
+        if (!isDirectorSurvey()) return;
+        var rw  = state.routeWorld;
+        var DM  = SBE && SBE.DirectorMode;
+        var d   = rw && rw.director;
+        if (!d || !DM) return;
+        var rect = canvas.getBoundingClientRect();
+        var scl  = getCanvasScale();
+        var cx   = (e.clientX - rect.left) * scl;
+        var cy   = (e.clientY - rect.top)  * scl;
+        DM.wheel(d, e.deltaY, cx, cy, canvas.width, canvas.height);
+        renderFrame();
+        e.preventDefault();
+        e.stopPropagation();
+      }, { passive: false, capture: true });   // capture: true fires before the existing handler
+    })();
+    // ── End Director Mode canvas events ────────────────────────────────────
 
     // Unlock AudioEngine on first user gesture — required by browser autoplay policy
     ["pointerdown", "click", "keydown"].forEach(function (evtName) {
@@ -5776,6 +7247,8 @@
     await applyScene({ lines: [], strokes: [], balls: [], walkers: [], groups: {}, shapes: [], textObjects: [] });
     renderBankGrid();
     updateCanvasAspect();
+    // Bootstrap Phase 1 spatial corridor immediately — canvas dimensions now stable
+    _rwEnsureSpatialBootstrap(state.routeWorld);
     setViewClasses();
     syncUI();
     updatePanels(state.tool);
@@ -5958,6 +7431,8 @@
 
         triggered.push({
           id: event.id,
+          index: event.index != null ? event.index : event.sourceIndex,
+          sourceIndex: event.sourceIndex,
           note: event.note,
           velocity: event.velocity,
           startBeat: event.startBeat,
@@ -5966,6 +7441,17 @@
       });
 
       state.midiPlayback.lastTriggeredNotes = triggered;
+
+      // Update playhead to the latest triggered event (greatest startBeat this frame)
+      if (triggered.length > 0) {
+        var lastTriggered = triggered.reduce(function (best, e) {
+          return e.startBeat > best.startBeat ? e : best;
+        }, triggered[0]);
+        state.midiPlayback.playheadEventIndex =
+          lastTriggered.index != null ? lastTriggered.index : lastTriggered.sourceIndex;
+        state.midiPlayback.playheadEventId  = lastTriggered.id || null;
+        state.midiPlayback.playheadBeat     = lastTriggered.startBeat != null ? lastTriggered.startBeat : currentBeat;
+      }
 
       state.midiPlayback.activeNotes = events.filter(function (event) {
         var localBeat = (shouldLoop && loopBeats > 0)
@@ -6213,6 +7699,18 @@
       window._wos.renderSystemHud  = renderSystemHud;
       window._wos.toggleSystemHud  = toggleSystemHud;
       window._wos.getSystemHudData = getSystemHudData;
+      window._wos.refreshBankGrid  = renderBankGrid;   // exposed for drawer mount
+      window._wos.syncUI           = syncUI;           // exposed for symbolDrawer placement trigger
+
+      // ── Shortcut suspension — used by takesFocus drawers ──────────────────
+      // When a drawer declares takesFocus:true, it calls shortcuts.suspend()
+      // on mount and shortcuts.resume() on unmount. All WOS keydown handlers
+      // guard against _shortcutsSuspended before acting.
+      window._wos._shortcutsSuspended = false;
+      window._wos.shortcuts = {
+        suspend: function () { window._wos._shortcutsSuspended = true;  },
+        resume:  function () { window._wos._shortcutsSuspended = false; },
+      };
 
       window._wos.midiPlayback = {
         enable: function () {
@@ -6252,6 +7750,161 @@
 
     bindSystemHud();
 
+    // ── _wos.infiniteWorld API ────────────────────────────────────────────────
+    window._wos.infiniteWorld = (function () {
+      function iw() { return state.infiniteWorld; }
+
+      return {
+        start: function () {
+          var w = iw();
+          w.enabled = true;
+          // Build terrain if missing
+          var hasLayer = (state.world.layers || []).some(function (l) { return l._iw === true; });
+          if (!hasLayer) { iwBuildTerrainLayer(w); }
+          // Spawn probe if missing
+          if (!w.probeId) { iwSpawnProbe(w); }
+          _iwLastTickAt = 0; // force immediate tick
+          renderFrame();
+          console.log("[InfiniteWorld] started");
+          return w;
+        },
+
+        stop: function () {
+          iw().enabled = false;
+          console.log("[InfiniteWorld] stopped");
+        },
+
+        reset: function () {
+          var w = iw();
+          w.enabled = false;
+          // Remove IW layers
+          state.world.layers = (state.world.layers || []).filter(function (l) { return !l._iw; });
+          // Remove IW bank
+          state.midiBanks = state.midiBanks.filter(function (b) { return b.id !== IW_SIMULATED_BANK_ID; });
+          // Remove probe
+          if (w.probeId) {
+            state.balls = state.balls.filter(function (b) { return b.id !== w.probeId; });
+            state.swarm.count = state.balls.length;
+          }
+          // Remove any lingering _infiniteProbe balls
+          state.balls = state.balls.filter(function (b) { return !b._infiniteProbe; });
+          state.swarm.count = state.balls.length;
+          w.terrainBankId  = null;
+          w.terrainLayerId = null;
+          w.probeId        = null;
+          w.beatCursor     = 0;
+          w.sourceIndex    = 0;
+          _iwBlockStates   = {};
+          _iwProbeTrail    = [];
+          renderFrame();
+          console.log("[InfiniteWorld] reset");
+        },
+
+        state: function () {
+          return Object.assign({}, iw(), {
+            terrainLayerExists: (state.world.layers || []).some(function (l) { return l._iw; }),
+            probeExists: !!(iw().probeId && state.balls.find(function (b) { return b.id === iw().probeId; })),
+            activeBlockStates: Object.keys(_iwBlockStates).length,
+            trailLength: _iwProbeTrail.length,
+          });
+        },
+
+        spawnProbe: function () {
+          return iwSpawnProbe(iw());
+        },
+
+        setDensity: function (val) {
+          var d = Math.max(0.05, Math.min(1, parseFloat(val) || 0.35));
+          iw().density = d;
+          return d;
+        },
+
+        setEnergy: function (val) {
+          var e = Math.max(0, Math.min(1, parseFloat(val) || 0.45));
+          iw().energy = e;
+          return e;
+        },
+
+        setPalette: function (id) {
+          var GS = getGridSystem();
+          if (!GS || !GS.BAUHAUS_PALETTES[id]) {
+            console.warn("[InfiniteWorld] unknown palette:", id,
+              "— use:", Object.keys(GS ? GS.BAUHAUS_PALETTES : {}).join(" | "));
+            return false;
+          }
+          iw()._paletteId = id;
+          var layer = (state.world.layers || []).find(function (l) { return l._iw; });
+          if (layer && layer.renderer) {
+            layer.renderer.paletteId = id;
+            // Bust color cache so blocks re-resolve on next frame
+            (layer.blocks || []).forEach(function (b) { b._iwColor = null; });
+          }
+          renderFrame();
+          return id;
+        },
+
+        setTickMs: function (ms) {
+          iw().tickMs = Math.max(50, parseInt(ms, 10) || 180);
+          return iw().tickMs;
+        },
+
+        regenerate: function () {
+          var w = iw();
+          var bank = state.midiBanks.find(function (b) { return b.id === IW_SIMULATED_BANK_ID; });
+          if (bank) bank._simNotes = [];
+          w.beatCursor   = 0;
+          _iwBlockStates = {};
+          iwBuildTerrainLayer(w);
+          renderFrame();
+          console.log("[InfiniteWorld] regenerated");
+        },
+
+        enableAutoStart: function (val) {
+          iw().autoStart = !!val;
+          console.log("[InfiniteWorld] autoStart =", iw().autoStart);
+          return iw().autoStart;
+        },
+
+        toggle: function () {
+          var w = iw();
+          if (w.enabled) {
+            w.enabled = false;
+            console.log("[InfiniteWorld] toggled OFF");
+          } else {
+            w.enabled = true;
+            var hasLayer = (state.world.layers || []).some(function (l) { return l._iw === true; });
+            if (!hasLayer) { iwBuildTerrainLayer(w); }
+            if (!w.probeId) { iwSpawnProbe(w); }
+            _iwLastTickAt = 0;
+            renderFrame();
+            console.log("[InfiniteWorld] toggled ON");
+          }
+          return w.enabled;
+        },
+      };
+    }());
+
+    // ── IW Auto-start ─────────────────────────────────────────────────────────
+    // If autoStart is enabled and IW has not yet been started, defer startup
+    // slightly so the rest of init can complete first.
+    (function () {
+      var w = state.infiniteWorld;
+      if (!w.autoStart) return;
+      // Guard: do not start if already active or if a MIDI import is in progress
+      if (w.enabled) return;
+      var hasMidiImport = (state.midiBanks || []).some(function (b) { return !b._iw; });
+      // Only auto-start when there are no user-imported banks (fresh load)
+      if (hasMidiImport) return;
+      setTimeout(function () {
+        var w2 = state.infiniteWorld;
+        if (!w2.autoStart || w2.enabled) return;
+        var hasLayer = (state.world.layers || []).some(function (l) { return l._iw === true; });
+        if (!hasLayer) {
+          window._wos.infiniteWorld.start();
+        }
+      }, 500);
+    }());
+
     renderFrame();
 
     // Behavior + particle loop — runs every frame independent of playback state
@@ -6266,6 +7919,1375 @@
       processBehaviors(performance.now());
     }
 
+    // ── InfiniteWorld v1.0.0 ─────────────────────────────────────────────────
+
+    var IW_SIMULATED_CARTRIDGE_ID = "iw_terrain_cartridge";
+    var IW_SIMULATED_BANK_ID      = "iw_terrain_bank";
+    var IW_LAYER_LABEL            = "IW Terrain";
+    var IW_GRID_COLS              = 18;
+    var IW_GRID_ROWS              = 28;
+    var IW_REGION_COUNT           = 6;
+
+    // ── Region system ────────────────────────────────────────────────────────
+    // 6 voronoi seeds spread across the grid (normalized 0-1 coords)
+    var IW_REGION_SEEDS = [
+      [0.15, 0.15], [0.85, 0.15], [0.5, 0.48],
+      [0.15, 0.82], [0.85, 0.82], [0.5, 0.2],
+    ];
+
+    var _iwRegions = null;
+
+    function iwInitRegions() {
+      _iwRegions = IW_REGION_SEEDS.map(function (seed, i) {
+        return {
+          id:           i,
+          densityBias:  [0.65, 0.2, 0.8, 0.4, 0.25, 0.55][i],
+          energyBias:   [0.5,  0.1, 0.7, 0.3, 0.15, 0.6 ][i],
+          decayRate:    [0.91, 0.97, 0.88, 0.94, 0.96, 0.90][i],
+          driftSpeed:   0.00035 + i * 0.00015,
+          driftPhase:   (i * 1.13) % (Math.PI * 2),
+          visualWeight: [0.7, 0.3, 1.0, 0.5, 0.25, 0.8][i],
+        };
+      });
+    }
+
+    function iwGetRegion(id) {
+      if (!_iwRegions) iwInitRegions();
+      return _iwRegions[id % IW_REGION_COUNT] || _iwRegions[0];
+    }
+
+    function iwBlockRegionId(col, row) {
+      var nx = col / IW_GRID_COLS;
+      var ny = row / IW_GRID_ROWS;
+      var best = 0, bestDist = Infinity;
+      for (var i = 0; i < IW_REGION_SEEDS.length; i++) {
+        var dx = nx - IW_REGION_SEEDS[i][0];
+        var dy = ny - IW_REGION_SEEDS[i][1];
+        var d  = dx * dx + dy * dy;
+        if (d < bestDist) { bestDist = d; best = i; }
+      }
+      return best;
+    }
+
+    // ── Density noise ────────────────────────────────────────────────────────
+    function iwNoise2D(x, y) {
+      var s = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
+      return s - Math.floor(s);
+    }
+
+    function iwDensityAt(col, row) {
+      var n1 = iwNoise2D(col * 0.24, row * 0.17);
+      var n2 = iwNoise2D(col * 0.06 + 3.1, row * 0.05 + 7.4);
+      return (n1 + n2) * 0.5;
+    }
+
+    // ── Per-block render state (persists across ticks) ───────────────────────
+    var _iwBlockStates = {};
+
+    function iwGetBlockState(blockIndex, regionId) {
+      if (!_iwBlockStates[blockIndex]) {
+        var reg = iwGetRegion(regionId);
+        _iwBlockStates[blockIndex] = {
+          pulse:      0,
+          glow:       0,
+          driftPhase: Math.random() * Math.PI * 2,
+          regionId:   regionId,
+          decay:      reg.decayRate,
+        };
+      }
+      return _iwBlockStates[blockIndex];
+    }
+
+    function iwDecayBlockStates(dt) {
+      var keys = Object.keys(_iwBlockStates);
+      for (var i = 0; i < keys.length; i++) {
+        var s = _iwBlockStates[keys[i]];
+        s.pulse = s.pulse * Math.pow(s.decay, dt * 60);
+        s.glow  = s.glow  * Math.pow(0.96,   dt * 60);
+        if (s.pulse < 0.001) s.pulse = 0;
+        if (s.glow  < 0.001) s.glow  = 0;
+      }
+    }
+
+    // ── Probe trail ──────────────────────────────────────────────────────────
+    var _iwProbeTrail    = [];
+    var IW_TRAIL_MAX     = 28;
+    var IW_TRAIL_INTERVAL_MS = 60;
+    var _iwTrailLastAt   = 0;
+
+    // ── Note weights ─────────────────────────────────────────────────────────
+    var IW_NOTE_WEIGHTS = [8,2,6,2,7,5,2,8,2,6,2,4];
+    var IW_NOTE_WEIGHT_CUM = (function () {
+      var cum = [], t = 0;
+      IW_NOTE_WEIGHTS.forEach(function (w) { t += w; cum.push(t); });
+      return cum;
+    }());
+    var IW_NOTE_WEIGHT_TOTAL = IW_NOTE_WEIGHT_CUM[11];
+
+    var IW_MOTIFS = [[0,4,7],[0,3,7],[0,5,9],[2,5,9],[0,2,4,7]];
+
+    function iwWeightedNoteClass(regionId) {
+      // Slight bias toward lower classes in ghost zones, higher in hubs
+      var r = Math.random() * IW_NOTE_WEIGHT_TOTAL;
+      for (var i = 0; i < IW_NOTE_WEIGHT_CUM.length; i++) {
+        if (r < IW_NOTE_WEIGHT_CUM[i]) return i;
+      }
+      return 0;
+    }
+
+    // ── Note generation ──────────────────────────────────────────────────────
+    function iwGenerateBurst(iw) {
+      var density = Math.max(0.05, Math.min(1, iw.density));
+      var count   = Math.max(1, Math.round(density * 5));
+      var notes   = [];
+      var useMotif = Math.random() < 0.3;
+      var motif    = useMotif ? IW_MOTIFS[Math.floor(Math.random() * IW_MOTIFS.length)] : null;
+      for (var i = 0; i < count; i++) {
+        var nc  = motif ? motif[i % motif.length] : iwWeightedNoteClass();
+        var oct = 2 + Math.floor(Math.random() * 4);
+        var note = Math.max(24, Math.min(96, nc + oct * 12));
+        notes.push({
+          note:     note,
+          velocity: Math.round(35 + Math.random() * 75),
+          time:     iw.beatCursor + i * 0.25,
+          duration: 0.25 + Math.random() * 0.75,
+          _velNorm: (35 + Math.random() * 75) / 110,
+        });
+      }
+      return notes;
+    }
+
+    function iwEnsureSimulatedBank(iw) {
+      var GS = getGridSystem();
+      if (!GS) return null;
+
+      var existingNotes = [];
+      var existingBank = state.midiBanks.find(function (b) { return b.id === IW_SIMULATED_BANK_ID; });
+      if (existingBank && existingBank._simNotes) existingNotes = existingBank._simNotes;
+
+      var newNotes = iwGenerateBurst(iw);
+      existingNotes = existingNotes.concat(newNotes);
+      if (existingNotes.length > iw.maxEvents) {
+        existingNotes = existingNotes.slice(existingNotes.length - iw.maxEvents);
+      }
+      iw.beatCursor += 2;
+
+      var cartridge = {
+        id: IW_SIMULATED_CARTRIDGE_ID, name: "IW Terrain",
+        bpm: 120, length: iw.beatCursor,
+        notes: existingNotes.map(function (n) {
+          return { note: n.note, velocity: n.velocity, time: n.time, duration: n.duration };
+        }),
+        _iw: true,
+      };
+
+      var bank = GS.createMidiBankFromCartridge(cartridge);
+      if (!bank) return null;
+      bank.id = IW_SIMULATED_BANK_ID;
+      bank._simNotes = existingNotes;
+      bank._newBurstSize = newNotes.length;
+      bank._iw = true;
+
+      state.midiBanks = state.midiBanks.filter(function (b) { return b.id !== IW_SIMULATED_BANK_ID; });
+      state.midiBanks.push(bank);
+      iw.terrainBankId = IW_SIMULATED_BANK_ID;
+      return { bank: bank, cartridge: cartridge, newNotes: newNotes };
+    }
+
+    function iwBuildTerrainLayer(iw) {
+      if (!_iwRegions) iwInitRegions();
+      var GS = getGridSystem();
+      if (!GS) return null;
+
+      var banked = iwEnsureSimulatedBank(iw);
+      if (!banked) return null;
+      var bank = banked.bank;
+
+      var canvasW = state.canvas.width  || 1080;
+      var canvasH = state.canvas.height || 1920;
+
+      var gridSettings = {
+        columns: IW_GRID_COLS, rows: IW_GRID_ROWS,
+        cellSize: 42, gap: 0,
+        placementMode: "packedTimeGrid", fitMode: "fitFrame",
+        colorMode: "noteColor", blockStyleId: "solid_note_tile",
+        framePadding: 24, minCellSize: 4, maxCellSize: 240,
+        quantizeBeats: 0, pitchRange: { min: 24, max: 96 },
+        sizeMode: "none", opacityMode: "none", wrapMode: "wrapRows",
+      };
+
+      // Remove old IW layer but preserve _iwBlockStates (keyed by index — survives rebuild)
+      state.world.layers = (state.world.layers || []).filter(function (l) { return !l._iw; });
+
+      var layer = GS.createGridLayerFromMidiBank(IW_SIMULATED_BANK_ID, {
+        name: IW_LAYER_LABEL, grid: gridSettings,
+      });
+      if (!layer) return null;
+
+      layer.label   = IW_LAYER_LABEL;
+      layer.status  = "active";
+      layer._iw     = true;
+      layer.renderer = {
+        id: "bauhausMinimal", version: "1.3.1",
+        paletteId: iw._paletteId || GS.DEFAULT_PALETTE_ID,
+        finishId:  "clean",
+        viewport:  Object.assign({}, GS.DEFAULT_VIEWPORT),
+        reactivity: { enabled: true, mode: "noteClass" },
+        tileStyle:  Object.assign({}, GS.BAUHAUS_TILE_STYLES["softPrint"]),
+        notePatternOverrides: {},
+      };
+
+      layer.blocks = GS.generateGridBlocksFromMidiBank(
+        bank, gridSettings, layer.id, canvasW, canvasH
+      );
+
+      // Assign region, density-based baseAlpha, and initialise block state
+      var newBurstSize = bank._newBurstSize || 0;
+      var totalBlocks  = layer.blocks.length;
+      layer.blocks.forEach(function (block, idx) {
+        var regionId = iwBlockRegionId(block.col || 0, block.row || 0);
+        var region   = iwGetRegion(regionId);
+        var density  = iwDensityAt(block.col || 0, block.row || 0);
+
+        // Sparse density field: low-density areas get low baseAlpha
+        var densityBase = density * 0.5 + region.densityBias * 0.5;
+        block.baseAlpha = Math.max(0.08, Math.min(0.82, densityBase * 0.88 + 0.1));
+        block._iwRegion = regionId;
+
+        // Trigger pulse on freshly added blocks (last N in the array)
+        var isNew = idx >= (totalBlocks - newBurstSize);
+        var bs    = iwGetBlockState(idx, regionId);
+        if (isNew && block.velocityNorm != null) {
+          bs.pulse = Math.min(1, bs.pulse + block.velocityNorm * region.energyBias);
+          bs.glow  = Math.min(1, bs.glow  + block.velocityNorm * region.energyBias * 0.5);
+        }
+      });
+
+      layer.source = { type: "midiBank", bankId: IW_SIMULATED_BANK_ID,
+        cartridgeId: IW_SIMULATED_CARTRIDGE_ID };
+
+      state.world.layers = state.world.layers || [];
+      state.world.layers.push(layer);
+      iw.terrainLayerId = layer.id;
+      return layer;
+    }
+
+    // ── Grid offset helper (for overlay positioning) ──────────────────────────
+    function iwGetGridScreenOffset() {
+      var layer = (state.world.layers || []).find(function (l) { return l._iw; });
+      if (!layer || !layer.grid) return { x: 0, y: 0, cellSize: 42, gap: 0 };
+      var g  = layer.grid;
+      var GS = getGridSystem();
+      var cw = state.canvas.width  || 1080;
+      var ch = state.canvas.height || 1920;
+      var cs = GS ? GS.computeFitCellSize(g, cw, ch) : g.cellSize;
+      var gw = g.columns * (cs + g.gap) - g.gap;
+      var gh = g.rows    * (cs + g.gap) - g.gap;
+      return {
+        x:        Math.round((cw - gw) / 2),
+        y:        Math.round((ch - gh) / 2),
+        cellSize: cs,
+        gap:      g.gap,
+      };
+    }
+
+    var _iwLastTickAt  = 0;
+    var _iwEnergyPhase = Math.random() * Math.PI * 2;
+
+    function updateInfiniteWorld(now, dt) {
+      var iw = state.infiniteWorld;
+      if (!iw || !iw.enabled) return;
+
+      // ── Simulated audio energy (slow sine + occasional bump) ─────────────
+      _iwEnergyPhase += dt * 0.35;
+      var sinEnergy = 0.22 * Math.sin(_iwEnergyPhase) + 0.08 * Math.sin(_iwEnergyPhase * 2.7);
+      var bump = (Math.random() < 0.008) ? (0.12 + Math.random() * 0.22) : 0;
+      iw.energy = Math.max(0, Math.min(1, 0.38 + sinEnergy + bump));
+
+      // ── Terrain tick ─────────────────────────────────────────────────────
+      if (now - _iwLastTickAt >= iw.tickMs) {
+        _iwLastTickAt = now;
+        iwBuildTerrainLayer(iw);
+      }
+
+      // ── Per-frame block state decay + transient field injection ──────────
+      iwDecayBlockStates(dt);
+
+      var layer = (state.world.layers || []).find(function (l) { return l._iw; });
+      if (layer && layer.blocks) {
+        var energy  = iw.energy;
+        var probePx = null;
+        if (iw.probeId) {
+          var probe = state.balls.find(function (b) { return b.id === iw.probeId; });
+          if (probe) {
+            probePx = { x: probe.x, y: probe.y };
+          }
+        }
+        var off = iwGetGridScreenOffset();
+
+        // Cache palette color once (persists on block for overlay use)
+        var GS = getGridSystem();
+        var palette = GS && GS.BAUHAUS_PALETTES[layer.renderer.paletteId || GS.DEFAULT_PALETTE_ID];
+
+        layer.blocks.forEach(function (block, idx) {
+          var bs = iwGetBlockState(idx, block._iwRegion || 0);
+
+          if (palette && block._iwColor == null) {
+            block._iwColor = GS.getPaletteColor(block.noteClass, palette);
+          }
+
+          // Probe proximity illumination (screen-space distance)
+          if (probePx) {
+            var bsx = (block.x || 0) + off.x + off.cellSize * 0.5;
+            var bsy = (block.y || 0) + off.y + off.cellSize * 0.5;
+            var dx  = bsx - probePx.x;
+            var dy  = bsy - probePx.y;
+            var d2  = dx * dx + dy * dy;
+            var illumRadius = 180;
+            if (d2 < illumRadius * illumRadius) {
+              var illum = (1 - Math.sqrt(d2) / illumRadius) * 0.28 * energy;
+              bs.pulse = Math.min(1, bs.pulse + illum * dt * 4);
+            }
+          }
+
+          // Write transient fields consumed by Bauhaus renderer
+          block._pulse       = Math.min(1, bs.pulse + bs.glow * 0.25);
+          block._audioEnergy = energy;
+          block._worldPulse  = bs.pulse;
+        });
+      }
+
+      // ── Probe motion (Lissajous orbit, screen-space coords) ───────────────
+      if (iw.probeId) {
+        var probe = state.balls.find(function (b) { return b.id === iw.probeId; });
+        if (probe) {
+          var t  = now * 0.00022;
+          var cw = state.canvas.width  || 1080;
+          var ch = state.canvas.height || 1920;
+          probe.x  = cw * 0.5 + Math.sin(t * 1.3)       * cw * 0.26;
+          probe.y  = ch * 0.5 + Math.sin(t * 0.9 + 1.2) * ch * 0.28;
+          probe.vx = 0;
+          probe.vy = 0;
+
+          // Trail capture
+          if (now - _iwTrailLastAt > IW_TRAIL_INTERVAL_MS) {
+            _iwTrailLastAt = now;
+            _iwProbeTrail.push({ x: probe.x, y: probe.y, t: now });
+            if (_iwProbeTrail.length > IW_TRAIL_MAX) {
+              _iwProbeTrail.shift();
+            }
+          }
+        } else {
+          iw.probeId = null;
+        }
+      }
+    }
+
+    // ── renderInfiniteWorldOverlay ────────────────────────────────────────────
+    function renderInfiniteWorldOverlay(ctx) {
+      var iw = state.infiniteWorld;
+      if (!iw || !iw.enabled) return;
+
+      var cw  = state.canvas.width  || 1080;
+      var ch  = state.canvas.height || 1920;
+      var off = iwGetGridScreenOffset();
+
+      // ── Atmosphere: edge vignette ─────────────────────────────────────────
+      var vigGrad = ctx.createRadialGradient(
+        cw * 0.5, ch * 0.5, ch * 0.28,
+        cw * 0.5, ch * 0.5, ch * 0.78
+      );
+      vigGrad.addColorStop(0,   "rgba(0,0,0,0)");
+      vigGrad.addColorStop(0.6, "rgba(0,0,0,0.04)");
+      vigGrad.addColorStop(1,   "rgba(0,0,0,0.22)");
+      ctx.fillStyle = vigGrad;
+      ctx.fillRect(0, 0, cw, ch);
+
+      // ── Atmosphere: ultra-light scanline grain (every 4 lines, very faint) ─
+      if (Math.random() < 0.6) { // skip some frames for perf
+        var scanAlpha = 0.012 + iw.energy * 0.008;
+        ctx.fillStyle = "rgba(0,0,0," + scanAlpha.toFixed(3) + ")";
+        var frameOffset = (Math.floor(performance.now() * 0.05) % 4);
+        for (var sy = frameOffset; sy < ch; sy += 4) {
+          ctx.fillRect(0, sy, cw, 1);
+        }
+      }
+
+      // ── Block glow halos (only high-glow blocks) ──────────────────────────
+      var layer = (state.world.layers || []).find(function (l) { return l._iw; });
+      if (layer && layer.blocks) {
+        var cs = off.cellSize;
+        layer.blocks.forEach(function (block, idx) {
+          var bs = _iwBlockStates[idx];
+          if (!bs || bs.glow < 0.08) return;
+
+          var bx = (block.x || 0) + off.x + cs * 0.5;
+          var by = (block.y || 0) + off.y + cs * 0.5;
+          var glowR = cs * 1.2 + bs.glow * cs * 0.8;
+
+          // Region drift: tiny oscillation on glow radius
+          var reg = iwGetRegion(block._iwRegion || 0);
+          var driftAmt = Math.sin(performance.now() * reg.driftSpeed + bs.driftPhase) * 1.5;
+          glowR += driftAmt;
+
+          var color = block._iwColor || block.color || "#aaaaaa";
+          var grad = ctx.createRadialGradient(bx, by, 0, bx, by, glowR);
+          grad.addColorStop(0,   hexToRgba(color, bs.glow * 0.18 * reg.visualWeight));
+          grad.addColorStop(0.5, hexToRgba(color, bs.glow * 0.07 * reg.visualWeight));
+          grad.addColorStop(1,   "rgba(0,0,0,0)");
+          ctx.fillStyle = grad;
+          ctx.beginPath();
+          ctx.arc(bx, by, glowR, 0, Math.PI * 2);
+          ctx.fill();
+        });
+      }
+
+      // ── Probe trail ───────────────────────────────────────────────────────
+      if (_iwProbeTrail.length > 1 && iw.probeId) {
+        var now = performance.now();
+        for (var i = 0; i < _iwProbeTrail.length - 1; i++) {
+          var pt  = _iwProbeTrail[i];
+          var age = Math.max(0, 1 - (now - pt.t) / (IW_TRAIL_MAX * IW_TRAIL_INTERVAL_MS));
+          var ta  = age * age * 0.28;
+          if (ta < 0.005) continue;
+          ctx.beginPath();
+          ctx.arc(pt.x, pt.y, 2.5 + age * 2.5, 0, Math.PI * 2);
+          ctx.fillStyle = "rgba(240,190,30," + ta.toFixed(3) + ")";
+          ctx.fill();
+        }
+      }
+
+      // ── Probe energy ring ─────────────────────────────────────────────────
+      if (iw.probeId) {
+        var probe = state.balls.find(function (b) { return b.id === iw.probeId; });
+        if (probe) {
+          var ringT   = performance.now() * 0.002;
+          var ringR   = 26 + Math.sin(ringT) * 5 + iw.energy * 14;
+          var ringAlpha = 0.18 + iw.energy * 0.2;
+          ctx.beginPath();
+          ctx.arc(probe.x, probe.y, ringR, 0, Math.PI * 2);
+          ctx.strokeStyle = "rgba(240,190,30," + ringAlpha.toFixed(3) + ")";
+          ctx.lineWidth   = 1 + iw.energy * 1.5;
+          ctx.stroke();
+
+          // Soft outer halo
+          var haloGrad = ctx.createRadialGradient(
+            probe.x, probe.y, ringR * 0.6,
+            probe.x, probe.y, ringR * 1.8
+          );
+          haloGrad.addColorStop(0,   "rgba(240,190,30," + (ringAlpha * 0.3).toFixed(3) + ")");
+          haloGrad.addColorStop(1,   "rgba(0,0,0,0)");
+          ctx.fillStyle = haloGrad;
+          ctx.beginPath();
+          ctx.arc(probe.x, probe.y, ringR * 1.8, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    }
+
+    // Tiny helper: hex color → rgba string with alpha
+    function hexToRgba(hex, alpha) {
+      if (!hex || hex[0] !== "#") return "rgba(150,150,150," + alpha + ")";
+      var r = parseInt(hex.slice(1,3), 16) || 0;
+      var g = parseInt(hex.slice(3,5), 16) || 0;
+      var b = parseInt(hex.slice(5,7), 16) || 0;
+      return "rgba(" + r + "," + g + "," + b + "," + alpha.toFixed(3) + ")";
+    }
+
+    function iwSpawnProbe(iw) {
+      if (iw.probeId) {
+        state.balls = state.balls.filter(function (b) { return b.id !== iw.probeId; });
+        state.swarm.count = state.balls.length;
+        iw.probeId = null;
+      }
+      _iwProbeTrail = [];
+
+      var cw = state.canvas.width  || 1080;
+      var ch = state.canvas.height || 1920;
+      var probe = normalizeBall({
+        x: cw * 0.5, y: ch * 0.5,
+        vx: 0, vy: 0,
+        collisionRadius: 10,
+        renderRadius:    18,
+        color:  "#f0be1e",
+        style:  "core",
+        energy: 1,
+        _infiniteProbe: true,
+        sound: null,
+      });
+      iw.probeId = probe.id;
+      state.balls.push(probe);
+      state.swarm.count = state.balls.length;
+      return probe;
+    }
+
+    // ── End InfiniteWorld v1.0.0 ──────────────────────────────────────────────
+
+    // ── RouteWorld v1.0.0 ─────────────────────────────────────────────────────
+
+    function makeId(prefix) {
+      return prefix + "-" + Math.random().toString(36).slice(2, 9);
+    }
+
+    // Compute total pixel length of a polyline and cumulative distances per segment
+    function computePolylineDistances(points) {
+      var cumulative = [0];
+      var total = 0;
+      for (var i = 1; i < points.length; i++) {
+        var dx = points[i].x - points[i - 1].x;
+        var dy = points[i].y - points[i - 1].y;
+        total += Math.hypot(dx, dy);
+        cumulative.push(total);
+      }
+      return { total: total, cumulative: cumulative };
+    }
+
+    // Interpolate position and heading on route polyline given normalized t
+    function sampleRoutePolyline(route, t) {
+      var pts = route.points;
+      if (!pts || pts.length === 0) return { x: 0, y: 0, heading: 0 };
+      if (pts.length === 1) return { x: pts[0].x, y: pts[0].y, heading: 0 };
+
+      var clampedT = Math.max(0, Math.min(1, t));
+      var targetDist = clampedT * route._totalPixelLength;
+
+      var cum = route._cumulativeDistances;
+      // Binary search for segment
+      var lo = 0, hi = cum.length - 2;
+      while (lo < hi) {
+        var mid = (lo + hi + 1) >> 1;
+        if (cum[mid] <= targetDist) lo = mid; else hi = mid - 1;
+      }
+      var i = lo;
+      var segLen = cum[i + 1] - cum[i];
+      var segT = segLen > 0 ? (targetDist - cum[i]) / segLen : 0;
+
+      var p0 = pts[i], p1 = pts[i + 1];
+      var x = p0.x + (p1.x - p0.x) * segT;
+      var y = p0.y + (p1.y - p0.y) * segT;
+      var heading = Math.atan2(p1.y - p0.y, p1.x - p0.x);
+
+      return { x: x, y: y, heading: heading };
+    }
+
+    // Find which segment the actor is currently on
+    function findActiveSegment(rw, routeId, t) {
+      var segs = rw.segments || [];
+      for (var i = 0; i < segs.length; i++) {
+        var s = segs[i];
+        if (s.routeId === routeId && t >= s.startT && t <= s.endT) {
+          return s;
+        }
+      }
+      return null;
+    }
+
+    function checkEventZones(rw, actor, now) {
+      var route = rw.routes.find(function (r) { return r.id === actor.routeId; });
+      if (!route) return;
+      var totalPx = route._totalPixelLength || 1;
+      // Convert zone radius in meters to approx normalized t (rough px-based scale)
+      // 1 meter ≈ 1 pixel in WOS canvas space for v1
+      var zones = rw.eventZones || [];
+      zones.forEach(function (zone) {
+        if (zone.routeId !== actor.routeId) return;
+        var radiusT = zone.radiusMeters / totalPx;
+        if (Math.abs(actor.t - zone.t) > radiusT) return;
+
+        var nowSec = now / 1000;
+        if ((nowSec - zone.lastTriggeredAt) < zone.cooldownSec) return;
+        if (Math.random() > zone.rarity) return;
+
+        // Check conditions
+        var worldState = rw.world || {};
+        if (zone.conditions.weather.length > 0 &&
+            !zone.conditions.weather.includes(worldState.weather)) return;
+        if (zone.conditions.timeOfDay.length > 0 &&
+            !zone.conditions.timeOfDay.includes(worldState.timeOfDay)) return;
+
+        zone.lastTriggeredAt = nowSec;
+        rw.runtime.triggeredEventIds.add(zone.id);
+
+        (zone.actions || []).forEach(function (action) {
+          if (action.type === "weatherShift" && rw.world) {
+            rw.world.weather = action.weather || rw.world.weather;
+          } else if (action.type === "cameraHint") {
+            var cam3 = _rwEnsureCamera(rw);
+            cam3.mode = action.mode || cam3.mode;
+          } else if (action.type === "signalPulse") {
+            // stub — future audio hook
+          } else if (action.type === "spawnSwarm") {
+            // stub — future swarm hook
+          }
+        });
+
+        console.log("[RouteWorld] event zone triggered:", zone.id, zone.label, zone.type);
+      });
+    }
+
+    function _rwEnsureCamera(rw) {
+      if (!rw.camera) {
+        var RC = SBE && SBE.RouteCamera;
+        rw.camera = RC ? RC.makeCamera() : {
+          mode:"follow", x:0, y:0, targetX:0, targetY:0,
+          zoom:1.2, targetZoom:1.2, smoothing:0.08, zoomSmoothing:0.06,
+          lookAheadDistance:140, velocityInfluence:0.35, deadZone:40,
+          overviewPadding:160, dynamicZoom:true, showTrail:true,
+          showHeadlight:true, showFlowIndicators:true,
+          _speed:0, _smoothSpeed:0, _cinematicPhase:0, _pulseT:0, _overviewFitted:false,
+        };
+      }
+      return rw.camera;
+    }
+
+    // ── Foundation Protocol lazy-init helpers ────────────────────────────────
+    function _rwEnsureClock(rw) {
+      if (!rw.clock) {
+        var UC = SBE && SBE.UniversalClock;
+        rw.clock = UC ? UC.makeClock() : { worldTimeScale: 60, worldStartSec: 8 * 3600, paused: false, _realElapsedSec: 0 };
+      }
+      return rw.clock;
+    }
+    function _rwEnsureEnv(rw) {
+      if (!rw.env) {
+        var ES = SBE && SBE.EnvironmentState;
+        rw.env = ES ? ES.makeEnvironment() : { weatherType: "clear" };
+      }
+      return rw.env;
+    }
+    function _rwEnsureComms(rw) {
+      if (!rw.comms) {
+        var CS = SBE && SBE.CommsSystem;
+        rw.comms = CS ? CS.makeCommsStore() : { messages: [], _firedTriggers: {}, _checkTimerSec: 0 };
+      }
+      return rw.comms;
+    }
+    function _rwEnsureSpatial(rw) {
+      if (!rw.spatial) {
+        var SI = SBE && SBE.SpatialInfrastructure;
+        if (SI) {
+          rw.spatial = SI.buildPhase1World(state.canvas);
+        }
+      }
+      return rw.spatial;
+    }
+    function _rwEnsureBasemap(rw) {
+      if (!rw.basemap) {
+        var BM = SBE && SBE.BasemapRenderer;
+        rw.basemap = BM ? BM.makeDefaultState() : {
+          enabled: true, opacity: 0.35, zoom: 11, zoomLocked: false,
+          style: "dark", tileSize: 256, visibleTiles: [], _lastZ: null, _lastDrawn: 0, _lastPending: 0,
+        };
+      }
+      // Wire re-render callback so tile loads trigger frame updates
+      if (rw.basemap && !rw.basemap._reRender) {
+        rw.basemap._reRender = renderFrame;
+      }
+      return rw.basemap;
+    }
+    function _rwEnsureReferenceGeo(rw) {
+      if (!rw.referenceGeography) {
+        var RGL = SBE && SBE.ReferenceGeographyLayer;
+        rw.referenceGeography = RGL ? RGL.makeDefaultState() : {
+          enabled: true, layers: { water:true, roads:true, bridges:true, parks:true, districts:true },
+          opacity: 0.45, style: "muted",
+        };
+      }
+      return rw.referenceGeography;
+    }
+    function _rwEnsureDirector(rw) {
+      if (!rw.director) {
+        var DM = SBE && SBE.DirectorMode;
+        rw.director = DM ? DM.makeDirectorState() : {
+          enabled: false, mode: "follow",
+          manualCamera: { x: 0, y: 0, zoom: 1, isPanning: false, lastPointer: null, _primed: false },
+          simulation: { paused: false, speed: 1, routeProgressOverride: null },
+          reality: { useOverrides: false, timeHour: 8, season: "spring", weatherType: "clear", temperatureC: 9, daylightOverride: null },
+          cinema: { outputMode: "world", shotType: "overhead", targetActorId: null },
+        };
+      }
+      return rw.director;
+    }
+
+    // ── _corridorToRoute ──────────────────────────────────────────────────────
+    // Converts a SpatialInfrastructure corridor into a full WOS route object
+    // that the legacy route runtime (sampleRoutePolyline, fitRouteToCanvas, etc.)
+    // can consume. Called once by _rwEnsureSpatialBootstrap.
+    function _corridorToRoute(corridor) {
+      var RI = SBE && SBE.RouteIngestion;
+      if (!RI || !corridor || !corridor.points || corridor.points.length < 2) return null;
+      var pts = corridor.points; // [{lat, lng, x, y, ele}] — already projected
+
+      // Normalise: haversine distanceMeters + t (0-1)
+      var normalized = RI.normalizeRoutePoints(pts);
+      var totalMeters = normalized[normalized.length - 1].distanceMeters;
+
+      // Duration from real-world km at 60 kph
+      var totalKm   = corridor.totalDistanceKm || (totalMeters / 1000);
+      var durationSec = Math.round(totalKm * 1000 / (60000 / 3600)); // 60 kph = 16.667 m/s
+
+      // Pixel-space cumulative distances for sampleRoutePolyline()
+      var pixCum = [0];
+      for (var i = 1; i < pts.length; i++) {
+        pixCum.push(pixCum[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y));
+      }
+
+      return {
+        id:             corridor.id,
+        name:           "Brooklyn → Cold Spring, NY",
+        start: { label: "Bay Ridge, Brooklyn, NY", lat: pts[0].lat, lng: pts[0].lng, x: pts[0].x, y: pts[0].y },
+        end:   { label: "Cold Spring, NY",          lat: pts[pts.length - 1].lat, lng: pts[pts.length - 1].lng,
+                                                     x:   pts[pts.length - 1].x,   y:   pts[pts.length - 1].y },
+        distanceMeters:     Math.round(totalMeters),
+        durationSec:        durationSec,
+        averageSpeedKph:    60,
+        points:             normalized,
+        segments:           [],
+        metadata:           { providerType: corridor.sourceType || "kmz",
+                              projection:   { type: "local-bounds", scale: 1 } },
+        _totalPixelLength:    pixCum[pixCum.length - 1] || 1,
+        _cumulativeDistances: pixCum,
+        _skinSeed:            Math.floor(Math.random() * 1e8),
+      };
+    }
+
+    // ── _rwEnsureSpatialBootstrap ──────────────────────────────────────────────
+    // Idempotent. Bridges the Phase 1 embedded corridor into the RouteWorld
+    // runtime so the legacy route UI, camera, renderer, and simulation all work.
+    // Must be called before any route or render access (even before rw.active).
+    function _rwEnsureSpatialBootstrap(rw) {
+      if (!rw || rw._spatialBootstrapped) return;
+
+      var SI = SBE && SBE.SpatialInfrastructure;
+      if (!SI) return;
+
+      // Step 1: build spatial world (projection uses state.canvas)
+      if (!rw.spatial) rw.spatial = SI.buildPhase1World(state.canvas);
+      if (!rw.spatial || !rw.spatial.corridor) {
+        console.warn("[RouteWorld] spatial bootstrap: buildPhase1World returned nothing");
+        return;
+      }
+      var corridor = rw.spatial.corridor;
+
+      // Step 2: bridge corridor into legacy route list
+      if (!rw.routes.find(function (r) { return r.id === corridor.id; })) {
+        var route = _corridorToRoute(corridor);
+        if (!route) { console.warn("[RouteWorld] spatial bootstrap: _corridorToRoute failed"); return; }
+        rw.routes.push(route);
+      }
+
+      // Step 3: runtime pointers
+      rw.runtime = rw.runtime || {};
+      if (!rw.runtime.activeRouteId)     rw.runtime.activeRouteId     = corridor.id;
+      if (!rw.runtime.triggeredEventIds) rw.runtime.triggeredEventIds  = new Set();
+      if (!rw.runtime.elapsedSec)        rw.runtime.elapsedSec         = 0;
+
+      // Step 4: world record (required by start())
+      if (!rw.world) {
+        rw.world = {
+          id:            makeId("rworld"),
+          name:          "Brooklyn → Cold Spring, NY",
+          version:       "1.0.0",
+          provider:      { type: "kmz", sourceId: "phase1-embedded", attribution: "" },
+          routeId:       corridor.id,
+          activeCameraId:"route-follow",
+          durationSec:   rw.routes[rw.routes.length - 1].durationSec,
+          loopMode:      "destination",
+          mood:          "night-drive",
+          timeOfDay:     "morning",
+          weather:       "clear",
+          layers: { map: true, skin: true, traffic: true, ecology: true, events: true, surfaces: true, subway: false,
+                    terrain: true, signals: true, walkers: true, debug: false, atmosphere: true },
+        };
+      }
+
+      // Step 5: hero-car actor at corridor start
+      if (!rw.actors.find(function (a) { return a.id === "hero-car"; })) {
+        var AN_bs = SBE && SBE.AgentNeeds;
+        var sp = corridor.points[0] || { x: 0, y: 0, heading: 0 };
+        rw.actors.push({
+          id: "hero-car", type: "vehicle", role: "driver",
+          routeId: corridor.id,
+          t: 0, speed: 1, x: sp.x, y: sp.y, heading: 0,
+          visual: { color: "#f6d36b", radius: 8, trail: true, halo: true },
+          audio:  { enabled: false, role: "traffic" },
+          needs:  AN_bs ? AN_bs.makeNeeds() : null,
+        });
+      }
+      if (!rw.runtime.activeActorId) rw.runtime.activeActorId = "hero-car";
+
+      // Step 6: prime camera to corridor start
+      var cam_bs = _rwEnsureCamera(rw);
+      var startPt = corridor.points[0];
+      if (startPt && cam_bs.x === 0 && cam_bs.y === 0) {
+        cam_bs.x = cam_bs.targetX = startPt.x;
+        cam_bs.y = cam_bs.targetY = startPt.y;
+        cam_bs._overviewFitted = false;
+      }
+
+      // Prime director manual camera to same position as route camera
+      var DM_bs = SBE && SBE.DirectorMode;
+      var dir_bs = _rwEnsureDirector(rw);
+      if (DM_bs && dir_bs && startPt) {
+        DM_bs.primeManualCamera(dir_bs, startPt.x, startPt.y, 0.5);
+      }
+
+      rw._spatialBootstrapped = true;
+      console.log("[RouteWorld] Phase 1 bootstrap complete — " +
+        corridor.id + " · " + corridor.points.length + " pts · " +
+        rw.spatial.districts.length + " districts · " +
+        rw.spatial.pois.length + " POIs");
+    }
+
+    function updateRouteWorld(now, dt) {
+      var rw = state.routeWorld;
+      _rwEnsureSpatialBootstrap(rw);  // idempotent — runs once, safe every frame
+      if (!rw || !rw.active) return;
+
+      var rt  = rw.runtime;
+      var cam = _rwEnsureCamera(rw);
+      var RC  = SBE && SBE.RouteCamera;
+      var DM  = SBE && SBE.DirectorMode;
+
+      // ── Director Mode: scale dt, honour pause ───────────────────────────
+      var director = _rwEnsureDirector(rw);
+      var effectiveDt = director && DM ? DM.effectiveDt(director, dt) : dt;
+
+      rt.elapsedSec += effectiveDt;
+
+      // ── Foundation: tick clock, environment, agent needs, comms ─────────
+      var UC = SBE && SBE.UniversalClock;
+      var ES = SBE && SBE.EnvironmentState;
+      var AN = SBE && SBE.AgentNeeds;
+      var CS = SBE && SBE.CommsSystem;
+      var SI = SBE && SBE.SpatialInfrastructure;
+
+      var clock   = _rwEnsureClock(rw);
+      var env     = _rwEnsureEnv(rw);
+      var comms   = _rwEnsureComms(rw);
+      var spatial = _rwEnsureSpatial(rw);
+
+      if (UC) UC.tick(clock, effectiveDt);
+      if (ES) ES.update(env, clock, effectiveDt);
+
+      // ── Director reality overrides (applied after normal tick) ───────────
+      if (director && DM && director.enabled && director.reality && director.reality.useOverrides) {
+        DM.applyRealityOverrides(director, clock, env);
+      }
+
+      // Tick agent needs (world-time delta)
+      var worldDt = effectiveDt * clock.worldTimeScale;
+      if (AN && rw.actors) {
+        rw.actors.forEach(function (actor) {
+          if (actor && actor.needs) AN.tickNeeds(actor, worldDt, env);
+        });
+      }
+
+      // Comms trigger check (debounced internally)
+      if (CS) CS.checkTriggers(comms, rw.world, env, clock, rw.actors, effectiveDt);
+
+      var route = rw.routes.find(function (r) { return r.id === rt.activeRouteId; });
+      if (!route) return;
+
+      var duration     = route.durationSec || 7200;
+      var worldLoopMode = (rw.world && rw.world.loopMode) || "destination";
+      var progress     = rt.elapsedSec / duration;
+
+      // ── Director progress override ────────────────────────────────────────
+      var progressOverride = director && DM ? DM.effectiveProgress(director) : null;
+      if (progressOverride != null) {
+        progress = progressOverride;
+        // Also seek elapsed time so resuming live feels continuous
+        rt.elapsedSec = progress * duration;
+      } else if (worldLoopMode === "loop")        progress = progress % 1;
+      else if (worldLoopMode === "destination") progress = Math.min(progress, 1);
+
+      var actor = rw.actors.find(function (a) { return a.id === rt.activeActorId; });
+      if (actor) {
+        actor.t = progress;
+        var pos = sampleRoutePolyline(route, progress);
+        actor.x = pos.x;
+        actor.y = pos.y;
+        actor.heading = pos.heading;
+
+        var seg = findActiveSegment(rw, route.id, progress);
+        if (seg) rt.activeSegmentId = seg.id;
+
+        // Update actor's spatial context (district, scenic moment)
+        if (SI && spatial) {
+          actor._district = SI.getDistrictAtActor(spatial, actor);
+          actor._scenicMoment = SI.getNearestScenicMoment(spatial, actor.t);
+        }
+
+        checkEventZones(rw, actor, now);
+      }
+
+      // Camera update via RouteCamera module
+      if (RC) {
+        RC.update(cam, actor, route, dt, state.canvas);
+      } else {
+        // Fallback: simple follow
+        if (actor) {
+          cam.x += (actor.x - cam.x) * 0.08;
+          cam.y += (actor.y - cam.y) * 0.08;
+        }
+      }
+    }
+
+    // ── RouteWorld cinematic renderer ────────────────────────────────────────
+
+    function renderRouteWorldOverlay(ctx) {
+      var rw = state.routeWorld;
+      if (!rw) return;
+      _rwEnsureSpatialBootstrap(rw);  // idempotent — ensures corridor + route + world exist
+      if (!rw.active) return;
+
+      var route = rw.routes.find(function (r) { return r.id === rw.runtime.activeRouteId; });
+      if (!route || !route.points || route.points.length < 2) return;
+
+      var cam         = _rwEnsureCamera(rw);
+      var RC          = SBE && SBE.RouteCamera;
+      var DM_r        = SBE && SBE.DirectorMode;
+      var director_r  = _rwEnsureDirector(rw);
+      var worldLayers = (rw.world && rw.world.layers) || {};
+      var canvas      = state.canvas;
+
+      // ── Get camera transform (survey uses manual camera, others use RouteCamera) ──
+      var xf;
+      if (director_r && director_r.enabled && director_r.mode === "survey" && DM_r) {
+        xf = DM_r.getTransform(director_r, canvas.width, canvas.height);
+        // Prime manual camera from route camera if first time in survey mode
+        if (!director_r.manualCamera._primed) {
+          var rxf = RC ? RC.getTransform(cam, canvas) : { tx: 0, ty: 0, scale: 1 };
+          var primeX = (canvas.width  / 2 - rxf.tx) / rxf.scale;
+          var primeY = (canvas.height / 2 - rxf.ty) / rxf.scale;
+          DM_r.primeManualCamera(director_r, primeX, primeY, rxf.scale);
+          xf = DM_r.getTransform(director_r, canvas.width, canvas.height);
+        }
+      } else {
+        xf = RC ? RC.getTransform(cam, canvas) : { tx: 0, ty: 0, scale: 1 };
+      }
+      var scale = xf.scale;
+
+      ctx.save();
+      ctx.translate(xf.tx, xf.ty);
+      ctx.scale(scale, scale);
+
+      // ── Layer [1]: Basemap — OSM raster tiles (drawn FIRST, beneath all) ──
+      // Truth layer: geographic grounding for cinematic world development.
+      var BM = SBE && SBE.BasemapRenderer;
+      if (BM && rw.spatial) {
+        _rwEnsureBasemap(rw);
+        var debugOnBM = !!(worldLayers.debug || (rw.world && rw.world.debugMode));
+        BM.render(ctx, rw, {
+          transform:    xf,
+          canvasWidth:  canvas.width,
+          canvasHeight: canvas.height,
+          debug:        debugOnBM,
+        });
+      }
+
+      // ── Layer [2]: reference geography (drawn beneath WOS corridor) ───────
+      // Muted waterways, landmasses, roads, bridges, parks — geographic truth
+      // scaffolding. Must render before corridor renderer to stay below.
+      var RGL = SBE && SBE.ReferenceGeographyLayer;
+      if (RGL && rw.spatial) {
+        _rwEnsureReferenceGeo(rw);
+        var debugOnR = !!(worldLayers.debug || (rw.world && rw.world.debugMode));
+        RGL.render(ctx, rw, xf, { showLabels: debugOnR });
+      }
+
+      // ── Layer: route map ──────────────────────────────────────────────────
+      if (worldLayers.map !== false) {
+        _rwDrawRouteSkin(ctx, rw, route, scale);
+        _rwDrawRouteLines(ctx, rw, route, scale);
+        _rwDrawStartEndMarkers(ctx, route, scale);
+      }
+
+      // ── Layer: flow direction indicators ─────────────────────────────────
+      if (worldLayers.map !== false && cam.showFlowIndicators) {
+        _rwDrawFlowPulse(ctx, route, cam, scale);
+      }
+
+      // ── Layer: event zones ────────────────────────────────────────────────
+      if (worldLayers.events !== false) {
+        _rwDrawEventZones(ctx, rw, route, scale);
+      }
+
+      // ── Layer: corridor renderer (spatial infrastructure visualization) ───
+      // Draws district bands, spatial route spine, scenic moments, POIs,
+      // actor markers, and camera reticle from the SpatialInfrastructure world.
+      var CR = SBE && SBE.CorridorRenderer;
+      if (CR && rw.spatial) {
+        var debugOn = !!(worldLayers.debug || (rw.world && rw.world.debugMode));
+        CR.render(ctx, rw, {
+          showRoute:         worldLayers.terrain  !== false,
+          showDistricts:     worldLayers.terrain  !== false,
+          showPOIs:          worldLayers.signals  !== false,
+          showScenicMoments: worldLayers.signals  !== false,
+          showActors:        worldLayers.walkers  !== false,
+          showCamera:        worldLayers.walkers  !== false,
+          showLabels:        debugOn,
+          showDebug:         debugOn,
+        }, scale, cam._pulseT || 0);
+      }
+
+      // ── Layer: actor trail + headlight + actor ────────────────────────────
+      // Keep existing trail/headlight rendering on top of corridor overlay.
+      (rw.actors || []).forEach(function (actor) {
+        if (!actor.x && !actor.y) return;
+        var vis = actor.visual || {};
+        var r   = (vis.radius || 8) / scale;
+        var col = vis.color || "#f6d36b";
+
+        if (cam.showTrail && vis.trail) {
+          _rwDrawActorTrail(ctx, actor, col, r);
+        }
+        if (cam.showHeadlight) {
+          _rwDrawHeadlight(ctx, actor, col, r, scale);
+        }
+        // Actor dot drawn by CorridorRenderer when spatial is active —
+        // fall back to native draw only when no spatial world loaded.
+        if (!rw.spatial) {
+          _rwDrawActorDot(ctx, actor, col, r);
+        }
+      });
+
+      ctx.restore();
+
+      // ── Screen-space HUD (drawn after camera restore) ─────────────────────
+      _rwDrawHUD(ctx, rw, route, cam, canvas);
+    }
+
+    // ── Route lines ───────────────────────────────────────────────────────────
+    function _rwDrawRouteLines(ctx, rw, route, scale) {
+      var segs = rw.segments || [];
+      var pts  = route.points;
+
+      if (segs.length > 0) {
+        segs.forEach(function (seg) {
+          if (seg.routeId !== route.id) return;
+          var segPts = _rwSegmentPoints(route, seg, pts);
+
+          var roadW = seg.type === "highway" ? 7 : seg.type === "local" ? 2.5 : 4;
+          var col   = seg.type === "highway"   ? "#e0a030"
+                    : seg.type === "tunnel"     ? "#556677"
+                    : seg.type === "bridge"     ? "#8899aa"
+                    : seg.type === "waterfront" ? "#2277aa"
+                    : "#667788";
+
+          // Shadow / glow under road
+          ctx.save();
+          ctx.beginPath();
+          ctx.moveTo(segPts[0].x, segPts[0].y);
+          for (var j = 1; j < segPts.length; j++) ctx.lineTo(segPts[j].x, segPts[j].y);
+          ctx.strokeStyle = col;
+          ctx.lineWidth   = (roadW + 6) / scale;
+          ctx.lineCap = "round"; ctx.lineJoin = "round";
+          ctx.globalAlpha = 0.12;
+          ctx.stroke();
+
+          // Road surface
+          ctx.beginPath();
+          ctx.moveTo(segPts[0].x, segPts[0].y);
+          for (var k = 1; k < segPts.length; k++) ctx.lineTo(segPts[k].x, segPts[k].y);
+          ctx.strokeStyle = col;
+          ctx.lineWidth   = roadW / scale;
+          ctx.globalAlpha = 0.7;
+          ctx.stroke();
+          ctx.restore();
+        });
+      } else {
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, pts[0].y);
+        for (var i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+        ctx.strokeStyle = "#667788";
+        ctx.lineWidth   = 4 / scale;
+        ctx.lineCap = "round"; ctx.lineJoin = "round";
+        ctx.globalAlpha = 0.7;
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+
+    function _rwSegmentPoints(route, seg, pts) {
+      var cum   = route._cumulativeDistances;
+      var total = route._totalPixelLength || 1;
+      var startDist = seg.startT * total;
+      var endDist   = seg.endT   * total;
+      var segPts = [];
+      for (var i = 0; i < cum.length; i++) {
+        if (cum[i] >= startDist - 1 && cum[i] <= endDist + 1) segPts.push(pts[i]);
+      }
+      segPts.unshift(sampleRoutePolyline(route, seg.startT));
+      segPts.push(sampleRoutePolyline(route, seg.endT));
+      return segPts;
+    }
+
+    // ── Start/end markers ─────────────────────────────────────────────────────
+    function _rwDrawStartEndMarkers(ctx, route, scale) {
+      var pts  = route.points;
+      var r    = 5 / scale;
+      ctx.save();
+
+      // Start — green ring
+      ctx.beginPath();
+      ctx.arc(pts[0].x, pts[0].y, r * 2.2, 0, Math.PI * 2);
+      ctx.strokeStyle = "#44ff99"; ctx.lineWidth = 1.5 / scale;
+      ctx.globalAlpha = 0.5; ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(pts[0].x, pts[0].y, r, 0, Math.PI * 2);
+      ctx.fillStyle = "#44ff99"; ctx.globalAlpha = 0.9; ctx.fill();
+
+      // End — red ring
+      ctx.beginPath();
+      ctx.arc(pts[pts.length-1].x, pts[pts.length-1].y, r * 2.2, 0, Math.PI * 2);
+      ctx.strokeStyle = "#ff4466"; ctx.lineWidth = 1.5 / scale;
+      ctx.globalAlpha = 0.5; ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(pts[pts.length-1].x, pts[pts.length-1].y, r, 0, Math.PI * 2);
+      ctx.fillStyle = "#ff4466"; ctx.globalAlpha = 0.9; ctx.fill();
+
+      ctx.restore();
+    }
+
+    // ── Procedural skin (buildings/water/green) ───────────────────────────────
+    function _rwDrawRouteSkin(ctx, rw, route, scale) {
+      var worldLayers = (rw.world && rw.world.layers) || {};
+      if (worldLayers.skin === false) return;
+
+      var skin = rw.skins[0];
+      var density  = (skin && skin.buildingDensity) || 0.35;
+      var waterD   = (skin && skin.waterDensity)    || 0.15;
+      var pts      = route.points;
+      var seed     = route._skinSeed || 12345;
+      var rand     = (function (s) {
+        return function () { s = (s * 16807) % 2147483647; return s / 2147483647; };
+      })(seed);
+
+      ctx.save();
+      for (var si = 0; si < pts.length - 1; si++) {
+        var p0 = pts[si], p1 = pts[si + 1];
+        var mx = (p0.x + p1.x) / 2, my = (p0.y + p1.y) / 2;
+        var nx = -(p1.y - p0.y), ny = p1.x - p0.x;
+        var nlen = Math.hypot(nx, ny) || 1;
+        nx /= nlen; ny /= nlen;
+
+        var nb = Math.floor(density * 4 + 1);
+        for (var bi = 0; bi < nb; bi++) {
+          var side = rand() > 0.5 ? 1 : -1;
+          var bx = mx + nx * side * (18 + rand() * 30) + (rand() - 0.5) * 20;
+          var by = my + ny * side * (18 + rand() * 30) + (rand() - 0.5) * 20;
+          var bw = 10 + rand() * 22, bh = 8 + rand() * 18;
+          ctx.fillStyle = "rgba(60,80,100,0.28)";
+          ctx.fillRect(bx - bw/2, by - bh/2, bw, bh);
+        }
+        if (si % 2 === 0) {
+          var gx = mx + nx * (rand() > 0.5 ? 1 : -1) * (50 + rand() * 30);
+          var gy = my + ny * (rand() > 0.5 ? 1 : -1) * (50 + rand() * 30);
+          ctx.beginPath();
+          ctx.arc(gx, gy, 12 + rand() * 20, 0, Math.PI * 2);
+          ctx.fillStyle = "rgba(30,90,50,0.18)"; ctx.fill();
+        }
+        if (rand() < waterD) {
+          var wx = mx + nx * (rand() > 0.5 ? 1 : -1) * (60 + rand() * 40);
+          var wy = my + ny * (rand() > 0.5 ? 1 : -1) * (60 + rand() * 40);
+          ctx.beginPath();
+          ctx.ellipse(wx, wy, 20 + rand() * 35, 10 + rand() * 20, rand() * Math.PI, 0, Math.PI * 2);
+          ctx.fillStyle = "rgba(20,60,120,0.22)"; ctx.fill();
+        }
+      }
+      ctx.restore();
+    }
+
+    // ── Flow direction pulse ──────────────────────────────────────────────────
+    function _rwDrawFlowPulse(ctx, route, cam, scale) {
+      var pulseT  = cam._pulseT || 0;
+      var pts     = route.points;
+      if (pts.length < 2) return;
+
+      // Draw a small bright section of route centered on pulseT
+      var width   = 0.08;  // extent of pulse in t-space
+      var lo      = pulseT - width / 2;
+      var hi      = pulseT + width / 2;
+
+      ctx.save();
+      ctx.lineCap = "round"; ctx.lineJoin = "round";
+
+      // Sample a mini-polyline over the pulse range
+      var steps = 8;
+      ctx.beginPath();
+      var started = false;
+      for (var i = 0; i <= steps; i++) {
+        var t = lo + (i / steps) * width;
+        if (t < 0 || t > 1) continue;
+        var p = sampleRoutePolyline(route, t);
+        var alpha = 1 - Math.abs((t - pulseT) / (width / 2));
+        if (!started) { ctx.moveTo(p.x, p.y); started = true; }
+        else ctx.lineTo(p.x, p.y);
+      }
+      ctx.strokeStyle = "rgba(200,220,255,0.55)";
+      ctx.lineWidth   = 6 / scale;
+      ctx.globalAlpha = 0.55;
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // ── Event zones ───────────────────────────────────────────────────────────
+    function _rwDrawEventZones(ctx, rw, route, scale) {
+      ctx.save();
+      (rw.eventZones || []).forEach(function (zone) {
+        if (zone.routeId !== route.id) return;
+        var zp = sampleRoutePolyline(route, zone.t);
+        var triggered = rw.runtime.triggeredEventIds.has(zone.id);
+        ctx.beginPath();
+        ctx.arc(zp.x, zp.y, 12 / scale, 0, Math.PI * 2);
+        ctx.strokeStyle = triggered ? "#ffdd44" : "rgba(200,200,80,0.45)";
+        ctx.lineWidth = 1.5 / scale; ctx.globalAlpha = 1;
+        ctx.stroke();
+        if (triggered) {
+          ctx.beginPath();
+          ctx.arc(zp.x, zp.y, 5 / scale, 0, Math.PI * 2);
+          ctx.fillStyle = "rgba(255,220,60,0.5)"; ctx.fill();
+        }
+      });
+      ctx.restore();
+    }
+
+    // ── Actor: fading trail ───────────────────────────────────────────────────
+    function _rwDrawActorTrail(ctx, actor, color, r) {
+      var trail = actor._trail;
+      if (!trail || trail.length < 2) return;
+      ctx.save();
+      ctx.lineCap = "round";
+      for (var i = 1; i < trail.length; i++) {
+        var alpha = (i / trail.length) * 0.45;
+        var width = r * (0.4 + (i / trail.length) * 0.8);
+        ctx.beginPath();
+        ctx.moveTo(trail[i-1].x, trail[i-1].y);
+        ctx.lineTo(trail[i].x,   trail[i].y);
+        ctx.strokeStyle  = color;
+        ctx.lineWidth    = width;
+        ctx.globalAlpha  = alpha;
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    // ── Actor: forward headlight cone ─────────────────────────────────────────
+    function _rwDrawHeadlight(ctx, actor, color, r, scale) {
+      var coneLen  = 80 / scale;
+      var coneHalf = Math.PI / 6;  // 30° half-angle
+      var fwd      = actor.heading;
+
+      ctx.save();
+      ctx.translate(actor.x, actor.y);
+      ctx.rotate(fwd);
+
+      var grad = ctx.createRadialGradient(0, 0, r, 0, 0, coneLen);
+      grad.addColorStop(0,   "rgba(255,245,200,0.18)");
+      grad.addColorStop(0.5, "rgba(255,245,200,0.07)");
+      grad.addColorStop(1,   "rgba(255,245,200,0)");
+
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.arc(0, 0, coneLen, -coneHalf, coneHalf);
+      ctx.closePath();
+      ctx.fillStyle   = grad;
+      ctx.globalAlpha = 1;
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // ── Actor: dot + halo ─────────────────────────────────────────────────────
+    function _rwDrawActorDot(ctx, actor, color, r) {
+      ctx.save();
+      // Halo
+      var grad = ctx.createRadialGradient(actor.x, actor.y, 0, actor.x, actor.y, r * 3.5);
+      grad.addColorStop(0,   color + "66");
+      grad.addColorStop(1,   "transparent");
+      ctx.beginPath();
+      ctx.arc(actor.x, actor.y, r * 3.5, 0, Math.PI * 2);
+      ctx.fillStyle = grad; ctx.globalAlpha = 1; ctx.fill();
+
+      // Core dot
+      ctx.beginPath();
+      ctx.arc(actor.x, actor.y, r, 0, Math.PI * 2);
+      ctx.fillStyle = color; ctx.globalAlpha = 1; ctx.fill();
+
+      // Bright centre specular
+      ctx.beginPath();
+      ctx.arc(actor.x - r * 0.2, actor.y - r * 0.2, r * 0.35, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(255,255,255,0.7)"; ctx.fill();
+      ctx.restore();
+    }
+
+    // ── Cinematic HUD (screen space) ──────────────────────────────────────────
+    function _rwDrawHUD(ctx, rw, route, cam, canvas) {
+      var actor = rw.actors.find(function (a) { return a.id === rw.runtime.activeActorId; });
+      var RC    = SBE && SBE.RouteCamera;
+      var cw    = canvas.width  || 1080;
+      var ch    = canvas.height || 1920;
+
+      var x = 40, y = ch - 220;
+      var lineH = 36;
+
+      ctx.save();
+      ctx.font      = "600 22px/1 monospace";
+      ctx.textAlign = "left";
+
+      var speedKph = RC ? RC.getSpeedKph(cam, route) : 0;
+      var distM    = actor ? Math.round((actor.t || 0) * (route.distanceMeters || 0)) : 0;
+      var distKm   = (distM / 1000).toFixed(1);
+
+      var h   = Math.floor((rw.runtime.elapsedSec || 0) / 3600);
+      var m   = Math.floor(((rw.runtime.elapsedSec || 0) % 3600) / 60);
+      var s   = Math.floor((rw.runtime.elapsedSec || 0) % 60);
+      var timeLabel = (h > 0 ? h + ":" : "") +
+        String(m).padStart(2, "0") + ":" +
+        String(s).padStart(2, "0");
+
+      var modeLabel = (cam.mode || "follow").toUpperCase();
+
+      // ── Prefer WorldInspector HUD lines when spatial world is loaded ──────
+      var WI = SBE && SBE.WorldInspector;
+      var lines;
+      if (WI && rw.spatial) {
+        var snap = WI.snapshot(rw, rw.clock, rw.env, rw.comms);
+        lines = [(route.name || "ROUTE")].concat(WI.formatHud(snap));
+      } else {
+        lines = [
+          route.name || "ROUTE",
+          speedKph + " KPH",
+          distKm + " KM",
+          modeLabel,
+          timeLabel,
+        ];
+      }
+
+      // Subtle background pill
+      ctx.fillStyle   = "rgba(0,0,0,0.32)";
+      ctx.globalAlpha = 1;
+      var pillW = 200, pillH = lines.length * lineH + 24;
+      ctx.beginPath();
+      ctx.roundRect(x - 12, y - 8, pillW, pillH, 8);
+      ctx.fill();
+
+      lines.forEach(function (line, i) {
+        var alpha = i === 0 ? 0.85 : 0.55;
+        var size  = i === 0 ? "600 22px" : "400 17px";
+        ctx.font        = size + "/1 monospace";
+        ctx.fillStyle   = "#e8eaed";
+        ctx.globalAlpha = alpha;
+        ctx.fillText(line, x, y + i * lineH + 20);
+      });
+
+      ctx.restore();
+    }
+
+    // ── End RouteWorld cinematic pass ────────────────────────────────────────
+
     function behaviorLoop(now) {
       var dt = behaviorLastTime
         ? Math.min(40, now - behaviorLastTime) / 1000
@@ -6273,6 +9295,18 @@
       behaviorLastTime = now;
       processBehaviors(now);
       updateParticles(dt);
+
+      // InfiniteWorld runs every frame whether playing or not
+      if (state.infiniteWorld && state.infiniteWorld.enabled) {
+        updateInfiniteWorld(now, dt);
+        renderFrame();
+      }
+
+      // RouteWorld runs every frame when active
+      if (state.routeWorld && state.routeWorld.active) {
+        updateRouteWorld(now, dt);
+        renderFrame();
+      }
 
       // Material simulation — runs continuously so deformation animates even when stopped
       var materialActive = false;
@@ -7125,12 +10159,20 @@
         wrapMode:      "wrapRows",
       };
 
-      // Preserve palette/finish across regeneration
+      // Preserve palette/finish/viewport/tileStyle across regeneration
       var prevGrid = (state.world.layers || []).find(function (l) {
         return l.type === "grid" && l.renderer && l.renderer.id === canonical.rendererId;
       });
-      var prevPaletteId = prevGrid && prevGrid.renderer.paletteId;
-      var prevFinishId  = prevGrid && prevGrid.renderer.finishId;
+      var prevPaletteId         = prevGrid && prevGrid.renderer.paletteId;
+      var prevFinishId          = prevGrid && prevGrid.renderer.finishId;
+      var prevViewport          = prevGrid && prevGrid.renderer.viewport
+        ? Object.assign({}, prevGrid.renderer.viewport) : null;
+      var prevReactivity        = prevGrid && prevGrid.renderer.reactivity
+        ? Object.assign({}, prevGrid.renderer.reactivity) : null;
+      var prevTileStyle         = prevGrid && prevGrid.renderer.tileStyle
+        ? Object.assign({}, prevGrid.renderer.tileStyle) : null;
+      var prevNotePatternOvr    = prevGrid && prevGrid.renderer.notePatternOverrides
+        ? Object.assign({}, prevGrid.renderer.notePatternOverrides) : null;
 
       // One canonical grid layer — replace all existing grid layers
       state.world.layers = (state.world.layers || []).filter(function (l) {
@@ -7145,15 +10187,22 @@
 
       layer.label    = "Bauhaus Grid";
       layer.status   = "active";
+      var defaultTileStyle = Object.assign({}, GS.BAUHAUS_TILE_STYLES[GS.DEFAULT_TILE_STYLE_ID]);
+      var notePatternOvr   = prevNotePatternOvr || {};
       layer.renderer = {
         id:        canonical.rendererId,
-        version:   "1.2.0",
+        version:   "1.3.1",
         paletteId: prevPaletteId || GS.DEFAULT_PALETTE_ID,
         finishId:  prevFinishId  || GS.DEFAULT_FINISH_ID,
+        viewport:           prevViewport    || Object.assign({}, GS.DEFAULT_VIEWPORT),
+        reactivity:         prevReactivity  || { enabled: false, mode: "off" },
+        tileStyle:          prevTileStyle   || defaultTileStyle,
+        notePatternOverrides: notePatternOvr,
       };
+      GS.setActiveNotePatternOverrides(notePatternOvr);
       layer.audio    = { channelId: canonical.audioChannelId };
       layer.grid.visualLanguage = "bauhausMinimal";
-      layer.grid.visualVersion  = "1.2.0";
+      layer.grid.visualVersion  = "1.3.1";
       layer.source   = { type: "midiBank", bankId: sourceBankId, cartridgeId: sourceCartridgeId };
 
       // Generate blocks from the same event set used for counting
@@ -7201,6 +10250,14 @@
       return !!na && (performance.now() - na) < 120;
     }
 
+    function isBauhausBlockPlayhead(block) {
+      var mp = state.midiPlayback;
+      if (!mp) return false;
+      if (mp.playheadEventIndex != null && block.sourceIndex === mp.playheadEventIndex) return true;
+      if (mp.playheadEventId   != null && block.sourceEventId === mp.playheadEventId)  return true;
+      return false;
+    }
+
     function getBauhausBlockPulse(block) {
       if (!block.active) return 0;
       var last = typeof block.noteClass === "number" ? noteActivity[block.noteClass] : null;
@@ -7217,15 +10274,110 @@
       if (isPlaying) {
         currentBeat = getTransportTime() / beatDuration;
       }
+
+      // Decay signal activations each render frame
+      var sigNow = performance.now();
+      updateSignalActivity(sigNow);
+
       state.world.layers.forEach(function (layer) {
         if (layer.type !== "grid" || !layer.visible) return;
         // Update active flag using canonical bridge first, fallback to beat window
         if (layer.blocks) {
           layer.blocks.forEach(function (block) {
-            block.active = isBauhausBlockActive(block);
-            block._pulse = getBauhausBlockPulse(block);
+            block.active   = isBauhausBlockActive(block);
+            block._pulse   = getBauhausBlockPulse(block);
+            block.playhead = isBauhausBlockPlayhead(block);
           });
         }
+
+        // Write per-block structured signal state from signalActivity map
+        var sa = state.signalActivity;
+        var totalSig = 0;
+        if (layer.blocks && sa) {
+          layer.blocks.forEach(function(block) {
+            var sig = sa.active.get(block.id);
+
+            if (sig) {
+              var age = sigNow - sig.activatedAt;
+              var velNorm = Math.min(1, Math.max(0, (sig.velocity || 64) / 127));
+              var attackMs = 90 + velNorm * 50; // 90–140ms, velocity-scaled
+              var t = 1 - age / sig.decayMs;
+              t = Math.max(0, t);
+              t = t * t; // exponential ease — fast attack, smooth decay
+              var energy = t * sig.energy;
+              var attackProgress = Math.min(1, age / attackMs);
+
+              // Init release tracker once per activation
+              if (!block._signalRelease || block._signalRelease.activationId !== sig.activatedAt) {
+                var relDuration = 300 + velNorm * 900; // 300–1200ms
+                block._signalRelease = {
+                  activationId: sig.activatedAt,
+                  startedAt: sig.activatedAt + attackMs,
+                  duration: relDuration,
+                };
+              }
+
+              block._signal = {
+                energy: energy,
+                type: sig.type || "origin",
+                velocity: velNorm,
+                active: attackProgress < 1,
+                attackProgress: attackProgress,
+                startedAt: sig.activatedAt,
+                release: 0,
+              };
+              totalSig += energy;
+            } else {
+              block._signal = null;
+            }
+
+            // Release shell — decays independently after active pulse ends
+            var relTrack = block._signalRelease;
+            if (relTrack) {
+              var relAge = sigNow - relTrack.startedAt;
+              var relT = relAge < 0 ? 0 : Math.max(0, 1 - relAge / relTrack.duration);
+              if (relT > 0) {
+                if (block._signal) {
+                  block._signal.release = relT;
+                } else {
+                  // Only release tail remains — minimal struct for renderer
+                  block._signal = {
+                    energy: 0, type: "origin", velocity: 0,
+                    active: false, attackProgress: 1,
+                    release: relT, startedAt: 0,
+                  };
+                }
+              } else {
+                block._signalRelease = null;
+              }
+            }
+          });
+        }
+        // Aggregate activity level for atmosphere (0–1), origin signals drive it
+        var blockCount = layer.blocks ? layer.blocks.length : 1;
+        state.signalActivityLevel = Math.min(1, totalSig / Math.max(1, blockCount * 0.04));
+
+        // Timeline follow: compute progress + target index (throttled)
+        var vpConf = layer.renderer && layer.renderer.viewport;
+        if (vpConf && vpConf.enabled && vpConf.followPlayback &&
+            (vpConf.followTarget == null || vpConf.followTarget === "timeline") && isPlaying) {
+          var now = performance.now();
+          var updateMs = vpConf.followTargetUpdateMs != null ? vpConf.followTargetUpdateMs : 120;
+          if (!vpConf._lastTargetUpdateAt || now - vpConf._lastTargetUpdateAt >= updateMs) {
+            vpConf._lastTargetUpdateAt = now;
+            var resolved = resolveMidiBankAndCartridge(null);
+            var pbEvents = getMidiNoteEventsForPlayback();
+            var srcLen = getMidiPlaybackLengthBeats(resolved.bank, resolved.cartridge, pbEvents);
+            var totalBlocks = layer.blocks ? layer.blocks.length : 0;
+            if (srcLen > 0 && totalBlocks > 0) {
+              var progress = Math.max(0, Math.min(1, currentBeat / srcLen));
+              vpConf._timelineProgress = progress;
+              vpConf._timelineIndex = Math.floor(progress * Math.max(0, totalBlocks - 1));
+              vpConf._totalBlocks = totalBlocks;
+            }
+          }
+        }
+
         var prevBeat = layer._prevBeat != null ? layer._prevBeat : currentBeat;
         if (isPlaying) {
           processGridLayerPlayback(layer, currentBeat, prevBeat);
@@ -7233,6 +10385,100 @@
         layer._prevBeat = currentBeat;
         GS.renderGridLayer(ctx, layer, state);
       });
+    }
+
+    // ── Signal Activity API ────────────────────────────────────────────────
+    function activateGridCell(cellId, energy, meta) {
+      if (!cellId || !state.signalActivity) return;
+      var type = (meta && meta.type) || "origin";
+      var baseDuration = (meta && meta.decayMs) || 900;
+      var duration = type === "origin" ? baseDuration * 1.2 : baseDuration * 0.72;
+      state.signalActivity.active.set(cellId, {
+        energy: Math.max(0, Math.min(1, energy || 1)),
+        activatedAt: performance.now(),
+        decayMs: duration,
+        type: type,
+        velocity: (meta && meta.velocity) || 100,
+        sourceId: (meta && meta.sourceId) || null,
+      });
+    }
+
+    function updateSignalActivity(now) {
+      if (!state.signalActivity) return;
+      var sa = state.signalActivity;
+
+      // Fire pending delayed activations
+      if (sa.pending.length) {
+        var stillPending = [];
+        for (var pi = 0; pi < sa.pending.length; pi++) {
+          var p = sa.pending[pi];
+          if (now >= p.fireAt) {
+            activateGridCell(p.cellId, p.energy, p.meta);
+          } else {
+            stillPending.push(p);
+          }
+        }
+        sa.pending = stillPending;
+      }
+
+      // Decay expired entries
+      sa.active.forEach(function(v, key) {
+        if (now - v.activatedAt >= v.decayMs) {
+          sa.active.delete(key);
+        }
+      });
+    }
+
+    function _getBlockAdjacencyMap(layer) {
+      if (layer._adjacencyMap) return layer._adjacencyMap;
+      var byKey = {};
+      layer.blocks.forEach(function(b) {
+        byKey[b.col + "," + b.row] = b;
+      });
+      var map = {};
+      var meta = {}; // parallel to map — per-neighbor isCardinal flag
+      // dirs ordered: 4 cardinal first, 4 diagonal after
+      var dirs = [[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[1,-1],[-1,1],[1,1]];
+      layer.blocks.forEach(function(b) {
+        var neighbors = [];
+        var cardinalFlags = [];
+        for (var di = 0; di < dirs.length; di++) {
+          var d = dirs[di];
+          var nb = byKey[(b.col + d[0]) + "," + (b.row + d[1])];
+          if (nb) {
+            neighbors.push(nb.id);
+            cardinalFlags.push(di < 4); // first 4 are cardinal
+          }
+        }
+        map[b.id] = neighbors;
+        meta[b.id] = cardinalFlags;
+      });
+      layer._adjacencyMap = map;
+      layer._adjacencyMeta = meta;
+      return map;
+    }
+
+    function activateNeighborCells(block, layer, energy) {
+      if (!layer || !layer.blocks || !layer.blocks.length) return;
+      var adj = _getBlockAdjacencyMap(layer);
+      var adjMeta = layer._adjacencyMeta; // includes cardinal flag per neighbor
+      if (!adj[block.id] || !adj[block.id].length) return;
+      var now = performance.now();
+      var neighbors = adj[block.id];
+      var meta = adjMeta && adjMeta[block.id] ? adjMeta[block.id] : null;
+      for (var ni = 0; ni < neighbors.length; ni++) {
+        var isCardinal = meta ? meta[ni] : true;
+        // Cardinals carry more energy (0.14–0.24); diagonals attenuate (0.08–0.16)
+        var range = isCardinal ? [0.14, 0.10] : [0.08, 0.08];
+        var nEnergy = energy * (range[0] + Math.random() * range[1]);
+        var delay = 20 + Math.random() * 70;
+        state.signalActivity.pending.push({
+          cellId: neighbors[ni],
+          energy: nEnergy,
+          meta: { decayMs: 500, velocity: block.velocity || 64, type: "neighbor" },
+          fireAt: now + delay,
+        });
+      }
     }
 
     function processGridLayerPlayback(layer, currentBeat, previousBeat) {
@@ -7251,6 +10497,11 @@
           if (!layer._firedEvents.has(fireKey)) {
             layer._firedEvents.add(fireKey);
             triggerGridBlockSound(block, layer);
+            var sigEnergy = Math.max(0.4, (block.velocity || 64) / 127);
+            // Collision flash — crisp white inset, rendered before propagation
+            block._collisionFlash = { energy: sigEnergy, startTime: performance.now() };
+            activateGridCell(block.id, sigEnergy, { decayMs: 900, velocity: block.velocity || 64 });
+            activateNeighborCells(block, layer, sigEnergy);
           }
         }
       });
@@ -7669,11 +10920,12 @@
       badge.className = "canvas-tool-subbar__tool-name";
       var toolName =
         {
-          pen: "Brush",
-          ball: "Ball",
-          text: "Text",
-          select: "Select",
-          shape: "Shape",
+          pen:             "Brush",
+          ball:            "Ball",
+          text:            "Text",
+          select:          "Select",
+          shape:           "Shape",
+          "symbol-place":  "Place Symbol",
         }[state.tool] || state.tool;
       badge.textContent = toolName;
       root.appendChild(badge);
@@ -8219,12 +11471,69 @@
           return;
         }
 
+        // ── Shortcut suspension — takesFocus drawers (e.g. GlyphLab) ─────────
+        if (window._wos && window._wos._shortcutsSuspended) {
+          return;
+        }
+
+        // Route World keyboard shortcuts (only when route is loaded)
+        if (state.routeWorld && state.routeWorld.routes.length > 0 && !event.metaKey && !event.ctrlKey) {
+          var rwShortcut = false;
+          if (event.key === "1") { window._wos.routeWorld.setCameraMode("overview");  rwShortcut = true; }
+          if (event.key === "2") { window._wos.routeWorld.setCameraMode("follow");    rwShortcut = true; }
+          if (event.key === "3") { window._wos.routeWorld.setCameraMode("cinematic"); rwShortcut = true; }
+          if (event.key.toLowerCase() === "f" && !event.shiftKey) {
+            window._wos.routeWorld.fitRouteToCanvas(null, { padding: 120 });
+            rwShortcut = true;
+          }
+          if (rwShortcut) { event.preventDefault(); return; }
+        }
+
         console.log("[KEYDOWN TRACE]", {
           key: event.key, code: event.code,
           meta: event.metaKey, ctrl: event.ctrlKey, shift: event.shiftKey,
           activeElement: document.activeElement && document.activeElement.tagName
             ? document.activeElement.tagName.toLowerCase() : null,
         });
+
+        // ESC — exit symbol placement mode
+        if (event.key === "Escape" && state.tool === "symbol-place") {
+          event.preventDefault();
+          state.tool = "select";
+          _symGhost.visible = false;
+          syncUI();
+          renderFrame();
+          return;
+        }
+
+        // Symbol object keyboard handling (must run before generic Cmd+D / Delete)
+        if (state.selectedSymbolObjectId) {
+          var _SOS = global.SBE && global.SBE.SymbolObjectSystem;
+
+          // Cmd+D — duplicate selected symbol object
+          if (event.key && event.key.toLowerCase() === "d" && (event.metaKey || event.ctrlKey)) {
+            event.preventDefault();
+            if (_SOS) {
+              var _srcSym = state.symbolObjects.find(function (o) { return o.id === state.selectedSymbolObjectId; });
+              if (_srcSym) {
+                var _copySym = _SOS.duplicate(_srcSym);
+                state.symbolObjects.push(_copySym);
+                state.selectedSymbolObjectId = _copySym.id;
+                renderFrame();
+              }
+            }
+            return;
+          }
+
+          // Delete / Backspace — remove selected symbol object
+          if (event.key === "Delete" || event.key === "Backspace") {
+            event.preventDefault();
+            state.symbolObjects = state.symbolObjects.filter(function (o) { return o.id !== state.selectedSymbolObjectId; });
+            state.selectedSymbolObjectId = null;
+            renderFrame();
+            return;
+          }
+        }
 
         // Cmd+D — duplicate (must precede plain D)
         if (event.key && event.key.toLowerCase() === "d" && (event.metaKey || event.ctrlKey)) {
@@ -9690,6 +12999,11 @@
           return;
         }
 
+        // ── Shortcut suspension — takesFocus drawers (e.g. GlyphLab) ─────────
+        if (window._wos && window._wos._shortcutsSuspended) {
+          return;
+        }
+
         console.log("[KEYDOWN TRACE]", {
           key: event.key,
           code: event.code,
@@ -10066,6 +13380,17 @@
           if (stroke) stroke._groupId = group.id;
         });
       });
+      // SymbolObjects — hydrate from scene, or reset to empty list
+      var SOS_apply = global.SBE && global.SBE.SymbolObjectSystem;
+      state.symbolObjects = SOS_apply && Array.isArray(scene.symbolObjects)
+        ? scene.symbolObjects.map(SOS_apply.hydrate).filter(Boolean)
+        : [];
+      state.selectedSymbolObjectId = null;
+
+      // Reset placement ghost — never carry ghost state across scene loads
+      if (_symGhost) { _symGhost.visible = false; _symGhost.wx = 0; _symGhost.wy = 0; }
+      if (state.tool === "symbol-place") state.tool = "select";
+
       renderer.resize(state.canvas.width, state.canvas.height);
       updateCanvasAspect();
       rebuildAudioBindings();
@@ -13022,6 +16347,9 @@
         state.midiPlayback.firedNoteKeys.clear();
         state.midiPlayback.activeNotes = [];
         state.midiPlayback.lastTriggeredNotes = [];
+        state.midiPlayback.playheadEventIndex = null;
+        state.midiPlayback.playheadEventId = null;
+        state.midiPlayback.playheadBeat = 0;
       }
       // Reset grid layer playback state so no burst fires on resume
       (state.world.layers || []).forEach(function (layer) {
@@ -13053,6 +16381,9 @@
       if (state.midiPlayback) {
         state.midiPlayback.activeNotes = [];
         state.midiPlayback.lastTriggeredNotes = [];
+        state.midiPlayback.playheadEventIndex = null;
+        state.midiPlayback.playheadEventId = null;
+        state.midiPlayback.playheadBeat = 0;
       }
 
       if (loopId) {
@@ -13554,6 +16885,9 @@
       updateWalkers(dt);
       updateWalkerMusic();
 
+      // InfiniteWorld (also called from behaviorLoop when stopped)
+      updateInfiniteWorld(now, dt);
+
       // Drain audio queue — all physics/emitter/collision events batched here
       processAudioQueue();
 
@@ -13768,6 +17102,157 @@
       if (state.midiPlayback) state.midiPlayback.lastBeat = _currentMidiBeat;
     }
 
+    // ── SymbolObject rendering (world space, inside camera transform) ─────────
+    //
+    // renderSymbolObjects is called from inside renderFrame's camera-transform
+    // block, so ctx is already transformed to world space.
+    //
+    // Rendering uses WOS.SymbolRenderer.renderGlyph exclusively.
+    // If a referenced SymbolSet or glyph is missing, a fallback placeholder
+    // is drawn (dashed rect) and the pipeline continues without crashing.
+
+    var _symGhost = { visible: false, wx: 0, wy: 0 };  // placement ghost state
+
+    function renderSymbolObjects(ctx) {
+      var SR  = global.WOS && global.WOS.SymbolRenderer;
+      var SS  = global.SBE && global.SBE.SymbolSystem;
+      var SOS = global.SBE && global.SBE.SymbolObjectSystem;
+      if (!SR || !SS || !SOS) return;
+
+      var objs = state.symbolObjects;
+      if (!objs || !objs.length) {
+        if (state.tool === "symbol-place") _drawSymbolGhost(ctx, SR, SS, SOS);
+        return;
+      }
+
+      var sorted = SOS.sortByZIndex(objs);
+      var clean  = !!(state.ui && (state.ui.cleanOutput || state.ui.presentation));
+
+      sorted.forEach(function (obj) {
+        if (!obj.visible) return;
+
+        var set   = SS.getSet(obj.setId);
+        var glyph = set ? (set.glyphs[obj.slotKey] || null) : null;
+        var size  = SOS.getWorldSize(obj);
+        var pal   = SOS.resolvePalette(obj, set);
+
+        ctx.save();
+        ctx.globalAlpha = obj.opacity !== undefined ? obj.opacity : 1;
+
+        // Apply world-space transform: translate to center, rotate, then offset to draw from top-left
+        ctx.translate(obj.x, obj.y);
+        if (obj.rotation) ctx.rotate(obj.rotation);
+
+        var half = size / 2;
+
+        if (glyph && glyph.strokes && glyph.strokes.length > 0) {
+          SR.renderGlyph(ctx, glyph, -half, -half, size, pal, {});
+        } else {
+          // Fallback: dashed placeholder box — indicates missing glyph, no crash
+          ctx.strokeStyle = "rgba(255,255,255,0.18)";
+          ctx.lineWidth   = 1;
+          ctx.setLineDash([3, 3]);
+          ctx.strokeRect(-half, -half, size, size);
+          ctx.setLineDash([]);
+          // Slot key label centered
+          ctx.fillStyle   = "rgba(255,255,255,0.25)";
+          ctx.font        = Math.max(8, size * 0.18) + "px monospace";
+          ctx.textAlign   = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(obj.slotKey || "?", 0, 0);
+        }
+
+        ctx.restore();
+
+        // Selection chrome — drawn in world space (scales with camera, which is correct)
+        if (!clean && obj.id === state.selectedSymbolObjectId) {
+          var b   = SOS.getBounds(obj);
+          var pad = 8;
+          ctx.save();
+          ctx.globalAlpha  = 1;
+          ctx.strokeStyle  = "rgba(255,255,255,0.72)";
+          ctx.lineWidth    = 1.5;
+          ctx.setLineDash([6, 5]);
+          ctx.strokeRect(b.minX - pad, b.minY - pad, b.w + pad * 2, b.h + pad * 2);
+          ctx.setLineDash([]);
+
+          // Corner scale handles
+          var hx = b.minX - pad;
+          var hy = b.minY - pad;
+          var hw = b.w + pad * 2;
+          var hh = b.h + pad * 2;
+          var hr = 5;
+          var corners = [
+            [hx,      hy     ],
+            [hx + hw, hy     ],
+            [hx,      hy + hh],
+            [hx + hw, hy + hh],
+          ];
+          ctx.fillStyle = "rgba(255,255,255,0.72)";
+          corners.forEach(function (c) {
+            ctx.beginPath();
+            ctx.arc(c[0], c[1], hr, 0, Math.PI * 2);
+            ctx.fill();
+          });
+
+          // Rotate handle — above center
+          var rx = b.minX + b.w / 2;
+          var ry = b.minY - pad - 16;
+          ctx.beginPath();
+          ctx.arc(rx, ry, hr, 0, Math.PI * 2);
+          ctx.strokeStyle = "rgba(255,255,255,0.72)";
+          ctx.lineWidth   = 1.5;
+          ctx.stroke();
+          // Stem from top-center of bounds to rotate handle
+          ctx.beginPath();
+          ctx.moveTo(rx, b.minY - pad);
+          ctx.lineTo(rx, ry + hr);
+          ctx.stroke();
+
+          ctx.restore();
+        }
+      });
+
+      // Placement ghost (drawn last, on top of all placed objects)
+      if (state.tool === "symbol-place") _drawSymbolGhost(ctx, SR, SS, SOS);
+    }
+
+    function _drawSymbolGhost(ctx, SR, SS, SOS) {
+      // All four conditions must be true — no partial rendering, no fallback rects.
+      if (state.tool !== "symbol-place") return;
+      if (!_symGhost || !_symGhost.visible) return;
+
+      var sym = state.symbols;
+      if (!sym.activeSlotKey || !sym.activeSetId) return;
+
+      var set   = SS.getSet(sym.activeSetId);
+      if (!set) return;
+
+      var glyph = set.glyphs[sym.activeSlotKey] || null;
+      if (!glyph || !glyph.strokes || !glyph.strokes.length) return;  // no fallback rect in ghost
+
+      var size = SOS.BASE_SIZE;
+      var pal  = sym.placementPalette || set.palette || null;
+      var half = size / 2;
+
+      ctx.save();
+      ctx.globalAlpha = 0.45;
+      ctx.translate(_symGhost.wx, _symGhost.wy);
+
+      SR.renderGlyph(ctx, glyph, -half, -half, size, pal, {});
+
+      // Crosshair
+      ctx.strokeStyle = "rgba(255,255,255,0.3)";
+      ctx.lineWidth   = 0.5;
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.moveTo(-half - 4, 0); ctx.lineTo(half + 4, 0);
+      ctx.moveTo(0, -half - 4); ctx.lineTo(0, half + 4);
+      ctx.stroke();
+
+      ctx.restore();
+    }
+
     function renderFrame() {
       state.frame = (state.frame || 0) + 1;
       // Pass renderer a filtered state view — derived stroke-bridge lines are invisible
@@ -13785,6 +17270,20 @@
       renderGridLayers(ctx);
       ctx.restore();
 
+      // ── InfiniteWorld overlay (screen space, over grid) ───────────────────
+      if (state.infiniteWorld && state.infiniteWorld.enabled) {
+        ctx.save();
+        renderInfiniteWorldOverlay(ctx);
+        ctx.restore();
+      }
+
+      // ── RouteWorld overlay (screen space) ─────────────────────────────────
+      if (state.routeWorld && state.routeWorld.active) {
+        ctx.save();
+        renderRouteWorldOverlay(ctx);
+        ctx.restore();
+      }
+
       // ── Camera transform — world space draw calls ─────────────────────────
       var cam = state.camera;
       ctx.save();
@@ -13797,6 +17296,7 @@
       // Surface stamp layer (persistent ink)
       ctx.drawImage(surfaceCanvas, 0, 0);
       renderStrokes(ctx);
+      renderSymbolObjects(ctx);
       renderMidiPoints(ctx);
       drawWalkers(ctx);
       renderParticles(ctx);

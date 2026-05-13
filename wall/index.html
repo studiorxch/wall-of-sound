@@ -1,6 +1,8 @@
 <!doctype html>
 <html lang="en">
   <head>
+    <link rel="icon" href="./favicon.ico" sizes="any" />
+    <link rel="apple-touch-icon" href="./favicon.png" />
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Wall of Sound</title>
@@ -230,7 +232,9 @@
                   </div>
                 </div>
                 <div class="insp-row">
-                  <label class="insp-label" for="obj-strokeWidth">Stroke Width</label>
+                  <label class="insp-label" for="obj-strokeWidth"
+                    >Stroke Width</label
+                  >
                   <div class="insp-control insp-slider-num">
                     <input
                       id="obj-strokeWidth"
@@ -377,7 +381,9 @@
                   </div>
                 </div>
                 <div class="insp-row">
-                  <label class="insp-label" for="obj-soundTrigger">Trigger</label>
+                  <label class="insp-label" for="obj-soundTrigger"
+                    >Trigger</label
+                  >
                   <div class="insp-control">
                     <select id="obj-soundTrigger">
                       <option value="impact">Impact</option>
@@ -419,13 +425,15 @@
                 <label class="insp-label" for="viewport-mode">Frame</label>
                 <div class="insp-control">
                   <select id="viewport-mode">
-                    <option value="portrait">Portrait (1080×1920)</option>
-                    <option value="landscape">Landscape (1920×1080)</option>
+                    <option value="portrait">Portrait</option>
+                    <option value="landscape">Landscape</option>
                   </select>
                 </div>
               </div>
               <div class="insp-row">
-                <label class="insp-label" for="transparent-bg">Transparent Frame</label>
+                <label class="insp-label" for="transparent-bg"
+                  >Transparent Frame</label
+                >
                 <div class="insp-control">
                   <input id="transparent-bg" type="checkbox" />
                 </div>
@@ -437,7 +445,9 @@
                 </div>
               </div>
               <div class="insp-row">
-                <label class="insp-label" for="background-file">Wall Background</label>
+                <label class="insp-label" for="background-file"
+                  >Wall Background</label
+                >
                 <div class="insp-control">
                   <label class="insp-file-btn">
                     <input id="background-file" type="file" accept="image/*" />
@@ -453,7 +463,7 @@
         <div class="tab-content" data-tab-content="world">
           <div class="insp-section" data-section="world">
             <button class="insp-section-header open" data-toggle="world">
-              <span class="insp-chevron">▼</span> WORLD
+              <span class="insp-chevron">▼</span> PHYSICS
             </button>
             <div class="insp-section-body">
               <div class="insp-row">
@@ -484,53 +494,71 @@
             </div>
           </div>
 
-          <div class="insp-section" data-section="feedback">
-            <button class="insp-section-header open" data-toggle="feedback">
-              <span class="insp-chevron">▼</span> FEEDBACK
+          <div class="insp-section" data-section="world-actions">
+            <button
+              class="insp-section-header open"
+              data-toggle="world-actions"
+            >
+              <span class="insp-chevron">▼</span> BALLS
             </button>
-            <div class="insp-section-body">
-              <div class="insp-row">
-                <label class="insp-label" for="toggle-hit-count">Show Hit Count</label>
-                <div class="insp-control">
-                  <input id="toggle-hit-count" type="checkbox" />
-                </div>
+
+            <div class="insp-row">
+              <label class="insp-label" for="toggle-hit-count"
+                >Show Hit Count</label
+              >
+              <div class="insp-control">
+                <input id="toggle-hit-count" type="checkbox" />
               </div>
             </div>
-          </div>
 
-          <div class="insp-section" data-section="world-actions">
-            <button class="insp-section-header open" data-toggle="world-actions">
-              <span class="insp-chevron">▼</span> WORLD ACTIONS
-            </button>
-            <div class="insp-section-body">
-              <button id="clear-balls" type="button" class="wide-btn">Clear Balls</button>
+            <div class="insp-row">
+              <span class="insp-label"></span>
+              <div class="insp-control">
+                <button id="clear-balls" type="button" class="insp-btn">
+                  Clear Balls
+                </button>
+              </div>
             </div>
           </div>
 
           <div class="insp-section" data-section="world-layers">
             <button class="insp-section-header open" data-toggle="world-layers">
-              <span class="insp-chevron">▼</span> WORLD LAYERS
+              <span class="insp-chevron">▼</span> MIDI BANK
             </button>
             <div class="insp-section-body">
               <div class="insp-row">
-                <label class="insp-label">MIDI Bank</label>
+                <label class="insp-label">source</label>
                 <div class="insp-control">
                   <select id="grid-bank-select">
-                    <option value="">— no bank loaded —</option>
+                    <option value="">• no bank •</option>
                   </select>
                 </div>
               </div>
               <div class="insp-row">
+                <span class="insp-label"></span>
                 <div class="insp-control">
-                  <button id="generate-bauhaus-grid" type="button" class="wide-btn">Generate Bauhaus Grid</button>
+                  <button
+                    id="generate-bauhaus-grid"
+                    type="button"
+                    class="insp-btn"
+                  >
+                    Generate Grid
+                  </button>
                 </div>
               </div>
               <div class="insp-row">
+                <span class="insp-label"></span>
                 <div class="insp-control">
-                  <button id="clear-grid-layers" type="button" class="wide-btn secondary-btn">Clear Grid</button>
+                  <button
+                    id="clear-grid-layers"
+                    type="button"
+                    class="insp-btn secondary-btn"
+                  >
+                    Clear Grid
+                  </button>
                 </div>
               </div>
-              <div id="grid-layer-list" class="insp-row" style="flex-direction:column;gap:2px;">
+              <div id="grid-layer-list" class="insp-stack">
                 <!-- populated by JS -->
               </div>
             </div>
@@ -538,11 +566,32 @@
 
           <!-- Particle tool state — hidden, kept for JS bindings -->
           <div style="display: none">
-            <input id="ball-count" type="range" min="1" max="8" step="1" value="1" />
+            <input
+              id="ball-count"
+              type="range"
+              min="1"
+              max="8"
+              step="1"
+              value="1"
+            />
             <output id="ball-count-value">1</output>
-            <input id="ball-speed" type="range" min="0.4" max="3" step="0.1" value="1" />
+            <input
+              id="ball-speed"
+              type="range"
+              min="0.4"
+              max="3"
+              step="0.1"
+              value="1"
+            />
             <output id="ball-speed-value">1.0</output>
-            <input id="ball-spread" type="range" min="0" max="1" step="0.05" value="0.15" />
+            <input
+              id="ball-spread"
+              type="range"
+              min="0"
+              max="1"
+              step="0.05"
+              value="0.15"
+            />
             <output id="ball-spread-value">0.15</output>
             <select id="particle-shape">
               <option value="circle">Circle</option>
@@ -556,12 +605,23 @@
           <div style="display: none">
             <input id="density-harmonics-toggle" type="checkbox" checked />
             <input id="velocity-dynamics-toggle" type="checkbox" checked />
-            <input id="sound-sensitivity" type="range" min="0.5" max="2" step="0.1" value="1.0" />
+            <input
+              id="sound-sensitivity"
+              type="range"
+              min="0.5"
+              max="2"
+              step="0.1"
+              value="1.0"
+            />
             <output id="sound-sensitivity-value">1.0</output>
           </div>
 
           <!-- Sampler moved to overlay panel -->
-          <div id="sampler-key-list" class="sampler-key-list" style="display: none"></div>
+          <div
+            id="sampler-key-list"
+            class="sampler-key-list"
+            style="display: none"
+          ></div>
         </div>
         <!-- Motion Brush Tab -->
         <div
@@ -826,17 +886,65 @@
     <script src="./engine/particleSystem.js"></script>
     <script src="./engine/materialSystem.js"></script>
     <script src="./engine/gridSystem.js"></script>
+    <!-- GlyphRenderer — shared canonical renderer, must load before glyphDrawer.js -->
+    <script src="./engine/glyphRenderer.js"></script>
+    <!-- SymbolRenderer — stroke-based renderer for SymbolSets -->
+    <script src="./engine/symbolRenderer.js"></script>
+    <!-- SymbolObjectSystem — world-space instance model -->
+    <script src="./engine/symbolObjectSystem.js"></script>
     <script src="./midi/midiOut.js"></script>
     <script src="./render/canvasRenderer.js"></script>
     <script src="./state/examplePreset.js"></script>
     <script src="./state/sceneManager.js"></script>
+    <!-- Drawer System — load before controls.js -->
+    <!-- events.js must load before drawer registrations that use SBE.Events -->
+    <script src="./ui/events.js"></script>
+    <script src="./ui/drawerSystem.js"></script>
+    <script src="./ui/glyphDrawer.js"></script>
+    <script src="./ui/samplerDrawer.js"></script>
+    <script src="./ui/libraryDrawer.js"></script>
+    <!-- SymbolSystem + SymbolLab drawer — load after DrawerSystem, before controls -->
+    <script src="./ui/symbolSystem.js"></script>
+    <script src="./ui/symbolDrawer.js"></script>
     <script src="./ui/controls.js"></script>
     <script src="./ui/drawTools.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tonejs/midi/build/Midi.min.js"></script>
     <script src="./midi/midiImporter.js"></script>
     <script src="./engine/registry.js"></script>
     <script src="./engine/schemas.js"></script>
+    <script src="./engine/routeIngestion.js"></script>
+    <script src="./engine/routeCamera.js"></script>
+    <!-- Foundation Protocols — Human Aquarium v1.0.0 -->
+    <script src="./engine/universalClock.js"></script>
+    <script src="./engine/environmentState.js"></script>
+    <script src="./engine/agentNeeds.js"></script>
+    <!-- Spatial Infrastructure v1.1.0 — load after ingestion, before aquarium camera -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="./engine/spatialInfrastructure.js"></script>
+    <script src="./engine/aquariumCamera.js"></script>
+    <script src="./engine/commsSystem.js"></script>
+    <script src="./engine/worldInspector.js"></script>
+    <!-- Director Mode v1.0.0 -->
+    <script src="./engine/directorMode.js"></script>
+    <!-- Basemap Foundation v1.0.0 -->
+    <script src="./render/basemapRenderer.js"></script>
+    <!-- Reference Geography Layer v1.0.0 -->
+    <script src="./render/referenceGeographyLayer.js"></script>
+    <!-- Corridor Renderer v1.0.0 -->
+    <script src="./render/corridorRenderer.js"></script>
     <script src="./main.js"></script>
+
+    <!-- ── Universal Drawer System v1.0.0 ─────────────────────────────────── -->
+    <!-- Launcher rail + drawer panel (HTML inserted before overlay for z-order) -->
+    <div id="launcher-rail" class="launcher-rail">
+      <button class="launcher-btn" data-drawer="sampler" title="Sampler">🎵</button>
+      <button class="launcher-btn" data-drawer="library" title="Library">📚</button>
+      <button class="launcher-btn" data-drawer="symbols" title="SymbolLab">✦</button>
+    </div>
+
+    <aside id="drawer-panel" class="drawer-panel" aria-hidden="true">
+      <div id="drawer-content"></div>
+    </aside>
 
     <!-- ── Right Overlay Panel (Sampler / Library) ─────────────────────── -->
     <div id="overlay-panel" class="overlay-panel" aria-hidden="true">
@@ -1012,7 +1120,10 @@
         document.addEventListener("keydown", function (e) {
           if (e.key === "Escape") {
             closeCtx();
-            closePanel();
+            // DrawerSystem ESC is handled in controls.js; only close legacy panel
+            // if no drawer is active (prevents double-close conflicts)
+            var DS = window.SBE && window.SBE.DrawerSystem;
+            if (!DS || DS.getActiveId() === null) closePanel();
           }
         });
 
@@ -1022,7 +1133,9 @@
           var action = item.dataset.action;
           closeCtx();
           if (action === "sampler" || action === "library") {
-            openPanel(action);
+            // Route through DrawerSystem (primary runtime); fall back to legacy openPanel
+            var DS = window.SBE && window.SBE.DrawerSystem;
+            if (DS) { DS.openDrawer(action); } else { openPanel(action); }
             return;
           }
           // Delegate to existing buttons

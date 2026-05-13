@@ -215,6 +215,215 @@
     },
   };
 
+  // ── SignalActivitySchema ──────────────────────────────────────────────────────
+  // Owns: state.signalActivity
+  var SignalActivitySchema = {
+    active:  r(null,  null, "Map<cellId, SignalRecord> — live activations"),
+    pending: r([],    null, "Delayed neighbor activations array"),
+  };
+
+  // ── LayerControlSchema ────────────────────────────────────────────────────────
+  // Owns: one entry in state.layerControls
+  var LayerControlSchema = {
+    visible: p(true,  "toggle",      "Layer is rendered"),
+    opacity: p(1.0,   "sliderFloat", "Layer global opacity 0–1"),
+    solo:    r(false, null,          "Solo mode — only this layer renders"),
+  };
+
+  // ── InfiniteWorldSchema ───────────────────────────────────────────────────────
+  // Owns: state.infiniteWorld
+  var InfiniteWorldSchema = {
+    enabled:        r(false,        null,          "IW currently running"),
+    autoStart:      p(false,        "toggle",      "Auto-start IW on page load"),
+    density:        p(0.35,         "sliderFloat", "Cell density 0–1"),
+    energy:         p(0.45,         "sliderFloat", "Activation energy 0–1"),
+    tickMs:         p(180,          "numberInput", "Tick interval ms"),
+    maxEvents:      p(260,          "numberInput", "Max events per cycle"),
+    beatCursor:     r(0,            null,          "Current beat position"),
+    sourceIndex:    r(0,            null,          "Current source event index"),
+    mode:           p("sparseField","select",      "IW generation mode"),
+    simulatedAudio: p(true,         "toggle",      "Simulate audio events"),
+    terrainBankId:  r(null,         null,          "Active terrain bank id"),
+    terrainLayerId: r(null,         null,          "Active terrain layer id"),
+    probeId:        r(null,         null,          "Active probe id"),
+  };
+
+  // ── PlayableCellSignalSchema ──────────────────────────────────────────────────
+  // Owns: block._signal (runtime, per-block)
+  var PlayableCellSignalSchema = {
+    energy:         r(0,       null, "Current normalized signal energy 0–1"),
+    type:           r("origin",null, "Signal hierarchy — origin | neighbor"),
+    velocity:       r(0,       null, "Normalized MIDI velocity 0–1"),
+    active:         r(false,   null, "True during attack phase"),
+    attackProgress: r(0,       null, "Attack phase progress 0–1"),
+    startedAt:      r(0,       null, "Activation timestamp ms"),
+    release:        r(0,       null, "Release tail energy 0–1"),
+  };
+
+  // ── RouteWorldSchema ─────────────────────────────────────────────────────────
+  // Owns: state.routeWorld.world
+  var RouteWorldSchema = {
+    id:             p(null,             null,    "Unique route-world id"),
+    name:           p("Untitled Route World", "textInput", "Display name"),
+    version:        p("1.0.0",          null,    "Schema version"),
+    provider: {
+      type:         p("manual",         "select","manual | geojson | mapbox | osm | google"),
+      sourceId:     p(null,             null,    "External map source id"),
+      attribution:  p("",              "textInput","Attribution string"),
+    },
+    routeId:        p(null,             null,    "Active route id"),
+    activeCameraId: p("route-follow",   "select","Active camera rig id"),
+    durationSec:    p(7200,             "numberInput","World playback duration seconds"),
+    loopMode:       p("destination",    "select","destination | loop | infinite"),
+    mood:           p("night-drive",    "select","World mood preset"),
+    timeOfDay:      p("night",          "select","Time of day"),
+    weather:        p("clear",          "select","Weather state"),
+    layers: {
+      map:          p(true,  "toggle", "Map base layer visible"),
+      skin:         p(true,  "toggle", "Skin render layer visible"),
+      traffic:      p(true,  "toggle", "Traffic layer visible"),
+      ecology:      p(true,  "toggle", "Ecology layer visible"),
+      events:       p(true,  "toggle", "Event zone markers visible"),
+      surfaces:     p(true,  "toggle", "Surface anchors visible"),
+      subway:       p(false, "toggle", "Subway underlay visible"),
+    },
+  };
+
+  // ── RouteSchema ───────────────────────────────────────────────────────────────
+  // Owns: one entry in state.routeWorld.routes[]
+  var RouteSchema = {
+    id:              p(null,          null,         "Unique route id"),
+    name:            p("Route",       "textInput",  "Display name"),
+    start: {
+      label:         p("Home",        "textInput",  "Start label"),
+      lat:           p(null,          null,         "Start latitude"),
+      lng:           p(null,          null,         "Start longitude"),
+      x:             p(0,             "numberInput","Start x px"),
+      y:             p(0,             "numberInput","Start y px"),
+    },
+    end: {
+      label:         p("Destination", "textInput",  "End label"),
+      lat:           p(null,          null,         "End latitude"),
+      lng:           p(null,          null,         "End longitude"),
+      x:             p(0,             "numberInput","End x px"),
+      y:             p(0,             "numberInput","End y px"),
+    },
+    distanceMeters:  p(0,    "numberInput", "Total route distance in meters"),
+    durationSec:     p(7200, "numberInput", "Route travel time in seconds"),
+    points:          p([],   null,          "Array of {x,y} route waypoints"),
+    segments:        p([],   null,          "Array of RouteSegment ids"),
+    metadata:        p({},   null,          "Arbitrary provider metadata"),
+  };
+
+  // ── RouteSegmentSchema ────────────────────────────────────────────────────────
+  // Owns: one entry in state.routeWorld.segments[]
+  var RouteSegmentSchema = {
+    id:                   p(null,       null,         "Unique segment id"),
+    index:                p(0,          "numberInput","Segment index along route"),
+    type:                 p("road",     "select",     "local | road | highway | bridge | tunnel | waterfront | forest | industrial"),
+    startT:               p(0,          null,         "Normalized start t along route 0–1"),
+    endT:                 p(1,          null,         "Normalized end t along route 0–1"),
+    startDistanceMeters:  p(0,          null,         "Distance from route start (meters)"),
+    endDistanceMeters:    p(0,          null,         "Distance from route end (meters)"),
+    speedLimitKph:        p(50,         "numberInput","Speed limit km/h"),
+    mood:                 p("neutral",  "select",     "Segment mood preset"),
+    density:              p(0.35,       "sliderFloat","Environmental density 0–1"),
+    cameraHint:           p("follow",   "select",     "Camera behavior hint"),
+    skinHint:             p("suburban", "select",     "Skin renderer hint"),
+    eventPoolIds:         p([],         null,         "Attached event pool ids"),
+  };
+
+  // ── RouteActorSchema ──────────────────────────────────────────────────────────
+  // Owns: one entry in state.routeWorld.actors[]
+  var RouteActorSchema = {
+    id:      p(null,      null,        "Unique actor id"),
+    type:    p("vehicle", "select",    "vehicle | pedestrian | bird | fish | train | boat"),
+    role:    p("hero-car","select",    "Actor role"),
+    routeId: p(null,      null,        "Bound route id"),
+    t:       r(0,         null,        "Normalized progress along route 0–1"),
+    speed:   r(1,         null,        "Speed multiplier"),
+    x:       r(0,         null,        "Current canvas x"),
+    y:       r(0,         null,        "Current canvas y"),
+    heading: r(0,         null,        "Current heading radians"),
+    visual: {
+      color:  p("#f6d36b", "colorPicker","Actor color"),
+      radius: p(8,         "sliderInt", "Actor dot radius px"),
+      trail:  p(true,      "toggle",    "Render trail"),
+      halo:   p(true,      "toggle",    "Render halo glow"),
+    },
+    audio: {
+      enabled: p(false,    "toggle",    "Audio output active"),
+      role:    p("traffic","select",    "Audio role"),
+    },
+  };
+
+  // ── RouteEventZoneSchema ──────────────────────────────────────────────────────
+  // Owns: one entry in state.routeWorld.eventZones[]
+  var RouteEventZoneSchema = {
+    id:           p(null,       null,         "Unique zone id"),
+    label:        p("Event Zone","textInput", "Display label"),
+    routeId:      p(null,       null,         "Bound route id"),
+    t:            p(0,          null,         "Normalized trigger t along route 0–1"),
+    radiusMeters: p(100,        "numberInput","Trigger radius in meters"),
+    type:         p("ambient",  "select",     "traffic | weather | wildlife | music | surface | surreal | ambient"),
+    rarity:       p(1,          "sliderFloat","Trigger probability 0–1"),
+    cooldownSec:  p(300,        "numberInput","Cooldown between triggers (seconds)"),
+    conditions: {
+      weather:      p([], null, "Required weather states (empty = any)"),
+      timeOfDay:    p([], null, "Required time-of-day values (empty = any)"),
+      segmentTypes: p([], null, "Required segment types (empty = any)"),
+    },
+    actions:           p([],   null, "Array of action descriptors"),
+    lastTriggeredAt:   r(0,    null, "Timestamp of last trigger (ms)"),
+  };
+
+  // ── RouteSkinSchema ───────────────────────────────────────────────────────────
+  // Owns: one entry in state.routeWorld.skins[]
+  var RouteSkinSchema = {
+    id:                p(null,          null,    "Unique skin id"),
+    routeWorldId:      p(null,          null,    "Owning route-world id"),
+    style:             p("wos-map",     "select","wos-map | bauhaus-city | night-drive | candy-city"),
+    buildingDensity:   p(0.35, "sliderFloat",    "Building density 0–1"),
+    waterDensity:      p(0.15, "sliderFloat",    "Water feature density 0–1"),
+    greenDensity:      p(0.2,  "sliderFloat",    "Green zone density 0–1"),
+    roadRenderMode:    p("signal-line",  "select","Road render style"),
+    buildingRenderMode:p("grid-symbol", "select","Building render style"),
+    waterRenderMode:   p("organic-void","select","Water render style"),
+    paletteId:         p("nightMap",    "select","Palette id"),
+    glyphSystemId:     p("bauhaus",     "select","Glyph system id"),
+  };
+
+  // ── CameraRigSchema ───────────────────────────────────────────────────────────
+  // Owns: one entry in state.routeWorld.cameraRigs[]
+  var CameraRigSchema = {
+    id:            p("route-follow", null,    "Camera rig id"),
+    mode:          p("follow",       "select","overview | follow | dual | infinite"),
+    targetActorId: p("hero-car",     null,    "Actor id to follow"),
+    zoom:          r(1.8,            null,    "Current zoom"),
+    targetZoom:    r(1.8,            null,    "Target zoom (interpolated towards)"),
+    lookAhead:     p(0.035, "sliderFloat",    "Normalized look-ahead offset 0–1"),
+    smoothing:     p(0.08,  "sliderFloat",    "Camera smoothing 0–1"),
+    drift:         p(0.15,  "sliderFloat",    "Camera drift factor 0–1"),
+    viewLayout:    p("single", "select",      "single | dualPortrait | overviewOnly | cameraOnly"),
+  };
+
+  // ── SurfaceAnchorSchema ───────────────────────────────────────────────────────
+  // Owns: one entry in state.routeWorld.surfaceAnchors[]
+  var SurfaceAnchorSchema = {
+    id:                  p(null,      null,         "Unique anchor id"),
+    routeWorldId:        p(null,      null,         "Owning route-world id"),
+    type:                p("wall",    "select",     "wall | billboard | subway-wall | roof | parking-lot | tunnel"),
+    label:               p("Surface", "textInput",  "Display label"),
+    x:                   p(0,         "numberInput","Canvas x"),
+    y:                   p(0,         "numberInput","Canvas y"),
+    lat:                 p(null,      null,         "Geo latitude"),
+    lng:                 p(null,      null,         "Geo longitude"),
+    width:               p(640,       "numberInput","Surface width px"),
+    height:              p(360,       "numberInput","Surface height px"),
+    surfaceId:           p(null,      null,         "Bound WOS surface id"),
+    visibleFromRouteT:   p(0,         null,         "Normalized t at which anchor becomes visible"),
+  };
+
   // ── Attach ───────────────────────────────────────────────────────────────────
   SBE.Schemas = {
     Canvas:      CanvasSchema,
@@ -229,12 +438,25 @@
       shape:     ShapeSchema,
       gridLayer: GridLayerSchema,
     },
-    ToolDefaults: ToolDefaultsSchema,
-    Runtime:      RuntimeSchema,
+    ToolDefaults:       ToolDefaultsSchema,
+    Runtime:            RuntimeSchema,
+    SignalActivity:     SignalActivitySchema,
+    LayerControl:       LayerControlSchema,
+    InfiniteWorld:      InfiniteWorldSchema,
+    PlayableCellSignal: PlayableCellSignalSchema,
+    RouteWorld:         RouteWorldSchema,
+    Route:              RouteSchema,
+    RouteSegment:       RouteSegmentSchema,
+    RouteActor:         RouteActorSchema,
+    RouteEventZone:     RouteEventZoneSchema,
+    RouteSkin:          RouteSkinSchema,
+    CameraRig:          CameraRigSchema,
+    SurfaceAnchor:      SurfaceAnchorSchema,
   };
 
   console.log("[WOS Schemas] Loaded —",
     Object.keys(SBE.Schemas).length, "top-level schemas,",
-    Object.keys(SBE.Schemas.Objects).length - 1, "object types"  // -1 for base
+    Object.keys(SBE.Schemas.Objects).length - 1, "object types,",
+    "signal/layer/IW/routeWorld schemas registered"
   );
 })(window);

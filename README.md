@@ -1,262 +1,576 @@
 # 🧱 Wall of Sound (WOS)
 
-Wall of Sound is a physics-driven audiovisual engine where sound emerges from interaction.
+Wall of Sound is a living audiovisual world engine where music, geography, motion, and behavior continuously interact.
 
-Instead of composing on a timeline, WOS generates music through motion, collision, and behavior. Objects exist on a “Wall” and produce sound as they interact—turning composition into a dynamic system rather than a linear sequence.
+Instead of composing on a static timeline, WOS generates evolving soundscapes through:
 
----
+- movement
+- interaction
+- infrastructure
+- environmental systems
+- musical propagation
+- cinematic observation
 
-## 🎯 Core Concept
-
-WOS replaces traditional DAW sequencing with an **event-based sound system**:
-
-- Objects move through space
-- Interactions generate events
-- Events trigger sound
-- Behaviors shape motion and rhythm
-
-This enables **infinite variation with structural cohesion**.
+WOS treats music as a living ecology layered onto worlds.
 
 ---
 
-## 🧠 System Architecture
+# 🎯 Core Concept
 
-WOS operates across four primary layers:
-
-### 1. Data Layer
-
-Defines the world state.
-
-- Objects (shapes, strokes, emitters)
-- Properties (position, velocity, rotation)
-- Behaviors (emission, collision, forces)
-
----
-
-### 2. Logic Layer
-
-Processes motion and interaction.
-
-- Physics engine (delta time, damping, velocity)
-- Behavior system (runs every frame)
-- Collision detection and response
-
----
-
-### 3. Event Layer (Core Runtime)
-
-Decouples interaction from sound.
+WOS replaces traditional linear sequencing with:
 
 ```text
-Wall → Event → Sound
+WORLD → EVENT → SOUND → WORLD RESPONSE
 ```
 
-- All interactions produce events (collision, emission, lifecycle)
-- Events are dispatched through a central EventBus
-- Events carry context (position, velocity, energy, source)
+Objects move through environments.
+Interactions generate events.
+Events trigger sound.
+Sound reshapes the environment.
 
-This ensures:
+The result is:
 
-- Visual systems do not directly control audio
-- Audio systems can evolve independently
-- The same event stream can power real-time playback and export
+- emergent music
+- reactive environments
+- infinite variation
+- cinematic traversal
+- persistent audiovisual worlds
 
 ---
 
-### 4. Sound Layer
+# 🌎 Route World System (NEW)
+
+WOS is evolving into a route-based living world engine.
+
+Instead of static visualizers, WOS now supports:
+
+- route traversal
+- map-backed environments
+- cinematic driving systems
+- ambient ecological worlds
+- persistent atmospheric simulation
+
+A route can now function as:
+
+- a musical composition
+- a cinematic journey
+- a living observatory
+- a procedural audiovisual ecosystem
+
+---
+
+# 🗺 Route World Architecture
+
+WOS separates:
+
+```text
+Map = spatial truth
+WOS = living interpretation layer
+```
+
+Real-world route geometry provides:
+
+- roads
+- paths
+- traversal
+- infrastructure
+- pacing
+- geography
+
+WOS layers on top:
+
+- atmosphere
+- music
+- ecology
+- weather
+- traffic
+- visual skin systems
+- signal propagation
+- events
+- cinematic observation
+
+---
+
+# 🚗 Route Traversal
+
+The Route World system now supports:
+
+- manual route creation
+- GeoJSON route ingestion
+- encoded polyline ingestion
+- normalized route projection
+- route persistence
+- cinematic traversal
+- hero vehicle actors
+- route event zones
+- route skins
+
+Routes become:
+
+```text
+continuous audiovisual journeys
+```
+
+rather than looping visual scenes.
+
+---
+
+# 🎥 Cinematic Camera System (NEW)
+
+WOS now introduces a dedicated route camera system.
+
+Camera modes:
+
+- Overview
+- Follow
+- Cinematic
+- Future: Dual Portrait + Infinite View
+
+The camera acts as:
+
+```text
+the observer consciousness of the world
+```
+
+Features include:
+
+- smooth follow behavior
+- look-ahead anticipation
+- dynamic zoom
+- velocity-aware framing
+- hero trails
+- route flow readability
+- ambient route presentation
+
+This transforms WOS into:
+
+```text
+living infrastructural cinema
+```
+
+---
+
+# 🧠 System Architecture
+
+WOS now operates across several interconnected layers.
+
+---
+
+## 1. Geography Layer
+
+Defines:
+
+- routes
+- roads
+- districts
+- traversal
+- infrastructure
+- future subway systems
+
+The geography layer provides persistent spatial truth.
+
+---
+
+## 2. World Layer
+
+Defines environmental state.
+
+Includes:
+
+- weather
+- time-of-day
+- route skins
+- district density
+- atmosphere
+- ecology
+
+---
+
+## 3. Logic Layer
+
+Processes:
+
+- movement
+- behaviors
+- propagation
+- collisions
+- environmental systems
+- route traversal
+
+---
+
+## 4. Event Layer
+
+Core runtime event architecture.
+
+```text
+WORLD → EVENT → RESPONSE
+```
+
+Events carry:
+
+- position
+- energy
+- velocity
+- timing
+- source context
+- route context
+
+Events drive:
+
+- audio
+- visual response
+- environmental behaviors
+- future ecology systems
+
+---
+
+## 5. Audio Layer
 
 Transforms events into sound.
 
-- Oscillator (monitor output)
-- MIDI output (Ableton / external gear)
-- Future: sampler + sound engine
-
----
-
-## 🔁 Bidirectional System
-
-WOS supports two directions of interaction:
-
-### 1. Interaction → Sound (Primary)
-
-- Collisions trigger notes
-- Emitters generate rhythm
-- Motion shapes timing and dynamics
-
-### 2. Sound → Visual (Reactive)
-
-- Audio analysis feeds back into the system
-- Visuals respond through the same event pipeline
-
-```text
-audio → event → wall response
-```
-
-This avoids tight coupling between audio and visuals.
-
----
-
-## 🔊 Audio Model
-
-Sound is not placed—it is triggered.
-
-- Collisions → transient events (hits, notes)
-- Emitters → rhythmic generation
-- Motion → modulation (velocity, density, timing)
-- Groups → multi-voice coordination
-
-The system supports:
-
-- Loop-safe playback
-- BPM alignment (external or internal clock)
-- Layered generative structures
-
----
-
-## 🧩 Objects
-
-All elements on the Wall are treated as **Objects**:
-
-- Strokes (drawn lines)
-- Shapes (grouped geometry)
-- Emitters (spawn particles/events)
-- Particles (temporary carriers)
-
-Objects can:
-
-- Move
-- Collide
-- Emit
-- Hold behaviors
-- Trigger events
-
----
-
-## ⚙️ Behaviors
-
-Behaviors define how objects act.
-
-### Categories
-
-**Emitters**
-
-- Generate particles or events over time
-- Directional control via angle/dial
-- Spread, rate, and lifecycle control
-
-**Deflectors**
-
-- Bumper (hard / elastic)
-- Rails / ramps (guided motion)
-
-**Fields**
-
-- Attract / repel forces within a radius
-
----
-
-## 🎨 The Wall
-
-The “Wall” is the primary system surface.
-
-- Replaces traditional canvas metaphor
-- Holds all objects and interactions
-- Designed for both creation and presentation
-- Supports portrait and landscape (stream + export)
-
----
-
-## 🛠 Tools
-
-### Mop Tool (Primary)
-
-Unified drawing + transform tool.
-
-- Draw strokes
-- Select objects
-- Move / rotate / scale
-- Save to shape library
-
-Legacy tools are being phased out in favor of a unified workflow.
-
----
-
-## 🔁 Playback Model
-
-WOS runs continuously:
-
-- Behaviors execute every frame
-- Motion is time-based (deltaTime)
-- Events are triggered dynamically
-- Sound responds in real-time
-
 Supports:
 
-- Passive (ambient playback)
-- Active (interactive performance)
+- MIDI output
+- event-driven playback
+- future sampler engine
+- environmental ambience
+- music-reactive geography
+
+Future goals:
+
+- traffic-generated rhythms
+- subway pulse systems
+- ecological ambience
+- reactive environmental soundscapes
 
 ---
 
-## 📦 Project Structure
+# 🧬 World Primitives (NEW)
 
+WOS is transitioning toward reusable world primitives.
+
+Core primitives:
+
+- Route
+- Road
+- District
+- Vehicle
+- Pedestrian
+- Building
+- EcologyNode
+- EventZone
+- TransitLine
+- SurfaceAnchor
+
+These primitives form the language of living WOS worlds.
+
+---
+
+# 🧱 Procedural Skin System
+
+WOS uses procedural visual interpretation layered over geography.
+
+The system combines:
+
+- Bauhaus-inspired geometry
+- signal propagation
+- modular architecture
+- MIDI-driven visual rhythm
+- atmospheric rendering
+- ecological spacing
+
+This allows worlds to evolve stylistically while preserving geographic truth.
+
+Future directions include:
+
+- candy-city worlds
+- signal-city worlds
+- subway ecologies
+- night-drive aesthetics
+- surreal infrastructure skins
+
+---
+
+# 🚇 Subway Infrastructure Layer (PLANNED)
+
+Future WOS worlds will support layered infrastructure.
+
+Examples:
+
+- subway systems
+- underground routes
+- transit pulse propagation
+- hidden signal networks
+- layered transportation ecologies
+
+The subway layer will function as:
+
+```text
+hidden musical infrastructure beneath the visible world
 ```
+
+---
+
+# 🧍 Ecology Systems (PLANNED)
+
+WOS will support living ecological systems.
+
+Future ecology actors:
+
+- vehicles
+- buses
+- trains
+- boats
+- pedestrians
+- birds
+- fish
+- environmental swarms
+
+The goal is:
+
+```text
+ambient living behavior
+```
+
+rather than traditional NPC simulation.
+
+---
+
+# 🎨 Surface Mode + World Mode
+
+WOS supports two complementary creation modes.
+
+---
+
+## Surface Mode
+
+A freeform signal laboratory.
+
+Used for:
+
+- experimentation
+- MIDI sketching
+- visual behaviors
+- abstract signal systems
+- audiovisual prototyping
+
+---
+
+## World Mode
+
+A persistent map-backed audiovisual world.
+
+Used for:
+
+- traversal
+- atmosphere
+- route worlds
+- cinematic presentation
+- ecology systems
+
+---
+
+## Surface Anchors (NEW)
+
+Surface Mode can now exist inside the world itself.
+
+Examples:
+
+- walls
+- subway tunnels
+- rooftops
+- billboards
+- parking lots
+- transit corridors
+
+These become:
+
+```text
+localized editable signal spaces
+```
+
+allowing persistent visual and musical marks throughout the world.
+
+---
+
+# 📺 Streaming-First Architecture
+
+WOS is being designed as:
+
+```text
+a persistent 24/7 audiovisual observatory
+```
+
+The primary experience is:
+
+- observation
+- atmosphere
+- traversal
+- ambient inhabitation
+
+not traditional gameplay.
+
+Future viewer interaction may include:
+
+- chat-driven weather
+- route voting
+- camera switching
+- event triggering
+- ecology modulation
+
+The world continues evolving whether viewers are present or not.
+
+---
+
+# 🖥 Desktop Zone (PLANNED)
+
+A future onboarding layer for WOS.
+
+The Desktop Zone provides:
+
+- live world windows
+- ambient desktop worlds
+- district feeds
+- subway overlays
+- environmental route views
+- audio-reactive wallpapers
+
+This acts as:
+
+```text
+a passive living connection into the WOS ecosystem
+```
+
+---
+
+# 🎼 Music Philosophy
+
+WOS does not treat music as:
+
+```text
+a fixed arrangement
+```
+
+Instead:
+
+music becomes:
+
+- environmental
+- behavioral
+- infrastructural
+- emergent
+- spatial
+- continuous
+
+The goal is:
+
+```text
+music inhabiting geography
+```
+
+rather than music simply reacting to visuals.
+
+---
+
+# 🛠 Current Focus
+
+Current development priorities:
+
+- real route ingestion
+- cinematic route traversal
+- route camera system
+- procedural map skins
+- atmosphere systems
+- route event architecture
+- route persistence
+- ecology groundwork
+- stream presentation
+
+---
+
+# 🔮 Upcoming Features
+
+## Near-Term
+
+- cinematic route camera
+- dual portrait map view
+- infinite ambient mode
+- route HUD overlays
+- procedural building districts
+- atmospheric weather systems
+- hero vehicle traversal
+- route event zones
+
+---
+
+## Mid-Term
+
+- traffic systems
+- pedestrian ecology
+- subway underlay systems
+- dynamic weather
+- environmental audio generation
+- layered transportation systems
+- map district identities
+
+---
+
+## Long-Term
+
+- full persistent route worlds
+- community-created worlds
+- world skin sharing
+- subway ecology systems
+- multi-camera broadcast modes
+- 3D low-poly world rendering
+- ambient living city observatories
+
+---
+
+# 📦 Project Structure
+
+```text
 /wall-of-sound
-  /wall        # visual + physics systems
-  /sound       # audio engines (MIDI, future sampler)
-  /core        # event system + shared runtime (EventBus)
-  /docs        # specs and system design
+  /wall
+  /sound
+  /core
+  /docs
+  /engine
+  /render
+  /state
+  /ui
 
-  index.html   # entry point
-  main.js      # engine loop
-  controls.js  # UI bindings
+  index.html
+  main.js
 ```
 
 ---
 
-## 🚧 Current Focus
+# 🧪 Philosophy
 
-- Object system unification (shapes, strokes, groups)
-- Stable physics + motion feel
-- Collision consistency + event quality
-- Emitter refinement (direction, density, lifecycle)
-- Selection + transform system
+WOS is not:
 
----
+- a DAW
+- a map app
+- a game engine
+- a visualizer
 
-## 🔮 Roadmap
+It is:
 
-- Event schema refinement (energy, velocity, timing)
-- Minimal sound engine (event → tone mapping)
-- Sampler integration (per-object sound profiles)
-- Shape + sound libraries
-- Multi-wall environments
-- Embeddable “Capsules” (shareable scenes)
-- Stream + export modes (OBS / MP4 / WAV)
+```text
+a living musical world system
+```
 
----
+where:
 
-## 🧪 Philosophy
-
-WOS is not a DAW.
-
-It is a **sound system**:
-
-- Emergent
-- Interactive
-- Spatial
-- Continuous
-
-It treats music as a **living structure**, not a fixed arrangement.
+- geography becomes emotional
+- infrastructure becomes musical
+- motion becomes atmosphere
+- systems become cinema
 
 ---
 
-## 👤 Author
+# 👤 Author
 
-StudioRich
-Brooklyn, NYC
-
----
-
-## 📜 License
-
-TBD
+St

@@ -1,4 +1,4 @@
-// 0507_WOS_GridBlockLibrarySystem_v1.1.0
+// 0510_WOS_FieldCompositionPass_v1.0.0
 // MIDI Bank → World Layer → Grid Environment
 // Vanilla IIFE — attaches to global SBE.GridSystem
 
@@ -576,29 +576,338 @@
     ctx.restore();
   }
 
+  // ── Pattern vocabulary ───────────────────────────────────────────────────────
+  var BAUHAUS_PATTERN_IDS = [
+    "circle", "square", "triangle", "lines", "arch", "diamond",
+    "hourglass", "triangleGrid", "halfCircle", "arc", "cornerTriangle",
+    "cross", "quarterCircle", "fullArc", "pill", "ring",
+  ];
+
+  var BAUHAUS_PATTERN_VOCABULARY_VERSION = "1.3.1";
+
+  var NOTE_CLASS_NAMES = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+
+  var BAUHAUS_PATTERN_META = {
+    circle:         { family: "circle",   complexity: 1 },
+    ring:           { family: "circle",   complexity: 2 },
+    halfCircle:     { family: "circleCut",complexity: 2 },
+    quarterCircle:  { family: "circleCut",complexity: 3 },
+    square:         { family: "rect",     complexity: 1 },
+    lines:          { family: "stripe",   complexity: 2 },
+    triangle:       { family: "triangle", complexity: 1 },
+    cornerTriangle: { family: "triangle", complexity: 2 },
+    triangleGrid:   { family: "triangle", complexity: 3 },
+    diamond:        { family: "diamond",  complexity: 2 },
+    hourglass:      { family: "compound", complexity: 3 },
+    cross:          { family: "cross",    complexity: 2 },
+    pill:           { family: "rounded",  complexity: 2 },
+    arch:           { family: "arch",     complexity: 2 },
+    arc:            { family: "arc",      complexity: 2 },
+    fullArc:        { family: "arc",      complexity: 3 },
+  };
+
+  // Derived: family → [patternIds], built from META
+  var BAUHAUS_FAMILY_PATTERNS = (function () {
+    var out = {};
+    BAUHAUS_PATTERN_IDS.forEach(function (id) {
+      var fam = BAUHAUS_PATTERN_META[id] && BAUHAUS_PATTERN_META[id].family;
+      if (!fam) return;
+      if (!out[fam]) out[fam] = [];
+      out[fam].push(id);
+    });
+    return out;
+  }());
+
+  // noteClass 0-11 → pattern family
+  var DEFAULT_NOTE_FAMILY_MAP = {
+    0: "circle",   // C
+    1: "arc",      // C#
+    2: "triangle", // D
+    3: "circleCut",// D#
+    4: "rect",     // E
+    5: "stripe",   // F
+    6: "diamond",  // F#
+    7: "circle",   // G
+    8: "arch",     // G#
+    9: "triangle", // A
+    10: "cross",   // A#
+    11: "compound",// B
+  };
+
+  var _activeNotePatternOverrides = {};
+
+  function getPatternsForFamily(family) {
+    return BAUHAUS_FAMILY_PATTERNS[family] || BAUHAUS_PATTERN_IDS;
+  }
+
+  function setActiveNotePatternOverrides(overrides) {
+    _activeNotePatternOverrides = overrides || {};
+  }
+
+  function resolveBauhausPatternId(block) {
+    var nc = block.noteClass || 0;
+    var family = _activeNotePatternOverrides[nc] || DEFAULT_NOTE_FAMILY_MAP[nc] || "circle";
+    var candidates = getPatternsForFamily(family);
+    var seed =
+      (block.sourceIndex != null ? block.sourceIndex : (block.sequenceIndex || block.index || 0)) +
+      nc * 17 +
+      Math.round((block.velocityNorm || 0) * 100) * 3 +
+      Math.round((block.durationNorm || 0) * 100) * 5;
+    return candidates[Math.abs(seed) % candidates.length];
+  }
+
+  // ── Tile styles ──────────────────────────────────────────────────────────────
+  var BAUHAUS_TILE_STYLES = {
+    strictBauhaus: { id: "strictBauhaus", name: "Strict Bauhaus",
+      shapeScale: 0.92, backgroundTileAlpha: 1.0, patternAlpha: 1.0, strokeWeight: 1.0, useOutline: false },
+    softPrint:     { id: "softPrint",     name: "Soft Print",
+      shapeScale: 0.62, backgroundTileAlpha: 0.7, patternAlpha: 0.85, strokeWeight: 0.8, useOutline: false },
+    posterBlocks:  { id: "posterBlocks",  name: "Poster Blocks",
+      shapeScale: 1.0,  backgroundTileAlpha: 1.0, patternAlpha: 1.0, strokeWeight: 1.2, useOutline: true },
+    technicalMap:  { id: "technicalMap",  name: "Technical Map",
+      shapeScale: 0.42, backgroundTileAlpha: 0.5, patternAlpha: 0.7, strokeWeight: 0.6, useOutline: true },
+  };
+
+  var DEFAULT_TILE_STYLE_ID = "strictBauhaus";
+
+  // drawBauhausPattern — canvas-native, no save/restore (caller owns ctx state)
+  function drawBauhausPattern(ctx, patternId, x, y, w, h, color, velNorm, durNorm, tileStyle) {
+    var ts = tileStyle || BAUHAUS_TILE_STYLES.strictBauhaus;
+    var baseSize = Math.min(w, h);
+    var patScale = ts.shapeScale * (0.85 + (velNorm || 0.5) * 0.18);
+    var ps = Math.max(2, baseSize * patScale);
+    var r  = ps / 2;
+    var cx = x + w / 2;
+    var cy = y + h / 2;
+    var sw = Math.max(1, baseSize * 0.065 * ts.strokeWeight);
+
+    ctx.fillStyle   = color;
+    ctx.strokeStyle = color;
+    ctx.lineWidth   = sw;
+
+    switch (patternId) {
+
+      case "circle":
+        ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
+        break;
+
+      case "square":
+        ctx.fillRect(cx - r * 0.85, cy - r * 0.85, r * 1.7, r * 1.7);
+        break;
+
+      case "triangle":
+        ctx.beginPath();
+        ctx.moveTo(cx,             cy - r);
+        ctx.lineTo(cx + r * 0.866, cy + r * 0.5);
+        ctx.lineTo(cx - r * 0.866, cy + r * 0.5);
+        ctx.closePath(); ctx.fill();
+        break;
+
+      case "lines": {
+        var lw  = ps * 0.82;
+        var lth = Math.max(1, baseSize * 0.055);
+        var lg  = ps * 0.32;
+        [-lg, 0, lg].forEach(function (dy) {
+          ctx.fillRect(cx - lw / 2, cy + dy - lth / 2, lw, lth);
+        });
+        break;
+      }
+
+      case "arch":
+        // Filled top semicircle (arch pointing up, flat base at center)
+        ctx.beginPath();
+        ctx.arc(cx, cy + r * 0.12, r, -Math.PI, 0);
+        ctx.closePath(); ctx.fill();
+        break;
+
+      case "diamond":
+        ctx.beginPath();
+        ctx.moveTo(cx,     cy - r);
+        ctx.lineTo(cx + r, cy);
+        ctx.lineTo(cx,     cy + r);
+        ctx.lineTo(cx - r, cy);
+        ctx.closePath(); ctx.fill();
+        break;
+
+      case "hourglass":
+        ctx.beginPath();
+        ctx.moveTo(cx - r * 0.88, cy - r);
+        ctx.lineTo(cx + r * 0.88, cy - r);
+        ctx.lineTo(cx,            cy);
+        ctx.lineTo(cx + r * 0.88, cy + r);
+        ctx.lineTo(cx - r * 0.88, cy + r);
+        ctx.lineTo(cx,            cy);
+        ctx.closePath(); ctx.fill();
+        break;
+
+      case "triangleGrid": {
+        var sm = r * 0.52;
+        [[cx, cy - sm * 1.05], [cx - sm, cy + sm * 0.6], [cx + sm, cy + sm * 0.6]].forEach(function (p) {
+          ctx.beginPath();
+          ctx.moveTo(p[0],             p[1] - sm * 0.78);
+          ctx.lineTo(p[0] + sm * 0.68, p[1] + sm * 0.38);
+          ctx.lineTo(p[0] - sm * 0.68, p[1] + sm * 0.38);
+          ctx.closePath(); ctx.fill();
+        });
+        break;
+      }
+
+      case "halfCircle":
+        // Filled bottom semicircle (flat on top)
+        ctx.beginPath();
+        ctx.arc(cx, cy - r * 0.12, r, 0, Math.PI);
+        ctx.closePath(); ctx.fill();
+        break;
+
+      case "arc":
+        // Open rainbow arc — stroke only
+        ctx.beginPath();
+        ctx.arc(cx, cy + r * 0.25, r * 0.88, -Math.PI * 0.92, -Math.PI * 0.08, false);
+        ctx.stroke();
+        break;
+
+      case "cornerTriangle": {
+        var triSize = ps * 0.92;
+        var tx = x + w * 0.09;
+        var ty = y + h * 0.09;
+        ctx.beginPath();
+        ctx.moveTo(tx,           ty);
+        ctx.lineTo(tx + triSize, ty);
+        ctx.lineTo(tx,           ty + triSize);
+        ctx.closePath(); ctx.fill();
+        break;
+      }
+
+      case "cross": {
+        var arm   = ps * 0.82;
+        var thick = Math.max(1, ps * 0.27);
+        ctx.fillRect(cx - arm / 2,   cy - thick / 2, arm,   thick);
+        ctx.fillRect(cx - thick / 2, cy - arm / 2,   thick, arm);
+        break;
+      }
+
+      case "quarterCircle":
+        // Filled quarter circle from top-left corner
+        ctx.beginPath();
+        ctx.moveTo(x + w * 0.09, y + h * 0.09);
+        ctx.arc(   x + w * 0.09, y + h * 0.09, ps * 0.88, 0, Math.PI / 2);
+        ctx.closePath(); ctx.fill();
+        break;
+
+      case "fullArc":
+        // Nearly-complete stroke circle, small gap at top-right
+        ctx.beginPath();
+        ctx.arc(cx, cy, r * 0.88, 0.2, Math.PI * 2 - 0.2);
+        ctx.stroke();
+        break;
+
+      case "pill": {
+        var ph = ps * 0.9;
+        var pw = ps * 0.44;
+        var pr = pw / 2;
+        var px0 = cx - pw / 2;
+        var py0 = cy - ph / 2;
+        ctx.beginPath();
+        ctx.moveTo(px0 + pr, py0);
+        ctx.lineTo(px0 + pw - pr, py0);
+        ctx.arcTo(px0 + pw, py0,      px0 + pw, py0 + pr,      pr);
+        ctx.lineTo(px0 + pw, py0 + ph - pr);
+        ctx.arcTo(px0 + pw, py0 + ph, px0 + pw - pr, py0 + ph, pr);
+        ctx.lineTo(px0 + pr, py0 + ph);
+        ctx.arcTo(px0,       py0 + ph, px0,           py0 + ph - pr, pr);
+        ctx.lineTo(px0,      py0 + pr);
+        ctx.arcTo(px0,       py0,      px0 + pr,      py0,           pr);
+        ctx.closePath(); ctx.fill();
+        break;
+      }
+
+      case "ring":
+        ctx.beginPath(); ctx.arc(cx, cy, r * 0.88, 0, Math.PI * 2);
+        ctx.stroke();
+        break;
+
+      default:
+        ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+
   // ── renderBauhausGridBlock ───────────────────────────────────────────────────
   function renderBauhausGridBlock(ctx, block, style, renderState) {
-    var size = block.width; // square tile
-    var isActive = block.active;
-    var pulse = block._pulse != null ? block._pulse : (isActive ? 1 : 0);
-    var baseAlpha = block.baseAlpha != null ? block.baseAlpha : 1;
-    var color = block._resolvedColor || block.color; // palette-resolved or raw
+    // Field composition: resolve scale class once and cache on block
+    if (!block._fieldScaleClass) {
+      block._fieldScaleClass = _resolveScaleClass(block);
+    }
 
-    // ── sub-5px: base square + optional center dot ───────────────────────────
+    var size = block.width;
+    var baseAlpha = block.baseAlpha != null ? block.baseAlpha : 1;
+    var color = block._resolvedColor || block.color;
+
+    // Scale class alpha modulation
+    var scaleClass = block._fieldScaleClass;
+    if (scaleClass === "small")  baseAlpha *= 0.55;
+    if (scaleClass === "large")  baseAlpha *= 0.72;
+
+    // Reactivity gate: resolve effective pulse from mode
+    var reactivityMode = block._reactivityMode || "off";
+    var rawPulse = block._pulse != null ? block._pulse : (block.active ? 1 : 0);
+    var pulse = 0;
+    if      (reactivityMode === "noteClass") { pulse = rawPulse; }
+    else if (reactivityMode === "playhead")  { pulse = block.playhead ? rawPulse : 0; }
+    // "off": pulse stays 0
+
+    // Signal activation — structured record: energy, type, velocity, phase, release
+    var sig = block._signal || null;
+    var signalEnergy  = sig ? sig.energy  : 0;
+    var signalType    = sig ? (sig.type || "origin") : null;
+    var signalVel     = sig ? (sig.velocity || 0.5) : 0;   // 0-1 normalized
+    var signalRelease = sig ? (sig.release || 0)    : 0;   // 0-1 release tail
+    var isOrigin      = signalType === "origin";
+
+    // Attack-phase sine impulse — peaks at mid-attack, then falls off
+    var pulseCurve = 0;
+    if (sig && sig.active && sig.attackProgress != null) {
+      pulseCurve = Math.sin(sig.attackProgress * Math.PI);
+    }
+
+    if (signalEnergy > 0) {
+      pulse = Math.max(pulse, signalEnergy);
+    }
+
+    // Per-type visual parameters — velocity-coupled, resolved once for all paths
+    var sigScaleMult = 0;
+    var sigColorLift = 0;
+    var sigGlowR     = 0;
+    var sigGlowAlpha = 0;
+    var hasSignal    = signalEnergy > 0 || signalRelease > 0;
+    if (hasSignal) {
+      // Release contributes to glow at reduced weight
+      var eff = Math.max(signalEnergy, signalRelease * 0.35);
+      if (isOrigin) {
+        // Scale: sustained from energy + velocity-weighted impulse peak
+        sigScaleMult = signalEnergy * 0.24 + signalVel * 0.18 * pulseCurve;
+        sigColorLift = eff * (0.35 + signalVel * 0.20);         // 0.35–0.55
+        sigGlowR     = size * (2.0 + signalVel * 1.5);          // 2.0×–3.5×
+        sigGlowAlpha = eff * (0.20 + signalVel * 0.18);         // 0.20–0.38
+      } else {
+        // Neighbor: weaker, velocity-modulated impulse only
+        sigScaleMult = signalEnergy * 0.08 + signalVel * 0.08 * pulseCurve;
+        sigColorLift = eff * 0.18;
+        sigGlowR     = size * 1.8;
+        sigGlowAlpha = eff * 0.16;
+      }
+    }
+
+    // ── sub-5px ──────────────────────────────────────────────────────────────
     if (size < 5) {
       ctx.save();
-      if (isActive && pulse > 0) {
+      if (pulse > 0) {
         ctx.globalAlpha = Math.min(1, baseAlpha + pulse * 0.5);
-        ctx.fillStyle = color;
+        ctx.fillStyle = sigColorLift > 0 ? lightenHex(color, sigColorLift) : color;
         ctx.fillRect(block.x, block.y, size, size);
+        var dot = Math.max(1, Math.floor(size * 0.4));
         ctx.globalAlpha = pulse * 0.9;
         ctx.fillStyle = "#ffffff";
-        var dot = Math.max(1, Math.floor(size * 0.4));
-        ctx.fillRect(
-          block.x + Math.floor((size - dot) / 2),
-          block.y + Math.floor((size - dot) / 2),
-          dot, dot
-        );
+        ctx.fillRect(block.x + Math.floor((size - dot) / 2), block.y + Math.floor((size - dot) / 2), dot, dot);
       } else {
         ctx.globalAlpha = baseAlpha * 0.72;
         ctx.fillStyle = muteHex(color, 0.3);
@@ -608,13 +917,15 @@
       return;
     }
 
-    // ── sub-8px: brightness/opacity only, no scaling or stroke ───────────────
+    // ── sub-8px: solid fill + brightness only ────────────────────────────────
     if (size < 8) {
       ctx.save();
-      ctx.globalAlpha = isActive
+      ctx.globalAlpha = pulse > 0
         ? Math.min(1, baseAlpha * (1 + pulse * 0.55))
         : baseAlpha * 0.72;
-      ctx.fillStyle = isActive ? lightenHex(color, pulse * 0.3) : muteHex(color, 0.3);
+      ctx.fillStyle = pulse > 0
+        ? lightenHex(color, pulse * 0.3 + sigColorLift)
+        : muteHex(color, 0.3);
       ctx.fillRect(block.x, block.y, size, size);
       ctx.restore();
       return;
@@ -623,72 +934,278 @@
     // ── normal tiles ─────────────────────────────────────────────────────────
     var velNorm = block.velocityNorm != null ? block.velocityNorm : 0.5;
     var durNorm = block.durationNorm != null ? block.durationNorm : 0.25;
-    var accentKind = block.accentKind != null ? block.accentKind : 0;
+    var tileStyleObj = block._tileStyle || BAUHAUS_TILE_STYLES[DEFAULT_TILE_STYLE_ID];
 
     var maxScale = size >= 16 ? 1.08 : 1.04;
-    var scale = 1 + (maxScale - 1) * pulse;
+    var scale = Math.max(1 + (maxScale - 1) * pulse, 1 + sigScaleMult);
     var w = size * scale;
     var h = size * scale;
     var x = block.x + (size - w) / 2;
     var y = block.y + (size - h) / 2;
 
+    // Activation glow — soft radial bloom, radius and alpha differ by signal type
+    if (sigGlowAlpha > 0.01 && sigGlowR > 0) {
+      try {
+        var gcx = block.x + size / 2, gcy = block.y + size / 2;
+        var grd = ctx.createRadialGradient(gcx, gcy, 0, gcx, gcy, sigGlowR);
+        var rgb = hexToRgb(color);
+        grd.addColorStop(0, "rgba(" + rgb.r + "," + rgb.g + "," + rgb.b + "," + sigGlowAlpha + ")");
+        grd.addColorStop(1, "rgba(" + rgb.r + "," + rgb.g + "," + rgb.b + ",0)");
+        ctx.save();
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = grd;
+        ctx.beginPath();
+        ctx.arc(gcx, gcy, sigGlowR, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      } catch (e) {}
+    }
+
     var mutedColor = muteHex(color, 0.3);
-    var accentColor = lightenHex(color, 0.35 + pulse * 0.25);
-    var tileAlpha = isActive
+    var accentColor = lightenHex(color, 0.32 + pulse * 0.22 + sigColorLift);
+    var tileAlpha = (pulse > 0
       ? Math.min(1, baseAlpha * (0.82 + pulse * 0.28))
-      : baseAlpha * 0.72;
-    var accentAlpha = (0.45 + velNorm * 0.35) + (isActive ? pulse * 0.35 : 0);
+      : baseAlpha * 0.72) * tileStyleObj.backgroundTileAlpha;
+    var accentAlpha = Math.min(1, (0.48 + velNorm * 0.32 + pulse * 0.2) * tileStyleObj.patternAlpha);
+
+    // Release shell — color residue lingering after active pulse, origin only
+    if (signalRelease > 0.04 && signalEnergy < 0.25 && isOrigin) {
+      var _relInset = Math.max(1, size * 0.08);
+      ctx.save();
+      ctx.globalAlpha = signalRelease * 0.20;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = Math.max(1, size * 0.055);
+      ctx.strokeRect(block.x + _relInset, block.y + _relInset,
+                     size - _relInset * 2, size - _relInset * 2);
+      ctx.restore();
+    }
+
+    // Collision flash — crisp white inset, very brief, precedes propagation in timing
+    if (block._collisionFlash) {
+      var _flashNow = typeof performance !== "undefined" ? performance.now() : Date.now();
+      var _flashAge = _flashNow - block._collisionFlash.startTime;
+      var _flashDur = 110;
+      if (_flashAge < _flashDur) {
+        var _flashT = 1 - _flashAge / _flashDur;
+        var _fi = Math.max(1, size * 0.06);
+        ctx.save();
+        ctx.globalAlpha = _flashT * 0.75;
+        ctx.strokeStyle = "#ffffff";
+        ctx.lineWidth = Math.max(1, size * 0.045);
+        ctx.strokeRect(block.x + _fi, block.y + _fi, size - _fi * 2, size - _fi * 2);
+        ctx.restore();
+      } else {
+        block._collisionFlash = null;
+      }
+    }
 
     ctx.save();
 
-    // Base tile
+    // Base tile (muted palette color)
     ctx.globalAlpha = tileAlpha;
-    ctx.fillStyle = isActive ? lightenHex(mutedColor, pulse * 0.18) : mutedColor;
+    ctx.fillStyle = pulse > 0 ? lightenHex(mutedColor, pulse * 0.18) : mutedColor;
     ctx.fillRect(x, y, w, h);
 
-    // Accent mark
-    var accentScale = 0.35 + velNorm * 0.45;
-    var accentSize = Math.max(1, size * accentScale);
-    accentSize *= 0.85 + durNorm * 0.3;
-    if (isActive) accentSize *= 1 + pulse * 0.15;
-
-    var cx = x + w / 2;
-    var cy = y + h / 2;
-
-    ctx.globalAlpha = Math.min(1, accentAlpha);
-    ctx.fillStyle = accentColor;
-
-    if (accentKind === 0) {
-      var r = accentSize / 2;
-      ctx.beginPath();
-      ctx.arc(cx, cy, r, 0, Math.PI * 2);
-      ctx.fill();
-    } else if (accentKind === 1) {
-      var bh = Math.max(1, accentSize * 0.28);
-      ctx.fillRect(cx - accentSize / 2, cy - bh / 2, accentSize, bh);
-    } else if (accentKind === 2) {
-      var bw = Math.max(1, accentSize * 0.28);
-      ctx.fillRect(cx - bw / 2, cy - accentSize / 2, bw, accentSize);
-    } else {
-      var hs = accentSize / 2;
-      ctx.fillRect(cx - hs, cy - hs, accentSize, accentSize);
+    // Outline (posterBlocks / technicalMap)
+    if (tileStyleObj.useOutline) {
+      ctx.globalAlpha = tileAlpha * 0.6;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = Math.max(1, size * 0.04 * tileStyleObj.strokeWeight);
+      ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
     }
 
-    // Active pulse: white inset stroke + note-color glow
-    if (isActive && pulse > 0.05) {
+    // Resolve pattern (cached on block after first frame — stable)
+    if (!block.patternId) block.patternId = resolveBauhausPatternId(block);
+
+    // Draw pattern
+    ctx.globalAlpha = accentAlpha;
+    drawBauhausPattern(ctx, block.patternId, x, y, w, h, accentColor, velNorm, durNorm, tileStyleObj);
+
+    // Active pulse: inset stroke — white for origin (direct), color for neighbor (propagated)
+    if (pulse > 0.05) {
       var inset = Math.max(1, size * 0.07);
       ctx.globalAlpha = 0.45 + pulse * 0.45;
-      ctx.strokeStyle = "rgba(255,255,255,0.9)";
+      // Direct triggers use white; propagated use hue-matched color — visual causality
+      ctx.strokeStyle = isOrigin ? "rgba(255,255,255,0.9)" : color;
       ctx.lineWidth = Math.max(1, size * 0.05);
       ctx.strokeRect(x + inset, y + inset, w - inset * 2, h - inset * 2);
 
-      ctx.globalAlpha = pulse * 0.22;
+      ctx.globalAlpha = pulse * 0.2;
       ctx.strokeStyle = color;
       ctx.lineWidth = Math.max(2, size * 0.14);
       ctx.strokeRect(x - 1, y - 1, w + 2, h + 2);
     }
 
     ctx.restore();
+  }
+
+  // ── Field Composition System ─────────────────────────────────────────────────
+  // Deterministic hash for a block — avoids Math.random() per frame.
+  function _blockHash(block) {
+    var s = (block.sourceIndex != null ? block.sourceIndex : 0);
+    var nc = block.noteClass || 0;
+    return ((s * 2654435761 + nc * 40503) >>> 0);
+  }
+
+  // Resolve scale class for a block: "small" | "medium" | "large"
+  // Distribution: 10% large, 25% small, 65% medium
+  function _resolveScaleClass(block) {
+    var h = _blockHash(block) % 100;
+    if (h < 10) return "large";
+    if (h < 35) return "small";
+    return "medium";
+  }
+
+  // Scale multiplier per class
+  var _SCALE_CLASS_RANGE = {
+    small:  [0.35, 0.65],
+    medium: [0.88, 1.02],
+    large:  [1.4,  2.4],
+  };
+
+  function _scaleMultiplier(block) {
+    var cls = block._fieldScaleClass || "medium";
+    var r = _SCALE_CLASS_RANGE[cls];
+    var t = ((_blockHash(block) * 1664525 + 1013904223) >>> 0) / 4294967296;
+    return r[0] + (r[1] - r[0]) * t;
+  }
+
+  // Overflow offset — 30% of blocks get a push beyond their cell boundary
+  function _overflowOffset(block, cellSize) {
+    var h = _blockHash(block);
+    if ((h % 100) >= 30) return { dx: 0, dy: 0 };
+    var gap = cellSize * 0.38;
+    var angle = (h % 628) / 100;
+    return { dx: Math.cos(angle) * gap, dy: Math.sin(angle) * gap };
+  }
+
+  // Rotation — family-specific subtle tilt for non-symmetric forms
+  function _fieldRotation(block) {
+    var family = (BAUHAUS_PATTERN_META[block.patternId] || {}).family || "";
+    if (family === "circle" || family === "rect" || family === "cross") return 0;
+    var h = _blockHash(block);
+    var maxAngle = (family === "triangle" || family === "diamond") ? 0.52 : 0.26;
+    var t = ((h * 6364136223846793005 + 1442695040888963407) >>> 0) / 4294967296;
+    return (t - 0.5) * 2 * maxAngle;
+  }
+
+  // Adjacency formation check — returns a merge descriptor or null
+  // Only fires probabilistically (~18% of eligible pairs)
+  var _formationCache = null;
+  function _buildFormationCache(blocks, cols) {
+    var cache = {};
+    blocks.forEach(function (b, i) {
+      var key = b.col + "," + b.row;
+      cache[key] = i;
+    });
+    return cache;
+  }
+
+  function _resolveFormation(block, blockIndexMap, blocks) {
+    if (!blockIndexMap) return null;
+    var h = _blockHash(block);
+    if ((h % 100) >= 18) return null;
+    var pid = block.patternId || "";
+    // Only merge compatible families
+    var mergeable = {
+      quarterCircle: "tunnel", halfCircle: "tunnel",
+      triangle: "arrow", cornerTriangle: "arrow",
+      lines: "corridor", square: "cluster", ring: "hub",
+    };
+    var kind = mergeable[pid];
+    if (!kind) return null;
+    // Check right neighbor
+    var neighborKey = (block.col + 1) + "," + block.row;
+    var nIdx = blockIndexMap[neighborKey];
+    if (nIdx == null) return null;
+    var neighbor = blocks[nIdx];
+    var nMeta = (BAUHAUS_PATTERN_META[neighbor.patternId] || {}).family;
+    var bMeta = (BAUHAUS_PATTERN_META[pid] || {}).family;
+    if (nMeta !== bMeta) return null;
+    return { kind: kind, neighbor: neighbor };
+  }
+
+  // Draw macro atmosphere — Layer A: giant ghost forms (drawn before grid content)
+  // activityLevel (0-1): optional, brightens arcs proportionally to signal activity
+  function _drawMacroAtmosphere(ctx, palette, canvasW, canvasH, gridW, gridH, activityLevel) {
+    if (!palette) return;
+    var colors = palette.colors;
+    var activity = activityLevel || 0;
+    ctx.save();
+    // 4-6 huge ghost forms
+    var count = 5;
+    var seeds = [0.17, 0.73, 0.42, 0.91, 0.28];
+    for (var i = 0; i < count; i++) {
+      var t = seeds[i];
+      var cx = gridW * (0.1 + t * 0.8);
+      var cy = gridH * (0.05 + seeds[(i + 2) % count] * 0.9);
+      var r = gridH * (0.22 + seeds[(i + 1) % count] * 0.35);
+      var color = colors[(i * 3) % colors.length];
+      var rgb = hexToRgb(color);
+      var alpha = 0.03 + seeds[(i + 3) % count] * 0.05 + activity * 0.035;
+      // Arcs and pressure circles
+      if (i % 2 === 0) {
+        ctx.beginPath();
+        var startAngle = seeds[(i + 1) % count] * Math.PI;
+        ctx.arc(cx, cy, r, startAngle, startAngle + Math.PI * 1.6, false);
+        ctx.strokeStyle = "rgba(" + rgb.r + "," + rgb.g + "," + rgb.b + "," + alpha + ")";
+        ctx.lineWidth = Math.max(4, gridH * 0.018);
+        ctx.stroke();
+      } else {
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.strokeStyle = "rgba(" + rgb.r + "," + rgb.g + "," + rgb.b + "," + (alpha * 0.7) + ")";
+        ctx.lineWidth = Math.max(3, gridH * 0.012);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+
+  // Draw signal noise — Layer C: micro atmospheric debris (drawn after grid)
+  function _drawSignalNoise(ctx, palette, gridW, gridH, blocks, cellSize) {
+    if (!palette || !blocks || !blocks.length) return;
+    var colors = palette.colors;
+    ctx.save();
+    var noiseCount = Math.min(60, Math.floor(blocks.length * 0.08));
+    for (var i = 0; i < noiseCount; i++) {
+      var b = blocks[(i * 7 + 3) % blocks.length];
+      var color = colors[b.noteClass % colors.length];
+      var rgb = hexToRgb(color);
+      var nx = b.col * (cellSize + 1) + (((_blockHash(b) * 1103515245) >>> 0) % Math.max(1, cellSize)) - cellSize * 0.5;
+      var ny = b.row * (cellSize + 1) + (((_blockHash(b) * 22695477)  >>> 0) % Math.max(1, cellSize)) - cellSize * 0.5;
+      var sz = 1 + ((_blockHash(b) % 3));
+      ctx.globalAlpha = 0.06 + ((_blockHash(b) % 20) / 200);
+      if (i % 3 === 0) {
+        ctx.fillStyle = "rgba(" + rgb.r + "," + rgb.g + "," + rgb.b + ",1)";
+        ctx.fillRect(nx, ny, sz, sz);
+      } else {
+        ctx.beginPath();
+        ctx.arc(nx, ny, sz * 0.6, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(" + rgb.r + "," + rgb.g + "," + rgb.b + ",1)";
+        ctx.fill();
+      }
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  // Intentional void test — blocks in void zones are skipped (rendered as empty space)
+  // Produces irregular corridors, cluster islands, silent regions
+  function _isIntentionalVoid(block, cols, rows) {
+    var h = _blockHash(block);
+    var nx = block.col / Math.max(1, cols - 1);
+    var ny = block.row / Math.max(1, rows - 1);
+    // 3 void seeds
+    var voids = [[0.22, 0.38, 0.12], [0.75, 0.6, 0.10], [0.5, 0.82, 0.09]];
+    for (var i = 0; i < voids.length; i++) {
+      var vx = voids[i][0], vy = voids[i][1], vr = voids[i][2];
+      var dx = nx - vx, dy = ny - vy;
+      if (dx * dx + dy * dy < vr * vr) return true;
+    }
+    // Corridor void: thin horizontal band ~35% down
+    if (ny > 0.33 && ny < 0.37 && (h % 100) < 55) return true;
+    return false;
   }
 
   // ── renderGridLayer ──────────────────────────────────────────────────────────
@@ -698,73 +1215,290 @@
     var g = layer.grid;
     var canvasW = renderState.canvas ? renderState.canvas.width : 1080;
     var canvasH = renderState.canvas ? renderState.canvas.height : 1920;
-
-    var cellSize = g.cellSize;
-    if (g.fitMode === "fitFrame") {
-      cellSize = computeFitCellSize(g, canvasW, canvasH);
-    }
-
-    var gridW = g.columns * (cellSize + g.gap) - g.gap;
-    var gridH = g.rows * (cellSize + g.gap) - g.gap;
-    var offsetX = Math.round((canvasW - gridW) / 2);
-    var offsetY = Math.round((canvasH - gridH) / 2);
-
     var isBauhaus = layer.renderer && layer.renderer.id === "bauhausMinimal";
 
-    // Resolve palette + finish for Bauhaus layers
+    // Resolve reactivity mode
+    var reactivityMode = "off";
+    if (isBauhaus && layer.renderer.reactivity) {
+      var rx = layer.renderer.reactivity;
+      reactivityMode = (rx.enabled && rx.mode) ? rx.mode : "off";
+    }
+
+    // Resolve palette + finish + tileStyle (shared by both rendering paths)
     var palette = null;
     var finishId = "clean";
+    var activeTileStyle = null;
     if (isBauhaus) {
-      var paletteId = (layer.renderer && layer.renderer.paletteId) || DEFAULT_PALETTE_ID;
-      finishId = (layer.renderer && layer.renderer.finishId) || DEFAULT_FINISH_ID;
+      var paletteId = layer.renderer.paletteId || DEFAULT_PALETTE_ID;
+      finishId = layer.renderer.finishId || DEFAULT_FINISH_ID;
       palette = BAUHAUS_PALETTES[paletteId] || BAUHAUS_PALETTES[DEFAULT_PALETTE_ID];
-
-      // Fill full canvas with palette background (this layer IS the background)
+      var tileStyleId = (layer.renderer.tileStyle && layer.renderer.tileStyle.id) || DEFAULT_TILE_STYLE_ID;
+      activeTileStyle = BAUHAUS_TILE_STYLES[tileStyleId] ||
+        (layer.renderer.tileStyle && typeof layer.renderer.tileStyle === "object" ? layer.renderer.tileStyle : null) ||
+        BAUHAUS_TILE_STYLES[DEFAULT_TILE_STYLE_ID];
       ctx.save();
       ctx.fillStyle = palette.background;
       ctx.fillRect(0, 0, canvasW, canvasH);
       ctx.restore();
     }
 
+    // ── Viewport path (Bauhaus only) ─────────────────────────────────────────
+    var vpConf = isBauhaus && layer.renderer.viewport;
+    if (vpConf && vpConf.enabled && vpConf.mode !== "full") {
+      var gap = g.gap != null ? g.gap : 1;
+      var vCols = Math.max(1, Math.min(vpConf.cols || 7,  g.columns));
+      var vRows = Math.max(1, Math.min(vpConf.rows || 11, g.rows));
+      var vSC = Math.max(0, Math.min(vpConf.startCol || 0, Math.max(0, g.columns - vCols)));
+      var vSR = Math.max(0, Math.min(vpConf.startRow || 0, Math.max(0, g.rows   - vRows)));
+
+      // Follow playback: timeline (default) or event mode
+      if (vpConf.followPlayback) {
+        var maxSC = Math.max(0, g.columns - vCols);
+        var maxSR = Math.max(0, g.rows    - vRows);
+        var targetSC = null, targetSR = null;
+        var followTarget = vpConf.followTarget || "timeline";
+
+        if (followTarget === "event") {
+          // Exact playhead block (may jump on dense MIDI)
+          var phBlock = null;
+          for (var _bi = 0; _bi < layer.blocks.length; _bi++) {
+            if (layer.blocks[_bi].playhead) { phBlock = layer.blocks[_bi]; break; }
+          }
+          if (phBlock) {
+            targetSC = Math.max(0, Math.min(maxSC, phBlock.col - Math.floor(vCols / 2)));
+            targetSR = Math.max(0, Math.min(maxSR, phBlock.row - Math.floor(vRows / 2)));
+          }
+        } else {
+          // Timeline: linear progress through the full block sequence
+          // _timelineIndex is written each frame by main.js (throttled)
+          var tIdx = vpConf._timelineIndex;
+          if (tIdx != null) {
+            var tCol = tIdx % g.columns;
+            var tRow = Math.floor(tIdx / g.columns);
+            targetSC = Math.max(0, Math.min(maxSC, tCol - Math.floor(vCols / 2)));
+            targetSR = Math.max(0, Math.min(maxSR, tRow - Math.floor(vRows / 2)));
+          }
+        }
+
+        if (targetSC != null && targetSR != null) {
+          vpConf.targetStartCol = targetSC;
+          vpConf.targetStartRow = targetSR;
+
+          var k = vpConf.followSmoothing != null ? vpConf.followSmoothing : 0.08;
+          if (vpConf._smoothCol == null) vpConf._smoothCol = vSC;
+          if (vpConf._smoothRow == null) vpConf._smoothRow = vSR;
+          vpConf._smoothCol += (targetSC - vpConf._smoothCol) * k;
+          vpConf._smoothRow += (targetSR - vpConf._smoothRow) * k;
+
+          vSC = Math.max(0, Math.min(maxSC, Math.round(vpConf._smoothCol)));
+          vSR = Math.max(0, Math.min(maxSR, Math.round(vpConf._smoothRow)));
+          vpConf.startCol = vSC;
+          vpConf.startRow = vSR;
+        }
+      }
+
+      var vpPad = vpConf.padding != null ? vpConf.padding : 24;
+      var vpCell = computeFitCellSize(
+        { columns: vCols, rows: vRows, framePadding: vpPad, gap: gap, minCellSize: 4, maxCellSize: 240 },
+        canvasW, canvasH
+      );
+      var vpW = vCols * (vpCell + gap) - gap;
+      var vpH = vRows * (vpCell + gap) - gap;
+
+      ctx.save();
+      ctx.translate(Math.round((canvasW - vpW) / 2), Math.round((canvasH - vpH) / 2));
+
+      layer.blocks.forEach(function (block) {
+        var bc = block.col, br = block.row;
+        if (bc < vSC || bc >= vSC + vCols || br < vSR || br >= vSR + vRows) return;
+        var style = BLOCK_LIBRARY[block.styleId] || BLOCK_LIBRARY.solid_note_tile;
+        var saved = { x: block.x, y: block.y, width: block.width, height: block.height };
+        block.x = (bc - vSC) * (vpCell + gap);
+        block.y = (br - vSR) * (vpCell + gap);
+        block.width = vpCell;
+        block.height = vpCell;
+        block._resolvedColor  = palette ? getPaletteColor(block.noteClass, palette) : block.color;
+        block._reactivityMode = reactivityMode;
+        block._tileStyle      = activeTileStyle;
+        renderBauhausGridBlock(ctx, block, style, renderState);
+        block._resolvedColor  = null;
+        block._reactivityMode = null;
+        block._tileStyle      = null;
+        block.x = saved.x; block.y = saved.y; block.width = saved.width; block.height = saved.height;
+      });
+
+      if (palette && finishId !== "clean") {
+        applyBauhausFinish(ctx, finishId, 0, 0, vpW, vpH, palette);
+      }
+      ctx.restore();
+      return;
+    }
+
+    // ── Full-grid path ───────────────────────────────────────────────────────
+    var cellSize = g.cellSize;
+    if (g.fitMode === "fitFrame") {
+      cellSize = computeFitCellSize(g, canvasW, canvasH);
+    }
+    var gridW = g.columns * (cellSize + g.gap) - g.gap;
+    var gridH = g.rows    * (cellSize + g.gap) - g.gap;
+    var offsetX = Math.round((canvasW - gridW) / 2);
+    var offsetY = Math.round((canvasH - gridH) / 2);
+
     ctx.save();
     ctx.translate(offsetX, offsetY);
 
-    // Tile rendering — inject _resolvedColor for Bauhaus
-    if (g.fitMode === "fitFrame" && cellSize !== g.cellSize) {
+    // Layer A — Macro Atmosphere (behind all glyphs)
+    var _lc = renderState && renderState.layerControls;
+    var _lcAtmo = _lc && _lc.atmosphere;
+    var _showAtmo = !_lc || !_lcAtmo || _lcAtmo.visible !== false;
+    var _hasSoloGs = _lc && Object.keys(_lc).some(function(k){return _lc[k]&&_lc[k].solo;});
+    if (_hasSoloGs) _showAtmo = !!(_lcAtmo && _lcAtmo.solo);
+    if (isBauhaus && palette && cellSize >= 8 && _showAtmo) {
+      var atmosphereActivity = renderState && renderState.signalActivityLevel || 0;
+      ctx.save();
+      ctx.globalAlpha = (_lcAtmo && _lcAtmo.opacity != null) ? _lcAtmo.opacity : 1;
+      _drawMacroAtmosphere(ctx, palette, canvasW, canvasH, gridW, gridH, atmosphereActivity);
+      ctx.restore();
+    }
+
+    // Helper: render one bauhaus block with field composition applied
+    function _renderBauhausField(block, cellSz) {
+      // Resolve pattern early so we can use it for rotation/formation checks
+      if (!block.patternId) block.patternId = resolveBauhausPatternId(block);
+
+      // Void test — intentionally empty space
+      if (_isIntentionalVoid(block, g.columns, g.rows)) return;
+
+      var style = BLOCK_LIBRARY[block.styleId] || BLOCK_LIBRARY.solid_note_tile;
+      var saved = { x: block.x, y: block.y, width: block.width, height: block.height };
+
+      // Normalize position to cell grid
+      block.x = block.col * (cellSz + g.gap);
+      block.y = block.row * (cellSz + g.gap);
+      block.width  = cellSz;
+      block.height = cellSz;
+
+      // Scale hierarchy
+      var scaleMult = _scaleMultiplier(block);
+      var scaledSize = cellSz * scaleMult;
+      var overflow   = _overflowOffset(block, cellSz);
+      var rot        = _fieldRotation(block);
+
+      block._resolvedColor  = palette ? getPaletteColor(block.noteClass, palette) : block.color;
+      block._reactivityMode = reactivityMode;
+      block._tileStyle      = activeTileStyle;
+
+      // Apply transform for scale + overflow + rotation
+      if (scaleMult !== 1 || overflow.dx !== 0 || overflow.dy !== 0 || rot !== 0) {
+        ctx.save();
+        var cx = block.x + cellSz * 0.5 + overflow.dx;
+        var cy = block.y + cellSz * 0.5 + overflow.dy;
+        ctx.translate(cx, cy);
+        if (rot !== 0) ctx.rotate(rot);
+        ctx.translate(-cx, -cy);
+        // Override width/height to scaled size
+        var diff = (scaledSize - cellSz) * 0.5;
+        block.x -= diff + overflow.dx;
+        block.y -= diff + overflow.dy;
+        block.width  = scaledSize;
+        block.height = scaledSize;
+        renderBauhausGridBlock(ctx, block, style, renderState);
+        ctx.restore();
+      } else {
+        renderBauhausGridBlock(ctx, block, style, renderState);
+      }
+
+      block._resolvedColor  = null;
+      block._reactivityMode = null;
+      block._tileStyle      = null;
+      block.x = saved.x; block.y = saved.y; block.width = saved.width; block.height = saved.height;
+    }
+
+    // Layer B — Structural Terrain: render all blocks with field composition
+    var _lcTerrain = _lc && _lc.terrain;
+    var _showTerrain = !_lc || !_lcTerrain || _lcTerrain.visible !== false;
+    if (_hasSoloGs) _showTerrain = !!(_lcTerrain && _lcTerrain.solo);
+    var _terrainAlpha = (_lcTerrain && _lcTerrain.opacity != null) ? _lcTerrain.opacity : 1;
+    if (_showTerrain) {
+      ctx.save();
+      ctx.globalAlpha = _terrainAlpha;
+    }
+    if (isBauhaus && cellSize >= 8 && _showTerrain) {
+      layer.blocks.forEach(function (block) { _renderBauhausField(block, cellSize); });
+    } else if (_showTerrain && g.fitMode === "fitFrame" && cellSize !== g.cellSize) {
       layer.blocks.forEach(function (block) {
         var style = BLOCK_LIBRARY[block.styleId] || BLOCK_LIBRARY.solid_note_tile;
-        var bx = block.col * (cellSize + g.gap);
-        var by = block.row * (cellSize + g.gap);
         var saved = { x: block.x, y: block.y, width: block.width, height: block.height };
-        block.x = bx; block.y = by; block.width = cellSize; block.height = cellSize;
+        block.x = block.col * (cellSize + g.gap);
+        block.y = block.row * (cellSize + g.gap);
+        block.width = cellSize; block.height = cellSize;
         if (isBauhaus) {
-          block._resolvedColor = palette ? getPaletteColor(block.noteClass, palette) : block.color;
+          block._resolvedColor  = palette ? getPaletteColor(block.noteClass, palette) : block.color;
+          block._reactivityMode = reactivityMode;
+          block._tileStyle      = activeTileStyle;
           renderBauhausGridBlock(ctx, block, style, renderState);
-          block._resolvedColor = null;
+          block._resolvedColor  = null;
+          block._reactivityMode = null;
+          block._tileStyle      = null;
         } else {
           renderGridBlock(ctx, block, style, renderState);
         }
         block.x = saved.x; block.y = saved.y; block.width = saved.width; block.height = saved.height;
       });
-    } else {
+    } else if (_showTerrain) {
       layer.blocks.forEach(function (block) {
         var style = BLOCK_LIBRARY[block.styleId] || BLOCK_LIBRARY.solid_note_tile;
         if (isBauhaus) {
-          block._resolvedColor = palette ? getPaletteColor(block.noteClass, palette) : block.color;
+          block._resolvedColor  = palette ? getPaletteColor(block.noteClass, palette) : block.color;
+          block._reactivityMode = reactivityMode;
+          block._tileStyle      = activeTileStyle;
           renderBauhausGridBlock(ctx, block, style, renderState);
-          block._resolvedColor = null;
+          block._resolvedColor  = null;
+          block._reactivityMode = null;
+          block._tileStyle      = null;
         } else {
           renderGridBlock(ctx, block, style, renderState);
         }
       });
     }
+    if (_showTerrain) ctx.restore();
 
-    // Apply finish overlay in grid coordinate space
+    // Layer C — Signal Noise (micro debris, above structural terrain)
+    var _lcSig = _lc && _lc.signals;
+    var _showSig = !_lc || !_lcSig || _lcSig.visible !== false;
+    if (_hasSoloGs) _showSig = !!(_lcSig && _lcSig.solo);
+    if (isBauhaus && palette && cellSize >= 8 && _showSig) {
+      ctx.save();
+      ctx.globalAlpha = (_lcSig && _lcSig.opacity != null) ? _lcSig.opacity : 1;
+      _drawSignalNoise(ctx, palette, gridW, gridH, layer.blocks, cellSize);
+      ctx.restore();
+    }
+
     if (isBauhaus && palette && finishId !== "clean") {
       applyBauhausFinish(ctx, finishId, 0, 0, gridW, gridH, palette);
     }
-
     ctx.restore();
+  }
+
+  // ── getBauhausNotePatternMap ─────────────────────────────────────────────────
+  function getBauhausNotePatternMap(layer) {
+    var paletteId = (layer && layer.renderer && layer.renderer.paletteId) || DEFAULT_PALETTE_ID;
+    var palette = BAUHAUS_PALETTES[paletteId] || BAUHAUS_PALETTES[DEFAULT_PALETTE_ID];
+    var out = [];
+    for (var nc = 0; nc < 12; nc++) {
+      var family = _activeNotePatternOverrides[nc] || DEFAULT_NOTE_FAMILY_MAP[nc] || "circle";
+      var patterns = getPatternsForFamily(family);
+      var preferred = patterns[0];
+      out.push({
+        noteClass: nc,
+        noteName: NOTE_CLASS_NAMES[nc],
+        color: getPaletteColor(nc, palette),
+        patternFamily: family,
+        allowedPatterns: patterns.slice(),
+        preferredPattern: preferred,
+      });
+    }
+    return out;
   }
 
   // ── createMidiBankFromCartridge ──────────────────────────────────────────────
@@ -823,6 +1557,26 @@
     BAUHAUS_FINISHES: BAUHAUS_FINISHES,
     DEFAULT_PALETTE_ID: DEFAULT_PALETTE_ID,
     DEFAULT_FINISH_ID: DEFAULT_FINISH_ID,
+    BAUHAUS_PATTERN_IDS: BAUHAUS_PATTERN_IDS,
+    BAUHAUS_PATTERN_VOCABULARY_VERSION: BAUHAUS_PATTERN_VOCABULARY_VERSION,
+    BAUHAUS_PATTERN_META: BAUHAUS_PATTERN_META,
+    BAUHAUS_FAMILY_PATTERNS: BAUHAUS_FAMILY_PATTERNS,
+    DEFAULT_NOTE_FAMILY_MAP: DEFAULT_NOTE_FAMILY_MAP,
+    NOTE_CLASS_NAMES: NOTE_CLASS_NAMES,
+    getPatternsForFamily: getPatternsForFamily,
+    setActiveNotePatternOverrides: setActiveNotePatternOverrides,
+    resolveBauhausPatternId: resolveBauhausPatternId,
+    drawBauhausPattern: drawBauhausPattern,
+    BAUHAUS_TILE_STYLES: BAUHAUS_TILE_STYLES,
+    DEFAULT_TILE_STYLE_ID: DEFAULT_TILE_STYLE_ID,
+    getBauhausNotePatternMap: getBauhausNotePatternMap,
+    DEFAULT_VIEWPORT: {
+      enabled: false, mode: "full",
+      cols: 7, rows: 11, startCol: 0, startRow: 0,
+      followPlayback: false, followTarget: "timeline",
+      followSmoothing: 0.08, followTargetUpdateMs: 120,
+      padding: 24,
+    },
     createMidiBankFromCartridge: createMidiBankFromCartridge,
   };
 })(window);

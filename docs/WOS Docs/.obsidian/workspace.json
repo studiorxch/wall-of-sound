@@ -4,22 +4,6 @@
     "type": "split",
     "children": [
       {
-        "id": "be2b3bba2af90571",
-        "type": "tabs",
-        "children": [
-          {
-            "id": "93f7e0c050d2d67f",
-            "type": "leaf",
-            "state": {
-              "type": "graph",
-              "state": {},
-              "icon": "lucide-git-fork",
-              "title": "Graph view"
-            }
-          }
-        ]
-      },
-      {
         "id": "8ff21bc0e0d1d6b5",
         "type": "tabs",
         "children": [
@@ -196,7 +180,7 @@
       "bases:Create new base": false
     }
   },
-  "active": "93f7e0c050d2d67f",
+  "active": "190ed40e3f8aad9e",
   "lastOpenFiles": [
     "wall/0426_WOS_MotionPanel_v1.2.0.md",
     "wall/0415_WOS_SystemStabilityPass_v1.1.md",

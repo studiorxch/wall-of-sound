@@ -110,6 +110,18 @@
       drag: 0.01,
       type: "dot",
     },
+
+    // Electrical signal response — sparse micro-glow on grid cell activation
+    signal: {
+      size: [2, 5],
+      speed: [8, 28],
+      life: [0.2, 0.6],
+      count: 3,
+      spread: 360,
+      gravity: 0,
+      drag: 0.12,
+      type: "glow",
+    },
   };
 
   // ── spawnProfile ──────────────────────────────────────────────────────────

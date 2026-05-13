@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "wall-of-sound",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["serve", "-p", "5500", "wall"],
+      "port": 5500
+    }
+  ]
+}

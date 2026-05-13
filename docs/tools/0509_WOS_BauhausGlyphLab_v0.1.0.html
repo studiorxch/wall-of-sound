@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>WOS Bauhaus Glyph Lab v0.1.0</title>
+  <style>
+    :root { --bg:#111214; --panel:#17191d; --panel-2:#202329; --text:#e9edf2; --muted:#8b939f; --line:rgba(255,255,255,.12); --accent:#3dd8c5; --neutral:#e8e5db; --paper:#f5efdf; }
+    * { box-sizing:border-box; }
+    body { margin:0; min-height:100vh; background:var(--bg); color:var(--text); font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; overflow:hidden; }
+    .app { display:grid; grid-template-columns:320px 1fr; height:100vh; }
+    aside { background:var(--panel); border-right:1px solid var(--line); overflow:auto; padding:18px; }
+    main { overflow:auto; padding:28px; }
+    h1 { margin:0 0 4px; font-size:16px; letter-spacing:.08em; text-transform:uppercase; }
+    .sub { margin:0 0 18px; color:var(--muted); font-size:11px; line-height:1.45; }
+    .section { border-top:1px solid var(--line); padding-top:16px; margin-top:16px; }
+    .section h2, .card h3 { margin:0 0 10px; color:var(--accent); font-size:11px; letter-spacing:.1em; text-transform:uppercase; }
+    .card h3 { color:var(--muted); margin-bottom:14px; }
+    label { display:block; margin:12px 0 6px; color:var(--muted); font-size:10px; letter-spacing:.06em; text-transform:uppercase; }
+    select, input[type=range], button { width:100%; font:inherit; }
+    select, button { background:var(--panel-2); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:9px 10px; font-size:12px; }
+    button { cursor:pointer; margin-top:8px; }
+    button:hover { border-color:var(--accent); }
+    input[type=range] { accent-color:var(--accent); }
+    .kv { display:grid; grid-template-columns:1fr auto; gap:10px; margin-top:8px; color:var(--muted); font-size:10px; }
+    .preview-row { display:grid; grid-template-columns:minmax(360px,560px) minmax(420px,1fr); gap:28px; align-items:start; }
+    .card { background:#0b0c0f; border:1px solid var(--line); border-radius:18px; padding:18px; box-shadow:0 18px 80px rgba(0,0,0,.28); }
+    canvas { display:block; width:100%; height:auto; background:var(--paper); border-radius:10px; }
+    .note-map { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:8px; }
+    .note-pill { display:grid; grid-template-columns:34px 1fr; gap:8px; align-items:center; padding:7px; background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.07); border-radius:8px; font-size:10px; color:var(--muted); }
+    .note-pill strong { color:var(--text); font-size:11px; }
+    .mini-glyph { width:28px; height:28px; display:grid; grid-template-columns:repeat(2,1fr); grid-template-rows:repeat(2,1fr); background:var(--neutral); border:1px solid rgba(0,0,0,.05); }
+    .mini-glyph span { border:.5px solid rgba(255,255,255,.16); }
+    .mini-glyph span.on { background:#ff211a; }
+    .copy { white-space:pre-wrap; word-break:break-word; font-size:10px; color:#cfd6df; background:#08090b; border:1px solid var(--line); border-radius:10px; padding:12px; max-height:220px; overflow:auto; }
+    @media (max-width:960px) { body{overflow:auto}.app{grid-template-columns:1fr;height:auto} aside{border-right:none;border-bottom:1px solid var(--line)} .preview-row{grid-template-columns:1fr} }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside>
+      <h1>Bauhaus Glyph Lab</h1>
+      <p class="sub">WOS visual pitch alphabet tester. Same 12-note cut map, multiple shape renderers.</p>
+      <div class="section">
+        <h2>Renderer</h2>
+        <label for="renderer">Shape Family</label>
+        <select id="renderer"><option value="square">Square Cut</option><option value="triangle">Triangle Cut</option><option value="circle">Circle Cut</option><option value="mixed">Mixed Bauhaus</option></select>
+        <label for="colorMode">Color Mode</label>
+        <select id="colorMode"><option value="monotone">Monotone Red</option><option value="duotone">Note Color + Neutral</option><option value="neutral">Neutral Only</option></select>
+        <label for="arrangement">Wallpaper Algorithm</label>
+        <select id="arrangement"><option value="linear">Linear Gradient / Pitch Walk</option><option value="spiral">Spiral Drift</option><option value="waves">Wave Bands</option><option value="random">Seeded Random</option></select>
+      </div>
+      <div class="section">
+        <h2>Grid</h2>
+        <label for="cols">Columns <span id="colsVal">24</span></label><input id="cols" type="range" min="6" max="60" value="24" />
+        <label for="rows">Rows <span id="rowsVal">36</span></label><input id="rows" type="range" min="6" max="80" value="36" />
+        <label for="gap">Gap <span id="gapVal">0</span></label><input id="gap" type="range" min="0" max="8" value="0" />
+        <label for="grain">Paper Grain <span id="grainVal">22</span>%</label><input id="grain" type="range" min="0" max="80" value="22" />
+        <button id="reroll">Reroll Seed</button><button id="downloadPng">Download PNG</button><button id="copyJson">Copy Glyph JSON</button>
+      </div>
+      <div class="section">
+        <h2>Model</h2>
+        <div class="kv"><span>Cut Map</span><span>12 notes</span></div><div class="kv"><span>Base Unit</span><span>2×2 cells</span></div><div class="kv"><span>Anchor</span><span>C = full</span></div><div class="kv"><span>Opposite</span><span>F# = empty</span></div>
+      </div>
+    </aside>
+    <main>
+      <div class="preview-row">
+        <section class="card"><h3>12-Note Glyph Chart</h3><canvas id="chart" width="720" height="980"></canvas></section>
+        <section class="card"><h3>Wallpaper / Terrain Preview</h3><canvas id="wallpaper" width="1080" height="1440"></canvas></section>
+      </div>
+      <section class="card" style="margin-top:28px;"><h3>Current Note Map</h3><div id="noteMap" class="note-map"></div></section>
+      <section class="card" style="margin-top:28px;"><h3>Exportable JSON</h3><div id="jsonOut" class="copy"></div></section>
+    </main>
+  </div>
+<script>
+const NOTE_ORDER=["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+const NOTE_COLORS={"C":"#ff2a22","C#":"#ff6d39","D":"#ff9b1f","D#":"#ffbf2f","E":"#e5d645","F":"#b9d957","F#":"#35b96d","G":"#28bea0","G#":"#2bb8d2","A":"#498cff","A#":"#7a62ff","B":"#f05abf"};
+const CUT_MAP={"C":{id:"full",cells:["tl","tr","bl","br"]},"C#":{id:"l_missing_br",cells:["tl","tr","bl"]},"D":{id:"diag_tl_br",cells:["tl","br"]},"D#":{id:"top_row",cells:["tl","tr"]},"E":{id:"l_missing_bl",cells:["tl","tr","br"]},"F":{id:"right_col",cells:["tr","br"]},"F#":{id:"empty",cells:[]},"G":{id:"bottom_row",cells:["bl","br"]},"G#":{id:"diag_tr_bl",cells:["tr","bl"]},"A":{id:"l_missing_tr",cells:["tl","bl","br"]},"A#":{id:"l_missing_tl",cells:["tr","bl","br"]},"B":{id:"left_col",cells:["tl","bl"]}};
+const els={renderer:document.getElementById("renderer"),colorMode:document.getElementById("colorMode"),arrangement:document.getElementById("arrangement"),cols:document.getElementById("cols"),rows:document.getElementById("rows"),gap:document.getElementById("gap"),grain:document.getElementById("grain"),colsVal:document.getElementById("colsVal"),rowsVal:document.getElementById("rowsVal"),gapVal:document.getElementById("gapVal"),grainVal:document.getElementById("grainVal"),chart:document.getElementById("chart"),wallpaper:document.getElementById("wallpaper"),noteMap:document.getElementById("noteMap"),jsonOut:document.getElementById("jsonOut"),reroll:document.getElementById("reroll"),downloadPng:document.getElementById("downloadPng"),copyJson:document.getElementById("copyJson")};
+let seed=9381;
+function rand(){seed=(seed*1664525+1013904223)>>>0;return seed/4294967296;}
+function drawSquareCell(ctx,x,y,size,cell,color){const h=size/2;let cx=x,cy=y;if(cell.includes("r"))cx+=h;if(cell.includes("b"))cy+=h;ctx.fillStyle=color;ctx.fillRect(cx,cy,h,h);}
+function trianglePathForCell(ctx,x,y,size,cell){const h=size/2,cx=x+h,cy=y+h;if(cell==="tl"){ctx.moveTo(x,y);ctx.lineTo(x+h,y);ctx.lineTo(cx,cy);}if(cell==="tr"){ctx.moveTo(x+size,y);ctx.lineTo(x+h,y);ctx.lineTo(cx,cy);}if(cell==="br"){ctx.moveTo(x+size,y+size);ctx.lineTo(x+h,y+size);ctx.lineTo(cx,cy);}if(cell==="bl"){ctx.moveTo(x,y+size);ctx.lineTo(x+h,y+size);ctx.lineTo(cx,cy);}ctx.closePath();}
+function circlePathForCell(ctx,x,y,size,cell){const r=size/2;if(cell==="tl"){ctx.moveTo(x,y+r);ctx.arc(x,y,r,Math.PI/2,0,true);ctx.lineTo(x,y);}if(cell==="tr"){ctx.moveTo(x+r,y);ctx.arc(x+size,y,r,Math.PI,Math.PI/2,true);ctx.lineTo(x+size,y);}if(cell==="br"){ctx.moveTo(x+size,y+r);ctx.arc(x+size,y+size,r,-Math.PI/2,Math.PI,true);ctx.lineTo(x+size,y+size);}if(cell==="bl"){ctx.moveTo(x+r,y+size);ctx.arc(x,y+size,r,0,-Math.PI/2,true);ctx.lineTo(x,y+size);}ctx.closePath();}
+function getActiveColor(note,mode){if(mode==="monotone")return"#ff211a";if(mode==="neutral")return"#d2d0ca";return NOTE_COLORS[note]||"#ff211a";}
+function drawGlyph(ctx,note,x,y,size,renderer,colorMode,options={}){const map=CUT_MAP[note]||CUT_MAP.C,active=getActiveColor(note,colorMode),neutral=colorMode==="neutral"?"#eeeeea":"#e8e5db";ctx.save();if(renderer==="mixed"){const idx=NOTE_ORDER.indexOf(note);renderer=["square","triangle","circle"][Math.abs(idx)%3];}ctx.fillStyle=neutral;ctx.fillRect(x,y,size,size);if(renderer==="square"){map.cells.forEach(cell=>drawSquareCell(ctx,x,y,size,cell,active));}if(renderer==="triangle"){ctx.fillStyle=active;map.cells.forEach(cell=>{ctx.beginPath();trianglePathForCell(ctx,x,y,size,cell);ctx.fill();});}if(renderer==="circle"){ctx.fillStyle=active;map.cells.forEach(cell=>{ctx.beginPath();circlePathForCell(ctx,x,y,size,cell);ctx.fill();});}if(options.grid&&size>=12){ctx.strokeStyle="rgba(255,255,255,.18)";ctx.lineWidth=Math.max(.5,size*.012);ctx.beginPath();ctx.moveTo(x+size/2,y);ctx.lineTo(x+size/2,y+size);ctx.moveTo(x,y+size/2);ctx.lineTo(x+size,y+size/2);ctx.stroke();}ctx.restore();}
+function drawPaper(ctx,w,h,grainPct){ctx.fillStyle="#f5efdf";ctx.fillRect(0,0,w,h);const count=Math.floor((w*h/9000)*(grainPct/25));ctx.save();ctx.globalAlpha=.22;for(let i=0;i<count;i++){const v=Math.floor(130+rand()*90);ctx.fillStyle=`rgb(${v},${v},${v})`;ctx.fillRect(rand()*w,rand()*h,rand()*1.4+.4,rand()*1.4+.4);}ctx.restore();}
+function drawChart(){const ctx=els.chart.getContext("2d"),w=els.chart.width,h=els.chart.height;drawPaper(ctx,w,h,Number(els.grain.value));const renderer=els.renderer.value,colorMode=els.colorMode.value,cols=3,gapX=180,gapY=220,tile=112,startX=110,startY=92;ctx.font="700 20px ui-monospace, monospace";ctx.textAlign="center";ctx.textBaseline="middle";NOTE_ORDER.forEach((note,i)=>{const col=i%cols,row=Math.floor(i/cols),x=startX+col*gapX,y=startY+row*gapY;ctx.fillStyle="#111";ctx.fillText(note,x+tile/2,y-28);drawGlyph(ctx,note,x,y,tile,renderer,colorMode,{grid:true});ctx.font="11px ui-monospace, monospace";ctx.fillStyle="rgba(20,20,20,.58)";ctx.fillText(CUT_MAP[note].id,x+tile/2,y+tile+22);ctx.font="700 20px ui-monospace, monospace";});}
+function noteForCell(col,row,cols,rows,mode){if(mode==="linear"){const t=(col/Math.max(1,cols-1))*.62+(row/Math.max(1,rows-1))*.38;return NOTE_ORDER[Math.floor(t*12)%12];}if(mode==="spiral"){const dx=col-cols/2,dy=row-rows/2,angle=Math.atan2(dy,dx),dist=Math.hypot(dx,dy),v=angle/(Math.PI*2)+dist*.095;return NOTE_ORDER[((Math.floor(v*12)%12)+12)%12];}if(mode==="waves"){const v=Math.sin(col*.42)+Math.cos(row*.31)+Math.sin((col+row)*.13),idx=Math.floor(((v+3)/6)*12);return NOTE_ORDER[Math.max(0,Math.min(11,idx))];}return NOTE_ORDER[Math.floor(rand()*12)];}
+function drawWallpaper(){const ctx=els.wallpaper.getContext("2d"),w=els.wallpaper.width,h=els.wallpaper.height,cols=Number(els.cols.value),rows=Number(els.rows.value),gap=Number(els.gap.value),renderer=els.renderer.value,colorMode=els.colorMode.value,arrangement=els.arrangement.value,localSeed=seed;drawPaper(ctx,w,h,Number(els.grain.value));const pad=78,cell=Math.min((w-pad*2-gap*(cols-1))/cols,(h-pad*2-gap*(rows-1))/rows),totalW=cell*cols+gap*(cols-1),totalH=cell*rows+gap*(rows-1),ox=(w-totalW)/2,oy=(h-totalH)/2;for(let r=0;r<rows;r++){for(let c=0;c<cols;c++){const note=noteForCell(c,r,cols,rows,arrangement);drawGlyph(ctx,note,ox+c*(cell+gap),oy+r*(cell+gap),cell,renderer,colorMode,{grid:cell>16});}}seed=localSeed;}
+function syncNoteMap(){els.noteMap.innerHTML="";NOTE_ORDER.forEach(note=>{const pill=document.createElement("div");pill.className="note-pill";const mini=document.createElement("div");mini.className="mini-glyph";["tl","tr","bl","br"].forEach(cell=>{const span=document.createElement("span");if(CUT_MAP[note].cells.includes(cell))span.className="on";mini.appendChild(span);});const txt=document.createElement("div");txt.innerHTML=`<strong>${note}</strong><br>${CUT_MAP[note].id}`;pill.appendChild(mini);pill.appendChild(txt);els.noteMap.appendChild(pill);});const json={id:"bauhausCutGlyphMap.v0.1.0",renderer:els.renderer.value,colorMode:els.colorMode.value,arrangement:els.arrangement.value,notes:CUT_MAP};els.jsonOut.textContent=JSON.stringify(json,null,2);}
+function syncLabels(){els.colsVal.textContent=els.cols.value;els.rowsVal.textContent=els.rows.value;els.gapVal.textContent=els.gap.value;els.grainVal.textContent=els.grain.value;}
+function renderAll(){syncLabels();drawChart();drawWallpaper();syncNoteMap();}
+["change","input"].forEach(evt=>{[els.renderer,els.colorMode,els.arrangement,els.cols,els.rows,els.gap,els.grain].forEach(el=>el.addEventListener(evt,renderAll));});
+els.reroll.addEventListener("click",()=>{seed=Math.floor(Math.random()*1000000);renderAll();});
+els.downloadPng.addEventListener("click",()=>{const a=document.createElement("a");a.download="wos-bauhaus-glyph-lab-wallpaper.png";a.href=els.wallpaper.toDataURL("image/png");a.click();});
+els.copyJson.addEventListener("click",async()=>{await navigator.clipboard.writeText(els.jsonOut.textContent);els.copyJson.textContent="Copied";setTimeout(()=>{els.copyJson.textContent="Copy Glyph JSON";},900);});
+renderAll();
+</script>
+</body>
+</html>
