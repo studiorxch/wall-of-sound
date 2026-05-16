@@ -214,9 +214,8 @@
   document.addEventListener("pointerdown", function (e) {
     if (_activeId === null) return;
     var panel = document.getElementById("drawer-panel");
-    var rail  = document.getElementById("launcher-rail");
     if (panel && panel.contains(e.target)) return;  // click inside drawer — keep open
-    if (rail  && rail.contains(e.target))  return;  // click on launcher button — handled by toggle
+    if (e.target.closest && e.target.closest(".launcher-btn")) return;  // click on launcher — handled by toggle
 
     // Respect per-drawer closeOnOutsideClick flag (default: true)
     var drawer = registry[_activeId];

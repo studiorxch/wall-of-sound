@@ -87,6 +87,29 @@
   const noteActivity = {};
   const noteVelocity = {};
 
+  function flashNote(noteClass, velocity) {
+    const el = window.noteElements[noteClass % 12];
+    if (!el) return;
+
+    const noteName = NOTE_NAMES[noteClass % 12];
+    const color = NOTE_COLORS[noteName] || "#3dd8c5";
+
+    el.style.setProperty("--note-color", color);
+
+    // optional velocity scaling
+    const intensity = Math.max(0.35, velocity || 1);
+
+    el.style.opacity = intensity;
+    el.classList.add("active");
+
+    clearTimeout(el._flashTimer);
+
+    el._flashTimer = setTimeout(() => {
+      el.classList.remove("active");
+      el.style.opacity = 0;
+    }, 120);
+  }
+
   function saveSamples() {
     const data = {};
 
@@ -250,6 +273,7 @@
     let isPlaying = false;
     let loopId = null;
     let lastFrameTime = 0;
+    let lastDt = 1 / 60;
     let frameAccumulator = 0;
     const canvas = document.getElementById("engine-canvas");
     const canvasWrap = document.getElementById("canvas-wrap");
@@ -308,14 +332,24 @@
         return state.duplication;
       },
       debugSelection: function debugSelection() {
-        var strokeIds = state.selection && state.selection.strokeIds
-          ? Array.from(state.selection.strokeIds) : [];
-        var refs = typeof getSelectedObjectRefs === "function" ? getSelectedObjectRefs() : [];
-        var primary = typeof getPrimarySelectedObjectRef === "function" ? getPrimarySelectedObjectRef() : null;
+        var strokeIds =
+          state.selection && state.selection.strokeIds
+            ? Array.from(state.selection.strokeIds)
+            : [];
+        var refs =
+          typeof getSelectedObjectRefs === "function"
+            ? getSelectedObjectRefs()
+            : [];
+        var primary =
+          typeof getPrimarySelectedObjectRef === "function"
+            ? getPrimarySelectedObjectRef()
+            : null;
         return {
           tool: state.tool,
-          activeElement: document.activeElement && document.activeElement.tagName
-            ? document.activeElement.tagName.toLowerCase() : null,
+          activeElement:
+            document.activeElement && document.activeElement.tagName
+              ? document.activeElement.tagName.toLowerCase()
+              : null,
           multiSelection: state.multiSelection || [],
           selection: {
             strokeId: state.selection && state.selection.strokeId,
@@ -346,56 +380,116 @@
       testDuplicate: function () {
         return duplicateSelectedObject();
       },
-      forceDeleteFirstSelectedStroke: function forceDeleteFirstSelectedStroke() {
-        var id =
-          (state.selection && state.selection.strokeId) ||
-          (state.selection && state.selection.strokeIds && Array.from(state.selection.strokeIds)[0]) ||
-          (state.multiSelection && state.multiSelection.find(function (x) { return x.type === "stroke"; }) &&
-            state.multiSelection.find(function (x) { return x.type === "stroke"; }).id);
-        console.log("[FORCE DELETE STROKE] id:", id);
-        if (!id) { console.warn("[FORCE DELETE STROKE] no stroke id found"); return false; }
-        var before = { strokes: state.strokes.length, walkers: state.walkers.length, lines: state.lines.length };
-        state.strokes = state.strokes.filter(function (s) { return s.id !== id; });
-        state.walkers = state.walkers.filter(function (w) { return w.strokeId !== id && !(w.stroke && w.stroke.id === id); });
-        state.lines = state.lines.filter(function (l) { return l._strokeId !== id && l.strokeId !== id; });
-        clearSelection();
-        renderFrame();
-        syncUI();
-        var after = { strokes: state.strokes.length, walkers: state.walkers.length, lines: state.lines.length };
-        console.log("[FORCE DELETE STROKE]", { before: before, after: after });
-        return true;
-      },
-      forceDuplicateFirstSelectedStroke: function forceDuplicateFirstSelectedStroke() {
-        var id =
-          (state.selection && state.selection.strokeId) ||
-          (state.selection && state.selection.strokeIds && Array.from(state.selection.strokeIds)[0]) ||
-          (state.multiSelection && state.multiSelection.find(function (x) { return x.type === "stroke"; }) &&
-            state.multiSelection.find(function (x) { return x.type === "stroke"; }).id);
-        console.log("[FORCE DUPLICATE STROKE] id:", id);
-        if (!id) { console.warn("[FORCE DUPLICATE STROKE] no stroke id found"); return null; }
-        var source = state.strokes.find(function (s) { return s.id === id; });
-        if (!source) { console.warn("[FORCE DUPLICATE STROKE] source missing:", id); return null; }
-        pushHistory();
-        var copy = JSON.parse(JSON.stringify(source));
-        copy.id = "stroke-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7);
-        copy.points = (copy.points || []).map(function (p) { return { x: p.x + 20, y: p.y + 20 }; });
-        copy.drips = []; copy.specks = []; delete copy._groupId;
-        state.strokes.push(copy);
-        if (typeof strokeToLines === "function") strokeToLines(copy);
-        var srcWalker = state.walkers.find(function (w) { return w.strokeId === source.id || (w.stroke && w.stroke.id === source.id); });
-        if (srcWalker && typeof createWalkerFromStroke === "function") {
-          var walker = createWalkerFromStroke(copy);
-          if (walker) state.walkers.push(walker);
-        }
-        clearSelection();
-        state.selection.strokeId = copy.id;
-        state.selection.strokeIds = new Set([copy.id]);
-        state.selection.groupId = null;
-        state.multiSelection = [{ type: "stroke", id: copy.id }];
-        syncLegacySelection(); syncSelectionPanel(); renderFrame(); syncUI();
-        console.log("[FORCE DUPLICATE STROKE] duplicated:", copy.id);
-        return copy;
-      },
+      forceDeleteFirstSelectedStroke:
+        function forceDeleteFirstSelectedStroke() {
+          var id =
+            (state.selection && state.selection.strokeId) ||
+            (state.selection &&
+              state.selection.strokeIds &&
+              Array.from(state.selection.strokeIds)[0]) ||
+            (state.multiSelection &&
+              state.multiSelection.find(function (x) {
+                return x.type === "stroke";
+              }) &&
+              state.multiSelection.find(function (x) {
+                return x.type === "stroke";
+              }).id);
+          console.log("[FORCE DELETE STROKE] id:", id);
+          if (!id) {
+            console.warn("[FORCE DELETE STROKE] no stroke id found");
+            return false;
+          }
+          var before = {
+            strokes: state.strokes.length,
+            walkers: state.walkers.length,
+            lines: state.lines.length,
+          };
+          state.strokes = state.strokes.filter(function (s) {
+            return s.id !== id;
+          });
+          state.walkers = state.walkers.filter(function (w) {
+            return w.strokeId !== id && !(w.stroke && w.stroke.id === id);
+          });
+          state.lines = state.lines.filter(function (l) {
+            return l._strokeId !== id && l.strokeId !== id;
+          });
+          clearSelection();
+          renderFrame();
+          syncUI();
+          var after = {
+            strokes: state.strokes.length,
+            walkers: state.walkers.length,
+            lines: state.lines.length,
+          };
+          console.log("[FORCE DELETE STROKE]", {
+            before: before,
+            after: after,
+          });
+          return true;
+        },
+      forceDuplicateFirstSelectedStroke:
+        function forceDuplicateFirstSelectedStroke() {
+          var id =
+            (state.selection && state.selection.strokeId) ||
+            (state.selection &&
+              state.selection.strokeIds &&
+              Array.from(state.selection.strokeIds)[0]) ||
+            (state.multiSelection &&
+              state.multiSelection.find(function (x) {
+                return x.type === "stroke";
+              }) &&
+              state.multiSelection.find(function (x) {
+                return x.type === "stroke";
+              }).id);
+          console.log("[FORCE DUPLICATE STROKE] id:", id);
+          if (!id) {
+            console.warn("[FORCE DUPLICATE STROKE] no stroke id found");
+            return null;
+          }
+          var source = state.strokes.find(function (s) {
+            return s.id === id;
+          });
+          if (!source) {
+            console.warn("[FORCE DUPLICATE STROKE] source missing:", id);
+            return null;
+          }
+          pushHistory();
+          var copy = JSON.parse(JSON.stringify(source));
+          copy.id =
+            "stroke-" +
+            Date.now() +
+            "-" +
+            Math.random().toString(36).slice(2, 7);
+          copy.points = (copy.points || []).map(function (p) {
+            return { x: p.x + 20, y: p.y + 20 };
+          });
+          copy.drips = [];
+          copy.specks = [];
+          delete copy._groupId;
+          state.strokes.push(copy);
+          if (typeof strokeToLines === "function") strokeToLines(copy);
+          var srcWalker = state.walkers.find(function (w) {
+            return (
+              w.strokeId === source.id ||
+              (w.stroke && w.stroke.id === source.id)
+            );
+          });
+          if (srcWalker && typeof createWalkerFromStroke === "function") {
+            var walker = createWalkerFromStroke(copy);
+            if (walker) state.walkers.push(walker);
+          }
+          clearSelection();
+          state.selection.strokeId = copy.id;
+          state.selection.strokeIds = new Set([copy.id]);
+          state.selection.groupId = null;
+          state.multiSelection = [{ type: "stroke", id: copy.id }];
+          syncLegacySelection();
+          syncSelectionPanel();
+          renderFrame();
+          syncUI();
+          console.log("[FORCE DUPLICATE STROKE] duplicated:", copy.id);
+          return copy;
+        },
       // Path factories (light integration — spec 0426)
       createLinePath: function (a, b, opts) {
         return createLinePath(a, b, opts);
@@ -1618,6 +1712,7 @@
 
         noteActivity[noteClass] = performance.now();
         noteVelocity[noteClass] = velocity / 127;
+        flashNote(noteClass, velocity / 127);
 
         if (state.debug && state.debug.info) {
           console.log("[AUDIO FLOW]", {
@@ -1821,36 +1916,82 @@
       },
       // ── GlyphLab (legacy — kept for glyphDrawer.js compatibility) ──────────
       glyphs: {
-        activeNote:   "C",
-        renderer:     "square",
-        colorMode:    "duotone",
-        size:         64,
-        insertReady:  false,
-        insertNote:   null,
-        insertScale:  1.0,
-        tool:         "select",
+        activeNote: "C",
+        renderer: "square",
+        colorMode: "duotone",
+        size: 64,
+        insertReady: false,
+        insertNote: null,
+        insertScale: 1.0,
+        tool: "select",
       },
       glyphLibrary: {
-        saved:   [],
-        recent:  [],
+        saved: [],
+        recent: [],
       },
       // ── SymbolSystem ──────────────────────────────────────────────────────
       symbols: {
-        activeSetId:      null,  // String | null — managed by SBE.SymbolSystem
-        activeSlotKey:    "A",   // SINGLE authoritative slot — preview, placement, export all derive from this
-        placementSize:    48,    // px
-        placementPalette: null,  // SymbolPalette override | null = use set default
+        activeSetId: null, // String | null — managed by SBE.SymbolSystem
+        activeSlotKey: "A", // SINGLE authoritative slot — preview, placement, export all derive from this
+        placementSize: 48, // px
+        placementPalette: null, // SymbolPalette override | null = use set default
       },
       // ── SymbolObjects — world-space placed symbol instances ───────────────
-      symbolObjects:           [],    // SymbolObject[]
-      selectedSymbolObjectId:  null,  // String | null
+      symbolObjects: [], // SymbolObject[]
+      selectedSymbolObjectIds: new Set(), // Set<String> — multi-select model
+      // symbolPreview — preview mode state (persisted with scene)
+      symbolPreview: {
+        mode: "glyph", // "glyph" | "word" | "poem" | "pattern" | "world"
+        word: {
+          text: "SOHO",
+          scale: 56,
+          tracking: 8,
+        },
+        poem: {
+          text: "soft little goblin\nsleeping on my chair\nacting like they pay the rent",
+          fontSize: 26,
+          lineHeight: 1.6,
+          tracking: 3,
+          wrapWidth: 220,
+          align: "left",
+        },
+        pattern: {
+          columns: 6,
+          rows: 6,
+          spacing: 8,
+          jitter: 0,
+          randomRotation: 0,
+          randomScale: 0,
+        },
+        world: {
+          density: 40,
+          drift: 0.2,
+        },
+      },
+
+      // symbolBrush — stamp/brush placement parameters
+      symbolBrush: {
+        spacing: 32, // min world-px between brush stamps
+        randomRotation: 0, // 0–1: fraction of 2π applied randomly per stamp
+        randomScale: 0, // 0–1: ±50% scale variation applied randomly
+        followStroke: true, // orient stamp along drag direction
+      },
       selection: {
         strokeId: null, // single primary selection (for handles, inspector)
         strokeIds: new Set(), // multi-select set for grouping + deletion
         groupId: null, // selected group (if stroke belongs to group)
       },
+      selectMarquee: null, // { x1, y1, x2, y2, shift } — live drag rect for marquee select
       groups: {}, // id → GroupNode (wrapper layer over strokes)
       particles: [], // emitter particles { x, y, vx, vy, life, color }
+      projectileTool: {
+        // ProjectileWalkerMigration v1.0.0 — walkers are now default
+        useWalkers: true, // projectile walkers are authoritative; legacy balls are legacy
+        bounce: 0.82,
+        gravityScale: 1.0,
+        radius: 8,
+        showPhysics: false,
+      },
       ballTool: {
         count: 1,
         speed: 1,
@@ -1904,6 +2045,21 @@
         });
       })(),
       viewportMode: "portrait", // "portrait" | "landscape"
+      // ── Layer System (SubjectAndLayerSystem v1.0.0) ─────────────────────
+      layers: (function () {
+        return [
+          {
+            id: "layer-1",
+            name: "Layer 1",
+            visible: true,
+            locked: false,
+            opacity: 1.0,
+            blendMode: "normal",
+          },
+        ];
+      })(),
+      activeLayerId: "layer-1",
+      layersEditingId: null, // id of layer currently being renamed
       physics: {
         gravity: { x: 0, y: 3.0 },
         damping: 0.996,
@@ -1914,6 +2070,50 @@
         strength: 3,
         direction: { x: 0, y: 1 },
         layers: [], // WorldLayer[] — grid and future layer types
+        // ── Field visualization (FieldVisualizationSystem v1.0.0) ─────────
+        fieldViz: {
+          enabled: false,
+          opacity: 0.35,
+          mode: "heatmap", // vector|flow|heatmap(density)|territory|particles|trails — "density" kept as compat alias
+          blur: 24,
+          decay: 0.985,
+          accumulation: 0.04,
+          palette: "infra",
+        },
+        // ── Dual-plane physics (DualPlanePhysics v1.0.0) ─────────────────
+        physics: {
+          mode: "side", // "side" | "topdown"
+          screen: {
+            gravityX: 0,
+            gravityY: 1,
+            strength: 1,
+          },
+          world: {
+            fieldType: "none", // "none" | "flow" | "vector" | "orbital"
+            vectorX: 0,
+            vectorY: 0,
+            strength: 0,
+          },
+          // ── Flow field walker drift (FlowFieldWalkerDrift v1.0.0) ───────
+          flow: {
+            enabled: false,
+            strength: 0.015, // field force per frame (0..0.1)
+            damping: 0.985, // velocity damping (0.9..1.0)
+            turbulence: 0.0, // reserved — future curl noise
+            curl: 0.0, // reserved — future curl field
+            orbitalMode: "tangential", // "radial" | "tangential" | "hybrid"
+          },
+        },
+      },
+      // ── Field visualizer (FieldVisualizer v1.0.0) ────────────────────────
+      fieldVisualizer: {
+        enabled: false,
+        mode: "vectors", // vectors|drift|particles|trails|heatmap
+        palette: "infra",
+        opacity: 0.5,
+        gridStep: 48, // px between vector grid arrows
+        arrowLen: 16, // px arrow length
+        trailDecay: 0.97, // trail persistence (0.9..1.0)
       },
       gridBanks: {}, // cartridgeId → extended bank with typed events
       soundResponse: {
@@ -1999,6 +2199,7 @@
       },
       strokes: [],
       walkers: [],
+      projectileWalkers: [], // motionMode:"projectile" — ProjectileWalkerMigration v1.0.0
       walker: {
         enabled: true,
         baseNote: 60,
@@ -2047,67 +2248,67 @@
         playheadBeat: 0,
       },
       signalActivity: {
-        active: new Map(),   // cellId → { energy, activatedAt, decayMs, velocity, sourceId }
-        pending: [],         // [{ cellId, energy, meta, fireAt }]
+        active: new Map(), // cellId → { energy, activatedAt, decayMs, velocity, sourceId }
+        pending: [], // [{ cellId, energy, meta, fireAt }]
       },
       demo: {
-        enabled:   false,
+        enabled: false,
         autoStart: false,
       },
       layerControls: {
-        atmosphere: { visible: true,  opacity: 1.0, solo: false },
-        terrain:    { visible: true,  opacity: 1.0, solo: false },
-        signals:    { visible: true,  opacity: 1.0, solo: false },
-        walkers:    { visible: true,  opacity: 1.0, solo: false },
-        midi:       { visible: true,  opacity: 1.0, solo: false },
-        ecology:    { visible: true,  opacity: 1.0, solo: false },
-        debug:      { visible: false, opacity: 1.0, solo: false },
+        atmosphere: { visible: true, opacity: 1.0, solo: false },
+        terrain: { visible: true, opacity: 1.0, solo: false },
+        signals: { visible: true, opacity: 1.0, solo: false },
+        walkers: { visible: true, opacity: 1.0, solo: false },
+        midi: { visible: true, opacity: 1.0, solo: false },
+        ecology: { visible: true, opacity: 1.0, solo: false },
+        debug: { visible: false, opacity: 1.0, solo: false },
       },
       infiniteWorld: {
-        enabled:        false,
-        autoStart:      false,
-        density:        0.35,
-        energy:         0.45,
-        tickMs:         180,
-        maxEvents:      260,
-        beatCursor:     0,
-        sourceIndex:    0,
-        mode:           "sparseField",
+        enabled: false,
+        autoStart: false,
+        density: 0.35,
+        energy: 0.45,
+        tickMs: 180,
+        maxEvents: 260,
+        beatCursor: 0,
+        sourceIndex: 0,
+        mode: "sparseField",
         simulatedAudio: true,
-        terrainBankId:  null,
+        terrainBankId: null,
         terrainLayerId: null,
-        probeId:        null,
+        probeId: null,
       },
       routeWorld: {
-        active:        false,
-        world:         null,
-        routes:        [],
-        segments:      [],
-        actors:        [],
-        eventZones:    [],
-        skins:         [],
-        cameraRigs:    [],
-        surfaceAnchors:[],
-        camera:        null,   // initialised on first use via SBE.RouteCamera.makeCamera()
+        active: false,
+        world: null,
+        routes: [],
+        segments: [],
+        actors: [],
+        eventZones: [],
+        skins: [],
+        cameraRigs: [],
+        surfaceAnchors: [],
+        camera: null, // initialised on first use via SBE.RouteCamera.makeCamera()
         // Foundation Protocols — Human Aquarium v1.0.0
-        clock:         null,   // initialised on first use via SBE.UniversalClock.makeClock()
-        env:           null,   // initialised on first use via SBE.EnvironmentState.makeEnvironment()
-        comms:         null,   // initialised on first use via SBE.CommsSystem.makeCommsStore()
+        clock: null, // initialised on first use via SBE.UniversalClock.makeClock()
+        env: null, // initialised on first use via SBE.EnvironmentState.makeEnvironment()
+        comms: null, // initialised on first use via SBE.CommsSystem.makeCommsStore()
         // Spatial Infrastructure v1.1.0
-        spatial:       null,   // initialised on first use or via buildPhase1World()
+        spatial: null, // initialised on first use or via buildPhase1World()
         // Director Mode v1.0.0
-        director:      null,   // initialised on first use via SBE.DirectorMode.makeDirectorState()
-        tripPlan:      null,   // placeholder itinerary model (future spec)
+        director: null, // initialised on first use via SBE.DirectorMode.makeDirectorState()
+        tripPlan: null, // placeholder itinerary model (future spec)
         // Reference Geography Layer v1.0.0
-        referenceGeography: null,  // initialised on first use via SBE.ReferenceGeographyLayer.makeDefaultState()
+        referenceGeography: null, // initialised on first use via SBE.ReferenceGeographyLayer.makeDefaultState()
         // Basemap Foundation v1.0.0
-        basemap:      null,   // initialised on first use via SBE.BasemapRenderer.makeDefaultState()
+        basemap: null, // initialised on first use via SBE.BasemapRenderer.makeDefaultState()
         // Presentation mode — "portrait" | "landscape" | "dual"
         presentationMode: "portrait",
         runtime: {
-          elapsedSec:      0,
-          activeRouteId:   null,
-          activeActorId:   null,
+          elapsedSec: 0,
+          activeRouteId: null,
+          activeActorId: null,
           activeSegmentId: null,
           triggeredEventIds: new Set(),
         },
@@ -2118,6 +2319,7 @@
         info: false,
         audioLogs: false, // gates per-frame audio spam logs
         visualMode: "clean", // "clean" = low stroke alpha, no segment flash | "full" = original
+        driftOverlay: false, // white=path pos, red=post-drift pos
       },
       motion: {
         enabled: true,
@@ -2200,7 +2402,7 @@
     window._wos.sampleMap = sampleMap;
     window._wos.state = state;
     window._wos.audioState = state.audio;
-    window._wos.renderFrame = renderFrame;  // exposed for UI controls
+    window._wos.renderFrame = renderFrame; // exposed for UI controls
 
     // ── Grid debug helpers ─────────────────────────────────────────────────
     window._wos.debugRegistry = function debugRegistry() {
@@ -2216,7 +2418,12 @@
         if (!group || typeof group !== "object") return;
         output[key] = Object.keys(group).map(function (id) {
           var item = group[id];
-          return { id: item.id, label: item.label, status: item.status, visibleIn: item.visibleIn || [] };
+          return {
+            id: item.id,
+            label: item.label,
+            status: item.status,
+            visibleIn: item.visibleIn || [],
+          };
         });
       });
       return output;
@@ -2244,20 +2451,31 @@
 
       function checkField(schemaName, fieldName, descriptor) {
         if (!descriptor || typeof descriptor !== "object") {
-          errors.push(schemaName + "." + fieldName + " is not a field descriptor");
+          errors.push(
+            schemaName + "." + fieldName + " is not a field descriptor",
+          );
           return;
         }
 
         if (typeof descriptor.persistent !== "boolean") {
-          warnings.push(schemaName + "." + fieldName + " missing persistent boolean");
+          warnings.push(
+            schemaName + "." + fieldName + " missing persistent boolean",
+          );
         }
 
         if (typeof descriptor.runtime !== "boolean") {
-          warnings.push(schemaName + "." + fieldName + " missing runtime boolean");
+          warnings.push(
+            schemaName + "." + fieldName + " missing runtime boolean",
+          );
         }
 
         if (descriptor.persistent === true && descriptor.runtime === true) {
-          errors.push(schemaName + "." + fieldName + " cannot be both persistent and runtime");
+          errors.push(
+            schemaName +
+              "." +
+              fieldName +
+              " cannot be both persistent and runtime",
+          );
         }
       }
 
@@ -2289,10 +2507,17 @@
         walkSchema(schemaName, schemas[schemaName]);
       });
 
-      if (registry && registry.statuses && schemas.Layer && schemas.Layer.status) {
+      if (
+        registry &&
+        registry.statuses &&
+        schemas.Layer &&
+        schemas.Layer.status
+      ) {
         var defaultStatus = schemas.Layer.status.default;
         if (!registry.statuses[defaultStatus]) {
-          errors.push("Layer.status default is not a registered status: " + defaultStatus);
+          errors.push(
+            "Layer.status default is not a registered status: " + defaultStatus,
+          );
         }
       }
 
@@ -2300,23 +2525,35 @@
     };
 
     window._wos.debugGridLayers = function () {
-      return (state.world.layers || []).filter(function (l) { return l.type === "grid"; });
+      return (state.world.layers || []).filter(function (l) {
+        return l.type === "grid";
+      });
     };
     window._wos.debugGridBlocks = function (layerId) {
-      var layer = (state.world.layers || []).find(function (l) { return l.id === layerId; });
+      var layer = (state.world.layers || []).find(function (l) {
+        return l.id === layerId;
+      });
       return layer ? layer.blocks : [];
     };
     // Legacy helpers — still available for DevTools use
     window._wos.addBankToGridLayer = function (cartridgeId, options) {
       var cid = cartridgeId || state.activeMidiBankId;
-      if (!cid) { console.warn("[WOS GRID] No active MIDI bank"); return null; }
+      if (!cid) {
+        console.warn("[WOS GRID] No active MIDI bank");
+        return null;
+      }
       var layer = addBankToGridLayer(cid, options);
       if (layer) renderFrame();
       return layer;
     };
     window._wos.regenerateFirstGridLayer = function () {
-      var layer = (state.world.layers || []).find(function (l) { return l.type === "grid"; });
-      if (!layer) { console.warn("[WOS GRID] No grid layer found"); return null; }
+      var layer = (state.world.layers || []).find(function (l) {
+        return l.type === "grid";
+      });
+      if (!layer) {
+        console.warn("[WOS GRID] No grid layer found");
+        return null;
+      }
       var result = regenerateGridLayer(layer.id);
       if (result) renderFrame();
       return result;
@@ -2339,100 +2576,153 @@
     };
     window._wos.debugGridStats = function () {
       return (state.world.layers || [])
-        .filter(function (l) { return l.type === "grid"; })
+        .filter(function (l) {
+          return l.type === "grid";
+        })
         .map(function (layer) {
           var g = layer.grid;
           var blocks = layer.blocks || [];
-          var sourceRef = layer.source && (layer.source.cartridgeId || layer.source.bankId);
+          var sourceRef =
+            layer.source && (layer.source.cartridgeId || layer.source.bankId);
           var resolved = resolveMidiBankAndCartridge(sourceRef);
-          var sourceNotes = resolved.cartridge && resolved.cartridge.notes
-            ? resolved.cartridge.notes.length : 0;
+          var sourceNotes =
+            resolved.cartridge && resolved.cartridge.notes
+              ? resolved.cartridge.notes.length
+              : 0;
           var playbackEvents = getMidiPlaybackEventsForResolvedSource(
-            resolved.bank, resolved.cartridge
+            resolved.bank,
+            resolved.cartridge,
           ).length;
 
           var vp = layer.renderer && layer.renderer.viewport;
           var vpEnabled = !!(vp && vp.enabled && vp.mode !== "full");
           var mp = state.midiPlayback;
           var phIdx = mp ? mp.playheadEventIndex : null;
-          var phId  = mp ? mp.playheadEventId    : null;
-          var phBlock = phIdx != null || phId != null
-            ? blocks.find(function (b) {
-                return (phIdx != null && b.sourceIndex === phIdx) ||
-                       (phId  != null && b.sourceEventId === phId);
-              })
-            : null;
-          var vpCols = vp ? (vp.cols || 7)  : null;
-          var vpRows = vp ? (vp.rows || 11) : null;
-          var vpSC   = vp ? (vp.startCol || 0) : null;
-          var vpSR   = vp ? (vp.startRow  || 0) : null;
+          var phId = mp ? mp.playheadEventId : null;
+          var phBlock =
+            phIdx != null || phId != null
+              ? blocks.find(function (b) {
+                  return (
+                    (phIdx != null && b.sourceIndex === phIdx) ||
+                    (phId != null && b.sourceEventId === phId)
+                  );
+                })
+              : null;
+          var vpCols = vp ? vp.cols || 7 : null;
+          var vpRows = vp ? vp.rows || 11 : null;
+          var vpSC = vp ? vp.startCol || 0 : null;
+          var vpSR = vp ? vp.startRow || 0 : null;
           var visibleBlocks = blocks.length;
           if (vpEnabled && g) {
             visibleBlocks = blocks.filter(function (b) {
-              return b.col >= vpSC && b.col < vpSC + vpCols &&
-                     b.row >= vpSR && b.row < vpSR + vpRows;
+              return (
+                b.col >= vpSC &&
+                b.col < vpSC + vpCols &&
+                b.row >= vpSR &&
+                b.row < vpSR + vpRows
+              );
             }).length;
           }
 
           return {
-            layerId:        layer.id,
-            label:          layer.label || layer.name,
-            rendererId:     layer.renderer ? layer.renderer.id : null,
-            paletteId:      layer.renderer ? layer.renderer.paletteId : null,
-            finishId:       layer.renderer ? layer.renderer.finishId  : null,
+            layerId: layer.id,
+            label: layer.label || layer.name,
+            rendererId: layer.renderer ? layer.renderer.id : null,
+            paletteId: layer.renderer ? layer.renderer.paletteId : null,
+            finishId: layer.renderer ? layer.renderer.finishId : null,
             visualLanguage: g ? g.visualLanguage : null,
-            visualVersion:  g ? g.visualVersion  : null,
-            sourceBankId:   resolved.bankId,
+            visualVersion: g ? g.visualVersion : null,
+            sourceBankId: resolved.bankId,
             sourceCartridgeId: resolved.cartridgeId,
-            sourceNotes:    sourceNotes,
+            sourceNotes: sourceNotes,
             playbackEvents: playbackEvents,
-            totalBlocks:    blocks.length,
-            gridBlocks:     blocks.length,
-            visibleBlocks:  visibleBlocks,
-            activeBlocks:   blocks.filter(function (b) { return b.active; }).length,
-            viewportEnabled:       vpEnabled,
-            viewportMode:          vp ? (vp.mode || "full") : "full",
-            viewportFollowPlayback:vp ? !!vp.followPlayback : false,
-            followTarget:          vp ? (vp.followTarget || "timeline") : null,
-            followSmoothing:       vp && vp.followSmoothing != null ? vp.followSmoothing : 0.08,
-            followTargetUpdateMs:  vp && vp.followTargetUpdateMs != null ? vp.followTargetUpdateMs : 120,
-            timelineProgress:      vp ? (vp._timelineProgress != null ? vp._timelineProgress : null) : null,
-            timelineIndex:         vp ? (vp._timelineIndex    != null ? vp._timelineIndex    : null) : null,
-            targetStartCol:        vp ? (vp.targetStartCol    != null ? vp.targetStartCol    : null) : null,
-            targetStartRow:        vp ? (vp.targetStartRow    != null ? vp.targetStartRow    : null) : null,
-            smoothStartCol:        vp ? (vp._smoothCol        != null ? vp._smoothCol        : null) : null,
-            smoothStartRow:        vp ? (vp._smoothRow        != null ? vp._smoothRow        : null) : null,
-            viewportCols:          vpCols,
-            viewportRows:          vpRows,
-            viewportStartCol:      vpSC,
-            viewportStartRow:      vpSR,
-            playheadEventIndex:    phIdx,
-            playheadBlockCol:      phBlock ? phBlock.col : null,
-            playheadBlockRow:      phBlock ? phBlock.row : null,
-            columns:        g ? g.columns : null,
-            rows:           g ? g.rows    : null,
-            cellSize:       g ? g.cellSize : null,
-            gap:            g ? g.gap      : null,
-            fitMode:        g ? g.fitMode  : null,
-            placementMode:  g ? g.placementMode : null,
-            countMatch:     blocks.length === sourceNotes,
+            totalBlocks: blocks.length,
+            gridBlocks: blocks.length,
+            visibleBlocks: visibleBlocks,
+            activeBlocks: blocks.filter(function (b) {
+              return b.active;
+            }).length,
+            viewportEnabled: vpEnabled,
+            viewportMode: vp ? vp.mode || "full" : "full",
+            viewportFollowPlayback: vp ? !!vp.followPlayback : false,
+            followTarget: vp ? vp.followTarget || "timeline" : null,
+            followSmoothing:
+              vp && vp.followSmoothing != null ? vp.followSmoothing : 0.08,
+            followTargetUpdateMs:
+              vp && vp.followTargetUpdateMs != null
+                ? vp.followTargetUpdateMs
+                : 120,
+            timelineProgress: vp
+              ? vp._timelineProgress != null
+                ? vp._timelineProgress
+                : null
+              : null,
+            timelineIndex: vp
+              ? vp._timelineIndex != null
+                ? vp._timelineIndex
+                : null
+              : null,
+            targetStartCol: vp
+              ? vp.targetStartCol != null
+                ? vp.targetStartCol
+                : null
+              : null,
+            targetStartRow: vp
+              ? vp.targetStartRow != null
+                ? vp.targetStartRow
+                : null
+              : null,
+            smoothStartCol: vp
+              ? vp._smoothCol != null
+                ? vp._smoothCol
+                : null
+              : null,
+            smoothStartRow: vp
+              ? vp._smoothRow != null
+                ? vp._smoothRow
+                : null
+              : null,
+            viewportCols: vpCols,
+            viewportRows: vpRows,
+            viewportStartCol: vpSC,
+            viewportStartRow: vpSR,
+            playheadEventIndex: phIdx,
+            playheadBlockCol: phBlock ? phBlock.col : null,
+            playheadBlockRow: phBlock ? phBlock.row : null,
+            columns: g ? g.columns : null,
+            rows: g ? g.rows : null,
+            cellSize: g ? g.cellSize : null,
+            gap: g ? g.gap : null,
+            fitMode: g ? g.fitMode : null,
+            placementMode: g ? g.placementMode : null,
+            countMatch: blocks.length === sourceNotes,
             patternVocabularyVersion: (function () {
               var GS = getGridSystem();
               return GS ? GS.BAUHAUS_PATTERN_VOCABULARY_VERSION : null;
             })(),
-            patternCount:   (function () {
+            patternCount: (function () {
               var GS = getGridSystem();
               return GS ? GS.BAUHAUS_PATTERN_IDS.length : null;
             })(),
-            reactivityMode:    layer.renderer && layer.renderer.reactivity
-              ? (layer.renderer.reactivity.enabled ? layer.renderer.reactivity.mode : "off")
-              : "off",
-            reactivityEnabled: !!(layer.renderer && layer.renderer.reactivity &&
-              layer.renderer.reactivity.enabled),
-            tileStyleId:         layer.renderer && layer.renderer.tileStyle
-              ? (layer.renderer.tileStyle.id || null) : null,
-            tileStyle:           layer.renderer ? (layer.renderer.tileStyle || null) : null,
-            notePatternOverrides: layer.renderer ? (layer.renderer.notePatternOverrides || {}) : {},
+            reactivityMode:
+              layer.renderer && layer.renderer.reactivity
+                ? layer.renderer.reactivity.enabled
+                  ? layer.renderer.reactivity.mode
+                  : "off"
+                : "off",
+            reactivityEnabled: !!(
+              layer.renderer &&
+              layer.renderer.reactivity &&
+              layer.renderer.reactivity.enabled
+            ),
+            tileStyleId:
+              layer.renderer && layer.renderer.tileStyle
+                ? layer.renderer.tileStyle.id || null
+                : null,
+            tileStyle: layer.renderer ? layer.renderer.tileStyle || null : null,
+            notePatternOverrides: layer.renderer
+              ? layer.renderer.notePatternOverrides || {}
+              : {},
             patternFamilies: (function () {
               var GS = getGridSystem();
               return GS ? Object.keys(GS.BAUHAUS_FAMILY_PATTERNS) : [];
@@ -2443,13 +2733,23 @@
     // ── _wos.bauhaus — palette + finish debug API ──────────────────────────────
     window._wos.bauhaus = (function () {
       function getBauhausLayer() {
-        return (state.world.layers || []).find(function (l) {
-          return l.type === "grid" && l.renderer && l.renderer.id === "bauhausMinimal";
-        }) || null;
+        return (
+          (state.world.layers || []).find(function (l) {
+            return (
+              l.type === "grid" &&
+              l.renderer &&
+              l.renderer.id === "bauhausMinimal"
+            );
+          }) || null
+        );
       }
       function getAllBauhausLayers() {
         return (state.world.layers || []).filter(function (l) {
-          return l.type === "grid" && l.renderer && l.renderer.id === "bauhausMinimal";
+          return (
+            l.type === "grid" &&
+            l.renderer &&
+            l.renderer.id === "bauhausMinimal"
+          );
         });
       }
 
@@ -2458,23 +2758,34 @@
           var GS = getGridSystem();
           if (!GS) return [];
           return Object.values(GS.BAUHAUS_PALETTES).map(function (p) {
-            return { id: p.id, name: p.name, colors: p.colors, background: p.background };
+            return {
+              id: p.id,
+              name: p.name,
+              colors: p.colors,
+              background: p.background,
+            };
           });
         },
         setPalette: function (paletteId) {
           var GS = getGridSystem();
           if (!GS || !GS.BAUHAUS_PALETTES[paletteId]) {
-            console.warn("[BAUHAUS] Unknown palette:", paletteId,
-              "— available:", Object.keys(GS ? GS.BAUHAUS_PALETTES : {}));
+            console.warn(
+              "[BAUHAUS] Unknown palette:",
+              paletteId,
+              "— available:",
+              Object.keys(GS ? GS.BAUHAUS_PALETTES : {}),
+            );
             return false;
           }
-          getAllBauhausLayers().forEach(function (l) { l.renderer.paletteId = paletteId; });
+          getAllBauhausLayers().forEach(function (l) {
+            l.renderer.paletteId = paletteId;
+          });
           renderFrame();
           return paletteId;
         },
         getPalette: function () {
           var l = getBauhausLayer();
-          return l ? (l.renderer.paletteId || "exhibition1923") : null;
+          return l ? l.renderer.paletteId || "exhibition1923" : null;
         },
 
         listFinishes: function () {
@@ -2487,30 +2798,40 @@
         setFinish: function (finishId) {
           var GS = getGridSystem();
           if (!GS || !GS.BAUHAUS_FINISHES[finishId]) {
-            console.warn("[BAUHAUS] Unknown finish:", finishId,
-              "— available:", Object.keys(GS ? GS.BAUHAUS_FINISHES : {}));
+            console.warn(
+              "[BAUHAUS] Unknown finish:",
+              finishId,
+              "— available:",
+              Object.keys(GS ? GS.BAUHAUS_FINISHES : {}),
+            );
             return false;
           }
-          getAllBauhausLayers().forEach(function (l) { l.renderer.finishId = finishId; });
+          getAllBauhausLayers().forEach(function (l) {
+            l.renderer.finishId = finishId;
+          });
           renderFrame();
           return finishId;
         },
         getFinish: function () {
           var l = getBauhausLayer();
-          return l ? (l.renderer.finishId || "paperSoft") : null;
+          return l ? l.renderer.finishId || "paperSoft" : null;
         },
 
         getState: function () {
           var l = getBauhausLayer();
           if (!l) return null;
           return {
-            paletteId:     l.renderer.paletteId     || "exhibition1923",
-            finishId:      l.renderer.finishId       || "paperSoft",
-            rendererId:    l.renderer.id,
-            visualLanguage:l.grid && l.grid.visualLanguage,
+            paletteId: l.renderer.paletteId || "exhibition1923",
+            finishId: l.renderer.finishId || "paperSoft",
+            rendererId: l.renderer.id,
+            visualLanguage: l.grid && l.grid.visualLanguage,
             visualVersion: l.grid && l.grid.visualVersion,
-            gridBlocks:    l.blocks ? l.blocks.length : 0,
-            activeBlocks:  l.blocks ? l.blocks.filter(function (b) { return b.active; }).length : 0,
+            gridBlocks: l.blocks ? l.blocks.length : 0,
+            activeBlocks: l.blocks
+              ? l.blocks.filter(function (b) {
+                  return b.active;
+                }).length
+              : 0,
           };
         },
 
@@ -2526,25 +2847,34 @@
           var vp = l.renderer.viewport;
           var mp = state.midiPlayback;
           return Object.assign({}, vp, {
-            followTarget:        vp.followTarget        || "timeline",
-            followSmoothing:     vp.followSmoothing     != null ? vp.followSmoothing     : 0.08,
-            followTargetUpdateMs:vp.followTargetUpdateMs != null ? vp.followTargetUpdateMs : 120,
-            timelineProgress:    vp._timelineProgress   != null ? vp._timelineProgress   : null,
-            timelineIndex:       vp._timelineIndex      != null ? vp._timelineIndex       : null,
-            targetStartCol:      vp.targetStartCol      != null ? vp.targetStartCol      : vp.startCol,
-            targetStartRow:      vp.targetStartRow      != null ? vp.targetStartRow      : vp.startRow,
-            smoothStartCol:      vp._smoothCol          != null ? vp._smoothCol           : null,
-            smoothStartRow:      vp._smoothRow          != null ? vp._smoothRow           : null,
-            playheadEventIndex:  mp ? mp.playheadEventIndex : null,
-            playheadEventId:     mp ? mp.playheadEventId    : null,
-            playheadBeat:        mp ? mp.playheadBeat        : 0,
+            followTarget: vp.followTarget || "timeline",
+            followSmoothing:
+              vp.followSmoothing != null ? vp.followSmoothing : 0.08,
+            followTargetUpdateMs:
+              vp.followTargetUpdateMs != null ? vp.followTargetUpdateMs : 120,
+            timelineProgress:
+              vp._timelineProgress != null ? vp._timelineProgress : null,
+            timelineIndex: vp._timelineIndex != null ? vp._timelineIndex : null,
+            targetStartCol:
+              vp.targetStartCol != null ? vp.targetStartCol : vp.startCol,
+            targetStartRow:
+              vp.targetStartRow != null ? vp.targetStartRow : vp.startRow,
+            smoothStartCol: vp._smoothCol != null ? vp._smoothCol : null,
+            smoothStartRow: vp._smoothRow != null ? vp._smoothRow : null,
+            playheadEventIndex: mp ? mp.playheadEventIndex : null,
+            playheadEventId: mp ? mp.playheadEventId : null,
+            playheadBeat: mp ? mp.playheadBeat : 0,
           });
         },
 
         setViewportMode: function (mode) {
           var MODES = { full: true, portraitStudy: true, landscapeStudy: true };
           if (!MODES[mode]) {
-            console.warn("[BAUHAUS] Unknown viewport mode:", mode, "— use: full | portraitStudy | landscapeStudy");
+            console.warn(
+              "[BAUHAUS] Unknown viewport mode:",
+              mode,
+              "— use: full | portraitStudy | landscapeStudy",
+            );
             return false;
           }
           getAllBauhausLayers().forEach(function (l) {
@@ -2555,8 +2885,14 @@
               vp.enabled = false;
             } else {
               vp.enabled = true;
-              if (mode === "portraitStudy"  && !vp._userSet) { vp.cols = 7;  vp.rows = 11; }
-              if (mode === "landscapeStudy" && !vp._userSet) { vp.cols = 12; vp.rows = 6; }
+              if (mode === "portraitStudy" && !vp._userSet) {
+                vp.cols = 7;
+                vp.rows = 11;
+              }
+              if (mode === "landscapeStudy" && !vp._userSet) {
+                vp.cols = 12;
+                vp.rows = 6;
+              }
             }
           });
           renderFrame();
@@ -2568,11 +2904,17 @@
             if (!l.renderer.viewport) l.renderer.viewport = {};
             var vp = l.renderer.viewport;
             var g = l.grid;
-            vp.cols     = Math.max(1, Math.min(cols     || 7,  g.columns));
-            vp.rows     = Math.max(1, Math.min(rows     || 11, g.rows));
-            vp.startCol = Math.max(0, Math.min(startCol || 0, Math.max(0, g.columns - vp.cols)));
-            vp.startRow = Math.max(0, Math.min(startRow || 0, Math.max(0, g.rows    - vp.rows)));
-            vp.enabled  = true;
+            vp.cols = Math.max(1, Math.min(cols || 7, g.columns));
+            vp.rows = Math.max(1, Math.min(rows || 11, g.rows));
+            vp.startCol = Math.max(
+              0,
+              Math.min(startCol || 0, Math.max(0, g.columns - vp.cols)),
+            );
+            vp.startRow = Math.max(
+              0,
+              Math.min(startRow || 0, Math.max(0, g.rows - vp.rows)),
+            );
+            vp.enabled = true;
             vp._userSet = true;
             if (!vp.mode || vp.mode === "full") vp.mode = "portraitStudy";
           });
@@ -2584,9 +2926,21 @@
           getAllBauhausLayers().forEach(function (l) {
             if (!l.renderer.viewport || !l.renderer.viewport.enabled) return;
             var vp = l.renderer.viewport;
-            var g  = l.grid;
-            vp.startCol = Math.max(0, Math.min((vp.startCol || 0) + (dx || 0), Math.max(0, g.columns - (vp.cols || 7))));
-            vp.startRow = Math.max(0, Math.min((vp.startRow || 0) + (dy || 0), Math.max(0, g.rows    - (vp.rows || 11))));
+            var g = l.grid;
+            vp.startCol = Math.max(
+              0,
+              Math.min(
+                (vp.startCol || 0) + (dx || 0),
+                Math.max(0, g.columns - (vp.cols || 7)),
+              ),
+            );
+            vp.startRow = Math.max(
+              0,
+              Math.min(
+                (vp.startRow || 0) + (dy || 0),
+                Math.max(0, g.rows - (vp.rows || 11)),
+              ),
+            );
           });
           renderFrame();
           return this.getViewport();
@@ -2595,10 +2949,18 @@
         resetViewport: function () {
           getAllBauhausLayers().forEach(function (l) {
             var GS = getGridSystem();
-            l.renderer.viewport = GS ? Object.assign({}, GS.DEFAULT_VIEWPORT) : {
-              enabled: false, mode: "full", cols: 7, rows: 11,
-              startCol: 0, startRow: 0, followPlayback: false, padding: 24,
-            };
+            l.renderer.viewport = GS
+              ? Object.assign({}, GS.DEFAULT_VIEWPORT)
+              : {
+                  enabled: false,
+                  mode: "full",
+                  cols: 7,
+                  rows: 11,
+                  startCol: 0,
+                  startRow: 0,
+                  followPlayback: false,
+                  padding: 24,
+                };
           });
           renderFrame();
           return this.getViewport();
@@ -2620,13 +2982,16 @@
         setReactivity: function (mode) {
           var valid = { off: true, playhead: true, noteClass: true };
           if (!valid[mode]) {
-            console.warn("[BAUHAUS] Unknown reactivity mode:", mode,
-              "— use: off | playhead | noteClass");
+            console.warn(
+              "[BAUHAUS] Unknown reactivity mode:",
+              mode,
+              "— use: off | playhead | noteClass",
+            );
             return false;
           }
           getAllBauhausLayers().forEach(function (l) {
             if (!l.renderer.reactivity) l.renderer.reactivity = {};
-            l.renderer.reactivity.mode    = mode;
+            l.renderer.reactivity.mode = mode;
             l.renderer.reactivity.enabled = mode !== "off";
           });
           renderFrame();
@@ -2637,13 +3002,17 @@
           var l = getBauhausLayer();
           if (!l || !l.renderer.reactivity) return "off";
           var rx = l.renderer.reactivity;
-          return (rx.enabled && rx.mode) ? rx.mode : "off";
+          return rx.enabled && rx.mode ? rx.mode : "off";
         },
 
         setViewportFollowTarget: function (target) {
           var valid = { timeline: true, event: true };
           if (!valid[target]) {
-            console.warn("[BAUHAUS] Unknown followTarget:", target, "— use: timeline | event");
+            console.warn(
+              "[BAUHAUS] Unknown followTarget:",
+              target,
+              "— use: timeline | event",
+            );
             return false;
           }
           getAllBauhausLayers().forEach(function (l) {
@@ -2670,8 +3039,12 @@
           if (!GS) return false;
           var ts = GS.BAUHAUS_TILE_STYLES[id];
           if (!ts) {
-            console.warn("[BAUHAUS] Unknown tile style:", id,
-              "— use:", Object.keys(GS.BAUHAUS_TILE_STYLES).join(" | "));
+            console.warn(
+              "[BAUHAUS] Unknown tile style:",
+              id,
+              "— use:",
+              Object.keys(GS.BAUHAUS_TILE_STYLES).join(" | "),
+            );
             return false;
           }
           getAllBauhausLayers().forEach(function (l) {
@@ -2690,7 +3063,7 @@
         // ── Note→pattern map API ────────────────────────────────────────────
         getNotePatternMap: function () {
           var GS = getGridSystem();
-          var l  = getBauhausLayer();
+          var l = getBauhausLayer();
           if (!GS || !l) return null;
           return GS.getBauhausNotePatternMap(l);
         },
@@ -2699,24 +3072,34 @@
           var GS = getGridSystem();
           if (!GS) return false;
           if (!GS.BAUHAUS_FAMILY_PATTERNS[family]) {
-            console.warn("[BAUHAUS] Unknown family:", family,
-              "— use:", Object.keys(GS.BAUHAUS_FAMILY_PATTERNS).join(" | "));
+            console.warn(
+              "[BAUHAUS] Unknown family:",
+              family,
+              "— use:",
+              Object.keys(GS.BAUHAUS_FAMILY_PATTERNS).join(" | "),
+            );
             return false;
           }
           var nc = parseInt(noteClass, 10);
           if (isNaN(nc) || nc < 0 || nc > 11) {
-            console.warn("[BAUHAUS] noteClass must be 0-11"); return false;
+            console.warn("[BAUHAUS] noteClass must be 0-11");
+            return false;
           }
           getAllBauhausLayers().forEach(function (l) {
-            if (!l.renderer.notePatternOverrides) l.renderer.notePatternOverrides = {};
+            if (!l.renderer.notePatternOverrides)
+              l.renderer.notePatternOverrides = {};
             l.renderer.notePatternOverrides[nc] = family;
           });
           // Sync to GS module-level overrides
           var l = getBauhausLayer();
-          GS.setActiveNotePatternOverrides(l ? (l.renderer.notePatternOverrides || {}) : {});
+          GS.setActiveNotePatternOverrides(
+            l ? l.renderer.notePatternOverrides || {} : {},
+          );
           // Bust per-block pattern cache so blocks re-resolve on next frame
           getAllBauhausLayers().forEach(function (l) {
-            (l.blocks || []).forEach(function (b) { b.patternId = null; });
+            (l.blocks || []).forEach(function (b) {
+              b.patternId = null;
+            });
           });
           renderFrame();
           return { noteClass: nc, family: family };
@@ -2727,7 +3110,9 @@
           if (!GS) return false;
           getAllBauhausLayers().forEach(function (l) {
             l.renderer.notePatternOverrides = {};
-            (l.blocks || []).forEach(function (b) { b.patternId = null; });
+            (l.blocks || []).forEach(function (b) {
+              b.patternId = null;
+            });
           });
           GS.setActiveNotePatternOverrides({});
           renderFrame();
@@ -2737,13 +3122,23 @@
     })();
 
     // ── Layer governance helpers ───────────────────────────────────────────────
-    var LAYER_CONTROL_IDS = ["atmosphere","terrain","signals","walkers","midi","ecology","debug"];
+    var LAYER_CONTROL_IDS = [
+      "atmosphere",
+      "terrain",
+      "signals",
+      "walkers",
+      "midi",
+      "ecology",
+      "debug",
+    ];
 
     function isLayerVisible(id) {
       var lc = state.layerControls;
       if (!lc || !lc[id]) return true;
-      var hasSolo = LAYER_CONTROL_IDS.some(function (k) { return lc[k] && lc[k].solo; });
-      if (hasSolo) return !!(lc[id].solo);
+      var hasSolo = LAYER_CONTROL_IDS.some(function (k) {
+        return lc[k] && lc[k].solo;
+      });
+      if (hasSolo) return !!lc[id].solo;
       return lc[id].visible !== false;
     }
 
@@ -2755,10 +3150,11 @@
 
     // ── _wos.routeWorld — route world console API ────────────────────────────
     window._wos.routeWorld = (function () {
-      function rw() { return state.routeWorld; }
+      function rw() {
+        return state.routeWorld;
+      }
 
       return {
-
         createManualRoute: function (name, points, options) {
           var opts = options || {};
           var routeId = makeId("route");
@@ -2767,53 +3163,69 @@
           // Build cumulative distances
           var dist = computePolylineDistances(points);
           var route = {
-            id:              routeId,
-            name:            name || "Route",
+            id: routeId,
+            name: name || "Route",
             start: {
               label: opts.startLabel || "Home",
-              lat: null, lng: null,
+              lat: null,
+              lng: null,
               x: points[0] ? points[0].x : 0,
               y: points[0] ? points[0].y : 0,
             },
             end: {
               label: opts.endLabel || "Destination",
-              lat: null, lng: null,
+              lat: null,
+              lng: null,
               x: points[points.length - 1] ? points[points.length - 1].x : 0,
               y: points[points.length - 1] ? points[points.length - 1].y : 0,
             },
             distanceMeters: dist.total,
-            durationSec:    opts.durationSec || 7200,
-            points:         points.slice(),
-            segments:       [],
-            metadata:       opts.metadata || {},
-            _totalPixelLength:    dist.total,
+            durationSec: opts.durationSec || 7200,
+            points: points.slice(),
+            segments: [],
+            metadata: opts.metadata || {},
+            _totalPixelLength: dist.total,
             _cumulativeDistances: dist.cumulative,
             _skinSeed: Math.floor(Math.random() * 1e8),
           };
 
           // Auto-generate route segments proportionally
-          var segTypes = ["local", "road", "highway", "road", "waterfront", "road"];
-          var skinHints = ["residential", "suburban", "suburban", "suburban", "waterfront", "suburban"];
-          var segCount  = Math.max(2, Math.floor(points.length / 2));
-          var segments  = [];
+          var segTypes = [
+            "local",
+            "road",
+            "highway",
+            "road",
+            "waterfront",
+            "road",
+          ];
+          var skinHints = [
+            "residential",
+            "suburban",
+            "suburban",
+            "suburban",
+            "waterfront",
+            "suburban",
+          ];
+          var segCount = Math.max(2, Math.floor(points.length / 2));
+          var segments = [];
           for (var si = 0; si < segCount; si++) {
             var st = si / segCount;
             var et = (si + 1) / segCount;
             var seg = {
-              id:                  makeId("seg"),
-              routeId:             routeId,
-              index:               si,
-              type:                segTypes[si % segTypes.length],
-              startT:              st,
-              endT:                et,
+              id: makeId("seg"),
+              routeId: routeId,
+              index: si,
+              type: segTypes[si % segTypes.length],
+              startT: st,
+              endT: et,
               startDistanceMeters: st * dist.total,
-              endDistanceMeters:   et * dist.total,
-              speedLimitKph:       50,
-              mood:                "neutral",
-              density:             0.35,
-              cameraHint:          "follow",
-              skinHint:            skinHints[si % skinHints.length],
-              eventPoolIds:        [],
+              endDistanceMeters: et * dist.total,
+              speedLimitKph: 50,
+              mood: "neutral",
+              density: 0.35,
+              cameraHint: "follow",
+              skinHint: skinHints[si % skinHints.length],
+              eventPoolIds: [],
             };
             segments.push(seg);
             route.segments.push(seg.id);
@@ -2821,56 +3233,77 @@
 
           // Create world
           var world = {
-            id:            worldId,
-            name:          opts.worldName || name || "Route World",
-            version:       "1.0.0",
-            provider:      { type: "manual", sourceId: null, attribution: "" },
-            routeId:       routeId,
-            activeCameraId:"route-follow",
-            durationSec:   opts.durationSec || 7200,
-            loopMode:      opts.loopMode || "destination",
-            mood:          opts.mood || "night-drive",
-            timeOfDay:     opts.timeOfDay || "night",
-            weather:       opts.weather || "clear",
+            id: worldId,
+            name: opts.worldName || name || "Route World",
+            version: "1.0.0",
+            provider: { type: "manual", sourceId: null, attribution: "" },
+            routeId: routeId,
+            activeCameraId: "route-follow",
+            durationSec: opts.durationSec || 7200,
+            loopMode: opts.loopMode || "destination",
+            mood: opts.mood || "night-drive",
+            timeOfDay: opts.timeOfDay || "night",
+            weather: opts.weather || "clear",
             layers: {
-              map:      true, skin:     true, traffic:  true,
-              ecology:  true, events:   true, surfaces: true, subway: false,
+              map: true,
+              skin: true,
+              traffic: true,
+              ecology: true,
+              events: true,
+              surfaces: true,
+              subway: false,
             },
           };
 
           // Default skin
           var skin = {
-            id: makeId("skin"), routeWorldId: worldId,
+            id: makeId("skin"),
+            routeWorldId: worldId,
             style: opts.skinStyle || "wos-map",
-            buildingDensity: opts.buildingDensity != null ? opts.buildingDensity : 0.35,
-            waterDensity:    opts.waterDensity    != null ? opts.waterDensity    : 0.15,
-            greenDensity:    opts.greenDensity    != null ? opts.greenDensity    : 0.2,
-            roadRenderMode:     "signal-line",
+            buildingDensity:
+              opts.buildingDensity != null ? opts.buildingDensity : 0.35,
+            waterDensity: opts.waterDensity != null ? opts.waterDensity : 0.15,
+            greenDensity: opts.greenDensity != null ? opts.greenDensity : 0.2,
+            roadRenderMode: "signal-line",
             buildingRenderMode: "grid-symbol",
-            waterRenderMode:    "organic-void",
-            paletteId:    "nightMap",
-            glyphSystemId:"bauhaus",
+            waterRenderMode: "organic-void",
+            paletteId: "nightMap",
+            glyphSystemId: "bauhaus",
           };
 
           // Default camera rig
           var rig = {
-            id: "route-follow", mode: "follow", targetActorId: "hero-car",
-            zoom: 1.8, targetZoom: 1.8,
-            lookAhead: 0.035, smoothing: 0.08, drift: 0.15,
+            id: "route-follow",
+            mode: "follow",
+            targetActorId: "hero-car",
+            zoom: 1.8,
+            targetZoom: 1.8,
+            lookAhead: 0.035,
+            smoothing: 0.08,
+            drift: 0.15,
             viewLayout: "single",
           };
 
           var w = rw();
-          w.world         = world;
+          w.world = world;
           w.routes.push(route);
-          segments.forEach(function (s) { w.segments.push(s); });
+          segments.forEach(function (s) {
+            w.segments.push(s);
+          });
           w.skins.push(skin);
           w.cameraRigs.push(rig);
           w.runtime.activeRouteId = routeId;
 
-          console.log("[RouteWorld] manual route created:", routeId,
-            points.length, "points,", segments.length, "segments,",
-            dist.total.toFixed(0), "px total length");
+          console.log(
+            "[RouteWorld] manual route created:",
+            routeId,
+            points.length,
+            "points,",
+            segments.length,
+            "segments,",
+            dist.total.toFixed(0),
+            "px total length",
+          );
           return route;
         },
 
@@ -2878,26 +3311,40 @@
           var w = rw();
           var rid = routeId || (w.runtime && w.runtime.activeRouteId);
           // Remove existing hero-car if present
-          w.actors = w.actors.filter(function (a) { return a.id !== "hero-car"; });
+          w.actors = w.actors.filter(function (a) {
+            return a.id !== "hero-car";
+          });
           var AN_init = SBE && SBE.AgentNeeds;
           var actor = {
-            id: "hero-car", type: "vehicle", role: "driver",
+            id: "hero-car",
+            type: "vehicle",
+            role: "driver",
             routeId: rid,
-            t: 0, speed: 1, x: 0, y: 0, heading: 0,
+            t: 0,
+            speed: 1,
+            x: 0,
+            y: 0,
+            heading: 0,
             visual: { color: "#f6d36b", radius: 8, trail: true, halo: true },
-            audio:  { enabled: false, role: "traffic" },
-            needs:  AN_init ? AN_init.makeNeeds() : null,
+            audio: { enabled: false, role: "traffic" },
+            needs: AN_init ? AN_init.makeNeeds() : null,
           };
           w.actors.push(actor);
           w.runtime.activeActorId = "hero-car";
           // Prime starting position
-          var route = w.routes.find(function (r) { return r.id === rid; });
+          var route = w.routes.find(function (r) {
+            return r.id === rid;
+          });
           if (route) {
             var pos = sampleRoutePolyline(route, 0);
-            actor.x = pos.x; actor.y = pos.y; actor.heading = pos.heading;
+            actor.x = pos.x;
+            actor.y = pos.y;
+            actor.heading = pos.heading;
             var cam = _rwEnsureCamera(w);
-            cam.x = pos.x; cam.y = pos.y;
-            cam.targetX = pos.x; cam.targetY = pos.y;
+            cam.x = pos.x;
+            cam.y = pos.y;
+            cam.targetX = pos.x;
+            cam.targetY = pos.y;
           }
           console.log("[RouteWorld] hero-car added, route:", rid);
           return actor;
@@ -2907,21 +3354,22 @@
           var w = rw();
           var cfg = config || {};
           var zone = {
-            id:           cfg.id || makeId("zone"),
-            label:        cfg.label || "Event Zone",
-            routeId:      routeId || w.runtime.activeRouteId,
-            t:            t != null ? t : 0.5,
+            id: cfg.id || makeId("zone"),
+            label: cfg.label || "Event Zone",
+            routeId: routeId || w.runtime.activeRouteId,
+            t: t != null ? t : 0.5,
             radiusMeters: cfg.radiusMeters || 100,
-            type:         cfg.type || "ambient",
-            rarity:       cfg.rarity != null ? cfg.rarity : 1,
-            cooldownSec:  cfg.cooldownSec || 300,
+            type: cfg.type || "ambient",
+            rarity: cfg.rarity != null ? cfg.rarity : 1,
+            cooldownSec: cfg.cooldownSec || 300,
             conditions: {
-              weather:      (cfg.conditions && cfg.conditions.weather)      || [],
-              timeOfDay:    (cfg.conditions && cfg.conditions.timeOfDay)    || [],
-              segmentTypes: (cfg.conditions && cfg.conditions.segmentTypes) || [],
+              weather: (cfg.conditions && cfg.conditions.weather) || [],
+              timeOfDay: (cfg.conditions && cfg.conditions.timeOfDay) || [],
+              segmentTypes:
+                (cfg.conditions && cfg.conditions.segmentTypes) || [],
             },
-            actions:          cfg.actions || [],
-            lastTriggeredAt:  0,
+            actions: cfg.actions || [],
+            lastTriggeredAt: 0,
           };
           w.eventZones.push(zone);
           console.log("[RouteWorld] event zone added:", zone.id, "at t=", t);
@@ -2931,7 +3379,12 @@
         setCameraMode: function (mode) {
           var valid = ["overview", "follow", "cinematic", "dual"];
           if (!valid.includes(mode)) {
-            console.warn("[RouteWorld] unknown camera mode:", mode, "— use:", valid.join(" | "));
+            console.warn(
+              "[RouteWorld] unknown camera mode:",
+              mode,
+              "— use:",
+              valid.join(" | "),
+            );
             return;
           }
           var w = rw();
@@ -2943,9 +3396,13 @@
             cam.mode = mode; // fallback if RouteCamera not loaded
           }
           if (mode === "dual") {
-            console.warn("[RouteWorld] dual camera: not fully rendered in v1, storing mode");
+            console.warn(
+              "[RouteWorld] dual camera: not fully rendered in v1, storing mode",
+            );
           }
-          var rig = w.cameraRigs.find(function (c) { return c.id === "route-follow"; });
+          var rig = w.cameraRigs.find(function (c) {
+            return c.id === "route-follow";
+          });
           if (rig) rig.mode = mode;
           renderFrame();
           console.log("[RouteWorld] camera mode:", mode);
@@ -2954,7 +3411,10 @@
 
         setCameraOption: function (key, value) {
           var cam = _rwEnsureCamera(rw());
-          if (!(key in cam)) { console.warn("[RouteWorld] unknown camera option:", key); return; }
+          if (!(key in cam)) {
+            console.warn("[RouteWorld] unknown camera option:", key);
+            return;
+          }
           cam[key] = value;
           renderFrame();
           return cam[key];
@@ -2963,7 +3423,10 @@
         setSkin: function (style) {
           var w = rw();
           var skin = w.skins[0];
-          if (!skin) { console.warn("[RouteWorld] no skin to update"); return; }
+          if (!skin) {
+            console.warn("[RouteWorld] no skin to update");
+            return;
+          }
           skin.style = style;
           renderFrame();
           console.log("[RouteWorld] skin style:", style);
@@ -2972,13 +3435,20 @@
 
         start: function () {
           var w = rw();
-          _rwEnsureSpatialBootstrap(w);  // guarantee world + route + actor exist
-          if (!w.world) { console.warn("[RouteWorld] no world — call createManualRoute first"); return; }
+          _rwEnsureSpatialBootstrap(w); // guarantee world + route + actor exist
+          if (!w.world) {
+            console.warn(
+              "[RouteWorld] no world — call createManualRoute first",
+            );
+            return;
+          }
           w.active = true;
           w.runtime.elapsedSec = 0;
           w.runtime.triggeredEventIds = new Set();
           // Reset actor progress
-          w.actors.forEach(function (a) { a.t = 0; });
+          w.actors.forEach(function (a) {
+            a.t = 0;
+          });
           renderFrame();
           console.log("[RouteWorld] started");
           return w.world;
@@ -2993,18 +3463,21 @@
         reset: function () {
           var w = rw();
           w.active = false;
-          w.world          = null;
-          w.routes         = [];
-          w.actors         = [];
-          w.eventZones     = [];
-          w.skins          = [];
-          w.cameraRigs     = [];
+          w.world = null;
+          w.routes = [];
+          w.actors = [];
+          w.eventZones = [];
+          w.skins = [];
+          w.cameraRigs = [];
           w.surfaceAnchors = [];
-          w.segments       = [];
+          w.segments = [];
           w.camera = null; // will be re-created fresh on next use
           w.runtime = {
-            elapsedSec: 0, activeRouteId: null, activeActorId: null,
-            activeSegmentId: null, triggeredEventIds: new Set(),
+            elapsedSec: 0,
+            activeRouteId: null,
+            activeActorId: null,
+            activeSegmentId: null,
+            triggeredEventIds: new Set(),
           };
           renderFrame();
           console.log("[RouteWorld] reset");
@@ -3013,18 +3486,21 @@
         state: function () {
           var w = rw();
           return {
-            active:        w.active,
-            world:         w.world,
-            routeCount:    w.routes.length,
-            actorCount:    w.actors.length,
-            segmentCount:  (w.segments || []).length,
-            eventZoneCount:w.eventZones.length,
-            skinCount:     w.skins.length,
-            cameraRigCount:w.cameraRigs.length,
+            active: w.active,
+            world: w.world,
+            routeCount: w.routes.length,
+            actorCount: w.actors.length,
+            segmentCount: (w.segments || []).length,
+            eventZoneCount: w.eventZones.length,
+            skinCount: w.skins.length,
+            cameraRigCount: w.cameraRigs.length,
             runtime: Object.assign({}, w.runtime, {
               triggeredEventIds: Array.from(w.runtime.triggeredEventIds || []),
             }),
-            heroActor: w.actors.find(function (a) { return a.id === "hero-car"; }) || null,
+            heroActor:
+              w.actors.find(function (a) {
+                return a.id === "hero-car";
+              }) || null,
           };
         },
 
@@ -3032,7 +3508,10 @@
 
         importGeoJSONRoute: function (geojson, options) {
           var RI = SBE.RouteIngestion;
-          if (!RI) { console.error("[RouteWorld] SBE.RouteIngestion not loaded"); return null; }
+          if (!RI) {
+            console.error("[RouteWorld] SBE.RouteIngestion not loaded");
+            return null;
+          }
           var result = RI.importGeoJSON(geojson, state.canvas, options);
           if (!result) return null;
           return _rwIngestResult(result, options);
@@ -3040,7 +3519,10 @@
 
         importEncodedPolyline: function (encoded, options) {
           var RI = SBE.RouteIngestion;
-          if (!RI) { console.error("[RouteWorld] SBE.RouteIngestion not loaded"); return null; }
+          if (!RI) {
+            console.error("[RouteWorld] SBE.RouteIngestion not loaded");
+            return null;
+          }
           var result = RI.importEncodedPolyline(encoded, state.canvas, options);
           if (!result) return null;
           return _rwIngestResult(result, options);
@@ -3048,24 +3530,40 @@
 
         normalizeGeoRoute: function (points, options) {
           var RI = SBE.RouteIngestion;
-          if (!RI) { console.error("[RouteWorld] SBE.RouteIngestion not loaded"); return null; }
+          if (!RI) {
+            console.error("[RouteWorld] SBE.RouteIngestion not loaded");
+            return null;
+          }
           return RI.normalizeRoutePoints(points);
         },
 
         fitRouteToCanvas: function (routeId, options) {
           var RI = SBE.RouteIngestion;
-          if (!RI) { console.error("[RouteWorld] SBE.RouteIngestion not loaded"); return null; }
+          if (!RI) {
+            console.error("[RouteWorld] SBE.RouteIngestion not loaded");
+            return null;
+          }
           var w = rw();
-          _rwEnsureSpatialBootstrap(w);  // guarantee route exists before lookup
-          var route = w.routes.find(function (r) { return r.id === (routeId || w.runtime.activeRouteId); });
-          if (!route) { console.warn("[RouteWorld] fitRouteToCanvas: route not found:", routeId); return null; }
+          _rwEnsureSpatialBootstrap(w); // guarantee route exists before lookup
+          var route = w.routes.find(function (r) {
+            return r.id === (routeId || w.runtime.activeRouteId);
+          });
+          if (!route) {
+            console.warn(
+              "[RouteWorld] fitRouteToCanvas: route not found:",
+              routeId,
+            );
+            return null;
+          }
           var pad = options && options.padding != null ? options.padding : 120;
           RI.fitRouteToCanvas(route, state.canvas, pad);
           // Reset camera to new start position
           var cam2 = _rwEnsureCamera(w);
           if (route.points && route.points[0]) {
-            cam2.x = route.points[0].x; cam2.y = route.points[0].y;
-            cam2.targetX = cam2.x; cam2.targetY = cam2.y;
+            cam2.x = route.points[0].x;
+            cam2.y = route.points[0].y;
+            cam2.targetX = cam2.x;
+            cam2.targetY = cam2.y;
             cam2._overviewFitted = false;
           }
           renderFrame();
@@ -3075,10 +3573,18 @@
 
         routeStats: function (routeId) {
           var RI = SBE.RouteIngestion;
-          if (!RI) { console.error("[RouteWorld] SBE.RouteIngestion not loaded"); return null; }
+          if (!RI) {
+            console.error("[RouteWorld] SBE.RouteIngestion not loaded");
+            return null;
+          }
           var w = rw();
-          var route = w.routes.find(function (r) { return r.id === (routeId || w.runtime.activeRouteId); });
-          if (!route) { console.warn("[RouteWorld] routeStats: no route found"); return null; }
+          var route = w.routes.find(function (r) {
+            return r.id === (routeId || w.runtime.activeRouteId);
+          });
+          if (!route) {
+            console.warn("[RouteWorld] routeStats: no route found");
+            return null;
+          }
           return RI.routeStats(route);
         },
       };
@@ -3087,67 +3593,95 @@
     // ── Shared ingestion helper (used by importGeoJSONRoute + importEncodedPolyline) ──
     function _rwIngestResult(result, options) {
       var w = state.routeWorld;
-      var route    = result.route;
+      var route = result.route;
       var segments = result.segments;
 
       // Ensure world record exists
       if (!w.world) {
         w.world = {
-          id:            makeId("rworld"),
-          name:          (options && options.worldName) || route.name || "Route World",
-          version:       "1.0.0",
-          provider:      { type: route.metadata && route.metadata.providerType || "geojson", sourceId: null, attribution: "" },
-          routeId:       route.id,
-          activeCameraId:"route-follow",
-          durationSec:   route.durationSec,
-          loopMode:      (options && options.loopMode) || "destination",
-          mood:          (options && options.mood) || "night-drive",
-          timeOfDay:     (options && options.timeOfDay) || "night",
-          weather:       (options && options.weather) || "clear",
-          layers: { map: true, skin: true, traffic: true, ecology: true, events: true, surfaces: true, subway: false,
-                    // Corridor Renderer v1.0.0 layer toggles
-                    terrain: true,    // route spine + district bands
-                    signals: true,    // POIs + scenic moments
-                    walkers: true,    // actor markers + camera reticle
-                    debug:   false,   // labels + spatial diagnostics
-                    atmosphere: true, // future: weather overlays
-                  },
+          id: makeId("rworld"),
+          name: (options && options.worldName) || route.name || "Route World",
+          version: "1.0.0",
+          provider: {
+            type: (route.metadata && route.metadata.providerType) || "geojson",
+            sourceId: null,
+            attribution: "",
+          },
+          routeId: route.id,
+          activeCameraId: "route-follow",
+          durationSec: route.durationSec,
+          loopMode: (options && options.loopMode) || "destination",
+          mood: (options && options.mood) || "night-drive",
+          timeOfDay: (options && options.timeOfDay) || "night",
+          weather: (options && options.weather) || "clear",
+          layers: {
+            map: true,
+            skin: true,
+            traffic: true,
+            ecology: true,
+            events: true,
+            surfaces: true,
+            subway: false,
+            // Corridor Renderer v1.0.0 layer toggles
+            terrain: true, // route spine + district bands
+            signals: true, // POIs + scenic moments
+            walkers: true, // actor markers + camera reticle
+            debug: false, // labels + spatial diagnostics
+            atmosphere: true, // future: weather overlays
+          },
         };
       } else {
         w.world.routeId = route.id;
         w.world.durationSec = route.durationSec;
-        w.world.provider.type = route.metadata && route.metadata.providerType || "geojson";
+        w.world.provider.type =
+          (route.metadata && route.metadata.providerType) || "geojson";
       }
 
       // Default skin if none
       if (!w.skins.length) {
         w.skins.push({
-          id: makeId("skin"), routeWorldId: w.world.id,
+          id: makeId("skin"),
+          routeWorldId: w.world.id,
           style: "wos-map",
-          buildingDensity: 0.35, waterDensity: 0.15, greenDensity: 0.2,
-          roadRenderMode: "signal-line", buildingRenderMode: "grid-symbol", waterRenderMode: "organic-void",
-          paletteId: "nightMap", glyphSystemId: "bauhaus",
+          buildingDensity: 0.35,
+          waterDensity: 0.15,
+          greenDensity: 0.2,
+          roadRenderMode: "signal-line",
+          buildingRenderMode: "grid-symbol",
+          waterRenderMode: "organic-void",
+          paletteId: "nightMap",
+          glyphSystemId: "bauhaus",
         });
       }
 
       // Default camera rig if none
       if (!w.cameraRigs.length) {
         w.cameraRigs.push({
-          id: "route-follow", mode: "follow", targetActorId: "hero-car",
-          zoom: 1.8, targetZoom: 1.8,
-          lookAhead: 0.035, smoothing: 0.08, drift: 0.15, viewLayout: "single",
+          id: "route-follow",
+          mode: "follow",
+          targetActorId: "hero-car",
+          zoom: 1.8,
+          targetZoom: 1.8,
+          lookAhead: 0.035,
+          smoothing: 0.08,
+          drift: 0.15,
+          viewLayout: "single",
         });
       }
 
       w.routes.push(route);
-      segments.forEach(function (s) { w.segments.push(s); });
+      segments.forEach(function (s) {
+        w.segments.push(s);
+      });
       w.runtime.activeRouteId = route.id;
 
-      console.log("[RouteWorld] route ingested:", route.id,
+      console.log(
+        "[RouteWorld] route ingested:",
+        route.id,
         route.points.length + " pts,",
         segments.length + " segs,",
         Math.round(route.distanceMeters) + "m,",
-        route.durationSec + "s"
+        route.durationSec + "s",
       );
       return route;
     }
@@ -3158,31 +3692,53 @@
         var lc = state.layerControls;
         return LAYER_CONTROL_IDS.map(function (id) {
           var ctrl = lc[id] || { visible: true, opacity: 1.0, solo: false };
-          return { id: id, visible: ctrl.visible, opacity: ctrl.opacity, solo: ctrl.solo, computed: isLayerVisible(id) };
+          return {
+            id: id,
+            visible: ctrl.visible,
+            opacity: ctrl.opacity,
+            solo: ctrl.solo,
+            computed: isLayerVisible(id),
+          };
         });
       },
       show: function (id) {
-        if (!state.layerControls[id]) { console.warn("[layers] unknown id:", id); return; }
+        if (!state.layerControls[id]) {
+          console.warn("[layers] unknown id:", id);
+          return;
+        }
         state.layerControls[id].visible = true;
         renderFrame();
       },
       hide: function (id) {
-        if (!state.layerControls[id]) { console.warn("[layers] unknown id:", id); return; }
+        if (!state.layerControls[id]) {
+          console.warn("[layers] unknown id:", id);
+          return;
+        }
         state.layerControls[id].visible = false;
         renderFrame();
       },
       setOpacity: function (id, v) {
-        if (!state.layerControls[id]) { console.warn("[layers] unknown id:", id); return; }
+        if (!state.layerControls[id]) {
+          console.warn("[layers] unknown id:", id);
+          return;
+        }
         state.layerControls[id].opacity = Math.max(0, Math.min(1, v));
         renderFrame();
       },
       solo: function (id) {
-        if (!state.layerControls[id]) { console.warn("[layers] unknown id:", id); return; }
-        LAYER_CONTROL_IDS.forEach(function (k) { state.layerControls[k].solo = (k === id); });
+        if (!state.layerControls[id]) {
+          console.warn("[layers] unknown id:", id);
+          return;
+        }
+        LAYER_CONTROL_IDS.forEach(function (k) {
+          state.layerControls[k].solo = k === id;
+        });
         renderFrame();
       },
       clearSolo: function () {
-        LAYER_CONTROL_IDS.forEach(function (k) { state.layerControls[k].solo = false; });
+        LAYER_CONTROL_IDS.forEach(function (k) {
+          state.layerControls[k].solo = false;
+        });
         renderFrame();
       },
     };
@@ -3195,17 +3751,28 @@
         _rwEnsureSpatialBootstrap(rw);
         var SI = SBE && SBE.SpatialInfrastructure;
         var spatial = rw && rw.spatial;
-        if (!spatial) { console.log("[spatial] no spatial world loaded"); return null; }
+        if (!spatial) {
+          console.log("[spatial] no spatial world loaded");
+          return null;
+        }
         var s = SI ? SI.summary(spatial) : null;
         console.log("[spatial] summary:", s);
-        console.log("[spatial] routes:", rw.routes.length, "· activeRouteId:", rw.runtime && rw.runtime.activeRouteId);
+        console.log(
+          "[spatial] routes:",
+          rw.routes.length,
+          "· activeRouteId:",
+          rw.runtime && rw.runtime.activeRouteId,
+        );
         return s;
       },
       // Snapshot the current world inspector state
       inspector: function () {
         var rw = state.routeWorld;
         var WI = SBE && SBE.WorldInspector;
-        if (!WI) { console.log("[spatial] WorldInspector not loaded"); return null; }
+        if (!WI) {
+          console.log("[spatial] WorldInspector not loaded");
+          return null;
+        }
         var snap = WI.snapshot(rw, rw.clock, rw.env, rw.comms);
         console.log("[spatial] inspector:", snap);
         return snap;
@@ -3216,7 +3783,10 @@
         if (rw && rw.world && rw.world.layers) {
           rw.world.layers.debug = on !== false;
           renderFrame();
-          console.log("[spatial] debug labels:", rw.world.layers.debug ? "ON" : "OFF");
+          console.log(
+            "[spatial] debug labels:",
+            rw.world.layers.debug ? "ON" : "OFF",
+          );
         }
       },
       // Toggle a specific corridor layer (terrain|signals|walkers|atmosphere)
@@ -3225,17 +3795,37 @@
         if (rw && rw.world && rw.world.layers) {
           rw.world.layers[name] = on !== false;
           renderFrame();
-          console.log("[spatial] layer", name, ":", rw.world.layers[name] ? "ON" : "OFF");
+          console.log(
+            "[spatial] layer",
+            name,
+            ":",
+            rw.world.layers[name] ? "ON" : "OFF",
+          );
         }
       },
       // Score spatial interest at current camera position
       interest: function () {
         var rw = state.routeWorld;
         var SI = SBE && SBE.SpatialInfrastructure;
-        if (!SI || !rw || !rw.spatial || !rw.camera) { console.log("[spatial] not ready"); return; }
+        if (!SI || !rw || !rw.spatial || !rw.camera) {
+          console.log("[spatial] not ready");
+          return;
+        }
         var cam = rw.camera;
-        var score = SI.spatialInterest(rw.spatial, { x: cam.x, y: cam.y }, rw.env, rw.clock);
-        console.log("[spatial] interest at camera (" + Math.round(cam.x) + "," + Math.round(cam.y) + "):", score.toFixed(3));
+        var score = SI.spatialInterest(
+          rw.spatial,
+          { x: cam.x, y: cam.y },
+          rw.env,
+          rw.clock,
+        );
+        console.log(
+          "[spatial] interest at camera (" +
+            Math.round(cam.x) +
+            "," +
+            Math.round(cam.y) +
+            "):",
+          score.toFixed(3),
+        );
         return score;
       },
     };
@@ -3247,7 +3837,10 @@
         var rw = state.routeWorld;
         var DM = SBE && SBE.DirectorMode;
         var d = rw && rw.director;
-        if (!d) { console.log("[director] not initialised"); return null; }
+        if (!d) {
+          console.log("[director] not initialised");
+          return null;
+        }
         var snap = DM ? DM.snapshotDirector(d) : d;
         console.log("[director]", snap);
         return snap;
@@ -3256,48 +3849,58 @@
       mode: function (m) {
         var rw = state.routeWorld;
         var DM = SBE && SBE.DirectorMode;
-        var d  = _rwEnsureDirector(rw);
+        var d = _rwEnsureDirector(rw);
         if (DM) DM.setMode(d, m);
         else d.mode = m;
         console.log("[director] mode →", d.mode);
-        if (window._wos.syncRouteWorldStatus) window._wos.syncRouteWorldStatus();
+        if (window._wos.syncRouteWorldStatus)
+          window._wos.syncRouteWorldStatus();
       },
       // Pause simulation
       pause: function () {
         var rw = state.routeWorld;
         var DM = SBE && SBE.DirectorMode;
-        var d  = _rwEnsureDirector(rw);
-        if (DM) DM.pause(d); else d.simulation.paused = true;
+        var d = _rwEnsureDirector(rw);
+        if (DM) DM.pause(d);
+        else d.simulation.paused = true;
         console.log("[director] paused");
       },
       // Resume simulation
       resume: function () {
         var rw = state.routeWorld;
         var DM = SBE && SBE.DirectorMode;
-        var d  = _rwEnsureDirector(rw);
-        if (DM) DM.resume(d); else d.simulation.paused = false;
+        var d = _rwEnsureDirector(rw);
+        if (DM) DM.resume(d);
+        else d.simulation.paused = false;
         console.log("[director] resumed");
       },
       // Set simulation speed multiplier (0.1 – 8)
       speed: function (s) {
         var rw = state.routeWorld;
         var DM = SBE && SBE.DirectorMode;
-        var d  = _rwEnsureDirector(rw);
-        if (DM) DM.setSpeed(d, s); else d.simulation.speed = s;
+        var d = _rwEnsureDirector(rw);
+        if (DM) DM.setSpeed(d, s);
+        else d.simulation.speed = s;
         console.log("[director] speed →", d.simulation.speed);
       },
       // Scrub route progress (0–1). Pass null to return to live.
       progress: function (t) {
         var rw = state.routeWorld;
         var DM = SBE && SBE.DirectorMode;
-        var d  = _rwEnsureDirector(rw);
-        if (DM) DM.setRouteProgress(d, t); else d.simulation.routeProgressOverride = t == null ? null : Math.max(0, Math.min(1, t));
-        console.log("[director] progress →", d.simulation.routeProgressOverride);
+        var d = _rwEnsureDirector(rw);
+        if (DM) DM.setRouteProgress(d, t);
+        else
+          d.simulation.routeProgressOverride =
+            t == null ? null : Math.max(0, Math.min(1, t));
+        console.log(
+          "[director] progress →",
+          d.simulation.routeProgressOverride,
+        );
       },
       // Set world hour (0–23.99). Activates reality overrides.
       time: function (h) {
         var rw = state.routeWorld;
-        var d  = _rwEnsureDirector(rw);
+        var d = _rwEnsureDirector(rw);
         d.reality.useOverrides = true;
         d.reality.timeHour = ((h % 24) + 24) % 24;
         console.log("[director] timeHour →", d.reality.timeHour.toFixed(2));
@@ -3305,7 +3908,7 @@
       // Set weather archetype. Activates reality overrides.
       weather: function (w) {
         var rw = state.routeWorld;
-        var d  = _rwEnsureDirector(rw);
+        var d = _rwEnsureDirector(rw);
         d.reality.useOverrides = true;
         d.reality.weatherType = w;
         console.log("[director] weather →", w);
@@ -3313,7 +3916,7 @@
       // Set season. Activates reality overrides.
       season: function (s) {
         var rw = state.routeWorld;
-        var d  = _rwEnsureDirector(rw);
+        var d = _rwEnsureDirector(rw);
         d.reality.useOverrides = true;
         d.reality.season = s;
         console.log("[director] season →", s);
@@ -3322,16 +3925,17 @@
       fit: function () {
         var rw = state.routeWorld;
         var DM = SBE && SBE.DirectorMode;
-        var d  = _rwEnsureDirector(rw);
-        if (d.manualCamera) d.manualCamera._primed = false;  // forces re-prime on next render
-        window._wos.routeWorld && window._wos.routeWorld.fitRouteToCanvas(null, { padding: 120 });
+        var d = _rwEnsureDirector(rw);
+        if (d.manualCamera) d.manualCamera._primed = false; // forces re-prime on next render
+        window._wos.routeWorld &&
+          window._wos.routeWorld.fitRouteToCanvas(null, { padding: 120 });
         console.log("[director] fit — manual camera will re-prime");
       },
       // Reset to survey mode at current camera position
       resetView: function () {
         var rw = state.routeWorld;
         var DM = SBE && SBE.DirectorMode;
-        var d  = _rwEnsureDirector(rw);
+        var d = _rwEnsureDirector(rw);
         if (DM) DM.setMode(d, "survey");
         if (d.manualCamera) d.manualCamera._primed = false;
         console.log("[director] reset to survey");
@@ -3339,7 +3943,7 @@
       // Disable reality overrides (return to live simulation)
       liveMode: function () {
         var rw = state.routeWorld;
-        var d  = _rwEnsureDirector(rw);
+        var d = _rwEnsureDirector(rw);
         d.reality.useOverrides = false;
         console.log("[director] live mode — overrides disabled");
       },
@@ -3363,7 +3967,8 @@
         var rw = state.routeWorld;
         var rg = _rwEnsureReferenceGeo(rw);
         var RGL = SBE && SBE.ReferenceGeographyLayer;
-        if (RGL) RGL.setStyle(rg, mode); else rg.style = mode;
+        if (RGL) RGL.setStyle(rg, mode);
+        else rg.style = mode;
         renderFrame();
         console.log("[geo] style →", rg.style);
       },
@@ -3372,7 +3977,8 @@
         var rw = state.routeWorld;
         var rg = _rwEnsureReferenceGeo(rw);
         var RGL = SBE && SBE.ReferenceGeographyLayer;
-        if (RGL) RGL.setOpacity(rg, v); else rg.opacity = Math.max(0, Math.min(1, v));
+        if (RGL) RGL.setOpacity(rg, v);
+        else rg.opacity = Math.max(0, Math.min(1, v));
         renderFrame();
         console.log("[geo] opacity →", rg.opacity.toFixed(2));
       },
@@ -3388,7 +3994,12 @@
       snapshot: function () {
         var rw = state.routeWorld;
         var rg = _rwEnsureReferenceGeo(rw);
-        var snap = { enabled: rg.enabled, style: rg.style, opacity: rg.opacity, layers: Object.assign({}, rg.layers) };
+        var snap = {
+          enabled: rg.enabled,
+          style: rg.style,
+          opacity: rg.opacity,
+          layers: Object.assign({}, rg.layers),
+        };
         console.log("[geo]", snap);
         return snap;
       },
@@ -3464,8 +4075,16 @@
         var rw = state.routeWorld;
         var bm = rw && rw.basemap;
         var tiles = bm && bm.visibleTiles ? bm.visibleTiles : [];
-        console.log("[map] visible tiles (Z=" + (bm && bm._lastZ) + "):", tiles);
-        console.log("[map] drawn:", bm && bm._lastDrawn, " pending:", bm && bm._lastPending);
+        console.log(
+          "[map] visible tiles (Z=" + (bm && bm._lastZ) + "):",
+          tiles,
+        );
+        console.log(
+          "[map] drawn:",
+          bm && bm._lastDrawn,
+          " pending:",
+          bm && bm._lastPending,
+        );
         return tiles.slice();
       },
       // Print full basemap state snapshot
@@ -3473,9 +4092,14 @@
         var rw = state.routeWorld;
         var bm = _rwEnsureBasemap(rw);
         var snap = {
-          enabled: bm.enabled, opacity: bm.opacity, style: bm.style,
-          zoom: bm.zoom, zoomLocked: bm.zoomLocked,
-          lastZ: bm._lastZ, drawn: bm._lastDrawn, pending: bm._lastPending,
+          enabled: bm.enabled,
+          opacity: bm.opacity,
+          style: bm.style,
+          zoom: bm.zoom,
+          zoomLocked: bm.zoomLocked,
+          lastZ: bm._lastZ,
+          drawn: bm._lastDrawn,
+          pending: bm._lastPending,
           presentationMode: rw.presentationMode,
         };
         console.log("[map]", snap);
@@ -3485,7 +4109,9 @@
 
     // ── _wos.demo — demo mode console API ─────────────────────────────────────
     window._wos.demo = {
-      state: function () { return Object.assign({}, state.demo); },
+      state: function () {
+        return Object.assign({}, state.demo);
+      },
       enable: function () {
         state.demo.enabled = true;
         console.log("[demo] enabled");
@@ -3504,18 +4130,26 @@
     // ── _wos.auditHiddenArtifacts ──────────────────────────────────────────────
     window._wos.auditHiddenArtifacts = function auditHiddenArtifacts() {
       var result = {
-        autoRunning:  [],
-        hiddenState:  [],
+        autoRunning: [],
+        hiddenState: [],
         orphanedRefs: [],
-        staleFields:  [],
+        staleFields: [],
       };
 
       // Check IW auto-start
       if (state.infiniteWorld && state.infiniteWorld.autoStart) {
-        result.autoRunning.push({ id: "infiniteWorld.autoStart", value: true, note: "will auto-start IW on load" });
+        result.autoRunning.push({
+          id: "infiniteWorld.autoStart",
+          value: true,
+          note: "will auto-start IW on load",
+        });
       }
       if (state.demo && state.demo.autoStart) {
-        result.autoRunning.push({ id: "demo.autoStart", value: true, note: "will auto-start demo on load" });
+        result.autoRunning.push({
+          id: "demo.autoStart",
+          value: true,
+          note: "will auto-start demo on load",
+        });
       }
 
       // Check for orphaned _signalEnergy refs on blocks
@@ -3526,18 +4160,39 @@
           if (b._signalEnergy != null) oldEnergyBlocks++;
         });
       });
-      if (oldEnergyBlocks > 0) result.staleFields.push({ id: "_signalEnergy", count: oldEnergyBlocks, note: "legacy flat field — use block._signal.energy" });
+      if (oldEnergyBlocks > 0)
+        result.staleFields.push({
+          id: "_signalEnergy",
+          count: oldEnergyBlocks,
+          note: "legacy flat field — use block._signal.energy",
+        });
 
       // Check for walkers without trail/idHash infrastructure
-      var legacyWalkers = (state.walkers || []).filter(function (w) { return !w._idHash; });
-      if (legacyWalkers.length) result.orphanedRefs.push({ id: "walker._idHash", count: legacyWalkers.length, note: "walkers missing trail/idHash — created before PlayheadReadability spec" });
+      var legacyWalkers = (state.walkers || []).filter(function (w) {
+        return !w._idHash;
+      });
+      if (legacyWalkers.length)
+        result.orphanedRefs.push({
+          id: "walker._idHash",
+          count: legacyWalkers.length,
+          note: "walkers missing trail/idHash — created before PlayheadReadability spec",
+        });
 
       // Report layerControls state
       result.layerControls = LAYER_CONTROL_IDS.map(function (id) {
-        return { id: id, visible: isLayerVisible(id), opacity: getLayerOpacity(id) };
+        return {
+          id: id,
+          visible: isLayerVisible(id),
+          opacity: getLayerOpacity(id),
+        };
       });
 
-      console.table && console.table(result.autoRunning.concat(result.staleFields).concat(result.orphanedRefs));
+      console.table &&
+        console.table(
+          result.autoRunning
+            .concat(result.staleFields)
+            .concat(result.orphanedRefs),
+        );
       return result;
     };
 
@@ -3828,147 +4483,314 @@
       true,
     );
 
-    // ── Symbol Placement + Symbol Selection ──────────────────────────────────
+    // ── Symbol Interaction System ─────────────────────────────────────────────
+    // Handles: placement (symbol-place), brush (symbol-brush), and select-mode
+    // interaction for SymbolObjects: single/multi/marquee select, move, rotate,
+    // scale, z-order. Multi-select uses state.selectedSymbolObjectIds (Set).
 
-    var _symDragLast   = null;   // last world point during symbol drag/transform
-    var _symHandleMode = null;  // "move" | "rotate" | "scale" for active symbol gesture
+    var _symDragLast = null; // last world point during drag
+    var _symHandleMode = null; // "move"|"rotate"|"scale"|"marquee"|"brush" for active gesture
+    var _symMarquee = null; // { x1, y1, x2, y2 } while marquee drag is live
+    var _symBrushLast = null; // last stamp world point for brush spacing check
 
-    // Placement mode: pointermove updates ghost position
-    canvas.addEventListener("pointermove", function onSymbolMove(e) {
+    // ── Helper: place one symbol at world point pt ────────────────────────────
+    function _symPlace(pt, shiftAdd) {
+      var SS = global.SBE && global.SBE.SymbolSystem;
       var SOS = global.SBE && global.SBE.SymbolObjectSystem;
+      var sym = state.symbols;
+      if (!SS || !SOS || !sym.activeSlotKey || !sym.activeSetId) return null;
 
-      // Update placement ghost regardless of active drag
-      if (state.tool === "symbol-place" && state.symbols.activeSlotKey) {
-        var pt = getCanvasCoordsLocal(e);
-        _symGhost.visible = true;
-        _symGhost.wx = pt.x;
-        _symGhost.wy = pt.y;
-        renderFrame();
-        return;
+      // Snap to grid
+      var snapped = snapPoint(pt);
+      var brushRotation = 0;
+      var brushScale = 1;
+      if (state.tool === "symbol-brush") {
+        var br = state.symbolBrush;
+        brushRotation = br.randomRotation * (Math.random() * Math.PI * 2);
+        brushScale = 1 + br.randomScale * (Math.random() * 1.0 - 0.5);
       }
-      _symGhost.visible = false;
-
-      // Handle drag for selected symbol object
-      if (_symHandleMode && state.selectedSymbolObjectId && SOS) {
-        var pt = getCanvasCoordsLocal(e);
-        var dx = pt.x - _symDragLast.x;
-        var obj = state.symbolObjects.find(function (o) { return o.id === state.selectedSymbolObjectId; });
-        if (obj) {
-          if (_symHandleMode === "move") {
-            obj.x += dx;
-            obj.y += (pt.y - _symDragLast.y);
-          } else if (_symHandleMode === "rotate") {
-            obj.rotation = (obj.rotation || 0) + dx * 0.02;
-          } else if (_symHandleMode === "scale") {
-            obj.scale = Math.max(0.1, (obj.scale || 1) + dx * 0.01);
-          }
-          _symDragLast = pt;
-          renderFrame();
-        }
-        return;
-      }
-    });
-
-    // Placement mode: pointerdown places object
-    canvas.addEventListener("pointerdown", function onSymbolDown(e) {
-      var SS  = global.SBE && global.SBE.SymbolSystem;
-      var SOS = global.SBE && global.SBE.SymbolObjectSystem;
-      if (!SS || !SOS) return;
-
-      var pt = getCanvasCoordsLocal(e);
-
-      // ── Placement mode ──────────────────────────────────────────────────
-      if (state.tool === "symbol-place") {
-        var sym = state.symbols;
-        if (!sym.activeSlotKey || !sym.activeSetId) return;
-
-        var obj = SOS.createSymbolObject(sym.activeSetId, sym.activeSlotKey, pt.x, pt.y, {
-          scale:          1,
-          rotation:       0,
+      var obj = SOS.createSymbolObject(
+        sym.activeSetId,
+        sym.activeSlotKey,
+        snapped.x,
+        snapped.y,
+        {
+          scale: Math.max(0.05, brushScale),
+          rotation: brushRotation,
           paletteOverride: sym.placementPalette || null,
-        });
-        state.symbolObjects.push(obj);
-        state.selectedSymbolObjectId = obj.id;
-        // Exit placement mode, return to select
-        state.tool = "select";
-        _symGhost.visible = false;
-        syncUI();
-        renderFrame();
-        e.stopPropagation();
-        return;
-      }
+        },
+      );
+      state.symbolObjects.push(obj);
+      if (!shiftAdd) state.selectedSymbolObjectIds = new Set([obj.id]);
+      else state.selectedSymbolObjectIds.add(obj.id);
+      return obj;
+    }
 
-      // ── Select mode: handle hit test ─────────────────────────────────────
-      if (state.tool !== "select") return;
-
-      var selId  = state.selectedSymbolObjectId;
-      var selObj = selId ? state.symbolObjects.find(function (o) { return o.id === selId; }) : null;
-
-      // Check if clicking a handle on the selected object
-      if (selObj && SOS) {
-        var b   = SOS.getBounds(selObj);
-        var pad = 8;
-        var hr  = 10;  // hit radius for handles
-
-        // Rotate handle check
-        var rx  = b.minX + b.w / 2;
-        var ry  = b.minY - pad - 16;
-        if (Math.hypot(pt.x - rx, pt.y - ry) <= hr) {
-          _symHandleMode = "rotate";
-          _symDragLast   = pt;
-          canvas.setPointerCapture(e.pointerId);
-          e.stopPropagation();
-          return;
-        }
-
-        // Corner scale handle check
-        var corners = [
+    // ── Helper: get selection handles for current selection ───────────────────
+    function _symGetHandles() {
+      var SOS = global.SBE && global.SBE.SymbolObjectSystem;
+      if (!SOS || !state.selectedSymbolObjectIds.size) return null;
+      var b = SOS.getMultiBounds(
+        state.symbolObjects,
+        state.selectedSymbolObjectIds,
+      );
+      if (!b) return null;
+      var pad = 10;
+      return {
+        b: b,
+        pad: pad,
+        corners: [
           [b.minX - pad, b.minY - pad],
           [b.maxX + pad, b.minY - pad],
           [b.minX - pad, b.maxY + pad],
           [b.maxX + pad, b.maxY + pad],
-        ];
-        for (var ci = 0; ci < corners.length; ci++) {
-          if (Math.hypot(pt.x - corners[ci][0], pt.y - corners[ci][1]) <= hr) {
-            _symHandleMode = "scale";
-            _symDragLast   = pt;
+        ],
+        rotate: [b.cx, b.minY - pad - 18],
+      };
+    }
+
+    // ── pointermove ───────────────────────────────────────────────────────────
+    canvas.addEventListener("pointermove", function onSymbolMove(e) {
+      var SOS = global.SBE && global.SBE.SymbolObjectSystem;
+      var pt = getCanvasCoordsLocal(e);
+
+      // Ghost preview for placement modes
+      if (state.tool === "symbol-place" || state.tool === "symbol-brush") {
+        _symGhost.visible = true;
+        _symGhost.wx = pt.x;
+        _symGhost.wy = pt.y;
+        renderFrame();
+        if (!_symHandleMode) return;
+      } else {
+        _symGhost.visible = false;
+      }
+
+      if (!_symHandleMode || !_symDragLast) return;
+
+      var dx = pt.x - _symDragLast.x;
+      var dy = pt.y - _symDragLast.y;
+
+      if (_symHandleMode === "brush") {
+        // ── Brush stroke — stamp when spacing threshold crossed ─────────────
+        var dist = Math.hypot(
+          pt.x - (_symBrushLast ? _symBrushLast.x : pt.x),
+          pt.y - (_symBrushLast ? _symBrushLast.y : pt.y),
+        );
+        if (dist >= (state.symbolBrush.spacing || 32)) {
+          _symPlace(pt, true);
+          _symBrushLast = pt;
+          renderFrame();
+        }
+        _symDragLast = pt;
+        return;
+      }
+
+      if (_symHandleMode === "marquee") {
+        // ── Marquee drag ────────────────────────────────────────────────────
+        _symMarquee.x2 = pt.x;
+        _symMarquee.y2 = pt.y;
+        renderFrame();
+        _symDragLast = pt;
+        return;
+      }
+
+      if (!SOS || !state.selectedSymbolObjectIds.size) return;
+      var mb = SOS.getMultiBounds(
+        state.symbolObjects,
+        state.selectedSymbolObjectIds,
+      );
+      if (!mb) return;
+
+      if (_symHandleMode === "move") {
+        // Grid snap: apply to the whole group delta
+        var snappedPt = snapPoint(pt);
+        var snappedLast = snapPoint(_symDragLast);
+        var sdx = snappedPt.x - snappedLast.x;
+        var sdy = snappedPt.y - snappedLast.y;
+        SOS.moveGroup(
+          state.symbolObjects,
+          state.selectedSymbolObjectIds,
+          sdx,
+          sdy,
+        );
+      } else if (_symHandleMode === "rotate") {
+        var dr = dx * 0.022;
+        if (e.shiftKey)
+          dr =
+            SOS.snapAngle((state._symRotAccum || 0) + dr) -
+            (state._symRotAccum || 0);
+        state._symRotAccum = (state._symRotAccum || 0) + dr;
+        SOS.rotateGroup(
+          state.symbolObjects,
+          state.selectedSymbolObjectIds,
+          dr,
+          mb.cx,
+          mb.cy,
+        );
+      } else if (_symHandleMode === "scale") {
+        var ds = 1 + dx * 0.012;
+        SOS.scaleGroup(
+          state.symbolObjects,
+          state.selectedSymbolObjectIds,
+          ds,
+          mb.cx,
+          mb.cy,
+        );
+      }
+
+      _symDragLast = pt;
+      renderFrame();
+    });
+
+    // ── pointerdown ───────────────────────────────────────────────────────────
+    canvas.addEventListener(
+      "pointerdown",
+      function onSymbolDown(e) {
+        var SS = global.SBE && global.SBE.SymbolSystem;
+        var SOS = global.SBE && global.SBE.SymbolObjectSystem;
+        if (!SS || !SOS) return;
+
+        var pt = getCanvasCoordsLocal(e);
+
+        // ── Placement mode: stamp once, stay in placement mode ─────────────────
+        if (state.tool === "symbol-place") {
+          if (!state.symbols.activeSlotKey || !state.symbols.activeSetId)
+            return;
+          _symPlace(pt, false);
+          state.tool = "select";
+          _symGhost.visible = false;
+          syncUI();
+          renderFrame();
+          e.stopPropagation();
+          return;
+        }
+
+        // ── Brush mode: begin brush stroke ─────────────────────────────────────
+        if (state.tool === "symbol-brush") {
+          if (!state.symbols.activeSlotKey || !state.symbols.activeSetId)
+            return;
+          state.selectedSymbolObjectIds.clear();
+          _symPlace(pt, false);
+          _symBrushLast = pt;
+          _symHandleMode = "brush";
+          _symDragLast = pt;
+          canvas.setPointerCapture(e.pointerId);
+          renderFrame();
+          e.stopPropagation();
+          return;
+        }
+
+        // ── Select mode ────────────────────────────────────────────────────────
+        if (state.tool !== "select") return;
+
+        // Handle hit test — check multi-selection handles first
+        var handles = _symGetHandles();
+        if (handles) {
+          var hr = 12;
+          // Rotate handle
+          if (
+            Math.hypot(pt.x - handles.rotate[0], pt.y - handles.rotate[1]) <= hr
+          ) {
+            _symHandleMode = "rotate";
+            _symDragLast = pt;
+            state._symRotAccum = 0;
             canvas.setPointerCapture(e.pointerId);
             e.stopPropagation();
             return;
           }
+          // Corner scale handles
+          for (var ci = 0; ci < handles.corners.length; ci++) {
+            if (
+              Math.hypot(
+                pt.x - handles.corners[ci][0],
+                pt.y - handles.corners[ci][1],
+              ) <= hr
+            ) {
+              _symHandleMode = "scale";
+              _symDragLast = pt;
+              canvas.setPointerCapture(e.pointerId);
+              e.stopPropagation();
+              return;
+            }
+          }
         }
-      }
 
-      // Hit test symbol objects to select and begin move drag
-      var hit = SOS ? SOS.hitTest(state.symbolObjects, pt.x, pt.y) : null;
-      if (hit) {
-        state.selectedSymbolObjectId = hit.id;
-        _symHandleMode = "move";
-        _symDragLast   = pt;
+        // Object hit test
+        var hit = SOS.hitTest(state.symbolObjects, pt.x, pt.y);
+        if (hit) {
+          if (e.shiftKey) {
+            // Shift: toggle additive selection
+            if (state.selectedSymbolObjectIds.has(hit.id)) {
+              state.selectedSymbolObjectIds.delete(hit.id);
+            } else {
+              state.selectedSymbolObjectIds.add(hit.id);
+            }
+          } else if (!state.selectedSymbolObjectIds.has(hit.id)) {
+            // Click non-selected: select only this one
+            state.selectedSymbolObjectIds = new Set([hit.id]);
+          }
+          // (clicking already-selected starts move drag)
+          _symHandleMode = "move";
+          _symDragLast = pt;
+          canvas.setPointerCapture(e.pointerId);
+          renderFrame();
+          e.stopPropagation();
+          return;
+        }
+
+        // Miss — begin marquee (or clear selection)
+        if (!e.shiftKey) state.selectedSymbolObjectIds.clear();
+        _symMarquee = { x1: pt.x, y1: pt.y, x2: pt.x, y2: pt.y };
+        _symHandleMode = "marquee";
+        _symDragLast = pt;
         canvas.setPointerCapture(e.pointerId);
         renderFrame();
-        e.stopPropagation();
-        return;
-      }
+        // Don't stopPropagation — allows other select handlers to co-exist
+      },
+      /* capture */ true,
+    );
 
-      // Miss — deselect
-      if (state.selectedSymbolObjectId) {
-        state.selectedSymbolObjectId = null;
-        renderFrame();
-        // Don't stopPropagation — allow other select behavior to continue
-      }
-    }, /* capture */ true);
+    // ── pointerup ─────────────────────────────────────────────────────────────
+    canvas.addEventListener(
+      "pointerup",
+      function onSymbolUp(e) {
+        var SOS = global.SBE && global.SBE.SymbolObjectSystem;
 
-    canvas.addEventListener("pointerup", function onSymbolUp(e) {
-      if (_symHandleMode) {
-        _symHandleMode = null;
-        _symDragLast   = null;
-        renderFrame();
-      }
-    }, /* capture */ true);
+        if (_symHandleMode === "marquee" && _symMarquee && SOS) {
+          // Commit marquee selection
+          var inRect = SOS.objectsInRect(
+            state.symbolObjects,
+            _symMarquee.x1,
+            _symMarquee.y1,
+            _symMarquee.x2,
+            _symMarquee.y2,
+          );
+          if (e.shiftKey) {
+            inRect.forEach(function (o) {
+              state.selectedSymbolObjectIds.add(o.id);
+            });
+          } else {
+            state.selectedSymbolObjectIds = new Set(
+              inRect.map(function (o) {
+                return o.id;
+              }),
+            );
+          }
+          _symMarquee = null;
+        }
+
+        if (_symHandleMode) {
+          _symHandleMode = null;
+          _symDragLast = null;
+          state._symRotAccum = 0;
+          renderFrame();
+        }
+      },
+      /* capture */ true,
+    );
 
     canvas.addEventListener("pointerleave", function () {
-      if (state.tool === "symbol-place") {
+      if (state.tool === "symbol-place" || state.tool === "symbol-brush") {
         _symGhost.visible = false;
         renderFrame();
       }
@@ -4223,7 +5045,9 @@
     canvas.addEventListener(
       "pointerdown",
       function onMopDown(e) {
-        if (state.tool !== "pen") return;
+        if (state.tool !== "pen" && state.tool !== "select") return;
+        // Layer rename isolation — all canvas interaction paused while editing layer name (P5)
+        if (state.layersEditingId) return;
         var rawPt = getCanvasCoordsLocal(e);
         var pt = snapPoint(rawPt);
         mopDownPt = rawPt;
@@ -4344,6 +5168,7 @@
         }
 
         // Selection + transform always take priority — use raw coords for transform precision
+        // getStrokeAtPoint() already rejects locked/hidden layer strokes
         var hit = getStrokeAtPoint(rawPt);
         if (hit) {
           state.penTool.isDrawing = false;
@@ -4423,7 +5248,31 @@
           return;
         }
 
-        // No hit — clear stroke selection
+        // No hit — marquee (select tool) or clear (pen tool)
+        if (state.tool === "select") {
+          // Shift preserves existing selection; plain click clears it
+          if (!e.shiftKey) {
+            state.selection.strokeId = null;
+            state.selection.strokeIds.clear();
+            state.selection.groupId = null;
+            state.multiSelection = state.multiSelection.filter(function (ev) {
+              return ev.type !== "stroke";
+            });
+            syncSelectionPanel();
+          }
+          // Begin marquee drag
+          state.selectMarquee = {
+            x1: rawPt.x,
+            y1: rawPt.y,
+            x2: rawPt.x,
+            y2: rawPt.y,
+            shift: !!e.shiftKey,
+          };
+          canvas.setPointerCapture(e.pointerId);
+          return;
+        }
+
+        // Pen tool — clear selection before drawing
         if (state.selection.strokeId) {
           state.selection.strokeId = null;
           state.selection.strokeIds.clear();
@@ -4433,6 +5282,9 @@
           });
           syncSelectionPanel();
         }
+
+        // Select tool — no drawing. All drawing modes below are pen-only.
+        if (state.tool !== "pen") return;
 
         // Place-shape mode — stamp library shape at click point
         if (state.penTool.mode === "place-shape") {
@@ -4499,6 +5351,8 @@
         }
 
         // Freehand mode — start stroke immediately
+        // Layer lock guard — cannot draw into a locked layer
+        if (isActiveLayerLocked()) return;
         state.penTool.isDrawing = true;
         state.penTool.constraintAnchor = { x: pt.x, y: pt.y };
         pushHistory();
@@ -4515,7 +5369,21 @@
     canvas.addEventListener(
       "pointermove",
       function onMopMove(e) {
-        if (state.tool !== "pen") return;
+        if (state.tool !== "pen" && state.tool !== "select") return;
+        if (state.layersEditingId) return; // layer rename isolation (P5)
+
+        // Marquee drag — select tool only
+        if (
+          state.tool === "select" &&
+          state.selectMarquee &&
+          !state.transform.active
+        ) {
+          var mqCur = getCanvasCoordsLocal(e);
+          state.selectMarquee.x2 = mqCur.x;
+          state.selectMarquee.y2 = mqCur.y;
+          renderFrame();
+          return;
+        }
 
         // Transform — move / scale / rotate selected stroke OR group
         if (state.transform.active) {
@@ -4876,7 +5744,55 @@
     canvas.addEventListener(
       "pointerup",
       function onMopUp(e) {
-        if (state.tool !== "pen") return;
+        if (state.tool !== "pen" && state.tool !== "select") return;
+
+        // Commit marquee selection
+        if (state.tool === "select" && state.selectMarquee) {
+          var mq = state.selectMarquee;
+          state.selectMarquee = null;
+          var mqW = Math.abs(mq.x2 - mq.x1);
+          var mqH = Math.abs(mq.y2 - mq.y1);
+          if (mqW > 8 && mqH > 8) {
+            var mqL = Math.min(mq.x1, mq.x2),
+              mqR = Math.max(mq.x1, mq.x2);
+            var mqT = Math.min(mq.y1, mq.y2),
+              mqB = Math.max(mq.y1, mq.y2);
+            var mqHits = state.strokes.filter(function (s) {
+              // Locked or hidden layer — fully non-interactive
+              if (isLayerLockedById(s.layerId)) return false;
+              if (s.layerId && state.layers) {
+                var _mql = state.layers.find(function (l) {
+                  return l.id === s.layerId;
+                });
+                if (_mql && !_mql.visible) return false;
+              }
+              var b = getStrokeBounds(s);
+              if (!b) return false;
+              return (
+                b.maxX >= mqL && b.minX <= mqR && b.maxY >= mqT && b.minY <= mqB
+              );
+            });
+            if (mqHits.length) {
+              if (!mq.shift) {
+                state.selection.strokeIds.clear();
+                state.selection.groupId = null;
+              }
+              mqHits.forEach(function (s) {
+                state.selection.strokeIds.add(s.id);
+              });
+              state.selection.strokeId = mqHits[mqHits.length - 1].id;
+              state.multiSelection = Array.from(state.selection.strokeIds).map(
+                function (id) {
+                  return { type: "stroke", id: id };
+                },
+              );
+              syncLegacySelection();
+              syncSelectionPanel();
+            }
+          }
+          renderFrame();
+          return;
+        }
 
         // Reset transform regardless of mode
         if (state.transform.active) {
@@ -4907,6 +5823,31 @@
               state.duplication.scale = 1;
               state.duplication.valid = true;
             }
+          }
+          // Rebuild collision lines for moved/rotated/scaled strokes (P3 fix)
+          var _tgtId = state.transform.targetId;
+          if (_tgtId && _tgtId !== "__multi__") {
+            var _tgtStroke = state.strokes.find(function (s) {
+              return s.id === _tgtId;
+            });
+            if (_tgtStroke) strokeToLines(_tgtStroke);
+          } else if (_tgtId === "__multi__" && state.selection.strokeIds) {
+            state.selection.strokeIds.forEach(function (sid) {
+              var _ms = state.strokes.find(function (s) {
+                return s.id === sid;
+              });
+              if (_ms) strokeToLines(_ms);
+            });
+          }
+          if (state.selection.groupId) {
+            var _grp = state.groups[state.selection.groupId];
+            if (_grp)
+              (_grp.strokeIds || []).forEach(function (sid) {
+                var _gs = state.strokes.find(function (s) {
+                  return s.id === sid;
+                });
+                if (_gs) strokeToLines(_gs);
+              });
           }
           state.transform.active = false;
           state.transform.type = "move";
@@ -5197,6 +6138,30 @@
       base.harmony = { role: 0 };
       base.meta = { length: 1, curvature: 0, complexity: 0 };
       base.trailEnabled = !!state.tools.brush.trailEnabled;
+      // ── Actor visual layer fields (ActorVisualLayerSystem v1.0.0) ──────────
+      base.pathStyle = "none"; // "none"|"solid"|"dotted"|"dashed"|"double"
+      base.pathDash = 12; // dash segment length (dotted/dashed)
+      base.pathGap = 8; // gap between dashes
+      // ── SUBJECT system (replaces TARGET+AVATAR) ──────────────────────────
+      base.subjectStyle = "none"; // "none"|"dot"|"arrow"|"glyph"|"image"|"text"
+      base.subjectScale = 1.0;
+      base.subjectOpacity = 1.0;
+      base.subjectVisible = true;
+      base.subjectGlyph = null; // "setId:slotKey"
+      base.subjectText = null; // for "text" style
+      base.subjectImage = null; // data URL for "image" style
+      base.subjectColor = null; // tint override; null = use stroke color
+      base.layerId =
+        state.activeLayerId ||
+        (state.layers && state.layers[0] && state.layers[0].id) ||
+        null;
+      base.trail = {
+        enabled: !!state.tools.brush.trailEnabled,
+        style: "line",
+        length: 1.0,
+        color: null, // null = inherit stroke color
+        opacity: 0.6,
+      };
       base.sound = {
         enabled: true,
         note: null,
@@ -5311,6 +6276,22 @@
     function renderStrokes(ctx) {
       if (state.view && state.view.showPaths === false) return;
       (state.strokes || []).forEach(function (stroke) {
+        // Layer visibility + blend mode gate
+        var _strokeLayer = null;
+        if (stroke.layerId && state.layers) {
+          _strokeLayer = state.layers.find(function (l) {
+            return l.id === stroke.layerId;
+          });
+          if (_strokeLayer && !_strokeLayer.visible) return;
+        }
+        // Apply layer blend mode for this stroke
+        if (
+          _strokeLayer &&
+          _strokeLayer.blendMode &&
+          _strokeLayer.blendMode !== "normal"
+        ) {
+          ctx.globalCompositeOperation = _strokeLayer.blendMode;
+        }
         var pts = stroke.points;
 
         // Selection highlight — primary selection OR multi-select set OR group membership
@@ -5339,31 +6320,92 @@
         var rm =
           stroke.renderMode ||
           (stroke.outlineVisible === false ? "hidden" : "visible");
-        // During active drawing: always show ghost preview so artist sees the path
+        // ── Live draw preview (P2/P6 — PathGlyphInspectorFinalization v1.0.0) ──
+        // During active drawing ALWAYS show a visible preview skeleton, even when
+        // pathStyle === "none" (invisible infrastructure). This gives draw feedback
+        // regardless of the final renderMode. After pointerup the final style applies.
         var isActivelyDrawing = stroke.id === state.penTool.activeStrokeId;
-        if (isActivelyDrawing && rm !== "visible") {
-          // Temporary draw-phase ghost — not tied to renderMode, input feedback only
-          if (pts.length >= 2) {
+        if (isActivelyDrawing) {
+          var _dps = stroke.pathStyle;
+          var _dpw = stroke.width || 18;
+          // Single-point: show a dot at pen-down position
+          if (pts.length === 1) {
             ctx.save();
-            ctx.strokeStyle = stroke.color || "#ffffff";
-            ctx.lineWidth = stroke.width || 18;
-            ctx.lineCap = "round";
-            ctx.lineJoin = "round";
-            ctx.globalAlpha = 0.35;
-            ctx.setLineDash([6, 6]);
+            ctx.fillStyle = stroke.color || "#ffffff";
+            ctx.globalAlpha = 0.65;
+            ctx.beginPath();
+            ctx.arc(pts[0].x, pts[0].y, Math.max(2, _dpw * 0.35), 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+            return;
+          }
+          // Multi-point: always render a preview that mirrors the chosen path style
+          ctx.save();
+          ctx.strokeStyle = stroke.color || "#ffffff";
+          ctx.lineCap = "round";
+          ctx.lineJoin = "round";
+          // Build the curve path once — reused for all style variants
+          function _drawPreviewCurve() {
             ctx.beginPath();
             ctx.moveTo(pts[0].x, pts[0].y);
-            for (var di = 1; di < pts.length - 1; di++) {
-              var dMidX = (pts[di].x + pts[di + 1].x) / 2;
-              var dMidY = (pts[di].y + pts[di + 1].y) / 2;
-              ctx.quadraticCurveTo(pts[di].x, pts[di].y, dMidX, dMidY);
+            for (var _pi = 1; _pi < pts.length - 1; _pi++) {
+              var _pMx = (pts[_pi].x + pts[_pi + 1].x) / 2;
+              var _pMy = (pts[_pi].y + pts[_pi + 1].y) / 2;
+              ctx.quadraticCurveTo(pts[_pi].x, pts[_pi].y, _pMx, _pMy);
             }
             ctx.lineTo(pts[pts.length - 1].x, pts[pts.length - 1].y);
+          }
+          if (_dps === "none") {
+            // Infrastructure ghost — thin dashed skeleton so artist can see the route
+            ctx.lineWidth = Math.max(1, _dpw * 0.12);
+            ctx.globalAlpha = 0.38;
+            ctx.setLineDash([5, 8]);
+            _drawPreviewCurve();
             ctx.stroke();
             ctx.setLineDash([]);
-            ctx.restore();
+          } else if (!_dps || _dps === "solid") {
+            ctx.lineWidth = _dpw;
+            ctx.globalAlpha = (stroke.opacity != null ? stroke.opacity : 1) * 0.82;
+            _drawPreviewCurve();
+            ctx.stroke();
+          } else if (_dps === "dotted") {
+            // Near-zero dash + round cap = circles sized by stroke width
+            ctx.lineWidth = _dpw;
+            ctx.globalAlpha = (stroke.opacity != null ? stroke.opacity : 1) * 0.82;
+            ctx.setLineDash([0.001, _dpw * 0.8]);
+            _drawPreviewCurve();
+            ctx.stroke();
+            ctx.setLineDash([]);
+          } else if (_dps === "dashed") {
+            var _dash = stroke.pathDash != null ? stroke.pathDash : _dpw;
+            var _gap  = stroke.pathGap  != null ? stroke.pathGap  : _dpw * 0.8;
+            ctx.lineWidth = _dpw;
+            ctx.globalAlpha = (stroke.opacity != null ? stroke.opacity : 1) * 0.82;
+            ctx.setLineDash([_dash, _gap]);
+            _drawPreviewCurve();
+            ctx.stroke();
+            ctx.setLineDash([]);
+          } else if (_dps === "double") {
+            var _dblOff = _dpw * 0.55;
+            ctx.lineWidth = Math.max(1, _dpw * 0.22);
+            ctx.globalAlpha = (stroke.opacity != null ? stroke.opacity : 1) * 0.82;
+            [_dblOff, -_dblOff].forEach(function(off) {
+              ctx.beginPath();
+              for (var _ri = 0; _ri < pts.length - 1; _ri++) {
+                var _rp0 = pts[_ri], _rp1 = pts[_ri + 1];
+                var _rdx = _rp1.x - _rp0.x, _rdy = _rp1.y - _rp0.y;
+                var _rlen = Math.hypot(_rdx, _rdy) || 1;
+                var _rpx = -_rdy / _rlen * off, _rpy = _rdx / _rlen * off;
+                if (_ri === 0) ctx.moveTo(_rp0.x + _rpx, _rp0.y + _rpy);
+                ctx.lineTo(_rp1.x + _rpx, _rp1.y + _rpy);
+              }
+              ctx.stroke();
+            });
           }
-          return; // skip normal render passes for this stroke while drawing
+          ctx.restore();
+          // Don't fall through to the static render pipeline during active drawing
+          // (would double-render and cause flicker). Return after preview is drawn.
+          return;
         }
         if (pts.length >= 2) {
           // Selection halo — always shown for selected strokes regardless of renderMode
@@ -5385,38 +6427,133 @@
             ctx.stroke();
             ctx.restore();
           }
-          if (rm === "visible") {
-            ctx.save();
-            ctx.strokeStyle = stroke.color;
-            ctx.lineCap = "round";
-            ctx.lineJoin = "round";
-            // Clean visual mode: stroke is structure only, low alpha
-            var cleanMode = state.debug && state.debug.visualMode === "clean";
-            var baseAlpha = cleanMode
-              ? 0.3
-              : (stroke.opacity != null ? stroke.opacity : 1) * 0.82;
-            var energy = stroke._hitEnergy || 0;
-            // Hit pulse: width expansion + glow + alpha boost
-            ctx.lineWidth = (stroke.width || 18) + energy * 8;
-            ctx.globalAlpha = Math.min(1, baseAlpha + energy * 0.4);
-            if (energy > 0.05) {
-              ctx.shadowColor = stroke.color;
-              ctx.shadowBlur = energy * 18;
+          // ── Path style rendering (ActorVisualLayerSystem v1.0.0) ────────────
+          // pathStyle = undefined|"solid"  → legacy/solid render (backward compat)
+          // pathStyle = "none"             → invisible; skeleton when selected
+          // pathStyle = "dotted"|"dashed"  → patterned line using stroke width
+          // pathStyle = "double"           → two parallel offset strokes
+          var ps = stroke.pathStyle; // undefined = legacy solid
+          var legacySolid = !ps || ps === "solid";
+
+          if (rm === "visible" || (rm === "hidden" && false)) {
+            if (ps === "none") {
+              // None style — invisible path; selection skeleton shown above via halo
+              // Show faint skeleton when selected so actor path remains identifiable
+              if (isSelected) {
+                ctx.save();
+                ctx.strokeStyle = stroke.color || "#ffffff";
+                ctx.lineWidth = Math.max(1, (stroke.width || 18) * 0.12);
+                ctx.lineCap = "round";
+                ctx.lineJoin = "round";
+                ctx.globalAlpha = 0.28;
+                ctx.setLineDash([5, 7]);
+                ctx.beginPath();
+                ctx.moveTo(pts[0].x, pts[0].y);
+                for (var _ni = 1; _ni < pts.length - 1; _ni++) {
+                  var _nmX = (pts[_ni].x + pts[_ni + 1].x) / 2;
+                  var _nmY = (pts[_ni].y + pts[_ni + 1].y) / 2;
+                  ctx.quadraticCurveTo(pts[_ni].x, pts[_ni].y, _nmX, _nmY);
+                }
+                ctx.lineTo(pts[pts.length - 1].x, pts[pts.length - 1].y);
+                ctx.stroke();
+                ctx.setLineDash([]);
+                ctx.restore();
+              }
+            } else if (legacySolid) {
+              // ── Solid / legacy render ────────────────────────────────────────
+              ctx.save();
+              ctx.strokeStyle = stroke.color;
+              ctx.lineCap = "round";
+              ctx.lineJoin = "round";
+              var cleanMode = state.debug && state.debug.visualMode === "clean";
+              // Apply layer opacity
+              var _layerOp = 1.0;
+              if (stroke.layerId && state.layers) {
+                var _solLay = state.layers.find(function (l) {
+                  return l.id === stroke.layerId;
+                });
+                if (_solLay) _layerOp = _solLay.opacity;
+              }
+              var baseAlpha = cleanMode
+                ? 0.3
+                : (stroke.opacity != null ? stroke.opacity : 1) *
+                  0.82 *
+                  _layerOp;
+              var energy = stroke._hitEnergy || 0;
+              ctx.lineWidth = (stroke.width || 18) + energy * 8;
+              ctx.globalAlpha = Math.min(1, baseAlpha + energy * 0.4);
+              if (energy > 0.05) {
+                ctx.shadowColor = stroke.color;
+                ctx.shadowBlur = energy * 18;
+              }
+              ctx.beginPath();
+              ctx.moveTo(pts[0].x, pts[0].y);
+              for (var i = 1; i < pts.length - 1; i++) {
+                var midX = (pts[i].x + pts[i + 1].x) / 2;
+                var midY = (pts[i].y + pts[i + 1].y) / 2;
+                ctx.quadraticCurveTo(pts[i].x, pts[i].y, midX, midY);
+              }
+              ctx.lineTo(pts[pts.length - 1].x, pts[pts.length - 1].y);
+              ctx.stroke();
+              ctx.shadowBlur = 0;
+              ctx.restore();
+            } else if (ps === "dotted" || ps === "dashed") {
+              // ── Dotted / Dashed — full width authority (P7) ─────────────────
+              var _w7 = stroke.width || 18;
+              var _dash = stroke.pathDash != null ? stroke.pathDash : _w7;
+              var _gap  = stroke.pathGap  != null ? stroke.pathGap  : _w7 * 0.8;
+              // Dotted: near-zero dash + round cap = circles. Dashed: full dash length.
+              var _segLen = ps === "dotted" ? 0.001 : _dash;
+              ctx.save();
+              ctx.strokeStyle = stroke.color;
+              ctx.lineCap = "round";
+              ctx.lineJoin = "round";
+              ctx.lineWidth = _w7;
+              ctx.globalAlpha =
+                (stroke.opacity != null ? stroke.opacity : 1) * 0.82;
+              ctx.setLineDash([_segLen, _gap]);
+              ctx.beginPath();
+              ctx.moveTo(pts[0].x, pts[0].y);
+              for (var _di = 1; _di < pts.length - 1; _di++) {
+                var _dmX = (pts[_di].x + pts[_di + 1].x) / 2;
+                var _dmY = (pts[_di].y + pts[_di + 1].y) / 2;
+                ctx.quadraticCurveTo(pts[_di].x, pts[_di].y, _dmX, _dmY);
+              }
+              ctx.lineTo(pts[pts.length - 1].x, pts[pts.length - 1].y);
+              ctx.stroke();
+              ctx.setLineDash([]);
+              ctx.restore();
+            } else if (ps === "double") {
+              // ── Double — two parallel offset strokes (rail / road / tunnel) ──
+              var _dblW = stroke.width || 18;
+              var _dblOff = _dblW * 0.55; // centre-to-edge separation
+              ctx.save();
+              ctx.strokeStyle = stroke.color;
+              ctx.lineCap = "round";
+              ctx.lineJoin = "round";
+              ctx.lineWidth = Math.max(1, _dblW * 0.22);
+              ctx.globalAlpha =
+                (stroke.opacity != null ? stroke.opacity : 1) * 0.82;
+              // Build path twice, offset perpendicular to tangent
+              [_dblOff, -_dblOff].forEach(function (off) {
+                ctx.beginPath();
+                for (var _ri = 0; _ri < pts.length - 1; _ri++) {
+                  var _rp0 = pts[_ri],
+                    _rp1 = pts[_ri + 1];
+                  var _rdx = _rp1.x - _rp0.x,
+                    _rdy = _rp1.y - _rp0.y;
+                  var _rlen = Math.hypot(_rdx, _rdy) || 1;
+                  var _rpx = (-_rdy / _rlen) * off,
+                    _rpy = (_rdx / _rlen) * off;
+                  if (_ri === 0) ctx.moveTo(_rp0.x + _rpx, _rp0.y + _rpy);
+                  ctx.lineTo(_rp1.x + _rpx, _rp1.y + _rpy);
+                }
+                ctx.stroke();
+              });
+              ctx.restore();
             }
-            ctx.beginPath();
-            ctx.moveTo(pts[0].x, pts[0].y);
-            for (var i = 1; i < pts.length - 1; i++) {
-              var midX = (pts[i].x + pts[i + 1].x) / 2;
-              var midY = (pts[i].y + pts[i + 1].y) / 2;
-              ctx.quadraticCurveTo(pts[i].x, pts[i].y, midX, midY);
-            }
-            var last = pts[pts.length - 1];
-            ctx.lineTo(last.x, last.y);
-            ctx.stroke();
-            ctx.shadowBlur = 0;
-            ctx.restore();
           }
-          // rm === "hidden" → no stroke draw, walker and selection halo still active
+          // rm === "hidden" → no path draw, walker and selection halo still active
         }
 
         // Change 8 — drip rendering
@@ -5430,6 +6567,14 @@
           ctx.restore();
         });
         // Specks now stamped immediately via stampSpeck — no particle rendering needed
+        // Reset blend mode after each stroke
+        if (
+          _strokeLayer &&
+          _strokeLayer.blendMode &&
+          _strokeLayer.blendMode !== "normal"
+        ) {
+          ctx.globalCompositeOperation = "source-over";
+        }
       });
 
       // Draw transform handles on selected stroke (suppressed for group/multi-select)
@@ -5555,6 +6700,24 @@
           ctx.stroke();
           ctx.restore();
         }
+      }
+
+      // ── Marquee select rect ────────────────────────────────────────────────
+      if (state.selectMarquee) {
+        var _mq = state.selectMarquee;
+        var _mqL = Math.min(_mq.x1, _mq.x2),
+          _mqT = Math.min(_mq.y1, _mq.y2);
+        var _mqW = Math.abs(_mq.x2 - _mq.x1),
+          _mqH = Math.abs(_mq.y2 - _mq.y1);
+        ctx.save();
+        ctx.strokeStyle = "rgba(61,216,197,0.9)";
+        ctx.fillStyle = "rgba(61,216,197,0.06)";
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 4]);
+        ctx.strokeRect(_mqL, _mqT, _mqW, _mqH);
+        ctx.fillRect(_mqL, _mqT, _mqW, _mqH);
+        ctx.setLineDash([]);
+        ctx.restore();
       }
 
       // Ghost preview of next duplicate position (when duplication delta is valid)
@@ -5834,7 +6997,11 @@
           maxX: state.canvas.width + 100,
           maxY: state.canvas.height + 100,
         };
-        SBE.ParticleSystem.update(dt, bounds);
+        SBE.ParticleSystem.update(
+          dt,
+          bounds,
+          state.world && state.world.physics ? state.world.physics : null,
+        );
       } else {
         // Fallback — inline update (dt in seconds, life in seconds, vx/vy pre-scaled to px/frame)
         state.particles.forEach(function (p) {
@@ -6075,7 +7242,7 @@
           ? modeSpeed[motionMode]
           : state.walker.speed * 60;
       var wId = "w_" + Math.random().toString(36).slice(2);
-      var wIdHash = (function(s) {
+      var wIdHash = (function (s) {
         var h = 0;
         for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
         return h;
@@ -6100,6 +7267,10 @@
         trail: [],
         _lastTrailSample: 0,
         motionMode: motionMode,
+        motionPlane: "world", // top-down entity — not subject to screen gravity
+        fieldInfluence: 1.0, // 0 = immune to flow, 1 = full drift, 2 = highly sensitive
+        _driftVx: 0, // accumulated flow drift velocity X
+        _driftVy: 0, // accumulated flow drift velocity Y
         lastTriggerT: -1,
         noteOffset: Math.floor(Math.random() * 12),
         music: {
@@ -6126,6 +7297,113 @@
           };
         })(),
         _emitAcc: 0,
+        // ── Walker Avatar (WalkerAvatarSystem v1.0.0) ──────────────────────
+        // ISOLATION: fresh object literal per walker — never a shared reference
+        avatar: {
+          enabled: false,
+          mode: "dot", // dot | glyph | blob | pulse | ghost
+          glyphId: null, // "setId:slotKey" — per-walker
+          scale: 1.0,
+          rotationMode: "motion", // none | motion | field
+          opacity: 1.0,
+          tint: null, // null = use walker color — per-walker
+          trailInfluence: 1.0,
+          // Physical representation — separable from glyph render
+          collider: {
+            type: "circle", // "circle" | "box" | "capsule"
+            radius: 12, // world-space px — scaled by avatar.scale
+            offsetX: 0,
+            offsetY: 0,
+            enabled: false, // participates in projectile collision when true
+          },
+        },
+      };
+    }
+
+    // ── Projectile Walker (ProjectileWalkerMigration v1.0.0) ────────────────
+    // Creates a free-physics walker at world position (wx, wy) with velocity (vx, vy).
+    // motionMode: "projectile" — bypasses path sampling, driven by physics.
+    function createProjectileWalker(wx, wy, vx, vy, opts) {
+      opts = opts || {};
+      var wId = "w_" + Math.random().toString(36).slice(2);
+      var wIdHash = (function (s) {
+        var h = 0;
+        for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+        return h;
+      })(wId);
+      return {
+        id: wId,
+        _idHash: wIdHash,
+        stroke: null,
+        strokeId: null,
+        color: opts.color || "#3dd8c5",
+        path: null,
+        t: 0,
+        dir: 1,
+        speed: 0,
+        x: wx,
+        y: wy,
+        trail: [],
+        _lastTrailSample: 0,
+        motionMode: "projectile", // ← free physics, no path sampling
+        motionPlane: opts.motionPlane || "world",
+        fieldInfluence: opts.fieldInfluence != null ? opts.fieldInfluence : 1.0,
+        _driftVx: 0,
+        _driftVy: 0,
+        _pathX: wx,
+        _pathY: wy,
+        physics: {
+          vx: vx || 0,
+          vy: vy || 0,
+          mass: opts.mass != null ? opts.mass : 1.0,
+          bounce: opts.bounce != null ? opts.bounce : 0.82,
+          friction: opts.friction != null ? opts.friction : 0.992,
+          gravityScale: opts.gravityScale != null ? opts.gravityScale : 1.0,
+          collisionRadius:
+            opts.collisionRadius != null ? opts.collisionRadius : 8,
+          maxSpeed: opts.maxSpeed != null ? opts.maxSpeed : 24,
+        },
+        debug: {
+          showPhysics: false,
+        },
+        lastTriggerT: -1,
+        noteOffset: Math.floor(Math.random() * 12),
+        music: {
+          voice: "lead",
+          density: 0.7,
+          octave: 0,
+          mute: false,
+          lastStep: -1,
+          mode: "pingpong",
+        },
+        emitter: {
+          enabled: false,
+          rate: 40,
+          spread: 0.3,
+          speed: 120,
+          size: 3,
+          life: 1.0,
+          type: "dot",
+          color: opts.color || "#3dd8c5",
+        },
+        _emitAcc: 0,
+        avatar: {
+          enabled: false,
+          mode: "dot",
+          glyphId: null,
+          scale: 1.0,
+          rotationMode: "motion",
+          opacity: 1.0,
+          tint: null,
+          trailInfluence: 1.0,
+          collider: {
+            type: "circle",
+            radius: 12,
+            offsetX: 0,
+            offsetY: 0,
+            enabled: false,
+          },
+        },
       };
     }
 
@@ -6226,6 +7504,10 @@
         x: 0,
         y: 0,
         motionMode: opts.motionMode || (path.closed ? "loop" : "pingpong"),
+        motionPlane: "world",
+        fieldInfluence: opts.fieldInfluence != null ? opts.fieldInfluence : 1.0,
+        _driftVx: 0,
+        _driftVy: 0,
         lastTriggerT: -1,
         noteOffset: Math.floor(Math.random() * 12),
         music: {
@@ -6607,6 +7889,66 @@
     // ── End Particle Interaction System ─────────────────────────────────
     // ═══════════════════════════════════════════════════════════════════════
 
+    // ── Flow field drift (FlowFieldWalkerDrift v1.0.0) ────────────────────
+    // Softly displaces walker position by accumulated environmental velocity.
+    // Path traversal (w.t) is authoritative — drift is purely additive & visual.
+    // Called AFTER samplePath so w.x/w.y already have base path position.
+    function _applyFlowDrift(w, dt) {
+      var dp = state.world && state.world.physics;
+      if (!dp) return;
+      var flow = dp.flow;
+      if (!flow || !flow.enabled) return;
+
+      // Active in all plane modes — side worlds support wind/vector/flow fields too.
+      var planeMode = dp.mode || "side";
+      // (no per-mode gate — field type "none" serves as the off switch)
+
+      // World field vector — position-dependent for orbital fields
+      var wf = dp.world;
+      if (!wf || wf.fieldType === "none") return;
+      var fv;
+      if (window.SBE && SBE.FieldVisualizer) {
+        fv = SBE.FieldVisualizer.sampleFieldVector(w.x, w.y, dp);
+      } else {
+        // Fallback: read uniform vector directly
+        var _mag = Math.hypot(wf.vectorX || 0, wf.vectorY || 0) || 1;
+        fv = { x: (wf.vectorX || 0) / _mag, y: (wf.vectorY || 0) / _mag };
+      }
+      var fx = fv.x;
+      var fy = fv.y;
+      if (fx === 0 && fy === 0) return;
+
+      // var strength  = flow.strength  != null ? flow.strength  : 0.015;
+      var strength = flow.strength != null ? flow.strength : 0.5; // diagnostic default is stronger to make effect visible without tuning
+      var damping = flow.damping != null ? flow.damping : 0.985;
+      var influence = w.fieldInfluence != null ? w.fieldInfluence : 1.0;
+      var scale = dt * 60; // normalize to 60fps baseline
+
+      // Ensure drift velocity initialized
+      if (w._driftVx == null) w._driftVx = 0;
+      if (w._driftVy == null) w._driftVy = 0;
+
+      // Accumulate drift velocity from field force
+      w._driftVx += fx * strength * influence * scale;
+      w._driftVy += fy * strength * influence * scale;
+
+      // Damp — creates fluid terminal-velocity feel, prevents runaway
+      w._driftVx *= damping;
+      w._driftVy *= damping;
+
+      // Hard cap: max drift speed = 3px/frame to preserve path readability
+      var driftMag = Math.hypot(w._driftVx, w._driftVy);
+      if (driftMag > 3.0) {
+        var inv = 3.0 / driftMag;
+        w._driftVx *= inv;
+        w._driftVy *= inv;
+      }
+
+      // Apply drift to displayed position (additive on top of path position)
+      w.x += w._driftVx;
+      w.y += w._driftVy;
+    }
+
     function updateWalkerMovement(w, dt) {
       // Refresh path geometry from live stroke — transforms replace stroke.points reference
       if (w.strokeId && w.path && w.path.type === "stroke") {
@@ -6655,6 +7997,7 @@
         default:
           // Dispatch to motionMode for spec-aligned modes
           var motionMode = w.motionMode || "pingpong";
+          if (motionMode === "none") break; // Walker exists but doesn't advance
           if (motionMode === "loop") {
             if (w.path && w.path.closed) {
               w.t += w.speed * dt;
@@ -6689,6 +8032,68 @@
           break;
       }
 
+      // ── Projectile walker — free physics, bypasses path sampling ────────────
+      if (w.motionMode === "projectile") {
+        var ph = w.physics || (w.physics = {});
+        var PROJ_SCALE = 60; // matches ball MOTION_SCALE
+
+        // Gravity (world-space — uses same physics plane logic as path walkers)
+        var _dp2 = state.world && state.world.physics;
+        var _pm2 = (_dp2 && _dp2.mode) || "side";
+        if (_pm2 === "side" || _pm2 === "hybrid") {
+          var _wDir = (state.world && state.world.direction) || { x: 0, y: 1 };
+          var _wStr =
+            state.world && Number.isFinite(state.world.strength)
+              ? state.world.strength
+              : 3;
+          ph.vx +=
+            _wDir.x *
+            _wStr *
+            (ph.gravityScale != null ? ph.gravityScale : 1.0) *
+            (dt * 60);
+          ph.vy +=
+            _wDir.y *
+            _wStr *
+            (ph.gravityScale != null ? ph.gravityScale : 1.0) *
+            (dt * 60);
+        }
+
+        // Field drift (re-uses _applyFlowDrift via temporary w.vx/vy swap)
+        // Field influence stored into w._driftVx/Y which we add to physics vel
+        var prevX = w.x,
+          prevY = w.y;
+        _applyFlowDrift(w, dt);
+        var fieldPushX = w.x - prevX;
+        var fieldPushY = w.y - prevY;
+        // Undo the position mutation from _applyFlowDrift — we'll apply properly
+        w.x = prevX;
+        w.y = prevY;
+        ph.vx += fieldPushX * PROJ_SCALE;
+        ph.vy += fieldPushY * PROJ_SCALE;
+
+        // Friction
+        var _fr = ph.friction != null ? ph.friction : 0.992;
+        ph.vx *= _fr;
+        ph.vy *= _fr;
+
+        // Speed cap
+        var _mspd = ph.maxSpeed != null ? ph.maxSpeed : 24;
+        var _spd = Math.hypot(ph.vx, ph.vy);
+        if (_spd > _mspd) {
+          var _inv = _mspd / _spd;
+          ph.vx *= _inv;
+          ph.vy *= _inv;
+        }
+
+        // Integrate
+        w.x += ph.vx * dt * PROJ_SCALE;
+        w.y += ph.vy * dt * PROJ_SCALE;
+
+        w._pathX = w.x;
+        w._pathY = w.y;
+        return; // skip path sampling, skip drift (already applied)
+      }
+
       // Store position — resolved here, not at render time
       var pos;
       if (w.path) {
@@ -6696,8 +8101,20 @@
       } else {
         pos = getStrokePoint(w.stroke, w.t);
       }
+      // Stash direction from previous position for target orientation
+      if (w.x != null && w.y != null) {
+        w._lastDx = pos.x - w.x;
+        w._lastDy = pos.y - w.y;
+      }
       w.x = pos.x;
       w.y = pos.y;
+
+      // Stash pure path position for drift debug overlay
+      w._pathX = pos.x;
+      w._pathY = pos.y;
+
+      // ── Flow field environmental drift ────────────────────────────────────
+      _applyFlowDrift(w, dt);
 
       // Trail sampling — time-throttled to ~80ms intervals for readable residue
       var trailNow = performance.now();
@@ -6742,10 +8159,14 @@
               noteActivity[noteClass] = performance.now();
               noteVelocity[noteClass] = safeVelocity / 127;
 
-              if (!state.midiPlayback || state.midiPlayback.legacyWalkerAudioEnabled !== true) {
+              if (
+                !state.midiPlayback ||
+                state.midiPlayback.legacyWalkerAudioEnabled !== true
+              ) {
                 if (state.debug && state.debug.audioLogs) {
                   console.log("[MIDI LEGACY WALKER MUTED]", {
-                    note: note.note, velocity: safeVelocity,
+                    note: note.note,
+                    velocity: safeVelocity,
                     strokeId: stroke && stroke.id,
                   });
                 }
@@ -6760,7 +8181,11 @@
                   energy: safeVelocity / 127,
                   channel: "melodic",
                   useScale: false,
-                  data: { note: note.note, velocity: safeVelocity, source: "legacyWalkerMidi" },
+                  data: {
+                    note: note.note,
+                    velocity: safeVelocity,
+                    source: "legacyWalkerMidi",
+                  },
                 });
               }
             },
@@ -6860,6 +8285,151 @@
       });
     }
 
+    // ── _renderSubject — SUBJECT layer renderer (SubjectAndLayerSystem v1.0.0) ──
+    // Renders the symbolic representation at the actor's current world position.
+    // style: "none"|"dot"|"arrow"|"glyph"|"image"|"text"
+    var _subjectImageCache = {}; // strokeId → HTMLImageElement
+    function _renderSubject(
+      ctx,
+      style,
+      scale,
+      opacity,
+      stroke,
+      walker,
+      px,
+      py,
+      color,
+      now,
+    ) {
+      // subjectColor: explicit tint override. For glyphs, null = preserve glyph's own palette.
+      // For dot/arrow/text, null = use stroke/walker color (passed in as `color`).
+      var _tintColor =
+        stroke && stroke.subjectColor ? stroke.subjectColor : null;
+      // For non-glyph styles, apply tint or fall back to stroke color
+      if (style !== "glyph" && _tintColor) color = _tintColor;
+      // Compute orientation from motion
+      var angle = 0;
+      if (walker.motionMode === "projectile") {
+        var _ph = walker.physics || {};
+        if (_ph.vx || _ph.vy) angle = Math.atan2(_ph.vy || 0, _ph.vx || 0);
+      } else if (walker._lastDx || walker._lastDy) {
+        angle = Math.atan2(walker._lastDy || 0, walker._lastDx || 0);
+      }
+
+      ctx.save();
+      ctx.translate(px, py);
+      ctx.globalAlpha = opacity * 0.92;
+
+      if (style === "none") {
+        // Minimal placeholder — small + marker, no circles
+        var _ps = 3.5 * scale;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1;
+        ctx.lineCap = "round";
+        ctx.globalAlpha = opacity * 0.55;
+        ctx.beginPath();
+        ctx.moveTo(-_ps, 0);
+        ctx.lineTo(_ps, 0);
+        ctx.moveTo(0, -_ps);
+        ctx.lineTo(0, _ps);
+        ctx.stroke();
+      } else if (style === "dot") {
+        var _dr =
+          walker.motionMode === "projectile"
+            ? Math.max(
+                3,
+                (walker.physics && walker.physics.collisionRadius) || 8,
+              ) * scale
+            : 5 * scale;
+        ctx.fillStyle = color;
+        ctx.globalAlpha = opacity * 0.92;
+        ctx.beginPath();
+        ctx.arc(0, 0, _dr, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#ffffff";
+        ctx.globalAlpha = opacity * 0.65;
+        ctx.beginPath();
+        ctx.arc(0, 0, Math.max(1.5, _dr * 0.4), 0, Math.PI * 2);
+        ctx.fill();
+      } else if (style === "arrow") {
+        ctx.rotate(angle);
+        var _ar = 7 * scale;
+        ctx.fillStyle = color;
+        ctx.globalAlpha = opacity * 0.9;
+        ctx.beginPath();
+        ctx.moveTo(_ar, 0);
+        ctx.lineTo(-_ar * 0.6, -_ar * 0.55);
+        ctx.lineTo(-_ar * 0.3, 0);
+        ctx.lineTo(-_ar * 0.6, _ar * 0.55);
+        ctx.closePath();
+        ctx.fill();
+      } else if (style === "glyph") {
+        var SR = global.WOS && global.WOS.SymbolRenderer;
+        var SS = global.SBE && global.SBE.SymbolSystem;
+        if (SR && SS && stroke.subjectGlyph) {
+          var _parts = stroke.subjectGlyph.split(":");
+          var _glyph = SS.getGlyph && SS.getGlyph(_parts[0], _parts[1]);
+          if (_glyph && (_glyph.strokes || _glyph.objects)) {
+            var _gSize = 48 * scale;
+            var _half = _gSize / 2;
+            ctx.rotate(angle);
+            // Build palette — always inject subjectOpacity so renderGlyph's internal
+            // ctx.globalAlpha = p.opacity respects our opacity value (P3/P4 fix).
+            var _basePal = _glyph.palette ? Object.assign({}, _glyph.palette) : {};
+            var _glyphPalette = Object.assign(_basePal, { opacity: opacity });
+            if (_tintColor) {
+              _glyphPalette.strokeColor = _tintColor;
+              _glyphPalette.fillColor   = _tintColor;
+              _glyphPalette.mode        = _glyphPalette.mode || "stroke";
+            }
+            SR.renderGlyph(ctx, _glyph, -_half, -_half, _gSize, _glyphPalette, {});
+          }
+        } else {
+          // Fallback to dot when no glyph set
+          ctx.fillStyle = color;
+          ctx.beginPath();
+          ctx.arc(0, 0, 5 * scale, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      } else if (style === "image") {
+        var _cacheKey = stroke.id;
+        var _img = _subjectImageCache[_cacheKey];
+        if (!_img && stroke.subjectImage) {
+          _img = new Image();
+          _img.onload = function () {
+            renderFrame();
+          }; // trigger repaint once loaded
+          _img.src = stroke.subjectImage;
+          _subjectImageCache[_cacheKey] = _img;
+        }
+        if (_img && _img.complete && _img.naturalWidth) {
+          var _iw = 64 * scale,
+            _ih = 64 * scale;
+          // Preserve aspect ratio
+          var _ar = _img.naturalWidth / (_img.naturalHeight || 1);
+          if (_ar > 1) {
+            _ih = _iw / _ar;
+          } else {
+            _iw = _ih * _ar;
+          }
+          ctx.globalAlpha = opacity;
+          ctx.drawImage(_img, -_iw / 2, -_ih / 2, _iw, _ih);
+        }
+      } else if (style === "text") {
+        if (stroke.subjectText) {
+          var _fontSize = Math.round(12 * scale);
+          ctx.font = "600 " + _fontSize + "px sans-serif";
+          ctx.fillStyle = color;
+          ctx.globalAlpha = opacity;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(stroke.subjectText, 0, 0);
+        }
+      }
+
+      ctx.restore();
+    }
+
     function drawWalkers(ctx) {
       if (!isLayerVisible("walkers")) return;
       var walkerLayerAlpha = getLayerOpacity("walkers");
@@ -6869,11 +8439,14 @@
 
       ctx.save();
       ctx.globalAlpha = walkerLayerAlpha;
-      state.walkers.forEach(function (w) {
+      // Path walkers + projectile walkers — unified render pipeline
+      var _allWalkers = state.walkers.concat(state.projectileWalkers || []);
+      _allWalkers.forEach(function (w) {
         var px = w.x != null ? w.x : 0;
         var py = w.y != null ? w.y : 0;
         var walkerColor = w.color || (w.stroke && w.stroke.color) || "#3dd8c5";
         var speedNorm = Math.min(1, (w.speed || 0) / 0.25);
+        var _walkerLayer = null; // resolved below if walker has a layer
 
         // ── Motion Trail — architectural residue, drawn first ────────────────
         var trail = w.trail;
@@ -6884,7 +8457,7 @@
             var age = now - pt.t;
             if (age > TRAIL_MAX_AGE) continue;
             var frac = 1 - age / TRAIL_MAX_AGE;
-            ctx.globalAlpha = 0.02 + frac * 0.20;
+            ctx.globalAlpha = 0.02 + frac * 0.2;
             ctx.fillStyle = walkerColor;
             // 2×2 square marks — segmented infrastructure aesthetic
             ctx.fillRect(pt.x - 1, pt.y - 1, 2, 2);
@@ -6895,11 +8468,13 @@
         // ── Playhead Halo — electrical pressure, drawn before core ──────────
         (function () {
           var idHash = w._idHash || 0;
-          var pulse = 0.65
-            + Math.sin(now * 0.008 + (idHash % 1000) * 0.0063) * 0.12
-            + speedNorm * 0.22;
-          var haloRadius = 16 + speedNorm * 6;
-          var haloAlpha  = pulse * 0.18;
+          var pulse =
+            0.65 +
+            Math.sin(now * 0.008 + (idHash % 1000) * 0.0063) * 0.12 +
+            speedNorm * 0.22;
+          var _bodyR = (w.physics && w.physics.collisionRadius) || 8;
+          var haloRadius = _bodyR * 1.6 + speedNorm * _bodyR * 0.5;
+          var haloAlpha = pulse * 0.18;
           try {
             var hrd = ctx.createRadialGradient(px, py, 0, px, py, haloRadius);
             hrd.addColorStop(0, walkerColor);
@@ -6914,31 +8489,406 @@
           } catch (e) {}
         })();
 
-        // ── Walker core dot ──────────────────────────────────────────────────
+        // ── Walker core / avatar rendering ──────────────────────────────────
         (function () {
-          var hasMidi = !!(
-            w.strokeId &&
-            (function () {
-              var s = state.strokes.find(function (s) {
-                return s.id === w.strokeId;
-              });
-              return s && s.midiCartridge;
-            })()
-          );
-          var r = hasMidi ? 7 : 5;
-          var innerColor = hasMidi ? "#ff4d4d" : walkerColor;
-          ctx.save();
-          ctx.beginPath();
-          ctx.arc(px, py, r, 0, Math.PI * 2);
-          ctx.fillStyle = "#ffffff";
-          ctx.globalAlpha = 0.9;
-          ctx.fill();
-          ctx.beginPath();
-          ctx.arc(px, py, r - 2.5, 0, Math.PI * 2);
-          ctx.fillStyle = innerColor;
-          ctx.globalAlpha = 1;
-          ctx.fill();
-          ctx.restore();
+          var av = w.avatar;
+          // avatar.style is the authoritative render field (migrated from avatar.mode)
+          if (av && av.mode && !av.style) {
+            av.style = av.mode;
+            delete av.mode;
+          }
+          var avatarActive =
+            av && av.enabled && av.style && av.style !== "none";
+
+          // ── SUBJECT layer — symbolic visual representation ────────────────
+          // New SUBJECT system takes priority over legacy avatar/target.
+          // Falls through to legacy rendering only if subjectStyle is absent (old scenes).
+          if (!avatarActive) {
+            var _srcStroke = w.strokeId
+              ? state.strokes.find(function (s) {
+                  return s.id === w.strokeId;
+                })
+              : null;
+
+            // Check layer visibility + blend mode
+            if (_srcStroke && _srcStroke.layerId) {
+              _walkerLayer =
+                (state.layers &&
+                  state.layers.find(function (l) {
+                    return l.id === _srcStroke.layerId;
+                  })) ||
+                null;
+              if (_walkerLayer && !_walkerLayer.visible) {
+                return;
+              }
+              if (
+                _walkerLayer &&
+                _walkerLayer.blendMode &&
+                _walkerLayer.blendMode !== "normal"
+              ) {
+                ctx.globalCompositeOperation = _walkerLayer.blendMode;
+              }
+            }
+
+            // SUBJECT system (new) — takes priority when subjectStyle is defined
+            if (_srcStroke && _srcStroke.subjectStyle !== undefined) {
+              var _subStyle = _srcStroke.subjectStyle || "none";
+              var _subScale =
+                _srcStroke.subjectScale != null ? _srcStroke.subjectScale : 1.0;
+              var _subOpacity =
+                _srcStroke.subjectOpacity != null
+                  ? _srcStroke.subjectOpacity
+                  : 1.0;
+              var _subVisible = _srcStroke.subjectVisible !== false;
+              if (_subVisible) {
+                _renderSubject(
+                  ctx,
+                  _subStyle,
+                  _subScale,
+                  _subOpacity,
+                  _srcStroke,
+                  w,
+                  px,
+                  py,
+                  walkerColor,
+                  now,
+                );
+              }
+              return;
+            }
+
+            // Legacy TARGET / dot render (old scenes without subjectStyle)
+            var _tStyle =
+              (_srcStroke && _srcStroke.targetStyle) ||
+              (w.motionMode === "projectile" ? "dot" : "crosshair");
+            var _tScale =
+              _srcStroke && _srcStroke.targetScale != null
+                ? _srcStroke.targetScale
+                : 1.0;
+            var _tVisible = _srcStroke
+              ? _srcStroke.targetVisible !== false
+              : true;
+
+            if (_tVisible && _tStyle !== "none") {
+              // Compute target orientation from motion direction
+              var _tAngle = 0;
+              if (w.motionMode === "projectile") {
+                var _ph = w.physics || {};
+                if (_ph.vx || _ph.vy)
+                  _tAngle = Math.atan2(_ph.vy || 0, _ph.vx || 0);
+              } else if (w._lastDx || w._lastDy) {
+                _tAngle = Math.atan2(w._lastDy || 0, w._lastDx || 0);
+              }
+
+              ctx.save();
+              ctx.translate(px, py);
+              if (_tAngle) ctx.rotate(_tAngle);
+              ctx.globalAlpha = 0.88;
+
+              if (_tStyle === "crosshair") {
+                // ── Crosshair reticle — communicates targeting + orientation ──
+                var _cr = 6 * _tScale,
+                  _cg = 2.2 * _tScale;
+                ctx.strokeStyle = walkerColor;
+                ctx.lineWidth = 1.3;
+                ctx.lineCap = "round";
+                ctx.beginPath();
+                ctx.moveTo(-_cr, 0);
+                ctx.lineTo(-_cg, 0);
+                ctx.moveTo(_cg, 0);
+                ctx.lineTo(_cr, 0);
+                ctx.moveTo(0, -_cr);
+                ctx.lineTo(0, -_cg);
+                ctx.moveTo(0, _cg);
+                ctx.lineTo(0, _cr);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.arc(0, 0, _cr * 0.65, 0, Math.PI * 2);
+                ctx.globalAlpha = 0.35;
+                ctx.stroke();
+              } else if (_tStyle === "dot") {
+                // ── Simple dot — legacy / fallback ────────────────────────────
+                var _dr =
+                  w.motionMode === "projectile"
+                    ? Math.max(
+                        3,
+                        (w.physics && w.physics.collisionRadius) || 8,
+                      ) * _tScale
+                    : 5 * _tScale;
+                ctx.fillStyle = walkerColor;
+                ctx.beginPath();
+                ctx.arc(0, 0, _dr, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = "#ffffff";
+                ctx.globalAlpha = 0.7;
+                ctx.beginPath();
+                ctx.arc(0, 0, Math.max(1.5, _dr * 0.4), 0, Math.PI * 2);
+                ctx.fill();
+              } else if (_tStyle === "ring") {
+                // ── Ring — motion pulse ring ───────────────────────────────────
+                var _rr = 7 * _tScale;
+                ctx.strokeStyle = walkerColor;
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.arc(0, 0, _rr, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.globalAlpha = 0.5;
+                ctx.beginPath();
+                ctx.arc(0, 0, _rr * 0.45, 0, Math.PI * 2);
+                ctx.fillStyle = walkerColor;
+                ctx.fill();
+              } else if (_tStyle === "arrow") {
+                // ── Arrow — directional indicator ─────────────────────────────
+                var _ar = 7 * _tScale;
+                ctx.strokeStyle = walkerColor;
+                ctx.fillStyle = walkerColor;
+                ctx.lineWidth = 1.3;
+                ctx.beginPath();
+                ctx.moveTo(_ar, 0);
+                ctx.lineTo(-_ar * 0.6, -_ar * 0.55);
+                ctx.lineTo(-_ar * 0.3, 0);
+                ctx.lineTo(-_ar * 0.6, _ar * 0.55);
+                ctx.closePath();
+                ctx.fill();
+              } else if (_tStyle === "locator") {
+                // ── Locator — map pin with dot ────────────────────────────────
+                var _lr = 5 * _tScale;
+                ctx.strokeStyle = walkerColor;
+                ctx.fillStyle = walkerColor;
+                ctx.lineWidth = 1.3;
+                ctx.beginPath();
+                ctx.arc(0, 0, _lr, 0, Math.PI * 2);
+                ctx.globalAlpha = 0.25;
+                ctx.fill();
+                ctx.globalAlpha = 0.88;
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.arc(0, 0, _lr * 0.35, 0, Math.PI * 2);
+                ctx.fill();
+              }
+
+              ctx.restore();
+            }
+            return;
+          }
+
+          // ── Avatar rendering ─────────────────────────────────────────────
+          var avColor = av.tint || walkerColor;
+          var avScale = av.scale != null ? av.scale : 1.0;
+          var avOpacity =
+            (av.opacity != null ? av.opacity : 1.0) * walkerLayerAlpha;
+
+          // Rotation angle — computed before save/translate
+          var avAngle = 0;
+          if (av.rotationMode === "motion") {
+            var dvx = w._driftVx || 0,
+              dvy = w._driftVy || 0;
+            var spd = w.speed || 0;
+            // Prefer drift velocity (shows field influence), fall back to path direction
+            if (Math.abs(dvx) > 0.01 || Math.abs(dvy) > 0.01) {
+              avAngle = Math.atan2(dvy, dvx);
+            } else {
+              // Approximate path direction from recent trail
+              var tr = w.trail;
+              if (tr && tr.length >= 2) {
+                var ta = tr[tr.length - 1],
+                  tb = tr[tr.length - 2];
+                avAngle = Math.atan2(ta.y - tb.y, ta.x - tb.x);
+              }
+            }
+          } else if (av.rotationMode === "field") {
+            var dp = state.world && state.world.physics;
+            if (dp && window.SBE && SBE.FieldVisualizer) {
+              var fv = SBE.FieldVisualizer.sampleFieldVector(px, py, dp);
+              avAngle = Math.atan2(fv.y, fv.x);
+            }
+          }
+
+          var avMode = av.style;
+
+          // ── Dot mode — simple filled circle avatar ────────────────────────
+          if (avMode === "dot") {
+            var _dr2 = 5 * avScale;
+            ctx.save();
+            ctx.globalAlpha = avOpacity;
+            ctx.beginPath();
+            ctx.arc(px, py, _dr2, 0, Math.PI * 2);
+            ctx.fillStyle = "#ffffff";
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(px, py, Math.max(1, _dr2 - 2), 0, Math.PI * 2);
+            ctx.fillStyle = avColor;
+            ctx.fill();
+            ctx.restore();
+          }
+
+          // ── Glyph mode ───────────────────────────────────────────────────
+          // Fallback chain: requested glyph → first glyph in same set
+          //                 → first glyph in any set → blob → dot
+          // avColor is recomputed from av.tint every frame — no caching.
+          if (avMode === "glyph") {
+            var SR = global.WOS && global.WOS.SymbolRenderer;
+            var SS = global.SBE && global.SBE.SymbolSystem;
+            if (!SR || !SS) {
+              avMode = "blob";
+            } else {
+              var glyphRef = av.glyphId; // "setId:slotKey" — isolated to this walker
+              var glyph = null;
+              var _glyphFound = false;
+
+              // 1. Requested glyph
+              if (glyphRef && glyphRef.indexOf(":") !== -1) {
+                var _parts = glyphRef.split(":");
+                var _reqGlyph = SS.getGlyph(_parts[0], _parts[1]);
+                if (
+                  _reqGlyph &&
+                  ((_reqGlyph.strokes && _reqGlyph.strokes.length) ||
+                    (_reqGlyph.objects && _reqGlyph.objects.length))
+                ) {
+                  glyph = _reqGlyph;
+                  _glyphFound = true;
+                }
+              }
+
+              // 2. Fallback: first usable glyph in the same set (by setId)
+              if (!_glyphFound && glyphRef && glyphRef.indexOf(":") !== -1) {
+                var _fbSetId = glyphRef.split(":")[0];
+                var _fbSet = SS.getSet ? SS.getSet(_fbSetId) : null;
+                if (_fbSet && _fbSet.glyphs) {
+                  var _fbKeys = Object.keys(_fbSet.glyphs);
+                  for (var _fi = 0; _fi < _fbKeys.length; _fi++) {
+                    var _fbG = _fbSet.glyphs[_fbKeys[_fi]];
+                    if (
+                      _fbG &&
+                      ((_fbG.strokes && _fbG.strokes.length) ||
+                        (_fbG.objects && _fbG.objects.length))
+                    ) {
+                      glyph = _fbG;
+                      _glyphFound = true;
+                      console.warn(
+                        "[AVATAR GLYPH FALLBACK] slot not found in set, using first available:",
+                        _fbKeys[_fi],
+                      );
+                      break;
+                    }
+                  }
+                }
+              }
+
+              // 3. Fallback: first usable glyph in any loaded set
+              if (!_glyphFound) {
+                var _allSets = SS.getAllSets ? SS.getAllSets() : [];
+                outer: for (var _si = 0; _si < _allSets.length; _si++) {
+                  var _aSet = _allSets[_si];
+                  if (!_aSet || !_aSet.glyphs) continue;
+                  var _aKeys = Object.keys(_aSet.glyphs);
+                  for (var _ai = 0; _ai < _aKeys.length; _ai++) {
+                    var _aG = _aSet.glyphs[_aKeys[_ai]];
+                    if (
+                      _aG &&
+                      ((_aG.strokes && _aG.strokes.length) ||
+                        (_aG.objects && _aG.objects.length))
+                    ) {
+                      glyph = _aG;
+                      _glyphFound = true;
+                      console.warn(
+                        "[AVATAR GLYPH FALLBACK] no set match, using first available glyph from any set",
+                      );
+                      break outer;
+                    }
+                  }
+                }
+              }
+
+              if (glyph) {
+                var glyphSize = 48 * avScale;
+                var half = glyphSize / 2;
+                // avColor recomputed fresh every frame — tint changes take effect immediately
+                var pal = [avColor, avColor, avColor];
+                ctx.save();
+                ctx.globalAlpha = avOpacity;
+                ctx.translate(px, py);
+                if (avAngle) ctx.rotate(avAngle);
+                SR.renderGlyph(ctx, glyph, -half, -half, glyphSize, pal, {});
+                ctx.restore();
+              } else {
+                // 4. Blob — only if truly no glyph anywhere
+                console.warn(
+                  "[AVATAR GLYPH FALLBACK] no glyphs available — rendering blob",
+                );
+                avMode = "blob";
+              }
+            }
+          }
+
+          // ── Blob mode ────────────────────────────────────────────────────
+          if (avMode === "blob") {
+            var blobR = 18 * avScale;
+            try {
+              var bg = ctx.createRadialGradient(px, py, 0, px, py, blobR);
+              bg.addColorStop(0, avColor);
+              bg.addColorStop(0.5, avColor);
+              bg.addColorStop(1, "transparent");
+              ctx.save();
+              ctx.globalAlpha = avOpacity * 0.85;
+              ctx.fillStyle = bg;
+              ctx.beginPath();
+              ctx.arc(px, py, blobR, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.restore();
+            } catch (e) {}
+          }
+
+          // ── Pulse mode ───────────────────────────────────────────────────
+          if (avMode === "pulse") {
+            var pPhase =
+              (now * 0.004 + (w._idHash || 0) * 0.001) % (Math.PI * 2);
+            var pR = (14 + Math.sin(pPhase) * 6) * avScale;
+            var pInner = pR * 0.35;
+            try {
+              var pg = ctx.createRadialGradient(px, py, pInner, px, py, pR);
+              pg.addColorStop(0, avColor);
+              pg.addColorStop(0.6, avColor);
+              pg.addColorStop(1, "transparent");
+              ctx.save();
+              ctx.globalAlpha = avOpacity * (0.6 + Math.sin(pPhase) * 0.3);
+              ctx.fillStyle = pg;
+              ctx.beginPath();
+              ctx.arc(px, py, pR, 0, Math.PI * 2);
+              ctx.fill();
+              // Hard core
+              ctx.globalAlpha = avOpacity;
+              ctx.fillStyle = avColor;
+              ctx.beginPath();
+              ctx.arc(px, py, pInner, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.restore();
+            } catch (e) {}
+          }
+
+          // ── Ghost mode ───────────────────────────────────────────────────
+          if (avMode === "ghost") {
+            var gR = 22 * avScale;
+            try {
+              var gg = ctx.createRadialGradient(px, py, 0, px, py, gR);
+              gg.addColorStop(0, avColor);
+              gg.addColorStop(1, "transparent");
+              ctx.save();
+              ctx.globalAlpha = avOpacity * 0.35;
+              ctx.fillStyle = gg;
+              ctx.beginPath();
+              ctx.arc(px, py, gR, 0, Math.PI * 2);
+              ctx.fill();
+              // Faint ring
+              ctx.globalAlpha = avOpacity * 0.15;
+              ctx.strokeStyle = avColor;
+              ctx.lineWidth = 1;
+              ctx.beginPath();
+              ctx.arc(px, py, gR * 0.6, 0, Math.PI * 2);
+              ctx.stroke();
+              ctx.restore();
+            } catch (e) {}
+          }
         })();
 
         // ── Path outline — debug only ────────────────────────────────────────
@@ -6974,6 +8924,125 @@
             py + 4,
           );
           ctx.restore();
+        }
+
+        // ── Projectile physics debug overlay (Phase 9) ──────────────────────────
+        if (w.motionMode === "projectile" && w.debug && w.debug.showPhysics) {
+          ctx.save();
+          ctx.globalAlpha = 0.9;
+          var _ph = w.physics || {};
+          var _cr = _ph.collisionRadius || 8;
+
+          // True collision radius ring — yellow dashed
+          ctx.strokeStyle = "#ffff00";
+          ctx.lineWidth = 1;
+          ctx.setLineDash([3, 3]);
+          ctx.beginPath();
+          ctx.arc(px, py, _cr, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.setLineDash([]);
+
+          // World position label — cyan, world-space coords (NOT canvas px)
+          ctx.fillStyle = "#00ffff";
+          ctx.font = "8px monospace";
+          ctx.globalAlpha = 0.85;
+          ctx.fillText(
+            "W(" + w.x.toFixed(0) + "," + w.y.toFixed(0) + ")",
+            px + _cr + 3,
+            py + 9,
+          );
+
+          // Velocity arrow — green
+          var _phVlen = Math.hypot(_ph.vx || 0, _ph.vy || 0);
+          if (_phVlen > 0.1) {
+            var _vscale = 4;
+            ctx.strokeStyle = "#00ff88";
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(px, py);
+            ctx.lineTo(
+              px + (_ph.vx || 0) * _vscale,
+              py + (_ph.vy || 0) * _vscale,
+            );
+            ctx.stroke();
+            var _vang = Math.atan2(_ph.vy || 0, _ph.vx || 0);
+            var _tipX = px + (_ph.vx || 0) * _vscale,
+              _tipY = py + (_ph.vy || 0) * _vscale;
+            ctx.beginPath();
+            ctx.moveTo(_tipX, _tipY);
+            ctx.lineTo(
+              _tipX - Math.cos(_vang - 0.4) * 6,
+              _tipY - Math.sin(_vang - 0.4) * 6,
+            );
+            ctx.lineTo(
+              _tipX - Math.cos(_vang + 0.4) * 6,
+              _tipY - Math.sin(_vang + 0.4) * 6,
+            );
+            ctx.closePath();
+            ctx.fillStyle = "#00ff88";
+            ctx.fill();
+          }
+          ctx.fillStyle = "#ffff88";
+          ctx.font = "8px monospace";
+          ctx.globalAlpha = 0.8;
+          ctx.fillText(
+            _phVlen.toFixed(1) + " px/f | r=" + _cr,
+            px + _cr + 3,
+            py - 2,
+          );
+          ctx.restore();
+        }
+
+        // ── Drift debug overlay ──────────────────────────────────────────────
+        // White dot = path position (pre-drift). Red dot = final position (post-drift).
+        // Active when state.debug.driftOverlay is true.
+        if (state.debug && state.debug.driftOverlay) {
+          ctx.save();
+          ctx.globalAlpha = 1;
+
+          // White dot — pure path position
+          if (w._pathX != null) {
+            ctx.beginPath();
+            ctx.arc(w._pathX, w._pathY, 5, 0, Math.PI * 2);
+            ctx.fillStyle = "#ffffff";
+            ctx.fill();
+          }
+
+          // Red dot — final position (includes drift offset)
+          ctx.beginPath();
+          ctx.arc(px, py, 4, 0, Math.PI * 2);
+          ctx.fillStyle = "#ff2222";
+          ctx.fill();
+
+          // Line connecting them when separated
+          if (w._pathX != null) {
+            var sep = Math.hypot(px - w._pathX, py - w._pathY);
+            if (sep > 0.5) {
+              ctx.beginPath();
+              ctx.moveTo(w._pathX, w._pathY);
+              ctx.lineTo(px, py);
+              ctx.strokeStyle = "rgba(255,100,100,0.6)";
+              ctx.lineWidth = 1.5;
+              ctx.stroke();
+
+              // Label separation distance
+              ctx.fillStyle = "#ff8888";
+              ctx.font = "bold 9px monospace";
+              ctx.globalAlpha = 0.9;
+              ctx.fillText(sep.toFixed(1) + "px", px + 6, py - 4);
+            }
+          }
+
+          ctx.restore();
+        }
+
+        // Reset blend mode after walker render
+        if (
+          _walkerLayer &&
+          _walkerLayer.blendMode &&
+          _walkerLayer.blendMode !== "normal"
+        ) {
+          ctx.globalCompositeOperation = "source-over";
         }
       });
       ctx.restore();
@@ -7041,7 +9110,11 @@
 
       // Pan: middle mouse button or Space+drag
       global.addEventListener("keydown", function (e) {
-        if (e.code === "Space" && !isTypingTarget() && !(window._wos && window._wos._shortcutsSuspended)) {
+        if (
+          e.code === "Space" &&
+          !isTypingTarget() &&
+          !(window._wos && window._wos._shortcutsSuspended)
+        ) {
           _spaceDown = true;
         }
       });
@@ -7079,26 +9152,26 @@
     (function bindDirectorPointerEvents() {
       function isDirectorSurvey() {
         var rw = state.routeWorld;
-        var d  = rw && rw.director;
+        var d = rw && rw.director;
         return d && d.enabled && d.mode === "survey";
       }
       function getCanvasScale() {
         var rect = canvas.getBoundingClientRect();
-        return rect.width ? (canvas.width / rect.width) : 1;
+        return rect.width ? canvas.width / rect.width : 1;
       }
 
       canvas.addEventListener("pointerdown", function onDirDown(e) {
         if (!isDirectorSurvey()) return;
         // Only primary mouse button for survey pan (middle is used by general cam pan)
         if (e.button !== 0) return;
-        var rw  = state.routeWorld;
-        var DM  = SBE && SBE.DirectorMode;
-        var d   = rw && rw.director;
+        var rw = state.routeWorld;
+        var DM = SBE && SBE.DirectorMode;
+        var d = rw && rw.director;
         if (!d || !DM) return;
-        var rect  = canvas.getBoundingClientRect();
-        var scl   = getCanvasScale();
-        var cx    = (e.clientX - rect.left) * scl;
-        var cy    = (e.clientY - rect.top)  * scl;
+        var rect = canvas.getBoundingClientRect();
+        var scl = getCanvasScale();
+        var cx = (e.clientX - rect.left) * scl;
+        var cy = (e.clientY - rect.top) * scl;
         DM.pointerDown(d, cx, cy);
         canvas.setPointerCapture(e.pointerId);
         e.stopPropagation();
@@ -7106,15 +9179,15 @@
 
       canvas.addEventListener("pointermove", function onDirMove(e) {
         if (!isDirectorSurvey()) return;
-        var rw  = state.routeWorld;
-        var DM  = SBE && SBE.DirectorMode;
-        var d   = rw && rw.director;
+        var rw = state.routeWorld;
+        var DM = SBE && SBE.DirectorMode;
+        var d = rw && rw.director;
         if (!d || !DM || !d.manualCamera.isPanning) return;
-        var rect  = canvas.getBoundingClientRect();
-        var scl   = getCanvasScale();
-        var cx    = (e.clientX - rect.left) * scl;
-        var cy    = (e.clientY - rect.top)  * scl;
-        DM.pointerMove(d, cx, cy, 1);  // scl already folded into coords
+        var rect = canvas.getBoundingClientRect();
+        var scl = getCanvasScale();
+        var cx = (e.clientX - rect.left) * scl;
+        var cy = (e.clientY - rect.top) * scl;
+        DM.pointerMove(d, cx, cy, 1); // scl already folded into coords
         renderFrame();
         e.stopPropagation();
       });
@@ -7122,34 +9195,38 @@
       canvas.addEventListener("pointerup", function onDirUp() {
         var rw = state.routeWorld;
         var DM = SBE && SBE.DirectorMode;
-        var d  = rw && rw.director;
+        var d = rw && rw.director;
         if (d && DM) DM.pointerUp(d);
       });
 
       canvas.addEventListener("pointercancel", function () {
         var rw = state.routeWorld;
         var DM = SBE && SBE.DirectorMode;
-        var d  = rw && rw.director;
+        var d = rw && rw.director;
         if (d && DM) DM.pointerUp(d);
       });
 
       // Wheel zoom in survey mode — fires alongside existing wheel handler;
       // we short-circuit the route-world zoom first.
-      canvas.addEventListener("wheel", function onDirWheel(e) {
-        if (!isDirectorSurvey()) return;
-        var rw  = state.routeWorld;
-        var DM  = SBE && SBE.DirectorMode;
-        var d   = rw && rw.director;
-        if (!d || !DM) return;
-        var rect = canvas.getBoundingClientRect();
-        var scl  = getCanvasScale();
-        var cx   = (e.clientX - rect.left) * scl;
-        var cy   = (e.clientY - rect.top)  * scl;
-        DM.wheel(d, e.deltaY, cx, cy, canvas.width, canvas.height);
-        renderFrame();
-        e.preventDefault();
-        e.stopPropagation();
-      }, { passive: false, capture: true });   // capture: true fires before the existing handler
+      canvas.addEventListener(
+        "wheel",
+        function onDirWheel(e) {
+          if (!isDirectorSurvey()) return;
+          var rw = state.routeWorld;
+          var DM = SBE && SBE.DirectorMode;
+          var d = rw && rw.director;
+          if (!d || !DM) return;
+          var rect = canvas.getBoundingClientRect();
+          var scl = getCanvasScale();
+          var cx = (e.clientX - rect.left) * scl;
+          var cy = (e.clientY - rect.top) * scl;
+          DM.wheel(d, e.deltaY, cx, cy, canvas.width, canvas.height);
+          renderFrame();
+          e.preventDefault();
+          e.stopPropagation();
+        },
+        { passive: false, capture: true },
+      ); // capture: true fires before the existing handler
     })();
     // ── End Director Mode canvas events ────────────────────────────────────
 
@@ -7175,6 +9252,132 @@
       });
     })();
     // ── End show paths ─────────────────────────────────────────────────────
+
+    // ── Drift debug overlay toggle ─────────────────────────────────────────
+    (function bindDriftOverlay() {
+      var el = document.getElementById("debug-drift-overlay");
+      if (!el) return;
+      el.checked = !!(state.debug && state.debug.driftOverlay);
+      el.addEventListener("change", function () {
+        state.debug.driftOverlay = el.checked;
+        if (el.checked) {
+          // Exaggerate drift for proof: strength 2.0, damping 1.0 (no decay)
+          if (state.world && state.world.physics && state.world.physics.flow) {
+            state.world.physics.flow._savedStrength =
+              state.world.physics.flow.strength;
+            state.world.physics.flow._savedDamping =
+              state.world.physics.flow.damping;
+            state.world.physics.flow.strength = 2.0;
+            state.world.physics.flow.damping = 1.0;
+          }
+        } else {
+          // Restore original values
+          if (state.world && state.world.physics && state.world.physics.flow) {
+            var fl = state.world.physics.flow;
+            if (fl._savedStrength != null) {
+              fl.strength = fl._savedStrength;
+              delete fl._savedStrength;
+            }
+            if (fl._savedDamping != null) {
+              fl.damping = fl._savedDamping;
+              delete fl._savedDamping;
+            }
+          }
+        }
+        renderFrame();
+      });
+    })();
+
+    // ── Projectile walker UI bindings (ProjectileWalkerMigration v1.0.0) ─────
+    // Runs after state, _wos.state, and controls are fully initialized.
+    (function bindProjectileTool() {
+      function pt() {
+        return state.projectileTool;
+      }
+
+      var el;
+
+      // Movement Mode select (proj-movement-mode) — "physics" = useWalkers true
+      (function () {
+        var selEl = document.getElementById("proj-movement-mode");
+        if (selEl) {
+          selEl.value = pt().useWalkers ? "physics" : "none";
+          selEl.onchange = function () {
+            pt().useWalkers = this.value === "physics";
+            // Keep legacy hidden input in sync for serialization compat
+            var legEl = document.getElementById("proj-use-walkers");
+            if (legEl) legEl.value = pt().useWalkers ? "1" : "0";
+          };
+        }
+      })();
+
+      // Each control gets its own closure-safe block to prevent shared-variable contamination
+      (function () {
+        var outEl = document.getElementById("proj-bounce-value");
+        var rangeEl = document.getElementById("proj-bounce");
+        if (rangeEl) {
+          rangeEl.value = pt().bounce;
+          rangeEl.oninput = function () {
+            pt().bounce = Number(this.value);
+            if (outEl) outEl.value = Number(this.value).toFixed(2);
+            state.projectileWalkers.forEach(function (pw) {
+              if (pw.physics) pw.physics.bounce = pt().bounce;
+            });
+          };
+        }
+      })();
+
+      (function () {
+        var outEl = document.getElementById("proj-gravity-scale-value");
+        var rangeEl = document.getElementById("proj-gravity-scale");
+        if (rangeEl) {
+          rangeEl.value = pt().gravityScale;
+          rangeEl.oninput = function () {
+            pt().gravityScale = Number(this.value);
+            if (outEl) outEl.value = Number(this.value).toFixed(2);
+            state.projectileWalkers.forEach(function (pw) {
+              if (pw.physics) pw.physics.gravityScale = pt().gravityScale;
+            });
+          };
+        }
+      })();
+
+      (function () {
+        var outEl = document.getElementById("proj-radius-value");
+        var rangeEl = document.getElementById("proj-radius");
+        if (rangeEl) {
+          rangeEl.value = pt().radius;
+          rangeEl.oninput = function () {
+            pt().radius = Number(this.value);
+            if (outEl) outEl.value = this.value;
+            state.projectileWalkers.forEach(function (pw) {
+              if (pw.physics) pw.physics.collisionRadius = pt().radius;
+            });
+          };
+        }
+      })();
+
+      el = document.getElementById("proj-show-physics");
+      if (el) {
+        el.checked = pt().showPhysics;
+        el.onchange = function () {
+          pt().showPhysics = this.checked;
+          state.projectileWalkers.forEach(function (pw) {
+            if (!pw.debug) pw.debug = {};
+            pw.debug.showPhysics = pt().showPhysics;
+          });
+          renderFrame();
+        };
+      }
+
+      el = document.getElementById("proj-clear");
+      if (el) {
+        el.onclick = function () {
+          state.projectileWalkers = [];
+          renderFrame();
+        };
+      }
+    })();
 
     // Slider ↔ number sync for obj-strokeWidth
     (function bindSliderNum() {
@@ -7244,7 +9447,15 @@
 
     // ── Creation Preset UI ───────────────────────────────────────────────────
 
-    await applyScene({ lines: [], strokes: [], balls: [], walkers: [], groups: {}, shapes: [], textObjects: [] });
+    await applyScene({
+      lines: [],
+      strokes: [],
+      balls: [],
+      walkers: [],
+      groups: {},
+      shapes: [],
+      textObjects: [],
+    });
     renderBankGrid();
     updateCanvasAspect();
     // Bootstrap Phase 1 spatial corridor immediately — canvas dimensions now stable
@@ -7279,7 +9490,9 @@
 
     function getWorldLayerCountByType(type) {
       var layers = state.world && state.world.layers ? state.world.layers : [];
-      return layers.filter(function (l) { return l && l.type === type; }).length;
+      return layers.filter(function (l) {
+        return l && l.type === type;
+      }).length;
     }
 
     function countGridBlocks() {
@@ -7303,9 +9516,11 @@
 
     function getActiveMidiPlaybackBank() {
       if (!state.activeMidiBankId) return null;
-      return (state.midiBanks || []).find(function (bank) {
-        return bank && bank.id === state.activeMidiBankId;
-      }) || null;
+      return (
+        (state.midiBanks || []).find(function (bank) {
+          return bank && bank.id === state.activeMidiBankId;
+        }) || null
+      );
     }
 
     function getCartridgeForMidiBank(bank) {
@@ -7316,40 +9531,59 @@
         });
         if (byCartridgeId) return byCartridgeId;
       }
-      return (state.midiCartridges || []).find(function (cart) {
-        return cart && cart.id === bank.id;
-      }) || null;
+      return (
+        (state.midiCartridges || []).find(function (cart) {
+          return cart && cart.id === bank.id;
+        }) || null
+      );
     }
 
     function normalizeMidiPlaybackEvent(raw, index) {
       if (!raw) return null;
 
       var note =
-        typeof raw.note === "number" ? raw.note :
-        typeof raw.midi === "number" ? raw.midi :
-        typeof raw.midiNote === "number" ? raw.midiNote :
-        typeof raw.pitch === "number" ? raw.pitch : 60;
+        typeof raw.note === "number"
+          ? raw.note
+          : typeof raw.midi === "number"
+            ? raw.midi
+            : typeof raw.midiNote === "number"
+              ? raw.midiNote
+              : typeof raw.pitch === "number"
+                ? raw.pitch
+                : 60;
 
       var velocity =
-        typeof raw.velocity === "number" ? raw.velocity :
-        typeof raw.vel === "number" ? raw.vel : 90;
+        typeof raw.velocity === "number"
+          ? raw.velocity
+          : typeof raw.vel === "number"
+            ? raw.vel
+            : 90;
 
       if (velocity > 0 && velocity <= 1) velocity = Math.round(velocity * 127);
       velocity = Math.max(1, Math.min(127, Math.round(velocity)));
 
       var bpm = state.bpm || 120;
       var startBeat =
-        typeof raw.startBeat === "number" ? raw.startBeat :
-        typeof raw.beat === "number" ? raw.beat :
-        typeof raw.timeBeats === "number" ? raw.timeBeats :
-        (typeof raw.ticks === "number" && raw.ppq) ? raw.ticks / raw.ppq :
-        typeof raw.time === "number" ? raw.time * (bpm / 60) : 0;
+        typeof raw.startBeat === "number"
+          ? raw.startBeat
+          : typeof raw.beat === "number"
+            ? raw.beat
+            : typeof raw.timeBeats === "number"
+              ? raw.timeBeats
+              : typeof raw.ticks === "number" && raw.ppq
+                ? raw.ticks / raw.ppq
+                : typeof raw.time === "number"
+                  ? raw.time * (bpm / 60)
+                  : 0;
 
       var durationBeats =
-        typeof raw.durationBeats === "number" ? raw.durationBeats :
-        typeof raw.duration === "number" ? raw.duration * (bpm / 60) :
-        (typeof raw.durationTicks === "number" && raw.ppq) ? raw.durationTicks / raw.ppq :
-        0.25;
+        typeof raw.durationBeats === "number"
+          ? raw.durationBeats
+          : typeof raw.duration === "number"
+            ? raw.duration * (bpm / 60)
+            : typeof raw.durationTicks === "number" && raw.ppq
+              ? raw.durationTicks / raw.ppq
+              : 0.25;
 
       return {
         id: raw.id || "midi_note_" + index,
@@ -7373,7 +9607,11 @@
       if (bank && Array.isArray(bank.notes) && bank.notes.length) {
         return bank.notes.map(normalizeMidiPlaybackEvent).filter(Boolean);
       }
-      if (cartridge && Array.isArray(cartridge.notes) && cartridge.notes.length) {
+      if (
+        cartridge &&
+        Array.isArray(cartridge.notes) &&
+        cartridge.notes.length
+      ) {
         return cartridge.notes.map(normalizeMidiPlaybackEvent).filter(Boolean);
       }
       return [];
@@ -7400,7 +9638,11 @@
 
       // Resolve active bank/cartridge for source length and repeat flag
       var resolved = resolveMidiBankAndCartridge(null);
-      var sourceLengthBeats = getMidiPlaybackLengthBeats(resolved.bank, resolved.cartridge, events);
+      var sourceLengthBeats = getMidiPlaybackLengthBeats(
+        resolved.bank,
+        resolved.cartridge,
+        events,
+      );
       var shouldLoop = !!(resolved.bank && resolved.bank.repeat);
       var loopBeats = shouldLoop ? sourceLengthBeats : 0;
 
@@ -7420,7 +9662,8 @@
           : eventBeat > previousBeat && eventBeat <= currentBeat;
         if (!crossed) return;
 
-        var cycle = (shouldLoop && loopBeats > 0) ? Math.floor(currentBeat / loopBeats) : 0;
+        var cycle =
+          shouldLoop && loopBeats > 0 ? Math.floor(currentBeat / loopBeats) : 0;
         var key = event.id + "::" + cycle;
         if (state.midiPlayback.firedNoteKeys.has(key)) return;
         state.midiPlayback.firedNoteKeys.add(key);
@@ -7448,18 +9691,25 @@
           return e.startBeat > best.startBeat ? e : best;
         }, triggered[0]);
         state.midiPlayback.playheadEventIndex =
-          lastTriggered.index != null ? lastTriggered.index : lastTriggered.sourceIndex;
-        state.midiPlayback.playheadEventId  = lastTriggered.id || null;
-        state.midiPlayback.playheadBeat     = lastTriggered.startBeat != null ? lastTriggered.startBeat : currentBeat;
+          lastTriggered.index != null
+            ? lastTriggered.index
+            : lastTriggered.sourceIndex;
+        state.midiPlayback.playheadEventId = lastTriggered.id || null;
+        state.midiPlayback.playheadBeat =
+          lastTriggered.startBeat != null
+            ? lastTriggered.startBeat
+            : currentBeat;
       }
 
       state.midiPlayback.activeNotes = events.filter(function (event) {
-        var localBeat = (shouldLoop && loopBeats > 0)
-          ? ((currentBeat % loopBeats) + loopBeats) % loopBeats
-          : currentBeat;
-        var start = (shouldLoop && loopBeats > 0)
-          ? ((event.startBeat % loopBeats) + loopBeats) % loopBeats
-          : event.startBeat;
+        var localBeat =
+          shouldLoop && loopBeats > 0
+            ? ((currentBeat % loopBeats) + loopBeats) % loopBeats
+            : currentBeat;
+        var start =
+          shouldLoop && loopBeats > 0
+            ? ((event.startBeat % loopBeats) + loopBeats) % loopBeats
+            : event.startBeat;
         return localBeat >= start && localBeat <= start + event.durationBeats;
       });
 
@@ -7473,62 +9723,74 @@
     }
 
     function getSelectedCount() {
-      if (state.selection && state.selection.strokeIds) return countItems(state.selection.strokeIds);
+      if (state.selection && state.selection.strokeIds)
+        return countItems(state.selection.strokeIds);
       return countItems(state.multiSelection);
     }
 
     function getSystemHudData() {
       var registryStatus =
         window._wos && window._wos.listRegistryStatus
-          ? window._wos.listRegistryStatus() : null;
+          ? window._wos.listRegistryStatus()
+          : null;
       var registryValidation =
         window._wos && window._wos.validateRegistry
-          ? window._wos.validateRegistry() : null;
+          ? window._wos.validateRegistry()
+          : null;
       var schemaValidation =
         window._wos && window._wos.validateSchemas
-          ? window._wos.validateSchemas() : null;
+          ? window._wos.validateSchemas()
+          : null;
       var schemas = window.SBE && window.SBE.Schemas;
       var currentBeat = getRuntimeBeat();
 
       return {
-        registryStatus:     registryStatus,
+        registryStatus: registryStatus,
         registryValidation: registryValidation,
-        schemaValidation:   schemaValidation,
-        schemaGroups:       schemas ? Object.keys(schemas) : [],
+        schemaValidation: schemaValidation,
+        schemaGroups: schemas ? Object.keys(schemas) : [],
         runtime: {
-          tool:                state.tool || "none",
-          frame:               state.frame || 0,
-          viewportMode:        state.viewportMode || "unknown",
-          playing:             !!isPlaying,
-          bpm:                 state.bpm || 120,
-          loopBars:            state.loop && state.loop.bars ? state.loop.bars : 0,
-          currentBeat:         Number(currentBeat.toFixed(2)),
-          strokes:             countItems(state.strokes),
-          walkers:             countItems(state.walkers),
-          lines:               countItems(state.lines),
-          balls:               countItems(state.balls),
-          shapes:              countItems(state.shapes),
-          textObjects:         countItems(state.textObjects),
-          particles:           countItems(state.particles),
-          selectedCount:       getSelectedCount(),
-          worldLayers:         countItems(state.world && state.world.layers),
-          gridLayers:          getWorldLayerCountByType("grid"),
-          objectLayers:        getWorldLayerCountByType("objectLayer"),
+          tool: state.tool || "none",
+          frame: state.frame || 0,
+          viewportMode: state.viewportMode || "unknown",
+          playing: !!isPlaying,
+          bpm: state.bpm || 120,
+          loopBars: state.loop && state.loop.bars ? state.loop.bars : 0,
+          currentBeat: Number(currentBeat.toFixed(2)),
+          strokes: countItems(state.strokes),
+          walkers: countItems(state.walkers),
+          lines: countItems(state.lines),
+          balls: countItems(state.balls),
+          shapes: countItems(state.shapes),
+          textObjects: countItems(state.textObjects),
+          particles: countItems(state.particles),
+          selectedCount: getSelectedCount(),
+          worldLayers: countItems(state.world && state.world.layers),
+          gridLayers: getWorldLayerCountByType("grid"),
+          objectLayers: getWorldLayerCountByType("objectLayer"),
           interactionOverlays: getWorldLayerCountByType("interactionOverlay"),
-          dataOverlays:        getWorldLayerCountByType("dataOverlay"),
-          devOverlays:         getWorldLayerCountByType("devOverlay"),
-          midiCartridges:      countItems(state.midiCartridges),
-          midiBanks:           countItems(state.midiBanks),
-          activeMidiBankId:    state.activeMidiBankId || "none",
-          gridBanks:           countItems(state.gridBanks),
-          gridBlocks:          countGridBlocks(),
-          sourceNotes:         countSourceNotes(),
-          activeVoices:        state.audio && state.audio.activeVoices
-                                 ? countItems(state.audio.activeVoices) : 0,
-          midiPlaybackEnabled: !!(state.midiPlayback && state.midiPlayback.enabled),
-          midiPlaybackEvents:  getMidiNoteEventsForPlayback().length,
-          midiActiveNotes:     countItems(state.midiPlayback && state.midiPlayback.activeNotes),
-          midiLastTriggered:   countItems(state.midiPlayback && state.midiPlayback.lastTriggeredNotes),
+          dataOverlays: getWorldLayerCountByType("dataOverlay"),
+          devOverlays: getWorldLayerCountByType("devOverlay"),
+          midiCartridges: countItems(state.midiCartridges),
+          midiBanks: countItems(state.midiBanks),
+          activeMidiBankId: state.activeMidiBankId || "none",
+          gridBanks: countItems(state.gridBanks),
+          gridBlocks: countGridBlocks(),
+          sourceNotes: countSourceNotes(),
+          activeVoices:
+            state.audio && state.audio.activeVoices
+              ? countItems(state.audio.activeVoices)
+              : 0,
+          midiPlaybackEnabled: !!(
+            state.midiPlayback && state.midiPlayback.enabled
+          ),
+          midiPlaybackEvents: getMidiNoteEventsForPlayback().length,
+          midiActiveNotes: countItems(
+            state.midiPlayback && state.midiPlayback.activeNotes,
+          ),
+          midiLastTriggered: countItems(
+            state.midiPlayback && state.midiPlayback.lastTriggeredNotes,
+          ),
         },
       };
     }
@@ -7545,8 +9807,12 @@
     function makeHudMetric(label, value) {
       return (
         '<div class="system-hud__metric">' +
-        '<span class="system-hud__metric-label">' + escapeHudHtml(label) + "</span>" +
-        '<span class="system-hud__metric-value">' + escapeHudHtml(String(value)) + "</span>" +
+        '<span class="system-hud__metric-label">' +
+        escapeHudHtml(label) +
+        "</span>" +
+        '<span class="system-hud__metric-value">' +
+        escapeHudHtml(String(value)) +
+        "</span>" +
         "</div>"
       );
     }
@@ -7555,9 +9821,14 @@
     function makeHudRow(label, status) {
       return (
         '<div class="system-hud__row">' +
-        '<span class="system-hud__name">' + escapeHudHtml(label) + "</span>" +
-        '<span class="system-hud__badge" data-status="' + escapeHudHtml(status || "available") + '">' +
-        escapeHudHtml(status || "available") + "</span>" +
+        '<span class="system-hud__name">' +
+        escapeHudHtml(label) +
+        "</span>" +
+        '<span class="system-hud__badge" data-status="' +
+        escapeHudHtml(status || "available") +
+        '">' +
+        escapeHudHtml(status || "available") +
+        "</span>" +
         "</div>"
       );
     }
@@ -7566,37 +9837,52 @@
     function makeHudValueRow(label, value) {
       return (
         '<div class="system-hud__row system-hud__row--value">' +
-        '<span class="system-hud__name">' + escapeHudHtml(label) + "</span>" +
-        '<span class="system-hud__value">' + escapeHudHtml(String(value)) + "</span>" +
+        '<span class="system-hud__name">' +
+        escapeHudHtml(label) +
+        "</span>" +
+        '<span class="system-hud__value">' +
+        escapeHudHtml(String(value)) +
+        "</span>" +
         "</div>"
       );
     }
 
     function renderSystemHud() {
-      var summaryEl  = document.getElementById("system-hud-summary");
+      var summaryEl = document.getElementById("system-hud-summary");
       var registryEl = document.getElementById("system-hud-registry");
-      var schemasEl  = document.getElementById("system-hud-schemas");
-      var runtimeEl  = document.getElementById("system-hud-runtime");
+      var schemasEl = document.getElementById("system-hud-schemas");
+      var runtimeEl = document.getElementById("system-hud-runtime");
       if (!summaryEl || !registryEl || !schemasEl || !runtimeEl) return;
 
       var data = getSystemHudData();
       var r = data.runtime;
 
-      var regErrors = data.registryValidation && data.registryValidation.errors
-        ? data.registryValidation.errors.length : 0;
-      var schemaErrors = data.schemaValidation && data.schemaValidation.errors
-        ? data.schemaValidation.errors.length : 0;
-      var liveObjects = r.strokes + r.walkers + r.balls + r.shapes + r.textObjects + r.particles;
+      var regErrors =
+        data.registryValidation && data.registryValidation.errors
+          ? data.registryValidation.errors.length
+          : 0;
+      var schemaErrors =
+        data.schemaValidation && data.schemaValidation.errors
+          ? data.schemaValidation.errors.length
+          : 0;
+      var liveObjects =
+        r.strokes +
+        r.walkers +
+        r.balls +
+        r.shapes +
+        r.textObjects +
+        r.particles;
 
       summaryEl.innerHTML =
-        makeHudMetric("Reg Errors",    regErrors) +
+        makeHudMetric("Reg Errors", regErrors) +
         makeHudMetric("Schema Errors", schemaErrors) +
-        makeHudMetric("Live Objects",  liveObjects);
+        makeHudMetric("Live Objects", liveObjects);
 
       // Registry: group summary row then item rows
       var registryHtml = "";
       if (!data.registryStatus) {
-        registryHtml = '<div class="system-hud__validation" data-state="error">Registry helpers missing</div>';
+        registryHtml =
+          '<div class="system-hud__validation" data-state="error">Registry helpers missing</div>';
       } else {
         Object.keys(data.registryStatus).forEach(function (groupName) {
           var items = data.registryStatus[groupName] || [];
@@ -7610,65 +9896,84 @@
 
       // Schemas: value rows only
       var schemaState = schemaErrors ? "error" : "ok";
-      var schemaWarnings = data.schemaValidation && data.schemaValidation.warnings
-        ? data.schemaValidation.warnings.length : 0;
+      var schemaWarnings =
+        data.schemaValidation && data.schemaValidation.warnings
+          ? data.schemaValidation.warnings.length
+          : 0;
       var schemaHtml =
-        '<div class="system-hud__validation" data-state="' + schemaState + '">' +
-        (schemaErrors ? "Schema errors: " + schemaErrors : "Schemas OK") + "</div>" +
+        '<div class="system-hud__validation" data-state="' +
+        schemaState +
+        '">' +
+        (schemaErrors ? "Schema errors: " + schemaErrors : "Schemas OK") +
+        "</div>" +
         makeHudValueRow("Top-level schemas", data.schemaGroups.length) +
-        makeHudValueRow("Object schemas",
+        makeHudValueRow(
+          "Object schemas",
           window.SBE && SBE.Schemas && SBE.Schemas.Objects
-            ? Object.keys(SBE.Schemas.Objects).length - 1 : 0) +
-        makeHudValueRow("Runtime groups",
+            ? Object.keys(SBE.Schemas.Objects).length - 1
+            : 0,
+        ) +
+        makeHudValueRow(
+          "Runtime groups",
           window.SBE && SBE.Schemas && SBE.Schemas.Runtime
-            ? Object.keys(SBE.Schemas.Runtime).length : 0) +
+            ? Object.keys(SBE.Schemas.Runtime).length
+            : 0,
+        ) +
         makeHudValueRow("Warnings", schemaWarnings);
 
-      if (data.schemaValidation && data.schemaValidation.errors && data.schemaValidation.errors.length) {
+      if (
+        data.schemaValidation &&
+        data.schemaValidation.errors &&
+        data.schemaValidation.errors.length
+      ) {
         data.schemaValidation.errors.forEach(function (err) {
-          schemaHtml += '<div class="system-hud__validation" data-state="error">' + escapeHudHtml(err) + "</div>";
+          schemaHtml +=
+            '<div class="system-hud__validation" data-state="error">' +
+            escapeHudHtml(err) +
+            "</div>";
         });
       }
       schemasEl.innerHTML = schemaHtml;
 
       // Runtime: all value rows
       runtimeEl.innerHTML =
-        makeHudValueRow("Tool",          r.tool) +
-        makeHudValueRow("Playing",       String(r.playing)) +
-        makeHudValueRow("BPM",           r.bpm) +
-        makeHudValueRow("Beat",          r.currentBeat) +
-        makeHudValueRow("Frame",         r.frame) +
-        makeHudValueRow("Viewport",      r.viewportMode) +
-        makeHudValueRow("Strokes",       r.strokes) +
-        makeHudValueRow("Walkers",       r.walkers) +
-        makeHudValueRow("Lines",         r.lines) +
-        makeHudValueRow("Balls",         r.balls) +
-        makeHudValueRow("Shapes",        r.shapes) +
-        makeHudValueRow("Text",          r.textObjects) +
-        makeHudValueRow("Particles",     r.particles) +
-        makeHudValueRow("Selected",      r.selectedCount) +
-        makeHudValueRow("World Layers",  r.worldLayers) +
-        makeHudValueRow("Grid Layers",   r.gridLayers) +
-        makeHudValueRow("Grid Blocks",   r.gridBlocks) +
-        makeHudValueRow("Source Notes",  r.sourceNotes) +
-        makeHudValueRow("MIDI Banks",    r.midiBanks) +
-        makeHudValueRow("Active Bank",   r.activeMidiBankId) +
-        makeHudValueRow("Grid Banks",    r.gridBanks) +
+        makeHudValueRow("Tool", r.tool) +
+        makeHudValueRow("Playing", String(r.playing)) +
+        makeHudValueRow("BPM", r.bpm) +
+        makeHudValueRow("Beat", r.currentBeat) +
+        makeHudValueRow("Frame", r.frame) +
+        makeHudValueRow("Viewport", r.viewportMode) +
+        makeHudValueRow("Strokes", r.strokes) +
+        makeHudValueRow("Walkers", r.walkers) +
+        makeHudValueRow("Lines", r.lines) +
+        makeHudValueRow("Balls", r.balls) +
+        makeHudValueRow("Shapes", r.shapes) +
+        makeHudValueRow("Text", r.textObjects) +
+        makeHudValueRow("Particles", r.particles) +
+        makeHudValueRow("Selected", r.selectedCount) +
+        makeHudValueRow("World Layers", r.worldLayers) +
+        makeHudValueRow("Grid Layers", r.gridLayers) +
+        makeHudValueRow("Grid Blocks", r.gridBlocks) +
+        makeHudValueRow("Source Notes", r.sourceNotes) +
+        makeHudValueRow("MIDI Banks", r.midiBanks) +
+        makeHudValueRow("Active Bank", r.activeMidiBankId) +
+        makeHudValueRow("Grid Banks", r.gridBanks) +
         makeHudValueRow("Active Voices", r.activeVoices) +
-        makeHudValueRow("MIDI Playback",  String(r.midiPlaybackEnabled)) +
-        makeHudValueRow("MIDI Events",    r.midiPlaybackEvents) +
-        makeHudValueRow("MIDI Active",    r.midiActiveNotes) +
+        makeHudValueRow("MIDI Playback", String(r.midiPlaybackEnabled)) +
+        makeHudValueRow("MIDI Events", r.midiPlaybackEvents) +
+        makeHudValueRow("MIDI Active", r.midiActiveNotes) +
         makeHudValueRow("MIDI Triggered", r.midiLastTriggered);
     }
 
     function toggleSystemHud(forceOpen) {
-      var hud    = document.getElementById("system-hud");
+      var hud = document.getElementById("system-hud");
       var toggle = document.getElementById("system-hud-toggle");
       if (!hud || !toggle) return;
 
-      var shouldOpen = typeof forceOpen === "boolean"
-        ? forceOpen
-        : hud.classList.contains("hidden");
+      var shouldOpen =
+        typeof forceOpen === "boolean"
+          ? forceOpen
+          : hud.classList.contains("hidden");
 
       hud.classList.toggle("hidden", !shouldOpen);
       hud.setAttribute("aria-hidden", shouldOpen ? "false" : "true");
@@ -7690,17 +9995,23 @@
 
     function bindSystemHud() {
       var toggle = document.getElementById("system-hud-toggle");
-      var close  = document.getElementById("system-hud-close");
+      var close = document.getElementById("system-hud-close");
 
-      if (toggle) toggle.addEventListener("click", function () { toggleSystemHud(); });
-      if (close)  close.addEventListener("click",  function () { toggleSystemHud(false); });
+      if (toggle)
+        toggle.addEventListener("click", function () {
+          toggleSystemHud();
+        });
+      if (close)
+        close.addEventListener("click", function () {
+          toggleSystemHud(false);
+        });
 
       window._wos = window._wos || {};
-      window._wos.renderSystemHud  = renderSystemHud;
-      window._wos.toggleSystemHud  = toggleSystemHud;
+      window._wos.renderSystemHud = renderSystemHud;
+      window._wos.toggleSystemHud = toggleSystemHud;
       window._wos.getSystemHudData = getSystemHudData;
-      window._wos.refreshBankGrid  = renderBankGrid;   // exposed for drawer mount
-      window._wos.syncUI           = syncUI;           // exposed for symbolDrawer placement trigger
+      window._wos.refreshBankGrid = renderBankGrid; // exposed for drawer mount
+      window._wos.syncUI = syncUI; // exposed for symbolDrawer placement trigger
 
       // ── Shortcut suspension — used by takesFocus drawers ──────────────────
       // When a drawer declares takesFocus:true, it calls shortcuts.suspend()
@@ -7708,8 +10019,12 @@
       // guard against _shortcutsSuspended before acting.
       window._wos._shortcutsSuspended = false;
       window._wos.shortcuts = {
-        suspend: function () { window._wos._shortcutsSuspended = true;  },
-        resume:  function () { window._wos._shortcutsSuspended = false; },
+        suspend: function () {
+          window._wos._shortcutsSuspended = true;
+        },
+        resume: function () {
+          window._wos._shortcutsSuspended = false;
+        },
       };
 
       window._wos.midiPlayback = {
@@ -7730,7 +10045,9 @@
         testFirst: function () {
           var events = getMidiNoteEventsForPlayback();
           if (!events.length) {
-            console.warn("[MIDI PLAYBACK] No events available — drop a .mid file first");
+            console.warn(
+              "[MIDI PLAYBACK] No events available — drop a .mid file first",
+            );
             return null;
           }
           var event = events[0];
@@ -7752,17 +10069,25 @@
 
     // ── _wos.infiniteWorld API ────────────────────────────────────────────────
     window._wos.infiniteWorld = (function () {
-      function iw() { return state.infiniteWorld; }
+      function iw() {
+        return state.infiniteWorld;
+      }
 
       return {
         start: function () {
           var w = iw();
           w.enabled = true;
           // Build terrain if missing
-          var hasLayer = (state.world.layers || []).some(function (l) { return l._iw === true; });
-          if (!hasLayer) { iwBuildTerrainLayer(w); }
+          var hasLayer = (state.world.layers || []).some(function (l) {
+            return l._iw === true;
+          });
+          if (!hasLayer) {
+            iwBuildTerrainLayer(w);
+          }
           // Spawn probe if missing
-          if (!w.probeId) { iwSpawnProbe(w); }
+          if (!w.probeId) {
+            iwSpawnProbe(w);
+          }
           _iwLastTickAt = 0; // force immediate tick
           renderFrame();
           console.log("[InfiniteWorld] started");
@@ -7778,32 +10103,47 @@
           var w = iw();
           w.enabled = false;
           // Remove IW layers
-          state.world.layers = (state.world.layers || []).filter(function (l) { return !l._iw; });
+          state.world.layers = (state.world.layers || []).filter(function (l) {
+            return !l._iw;
+          });
           // Remove IW bank
-          state.midiBanks = state.midiBanks.filter(function (b) { return b.id !== IW_SIMULATED_BANK_ID; });
+          state.midiBanks = state.midiBanks.filter(function (b) {
+            return b.id !== IW_SIMULATED_BANK_ID;
+          });
           // Remove probe
           if (w.probeId) {
-            state.balls = state.balls.filter(function (b) { return b.id !== w.probeId; });
+            state.balls = state.balls.filter(function (b) {
+              return b.id !== w.probeId;
+            });
             state.swarm.count = state.balls.length;
           }
           // Remove any lingering _infiniteProbe balls
-          state.balls = state.balls.filter(function (b) { return !b._infiniteProbe; });
+          state.balls = state.balls.filter(function (b) {
+            return !b._infiniteProbe;
+          });
           state.swarm.count = state.balls.length;
-          w.terrainBankId  = null;
+          w.terrainBankId = null;
           w.terrainLayerId = null;
-          w.probeId        = null;
-          w.beatCursor     = 0;
-          w.sourceIndex    = 0;
-          _iwBlockStates   = {};
-          _iwProbeTrail    = [];
+          w.probeId = null;
+          w.beatCursor = 0;
+          w.sourceIndex = 0;
+          _iwBlockStates = {};
+          _iwProbeTrail = [];
           renderFrame();
           console.log("[InfiniteWorld] reset");
         },
 
         state: function () {
           return Object.assign({}, iw(), {
-            terrainLayerExists: (state.world.layers || []).some(function (l) { return l._iw; }),
-            probeExists: !!(iw().probeId && state.balls.find(function (b) { return b.id === iw().probeId; })),
+            terrainLayerExists: (state.world.layers || []).some(function (l) {
+              return l._iw;
+            }),
+            probeExists: !!(
+              iw().probeId &&
+              state.balls.find(function (b) {
+                return b.id === iw().probeId;
+              })
+            ),
             activeBlockStates: Object.keys(_iwBlockStates).length,
             trailLength: _iwProbeTrail.length,
           });
@@ -7828,16 +10168,24 @@
         setPalette: function (id) {
           var GS = getGridSystem();
           if (!GS || !GS.BAUHAUS_PALETTES[id]) {
-            console.warn("[InfiniteWorld] unknown palette:", id,
-              "— use:", Object.keys(GS ? GS.BAUHAUS_PALETTES : {}).join(" | "));
+            console.warn(
+              "[InfiniteWorld] unknown palette:",
+              id,
+              "— use:",
+              Object.keys(GS ? GS.BAUHAUS_PALETTES : {}).join(" | "),
+            );
             return false;
           }
           iw()._paletteId = id;
-          var layer = (state.world.layers || []).find(function (l) { return l._iw; });
+          var layer = (state.world.layers || []).find(function (l) {
+            return l._iw;
+          });
           if (layer && layer.renderer) {
             layer.renderer.paletteId = id;
             // Bust color cache so blocks re-resolve on next frame
-            (layer.blocks || []).forEach(function (b) { b._iwColor = null; });
+            (layer.blocks || []).forEach(function (b) {
+              b._iwColor = null;
+            });
           }
           renderFrame();
           return id;
@@ -7850,9 +10198,11 @@
 
         regenerate: function () {
           var w = iw();
-          var bank = state.midiBanks.find(function (b) { return b.id === IW_SIMULATED_BANK_ID; });
+          var bank = state.midiBanks.find(function (b) {
+            return b.id === IW_SIMULATED_BANK_ID;
+          });
           if (bank) bank._simNotes = [];
-          w.beatCursor   = 0;
+          w.beatCursor = 0;
           _iwBlockStates = {};
           iwBuildTerrainLayer(w);
           renderFrame();
@@ -7872,9 +10222,15 @@
             console.log("[InfiniteWorld] toggled OFF");
           } else {
             w.enabled = true;
-            var hasLayer = (state.world.layers || []).some(function (l) { return l._iw === true; });
-            if (!hasLayer) { iwBuildTerrainLayer(w); }
-            if (!w.probeId) { iwSpawnProbe(w); }
+            var hasLayer = (state.world.layers || []).some(function (l) {
+              return l._iw === true;
+            });
+            if (!hasLayer) {
+              iwBuildTerrainLayer(w);
+            }
+            if (!w.probeId) {
+              iwSpawnProbe(w);
+            }
             _iwLastTickAt = 0;
             renderFrame();
             console.log("[InfiniteWorld] toggled ON");
@@ -7882,7 +10238,7 @@
           return w.enabled;
         },
       };
-    }());
+    })();
 
     // ── IW Auto-start ─────────────────────────────────────────────────────────
     // If autoStart is enabled and IW has not yet been started, defer startup
@@ -7892,18 +10248,22 @@
       if (!w.autoStart) return;
       // Guard: do not start if already active or if a MIDI import is in progress
       if (w.enabled) return;
-      var hasMidiImport = (state.midiBanks || []).some(function (b) { return !b._iw; });
+      var hasMidiImport = (state.midiBanks || []).some(function (b) {
+        return !b._iw;
+      });
       // Only auto-start when there are no user-imported banks (fresh load)
       if (hasMidiImport) return;
       setTimeout(function () {
         var w2 = state.infiniteWorld;
         if (!w2.autoStart || w2.enabled) return;
-        var hasLayer = (state.world.layers || []).some(function (l) { return l._iw === true; });
+        var hasLayer = (state.world.layers || []).some(function (l) {
+          return l._iw === true;
+        });
         if (!hasLayer) {
           window._wos.infiniteWorld.start();
         }
       }, 500);
-    }());
+    })();
 
     renderFrame();
 
@@ -7922,17 +10282,21 @@
     // ── InfiniteWorld v1.0.0 ─────────────────────────────────────────────────
 
     var IW_SIMULATED_CARTRIDGE_ID = "iw_terrain_cartridge";
-    var IW_SIMULATED_BANK_ID      = "iw_terrain_bank";
-    var IW_LAYER_LABEL            = "IW Terrain";
-    var IW_GRID_COLS              = 18;
-    var IW_GRID_ROWS              = 28;
-    var IW_REGION_COUNT           = 6;
+    var IW_SIMULATED_BANK_ID = "iw_terrain_bank";
+    var IW_LAYER_LABEL = "IW Terrain";
+    var IW_GRID_COLS = 18;
+    var IW_GRID_ROWS = 28;
+    var IW_REGION_COUNT = 6;
 
     // ── Region system ────────────────────────────────────────────────────────
     // 6 voronoi seeds spread across the grid (normalized 0-1 coords)
     var IW_REGION_SEEDS = [
-      [0.15, 0.15], [0.85, 0.15], [0.5, 0.48],
-      [0.15, 0.82], [0.85, 0.82], [0.5, 0.2],
+      [0.15, 0.15],
+      [0.85, 0.15],
+      [0.5, 0.48],
+      [0.15, 0.82],
+      [0.85, 0.82],
+      [0.5, 0.2],
     ];
 
     var _iwRegions = null;
@@ -7940,12 +10304,12 @@
     function iwInitRegions() {
       _iwRegions = IW_REGION_SEEDS.map(function (seed, i) {
         return {
-          id:           i,
-          densityBias:  [0.65, 0.2, 0.8, 0.4, 0.25, 0.55][i],
-          energyBias:   [0.5,  0.1, 0.7, 0.3, 0.15, 0.6 ][i],
-          decayRate:    [0.91, 0.97, 0.88, 0.94, 0.96, 0.90][i],
-          driftSpeed:   0.00035 + i * 0.00015,
-          driftPhase:   (i * 1.13) % (Math.PI * 2),
+          id: i,
+          densityBias: [0.65, 0.2, 0.8, 0.4, 0.25, 0.55][i],
+          energyBias: [0.5, 0.1, 0.7, 0.3, 0.15, 0.6][i],
+          decayRate: [0.91, 0.97, 0.88, 0.94, 0.96, 0.9][i],
+          driftSpeed: 0.00035 + i * 0.00015,
+          driftPhase: (i * 1.13) % (Math.PI * 2),
           visualWeight: [0.7, 0.3, 1.0, 0.5, 0.25, 0.8][i],
         };
       });
@@ -7959,12 +10323,16 @@
     function iwBlockRegionId(col, row) {
       var nx = col / IW_GRID_COLS;
       var ny = row / IW_GRID_ROWS;
-      var best = 0, bestDist = Infinity;
+      var best = 0,
+        bestDist = Infinity;
       for (var i = 0; i < IW_REGION_SEEDS.length; i++) {
         var dx = nx - IW_REGION_SEEDS[i][0];
         var dy = ny - IW_REGION_SEEDS[i][1];
-        var d  = dx * dx + dy * dy;
-        if (d < bestDist) { bestDist = d; best = i; }
+        var d = dx * dx + dy * dy;
+        if (d < bestDist) {
+          bestDist = d;
+          best = i;
+        }
       }
       return best;
     }
@@ -7988,11 +10356,11 @@
       if (!_iwBlockStates[blockIndex]) {
         var reg = iwGetRegion(regionId);
         _iwBlockStates[blockIndex] = {
-          pulse:      0,
-          glow:       0,
+          pulse: 0,
+          glow: 0,
           driftPhase: Math.random() * Math.PI * 2,
-          regionId:   regionId,
-          decay:      reg.decayRate,
+          regionId: regionId,
+          decay: reg.decayRate,
         };
       }
       return _iwBlockStates[blockIndex];
@@ -8003,28 +10371,38 @@
       for (var i = 0; i < keys.length; i++) {
         var s = _iwBlockStates[keys[i]];
         s.pulse = s.pulse * Math.pow(s.decay, dt * 60);
-        s.glow  = s.glow  * Math.pow(0.96,   dt * 60);
+        s.glow = s.glow * Math.pow(0.96, dt * 60);
         if (s.pulse < 0.001) s.pulse = 0;
-        if (s.glow  < 0.001) s.glow  = 0;
+        if (s.glow < 0.001) s.glow = 0;
       }
     }
 
     // ── Probe trail ──────────────────────────────────────────────────────────
-    var _iwProbeTrail    = [];
-    var IW_TRAIL_MAX     = 28;
+    var _iwProbeTrail = [];
+    var IW_TRAIL_MAX = 28;
     var IW_TRAIL_INTERVAL_MS = 60;
-    var _iwTrailLastAt   = 0;
+    var _iwTrailLastAt = 0;
 
     // ── Note weights ─────────────────────────────────────────────────────────
-    var IW_NOTE_WEIGHTS = [8,2,6,2,7,5,2,8,2,6,2,4];
+    var IW_NOTE_WEIGHTS = [8, 2, 6, 2, 7, 5, 2, 8, 2, 6, 2, 4];
     var IW_NOTE_WEIGHT_CUM = (function () {
-      var cum = [], t = 0;
-      IW_NOTE_WEIGHTS.forEach(function (w) { t += w; cum.push(t); });
+      var cum = [],
+        t = 0;
+      IW_NOTE_WEIGHTS.forEach(function (w) {
+        t += w;
+        cum.push(t);
+      });
       return cum;
-    }());
+    })();
     var IW_NOTE_WEIGHT_TOTAL = IW_NOTE_WEIGHT_CUM[11];
 
-    var IW_MOTIFS = [[0,4,7],[0,3,7],[0,5,9],[2,5,9],[0,2,4,7]];
+    var IW_MOTIFS = [
+      [0, 4, 7],
+      [0, 3, 7],
+      [0, 5, 9],
+      [2, 5, 9],
+      [0, 2, 4, 7],
+    ];
 
     function iwWeightedNoteClass(regionId) {
       // Slight bias toward lower classes in ghost zones, higher in hubs
@@ -8038,18 +10416,20 @@
     // ── Note generation ──────────────────────────────────────────────────────
     function iwGenerateBurst(iw) {
       var density = Math.max(0.05, Math.min(1, iw.density));
-      var count   = Math.max(1, Math.round(density * 5));
-      var notes   = [];
+      var count = Math.max(1, Math.round(density * 5));
+      var notes = [];
       var useMotif = Math.random() < 0.3;
-      var motif    = useMotif ? IW_MOTIFS[Math.floor(Math.random() * IW_MOTIFS.length)] : null;
+      var motif = useMotif
+        ? IW_MOTIFS[Math.floor(Math.random() * IW_MOTIFS.length)]
+        : null;
       for (var i = 0; i < count; i++) {
-        var nc  = motif ? motif[i % motif.length] : iwWeightedNoteClass();
+        var nc = motif ? motif[i % motif.length] : iwWeightedNoteClass();
         var oct = 2 + Math.floor(Math.random() * 4);
         var note = Math.max(24, Math.min(96, nc + oct * 12));
         notes.push({
-          note:     note,
+          note: note,
           velocity: Math.round(35 + Math.random() * 75),
-          time:     iw.beatCursor + i * 0.25,
+          time: iw.beatCursor + i * 0.25,
           duration: 0.25 + Math.random() * 0.75,
           _velNorm: (35 + Math.random() * 75) / 110,
         });
@@ -8062,21 +10442,33 @@
       if (!GS) return null;
 
       var existingNotes = [];
-      var existingBank = state.midiBanks.find(function (b) { return b.id === IW_SIMULATED_BANK_ID; });
-      if (existingBank && existingBank._simNotes) existingNotes = existingBank._simNotes;
+      var existingBank = state.midiBanks.find(function (b) {
+        return b.id === IW_SIMULATED_BANK_ID;
+      });
+      if (existingBank && existingBank._simNotes)
+        existingNotes = existingBank._simNotes;
 
       var newNotes = iwGenerateBurst(iw);
       existingNotes = existingNotes.concat(newNotes);
       if (existingNotes.length > iw.maxEvents) {
-        existingNotes = existingNotes.slice(existingNotes.length - iw.maxEvents);
+        existingNotes = existingNotes.slice(
+          existingNotes.length - iw.maxEvents,
+        );
       }
       iw.beatCursor += 2;
 
       var cartridge = {
-        id: IW_SIMULATED_CARTRIDGE_ID, name: "IW Terrain",
-        bpm: 120, length: iw.beatCursor,
+        id: IW_SIMULATED_CARTRIDGE_ID,
+        name: "IW Terrain",
+        bpm: 120,
+        length: iw.beatCursor,
         notes: existingNotes.map(function (n) {
-          return { note: n.note, velocity: n.velocity, time: n.time, duration: n.duration };
+          return {
+            note: n.note,
+            velocity: n.velocity,
+            time: n.time,
+            duration: n.duration,
+          };
         }),
         _iw: true,
       };
@@ -8088,7 +10480,9 @@
       bank._newBurstSize = newNotes.length;
       bank._iw = true;
 
-      state.midiBanks = state.midiBanks.filter(function (b) { return b.id !== IW_SIMULATED_BANK_ID; });
+      state.midiBanks = state.midiBanks.filter(function (b) {
+        return b.id !== IW_SIMULATED_BANK_ID;
+      });
       state.midiBanks.push(bank);
       iw.terrainBankId = IW_SIMULATED_BANK_ID;
       return { bank: bank, cartridge: cartridge, newNotes: newNotes };
@@ -8103,68 +10497,97 @@
       if (!banked) return null;
       var bank = banked.bank;
 
-      var canvasW = state.canvas.width  || 1080;
+      var canvasW = state.canvas.width || 1080;
       var canvasH = state.canvas.height || 1920;
 
       var gridSettings = {
-        columns: IW_GRID_COLS, rows: IW_GRID_ROWS,
-        cellSize: 42, gap: 0,
-        placementMode: "packedTimeGrid", fitMode: "fitFrame",
-        colorMode: "noteColor", blockStyleId: "solid_note_tile",
-        framePadding: 24, minCellSize: 4, maxCellSize: 240,
-        quantizeBeats: 0, pitchRange: { min: 24, max: 96 },
-        sizeMode: "none", opacityMode: "none", wrapMode: "wrapRows",
+        columns: IW_GRID_COLS,
+        rows: IW_GRID_ROWS,
+        cellSize: 42,
+        gap: 0,
+        placementMode: "packedTimeGrid",
+        fitMode: "fitFrame",
+        colorMode: "noteColor",
+        blockStyleId: "solid_note_tile",
+        framePadding: 24,
+        minCellSize: 4,
+        maxCellSize: 240,
+        quantizeBeats: 0,
+        pitchRange: { min: 24, max: 96 },
+        sizeMode: "none",
+        opacityMode: "none",
+        wrapMode: "wrapRows",
       };
 
       // Remove old IW layer but preserve _iwBlockStates (keyed by index — survives rebuild)
-      state.world.layers = (state.world.layers || []).filter(function (l) { return !l._iw; });
+      state.world.layers = (state.world.layers || []).filter(function (l) {
+        return !l._iw;
+      });
 
       var layer = GS.createGridLayerFromMidiBank(IW_SIMULATED_BANK_ID, {
-        name: IW_LAYER_LABEL, grid: gridSettings,
+        name: IW_LAYER_LABEL,
+        grid: gridSettings,
       });
       if (!layer) return null;
 
-      layer.label   = IW_LAYER_LABEL;
-      layer.status  = "active";
-      layer._iw     = true;
+      layer.label = IW_LAYER_LABEL;
+      layer.status = "active";
+      layer._iw = true;
       layer.renderer = {
-        id: "bauhausMinimal", version: "1.3.1",
+        id: "bauhausMinimal",
+        version: "1.3.1",
         paletteId: iw._paletteId || GS.DEFAULT_PALETTE_ID,
-        finishId:  "clean",
-        viewport:  Object.assign({}, GS.DEFAULT_VIEWPORT),
+        finishId: "clean",
+        viewport: Object.assign({}, GS.DEFAULT_VIEWPORT),
         reactivity: { enabled: true, mode: "noteClass" },
-        tileStyle:  Object.assign({}, GS.BAUHAUS_TILE_STYLES["softPrint"]),
+        tileStyle: Object.assign({}, GS.BAUHAUS_TILE_STYLES["softPrint"]),
         notePatternOverrides: {},
       };
 
       layer.blocks = GS.generateGridBlocksFromMidiBank(
-        bank, gridSettings, layer.id, canvasW, canvasH
+        bank,
+        gridSettings,
+        layer.id,
+        canvasW,
+        canvasH,
       );
 
       // Assign region, density-based baseAlpha, and initialise block state
       var newBurstSize = bank._newBurstSize || 0;
-      var totalBlocks  = layer.blocks.length;
+      var totalBlocks = layer.blocks.length;
       layer.blocks.forEach(function (block, idx) {
         var regionId = iwBlockRegionId(block.col || 0, block.row || 0);
-        var region   = iwGetRegion(regionId);
-        var density  = iwDensityAt(block.col || 0, block.row || 0);
+        var region = iwGetRegion(regionId);
+        var density = iwDensityAt(block.col || 0, block.row || 0);
 
         // Sparse density field: low-density areas get low baseAlpha
         var densityBase = density * 0.5 + region.densityBias * 0.5;
-        block.baseAlpha = Math.max(0.08, Math.min(0.82, densityBase * 0.88 + 0.1));
+        block.baseAlpha = Math.max(
+          0.08,
+          Math.min(0.82, densityBase * 0.88 + 0.1),
+        );
         block._iwRegion = regionId;
 
         // Trigger pulse on freshly added blocks (last N in the array)
-        var isNew = idx >= (totalBlocks - newBurstSize);
-        var bs    = iwGetBlockState(idx, regionId);
+        var isNew = idx >= totalBlocks - newBurstSize;
+        var bs = iwGetBlockState(idx, regionId);
         if (isNew && block.velocityNorm != null) {
-          bs.pulse = Math.min(1, bs.pulse + block.velocityNorm * region.energyBias);
-          bs.glow  = Math.min(1, bs.glow  + block.velocityNorm * region.energyBias * 0.5);
+          bs.pulse = Math.min(
+            1,
+            bs.pulse + block.velocityNorm * region.energyBias,
+          );
+          bs.glow = Math.min(
+            1,
+            bs.glow + block.velocityNorm * region.energyBias * 0.5,
+          );
         }
       });
 
-      layer.source = { type: "midiBank", bankId: IW_SIMULATED_BANK_ID,
-        cartridgeId: IW_SIMULATED_CARTRIDGE_ID };
+      layer.source = {
+        type: "midiBank",
+        bankId: IW_SIMULATED_BANK_ID,
+        cartridgeId: IW_SIMULATED_CARTRIDGE_ID,
+      };
 
       state.world.layers = state.world.layers || [];
       state.world.layers.push(layer);
@@ -8174,24 +10597,26 @@
 
     // ── Grid offset helper (for overlay positioning) ──────────────────────────
     function iwGetGridScreenOffset() {
-      var layer = (state.world.layers || []).find(function (l) { return l._iw; });
+      var layer = (state.world.layers || []).find(function (l) {
+        return l._iw;
+      });
       if (!layer || !layer.grid) return { x: 0, y: 0, cellSize: 42, gap: 0 };
-      var g  = layer.grid;
+      var g = layer.grid;
       var GS = getGridSystem();
-      var cw = state.canvas.width  || 1080;
+      var cw = state.canvas.width || 1080;
       var ch = state.canvas.height || 1920;
       var cs = GS ? GS.computeFitCellSize(g, cw, ch) : g.cellSize;
       var gw = g.columns * (cs + g.gap) - g.gap;
-      var gh = g.rows    * (cs + g.gap) - g.gap;
+      var gh = g.rows * (cs + g.gap) - g.gap;
       return {
-        x:        Math.round((cw - gw) / 2),
-        y:        Math.round((ch - gh) / 2),
+        x: Math.round((cw - gw) / 2),
+        y: Math.round((ch - gh) / 2),
         cellSize: cs,
-        gap:      g.gap,
+        gap: g.gap,
       };
     }
 
-    var _iwLastTickAt  = 0;
+    var _iwLastTickAt = 0;
     var _iwEnergyPhase = Math.random() * Math.PI * 2;
 
     function updateInfiniteWorld(now, dt) {
@@ -8200,8 +10625,9 @@
 
       // ── Simulated audio energy (slow sine + occasional bump) ─────────────
       _iwEnergyPhase += dt * 0.35;
-      var sinEnergy = 0.22 * Math.sin(_iwEnergyPhase) + 0.08 * Math.sin(_iwEnergyPhase * 2.7);
-      var bump = (Math.random() < 0.008) ? (0.12 + Math.random() * 0.22) : 0;
+      var sinEnergy =
+        0.22 * Math.sin(_iwEnergyPhase) + 0.08 * Math.sin(_iwEnergyPhase * 2.7);
+      var bump = Math.random() < 0.008 ? 0.12 + Math.random() * 0.22 : 0;
       iw.energy = Math.max(0, Math.min(1, 0.38 + sinEnergy + bump));
 
       // ── Terrain tick ─────────────────────────────────────────────────────
@@ -8213,12 +10639,16 @@
       // ── Per-frame block state decay + transient field injection ──────────
       iwDecayBlockStates(dt);
 
-      var layer = (state.world.layers || []).find(function (l) { return l._iw; });
+      var layer = (state.world.layers || []).find(function (l) {
+        return l._iw;
+      });
       if (layer && layer.blocks) {
-        var energy  = iw.energy;
+        var energy = iw.energy;
         var probePx = null;
         if (iw.probeId) {
-          var probe = state.balls.find(function (b) { return b.id === iw.probeId; });
+          var probe = state.balls.find(function (b) {
+            return b.id === iw.probeId;
+          });
           if (probe) {
             probePx = { x: probe.x, y: probe.y };
           }
@@ -8227,7 +10657,11 @@
 
         // Cache palette color once (persists on block for overlay use)
         var GS = getGridSystem();
-        var palette = GS && GS.BAUHAUS_PALETTES[layer.renderer.paletteId || GS.DEFAULT_PALETTE_ID];
+        var palette =
+          GS &&
+          GS.BAUHAUS_PALETTES[
+            layer.renderer.paletteId || GS.DEFAULT_PALETTE_ID
+          ];
 
         layer.blocks.forEach(function (block, idx) {
           var bs = iwGetBlockState(idx, block._iwRegion || 0);
@@ -8240,9 +10674,9 @@
           if (probePx) {
             var bsx = (block.x || 0) + off.x + off.cellSize * 0.5;
             var bsy = (block.y || 0) + off.y + off.cellSize * 0.5;
-            var dx  = bsx - probePx.x;
-            var dy  = bsy - probePx.y;
-            var d2  = dx * dx + dy * dy;
+            var dx = bsx - probePx.x;
+            var dy = bsy - probePx.y;
+            var d2 = dx * dx + dy * dy;
             var illumRadius = 180;
             if (d2 < illumRadius * illumRadius) {
               var illum = (1 - Math.sqrt(d2) / illumRadius) * 0.28 * energy;
@@ -8251,21 +10685,23 @@
           }
 
           // Write transient fields consumed by Bauhaus renderer
-          block._pulse       = Math.min(1, bs.pulse + bs.glow * 0.25);
+          block._pulse = Math.min(1, bs.pulse + bs.glow * 0.25);
           block._audioEnergy = energy;
-          block._worldPulse  = bs.pulse;
+          block._worldPulse = bs.pulse;
         });
       }
 
       // ── Probe motion (Lissajous orbit, screen-space coords) ───────────────
       if (iw.probeId) {
-        var probe = state.balls.find(function (b) { return b.id === iw.probeId; });
+        var probe = state.balls.find(function (b) {
+          return b.id === iw.probeId;
+        });
         if (probe) {
-          var t  = now * 0.00022;
-          var cw = state.canvas.width  || 1080;
+          var t = now * 0.00022;
+          var cw = state.canvas.width || 1080;
           var ch = state.canvas.height || 1920;
-          probe.x  = cw * 0.5 + Math.sin(t * 1.3)       * cw * 0.26;
-          probe.y  = ch * 0.5 + Math.sin(t * 0.9 + 1.2) * ch * 0.28;
+          probe.x = cw * 0.5 + Math.sin(t * 1.3) * cw * 0.26;
+          probe.y = ch * 0.5 + Math.sin(t * 0.9 + 1.2) * ch * 0.28;
           probe.vx = 0;
           probe.vy = 0;
 
@@ -8288,33 +10724,40 @@
       var iw = state.infiniteWorld;
       if (!iw || !iw.enabled) return;
 
-      var cw  = state.canvas.width  || 1080;
-      var ch  = state.canvas.height || 1920;
+      var cw = state.canvas.width || 1080;
+      var ch = state.canvas.height || 1920;
       var off = iwGetGridScreenOffset();
 
       // ── Atmosphere: edge vignette ─────────────────────────────────────────
       var vigGrad = ctx.createRadialGradient(
-        cw * 0.5, ch * 0.5, ch * 0.28,
-        cw * 0.5, ch * 0.5, ch * 0.78
+        cw * 0.5,
+        ch * 0.5,
+        ch * 0.28,
+        cw * 0.5,
+        ch * 0.5,
+        ch * 0.78,
       );
-      vigGrad.addColorStop(0,   "rgba(0,0,0,0)");
+      vigGrad.addColorStop(0, "rgba(0,0,0,0)");
       vigGrad.addColorStop(0.6, "rgba(0,0,0,0.04)");
-      vigGrad.addColorStop(1,   "rgba(0,0,0,0.22)");
+      vigGrad.addColorStop(1, "rgba(0,0,0,0.22)");
       ctx.fillStyle = vigGrad;
       ctx.fillRect(0, 0, cw, ch);
 
       // ── Atmosphere: ultra-light scanline grain (every 4 lines, very faint) ─
-      if (Math.random() < 0.6) { // skip some frames for perf
+      if (Math.random() < 0.6) {
+        // skip some frames for perf
         var scanAlpha = 0.012 + iw.energy * 0.008;
         ctx.fillStyle = "rgba(0,0,0," + scanAlpha.toFixed(3) + ")";
-        var frameOffset = (Math.floor(performance.now() * 0.05) % 4);
+        var frameOffset = Math.floor(performance.now() * 0.05) % 4;
         for (var sy = frameOffset; sy < ch; sy += 4) {
           ctx.fillRect(0, sy, cw, 1);
         }
       }
 
       // ── Block glow halos (only high-glow blocks) ──────────────────────────
-      var layer = (state.world.layers || []).find(function (l) { return l._iw; });
+      var layer = (state.world.layers || []).find(function (l) {
+        return l._iw;
+      });
       if (layer && layer.blocks) {
         var cs = off.cellSize;
         layer.blocks.forEach(function (block, idx) {
@@ -8327,14 +10770,21 @@
 
           // Region drift: tiny oscillation on glow radius
           var reg = iwGetRegion(block._iwRegion || 0);
-          var driftAmt = Math.sin(performance.now() * reg.driftSpeed + bs.driftPhase) * 1.5;
+          var driftAmt =
+            Math.sin(performance.now() * reg.driftSpeed + bs.driftPhase) * 1.5;
           glowR += driftAmt;
 
           var color = block._iwColor || block.color || "#aaaaaa";
           var grad = ctx.createRadialGradient(bx, by, 0, bx, by, glowR);
-          grad.addColorStop(0,   hexToRgba(color, bs.glow * 0.18 * reg.visualWeight));
-          grad.addColorStop(0.5, hexToRgba(color, bs.glow * 0.07 * reg.visualWeight));
-          grad.addColorStop(1,   "rgba(0,0,0,0)");
+          grad.addColorStop(
+            0,
+            hexToRgba(color, bs.glow * 0.18 * reg.visualWeight),
+          );
+          grad.addColorStop(
+            0.5,
+            hexToRgba(color, bs.glow * 0.07 * reg.visualWeight),
+          );
+          grad.addColorStop(1, "rgba(0,0,0,0)");
           ctx.fillStyle = grad;
           ctx.beginPath();
           ctx.arc(bx, by, glowR, 0, Math.PI * 2);
@@ -8346,9 +10796,12 @@
       if (_iwProbeTrail.length > 1 && iw.probeId) {
         var now = performance.now();
         for (var i = 0; i < _iwProbeTrail.length - 1; i++) {
-          var pt  = _iwProbeTrail[i];
-          var age = Math.max(0, 1 - (now - pt.t) / (IW_TRAIL_MAX * IW_TRAIL_INTERVAL_MS));
-          var ta  = age * age * 0.28;
+          var pt = _iwProbeTrail[i];
+          var age = Math.max(
+            0,
+            1 - (now - pt.t) / (IW_TRAIL_MAX * IW_TRAIL_INTERVAL_MS),
+          );
+          var ta = age * age * 0.28;
           if (ta < 0.005) continue;
           ctx.beginPath();
           ctx.arc(pt.x, pt.y, 2.5 + age * 2.5, 0, Math.PI * 2);
@@ -8359,24 +10812,33 @@
 
       // ── Probe energy ring ─────────────────────────────────────────────────
       if (iw.probeId) {
-        var probe = state.balls.find(function (b) { return b.id === iw.probeId; });
+        var probe = state.balls.find(function (b) {
+          return b.id === iw.probeId;
+        });
         if (probe) {
-          var ringT   = performance.now() * 0.002;
-          var ringR   = 26 + Math.sin(ringT) * 5 + iw.energy * 14;
+          var ringT = performance.now() * 0.002;
+          var ringR = 26 + Math.sin(ringT) * 5 + iw.energy * 14;
           var ringAlpha = 0.18 + iw.energy * 0.2;
           ctx.beginPath();
           ctx.arc(probe.x, probe.y, ringR, 0, Math.PI * 2);
           ctx.strokeStyle = "rgba(240,190,30," + ringAlpha.toFixed(3) + ")";
-          ctx.lineWidth   = 1 + iw.energy * 1.5;
+          ctx.lineWidth = 1 + iw.energy * 1.5;
           ctx.stroke();
 
           // Soft outer halo
           var haloGrad = ctx.createRadialGradient(
-            probe.x, probe.y, ringR * 0.6,
-            probe.x, probe.y, ringR * 1.8
+            probe.x,
+            probe.y,
+            ringR * 0.6,
+            probe.x,
+            probe.y,
+            ringR * 1.8,
           );
-          haloGrad.addColorStop(0,   "rgba(240,190,30," + (ringAlpha * 0.3).toFixed(3) + ")");
-          haloGrad.addColorStop(1,   "rgba(0,0,0,0)");
+          haloGrad.addColorStop(
+            0,
+            "rgba(240,190,30," + (ringAlpha * 0.3).toFixed(3) + ")",
+          );
+          haloGrad.addColorStop(1, "rgba(0,0,0,0)");
           ctx.fillStyle = haloGrad;
           ctx.beginPath();
           ctx.arc(probe.x, probe.y, ringR * 1.8, 0, Math.PI * 2);
@@ -8388,29 +10850,33 @@
     // Tiny helper: hex color → rgba string with alpha
     function hexToRgba(hex, alpha) {
       if (!hex || hex[0] !== "#") return "rgba(150,150,150," + alpha + ")";
-      var r = parseInt(hex.slice(1,3), 16) || 0;
-      var g = parseInt(hex.slice(3,5), 16) || 0;
-      var b = parseInt(hex.slice(5,7), 16) || 0;
+      var r = parseInt(hex.slice(1, 3), 16) || 0;
+      var g = parseInt(hex.slice(3, 5), 16) || 0;
+      var b = parseInt(hex.slice(5, 7), 16) || 0;
       return "rgba(" + r + "," + g + "," + b + "," + alpha.toFixed(3) + ")";
     }
 
     function iwSpawnProbe(iw) {
       if (iw.probeId) {
-        state.balls = state.balls.filter(function (b) { return b.id !== iw.probeId; });
+        state.balls = state.balls.filter(function (b) {
+          return b.id !== iw.probeId;
+        });
         state.swarm.count = state.balls.length;
         iw.probeId = null;
       }
       _iwProbeTrail = [];
 
-      var cw = state.canvas.width  || 1080;
+      var cw = state.canvas.width || 1080;
       var ch = state.canvas.height || 1920;
       var probe = normalizeBall({
-        x: cw * 0.5, y: ch * 0.5,
-        vx: 0, vy: 0,
+        x: cw * 0.5,
+        y: ch * 0.5,
+        vx: 0,
+        vy: 0,
         collisionRadius: 10,
-        renderRadius:    18,
-        color:  "#f0be1e",
-        style:  "core",
+        renderRadius: 18,
+        color: "#f0be1e",
+        style: "core",
         energy: 1,
         _infiniteProbe: true,
         sound: null,
@@ -8453,16 +10919,19 @@
 
       var cum = route._cumulativeDistances;
       // Binary search for segment
-      var lo = 0, hi = cum.length - 2;
+      var lo = 0,
+        hi = cum.length - 2;
       while (lo < hi) {
         var mid = (lo + hi + 1) >> 1;
-        if (cum[mid] <= targetDist) lo = mid; else hi = mid - 1;
+        if (cum[mid] <= targetDist) lo = mid;
+        else hi = mid - 1;
       }
       var i = lo;
       var segLen = cum[i + 1] - cum[i];
       var segT = segLen > 0 ? (targetDist - cum[i]) / segLen : 0;
 
-      var p0 = pts[i], p1 = pts[i + 1];
+      var p0 = pts[i],
+        p1 = pts[i + 1];
       var x = p0.x + (p1.x - p0.x) * segT;
       var y = p0.y + (p1.y - p0.y) * segT;
       var heading = Math.atan2(p1.y - p0.y, p1.x - p0.x);
@@ -8483,7 +10952,9 @@
     }
 
     function checkEventZones(rw, actor, now) {
-      var route = rw.routes.find(function (r) { return r.id === actor.routeId; });
+      var route = rw.routes.find(function (r) {
+        return r.id === actor.routeId;
+      });
       if (!route) return;
       var totalPx = route._totalPixelLength || 1;
       // Convert zone radius in meters to approx normalized t (rough px-based scale)
@@ -8495,15 +10966,21 @@
         if (Math.abs(actor.t - zone.t) > radiusT) return;
 
         var nowSec = now / 1000;
-        if ((nowSec - zone.lastTriggeredAt) < zone.cooldownSec) return;
+        if (nowSec - zone.lastTriggeredAt < zone.cooldownSec) return;
         if (Math.random() > zone.rarity) return;
 
         // Check conditions
         var worldState = rw.world || {};
-        if (zone.conditions.weather.length > 0 &&
-            !zone.conditions.weather.includes(worldState.weather)) return;
-        if (zone.conditions.timeOfDay.length > 0 &&
-            !zone.conditions.timeOfDay.includes(worldState.timeOfDay)) return;
+        if (
+          zone.conditions.weather.length > 0 &&
+          !zone.conditions.weather.includes(worldState.weather)
+        )
+          return;
+        if (
+          zone.conditions.timeOfDay.length > 0 &&
+          !zone.conditions.timeOfDay.includes(worldState.timeOfDay)
+        )
+          return;
 
         zone.lastTriggeredAt = nowSec;
         rw.runtime.triggeredEventIds.add(zone.id);
@@ -8521,21 +10998,44 @@
           }
         });
 
-        console.log("[RouteWorld] event zone triggered:", zone.id, zone.label, zone.type);
+        console.log(
+          "[RouteWorld] event zone triggered:",
+          zone.id,
+          zone.label,
+          zone.type,
+        );
       });
     }
 
     function _rwEnsureCamera(rw) {
       if (!rw.camera) {
         var RC = SBE && SBE.RouteCamera;
-        rw.camera = RC ? RC.makeCamera() : {
-          mode:"follow", x:0, y:0, targetX:0, targetY:0,
-          zoom:1.2, targetZoom:1.2, smoothing:0.08, zoomSmoothing:0.06,
-          lookAheadDistance:140, velocityInfluence:0.35, deadZone:40,
-          overviewPadding:160, dynamicZoom:true, showTrail:true,
-          showHeadlight:true, showFlowIndicators:true,
-          _speed:0, _smoothSpeed:0, _cinematicPhase:0, _pulseT:0, _overviewFitted:false,
-        };
+        rw.camera = RC
+          ? RC.makeCamera()
+          : {
+              mode: "follow",
+              x: 0,
+              y: 0,
+              targetX: 0,
+              targetY: 0,
+              zoom: 1.2,
+              targetZoom: 1.2,
+              smoothing: 0.08,
+              zoomSmoothing: 0.06,
+              lookAheadDistance: 140,
+              velocityInfluence: 0.35,
+              deadZone: 40,
+              overviewPadding: 160,
+              dynamicZoom: true,
+              showTrail: true,
+              showHeadlight: true,
+              showFlowIndicators: true,
+              _speed: 0,
+              _smoothSpeed: 0,
+              _cinematicPhase: 0,
+              _pulseT: 0,
+              _overviewFitted: false,
+            };
       }
       return rw.camera;
     }
@@ -8544,7 +11044,14 @@
     function _rwEnsureClock(rw) {
       if (!rw.clock) {
         var UC = SBE && SBE.UniversalClock;
-        rw.clock = UC ? UC.makeClock() : { worldTimeScale: 60, worldStartSec: 8 * 3600, paused: false, _realElapsedSec: 0 };
+        rw.clock = UC
+          ? UC.makeClock()
+          : {
+              worldTimeScale: 60,
+              worldStartSec: 8 * 3600,
+              paused: false,
+              _realElapsedSec: 0,
+            };
       }
       return rw.clock;
     }
@@ -8558,7 +11065,9 @@
     function _rwEnsureComms(rw) {
       if (!rw.comms) {
         var CS = SBE && SBE.CommsSystem;
-        rw.comms = CS ? CS.makeCommsStore() : { messages: [], _firedTriggers: {}, _checkTimerSec: 0 };
+        rw.comms = CS
+          ? CS.makeCommsStore()
+          : { messages: [], _firedTriggers: {}, _checkTimerSec: 0 };
       }
       return rw.comms;
     }
@@ -8574,10 +11083,20 @@
     function _rwEnsureBasemap(rw) {
       if (!rw.basemap) {
         var BM = SBE && SBE.BasemapRenderer;
-        rw.basemap = BM ? BM.makeDefaultState() : {
-          enabled: true, opacity: 0.35, zoom: 11, zoomLocked: false,
-          style: "dark", tileSize: 256, visibleTiles: [], _lastZ: null, _lastDrawn: 0, _lastPending: 0,
-        };
+        rw.basemap = BM
+          ? BM.makeDefaultState()
+          : {
+              enabled: true,
+              opacity: 0.35,
+              zoom: 11,
+              zoomLocked: false,
+              style: "dark",
+              tileSize: 256,
+              visibleTiles: [],
+              _lastZ: null,
+              _lastDrawn: 0,
+              _lastPending: 0,
+            };
       }
       // Wire re-render callback so tile loads trigger frame updates
       if (rw.basemap && !rw.basemap._reRender) {
@@ -8588,23 +11107,58 @@
     function _rwEnsureReferenceGeo(rw) {
       if (!rw.referenceGeography) {
         var RGL = SBE && SBE.ReferenceGeographyLayer;
-        rw.referenceGeography = RGL ? RGL.makeDefaultState() : {
-          enabled: true, layers: { water:true, roads:true, bridges:true, parks:true, districts:true },
-          opacity: 0.45, style: "muted",
-        };
+        rw.referenceGeography = RGL
+          ? RGL.makeDefaultState()
+          : {
+              enabled: true,
+              layers: {
+                water: true,
+                roads: true,
+                bridges: true,
+                parks: true,
+                districts: true,
+              },
+              opacity: 0.45,
+              style: "muted",
+            };
       }
       return rw.referenceGeography;
     }
     function _rwEnsureDirector(rw) {
       if (!rw.director) {
         var DM = SBE && SBE.DirectorMode;
-        rw.director = DM ? DM.makeDirectorState() : {
-          enabled: false, mode: "follow",
-          manualCamera: { x: 0, y: 0, zoom: 1, isPanning: false, lastPointer: null, _primed: false },
-          simulation: { paused: false, speed: 1, routeProgressOverride: null },
-          reality: { useOverrides: false, timeHour: 8, season: "spring", weatherType: "clear", temperatureC: 9, daylightOverride: null },
-          cinema: { outputMode: "world", shotType: "overhead", targetActorId: null },
-        };
+        rw.director = DM
+          ? DM.makeDirectorState()
+          : {
+              enabled: false,
+              mode: "follow",
+              manualCamera: {
+                x: 0,
+                y: 0,
+                zoom: 1,
+                isPanning: false,
+                lastPointer: null,
+                _primed: false,
+              },
+              simulation: {
+                paused: false,
+                speed: 1,
+                routeProgressOverride: null,
+              },
+              reality: {
+                useOverrides: false,
+                timeHour: 8,
+                season: "spring",
+                weatherType: "clear",
+                temperatureC: 9,
+                daylightOverride: null,
+              },
+              cinema: {
+                outputMode: "world",
+                shotType: "overhead",
+                targetActorId: null,
+              },
+            };
       }
       return rw.director;
     }
@@ -8615,7 +11169,8 @@
     // can consume. Called once by _rwEnsureSpatialBootstrap.
     function _corridorToRoute(corridor) {
       var RI = SBE && SBE.RouteIngestion;
-      if (!RI || !corridor || !corridor.points || corridor.points.length < 2) return null;
+      if (!RI || !corridor || !corridor.points || corridor.points.length < 2)
+        return null;
       var pts = corridor.points; // [{lat, lng, x, y, ele}] — already projected
 
       // Normalise: haversine distanceMeters + t (0-1)
@@ -8623,31 +11178,47 @@
       var totalMeters = normalized[normalized.length - 1].distanceMeters;
 
       // Duration from real-world km at 60 kph
-      var totalKm   = corridor.totalDistanceKm || (totalMeters / 1000);
-      var durationSec = Math.round(totalKm * 1000 / (60000 / 3600)); // 60 kph = 16.667 m/s
+      var totalKm = corridor.totalDistanceKm || totalMeters / 1000;
+      var durationSec = Math.round((totalKm * 1000) / (60000 / 3600)); // 60 kph = 16.667 m/s
 
       // Pixel-space cumulative distances for sampleRoutePolyline()
       var pixCum = [0];
       for (var i = 1; i < pts.length; i++) {
-        pixCum.push(pixCum[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y));
+        pixCum.push(
+          pixCum[i - 1] +
+            Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y),
+        );
       }
 
       return {
-        id:             corridor.id,
-        name:           "Brooklyn → Cold Spring, NY",
-        start: { label: "Bay Ridge, Brooklyn, NY", lat: pts[0].lat, lng: pts[0].lng, x: pts[0].x, y: pts[0].y },
-        end:   { label: "Cold Spring, NY",          lat: pts[pts.length - 1].lat, lng: pts[pts.length - 1].lng,
-                                                     x:   pts[pts.length - 1].x,   y:   pts[pts.length - 1].y },
-        distanceMeters:     Math.round(totalMeters),
-        durationSec:        durationSec,
-        averageSpeedKph:    60,
-        points:             normalized,
-        segments:           [],
-        metadata:           { providerType: corridor.sourceType || "kmz",
-                              projection:   { type: "local-bounds", scale: 1 } },
-        _totalPixelLength:    pixCum[pixCum.length - 1] || 1,
+        id: corridor.id,
+        name: "Brooklyn → Cold Spring, NY",
+        start: {
+          label: "Bay Ridge, Brooklyn, NY",
+          lat: pts[0].lat,
+          lng: pts[0].lng,
+          x: pts[0].x,
+          y: pts[0].y,
+        },
+        end: {
+          label: "Cold Spring, NY",
+          lat: pts[pts.length - 1].lat,
+          lng: pts[pts.length - 1].lng,
+          x: pts[pts.length - 1].x,
+          y: pts[pts.length - 1].y,
+        },
+        distanceMeters: Math.round(totalMeters),
+        durationSec: durationSec,
+        averageSpeedKph: 60,
+        points: normalized,
+        segments: [],
+        metadata: {
+          providerType: corridor.sourceType || "kmz",
+          projection: { type: "local-bounds", scale: 1 },
+        },
+        _totalPixelLength: pixCum[pixCum.length - 1] || 1,
         _cumulativeDistances: pixCum,
-        _skinSeed:            Math.floor(Math.random() * 1e8),
+        _skinSeed: Math.floor(Math.random() * 1e8),
       };
     }
 
@@ -8664,54 +11235,92 @@
       // Step 1: build spatial world (projection uses state.canvas)
       if (!rw.spatial) rw.spatial = SI.buildPhase1World(state.canvas);
       if (!rw.spatial || !rw.spatial.corridor) {
-        console.warn("[RouteWorld] spatial bootstrap: buildPhase1World returned nothing");
+        console.warn(
+          "[RouteWorld] spatial bootstrap: buildPhase1World returned nothing",
+        );
         return;
       }
       var corridor = rw.spatial.corridor;
 
       // Step 2: bridge corridor into legacy route list
-      if (!rw.routes.find(function (r) { return r.id === corridor.id; })) {
+      if (
+        !rw.routes.find(function (r) {
+          return r.id === corridor.id;
+        })
+      ) {
         var route = _corridorToRoute(corridor);
-        if (!route) { console.warn("[RouteWorld] spatial bootstrap: _corridorToRoute failed"); return; }
+        if (!route) {
+          console.warn(
+            "[RouteWorld] spatial bootstrap: _corridorToRoute failed",
+          );
+          return;
+        }
         rw.routes.push(route);
       }
 
       // Step 3: runtime pointers
       rw.runtime = rw.runtime || {};
-      if (!rw.runtime.activeRouteId)     rw.runtime.activeRouteId     = corridor.id;
-      if (!rw.runtime.triggeredEventIds) rw.runtime.triggeredEventIds  = new Set();
-      if (!rw.runtime.elapsedSec)        rw.runtime.elapsedSec         = 0;
+      if (!rw.runtime.activeRouteId) rw.runtime.activeRouteId = corridor.id;
+      if (!rw.runtime.triggeredEventIds)
+        rw.runtime.triggeredEventIds = new Set();
+      if (!rw.runtime.elapsedSec) rw.runtime.elapsedSec = 0;
 
       // Step 4: world record (required by start())
       if (!rw.world) {
         rw.world = {
-          id:            makeId("rworld"),
-          name:          "Brooklyn → Cold Spring, NY",
-          version:       "1.0.0",
-          provider:      { type: "kmz", sourceId: "phase1-embedded", attribution: "" },
-          routeId:       corridor.id,
-          activeCameraId:"route-follow",
-          durationSec:   rw.routes[rw.routes.length - 1].durationSec,
-          loopMode:      "destination",
-          mood:          "night-drive",
-          timeOfDay:     "morning",
-          weather:       "clear",
-          layers: { map: true, skin: true, traffic: true, ecology: true, events: true, surfaces: true, subway: false,
-                    terrain: true, signals: true, walkers: true, debug: false, atmosphere: true },
+          id: makeId("rworld"),
+          name: "Brooklyn → Cold Spring, NY",
+          version: "1.0.0",
+          provider: {
+            type: "kmz",
+            sourceId: "phase1-embedded",
+            attribution: "",
+          },
+          routeId: corridor.id,
+          activeCameraId: "route-follow",
+          durationSec: rw.routes[rw.routes.length - 1].durationSec,
+          loopMode: "destination",
+          mood: "night-drive",
+          timeOfDay: "morning",
+          weather: "clear",
+          layers: {
+            map: true,
+            skin: true,
+            traffic: true,
+            ecology: true,
+            events: true,
+            surfaces: true,
+            subway: false,
+            terrain: true,
+            signals: true,
+            walkers: true,
+            debug: false,
+            atmosphere: true,
+          },
         };
       }
 
       // Step 5: hero-car actor at corridor start
-      if (!rw.actors.find(function (a) { return a.id === "hero-car"; })) {
+      if (
+        !rw.actors.find(function (a) {
+          return a.id === "hero-car";
+        })
+      ) {
         var AN_bs = SBE && SBE.AgentNeeds;
         var sp = corridor.points[0] || { x: 0, y: 0, heading: 0 };
         rw.actors.push({
-          id: "hero-car", type: "vehicle", role: "driver",
+          id: "hero-car",
+          type: "vehicle",
+          role: "driver",
           routeId: corridor.id,
-          t: 0, speed: 1, x: sp.x, y: sp.y, heading: 0,
+          t: 0,
+          speed: 1,
+          x: sp.x,
+          y: sp.y,
+          heading: 0,
           visual: { color: "#f6d36b", radius: 8, trail: true, halo: true },
-          audio:  { enabled: false, role: "traffic" },
-          needs:  AN_bs ? AN_bs.makeNeeds() : null,
+          audio: { enabled: false, role: "traffic" },
+          needs: AN_bs ? AN_bs.makeNeeds() : null,
         });
       }
       if (!rw.runtime.activeActorId) rw.runtime.activeActorId = "hero-car";
@@ -8733,21 +11342,28 @@
       }
 
       rw._spatialBootstrapped = true;
-      console.log("[RouteWorld] Phase 1 bootstrap complete — " +
-        corridor.id + " · " + corridor.points.length + " pts · " +
-        rw.spatial.districts.length + " districts · " +
-        rw.spatial.pois.length + " POIs");
+      console.log(
+        "[RouteWorld] Phase 1 bootstrap complete — " +
+          corridor.id +
+          " · " +
+          corridor.points.length +
+          " pts · " +
+          rw.spatial.districts.length +
+          " districts · " +
+          rw.spatial.pois.length +
+          " POIs",
+      );
     }
 
     function updateRouteWorld(now, dt) {
       var rw = state.routeWorld;
-      _rwEnsureSpatialBootstrap(rw);  // idempotent — runs once, safe every frame
+      _rwEnsureSpatialBootstrap(rw); // idempotent — runs once, safe every frame
       if (!rw || !rw.active) return;
 
-      var rt  = rw.runtime;
+      var rt = rw.runtime;
       var cam = _rwEnsureCamera(rw);
-      var RC  = SBE && SBE.RouteCamera;
-      var DM  = SBE && SBE.DirectorMode;
+      var RC = SBE && SBE.RouteCamera;
+      var DM = SBE && SBE.DirectorMode;
 
       // ── Director Mode: scale dt, honour pause ───────────────────────────
       var director = _rwEnsureDirector(rw);
@@ -8762,16 +11378,22 @@
       var CS = SBE && SBE.CommsSystem;
       var SI = SBE && SBE.SpatialInfrastructure;
 
-      var clock   = _rwEnsureClock(rw);
-      var env     = _rwEnsureEnv(rw);
-      var comms   = _rwEnsureComms(rw);
+      var clock = _rwEnsureClock(rw);
+      var env = _rwEnsureEnv(rw);
+      var comms = _rwEnsureComms(rw);
       var spatial = _rwEnsureSpatial(rw);
 
       if (UC) UC.tick(clock, effectiveDt);
       if (ES) ES.update(env, clock, effectiveDt);
 
       // ── Director reality overrides (applied after normal tick) ───────────
-      if (director && DM && director.enabled && director.reality && director.reality.useOverrides) {
+      if (
+        director &&
+        DM &&
+        director.enabled &&
+        director.reality &&
+        director.reality.useOverrides
+      ) {
         DM.applyRealityOverrides(director, clock, env);
       }
 
@@ -8784,25 +11406,32 @@
       }
 
       // Comms trigger check (debounced internally)
-      if (CS) CS.checkTriggers(comms, rw.world, env, clock, rw.actors, effectiveDt);
+      if (CS)
+        CS.checkTriggers(comms, rw.world, env, clock, rw.actors, effectiveDt);
 
-      var route = rw.routes.find(function (r) { return r.id === rt.activeRouteId; });
+      var route = rw.routes.find(function (r) {
+        return r.id === rt.activeRouteId;
+      });
       if (!route) return;
 
-      var duration     = route.durationSec || 7200;
+      var duration = route.durationSec || 7200;
       var worldLoopMode = (rw.world && rw.world.loopMode) || "destination";
-      var progress     = rt.elapsedSec / duration;
+      var progress = rt.elapsedSec / duration;
 
       // ── Director progress override ────────────────────────────────────────
-      var progressOverride = director && DM ? DM.effectiveProgress(director) : null;
+      var progressOverride =
+        director && DM ? DM.effectiveProgress(director) : null;
       if (progressOverride != null) {
         progress = progressOverride;
         // Also seek elapsed time so resuming live feels continuous
         rt.elapsedSec = progress * duration;
-      } else if (worldLoopMode === "loop")        progress = progress % 1;
-      else if (worldLoopMode === "destination") progress = Math.min(progress, 1);
+      } else if (worldLoopMode === "loop") progress = progress % 1;
+      else if (worldLoopMode === "destination")
+        progress = Math.min(progress, 1);
 
-      var actor = rw.actors.find(function (a) { return a.id === rt.activeActorId; });
+      var actor = rw.actors.find(function (a) {
+        return a.id === rt.activeActorId;
+      });
       if (actor) {
         actor.t = progress;
         var pos = sampleRoutePolyline(route, progress);
@@ -8839,27 +11468,36 @@
     function renderRouteWorldOverlay(ctx) {
       var rw = state.routeWorld;
       if (!rw) return;
-      _rwEnsureSpatialBootstrap(rw);  // idempotent — ensures corridor + route + world exist
+      _rwEnsureSpatialBootstrap(rw); // idempotent — ensures corridor + route + world exist
       if (!rw.active) return;
 
-      var route = rw.routes.find(function (r) { return r.id === rw.runtime.activeRouteId; });
+      var route = rw.routes.find(function (r) {
+        return r.id === rw.runtime.activeRouteId;
+      });
       if (!route || !route.points || route.points.length < 2) return;
 
-      var cam         = _rwEnsureCamera(rw);
-      var RC          = SBE && SBE.RouteCamera;
-      var DM_r        = SBE && SBE.DirectorMode;
-      var director_r  = _rwEnsureDirector(rw);
+      var cam = _rwEnsureCamera(rw);
+      var RC = SBE && SBE.RouteCamera;
+      var DM_r = SBE && SBE.DirectorMode;
+      var director_r = _rwEnsureDirector(rw);
       var worldLayers = (rw.world && rw.world.layers) || {};
-      var canvas      = state.canvas;
+      var canvas = state.canvas;
 
       // ── Get camera transform (survey uses manual camera, others use RouteCamera) ──
       var xf;
-      if (director_r && director_r.enabled && director_r.mode === "survey" && DM_r) {
+      if (
+        director_r &&
+        director_r.enabled &&
+        director_r.mode === "survey" &&
+        DM_r
+      ) {
         xf = DM_r.getTransform(director_r, canvas.width, canvas.height);
         // Prime manual camera from route camera if first time in survey mode
         if (!director_r.manualCamera._primed) {
-          var rxf = RC ? RC.getTransform(cam, canvas) : { tx: 0, ty: 0, scale: 1 };
-          var primeX = (canvas.width  / 2 - rxf.tx) / rxf.scale;
+          var rxf = RC
+            ? RC.getTransform(cam, canvas)
+            : { tx: 0, ty: 0, scale: 1 };
+          var primeX = (canvas.width / 2 - rxf.tx) / rxf.scale;
           var primeY = (canvas.height / 2 - rxf.ty) / rxf.scale;
           DM_r.primeManualCamera(director_r, primeX, primeY, rxf.scale);
           xf = DM_r.getTransform(director_r, canvas.width, canvas.height);
@@ -8878,12 +11516,15 @@
       var BM = SBE && SBE.BasemapRenderer;
       if (BM && rw.spatial) {
         _rwEnsureBasemap(rw);
-        var debugOnBM = !!(worldLayers.debug || (rw.world && rw.world.debugMode));
+        var debugOnBM = !!(
+          worldLayers.debug ||
+          (rw.world && rw.world.debugMode)
+        );
         BM.render(ctx, rw, {
-          transform:    xf,
-          canvasWidth:  canvas.width,
+          transform: xf,
+          canvasWidth: canvas.width,
           canvasHeight: canvas.height,
-          debug:        debugOnBM,
+          debug: debugOnBM,
         });
       }
 
@@ -8893,7 +11534,10 @@
       var RGL = SBE && SBE.ReferenceGeographyLayer;
       if (RGL && rw.spatial) {
         _rwEnsureReferenceGeo(rw);
-        var debugOnR = !!(worldLayers.debug || (rw.world && rw.world.debugMode));
+        var debugOnR = !!(
+          worldLayers.debug ||
+          (rw.world && rw.world.debugMode)
+        );
         RGL.render(ctx, rw, xf, { showLabels: debugOnR });
       }
 
@@ -8920,16 +11564,22 @@
       var CR = SBE && SBE.CorridorRenderer;
       if (CR && rw.spatial) {
         var debugOn = !!(worldLayers.debug || (rw.world && rw.world.debugMode));
-        CR.render(ctx, rw, {
-          showRoute:         worldLayers.terrain  !== false,
-          showDistricts:     worldLayers.terrain  !== false,
-          showPOIs:          worldLayers.signals  !== false,
-          showScenicMoments: worldLayers.signals  !== false,
-          showActors:        worldLayers.walkers  !== false,
-          showCamera:        worldLayers.walkers  !== false,
-          showLabels:        debugOn,
-          showDebug:         debugOn,
-        }, scale, cam._pulseT || 0);
+        CR.render(
+          ctx,
+          rw,
+          {
+            showRoute: worldLayers.terrain !== false,
+            showDistricts: worldLayers.terrain !== false,
+            showPOIs: worldLayers.signals !== false,
+            showScenicMoments: worldLayers.signals !== false,
+            showActors: worldLayers.walkers !== false,
+            showCamera: worldLayers.walkers !== false,
+            showLabels: debugOn,
+            showDebug: debugOn,
+          },
+          scale,
+          cam._pulseT || 0,
+        );
       }
 
       // ── Layer: actor trail + headlight + actor ────────────────────────────
@@ -8937,7 +11587,7 @@
       (rw.actors || []).forEach(function (actor) {
         if (!actor.x && !actor.y) return;
         var vis = actor.visual || {};
-        var r   = (vis.radius || 8) / scale;
+        var r = (vis.radius || 8) / scale;
         var col = vis.color || "#f6d36b";
 
         if (cam.showTrail && vis.trail) {
@@ -8962,37 +11612,46 @@
     // ── Route lines ───────────────────────────────────────────────────────────
     function _rwDrawRouteLines(ctx, rw, route, scale) {
       var segs = rw.segments || [];
-      var pts  = route.points;
+      var pts = route.points;
 
       if (segs.length > 0) {
         segs.forEach(function (seg) {
           if (seg.routeId !== route.id) return;
           var segPts = _rwSegmentPoints(route, seg, pts);
 
-          var roadW = seg.type === "highway" ? 7 : seg.type === "local" ? 2.5 : 4;
-          var col   = seg.type === "highway"   ? "#e0a030"
-                    : seg.type === "tunnel"     ? "#556677"
-                    : seg.type === "bridge"     ? "#8899aa"
-                    : seg.type === "waterfront" ? "#2277aa"
+          var roadW =
+            seg.type === "highway" ? 7 : seg.type === "local" ? 2.5 : 4;
+          var col =
+            seg.type === "highway"
+              ? "#e0a030"
+              : seg.type === "tunnel"
+                ? "#556677"
+                : seg.type === "bridge"
+                  ? "#8899aa"
+                  : seg.type === "waterfront"
+                    ? "#2277aa"
                     : "#667788";
 
           // Shadow / glow under road
           ctx.save();
           ctx.beginPath();
           ctx.moveTo(segPts[0].x, segPts[0].y);
-          for (var j = 1; j < segPts.length; j++) ctx.lineTo(segPts[j].x, segPts[j].y);
+          for (var j = 1; j < segPts.length; j++)
+            ctx.lineTo(segPts[j].x, segPts[j].y);
           ctx.strokeStyle = col;
-          ctx.lineWidth   = (roadW + 6) / scale;
-          ctx.lineCap = "round"; ctx.lineJoin = "round";
+          ctx.lineWidth = (roadW + 6) / scale;
+          ctx.lineCap = "round";
+          ctx.lineJoin = "round";
           ctx.globalAlpha = 0.12;
           ctx.stroke();
 
           // Road surface
           ctx.beginPath();
           ctx.moveTo(segPts[0].x, segPts[0].y);
-          for (var k = 1; k < segPts.length; k++) ctx.lineTo(segPts[k].x, segPts[k].y);
+          for (var k = 1; k < segPts.length; k++)
+            ctx.lineTo(segPts[k].x, segPts[k].y);
           ctx.strokeStyle = col;
-          ctx.lineWidth   = roadW / scale;
+          ctx.lineWidth = roadW / scale;
           ctx.globalAlpha = 0.7;
           ctx.stroke();
           ctx.restore();
@@ -9003,8 +11662,9 @@
         ctx.moveTo(pts[0].x, pts[0].y);
         for (var i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
         ctx.strokeStyle = "#667788";
-        ctx.lineWidth   = 4 / scale;
-        ctx.lineCap = "round"; ctx.lineJoin = "round";
+        ctx.lineWidth = 4 / scale;
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
         ctx.globalAlpha = 0.7;
         ctx.stroke();
         ctx.restore();
@@ -9012,13 +11672,14 @@
     }
 
     function _rwSegmentPoints(route, seg, pts) {
-      var cum   = route._cumulativeDistances;
+      var cum = route._cumulativeDistances;
       var total = route._totalPixelLength || 1;
       var startDist = seg.startT * total;
-      var endDist   = seg.endT   * total;
+      var endDist = seg.endT * total;
       var segPts = [];
       for (var i = 0; i < cum.length; i++) {
-        if (cum[i] >= startDist - 1 && cum[i] <= endDist + 1) segPts.push(pts[i]);
+        if (cum[i] >= startDist - 1 && cum[i] <= endDist + 1)
+          segPts.push(pts[i]);
       }
       segPts.unshift(sampleRoutePolyline(route, seg.startT));
       segPts.push(sampleRoutePolyline(route, seg.endT));
@@ -9027,27 +11688,41 @@
 
     // ── Start/end markers ─────────────────────────────────────────────────────
     function _rwDrawStartEndMarkers(ctx, route, scale) {
-      var pts  = route.points;
-      var r    = 5 / scale;
+      var pts = route.points;
+      var r = 5 / scale;
       ctx.save();
 
       // Start — green ring
       ctx.beginPath();
       ctx.arc(pts[0].x, pts[0].y, r * 2.2, 0, Math.PI * 2);
-      ctx.strokeStyle = "#44ff99"; ctx.lineWidth = 1.5 / scale;
-      ctx.globalAlpha = 0.5; ctx.stroke();
+      ctx.strokeStyle = "#44ff99";
+      ctx.lineWidth = 1.5 / scale;
+      ctx.globalAlpha = 0.5;
+      ctx.stroke();
       ctx.beginPath();
       ctx.arc(pts[0].x, pts[0].y, r, 0, Math.PI * 2);
-      ctx.fillStyle = "#44ff99"; ctx.globalAlpha = 0.9; ctx.fill();
+      ctx.fillStyle = "#44ff99";
+      ctx.globalAlpha = 0.9;
+      ctx.fill();
 
       // End — red ring
       ctx.beginPath();
-      ctx.arc(pts[pts.length-1].x, pts[pts.length-1].y, r * 2.2, 0, Math.PI * 2);
-      ctx.strokeStyle = "#ff4466"; ctx.lineWidth = 1.5 / scale;
-      ctx.globalAlpha = 0.5; ctx.stroke();
+      ctx.arc(
+        pts[pts.length - 1].x,
+        pts[pts.length - 1].y,
+        r * 2.2,
+        0,
+        Math.PI * 2,
+      );
+      ctx.strokeStyle = "#ff4466";
+      ctx.lineWidth = 1.5 / scale;
+      ctx.globalAlpha = 0.5;
+      ctx.stroke();
       ctx.beginPath();
-      ctx.arc(pts[pts.length-1].x, pts[pts.length-1].y, r, 0, Math.PI * 2);
-      ctx.fillStyle = "#ff4466"; ctx.globalAlpha = 0.9; ctx.fill();
+      ctx.arc(pts[pts.length - 1].x, pts[pts.length - 1].y, r, 0, Math.PI * 2);
+      ctx.fillStyle = "#ff4466";
+      ctx.globalAlpha = 0.9;
+      ctx.fill();
 
       ctx.restore();
     }
@@ -9058,44 +11733,62 @@
       if (worldLayers.skin === false) return;
 
       var skin = rw.skins[0];
-      var density  = (skin && skin.buildingDensity) || 0.35;
-      var waterD   = (skin && skin.waterDensity)    || 0.15;
-      var pts      = route.points;
-      var seed     = route._skinSeed || 12345;
-      var rand     = (function (s) {
-        return function () { s = (s * 16807) % 2147483647; return s / 2147483647; };
+      var density = (skin && skin.buildingDensity) || 0.35;
+      var waterD = (skin && skin.waterDensity) || 0.15;
+      var pts = route.points;
+      var seed = route._skinSeed || 12345;
+      var rand = (function (s) {
+        return function () {
+          s = (s * 16807) % 2147483647;
+          return s / 2147483647;
+        };
       })(seed);
 
       ctx.save();
       for (var si = 0; si < pts.length - 1; si++) {
-        var p0 = pts[si], p1 = pts[si + 1];
-        var mx = (p0.x + p1.x) / 2, my = (p0.y + p1.y) / 2;
-        var nx = -(p1.y - p0.y), ny = p1.x - p0.x;
+        var p0 = pts[si],
+          p1 = pts[si + 1];
+        var mx = (p0.x + p1.x) / 2,
+          my = (p0.y + p1.y) / 2;
+        var nx = -(p1.y - p0.y),
+          ny = p1.x - p0.x;
         var nlen = Math.hypot(nx, ny) || 1;
-        nx /= nlen; ny /= nlen;
+        nx /= nlen;
+        ny /= nlen;
 
         var nb = Math.floor(density * 4 + 1);
         for (var bi = 0; bi < nb; bi++) {
           var side = rand() > 0.5 ? 1 : -1;
           var bx = mx + nx * side * (18 + rand() * 30) + (rand() - 0.5) * 20;
           var by = my + ny * side * (18 + rand() * 30) + (rand() - 0.5) * 20;
-          var bw = 10 + rand() * 22, bh = 8 + rand() * 18;
+          var bw = 10 + rand() * 22,
+            bh = 8 + rand() * 18;
           ctx.fillStyle = "rgba(60,80,100,0.28)";
-          ctx.fillRect(bx - bw/2, by - bh/2, bw, bh);
+          ctx.fillRect(bx - bw / 2, by - bh / 2, bw, bh);
         }
         if (si % 2 === 0) {
           var gx = mx + nx * (rand() > 0.5 ? 1 : -1) * (50 + rand() * 30);
           var gy = my + ny * (rand() > 0.5 ? 1 : -1) * (50 + rand() * 30);
           ctx.beginPath();
           ctx.arc(gx, gy, 12 + rand() * 20, 0, Math.PI * 2);
-          ctx.fillStyle = "rgba(30,90,50,0.18)"; ctx.fill();
+          ctx.fillStyle = "rgba(30,90,50,0.18)";
+          ctx.fill();
         }
         if (rand() < waterD) {
           var wx = mx + nx * (rand() > 0.5 ? 1 : -1) * (60 + rand() * 40);
           var wy = my + ny * (rand() > 0.5 ? 1 : -1) * (60 + rand() * 40);
           ctx.beginPath();
-          ctx.ellipse(wx, wy, 20 + rand() * 35, 10 + rand() * 20, rand() * Math.PI, 0, Math.PI * 2);
-          ctx.fillStyle = "rgba(20,60,120,0.22)"; ctx.fill();
+          ctx.ellipse(
+            wx,
+            wy,
+            20 + rand() * 35,
+            10 + rand() * 20,
+            rand() * Math.PI,
+            0,
+            Math.PI * 2,
+          );
+          ctx.fillStyle = "rgba(20,60,120,0.22)";
+          ctx.fill();
         }
       }
       ctx.restore();
@@ -9103,17 +11796,18 @@
 
     // ── Flow direction pulse ──────────────────────────────────────────────────
     function _rwDrawFlowPulse(ctx, route, cam, scale) {
-      var pulseT  = cam._pulseT || 0;
-      var pts     = route.points;
+      var pulseT = cam._pulseT || 0;
+      var pts = route.points;
       if (pts.length < 2) return;
 
       // Draw a small bright section of route centered on pulseT
-      var width   = 0.08;  // extent of pulse in t-space
-      var lo      = pulseT - width / 2;
-      var hi      = pulseT + width / 2;
+      var width = 0.08; // extent of pulse in t-space
+      var lo = pulseT - width / 2;
+      var hi = pulseT + width / 2;
 
       ctx.save();
-      ctx.lineCap = "round"; ctx.lineJoin = "round";
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
 
       // Sample a mini-polyline over the pulse range
       var steps = 8;
@@ -9124,11 +11818,13 @@
         if (t < 0 || t > 1) continue;
         var p = sampleRoutePolyline(route, t);
         var alpha = 1 - Math.abs((t - pulseT) / (width / 2));
-        if (!started) { ctx.moveTo(p.x, p.y); started = true; }
-        else ctx.lineTo(p.x, p.y);
+        if (!started) {
+          ctx.moveTo(p.x, p.y);
+          started = true;
+        } else ctx.lineTo(p.x, p.y);
       }
       ctx.strokeStyle = "rgba(200,220,255,0.55)";
-      ctx.lineWidth   = 6 / scale;
+      ctx.lineWidth = 6 / scale;
       ctx.globalAlpha = 0.55;
       ctx.stroke();
       ctx.restore();
@@ -9144,12 +11840,14 @@
         ctx.beginPath();
         ctx.arc(zp.x, zp.y, 12 / scale, 0, Math.PI * 2);
         ctx.strokeStyle = triggered ? "#ffdd44" : "rgba(200,200,80,0.45)";
-        ctx.lineWidth = 1.5 / scale; ctx.globalAlpha = 1;
+        ctx.lineWidth = 1.5 / scale;
+        ctx.globalAlpha = 1;
         ctx.stroke();
         if (triggered) {
           ctx.beginPath();
           ctx.arc(zp.x, zp.y, 5 / scale, 0, Math.PI * 2);
-          ctx.fillStyle = "rgba(255,220,60,0.5)"; ctx.fill();
+          ctx.fillStyle = "rgba(255,220,60,0.5)";
+          ctx.fill();
         }
       });
       ctx.restore();
@@ -9165,11 +11863,11 @@
         var alpha = (i / trail.length) * 0.45;
         var width = r * (0.4 + (i / trail.length) * 0.8);
         ctx.beginPath();
-        ctx.moveTo(trail[i-1].x, trail[i-1].y);
-        ctx.lineTo(trail[i].x,   trail[i].y);
-        ctx.strokeStyle  = color;
-        ctx.lineWidth    = width;
-        ctx.globalAlpha  = alpha;
+        ctx.moveTo(trail[i - 1].x, trail[i - 1].y);
+        ctx.lineTo(trail[i].x, trail[i].y);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = width;
+        ctx.globalAlpha = alpha;
         ctx.stroke();
       }
       ctx.restore();
@@ -9177,24 +11875,24 @@
 
     // ── Actor: forward headlight cone ─────────────────────────────────────────
     function _rwDrawHeadlight(ctx, actor, color, r, scale) {
-      var coneLen  = 80 / scale;
-      var coneHalf = Math.PI / 6;  // 30° half-angle
-      var fwd      = actor.heading;
+      var coneLen = 80 / scale;
+      var coneHalf = Math.PI / 6; // 30° half-angle
+      var fwd = actor.heading;
 
       ctx.save();
       ctx.translate(actor.x, actor.y);
       ctx.rotate(fwd);
 
       var grad = ctx.createRadialGradient(0, 0, r, 0, 0, coneLen);
-      grad.addColorStop(0,   "rgba(255,245,200,0.18)");
+      grad.addColorStop(0, "rgba(255,245,200,0.18)");
       grad.addColorStop(0.5, "rgba(255,245,200,0.07)");
-      grad.addColorStop(1,   "rgba(255,245,200,0)");
+      grad.addColorStop(1, "rgba(255,245,200,0)");
 
       ctx.beginPath();
       ctx.moveTo(0, 0);
       ctx.arc(0, 0, coneLen, -coneHalf, coneHalf);
       ctx.closePath();
-      ctx.fillStyle   = grad;
+      ctx.fillStyle = grad;
       ctx.globalAlpha = 1;
       ctx.fill();
       ctx.restore();
@@ -9204,48 +11902,67 @@
     function _rwDrawActorDot(ctx, actor, color, r) {
       ctx.save();
       // Halo
-      var grad = ctx.createRadialGradient(actor.x, actor.y, 0, actor.x, actor.y, r * 3.5);
-      grad.addColorStop(0,   color + "66");
-      grad.addColorStop(1,   "transparent");
+      var grad = ctx.createRadialGradient(
+        actor.x,
+        actor.y,
+        0,
+        actor.x,
+        actor.y,
+        r * 3.5,
+      );
+      grad.addColorStop(0, color + "66");
+      grad.addColorStop(1, "transparent");
       ctx.beginPath();
       ctx.arc(actor.x, actor.y, r * 3.5, 0, Math.PI * 2);
-      ctx.fillStyle = grad; ctx.globalAlpha = 1; ctx.fill();
+      ctx.fillStyle = grad;
+      ctx.globalAlpha = 1;
+      ctx.fill();
 
       // Core dot
       ctx.beginPath();
       ctx.arc(actor.x, actor.y, r, 0, Math.PI * 2);
-      ctx.fillStyle = color; ctx.globalAlpha = 1; ctx.fill();
+      ctx.fillStyle = color;
+      ctx.globalAlpha = 1;
+      ctx.fill();
 
       // Bright centre specular
       ctx.beginPath();
       ctx.arc(actor.x - r * 0.2, actor.y - r * 0.2, r * 0.35, 0, Math.PI * 2);
-      ctx.fillStyle = "rgba(255,255,255,0.7)"; ctx.fill();
+      ctx.fillStyle = "rgba(255,255,255,0.7)";
+      ctx.fill();
       ctx.restore();
     }
 
     // ── Cinematic HUD (screen space) ──────────────────────────────────────────
     function _rwDrawHUD(ctx, rw, route, cam, canvas) {
-      var actor = rw.actors.find(function (a) { return a.id === rw.runtime.activeActorId; });
-      var RC    = SBE && SBE.RouteCamera;
-      var cw    = canvas.width  || 1080;
-      var ch    = canvas.height || 1920;
+      var actor = rw.actors.find(function (a) {
+        return a.id === rw.runtime.activeActorId;
+      });
+      var RC = SBE && SBE.RouteCamera;
+      var cw = canvas.width || 1080;
+      var ch = canvas.height || 1920;
 
-      var x = 40, y = ch - 220;
+      var x = 40,
+        y = ch - 220;
       var lineH = 36;
 
       ctx.save();
-      ctx.font      = "600 22px/1 monospace";
+      ctx.font = "600 22px/1 monospace";
       ctx.textAlign = "left";
 
       var speedKph = RC ? RC.getSpeedKph(cam, route) : 0;
-      var distM    = actor ? Math.round((actor.t || 0) * (route.distanceMeters || 0)) : 0;
-      var distKm   = (distM / 1000).toFixed(1);
+      var distM = actor
+        ? Math.round((actor.t || 0) * (route.distanceMeters || 0))
+        : 0;
+      var distKm = (distM / 1000).toFixed(1);
 
-      var h   = Math.floor((rw.runtime.elapsedSec || 0) / 3600);
-      var m   = Math.floor(((rw.runtime.elapsedSec || 0) % 3600) / 60);
-      var s   = Math.floor((rw.runtime.elapsedSec || 0) % 60);
-      var timeLabel = (h > 0 ? h + ":" : "") +
-        String(m).padStart(2, "0") + ":" +
+      var h = Math.floor((rw.runtime.elapsedSec || 0) / 3600);
+      var m = Math.floor(((rw.runtime.elapsedSec || 0) % 3600) / 60);
+      var s = Math.floor((rw.runtime.elapsedSec || 0) % 60);
+      var timeLabel =
+        (h > 0 ? h + ":" : "") +
+        String(m).padStart(2, "0") +
+        ":" +
         String(s).padStart(2, "0");
 
       var modeLabel = (cam.mode || "follow").toUpperCase();
@@ -9255,7 +11972,7 @@
       var lines;
       if (WI && rw.spatial) {
         var snap = WI.snapshot(rw, rw.clock, rw.env, rw.comms);
-        lines = [(route.name || "ROUTE")].concat(WI.formatHud(snap));
+        lines = [route.name || "ROUTE"].concat(WI.formatHud(snap));
       } else {
         lines = [
           route.name || "ROUTE",
@@ -9267,18 +11984,19 @@
       }
 
       // Subtle background pill
-      ctx.fillStyle   = "rgba(0,0,0,0.32)";
+      ctx.fillStyle = "rgba(0,0,0,0.32)";
       ctx.globalAlpha = 1;
-      var pillW = 200, pillH = lines.length * lineH + 24;
+      var pillW = 200,
+        pillH = lines.length * lineH + 24;
       ctx.beginPath();
       ctx.roundRect(x - 12, y - 8, pillW, pillH, 8);
       ctx.fill();
 
       lines.forEach(function (line, i) {
         var alpha = i === 0 ? 0.85 : 0.55;
-        var size  = i === 0 ? "600 22px" : "400 17px";
-        ctx.font        = size + "/1 monospace";
-        ctx.fillStyle   = "#e8eaed";
+        var size = i === 0 ? "600 22px" : "400 17px";
+        ctx.font = size + "/1 monospace";
+        ctx.fillStyle = "#e8eaed";
         ctx.globalAlpha = alpha;
         ctx.fillText(line, x, y + i * lineH + 20);
       });
@@ -9349,6 +12067,15 @@
       for (var i = state.strokes.length - 1; i >= 0; i--) {
         var s = state.strokes[i];
         if (!s.points || s.points.length < 2) continue;
+        // Locked-layer gate — fully non-interactive
+        if (isLayerLockedById(s.layerId)) continue;
+        // Hidden-layer gate — invisible = non-interactive
+        if (s.layerId && state.layers) {
+          var _hl = state.layers.find(function (l) {
+            return l.id === s.layerId;
+          });
+          if (_hl && !_hl.visible) continue;
+        }
         for (var j = 0; j < s.points.length - 1; j++) {
           if (isPointNearSegment(pt, s.points[j], s.points[j + 1])) {
             return s;
@@ -9957,7 +12684,8 @@
       var GS = getGridSystem();
       if (!GS) return null;
       if (!state.gridBanks[cartridge.id]) {
-        state.gridBanks[cartridge.id] = GS.createMidiBankFromCartridge(cartridge);
+        state.gridBanks[cartridge.id] =
+          GS.createMidiBankFromCartridge(cartridge);
       }
       return state.gridBanks[cartridge.id];
     }
@@ -9970,7 +12698,10 @@
       }
       var cartridge = getMidiCartridge(cartridgeId);
       if (!cartridge) {
-        console.warn("[WOS GRID] Cannot add to grid layer: cartridge not found:", cartridgeId);
+        console.warn(
+          "[WOS GRID] Cannot add to grid layer: cartridge not found:",
+          cartridgeId,
+        );
         return null;
       }
       var bank = getOrCreateGridBank(cartridge);
@@ -9986,26 +12717,47 @@
 
       if (!layer) {
         // Auto-number new grid layers
-        var existing = (state.world.layers || []).filter(function (l) { return l.type === "grid"; });
+        var existing = (state.world.layers || []).filter(function (l) {
+          return l.type === "grid";
+        });
         var num = String(existing.length + 1).padStart(2, "0");
-        layer = GS.createGridLayerFromMidiBank(bank.id, Object.assign({ name: "Environment Grid " + num }, options || {}));
+        layer = GS.createGridLayerFromMidiBank(
+          bank.id,
+          Object.assign({ name: "Environment Grid " + num }, options || {}),
+        );
         if (!layer) return null;
         state.world.layers = state.world.layers || [];
         state.world.layers.push(layer);
       }
 
       // Generate blocks
-      layer.blocks = GS.generateGridBlocksFromMidiBank(bank, layer.grid, layer.id, state.canvas.width, state.canvas.height);
-      console.log("[WOS GRID] Layer ready:", layer.id, "blocks:", layer.blocks.length);
+      layer.blocks = GS.generateGridBlocksFromMidiBank(
+        bank,
+        layer.grid,
+        layer.id,
+        state.canvas.width,
+        state.canvas.height,
+      );
+      console.log(
+        "[WOS GRID] Layer ready:",
+        layer.id,
+        "blocks:",
+        layer.blocks.length,
+      );
       return layer;
     }
 
     function regenerateGridLayer(layerId, gridSettingsOverride) {
       var GS = getGridSystem();
       if (!GS) return null;
-      var layer = (state.world.layers || []).find(function (l) { return l.id === layerId; });
+      var layer = (state.world.layers || []).find(function (l) {
+        return l.id === layerId;
+      });
       if (!layer || layer.type !== "grid") {
-        console.warn("[WOS GRID] regenerateGridLayer: layer not found:", layerId);
+        console.warn(
+          "[WOS GRID] regenerateGridLayer: layer not found:",
+          layerId,
+        );
         return null;
       }
       if (gridSettingsOverride) {
@@ -10021,10 +12773,19 @@
         bank = cart ? getOrCreateGridBank(cart) : null;
       }
       if (!bank) {
-        console.warn("[WOS GRID] regenerateGridLayer: bank not found for layer", layerId);
+        console.warn(
+          "[WOS GRID] regenerateGridLayer: bank not found for layer",
+          layerId,
+        );
         return null;
       }
-      layer.blocks = GS.generateGridBlocksFromMidiBank(bank, layer.grid, layer.id, state.canvas.width, state.canvas.height);
+      layer.blocks = GS.generateGridBlocksFromMidiBank(
+        bank,
+        layer.grid,
+        layer.id,
+        state.canvas.width,
+        state.canvas.height,
+      );
       return layer;
     }
 
@@ -10043,39 +12804,61 @@
       var cartridge = null;
 
       if (id) {
-        bank = banks.find(function (b) { return b && b.id === id; }) || null;
-        cartridge = cartridges.find(function (c) { return c && c.id === id; }) || null;
+        bank =
+          banks.find(function (b) {
+            return b && b.id === id;
+          }) || null;
+        cartridge =
+          cartridges.find(function (c) {
+            return c && c.id === id;
+          }) || null;
       }
 
       // Input was a cartridge id — find its bank
       if (cartridge && !bank) {
-        bank = banks.find(function (b) {
-          return b && (b.cartridgeId === cartridge.id || b.sourceCartridgeId === cartridge.id);
-        }) || null;
+        bank =
+          banks.find(function (b) {
+            return (
+              b &&
+              (b.cartridgeId === cartridge.id ||
+                b.sourceCartridgeId === cartridge.id)
+            );
+          }) || null;
       }
 
       // Input was a bank id — find its cartridge
       if (bank && !cartridge) {
         var cid = bank.cartridgeId || bank.sourceCartridgeId || null;
-        if (cid) cartridge = cartridges.find(function (c) { return c && c.id === cid; }) || null;
+        if (cid)
+          cartridge =
+            cartridges.find(function (c) {
+              return c && c.id === cid;
+            }) || null;
       }
 
       // Fallback: older paths use same id for both bank and cartridge
       if (bank && !cartridge) {
-        cartridge = cartridges.find(function (c) { return c && c.id === bank.id; }) || null;
+        cartridge =
+          cartridges.find(function (c) {
+            return c && c.id === bank.id;
+          }) || null;
       }
 
       // If we have a cartridge but no real bank, synthesize a minimal bank wrapper
       if (cartridge && !bank) {
-        bank = { id: cartridge.id, cartridgeId: cartridge.id,
-                 name: cartridge.name || "Imported MIDI", events: null };
+        bank = {
+          id: cartridge.id,
+          cartridgeId: cartridge.id,
+          name: cartridge.name || "Imported MIDI",
+          events: null,
+        };
       }
 
       return {
-        inputId:     id,
-        bank:        bank,
-        cartridge:   cartridge,
-        bankId:      bank ? bank.id : null,
+        inputId: id,
+        bank: bank,
+        cartridge: cartridge,
+        bankId: bank ? bank.id : null,
         cartridgeId: cartridge ? cartridge.id : null,
       };
     }
@@ -10088,7 +12871,11 @@
       if (bank && Array.isArray(bank.notes) && bank.notes.length) {
         return bank.notes.map(normalizeMidiPlaybackEvent).filter(Boolean);
       }
-      if (cartridge && Array.isArray(cartridge.notes) && cartridge.notes.length) {
+      if (
+        cartridge &&
+        Array.isArray(cartridge.notes) &&
+        cartridge.notes.length
+      ) {
         return cartridge.notes.map(normalizeMidiPlaybackEvent).filter(Boolean);
       }
       return [];
@@ -10096,7 +12883,10 @@
 
     function generateBauhausGrid(selectedBankId) {
       var GS = getGridSystem();
-      if (!GS) { console.warn("[BAUHAUS GRID] GridSystem not loaded"); return null; }
+      if (!GS) {
+        console.warn("[BAUHAUS GRID] GridSystem not loaded");
+        return null;
+      }
 
       var resolved = resolveMidiBankAndCartridge(selectedBankId);
       var bank = resolved.bank;
@@ -10108,7 +12898,8 @@
       }
       if (!cartridge) {
         console.warn("[BAUHAUS GRID] Cartridge not found:", {
-          inputId: resolved.inputId, bankId: resolved.bankId,
+          inputId: resolved.inputId,
+          bankId: resolved.bankId,
           activeMidiBankId: state.activeMidiBankId,
         });
         return null;
@@ -10118,61 +12909,88 @@
       var gridBank = getOrCreateGridBank(cartridge);
 
       // Events: prefer expanded grid bank, fall back through resolved sources
-      var events = getMidiPlaybackEventsForResolvedSource(gridBank || bank, cartridge);
+      var events = getMidiPlaybackEventsForResolvedSource(
+        gridBank || bank,
+        cartridge,
+      );
       if (!events.length) {
         console.warn("[BAUHAUS GRID] No MIDI events found for source", {
-          bankId: resolved.bankId, cartridgeId: resolved.cartridgeId,
+          bankId: resolved.bankId,
+          cartridgeId: resolved.cartridgeId,
         });
         return null;
       }
 
-      var sourceBankId     = (gridBank || bank).id;
+      var sourceBankId = (gridBank || bank).id;
       var sourceCartridgeId = cartridge.id;
 
       // Compute canonical dimensions from event count + frame
       var canvasW = state.canvas.width || 1080;
       var canvasH = state.canvas.height || 1920;
       var canonical = GS.CANONICAL_BAUHAUS_GRID;
-      var dims = GS.computePackedGridDimensions(events.length, canvasW, canvasH);
+      var dims = GS.computePackedGridDimensions(
+        events.length,
+        canvasW,
+        canvasH,
+      );
       var cellSize = GS.computeFitCellSize(
-        { columns: dims.columns, rows: dims.rows, framePadding: canonical.padding,
-          gap: canonical.gap, minCellSize: canonical.minCellSize, maxCellSize: canonical.maxCellSize },
-        canvasW, canvasH
+        {
+          columns: dims.columns,
+          rows: dims.rows,
+          framePadding: canonical.padding,
+          gap: canonical.gap,
+          minCellSize: canonical.minCellSize,
+          maxCellSize: canonical.maxCellSize,
+        },
+        canvasW,
+        canvasH,
       );
 
       var gridSettings = {
-        columns:       dims.columns,
-        rows:          dims.rows,
-        cellSize:      cellSize,
-        gap:           canonical.gap,
+        columns: dims.columns,
+        rows: dims.rows,
+        cellSize: cellSize,
+        gap: canonical.gap,
         placementMode: canonical.placementMode,
-        fitMode:       canonical.fitMode,
-        colorMode:     canonical.colorMode,
-        blockStyleId:  canonical.blockStyleId,
-        framePadding:  canonical.padding,
-        minCellSize:   canonical.minCellSize,
-        maxCellSize:   canonical.maxCellSize,
+        fitMode: canonical.fitMode,
+        colorMode: canonical.colorMode,
+        blockStyleId: canonical.blockStyleId,
+        framePadding: canonical.padding,
+        minCellSize: canonical.minCellSize,
+        maxCellSize: canonical.maxCellSize,
         quantizeBeats: 0,
-        pitchRange:    { min: 36, max: 84 },
-        sizeMode:      "none",
-        opacityMode:   "none",
-        wrapMode:      "wrapRows",
+        pitchRange: { min: 36, max: 84 },
+        sizeMode: "none",
+        opacityMode: "none",
+        wrapMode: "wrapRows",
       };
 
       // Preserve palette/finish/viewport/tileStyle across regeneration
       var prevGrid = (state.world.layers || []).find(function (l) {
-        return l.type === "grid" && l.renderer && l.renderer.id === canonical.rendererId;
+        return (
+          l.type === "grid" &&
+          l.renderer &&
+          l.renderer.id === canonical.rendererId
+        );
       });
-      var prevPaletteId         = prevGrid && prevGrid.renderer.paletteId;
-      var prevFinishId          = prevGrid && prevGrid.renderer.finishId;
-      var prevViewport          = prevGrid && prevGrid.renderer.viewport
-        ? Object.assign({}, prevGrid.renderer.viewport) : null;
-      var prevReactivity        = prevGrid && prevGrid.renderer.reactivity
-        ? Object.assign({}, prevGrid.renderer.reactivity) : null;
-      var prevTileStyle         = prevGrid && prevGrid.renderer.tileStyle
-        ? Object.assign({}, prevGrid.renderer.tileStyle) : null;
-      var prevNotePatternOvr    = prevGrid && prevGrid.renderer.notePatternOverrides
-        ? Object.assign({}, prevGrid.renderer.notePatternOverrides) : null;
+      var prevPaletteId = prevGrid && prevGrid.renderer.paletteId;
+      var prevFinishId = prevGrid && prevGrid.renderer.finishId;
+      var prevViewport =
+        prevGrid && prevGrid.renderer.viewport
+          ? Object.assign({}, prevGrid.renderer.viewport)
+          : null;
+      var prevReactivity =
+        prevGrid && prevGrid.renderer.reactivity
+          ? Object.assign({}, prevGrid.renderer.reactivity)
+          : null;
+      var prevTileStyle =
+        prevGrid && prevGrid.renderer.tileStyle
+          ? Object.assign({}, prevGrid.renderer.tileStyle)
+          : null;
+      var prevNotePatternOvr =
+        prevGrid && prevGrid.renderer.notePatternOverrides
+          ? Object.assign({}, prevGrid.renderer.notePatternOverrides)
+          : null;
 
       // One canonical grid layer — replace all existing grid layers
       state.world.layers = (state.world.layers || []).filter(function (l) {
@@ -10185,82 +13003,128 @@
       });
       if (!layer) return null;
 
-      layer.label    = "Bauhaus Grid";
-      layer.status   = "active";
-      var defaultTileStyle = Object.assign({}, GS.BAUHAUS_TILE_STYLES[GS.DEFAULT_TILE_STYLE_ID]);
-      var notePatternOvr   = prevNotePatternOvr || {};
+      layer.label = "Bauhaus Grid";
+      layer.status = "active";
+      var defaultTileStyle = Object.assign(
+        {},
+        GS.BAUHAUS_TILE_STYLES[GS.DEFAULT_TILE_STYLE_ID],
+      );
+      var notePatternOvr = prevNotePatternOvr || {};
       layer.renderer = {
-        id:        canonical.rendererId,
-        version:   "1.3.1",
+        id: canonical.rendererId,
+        version: "1.3.1",
         paletteId: prevPaletteId || GS.DEFAULT_PALETTE_ID,
-        finishId:  prevFinishId  || GS.DEFAULT_FINISH_ID,
-        viewport:           prevViewport    || Object.assign({}, GS.DEFAULT_VIEWPORT),
-        reactivity:         prevReactivity  || { enabled: false, mode: "off" },
-        tileStyle:          prevTileStyle   || defaultTileStyle,
+        finishId: prevFinishId || GS.DEFAULT_FINISH_ID,
+        viewport: prevViewport || Object.assign({}, GS.DEFAULT_VIEWPORT),
+        reactivity: prevReactivity || { enabled: false, mode: "off" },
+        tileStyle: prevTileStyle || defaultTileStyle,
         notePatternOverrides: notePatternOvr,
       };
       GS.setActiveNotePatternOverrides(notePatternOvr);
-      layer.audio    = { channelId: canonical.audioChannelId };
+      layer.audio = { channelId: canonical.audioChannelId };
       layer.grid.visualLanguage = "bauhausMinimal";
-      layer.grid.visualVersion  = "1.3.1";
-      layer.source   = { type: "midiBank", bankId: sourceBankId, cartridgeId: sourceCartridgeId };
+      layer.grid.visualVersion = "1.3.1";
+      layer.source = {
+        type: "midiBank",
+        bankId: sourceBankId,
+        cartridgeId: sourceCartridgeId,
+      };
 
       // Generate blocks from the same event set used for counting
-      var bankForBlocks = gridBank || { id: sourceBankId, events: events.map(function (e) { return e.raw || e; }) };
-      layer.blocks = GS.generateGridBlocksFromMidiBank(bankForBlocks, gridSettings, layer.id, canvasW, canvasH);
+      var bankForBlocks = gridBank || {
+        id: sourceBankId,
+        events: events.map(function (e) {
+          return e.raw || e;
+        }),
+      };
+      layer.blocks = GS.generateGridBlocksFromMidiBank(
+        bankForBlocks,
+        gridSettings,
+        layer.id,
+        canvasW,
+        canvasH,
+      );
 
       state.world.layers.push(layer);
 
       var playbackEvents = getMidiNoteEventsForPlayback().length;
-      var sourceNotes    = events.length;
-      var gridBlocks     = layer.blocks.length;
+      var sourceNotes = events.length;
+      var gridBlocks = layer.blocks.length;
 
       if (sourceNotes !== gridBlocks) {
         console.warn("[BAUHAUS GRID] Count mismatch", {
-          sourceNotes: sourceNotes, playbackEvents: playbackEvents, gridBlocks: gridBlocks,
+          sourceNotes: sourceNotes,
+          playbackEvents: playbackEvents,
+          gridBlocks: gridBlocks,
         });
       }
 
       console.log("[BAUHAUS GRID] Generated", {
-        bankId: sourceBankId, cartridgeId: sourceCartridgeId,
-        sourceNotes: sourceNotes, playbackEvents: playbackEvents,
-        gridBlocks: gridBlocks, columns: dims.columns, rows: dims.rows, cellSize: cellSize,
+        bankId: sourceBankId,
+        cartridgeId: sourceCartridgeId,
+        sourceNotes: sourceNotes,
+        playbackEvents: playbackEvents,
+        gridBlocks: gridBlocks,
+        columns: dims.columns,
+        rows: dims.rows,
+        cellSize: cellSize,
       });
 
       return layer;
     }
 
     function clearGridLayers() {
-      var before = (state.world.layers || []).filter(function (l) { return l.type === "grid"; }).length;
-      state.world.layers = (state.world.layers || []).filter(function (l) { return l.type !== "grid"; });
+      var before = (state.world.layers || []).filter(function (l) {
+        return l.type === "grid";
+      }).length;
+      state.world.layers = (state.world.layers || []).filter(function (l) {
+        return l.type !== "grid";
+      });
       return before;
     }
 
     function isBauhausBlockActive(block) {
-      var activeNotes = state.midiPlayback && state.midiPlayback.activeNotes
-        ? state.midiPlayback.activeNotes : [];
-      if (activeNotes.some(function (n) {
-        return n && (
-          n.id === block.sourceEventId ||
-          n.index === block.sourceIndex ||
-          n.index === block.sequenceIndex
-        );
-      })) return true;
+      var activeNotes =
+        state.midiPlayback && state.midiPlayback.activeNotes
+          ? state.midiPlayback.activeNotes
+          : [];
+      if (
+        activeNotes.some(function (n) {
+          return (
+            n &&
+            (n.id === block.sourceEventId ||
+              n.index === block.sourceIndex ||
+              n.index === block.sequenceIndex)
+          );
+        })
+      )
+        return true;
       var na = noteActivity[block.noteClass];
-      return !!na && (performance.now() - na) < 120;
+      return !!na && performance.now() - na < 120;
     }
 
     function isBauhausBlockPlayhead(block) {
       var mp = state.midiPlayback;
       if (!mp) return false;
-      if (mp.playheadEventIndex != null && block.sourceIndex === mp.playheadEventIndex) return true;
-      if (mp.playheadEventId   != null && block.sourceEventId === mp.playheadEventId)  return true;
+      if (
+        mp.playheadEventIndex != null &&
+        block.sourceIndex === mp.playheadEventIndex
+      )
+        return true;
+      if (
+        mp.playheadEventId != null &&
+        block.sourceEventId === mp.playheadEventId
+      )
+        return true;
       return false;
     }
 
     function getBauhausBlockPulse(block) {
       if (!block.active) return 0;
-      var last = typeof block.noteClass === "number" ? noteActivity[block.noteClass] : null;
+      var last =
+        typeof block.noteClass === "number"
+          ? noteActivity[block.noteClass]
+          : null;
       if (!last) return 1;
       var age = performance.now() - last;
       return Math.max(0, 1 - age / 160);
@@ -10268,7 +13132,13 @@
 
     function renderGridLayers(ctx) {
       var GS = getGridSystem();
-      if (!GS || !state.world || !state.world.layers || !state.world.layers.length) return;
+      if (
+        !GS ||
+        !state.world ||
+        !state.world.layers ||
+        !state.world.layers.length
+      )
+        return;
       var currentBeat = 0;
       var beatDuration = 60 / Math.max(1, state.bpm);
       if (isPlaying) {
@@ -10284,8 +13154,8 @@
         // Update active flag using canonical bridge first, fallback to beat window
         if (layer.blocks) {
           layer.blocks.forEach(function (block) {
-            block.active   = isBauhausBlockActive(block);
-            block._pulse   = getBauhausBlockPulse(block);
+            block.active = isBauhausBlockActive(block);
+            block._pulse = getBauhausBlockPulse(block);
             block.playhead = isBauhausBlockPlayhead(block);
           });
         }
@@ -10294,12 +13164,15 @@
         var sa = state.signalActivity;
         var totalSig = 0;
         if (layer.blocks && sa) {
-          layer.blocks.forEach(function(block) {
+          layer.blocks.forEach(function (block) {
             var sig = sa.active.get(block.id);
 
             if (sig) {
               var age = sigNow - sig.activatedAt;
-              var velNorm = Math.min(1, Math.max(0, (sig.velocity || 64) / 127));
+              var velNorm = Math.min(
+                1,
+                Math.max(0, (sig.velocity || 64) / 127),
+              );
               var attackMs = 90 + velNorm * 50; // 90–140ms, velocity-scaled
               var t = 1 - age / sig.decayMs;
               t = Math.max(0, t);
@@ -10308,7 +13181,10 @@
               var attackProgress = Math.min(1, age / attackMs);
 
               // Init release tracker once per activation
-              if (!block._signalRelease || block._signalRelease.activationId !== sig.activatedAt) {
+              if (
+                !block._signalRelease ||
+                block._signalRelease.activationId !== sig.activatedAt
+              ) {
                 var relDuration = 300 + velNorm * 900; // 300–1200ms
                 block._signalRelease = {
                   activationId: sig.activatedAt,
@@ -10335,16 +13211,21 @@
             var relTrack = block._signalRelease;
             if (relTrack) {
               var relAge = sigNow - relTrack.startedAt;
-              var relT = relAge < 0 ? 0 : Math.max(0, 1 - relAge / relTrack.duration);
+              var relT =
+                relAge < 0 ? 0 : Math.max(0, 1 - relAge / relTrack.duration);
               if (relT > 0) {
                 if (block._signal) {
                   block._signal.release = relT;
                 } else {
                   // Only release tail remains — minimal struct for renderer
                   block._signal = {
-                    energy: 0, type: "origin", velocity: 0,
-                    active: false, attackProgress: 1,
-                    release: relT, startedAt: 0,
+                    energy: 0,
+                    type: "origin",
+                    velocity: 0,
+                    active: false,
+                    attackProgress: 1,
+                    release: relT,
+                    startedAt: 0,
                   };
                 }
               } else {
@@ -10355,24 +13236,44 @@
         }
         // Aggregate activity level for atmosphere (0–1), origin signals drive it
         var blockCount = layer.blocks ? layer.blocks.length : 1;
-        state.signalActivityLevel = Math.min(1, totalSig / Math.max(1, blockCount * 0.04));
+        state.signalActivityLevel = Math.min(
+          1,
+          totalSig / Math.max(1, blockCount * 0.04),
+        );
 
         // Timeline follow: compute progress + target index (throttled)
         var vpConf = layer.renderer && layer.renderer.viewport;
-        if (vpConf && vpConf.enabled && vpConf.followPlayback &&
-            (vpConf.followTarget == null || vpConf.followTarget === "timeline") && isPlaying) {
+        if (
+          vpConf &&
+          vpConf.enabled &&
+          vpConf.followPlayback &&
+          (vpConf.followTarget == null || vpConf.followTarget === "timeline") &&
+          isPlaying
+        ) {
           var now = performance.now();
-          var updateMs = vpConf.followTargetUpdateMs != null ? vpConf.followTargetUpdateMs : 120;
-          if (!vpConf._lastTargetUpdateAt || now - vpConf._lastTargetUpdateAt >= updateMs) {
+          var updateMs =
+            vpConf.followTargetUpdateMs != null
+              ? vpConf.followTargetUpdateMs
+              : 120;
+          if (
+            !vpConf._lastTargetUpdateAt ||
+            now - vpConf._lastTargetUpdateAt >= updateMs
+          ) {
             vpConf._lastTargetUpdateAt = now;
             var resolved = resolveMidiBankAndCartridge(null);
             var pbEvents = getMidiNoteEventsForPlayback();
-            var srcLen = getMidiPlaybackLengthBeats(resolved.bank, resolved.cartridge, pbEvents);
+            var srcLen = getMidiPlaybackLengthBeats(
+              resolved.bank,
+              resolved.cartridge,
+              pbEvents,
+            );
             var totalBlocks = layer.blocks ? layer.blocks.length : 0;
             if (srcLen > 0 && totalBlocks > 0) {
               var progress = Math.max(0, Math.min(1, currentBeat / srcLen));
               vpConf._timelineProgress = progress;
-              vpConf._timelineIndex = Math.floor(progress * Math.max(0, totalBlocks - 1));
+              vpConf._timelineIndex = Math.floor(
+                progress * Math.max(0, totalBlocks - 1),
+              );
               vpConf._totalBlocks = totalBlocks;
             }
           }
@@ -10392,7 +13293,8 @@
       if (!cellId || !state.signalActivity) return;
       var type = (meta && meta.type) || "origin";
       var baseDuration = (meta && meta.decayMs) || 900;
-      var duration = type === "origin" ? baseDuration * 1.2 : baseDuration * 0.72;
+      var duration =
+        type === "origin" ? baseDuration * 1.2 : baseDuration * 0.72;
       state.signalActivity.active.set(cellId, {
         energy: Math.max(0, Math.min(1, energy || 1)),
         activatedAt: performance.now(),
@@ -10422,7 +13324,7 @@
       }
 
       // Decay expired entries
-      sa.active.forEach(function(v, key) {
+      sa.active.forEach(function (v, key) {
         if (now - v.activatedAt >= v.decayMs) {
           sa.active.delete(key);
         }
@@ -10432,19 +13334,28 @@
     function _getBlockAdjacencyMap(layer) {
       if (layer._adjacencyMap) return layer._adjacencyMap;
       var byKey = {};
-      layer.blocks.forEach(function(b) {
+      layer.blocks.forEach(function (b) {
         byKey[b.col + "," + b.row] = b;
       });
       var map = {};
       var meta = {}; // parallel to map — per-neighbor isCardinal flag
       // dirs ordered: 4 cardinal first, 4 diagonal after
-      var dirs = [[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[1,-1],[-1,1],[1,1]];
-      layer.blocks.forEach(function(b) {
+      var dirs = [
+        [-1, 0],
+        [1, 0],
+        [0, -1],
+        [0, 1],
+        [-1, -1],
+        [1, -1],
+        [-1, 1],
+        [1, 1],
+      ];
+      layer.blocks.forEach(function (b) {
         var neighbors = [];
         var cardinalFlags = [];
         for (var di = 0; di < dirs.length; di++) {
           var d = dirs[di];
-          var nb = byKey[(b.col + d[0]) + "," + (b.row + d[1])];
+          var nb = byKey[b.col + d[0] + "," + (b.row + d[1])];
           if (nb) {
             neighbors.push(nb.id);
             cardinalFlags.push(di < 4); // first 4 are cardinal
@@ -10469,13 +13380,17 @@
       for (var ni = 0; ni < neighbors.length; ni++) {
         var isCardinal = meta ? meta[ni] : true;
         // Cardinals carry more energy (0.14–0.24); diagonals attenuate (0.08–0.16)
-        var range = isCardinal ? [0.14, 0.10] : [0.08, 0.08];
+        var range = isCardinal ? [0.14, 0.1] : [0.08, 0.08];
         var nEnergy = energy * (range[0] + Math.random() * range[1]);
         var delay = 20 + Math.random() * 70;
         state.signalActivity.pending.push({
           cellId: neighbors[ni],
           energy: nEnergy,
-          meta: { decayMs: 500, velocity: block.velocity || 64, type: "neighbor" },
+          meta: {
+            decayMs: 500,
+            velocity: block.velocity || 64,
+            type: "neighbor",
+          },
           fireAt: now + delay,
         });
       }
@@ -10493,14 +13408,21 @@
       layer.blocks.forEach(function (block) {
         // Fire when block startBeat crosses the window [previousBeat, currentBeat)
         if (block.startBeat >= previousBeat && block.startBeat < currentBeat) {
-          var fireKey = block.sourceEventId + "@" + Math.floor(block.startBeat * 8);
+          var fireKey =
+            block.sourceEventId + "@" + Math.floor(block.startBeat * 8);
           if (!layer._firedEvents.has(fireKey)) {
             layer._firedEvents.add(fireKey);
             triggerGridBlockSound(block, layer);
             var sigEnergy = Math.max(0.4, (block.velocity || 64) / 127);
             // Collision flash — crisp white inset, rendered before propagation
-            block._collisionFlash = { energy: sigEnergy, startTime: performance.now() };
-            activateGridCell(block.id, sigEnergy, { decayMs: 900, velocity: block.velocity || 64 });
+            block._collisionFlash = {
+              energy: sigEnergy,
+              startTime: performance.now(),
+            };
+            activateGridCell(block.id, sigEnergy, {
+              decayMs: 900,
+              velocity: block.velocity || 64,
+            });
             activateNeighborCells(block, layer, sigEnergy);
           }
         }
@@ -10718,7 +13640,8 @@
     function triggerMidiPointsForWalker(walker) {
       if (!state.midiPoints.length) return;
       // Audio from MIDI points is a legacy path — muted unless explicitly enabled
-      var midiPointsAudioEnabled = state.midiPlayback &&
+      var midiPointsAudioEnabled =
+        state.midiPlayback &&
         state.midiPlayback.legacyWalkerAudioEnabled === true;
 
       // Resolve graphId/bankId live from the stroke — handles walkers created before MIDI was attached
@@ -10740,13 +13663,24 @@
         if (p.strokeId === walker.strokeId) {
           if (Math.abs(p.t - walker.t) < threshold) {
             if (midiPointsAudioEnabled) {
-              playFallbackInstrument(p.note, p.velocity != null ? p.velocity : 100);
+              playFallbackInstrument(
+                p.note,
+                p.velocity != null ? p.velocity : 100,
+              );
             }
             p.consumed = true;
             triggered = true;
             if (state.debug && state.debug.audioLogs)
-              console.log("[MIDI POINT]", p.note, "t:", p.t.toFixed(3),
-                "walker.t:", walker.t.toFixed(3), "audio:", midiPointsAudioEnabled);
+              console.log(
+                "[MIDI POINT]",
+                p.note,
+                "t:",
+                p.t.toFixed(3),
+                "walker.t:",
+                walker.t.toFixed(3),
+                "audio:",
+                midiPointsAudioEnabled,
+              );
           }
           return;
         }
@@ -10761,13 +13695,22 @@
           var dy = walker.y - p.y;
           if (dx * dx + dy * dy < 49) {
             if (midiPointsAudioEnabled) {
-              playFallbackInstrument(p.note, p.velocity != null ? p.velocity : 100);
+              playFallbackInstrument(
+                p.note,
+                p.velocity != null ? p.velocity : 100,
+              );
             }
             p.consumed = true;
             triggered = true;
             if (state.debug && state.debug.audioLogs)
-              console.log("[MIDI POINT] graph hit", p.note, "t:", p.t.toFixed(3),
-                "audio:", midiPointsAudioEnabled);
+              console.log(
+                "[MIDI POINT] graph hit",
+                p.note,
+                "t:",
+                p.t.toFixed(3),
+                "audio:",
+                midiPointsAudioEnabled,
+              );
           }
         }
       });
@@ -10920,12 +13863,13 @@
       badge.className = "canvas-tool-subbar__tool-name";
       var toolName =
         {
-          pen:             "Brush",
-          ball:            "Ball",
-          text:            "Text",
-          select:          "Select",
-          shape:           "Shape",
-          "symbol-place":  "Place Symbol",
+          pen: "Brush",
+          ball: "Ball",
+          text: "Text",
+          select: "Select",
+          shape: "Shape",
+          "symbol-place": "Place Symbol",
+          "symbol-brush": "Brush: Symbol",
         }[state.tool] || state.tool;
       badge.textContent = toolName;
       root.appendChild(badge);
@@ -11359,6 +14303,94 @@
         obj.outlineVisible = !!v;
       });
 
+      // ── PATH layer bindings ────────────────────────────────────────────────
+      bind("obj-pathStyle", function (v) {
+        obj.pathStyle = v;
+        var dashFields = document.getElementById("path-dash-fields");
+        if (dashFields)
+          dashFields.style.display =
+            v === "dotted" || v === "dashed" ? "" : "none";
+      });
+      bind("obj-path-dash", function (v) {
+        obj.pathDash = Number(v);
+        var o = document.getElementById("obj-path-dash-value");
+        if (o) o.value = v;
+      });
+      bind("obj-path-gap", function (v) {
+        obj.pathGap = Number(v);
+        var o = document.getElementById("obj-path-gap-value");
+        if (o) o.value = v;
+      });
+
+      // ── SUBJECT layer bindings ─────────────────────────────────────────────
+      bind("obj-subject-style", function (v) {
+        obj.subjectStyle = v;
+        var _sg = document.getElementById("sub-row-glyph");
+        var _si = document.getElementById("sub-row-image");
+        var _st = document.getElementById("sub-row-text");
+        if (_sg) _sg.style.display = v === "glyph" ? "" : "none";
+        if (_si) _si.style.display = v === "image" ? "" : "none";
+        if (_st) _st.style.display = v === "text" ? "" : "none";
+      });
+      bind("obj-subject-scale", function (v) {
+        obj.subjectScale = Number(v);
+        var o = document.getElementById("obj-subject-scale-value");
+        if (o) o.value = Number(v).toFixed(1);
+      });
+      bind("obj-subject-opacity", function (v) {
+        obj.subjectOpacity = Number(v);
+        var o = document.getElementById("obj-subject-opacity-value");
+        if (o) o.value = Number(v).toFixed(2);
+      });
+      bind("obj-subject-visible", function (v) {
+        obj.subjectVisible = v === true || v === "on" || v === 1;
+      });
+      bind("obj-subject-glyph", function (v) {
+        obj.subjectGlyph = v || null;
+      });
+      bind("obj-subject-text", function (v) {
+        obj.subjectText = v || null;
+      });
+      bind("obj-subject-color", function (v) {
+        obj.subjectColor = v && v !== "#000000" && v !== "" ? v : null;
+        // Invalidate image cache so re-tinted image reloads
+        if (obj.subjectStyle === "image" && obj.id)
+          delete _subjectImageCache[obj.id];
+      });
+      // Image file upload for subject
+      (function () {
+        var _imgInput = document.getElementById("obj-subject-image");
+        if (!_imgInput) return;
+        _imgInput.onchange = function () {
+          var file = _imgInput.files && _imgInput.files[0];
+          if (!file) return;
+          var reader = new FileReader();
+          reader.onload = function (e) {
+            obj.subjectImage = e.target.result;
+            renderFrame();
+          };
+          reader.readAsDataURL(file);
+        };
+      })();
+
+      // ── TRAIL detail bindings ──────────────────────────────────────────────
+      bind("obj-trail-style", function (v) {
+        if (!obj.trail) obj.trail = {};
+        obj.trail.style = v;
+      });
+      bind("obj-trail-length", function (v) {
+        if (!obj.trail) obj.trail = {};
+        obj.trail.length = Number(v);
+        var o = document.getElementById("obj-trail-length-value");
+        if (o) o.value = Number(v).toFixed(1);
+      });
+      bind("obj-trail-opacity", function (v) {
+        if (!obj.trail) obj.trail = {};
+        obj.trail.opacity = Number(v);
+        var o = document.getElementById("obj-trail-opacity-value");
+        if (o) o.value = Number(v).toFixed(2);
+      });
+
       // Walker
       bind("obj-walker", function (v) {
         obj.walker = v;
@@ -11381,14 +14413,312 @@
           if (w.strokeId === obj.id) w.motionMode = v;
         });
       });
+      bind("obj-speed", function (v) {
+        // Speed is stored normalized 0–1; walker.speed is in path-units/frame at 60fps
+        // Mapping: inspector 0–1 → w.speed ~0.003–0.5 (same range as state.walker.speed * 60)
+        var spd = Number(v) * 0.25; // 0.25 = max comfortable path speed
+        state.walkers.forEach(function (w) {
+          if (w.strokeId === obj.id) w.speed = spd;
+        });
+        var o = document.getElementById("obj-speed-value");
+        if (o) o.value = Number(v).toFixed(2);
+      });
       bind("obj-trailStyle", function (v) {
-        obj.trailEnabled = v !== "off";
+        // Handles both checkbox boolean and legacy select "on"/"off" string values
+        var enabled = v === true || v === "on" || v === 1;
+        obj.trailEnabled = enabled;
+        if (!obj.trail) obj.trail = {};
+        obj.trail.enabled = enabled;
         state.walkers.forEach(function (w) {
           if (w.strokeId !== obj.id) return;
           if (!w.emitter) w.emitter = {};
-          w.emitter.enabled = v !== "off";
+          w.emitter.enabled = enabled;
+        });
+        // Show/hide trail detail fields
+        var _td = document.getElementById("trail-detail-fields");
+        if (_td) _td.style.display = enabled ? "" : "none";
+      });
+      bind("obj-field-influence", function (v) {
+        state.walkers.forEach(function (w) {
+          if (w.strokeId === obj.id) w.fieldInfluence = Number(v);
+        });
+        var out = document.getElementById("obj-field-influence-value");
+        if (out) out.value = Number(v).toFixed(2);
+      });
+
+      // ── Physics & Collision bindings ────────────────────────────────────
+      bind("obj-collider-enabled", function (v) {
+        var enabled = v === true || v === "on" || v === 1;
+        state.walkers.forEach(function (w) {
+          if (w.strokeId !== obj.id) return;
+          var av = _ensureAvatar(w);
+          av.collider.enabled = enabled;
+        });
+        var bodyFields = document.getElementById("physics-body-fields");
+        if (bodyFields) bodyFields.style.display = enabled ? "" : "none";
+      });
+      bind("obj-phys-bounce", function (v) {
+        state.walkers.forEach(function (w) {
+          if (w.strokeId !== obj.id) return;
+          if (!w.physics) w.physics = {};
+          w.physics.bounce = Number(v);
         });
       });
+      bind("obj-phys-gravity", function (v) {
+        state.walkers.forEach(function (w) {
+          if (w.strokeId !== obj.id) return;
+          if (!w.physics) w.physics = {};
+          w.physics.gravityScale = Number(v);
+        });
+      });
+
+      // ── Avatar bindings (WalkerAvatarSystem v1.0.0) ────────────────────
+
+      function _walkerForObj() {
+        return state.walkers.find(function (w) {
+          return w.strokeId === obj.id;
+        });
+      }
+      // ISOLATION: _ensureAvatar always creates a per-walker fresh literal.
+      // Never assigns a shared object or spread from a module-level default.
+      function _ensureAvatar(w) {
+        if (!w.avatar) {
+          w.avatar = {
+            enabled: false,
+            style: "none",
+            glyphId: null,
+            scale: 1.0,
+            rotationMode: "motion",
+            opacity: 1.0,
+            tint: null,
+            trailInfluence: 1.0,
+            // Collision is automatic when avatar.enabled — no collider.enabled gate.
+            // radius=20 gives a ~40px collision body at scale=1, matching a typical glyph.
+            collider: {
+              type: "circle",
+              radius: 20,
+              offsetX: 0,
+              offsetY: 0,
+              enabled: true,
+            },
+          };
+        }
+        // Ensure collider sub-object always exists (migration for walkers created before AvatarCollisionBodies)
+        if (!w.avatar.collider) {
+          w.avatar.collider = {
+            type: "circle",
+            radius: 20,
+            offsetX: 0,
+            offsetY: 0,
+            enabled: true,
+          };
+        }
+        return w.avatar;
+      }
+
+      // Populate glyph picker with all sets/glyphs from SymbolSystem
+      // Build glyph pickers — subject glyph picker (new) and legacy av-glyph (compat)
+      (function _buildGlyphPickers() {
+        var SS = global.SBE && global.SBE.SymbolSystem;
+        ["obj-subject-glyph", "av-glyph"].forEach(function (selId) {
+          var sel = document.getElementById(selId);
+          if (!sel || !SS) return;
+          sel.innerHTML = '<option value="">— none —</option>';
+          var sets = SS.getAllSets ? SS.getAllSets() : [];
+          sets.forEach(function (set) {
+            if (!set || !set.glyphs) return;
+            // Human-readable set name: prefer set.name, fall back to meta.name, then id
+            var setLabel = set.name || (set.meta && set.meta.name) || set.id;
+            // Trim internal hash suffixes (e.g. "ss-mp3zplok-37x7n" → "Untitled Set")
+            if (!set.name && setLabel.match(/^ss-[a-z0-9]+-[a-z0-9]+$/i)) {
+              setLabel = "Set";
+            }
+            var slots = Object.keys(set.glyphs);
+            slots.forEach(function (slotKey) {
+              var g = set.glyphs[slotKey];
+              if (
+                !g ||
+                ((!g.strokes || !g.strokes.length) &&
+                  (!g.objects || !g.objects.length))
+              )
+                return;
+              var opt = document.createElement("option");
+              opt.value = set.id + ":" + slotKey;
+              // Glyph label: prefer g.name or g.label, else humanise slotKey
+              var glyphLabel = (g.name || g.label || slotKey)
+                .replace(/^[a-z0-9]{5,}-[a-z0-9]+$/i, slotKey) // strip hash IDs
+                .replace(/[-_]/g, " ")
+                .replace(/\b\w/g, function (c) {
+                  return c.toUpperCase();
+                });
+              opt.textContent = setLabel + " / " + glyphLabel;
+              sel.appendChild(opt);
+            });
+          });
+        });
+        // Set current values
+        if (obj.subjectGlyph) {
+          var _sgEl = document.getElementById("obj-subject-glyph");
+          if (_sgEl) _sgEl.value = obj.subjectGlyph;
+        }
+        var w = _walkerForObj();
+        if (w && w.avatar && w.avatar.glyphId) {
+          var _agEl = document.getElementById("av-glyph");
+          if (_agEl) _agEl.value = w.avatar.glyphId;
+        }
+      })();
+
+      var avRowGlyph = document.getElementById("av-row-glyph");
+
+      function _syncAvatarModeRow(mode) {
+        if (avRowGlyph)
+          avRowGlyph.style.display = mode === "glyph" ? "" : "none";
+      }
+
+      // Sync current values into UI
+      (function _syncAvatarUI() {
+        var w = _walkerForObj();
+        var av = w
+          ? _ensureAvatar(w)
+          : {
+              enabled: false,
+              style: "none",
+              scale: 1.0,
+              rotationMode: "motion",
+              opacity: 1.0,
+              tint: null,
+            };
+        var setEl2 = function (id, val) {
+          var el = document.getElementById(id);
+          if (!el) return;
+          if (el.type === "checkbox") el.checked = !!val;
+          else el.value = val != null ? val : "";
+        };
+        setEl2("av-enabled", av.enabled);
+        setEl2("av-mode", av.style || "none");
+        setEl2("av-scale", av.scale != null ? av.scale : 1.0);
+        setEl2("av-opacity", av.opacity != null ? av.opacity : 1.0);
+        setEl2("av-rotation", av.rotationMode || "motion");
+        if (av.tint) setEl2("av-tint", av.tint);
+        var scOut = document.getElementById("av-scale-value");
+        if (scOut) scOut.value = (av.scale || 1.0).toFixed(2);
+        var opOut = document.getElementById("av-opacity-value");
+        if (opOut)
+          opOut.value = (av.opacity != null ? av.opacity : 1.0).toFixed(2);
+        _syncAvatarModeRow(av.style || "none");
+        // Seed collider radius — collision is automatic when avatar.enabled
+        var _col = av.collider || { radius: 20 };
+        var crEl = document.getElementById("av-collider-radius");
+        var crOut = document.getElementById("av-collider-radius-value");
+        if (crEl) {
+          crEl.value = _col.radius || 20;
+        }
+        if (crOut) {
+          crOut.value = _col.radius || 20;
+        }
+      })();
+
+      // ISOLATION FIX: use .on* assignment instead of addEventListener.
+      // el.addEventListener stacks listeners per bindInspector call (every selection change),
+      // causing all previously-selected walkers to be mutated by later inspector changes.
+      // .on* replaces the handler — exactly one handler active at all times, targeting
+      // the walker captured in this bindInspector closure only.
+      var _avBind = function (id, fn) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        var useChange =
+          el.type === "checkbox" ||
+          el.tagName === "SELECT" ||
+          el.type === "color";
+        var handler = function () {
+          var w = _walkerForObj();
+          if (!w) return;
+          fn(
+            _ensureAvatar(w),
+            el.type === "checkbox" ? el.checked : el.value,
+            w,
+          );
+          renderFrame();
+        };
+        if (useChange) {
+          el.onchange = handler;
+        } else {
+          el.oninput = handler;
+        }
+      };
+
+      _avBind("av-enabled", function (av, v) {
+        av.enabled = v;
+      });
+      _avBind("av-mode", function (av, v) {
+        av.style = v;
+        _syncAvatarModeRow(v);
+      });
+      _avBind("av-glyph", function (av, v) {
+        av.glyphId = v || null;
+      });
+      _avBind("av-scale", function (av, v) {
+        av.scale = Number(v);
+        var o = document.getElementById("av-scale-value");
+        if (o) o.value = Number(v).toFixed(2);
+      });
+      _avBind("av-opacity", function (av, v) {
+        av.opacity = Number(v);
+        var o = document.getElementById("av-opacity-value");
+        if (o) o.value = Number(v).toFixed(2);
+      });
+      _avBind("av-rotation", function (av, v) {
+        av.rotationMode = v;
+      });
+      // Tint: avColor = av.tint || walkerColor is recomputed every render frame — no cache
+      _avBind("av-tint", function (av, v) {
+        av.tint = v;
+      });
+
+      // Tint clear — .onclick assignment (single handler, no leak)
+      var avTintClear = document.getElementById("av-tint-clear");
+      if (avTintClear) {
+        avTintClear.onclick = function () {
+          var w = _walkerForObj();
+          if (w) {
+            _ensureAvatar(w).tint = null;
+            renderFrame();
+          }
+        };
+      }
+
+      // ── Collider controls (AvatarCollisionBodies v1.0.0) ──────────────────
+      // av-collider-enabled is now a hidden input (collision is automatic).
+      // Binding kept for backward compat with serialized states that reference it.
+      (function () {
+        var outEl = document.getElementById("av-collider-radius-value");
+        var rangeEl = document.getElementById("av-collider-radius");
+        if (rangeEl) {
+          // Seed from current walker's collider radius
+          var _wSeed = _walkerForObj();
+          if (_wSeed && _wSeed.avatar) {
+            var _seedCollider = _wSeed.avatar.collider || {};
+            rangeEl.value = _seedCollider.radius || 20;
+            if (outEl) outEl.value = rangeEl.value;
+          }
+          rangeEl.oninput = function () {
+            var w = _walkerForObj();
+            if (!w) return;
+            var av = _ensureAvatar(w);
+            if (!av.collider)
+              av.collider = {
+                type: "circle",
+                radius: 20,
+                offsetX: 0,
+                offsetY: 0,
+                enabled: true,
+              };
+            av.collider.radius = Number(this.value);
+            if (outEl) outEl.value = this.value;
+            renderFrame();
+          };
+        }
+      })();
 
       // Sound — writes directly to obj.sound
       bind("obj-soundSource", function (v) {
@@ -11431,181 +14761,428 @@
       }
       window._wosKeyboardBound = true;
 
-      global.addEventListener("keydown", async function onKeyDown(event) {
-        heldKeys.add(event.key.toLowerCase());
-        if (event.key === "Shift") input.shift = true;
+      global.addEventListener(
+        "keydown",
+        async function onKeyDown(event) {
+          heldKeys.add(event.key.toLowerCase());
+          if (event.key === "Shift") input.shift = true;
 
-        if (textEditor && event.key === "Escape") {
-          event.preventDefault();
-          removeCanvasTextInput(false);
-          return;
-        }
-
-        if (state.textEditing && state.activeLabelId) {
-          var _editLabel = getLabelById(state.activeLabelId);
-          if (_editLabel) {
+          if (textEditor && event.key === "Escape") {
             event.preventDefault();
-            if (event.key === "Escape") {
-              if (!_editLabel.text) removeLabel(_editLabel.id);
-              state.textEditing = false;
-              state.activeLabelId = null;
-            } else if (event.key === "Backspace") {
-              _editLabel.text = _editLabel.text.slice(0, -1);
-            } else if (event.key === "Enter") {
-              if (event.shiftKey) {
+            removeCanvasTextInput(false);
+            return;
+          }
+
+          if (state.textEditing && state.activeLabelId) {
+            var _editLabel = getLabelById(state.activeLabelId);
+            if (_editLabel) {
+              event.preventDefault();
+              if (event.key === "Escape") {
                 if (!_editLabel.text) removeLabel(_editLabel.id);
                 state.textEditing = false;
                 state.activeLabelId = null;
-              } else {
-                _editLabel.text += "\n";
+              } else if (event.key === "Backspace") {
+                _editLabel.text = _editLabel.text.slice(0, -1);
+              } else if (event.key === "Enter") {
+                if (event.shiftKey) {
+                  if (!_editLabel.text) removeLabel(_editLabel.id);
+                  state.textEditing = false;
+                  state.activeLabelId = null;
+                } else {
+                  _editLabel.text += "\n";
+                }
+              } else if (event.key.length === 1) {
+                _editLabel.text += event.key;
               }
-            } else if (event.key.length === 1) {
-              _editLabel.text += event.key;
+              renderFrame();
+              return;
             }
-            renderFrame();
+          }
+
+          if (isTypingTarget()) {
             return;
           }
-        }
 
-        if (isTypingTarget()) {
-          return;
-        }
-
-        // ── Shortcut suspension — takesFocus drawers (e.g. GlyphLab) ─────────
-        if (window._wos && window._wos._shortcutsSuspended) {
-          return;
-        }
-
-        // Route World keyboard shortcuts (only when route is loaded)
-        if (state.routeWorld && state.routeWorld.routes.length > 0 && !event.metaKey && !event.ctrlKey) {
-          var rwShortcut = false;
-          if (event.key === "1") { window._wos.routeWorld.setCameraMode("overview");  rwShortcut = true; }
-          if (event.key === "2") { window._wos.routeWorld.setCameraMode("follow");    rwShortcut = true; }
-          if (event.key === "3") { window._wos.routeWorld.setCameraMode("cinematic"); rwShortcut = true; }
-          if (event.key.toLowerCase() === "f" && !event.shiftKey) {
-            window._wos.routeWorld.fitRouteToCanvas(null, { padding: 120 });
-            rwShortcut = true;
+          // ── Shortcut suspension — takesFocus drawers (e.g. GlyphLab) ─────────
+          if (window._wos && window._wos._shortcutsSuspended) {
+            return;
           }
-          if (rwShortcut) { event.preventDefault(); return; }
-        }
 
-        console.log("[KEYDOWN TRACE]", {
-          key: event.key, code: event.code,
-          meta: event.metaKey, ctrl: event.ctrlKey, shift: event.shiftKey,
-          activeElement: document.activeElement && document.activeElement.tagName
-            ? document.activeElement.tagName.toLowerCase() : null,
-        });
+          // Route World keyboard shortcuts (only when route is loaded)
+          if (
+            state.routeWorld &&
+            state.routeWorld.routes.length > 0 &&
+            !event.metaKey &&
+            !event.ctrlKey
+          ) {
+            var rwShortcut = false;
+            if (event.key === "1") {
+              window._wos.routeWorld.setCameraMode("overview");
+              rwShortcut = true;
+            }
+            if (event.key === "2") {
+              window._wos.routeWorld.setCameraMode("follow");
+              rwShortcut = true;
+            }
+            if (event.key === "3") {
+              window._wos.routeWorld.setCameraMode("cinematic");
+              rwShortcut = true;
+            }
+            if (event.key.toLowerCase() === "f" && !event.shiftKey) {
+              window._wos.routeWorld.fitRouteToCanvas(null, { padding: 120 });
+              rwShortcut = true;
+            }
+            if (rwShortcut) {
+              event.preventDefault();
+              return;
+            }
+          }
 
-        // ESC — exit symbol placement mode
-        if (event.key === "Escape" && state.tool === "symbol-place") {
-          event.preventDefault();
-          state.tool = "select";
-          _symGhost.visible = false;
-          syncUI();
-          renderFrame();
-          return;
-        }
+          console.log("[KEYDOWN TRACE]", {
+            key: event.key,
+            code: event.code,
+            meta: event.metaKey,
+            ctrl: event.ctrlKey,
+            shift: event.shiftKey,
+            activeElement:
+              document.activeElement && document.activeElement.tagName
+                ? document.activeElement.tagName.toLowerCase()
+                : null,
+          });
 
-        // Symbol object keyboard handling (must run before generic Cmd+D / Delete)
-        if (state.selectedSymbolObjectId) {
-          var _SOS = global.SBE && global.SBE.SymbolObjectSystem;
+          // ── Symbol tool keyboard ─────────────────────────────────────────────
+          // ESC — exit placement/brush mode, or clear selection
+          if (event.key === "Escape") {
+            if (
+              state.tool === "symbol-place" ||
+              state.tool === "symbol-brush"
+            ) {
+              event.preventDefault();
+              state.tool = "select";
+              _symGhost.visible = false;
+              _symMarquee = null;
+              syncUI();
+              renderFrame();
+              return;
+            }
+            if (
+              state.selectedSymbolObjectIds &&
+              state.selectedSymbolObjectIds.size
+            ) {
+              event.preventDefault();
+              state.selectedSymbolObjectIds.clear();
+              _symMarquee = null;
+              renderFrame();
+              return;
+            }
+          }
 
-          // Cmd+D — duplicate selected symbol object
-          if (event.key && event.key.toLowerCase() === "d" && (event.metaKey || event.ctrlKey)) {
+          // Symbol multi-select keyboard ops (before generic handlers)
+          if (
+            state.selectedSymbolObjectIds &&
+            state.selectedSymbolObjectIds.size > 0
+          ) {
+            var _SOS = global.SBE && global.SBE.SymbolObjectSystem;
+
+            // Cmd+D — duplicate selection
+            if (
+              event.key &&
+              event.key.toLowerCase() === "d" &&
+              (event.metaKey || event.ctrlKey)
+            ) {
+              event.preventDefault();
+              if (_SOS) {
+                var _newIds = new Set();
+                var _selected = _SOS.getSelectedObjects(
+                  state.symbolObjects,
+                  state.selectedSymbolObjectIds,
+                );
+                _selected.forEach(function (src) {
+                  var copy = _SOS.duplicate(src);
+                  state.symbolObjects.push(copy);
+                  _newIds.add(copy.id);
+                });
+                state.selectedSymbolObjectIds = _newIds;
+                renderFrame();
+              }
+              return;
+            }
+
+            // Delete / Backspace — remove selected
+            if (event.key === "Delete" || event.key === "Backspace") {
+              event.preventDefault();
+              var _delIds = state.selectedSymbolObjectIds;
+              state.symbolObjects = state.symbolObjects.filter(function (o) {
+                return !_delIds.has(o.id);
+              });
+              state.selectedSymbolObjectIds = new Set();
+              renderFrame();
+              return;
+            }
+
+            // Arrow keys — nudge (1px) or Shift+Arrow (10px)
+            var _nudge = 0;
+            if (event.key === "ArrowLeft") _nudge = event.shiftKey ? -10 : -1;
+            if (event.key === "ArrowRight") _nudge = event.shiftKey ? 10 : 1;
+            var _nudgeY = 0;
+            if (event.key === "ArrowUp") _nudgeY = event.shiftKey ? -10 : -1;
+            if (event.key === "ArrowDown") _nudgeY = event.shiftKey ? 10 : 1;
+            if (_nudge !== 0 || _nudgeY !== 0) {
+              event.preventDefault();
+              if (_SOS)
+                _SOS.moveGroup(
+                  state.symbolObjects,
+                  state.selectedSymbolObjectIds,
+                  _nudge,
+                  _nudgeY,
+                );
+              renderFrame();
+              return;
+            }
+
+            // Z-order: ] = bring forward, [ = send backward, Shift+] = front, Shift+[ = back
+            if (event.key === "]" && _SOS) {
+              event.preventDefault();
+              state.selectedSymbolObjectIds.forEach(function (id) {
+                if (event.shiftKey) _SOS.bringToFront(state.symbolObjects, id);
+                else _SOS.bringForward(state.symbolObjects, id);
+              });
+              renderFrame();
+              return;
+            }
+            if (event.key === "[" && _SOS) {
+              event.preventDefault();
+              state.selectedSymbolObjectIds.forEach(function (id) {
+                if (event.shiftKey) _SOS.sendToBack(state.symbolObjects, id);
+                else _SOS.sendBackward(state.symbolObjects, id);
+              });
+              renderFrame();
+              return;
+            }
+          }
+
+          // Cmd+D — duplicate (must precede plain D)
+          if (
+            event.key &&
+            event.key.toLowerCase() === "d" &&
+            (event.metaKey || event.ctrlKey)
+          ) {
             event.preventDefault();
-            if (_SOS) {
-              var _srcSym = state.symbolObjects.find(function (o) { return o.id === state.selectedSymbolObjectId; });
-              if (_srcSym) {
-                var _copySym = _SOS.duplicate(_srcSym);
-                state.symbolObjects.push(_copySym);
-                state.selectedSymbolObjectId = _copySym.id;
+            event.stopPropagation();
+            console.log("[DUPLICATE KEY] before", window._wos.debugSelection());
+            var _dupResult = await duplicateSelectedObject();
+            console.log("[DUPLICATE KEY] result", _dupResult);
+            return;
+          }
+
+          // Delete / Backspace
+          if (event.key === "Delete" || event.key === "Backspace") {
+            event.preventDefault();
+            event.stopPropagation();
+            console.log("[DELETE KEY] before", window._wos.debugSelection());
+            var _delResult = deleteSelectedObject();
+            console.log("[DELETE KEY] result", _delResult);
+            return;
+          }
+
+          if (event.key === " ") {
+            event.preventDefault();
+            togglePlayback();
+            syncUI();
+            return;
+          }
+          if (event.key === "Tab") {
+            event.preventDefault();
+            togglePresentationMode();
+            return;
+          }
+          if (event.key === "?") {
+            event.preventDefault();
+            toggleShortcuts();
+            return;
+          }
+
+          if (event.key.toLowerCase() === "v") {
+            state.tool = "select";
+            syncUI();
+            return;
+          }
+          if (event.key.toLowerCase() === "d") {
+            state.tool = "pen";
+            syncUI();
+            return;
+          }
+          if (
+            event.key.toLowerCase() === "s" &&
+            !(event.metaKey || event.ctrlKey)
+          ) {
+            state.tool = "shape";
+            syncUI();
+            updatePanels(state.tool);
+            return;
+          }
+          if (event.key.toLowerCase() === "t") {
+            state.tool = "text";
+            syncUI();
+            updatePanels(state.tool);
+            return;
+          }
+          if (event.key.toLowerCase() === "b") {
+            state.tool = "ball";
+            syncUI();
+            return;
+          }
+          if (event.key.toLowerCase() === "m") {
+            state.tool = "pen";
+            syncUI();
+            return;
+          }
+          if (event.key.toLowerCase() === "p") {
+            state.tool = "pen";
+            syncUI();
+            return;
+          }
+
+          if (
+            event.key.toLowerCase() === "g" &&
+            (event.metaKey || event.ctrlKey) &&
+            event.shiftKey
+          ) {
+            event.preventDefault();
+            ungroupSelected();
+            return;
+          }
+          if (
+            event.key.toLowerCase() === "g" &&
+            (event.metaKey || event.ctrlKey)
+          ) {
+            event.preventDefault();
+            var strokeEntries = state.multiSelection.filter(function (e) {
+              return e.type === "stroke";
+            });
+            if (strokeEntries.length > 1) {
+              var ids = strokeEntries.map(function (e) {
+                return e.id;
+              });
+              var grp = createGroup(ids);
+              if (grp) {
+                state.multiSelection = [{ type: "group", id: grp.id }];
+                syncLegacySelection();
+                syncSelectionPanel();
                 renderFrame();
               }
             }
             return;
           }
-
-          // Delete / Backspace — remove selected symbol object
-          if (event.key === "Delete" || event.key === "Backspace") {
-            event.preventDefault();
-            state.symbolObjects = state.symbolObjects.filter(function (o) { return o.id !== state.selectedSymbolObjectId; });
-            state.selectedSymbolObjectId = null;
+          if (
+            event.key.toLowerCase() === "g" &&
+            !(event.metaKey || event.ctrlKey)
+          ) {
+            state.grid.enabled = !state.grid.enabled;
             renderFrame();
             return;
           }
-        }
-
-        // Cmd+D — duplicate (must precede plain D)
-        if (event.key && event.key.toLowerCase() === "d" && (event.metaKey || event.ctrlKey)) {
-          event.preventDefault();
-          event.stopPropagation();
-          console.log("[DUPLICATE KEY] before", window._wos.debugSelection());
-          var _dupResult = await duplicateSelectedObject();
-          console.log("[DUPLICATE KEY] result", _dupResult);
-          return;
-        }
-
-        // Delete / Backspace
-        if (event.key === "Delete" || event.key === "Backspace") {
-          event.preventDefault();
-          event.stopPropagation();
-          console.log("[DELETE KEY] before", window._wos.debugSelection());
-          var _delResult = deleteSelectedObject();
-          console.log("[DELETE KEY] result", _delResult);
-          return;
-        }
-
-        if (event.key === " ") { event.preventDefault(); togglePlayback(); syncUI(); return; }
-        if (event.key === "Tab") { event.preventDefault(); togglePresentationMode(); return; }
-        if (event.key === "?") { event.preventDefault(); toggleShortcuts(); return; }
-
-        if (event.key.toLowerCase() === "v") { state.tool = "select"; syncUI(); return; }
-        if (event.key.toLowerCase() === "d") { state.tool = "pen"; syncUI(); return; }
-        if (event.key.toLowerCase() === "s" && !(event.metaKey || event.ctrlKey)) { state.tool = "shape"; syncUI(); updatePanels(state.tool); return; }
-        if (event.key.toLowerCase() === "t") { state.tool = "text"; syncUI(); updatePanels(state.tool); return; }
-        if (event.key.toLowerCase() === "b") { state.tool = "ball"; syncUI(); return; }
-        if (event.key.toLowerCase() === "m") { state.tool = "pen"; syncUI(); return; }
-        if (event.key.toLowerCase() === "p") { state.tool = "pen"; syncUI(); return; }
-
-        if (event.key.toLowerCase() === "g" && (event.metaKey || event.ctrlKey) && event.shiftKey) {
-          event.preventDefault(); ungroupSelected(); return;
-        }
-        if (event.key.toLowerCase() === "g" && (event.metaKey || event.ctrlKey)) {
-          event.preventDefault();
-          var strokeEntries = state.multiSelection.filter(function (e) { return e.type === "stroke"; });
-          if (strokeEntries.length > 1) {
-            var ids = strokeEntries.map(function (e) { return e.id; });
-            var grp = createGroup(ids);
-            if (grp) { state.multiSelection = [{ type: "group", id: grp.id }]; syncLegacySelection(); syncSelectionPanel(); renderFrame(); }
+          if (
+            event.key.toLowerCase() === "k" &&
+            !(event.metaKey || event.ctrlKey)
+          ) {
+            saveSelectedShape();
+            syncShapeLibraryTab(true);
+            return;
           }
-          return;
-        }
-        if (event.key.toLowerCase() === "g" && !(event.metaKey || event.ctrlKey)) {
-          state.grid.enabled = !state.grid.enabled; renderFrame(); return;
-        }
-        if (event.key.toLowerCase() === "k" && !(event.metaKey || event.ctrlKey)) {
-          saveSelectedShape(); syncShapeLibraryTab(true); return;
-        }
 
-        if (state.tool === "pen" && state.penTool.isDrawing) {
-          if (event.key === "Escape") { state.penTool.currentStroke = null; state.penTool.isDrawing = false; state.penTool.previewPoint = null; renderFrame(); return; }
-          if (event.key === "Enter") { event.preventDefault(); if (state.penTool.mode === "shape") commitShapeStroke(false); else if (state.penTool.mode === "line" && state.penTool.currentStroke) { var cs = state.penTool.currentStroke; if (state.penTool.previewPoint && cs.points.length > 0) commitLineStroke(cs.points[0], state.penTool.previewPoint); } return; }
-          if (event.key === "Backspace" && state.penTool.mode === "shape" && state.penTool.currentStroke) { event.preventDefault(); var cs2 = state.penTool.currentStroke; if (cs2.points.length > 1) cs2.points.pop(); else { state.penTool.currentStroke = null; state.penTool.isDrawing = false; } renderFrame(); return; }
-        }
+          if (state.tool === "pen" && state.penTool.isDrawing) {
+            if (event.key === "Escape") {
+              state.penTool.currentStroke = null;
+              state.penTool.isDrawing = false;
+              state.penTool.previewPoint = null;
+              renderFrame();
+              return;
+            }
+            if (event.key === "Enter") {
+              event.preventDefault();
+              if (state.penTool.mode === "shape") commitShapeStroke(false);
+              else if (
+                state.penTool.mode === "line" &&
+                state.penTool.currentStroke
+              ) {
+                var cs = state.penTool.currentStroke;
+                if (state.penTool.previewPoint && cs.points.length > 0)
+                  commitLineStroke(cs.points[0], state.penTool.previewPoint);
+              }
+              return;
+            }
+            if (
+              event.key === "Backspace" &&
+              state.penTool.mode === "shape" &&
+              state.penTool.currentStroke
+            ) {
+              event.preventDefault();
+              var cs2 = state.penTool.currentStroke;
+              if (cs2.points.length > 1) cs2.points.pop();
+              else {
+                state.penTool.currentStroke = null;
+                state.penTool.isDrawing = false;
+              }
+              renderFrame();
+              return;
+            }
+          }
 
-        if (state.tool === "line" && state.lineTool.step === 1) {
-          if (!isNaN(event.key) && event.key !== " ") { event.preventDefault(); state.lineTool.isTyping = true; state.lineTool.lengthInput += event.key; renderFrame(); return; }
-          if (event.key === ".") { event.preventDefault(); state.lineTool.lengthInput += "."; renderFrame(); return; }
-          if (event.key === "Backspace") { event.preventDefault(); state.lineTool.lengthInput = state.lineTool.lengthInput.slice(0,-1); if (!state.lineTool.lengthInput) state.lineTool.isTyping = false; renderFrame(); return; }
-          if (event.key === "Enter" && state.lineTool.previewEnd) { event.preventDefault(); finalizeLineTool(state.lineTool.previewEnd); return; }
-          if (event.key === "Escape") { event.preventDefault(); state.lineTool.step = 0; state.lineTool.startPoint = null; state.lineTool.previewEnd = null; state.lineTool.lengthInput = ""; state.lineTool.isTyping = false; renderFrame(); return; }
-        }
+          if (state.tool === "line" && state.lineTool.step === 1) {
+            if (!isNaN(event.key) && event.key !== " ") {
+              event.preventDefault();
+              state.lineTool.isTyping = true;
+              state.lineTool.lengthInput += event.key;
+              renderFrame();
+              return;
+            }
+            if (event.key === ".") {
+              event.preventDefault();
+              state.lineTool.lengthInput += ".";
+              renderFrame();
+              return;
+            }
+            if (event.key === "Backspace") {
+              event.preventDefault();
+              state.lineTool.lengthInput = state.lineTool.lengthInput.slice(
+                0,
+                -1,
+              );
+              if (!state.lineTool.lengthInput) state.lineTool.isTyping = false;
+              renderFrame();
+              return;
+            }
+            if (event.key === "Enter" && state.lineTool.previewEnd) {
+              event.preventDefault();
+              finalizeLineTool(state.lineTool.previewEnd);
+              return;
+            }
+            if (event.key === "Escape") {
+              event.preventDefault();
+              state.lineTool.step = 0;
+              state.lineTool.startPoint = null;
+              state.lineTool.previewEnd = null;
+              state.lineTool.lengthInput = "";
+              state.lineTool.isTyping = false;
+              renderFrame();
+              return;
+            }
+          }
 
-        var modifier = event.metaKey || event.ctrlKey;
-        if (!modifier) return;
-        if (event.key.toLowerCase() === "z") { event.preventDefault(); await undo(); }
-        if (event.key.toLowerCase() === "a") { event.preventDefault(); selectAllObjects(); }
-      }, true);
+          var modifier = event.metaKey || event.ctrlKey;
+          if (!modifier) return;
+          if (event.key.toLowerCase() === "z") {
+            event.preventDefault();
+            await undo();
+          }
+          if (event.key.toLowerCase() === "a") {
+            event.preventDefault();
+            selectAllObjects();
+          }
+        },
+        true,
+      );
 
       global.addEventListener("keyup", function onKeyUp(event) {
         heldKeys.delete(event.key.toLowerCase());
@@ -11704,6 +15281,7 @@
           canvas: clone(state.canvas),
           swarm: clone(state.swarm),
           balls: clone(state.balls || []),
+          projectileWalkers: clone(state.projectileWalkers || []),
           shapes: clone(state.shapes || []),
           textObjects: clone(state.textObjects || []),
           background: state.backgroundDataUrl || null,
@@ -12178,47 +15756,59 @@
         });
       });
 
-      if (elements.textContent) elements.textContent.addEventListener(
-        "input",
-        function updateTextContent() {
-          state.defaults.textValue = elements.textContent.value;
-          scheduleSelectedTextRefresh();
-        },
-      );
-
-      if (elements.textSize) elements.textSize.addEventListener("input", function updateTextSize() {
-        state.defaults.textSize = clampInt(
-          Number(elements.textSize.value),
-          24,
-          420,
+      if (elements.textContent)
+        elements.textContent.addEventListener(
+          "input",
+          function updateTextContent() {
+            state.defaults.textValue = elements.textContent.value;
+            scheduleSelectedTextRefresh();
+          },
         );
-        scheduleSelectedTextRefresh();
-      });
 
-      if (elements.textX) elements.textX.addEventListener("input", function updateTextX() {
-        applySelectedTextTransform({ x: Number(elements.textX.value) });
-      });
+      if (elements.textSize)
+        elements.textSize.addEventListener("input", function updateTextSize() {
+          state.defaults.textSize = clampInt(
+            Number(elements.textSize.value),
+            24,
+            420,
+          );
+          scheduleSelectedTextRefresh();
+        });
 
-      if (elements.textY) elements.textY.addEventListener("input", function updateTextY() {
-        applySelectedTextTransform({ y: Number(elements.textY.value) });
-      });
+      if (elements.textX)
+        elements.textX.addEventListener("input", function updateTextX() {
+          applySelectedTextTransform({ x: Number(elements.textX.value) });
+        });
 
-      if (elements.textScale) elements.textScale.addEventListener("input", function updateTextScale() {
-        applySelectedTextTransform({ scale: Number(elements.textScale.value) });
-      });
+      if (elements.textY)
+        elements.textY.addEventListener("input", function updateTextY() {
+          applySelectedTextTransform({ y: Number(elements.textY.value) });
+        });
 
-      if (elements.textRotation) elements.textRotation.addEventListener(
-        "input",
-        function updateTextRotation() {
-          applySelectedTextTransform({
-            rotation: Number(elements.textRotation.value),
-          });
-        },
-      );
+      if (elements.textScale)
+        elements.textScale.addEventListener(
+          "input",
+          function updateTextScale() {
+            applySelectedTextTransform({
+              scale: Number(elements.textScale.value),
+            });
+          },
+        );
 
-      if (elements.centerText) elements.centerText.addEventListener("click", function centerText() {
-        centerSelectedText();
-      });
+      if (elements.textRotation)
+        elements.textRotation.addEventListener(
+          "input",
+          function updateTextRotation() {
+            applySelectedTextTransform({
+              rotation: Number(elements.textRotation.value),
+            });
+          },
+        );
+
+      if (elements.centerText)
+        elements.centerText.addEventListener("click", function centerText() {
+          centerSelectedText();
+        });
 
       elements.duplicateSelection.addEventListener(
         "click",
@@ -12342,6 +15932,362 @@
         });
       }
 
+      // ── Field Visualization bindings (FieldVisualizationSystem v1.0.0) ───
+
+      (function bindFieldViz() {
+        function fv() {
+          return state.world.fieldViz;
+        }
+
+        var fvEnabled = document.getElementById("fv-enabled");
+        if (fvEnabled) {
+          fvEnabled.checked = fv().enabled;
+          fvEnabled.addEventListener("change", function () {
+            fv().enabled = this.checked;
+          });
+        }
+
+        // Visible: controls whether the overlay renders (independent of Active/enabled)
+        var fvVisible = document.getElementById("fv-visible");
+        if (fvVisible) {
+          if (fv().visible == null) fv().visible = true; // default on
+          fvVisible.checked = fv().visible !== false;
+          fvVisible.addEventListener("change", function () {
+            fv().visible = this.checked;
+          });
+        }
+
+        var fvMode = document.getElementById("fv-mode");
+        if (fvMode) {
+          fvMode.value = fv().mode;
+          fvMode.addEventListener("change", function () {
+            fv().mode = this.value;
+            this.blur();
+          });
+        }
+
+        var fvPalette = document.getElementById("fv-palette");
+        if (fvPalette) {
+          fvPalette.value = fv().palette;
+          fvPalette.addEventListener("change", function () {
+            fv().palette = this.value;
+            this.blur();
+          });
+        }
+
+        var fvOpacity = document.getElementById("fv-opacity");
+        var fvOpacityOut = document.getElementById("fv-opacity-value");
+        if (fvOpacity) {
+          fvOpacity.value = fv().opacity;
+          fvOpacity.addEventListener("input", function () {
+            fv().opacity = Number(this.value);
+            if (fvOpacityOut)
+              fvOpacityOut.value = Number(this.value).toFixed(2);
+          });
+        }
+
+        var fvBlur = document.getElementById("fv-blur");
+        var fvBlurOut = document.getElementById("fv-blur-value");
+        if (fvBlur) {
+          fvBlur.value = fv().blur;
+          fvBlur.addEventListener("input", function () {
+            fv().blur = Number(this.value);
+            if (fvBlurOut) fvBlurOut.value = this.value;
+          });
+        }
+
+        var fvDecay = document.getElementById("fv-decay");
+        var fvDecayOut = document.getElementById("fv-decay-value");
+        if (fvDecay) {
+          fvDecay.value = fv().decay;
+          fvDecay.addEventListener("input", function () {
+            fv().decay = Number(this.value);
+            if (fvDecayOut) fvDecayOut.value = this.value;
+          });
+        }
+
+        var fvAccum = document.getElementById("fv-accum");
+        var fvAccumOut = document.getElementById("fv-accum-value");
+        if (fvAccum) {
+          fvAccum.value = fv().accumulation;
+          fvAccum.addEventListener("input", function () {
+            fv().accumulation = Number(this.value);
+            if (fvAccumOut) fvAccumOut.value = Number(this.value).toFixed(3);
+          });
+        }
+
+        var fvClear = document.getElementById("fv-clear-density");
+        if (fvClear) {
+          fvClear.addEventListener("click", function () {
+            if (window.SBE && SBE.FieldRenderer)
+              SBE.FieldRenderer.clearDensity();
+          });
+        }
+      })();
+
+      // ── Field Visualizer debug bindings (FieldVisualizer v1.0.0) ─────────
+      (function () {
+        function fdbg() {
+          return state.fieldVisualizer;
+        }
+
+        function _syncFdbgRowVisibility(mode) {
+          var rowGrid = document.getElementById("fdbg-row-gridstep");
+          var rowTrail = document.getElementById("fdbg-row-traildecay");
+          if (rowGrid) rowGrid.style.display = mode === "vectors" ? "" : "none";
+          if (rowTrail)
+            rowTrail.style.display = mode === "trails" ? "" : "none";
+        }
+
+        var el;
+
+        el = document.getElementById("fdbg-enabled");
+        if (el) {
+          el.checked = fdbg().enabled;
+          el.addEventListener("change", function () {
+            fdbg().enabled = this.checked;
+          });
+        }
+
+        el = document.getElementById("fdbg-mode");
+        if (el) {
+          el.value = fdbg().mode;
+          _syncFdbgRowVisibility(fdbg().mode);
+          el.addEventListener("change", function () {
+            fdbg().mode = this.value;
+            _syncFdbgRowVisibility(this.value);
+            if (window.SBE && SBE.FieldVisualizer) SBE.FieldVisualizer.clear();
+            this.blur();
+          });
+        }
+
+        el = document.getElementById("fdbg-palette");
+        if (el) {
+          el.value = fdbg().palette;
+          el.addEventListener("change", function () {
+            fdbg().palette = this.value;
+            this.blur();
+          });
+        }
+
+        var opOut = document.getElementById("fdbg-opacity-value");
+        el = document.getElementById("fdbg-opacity");
+        if (el) {
+          el.value = fdbg().opacity;
+          el.addEventListener("input", function () {
+            fdbg().opacity = Number(this.value);
+            if (opOut) opOut.value = Number(this.value).toFixed(2);
+          });
+        }
+
+        var gsOut = document.getElementById("fdbg-gridstep-value");
+        el = document.getElementById("fdbg-gridstep");
+        if (el) {
+          el.value = fdbg().gridStep;
+          el.addEventListener("input", function () {
+            fdbg().gridStep = Number(this.value);
+            if (gsOut) gsOut.value = this.value;
+          });
+        }
+
+        var tdOut = document.getElementById("fdbg-traildecay-value");
+        el = document.getElementById("fdbg-traildecay");
+        if (el) {
+          el.value = fdbg().trailDecay;
+          el.addEventListener("input", function () {
+            fdbg().trailDecay = Number(this.value);
+            if (tdOut) tdOut.value = Number(this.value).toFixed(3);
+          });
+        }
+
+        el = document.getElementById("fdbg-orbital-mode");
+        if (el) {
+          var _flow =
+            state.world && state.world.physics && state.world.physics.flow;
+          el.value = (_flow && _flow.orbitalMode) || "tangential";
+          el.addEventListener("change", function () {
+            if (
+              state.world &&
+              state.world.physics &&
+              state.world.physics.flow
+            ) {
+              state.world.physics.flow.orbitalMode = this.value;
+            }
+            if (window.SBE && SBE.FieldVisualizer) SBE.FieldVisualizer.clear();
+            this.blur();
+          });
+        }
+      })();
+
+      // ── Dual-plane physics bindings (DualPlanePhysics v1.0.0) ────────────
+
+      // Plane mode segment group: Side / Topdown / Hybrid
+      var planeModeGroup = document.getElementById("plane-mode-group");
+      if (planeModeGroup) {
+        planeModeGroup.addEventListener("click", function (e) {
+          var btn = e.target.closest("[data-plane-mode]");
+          if (!btn) return;
+          var mode = btn.dataset.planeMode;
+          if (!state.world.physics) state.world.physics = {};
+          state.world.physics.mode = mode;
+          // Update active button
+          planeModeGroup.querySelectorAll(".insp-seg").forEach(function (b) {
+            b.classList.toggle("active", b.dataset.planeMode === mode);
+          });
+          // Field section always visible — Side also needs wind/rain/flow/vector fields.
+        });
+        // Side mode still exposes field section — side worlds need wind/flow/vector fields.
+        // Only the field section visibility is controlled by plane mode, not hidden entirely.
+        // (No initial hide — field section always visible)
+      }
+
+      // World field type
+      var worldFieldTypeEl = document.getElementById("world-field-type");
+      if (worldFieldTypeEl) {
+        worldFieldTypeEl.addEventListener("change", function () {
+          if (!state.world.physics) state.world.physics = {};
+          if (!state.world.physics.world) state.world.physics.world = {};
+          state.world.physics.world.fieldType = this.value;
+          // Show/hide direction row
+          var rowVec = document.getElementById("row-world-vector");
+          if (rowVec)
+            rowVec.style.display = this.value !== "none" ? "" : "none";
+          // Show/hide Orbital Mode row
+          var rowOrb = document.getElementById("row-world-orbital-subtype");
+          if (rowOrb)
+            rowOrb.style.display = this.value === "orbital" ? "" : "none";
+        });
+      }
+
+      // World orbital sub-type (Tangential / Radial / Spiral)
+      // Writes to state.world.physics.flow.orbitalMode — same field as legacy fdbg-orbital-mode
+      (function () {
+        var orbEl = document.getElementById("world-orbital-subtype");
+        if (!orbEl) return;
+        // Seed from current state
+        var _flow =
+          state.world && state.world.physics && state.world.physics.flow;
+        orbEl.value = (_flow && _flow.orbitalMode) || "tangential";
+        orbEl.addEventListener("change", function () {
+          if (!state.world.physics) state.world.physics = {};
+          if (!state.world.physics.flow) state.world.physics.flow = {};
+          state.world.physics.flow.orbitalMode = this.value;
+          if (window.SBE && SBE.FieldVisualizer) SBE.FieldVisualizer.clear();
+          this.blur();
+        });
+        // Init visibility
+        var _ft =
+          state.world &&
+          state.world.physics &&
+          state.world.physics.world &&
+          state.world.physics.world.fieldType;
+        var rowOrb = document.getElementById("row-world-orbital-subtype");
+        if (rowOrb) rowOrb.style.display = _ft === "orbital" ? "" : "none";
+      })();
+
+      // World vector angle (degrees → normalized vector)
+      var worldVectorAngleEl = document.getElementById("world-vector-angle");
+      var worldVectorAngleOut = document.getElementById(
+        "world-vector-angle-value",
+      );
+      if (worldVectorAngleEl) {
+        worldVectorAngleEl.addEventListener("input", function () {
+          var deg = Number(this.value);
+          var rad = ((deg - 90) * Math.PI) / 180; // 0° = north (up in screen coords)
+          if (!state.world.physics) state.world.physics = {};
+          if (!state.world.physics.world) state.world.physics.world = {};
+          state.world.physics.world.vectorX = Math.cos(rad);
+          state.world.physics.world.vectorY = Math.sin(rad);
+          if (worldVectorAngleOut) worldVectorAngleOut.value = deg + "°";
+        });
+      }
+
+      // World field strength
+      var worldFieldStrEl = document.getElementById("world-field-strength");
+      var worldFieldStrOut = document.getElementById(
+        "world-field-strength-value",
+      );
+      if (worldFieldStrEl) {
+        worldFieldStrEl.addEventListener("input", function () {
+          if (!state.world.physics) state.world.physics = {};
+          if (!state.world.physics.world) state.world.physics.world = {};
+          state.world.physics.world.strength = Number(this.value);
+          if (worldFieldStrOut)
+            worldFieldStrOut.value = Number(this.value).toFixed(1);
+        });
+      }
+
+      // ── Flow field walker drift bindings (FlowFieldWalkerDrift v1.0.0) ──
+
+      // Show/hide walker-drift-section when plane mode changes
+      // (re-use planeModeGroup listener already bound above — also init here)
+      (function syncDriftSection() {
+        var driftSection = document.getElementById("walker-drift-section");
+        function update() {
+          // Drift is valid in ALL plane modes — side worlds support wind/flow/vector fields.
+          if (driftSection) driftSection.style.display = "";
+        }
+        update();
+        // Patch plane mode group to also call update
+        var pg = document.getElementById("plane-mode-group");
+        if (pg) {
+          pg.addEventListener("click", function () {
+            setTimeout(update, 0); // after state updated by existing handler
+          });
+        }
+      })();
+
+      var flowDriftEnabled = document.getElementById("flow-drift-enabled");
+      if (flowDriftEnabled) {
+        flowDriftEnabled.checked = state.world.physics.flow.enabled;
+        flowDriftEnabled.addEventListener("change", function () {
+          state.world.physics.flow.enabled = this.checked;
+        });
+      }
+
+      var flowDriftStrEl = document.getElementById("flow-drift-strength");
+      var flowDriftStrOut = document.getElementById(
+        "flow-drift-strength-value",
+      );
+      if (flowDriftStrEl) {
+        flowDriftStrEl.value = state.world.physics.flow.strength;
+        flowDriftStrEl.addEventListener("input", function () {
+          state.world.physics.flow.strength = Number(this.value);
+          if (flowDriftStrOut)
+            flowDriftStrOut.value = Number(this.value).toFixed(3);
+        });
+      }
+
+      var flowDriftDampEl = document.getElementById("flow-drift-damping");
+      var flowDriftDampOut = document.getElementById(
+        "flow-drift-damping-value",
+      );
+      if (flowDriftDampEl) {
+        flowDriftDampEl.value = state.world.physics.flow.damping;
+        flowDriftDampEl.addEventListener("input", function () {
+          state.world.physics.flow.damping = Number(this.value);
+          if (flowDriftDampOut)
+            flowDriftDampOut.value = Number(this.value).toFixed(3);
+        });
+      }
+
+      // Field influence slider — operates on selected walker(s)
+      var fieldInflEl = document.getElementById("obj-field-influence");
+      var fieldInflOut = document.getElementById("obj-field-influence-value");
+      if (fieldInflEl) {
+        fieldInflEl.addEventListener("input", function () {
+          var val = Number(this.value);
+          if (fieldInflOut) fieldInflOut.value = val.toFixed(2);
+          // Apply to all selected walkers
+          state.walkers.forEach(function (w) {
+            var sel = state.multiSelection.some(function (s) {
+              return s.id === w.strokeId;
+            });
+            if (sel) w.fieldInfluence = val;
+          });
+        });
+      }
+
       // Material type binding
       var materialTypeEl = document.getElementById("material-type");
       if (materialTypeEl) {
@@ -12352,9 +16298,13 @@
           state.multiSelection.forEach(function (sel) {
             var obj = null;
             if (sel.type === "line") {
-              obj = state.lines.find(function (l) { return l.id === sel.id; });
+              obj = state.lines.find(function (l) {
+                return l.id === sel.id;
+              });
             } else if (sel.type === "stroke") {
-              obj = state.strokes.find(function (s) { return s.id === sel.id; });
+              obj = state.strokes.find(function (s) {
+                return s.id === sel.id;
+              });
             }
             if (obj) SBE.MaterialSystem.setMaterialType(obj, type);
           });
@@ -12955,311 +16905,313 @@
       })();
 
       if (!window._wosKeyboardBound) {
-      global.addEventListener("keydown", async function onKeyDown(event) {
-        heldKeys.add(event.key.toLowerCase());
-        if (event.key === "Shift") input.shift = true;
+        global.addEventListener("keydown", async function onKeyDown(event) {
+          heldKeys.add(event.key.toLowerCase());
+          if (event.key === "Shift") input.shift = true;
 
-        if (textEditor && event.key === "Escape") {
-          event.preventDefault();
-          removeCanvasTextInput(false);
-          return;
-        }
-
-        // ── Label editing mode — captures all keys ────────────────────────
-        if (state.textEditing && state.activeLabelId) {
-          var _editLabel = getLabelById(state.activeLabelId);
-          if (_editLabel) {
+          if (textEditor && event.key === "Escape") {
             event.preventDefault();
-            if (event.key === "Escape") {
-              // Cancel — remove empty label, deselect
-              if (!_editLabel.text) removeLabel(_editLabel.id);
-              state.textEditing = false;
-              state.activeLabelId = null;
-            } else if (event.key === "Backspace") {
-              _editLabel.text = _editLabel.text.slice(0, -1);
-            } else if (event.key === "Enter") {
-              if (event.shiftKey) {
-                // Shift+Enter — commit
+            removeCanvasTextInput(false);
+            return;
+          }
+
+          // ── Label editing mode — captures all keys ────────────────────────
+          if (state.textEditing && state.activeLabelId) {
+            var _editLabel = getLabelById(state.activeLabelId);
+            if (_editLabel) {
+              event.preventDefault();
+              if (event.key === "Escape") {
+                // Cancel — remove empty label, deselect
                 if (!_editLabel.text) removeLabel(_editLabel.id);
                 state.textEditing = false;
                 state.activeLabelId = null;
-              } else {
-                _editLabel.text += "\n";
+              } else if (event.key === "Backspace") {
+                _editLabel.text = _editLabel.text.slice(0, -1);
+              } else if (event.key === "Enter") {
+                if (event.shiftKey) {
+                  // Shift+Enter — commit
+                  if (!_editLabel.text) removeLabel(_editLabel.id);
+                  state.textEditing = false;
+                  state.activeLabelId = null;
+                } else {
+                  _editLabel.text += "\n";
+                }
+              } else if (event.key.length === 1) {
+                _editLabel.text += event.key;
               }
-            } else if (event.key.length === 1) {
-              _editLabel.text += event.key;
-            }
-            renderFrame();
-            return; // block all other shortcuts while editing
-          }
-        }
-        // ── End label editing ─────────────────────────────────────────────
-
-        if (isTypingTarget()) {
-          return;
-        }
-
-        // ── Shortcut suspension — takesFocus drawers (e.g. GlyphLab) ─────────
-        if (window._wos && window._wos._shortcutsSuspended) {
-          return;
-        }
-
-        console.log("[KEYDOWN TRACE]", {
-          key: event.key,
-          code: event.code,
-          meta: event.metaKey,
-          ctrl: event.ctrlKey,
-          shift: event.shiftKey,
-          activeElement: document.activeElement && document.activeElement.tagName
-            ? document.activeElement.tagName.toLowerCase() : null,
-        });
-
-        if (event.key === "Delete" || event.key === "Backspace") {
-          event.preventDefault();
-          event.stopPropagation();
-          console.log("[DELETE KEY] before", window._wos.debugSelection());
-          var _delResult = deleteSelectedObject();
-          console.log("[DELETE KEY] result", _delResult);
-          console.log("[DELETE KEY] after", window._wos.debugSelection());
-          return;
-        }
-
-        if (
-          event.key &&
-          event.key.toLowerCase() === "d" &&
-          (event.metaKey || event.ctrlKey)
-        ) {
-          event.preventDefault();
-          event.stopPropagation();
-          console.log("[DUPLICATE KEY] before", window._wos.debugSelection());
-          var _dupResult = await duplicateSelectedObject();
-          console.log("[DUPLICATE KEY] result", _dupResult);
-          console.log("[DUPLICATE KEY] after", window._wos.debugSelection());
-          return;
-        }
-
-        if (event.key === " ") {
-          event.preventDefault();
-          togglePlayback();
-          syncUI();
-          return;
-        }
-
-        if (event.key === "Tab") {
-          event.preventDefault();
-          togglePresentationMode();
-          return;
-        }
-
-        if (event.key === "?") {
-          event.preventDefault();
-          toggleShortcuts();
-          return;
-        }
-
-        if (event.key.toLowerCase() === "v") {
-          state.tool = "select";
-          syncUI();
-          return;
-        }
-        if (event.key.toLowerCase() === "d") {
-          // D key activates mop (primary drawing tool) — Cmd+D handled above
-          state.tool = "pen";
-          syncUI();
-          return;
-        }
-        if (
-          event.key.toLowerCase() === "s" &&
-          !(event.metaKey || event.ctrlKey)
-        ) {
-          state.tool = "shape";
-          syncUI();
-          updatePanels(state.tool);
-          return;
-        }
-        if (event.key.toLowerCase() === "t") {
-          state.tool = "text";
-          syncUI();
-          updatePanels(state.tool);
-          return;
-        }
-        if (event.key.toLowerCase() === "b") {
-          state.tool = "ball";
-          syncUI();
-          return;
-        }
-        if (event.key.toLowerCase() === "m") {
-          state.tool = "pen";
-          syncUI();
-          return;
-        }
-        if (event.key.toLowerCase() === "p") {
-          state.tool = "pen";
-          syncUI();
-          return;
-        }
-        // Ctrl/Cmd+Shift+G — ungroup
-        if (
-          event.key.toLowerCase() === "g" &&
-          (event.metaKey || event.ctrlKey) &&
-          event.shiftKey
-        ) {
-          event.preventDefault();
-          ungroupSelected();
-          return;
-        }
-
-        // Ctrl/Cmd+G — group selected strokes
-        if (
-          event.key.toLowerCase() === "g" &&
-          (event.metaKey || event.ctrlKey)
-        ) {
-          event.preventDefault();
-          var strokeEntries = state.multiSelection.filter(function (e) {
-            return e.type === "stroke";
-          });
-          if (strokeEntries.length > 1) {
-            var ids = strokeEntries.map(function (e) {
-              return e.id;
-            });
-            var grp = createGroup(ids);
-            if (grp) {
-              state.multiSelection = [{ type: "group", id: grp.id }];
-              syncLegacySelection();
-              syncSelectionPanel();
               renderFrame();
+              return; // block all other shortcuts while editing
             }
           }
-          return;
-        }
-        // G — toggle grid
-        if (
-          event.key.toLowerCase() === "g" &&
-          !(event.metaKey || event.ctrlKey)
-        ) {
-          state.grid.enabled = !state.grid.enabled;
-          renderFrame();
-          return;
-        }
-        // K — save selected stroke as shape
-        if (
-          event.key.toLowerCase() === "k" &&
-          !(event.metaKey || event.ctrlKey)
-        ) {
-          saveSelectedShape();
-          syncShapeLibraryTab(true);
-          return;
-        }
+          // ── End label editing ─────────────────────────────────────────────
 
-        // Pen tool keyboard controls (shape + line modes)
-        if (state.tool === "pen" && state.penTool.isDrawing) {
-          // Escape — cancel in-progress stroke
-          if (event.key === "Escape") {
-            state.penTool.currentStroke = null;
-            state.penTool.isDrawing = false;
-            state.penTool.previewPoint = null;
-            renderFrame();
+          if (isTypingTarget()) {
             return;
           }
-          // Enter — commit (shape = open path, line = finalize)
-          if (event.key === "Enter") {
+
+          // ── Shortcut suspension — takesFocus drawers (e.g. GlyphLab) ─────────
+          if (window._wos && window._wos._shortcutsSuspended) {
+            return;
+          }
+
+          console.log("[KEYDOWN TRACE]", {
+            key: event.key,
+            code: event.code,
+            meta: event.metaKey,
+            ctrl: event.ctrlKey,
+            shift: event.shiftKey,
+            activeElement:
+              document.activeElement && document.activeElement.tagName
+                ? document.activeElement.tagName.toLowerCase()
+                : null,
+          });
+
+          if (event.key === "Delete" || event.key === "Backspace") {
             event.preventDefault();
-            if (state.penTool.mode === "shape") commitShapeStroke(false);
-            else if (
-              state.penTool.mode === "line" &&
-              state.penTool.currentStroke
-            ) {
-              var cs = state.penTool.currentStroke;
-              if (state.penTool.previewPoint && cs.points.length > 0) {
-                commitLineStroke(cs.points[0], state.penTool.previewPoint);
-              }
-            }
+            event.stopPropagation();
+            console.log("[DELETE KEY] before", window._wos.debugSelection());
+            var _delResult = deleteSelectedObject();
+            console.log("[DELETE KEY] result", _delResult);
+            console.log("[DELETE KEY] after", window._wos.debugSelection());
             return;
           }
-          // Backspace — remove last placed point (shape only)
+
           if (
-            event.key === "Backspace" &&
-            state.penTool.mode === "shape" &&
-            state.penTool.currentStroke
+            event.key &&
+            event.key.toLowerCase() === "d" &&
+            (event.metaKey || event.ctrlKey)
           ) {
             event.preventDefault();
-            var cs = state.penTool.currentStroke;
-            if (cs.points.length > 1) {
-              cs.points.pop();
-            } else {
+            event.stopPropagation();
+            console.log("[DUPLICATE KEY] before", window._wos.debugSelection());
+            var _dupResult = await duplicateSelectedObject();
+            console.log("[DUPLICATE KEY] result", _dupResult);
+            console.log("[DUPLICATE KEY] after", window._wos.debugSelection());
+            return;
+          }
+
+          if (event.key === " ") {
+            event.preventDefault();
+            togglePlayback();
+            syncUI();
+            return;
+          }
+
+          if (event.key === "Tab") {
+            event.preventDefault();
+            togglePresentationMode();
+            return;
+          }
+
+          if (event.key === "?") {
+            event.preventDefault();
+            toggleShortcuts();
+            return;
+          }
+
+          if (event.key.toLowerCase() === "v") {
+            state.tool = "select";
+            syncUI();
+            return;
+          }
+          if (event.key.toLowerCase() === "d") {
+            // D key activates mop (primary drawing tool) — Cmd+D handled above
+            state.tool = "pen";
+            syncUI();
+            return;
+          }
+          if (
+            event.key.toLowerCase() === "s" &&
+            !(event.metaKey || event.ctrlKey)
+          ) {
+            state.tool = "shape";
+            syncUI();
+            updatePanels(state.tool);
+            return;
+          }
+          if (event.key.toLowerCase() === "t") {
+            state.tool = "text";
+            syncUI();
+            updatePanels(state.tool);
+            return;
+          }
+          if (event.key.toLowerCase() === "b") {
+            state.tool = "ball";
+            syncUI();
+            return;
+          }
+          if (event.key.toLowerCase() === "m") {
+            state.tool = "pen";
+            syncUI();
+            return;
+          }
+          if (event.key.toLowerCase() === "p") {
+            state.tool = "pen";
+            syncUI();
+            return;
+          }
+          // Ctrl/Cmd+Shift+G — ungroup
+          if (
+            event.key.toLowerCase() === "g" &&
+            (event.metaKey || event.ctrlKey) &&
+            event.shiftKey
+          ) {
+            event.preventDefault();
+            ungroupSelected();
+            return;
+          }
+
+          // Ctrl/Cmd+G — group selected strokes
+          if (
+            event.key.toLowerCase() === "g" &&
+            (event.metaKey || event.ctrlKey)
+          ) {
+            event.preventDefault();
+            var strokeEntries = state.multiSelection.filter(function (e) {
+              return e.type === "stroke";
+            });
+            if (strokeEntries.length > 1) {
+              var ids = strokeEntries.map(function (e) {
+                return e.id;
+              });
+              var grp = createGroup(ids);
+              if (grp) {
+                state.multiSelection = [{ type: "group", id: grp.id }];
+                syncLegacySelection();
+                syncSelectionPanel();
+                renderFrame();
+              }
+            }
+            return;
+          }
+          // G — toggle grid
+          if (
+            event.key.toLowerCase() === "g" &&
+            !(event.metaKey || event.ctrlKey)
+          ) {
+            state.grid.enabled = !state.grid.enabled;
+            renderFrame();
+            return;
+          }
+          // K — save selected stroke as shape
+          if (
+            event.key.toLowerCase() === "k" &&
+            !(event.metaKey || event.ctrlKey)
+          ) {
+            saveSelectedShape();
+            syncShapeLibraryTab(true);
+            return;
+          }
+
+          // Pen tool keyboard controls (shape + line modes)
+          if (state.tool === "pen" && state.penTool.isDrawing) {
+            // Escape — cancel in-progress stroke
+            if (event.key === "Escape") {
               state.penTool.currentStroke = null;
               state.penTool.isDrawing = false;
+              state.penTool.previewPoint = null;
+              renderFrame();
+              return;
             }
-            renderFrame();
+            // Enter — commit (shape = open path, line = finalize)
+            if (event.key === "Enter") {
+              event.preventDefault();
+              if (state.penTool.mode === "shape") commitShapeStroke(false);
+              else if (
+                state.penTool.mode === "line" &&
+                state.penTool.currentStroke
+              ) {
+                var cs = state.penTool.currentStroke;
+                if (state.penTool.previewPoint && cs.points.length > 0) {
+                  commitLineStroke(cs.points[0], state.penTool.previewPoint);
+                }
+              }
+              return;
+            }
+            // Backspace — remove last placed point (shape only)
+            if (
+              event.key === "Backspace" &&
+              state.penTool.mode === "shape" &&
+              state.penTool.currentStroke
+            ) {
+              event.preventDefault();
+              var cs = state.penTool.currentStroke;
+              if (cs.points.length > 1) {
+                cs.points.pop();
+              } else {
+                state.penTool.currentStroke = null;
+                state.penTool.isDrawing = false;
+              }
+              renderFrame();
+              return;
+            }
+          }
+
+          // L key — line tool disabled, mop is primary drawing system
+          // if (event.key.toLowerCase() === "l") { ... }
+
+          // Line tool length input
+          if (state.tool === "line" && state.lineTool.step === 1) {
+            if (!isNaN(event.key) && event.key !== " ") {
+              event.preventDefault();
+              state.lineTool.isTyping = true;
+              state.lineTool.lengthInput += event.key;
+              renderFrame();
+              return;
+            }
+            if (event.key === ".") {
+              event.preventDefault();
+              state.lineTool.lengthInput += ".";
+              renderFrame();
+              return;
+            }
+            if (event.key === "Backspace") {
+              event.preventDefault();
+              state.lineTool.lengthInput = state.lineTool.lengthInput.slice(
+                0,
+                -1,
+              );
+              if (!state.lineTool.lengthInput) state.lineTool.isTyping = false;
+              renderFrame();
+              return;
+            }
+            if (event.key === "Enter" && state.lineTool.previewEnd) {
+              event.preventDefault();
+              finalizeLineTool(state.lineTool.previewEnd);
+              return;
+            }
+            if (event.key === "Escape") {
+              event.preventDefault();
+              state.lineTool.step = 0;
+              state.lineTool.startPoint = null;
+              state.lineTool.previewEnd = null;
+              state.lineTool.lengthInput = "";
+              state.lineTool.isTyping = false;
+              renderFrame();
+              return;
+            }
+          }
+
+          const modifier = event.metaKey || event.ctrlKey;
+          if (!modifier) {
             return;
           }
-        }
 
-        // L key — line tool disabled, mop is primary drawing system
-        // if (event.key.toLowerCase() === "l") { ... }
-
-        // Line tool length input
-        if (state.tool === "line" && state.lineTool.step === 1) {
-          if (!isNaN(event.key) && event.key !== " ") {
+          if (event.key.toLowerCase() === "z") {
             event.preventDefault();
-            state.lineTool.isTyping = true;
-            state.lineTool.lengthInput += event.key;
-            renderFrame();
-            return;
+            await undo();
           }
-          if (event.key === ".") {
-            event.preventDefault();
-            state.lineTool.lengthInput += ".";
-            renderFrame();
-            return;
-          }
-          if (event.key === "Backspace") {
-            event.preventDefault();
-            state.lineTool.lengthInput = state.lineTool.lengthInput.slice(
-              0,
-              -1,
-            );
-            if (!state.lineTool.lengthInput) state.lineTool.isTyping = false;
-            renderFrame();
-            return;
-          }
-          if (event.key === "Enter" && state.lineTool.previewEnd) {
-            event.preventDefault();
-            finalizeLineTool(state.lineTool.previewEnd);
-            return;
-          }
-          if (event.key === "Escape") {
-            event.preventDefault();
-            state.lineTool.step = 0;
-            state.lineTool.startPoint = null;
-            state.lineTool.previewEnd = null;
-            state.lineTool.lengthInput = "";
-            state.lineTool.isTyping = false;
-            renderFrame();
-            return;
-          }
-        }
 
-        const modifier = event.metaKey || event.ctrlKey;
-        if (!modifier) {
-          return;
-        }
+          if (event.key.toLowerCase() === "a") {
+            event.preventDefault();
+            selectAllObjects();
+          }
+        });
 
-        if (event.key.toLowerCase() === "z") {
-          event.preventDefault();
-          await undo();
-        }
-
-        if (event.key.toLowerCase() === "a") {
-          event.preventDefault();
-          selectAllObjects();
-        }
-      });
-
-      global.addEventListener("keyup", function onKeyUp(event) {
-        heldKeys.delete(event.key.toLowerCase());
-        if (event.key === "Shift") input.shift = false;
-      });
+        global.addEventListener("keyup", function onKeyUp(event) {
+          heldKeys.delete(event.key.toLowerCase());
+          if (event.key === "Shift") input.shift = false;
+        });
       } // end if (!window._wosKeyboardBound)
     }
 
@@ -13346,6 +17298,10 @@
       state.balls = Array.isArray(scene.balls)
         ? scene.balls.map(normalizeBall)
         : [];
+      // Restore projectile walkers (ProjectileWalkerMigration v1.0.0)
+      state.projectileWalkers = Array.isArray(scene.projectileWalkers)
+        ? scene.projectileWalkers
+        : [];
       if (!state.balls.length && state.swarm.count > 0) {
         SBE.Swarm.syncSwarmCount(state, true);
         state.balls = state.balls.map(normalizeBall);
@@ -13355,6 +17311,17 @@
       state.backgroundImage = state.backgroundDataUrl
         ? await loadImage(state.backgroundDataUrl)
         : null;
+
+      // ── Layer state restore (SubjectLayerStabilityFix v1.0.0) ───────────────
+      if (Array.isArray(scene.layers) && scene.layers.length) {
+        state.layers = scene.layers;
+        state.activeLayerId = scene.activeLayerId || scene.layers[0].id;
+      } else {
+        // No layer data → keep current layers (scene was created before layer system)
+        _ensureDefaultLayer();
+      }
+      // Purge stale image cache on scene load so images reload from restored subjectImage
+      _subjectImageCache = {};
 
       // WOS stroke + group + walker layer restoration
       state.strokes = Array.isArray(scene.strokes) ? scene.strokes : [];
@@ -13382,14 +17349,20 @@
       });
       // SymbolObjects — hydrate from scene, or reset to empty list
       var SOS_apply = global.SBE && global.SBE.SymbolObjectSystem;
-      state.symbolObjects = SOS_apply && Array.isArray(scene.symbolObjects)
-        ? scene.symbolObjects.map(SOS_apply.hydrate).filter(Boolean)
-        : [];
-      state.selectedSymbolObjectId = null;
+      state.symbolObjects =
+        SOS_apply && Array.isArray(scene.symbolObjects)
+          ? scene.symbolObjects.map(SOS_apply.hydrate).filter(Boolean)
+          : [];
+      state.selectedSymbolObjectIds = new Set();
 
       // Reset placement ghost — never carry ghost state across scene loads
-      if (_symGhost) { _symGhost.visible = false; _symGhost.wx = 0; _symGhost.wy = 0; }
-      if (state.tool === "symbol-place") state.tool = "select";
+      if (_symGhost) {
+        _symGhost.visible = false;
+        _symGhost.wx = 0;
+        _symGhost.wy = 0;
+      }
+      if (state.tool === "symbol-place" || state.tool === "symbol-brush")
+        state.tool = "select";
 
       renderer.resize(state.canvas.width, state.canvas.height);
       updateCanvasAspect();
@@ -14171,6 +18144,52 @@
         setEl("obj-fill", obj.color || "#ff4b4b");
         setEl("obj-strokeWidth", Math.round(obj.baseWidth || obj.width || 18));
         setEl("obj-visible", obj.renderMode !== "hidden");
+
+        // ── PATH layer sync ────────────────────────────────────────────────
+        var _ps = obj.pathStyle || "solid";
+        setEl("obj-pathStyle", _ps);
+        var _dashF = document.getElementById("path-dash-fields");
+        if (_dashF)
+          _dashF.style.display =
+            _ps === "dotted" || _ps === "dashed" ? "" : "none";
+        setEl("obj-path-dash", obj.pathDash != null ? obj.pathDash : 12);
+        setEl("obj-path-gap", obj.pathGap != null ? obj.pathGap : 8);
+        var _pd = document.getElementById("obj-path-dash-value");
+        if (_pd) _pd.value = obj.pathDash != null ? obj.pathDash : 12;
+        var _pg = document.getElementById("obj-path-gap-value");
+        if (_pg) _pg.value = obj.pathGap != null ? obj.pathGap : 8;
+
+        // ── SUBJECT layer sync ─────────────────────────────────────────────
+        var _subSt = obj.subjectStyle != null ? obj.subjectStyle : "none";
+        setEl("obj-subject-style", _subSt);
+        setEl(
+          "obj-subject-scale",
+          obj.subjectScale != null ? obj.subjectScale : 1.0,
+        );
+        setEl(
+          "obj-subject-opacity",
+          obj.subjectOpacity != null ? obj.subjectOpacity : 1.0,
+        );
+        setEl("obj-subject-visible", obj.subjectVisible !== false);
+        var _ssv = document.getElementById("obj-subject-scale-value");
+        if (_ssv) _ssv.value = (obj.subjectScale || 1.0).toFixed(1);
+        var _sov = document.getElementById("obj-subject-opacity-value");
+        if (_sov) _sov.value = (obj.subjectOpacity || 1.0).toFixed(2);
+        // Show/hide sub-rows based on style
+        var _sg = document.getElementById("sub-row-glyph");
+        if (_sg) _sg.style.display = _subSt === "glyph" ? "" : "none";
+        var _si = document.getElementById("sub-row-image");
+        if (_si) _si.style.display = _subSt === "image" ? "" : "none";
+        var _st = document.getElementById("sub-row-text");
+        if (_st) _st.style.display = _subSt === "text" ? "" : "none";
+        if (obj.subjectGlyph) {
+          setEl("obj-subject-glyph", obj.subjectGlyph);
+        }
+        if (obj.subjectText) {
+          setEl("obj-subject-text", obj.subjectText);
+        }
+        setEl("obj-subject-color", obj.subjectColor || "");
+
         var walker = state.walkers.find(function (w) {
           return w.strokeId === obj.id;
         });
@@ -14179,13 +18198,43 @@
           "obj-motionMode",
           walker ? walker.motionMode || "pingpong" : "pingpong",
         );
+        // Speed: reverse map from walker.speed to 0–1 inspector range
+        if (walker) {
+          var _inspSpeed = Math.min(1, (walker.speed || 0) / 0.25);
+          setEl("obj-speed", _inspSpeed.toFixed(2));
+          var _so = document.getElementById("obj-speed-value");
+          if (_so) _so.value = _inspSpeed.toFixed(2);
+        }
         setEl(
           "obj-trailStyle",
-          obj.trailEnabled ||
+          !!(
+            obj.trailEnabled ||
             (walker && walker.emitter && walker.emitter.enabled)
-            ? "on"
-            : "off",
+          ),
         );
+        // ── TRAIL detail sync ──────────────────────────────────────────────
+        var _trailEnabled = !!(
+          obj.trailEnabled ||
+          (walker && walker.emitter && walker.emitter.enabled)
+        );
+        var _trailDetail = document.getElementById("trail-detail-fields");
+        if (_trailDetail)
+          _trailDetail.style.display = _trailEnabled ? "" : "none";
+        if (obj.trail) {
+          setEl("obj-trail-style", obj.trail.style || "line");
+          setEl(
+            "obj-trail-length",
+            obj.trail.length != null ? obj.trail.length : 1.0,
+          );
+          setEl(
+            "obj-trail-opacity",
+            obj.trail.opacity != null ? obj.trail.opacity : 0.6,
+          );
+          var _tlv = document.getElementById("obj-trail-length-value");
+          if (_tlv) _tlv.value = (obj.trail.length || 1.0).toFixed(1);
+          var _tov = document.getElementById("obj-trail-opacity-value");
+          if (_tov) _tov.value = (obj.trail.opacity || 0.6).toFixed(2);
+        }
         if (obj.sound) {
           setEl("obj-soundSource", obj.sound.source || "off");
           setEl("obj-soundRole", obj.sound.role || "drum");
@@ -14199,9 +18248,335 @@
         setEl("obj-octave", obj.octave != null ? obj.octave : 4);
         var swOut = document.getElementById("obj-strokeWidth-out");
         if (swOut) swOut.value = Math.round(obj.baseWidth || obj.width || 18);
+
+        // ── Physics & Collision state → UI sync ───────────────────────────
+        var _physWalker = walker;
+        var _physAv =
+          _physWalker && _physWalker.avatar ? _physWalker.avatar : null;
+        var _collEnabled =
+          _physAv && _physAv.collider ? !!_physAv.collider.enabled : false;
+        setEl("obj-collider-enabled", _collEnabled);
+        var bodyFields = document.getElementById("physics-body-fields");
+        if (bodyFields) bodyFields.style.display = _collEnabled ? "" : "none";
+        if (_physWalker && _physWalker.physics) {
+          setEl(
+            "obj-phys-bounce",
+            _physWalker.physics.bounce != null
+              ? _physWalker.physics.bounce
+              : 0.92,
+          );
+          setEl(
+            "obj-phys-gravity",
+            _physWalker.physics.gravityScale != null
+              ? _physWalker.physics.gravityScale
+              : 1.0,
+          );
+        }
+
+        // ── Avatar state → UI sync ─────────────────────────────────────────
+        if (walker && walker.avatar) {
+          var av = walker.avatar;
+          setEl("av-enabled", av.enabled);
+          setEl("av-mode", av.style || "none");
+          setEl("av-scale", av.scale != null ? av.scale : 1.0);
+          setEl("av-opacity", av.opacity != null ? av.opacity : 1.0);
+          setEl("av-rotation", av.rotationMode || "motion");
+          if (av.tint) setEl("av-tint", av.tint);
+          var _sc = document.getElementById("av-scale-value");
+          if (_sc) _sc.value = (av.scale || 1.0).toFixed(2);
+          var _op = document.getElementById("av-opacity-value");
+          if (_op)
+            _op.value = (av.opacity != null ? av.opacity : 1.0).toFixed(2);
+        }
+        if (walker && walker.avatar && walker.avatar.glyphId) {
+          var _gsel = document.getElementById("av-glyph");
+          if (_gsel) _gsel.value = walker.avatar.glyphId;
+        }
       })();
     }
     // ── End inspector binding utilities ───────────────────────────────────
+
+    // ── Layer System (SubjectAndLayerSystem v1.0.0) ──────────────────────────
+    function _ensureDefaultLayer() {
+      if (!state.layers || !state.layers.length) {
+        state.layers = [
+          {
+            id: "layer-1",
+            name: "Layer 1",
+            visible: true,
+            locked: false,
+            opacity: 1.0,
+            blendMode: "normal",
+          },
+        ];
+      }
+      if (!state.activeLayerId) state.activeLayerId = state.layers[0].id;
+    }
+    function isActiveLayerLocked() {
+      var al = getActiveLayer();
+      return !!(al && al.locked);
+    }
+    function isLayerLockedById(id) {
+      if (!id || !state.layers) return false;
+      var l = state.layers.find(function (l) {
+        return l.id === id;
+      });
+      return !!(l && l.locked);
+    }
+    function createLayer(name) {
+      _ensureDefaultLayer();
+      var id = "layer-" + Date.now();
+      var layer = {
+        id: id,
+        name: name || "Layer " + (state.layers.length + 1),
+        visible: true,
+        locked: false,
+        opacity: 1.0,
+        blendMode: "normal",
+      };
+      state.layers.unshift(layer); // new layers go on top
+      state.activeLayerId = id;
+      renderLayerPanel();
+      return layer;
+    }
+    function setActiveLayer(id) {
+      state.activeLayerId = id;
+      renderLayerPanel();
+    }
+    function getActiveLayer() {
+      _ensureDefaultLayer();
+      return (
+        state.layers.find(function (l) {
+          return l.id === state.activeLayerId;
+        }) || state.layers[0]
+      );
+    }
+    function renderLayerPanel() {
+      var list = document.getElementById("layer-list");
+      if (!list) return;
+      _ensureDefaultLayer();
+      list.innerHTML = "";
+      state.layers.forEach(function (layer, layerIndex) {
+        var row = document.createElement("div");
+        row.className =
+          "layer-row" +
+          (layer.id === state.activeLayerId ? " active" : "") +
+          (layer.locked ? " locked" : "");
+        row.dataset.layerId = layer.id;
+
+        // ── Reorder buttons ▲▼ ───────────────────────────────────────────────
+        var reorderCol = document.createElement("div");
+        reorderCol.className = "layer-reorder";
+        var upBtn = document.createElement("button");
+        upBtn.className = "layer-icon-btn layer-reorder-btn";
+        upBtn.title = "Move layer up";
+        upBtn.textContent = "▲";
+        upBtn.disabled = layerIndex === 0;
+        upBtn.onclick = function (e) {
+          e.stopPropagation();
+          if (layerIndex === 0) return;
+          var tmp = state.layers[layerIndex - 1];
+          state.layers[layerIndex - 1] = state.layers[layerIndex];
+          state.layers[layerIndex] = tmp;
+          renderLayerPanel();
+          renderFrame();
+        };
+        var downBtn = document.createElement("button");
+        downBtn.className = "layer-icon-btn layer-reorder-btn";
+        downBtn.title = "Move layer down";
+        downBtn.textContent = "▼";
+        downBtn.disabled = layerIndex === state.layers.length - 1;
+        downBtn.onclick = function (e) {
+          e.stopPropagation();
+          if (layerIndex === state.layers.length - 1) return;
+          var tmp = state.layers[layerIndex + 1];
+          state.layers[layerIndex + 1] = state.layers[layerIndex];
+          state.layers[layerIndex] = tmp;
+          renderLayerPanel();
+          renderFrame();
+        };
+        reorderCol.appendChild(upBtn);
+        reorderCol.appendChild(downBtn);
+
+        // ── Visibility button ────────────────────────────────────────────────
+        var visBtn = document.createElement("button");
+        visBtn.className = "layer-icon-btn" + (layer.visible ? " on" : "");
+        visBtn.title = layer.visible ? "Hide layer" : "Show layer";
+        visBtn.textContent = layer.visible ? "◉" : "○";
+        visBtn.onclick = function (e) {
+          e.stopPropagation();
+          layer.visible = !layer.visible;
+          renderLayerPanel();
+          renderFrame();
+        };
+
+        // ── Lock button ──────────────────────────────────────────────────────
+        var lockBtn = document.createElement("button");
+        lockBtn.className = "layer-icon-btn" + (layer.locked ? " on" : "");
+        lockBtn.title = layer.locked ? "Unlock layer" : "Lock layer";
+        lockBtn.textContent = layer.locked ? "🔒" : "🔓";
+        lockBtn.style.fontSize = "9px";
+        lockBtn.onclick = function (e) {
+          e.stopPropagation();
+          layer.locked = !layer.locked;
+          renderLayerPanel();
+        };
+
+        // ── Name — single click selects; double-click enters rename mode ─────
+        var nameEl = document.createElement("input");
+        nameEl.className = "layer-name";
+        nameEl.type = "text";
+        nameEl.value = layer.name;
+        nameEl.readOnly = true; // read-only until double-click
+        nameEl.title = "Double-click to rename";
+        nameEl.onclick = function (e) {
+          e.stopPropagation();
+          setActiveLayer(layer.id);
+        };
+        nameEl.ondblclick = function (e) {
+          e.stopPropagation();
+          e.preventDefault();
+          state.layersEditingId = layer.id;
+          nameEl.readOnly = false;
+          nameEl.focus();
+          nameEl.select();
+        };
+        // While editing: capture all pointer/keyboard events so canvas never sees them
+        nameEl.addEventListener("mousedown", function (e) {
+          if (!nameEl.readOnly) e.stopPropagation();
+        });
+        nameEl.addEventListener("pointerdown", function (e) {
+          if (!nameEl.readOnly) e.stopPropagation();
+        });
+        var _commitLayerRename = function () {
+          layer.name = nameEl.value.trim() || layer.name;
+          nameEl.readOnly = true;
+          state.layersEditingId = null;
+        };
+        nameEl.onblur = _commitLayerRename;
+        nameEl.onkeydown = function (e) {
+          if (e.key === "Enter") {
+            _commitLayerRename();
+            nameEl.blur();
+          }
+          if (e.key === "Escape") {
+            nameEl.value = layer.name;
+            nameEl.readOnly = true;
+            state.layersEditingId = null;
+            nameEl.blur();
+          }
+          e.stopPropagation(); // prevent canvas shortcuts while editing
+          if (!nameEl.readOnly) e.preventDefault(); // prevent accidental space/delete/etc
+        };
+
+        // ── Opacity label ────────────────────────────────────────────────────
+        var opLabel = document.createElement("span");
+        opLabel.className = "layer-opacity-label";
+        opLabel.textContent = Math.round(layer.opacity * 100) + "%";
+
+        row.appendChild(reorderCol);
+        row.appendChild(visBtn);
+        row.appendChild(lockBtn);
+        row.appendChild(nameEl);
+        row.appendChild(opLabel);
+        row.addEventListener("click", function (e) {
+          // Don't re-select when editing name — let the input handle its own interactions
+          if (state.layersEditingId === layer.id) return;
+          setActiveLayer(layer.id);
+        });
+        list.appendChild(row);
+      });
+      // Show active layer detail
+      var detail = document.getElementById("layer-detail");
+      var activeLayer = getActiveLayer();
+      if (detail && activeLayer) {
+        detail.style.display = "";
+        var opSlider = document.getElementById("layer-opacity");
+        var opOut = document.getElementById("layer-opacity-value");
+        var blendSel = document.getElementById("layer-blend-mode");
+        if (opSlider) opSlider.value = activeLayer.opacity;
+        if (opOut) opOut.value = Math.round(activeLayer.opacity * 100) + "%";
+        if (blendSel) blendSel.value = activeLayer.blendMode || "normal";
+      }
+    }
+    // Wire layer panel controls (run once after DOM ready)
+    (function initLayerControls() {
+      var addBtn = document.getElementById("layer-add");
+      var imgBtn = document.getElementById("layer-import-image");
+      var imgInput = document.getElementById("layer-image-file");
+      var opSlider = document.getElementById("layer-opacity");
+      var blendSel = document.getElementById("layer-blend-mode");
+      if (addBtn)
+        addBtn.onclick = function () {
+          createLayer();
+        };
+      if (imgBtn && imgInput) {
+        imgBtn.onclick = function () {
+          imgInput.click();
+        };
+        imgInput.onchange = function () {
+          var file = imgInput.files && imgInput.files[0];
+          if (!file) return;
+          var reader = new FileReader();
+          reader.onload = function (e) {
+            // Create a minimal stroke carrying the image as a subject
+            // Two-point path so strokeToLines/walkers can attach
+            var _cx = state.canvas.width / 2;
+            var _cy = state.canvas.height / 2;
+            var imgStroke = createStrokeObject(_cx - 1, _cy);
+            imgStroke.pathStyle = "none";
+            imgStroke.subjectStyle = "image";
+            imgStroke.subjectImage = e.target.result;
+            imgStroke.subjectScale = 1.0;
+            imgStroke.layerId = state.activeLayerId;
+            // Minimal two-point invisible path at canvas center
+            imgStroke.points = [
+              { x: _cx - 1, y: _cy },
+              { x: _cx + 1, y: _cy },
+            ];
+            // Pre-seed image cache so first render shows immediately
+            var _preImg = new Image();
+            _preImg.onload = function () {
+              renderFrame();
+            };
+            _preImg.src = e.target.result;
+            _subjectImageCache[imgStroke.id] = _preImg;
+            pushHistory();
+            state.strokes.push(imgStroke);
+            strokeToLines(imgStroke);
+            renderFrame();
+          };
+          reader.readAsDataURL(file);
+          imgInput.value = "";
+        };
+      }
+      if (opSlider)
+        opSlider.oninput = function () {
+          var layer = getActiveLayer();
+          if (!layer) return;
+          layer.opacity = Number(opSlider.value);
+          var o = document.getElementById("layer-opacity-value");
+          if (o) o.value = Math.round(layer.opacity * 100) + "%";
+          // Update the opacity label in the layer row directly (no full re-render needed)
+          var _activeRow =
+            list &&
+            list.querySelector(".layer-row.active .layer-opacity-label");
+          if (_activeRow)
+            _activeRow.textContent = Math.round(layer.opacity * 100) + "%";
+          renderFrame();
+        };
+      if (blendSel)
+        blendSel.onchange = function () {
+          var layer = getActiveLayer();
+          if (layer) {
+            layer.blendMode = blendSel.value;
+            renderFrame();
+          }
+        };
+      // Initial render
+      _ensureDefaultLayer();
+      renderLayerPanel();
+    })();
 
     function syncSelectionPanel() {
       // Guard — state.selection may not be initialized
@@ -14574,16 +18949,23 @@
           return { type: "stroke", id: state.selection.strokeId };
         }
         if (state.selection.strokeIds && state.selection.strokeIds.size) {
-          return { type: "stroke", id: Array.from(state.selection.strokeIds)[0] };
+          return {
+            type: "stroke",
+            id: Array.from(state.selection.strokeIds)[0],
+          };
         }
         if (state.selection.groupId) {
           return { type: "group", id: state.selection.groupId };
         }
       }
-      if (state.selectedShapeId) return { type: "shape", id: state.selectedShapeId };
-      if (state.selectedBallId) return { type: "ball", id: state.selectedBallId };
-      if (state.selectedLineId) return { type: "line", id: state.selectedLineId };
-      if (state.selectedTextId) return { type: "text", id: state.selectedTextId };
+      if (state.selectedShapeId)
+        return { type: "shape", id: state.selectedShapeId };
+      if (state.selectedBallId)
+        return { type: "ball", id: state.selectedBallId };
+      if (state.selectedLineId)
+        return { type: "line", id: state.selectedLineId };
+      if (state.selectedTextId)
+        return { type: "text", id: state.selectedTextId };
       return null;
     }
 
@@ -14593,18 +18975,24 @@
         refs = refs.concat(state.multiSelection);
       }
       if (state.selection) {
-        if (state.selection.strokeId) refs.push({ type: "stroke", id: state.selection.strokeId });
+        if (state.selection.strokeId)
+          refs.push({ type: "stroke", id: state.selection.strokeId });
         if (state.selection.strokeIds && state.selection.strokeIds.size) {
           Array.from(state.selection.strokeIds).forEach(function (id) {
             refs.push({ type: "stroke", id: id });
           });
         }
-        if (state.selection.groupId) refs.push({ type: "group", id: state.selection.groupId });
+        if (state.selection.groupId)
+          refs.push({ type: "group", id: state.selection.groupId });
       }
-      if (state.selectedShapeId) refs.push({ type: "shape", id: state.selectedShapeId });
-      if (state.selectedBallId) refs.push({ type: "ball", id: state.selectedBallId });
-      if (state.selectedLineId) refs.push({ type: "line", id: state.selectedLineId });
-      if (state.selectedTextId) refs.push({ type: "text", id: state.selectedTextId });
+      if (state.selectedShapeId)
+        refs.push({ type: "shape", id: state.selectedShapeId });
+      if (state.selectedBallId)
+        refs.push({ type: "ball", id: state.selectedBallId });
+      if (state.selectedLineId)
+        refs.push({ type: "line", id: state.selectedLineId });
+      if (state.selectedTextId)
+        refs.push({ type: "text", id: state.selectedTextId });
       var seen = {};
       return refs.filter(function (ref) {
         var key = ref.type + ":" + ref.id;
@@ -14983,7 +19371,64 @@
       renderFrame();
     }
 
+    // ── Projectile Walker Spawn (ProjectileWalkerMigration v1.0.0) ─────────────
+    // Spawns a projectile walker in world space — replaces ball spawning for new features.
+    // startPoint / endPoint are world coords (already camera-unprojected).
+    function spawnProjectileWalkerBurst(startPoint, endPoint) {
+      if (state.ui.presentation) return;
+      var dx = endPoint.x - startPoint.x;
+      var dy = endPoint.y - startPoint.y;
+      var magnitude = Math.hypot(dx, dy) || 1;
+      var baseAngle = Math.atan2(dy, dx);
+      var baseSpeed =
+        Math.min(18, Math.max(3, magnitude * 0.06)) *
+        (state.ballTool.speed || 1);
+      var count = Math.min(state.ballTool.count || 1, 8);
+      var spread = state.ballTool.spread || 0.3;
+
+      for (var i = 0; i < count; i++) {
+        var angle =
+          baseAngle + (count > 1 ? ((i / (count - 1)) * 2 - 1) * spread : 0);
+        var spd = baseSpeed * (0.85 + Math.random() * 0.3);
+        var pw = createProjectileWalker(
+          startPoint.x,
+          startPoint.y,
+          Math.cos(angle) * spd,
+          Math.sin(angle) * spd,
+          {
+            color: state.swarm.color || "#3dd8c5",
+            // projectileTool.radius is the authoritative body size for projectile walkers
+            collisionRadius:
+              (state.projectileTool && state.projectileTool.radius) || 8,
+            bounce:
+              state.projectileTool && state.projectileTool.bounce != null
+                ? state.projectileTool.bounce
+                : 0.82,
+            gravityScale:
+              state.projectileTool && state.projectileTool.gravityScale != null
+                ? state.projectileTool.gravityScale
+                : 1.0,
+          },
+        );
+        pw._spawnTime = performance.now();
+        state.projectileWalkers.push(pw);
+      }
+    }
+
     function spawnBallBurst(startPoint, endPoint) {
+      // Route to projectile walkers when projectileTool.useWalkers is enabled
+      if (state.projectileTool && state.projectileTool.useWalkers) {
+        // startPoint/endPoint are canvas pixels from drawTools — unproject to world space
+        var _cam = state.camera;
+        function _toWorld(pt) {
+          return {
+            x: (pt.x - canvas.width / 2) / _cam.zoom + _cam.x,
+            y: (pt.y - canvas.height / 2) / _cam.zoom + _cam.y,
+          };
+        }
+        spawnProjectileWalkerBurst(_toWorld(startPoint), _toWorld(endPoint));
+        return;
+      }
       if (state.ui.presentation || state.balls.length >= 800) {
         return;
       }
@@ -15088,12 +19533,16 @@
       if (!strokeId) return;
       deleteStroke(strokeId);
       if (state.selection) {
-        if (state.selection.strokeId === strokeId) state.selection.strokeId = null;
-        if (state.selection.strokeIds) state.selection.strokeIds.delete(strokeId);
+        if (state.selection.strokeId === strokeId)
+          state.selection.strokeId = null;
+        if (state.selection.strokeIds)
+          state.selection.strokeIds.delete(strokeId);
       }
-      state.multiSelection = (state.multiSelection || []).filter(function (sel) {
-        return !(sel.type === "stroke" && sel.id === strokeId);
-      });
+      state.multiSelection = (state.multiSelection || []).filter(
+        function (sel) {
+          return !(sel.type === "stroke" && sel.id === strokeId);
+        },
+      );
     }
 
     function deleteObjectByRef(ref) {
@@ -15103,27 +19552,38 @@
           deleteStrokeById(ref.id);
           break;
         case "shape":
-          state.shapes = state.shapes.filter(function (s) { return s.id !== ref.id; });
+          state.shapes = state.shapes.filter(function (s) {
+            return s.id !== ref.id;
+          });
           break;
         case "ball":
-          state.balls = state.balls.filter(function (b) { return b.id !== ref.id; });
+          state.balls = state.balls.filter(function (b) {
+            return b.id !== ref.id;
+          });
           state.swarm.count = state.balls.length;
           break;
         case "line":
-          state.lines = state.lines.filter(function (l) { return l.id !== ref.id; });
+          state.lines = state.lines.filter(function (l) {
+            return l.id !== ref.id;
+          });
           break;
         case "text":
-          state.textObjects = state.textObjects.filter(function (t) { return t.id !== ref.id; });
+          state.textObjects = state.textObjects.filter(function (t) {
+            return t.id !== ref.id;
+          });
           break;
         case "group":
           var grp = state.groups && state.groups[ref.id];
           if (grp) {
             var sids = grp.strokeIds || grp.children || [];
-            sids.forEach(function (sid) { deleteStrokeById(sid); });
+            sids.forEach(function (sid) {
+              deleteStrokeById(sid);
+            });
             if (typeof dissolveGroup === "function") dissolveGroup(ref.id);
             else delete state.groups[ref.id];
           }
-          if (state.selection && state.selection.groupId === ref.id) state.selection.groupId = null;
+          if (state.selection && state.selection.groupId === ref.id)
+            state.selection.groupId = null;
           break;
       }
     }
@@ -15136,11 +19596,18 @@
         return false;
       }
       pushHistory();
-      refs.forEach(function (ref) { deleteObjectByRef(ref); });
+      refs.forEach(function (ref) {
+        deleteObjectByRef(ref);
+      });
       clearSelection();
       renderFrame();
       syncUI();
-      console.log("[DELETE] Deleted", refs.map(function (r) { return r.type + ":" + r.id; }));
+      console.log(
+        "[DELETE] Deleted",
+        refs.map(function (r) {
+          return r.type + ":" + r.id;
+        }),
+      );
       return true;
     }
 
@@ -15148,11 +19615,15 @@
       if (
         state.duplication &&
         state.duplication.valid &&
-        (Math.abs(state.duplication.dx) > 0.5 || Math.abs(state.duplication.dy) > 0.5)
+        (Math.abs(state.duplication.dx) > 0.5 ||
+          Math.abs(state.duplication.dy) > 0.5)
       ) {
         return { dx: state.duplication.dx, dy: state.duplication.dy };
       }
-      return { dx: lastDuplicateDelta ? lastDuplicateDelta.x : 20, dy: lastDuplicateDelta ? lastDuplicateDelta.y : 20 };
+      return {
+        dx: lastDuplicateDelta ? lastDuplicateDelta.x : 20,
+        dy: lastDuplicateDelta ? lastDuplicateDelta.y : 20,
+      };
     }
 
     function selectDuplicatedObject(type, id) {
@@ -15165,10 +19636,25 @@
         state.multiSelection = [{ type: "stroke", id: id }];
         return;
       }
-      if (type === "shape") { state.selectedShapeId = id; state.multiSelection = [{ type: "shape", id: id }]; return; }
-      if (type === "ball") { state.selectedBallId = id; state.multiSelection = [{ type: "ball", id: id }]; return; }
-      if (type === "line") { state.selectedLineId = id; state.multiSelection = [{ type: "line", id: id }]; return; }
-      if (type === "text") { state.selectedTextId = id; state.multiSelection = [{ type: "text", id: id }]; }
+      if (type === "shape") {
+        state.selectedShapeId = id;
+        state.multiSelection = [{ type: "shape", id: id }];
+        return;
+      }
+      if (type === "ball") {
+        state.selectedBallId = id;
+        state.multiSelection = [{ type: "ball", id: id }];
+        return;
+      }
+      if (type === "line") {
+        state.selectedLineId = id;
+        state.multiSelection = [{ type: "line", id: id }];
+        return;
+      }
+      if (type === "text") {
+        state.selectedTextId = id;
+        state.multiSelection = [{ type: "text", id: id }];
+      }
     }
 
     function deleteSelectionObject() {
@@ -15375,6 +19861,10 @@
             w.dir = srcWalker.dir || 1;
             w.motionMode = srcWalker.motionMode || w.motionMode;
             w.speed = srcWalker.speed || w.speed;
+            // P2: deep copy avatar state (includes collider, glyphId, tint, scale, etc.)
+            if (srcWalker.avatar) {
+              w.avatar = JSON.parse(JSON.stringify(srcWalker.avatar));
+            }
             state.walkers.push(w);
             ensureSingleWalker(copy.id);
           }
@@ -15490,7 +19980,13 @@
       state.swarm.count = state.balls.length;
       renderFrame();
       syncUI();
-      console.log("[DUPLICATE]", ref.type + ":" + ref.id, "→", result.id, delta);
+      console.log(
+        "[DUPLICATE]",
+        ref.type + ":" + ref.id,
+        "→",
+        result.id,
+        delta,
+      );
     }
 
     function getSelectionBounds() {
@@ -15572,6 +20068,7 @@
           ? state.shapes.map(SBE.ShapeSystem.serializeShape)
           : [],
         balls: clone(state.balls),
+        projectileWalkers: clone(state.projectileWalkers || []),
         groups: clone(state.groups || {}),
         walkers: clone(state.walkers || []),
         strokes: state.strokes.map(function (s) {
@@ -15592,8 +20089,26 @@
             opacity: s.opacity != null ? s.opacity : 1,
             specks: [],
             drips: [],
+            // ── Subject layer (SubjectLayerStabilityFix v1.0.0) ────────────
+            pathStyle: s.pathStyle || "solid",
+            pathDash: s.pathDash != null ? s.pathDash : 12,
+            pathGap: s.pathGap != null ? s.pathGap : 8,
+            subjectStyle: s.subjectStyle != null ? s.subjectStyle : "none",
+            subjectGlyph: s.subjectGlyph || null,
+            subjectText: s.subjectText || null,
+            subjectImage: s.subjectImage || null,
+            subjectScale: s.subjectScale != null ? s.subjectScale : 1.0,
+            subjectOpacity: s.subjectOpacity != null ? s.subjectOpacity : 1.0,
+            subjectVisible: s.subjectVisible !== false,
+            subjectColor: s.subjectColor || null,
+            layerId: s.layerId || null,
+            trail: s.trail ? clone(s.trail) : null,
+            _groupId: s._groupId || null,
           };
         }),
+        // ── Layer state ────────────────────────────────────────────────────────
+        layers: clone(state.layers || []),
+        activeLayerId: state.activeLayerId || null,
         canvas: clone(state.canvas),
         swarm: clone(state.swarm),
         background: state.backgroundDataUrl,
@@ -16248,6 +20763,18 @@
     function strokeToLines(stroke) {
       if (!stroke || !stroke.points || stroke.points.length < 2) return;
       if (!SBE || !SBE.LineSystem) return;
+      // P1/P3: visible geometry = physical geometry.
+      // Hidden strokes AND "none" path-style produce no collision lines.
+      // SUBJECT colliders (avatar) remain independently active via getAvatarCollisionSegments.
+      if (
+        stroke.outlineVisible === false ||
+        stroke.hidden === true ||
+        stroke.pathStyle === "none"
+      ) {
+        // Ensure any previously created lines are removed for this stroke
+        removeLinesForStroke(stroke.id);
+        return;
+      }
 
       var pts = stroke.points;
       var settings = {
@@ -16420,6 +20947,7 @@
       processLoopPlayback(transportTime);
 
       const dt = delta / 1000; // real elapsed time
+      lastDt = dt;
       tick(dt, frameTime);
 
       renderFrame();
@@ -16740,12 +21268,44 @@
             ? state.world.mode
             : "gravity";
 
+      // ── Dual-plane mode ────────────────────────────────────────────────────
+      // planeMode controls WHICH physics plane each entity inhabits.
+      //   "side"    — screen gravity active for all balls; world field off.
+      //   "topdown" — screen gravity suppressed; world vector/flow active.
+      //   "hybrid"  — screen physics for screen-plane objects + world physics
+      //               for world-plane objects, both simultaneously.
+      var _dualPhysics =
+        state.world && state.world.physics ? state.world.physics : null;
+      var planeMode = (_dualPhysics && _dualPhysics.mode) || "side";
+      var _worldField = _dualPhysics ? _dualPhysics.world : null;
+
+      // Helper: apply world-plane physics (vector / flow field) to one object.
+      function _applyWorldPhysics(obj, _scale) {
+        if (!_worldField || _worldField.fieldType === "none") return;
+        var wStr = _worldField.strength || 0;
+        if (!wStr) return;
+        if (
+          _worldField.fieldType === "vector" ||
+          _worldField.fieldType === "flow"
+        ) {
+          obj.vx += (_worldField.vectorX || 0) * wStr * _scale;
+          obj.vy += (_worldField.vectorY || 0) * wStr * _scale;
+        }
+        // orbital and other field types: reserved for future extension
+      }
+
       var damp = state.physics.damping;
       var maxSpd = state.physics.maxSpeed;
       var scale = dt * 60;
       var MOTION_SCALE = 60;
 
-      if (worldMode === "gravity" || worldMode === "flow") {
+      // ── Legacy ball physics — retired. Skipped when balls array is empty.
+      // state.balls preserved for scene deserialization only.
+      // New spawns route entirely through state.projectileWalkers.
+      if (
+        state.balls.length > 0 &&
+        (worldMode === "gravity" || worldMode === "flow")
+      ) {
         var worldDirection =
           state.world && state.world.direction
             ? state.world.direction
@@ -16756,8 +21316,24 @@
             : Math.hypot(state.physics.gravity.x, state.physics.gravity.y);
 
         state.balls.forEach(function (ball) {
-          ball.vx += worldDirection.x * worldStrength * scale;
-          ball.vy += worldDirection.y * worldStrength * scale;
+          // Screen gravity: active when planeMode is "side" or "hybrid",
+          // or when the ball is explicitly bound to the screen plane.
+          var isScreen = !ball.motionPlane || ball.motionPlane === "screen";
+          var applyScreen =
+            planeMode === "side" || (planeMode === "hybrid" && isScreen);
+          if (applyScreen) {
+            ball.vx += worldDirection.x * worldStrength * scale;
+            ball.vy += worldDirection.y * worldStrength * scale;
+          }
+
+          // World field: active for world-plane balls in topdown / hybrid.
+          if (
+            planeMode === "topdown" ||
+            (planeMode === "hybrid" && !isScreen)
+          ) {
+            _applyWorldPhysics(ball, scale);
+          }
+
           ball.vx *= damp;
           ball.vy *= damp;
 
@@ -16771,15 +21347,18 @@
           ball.x += ball.vx * dt * MOTION_SCALE;
           ball.y += ball.vy * dt * MOTION_SCALE;
 
-          var FLOOR_Y = state.canvas.height * 0.92;
-          if (ball.y > FLOOR_Y) {
-            ball._dead = true;
+          // Floor death only applies to screen-gravity balls falling downward
+          if (applyScreen && worldDirection.y > 0) {
+            var FLOOR_Y = state.canvas.height * 0.92;
+            if (ball.y > FLOOR_Y) {
+              ball._dead = true;
+            }
           }
         });
         // Dead ball cleanup now handled globally after collision pass
       }
 
-      if (worldMode === "planar") {
+      if (state.balls.length > 0 && worldMode === "planar") {
         state.balls.forEach(function (ball) {
           ball.vx *= damp;
           ball.vy *= damp;
@@ -16815,7 +21394,7 @@
         });
       }
 
-      if (worldMode === "zero-g") {
+      if (state.balls.length > 0 && worldMode === "zero-g") {
         var noise = 0.02;
         state.balls.forEach(function (ball) {
           ball.vx += (Math.random() - 0.5) * noise;
@@ -16841,7 +21420,7 @@
         });
       }
 
-      if (worldMode === "swarm") {
+      if (state.balls.length > 0 && worldMode === "swarm") {
         var activeForceLines = state.lines
           .concat(
             SBE.TextSystem
@@ -16937,6 +21516,52 @@
         }
       });
 
+      // ── Projectile walker update ─────────────────────────────────────────────
+      state.projectileWalkers.forEach(function (pw) {
+        updateWalkerMovement(pw, dt);
+      });
+
+      // Expose projectile walkers to collision system (world-space path, not proxy)
+      // collision.js reads state.projectileWalkers directly via _getProjectileBalls()
+
+      // Cull dead / out-of-bounds projectile walkers
+      var worldW = canvas.width,
+        worldH = canvas.height;
+      state.projectileWalkers = state.projectileWalkers.filter(function (pw) {
+        if (pw._dead) return false;
+        // Cull if far outside world bounds (2x canvas size margin)
+        if (
+          pw.x < -worldW ||
+          pw.x > worldW * 2 ||
+          pw.y < -worldH ||
+          pw.y > worldH * 2
+        )
+          return false;
+        return true;
+      });
+
+      // ── Stroke collision sync — ensure every stroke has live bridge lines ────
+      // Covers the case where strokeToLines wasn't called (motionBrush bake path,
+      // paste/undo restore, or any future stroke-creation path that bypasses pointerup).
+      // A stamp on each stroke tracks whether lines were built; stale = needs rebuild.
+      (function ensureStrokeCollisionLines() {
+        var derivedIds = new Set();
+        state.lines.forEach(function (l) {
+          if (l._strokeId) derivedIds.add(l._strokeId);
+        });
+        state.strokes.forEach(function (s) {
+          // Skip hidden strokes — visible geometry = physical geometry (P3)
+          if (s.outlineVisible === false || s.hidden === true) {
+            // Remove stale lines if stroke was just hidden
+            if (derivedIds.has(s.id)) removeLinesForStroke(s.id);
+            return;
+          }
+          if (!derivedIds.has(s.id)) {
+            strokeToLines(s);
+          }
+        });
+      })();
+
       // Temporarily hide spawn-immune balls from collision detection
       const allBalls = state.balls;
       state.balls = allBalls.filter(function (b) {
@@ -16978,6 +21603,53 @@
 
       // Restore all balls (immune + eligible)
       state.balls = allBalls;
+
+      // Cache projectile collision contacts for debug overlay rendering
+      // Stored on state so drawWalkers can render them in the same frame
+      state._projCollisionDebug = state._projCollisionDebug || [];
+      state._projCollisionDebug.length = 0;
+      collisions.forEach(function (c) {
+        if (
+          c.type === "line" &&
+          c.ball &&
+          c.ball._isProjectileWalker &&
+          c.closestPoint
+        ) {
+          state._projCollisionDebug.push({
+            wx: c.ball.x,
+            wy: c.ball.y,
+            cx: c.closestPoint.x,
+            cy: c.closestPoint.y,
+            dist: c.distance,
+            threshold: c.threshold,
+            line: c.line,
+            radius: c.ball.radius,
+          });
+        }
+      });
+
+      // Apply bounce coefficient to projectile walkers after collision resolution
+      // (collision.js wrote raw reflected velocity; bounce scales it)
+      collisions.forEach(function (collision) {
+        if (!collision.ball || !collision.ball._isProjectileWalker) return;
+        var _pw = collision.ball._walkerRef;
+        if (!_pw || !_pw.physics) return;
+        var _bnc = _pw.physics.bounce != null ? _pw.physics.bounce : 0.82;
+        // Apply once per collision event (not per frame)
+        _pw.physics.vx *= _bnc;
+        _pw.physics.vy *= _bnc;
+        // Spawn impact particles at collision point
+        if (window.SBE && SBE.ParticleSystem) {
+          SBE.ParticleSystem.spawnProfile(
+            "burst",
+            _pw.x,
+            _pw.y,
+            _pw.color,
+            null,
+            { count: 5 },
+          );
+        }
+      });
 
       // Kill balls on collision — skip spawn-immune balls and walker proxies
       collisions.forEach(function (collision) {
@@ -17021,8 +21693,92 @@
             note: source.line.note,
           });
 
+        // ── Projectile walker audio — world-space event path ──────────────────
+        // Bypasses dispatchCollisionEvent (which gates on trigger === "impact").
+        // Most strokes default to trigger="continuous", silencing the legacy path.
+        // Synth strokes → playSynth directly (handleOscillator only handles samples).
+        // Sample strokes → emitCollisionEvent → emitEvent → eventBus.
+        if (source.ball && source.ball._isProjectileWalker) {
+          var _projContactPt = source.closestPoint || {
+            x: source.ball.x,
+            y: source.ball.y,
+          };
+          var _hitStroke = source.line.strokeId
+            ? state.strokes.find(function (s) {
+                return s.id === source.line.strokeId;
+              })
+            : null;
+          if (_hitStroke && isMuted(_hitStroke)) {
+            return;
+          }
+          var _hitSrc =
+            (_hitStroke && _hitStroke.sound && _hitStroke.sound.source) ||
+            "synth";
+          if (_hitSrc === "off") {
+            return;
+          }
+          if (_hitSrc === "synth") {
+            // Synth path — direct synthesis, bypasses sample pipeline
+            var _hitNote =
+              (_hitStroke &&
+                (_hitStroke.note != null
+                  ? _hitStroke.note
+                  : _hitStroke.sound &&
+                    _hitStroke.sound.midi &&
+                    _hitStroke.sound.midi.note)) ||
+              60;
+            playSynth(_hitStroke, _hitNote, 80);
+          } else {
+            // Sample path — resolve via event pipeline
+            emitCollisionEvent(
+              { id: source.line.strokeId, strokeId: source.line.strokeId },
+              source.ball,
+              1.0,
+              _projContactPt,
+            );
+          }
+          return;
+        }
+
         // Walker audio control — applies ONLY to walker proxies, never to real balls
         if (source.ball && source.ball._isWalkerProxy) {
+          // ── Avatar body hit — route to avatar owner's stroke sound ──────────
+          // Avatar segments have no strokeId (they're not derived from strokes).
+          // Look up the avatar owner's stroke via _avatarRef.strokeId instead.
+          if (source.line.sourceType === "avatar" && source.line._avatarRef) {
+            var _avWalker = source.line._avatarRef;
+            var _avStroke = state.strokes.find(function (s) {
+              return s.id === _avWalker.strokeId;
+            });
+            if (_avStroke && !isMuted(_avStroke)) {
+              var _avSrc =
+                (_avStroke.sound && _avStroke.sound.source) || "synth";
+              if (_avSrc !== "off") {
+                if (_avSrc === "synth") {
+                  var _avNote =
+                    _avStroke.note != null
+                      ? _avStroke.note
+                      : (_avStroke.sound &&
+                          _avStroke.sound.midi &&
+                          _avStroke.sound.midi.note) ||
+                        60;
+                  playSynth(_avStroke, _avNote, 80);
+                } else {
+                  emitCollisionEvent(
+                    { id: _avStroke.id, strokeId: _avStroke.id },
+                    source.ball,
+                    1.0,
+                    source.closestPoint || {
+                      x: source.ball.x,
+                      y: source.ball.y,
+                    },
+                  );
+                }
+              }
+            }
+            return;
+          }
+
           var isSelfStroke =
             source.line.strokeId &&
             source.ball.strokeId === source.line.strokeId;
@@ -17082,7 +21838,7 @@
       });
       state.swarm.count = state.balls.length;
 
-      stabilizeBalls(collisions);
+      if (state.balls.length > 0) stabilizeBalls(collisions);
 
       // Material simulation pass — inject energy then advance simulation
       if (window.SBE && SBE.MaterialSystem) {
@@ -17096,8 +21852,10 @@
 
       // MIDI playback — sequence notes from active bank against transport beat
       var _currentMidiBeat = getCurrentTransportBeat();
-      var _previousMidiBeat = state.midiPlayback && typeof state.midiPlayback.lastBeat === "number"
-        ? state.midiPlayback.lastBeat : _currentMidiBeat;
+      var _previousMidiBeat =
+        state.midiPlayback && typeof state.midiPlayback.lastBeat === "number"
+          ? state.midiPlayback.lastBeat
+          : _currentMidiBeat;
       processMidiPlayback(_currentMidiBeat, _previousMidiBeat);
       if (state.midiPlayback) state.midiPlayback.lastBeat = _currentMidiBeat;
     }
@@ -17111,11 +21869,11 @@
     // If a referenced SymbolSet or glyph is missing, a fallback placeholder
     // is drawn (dashed rect) and the pipeline continues without crashing.
 
-    var _symGhost = { visible: false, wx: 0, wy: 0 };  // placement ghost state
+    var _symGhost = { visible: false, wx: 0, wy: 0 }; // placement ghost state
 
     function renderSymbolObjects(ctx) {
-      var SR  = global.WOS && global.WOS.SymbolRenderer;
-      var SS  = global.SBE && global.SBE.SymbolSystem;
+      var SR = global.WOS && global.WOS.SymbolRenderer;
+      var SS = global.SBE && global.SBE.SymbolSystem;
       var SOS = global.SBE && global.SBE.SymbolObjectSystem;
       if (!SR || !SS || !SOS) return;
 
@@ -17126,15 +21884,18 @@
       }
 
       var sorted = SOS.sortByZIndex(objs);
-      var clean  = !!(state.ui && (state.ui.cleanOutput || state.ui.presentation));
+      var clean = !!(
+        state.ui &&
+        (state.ui.cleanOutput || state.ui.presentation)
+      );
 
       sorted.forEach(function (obj) {
         if (!obj.visible) return;
 
-        var set   = SS.getSet(obj.setId);
-        var glyph = set ? (set.glyphs[obj.slotKey] || null) : null;
-        var size  = SOS.getWorldSize(obj);
-        var pal   = SOS.resolvePalette(obj, set);
+        var set = SS.getSet(obj.setId);
+        var glyph = set ? set.glyphs[obj.slotKey] || null : null;
+        var size = SOS.getWorldSize(obj);
+        var pal = SOS.resolvePalette(obj, set);
 
         ctx.save();
         ctx.globalAlpha = obj.opacity !== undefined ? obj.opacity : 1;
@@ -17145,73 +21906,124 @@
 
         var half = size / 2;
 
-        if (glyph && glyph.strokes && glyph.strokes.length > 0) {
+        if (
+          glyph &&
+          ((glyph.strokes && glyph.strokes.length) ||
+            (glyph.objects && glyph.objects.length))
+        ) {
           SR.renderGlyph(ctx, glyph, -half, -half, size, pal, {});
         } else {
           // Fallback: dashed placeholder box — indicates missing glyph, no crash
           ctx.strokeStyle = "rgba(255,255,255,0.18)";
-          ctx.lineWidth   = 1;
+          ctx.lineWidth = 1;
           ctx.setLineDash([3, 3]);
           ctx.strokeRect(-half, -half, size, size);
           ctx.setLineDash([]);
           // Slot key label centered
-          ctx.fillStyle   = "rgba(255,255,255,0.25)";
-          ctx.font        = Math.max(8, size * 0.18) + "px monospace";
-          ctx.textAlign   = "center";
+          ctx.fillStyle = "rgba(255,255,255,0.25)";
+          ctx.font = Math.max(8, size * 0.18) + "px monospace";
+          ctx.textAlign = "center";
           ctx.textBaseline = "middle";
           ctx.fillText(obj.slotKey || "?", 0, 0);
         }
 
         ctx.restore();
 
-        // Selection chrome — drawn in world space (scales with camera, which is correct)
-        if (!clean && obj.id === state.selectedSymbolObjectId) {
-          var b   = SOS.getBounds(obj);
-          var pad = 8;
+        // Per-object selection highlight (subtle tint for each selected member)
+        if (
+          !clean &&
+          state.selectedSymbolObjectIds &&
+          state.selectedSymbolObjectIds.has(obj.id)
+        ) {
+          var b = SOS.getBounds(obj);
           ctx.save();
-          ctx.globalAlpha  = 1;
-          ctx.strokeStyle  = "rgba(255,255,255,0.72)";
-          ctx.lineWidth    = 1.5;
-          ctx.setLineDash([6, 5]);
-          ctx.strokeRect(b.minX - pad, b.minY - pad, b.w + pad * 2, b.h + pad * 2);
+          ctx.globalAlpha = 1;
+          ctx.strokeStyle = "rgba(255,255,255,0.35)";
+          ctx.lineWidth = 1;
+          ctx.setLineDash([3, 3]);
+          ctx.strokeRect(b.minX, b.minY, b.w, b.h);
+          ctx.setLineDash([]);
+          ctx.restore();
+        }
+      });
+
+      // ── Multi-select combined bounds + handles ────────────────────────────
+      if (
+        !clean &&
+        state.selectedSymbolObjectIds &&
+        state.selectedSymbolObjectIds.size > 0
+      ) {
+        var mb = SOS.getMultiBounds(
+          state.symbolObjects,
+          state.selectedSymbolObjectIds,
+        );
+        if (mb) {
+          var pad = 10;
+          var bx = mb.minX - pad;
+          var by = mb.minY - pad;
+          var bw = mb.w + pad * 2;
+          var bh = mb.h + pad * 2;
+          var hr = 5;
+
+          ctx.save();
+          ctx.globalAlpha = 1;
+
+          // Dashed bounding box
+          ctx.strokeStyle = "rgba(255,255,255,0.8)";
+          ctx.lineWidth = 1.5;
+          ctx.setLineDash([6, 4]);
+          ctx.strokeRect(bx, by, bw, bh);
           ctx.setLineDash([]);
 
           // Corner scale handles
-          var hx = b.minX - pad;
-          var hy = b.minY - pad;
-          var hw = b.w + pad * 2;
-          var hh = b.h + pad * 2;
-          var hr = 5;
           var corners = [
-            [hx,      hy     ],
-            [hx + hw, hy     ],
-            [hx,      hy + hh],
-            [hx + hw, hy + hh],
+            [bx, by],
+            [bx + bw, by],
+            [bx, by + bh],
+            [bx + bw, by + bh],
           ];
-          ctx.fillStyle = "rgba(255,255,255,0.72)";
+          ctx.fillStyle = "rgba(255,255,255,0.85)";
           corners.forEach(function (c) {
             ctx.beginPath();
             ctx.arc(c[0], c[1], hr, 0, Math.PI * 2);
             ctx.fill();
           });
 
-          // Rotate handle — above center
-          var rx = b.minX + b.w / 2;
-          var ry = b.minY - pad - 16;
+          // Rotate handle — above top-center
+          var rx = bx + bw / 2;
+          var ry = by - 18;
           ctx.beginPath();
           ctx.arc(rx, ry, hr, 0, Math.PI * 2);
-          ctx.strokeStyle = "rgba(255,255,255,0.72)";
-          ctx.lineWidth   = 1.5;
+          ctx.strokeStyle = "rgba(255,255,255,0.8)";
+          ctx.lineWidth = 1.5;
           ctx.stroke();
-          // Stem from top-center of bounds to rotate handle
+          // Stem
           ctx.beginPath();
-          ctx.moveTo(rx, b.minY - pad);
+          ctx.moveTo(rx, by);
           ctx.lineTo(rx, ry + hr);
           ctx.stroke();
 
           ctx.restore();
         }
-      });
+      }
+
+      // ── Marquee rect overlay ──────────────────────────────────────────────
+      if (!clean && _symMarquee) {
+        var mx1 = Math.min(_symMarquee.x1, _symMarquee.x2);
+        var my1 = Math.min(_symMarquee.y1, _symMarquee.y2);
+        var mw = Math.abs(_symMarquee.x2 - _symMarquee.x1);
+        var mh = Math.abs(_symMarquee.y2 - _symMarquee.y1);
+        ctx.save();
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = "rgba(255,255,255,0.04)";
+        ctx.fillRect(mx1, my1, mw, mh);
+        ctx.strokeStyle = "rgba(255,255,255,0.55)";
+        ctx.lineWidth = 1;
+        ctx.setLineDash([5, 4]);
+        ctx.strokeRect(mx1, my1, mw, mh);
+        ctx.setLineDash([]);
+        ctx.restore();
+      }
 
       // Placement ghost (drawn last, on top of all placed objects)
       if (state.tool === "symbol-place") _drawSymbolGhost(ctx, SR, SS, SOS);
@@ -17225,14 +22037,21 @@
       var sym = state.symbols;
       if (!sym.activeSlotKey || !sym.activeSetId) return;
 
-      var set   = SS.getSet(sym.activeSetId);
+      var set = SS.getSet(sym.activeSetId);
       if (!set) return;
 
       var glyph = set.glyphs[sym.activeSlotKey] || null;
-      if (!glyph || !glyph.strokes || !glyph.strokes.length) return;  // no fallback rect in ghost
+      if (
+        !glyph ||
+        !(
+          (glyph.strokes && glyph.strokes.length) ||
+          (glyph.objects && glyph.objects.length)
+        )
+      )
+        return; // no fallback rect in ghost
 
       var size = SOS.BASE_SIZE;
-      var pal  = sym.placementPalette || set.palette || null;
+      var pal = sym.placementPalette || set.palette || null;
       var half = size / 2;
 
       ctx.save();
@@ -17243,11 +22062,13 @@
 
       // Crosshair
       ctx.strokeStyle = "rgba(255,255,255,0.3)";
-      ctx.lineWidth   = 0.5;
+      ctx.lineWidth = 0.5;
       ctx.setLineDash([]);
       ctx.beginPath();
-      ctx.moveTo(-half - 4, 0); ctx.lineTo(half + 4, 0);
-      ctx.moveTo(0, -half - 4); ctx.lineTo(0, half + 4);
+      ctx.moveTo(-half - 4, 0);
+      ctx.lineTo(half + 4, 0);
+      ctx.moveTo(0, -half - 4);
+      ctx.lineTo(0, half + 4);
       ctx.stroke();
 
       ctx.restore();
@@ -17293,12 +22114,97 @@
 
       // Grid — drawn before all stroke/walker content
       drawGrid(ctx, canvas.width, canvas.height);
+
+      // ── Field visualization layer (below symbols, above background grid) ──
+      // Gated on fv.visible — Active (enabled) controls simulation; Visible controls rendering.
+      var _fviz = state.world && state.world.fieldViz;
+      if (
+        window.SBE &&
+        SBE.FieldRenderer &&
+        (!_fviz || _fviz.visible !== false)
+      ) {
+        SBE.FieldRenderer.render(ctx, state);
+      }
+
       // Surface stamp layer (persistent ink)
       ctx.drawImage(surfaceCanvas, 0, 0);
       renderStrokes(ctx);
       renderSymbolObjects(ctx);
       renderMidiPoints(ctx);
+
+      // ── Field visualizer (debug/atmospheric overlay) ──────────────────────
+      if (window.SBE && SBE.FieldVisualizer) {
+        SBE.FieldVisualizer.render(ctx, state, lastDt);
+      }
+
       drawWalkers(ctx);
+
+      // ── Projectile collision contact debug overlay (world-space) ─────────────
+      // Active when ANY projectile walker has showPhysics enabled.
+      // Renders contact points, normals, and active test segments.
+      (function drawProjectileContactDebug() {
+        if (!state._projCollisionDebug || !state._projCollisionDebug.length)
+          return;
+        // Only render if at least one active projectile has showPhysics
+        var anyDebug = (state.projectileWalkers || []).some(function (w) {
+          return w.debug && w.debug.showPhysics;
+        });
+        if (!anyDebug) return;
+
+        ctx.save();
+        state._projCollisionDebug.forEach(function (ev) {
+          // Contact point — magenta dot
+          ctx.globalAlpha = 0.95;
+          ctx.fillStyle = "#ff00ff";
+          ctx.beginPath();
+          ctx.arc(ev.cx, ev.cy, 3, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Penetration line: projectile center → contact point
+          ctx.strokeStyle = "rgba(255,0,255,0.6)";
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(ev.wx, ev.wy);
+          ctx.lineTo(ev.cx, ev.cy);
+          ctx.stroke();
+
+          // Normal arrow at contact point — orange (points away from line)
+          var _ndx = ev.wx - ev.cx,
+            _ndy = ev.wy - ev.cy;
+          var _nm = Math.hypot(_ndx, _ndy) || 1;
+          var _nx = _ndx / _nm,
+            _ny = _ndy / _nm;
+          var _nLen = ev.radius * 1.4;
+          ctx.strokeStyle = "#ff8800";
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.moveTo(ev.cx, ev.cy);
+          ctx.lineTo(ev.cx + _nx * _nLen, ev.cy + _ny * _nLen);
+          ctx.stroke();
+
+          // Threshold ring at contact — shows live collision radius in world space
+          ctx.strokeStyle = "rgba(255,255,0,0.35)";
+          ctx.lineWidth = 0.5;
+          ctx.setLineDash([2, 4]);
+          ctx.beginPath();
+          ctx.arc(ev.wx, ev.wy, ev.threshold, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.setLineDash([]);
+
+          // Line segment being tested — dim cyan
+          if (ev.line) {
+            ctx.strokeStyle = "rgba(0,255,255,0.25)";
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(ev.line.x1, ev.line.y1);
+            ctx.lineTo(ev.line.x2, ev.line.y2);
+            ctx.stroke();
+          }
+        });
+        ctx.globalAlpha = 1;
+        ctx.restore();
+      })();
+
       renderParticles(ctx);
       drawHitFeedback(ctx);
       drawMutedOverlays(ctx);

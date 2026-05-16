@@ -34,6 +34,7 @@
       alpha: cfg.alpha != null ? cfg.alpha : 1,
       drag: cfg.drag != null ? cfg.drag : 0,
       gravity: cfg.gravity != null ? cfg.gravity : GRAVITY,
+      motionPlane: cfg.motionPlane || "screen", // "screen" | "world"
       _dead: false,
     };
   }
@@ -241,12 +242,16 @@
     },
 
     // ── Update (dt in seconds) ────────────────────────────────────────────
-    update: function (dt, bounds) {
+    // worldPhysics — optional state.world.physics config for plane-aware forces.
+    update: function (dt, bounds, worldPhysics) {
       var list = this.particles;
+
+      // Resolve world field for world-plane particles
+      var _wf = worldPhysics ? worldPhysics.world : null;
+      var _planeMode = worldPhysics ? (worldPhysics.mode || "side") : "side";
 
       for (var i = list.length - 1; i >= 0; i--) {
         var p = list[i];
-        var g = (p.gravity != null ? p.gravity : GRAVITY) * dt;
 
         // Drag — velocity damping
         if (p.drag) {
@@ -254,8 +259,29 @@
           p.vy *= 1 - p.drag;
         }
 
+        // ── Plane-aware force application ────────────────────────────────
+        var isWorldPlane = p.motionPlane === "world";
+        var applyScreenGravity =
+          !isWorldPlane || _planeMode === "side" || _planeMode === "hybrid";
+
+        if (applyScreenGravity && !isWorldPlane) {
+          // Screen-plane: apply downward gravity (existing behavior)
+          var g = (p.gravity != null ? p.gravity : GRAVITY) * dt;
+          p.vy += g;
+        } else if (isWorldPlane && (_planeMode === "topdown" || _planeMode === "hybrid")) {
+          // World-plane: apply world field vector instead of screen gravity
+          if (_wf && _wf.fieldType !== "none" && _wf.strength) {
+            p.vx += (_wf.vectorX || 0) * _wf.strength * dt;
+            p.vy += (_wf.vectorY || 0) * _wf.strength * dt;
+          }
+          // No screen gravity for world-plane particles in topdown/hybrid
+        } else {
+          // Fallback: screen gravity (preserves legacy behavior when no worldPhysics passed)
+          var g = (p.gravity != null ? p.gravity : GRAVITY) * dt;
+          p.vy += g;
+        }
+
         // Integrate
-        p.vy += g;
         p.x += p.vx * dt;
         p.y += p.vy * dt;
 

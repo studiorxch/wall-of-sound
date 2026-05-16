@@ -305,6 +305,11 @@
       // drawerSystem.js owns the centralized input handling — nothing extra here.
       launcherButtons.forEach(function (button) {
         button.addEventListener("click", function () {
+          var workbenchId = button.dataset.workbench;
+          if (workbenchId) {
+            _toggleWorkbench(button, workbenchId);
+            return;
+          }
           var DS = window.SBE && window.SBE.DrawerSystem;
           if (!DS) return;
           var drawerId = button.dataset.drawer;
@@ -315,6 +320,36 @@
           }
         });
       });
+    }
+
+    function _toggleWorkbench(button, id) {
+      var wb     = document.getElementById("symbol-workbench");
+      var wbc    = document.getElementById("symbol-workbench-content");
+      var handle = document.getElementById("split-handle");
+      if (!wb || !wbc) return;
+
+      var isOpen = !wb.hidden;
+
+      if (isOpen) {
+        // Close
+        var SD = window.SBE && window.SBE.SymbolDrawer;
+        if (SD) SD.unmount(wbc);
+        wb.hidden = true;
+        if (handle) handle.hidden = true;
+        button.classList.remove("workbench-active");
+        document.body.classList.remove("workbench-open");
+      } else {
+        // Open
+        wb.hidden = false;
+        if (handle) handle.hidden = false;
+        button.classList.add("workbench-active");
+        document.body.classList.add("workbench-open");
+        var SD = window.SBE && window.SBE.SymbolDrawer;
+        if (SD) SD.mount(wbc);
+        // Apply persisted split height if available
+        var VS = window.SBE && window.SBE.ViewportSystem;
+        if (VS) VS.applySplit();
+      }
     }
 
     function bindGridLayerControls() {

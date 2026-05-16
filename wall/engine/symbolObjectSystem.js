@@ -178,10 +178,134 @@
     });
   }
 
+  // ── Multi-select helpers ──────────────────────────────────────────────────
+
+  // Returns the combined AABB of all selected objects. Returns null if nothing selected.
+  function getMultiBounds(objects, selectedIds) {
+    if (!selectedIds || !selectedIds.size) return null;
+    var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    var found = false;
+    objects.forEach(function (obj) {
+      if (!selectedIds.has(obj.id)) return;
+      var b = getBounds(obj);
+      if (b.minX < minX) minX = b.minX;
+      if (b.minY < minY) minY = b.minY;
+      if (b.maxX > maxX) maxX = b.maxX;
+      if (b.maxY > maxY) maxY = b.maxY;
+      found = true;
+    });
+    if (!found) return null;
+    return { minX: minX, minY: minY, maxX: maxX, maxY: maxY, w: maxX - minX, h: maxY - minY,
+             cx: (minX + maxX) / 2, cy: (minY + maxY) / 2 };
+  }
+
+  // Returns selected objects in z-order.
+  function getSelectedObjects(objects, selectedIds) {
+    if (!selectedIds || !selectedIds.size) return [];
+    return sortByZIndex(objects.filter(function (o) { return selectedIds.has(o.id); }));
+  }
+
+  // Returns all objects whose AABB intersects the given rect {x1,y1,x2,y2} (any order).
+  function objectsInRect(objects, x1, y1, x2, y2) {
+    var rx1 = Math.min(x1, x2), ry1 = Math.min(y1, y2);
+    var rx2 = Math.max(x1, x2), ry2 = Math.max(y1, y2);
+    return objects.filter(function (obj) {
+      var b = getBounds(obj);
+      return b.maxX >= rx1 && b.minX <= rx2 && b.maxY >= ry1 && b.minY <= ry2;
+    });
+  }
+
+  // ── Group transforms ──────────────────────────────────────────────────────
+
+  // Move all selected objects by (dx, dy).
+  function moveGroup(objects, selectedIds, dx, dy) {
+    objects.forEach(function (obj) {
+      if (!selectedIds.has(obj.id) || obj.locked) return;
+      obj.x += dx;
+      obj.y += dy;
+    });
+  }
+
+  // Rotate all selected objects by dr radians around the given center (cx, cy).
+  function rotateGroup(objects, selectedIds, dr, cx, cy) {
+    var cos = Math.cos(dr), sin = Math.sin(dr);
+    objects.forEach(function (obj) {
+      if (!selectedIds.has(obj.id) || obj.locked) return;
+      var ox = obj.x - cx, oy = obj.y - cy;
+      obj.x  = cx + ox * cos - oy * sin;
+      obj.y  = cy + ox * sin + oy * cos;
+      obj.rotation = (obj.rotation || 0) + dr;
+    });
+  }
+
+  // Scale all selected objects by ds around the given center (cx, cy).
+  function scaleGroup(objects, selectedIds, ds, cx, cy) {
+    objects.forEach(function (obj) {
+      if (!selectedIds.has(obj.id) || obj.locked) return;
+      obj.x     = cx + (obj.x - cx) * ds;
+      obj.y     = cy + (obj.y - cy) * ds;
+      obj.scale = Math.max(0.05, (obj.scale || 1) * ds);
+    });
+  }
+
+  // ── Z-order ───────────────────────────────────────────────────────────────
+
+  function _getZRange(objects) {
+    var zs = objects.map(function (o) { return o.zIndex || 0; });
+    return { min: Math.min.apply(null, zs), max: Math.max.apply(null, zs) };
+  }
+
+  function bringForward(objects, id) {
+    var obj = objects.find(function (o) { return o.id === id; });
+    if (obj) obj.zIndex = (obj.zIndex || 0) + 1;
+  }
+
+  function sendBackward(objects, id) {
+    var obj = objects.find(function (o) { return o.id === id; });
+    if (obj) obj.zIndex = (obj.zIndex || 0) - 1;
+  }
+
+  function bringToFront(objects, id) {
+    var obj = objects.find(function (o) { return o.id === id; });
+    if (!obj || objects.length < 2) return;
+    var r = _getZRange(objects);
+    obj.zIndex = r.max + 1;
+  }
+
+  function sendToBack(objects, id) {
+    var obj = objects.find(function (o) { return o.id === id; });
+    if (!obj || objects.length < 2) return;
+    var r = _getZRange(objects);
+    obj.zIndex = r.min - 1;
+  }
+
+  // ── Snap helpers ──────────────────────────────────────────────────────────
+
+  // Snap a value to the nearest multiple of gridSize. No-op if gridSize <= 0.
+  function snapToGrid(v, gridSize) {
+    if (!gridSize || gridSize <= 0) return v;
+    return Math.round(v / gridSize) * gridSize;
+  }
+
+  // Snap an angle (radians) to the nearest multiple of snapDeg degrees.
+  var SNAP_DEG = 15;
+  function snapAngle(r, snapDeg) {
+    snapDeg = snapDeg || SNAP_DEG;
+    var snapRad = snapDeg * Math.PI / 180;
+    return Math.round(r / snapRad) * snapRad;
+  }
+
+  // Snap a point to grid if enabled.
+  function snapPoint(pt, gridEnabled, gridSize) {
+    if (!gridEnabled || !gridSize) return pt;
+    return { x: snapToGrid(pt.x, gridSize), y: snapToGrid(pt.y, gridSize) };
+  }
+
   // ── Public API ────────────────────────────────────────────────────────────
 
   SBE.SymbolObjectSystem = {
     BASE_SIZE:           BASE_SIZE,
+    // Core
     createSymbolObject:  createSymbolObject,
     getWorldSize:        getWorldSize,
     getBounds:           getBounds,
@@ -191,6 +315,23 @@
     duplicate:           duplicate,
     resolvePalette:      resolvePalette,
     sortByZIndex:        sortByZIndex,
+    // Multi-select
+    getMultiBounds:      getMultiBounds,
+    getSelectedObjects:  getSelectedObjects,
+    objectsInRect:       objectsInRect,
+    // Group transforms
+    moveGroup:           moveGroup,
+    rotateGroup:         rotateGroup,
+    scaleGroup:          scaleGroup,
+    // Z-order
+    bringForward:        bringForward,
+    sendBackward:        sendBackward,
+    bringToFront:        bringToFront,
+    sendToBack:          sendToBack,
+    // Snap
+    snapToGrid:          snapToGrid,
+    snapAngle:           snapAngle,
+    snapPoint:           snapPoint,
   };
 
   console.log("[WOS SymbolObjectSystem] Loaded — v1.0.0");

@@ -24,13 +24,9 @@
     );
     drawLines(context, state.lines, state.selectedLineId, isClean(state));
     drawShapes(context, state, isClean(state));
-    drawBalls(
-      context,
-      state.balls,
-      state.swarm.color,
-      state.selectedBallId,
-      isClean(state),
-    );
+    // Legacy ball rendering suppressed — ActorSystemCleanup v1.0.0
+    // state.balls kept for deserialization compat only; projectile walkers are authoritative.
+    // drawBalls(context, state.balls, state.swarm.color, state.selectedBallId, isClean(state));
     drawDraft(context, overlays, isClean(state));
   };
 

@@ -25,7 +25,8 @@
       collisionRadius,
       renderRadius,
       style: config.ballStyle || "core",
-      energy: 1
+      energy: 1,
+      motionPlane: "screen",  // screen-space entity — subject to screen gravity
     };
   }
 

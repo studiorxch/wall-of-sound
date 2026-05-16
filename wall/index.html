@@ -27,6 +27,15 @@
       <!-- LEFT RAIL -->
       <div id="left-rail">
         <div class="rail-icon"></div>
+        <button class="launcher-btn" data-drawer="sampler" title="Sampler">
+          🍡
+        </button>
+        <button class="launcher-btn" data-drawer="library" title="Library">
+          📚
+        </button>
+        <button class="launcher-btn" data-workbench="symbols" title="SymbolLab">
+          ✦
+        </button>
       </div>
       <!-- LEFT PANEL: Libraries -->
       <aside id="left-panel" class="panel panel-left" hidden>
@@ -70,17 +79,47 @@
         </div>
         <div id="stage-grid"></div>
         <div id="canvas-tool-subbar" class="canvas-tool-subbar"></div>
+        <!-- Viewport zoom controls — floating HUD, bottom-right of canvas area -->
+        <div class="viewport-controls" id="viewport-controls">
+          <!-- Orientation toggle — Portrait / Landscape -->
+          <select
+            id="viewport-mode"
+            title="Orientation"
+            style="
+              background: var(--panel, #1a1a1f);
+              border: 1px solid rgba(255, 255, 255, 0.12);
+              color: inherit;
+              font-size: 10px;
+              padding: 2px 4px;
+              border-radius: 3px;
+              cursor: pointer;
+              opacity: 0.7;
+            "
+          >
+            <option value="portrait">Portrait</option>
+            <option value="landscape">Landscape</option>
+          </select>
+          <button class="vp-btn" id="vp-zoom-out" title="Zoom Out (Ctrl −)">
+            −
+          </button>
+          <span class="vp-zoom-label" id="vp-zoom-label">100%</span>
+          <button class="vp-btn" id="vp-zoom-in" title="Zoom In (Ctrl +)">
+            +
+          </button>
+          <button
+            class="vp-btn vp-btn--fit"
+            id="vp-zoom-fit"
+            title="Fit to view"
+          >
+            Fit
+          </button>
+        </div>
         <div class="canvas-wrap" id="canvas-wrap">
           <canvas id="engine-canvas" width="1080" height="1920"></canvas>
         </div>
         <div class="tool-group">
-          <!-- Select deprecated — pen tool handles select/transform. Hidden but keyboard shortcut preserved. -->
-          <button
-            class="tool"
-            data-tool="select"
-            title="Select (V)"
-            style="display: none"
-          >
+          <!-- SELECT tool — dedicated non-drawing mode for click-select, marquee, transform -->
+          <button class="tool" data-tool="select" title="Select (V)">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
               <path
                 d="M2 1L12 7L7 8.5L5 13L2 1Z"
@@ -90,23 +129,52 @@
               />
             </svg>
           </button>
-          <button class="tool active" data-tool="pen" title="Pen (P · D · M)">
+          <!-- MOTION tool — creates routes, movement infrastructure, actor behaviors -->
+          <button
+            class="tool active"
+            data-tool="pen"
+            title="Motion (P · D · M)"
+          >
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <path
-                d="M2 3 Q5 1 8 4 Q11 7 9 11"
-                stroke="currentColor"
-                stroke-width="1.6"
-                stroke-linecap="round"
-                fill="none"
-              />
-              <circle
-                cx="9"
-                cy="11"
-                r="2"
+              <!-- Crosshair / reticle — communicates targeting, routing, active entity -->
+
+              <line
+                x1="7"
+                y1="1"
+                x2="7"
+                y2="4.2"
                 stroke="currentColor"
                 stroke-width="1.3"
-                fill="none"
+                stroke-linecap="round"
               />
+              <line
+                x1="7"
+                y1="9.8"
+                x2="7"
+                y2="13"
+                stroke="currentColor"
+                stroke-width="1.3"
+                stroke-linecap="round"
+              />
+              <line
+                x1="1"
+                y1="7"
+                x2="4.2"
+                y2="7"
+                stroke="currentColor"
+                stroke-width="1.3"
+                stroke-linecap="round"
+              />
+              <line
+                x1="9.8"
+                y1="7"
+                x2="13"
+                y2="7"
+                stroke="currentColor"
+                stroke-width="1.3"
+                stroke-linecap="round"
+              />
+              <circle cx="7" cy="7" r="1" fill="currentColor" />
             </svg>
           </button>
           <!-- Shape deprecated — pen shape mode covers this. Hidden but keyboard shortcut preserved. -->
@@ -211,39 +279,75 @@
       <aside id="right-panel" class="panel panel-right">
         <div class="inspector-tabs">
           <button class="tab active" data-tab="object">Object</button>
-          <button class="tab" data-tab="canvas">Frame</button>
+          <button class="tab" data-tab="layers">Layers</button>
           <button class="tab" data-tab="world">World</button>
           <button class="tab" data-tab="motion" hidden>Motion</button>
+          <!-- canvas tab alias — hidden, IDs preserved for JS compat -->
+          <button class="tab" data-tab="canvas" hidden>Frame</button>
         </div>
 
-        <!-- Object Tab — flat collapsible section system -->
+        <!-- Object Tab — actor/entity architecture inspector -->
         <div class="tab-content active" data-tab-content="object">
           <div id="inspector-object">
-            <!-- OBJECT section -->
+            <!-- ── PATH ──────────────────────────────────────────────────────── -->
+            <!-- Movement infrastructure. Routes, corridors, map geometry.      -->
             <div class="insp-section" data-section="object">
               <button class="insp-section-header open" data-toggle="object">
-                <span class="insp-chevron">▼</span> OBJECT
+                <span class="insp-chevron">▼</span> PATH
               </button>
               <div class="insp-section-body">
+                <!-- Style: path rendering mode. None = invisible infrastructure. -->
                 <div class="insp-row">
-                  <label class="insp-label" for="obj-fill">Fill Color</label>
+                  <label class="insp-label" for="obj-pathStyle">Style</label>
+                  <div class="insp-control">
+                    <select id="obj-pathStyle">
+                      <option value="none">None</option>
+                      <option value="solid">Solid</option>
+                      <option value="dashed">Dash-Dot</option>
+                      <option value="double">Double</option>
+                    </select>
+                  </div>
+                </div>
+                <!-- Dash / Gap controls — shown for Dotted and Dashed styles -->
+                <div id="path-dash-fields" style="display: none">
+                  <div class="insp-row">
+                    <label class="insp-label" for="obj-path-dash">Length</label>
+                    <div class="insp-control insp-slider-num">
+                      <input
+                        id="obj-path-dash"
+                        type="range"
+                        min="1"
+                        max="80"
+                        step="1"
+                        value="1"
+                      />
+                      <output id="obj-path-dash-value">1</output>
+                    </div>
+                  </div>
+                  <div class="insp-row">
+                    <label class="insp-label" for="obj-path-gap">Gap</label>
+                    <div class="insp-control insp-slider-num">
+                      <input
+                        id="obj-path-gap"
+                        type="range"
+                        min="1"
+                        max="80"
+                        step="1"
+                        value="36"
+                      />
+                      <output id="obj-path-gap-value">36</output>
+                    </div>
+                  </div>
+                </div>
+                <div class="insp-row">
+                  <label class="insp-label" for="obj-fill">Color</label>
                   <div class="insp-control">
                     <input id="obj-fill" type="color" value="#ff4b4b" />
                   </div>
                 </div>
                 <div class="insp-row">
-                  <label class="insp-label" for="obj-strokeWidth"
-                    >Stroke Width</label
-                  >
+                  <label class="insp-label" for="obj-strokeWidth">Width</label>
                   <div class="insp-control insp-slider-num">
-                    <input
-                      id="obj-strokeWidth"
-                      type="range"
-                      min="1"
-                      max="100"
-                      step="1"
-                      value="18"
-                    />
                     <input
                       id="obj-strokeWidth-num"
                       type="number"
@@ -251,6 +355,20 @@
                       max="100"
                       value="18"
                     />
+                  </div>
+                </div>
+                <div class="insp-row">
+                  <label class="insp-label" for="av-opacity">Opacity</label>
+                  <div class="insp-control insp-slider-num">
+                    <input
+                      id="av-opacity"
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.01"
+                      value="1"
+                    />
+                    <output id="av-opacity-value">1.00</output>
                   </div>
                 </div>
                 <div class="insp-row">
@@ -262,10 +380,224 @@
               </div>
             </div>
 
-            <!-- WALKER section -->
+            <!-- ── SUBJECT ────────────────────────────────────────────────── -->
+            <!-- Symbolic visual representation layer. Replaces TARGET+AVATAR.  -->
+            <!-- av-enabled/av-mode hidden: preserved for legacy scene compat.  -->
+            <input id="av-enabled" type="hidden" value="1" />
+            <input id="av-mode" type="hidden" value="none" />
+            <div class="insp-section" data-section="subject">
+              <button class="insp-section-header" data-toggle="subject">
+                <span class="insp-chevron">▶</span> SUBJECT
+              </button>
+              <div class="insp-section-body" style="display: none">
+                <div class="insp-row">
+                  <label class="insp-label" for="obj-subject-style"
+                    >Style</label
+                  >
+                  <div class="insp-control">
+                    <select id="obj-subject-style">
+                      <option value="none">None</option>
+                      <option value="dot">Dot</option>
+                      <option value="arrow">Arrow</option>
+                      <option value="glyph">Glyph</option>
+                      <option value="image">Image</option>
+                      <option value="text">Text</option>
+                    </select>
+                  </div>
+                </div>
+                <!-- Glyph picker — shown when Style = Glyph -->
+                <div class="insp-row" id="sub-row-glyph" style="display: none">
+                  <label class="insp-label" for="obj-subject-glyph"
+                    >Glyph</label
+                  >
+                  <div class="insp-control">
+                    <select id="obj-subject-glyph">
+                      <option value="">— none —</option>
+                    </select>
+                  </div>
+                </div>
+                <!-- Image picker — shown when Style = Image -->
+                <div class="insp-row" id="sub-row-image" style="display: none">
+                  <label class="insp-label" for="obj-subject-image"
+                    >Image</label
+                  >
+                  <div class="insp-control">
+                    <label class="insp-file-btn">
+                      <input
+                        id="obj-subject-image"
+                        type="file"
+                        accept="image/*,image/webp"
+                      />
+                      <span>Choose</span>
+                    </label>
+                  </div>
+                </div>
+                <!-- Text label — shown when Style = Text -->
+                <div class="insp-row" id="sub-row-text" style="display: none">
+                  <label class="insp-label" for="obj-subject-text">Label</label>
+                  <div class="insp-control">
+                    <input
+                      id="obj-subject-text"
+                      type="text"
+                      placeholder="Label…"
+                      style="width: 100%; box-sizing: border-box"
+                    />
+                  </div>
+                </div>
+                <div class="insp-row">
+                  <label class="insp-label" for="obj-subject-scale"
+                    >Scale</label
+                  >
+                  <div class="insp-control insp-slider-num">
+                    <input
+                      id="obj-subject-scale"
+                      type="range"
+                      min="0.3"
+                      max="3.0"
+                      step="0.1"
+                      value="1.0"
+                    />
+                    <output id="obj-subject-scale-value">1.0</output>
+                  </div>
+                </div>
+                <div class="insp-row">
+                  <label class="insp-label" for="obj-subject-opacity"
+                    >Opacity</label
+                  >
+                  <div class="insp-control insp-slider-num">
+                    <input
+                      id="obj-subject-opacity"
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.05"
+                      value="1.0"
+                    />
+                    <output id="obj-subject-opacity-value">1.00</output>
+                  </div>
+                </div>
+                <div class="insp-row">
+                  <label class="insp-label" for="obj-subject-color"
+                    >Color</label
+                  >
+                  <div class="insp-control">
+                    <input
+                      id="obj-subject-color"
+                      type="color"
+                      value=""
+                      title="Tint color (blank = use path color)"
+                      style="
+                        width: 36px;
+                        height: 22px;
+                        padding: 1px;
+                        border: none;
+                        background: none;
+                        cursor: pointer;
+                      "
+                    />
+                    <button
+                      type="button"
+                      style="
+                        font-size: 9px;
+                        opacity: 0.55;
+                        padding: 2px 4px;
+                        margin-left: 4px;
+                      "
+                      onclick="
+                        (function () {
+                          var el = document.getElementById('obj-subject-color');
+                          el.value = '';
+                          el.dispatchEvent(
+                            new Event('input', { bubbles: true }),
+                          );
+                        })()
+                      "
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+                <div class="insp-row">
+                  <label class="insp-label" for="obj-subject-visible"
+                    >Visible</label
+                  >
+                  <div class="insp-control">
+                    <input id="obj-subject-visible" type="checkbox" checked />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- ── TRAIL ──────────────────────────────────────────────────── -->
+            <!-- Movement memory visualization. Independent from path.          -->
+            <div class="insp-section" data-section="trail">
+              <button class="insp-section-header" data-toggle="trail">
+                <span class="insp-chevron">▶</span> TRAIL
+              </button>
+              <div class="insp-section-body" style="display: none">
+                <div class="insp-row">
+                  <label class="insp-label" for="obj-trailStyle">Enabled</label>
+                  <div class="insp-control">
+                    <input id="obj-trailStyle" type="checkbox" />
+                  </div>
+                </div>
+                <div id="trail-detail-fields" style="display: none">
+                  <div class="insp-row">
+                    <label class="insp-label" for="obj-trail-style"
+                      >Style</label
+                    >
+                    <div class="insp-control">
+                      <select id="obj-trail-style">
+                        <option value="line">Line</option>
+                        <option value="dots">Dots</option>
+                        <option value="ribbon">Ribbon</option>
+                        <option value="glow">Glow</option>
+                        <option value="particle">Particle</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="insp-row">
+                    <label class="insp-label" for="obj-trail-length"
+                      >Length</label
+                    >
+                    <div class="insp-control insp-slider-num">
+                      <input
+                        id="obj-trail-length"
+                        type="range"
+                        min="0.1"
+                        max="3.0"
+                        step="0.1"
+                        value="1.0"
+                      />
+                      <output id="obj-trail-length-value">1.0</output>
+                    </div>
+                  </div>
+                  <div class="insp-row">
+                    <label class="insp-label" for="obj-trail-opacity"
+                      >Opacity</label
+                    >
+                    <div class="insp-control insp-slider-num">
+                      <input
+                        id="obj-trail-opacity"
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.05"
+                        value="0.6"
+                      />
+                      <output id="obj-trail-opacity-value">0.60</output>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- ── BEHAVIOR ────────────────────────────────────────────────── -->
+            <!-- Procedural movement logic. Formerly WALKER.                   -->
+            <!-- data-section="walker" preserved for JS compat                 -->
             <div class="insp-section" data-section="walker">
               <button class="insp-section-header" data-toggle="walker">
-                <span class="insp-chevron">▶</span> WALKER
+                <span class="insp-chevron">▶</span> BEHAVIOR
               </button>
               <div class="insp-section-body" style="display: none">
                 <div class="insp-row">
@@ -275,36 +607,152 @@
                   </div>
                 </div>
                 <div class="insp-row">
-                  <label class="insp-label" for="obj-motionMode">Mode</label>
+                  <label class="insp-label" for="obj-motionMode"
+                    >Movement</label
+                  >
                   <div class="insp-control">
                     <select id="obj-motionMode">
+                      <option value="projectile">Projectile</option>
                       <option value="pingpong">Ping-Pong</option>
                       <option value="loop">Loop</option>
                       <option value="tunnel">Tunnel</option>
                       <option value="once">Once</option>
+                      <option value="none">None</option>
+                    </select>
+                  </div>
+                </div>
+                <!-- Speed — path traversal rate. Stored as normalized 0–1 in inspector, mapped to walker.speed -->
+                <div class="insp-row">
+                  <label class="insp-label" for="obj-speed">Speed</label>
+                  <div class="insp-control insp-slider-num">
+                    <input
+                      id="obj-speed"
+                      type="range"
+                      min="0.01"
+                      max="1.0"
+                      step="0.01"
+                      value="0.20"
+                    />
+                    <output id="obj-speed-value">0.20</output>
+                  </div>
+                </div>
+                <div class="insp-row">
+                  <label class="insp-label" for="av-rotation"
+                    >Rotation Source</label
+                  >
+                  <div class="insp-control">
+                    <select id="av-rotation">
+                      <option value="none">None</option>
+                      <option value="motion">Motion</option>
+                      <option value="field">Field</option>
                     </select>
                   </div>
                 </div>
                 <div class="insp-row">
-                  <label class="insp-label" for="obj-trailStyle">Trail</label>
-                  <div class="insp-control">
-                    <select id="obj-trailStyle">
-                      <option value="off">Off</option>
-                      <option value="on">On</option>
-                    </select>
+                  <label class="insp-label" for="obj-field-influence"
+                    >Field Influence</label
+                  >
+                  <div class="insp-control insp-slider-num">
+                    <input
+                      id="obj-field-influence"
+                      type="range"
+                      min="0"
+                      max="2"
+                      step="0.05"
+                      value="1"
+                    />
+                    <output id="obj-field-influence-value">1.0</output>
                   </div>
                 </div>
               </div>
             </div>
 
-            <!-- SOUND section -->
+            <!-- ── PHYSICS & COLLISION ─────────────────────────────────────── -->
+            <!-- Separate physical simulation from rendering.                   -->
+            <div class="insp-section" data-section="physics">
+              <button class="insp-section-header" data-toggle="physics">
+                <span class="insp-chevron">▶</span> PHYSICS &amp; COLLISION
+              </button>
+              <div class="insp-section-body" style="display: none">
+                <!-- Collider toggle — enables physics body for this actor -->
+                <div class="insp-row">
+                  <label class="insp-label" for="obj-collider-enabled"
+                    >Collider</label
+                  >
+                  <div class="insp-control">
+                    <input id="obj-collider-enabled" type="checkbox" checked />
+                  </div>
+                </div>
+
+                <!-- Physics body fields — visible when Collider = ON -->
+                <div id="physics-body-fields">
+                  <!-- Radius: authoritative collision, debug overlay, render body size -->
+                  <div class="insp-row">
+                    <label class="insp-label" for="av-collider-radius"
+                      >Radius</label
+                    >
+                    <div class="insp-control insp-slider-num">
+                      <input
+                        id="av-collider-radius"
+                        type="range"
+                        min="4"
+                        max="120"
+                        step="1"
+                        value="20"
+                      />
+                      <output id="av-collider-radius-value">20</output>
+                    </div>
+                  </div>
+                  <div class="insp-row">
+                    <label class="insp-label" for="obj-phys-bounce"
+                      >Bounce</label
+                    >
+                    <div class="insp-control insp-slider-num">
+                      <input
+                        id="obj-phys-bounce"
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.01"
+                        value="0.82"
+                      />
+                      <output id="obj-phys-bounce-value">0.82</output>
+                    </div>
+                  </div>
+                  <div class="insp-row">
+                    <label class="insp-label" for="obj-phys-gravity"
+                      >Gravity Scale</label
+                    >
+                    <div class="insp-control insp-slider-num">
+                      <input
+                        id="obj-phys-gravity"
+                        type="range"
+                        min="0"
+                        max="3"
+                        step="0.05"
+                        value="1.0"
+                      />
+                      <output id="obj-phys-gravity-value">1.00</output>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Legacy hidden input — preserved for serialization compat -->
+                <input id="av-collider-enabled" type="hidden" value="1" />
+              </div>
+            </div>
+
+            <!-- ── AUDIO ──────────────────────────────────────────────────── -->
+            <!-- Sound synthesis and playback. Formerly SOUND.               -->
             <div class="insp-section" data-section="sound">
               <button class="insp-section-header" data-toggle="sound">
-                <span class="insp-chevron">▶</span> SOUND
+                <span class="insp-chevron">▶</span> AUDIO
               </button>
               <div class="insp-section-body" style="display: none">
                 <div class="insp-row">
-                  <label class="insp-label" for="obj-soundSource">Source</label>
+                  <label class="insp-label" for="obj-soundSource"
+                    >Audio Source</label
+                  >
                   <div class="insp-control">
                     <select id="obj-soundSource">
                       <option value="off">Off</option>
@@ -314,29 +762,17 @@
                   </div>
                 </div>
                 <div class="insp-row">
-                  <label class="insp-label" for="obj-bankId">Bank</label>
+                  <label class="insp-label" for="obj-soundRole">Role</label>
                   <div class="insp-control">
-                    <select id="obj-bankId">
-                      <option value="">None</option>
-                      <option value="bank_1">Bank 1</option>
-                      <option value="bank_2">Bank 2</option>
-                      <option value="bank_3">Bank 3</option>
-                      <option value="bank_4">Bank 4</option>
-                      <option value="bank_5">Bank 5</option>
-                      <option value="bank_6">Bank 6</option>
-                      <option value="bank_7">Bank 7</option>
-                      <option value="bank_8">Bank 8</option>
-                      <option value="bank_9">Bank 9</option>
-                      <option value="bank_10">Bank 10</option>
-                      <option value="bank_11">Bank 11</option>
-                      <option value="bank_12">Bank 12</option>
-                      <option value="bank_13">Bank 13</option>
-                      <option value="bank_14">Bank 14</option>
-                      <option value="bank_15">Bank 15</option>
-                      <option value="bank_16">Bank 16</option>
+                    <select id="obj-soundRole">
+                      <option value="drum">Drum</option>
+                      <option value="bass">Bass</option>
+                      <option value="lead">Lead</option>
+                      <option value="pad">Pad</option>
                     </select>
                   </div>
                 </div>
+                <!-- Pitch Settings -->
                 <div class="insp-row">
                   <label class="insp-label" for="obj-noteClass">Note</label>
                   <div class="insp-control">
@@ -370,19 +806,8 @@
                   </div>
                 </div>
                 <div class="insp-row">
-                  <label class="insp-label" for="obj-soundRole">Role</label>
-                  <div class="insp-control">
-                    <select id="obj-soundRole">
-                      <option value="drum">Drum</option>
-                      <option value="bass">Bass</option>
-                      <option value="lead">Lead</option>
-                      <option value="pad">Pad</option>
-                    </select>
-                  </div>
-                </div>
-                <div class="insp-row">
                   <label class="insp-label" for="obj-soundTrigger"
-                    >Trigger</label
+                    >Trigger Type</label
                   >
                   <div class="insp-control">
                     <select id="obj-soundTrigger">
@@ -391,10 +816,56 @@
                     </select>
                   </div>
                 </div>
+                <div class="insp-row">
+                  <label class="insp-label" for="obj-bankId">Sound Bank</label>
+                  <div class="insp-control">
+                    <select id="obj-bankId">
+                      <option value="">None</option>
+                      <option value="bank_1">Bank 1</option>
+                      <option value="bank_2">Bank 2</option>
+                      <option value="bank_3">Bank 3</option>
+                      <option value="bank_4">Bank 4</option>
+                      <option value="bank_5">Bank 5</option>
+                      <option value="bank_6">Bank 6</option>
+                      <option value="bank_7">Bank 7</option>
+                      <option value="bank_8">Bank 8</option>
+                      <option value="bank_9">Bank 9</option>
+                      <option value="bank_10">Bank 10</option>
+                      <option value="bank_11">Bank 11</option>
+                      <option value="bank_12">Bank 12</option>
+                      <option value="bank_13">Bank 13</option>
+                      <option value="bank_14">Bank 14</option>
+                      <option value="bank_15">Bank 15</option>
+                      <option value="bank_16">Bank 16</option>
+                    </select>
+                  </div>
+                </div>
               </div>
             </div>
 
-            <!-- MATERIAL section -->
+            <!-- ── MIDI CONFIGURATION ─────────────────────────────────────── -->
+            <!-- External MIDI routing. Formerly MIDI BANK.                    -->
+            <!-- data-section="midi-bank-obj" preserved for JS compat          -->
+            <div class="insp-section" data-section="midi-bank-obj">
+              <button class="insp-section-header" data-toggle="midi-bank-obj">
+                <span class="insp-chevron">▶</span> MIDI CONFIGURATION
+              </button>
+              <div class="insp-section-body" style="display: none">
+                <div class="insp-row">
+                  <label class="insp-label">MIDI Source</label>
+                  <div class="insp-control">
+                    <select id="grid-bank-select">
+                      <option value="">• no bank •</option>
+                    </select>
+                  </div>
+                </div>
+                <div id="grid-layer-list" class="insp-stack">
+                  <!-- populated by JS -->
+                </div>
+              </div>
+            </div>
+
+            <!-- ── MATERIAL ───────────────────────────────────────────────── -->
             <div class="insp-section" data-section="material">
               <button class="insp-section-header" data-toggle="material">
                 <span class="insp-chevron">▶</span> MATERIAL
@@ -414,155 +885,593 @@
               </div>
             </div>
           </div>
-        </div>
-        <div class="tab-content" data-tab-content="canvas">
-          <div class="insp-section" data-section="frame">
-            <button class="insp-section-header open" data-toggle="frame">
-              <span class="insp-chevron">▼</span> FRAME
+          <!-- /inspector-object -->
+
+          <!-- ── STICKY FOOTER — global utility actions ─────────────────── -->
+          <div class="insp-footer">
+            <button
+              id="generate-bauhaus-grid"
+              type="button"
+              class="insp-btn"
+              style="flex: 1"
+            >
+              Generate Grid
             </button>
-            <div class="insp-section-body">
-              <div class="insp-row">
-                <label class="insp-label" for="viewport-mode">Frame</label>
-                <div class="insp-control">
-                  <select id="viewport-mode">
-                    <option value="portrait">Portrait</option>
-                    <option value="landscape">Landscape</option>
-                  </select>
-                </div>
+            <button
+              id="clear-grid-layers"
+              type="button"
+              class="insp-btn secondary-btn"
+              style="flex: 1"
+            >
+              Clear Grid
+            </button>
+          </div>
+        </div>
+        <!-- Layers Tab — compositing organization -->
+        <div class="tab-content" data-tab-content="layers">
+          <div class="layers-panel">
+            <div id="layer-list" class="layer-list">
+              <!-- populated by renderLayerPanel() -->
+            </div>
+            <!-- Active layer detail: opacity + blend mode -->
+            <div id="layer-detail" style="display: none">
+              <div class="layer-opacity-row">
+                <span>Opacity</span>
+                <input
+                  id="layer-opacity"
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.01"
+                  value="1"
+                />
+                <output id="layer-opacity-value">100%</output>
               </div>
-              <div class="insp-row">
-                <label class="insp-label" for="transparent-bg"
-                  >Transparent Frame</label
-                >
-                <div class="insp-control">
-                  <input id="transparent-bg" type="checkbox" />
-                </div>
+              <div class="layer-blend-row">
+                <span>Blend</span>
+                <select id="layer-blend-mode">
+                  <option value="normal">Normal</option>
+                  <option value="lighter">Add (Lighter)</option>
+                  <option value="screen">Screen</option>
+                  <option value="multiply">Multiply</option>
+                  <option value="overlay">Overlay</option>
+                  <option value="soft-light">Soft Light</option>
+                </select>
               </div>
-              <div class="insp-row">
-                <label class="insp-label" for="show-paths">Show Paths</label>
-                <div class="insp-control">
-                  <input id="show-paths" type="checkbox" checked />
-                </div>
-              </div>
-              <div class="insp-row">
-                <label class="insp-label" for="background-file"
-                  >Wall Background</label
-                >
-                <div class="insp-control">
-                  <label class="insp-file-btn">
-                    <input id="background-file" type="file" accept="image/*" />
-                    <span>Choose File</span>
-                  </label>
-                </div>
-              </div>
+            </div>
+            <div class="layer-actions">
+              <button
+                id="layer-add"
+                type="button"
+                class="insp-btn"
+                style="flex: 1"
+              >
+                + Layer
+              </button>
+              <button
+                id="layer-import-image"
+                type="button"
+                class="insp-btn secondary-btn"
+                style="flex: 1"
+              >
+                ↑ Image
+              </button>
+              <input
+                id="layer-image-file"
+                type="file"
+                accept="image/*,image/webp"
+                style="display: none"
+              />
             </div>
           </div>
         </div>
 
+        <!-- Legacy canvas tab — hidden, IDs preserved for JS bindings -->
+        <div
+          class="tab-content"
+          data-tab-content="canvas"
+          style="display: none"
+        >
+          <input id="transparent-bg" type="checkbox" />
+          <input id="show-paths" type="checkbox" checked />
+          <input id="debug-drift-overlay" type="checkbox" />
+          <input id="background-file" type="file" accept="image/*" />
+        </div>
+
         <!-- World Tab -->
         <div class="tab-content" data-tab-content="world">
+          <!-- ── PHYSICS ─────────────────────────────────────────────────── -->
           <div class="insp-section" data-section="world">
             <button class="insp-section-header open" data-toggle="world">
               <span class="insp-chevron">▼</span> PHYSICS
             </button>
             <div class="insp-section-body">
+              <!-- Plane: Side / Top  (Hybrid removed — not a simulation plane) -->
               <div class="insp-row">
-                <label class="insp-label" for="world-mode">Physics Mode</label>
-                <div class="insp-control">
-                  <select id="world-mode">
-                    <option value="gravity">Gravity</option>
-                    <option value="planar">Planar</option>
-                    <option value="zero-g">Zero-G</option>
-                    <option value="swarm">Swarm</option>
-                  </select>
-                </div>
-              </div>
-              <div class="insp-row">
-                <label class="insp-label" for="world-strength">Strength</label>
-                <div class="insp-control insp-slider-num">
-                  <input
-                    id="world-strength"
-                    type="range"
-                    min="0"
-                    max="20"
-                    step="0.5"
-                    value="3"
-                  />
-                  <output id="world-strength-value">3.0</output>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="insp-section" data-section="world-actions">
-            <button
-              class="insp-section-header open"
-              data-toggle="world-actions"
-            >
-              <span class="insp-chevron">▼</span> BALLS
-            </button>
-
-            <div class="insp-row">
-              <label class="insp-label" for="toggle-hit-count"
-                >Show Hit Count</label
-              >
-              <div class="insp-control">
-                <input id="toggle-hit-count" type="checkbox" />
-              </div>
-            </div>
-
-            <div class="insp-row">
-              <span class="insp-label"></span>
-              <div class="insp-control">
-                <button id="clear-balls" type="button" class="insp-btn">
-                  Clear Balls
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div class="insp-section" data-section="world-layers">
-            <button class="insp-section-header open" data-toggle="world-layers">
-              <span class="insp-chevron">▼</span> MIDI BANK
-            </button>
-            <div class="insp-section-body">
-              <div class="insp-row">
-                <label class="insp-label">source</label>
-                <div class="insp-control">
-                  <select id="grid-bank-select">
-                    <option value="">• no bank •</option>
-                  </select>
-                </div>
-              </div>
-              <div class="insp-row">
-                <span class="insp-label"></span>
-                <div class="insp-control">
-                  <button
-                    id="generate-bauhaus-grid"
-                    type="button"
-                    class="insp-btn"
-                  >
-                    Generate Grid
+                <label class="insp-label">Plane</label>
+                <div class="insp-control insp-btn-group" id="plane-mode-group">
+                  <button class="insp-seg active" data-plane-mode="side">
+                    Side
+                  </button>
+                  <button class="insp-seg" data-plane-mode="topdown">
+                    Top
                   </button>
                 </div>
               </div>
+
+              <!-- Field Type — simulation force type -->
+              <div id="world-field-section">
+                <div class="insp-row">
+                  <label class="insp-label" for="world-field-type"
+                    >Field Type</label
+                  >
+                  <div class="insp-control">
+                    <select id="world-field-type">
+                      <option value="none">None</option>
+                      <option value="vector">Linear</option>
+                      <option value="flow">Flow</option>
+                      <option value="orbital">Orbital</option>
+                      <option value="radial">Radial</option>
+                      <option value="noise">Noise</option>
+                    </select>
+                  </div>
+                </div>
+
+                <!-- Direction — visible when field ≠ None -->
+                <div class="insp-row" id="row-world-vector">
+                  <label class="insp-label" for="world-vector-angle"
+                    >Direction</label
+                  >
+                  <div class="insp-control insp-slider-num">
+                    <input
+                      id="world-vector-angle"
+                      type="range"
+                      min="0"
+                      max="360"
+                      step="1"
+                      value="0"
+                    />
+                    <output id="world-vector-angle-value">0°</output>
+                  </div>
+                </div>
+
+                <!-- Strength (was Intensity) -->
+                <div class="insp-row">
+                  <label class="insp-label" for="world-field-strength"
+                    >Strength</label
+                  >
+                  <div class="insp-control insp-slider-num">
+                    <input
+                      id="world-field-strength"
+                      type="range"
+                      min="0"
+                      max="10"
+                      step="0.1"
+                      value="0"
+                    />
+                    <output id="world-field-strength-value">0.0</output>
+                  </div>
+                </div>
+
+                <!-- Orbital Mode — only visible when Field Type = Orbital -->
+                <div
+                  class="insp-row"
+                  id="row-world-orbital-subtype"
+                  style="display: none"
+                >
+                  <label class="insp-label" for="world-orbital-subtype"
+                    >Orbital Mode</label
+                  >
+                  <div class="insp-control">
+                    <select id="world-orbital-subtype">
+                      <option value="tangential">Tangential</option>
+                      <option value="radial">Radial</option>
+                      <option value="spiral">Spiral</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <!-- ── Field Influence (FlowFieldWalkerDrift v1.0.0) ── -->
+              <!-- Controls how the active field affects character movement -->
+              <div id="walker-drift-section">
+                <div class="insp-row">
+                  <label class="insp-label" for="flow-drift-enabled"
+                    >Field Influence</label
+                  >
+                  <div class="insp-control">
+                    <input id="flow-drift-enabled" type="checkbox" />
+                  </div>
+                </div>
+                <div class="insp-row">
+                  <label class="insp-label" for="flow-drift-strength"
+                    >Strength</label
+                  >
+                  <div class="insp-control insp-slider-num">
+                    <input
+                      id="flow-drift-strength"
+                      type="range"
+                      min="0"
+                      max="0.1"
+                      step="0.001"
+                      value="0.015"
+                    />
+                    <output id="flow-drift-strength-value">0.015</output>
+                  </div>
+                </div>
+                <div class="insp-row">
+                  <label class="insp-label" for="flow-drift-damping"
+                    >Damping</label
+                  >
+                  <div class="insp-control insp-slider-num">
+                    <input
+                      id="flow-drift-damping"
+                      type="range"
+                      min="0.900"
+                      max="1.000"
+                      step="0.001"
+                      value="0.985"
+                    />
+                    <output id="flow-drift-damping-value">0.985</output>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ── VISUALIZATION ──────────────────────────────────────────── -->
+          <!-- Visual representation of force fields. Does NOT alter physics. -->
+          <div class="insp-section" data-section="field-viz">
+            <button class="insp-section-header" data-toggle="field-viz">
+              <span class="insp-chevron">▶</span> VISUALIZATION
+            </button>
+            <div class="insp-section-body" style="display: none">
+              <!-- Active: field affects simulation | Visible: overlay renders -->
+              <div class="insp-row">
+                <label class="insp-label" for="fv-enabled">Active</label>
+                <div class="insp-control">
+                  <input id="fv-enabled" type="checkbox" />
+                </div>
+              </div>
+              <div class="insp-row">
+                <label class="insp-label" for="fv-visible">Visible</label>
+                <div class="insp-control">
+                  <input id="fv-visible" type="checkbox" checked />
+                </div>
+              </div>
+
+              <!-- Display Mode — visual rendering style only -->
+              <div class="insp-row">
+                <label class="insp-label" for="fv-mode">Display Mode</label>
+                <div class="insp-control">
+                  <select id="fv-mode">
+                    <option value="vector">Vector</option>
+                    <option value="flow">Flow Lines</option>
+                    <option value="particles">Particles</option>
+                    <option value="trails">Trails</option>
+                    <option value="heatmap">Heatmap</option>
+                    <option value="territory">Territory</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="insp-row">
+                <label class="insp-label" for="fv-palette">Palette</label>
+                <div class="insp-control">
+                  <select id="fv-palette">
+                    <option value="infra">Infra</option>
+                    <option value="chalk">Chalk</option>
+                    <option value="thermal">Thermal</option>
+                    <option value="toxic">Toxic</option>
+                    <option value="ocean">Ocean</option>
+                    <option value="radar">Radar</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="insp-row">
+                <label class="insp-label" for="fv-opacity">Opacity</label>
+                <div class="insp-control insp-slider-num">
+                  <input
+                    id="fv-opacity"
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.01"
+                    value="0.35"
+                  />
+                  <output id="fv-opacity-value">0.35</output>
+                </div>
+              </div>
+
+              <!-- Temporal Effects -->
+              <div class="insp-row">
+                <label class="insp-label" for="fv-blur">Trail Blur</label>
+                <div class="insp-control insp-slider-num">
+                  <input
+                    id="fv-blur"
+                    type="range"
+                    min="0"
+                    max="80"
+                    step="1"
+                    value="24"
+                  />
+                  <output id="fv-blur-value">24</output>
+                </div>
+              </div>
+              <div class="insp-row">
+                <label class="insp-label" for="fv-decay">Decay Rate</label>
+                <div class="insp-control insp-slider-num">
+                  <input
+                    id="fv-decay"
+                    type="range"
+                    min="0.90"
+                    max="1"
+                    step="0.001"
+                    value="0.985"
+                  />
+                  <output id="fv-decay-value">0.985</output>
+                </div>
+              </div>
+              <div class="insp-row">
+                <label class="insp-label" for="fv-accum">Accumulation</label>
+                <div class="insp-control insp-slider-num">
+                  <input
+                    id="fv-accum"
+                    type="range"
+                    min="0"
+                    max="0.2"
+                    step="0.005"
+                    value="0.04"
+                  />
+                  <output id="fv-accum-value">0.04</output>
+                </div>
+              </div>
+
               <div class="insp-row">
                 <span class="insp-label"></span>
                 <div class="insp-control">
                   <button
-                    id="clear-grid-layers"
+                    id="fv-clear-density"
                     type="button"
                     class="insp-btn secondary-btn"
                   >
-                    Clear Grid
+                    Clear Field
                   </button>
                 </div>
               </div>
-              <div id="grid-layer-list" class="insp-stack">
-                <!-- populated by JS -->
+            </div>
+          </div>
+
+          <!-- ── DEBUG OVERLAY ──────────────────────────────────────────── -->
+          <!-- Diagnostic visualization. Does NOT alter simulation logic.   -->
+          <div class="insp-section" data-section="field-visualizer">
+            <button class="insp-section-header" data-toggle="field-visualizer">
+              <span class="insp-chevron">▶</span> DEBUG OVERLAY
+            </button>
+            <div class="insp-section-body" style="display: none">
+              <div class="insp-row">
+                <label class="insp-label" for="fdbg-enabled">Enable</label>
+                <div class="insp-control">
+                  <input id="fdbg-enabled" type="checkbox" />
+                </div>
+              </div>
+
+              <!-- Diagnostic Mode -->
+              <div class="insp-row">
+                <label class="insp-label" for="fdbg-mode"
+                  >Diagnostic Mode</label
+                >
+                <div class="insp-control">
+                  <select id="fdbg-mode">
+                    <option value="vectors">Vectors</option>
+                    <option value="flow-lines">Flow Lines</option>
+                    <option value="particles">Particles</option>
+                    <option value="trails">Trails</option>
+                    <option value="heatmap">Heatmap</option>
+                    <option value="territory">Territory</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="insp-row">
+                <label class="insp-label" for="fdbg-palette">Palette</label>
+                <div class="insp-control">
+                  <select id="fdbg-palette">
+                    <option value="infra">Infra</option>
+                    <option value="chalk">Chalk</option>
+                    <option value="thermal">Thermal</option>
+                    <option value="toxic">Toxic</option>
+                    <option value="ocean">Ocean</option>
+                    <option value="radar">Radar</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="insp-row">
+                <label class="insp-label" for="fdbg-opacity">Opacity</label>
+                <div class="insp-control insp-slider-num">
+                  <input
+                    id="fdbg-opacity"
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.01"
+                    value="0.5"
+                  />
+                  <output id="fdbg-opacity-value">0.50</output>
+                </div>
+              </div>
+
+              <!-- Grid Spacing — only for Vectors and Flow Lines modes -->
+              <div class="insp-row" id="fdbg-row-gridstep">
+                <label class="insp-label" for="fdbg-gridstep"
+                  >Grid Spacing</label
+                >
+                <div class="insp-control insp-slider-num">
+                  <input
+                    id="fdbg-gridstep"
+                    type="range"
+                    min="16"
+                    max="120"
+                    step="4"
+                    value="48"
+                  />
+                  <output id="fdbg-gridstep-value">48</output>
+                </div>
+              </div>
+
+              <div class="insp-row" id="fdbg-row-traildecay">
+                <label class="insp-label" for="fdbg-traildecay"
+                  >Trail Decay Rate</label
+                >
+                <div class="insp-control insp-slider-num">
+                  <input
+                    id="fdbg-traildecay"
+                    type="range"
+                    min="0.90"
+                    max="1.00"
+                    step="0.001"
+                    value="0.97"
+                  />
+                  <output id="fdbg-traildecay-value">0.970</output>
+                </div>
+              </div>
+
+              <!-- fdbg-orbital-mode preserved as hidden input for compat with older state -->
+              <input id="fdbg-orbital-mode" type="hidden" value="tangential" />
+            </div>
+          </div>
+
+          <!-- ── MOTION & COLLISION ─────────────────────────────────────── -->
+          <!-- Character movement physics and collision configuration.       -->
+          <div class="insp-section" data-section="projectile-walkers">
+            <button
+              class="insp-section-header"
+              data-toggle="projectile-walkers"
+            >
+              <span class="insp-chevron">▶</span> MOTION &amp; COLLISION
+            </button>
+            <div class="insp-section-body" style="display: none">
+              <!-- Movement Mode — replaces "Use Walkers" checkbox -->
+              <div class="insp-row">
+                <label class="insp-label" for="proj-movement-mode"
+                  >Movement</label
+                >
+                <div class="insp-control">
+                  <select id="proj-movement-mode">
+                    <option value="physics">Default</option>
+                    <option value="route">Route</option>
+                    <option value="wander">Wander</option>
+                    <option value="orbit">Orbit</option>
+                    <option value="none">None</option>
+                  </select>
+                </div>
+              </div>
+              <!-- Legacy hidden input preserved for serialization compat -->
+              <input id="proj-use-walkers" type="hidden" />
+
+              <div class="insp-row">
+                <label class="insp-label" for="proj-radius"
+                  >Collision Radius</label
+                >
+                <div class="insp-control insp-slider-num">
+                  <input
+                    id="proj-radius"
+                    type="range"
+                    min="2"
+                    max="48"
+                    step="1"
+                    value="8"
+                  />
+                  <output id="proj-radius-value">8</output>
+                </div>
+              </div>
+
+              <div class="insp-row">
+                <label class="insp-label" for="proj-gravity-scale"
+                  >Gravity Scale</label
+                >
+                <div class="insp-control insp-slider-num">
+                  <input
+                    id="proj-gravity-scale"
+                    type="range"
+                    min="0"
+                    max="3"
+                    step="0.05"
+                    value="1.0"
+                  />
+                  <output id="proj-gravity-scale-value">1.00</output>
+                </div>
+              </div>
+
+              <div class="insp-row">
+                <label class="insp-label" for="proj-bounce">Restitution</label>
+                <div class="insp-control insp-slider-num">
+                  <input
+                    id="proj-bounce"
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.01"
+                    value="0.82"
+                  />
+                  <output id="proj-bounce-value">0.82</output>
+                </div>
+              </div>
+
+              <div class="insp-row">
+                <label class="insp-label" for="proj-show-physics"
+                  >Show Trajectory</label
+                >
+                <div class="insp-control">
+                  <input id="proj-show-physics" type="checkbox" />
+                </div>
+              </div>
+
+              <div class="insp-row">
+                <span class="insp-label"></span>
+                <div class="insp-control">
+                  <button
+                    id="proj-clear"
+                    type="button"
+                    class="insp-btn secondary-btn"
+                  >
+                    Clear Characters
+                  </button>
+                </div>
               </div>
             </div>
           </div>
+
+          <!-- LEGACY BALLS — retired. DOM preserved for save/load compatibility.
+               All ball spawning now routes through MOTION & COLLISION characters.
+               JS bindings kept alive (hidden) so old scenes deserialize cleanly. -->
+          <div style="display: none">
+            <div id="row-world-mode">
+              <select id="world-mode">
+                <option value="gravity">Gravity</option>
+                <option value="planar">Planar</option>
+                <option value="zero-g">Zero-G</option>
+                <option value="swarm">Swarm</option>
+              </select>
+            </div>
+            <div id="row-world-strength">
+              <input
+                id="world-strength"
+                type="range"
+                min="0"
+                max="20"
+                step="0.5"
+                value="3"
+              />
+              <output id="world-strength-value">3.0</output>
+            </div>
+            <input id="toggle-hit-count" type="checkbox" />
+            <button id="clear-balls" type="button">Clear Balls</button>
+          </div>
+
+          <!-- MIDI BANK moved to Object tab → see data-section="midi-bank-obj" -->
 
           <!-- Particle tool state — hidden, kept for JS bindings -->
           <div style="display: none">
@@ -888,10 +1797,16 @@
     <script src="./engine/gridSystem.js"></script>
     <!-- GlyphRenderer — shared canonical renderer, must load before glyphDrawer.js -->
     <script src="./engine/glyphRenderer.js"></script>
+    <!-- PathSampler — evenly spaced path sampling for procedural line styles -->
+    <script src="./engine/pathSampler.js"></script>
     <!-- SymbolRenderer — stroke-based renderer for SymbolSets -->
     <script src="./engine/symbolRenderer.js"></script>
     <!-- SymbolObjectSystem — world-space instance model -->
     <script src="./engine/symbolObjectSystem.js"></script>
+    <!-- GlyphConstructor — construction state + operations for GlyphLab -->
+    <script src="./engine/glyphConstructor.js"></script>
+    <!-- SymbolPreviewRenderer — pure preview rendering for SymbolLab modes -->
+    <script src="./engine/symbolPreviewRenderer.js"></script>
     <script src="./midi/midiOut.js"></script>
     <script src="./render/canvasRenderer.js"></script>
     <script src="./state/examplePreset.js"></script>
@@ -905,7 +1820,10 @@
     <script src="./ui/libraryDrawer.js"></script>
     <!-- SymbolSystem + SymbolLab drawer — load after DrawerSystem, before controls -->
     <script src="./ui/symbolSystem.js"></script>
+    <script src="./engine/fieldRenderer.js"></script>
+    <script src="./engine/fieldVisualizer.js"></script>
     <script src="./ui/symbolDrawer.js"></script>
+    <script src="./ui/viewportSystem.js"></script>
     <script src="./ui/controls.js"></script>
     <script src="./ui/drawTools.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tonejs/midi/build/Midi.min.js"></script>
@@ -936,11 +1854,7 @@
 
     <!-- ── Universal Drawer System v1.0.0 ─────────────────────────────────── -->
     <!-- Launcher rail + drawer panel (HTML inserted before overlay for z-order) -->
-    <div id="launcher-rail" class="launcher-rail">
-      <button class="launcher-btn" data-drawer="sampler" title="Sampler">🎵</button>
-      <button class="launcher-btn" data-drawer="library" title="Library">📚</button>
-      <button class="launcher-btn" data-drawer="symbols" title="SymbolLab">✦</button>
-    </div>
+    <div id="launcher-rail" class="launcher-rail" aria-hidden="true"></div>
 
     <aside id="drawer-panel" class="drawer-panel" aria-hidden="true">
       <div id="drawer-content"></div>
@@ -1051,6 +1965,14 @@
       </div>
     </section>
 
+    <!-- ── Split handle — drag to resize world/workbench split ──────────── -->
+    <div id="split-handle" class="split-handle" hidden aria-hidden="true"></div>
+
+    <!-- ── Symbol Workbench — bottom-docked horizontal strip ────────────── -->
+    <section id="symbol-workbench" hidden>
+      <div id="symbol-workbench-content"></div>
+    </section>
+
     <!-- ── Context Menu ──────────────────────────────────────────────────── -->
     <ul id="canvas-context-menu" class="ctx-menu" style="display: none">
       <li class="ctx-item" data-action="new">New</li>
@@ -1135,7 +2057,11 @@
           if (action === "sampler" || action === "library") {
             // Route through DrawerSystem (primary runtime); fall back to legacy openPanel
             var DS = window.SBE && window.SBE.DrawerSystem;
-            if (DS) { DS.openDrawer(action); } else { openPanel(action); }
+            if (DS) {
+              DS.openDrawer(action);
+            } else {
+              openPanel(action);
+            }
             return;
           }
           // Delegate to existing buttons

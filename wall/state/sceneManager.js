@@ -171,7 +171,7 @@
     state.symbolObjects = SBE.SymbolObjectSystem && Array.isArray(scene.symbolObjects)
       ? scene.symbolObjects.map(SBE.SymbolObjectSystem.hydrate).filter(Boolean)
       : [];
-    state.selectedSymbolObjectId = null;
+    state.selectedSymbolObjectIds = new Set();
     if (state.collisionMemory) {
       state.collisionMemory.clear();
     }

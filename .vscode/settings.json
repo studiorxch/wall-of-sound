@@ -1,3 +1,9 @@
 {
+  "search.exclude": {
+    "**/_site/**": true,
+    "**/docs/_site/**": true,
+    "**/.jekyll-cache/**": true,
+    "**/.sass-cache/**": true
+  },
   "liveServer.settings.port": 5501
 }

@@ -167,6 +167,11 @@
       }
     }
 
+    // Render primitive objects (GlyphConstructor system)
+    if (glyph.objects && glyph.objects.length) {
+      renderGlyphObjects(ctx, glyph.objects, x, y, size, p);
+    }
+
     // Debug bounding box
     if (opts.debug && glyph.bounds) {
       var b = glyph.bounds;
@@ -226,12 +231,216 @@
     return canvas;
   }
 
+  // ── Glyph Object rendering ────────────────────────────────────────────────
+
+  // ── Line style helpers ────────────────────────────────────────────────────
+
+  // Collect canvas-space sample points for a dotted object.
+  function _sampleObjPath(obj, x, y, size, spacing) {
+    var PS = WOS.PathSampler;
+    if (!PS) return [];
+    if (obj.type === "line") {
+      return PS.sampleLine(x + obj.x1*size, y + obj.y1*size,
+                           x + obj.x2*size, y + obj.y2*size, spacing);
+    }
+    if (obj.type === "rect") {
+      return PS.sampleRect(x + obj.x*size, y + obj.y*size, obj.w*size, obj.h*size, spacing);
+    }
+    if (obj.type === "circle") {
+      if (obj.rx !== undefined && obj.ry !== undefined) {
+        var rx = obj.rx * size, ry = obj.ry * size;
+        var approx = Math.PI * (3 * (rx + ry) - Math.sqrt((3 * rx + ry) * (rx + 3 * ry)));
+        var cnt = Math.max(1, Math.round(approx / spacing));
+        var epts = [];
+        for (var k = 0; k < cnt; k++) {
+          var a = (k / cnt) * Math.PI * 2;
+          epts.push({ x: x + obj.cx * size + Math.cos(a) * rx,
+                      y: y + obj.cy * size + Math.sin(a) * ry });
+        }
+        return epts;
+      }
+      return PS.sampleCircle(x + obj.cx*size, y + obj.cy*size, Math.max(1, obj.r*size), spacing);
+    }
+    if (obj.type === "arc") {
+      var sa = obj.startAngle !== undefined ? obj.startAngle : 0;
+      var ea = obj.endAngle   !== undefined ? obj.endAngle   : Math.PI;
+      return PS.sampleArc(x + obj.cx*size, y + obj.cy*size, Math.max(1, obj.r*size), sa, ea, spacing);
+    }
+    if (obj.type === "corner") {
+      return PS.sampleCorner(x + obj.p0x*size, y + obj.p0y*size,
+                             x + obj.p1x*size, y + obj.p1y*size,
+                             x + obj.p2x*size, y + obj.p2y*size, spacing);
+    }
+    if (obj.type === "triangle") {
+      var s1 = PS.sampleLine(x+obj.x1*size, y+obj.y1*size, x+obj.x2*size, y+obj.y2*size, spacing);
+      var s2 = PS.sampleLine(x+obj.x2*size, y+obj.y2*size, x+obj.x3*size, y+obj.y3*size, spacing);
+      var s3 = PS.sampleLine(x+obj.x3*size, y+obj.y3*size, x+obj.x1*size, y+obj.y1*size, spacing);
+      return s1.concat(s2).concat(s3);
+    }
+    if (obj.type === "capsule") {
+      return PS.sampleLine(x + obj.x1*size, y + obj.y1*size,
+                           x + obj.x2*size, y + obj.y2*size, spacing);
+    }
+    return [];
+  }
+
+  // Draw procedural dots along the object's path.
+  function _renderDottedObject(ctx, obj, x, y, size, sc) {
+    var spacing = Math.max(1.5, (obj.patternSpacing || 0.10) * size);
+    var dr      = Math.max(0.5, (obj.dotRadius    || 0.025) * size);
+    var pts     = _sampleObjPath(obj, x, y, size, spacing);
+    ctx.fillStyle = sc;
+    for (var i = 0; i < pts.length; i++) {
+      ctx.beginPath();
+      ctx.arc(pts[i].x, pts[i].y, dr, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // Render a single primitive glyph object (line, rect, circle, etc.)
+  // All coordinates normalized 0..1, scaled by size to ctx coordinates.
+  function renderGlyphObject(ctx, obj, x, y, size, palette) {
+    if (!obj || !obj.type) return;
+    var p  = _pal(palette);
+    var sw = (typeof obj.strokeWidth === "number" ? obj.strokeWidth : 0.04) * size;
+    var sc = obj.stroke || p.strokeColor;
+    var fc = obj.fill   || null;
+    var ls = obj.lineStyle || "solid";
+
+    ctx.save();
+    ctx.strokeStyle = sc;
+    ctx.lineWidth   = Math.max(0.5, sw);
+    ctx.lineCap     = obj.lineCap || "round";
+    ctx.lineJoin    = "round";
+
+    // Dashed: apply line dash pattern before path construction
+    if (ls === "dashed") {
+      var dl = (obj.dashLength || 0.15) * size;
+      var gl = (obj.gapLength  || 0.08) * size;
+      ctx.setLineDash([Math.max(1, dl), Math.max(1, gl)]);
+    }
+
+    // Dotted: procedural dots — bypass normal stroke path entirely
+    if (ls === "dotted") {
+      _renderDottedObject(ctx, obj, x, y, size, sc);
+      ctx.restore();
+      return;
+    }
+
+    if (obj.type === "line") {
+      ctx.beginPath();
+      ctx.moveTo(x + obj.x1 * size, y + obj.y1 * size);
+      ctx.lineTo(x + obj.x2 * size, y + obj.y2 * size);
+      ctx.stroke();
+
+    } else if (obj.type === "rect") {
+      var rx2 = x + obj.x * size, ry2 = y + obj.y * size;
+      var rw2 = obj.w * size, rh2 = obj.h * size;
+      var cr  = (obj.cornerRadius || 0) * size;
+      ctx.beginPath();
+      if (cr > 0 && ctx.roundRect) {
+        ctx.roundRect(rx2, ry2, rw2, rh2, cr);
+      } else if (cr > 0) {
+        ctx.moveTo(rx2 + cr, ry2);
+        ctx.lineTo(rx2 + rw2 - cr, ry2);
+        ctx.arcTo(rx2 + rw2, ry2, rx2 + rw2, ry2 + cr, cr);
+        ctx.lineTo(rx2 + rw2, ry2 + rh2 - cr);
+        ctx.arcTo(rx2 + rw2, ry2 + rh2, rx2 + rw2 - cr, ry2 + rh2, cr);
+        ctx.lineTo(rx2 + cr, ry2 + rh2);
+        ctx.arcTo(rx2, ry2 + rh2, rx2, ry2 + rh2 - cr, cr);
+        ctx.lineTo(rx2, ry2 + cr);
+        ctx.arcTo(rx2, ry2, rx2 + cr, ry2, cr);
+        ctx.closePath();
+      } else {
+        ctx.rect(rx2, ry2, rw2, rh2);
+      }
+      if (fc) { ctx.fillStyle = fc; ctx.fill(); }
+      ctx.stroke();
+
+    } else if (obj.type === "circle") {
+      ctx.beginPath();
+      if (obj.rx !== undefined && obj.ry !== undefined) {
+        ctx.ellipse(x + obj.cx * size, y + obj.cy * size,
+                    Math.max(0.5, obj.rx * size), Math.max(0.5, obj.ry * size),
+                    0, 0, Math.PI * 2);
+      } else {
+        ctx.arc(x + obj.cx * size, y + obj.cy * size, Math.max(1, obj.r * size), 0, Math.PI * 2);
+      }
+      if (fc) { ctx.fillStyle = fc; ctx.fill(); }
+      ctx.stroke();
+
+    } else if (obj.type === "dot") {
+      ctx.beginPath();
+      ctx.arc(x + obj.cx * size, y + obj.cy * size, Math.max(1, obj.r * size), 0, Math.PI * 2);
+      ctx.fillStyle = sc;
+      ctx.fill();
+
+    } else if (obj.type === "triangle") {
+      ctx.beginPath();
+      ctx.moveTo(x + obj.x1 * size, y + obj.y1 * size);
+      ctx.lineTo(x + obj.x2 * size, y + obj.y2 * size);
+      ctx.lineTo(x + obj.x3 * size, y + obj.y3 * size);
+      ctx.closePath();
+      if (fc) { ctx.fillStyle = fc; ctx.fill(); }
+      ctx.stroke();
+
+    } else if (obj.type === "arc") {
+      ctx.beginPath();
+      if (obj.mode === "corner") {
+        var cax = x + obj.startX * size, cay = y + obj.startY * size;
+        var cbx = x + obj.endX   * size, cby = y + obj.endY   * size;
+        var cmx = (cax + cbx) / 2,       cmy = (cay + cby) / 2;
+        ctx.moveTo(cax, cay);
+        ctx.quadraticCurveTo(cmx, cmy, cbx, cby);
+      } else {
+        ctx.arc(
+          x + obj.cx * size, y + obj.cy * size,
+          Math.max(1, obj.r * size),
+          obj.startAngle !== undefined ? obj.startAngle : 0,
+          obj.endAngle   !== undefined ? obj.endAngle   : Math.PI
+        );
+      }
+      ctx.stroke();
+
+    } else if (obj.type === "capsule") {
+      var capR = Math.max(0.5, (obj.radius || 0.05) * size);
+      ctx.lineWidth = capR * 2;
+      ctx.beginPath();
+      ctx.moveTo(x + obj.x1 * size, y + obj.y1 * size);
+      ctx.lineTo(x + obj.x2 * size, y + obj.y2 * size);
+      ctx.stroke();
+
+    } else if (obj.type === "corner") {
+      var p0x = x + obj.p0x * size, p0y = y + obj.p0y * size;
+      var p1x = x + obj.p1x * size, p1y = y + obj.p1y * size;
+      var p2x = x + obj.p2x * size, p2y = y + obj.p2y * size;
+      var cr3 = Math.max(1, (obj.radius || 0.08) * size);
+      ctx.beginPath();
+      ctx.moveTo(p0x, p0y);
+      ctx.arcTo(p1x, p1y, p2x, p2y, cr3);
+      ctx.lineTo(p2x, p2y);
+      ctx.stroke();
+    }
+
+    ctx.restore();
+  }
+
+  // Render all primitive objects in an array.
+  function renderGlyphObjects(ctx, objects, x, y, size, palette) {
+    if (!objects || !objects.length) return;
+    for (var i = 0; i < objects.length; i++) {
+      renderGlyphObject(ctx, objects[i], x, y, size, palette);
+    }
+  }
+
   // ── Public API ────────────────────────────────────────────────────────────
 
   WOS.SymbolRenderer = {
     renderGlyph:         renderGlyph,
     renderSet:           renderSet,
     renderGlyphToCanvas: renderGlyphToCanvas,
+    renderGlyphObject:   renderGlyphObject,
+    renderGlyphObjects:  renderGlyphObjects,
   };
 
   console.log("[WOS SymbolRenderer] Loaded — v1.0.0");
