@@ -2104,6 +2104,103 @@
             orbitalMode: "tangential", // "radial" | "tangential" | "hybrid"
           },
         },
+        // ── Corridor Ecology (LocalRealization v1.0.0) ───────────────────────
+      // Lazy-initialized by initEcology(). Stored under state.world.ecology.
+      // Realization config lives alongside so it serializes naturally.
+      realization: {
+        enabled:         true,
+        radius:          1800,
+        maxActive:       120,
+        despawnPadding:  300,
+        visualizeRadius: true,
+      },
+      // ── Cluster Events (ClusterEvents v1.0.0) ────────────────────────────────
+      clusterEvents: {
+        enabled:   true,
+        events:    [],
+        maxEvents: 12,
+        debugDraw: false,
+        metrics:   { active: 0, peak: 0, avgStrength: 0 },
+      },
+      // ── Passenger Demo (FirstPassengerDemo v1.0.0) ──────────────────────────────
+      passengerDemo: {
+        enabled:          false,   // activate via SBE.PassengerDemo.init(state, now)
+        phase:            "calm",
+        startedAt:        0,
+        phaseStartedAt:   0,
+        _primaryInjected: false,
+        _secondaryInjected: false,
+        _primaryEventId:  null,
+        _phaseLabel:      "",
+        _phaseLabelAt:    0,
+        log:              [],
+        metrics:          { phase: "calm", phaseElapsed: 0, demoElapsed: 0 },
+      },
+      // ── Camera Curiosity (CameraCuriosity v1.0.0 / Passenger v1.0.0) ──────────
+      cameraCuriosity: {
+        enabled:                    true,
+        state:                      "idle",
+        passengerMode:              "documentary",  // wander|documentary|hunter|zen
+        currentTarget:              null,
+        currentScore:               0,
+        lingerUntil:                0,
+        reevaluateAt:               0,
+        drivingCamera:              false,
+        debugDraw:                  false,
+        debugCameraTrail:           false,
+        // Validation parameters
+        targetPersistenceMultiplier: 1.35,
+        maxCameraVelocity:           14,    // world units / frame (velocity clamp)
+        zoomDeadzone:                0.08,  // skip zoom update if diff < this
+        observeDriftRadius:          24,    // handheld micro-drift radius (wu)
+        observeDriftSpeed:           0.03,  // drift speed (time scale)
+        releaseBlendTime:            6.0,   // seconds for release smoothing
+        recentTargets:               [],    // cooldown memory
+        // Audio awareness hook (future)
+        audioAwareness: {
+          enabled:       false,
+          rhythmWeight:  0.0,
+          densityWeight: 0.0,
+          harmonyWeight: 0.0,
+        },
+        metrics: { nodes: 0, strongest: 0, stateTime: 0, cameraVelocity: 0, zoom: 1 },
+      },
+      // ── Actor Ecology (ActorEcology v1.0.0) ──────────────────────────────────
+      actors: {
+        enabled:            true,
+        maxAbstractActors:  4000,
+        maxRealizedActors:  140,
+        realizationRadius:  1200,
+        spawnRate:          1.0,
+        debugDraw:          false,
+        metrics: { abstractCount: 0, realizedCount: 0, commuters: 0, nightlife: 0, delivery: 0, wanderers: 0, ghosts: 0 },
+      },
+      // ── City Rhythm (CityRhythm v1.0.0) ─────────────────────────────────────
+      rhythm: {
+        enabled:          true,
+        dayLengthMinutes: 120,     // 2 real hours = 1 full WOS day
+        currentTime:      10.5,   // start at mid-morning (10:30)
+        currentHour:      10.5,
+        phase:            "day",
+        debugDraw:        false,
+        weatherBias:      0,
+        rhythmScale:      1.0,
+        metrics: { cityEnergy: 0.5, nightlifeBias: 0, trafficBias: 0.4, deliveryBias: 0.3 },
+      },
+      // ── Traffic Flow Field (TrafficFlowField v1.0.0) ────────────────────────
+      flow: {
+        enabled:            true,
+        influenceRadius:    120,
+        congestionRadius:   80,
+        alignmentStrength:  0.015,
+        cohesionStrength:   0.010,
+        separationStrength: 0.025,
+        congestionSlowdown: 0.65,
+        maxNeighbors:       8,
+        debugDraw:          false,
+        metrics: { activeClusters: 0, avgPressure: 0, maxPressure: 0 },
+      },
+      // ── world closes here ─────────────────────────────────────────────────
       },
       // ── Field visualizer (FieldVisualizer v1.0.0) ────────────────────────
       fieldVisualizer: {
@@ -2397,6 +2494,18 @@
     };
 
     var heldKeys = new Set();
+    // ── Bootstrap validation log ──────────────────────────────────────────────
+    console.log("[STATE BOOTSTRAP] state.world keys:", Object.keys(state.world || {}));
+    console.log("[STATE BOOTSTRAP] ecology keys present:",
+      "rhythm:",          !!(state.world && state.world.rhythm),
+      "clusterEvents:",   !!(state.world && state.world.clusterEvents),
+      "actors:",          !!(state.world && state.world.actors),
+      "cameraCuriosity:", !!(state.world && state.world.cameraCuriosity),
+      "passengerDemo:",   !!(state.world && state.world.passengerDemo),
+      "flow:",            !!(state.world && state.world.flow),
+      "realization:",     !!(state.world && state.world.realization)
+    );
+
     // Direct exposure — sampleMap is closure-scoped, state is now defined
     window._wos = window._wos || {};
     window._wos.sampleMap = sampleMap;
@@ -2404,7 +2513,41 @@
     window._wos.audioState = state.audio;
     window._wos.renderFrame = renderFrame; // exposed for UI controls
 
+    // ── Workspace ────────────────────────────────────────────────────────────
+    if (SBE.Workspace) {
+      SBE.Workspace.initDefault();
+      window._wos.workspace = SBE.Workspace;
+    }
+    if (SBE.WorkspaceUI) {
+      SBE.WorkspaceUI.init();
+    }
+
     // ── Grid debug helpers ─────────────────────────────────────────────────
+    window._wos.debugRuntimeState = function debugRuntimeState() {
+      var ws  = window.SBE && SBE.Workspace;
+      var rvr = window.SBE && SBE.RuntimeViewportRouter;
+      var surf = ws ? ws.getActiveSurface() : null;
+      var rt   = surf && surf.runtime;
+      var allSurfs = ws ? ws.getAllSurfaces() : [];
+      var routeCount = 0;
+      if (rt && Array.isArray(rt.routes)) routeCount = rt.routes.length;
+      else if (rt && typeof rt.getRoutes === "function") routeCount = rt.getRoutes().length;
+      var out = {
+        activeSurface:   surf ? { id: surf.id, name: surf.name, type: surf.type } : null,
+        activeRuntime:   rt   ? { name: rt.name || rt.type || "?", active: rt.active } : null,
+        viewportMode:    rvr  ? rvr.getMode() : "—",
+        projection:      surf && surf.anchor ? surf.anchor.type : "free",
+        geoMode:         !!(surf && (surf.type === "route" || surf.type === "world")),
+        activeRouteCount: routeCount,
+        surfaceCount:    allSurfs.length,
+        surfaces:        allSurfs.map(function(s) {
+          return { id: s.id, name: s.name, type: s.type, hasRuntime: !!s.runtime };
+        }),
+      };
+      console.table ? console.table(out) : console.log("[_wos.debugRuntimeState]", out);
+      return out;
+    };
+
     window._wos.debugRegistry = function debugRegistry() {
       return window.SBE && window.SBE.Registry ? window.SBE.Registry : null;
     };
@@ -9408,6 +9551,35 @@
     })();
     // ── End inspector collapsibles ────────────────────────────────────────
 
+    // ── RuntimeViewportRouter — input delegation ──────────────────────────────
+    // In geo mode, events only reach the runtime when in "route-edit" mode.
+    // All other events pass through the transparent canvas to Mapbox beneath.
+    function _geoRouteEditActive() {
+      if (!window.SBE || !SBE.Workspace) return false;
+      var _surf = SBE.Workspace.getActiveSurface();
+      if (!_surf || (_surf.type !== "route" && _surf.type !== "world")) return false;
+      var _rt = _surf.runtime;
+      return _rt && _rt.mode === "route-edit";
+    }
+    canvas.addEventListener("pointerdown", function (e) {
+      if (window.SBE && SBE.RuntimeViewportRouter) SBE.RuntimeViewportRouter.handlePointerDown(e);
+    });
+    canvas.addEventListener("pointermove", function (e) {
+      if (window.SBE && SBE.RuntimeViewportRouter) SBE.RuntimeViewportRouter.handlePointerMove(e);
+    });
+    canvas.addEventListener("pointerup", function (e) {
+      if (window.SBE && SBE.RuntimeViewportRouter) SBE.RuntimeViewportRouter.handlePointerUp(e);
+    });
+    canvas.addEventListener("dblclick", function (e) {
+      if (window.SBE && SBE.RuntimeViewportRouter) SBE.RuntimeViewportRouter.handleDblClick(e);
+    });
+    global.addEventListener("keydown", function (e) {
+      if (window.SBE && SBE.RuntimeViewportRouter) SBE.RuntimeViewportRouter.handleKeyDown(e);
+    });
+    global.addEventListener("keyup", function (e) {
+      if (window.SBE && SBE.RuntimeViewportRouter) SBE.RuntimeViewportRouter.handleKeyUp(e);
+    });
+
     // ── Text Tool canvas handler ────────────────────────────────────────────
     canvas.addEventListener("pointerdown", function onTextToolDown(e) {
       if (state.tool !== "text") return;
@@ -9463,6 +9635,15 @@
     setViewClasses();
     syncUI();
     updatePanels(state.tool);
+
+    // ── Corridor Ecology — auto-initialize ─────────────────────────────────────
+    // Bootstraps district pressure + abstract vehicle simulation on startup.
+    // Disabled by default (state.world.ecology.enabled = false) — enable via
+    // _wosEcology.enable() in the console or the world inspector toggle.
+    if (window.SBE && SBE.DistrictPressure && SBE.TrafficEcology) {
+      initEcology();
+      state.world.ecology.enabled = false; // off by default; enable in inspector
+    }
 
     // ── System HUD ────────────────────────────────────────────────────────────
 
@@ -11466,6 +11647,12 @@
     // ── RouteWorld cinematic renderer ────────────────────────────────────────
 
     function renderRouteWorldOverlay(ctx) {
+      // Hard stop: this renderer uses an abstract internal coordinate system,
+      // not Mapbox CSS-pixel space. It must never run when Mapbox is the substrate
+      // or corridor geometry will ghost over the real map.
+      if (window.SBE && SBE.Workspace &&
+          SBE.Workspace.isGeographicMode && SBE.Workspace.isGeographicMode()) return;
+
       var rw = state.routeWorld;
       if (!rw) return;
       _rwEnsureSpatialBootstrap(rw); // idempotent — ensures corridor + route + world exist
@@ -11559,10 +11746,12 @@
       }
 
       // ── Layer: corridor renderer (spatial infrastructure visualization) ───
-      // Draws district bands, spatial route spine, scenic moments, POIs,
-      // actor markers, and camera reticle from the SpatialInfrastructure world.
+      // Optional viz layer — draws district bands, route spine, scenic moments,
+      // POIs, actor markers. Enabled by worldLayers.corridor (default true for
+      // abstract surfaces; must be explicitly false to suppress).
+      // Never runs in geo mode (Mapbox is substrate) — see renderRouteWorldOverlay guard.
       var CR = SBE && SBE.CorridorRenderer;
-      if (CR && rw.spatial) {
+      if (CR && rw.spatial && worldLayers.corridor !== false) {
         var debugOn = !!(worldLayers.debug || (rw.world && rw.world.debugMode));
         CR.render(
           ctx,
@@ -13856,6 +14045,20 @@
     function renderCanvasToolSubBar() {
       var root = document.getElementById("canvas-tool-subbar");
       if (!root) return;
+
+      // In geographic navigate mode the map is the primary interface.
+      // No active tool = no toolbar. Clear and exit — telemetry HUD has the stage.
+      var _geoNav = window.SBE &&
+                    SBE.Workspace &&
+                    SBE.Workspace.isGeographicMode &&
+                    SBE.Workspace.isGeographicMode() &&
+                    SBE.Workspace.getInteractionMode &&
+                    SBE.Workspace.getInteractionMode() === "navigate";
+      if (_geoNav || state.tool === "select") {
+        root.innerHTML = "";
+        return;
+      }
+
       root.innerHTML = "";
 
       // Tool name badge
@@ -14986,6 +15189,14 @@
           }
 
           if (event.key === " ") {
+            // In geo/navigate mode spacebar is reserved for viewport pan — not transport
+            if (
+              SBE.Workspace &&
+              SBE.Workspace.isGeographicMode &&
+              SBE.Workspace.isGeographicMode() &&
+              SBE.Workspace.getInteractionMode &&
+              SBE.Workspace.getInteractionMode() === "navigate"
+            ) return;
             event.preventDefault();
             togglePlayback();
             syncUI();
@@ -16991,6 +17202,14 @@
           }
 
           if (event.key === " ") {
+            // In geo/navigate mode spacebar is reserved for viewport pan — not transport
+            if (
+              SBE.Workspace &&
+              SBE.Workspace.isGeographicMode &&
+              SBE.Workspace.isGeographicMode() &&
+              SBE.Workspace.getInteractionMode &&
+              SBE.Workspace.getInteractionMode() === "navigate"
+            ) return;
             event.preventDefault();
             togglePlayback();
             syncUI();
@@ -20927,6 +21146,75 @@
       midiOut.sendAllNotesOff();
     }
 
+    // ── Corridor Ecology — init / enable / disable ────────────────────────────
+    function initEcology() {
+      if (!window.SBE || !SBE.DistrictPressure || !SBE.TrafficEcology) return;
+      if (!state.world) state.world = {};
+
+      // Ensure realization config exists (may already be set from state init)
+      if (!state.world.realization) {
+        state.world.realization = {
+          enabled:         true,
+          radius:          1800,
+          maxActive:       120,
+          despawnPadding:  300,
+          visualizeRadius: true,
+        };
+      }
+
+      // Bootstrap ecology namespace if not present
+      if (!state.world.ecology) {
+        state.world.ecology = {
+          enabled:          true,
+          time:             720,        // abstract minutes since midnight (noon default)
+          timeOfDay:        0.5,
+          timeScale:        10,         // 1 real sec = 10 world minutes
+          weather:          { intensity: 0 },
+          events:           [],
+          abstractVehicles: [],
+          musicEcology:     { enabled: true },
+          pressure:         SBE.DistrictPressure.initPressure(),
+          _lastAbstractTick: 0,
+        };
+      } else {
+        // Re-enable if already initialized
+        state.world.ecology.enabled = true;
+        if (state.world.ecology.musicEcology)
+          state.world.ecology.musicEcology.enabled = true;
+      }
+
+      // Ensure realizedEntities Map exists
+      if (!state.world.realizedEntities) {
+        state.world.realizedEntities = new Map();
+      }
+
+      // Ensure actor storage exists
+      if (!state.world.abstractActors) state.world.abstractActors = [];
+      if (!state.world.realizedActors) state.world.realizedActors = new Map();
+    }
+
+    function enableEcology(on) {
+      if (on) {
+        initEcology();
+      } else if (state.world && state.world.ecology) {
+        state.world.ecology.enabled = false;
+        if (state.world.ecology.musicEcology)
+          state.world.ecology.musicEcology.enabled = false;
+      }
+    }
+
+    // Expose for console / debug inspector
+    global._wosEcology = {
+      init:   initEcology,
+      enable: function () { enableEcology(true);  },
+      disable: function () { enableEcology(false); },
+      get:    function () { return state.world && state.world.ecology; },
+      districts: function () {
+        var eco = state.world && state.world.ecology;
+        return eco && eco.pressure && eco.pressure.districts;
+      },
+    };
+
     function loop(now) {
       if (!isPlaying) {
         return;
@@ -20948,6 +21236,7 @@
 
       const dt = delta / 1000; // real elapsed time
       lastDt = dt;
+      if (window.SBE && SBE.RuntimeViewportRouter) SBE.RuntimeViewportRouter.update(dt);
       tick(dt, frameTime);
 
       renderFrame();
@@ -21858,6 +22147,66 @@
           : _currentMidiBeat;
       processMidiPlayback(_currentMidiBeat, _previousMidiBeat);
       if (state.midiPlayback) state.midiPlayback.lastBeat = _currentMidiBeat;
+
+      // ── Corridor Ecology tick (CityRhythm v1.0.0) ────────────────────────────
+      // CityRhythm runs every frame (advances city time + computes curves).
+      // Abstract simulation (district pressure + traffic) throttled to ~3s.
+      // LocalRealization, FlowField, and MusicEcology run every frame.
+      if (window.SBE && SBE.DistrictPressure && SBE.TrafficEcology &&
+          SBE.LocalRealization && SBE.MusicEcology) {
+        var _eco = state.world && state.world.ecology;
+        if (_eco && _eco.enabled) {
+
+          // ── Per-frame: city rhythm advance (owns time signal) ──────────────
+          if (SBE.CityRhythm) SBE.CityRhythm.tick(state, dt);
+
+          // ── Throttled: abstract world simulation (~3s cadence) ─────────────
+          var _ecoNow     = now;
+          var _ecoElapsed = _ecoNow - (_eco._lastAbstractTick || 0);
+          if (_ecoElapsed >= 3000) {
+            var _ecoDt = Math.min(_ecoElapsed / 1000, 6); // cap at 6s
+            SBE.DistrictPressure.tick(_eco, _ecoDt);
+            SBE.DistrictPressure.tickEvents(_eco, _ecoDt);
+            SBE.TrafficEcology.tick(_eco, _ecoDt);
+            // Apply rhythm biases to freshly-computed district pressure
+            if (SBE.CityRhythm) SBE.CityRhythm.applyDistrictBias(state);
+            // Actor pressure contribution
+            if (SBE.ActorEcology) {
+              SBE.ActorEcology.contributeToDistrictPressure(
+                _eco, state.world.abstractActors || []
+              );
+            }
+            // Cluster events lifecycle + auto-spawn
+            if (SBE.ClusterEvents) {
+              SBE.ClusterEvents.tick(state, _ecoDt, _ecoNow);
+            }
+            _eco._lastAbstractTick = _ecoNow;
+          }
+
+          // ── Per-frame: realization + flow + actors + events + music ────────
+          SBE.LocalRealization.tick(state, now);
+          if (SBE.TrafficFlowField) SBE.TrafficFlowField.tick(state, dt);
+          if (SBE.ActorEcology) {
+            SBE.ActorEcology.tick(state, dt, now);
+            SBE.ActorEcology.contributeMusicEcology(
+              _eco, state.world.abstractActors, state.world.realizedActors
+            );
+          }
+          if (SBE.ClusterEvents) {
+            SBE.ClusterEvents.influenceActors(state);
+            SBE.ClusterEvents.contributeMusicEcology(
+              _eco, SBE.ClusterEvents.getActiveEvents(state)
+            );
+          }
+          if (SBE.CameraCuriosity) {
+            SBE.CameraCuriosity.tick(state, dt, now);
+          }
+          if (SBE.PassengerDemo) {
+            SBE.PassengerDemo.tick(state, dt, now);
+          }
+          SBE.MusicEcology.tick(_eco, state, dt);
+        }
+      }
     }
 
     // ── SymbolObject rendering (world space, inside camera transform) ─────────
@@ -22083,13 +22432,44 @@
           return !l._isDerived;
         }),
       });
+      // Geo mode: route/world surfaces use Mapbox as substrate.
+      // Suppress stage background and old RouteWorld basemap renderer (PIP source).
+      var _geoSurface = (function() {
+        if (!window.SBE || !SBE.Workspace) return false;
+        // isGeographicMode() is authoritative — stays true once workspace is geo-initialized,
+        // even during the brief window when getActiveSurface() returns null (e.g. last surface
+        // just closed and replacement hasn't been opened yet).
+        if (SBE.Workspace.isGeographicMode && SBE.Workspace.isGeographicMode()) return true;
+        var _d = SBE.Workspace.getActiveSurface();
+        return !!(_d && (_d.type === "route" || _d.type === "world"));
+      })();
+      if (_geoSurface && renderState.ui) renderState.ui.transparentBackground = true;
+
+      // In geo mode, keep canvas pixel buffer in sync with the canvas-area layout
+      // so that mbr.project() CSS-pixel coordinates map directly onto canvas pixels.
+      if (_geoSurface) {
+        var _caRect = (document.querySelector(".canvas-area") || {}).getBoundingClientRect
+          ? document.querySelector(".canvas-area").getBoundingClientRect()
+          : null;
+        if (_caRect && _caRect.width > 0 && _caRect.height > 0) {
+          var _caw = Math.round(_caRect.width);
+          var _cah = Math.round(_caRect.height);
+          if (canvas.width !== _caw || canvas.height !== _cah) {
+            canvas.width  = _caw;
+            canvas.height = _cah;
+          }
+        }
+      }
+
       renderer.render(renderState, drawTools.getOverlays());
       var ctx = canvas.getContext("2d");
 
       // ── Frame-space: environment grid layers — not affected by camera ────────
-      ctx.save();
-      renderGridLayers(ctx);
-      ctx.restore();
+      if (!_geoSurface) {
+        ctx.save();
+        renderGridLayers(ctx);
+        ctx.restore();
+      }
 
       // ── InfiniteWorld overlay (screen space, over grid) ───────────────────
       if (state.infiniteWorld && state.infiniteWorld.enabled) {
@@ -22098,8 +22478,8 @@
         ctx.restore();
       }
 
-      // ── RouteWorld overlay (screen space) ─────────────────────────────────
-      if (state.routeWorld && state.routeWorld.active) {
+      // ── RouteWorld overlay — DISABLED in geo mode (Mapbox handles basemap) ──
+      if (!_geoSurface && state.routeWorld && state.routeWorld.active) {
         ctx.save();
         renderRouteWorldOverlay(ctx);
         ctx.restore();
@@ -22115,29 +22495,71 @@
       // Grid — drawn before all stroke/walker content
       drawGrid(ctx, canvas.width, canvas.height);
 
-      // ── Field visualization layer (below symbols, above background grid) ──
-      // Gated on fv.visible — Active (enabled) controls simulation; Visible controls rendering.
-      var _fviz = state.world && state.world.fieldViz;
-      if (
-        window.SBE &&
-        SBE.FieldRenderer &&
-        (!_fviz || _fviz.visible !== false)
-      ) {
-        SBE.FieldRenderer.render(ctx, state);
-      }
+      // ── Ecology renderers — suppressed in geographic surface mode ────────────
+      // In geo mode the canvas is transparent over Mapbox; world-space ecology
+      // content would ghost over the map. All draws below are skipped.
+      if (!_geoSurface) {
 
-      // Surface stamp layer (persistent ink)
-      ctx.drawImage(surfaceCanvas, 0, 0);
-      renderStrokes(ctx);
-      renderSymbolObjects(ctx);
-      renderMidiPoints(ctx);
+        // ── Stage Lighting — atmosphere + district fog + corridor glow ─────────
+        if (window.SBE && SBE.StageLightingRenderer) {
+          SBE.StageLightingRenderer.render(ctx, state, performance.now());
+        }
 
-      // ── Field visualizer (debug/atmospheric overlay) ──────────────────────
-      if (window.SBE && SBE.FieldVisualizer) {
-        SBE.FieldVisualizer.render(ctx, state, lastDt);
-      }
+        // ── Corridor Ecology — district overlays + route visualization ─────────
+        if (window.SBE && SBE.RealizationRenderer) {
+          SBE.RealizationRenderer.render(ctx, state, performance.now());
+        }
 
-      drawWalkers(ctx);
+        // ── City Rhythm ────────────────────────────────────────────────────────
+        if (window.SBE && SBE.CityRhythmRenderer) {
+          SBE.CityRhythmRenderer.render(ctx, state, performance.now());
+        }
+
+        // ── Traffic Flow Field ─────────────────────────────────────────────────
+        if (window.SBE && SBE.TrafficFlowRenderer) {
+          SBE.TrafficFlowRenderer.render(ctx, state);
+        }
+
+        // ── Actor Ecology ──────────────────────────────────────────────────────
+        if (window.SBE && SBE.ActorRenderer) {
+          SBE.ActorRenderer.render(ctx, state, performance.now());
+        }
+
+        // ── Cluster Events ─────────────────────────────────────────────────────
+        if (window.SBE && SBE.ClusterEventRenderer) {
+          SBE.ClusterEventRenderer.render(ctx, state, performance.now());
+        }
+
+        // ── Camera Curiosity ───────────────────────────────────────────────────
+        if (window.SBE && SBE.CameraCuriosityRenderer) {
+          SBE.CameraCuriosityRenderer.render(ctx, state, performance.now());
+        }
+
+        // ── Passenger Demo ─────────────────────────────────────────────────────
+        if (window.SBE && SBE.PassengerDemoRenderer) {
+          SBE.PassengerDemoRenderer.render(ctx, state, performance.now());
+        }
+
+        // ── Field visualization layer ──────────────────────────────────────────
+        var _fviz = state.world && state.world.fieldViz;
+        if (window.SBE && SBE.FieldRenderer && (!_fviz || _fviz.visible !== false)) {
+          SBE.FieldRenderer.render(ctx, state);
+        }
+
+        // Surface stamp layer (persistent ink)
+        ctx.drawImage(surfaceCanvas, 0, 0);
+        renderStrokes(ctx);
+        renderSymbolObjects(ctx);
+        renderMidiPoints(ctx);
+
+        // ── Field visualizer (debug/atmospheric overlay) ────────────────────
+        if (window.SBE && SBE.FieldVisualizer) {
+          SBE.FieldVisualizer.render(ctx, state, lastDt);
+        }
+
+        drawWalkers(ctx);
+
+      } // end !_geoSurface
 
       // ── Projectile collision contact debug overlay (world-space) ─────────────
       // Active when ANY projectile walker has showPhysics enabled.
@@ -22213,6 +22635,21 @@
 
       ctx.restore();
       // ── End camera transform — screen space overlays follow ───────────────
+
+      // In geo mode, clear any world-space ghost content drawn inside the camera
+      // transform (e.g. from renderers that ran before the _geoSurface guard was
+      // added, or debug overlays). Canvas is transparent over Mapbox — anything
+      // left here would composite incorrectly on top of the map.
+      if (_geoSurface) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+
+      // ── RuntimeViewportRouter — geographic route overlay (screen space) ───
+      // Rendered AFTER camera restore: mbr.project() returns CSS-pixel map
+      // coordinates which match canvas pixel space when canvas fills the area.
+      if (window.SBE && SBE.RuntimeViewportRouter) {
+        SBE.RuntimeViewportRouter.render(ctx);
+      }
 
       // Labels render in screen space (zoom-stable font size)
       renderLabels(ctx);
@@ -22639,30 +23076,166 @@
 
     function drawDebugHUD() {
       if (!state.ui.debugHUD) return;
-      if (!state.balls || !state.balls.length) return;
       var ctx = canvas.getContext("2d");
       ctx.save();
-      ctx.font = "10px monospace";
-      ctx.textAlign = "center";
-      state.balls.forEach(function (ball) {
-        if (!ball || !ball.sound || !ball.blueprint) return;
-        var note =
-          ball.sound.midi && ball.sound.midi.note != null
-            ? ball.sound.midi.note
-            : null;
-        var noteName =
-          note != null ? NOTE_NAMES[((note % 12) + 12) % 12] || "?" : "--";
-        var bpNote = ball.blueprint.note != null ? ball.blueprint.note : null;
-        var bpName =
-          bpNote != null ? NOTE_NAMES[((bpNote % 12) + 12) % 12] || "?" : "--";
-        var speed = Math.hypot(ball.vx || 0, ball.vy || 0).toFixed(1);
-        var played = ball._played ? "1" : "0";
-        var text = noteName + "/" + bpName + " v:" + speed + " p:" + played;
-        // Color: green = note matches blueprint, red = mismatch
-        ctx.fillStyle =
-          note === bpNote ? "rgba(100,255,180,0.9)" : "rgba(255,80,80,0.95)";
-        ctx.fillText(text, ball.x, ball.y - (ball.renderRadius + 10));
-      });
+
+      // Ball physics debug overlay
+      if (state.balls && state.balls.length) {
+        ctx.font = "10px monospace";
+        ctx.textAlign = "center";
+        state.balls.forEach(function (ball) {
+          if (!ball || !ball.sound || !ball.blueprint) return;
+          var note =
+            ball.sound.midi && ball.sound.midi.note != null
+              ? ball.sound.midi.note
+              : null;
+          var noteName =
+            note != null ? NOTE_NAMES[((note % 12) + 12) % 12] || "?" : "--";
+          var bpNote = ball.blueprint.note != null ? ball.blueprint.note : null;
+          var bpName =
+            bpNote != null ? NOTE_NAMES[((bpNote % 12) + 12) % 12] || "?" : "--";
+          var speed = Math.hypot(ball.vx || 0, ball.vy || 0).toFixed(1);
+          var played = ball._played ? "1" : "0";
+          var text = noteName + "/" + bpName + " v:" + speed + " p:" + played;
+          ctx.fillStyle =
+            note === bpNote ? "rgba(100,255,180,0.9)" : "rgba(255,80,80,0.95)";
+          ctx.fillText(text, ball.x, ball.y - (ball.renderRadius + 10));
+        });
+      }
+
+      // ── Corridor Ecology debug overlay ──────────────────────────────────────
+      var _eco = state.world && state.world.ecology;
+      if (_eco && _eco.enabled && window.SBE && SBE.LocalRealization) {
+        var _ecoMetrics = SBE.LocalRealization.getMetrics(state);
+        var _ecoOut  = _eco.musicEcology && _eco.musicEcology.output;
+
+        // City Rhythm header line
+        var _rhythmLabel = "";
+        if (SBE.CityRhythm) {
+          _rhythmLabel = SBE.CityRhythm.getPhaseLabel(state);
+        } else {
+          var _ecoH = _eco.time != null ? Math.floor(_eco.time / 60) : 0;
+          var _ecoM = _eco.time != null ? Math.floor(_eco.time % 60) : 0;
+          _rhythmLabel = ("0" + _ecoH).slice(-2) + ":" + ("0" + _ecoM).slice(-2);
+        }
+
+        // ── Panel background ─────────────────────────────────────────────────
+        var _panelH = 148;
+        ctx.font = "11px monospace";
+        ctx.textAlign = "left";
+        ctx.fillStyle = "rgba(0,0,0,0.60)";
+        ctx.fillRect(8, canvas.height - _panelH - 8, 310, _panelH);
+
+        var _py = canvas.height - _panelH + 4;
+
+        // Header — rhythm phase + clock
+        ctx.fillStyle = "rgba(61,216,197,0.95)";
+        ctx.fillText("ECOLOGY  " + _rhythmLabel, 14, _py);
+        _py += 15;
+
+        // Rhythm metrics
+        if (SBE.CityRhythm && state.world.rhythm) {
+          var _rm = state.world.rhythm.metrics;
+          ctx.fillStyle = "rgba(220,180,255,0.80)";
+          ctx.fillText(
+            "en:" + (_rm.cityEnergy   || 0).toFixed(2) +
+            "  nl:" + (_rm.nightlifeBias || 0).toFixed(2) +
+            "  tr:" + (_rm.trafficBias   || 0).toFixed(2) +
+            "  dl:" + (_rm.deliveryBias  || 0).toFixed(2),
+            14, _py
+          );
+          _py += 14;
+        }
+
+        // Realization metrics
+        ctx.fillStyle = "rgba(200,200,200,0.85)";
+        ctx.fillText(
+          "abstract:" + _ecoMetrics.abstract +
+          "  realized:" + _ecoMetrics.realized +
+          "  r:" + _ecoMetrics.radius,
+          14, _py
+        );
+        _py += 14;
+
+        ctx.fillStyle = "rgba(160,180,160,0.7)";
+        ctx.fillText(
+          "spawned:" + _ecoMetrics.spawnCount +
+          "  despawned:" + _ecoMetrics.despawnCount,
+          14, _py
+        );
+        _py += 14;
+
+        // District pressure table
+        var _dp = _eco.pressure && _eco.pressure.districts;
+        if (_dp) {
+          Object.keys(_dp).forEach(function (id) {
+            var d = _dp[id];
+            var row = id + "  nl:" + d.nightlife.toFixed(2) +
+                      " tr:" + d.traffic.toFixed(2) +
+                      " dl:" + d.delivery.toFixed(2) +
+                      " en:" + d.energy.toFixed(2);
+            ctx.fillStyle = "rgba(180,205,255,0.75)";
+            ctx.fillText(row, 14, _py);
+            _py += 14;
+          });
+        }
+
+        // Cluster events metrics
+        if (window.SBE && SBE.ClusterEvents) {
+          var _cem = SBE.ClusterEvents.getMetrics(state);
+          if (_cem.active > 0) {
+            ctx.fillStyle = "rgba(200,160,255,0.80)";
+            ctx.fillText(
+              "events  active:" + _cem.active +
+              "  peak:" + _cem.peak +
+              "  avgS:" + (_cem.avgStrength || 0).toFixed(2),
+              14, _py
+            );
+            _py += 14;
+          }
+        }
+
+        // Actor ecology metrics
+        if (window.SBE && SBE.ActorEcology) {
+          var _am = SBE.ActorEcology.getMetrics(state);
+          ctx.fillStyle = "rgba(180,180,230,0.75)";
+          ctx.fillText(
+            "actors  abs:" + _am.abstractCount +
+            "  real:" + _am.realizedCount +
+            "  nl:" + _am.nightlife +
+            "  cm:" + _am.commuters +
+            "  gh:" + _am.ghosts,
+            14, _py
+          );
+          _py += 14;
+        }
+
+        // Flow field metrics
+        if (window.SBE && SBE.TrafficFlowField) {
+          var _flowM = SBE.TrafficFlowField.getMetrics(state);
+          ctx.fillStyle = "rgba(140,210,195,0.75)";
+          ctx.fillText(
+            "flow  clusters:" + _flowM.activeClusters +
+            "  avgP:" + _flowM.avgPressure.toFixed(2) +
+            "  maxP:" + _flowM.maxPressure.toFixed(2),
+            14, _py
+          );
+          _py += 14;
+        }
+
+        // Music ecology output
+        if (_ecoOut) {
+          ctx.fillStyle = "rgba(255,218,80,0.80)";
+          ctx.fillText(
+            "bpm" + (_ecoOut.bpmShift >= 0 ? "+" : "") + _ecoOut.bpmShift.toFixed(1) +
+            "  dens:" + _ecoOut.density.toFixed(2) +
+            "  bright:" + _ecoOut.brightness.toFixed(2) +
+            "  perc:" + _ecoOut.percussion.toFixed(2),
+            14, _py
+          );
+        }
+      }
+
       ctx.restore();
     }
 

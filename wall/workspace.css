@@ -1,0 +1,1141 @@
+/* ── Workspace Architecture (0519_WOS_SurfaceRail_Architecture_v1.0.0) ──────
+ *
+ * Chrome surfaces:
+ *   #ws-surface-rail   — circular world nodes stacked in #left-rail (above nav)
+ *   #ws-sidebar-nav    — icon column in #left-rail (below surface rail)
+ *   #ws-lower-panel    — 44px strip, bottom of .canvas-area (above transport)
+ *
+ * The horizontal tab bar (#ws-tab-bar) is retired. Suppressed below.
+ * Surface identity is now broadcast-channel style: circles, not documents.
+ */
+
+/* ── Tab bar — retired ───────────────────────────────────────────────────── */
+/* Tab chrome is superseded by the left-rail surface stack.                   */
+#ws-tab-bar { display: none !important; }
+
+/* ── Surface Rail ─────────────────────────────────────────────────────────── */
+/* Vertical stack of circular destination/world nodes. Lives at the top of    */
+/* #left-rail, above the sidebar nav icon column. Separated by a thin rule.  */
+#ws-surface-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 0 8px;
+  gap: 5px;
+  flex-shrink: 0;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  margin-bottom: 2px;
+  position: relative;
+}
+
+/* Surface node — position context for the floating tooltip */
+.ws-sr-node {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+/* Circle button — the surface avatar */
+.ws-sr-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1.5px solid var(--sa-border, rgba(61,216,197,0.28));
+  background: var(--sa-bg, rgba(61,216,197,0.14));
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  opacity: 0.72;
+  transform: scale(1);
+  transition: opacity 0.15s, transform 0.15s, box-shadow 0.18s;
+  padding: 0;
+  outline: none;
+}
+
+.ws-sr-btn:hover {
+  opacity: 1;
+  transform: scale(1.06);
+}
+
+/* Active — live station ring + ambient glow */
+.ws-sr-node--active .ws-sr-btn {
+  opacity: 1;
+  box-shadow:
+    0 0 0 1.5px rgba(255,255,255,0.55),
+    0 0 10px rgba(255,255,255,0.10);
+}
+
+/* Live indicator dot — bottom-right corner, accent-colored */
+.ws-sr-node--active .ws-sr-btn::after {
+  content: "";
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--sa, #3dd8c5);
+  box-shadow: 0 0 5px var(--sa, #3dd8c5);
+  bottom: -1px;
+  right: -1px;
+}
+
+/* Abbreviation label inside circle */
+.ws-sr-abbr {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: rgba(255,255,255,0.82);
+  font-family: system-ui, -apple-system, "Helvetica Neue", sans-serif;
+  user-select: none;
+  pointer-events: none;
+  line-height: 1;
+}
+
+/* ＋ Add surface — dashed circle, minimal */
+.ws-sr-add {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1.5px dashed rgba(255,255,255,0.16);
+  background: transparent;
+  color: rgba(255,255,255,0.28);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 1px;
+  padding: 0;
+  opacity: 0.60;
+  transition: color 0.15s, border-color 0.15s, opacity 0.15s;
+  outline: none;
+}
+.ws-sr-add:hover {
+  color: rgba(255,255,255,0.65);
+  border-color: rgba(255,255,255,0.35);
+  opacity: 1;
+}
+
+/* Inline rename input — appears in place of the abbreviation on dblclick */
+.ws-sr-rename {
+  width: 30px;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.22);
+  color: rgba(255,255,255,0.90);
+  font-size: 9px;
+  font-family: inherit;
+  border-radius: 3px;
+  padding: 1px 3px;
+  outline: none;
+  text-align: center;
+}
+
+/* ── Surface tooltip ─────────────────────────────────────────────────────── */
+/* Cinematic telemetry flyout — dark, thin typography, right of the circle.   */
+/* pointer-events: none — never blocks map interaction.                       */
+.ws-sr-tip {
+  position: absolute;
+  left: calc(100% + 10px);
+  top: 50%;
+  transform: translateY(-50%);
+  background: rgba(7, 9, 13, 0.94);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 4px;
+  padding: 8px 12px 9px;
+  min-width: 118px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.12s;
+  z-index: 200;
+  white-space: nowrap;
+}
+.ws-sr-tip--visible { opacity: 1; }
+
+.ws-sr-tip-name {
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  color: rgba(255,255,255,0.38);
+  font-family: system-ui, -apple-system, "Helvetica Neue", sans-serif;
+  margin-bottom: 3px;
+  text-transform: uppercase;
+}
+
+.ws-sr-tip-time {
+  font-size: 14px;
+  font-weight: 200;
+  color: rgba(255,255,255,0.84);
+  font-family: system-ui, -apple-system, "Helvetica Neue", sans-serif;
+  letter-spacing: -0.01em;
+  margin-bottom: 5px;
+  line-height: 1;
+}
+
+.ws-sr-tip-weather {
+  font-size: 10px;
+  font-weight: 300;
+  font-style: italic;
+  color: rgba(255,255,255,0.42);
+  font-family: system-ui, -apple-system, "Helvetica Neue", sans-serif;
+  margin-bottom: 1px;
+}
+
+.ws-sr-tip-temp {
+  font-size: 17px;
+  font-weight: 100;
+  color: rgba(255,255,255,0.68);
+  font-family: system-ui, -apple-system, "Helvetica Neue", sans-serif;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+/* ── Workspace sidebar nav (prepended to #left-rail) ─────────────────────── */
+#ws-sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 4px 0 6px;
+  border-bottom: 1px solid var(--panel-border, rgba(255,255,255,0.06));
+  margin-bottom: 4px;
+  flex-shrink: 0;
+}
+
+/* Section divider labels: WORLD / ZONES / SYSTEMS / VIZ */
+.ws-nav-section {
+  font-size: 7px;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.14);
+  padding: 5px 0 1px;
+  align-self: stretch;
+  text-align: center;
+  line-height: 1;
+  user-select: none;
+  pointer-events: none;
+  flex-shrink: 0;
+}
+/* "—" divider is just a thin rule, no text */
+.ws-nav-section:empty,
+.ws-nav-section[textContent="—"] {
+  padding: 3px 6px;
+}
+.ws-nav-section:first-child { padding-top: 1px; }
+
+.ws-nav-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 32px;
+  border-radius: 5px;
+  background: transparent;
+  border: none;
+  color: rgba(255,255,255,0.28);
+  font-size: 13px;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+  position: relative;
+  flex-shrink: 0;
+  padding: 0;
+}
+
+.ws-nav-btn:hover {
+  color: rgba(255,255,255,0.68);
+  background: rgba(255,255,255,0.06);
+}
+
+.ws-nav-btn.ws-nav-btn--active {
+  color: var(--accent, #3dd8c5);
+  background: rgba(61,216,197,0.08);
+}
+
+/* Tooltip on hover */
+.ws-nav-btn::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: calc(100% + 10px);
+  top: 50%;
+  transform: translateY(-50%);
+  background: rgba(20,22,26,0.95);
+  border: 1px solid rgba(255,255,255,0.10);
+  color: rgba(255,255,255,0.80);
+  font-size: 10px;
+  font-family: inherit;
+  white-space: nowrap;
+  padding: 3px 7px;
+  border-radius: 4px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.12s;
+  z-index: 100;
+}
+.ws-nav-btn:hover::after { opacity: 1; }
+
+/* ── Lower context panel ─────────────────────────────────────────────────── */
+#ws-lower-panel {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  height: 44px;
+  background: var(--panel, #131416);
+  border-top: 1px solid var(--panel-border, rgba(255,255,255,0.06));
+  padding: 0 14px;
+  gap: 12px;
+  overflow: hidden;
+  z-index: 20;
+  position: relative;
+}
+
+/* World name — left anchor in bottom bar */
+.ws-lower-world {
+  font-size: 10px;
+  font-family: monospace;
+  letter-spacing: 0.04em;
+  color: rgba(255,255,255,0.55);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 160px;
+  flex: 1;
+  min-width: 0;
+}
+
+/* Accent dot — colored by active doc type */
+.ws-lower-accent-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ws-lower-accent, #3dd8c5);
+  flex-shrink: 0;
+  opacity: 0.70;
+}
+
+/* Right side of lower panel — status fields */
+.ws-lower-status {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-shrink: 0;
+}
+
+.ws-lower-field {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: rgba(255,255,255,0.22);
+  font-size: 10px;
+  font-family: monospace;
+  white-space: nowrap;
+}
+
+.ws-lower-field .ws-lower-value {
+  color: rgba(255,255,255,0.45);
+}
+
+/* ── Mapbox viewport (0518E_WOS_MapboxViewport_v1.0.0) ──────────────────── */
+#mapbox-viewport {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  z-index: 0;
+  pointer-events: auto;
+}
+
+/* Canvas transparent over map — active on route documents */
+.ws-map-active #engine-canvas {
+  background: transparent !important;
+  border-color: transparent !important;
+}
+
+/* Canvas-wrap sits above Mapbox (z:2). Pointer routing is handled per-mode:
+   navigate → canvas pointer-events:none (Mapbox owns)
+   draw     → #surface-overlay owns (canvas still none)
+   route-edit → .ws-route-edit-mode.ws-geo-mode #engine-canvas pointer-events:auto */
+.ws-map-active .canvas-wrap {
+  z-index: 2;
+}
+
+/* ── Persistence indicator ● SAVED / ● MODIFIED / ● LOCAL ───────────────── */
+.ws-persist-indicator {
+  font: 9px/16px monospace;
+  letter-spacing: 0.03em;
+  padding: 0 6px;
+  white-space: nowrap;
+  border-radius: 2px;
+  border: 1px solid transparent;
+}
+
+.ws-persist--saved {
+  color: rgba(52, 211, 153, 0.80);
+  border-color: rgba(52, 211, 153, 0.20);
+}
+
+.ws-persist--modified {
+  color: rgba(251, 146, 60, 0.85);
+  border-color: rgba(251, 146, 60, 0.22);
+}
+
+.ws-persist--local {
+  color: rgba(255, 255, 255, 0.28);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+/* ── Viewport mode toggle [ OP ] [ VIEW ] ───────────────────────────────── */
+.ws-mode-toggle {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 8px;
+}
+
+.ws-mode-btn {
+  padding: 1px 6px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 2px;
+  color: rgba(255,255,255,0.35);
+  font: 9px/16px monospace;
+  cursor: pointer;
+  letter-spacing: 0.04em;
+  transition: color 0.12s, background 0.12s, border-color 0.12s;
+}
+
+.ws-mode-btn:hover {
+  background: rgba(255,255,255,0.10);
+  color: rgba(255,255,255,0.60);
+}
+
+.ws-mode-btn--active {
+  background: rgba(255,255,255,0.14);
+  border-color: rgba(255,255,255,0.28);
+  color: rgba(255,255,255,0.85);
+}
+
+/* ── Geographic workspace mode (0518K_WOS_GeographicSurfaceMode_v1.0.0) ──── */
+/* In geo mode the canvas fills the full canvas-area, aligning canvas pixel   */
+/* space with map CSS-pixel space so mbr.project() coordinates render exactly. */
+.ws-geo-mode .canvas-wrap {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  align-items: stretch !important;
+  justify-content: stretch !important;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.ws-geo-mode #engine-canvas {
+  width: 100% !important;
+  height: 100% !important;
+  aspect-ratio: unset !important;
+  border: none !important;
+  background: transparent !important;
+  /* NAVIGATE (default): Mapbox owns the pointer — engine canvas is invisible to input.
+     pointer-events restored to auto only in route-edit mode (see below). */
+  pointer-events: none;
+}
+
+/* Route-edit mode: WOS canvas tools need pointer events for hit-testing, drag,
+   and click-to-place operations on the route overlay. */
+.ws-route-edit-mode.ws-geo-mode #engine-canvas {
+  pointer-events: auto;
+  cursor: crosshair;
+}
+
+/* Hide viewport orientation/zoom controls — map controls navigation in geo mode */
+.ws-geo-mode .viewport-controls { display: none !important; }
+
+/* ── Canvas-area padding override when lower panel is present ────────────── */
+/* Lower panel is 44px — reduce bottom padding to keep wall canvas centered. */
+.canvas-area.ws-chrome-active {
+  padding-bottom: calc(var(--wall-safe-padding) - 22px);
+}
+
+/* ── Geo camera controls overlay ─────────────────────────────────────────── */
+#ws-geo-controls {
+  position: absolute;
+  bottom: 54px; /* above lower panel */
+  right: 12px;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  pointer-events: auto;
+}
+
+.ws-geo-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  background: rgba(19,20,22,0.88);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 5px;
+  color: rgba(255,255,255,0.55);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+  backdrop-filter: blur(4px);
+}
+
+.ws-geo-btn:hover {
+  background: rgba(30,32,36,0.95);
+  color: rgba(255,255,255,0.85);
+  border-color: rgba(255,255,255,0.22);
+}
+
+.ws-geo-btn--active {
+  background: rgba(61,216,197,0.15);
+  border-color: #3dd8c5;
+  color: #3dd8c5;
+}
+
+/* ── WorldHUD — superseded by WorldTelemetryHUD ─────────────────────────── */
+/* The glass-panel WorldHUD is retired in favour of the cinematic telemetry   */
+/* typography system. Suppressed globally; kept in DOM for graceful fallback. */
+#world-hud { display: none !important; }
+
+/* ── WorldTelemetryHUD (0519_WOS_ContextualToolHUD_WeatherTelemetry_v1.0.0) */
+/* Cinematic environmental instrumentation — no glass panel, no widgets.      */
+/* Typography directly on the map; readability from shadow alone.             */
+/* Hidden outside geo mode. pointer-events: none always.                      */
+#world-telemetry-hud {
+  position: absolute;
+  top: 18px;
+  right: 24px;
+  z-index: 10;
+  pointer-events: none;
+  display: none;           /* shown only when map is active */
+  text-align: right;
+  /* Readability via shadow — no panel, no blur, no border */
+  filter: drop-shadow(0 1px 6px rgba(0,0,0,0.55))
+          drop-shadow(0 0 24px rgba(0,0,0,0.28));
+}
+
+.ws-map-active #world-telemetry-hud { display: block; }
+
+/* Location — tertiary, uppercase tracking */
+.wt-location {
+  font-size: 8px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.40);
+  font-family: system-ui, -apple-system, "Helvetica Neue", sans-serif;
+  margin-bottom: 4px;
+  line-height: 1;
+}
+
+/* Time block — primary information */
+.wt-time-block {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 5px;
+  line-height: 1;
+  margin-bottom: 1px;
+}
+
+/* Hours:minutes — large, thin, dominant */
+.wt-time {
+  font-size: 28px;
+  font-weight: 100;
+  letter-spacing: -0.03em;
+  color: rgba(255,255,255,0.90);
+  font-family: system-ui, -apple-system, "Helvetica Neue", sans-serif;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+/* AM/PM + timezone row — small, muted */
+.wt-time-sub {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding-bottom: 4px; /* align baseline with time digits */
+}
+
+.wt-meridiem {
+  font-size: 9px;
+  font-weight: 400;
+  letter-spacing: 0.06em;
+  color: rgba(255,255,255,0.38);
+  font-family: system-ui, -apple-system, "Helvetica Neue", sans-serif;
+}
+
+.wt-sep {
+  font-size: 8px;
+  color: rgba(255,255,255,0.18);
+  font-family: system-ui;
+}
+
+.wt-tzabbr {
+  font-size: 9px;
+  font-weight: 400;
+  letter-spacing: 0.06em;
+  color: rgba(255,255,255,0.32);
+  font-family: system-ui, -apple-system, "Helvetica Neue", sans-serif;
+}
+
+/* Conditions block */
+.wt-conditions {
+  margin-top: 7px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+}
+
+/* Cinematic weather label — restrained, italic, secondary */
+.wt-weather-label {
+  font-size: 10px;
+  font-weight: 300;
+  font-style: italic;
+  letter-spacing: 0.03em;
+  color: rgba(255,255,255,0.45);
+  font-family: system-ui, -apple-system, "Helvetica Neue", sans-serif;
+  min-height: 14px;  /* holds space when label is empty */
+}
+
+/* Temperature — secondary numeric, cool weight */
+.wt-temp {
+  font-size: 18px;
+  font-weight: 200;
+  letter-spacing: -0.02em;
+  color: rgba(255,255,255,0.72);
+  font-family: system-ui, -apple-system, "Helvetica Neue", sans-serif;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+/* ── Night mode — brighter, cooler ─────────────────────────────────────── */
+#world-telemetry-hud.wt--night .wt-time    { color: rgba(255,255,255,0.95); }
+#world-telemetry-hud.wt--night .wt-location { color: rgba(200,220,255,0.45); }
+#world-telemetry-hud.wt--night .wt-temp    { color: rgba(180,210,255,0.78); }
+
+/* ── Golden hour — warm time tones ─────────────────────────────────────── */
+#world-telemetry-hud.wt--golden .wt-time  { color: rgba(255,235,180,0.92); }
+#world-telemetry-hud.wt--golden .wt-temp  { color: rgba(255,210,120,0.80); }
+
+/* ── Rain — cool blue-grey text ─────────────────────────────────────────── */
+#world-telemetry-hud.wt--rain .wt-temp         { color: rgba(160,205,255,0.75); }
+#world-telemetry-hud.wt--rain .wt-weather-label { color: rgba(140,180,240,0.52); }
+
+/* ── Snow — icy white ───────────────────────────────────────────────────── */
+#world-telemetry-hud.wt--snow .wt-temp         { color: rgba(220,235,255,0.85); }
+#world-telemetry-hud.wt--snow .wt-weather-label { color: rgba(200,220,255,0.50); }
+
+/* ── Fog — slightly washed, reduced contrast ────────────────────────────── */
+#world-telemetry-hud.wt--fog { opacity: 0.78; }
+
+/* ── Canvas tool subbar — contextual, not persistent ────────────────────── */
+/* Hidden in geo navigate mode: the map is the primary interface.            */
+/* Only surfaces when an active tool exposes editable properties.            */
+.ws-geo-mode.ws-navigate-mode #canvas-tool-subbar { display: none !important; }
+
+/* Legacy WorldHUD, now #world-hud — definition block kept for mood classes  */
+/* that may be referenced elsewhere; all display is disabled above.           */
+#world-hud {
+  position: absolute;
+  top: 18px;            /* upper-right, independent of sidebar chrome */
+  right: 24px;
+  left: auto;
+  z-index: 10;
+  pointer-events: none;
+
+  /* Glass styling */
+  background: rgba(8, 10, 16, 0.40);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 10px;
+  padding: 11px 16px 10px;
+  min-width: 148px;
+
+  /* Prevent HUD from showing on non-geo surfaces */
+  display: none;
+  transition: opacity 0.4s ease;
+}
+
+/* Only show HUD when map is active (geo surface) */
+.ws-map-active #world-hud { display: block; }
+
+/* Weather icon + temperature */
+.hud-weather-line {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.hud-icon {
+  font-size: 18px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.hud-temp {
+  font-size: 24px;
+  font-weight: 200;
+  color: rgba(255, 255, 255, 0.92);
+  letter-spacing: -0.03em;
+  font-family: system-ui, -apple-system, "Helvetica Neue", sans-serif;
+  line-height: 1;
+}
+
+/* Weekday · time */
+.hud-time-line {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 3px;
+}
+
+.hud-weekday,
+.hud-time {
+  font-size: 12px;
+  font-weight: 300;
+  color: rgba(255, 255, 255, 0.72);
+  letter-spacing: 0.01em;
+  font-family: system-ui, -apple-system, "Helvetica Neue", sans-serif;
+}
+
+.hud-sep {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.28);
+}
+
+/* Location */
+.hud-location {
+  font-size: 9px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.32);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-family: system-ui, -apple-system, "Helvetica Neue", sans-serif;
+}
+
+/* ── Mood variants ──────────────────────────────────────────────────────── */
+/* Night — cooler, slightly dimmer border */
+#world-hud.hud--night {
+  border-color: rgba(90, 120, 200, 0.12);
+  background: rgba(6, 8, 18, 0.48);
+}
+
+/* Golden hour — warm amber border */
+#world-hud.hud--golden {
+  border-color: rgba(255, 160, 50, 0.16);
+}
+
+/* Rain / storm — cooler temp text */
+#world-hud.hud--rainy .hud-temp {
+  color: rgba(160, 210, 255, 0.90);
+}
+
+/* Snow — icy white */
+#world-hud.hud--snowy .hud-temp {
+  color: rgba(220, 235, 255, 0.92);
+}
+
+/* Fog — slightly washed */
+#world-hud.hud--foggy {
+  opacity: 0.82;
+}
+
+/* ── Zones Panel (0520_WOS_WorldRuntimeArchitecture_v1.0.0) ─────────────── */
+.zone-panel-header {
+  display: flex;
+  align-items: center;
+  padding: 8px 10px 6px;
+  gap: 6px;
+}
+.zone-panel-title {
+  flex: 1;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.35);
+}
+.zone-add-btn {
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 3px;
+  color: rgba(255,255,255,0.50);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 1px 6px;
+  transition: background 0.12s, color 0.12s;
+}
+.zone-add-btn:hover { background: rgba(255,255,255,0.12); color: rgba(255,255,255,0.85); }
+
+.zone-world-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 8px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  margin-bottom: 6px;
+}
+.zone-world-icon { color: #3dd8c5; font-size: 12px; }
+.zone-world-name { font-size: 10px; color: rgba(255,255,255,0.55); font-family: monospace; }
+
+.zone-empty {
+  font-size: 10px;
+  color: rgba(255,255,255,0.25);
+  text-align: center;
+  padding: 16px 12px;
+  line-height: 1.6;
+  white-space: pre-line;
+}
+
+.zone-list { display: flex; flex-direction: column; gap: 3px; padding: 0 8px 10px; }
+.zone-item {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 4px;
+  padding: 6px 8px 4px;
+}
+.zone-item--hidden { opacity: 0.45; }
+.zone-item-header { display: flex; align-items: center; gap: 6px; }
+.zone-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: #3dd8c5; flex-shrink: 0; opacity: 0.7;
+}
+.zone-item-name {
+  flex: 1; font-size: 11px; font-weight: 600;
+  color: rgba(255,255,255,0.80);
+}
+.zone-item-controls { display: flex; gap: 2px; }
+.zone-icon-btn {
+  background: none; border: none; color: rgba(255,255,255,0.28);
+  cursor: pointer; font-size: 11px; padding: 2px 3px;
+  border-radius: 2px; transition: color 0.1s, background 0.1s;
+}
+.zone-icon-btn:hover { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.75); }
+.zone-item-info {
+  font-size: 9px; color: rgba(255,255,255,0.28);
+  padding-left: 12px; margin-top: 2px;
+  font-style: italic;
+}
+
+.zone-section-label {
+  font-size: 8px; letter-spacing: 0.08em; text-transform: uppercase;
+  color: rgba(255,255,255,0.22); padding: 8px 10px 4px;
+}
+.zone-layer-list { display: flex; flex-direction: column; gap: 1px; padding: 0 8px 10px; }
+.zone-layer-item {
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 6px; border-radius: 3px;
+  background: rgba(255,255,255,0.03);
+}
+.zone-layer-vis { background: none; border: none; cursor: pointer; font-size: 11px; padding: 0; color: rgba(61,216,197,0.7); }
+.zone-layer-vis--hidden { color: rgba(255,255,255,0.22); }
+.zone-layer-name { flex: 1; font-size: 10px; color: rgba(255,255,255,0.65); }
+.zone-layer-type {
+  font-size: 8px; letter-spacing: 0.06em; text-transform: uppercase;
+  color: rgba(255,255,255,0.22); font-family: monospace;
+}
+
+/* ── Telemetry visibility channel (0520_WOS_WorldRuntimeArchitecture_v1.0.0) */
+/* Telemetry is NEVER baked into world rendering — separate channel, toggleable */
+body:not(.ws-telemetry-active) .ws-telemetry { display: none !important; }
+body.ws-telemetry-active .ws-telemetry {
+  outline: 1px solid rgba(255, 180, 0, 0.35);
+  outline-offset: 2px;
+}
+/* Telemetry HUD overlay — shown only when telemetry active */
+#ws-telemetry-hud {
+  position: absolute;
+  top: 40px;
+  left: 12px;
+  z-index: 40;
+  pointer-events: none;
+  font: 9px/1.5 monospace;
+  color: rgba(255, 180, 0, 0.75);
+  letter-spacing: 0.03em;
+  background: rgba(0,0,0,0.55);
+  border: 1px solid rgba(255,180,0,0.20);
+  border-radius: 3px;
+  padding: 4px 8px;
+  white-space: pre;
+  display: none;
+}
+body.ws-telemetry-active #ws-telemetry-hud { display: block; }
+
+/* ── AtmosphereComposite (0520_WOS_AtmosphereComposite_v1.0.0) ───────────── */
+/* Environmental mood compositor — sits between Mapbox and WOS canvas stack.  */
+/* Full z-stack:                                                               */
+/*   Mapbox              z-index: 0                                            */
+/*   AtmosphereComposite z-index: 1  ← mood tint / fog / cloud / rain        */
+/*   engine-canvas       z-index: 2                                            */
+/*   surface-overlay     z-index: 3                                            */
+/*   world-hud           z-index: 10                                           */
+#atmosphere-composite {
+  display: none;                  /* off outside geo mode */
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: transparent;
+}
+
+/* Visible only when Mapbox is the substrate */
+.ws-map-active #atmosphere-composite {
+  display: block;
+}
+
+/* ── Surface overlay canvas (0520_WOS_SurfaceDrawingRuntime_v1.0.0) ──────── */
+/* Stack: Mapbox (z:0) → AtmosphereComposite (z:1) → #engine-canvas (z:2) → #surface-overlay (z:3) */
+#surface-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;   /* navigate mode default — events fall through to map */
+  background: transparent;
+  touch-action: none;
+}
+
+/* Draw mode — overlay captures input, canvas shows crosshair */
+.ws-draw-mode #surface-overlay {
+  pointer-events: auto;
+  cursor: crosshair;
+}
+
+/* ── Route Panel ─────────────────────────────────────────────────────────── */
+.route-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 10px 10px 16px;
+}
+
+.route-input-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.route-field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.route-field-group label {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.35);
+}
+
+.route-field-group input[type="text"] {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 3px;
+  color: rgba(255,255,255,0.85);
+  font-size: 11px;
+  padding: 5px 7px;
+  outline: none;
+  transition: border-color 0.15s;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.route-field-group input[type="text"]:focus {
+  border-color: rgba(61,216,197,0.5);
+}
+
+.route-field-group--stop {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+
+.route-field-group--stop label {
+  flex-shrink: 0;
+  width: 44px;
+}
+
+.route-field-group--stop input[type="text"] {
+  flex: 1;
+}
+
+.route-stop-remove-btn {
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.3);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 2px 4px;
+  flex-shrink: 0;
+  transition: color 0.12s;
+}
+
+.route-stop-remove-btn:hover { color: rgba(255,80,80,0.8); }
+
+.route-stops-builder {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.route-add-stop-btn {
+  background: rgba(255,255,255,0.05);
+  border: 1px dashed rgba(255,255,255,0.15);
+  border-radius: 3px;
+  color: rgba(255,255,255,0.4);
+  cursor: pointer;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  padding: 5px 8px;
+  text-align: left;
+  transition: background 0.12s, color 0.12s;
+}
+
+.route-add-stop-btn:hover {
+  background: rgba(255,255,255,0.09);
+  color: rgba(255,255,255,0.7);
+}
+
+.route-gen-btn {
+  background: #3dd8c5;
+  border: none;
+  border-radius: 3px;
+  color: #0e1a18;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 7px 12px;
+  text-align: center;
+  transition: background 0.15s, opacity 0.15s;
+  margin-top: 2px;
+}
+
+.route-gen-btn:hover { background: #52e5d4; }
+.route-gen-btn:disabled { opacity: 0.45; cursor: default; }
+
+/* ── Route list ─────────────────────────────────────────────────────────── */
+.route-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.route-empty {
+  font-size: 10px;
+  opacity: 0.3;
+  text-align: center;
+  padding: 12px 0;
+}
+
+.route-item {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 4px;
+  padding: 7px 8px 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.route-item--locked {
+  opacity: 0.6;
+}
+
+.route-item-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.route-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+
+.route-item-name {
+  flex: 1;
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.82);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: default;
+}
+
+.route-item-controls {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.route-icon-btn {
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.3);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 2px 3px;
+  border-radius: 2px;
+  transition: color 0.12s, background 0.12s;
+}
+
+.route-icon-btn:hover {
+  background: rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.75);
+}
+
+.route-item-info {
+  font-size: 9px;
+  color: rgba(255,255,255,0.35);
+  padding-left: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.route-stops-expand {
+  padding-left: 13px;
+  margin-top: 2px;
+}
+
+.route-stops-expand summary {
+  font-size: 9px;
+  color: rgba(255,255,255,0.3);
+  cursor: pointer;
+  letter-spacing: 0.04em;
+  list-style: none;
+  user-select: none;
+}
+
+.route-stops-expand summary::-webkit-details-marker { display: none; }
+
+.route-stop-entry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 10px;
+  color: rgba(255,255,255,0.5);
+  padding: 2px 0;
+  gap: 6px;
+}
+
+.route-stop-entry .route-icon-btn {
+  font-size: 9px;
+  padding: 1px 3px;
+}

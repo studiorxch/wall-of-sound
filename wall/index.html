@@ -7,6 +7,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Wall of Sound</title>
     <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./workspace.css" />
+    <link href="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css" rel="stylesheet" />
   </head>
   <body>
     <!-- Buttons preserved as hidden for bindControls compatibility -->
@@ -281,6 +283,7 @@
           <button class="tab active" data-tab="object">Object</button>
           <button class="tab" data-tab="layers">Layers</button>
           <button class="tab" data-tab="world">World</button>
+          <button class="tab" data-tab="routes">Routes</button>
           <button class="tab" data-tab="motion" hidden>Motion</button>
           <!-- canvas tab alias — hidden, IDs preserved for JS compat -->
           <button class="tab" data-tab="canvas" hidden>Frame</button>
@@ -976,6 +979,16 @@
           <input id="show-paths" type="checkbox" checked />
           <input id="debug-drift-overlay" type="checkbox" />
           <input id="background-file" type="file" accept="image/*" />
+        </div>
+
+        <!-- Routes Tab -->
+        <div class="tab-content" data-tab-content="routes">
+          <div id="route-panel-content"></div>
+        </div>
+
+        <!-- Zones Tab -->
+        <div class="tab-content" data-tab-content="zones">
+          <div id="zones-panel-content"></div>
         </div>
 
         <!-- World Tab -->
@@ -1850,7 +1863,69 @@
     <script src="./render/referenceGeographyLayer.js"></script>
     <!-- Corridor Renderer v1.0.0 -->
     <script src="./render/corridorRenderer.js"></script>
+    <!-- Corridor Ecology v1.0.0 / Local Realization v1.0.0 — load before main.js -->
+    <script src="./engine/districtPressure.js"></script>
+    <script src="./engine/trafficEcology.js"></script>
+    <script src="./engine/worldRealizer.js"></script>
+    <script src="./engine/musicEcology.js"></script>
+    <script src="./engine/localRealization.js"></script>
+    <script src="./render/realizationRenderer.js"></script>
+    <script src="./engine/trafficFlowField.js"></script>
+    <script src="./render/trafficFlowRenderer.js"></script>
+    <script src="./engine/cityRhythm.js"></script>
+    <script src="./render/cityRhythmRenderer.js"></script>
+    <script src="./engine/actorEcology.js"></script>
+    <script src="./render/actorRenderer.js"></script>
+    <script src="./engine/clusterEvents.js"></script>
+    <script src="./render/clusterEventRenderer.js"></script>
+    <script src="./engine/cameraCuriosity.js"></script>
+    <script src="./render/cameraCuriosityRenderer.js"></script>
+    <script src="./engine/passengerDemo.js"></script>
+    <script src="./render/passengerDemoRenderer.js"></script>
+    <script src="./render/stageLightingRenderer.js"></script>
+    <!-- ── Mapbox GL JS (0518E_WOS_MapboxViewport_v1.0.0) ───────────────────── -->
+    <script src="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js"></script>
+    <!-- ── ID utility + Surface Persistence (0518F_WOS_RouteDocumentPersistence) -->
+    <script src="./utils/id.js"></script>
+    <script src="./persistence/surfacePersistence.js"></script>
+    <!-- ── Workspace Event Bus (0518B_WOS_WorkspaceEventBus_v1.0.0) ─────────── -->
+    <script src="./engine/workspaceEventBus.js"></script>
+    <!-- ── Document Registry (0518A_WOS_DocumentRegistry_v1.0.0) ────────────── -->
+    <script src="./engine/documentRegistry.js"></script>
+    <script src="./registries/runtimeRegistry.js"></script>
+    <script src="./registries/rendererRegistry.js"></script>
+    <script src="./registries/inspectorRegistry.js"></script>
+    <script src="./registries/panelRegistry.js"></script>
+    <!-- ── Surface Spatial Model (0518G_WOS_SurfaceSpatialModel_v1.0.0) ──────── -->
+    <script src="./engine/surfaceModel.js"></script>
+    <script src="./documents/routeDocument.js"></script>
+    <script src="./documents/canvasDocument.js"></script>
+    <script src="./documents/soundscapeDocument.js"></script>
+    <script src="./documents/worldDocument.js"></script>
+    <script src="./documents/mediaDocument.js"></script>
+    <script src="./documents/overlayDocument.js"></script>
+    <script src="./documents/simulationDocument.js"></script>
+    <script src="./runtimes/mapboxViewportRuntime.js"></script>
+    <script src="./render/mapboxOperatorRenderer.js"></script>
+    <script src="./render/mapboxPresentationRenderer.js"></script>
+    <script src="./runtimes/routePlannerRuntime.js"></script>
+    <script src="./corridors/corridorZero.js"></script>
+    <script src="./engine/runtimeViewportRouter.js"></script>
+    <script src="./engine/workspace.js"></script>
+    <script src="./engine/worldRuntime.js"></script>
+    <script src="./engine/worldAtmosphere.js"></script>
+    <script src="./engine/viewportLocationAuthority.js"></script>
+    <script src="./systems/world/worldLightingModel.js"></script>
+    <script src="./engine/surfaceDrawingRuntime.js"></script>
+    <script src="./render/worldHUD.js"></script>
+    <script src="./render/worldTelemetryHUD.js"></script>
+    <script src="./render/atmosphereComposite.js"></script>
+    <script src="./render/workspaceUI.js"></script>
     <script src="./main.js"></script>
+    <script src="./systems/routeInputSystem.js"></script>
+    <script src="./render/routePanel.js"></script>
+    <script src="./ui/routeControls.js"></script>
+    <script src="./render/zonesPanel.js"></script>
 
     <!-- ── Universal Drawer System v1.0.0 ─────────────────────────────────── -->
     <!-- Launcher rail + drawer panel (HTML inserted before overlay for z-order) -->
