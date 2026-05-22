@@ -125,7 +125,8 @@
       '<div class="wt-conditions">'             +
         '<div class="wt-weather-label"></div>'  +
         '<div class="wt-temp"></div>'           +
-      '</div>';
+      '</div>'                                  +
+      '<div class="wt-drift-label"></div>';
 
     canvasArea.appendChild(_hud);
 
@@ -136,6 +137,7 @@
       tzabbr:       _hud.querySelector(".wt-tzabbr"),
       weatherLabel: _hud.querySelector(".wt-weather-label"),
       temp:         _hud.querySelector(".wt-temp"),
+      driftLabel:   _hud.querySelector(".wt-drift-label"),
     };
   }
 
@@ -211,6 +213,11 @@
     _render();
   }
 
+  function _onDriftChanged(evt) {
+    if (!evt || !evt.state) return;
+    if (_els.driftLabel) _els.driftLabel.textContent = evt.state.driftLabel || "";
+  }
+
   function _onViewportLocation(evt) {
     if (!evt || !evt.location) return;
     var loc           = evt.location;
@@ -224,9 +231,10 @@
   // ── Hydrate from current system state ────────────────────────────────────
   function _hydrate() {
     // Pull current state from all relevant systems so HUD isn't blank on mount
-    if (SBE.WorldClock)      _onClockTick({ state: SBE.WorldClock.getState() });
-    if (SBE.WorldWeather)    _onWeather({ state: SBE.WorldWeather.getState() });
-    if (SBE.WorldAtmosphere) _onAtmosphere({ state: SBE.WorldAtmosphere.getState() });
+    if (SBE.WorldClock)        _onClockTick({ state: SBE.WorldClock.getState() });
+    if (SBE.WorldWeather)      _onWeather({ state: SBE.WorldWeather.getState() });
+    if (SBE.WorldAtmosphere)   _onAtmosphere({ state: SBE.WorldAtmosphere.getState() });
+    if (SBE.WorldDriftManager) _onDriftChanged({ state: SBE.WorldDriftManager.getState() });
 
     var vlaState = SBE.ViewportLocationAuthority && SBE.ViewportLocationAuthority.getState();
     if (vlaState && vlaState.city) {
@@ -253,6 +261,7 @@
       bus.on("world:weatherChanged",     _onWeather);
       bus.on("world:atmosphereChanged",  _onAtmosphere);
       bus.on("viewport:locationChanged", _onViewportLocation);
+      bus.on("world:driftChanged",       _onDriftChanged);
     }
 
     _hydrate();

@@ -64,6 +64,9 @@
     // Subscribe to workspace events via WorkspaceEventBus
     SBE.WorkspaceEventBus.on("workspace:surfacesChanged",      _onTabsChanged);
     SBE.WorkspaceEventBus.on("surface:opened",                 _onActiveDocChanged);
+    SBE.WorkspaceEventBus.on("surface:activated",              _onActiveDocChanged);
+    SBE.WorkspaceEventBus.on("surface:updated",                _onSurfaceIdentityUpdated);
+    SBE.WorkspaceEventBus.on("surface:presenceUpdated",        _onPresenceUpdated);
     SBE.WorkspaceEventBus.on("sidebar:changed",                _onSidebarContextChanged);
     SBE.WorkspaceEventBus.on("surface:saved",                  _updateLowerPanel);
     SBE.WorkspaceEventBus.on("surface:loaded",                 _updateLowerPanel);
@@ -79,6 +82,17 @@
     _onTabsChanged({ docs: SBE.Workspace.getAllSurfaces(), activeId: _getActiveId() });
     _onSidebarContextChanged({ context: SBE.Workspace.getSidebarContext() });
     _updateLowerPanel();
+
+    // Deferred presence flush — ensures SPM pulse classes are applied after
+    // SurfacePresenceManager.init() runs (called after WorkspaceUI.init() in main.js)
+    setTimeout(function () {
+      var spm = SBE.SurfacePresenceManager;
+      if (!spm) return;
+      SBE.Workspace.getAllSurfaces().forEach(function (doc) {
+        var p = spm.getPresence(doc.id);
+        if (p) SBE.WorkspaceEventBus.emit("surface:presenceUpdated", { docId: doc.id, presence: p });
+      });
+    }, 80);
 
     console.log("[WorkspaceUI] initialized");
   }
@@ -387,27 +401,45 @@
   }
 
   function _makeSurfaceNode(doc, isActive) {
+    // Pull identity from SurfaceStateManager when available
+    var ssm    = SBE.SurfaceStateManager;
+    var rec    = ssm ? ssm.getSurface(doc.id) : null;
+    var ident  = rec ? rec.identity : null;
+    var mood   = (ident && ident.mood) || "neutral";
+    var accent = (ident && ident.color) || doc.accent || "#3dd8c5";
+
+    // Seed pulse class from PresenceManager if already initialized
+    var spm       = SBE.SurfacePresenceManager;
+    var presence  = spm ? spm.getPresence(doc.id) : null;
+    var pulseClass = (presence && presence.moodPulse.cls) || "ws-pulse--neutral";
+
     var node = document.createElement("div");
-    node.className  = "ws-sr-node" + (isActive ? " ws-sr-node--active" : "");
+    node.className  = "ws-sr-node ws-sr-node--mood-" + mood.replace(/[^a-z-]/g, "")
+      + " " + pulseClass
+      + (isActive ? " ws-sr-node--active" : "");
     node.dataset.docId = doc.id;
 
-    // Circle button
+    // Circle button — identity color ring
     var btn = document.createElement("button");
     btn.className = "ws-sr-btn";
     btn.title     = doc.name;
-
-    var accent = doc.accent || "#3dd8c5";
     btn.style.setProperty("--sa",        accent);
-    btn.style.setProperty("--sa-bg",     _hexToRgba(accent, 0.14));
-    btn.style.setProperty("--sa-border", _hexToRgba(accent, 0.28));
+    btn.style.setProperty("--sa-bg",     _hexToRgba(accent, 0.13));
+    btn.style.setProperty("--sa-border", _hexToRgba(accent, 0.35));
 
-    // Abbreviation label inside circle
+    // Abbreviation inside circle
     var abbr = document.createElement("span");
     abbr.className   = "ws-sr-abbr";
     abbr.textContent = _surfaceAbbr(doc);
     btn.appendChild(abbr);
 
-    // Hover tooltip — populated lazily when shown
+    // Persistent name label — below circle, always visible
+    var nameEl = document.createElement("div");
+    nameEl.className   = "ws-sr-name";
+    nameEl.textContent = _surfaceShortName(doc.name);
+    nameEl.title       = doc.name;
+
+    // Hover tooltip — full telemetry, populated lazily
     var tip = document.createElement("div");
     tip.className = "ws-sr-tip";
     tip.innerHTML =
@@ -416,9 +448,12 @@
       '<div class="ws-sr-tip-weather"></div>' +
       '<div class="ws-sr-tip-temp"></div>';
 
-    // Pointer events
     btn.addEventListener("click", function () {
-      SBE.Workspace.openDocument(doc.id);
+      if (SBE.SurfaceStateManager) {
+        SBE.SurfaceStateManager.activateSurface(doc.id);
+      } else {
+        SBE.Workspace.openDocument(doc.id);
+      }
     });
 
     btn.addEventListener("dblclick", function (e) {
@@ -435,8 +470,20 @@
     });
 
     node.appendChild(btn);
+    node.appendChild(nameEl);
     node.appendChild(tip);
     return node;
+  }
+
+  // Short display name — truncate to 6 chars for the rail label
+  function _surfaceShortName(name) {
+    if (!name) return "—";
+    // "Surface 1" → "1"; bare number
+    var m = name.match(/\s(\d+)$/) || name.match(/^(\d+)$/);
+    if (m) return m[1];
+    // First word, max 6 chars
+    var word = name.trim().split(/\s+/)[0];
+    return word.length > 6 ? word.slice(0, 6) : word;
   }
 
   function _populateSurfaceTip(tip, doc) {
@@ -688,14 +735,90 @@
   function _onActiveDocChanged() {
     _syncMapToActiveDoc();
     _updateLowerPanel();
-    // Refresh surface rail active indicator when the active surface changes
     _renderSurfaceNodes(SBE.Workspace.getAllSurfaces(), _getActiveId());
   }
 
+  // All known pulse classes — used to strip old class before applying new one
+  var _ALL_PULSE_CLASSES = [
+    "ws-pulse--warm","ws-pulse--day","ws-pulse--night","ws-pulse--moon",
+    "ws-pulse--overcast","ws-pulse--rain","ws-pulse--storm","ws-pulse--fog",
+    "ws-pulse--snow","ws-pulse--neutral",
+  ];
+
+  // Simulation state classes that mirror presence.simulation.state
+  var _SIM_CLASSES = [
+    "ws-sr-node--paused","ws-sr-node--idle",
+    "ws-sr-node--broadcasting","ws-sr-node--rendering",
+  ];
+
+  function _onPresenceUpdated(evt) {
+    if (!evt || !evt.docId || !_surfaceRail) return;
+    var node = _surfaceRail.querySelector('[data-doc-id="' + evt.docId + '"]');
+    if (!node) return;
+    var p = evt.presence;
+
+    // 1. Mood pulse class — drives @keyframes animation on compositor-friendly props
+    var pulseClass = p.moodPulse && p.moodPulse.cls;
+    if (pulseClass) {
+      _ALL_PULSE_CLASSES.forEach(function (c) { node.classList.remove(c); });
+      node.classList.add(pulseClass);
+    }
+
+    // 2. Audio activity — CSS var on the button, used by box-shadow alpha
+    var btn = node.querySelector(".ws-sr-btn");
+    if (btn) {
+      btn.style.setProperty("--presence-audio", (p.audio.smoothed || 0).toFixed(3));
+    }
+
+    // 3. Simulation state classes
+    _SIM_CLASSES.forEach(function (c) { node.classList.remove(c); });
+    var simState = p.simulation && p.simulation.state;
+    if (simState && simState !== "active") {
+      node.classList.add("ws-sr-node--" + simState);
+    }
+
+    // 4. Broadcast mode micro-label — only render non-local modes
+    var mode    = p.broadcast && p.broadcast.mode;
+    var bcastEl = node.querySelector(".ws-sr-broadcast");
+    if (mode && mode !== "local") {
+      if (!bcastEl) {
+        bcastEl = document.createElement("div");
+        bcastEl.className = "ws-sr-broadcast";
+        node.appendChild(bcastEl);
+      }
+      bcastEl.textContent = mode.toUpperCase();
+    } else if (bcastEl) {
+      bcastEl.remove();
+    }
+  }
+
+  function _onSurfaceIdentityUpdated(evt) {
+    // Update the specific node's accent vars + mood class without full rebuild
+    if (!evt || !evt.docId || !_surfaceRail) return;
+    var node = _surfaceRail.querySelector('[data-doc-id="' + evt.docId + '"]');
+    if (!node) return;
+    var ident = evt.state && evt.state.identity;
+    if (!ident) return;
+    var btn = node.querySelector(".ws-sr-btn");
+    if (btn) {
+      btn.style.setProperty("--sa",        ident.color);
+      btn.style.setProperty("--sa-bg",     _hexToRgba(ident.color, 0.13));
+      btn.style.setProperty("--sa-border", _hexToRgba(ident.color, 0.35));
+    }
+    // Update mood class
+    node.className = node.className
+      .replace(/ws-sr-node--mood-\S+/g, "")
+      .trim() + " ws-sr-node--mood-" + (ident.mood || "neutral").replace(/[^a-z-]/g, "");
+  }
+
   function _onAddDocument() {
-    // New surfaces always start as route surfaces — name defaults to "Surface N"
-    var doc = SBE.Workspace.createSurface("route");
-    SBE.Workspace.openSurface(doc.id);
+    // New surfaces start at current camera view — SSM handles creation + activation
+    if (SBE.SurfaceStateManager) {
+      SBE.SurfaceStateManager.createSurface();
+    } else {
+      var doc = SBE.Workspace.createSurface("route");
+      SBE.Workspace.openSurface(doc.id);
+    }
   }
 
   function _getActiveId() {

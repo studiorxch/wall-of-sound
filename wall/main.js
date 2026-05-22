@@ -2521,6 +2521,614 @@
     if (SBE.WorkspaceUI) {
       SBE.WorkspaceUI.init();
     }
+    if (SBE.SurfaceStateManager) {
+      SBE.SurfaceStateManager.init();
+    }
+    if (SBE.SurfacePresenceManager) {
+      SBE.SurfacePresenceManager.init();
+    }
+    if (SBE.WorldDriftManager) {
+      SBE.WorldDriftManager.init();
+    }
+    if (SBE.SurfaceRegistry) {
+      SBE.SurfaceRegistry.init();
+    }
+    if (SBE.TransitionRuntime) {
+      SBE.TransitionRuntime.init();
+    }
+    if (SBE.BroadcastScheduler) {
+      SBE.BroadcastScheduler.init();
+    }
+    if (SBE.AttentionGeography) {
+      SBE.AttentionGeography.init();
+    }
+    if (SBE.ScenicPersistence) {
+      SBE.ScenicPersistence.init();
+    }
+    if (SBE.PassengerMode) {
+      SBE.PassengerMode.init();
+    }
+    if (SBE.SubwayTopologyRuntime) {
+      SBE.SubwayTopologyRuntime.init();
+    }
+    if (SBE.AtmosphereRuntime) {
+      SBE.AtmosphereRuntime.init();
+    }
+    if (SBE.GridRuntime) {
+      SBE.GridRuntime.init();
+    }
+    if (SBE.RoadTopologyAlignment) {
+      SBE.RoadTopologyAlignment.init();
+    }
+    if (SBE.AISRuntime) {
+      SBE.AISRuntime.init();
+    }
+    if (SBE.MarineRenderer) {
+      SBE.MarineRenderer.init();
+    }
+    if (SBE.TrafficFlowRuntime) {
+      SBE.TrafficFlowRuntime.init();
+    }
+    if (SBE.OverlayRuntime) {
+      SBE.OverlayRuntime.init();
+    }
+    if (SBE.TrafficRenderer) {
+      SBE.TrafficRenderer.init();
+    }
+    if (SBE.RealitySyncRuntime) {
+      SBE.RealitySyncRuntime.init();
+    }
+    if (SBE.EnvironmentalTelemetryHUD) {
+      SBE.EnvironmentalTelemetryHUD.init();
+    }
+
+    // ── SubwayTopologyRuntime observability ───────────────────────────────
+    // 0520E_WOS_DebugInfrastructure_v1.1.0
+    // Read-only, allocation-conscious, GC-safe. Never throws.
+    function buildInfrastructureDebugSnapshot(runtime) {
+      var s  = runtime.getState();
+      var ps = s.pulseState;
+      var tt = s.topologyTime;
+      var now = performance.now();
+
+      // ── Phase ────────────────────────────────────────────────────────
+      var phaseLabels = {
+        deep_night:    "Deep Night",    early_morning: "Early Morning",
+        morning_rush:  "Morning Rush",  midmorning:    "Midmorning",
+        midday:        "Midday",        afternoon:     "Afternoon",
+        evening_rush:  "Evening Rush",  early_evening: "Early Evening",
+        late_evening:  "Late Evening",  late_night:    "Late Night",
+      };
+      var phase = {
+        id:    tt.phase,
+        hour:  Math.round(tt.hour * 100) / 100,
+        label: phaseLabels[tt.phase] || tt.phase,
+      };
+
+      // ── Clock ────────────────────────────────────────────────────────
+      var h = tt.hour | 0;
+      var clock = {
+        hour:          h,
+        minute:        Math.round((tt.hour - h) * 60),
+        normalizedDay: Math.round((tt.hour / 24) * 1000) / 1000,
+      };
+
+      // ── Pulse ────────────────────────────────────────────────────────
+      // Derive transferPressure as average of top transfer node weights
+      var tIds = Object.keys(s.transferNodes);
+      var tSum = 0;
+      for (var ti = 0; ti < tIds.length; ti++) {
+        tSum += (s.transferNodes[tIds[ti]].weight || 0);
+      }
+      var transferPressure = tIds.length ? Math.round((tSum / tIds.length) * ps.intensity * 100) / 100 : 0;
+
+      var pulse = {
+        intensity:        Math.round(ps.intensity    * 1000) / 1000,
+        silenceBias:      Math.round(ps.silenceBias  * 1000) / 1000,
+        rushPressure:     Math.round(ps.rushPressure * 1000) / 1000,
+        transferPressure: Math.min(1, transferPressure),
+      };
+
+      // ── Districts — top 5 by pressure, bounded loop ──────────────────
+      var dKeys     = Object.keys(s.districtPulse);
+      var dArr      = [];
+      var moodTable = [
+        [0.80, "urgent"],
+        [0.60, "active"],
+        [0.40, "ambient"],
+        [0.20, "quiet"],
+        [0.00, "dormant"],
+      ];
+      function _mood(w) {
+        for (var mi = 0; mi < moodTable.length; mi++) {
+          if (w >= moodTable[mi][0]) return moodTable[mi][1];
+        }
+        return "dormant";
+      }
+      for (var di = 0; di < dKeys.length; di++) {
+        var dw = s.districtPulse[dKeys[di]];
+        dArr.push({ id: dKeys[di], label: dKeys[di].replace(/_/g, " "), weight: Math.round(dw * 1000) / 1000, mood: _mood(dw) });
+      }
+      // In-place insertion sort — avoids .sort() GC churn on small arrays
+      for (var si = 1; si < dArr.length; si++) {
+        var cur = dArr[si]; var sj = si - 1;
+        while (sj >= 0 && dArr[sj].weight < cur.weight) { dArr[sj + 1] = dArr[sj]; sj--; }
+        dArr[sj + 1] = cur;
+      }
+      var districts = dArr.length > 5 ? dArr.slice(0, 5) : dArr;
+
+      // ── Transfers ─────────────────────────────────────────────────────
+      var transfers = [];
+      for (var tti = 0; tti < tIds.length; tti++) {
+        var tn  = s.transferNodes[tIds[tti]];
+        var st  = s.stations[tIds[tti]];
+        transfers.push({
+          id:             tIds[tti],
+          connectedLines: (tn.connectedLines || []).join(", "),
+          pressure:       Math.round(tn.weight * ps.intensity * 100) / 100,
+        });
+      }
+
+      // ── Lines ─────────────────────────────────────────────────────────
+      var lKeys = Object.keys(s.lines);
+      var lines = [];
+      for (var li = 0; li < lKeys.length; li++) {
+        var ln  = s.lines[lKeys[li]];
+        var rp  = ln.rhythmProfile || {};
+        var act = ps.rushPressure > 0.8
+          ? (rp.daytimeIntensity || 0.5) * (rp.rushAmplification || 1)
+          : ps.intensity < 0.3
+            ? (rp.nighttimeIntensity || 0.2)
+            : (rp.daytimeIntensity || 0.5);
+        lines.push({
+          id:       lKeys[li],
+          stations: (ln.districts || []).length + " districts",
+          activity: Math.round(Math.min(1, act * ps.intensity) * 100) / 100,
+        });
+      }
+
+      // ── Diagnostics ───────────────────────────────────────────────────
+      var diagnostics = {
+        runtimeActive:    true,
+        lineCount:        lKeys.length,
+        stationCount:     Object.keys(s.stations).length,
+        districtCount:    dKeys.length,
+        transferCount:    tIds.length,
+        msSinceLastUpdate: Math.round(now),  // proxy — STR has no lastUpdatedAt yet
+      };
+
+      return Object.freeze({
+        __version:   "1.1.0",
+        phase:       phase,
+        clock:       clock,
+        pulse:       pulse,
+        districts:   districts,
+        transfers:   transfers,
+        lines:       lines,
+        diagnostics: diagnostics,
+      });
+    }
+
+    window._wos.debugInfrastructure = function debugInfrastructure() {
+      var runtime = window.SBE && SBE.SubwayTopologyRuntime;
+      if (!runtime) {
+        console.warn("[WOS] SubwayTopologyRuntime unavailable");
+        return { error: "SubwayTopologyRuntime unavailable" };
+      }
+      try {
+        var snap = buildInfrastructureDebugSnapshot(runtime);
+        console.groupCollapsed("[WOS] Infrastructure Debug — " + snap.phase.label + " · h" + snap.clock.hour + ":" + (snap.clock.minute < 10 ? "0" : "") + snap.clock.minute);
+        console.log("Phase",       snap.phase);
+        console.log("Clock",       snap.clock);
+        console.log("Pulse",       snap.pulse);
+        console.table(snap.districts);
+        console.table(snap.transfers);
+        console.table(snap.lines);
+        console.log("Diagnostics", snap.diagnostics);
+        console.groupEnd();
+        return snap;
+      } catch (e) {
+        console.warn("[WOS] debugInfrastructure error:", e);
+        return { error: String(e) };
+      }
+    };
+
+    // ── Traffic debug helpers ──────────────────────────────────────────────
+
+    // _wos.debugTrafficSamples()
+    // Displays arc-length sample topology: node count, segment spacing,
+    // elevation markers, total length per corridor.
+    window._wos.debugTrafficSamples = function debugTrafficSamples(corridorId) {
+      var tfr = window.SBE && SBE.TrafficFlowRuntime;
+      if (!tfr) { console.warn("[WOS] TrafficFlowRuntime unavailable"); return; }
+      var corridors = tfr.getCorridors();
+      var ids = corridorId ? [corridorId] : Object.keys(corridors);
+      var rows = [];
+      for (var ci = 0; ci < ids.length; ci++) {
+        var c = corridors[ids[ci]];
+        if (!c || !c.samples) continue;
+        var samples = c.samples;
+        var cum     = c.cumulativeDistances;
+        var n       = samples.length;
+        // Compute segment spacing stats
+        var minSeg = Infinity, maxSeg = 0, totalSeg = 0;
+        for (var si = 1; si < n; si++) {
+          var seg = cum[si] - cum[si - 1];
+          if (seg < minSeg) minSeg = seg;
+          if (seg > maxSeg) maxSeg = seg;
+          totalSeg += seg;
+        }
+        var avgSeg = n > 1 ? totalSeg / (n - 1) : 0;
+        // Bridge elevation range
+        var minZ = Infinity, maxZ = -Infinity;
+        for (var zi = 0; zi < n; zi++) {
+          if (samples[zi].z < minZ) minZ = samples[zi].z;
+          if (samples[zi].z > maxZ) maxZ = samples[zi].z;
+        }
+        rows.push({
+          corridorId:   c.id,
+          samples:      n,
+          totalM:       Math.round(c.totalLength),
+          avgSegM:      avgSeg.toFixed(2),
+          minSegM:      minSeg.toFixed(2),
+          maxSegM:      maxSeg.toFixed(2),
+          isBridge:     c.isBridge,
+          elevMin:      minZ === Infinity ? 0 : minZ.toFixed(1),
+          elevMax:      maxZ === -Infinity ? 0 : maxZ.toFixed(1),
+          waypoints:    c.rawWaypoints ? c.rawWaypoints.length : 0,
+        });
+      }
+      console.groupCollapsed("[WOS] Traffic Arc-Length Samples — " + rows.length + " corridors");
+      console.table(rows);
+      console.groupEnd();
+      return rows;
+    };
+
+    // _wos.debugTrafficViolations()
+    // Highlights vehicles deviating from legal corridor space.
+    // Reports: distance from nearest corridor sample, bridge vehicles at z=0,
+    // virtual vehicles with stale positions, heading discontinuities.
+    window._wos.debugTrafficViolations = function debugTrafficViolations() {
+      var tfr = window.SBE && SBE.TrafficFlowRuntime;
+      if (!tfr) { console.warn("[WOS] TrafficFlowRuntime unavailable"); return; }
+      var vehicles  = tfr.getVehicles();
+      var corridors = tfr.getCorridors();
+      if (!vehicles || vehicles.length === 0) {
+        console.log("[WOS] debugTrafficViolations: no active vehicles");
+        return [];
+      }
+      var violations = [];
+      for (var vi = 0; vi < vehicles.length; vi++) {
+        var v  = vehicles[vi];
+        var c  = corridors[v.corridorId];
+        if (!c || !c.samples) continue;
+        // Find nearest sample
+        var bestD2 = Infinity;
+        var samples = c.samples;
+        for (var si = 0; si < samples.length; si++) {
+          var dx = samples[si].x - v.headlights[0].x;
+          var dy = samples[si].y - v.headlights[0].y;
+          var d2 = dx * dx + dy * dy;
+          if (d2 < bestD2) bestD2 = d2;
+        }
+        var offRoadM  = Math.sqrt(bestD2);
+        var bridgeErr = c.isBridge && v.headlights[0] && offRoadM > 10;
+        var isViolation = offRoadM > 15 || bridgeErr;
+        if (isViolation) {
+          violations.push({
+            vehicleId:  v.vehicleId,
+            corridorId: v.corridorId,
+            offRoadM:   offRoadM.toFixed(1),
+            isBridge:   c.isBridge,
+            physical:   v.physical,
+            distanceM:  v.distanceM ? v.distanceM.toFixed(0) : "—",
+          });
+        }
+      }
+      var label = violations.length === 0
+        ? "[WOS] Traffic Violations: NONE — all vehicles within corridor bounds"
+        : "[WOS] Traffic Violations: " + violations.length + " out of " + vehicles.length;
+      if (violations.length === 0) {
+        console.log(label);
+      } else {
+        console.groupCollapsed(label);
+        console.table(violations);
+        console.groupEnd();
+      }
+      return violations;
+    };
+
+    // _wos.debugRoadProjection()
+    // Dumps projected centerlines, lane offsets, bridge segments, intersection joins.
+    window._wos.debugRoadProjection = function debugRoadProjection() {
+      var rta = window.SBE && SBE.RoadTopologyAlignment;
+      if (!rta) { console.warn("[WOS] RoadTopologyAlignment unavailable"); return; }
+      var ids = rta.getSegmentIds();
+      var nodes = rta.getNodes();
+      var stats = rta.getSpatialStats();
+      console.group("[WOS] RoadTopologyAlignment — " + ids.length + " segments, " + nodes.length + " intersection nodes");
+      console.log("Spatial hash stats:", stats);
+      var rows = ids.map(function(id) {
+        var seg = rta.getSegment(id);
+        if (!seg) return { id: id, error: "not found" };
+        var row = {
+          id: id,
+          totalLengthM: seg.totalLength ? seg.totalLength.toFixed(1) : "?",
+          arcSamples: seg.arcSamples ? seg.arcSamples.length : "?",
+          lanes: seg.lanes || 1,
+          laneWidthM: seg.laneWidth || "?",
+          isBridge: !!seg.isBridge,
+          waterExclusion: !!seg.waterExclusion,
+        };
+        // elevation range from arc samples
+        if (seg.arcSamples && seg.arcSamples.length) {
+          var minZ = Infinity, maxZ = -Infinity;
+          seg.arcSamples.forEach(function(s) {
+            if (s.z < minZ) minZ = s.z;
+            if (s.z > maxZ) maxZ = s.z;
+          });
+          row.minElevM = minZ.toFixed(1);
+          row.maxElevM = maxZ.toFixed(1);
+        }
+        return row;
+      });
+      if (console.table) {
+        console.table(rows);
+      } else {
+        rows.forEach(function(r) { console.log(JSON.stringify(r)); });
+      }
+      // Intersection node summary
+      if (nodes.length) {
+        console.group("Intersection nodes (" + nodes.length + ")");
+        nodes.slice(0, 20).forEach(function(n) {
+          console.log(n.id, "x=" + n.x.toFixed(1) + " y=" + n.y.toFixed(1) + " segs=[" + (n.segmentIds || []).join(",") + "]");
+        });
+        if (nodes.length > 20) console.log("… +" + (nodes.length - 20) + " more");
+        console.groupEnd();
+      }
+      console.groupEnd();
+      return rows;
+    };
+
+    // _wos.debugRoadViolations()
+    // Returns segments/vehicles with water leaks, off-road drift, projection discontinuities.
+    window._wos.debugRoadViolations = function debugRoadViolations() {
+      var rta = window.SBE && SBE.RoadTopologyAlignment;
+      var tfr = window.SBE && SBE.TrafficFlowRuntime;
+      var violations = [];
+
+      // 1. Projection discontinuities — consecutive arc samples with implausible jumps
+      if (rta) {
+        var ids = rta.getSegmentIds();
+        ids.forEach(function(id) {
+          var seg = rta.getSegment(id);
+          if (!seg || !seg.arcSamples || seg.arcSamples.length < 2) return;
+          var prev = seg.arcSamples[0];
+          for (var i = 1; i < seg.arcSamples.length; i++) {
+            var cur = seg.arcSamples[i];
+            var dx = cur.x - prev.x, dy = cur.y - prev.y;
+            var dist = Math.sqrt(dx*dx + dy*dy);
+            if (dist > 20) { // >20m jump between 3m samples = discontinuity
+              violations.push({ type: "projection_discontinuity", segId: id, sampleIndex: i, jumpM: dist.toFixed(1) });
+            }
+            prev = cur;
+          }
+        });
+      }
+
+      // 2. Vehicles off-road (>15m from nearest corridor sample)
+      if (tfr) {
+        var vehicles = tfr.getVehicles ? tfr.getVehicles() : [];
+        vehicles.forEach(function(v) {
+          if (!rta) return;
+          var nearest = rta.findNearestRoad(v.x, v.y);
+          if (!nearest) {
+            violations.push({ type: "no_road_found", vehicleId: v.id, x: v.x && v.x.toFixed(1), y: v.y && v.y.toFixed(1) });
+          } else if (nearest.distanceM > 15) {
+            violations.push({ type: "off_road", vehicleId: v.id, corridorId: v.corridorId, distanceM: nearest.distanceM.toFixed(1), nearestSegId: nearest.segId });
+          }
+          // 3. Bridge water exclusion — vehicles on bridge corridor with z near 0
+          if (v.isBridge && v.z !== undefined && v.z < 2) {
+            violations.push({ type: "bridge_elevation_leak", vehicleId: v.id, corridorId: v.corridorId, z: v.z });
+          }
+        });
+      }
+
+      var label = violations.length === 0
+        ? "[WOS] Road Violations: NONE"
+        : "[WOS] Road Violations: " + violations.length + " found";
+      if (violations.length === 0) {
+        console.log(label);
+      } else {
+        console.groupCollapsed(label);
+        if (console.table) { console.table(violations); }
+        else { violations.forEach(function(v) { console.log(JSON.stringify(v)); }); }
+        console.groupEnd();
+      }
+      return violations;
+    };
+
+    // ── AIS debug helpers ──────────────────────────────────────────────────
+
+    // _wos.debugAIS()
+    // Snapshot of all active vessels, feed state, and bucket counts.
+    window._wos.debugAIS = function debugAIS() {
+      var ais = window.SBE && SBE.AISRuntime;
+      if (!ais) { console.warn("[WOS] AISRuntime unavailable"); return; }
+      var stats   = ais.getStats();
+      var vessels = ais.getActiveVessels();
+      console.group("[WOS] AISRuntime — feed:" + stats.feedState +
+        "  active:" + stats.active +
+        "  dormant:" + stats.dormant +
+        "  protected-dormant:" + stats.protectedDormant);
+      var rows = vessels.map(function(v) {
+        return {
+          mmsi:        v.mmsi,
+          name:        v.vesselName || "—",
+          state:       v.state,
+          lat:         v.lat.toFixed(5),
+          lng:         v.lng.toFixed(5),
+          speedKts:    v.speedKnots.toFixed(1),
+          hdg:         Math.round(v.trueHeading),
+          protected:   v.isProtected,
+          persistent:  v.isPersistent,
+          isBridge:    !!(v.mooringReference || v.anchoringReference),
+          impWt:       v.importanceWeight.toFixed(2),
+          visWt:       v.visibilityWeight.toFixed(2),
+          ageSec:      Math.round((performance.now() - v.lastUpdateMs) / 1000),
+        };
+      });
+      if (console.table) { console.table(rows); }
+      else { rows.forEach(function(r) { console.log(JSON.stringify(r)); }); }
+      console.groupEnd();
+      return rows;
+    };
+
+    // _wos.debugAISVessel(mmsi)
+    // Full state dump for a single vessel.
+    window._wos.debugAISVessel = function debugAISVessel(mmsi) {
+      var ais = window.SBE && SBE.AISRuntime;
+      if (!ais) { console.warn("[WOS] AISRuntime unavailable"); return; }
+      var v = ais.getVessel(mmsi);
+      if (!v) { console.warn("[WOS] Vessel not found in active bucket:", mmsi); return null; }
+      console.log("[WOS] Vessel", mmsi, v);
+      return v;
+    };
+
+    // _wos.injectAISPacket(packet)
+    // Inject a pre-normalized AIS packet for testing (bypasses WebSocket feed).
+    window._wos.injectAISPacket = function injectAISPacket(packet) {
+      var bridge = window.SBE && SBE.AISIngestBridge;
+      if (!bridge) { console.warn("[WOS] AISIngestBridge unavailable"); return false; }
+      return bridge.injectPacket(packet);
+    };
+
+    // _wos.seedAISHarbor()
+    // Inject a representative set of NYC harbor vessels for visual validation.
+    window._wos.seedAISHarbor = function seedAISHarbor() {
+      var bridge = window.SBE && SBE.AISIngestBridge;
+      if (!bridge) { console.warn("[WOS] AISIngestBridge unavailable"); return; }
+      bridge.injectSeedVessels([
+        // Staten Island Ferry — Arthur Kill run
+        { mmsi: 366123001, vesselName: "STATEN ISLAND FERRY", callsign: "WDF7411",
+          state: "STATUS_UNDERWAY", lat: 40.6425, lng: -74.0165,
+          speedKnots: 16.5, courseOverGround: 350, trueHeading: 352,
+          lengthMeters: 171, widthMeters: 21 },
+        // Container ship at anchor, lower bay
+        { mmsi: 477123456, vesselName: "MSC ADRIATIC",
+          state: "STATUS_ANCHORED", lat: 40.5520, lng: -74.0730,
+          speedKnots: 0, courseOverGround: 0, trueHeading: 270,
+          lengthMeters: 366, widthMeters: 48 },
+        // Tug pushing barge, Kill Van Kull
+        { mmsi: 366987654, vesselName: "PATRICIA ANN", callsign: "WYA2019",
+          state: "STATUS_UNDERWAY", lat: 40.6372, lng: -74.1258,
+          speedKnots: 6.2, courseOverGround: 75, trueHeading: 76,
+          lengthMeters: 34, widthMeters: 9 },
+        // Cruise ship moored at Brooklyn Cruise Terminal
+        { mmsi: 310123789, vesselName: "NORWEGIAN DAWN",
+          state: "STATUS_MOORED", lat: 40.6695, lng: -74.0175,
+          speedKnots: 0, courseOverGround: 0, trueHeading: 310,
+          lengthMeters: 294, widthMeters: 32 },
+        // Coast Guard cutter, underway near Verrazano
+        { mmsi: 338123456, vesselName: "USCGC DEPENDABLE", callsign: "NIAG",
+          state: "STATUS_UNDERWAY", lat: 40.6030, lng: -74.0440,
+          speedKnots: 12.0, courseOverGround: 45, trueHeading: 44,
+          lengthMeters: 82, widthMeters: 13 },
+        // Research vessel, restricted
+        { mmsi: 367654321, vesselName: "PIONEER",
+          state: "STATUS_RESTRICTED", lat: 40.7095, lng: -74.0230,
+          speedKnots: 3.1, courseOverGround: 185, trueHeading: 185,
+          lengthMeters: 55, widthMeters: 12 },
+        // Water taxi, East River
+        { mmsi: 366543219, vesselName: "NY WATER TAXI 8",
+          state: "STATUS_UNDERWAY", lat: 40.7015, lng: -74.0145,
+          speedKnots: 18.0, courseOverGround: 20, trueHeading: 20,
+          lengthMeters: 24, widthMeters: 6 },
+        // Tanker, Gravesend Bay
+        { mmsi: 205123456, vesselName: "IVER INNOVATION",
+          state: "STATUS_ANCHORED", lat: 40.5810, lng: -74.0040,
+          speedKnots: 0, courseOverGround: 0, trueHeading: 180,
+          lengthMeters: 183, widthMeters: 28 },
+      ]);
+      console.log("[WOS] Seeded 8 harbor vessels. Call _wos.debugAIS() to inspect.");
+    };
+
+    // _wos.promotePersistentVessel(mmsi, metadata)
+    // Mark a vessel as persistent identity (bypasses LRU eviction, 24h dormant TTL).
+    window._wos.promotePersistentVessel = function promotePersistentVessel(mmsi, metadata) {
+      var ais = window.SBE && SBE.AISRuntime;
+      if (!ais) { console.warn("[WOS] AISRuntime unavailable"); return; }
+      ais.promotePersistentVessel(mmsi, metadata || {});
+      console.log("[WOS] Vessel", mmsi, "promoted to persistent identity");
+    };
+
+    // _wos.demotePersistentVessel(mmsi)
+    window._wos.demotePersistentVessel = function demotePersistentVessel(mmsi) {
+      var ais = window.SBE && SBE.AISRuntime;
+      if (!ais) { console.warn("[WOS] AISRuntime unavailable"); return; }
+      ais.demotePersistentVessel(mmsi);
+      console.log("[WOS] Vessel", mmsi, "demoted from persistent identity");
+    };
+
+    // ── MarineRenderer debug APIs (§16 MarineRenderer v1.0.4) ─────────────
+
+    // _wos.debugMarineScalars(enabled)
+    // Overlay continuity scalars (sc/ca/dr/iw/st/coast) on each rendered vessel.
+    window._wos.debugMarineScalars = function debugMarineScalars(enabled) {
+      var mr = window.SBE && SBE.MarineRenderer;
+      if (!mr) { console.warn("[WOS] MarineRenderer unavailable"); return; }
+      var on = enabled !== false;
+      mr.setDebugScalars(on);
+      console.log("[WOS] MarineRenderer scalar overlay:", on ? "ON" : "OFF");
+    };
+
+    // _wos.debugMarineInterpolation(enabled)
+    // Overlay interpolation delta lines — shows gap between render position
+    // and runtime truth, revealing smoothing aggressiveness.
+    window._wos.debugMarineInterpolation = function debugMarineInterpolation(enabled) {
+      var mr = window.SBE && SBE.MarineRenderer;
+      if (!mr) { console.warn("[WOS] MarineRenderer unavailable"); return; }
+      var on = enabled !== false;
+      mr.setDebugInterpolation(on);
+      console.log("[WOS] MarineRenderer interpolation overlay:", on ? "ON" : "OFF");
+    };
+
+    // _wos.debugMarineLifecycle(enabled)
+    // Overlay lifecycle state abbreviation on each vessel (UNDE / ANCH / MOOR / etc).
+    window._wos.debugMarineLifecycle = function debugMarineLifecycle(enabled) {
+      var mr = window.SBE && SBE.MarineRenderer;
+      if (!mr) { console.warn("[WOS] MarineRenderer unavailable"); return; }
+      var on = enabled !== false;
+      mr.setDebugLifecycle(on);
+      console.log("[WOS] MarineRenderer lifecycle overlay:", on ? "ON" : "OFF");
+    };
+
+    // _wos.debugMarineSnapshot()
+    // Returns full runtime + render state snapshot for all active vessels.
+    // Useful for governance parity verification: compare continuity fields
+    // between runtime truth and what the renderer is currently presenting.
+    window._wos.debugMarineSnapshot = function debugMarineSnapshot() {
+      var mr = window.SBE && SBE.MarineRenderer;
+      if (!mr) { console.warn("[WOS] MarineRenderer unavailable"); return; }
+      var snap = mr.getDebugSnapshot();
+      console.group("[WOS] MarineRenderer snapshot — " + snap.length + " active vessels");
+      snap.forEach(function(s) {
+        var lag = "";
+        if (s.runtime && s.render) {
+          var dLat = Math.abs(s.runtime.lat - s.render.lat) * 111320;
+          var dLng = Math.abs(s.runtime.lng - s.render.lng) * 111320;
+          lag = " lag≈" + Math.round(Math.sqrt(dLat*dLat + dLng*dLng)) + "m";
+        }
+        console.log(
+          s.mmsi, s.state + lag,
+          "sc:" + (s.continuity && s.continuity.signalConfidence || 0).toFixed(2),
+          "ca:" + (s.continuity && s.continuity.continuityAlpha  || 0).toFixed(2),
+          "iw:" + (s.continuity && s.continuity.interpolationWeight || 0).toFixed(2)
+        );
+      });
+      console.groupEnd();
+      return snap;
+    };
 
     // ── Grid debug helpers ─────────────────────────────────────────────────
     window._wos.debugRuntimeState = function debugRuntimeState() {
