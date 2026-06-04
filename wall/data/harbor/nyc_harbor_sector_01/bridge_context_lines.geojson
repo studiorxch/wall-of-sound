@@ -1,0 +1,139 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -74.0441,
+            40.6065
+          ],
+          [
+            -74.0385,
+            40.6085
+          ],
+          [
+            -74.032,
+            40.6092
+          ],
+          [
+            -74.0258,
+            40.6085
+          ],
+          [
+            -74.0202,
+            40.6062
+          ]
+        ]
+      },
+      "properties": {
+        "id": "bridge_context_verrazzano_narrows_bridge_001",
+        "layer": "bridge_context",
+        "label": "Verrazzano-Narrows Bridge",
+        "category": "bridge_context",
+        "priority": 5,
+        "cinematicWeight": 0.85,
+        "minZoom": 8.0,
+        "maxZoom": 15.0,
+        "lod": "coarse",
+        "source": "source_bridges.geojson"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -73.9969,
+            40.7061
+          ],
+          [
+            -73.9925,
+            40.7012
+          ],
+          [
+            -73.9908,
+            40.6968
+          ]
+        ]
+      },
+      "properties": {
+        "id": "bridge_context_brooklyn_bridge_002",
+        "layer": "bridge_context",
+        "label": "Brooklyn Bridge",
+        "category": "bridge_context",
+        "priority": 5,
+        "cinematicWeight": 0.8,
+        "minZoom": 8.0,
+        "maxZoom": 15.0,
+        "lod": "coarse",
+        "source": "source_bridges.geojson"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -73.9948,
+            40.7068
+          ],
+          [
+            -73.9878,
+            40.7002
+          ]
+        ]
+      },
+      "properties": {
+        "id": "bridge_context_manhattan_bridge_003",
+        "layer": "bridge_context",
+        "label": "Manhattan Bridge",
+        "category": "bridge_context",
+        "priority": 4,
+        "cinematicWeight": 0.75,
+        "minZoom": 8.5,
+        "maxZoom": 15.0,
+        "lod": "coarse",
+        "source": "source_bridges.geojson"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -73.9758,
+            40.7146
+          ],
+          [
+            -73.9688,
+            40.7075
+          ]
+        ]
+      },
+      "properties": {
+        "id": "bridge_context_williamsburg_bridge_004",
+        "layer": "bridge_context",
+        "label": "Williamsburg Bridge",
+        "category": "bridge_context",
+        "priority": 4,
+        "cinematicWeight": 0.7,
+        "minZoom": 9.0,
+        "maxZoom": 15.0,
+        "lod": "coarse",
+        "source": "source_bridges.geojson"
+      }
+    }
+  ],
+  "metadata": {
+    "layer": "bridge_context",
+    "sectorId": "nyc_harbor_sector_01",
+    "lod": "coarse",
+    "bakedAt": "2026-05-27T22:50:33.843451Z"
+  }
+}

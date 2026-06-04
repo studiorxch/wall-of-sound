@@ -1,0 +1,207 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -74.0322,
+            40.6008
+          ],
+          [
+            -74.0278,
+            40.6175
+          ],
+          [
+            -74.024,
+            40.6295
+          ],
+          [
+            -74.0188,
+            40.6415
+          ],
+          [
+            -74.0158,
+            40.6468
+          ],
+          [
+            -74.0122,
+            40.652
+          ],
+          [
+            -74.0082,
+            40.6562
+          ],
+          [
+            -73.9992,
+            40.6628
+          ],
+          [
+            -73.9945,
+            40.665
+          ]
+        ]
+      },
+      "properties": {
+        "id": "harbor_channel_main_ship_channel_001",
+        "layer": "harbor_channel",
+        "label": "Main Ship Channel",
+        "category": "harbor_channel",
+        "priority": 5,
+        "cinematicWeight": 0.95,
+        "minZoom": 7.5,
+        "maxZoom": 16.0,
+        "lod": "coarse",
+        "source": "source_harbor_channels.geojson"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -74.0165,
+            40.7
+          ],
+          [
+            -74.0235,
+            40.6968
+          ],
+          [
+            -74.0348,
+            40.69
+          ],
+          [
+            -74.0428,
+            40.6862
+          ],
+          [
+            -74.0458,
+            40.6858
+          ]
+        ]
+      },
+      "properties": {
+        "id": "harbor_channel_battery\u2013statue_of_liberty_ferry_corridor_002",
+        "layer": "harbor_channel",
+        "label": "Battery\u2013Statue of Liberty Ferry Corridor",
+        "category": "harbor_channel",
+        "priority": 4,
+        "cinematicWeight": 1.0,
+        "minZoom": 8.5,
+        "maxZoom": 16.0,
+        "lod": "coarse",
+        "source": "source_harbor_channels.geojson"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -74.0165,
+            40.7
+          ],
+          [
+            -74.0352,
+            40.694
+          ]
+        ]
+      },
+      "properties": {
+        "id": "harbor_channel_battery\u2013governors_island_ferry_corridor_003",
+        "layer": "harbor_channel",
+        "label": "Battery\u2013Governors Island Ferry Corridor",
+        "category": "harbor_channel",
+        "priority": 4,
+        "cinematicWeight": 0.9,
+        "minZoom": 8.5,
+        "maxZoom": 16.0,
+        "lod": "coarse",
+        "source": "source_harbor_channels.geojson"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -74.0165,
+            40.6952
+          ],
+          [
+            -74.0352,
+            40.694
+          ]
+        ]
+      },
+      "properties": {
+        "id": "harbor_channel_red_hook\u2013governors_island_ferry_corridor_004",
+        "layer": "harbor_channel",
+        "label": "Red Hook\u2013Governors Island Ferry Corridor",
+        "category": "harbor_channel",
+        "priority": 3,
+        "cinematicWeight": 0.9,
+        "minZoom": 9.5,
+        "maxZoom": 16.0,
+        "lod": "coarse",
+        "source": "source_harbor_channels.geojson"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -74.0265,
+            40.651
+          ],
+          [
+            -74.0108,
+            40.67
+          ],
+          [
+            -74.0028,
+            40.679
+          ],
+          [
+            -73.9945,
+            40.687
+          ],
+          [
+            -73.9918,
+            40.6908
+          ],
+          [
+            -73.9908,
+            40.6942
+          ]
+        ]
+      },
+      "properties": {
+        "id": "harbor_channel_sunset_park\u2013lower_manhattan_ferry_corrid_005",
+        "layer": "harbor_channel",
+        "label": "Sunset Park\u2013Lower Manhattan Ferry Corridor",
+        "category": "harbor_channel",
+        "priority": 3,
+        "cinematicWeight": 0.95,
+        "minZoom": 9.5,
+        "maxZoom": 16.0,
+        "lod": "coarse",
+        "source": "source_harbor_channels.geojson"
+      }
+    }
+  ],
+  "metadata": {
+    "layer": "harbor_channel",
+    "sectorId": "nyc_harbor_sector_01",
+    "lod": "coarse",
+    "bakedAt": "2026-05-27T22:50:33.845503Z"
+  }
+}

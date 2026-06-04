@@ -1,0 +1,323 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -74.0459,
+              40.6892
+            ],
+            [
+              -74.0438,
+              40.6871
+            ],
+            [
+              -74.0434,
+              40.6858
+            ],
+            [
+              -74.0436,
+              40.6844
+            ],
+            [
+              -74.0444,
+              40.6832
+            ],
+            [
+              -74.0456,
+              40.6824
+            ],
+            [
+              -74.047,
+              40.682
+            ],
+            [
+              -74.0485,
+              40.6822
+            ],
+            [
+              -74.0498,
+              40.683
+            ],
+            [
+              -74.0508,
+              40.6842
+            ],
+            [
+              -74.051,
+              40.6856
+            ],
+            [
+              -74.0506,
+              40.687
+            ],
+            [
+              -74.0495,
+              40.6882
+            ],
+            [
+              -74.0479,
+              40.689
+            ],
+            [
+              -74.0459,
+              40.6892
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "id": "island_liberty_island_001",
+        "layer": "island",
+        "label": "Liberty Island",
+        "category": "island",
+        "priority": 5,
+        "cinematicWeight": 1.0,
+        "minZoom": 8.5,
+        "maxZoom": 18.0,
+        "lod": "standard",
+        "source": "source_islands.geojson"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -74.0335,
+              40.6993
+            ],
+            [
+              -74.0318,
+              40.698
+            ],
+            [
+              -74.0308,
+              40.6962
+            ],
+            [
+              -74.0305,
+              40.6942
+            ],
+            [
+              -74.0308,
+              40.6922
+            ],
+            [
+              -74.0318,
+              40.6905
+            ],
+            [
+              -74.0335,
+              40.6893
+            ],
+            [
+              -74.0355,
+              40.6888
+            ],
+            [
+              -74.0375,
+              40.689
+            ],
+            [
+              -74.0392,
+              40.69
+            ],
+            [
+              -74.0402,
+              40.6918
+            ],
+            [
+              -74.0402,
+              40.694
+            ],
+            [
+              -74.0392,
+              40.696
+            ],
+            [
+              -74.0375,
+              40.6978
+            ],
+            [
+              -74.0355,
+              40.699
+            ],
+            [
+              -74.0335,
+              40.6993
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "id": "island_governors_island_002",
+        "layer": "island",
+        "label": "Governors Island",
+        "category": "island",
+        "priority": 5,
+        "cinematicWeight": 0.9,
+        "minZoom": 8.5,
+        "maxZoom": 18.0,
+        "lod": "standard",
+        "source": "source_islands.geojson"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -74.0392,
+              40.6998
+            ],
+            [
+              -74.0378,
+              40.6988
+            ],
+            [
+              -74.0368,
+              40.6974
+            ],
+            [
+              -74.0366,
+              40.6958
+            ],
+            [
+              -74.0372,
+              40.6944
+            ],
+            [
+              -74.0384,
+              40.6935
+            ],
+            [
+              -74.0398,
+              40.6933
+            ],
+            [
+              -74.0412,
+              40.6938
+            ],
+            [
+              -74.042,
+              40.695
+            ],
+            [
+              -74.042,
+              40.6965
+            ],
+            [
+              -74.0412,
+              40.6978
+            ],
+            [
+              -74.04,
+              40.6992
+            ],
+            [
+              -74.0392,
+              40.6998
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "id": "island_ellis_island_003",
+        "layer": "island",
+        "label": "Ellis Island",
+        "category": "island",
+        "priority": 4,
+        "cinematicWeight": 0.75,
+        "minZoom": 9.0,
+        "maxZoom": 18.0,
+        "lod": "standard",
+        "source": "source_islands.geojson"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -74.0648,
+              40.644
+            ],
+            [
+              -74.0638,
+              40.6428
+            ],
+            [
+              -74.0634,
+              40.6412
+            ],
+            [
+              -74.0638,
+              40.6398
+            ],
+            [
+              -74.065,
+              40.6388
+            ],
+            [
+              -74.0665,
+              40.6385
+            ],
+            [
+              -74.0678,
+              40.639
+            ],
+            [
+              -74.0686,
+              40.6404
+            ],
+            [
+              -74.0684,
+              40.642
+            ],
+            [
+              -74.0674,
+              40.6434
+            ],
+            [
+              -74.066,
+              40.6442
+            ],
+            [
+              -74.0648,
+              40.644
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "id": "island_shooter's_island_004",
+        "layer": "island",
+        "label": "Shooter's Island",
+        "category": "island",
+        "priority": 3,
+        "cinematicWeight": 0.7,
+        "minZoom": 9.5,
+        "maxZoom": 18.0,
+        "lod": "coarse",
+        "source": "source_islands.geojson"
+      }
+    }
+  ],
+  "metadata": {
+    "layer": "island",
+    "sectorId": "nyc_harbor_sector_01",
+    "lod": "standard",
+    "bakedAt": "2026-05-27T22:50:33.841892Z"
+  }
+}

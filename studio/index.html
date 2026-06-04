@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WOS Studio</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <!-- ── WOS Studio authoring shell (0603N) ──────────────────────────────────────
+       Separate entry point from wall/index.html. Loads SHARED actor/visual/palette
+       systems but starts NO live feeds, NO Drive, NO Hero runtime, NO Mapbox style.
+       Read-only data workspace for actor identity, palette, and proof-stage review.
+  ─────────────────────────────────────────────────────────────────────────────── -->
+  <div class="studio-shell">
+    <header class="studio-topbar">
+      <div class="studio-brand">WOS&nbsp;<span>Studio</span></div>
+      <nav class="studio-tabs" id="studio-tabs">
+        <button data-mode="asset-library" class="active">Asset Library</button>
+        <button data-mode="actor-library">Actor Library</button>
+        <button data-mode="glyph-lab">Glyph Lab</button>
+        <button data-mode="palette-lab">Palette Lab</button>
+        <button data-mode="proof-stage">Proof Stage</button>
+      </nav>
+      <a class="studio-walllink" href="../wall/index.html">Open Wall →</a>
+    </header>
+
+    <aside class="studio-library" id="studio-library">
+      <div class="studio-panel-title">Library</div>
+      <div class="studio-library-body" id="studio-library-body"><!-- populated --></div>
+    </aside>
+
+    <main class="studio-stage" id="studio-stage">
+      <div class="studio-panel-title" id="studio-stage-title">Preview Stage</div>
+      <div class="studio-stage-body" id="studio-stage-body"><!-- populated --></div>
+    </main>
+
+    <aside class="studio-inspector" id="studio-inspector">
+      <div class="studio-panel-title">Inspector</div>
+      <div class="studio-inspector-body" id="studio-inspector-body">
+        <div class="studio-empty">Select an actor identity to inspect.</div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- ── Shared SBE systems (data/authority only — NO feeds, NO map, NO Drive) ──── -->
+  <script>window.SBE = window.SBE || {};</script>
+  <script src="../wall/systems/actors/actorTypes.js"></script>
+  <script src="../wall/systems/actors/actorSourceRegistry.js"></script>
+  <script src="../wall/systems/actors/publicFeedSourceInventory.js"></script>
+  <script src="../wall/systems/actors/actorIdentityRegistry.js"></script>
+  <script src="../wall/systems/actors/actorVisualRegistry.js"></script>
+  <script src="../wall/systems/actors/truthActorVisualLODPolicy.js"></script>
+  <script src="../wall/systems/actors/actorRenderAuthority.js"></script>
+  <script src="../wall/systems/actors/actorVisualIdentityAuthority.js"></script>
+  <script src="../wall/systems/actors/actorPresentationPaletteRegistry.js"></script>
+  <script src="../wall/systems/actors/actorAssetLibraryAuthority.js"></script>
+  <script src="../wall/systems/actors/marineVesselTaxonomyResolver.js"></script>
+  <script src="../wall/systems/feeds/citibikeStationVisualProfile.js"></script>
+  <script src="../wall/systems/actors/truthActorRuntime.js"></script>
+  <!-- Proof harness commands (lazy; calls TruthActorRuntime, warns if no map) ───── -->
+  <script src="../wall/systems/presentation/worldSpaceVehicleDebug.js"></script>
+  <!-- Studio shell UI ─────────────────────────────────────────────────────────── -->
+  <script src="./studioShell.js"></script>
+</body>
+</html>

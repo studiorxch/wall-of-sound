@@ -1,0 +1,515 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -74.0188,
+              40.656
+            ],
+            [
+              -74.0208,
+              40.656
+            ],
+            [
+              -74.0208,
+              40.6548
+            ],
+            [
+              -74.0188,
+              40.6548
+            ],
+            [
+              -74.0188,
+              40.656
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "id": "pier_brooklyn_army_terminal_pier_1_001",
+        "layer": "pier",
+        "label": "Brooklyn Army Terminal Pier 1",
+        "category": "pier",
+        "priority": 5,
+        "cinematicWeight": 1.0,
+        "minZoom": 11.0,
+        "maxZoom": 18.0,
+        "lod": "standard",
+        "source": "source_piers.geojson"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -74.0188,
+              40.6545
+            ],
+            [
+              -74.021,
+              40.6545
+            ],
+            [
+              -74.021,
+              40.6532
+            ],
+            [
+              -74.0188,
+              40.6532
+            ],
+            [
+              -74.0188,
+              40.6545
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "id": "pier_brooklyn_army_terminal_pier_2_002",
+        "layer": "pier",
+        "label": "Brooklyn Army Terminal Pier 2",
+        "category": "pier",
+        "priority": 5,
+        "cinematicWeight": 1.0,
+        "minZoom": 11.0,
+        "maxZoom": 18.0,
+        "lod": "standard",
+        "source": "source_piers.geojson"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -74.0188,
+              40.6528
+            ],
+            [
+              -74.0212,
+              40.6528
+            ],
+            [
+              -74.0212,
+              40.6514
+            ],
+            [
+              -74.0188,
+              40.6514
+            ],
+            [
+              -74.0188,
+              40.6528
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "id": "pier_brooklyn_army_terminal_pier_3_003",
+        "layer": "pier",
+        "label": "Brooklyn Army Terminal Pier 3",
+        "category": "pier",
+        "priority": 4,
+        "cinematicWeight": 1.0,
+        "minZoom": 11.0,
+        "maxZoom": 18.0,
+        "lod": "standard",
+        "source": "source_piers.geojson"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -74.0145,
+              40.7002
+            ],
+            [
+              -74.0162,
+              40.7002
+            ],
+            [
+              -74.0162,
+              40.6988
+            ],
+            [
+              -74.0145,
+              40.6988
+            ],
+            [
+              -74.0145,
+              40.7002
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "id": "pier_brooklyn_army_terminal_north_pier_004",
+        "layer": "pier",
+        "label": "Brooklyn Army Terminal North Pier",
+        "category": "pier",
+        "priority": 5,
+        "cinematicWeight": 1.0,
+        "minZoom": 10.5,
+        "maxZoom": 18.0,
+        "lod": "standard",
+        "source": "source_piers.geojson"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -74.0132,
+              40.6988
+            ],
+            [
+              -74.015,
+              40.6988
+            ],
+            [
+              -74.015,
+              40.6975
+            ],
+            [
+              -74.0132,
+              40.6975
+            ],
+            [
+              -74.0132,
+              40.6988
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "id": "pier_brooklyn_army_terminal_south_pier_005",
+        "layer": "pier",
+        "label": "Brooklyn Army Terminal South Pier",
+        "category": "pier",
+        "priority": 5,
+        "cinematicWeight": 1.0,
+        "minZoom": 10.5,
+        "maxZoom": 18.0,
+        "lod": "hero",
+        "source": "source_piers.geojson"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -74.0268,
+              40.65
+            ],
+            [
+              -74.0288,
+              40.65
+            ],
+            [
+              -74.0288,
+              40.6486
+            ],
+            [
+              -74.0268,
+              40.6486
+            ],
+            [
+              -74.0268,
+              40.65
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "id": "pier_sunset_park_marine_terminal_pier_a_006",
+        "layer": "pier",
+        "label": "Sunset Park Marine Terminal Pier A",
+        "category": "pier",
+        "priority": 4,
+        "cinematicWeight": 0.95,
+        "minZoom": 11.0,
+        "maxZoom": 18.0,
+        "lod": "standard",
+        "source": "source_piers.geojson"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -74.0268,
+              40.6484
+            ],
+            [
+              -74.029,
+              40.6484
+            ],
+            [
+              -74.029,
+              40.647
+            ],
+            [
+              -74.0268,
+              40.647
+            ],
+            [
+              -74.0268,
+              40.6484
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "id": "pier_sunset_park_marine_terminal_pier_b_007",
+        "layer": "pier",
+        "label": "Sunset Park Marine Terminal Pier B",
+        "category": "pier",
+        "priority": 4,
+        "cinematicWeight": 0.95,
+        "minZoom": 11.0,
+        "maxZoom": 18.0,
+        "lod": "standard",
+        "source": "source_piers.geojson"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -74.0268,
+              40.6468
+            ],
+            [
+              -74.0292,
+              40.6468
+            ],
+            [
+              -74.0292,
+              40.6454
+            ],
+            [
+              -74.0268,
+              40.6454
+            ],
+            [
+              -74.0268,
+              40.6468
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "id": "pier_sunset_park_marine_terminal_pier_c_008",
+        "layer": "pier",
+        "label": "Sunset Park Marine Terminal Pier C",
+        "category": "pier",
+        "priority": 3,
+        "cinematicWeight": 0.95,
+        "minZoom": 11.0,
+        "maxZoom": 18.0,
+        "lod": "standard",
+        "source": "source_piers.geojson"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -74.0158,
+              40.677
+            ],
+            [
+              -74.018,
+              40.677
+            ],
+            [
+              -74.018,
+              40.6752
+            ],
+            [
+              -74.0158,
+              40.6752
+            ],
+            [
+              -74.0158,
+              40.677
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "id": "pier_red_hook_container_pier_1_009",
+        "layer": "pier",
+        "label": "Red Hook Container Pier 1",
+        "category": "pier",
+        "priority": 4,
+        "cinematicWeight": 0.85,
+        "minZoom": 10.5,
+        "maxZoom": 18.0,
+        "lod": "standard",
+        "source": "source_piers.geojson"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -74.0158,
+              40.675
+            ],
+            [
+              -74.0182,
+              40.675
+            ],
+            [
+              -74.0182,
+              40.6732
+            ],
+            [
+              -74.0158,
+              40.6732
+            ],
+            [
+              -74.0158,
+              40.675
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "id": "pier_red_hook_container_pier_2_010",
+        "layer": "pier",
+        "label": "Red Hook Container Pier 2",
+        "category": "pier",
+        "priority": 4,
+        "cinematicWeight": 0.85,
+        "minZoom": 10.5,
+        "maxZoom": 18.0,
+        "lod": "standard",
+        "source": "source_piers.geojson"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -74.0158,
+              40.673
+            ],
+            [
+              -74.018,
+              40.673
+            ],
+            [
+              -74.018,
+              40.6712
+            ],
+            [
+              -74.0158,
+              40.6712
+            ],
+            [
+              -74.0158,
+              40.673
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "id": "pier_red_hook_container_pier_3_011",
+        "layer": "pier",
+        "label": "Red Hook Container Pier 3",
+        "category": "pier",
+        "priority": 3,
+        "cinematicWeight": 0.85,
+        "minZoom": 11.0,
+        "maxZoom": 18.0,
+        "lod": "standard",
+        "source": "source_piers.geojson"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -74.0168,
+              40.696
+            ],
+            [
+              -74.0185,
+              40.696
+            ],
+            [
+              -74.0185,
+              40.6945
+            ],
+            [
+              -74.0168,
+              40.6945
+            ],
+            [
+              -74.0168,
+              40.696
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "id": "pier_brooklyn_army_terminal_ferry_pier_012",
+        "layer": "pier",
+        "label": "Brooklyn Army Terminal Ferry Pier",
+        "category": "pier",
+        "priority": 5,
+        "cinematicWeight": 1.0,
+        "minZoom": 10.5,
+        "maxZoom": 18.0,
+        "lod": "hero",
+        "source": "source_piers.geojson"
+      }
+    }
+  ],
+  "metadata": {
+    "layer": "pier",
+    "sectorId": "nyc_harbor_sector_01",
+    "lod": "standard",
+    "bakedAt": "2026-05-27T22:50:33.835316Z"
+  }
+}

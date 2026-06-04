@@ -1,0 +1,347 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -74.0168,
+              40.7001
+            ],
+            [
+              -74.0178,
+              40.7001
+            ],
+            [
+              -74.0178,
+              40.6992
+            ],
+            [
+              -74.0168,
+              40.6992
+            ],
+            [
+              -74.0168,
+              40.7001
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "id": "ferry_slip_battery_park_ferry_slip_(main)_001",
+        "layer": "ferry_slip",
+        "label": "Battery Park Ferry Slip (Main)",
+        "category": "ferry_slip",
+        "priority": 5,
+        "cinematicWeight": 0.9,
+        "minZoom": 11.0,
+        "maxZoom": 18.0,
+        "lod": "hero",
+        "source": "source_ferry_slips.geojson"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -74.0155,
+              40.6995
+            ],
+            [
+              -74.0165,
+              40.6995
+            ],
+            [
+              -74.0165,
+              40.6985
+            ],
+            [
+              -74.0155,
+              40.6985
+            ],
+            [
+              -74.0155,
+              40.6995
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "id": "ferry_slip_battery_park_ferry_slip_(secondary)_002",
+        "layer": "ferry_slip",
+        "label": "Battery Park Ferry Slip (Secondary)",
+        "category": "ferry_slip",
+        "priority": 4,
+        "cinematicWeight": 0.9,
+        "minZoom": 12.0,
+        "maxZoom": 18.0,
+        "lod": "hero",
+        "source": "source_ferry_slips.geojson"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -74.0158,
+              40.6948
+            ],
+            [
+              -74.017,
+              40.6948
+            ],
+            [
+              -74.017,
+              40.6936
+            ],
+            [
+              -74.0158,
+              40.6936
+            ],
+            [
+              -74.0158,
+              40.6948
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "id": "ferry_slip_governors_island_ferry_slip_(brooklyn)_003",
+        "layer": "ferry_slip",
+        "label": "Governors Island Ferry Slip (Brooklyn)",
+        "category": "ferry_slip",
+        "priority": 5,
+        "cinematicWeight": 0.9,
+        "minZoom": 11.5,
+        "maxZoom": 18.0,
+        "lod": "hero",
+        "source": "source_ferry_slips.geojson"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -74.0168,
+              40.6898
+            ],
+            [
+              -74.018,
+              40.6898
+            ],
+            [
+              -74.018,
+              40.6885
+            ],
+            [
+              -74.0168,
+              40.6885
+            ],
+            [
+              -74.0168,
+              40.6898
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "id": "ferry_slip_statue_of_liberty_ferry_slip_004",
+        "layer": "ferry_slip",
+        "label": "Statue of Liberty Ferry Slip",
+        "category": "ferry_slip",
+        "priority": 5,
+        "cinematicWeight": 1.0,
+        "minZoom": 11.0,
+        "maxZoom": 18.0,
+        "lod": "hero",
+        "source": "source_ferry_slips.geojson"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -74.0765,
+              40.6908
+            ],
+            [
+              -74.0778,
+              40.6908
+            ],
+            [
+              -74.0778,
+              40.6896
+            ],
+            [
+              -74.0765,
+              40.6896
+            ],
+            [
+              -74.0765,
+              40.6908
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "id": "ferry_slip_governors_island_ferry_slip_(manhattan_s_005",
+        "layer": "ferry_slip",
+        "label": "Governors Island Ferry Slip (Manhattan-side)",
+        "category": "ferry_slip",
+        "priority": 4,
+        "cinematicWeight": 0.9,
+        "minZoom": 11.5,
+        "maxZoom": 18.0,
+        "lod": "hero",
+        "source": "source_ferry_slips.geojson"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -74.0185,
+              40.6962
+            ],
+            [
+              -74.0198,
+              40.6962
+            ],
+            [
+              -74.0198,
+              40.695
+            ],
+            [
+              -74.0185,
+              40.695
+            ],
+            [
+              -74.0185,
+              40.6962
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "id": "ferry_slip_red_hook_ferry_slip_006",
+        "layer": "ferry_slip",
+        "label": "Red Hook Ferry Slip",
+        "category": "ferry_slip",
+        "priority": 4,
+        "cinematicWeight": 0.85,
+        "minZoom": 11.5,
+        "maxZoom": 18.0,
+        "lod": "hero",
+        "source": "source_ferry_slips.geojson"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -74.027,
+              40.6515
+            ],
+            [
+              -74.0282,
+              40.6515
+            ],
+            [
+              -74.0282,
+              40.6504
+            ],
+            [
+              -74.027,
+              40.6504
+            ],
+            [
+              -74.027,
+              40.6515
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "id": "ferry_slip_sunset_park_ferry_slip_007",
+        "layer": "ferry_slip",
+        "label": "Sunset Park Ferry Slip",
+        "category": "ferry_slip",
+        "priority": 4,
+        "cinematicWeight": 0.95,
+        "minZoom": 11.5,
+        "maxZoom": 18.0,
+        "lod": "hero",
+        "source": "source_ferry_slips.geojson"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -74.0612,
+              40.6988
+            ],
+            [
+              -74.0625,
+              40.6988
+            ],
+            [
+              -74.0625,
+              40.6975
+            ],
+            [
+              -74.0612,
+              40.6975
+            ],
+            [
+              -74.0612,
+              40.6988
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "id": "ferry_slip_jersey_city_liberty_ferry_slip_008",
+        "layer": "ferry_slip",
+        "label": "Jersey City Liberty Ferry Slip",
+        "category": "ferry_slip",
+        "priority": 3,
+        "cinematicWeight": 0.7,
+        "minZoom": 12.0,
+        "maxZoom": 18.0,
+        "lod": "standard",
+        "source": "source_ferry_slips.geojson"
+      }
+    }
+  ],
+  "metadata": {
+    "layer": "ferry_slip",
+    "sectorId": "nyc_harbor_sector_01",
+    "lod": "hero",
+    "bakedAt": "2026-05-27T22:50:33.836820Z"
+  }
+}

@@ -1,0 +1,559 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -74.0158,
+            40.7014
+          ],
+          [
+            -74.0175,
+            40.7005
+          ],
+          [
+            -74.0185,
+            40.6995
+          ],
+          [
+            -74.0195,
+            40.6975
+          ],
+          [
+            -74.02,
+            40.695
+          ],
+          [
+            -74.0195,
+            40.692
+          ],
+          [
+            -74.0178,
+            40.6895
+          ],
+          [
+            -74.015,
+            40.6875
+          ],
+          [
+            -74.0122,
+            40.6845
+          ],
+          [
+            -74.0095,
+            40.681
+          ],
+          [
+            -74.006,
+            40.676
+          ],
+          [
+            -74.0008,
+            40.668
+          ],
+          [
+            -73.9998,
+            40.6648
+          ]
+        ]
+      },
+      "properties": {
+        "id": "shoreline_brooklyn_upper_bay_shoreline_001",
+        "layer": "shoreline",
+        "label": "Brooklyn Upper Bay Shoreline",
+        "category": "shoreline",
+        "priority": 5,
+        "cinematicWeight": 0.7,
+        "minZoom": 8.5,
+        "maxZoom": 18.0,
+        "lod": "standard",
+        "source": "source_shoreline.geojson"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -73.9998,
+            40.6648
+          ],
+          [
+            -73.9975,
+            40.6568
+          ],
+          [
+            -73.9968,
+            40.652
+          ],
+          [
+            -73.9972,
+            40.648
+          ],
+          [
+            -73.9985,
+            40.6442
+          ],
+          [
+            -74.0005,
+            40.6408
+          ],
+          [
+            -74.0028,
+            40.6375
+          ],
+          [
+            -74.0058,
+            40.6345
+          ],
+          [
+            -74.0095,
+            40.632
+          ],
+          [
+            -74.0132,
+            40.6302
+          ],
+          [
+            -74.0168,
+            40.629
+          ]
+        ]
+      },
+      "properties": {
+        "id": "shoreline_bay_ridge_shoreline_002",
+        "layer": "shoreline",
+        "label": "Bay Ridge Shoreline",
+        "category": "shoreline",
+        "priority": 4,
+        "cinematicWeight": 0.7,
+        "minZoom": 9.0,
+        "maxZoom": 18.0,
+        "lod": "standard",
+        "source": "source_shoreline.geojson"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -74.0268,
+            40.6432
+          ],
+          [
+            -74.0278,
+            40.6402
+          ],
+          [
+            -74.0285,
+            40.6355
+          ],
+          [
+            -74.0282,
+            40.6295
+          ],
+          [
+            -74.0248,
+            40.618
+          ]
+        ]
+      },
+      "properties": {
+        "id": "shoreline_sunset_park_south_shore_003",
+        "layer": "shoreline",
+        "label": "Sunset Park South Shore",
+        "category": "shoreline",
+        "priority": 4,
+        "cinematicWeight": 0.95,
+        "minZoom": 9.0,
+        "maxZoom": 18.0,
+        "lod": "standard",
+        "source": "source_shoreline.geojson"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -74.0158,
+            40.7014
+          ],
+          [
+            -74.0142,
+            40.7026
+          ],
+          [
+            -74.0118,
+            40.7036
+          ],
+          [
+            -74.009,
+            40.7044
+          ],
+          [
+            -73.9998,
+            40.7062
+          ],
+          [
+            -73.9948,
+            40.7068
+          ]
+        ]
+      },
+      "properties": {
+        "id": "shoreline_lower_manhattan_west_shore_004",
+        "layer": "shoreline",
+        "label": "Lower Manhattan West Shore",
+        "category": "shoreline",
+        "priority": 5,
+        "cinematicWeight": 1.0,
+        "minZoom": 8.5,
+        "maxZoom": 18.0,
+        "lod": "standard",
+        "source": "source_shoreline.geojson"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -73.9948,
+            40.7068
+          ],
+          [
+            -73.9928,
+            40.7058
+          ],
+          [
+            -73.9912,
+            40.7042
+          ],
+          [
+            -73.9902,
+            40.7022
+          ],
+          [
+            -73.9898,
+            40.7
+          ],
+          [
+            -73.99,
+            40.6978
+          ],
+          [
+            -73.9908,
+            40.6958
+          ],
+          [
+            -73.992,
+            40.694
+          ]
+        ]
+      },
+      "properties": {
+        "id": "shoreline_battery_park_tip_005",
+        "layer": "shoreline",
+        "label": "Battery Park Tip",
+        "category": "shoreline",
+        "priority": 5,
+        "cinematicWeight": 0.9,
+        "minZoom": 10.0,
+        "maxZoom": 18.0,
+        "lod": "hero",
+        "source": "source_shoreline.geojson"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -74.0792,
+            40.685
+          ],
+          [
+            -74.0745,
+            40.682
+          ],
+          [
+            -74.072,
+            40.678
+          ],
+          [
+            -74.0695,
+            40.6755
+          ],
+          [
+            -74.0658,
+            40.6725
+          ],
+          [
+            -74.05,
+            40.662
+          ],
+          [
+            -74.0412,
+            40.6548
+          ],
+          [
+            -74.038,
+            40.6518
+          ]
+        ]
+      },
+      "properties": {
+        "id": "shoreline_jersey_city_waterfront_006",
+        "layer": "shoreline",
+        "label": "Jersey City Waterfront",
+        "category": "shoreline",
+        "priority": 3,
+        "cinematicWeight": 0.7,
+        "minZoom": 8.5,
+        "maxZoom": 15.0,
+        "lod": "coarse",
+        "source": "source_shoreline.geojson"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -74.038,
+            40.6518
+          ],
+          [
+            -74.0355,
+            40.6488
+          ],
+          [
+            -74.0332,
+            40.6455
+          ],
+          [
+            -74.0318,
+            40.6418
+          ],
+          [
+            -74.0312,
+            40.638
+          ],
+          [
+            -74.0315,
+            40.6342
+          ],
+          [
+            -74.0325,
+            40.6308
+          ]
+        ]
+      },
+      "properties": {
+        "id": "shoreline_bayonne_waterfront_007",
+        "layer": "shoreline",
+        "label": "Bayonne Waterfront",
+        "category": "shoreline",
+        "priority": 3,
+        "cinematicWeight": 0.7,
+        "minZoom": 9.0,
+        "maxZoom": 15.0,
+        "lod": "coarse",
+        "source": "source_shoreline.geojson"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -74.045,
+            40.69
+          ],
+          [
+            -74.0428,
+            40.6925
+          ],
+          [
+            -74.0398,
+            40.6952
+          ],
+          [
+            -74.0362,
+            40.6972
+          ],
+          [
+            -74.0278,
+            40.7002
+          ],
+          [
+            -74.0232,
+            40.7012
+          ],
+          [
+            -74.0185,
+            40.7018
+          ],
+          [
+            -74.0158,
+            40.7014
+          ]
+        ]
+      },
+      "properties": {
+        "id": "shoreline_brooklyn_army_terminal_shoreline_008",
+        "layer": "shoreline",
+        "label": "Brooklyn Army Terminal Shoreline",
+        "category": "shoreline",
+        "priority": 5,
+        "cinematicWeight": 1.0,
+        "minZoom": 9.5,
+        "maxZoom": 18.0,
+        "lod": "standard",
+        "source": "source_shoreline.geojson"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -74.0158,
+            40.672
+          ],
+          [
+            -74.0165,
+            40.6745
+          ],
+          [
+            -74.017,
+            40.6775
+          ],
+          [
+            -74.0172,
+            40.6808
+          ],
+          [
+            -74.0168,
+            40.6842
+          ],
+          [
+            -74.0158,
+            40.6875
+          ],
+          [
+            -74.0142,
+            40.6902
+          ],
+          [
+            -74.012,
+            40.6922
+          ],
+          [
+            -74.0092,
+            40.6938
+          ],
+          [
+            -74.0058,
+            40.6948
+          ],
+          [
+            -74.0022,
+            40.6952
+          ],
+          [
+            -73.9988,
+            40.695
+          ]
+        ]
+      },
+      "properties": {
+        "id": "shoreline_red_hook___upper_bay_shore_009",
+        "layer": "shoreline",
+        "label": "Red Hook / Upper Bay Shore",
+        "category": "shoreline",
+        "priority": 4,
+        "cinematicWeight": 0.85,
+        "minZoom": 9.5,
+        "maxZoom": 18.0,
+        "lod": "standard",
+        "source": "source_shoreline.geojson"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -74.045,
+            40.69
+          ],
+          [
+            -74.0468,
+            40.6872
+          ],
+          [
+            -74.048,
+            40.6842
+          ],
+          [
+            -74.0488,
+            40.6808
+          ],
+          [
+            -74.0488,
+            40.6772
+          ],
+          [
+            -74.048,
+            40.674
+          ],
+          [
+            -74.0465,
+            40.6712
+          ],
+          [
+            -74.0445,
+            40.6688
+          ],
+          [
+            -74.042,
+            40.6668
+          ]
+        ]
+      },
+      "properties": {
+        "id": "shoreline_sunset_park_industrial_shore_010",
+        "layer": "shoreline",
+        "label": "Sunset Park Industrial Shore",
+        "category": "shoreline",
+        "priority": 4,
+        "cinematicWeight": 0.95,
+        "minZoom": 9.5,
+        "maxZoom": 18.0,
+        "lod": "standard",
+        "source": "source_shoreline.geojson"
+      }
+    }
+  ],
+  "metadata": {
+    "layer": "shoreline",
+    "sectorId": "nyc_harbor_sector_01",
+    "lod": "standard",
+    "bakedAt": "2026-05-27T22:50:33.833118Z"
+  }
+}

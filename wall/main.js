@@ -1,5 +1,83 @@
 (function initMain(global) {
   const SBE = (global.SBE = global.SBE || {});
+
+  // ── Boot configuration ────────────────────────────────────────────────────
+  // Change WOS_BOOT_MODE to switch startup behavior without touching runtime code.
+  //   "normal"            — full WOS experience (traffic, routes, world systems)
+  //                         Maritime auto-starts as a first-class world subsystem.
+  //   "harbor-validation" — marine-only isolation: traffic hidden, debug vessel
+  //                         injected, harbor framing, tilt active on first frame.
+  //                         Retained as a developer debug mode; not the runtime default.
+  const WOS_BOOT_MODE = 'normal';
+
+  const BOOT_HARBOR_VALIDATION = WOS_BOOT_MODE === 'harbor-validation';
+
+  // ── Runtime flags — global mode gates ────────────────────────────────────
+  // Subsystems check SBE.runtimeFlags before rendering/ticking.
+  // Preserve any flags already on SBE.runtimeFlags (e.g. set by other scripts).
+  SBE.runtimeFlags = Object.assign(
+    {
+      harborBootstrapMode:    BOOT_HARBOR_VALIDATION,
+      // Console telemetry flags — false by default to keep DevTools quiet.
+      // Set true at runtime to restore verbose output:
+      //   SBE.runtimeFlags.showAISTelemetryLogs = true
+      //   SBE.runtimeFlags.showMarineDebugLogs  = true
+      showAISTelemetryLogs:   false,
+      showMarineDebugLogs:    false,
+      // Maritime occupancy renderer — motion presence flags (0523G-2).
+      // Nav lights, speed tails, and wake glow are on by default.
+      // Corridor hints and debug labels are off by default.
+      //   SBE.runtimeFlags.showMaritimeNavLights     = false
+      //   SBE.runtimeFlags.showMaritimeSpeedTails    = false
+      //   SBE.runtimeFlags.showMaritimeWakeGlow      = false
+      //   SBE.runtimeFlags.showMaritimeCorridorHints = true
+      //   SBE.runtimeFlags.showMaritimeDebugLabels   = true
+      showMaritimeNavLights:      true,
+      showMaritimeSpeedTails:     true,
+      showMaritimeWakeGlow:       true,
+      showMaritimeCorridorHints:  false,
+      showMaritimeDebugLabels:    false,    // §J1 — off by default; hover shows labels
+      // Maritime runtime state flags (0523K).
+      // maritimeEnabled:       master on/off for the maritime subsystem.
+      // maritimeGeoActive:     set by geo-bounds check; false outside harbor region.
+      // The remaining debug/validation flags default to OFF for clean runtime mode.
+      maritimeEnabled:                    true,
+      maritimeGeoActive:                  true,
+      maritimeValidationVisibility:       false,  // validation overlay — debug only
+      showSeedVesselLabels:               false,  // seed vessel label overlay — debug only
+      showMaritimeDebugFields:            false,  // radius rings / debug circles — debug only
+      // Maritime Validation Feed (0523H) — AIS-backed synthetic vessel ecology.
+      // enableMaritimeValidationFeed: runtime toggle (UI-bindable).
+      // maritimeValidationFeedAutostart: true → feed starts automatically at boot.
+      // showMaritimeValidationFeedLogs: verbose per-tick console output.
+      enableMaritimeValidationFeed:      true,
+      maritimeValidationFeedAutostart:   true,
+      showMaritimeValidationFeedLogs:    false,
+      // Land traffic (0523K regression patch).
+      // Off by default so cars don't appear during maritime runtime.
+      // Set true (or call _wos.enableLandTraffic(true)) to restore.
+      landTrafficEnabled:    false,
+      landTrafficAutostart:  false,
+    },
+    SBE.runtimeFlags || {}
+  );
+
+  // ── System registry — 0523K ─────────────────────────────────────────────
+  // SBE.systems is the first-class runtime catalogue of world subsystems.
+  // Each entry describes capability, enabled state, and feed sources.
+  // Subsystems check SBE.systems.<name>.enabled before self-initializing.
+  // Future-proof: swap validationFeed → liveAIS without renderer rewrites.
+
+  SBE.systems = SBE.systems || {};
+  SBE.systems.maritime = {
+    enabled:        true,   // master switch — controls renderer + feed lifecycle
+    validationFeed: true,   // synthetic ecology source (MaritimeValidationFeed)
+    liveAIS:        false,  // live AIS ingestion (future)
+    renderer:       true,   // MaritimeOccupancyRenderer sprite/hover rendering
+    runtime:        true,   // AISRuntime vessel lifecycle + dead reckoning
+    geoGated:       true,   // renderer sleeps when camera exits maritime bounds
+  };
+
   const NOTE_NAMES = [
     "C",
     "C#",
@@ -282,6 +360,12 @@
     const renderer = new SBE.CanvasRenderer(canvas);
     const midiOut = new SBE.MidiOut();
     const controls = SBE.Controls.createControls();
+    // ── §WOS-DEBUG-NS — preserve any pre-existing _wos debug namespaces ──────
+    // Debug helper scripts (maritimeStyleRegistryDebug, mapStyleAuthorityDebug,
+    // surfaceStylePresetDebug, liveStylePanel) register on _wos before main.js
+    // runs in some load orders. Capture them so the object literal below does
+    // not wipe them. Restored immediately after the closing }; below.
+    var _wos_prior = window._wos || {};
     window._wos = {
       get state() {
         return state;
@@ -914,6 +998,19 @@
         );
       },
     };
+    // ── §WOS-DEBUG-NS — restore debug namespaces after _wos re-init ──────────
+    // Any namespace already registered on _wos_prior (e.g. maritimeStyle,
+    // styleAuthority, presets, liveStyle) that main.js does NOT own is merged
+    // back non-destructively. main.js-owned keys always win.
+    (function _restoreDebugNamespaces() {
+      var ks = Object.keys(_wos_prior);
+      for (var _i = 0; _i < ks.length; _i++) {
+        var _k = ks[_i];
+        if (!(_k in window._wos)) {
+          window._wos[_k] = _wos_prior[_k];
+        }
+      }
+    })();
     window.noteElements = {};
 
     // ── Drag-and-Drop Overlay System ──
@@ -2563,10 +2660,144 @@
     if (SBE.AISRuntime) {
       SBE.AISRuntime.init();
     }
+    if (SBE.OverlayGrammar) {
+      SBE.OverlayGrammar.init();
+    }
+    if (SBE.ObservabilityCamera) {
+      SBE.ObservabilityCamera.init();
+    }
+    if (SBE.TiltProjectionRuntime) {
+      // Pass the Mapbox map instance so tilt can drive setPitch()
+      SBE.TiltProjectionRuntime.init(typeof map !== 'undefined' ? map : null);
+    }
     if (SBE.MarineRenderer) {
       SBE.MarineRenderer.init();
     }
-    if (SBE.TrafficFlowRuntime) {
+    if (SBE.MarineOverlayCanvasRuntime) {
+      SBE.MarineOverlayCanvasRuntime.init({
+        parentSelector: '.canvas-area',
+        getState: function () { return state; },
+      });
+    }
+    if (SBE.MaritimeOccupancyRenderer) {
+      SBE.MaritimeOccupancyRenderer.init({ parentSelector: '.canvas-area' });
+    }
+
+    // ── Maritime system auto-start — 0523K ────────────────────────────────
+    // Maritime is now a first-class world subsystem. It starts automatically
+    // when SBE.systems.maritime.enabled = true. No console commands required.
+    //
+    // Phase offset: each page load advances the validation feed by a random
+    // 0–12 minute head-start so vessels begin at staggered positions along
+    // their DR legs — the harbor looks naturally occupied, not freshly spawned.
+    //
+    // Geographic gate: _maritimeGeoBoundsCheck() runs every 8s and sets
+    // SBE.runtimeFlags.maritimeGeoActive. The renderer reads this flag at the
+    // top of each frame and returns early (sleeps) if false. The feed continues
+    // at 1Hz (lightweight) so AISRuntime state stays live when returning to view.
+    (function _maritimeAutoStart() {
+      if (!SBE.systems || !SBE.systems.maritime || !SBE.systems.maritime.enabled) return;
+
+      // ── Deferred start — maritime renderer and validation feed are non-essential
+      // at first paint. Defer 1500ms after first visible frame so they don't
+      // compete with Mapbox tile fetches and the initial style.load reveal.
+      function _doStart() {
+        var _mor = SBE.MaritimeOccupancyRenderer;
+        var _mvf = SBE.MaritimeValidationFeed;
+
+        // Enable the renderer (creates canvas, starts rAF loop)
+        if (_mor && SBE.systems.maritime.renderer && !_mor.isEnabled()) {
+          _mor.enable(true);
+        }
+
+        // Start the validation feed
+        if (_mvf && SBE.systems.maritime.validationFeed && SBE.runtimeFlags.enableMaritimeValidationFeed) {
+          _mvf.enable(true);
+          // Phase-offset: advance 0–12 min so vessels start mid-route.
+          // Math.random() is acceptable here — this is startup stagger, not AIS truth.
+          var _phaseOffsetMs = Math.floor(Math.random() * 720) * 1000;
+          if (_phaseOffsetMs > 0) {
+            _mvf.tick(performance.now() + _phaseOffsetMs);
+          }
+        }
+
+        // Geographic activation gate — evaluated every 8 seconds.
+        // NYC harbor corridor bounds: lat 40.55–40.80, lng -74.15 to -73.93.
+        // When camera center is outside these bounds the renderer skips frames
+        // (maritimeGeoActive = false) and the canvas stays clear.
+        // When it re-enters the bounds maritimeGeoActive is restored to true.
+        var _MARITIME_GEO = { latMin: 40.55, latMax: 40.80, lngMin: -74.15, lngMax: -73.93 };
+
+        function _maritimeGeoBoundsCheck() {
+          var mvr = SBE.MapboxViewportRuntime;
+          var cam = mvr && mvr.getCamera ? mvr.getCamera() : null;
+          if (!cam) return; // can't determine position — leave current state
+          var lat = cam.lat != null ? cam.lat : (cam.center && cam.center[1]);
+          var lng = cam.lng != null ? cam.lng : (cam.center && cam.center[0]);
+          if (lat == null || lng == null) return;
+          var inBounds = lat >= _MARITIME_GEO.latMin && lat <= _MARITIME_GEO.latMax &&
+                         lng >= _MARITIME_GEO.lngMin && lng <= _MARITIME_GEO.lngMax;
+          if (SBE.runtimeFlags.maritimeGeoActive !== inBounds) {
+            SBE.runtimeFlags.maritimeGeoActive = inBounds;
+            if (!inBounds) {
+              console.log('[WOS] Maritime: camera outside harbor bounds — renderer sleeping');
+            } else {
+              console.log('[WOS] Maritime: camera re-entered harbor bounds — renderer active');
+            }
+          }
+        }
+
+        if (SBE.systems.maritime.geoGated) {
+          // Immediate check, then poll every 8 seconds
+          setTimeout(_maritimeGeoBoundsCheck, 0);
+          setInterval(_maritimeGeoBoundsCheck, 8000);
+        }
+
+        var _morRef = SBE.MaritimeOccupancyRenderer;
+        var _mvfRef = SBE.MaritimeValidationFeed;
+        console.log('[WOS] Maritime system AUTO-STARTED (0523K)');
+        console.log('  renderer:       ' + (_morRef && _morRef.isEnabled() ? 'ON' : 'unavailable'));
+        console.log('  validationFeed: ' + (_mvfRef ? 'ON' : 'unavailable'));
+        console.log('  geoGated:       ' + SBE.systems.maritime.geoGated);
+
+        // ── Boot diagnostic — deferred 1500ms to allow AISRuntime first flush ──
+        setTimeout(function _maritimeBootDiag() {
+          var _diagAIS = SBE.AISRuntime;
+          var _diagMOR = SBE.MaritimeOccupancyRenderer;
+          var _diagMVF = SBE.MaritimeValidationFeed;
+          var _diagRF  = SBE.runtimeFlags || {};
+
+          var _allActive   = _diagAIS ? _diagAIS.getActiveVessels() : [];
+          var _valActive   = _allActive.filter(function (v) {
+            return v.mmsi >= 999001001 && v.mmsi <= 999001035;
+          }).length;
+          var _snap = _diagMOR ? _diagMOR.getDebugSnapshot() : null;
+
+          console.log('[WOS Maritime Boot]', {
+            feedEnabled:        !!(_diagMVF && _diagMVF.isEnabled && _diagMVF.isEnabled()),
+            aisActive:          _allActive.length,
+            validationActive:   _valActive,
+            rendererAIS:        _snap ? _snap.telemetry.aisRendered       : 0,
+            hiddenByAtmosphere: _snap ? _snap.telemetry.atmosphericHidden  : 0,
+            geoActive:          _diagRF.maritimeGeoActive !== false,
+            carsEnabled:        !!_diagRF.landTrafficEnabled,
+          });
+        }, 1500);
+      } // end _doStart
+
+      // Defer maritime start until 1500ms after first visible frame.
+      // This prevents validation feed XHR and renderer canvas allocation
+      // from competing with Mapbox tile fetches during the boot reveal window.
+      var _bs = SBE.WOSBootSequencer;
+      if (_bs && typeof _bs.defer === 'function') {
+        _bs.defer('maritimeAutoStart', _doStart, 1500);
+      } else {
+        // Fallback: 2s delay from DOMContentLoaded (original behavior was immediate)
+        setTimeout(_doStart, 2000);
+      }
+    })();
+
+    if (SBE.TrafficFlowRuntime && SBE.runtimeFlags.landTrafficEnabled) {
       SBE.TrafficFlowRuntime.init();
     }
     if (SBE.OverlayRuntime) {
@@ -2574,6 +2805,12 @@
     }
     if (SBE.TrafficRenderer) {
       SBE.TrafficRenderer.init();
+      // Disable unless land traffic is explicitly enabled.
+      // This covers both the maritime default (landTrafficEnabled=false)
+      // and the legacy harborBootstrapMode path.
+      if (!SBE.runtimeFlags.landTrafficEnabled || SBE.runtimeFlags.harborBootstrapMode) {
+        SBE.TrafficRenderer.disable();
+      }
     }
     if (SBE.RealitySyncRuntime) {
       SBE.RealitySyncRuntime.init();
@@ -3111,8 +3348,10 @@
       var mr = window.SBE && SBE.MarineRenderer;
       if (!mr) { console.warn("[WOS] MarineRenderer unavailable"); return; }
       var snap = mr.getDebugSnapshot();
-      console.group("[WOS] MarineRenderer snapshot — " + snap.length + " active vessels");
-      snap.forEach(function(s) {
+      var vessels = snap.vessels || snap; // compat: handle both new {vessels:[]} and old [] form
+      console.group("[WOS] MarineRenderer snapshot — " + vessels.length + " active vessels" +
+        " | renderState:" + snap.renderStateCount + " | lastRender:" + (snap.msSinceRender != null ? snap.msSinceRender + 'ms ago' : 'never'));
+      vessels.forEach(function(s) {
         var lag = "";
         if (s.runtime && s.render) {
           var dLat = Math.abs(s.runtime.lat - s.render.lat) * 111320;
@@ -3129,6 +3368,1367 @@
       console.groupEnd();
       return snap;
     };
+
+    // ── OverlayGrammar debug helpers ───────────────────────────────────────
+
+    // _wos.debugOverlayGrammar()
+    // Snapshot of all active OverlayProjectionRecords.
+    // Shows projectionOpacity, projectionScale, reductionState, sourceAuthority.
+    // Use alongside _wos.debugMarineSnapshot() to verify renderer/grammar parity.
+    window._wos.debugOverlayGrammar = function debugOverlayGrammar() {
+      var og = window.SBE && SBE.OverlayGrammar;
+      if (!og) { console.warn("[WOS] OverlayGrammar unavailable"); return; }
+      var state = og.getProjectionState();
+      var records = Object.values(state);
+      console.group("[WOS] OverlayGrammar — " + records.length + " projection records");
+      var rows = records.map(function(r) {
+        return {
+          entityId:   r.entityId,
+          state:      r._rawState,
+          reduction:  r.reductionState,
+          opacity:    r.projectionOpacity.toFixed(3),
+          scale:      r.projectionScale.toFixed(3),
+          factor:     r.reductionFactor.toFixed(3),
+          obsWt:      r.observabilityWeight.toFixed(3),
+          ca:         r.continuityAlpha.toFixed(3),
+          authority:  r.sourceAuthority,
+        };
+      });
+      if (console.table) { console.table(rows); }
+      else { rows.forEach(function(r) { console.log(JSON.stringify(r)); }); }
+      console.groupEnd();
+      return records;
+    };
+
+    // _wos.debugOverlayRecord(mmsi)
+    // Full record for a single entity — continuity inputs + projection outputs.
+    window._wos.debugOverlayRecord = function debugOverlayRecord(mmsi) {
+      var og = window.SBE && SBE.OverlayGrammar;
+      if (!og) { console.warn("[WOS] OverlayGrammar unavailable"); return; }
+      var r = og.getRecord(mmsi);
+      if (!r) { console.warn("[WOS] No overlay record for entity:", mmsi); return null; }
+      console.group("[WOS] OverlayRecord " + mmsi + " (" + r._rawState + ")");
+      console.log("reduction:   ", r.reductionState, "×" + r.reductionFactor.toFixed(3));
+      console.log("opacity:     ", r.projectionOpacity.toFixed(3));
+      console.log("scale:       ", r.projectionScale.toFixed(3));
+      console.log("obsWeight:   ", r.observabilityWeight.toFixed(3));
+      console.log("authority:   ", r.sourceAuthority);
+      console.log("continuity:  ", r._rawContinuity);
+      console.groupEnd();
+      return r;
+    };
+
+    // _wos.validateOverlayAuthority()
+    // Governance check — verifies OverlayGrammar is NOT mutating AISRuntime state.
+    // Compares vessel count before/after a forced projectOverlayState() call.
+    window._wos.validateOverlayAuthority = function validateOverlayAuthority() {
+      var og  = window.SBE && SBE.OverlayGrammar;
+      var ais = window.SBE && SBE.AISRuntime;
+      if (!og || !ais) { console.warn("[WOS] OverlayGrammar or AISRuntime unavailable"); return; }
+      var beforeVessels = ais.getActiveVessels().map(function(v) {
+        return { mmsi: v.mmsi, state: v.state, lat: v.lat, lng: v.lng };
+      });
+      og.projectOverlayState(); // force evaluation
+      var afterVessels  = ais.getActiveVessels().map(function(v) {
+        return { mmsi: v.mmsi, state: v.state, lat: v.lat, lng: v.lng };
+      });
+      var mutations = [];
+      beforeVessels.forEach(function(b) {
+        var a = afterVessels.find(function(v) { return v.mmsi === b.mmsi; });
+        if (!a) { mutations.push({ mmsi: b.mmsi, type: "EVICTED by overlay" }); return; }
+        if (a.state !== b.state) mutations.push({ mmsi: b.mmsi, type: "STATE_MUTATED", before: b.state, after: a.state });
+        if (Math.abs(a.lat - b.lat) > 1e-8) mutations.push({ mmsi: b.mmsi, type: "POSITION_MUTATED" });
+      });
+      if (mutations.length === 0) {
+        console.log("[WOS] validateOverlayAuthority: PASS — no runtime mutations detected");
+      } else {
+        console.error("[WOS] validateOverlayAuthority: FAIL — runtime mutations detected!", mutations);
+      }
+      return mutations;
+    };
+
+    // ── ObservabilityCamera debug helpers ──────────────────────────────────
+
+    // _wos.debugCamera()
+    // Full ObservabilityCameraState snapshot — mode, pacing, drift, isolation phase,
+    // current vs target position, whether Mapbox drive is enabled.
+    window._wos.debugCamera = function debugCamera() {
+      var oc = window.SBE && SBE.ObservabilityCamera;
+      if (!oc) { console.warn("[WOS] ObservabilityCamera unavailable"); return; }
+      var s = oc.getState();
+      var i = s._internal;
+      console.group("[WOS] ObservabilityCamera — mode:" + s.mode +
+        "  phase:" + (i && i.isolationPhase) + "  drive:" + (i && i.drivesMapbox));
+      console.log("pacing:    ", s.pacingFactor.toFixed(3));
+      console.log("drift:     ", s.driftFactor.toFixed(3));
+      console.log("obsWeight: ", s.observabilityWeight.toFixed(3));
+      console.log("contAlpha: ", s.continuityAlpha.toFixed(3));
+      console.log("authority: ", s.sourceAuthority);
+      if (i) {
+        console.log("current:  ", i.currentLat.toFixed(5), i.currentLng.toFixed(5));
+        console.log("target:   ", i.targetLat.toFixed(5),  i.targetLng.toFixed(5));
+        var dLat = Math.abs(i.targetLat - i.currentLat) * 111320;
+        var dLng = Math.abs(i.targetLng - i.currentLng) * 111320;
+        console.log("lagM:     ", Math.round(Math.sqrt(dLat*dLat + dLng*dLng)) + "m");
+        console.log("isolTick: ", i.isolationTickCount);
+        console.log("settle:   ", i.settleTicksRemaining, "ticks remaining");
+      }
+      console.groupEnd();
+      return s;
+    };
+
+    // _wos.cameraMode(mode)
+    // Set camera mode. Valid: harbor-drift, corridor-glide, grid-anchor,
+    //   ambient-survey, atmospheric-hold
+    window._wos.cameraMode = function cameraMode(mode) {
+      var oc = window.SBE && SBE.ObservabilityCamera;
+      if (!oc) { console.warn("[WOS] ObservabilityCamera unavailable"); return; }
+      oc.setMode(mode);
+      console.log("[WOS] Camera mode →", mode);
+    };
+
+    // _wos.cameraTarget(lat, lng)
+    // Override camera framing target. Camera drifts toward this position.
+    window._wos.cameraTarget = function cameraTarget(lat, lng) {
+      var oc = window.SBE && SBE.ObservabilityCamera;
+      if (!oc) { console.warn("[WOS] ObservabilityCamera unavailable"); return; }
+      oc.setTarget(lat, lng);
+      console.log("[WOS] Camera target →", lat, lng);
+    };
+
+    // _wos.enableCameraDrive(bool)
+    // Enable/disable Mapbox viewport application.
+    // When enabled: ObservabilityCamera drives the map's easeTo() on each tick.
+    // Use with caution — this moves the actual viewport.
+    window._wos.enableCameraDrive = function enableCameraDrive(enabled) {
+      var oc = window.SBE && SBE.ObservabilityCamera;
+      if (!oc) { console.warn("[WOS] ObservabilityCamera unavailable"); return; }
+      oc.enableMapboxDrive(enabled !== false);
+    };
+
+    // _wos.debugCameraAuthority()
+    // Governance check — verifies ObservabilityCamera is NOT mutating runtime truth.
+    // Compares AISRuntime vessel states before and after a forced camera evaluation.
+    window._wos.debugCameraAuthority = function debugCameraAuthority() {
+      var oc  = window.SBE && SBE.ObservabilityCamera;
+      var ais = window.SBE && SBE.AISRuntime;
+      if (!oc || !ais) { console.warn("[WOS] ObservabilityCamera or AISRuntime unavailable"); return; }
+      var before = ais.getActiveVessels().map(function(v) {
+        return { mmsi: v.mmsi, state: v.state, lat: v.lat, lng: v.lng };
+      });
+      oc.forceEval();
+      var after = ais.getActiveVessels().map(function(v) {
+        return { mmsi: v.mmsi, state: v.state, lat: v.lat, lng: v.lng };
+      });
+      var mutations = [];
+      before.forEach(function(b) {
+        var a = after.find(function(v) { return v.mmsi === b.mmsi; });
+        if (!a)                         mutations.push({ mmsi: b.mmsi, type: "EVICTED_BY_CAMERA" });
+        else if (a.state !== b.state)   mutations.push({ mmsi: b.mmsi, type: "STATE_MUTATED", before: b.state, after: a.state });
+        else if (Math.abs(a.lat - b.lat) > 1e-8) mutations.push({ mmsi: b.mmsi, type: "POSITION_MUTATED" });
+      });
+      if (mutations.length === 0) {
+        console.log("[WOS] debugCameraAuthority: PASS — no runtime mutations detected");
+      } else {
+        console.error("[WOS] debugCameraAuthority: FAIL", mutations);
+      }
+      return mutations;
+    };
+
+    // ── Harbor bootstrap & tilt debug APIs (0522) ─────────────────────────
+
+    // _wos.debugMarine()
+    // Audit the full marine render pipeline — separates ingestion failure from
+    // render failure. Reports counts at each pipeline stage.
+    window._wos.debugMarine = function debugMarine() {
+      var ais = window.SBE && SBE.AISRuntime;
+      var og  = window.SBE && SBE.OverlayGrammar;
+      var mr  = window.SBE && SBE.MarineRenderer;
+
+      var hydrated  = ais ? ais.getActiveVessels() : [];
+      var stale     = hydrated.filter(function(v) { return v.state === 'STATUS_STALE' || v.state === 'STATUS_OFFLINE'; });
+      var protected_ = hydrated.filter(function(v) { return v.isProtected; });
+
+      var projected  = og ? Object.values(og.getProjectionState()) : [];
+      var snap       = mr ? mr.getDebugSnapshot() : { initialized: false, renderStateCount: 0, wakeCount: 0, lastRenderMs: 0, msSinceRender: null, vessels: [] };
+      var feedState  = ais ? ais.getFeedState() : 'UNKNOWN';
+
+      console.group('[WOS] debugMarine — harbor pipeline audit');
+      console.log('feed state:      ', feedState);
+      console.log('hydrated:        ', hydrated.length,          '(AISRuntime active bucket)');
+      console.log('  stale/offline: ', stale.length);
+      console.log('  protected:     ', protected_.length);
+      console.log('projected:       ', projected.length,         '(OverlayGrammar records)');
+      console.log('mr.initialized:  ', snap.initialized);
+      console.log('renderStateCount:', snap.renderStateCount,    '(per-vessel interp state)');
+      console.log('wakeCount:       ', snap.wakeCount);
+      console.log('lastRenderMs:    ', snap.lastRenderMs > 0 ? snap.msSinceRender + 'ms ago' : 'never');
+      if (hydrated.length === 0 && feedState === 'FEED_OFFLINE') {
+        console.warn('  → No vessels hydrated. Feed is offline. Try: _wos.injectDebugVessel()');
+      } else if (hydrated.length > 0 && projected.length === 0) {
+        console.warn('  → Vessels hydrated but OverlayGrammar produced no records. Check OverlayGrammar.init()');
+      } else if (projected.length > 0 && snap.renderStateCount === 0 && snap.lastRenderMs === 0) {
+        console.warn('  → Projection records exist but MarineRenderer.render() has never been called. Check renderFrame() wiring.');
+      } else if (projected.length > 0 && snap.renderStateCount === 0) {
+        console.warn('  → render() called but no renderState built. All vessels may be below alpha threshold.');
+      } else if (snap.renderStateCount > 0) {
+        console.log('  → Pipeline healthy. Vessels flowing through all stages.');
+      }
+      console.groupEnd();
+      return {
+        feedState:        feedState,
+        hydrated:         hydrated.length,
+        stale:            stale.length,
+        protected:        protected_.length,
+        projected:        projected.length,
+        renderStateCount: snap.renderStateCount,
+        lastRenderMs:     snap.lastRenderMs,
+        msSinceRender:    snap.msSinceRender,
+      };
+    };
+
+    // _wos.injectDebugVessel(enable)
+    // Inject (or remove) a continuously-moving debug vessel on the Upper Bay
+    // → East River route. Bypasses feed/suppression floors. Persists until removed.
+    window._wos.injectDebugVessel = function injectDebugVessel(enable) {
+      var ais = window.SBE && SBE.AISRuntime;
+      if (!ais) { console.warn('[WOS] AISRuntime unavailable'); return; }
+      var active = ais.injectDebugVessel(enable);
+      console.log('[WOS] debug vessel:', active ? 'ACTIVE' : 'REMOVED');
+      return active;
+    };
+
+    // _wos.enableTilt(bool)
+    // Master tilt switch. false → pitch=0 (flat map).
+    window._wos.enableTilt = function enableTilt(enabled) {
+      var tpr = window.SBE && SBE.TiltProjectionRuntime;
+      if (!tpr) { console.warn('[WOS] TiltProjectionRuntime unavailable'); return; }
+      tpr.setEnabled(enabled !== false);
+    };
+
+    // _wos.setTiltMode(mode)
+    // Set tilt mode: 'disabled' | 'harbor' | 'cinematic'
+    // 'harbor' is the default cinematic harbor state (pitch 28–38°).
+    // 'cinematic' is reserved for deep immersion (pitch 45–60°).
+    window._wos.setTiltMode = function setTiltMode(mode) {
+      var tpr = window.SBE && SBE.TiltProjectionRuntime;
+      if (!tpr) { console.warn('[WOS] TiltProjectionRuntime unavailable'); return; }
+      tpr.setMode(mode);
+      console.log('[WOS] tilt mode →', mode);
+    };
+
+    // _wos.debugTilt()
+    // TiltProjectionRuntime state snapshot.
+    window._wos.debugTilt = function debugTilt() {
+      var tpr = window.SBE && SBE.TiltProjectionRuntime;
+      if (!tpr) { console.warn('[WOS] TiltProjectionRuntime unavailable'); return; }
+      var s = tpr.getState();
+      console.group('[WOS] TiltProjectionRuntime — mode:' + s.mode);
+      console.log('enabled:      ', s.enabled);
+      console.log('currentPitch: ', s.currentPitch.toFixed(2) + '°');
+      console.log('targetPitch:  ', s.targetPitch.toFixed(2) + '°');
+      console.log('delta:        ', (s.targetPitch - s.currentPitch).toFixed(2) + '°');
+      console.groupEnd();
+      return s;
+    };
+
+    // _wos.forceMarineRender()
+    // Execute a single MarineRenderer render pass immediately on the engine canvas.
+    // Separates data failure / projection failure / render-loop wiring failure / styling failure.
+    window._wos.forceMarineRender = function forceMarineRender() {
+      var mr     = window.SBE && SBE.MarineRenderer;
+      var canvas = document.getElementById('engine-canvas');
+      if (!mr) { console.warn('[WOS] MarineRenderer unavailable'); return false; }
+      if (!canvas) { console.warn('[WOS] engine-canvas not found'); return false; }
+      var ctx = canvas.getContext('2d');
+      mr.render(ctx, window._wos && window._wos.state, 1 / 60);
+      console.log('[WOS] forceMarineRender — render pass executed');
+      var snap = mr.getDebugSnapshot();
+      console.log('  renderStateCount:', snap.renderStateCount, '  lastRenderMs:', snap.lastRenderMs);
+      return true;
+    };
+
+    // _wos.debugMarineVisibility()
+    // Full pipeline + geometry visibility audit.
+    // Run this when boats are not visible to isolate the failure stage.
+    window._wos.debugMarineVisibility = function debugMarineVisibility() {
+      var ais = window.SBE && SBE.AISRuntime;
+      var mr  = window.SBE && SBE.MarineRenderer;
+      var mvr = window.SBE && SBE.MapboxViewportRuntime;
+
+      var harborMode   = !!(window.SBE && SBE.runtimeFlags && SBE.runtimeFlags.harborBootstrapMode);
+      var vessels      = ais ? ais.getActiveVessels() : [];
+      var debugVessel  = vessels.find(function(v) { return String(v.mmsi) === '999000001'; });
+      var snap         = mr ? mr.getDebugSnapshot() : {};
+      var cam          = mvr && mvr.getCamera ? mvr.getCamera() : null;
+      var canvas       = document.getElementById('engine-canvas');
+      var cw           = canvas ? canvas.width  : null;
+      var ch           = canvas ? canvas.height : null;
+
+      // Project the debug vessel position if it exists
+      var projected    = null;
+      var inBounds     = null;
+      if (debugVessel && mvr && mvr.project) {
+        projected = mvr.project([debugVessel.lng, debugVessel.lat]);
+        if (projected && cw && ch) {
+          inBounds = projected.x >= 0 && projected.x <= cw &&
+                     projected.y >= 0 && projected.y <= ch;
+        }
+      }
+
+      console.group('[WOS] debugMarineVisibility — marine render isolation');
+      console.log('harborBootstrapMode: ', harborMode);
+      console.log('AIS vessel count:    ', vessels.length);
+      console.log('debug vessel (999000001):', debugVessel
+        ? { lat: debugVessel.lat.toFixed(5), lng: debugVessel.lng.toFixed(5), state: debugVessel.state }
+        : 'NOT FOUND');
+      console.log('projected screen pos:', projected
+        ? { x: Math.round(projected.x), y: Math.round(projected.y) }
+        : null);
+      console.log('canvas size:         ', cw + ' × ' + ch);
+      console.log('projected in bounds: ', inBounds);
+      console.log('MR initialized:      ', snap.initialized);
+      console.log('MR renderStateCount: ', snap.renderStateCount);
+      console.log('MR lastRenderMs:     ', snap.msSinceRender != null ? snap.msSinceRender + 'ms ago' : 'never');
+      if (cam) {
+        console.log('map center:          ', cam.center);
+        console.log('map zoom:            ', typeof cam.zoom   === 'number' ? cam.zoom.toFixed(2)    : cam.zoom);
+        console.log('map pitch:           ', typeof cam.pitch  === 'number' ? cam.pitch.toFixed(1) + '°' : cam.pitch);
+        console.log('map bearing:         ', typeof cam.bearing=== 'number' ? cam.bearing.toFixed(1)+ '°' : cam.bearing);
+      } else {
+        console.warn('  map camera unavailable');
+      }
+
+      // Diagnosis hints
+      if (!harborMode)               console.warn('  → harborBootstrapMode is OFF — run _wos.enableHarborValidationMode()');
+      if (vessels.length === 0)      console.warn('  → No vessels — run _wos.injectDebugVessel()');
+      if (!debugVessel)              console.warn('  → Debug vessel not found in active bucket');
+      if (inBounds === false)        console.warn('  → Vessel projected OUTSIDE canvas bounds — camera not over vessel');
+      if (snap.renderStateCount === 0 && vessels.length > 0)
+                                     console.warn('  → render() called but no renderState — vessels may be below alpha threshold');
+      if (snap.msSinceRender === null) console.warn('  → MarineRenderer.render() has NEVER been called — check renderFrame() wiring');
+
+      console.groupEnd();
+      return {
+        harborMode:       harborMode,
+        vesselCount:      vessels.length,
+        debugVesselFound: !!debugVessel,
+        projected:        projected,
+        inBounds:         inBounds,
+        canvasSize:       { w: cw, h: ch },
+        initialized:      snap.initialized,
+        renderStateCount: snap.renderStateCount,
+        msSinceRender:    snap.msSinceRender,
+        camera:           cam,
+      };
+    };
+
+    // _wos.enableHarborValidationMode(bool)
+    // One-command cinematic harbor validation:
+    //   • disables land traffic rendering
+    //   • injects the debug vessel (Upper Bay → East River route)
+    //   • centers to harbor framing
+    //   • enables tilt HARBOR mode
+    //   • enables ObservabilityCamera Mapbox drive
+    //   • sets harborBootstrapMode runtime flag
+    window._wos.enableHarborValidationMode = function enableHarborValidationMode(enable) {
+      var on  = (enable !== false);
+      var ais = window.SBE && SBE.AISRuntime;
+      var tpr = window.SBE && SBE.TiltProjectionRuntime;
+      var oc  = window.SBE && SBE.ObservabilityCamera;
+      var mvr = window.SBE && SBE.MapboxViewportRuntime;
+      var tr  = window.SBE && SBE.TrafficRenderer;
+
+      // Toggle runtime flag
+      SBE.runtimeFlags = SBE.runtimeFlags || {};
+      SBE.runtimeFlags.harborBootstrapMode = on;
+
+      if (on) {
+        // Suppress land traffic
+        if (tr) { tr.disable(); }
+
+        // Inject continuously-moving debug vessel
+        if (ais) { ais.injectDebugVessel(true); }
+
+        // Harbor viewport framing
+        if (mvr) {
+          mvr.flyTo({
+            center:  [-74.0165, 40.7015],
+            zoom:    12.8,
+            bearing: -12,
+            pitch:   30,
+            duration: 1800,
+          });
+        }
+
+        // Tilt — harbor mode
+        if (tpr) { tpr.setEnabled(true); tpr.setMode('harbor'); }
+
+        // Camera drive — ObservabilityCamera steers the Mapbox viewport
+        if (oc) { oc.enableMapboxDrive(true); }
+
+        // Marine overlay canvas — dedicated rendering pipeline
+        var mocr = window.SBE && SBE.MarineOverlayCanvasRuntime;
+        if (mocr) { mocr.enable(true); }
+
+        // Maritime occupancy renderer — 0523 chain harbor occupancy layer
+        var mor = window.SBE && SBE.MaritimeOccupancyRenderer;
+        if (mor) { mor.enable(true); }
+
+        console.log('[WOS] Harbor Validation Mode: ENABLED');
+        console.log('  land traffic: suppressed');
+        console.log('  debug vessel: injected');
+        console.log('  framing:      Lower Manhattan harbor');
+        console.log('  tilt:         HARBOR (28–38°)');
+        console.log('  camera drive: ON');
+        console.log('  marine canvas: ON');
+        console.log('  occupancy renderer: ON');
+        console.log('  run _wos.debugMarine() or _wos.debugOccupancy() to audit pipeline');
+      } else {
+        // Restore land traffic
+        if (tr) { tr.enable(); }
+
+        // Remove debug vessel
+        if (ais) { ais.injectDebugVessel(false); }
+
+        // Disable tilt
+        if (tpr) { tpr.setEnabled(false); }
+
+        // Disable camera drive
+        if (oc) { oc.enableMapboxDrive(false); }
+
+        // Marine overlay canvas — shut down dedicated pipeline
+        var mocr = window.SBE && SBE.MarineOverlayCanvasRuntime;
+        if (mocr) { mocr.enable(false); }
+
+        // Maritime occupancy renderer — shut down
+        var mor = window.SBE && SBE.MaritimeOccupancyRenderer;
+        if (mor) { mor.enable(false); }
+
+        console.log('[WOS] Harbor Validation Mode: DISABLED');
+      }
+
+      return SBE.runtimeFlags.harborBootstrapMode;
+    };
+
+    // _wos.enableMarineDOMDebug(bool)
+    // DOM-based vessel marker that bypasses the canvas pipeline entirely.
+    // Projects debug vessel through MapboxViewportRuntime.project() and
+    // positions an absolutely-placed div at those screen coordinates.
+    //
+    // If DOM marker appears → AIS + projection + Mapbox are all fine.
+    //                         The problem is canvas layer/render order.
+    // If DOM marker does not appear → coordinate or container mismatch.
+    //
+    // Parent: .canvas-area (same container that holds #mapbox-viewport + canvas)
+    // z-index: 999999 — above all canvas and Mapbox layers.
+    (function() {
+      var _domDebugEl    = null;
+      var _domDebugTimer = null;
+
+      function _updateDOMMarker() {
+        var ais = window.SBE && SBE.AISRuntime;
+        var mvr = window.SBE && SBE.MapboxViewportRuntime;
+        if (!ais || !mvr || !mvr.project) return;
+
+        var vessels = ais.getActiveVessels();
+        var dbgV    = vessels.find(function(v) { return String(v.mmsi) === '999000001'; });
+        if (!dbgV) return;
+
+        if (!Number.isFinite(dbgV.lng) || !Number.isFinite(dbgV.lat)) return;
+        var pt = mvr.project([dbgV.lng, dbgV.lat]);
+        if (!pt) return;
+
+        // Coordinates from project() are relative to the map container element.
+        // The map container is #mapbox-viewport inside .canvas-area.
+        // We need to offset by the canvas-area's own bounding rect so the
+        // absolute-positioned marker lands at the right screen location.
+        var container = document.querySelector('.canvas-area');
+        if (!container) return;
+        var rect = container.getBoundingClientRect();
+
+        // project() returns CSS-pixel coords relative to the map canvas, which
+        // is the same coordinate space as the engine canvas (both fill .canvas-area).
+        _domDebugEl.style.left = Math.round(pt.x) + 'px';
+        _domDebugEl.style.top  = Math.round(pt.y) + 'px';
+
+        // Update label with live position
+        var label = _domDebugEl.querySelector('.marine-dom-label');
+        if (label) {
+          label.textContent = 'WOS-DEBUG-01\n' +
+            dbgV.lat.toFixed(4) + ', ' + dbgV.lng.toFixed(4) + '\n' +
+            'px(' + Math.round(pt.x) + ',' + Math.round(pt.y) + ')';
+        }
+      }
+
+      window._wos.enableMarineDOMDebug = function enableMarineDOMDebug(enable) {
+        if (enable === false) {
+          if (_domDebugEl && _domDebugEl.parentNode) _domDebugEl.parentNode.removeChild(_domDebugEl);
+          if (_domDebugTimer) { clearInterval(_domDebugTimer); _domDebugTimer = null; }
+          _domDebugEl = null;
+          console.log('[WOS] DOM debug marker removed');
+          return;
+        }
+
+        var container = document.querySelector('.canvas-area');
+        if (!container) { console.warn('[WOS] .canvas-area not found'); return; }
+
+        // Remove existing if any
+        var existing = document.getElementById('wos-marine-dom-debug');
+        if (existing) existing.parentNode.removeChild(existing);
+
+        // Create marker
+        _domDebugEl = document.createElement('div');
+        _domDebugEl.id = 'wos-marine-dom-debug';
+        _domDebugEl.style.cssText = [
+          'position:absolute',
+          'width:32px',
+          'height:32px',
+          'border-radius:50%',
+          'background:#00ffff',
+          'border:3px solid white',
+          'z-index:999999',
+          'pointer-events:none',
+          'transform:translate(-50%,-50%)',
+          'box-shadow:0 0 20px #00ffff,0 0 40px rgba(0,255,255,0.5)',
+          'transition:left 0.2s,top 0.2s',
+        ].join(';');
+
+        var label = document.createElement('div');
+        label.className = 'marine-dom-label';
+        label.style.cssText = [
+          'position:absolute',
+          'top:36px',
+          'left:50%',
+          'transform:translateX(-50%)',
+          'white-space:pre',
+          'text-align:center',
+          'font:bold 10px monospace',
+          'color:#00ffff',
+          'text-shadow:0 0 4px #000,0 1px 0 #000',
+          'background:rgba(0,0,0,0.6)',
+          'padding:2px 5px',
+          'border-radius:3px',
+        ].join(';');
+        label.textContent = 'WOS-DEBUG-01';
+        _domDebugEl.appendChild(label);
+
+        container.style.position = 'relative'; // ensure absolute children work
+        container.appendChild(_domDebugEl);
+
+        _updateDOMMarker();
+        _domDebugTimer = setInterval(_updateDOMMarker, 250);
+
+        console.log('[WOS] DOM debug marker enabled — watching MMSI 999000001');
+        console.log('  If marker appears: canvas layer is the problem');
+        console.log('  If marker absent:  projection or container mismatch');
+      };
+    })();
+
+    // _wos.enableMarineCanvasDebug(bool)
+    // Creates a dedicated marine overlay canvas inside .canvas-area, independent
+    // of #engine-canvas. Drives MarineRenderer on its own rAF loop.
+    //
+    // If magenta/cyan appear on this canvas but NOT on #engine-canvas:
+    //   → #engine-canvas is behind Mapbox or has a CSS layering issue.
+    //   → Marine should be permanently migrated to a dedicated overlay layer.
+    //
+    // z-index: 999998 (below DOM debug marker at 999999, above everything else)
+    (function() {
+      var _marineCanvas    = null;
+      var _marineCtx       = null;
+      var _marineRafId     = null;
+      var _marineLastMs    = 0;
+
+      function _marineFrame(now) {
+        _marineRafId = requestAnimationFrame(_marineFrame);
+
+        var mr  = window.SBE && SBE.MarineRenderer;
+        if (!mr || !_marineCtx) return;
+
+        var container = document.querySelector('.canvas-area');
+        if (!container) return;
+
+        var dpr = window.devicePixelRatio || 1;
+        var cw  = container.clientWidth;
+        var ch  = container.clientHeight;
+
+        // Resize backing buffer if container changed
+        if (_marineCanvas.width  !== Math.round(cw * dpr) ||
+            _marineCanvas.height !== Math.round(ch * dpr)) {
+          _marineCanvas.width  = Math.round(cw * dpr);
+          _marineCanvas.height = Math.round(ch * dpr);
+          _marineCanvas.style.width  = cw + 'px';
+          _marineCanvas.style.height = ch + 'px';
+        }
+
+        var dt = _marineLastMs ? Math.min(0.1, (now - _marineLastMs) / 1000) : 1 / 60;
+        _marineLastMs = now;
+
+        // Hard-reset context state before every frame
+        _marineCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        _marineCtx.globalAlpha = 1;
+        _marineCtx.globalCompositeOperation = 'source-over';
+        _marineCtx.clearRect(0, 0, cw, ch);
+
+        mr.render(_marineCtx, window._wos && window._wos.state, dt);
+      }
+
+      window._wos.enableMarineCanvasDebug = function enableMarineCanvasDebug(enable) {
+        if (enable === false) {
+          if (_marineRafId) { cancelAnimationFrame(_marineRafId); _marineRafId = null; }
+          if (_marineCanvas && _marineCanvas.parentNode) {
+            _marineCanvas.parentNode.removeChild(_marineCanvas);
+          }
+          _marineCanvas = null;
+          _marineCtx    = null;
+          _marineLastMs = 0;
+          console.log('[WOS] marine canvas debug: removed');
+          return;
+        }
+
+        var container = document.querySelector('.canvas-area');
+        if (!container) { console.warn('[WOS] .canvas-area not found'); return; }
+
+        // Remove any existing instance
+        var existing = document.getElementById('marine-debug-canvas');
+        if (existing) existing.parentNode.removeChild(existing);
+
+        var dpr = window.devicePixelRatio || 1;
+        var cw  = container.clientWidth;
+        var ch  = container.clientHeight;
+
+        _marineCanvas        = document.createElement('canvas');
+        _marineCanvas.id     = 'marine-debug-canvas';
+        _marineCanvas.width  = Math.round(cw * dpr);
+        _marineCanvas.height = Math.round(ch * dpr);
+        _marineCanvas.style.cssText = [
+          'position:absolute',
+          'inset:0',
+          'width:100%',
+          'height:100%',
+          'z-index:999998',
+          'pointer-events:none',
+        ].join(';');
+
+        container.style.position = 'relative';
+        container.appendChild(_marineCanvas);
+
+        _marineCtx = _marineCanvas.getContext('2d');
+        _marineLastMs = 0;
+        _marineRafId = requestAnimationFrame(_marineFrame);
+
+        console.log('[WOS] marine canvas debug: enabled');
+        console.log('  canvas size:', _marineCanvas.width, '×', _marineCanvas.height, '@', dpr + 'x');
+        console.log('  If magenta/cyan appear here but not on #engine-canvas:');
+        console.log('    → #engine-canvas has a CSS/z-index layering issue');
+        console.log('    → Migrate MarineRenderer permanently to dedicated overlay');
+      };
+    })();
+
+    // _wos.enableMarineOverlayCanvas(bool)
+    // Direct on/off control for the permanent MarineOverlayCanvasRuntime.
+    // In normal use, this is called automatically by enableHarborValidationMode().
+    // Useful for manually toggling the dedicated marine canvas without changing
+    // any other harbor-mode state (traffic, tilt, camera, etc.).
+    window._wos.enableMarineOverlayCanvas = function enableMarineOverlayCanvas(enable) {
+      var mocr = window.SBE && SBE.MarineOverlayCanvasRuntime;
+      if (!mocr) { console.warn('[WOS] MarineOverlayCanvasRuntime not available'); return; }
+      mocr.enable(enable !== false);
+      console.log('[WOS] MarineOverlayCanvasRuntime:', mocr.isEnabled() ? 'ENABLED' : 'DISABLED');
+      return mocr.isEnabled();
+    };
+
+    // _wos.debugMarineOverlayCanvas()
+    // Full snapshot of MarineOverlayCanvasRuntime + quick health assessment.
+    window._wos.debugMarineOverlayCanvas = function debugMarineOverlayCanvas() {
+      var mocr = window.SBE && SBE.MarineOverlayCanvasRuntime;
+      if (!mocr) { console.warn('[WOS] MarineOverlayCanvasRuntime not available'); return null; }
+
+      var snap = mocr.getDebugSnapshot();
+      console.group('[WOS] debugMarineOverlayCanvas');
+      console.log('  enabled:          ', snap.enabled);
+      console.log('  initialized:      ', snap.initialized);
+      console.log('  canvasExists:     ', snap.canvasExists);
+      console.log('  parentSelector:   ', snap.parentSelector);
+      console.log('  parentSize:       ', snap.parentSize ? (snap.parentSize.w + ' × ' + snap.parentSize.h) : 'N/A');
+      console.log('  canvasSize:       ', snap.canvasSize ? (snap.canvasSize.w + ' × ' + snap.canvasSize.h) : 'N/A');
+      console.log('  dpr:              ', snap.dpr);
+      console.log('  lastFrameMs:      ', snap.lastFrameMs);
+      console.log('  msSinceFrame:     ', snap.msSinceFrame !== null ? snap.msSinceFrame + 'ms' : 'never');
+      console.log('  vesselCount:      ', snap.vesselCount);
+      console.log('  renderStateCount: ', snap.renderStateCount);
+
+      // Health assessment
+      if (!snap.enabled)      console.warn('  → RUNTIME NOT ENABLED — call _wos.enableMarineOverlayCanvas(true)');
+      if (!snap.canvasExists) console.warn('  → CANVAS NOT CREATED — enable() may have failed');
+      if (!snap.parentSize)   console.warn('  → PARENT CONTAINER NOT FOUND — check .canvas-area selector');
+      if (snap.msSinceFrame !== null && snap.msSinceFrame > 200)
+                              console.warn('  → STALE FRAME — last render was ' + snap.msSinceFrame + 'ms ago');
+      if (snap.vesselCount === 0)
+                              console.warn('  → NO VESSELS — run _wos.injectDebugVessel(true)');
+      if (snap.enabled && snap.canvasExists && snap.msSinceFrame !== null && snap.msSinceFrame < 100)
+                              console.log('  ✓ rendering live');
+
+      console.groupEnd();
+      return snap;
+    };
+
+    // _wos.setMarineDebugScale(value)
+    // Adjust the visual size multiplier for harbor debug vessels.
+    //   1.0 = true-to-life (default), 2.0 = double, up to 3.0
+    //   0.5 = minimum (half size for dense-traffic testing)
+    // Applies immediately on the next frame — no restart needed.
+    window._wos.setMarineDebugScale = function setMarineDebugScale(value) {
+      var mr = window.SBE && SBE.MarineRenderer;
+      if (!mr) { console.warn('[WOS] MarineRenderer not available'); return; }
+      mr.setMarineDebugScale(value);
+      console.log('[WOS] marine debug scale set to', Math.max(0.5, Math.min(3.0, Number(value) || 1.0)));
+    };
+
+    // _wos.setMarineDebugVisible(bool)
+    // Toggle cyan debug styling in harbor mode.
+    //   true  (default) — cyan hull + dot + heading ray
+    //   false           — hull drawn with production vessel colors (grounded hull still active)
+    window._wos.setMarineDebugVisible = function setMarineDebugVisible(on) {
+      var mr = window.SBE && SBE.MarineRenderer;
+      if (!mr) { console.warn('[WOS] MarineRenderer not available'); return; }
+      mr.setMarineDebugVisible(on !== false);
+      console.log('[WOS] marine debug visible:', on !== false);
+    };
+
+    // _wos.debugTaxonomy(vesselClass?)
+    // Dump compiled taxonomy profile for a vessel class (or all classes).
+    // Example: _wos.debugTaxonomy('FERRY')
+    window._wos.debugTaxonomy = function debugTaxonomy(vesselClass) {
+      var mtp = window.SBE && SBE.MaritimeTaxonomyProfiles;
+      if (!mtp) { console.warn('[WOS] MaritimeTaxonomyProfiles not available'); return; }
+      var snap = mtp.getDebugSnapshot();
+      if (vesselClass) {
+        var profile = mtp.getTaxonomyProfile(vesselClass.toUpperCase());
+        console.group('[WOS] Taxonomy: ' + (vesselClass || 'ALL'));
+        console.log(profile);
+        console.groupEnd();
+        return profile;
+      }
+      console.group('[WOS] MaritimeTaxonomyProfiles');
+      console.log('  version:    ', snap.version);
+      console.log('  initialized:', snap.initialized);
+      console.log('  classes:    ', snap.classes.join(', '));
+      console.log('  vectorSize: ', snap.constants.COMPILED_VECTOR_SIZE);
+      console.groupEnd();
+      return snap;
+    };
+
+    // _wos.resolveVesselClass(aisTypeCode)
+    // Quick AIS type code → vessel class lookup for console testing.
+    window._wos.resolveVesselClass = function resolveVesselClass(aisTypeCode) {
+      var mtp = window.SBE && SBE.MaritimeTaxonomyProfiles;
+      if (!mtp) { console.warn('[WOS] MaritimeTaxonomyProfiles not available'); return null; }
+      var vc = mtp.resolveVesselClassFromAIS(Number(aisTypeCode), null);
+      console.log('[WOS] AIS', aisTypeCode, '→', vc);
+      return vc;
+    };
+
+    // ── 0523B Population Hierarchy APIs ───────────────────────────────────────
+
+    // _wos.debugPopulation()
+    // Print a full snapshot of the population hierarchy — tier breakdown, zone
+    // summaries, budget utilization, and score thresholds.
+    window._wos.debugPopulation = function debugPopulation() {
+      var mph = window.SBE && SBE.MaritimePopulationHierarchy;
+      if (!mph) { console.warn('[WOS] MaritimePopulationHierarchy not available'); return null; }
+      var snap = mph.getDebugSnapshot();
+      console.log('[WOS] Population Hierarchy v' + mph.VERSION);
+      console.log('  Total vessels registered:', snap.vesselCount);
+      console.log('  Tier breakdown:',
+        'HERO=' + snap.tierBreakdown.HERO,
+        'MID=' + snap.tierBreakdown.MID,
+        'BACKGROUND=' + snap.tierBreakdown.BACKGROUND,
+        'GHOST=' + snap.tierBreakdown.GHOST
+      );
+      var zones = Object.keys(snap.zoneSummaries);
+      zones.forEach(function (z) {
+        var zs = snap.zoneSummaries[z];
+        console.log('  Zone "' + z + '":', JSON.stringify(zs.counts),
+          '/ budgets:', JSON.stringify(zs.budgets));
+      });
+      console.log('  Score thresholds:', JSON.stringify(snap.scoreThresholds));
+      return snap;
+    };
+
+    // _wos.getVesselTier(vesselId)
+    // Look up a vessel's current population tier record by MMSI or internal id.
+    window._wos.getVesselTier = function getVesselTier(vesselId) {
+      var mph = window.SBE && SBE.MaritimePopulationHierarchy;
+      if (!mph) { console.warn('[WOS] MaritimePopulationHierarchy not available'); return null; }
+      var id  = String(vesselId);
+      var rec = mph.getVesselTier(id);
+      if (!rec) { console.log('[WOS] vessel', id, 'not registered in population hierarchy'); return null; }
+      console.log('[WOS] vessel', id, '→ tier:', rec.tier, '| score:', rec.score.toFixed(3),
+        '| zone:', rec.zone, '| promoted:', rec.promotionExpiry > 0 ? rec.promotionReason : 'none');
+      return rec;
+    };
+
+    // _wos.promoteVessel(vesselId, tier)
+    // Temporarily promote a vessel to HERO or MID for PROMOTION_TTL_MS (30s).
+    // Example: _wos.promoteVessel('123456789', 'HERO')
+    window._wos.promoteVessel = function promoteVessel(vesselId, tier) {
+      var mph = window.SBE && SBE.MaritimePopulationHierarchy;
+      if (!mph) { console.warn('[WOS] MaritimePopulationHierarchy not available'); return; }
+      var id = String(vesselId);
+      mph.promoteVessel(id, tier, mph.PROMOTION_REASON.MANUAL);
+      var rec = mph.getVesselTier(id);
+      if (rec) {
+        console.log('[WOS] vessel', id, 'promoted → tier:', rec.tier,
+          '| expires in 30s');
+      } else {
+        console.warn('[WOS] vessel', id, 'not found — register it first via assignPopulationTier');
+      }
+    };
+
+    // _wos.assignVesselPopulation(vesselId, vesselClass, zone?)
+    // Register or re-classify a vessel in the population hierarchy.
+    // Useful for testing new vessel class tier assignments from the console.
+    // Example: _wos.assignVesselPopulation('999', 'FERRY', 'inner-harbor')
+    window._wos.assignVesselPopulation = function assignVesselPopulation(vesselId, vesselClass, zone) {
+      var mph = window.SBE && SBE.MaritimePopulationHierarchy;
+      if (!mph) { console.warn('[WOS] MaritimePopulationHierarchy not available'); return; }
+      var id  = String(vesselId);
+      var vc  = String(vesselClass || 'UNKNOWN');
+      var z   = zone ? String(zone) : 'default';
+      var rec = mph.assignPopulationTier(id, vc, z, null);
+      console.log('[WOS] vessel', id, 'class', vc, '→ tier:', rec.tier,
+        '| score:', rec.score.toFixed(3), '| zone:', z);
+      return rec;
+    };
+
+    // ── 0523C Spawn Ecology APIs ───────────────────────────────────────────────
+
+    // _wos.debugSpawnEcology()
+    // Full snapshot: enabled state, synthetic counts, per-zone ecology scores,
+    // spawn interval timings, budget state, active synthetic vessels.
+    window._wos.debugSpawnEcology = function debugSpawnEcology() {
+      var mse = window.SBE && SBE.MaritimeSpawnEcology;
+      if (!mse) { console.warn('[WOS] MaritimeSpawnEcology not available'); return null; }
+      var snap = mse.getDebugSnapshot();
+      console.log('[WOS] SpawnEcology v' + snap.version,
+        '| enabled:', snap.enabled,
+        '| harborMode:', snap.syntheticHarborMode,
+        '| synthetic:', snap.globalSyntheticCount + '/' + snap.globalMaxSynthetic);
+      snap.zones.forEach(function (z) {
+        console.log('  zone:', z.zoneId,
+          '| score:', z.ecologyScore,
+          '| interval:', Math.round(z.spawnIntervalMs / 1000) + 's',
+          '| nextIn:', Math.round(z.nextSpawnInMs / 1000) + 's',
+          '| bounds:', z.hasBounds,
+          '| synthetic ceiling:', z.syntheticCeiling);
+      });
+      console.log('  telemetry:', JSON.stringify(snap.telemetry));
+      return snap;
+    };
+
+    // _wos.debugEcologicalZones()
+    // Show zone registry status, bounds registration, and grid index size.
+    window._wos.debugEcologicalZones = function debugEcologicalZones() {
+      var mez = window.SBE && SBE.MaritimeEcologicalZones;
+      if (!mez) { console.warn('[WOS] MaritimeEcologicalZones not available'); return null; }
+      var snap = mez.getDebugSnapshot();
+      console.log('[WOS] EcologicalZones v' + snap.version,
+        '| zones:', snap.zoneCount,
+        '| with bounds:', snap.registeredBoundsCount,
+        '| grid cells:', snap.gridCellCount);
+      snap.zones.forEach(function (z) {
+        console.log(' ', z.hasBounds ? '✓' : '○', z.zoneId,
+          '(' + z.zoneType + ')',
+          '| target:', z.densityRange.target,
+          '| max:', z.densityRange.max,
+          '| synthCeil:', z.syntheticCeiling);
+      });
+      return snap;
+    };
+
+    // _wos.registerZoneBounds(zoneId, bounds)
+    // Register geographic bounds for an ecological zone so coordinate lookup works.
+    // bounds: { minLat, maxLat, minLng, maxLng }  — OR  { lat, lng, radiusDeg }
+    // Example: _wos.registerZoneBounds('ferry_transit_corridor_primary',
+    //            { lat: 40.645, lng: -74.015, radiusDeg: 0.05 })
+    window._wos.registerZoneBounds = function registerZoneBounds(zoneId, bounds) {
+      var mez = window.SBE && SBE.MaritimeEcologicalZones;
+      if (!mez) { console.warn('[WOS] MaritimeEcologicalZones not available'); return false; }
+      var ok = mez.registerZoneBounds(zoneId, bounds);
+      if (ok) console.log('[WOS] zone bounds registered:', zoneId, JSON.stringify(bounds));
+      return ok;
+    };
+
+    // _wos.enableSyntheticHarborMode(bool)
+    // Enable/disable SYNTHETIC_HARBOR_MODE — AIS-independent synthetic presence.
+    // Must not be used in live AIS sessions. For development/replay/demo only.
+    window._wos.enableSyntheticHarborMode = function enableSyntheticHarborMode(on) {
+      var mse = window.SBE && SBE.MaritimeSpawnEcology;
+      if (!mse) { console.warn('[WOS] MaritimeSpawnEcology not available'); return; }
+      mse.enableSyntheticHarborMode(on !== false);
+    };
+
+    // _wos.enableSpawnEcology(bool)
+    // Master switch for spawn ecology. Disabled by default — must be explicitly enabled.
+    window._wos.enableSpawnEcology = function enableSpawnEcology(on) {
+      var mse = window.SBE && SBE.MaritimeSpawnEcology;
+      if (!mse) { console.warn('[WOS] MaritimeSpawnEcology not available'); return; }
+      mse.enable(on !== false);
+      console.log('[WOS] SpawnEcology enabled:', mse.isEnabled());
+    };
+
+    // _wos.getSpawnCandidates(zoneId, count?)
+    // Manually request spawn candidates for a zone. Uses current simulation time.
+    // Returns candidate request objects — does not instantiate vessels.
+    // Example: _wos.getSpawnCandidates('ferry_transit_corridor_primary', 3)
+    window._wos.getSpawnCandidates = function getSpawnCandidates(zoneId, count) {
+      var mse = window.SBE && SBE.MaritimeSpawnEcology;
+      if (!mse) { console.warn('[WOS] MaritimeSpawnEcology not available'); return []; }
+      var ctx = {
+        simulationTimeMs:     performance.now(),
+        weatherState:         null,
+        liveAISCountInZone:   0,
+        syntheticCountInZone: 0,
+        ecologySilenceActive: false,
+      };
+      var candidates = mse.getSpawnCandidates(String(zoneId), Number(count) || 1, ctx);
+      console.log('[WOS] spawn candidates for', zoneId, ':', candidates.length);
+      candidates.forEach(function (c) {
+        console.log('  ', c.syntheticId, '| class:', c.vesselClass,
+          '| pos:', c.initialPosition.lat.toFixed(5), c.initialPosition.lng.toFixed(5),
+          '| hdg:', c.initialHeadingDeg + '°',
+          '| spd:', c.initialSpeedKts + 'kts',
+          '| lifetime:', Math.round(c.requestedLifetimeMs / 60000) + 'min',
+          '| reason:', c.spawnReason);
+      });
+      return candidates;
+    };
+
+    // _wos.debugTemporalEcology(simulationTimeMs?)
+    // Show current time window, affinities, and per-zone time multipliers.
+    window._wos.debugTemporalEcology = function debugTemporalEcology(simulationTimeMs) {
+      var mte = window.SBE && SBE.MaritimeTemporalEcology;
+      if (!mte) { console.warn('[WOS] MaritimeTemporalEcology not available'); return null; }
+      var t    = simulationTimeMs != null ? Number(simulationTimeMs) : performance.now();
+      var snap = mte.getDebugSnapshot(t);
+      console.log('[WOS] TemporalEcology | hour:', snap.simulationHour,
+        '| window:', snap.activeWindow);
+      var mez  = window.SBE && SBE.MaritimeEcologicalZones;
+      var zones = mez ? mez.getAllZones() : [];
+      zones.forEach(function (z) {
+        var aff = mte.getTimeWindowAffinity(z.zoneType, t);
+        console.log('  ', z.zoneId.split('_').slice(0, 3).join('_'),
+          '| timeAffinity:', aff.toFixed(3));
+      });
+      return snap;
+    };
+
+    // ── 0523D Wake Authority APIs ──────────────────────────────────────────────
+
+    // _wos.debugWake()
+    // Full WakeRegistry snapshot: segment counts, budget pressure, telemetry,
+    // top vessels by segment count, per-zone counts.
+    window._wos.debugWake = function debugWake() {
+      var wa = window.SBE && SBE.WakeAuthority;
+      if (!wa) { console.warn('[WOS] WakeAuthority not available'); return null; }
+      var snap = wa.getDebugSnapshot();
+      console.log('[WOS] WakeAuthority v' + snap.version,
+        '| active:', snap.activeSegments + '/' + snap.budgets.globalMax,
+        '| synthetic:', snap.syntheticSegments,
+        '| pressure:', (snap.budgets.globalPressure * 100).toFixed(1) + '%');
+      if (snap.topVessels.length) {
+        console.log('  top vessels by wake count:');
+        snap.topVessels.forEach(function (v) {
+          console.log('   ', v.vesselId, '→', v.count, 'segments');
+        });
+      }
+      if (Object.keys(snap.zoneCounts).length) {
+        console.log('  zone counts:', JSON.stringify(snap.zoneCounts));
+      }
+      console.log('  telemetry:', JSON.stringify(snap.telemetry));
+      return snap;
+    };
+
+    // _wos.testWakeEmission(vesselId, vesselClass, tier, lat, lng, speedKts)
+    // Manually fire one wake emission for testing. Uses performance.now() as sim time.
+    // Does NOT integrate with AISRuntime — purely for console validation.
+    // Example: _wos.testWakeEmission('123456789', 'FERRY', 'HERO', 40.644, -74.017, 12)
+    window._wos.testWakeEmission = function testWakeEmission(vesselId, vesselClass, tier, lat, lng, speedKts) {
+      var wa = window.SBE && SBE.WakeAuthority;
+      if (!wa) { console.warn('[WOS] WakeAuthority not available'); return null; }
+      var id   = String(vesselId);
+      var vc   = String(vesselClass  || 'FERRY');
+      var t    = String(tier         || 'MID');
+      var spd  = Number(speedKts)    || 8;
+      var simMs = performance.now();
+
+      var emitter = wa.resolveWakeEligibility(id, vc, t, spd, 'AIS_VESSEL');
+      console.log('[WOS] emitter state:', JSON.stringify(emitter));
+
+      if (!emitter.eligible) {
+        console.warn('[WOS] vessel not eligible for wake emission');
+        return null;
+      }
+
+      var vessel = {
+        vesselId:              id,
+        lat:                   Number(lat)  || 40.644,
+        lng:                   Number(lng)  || -74.017,
+        trueHeading:           90,
+        speedKts:              spd,
+        vesselClass:           vc,
+        continuityConfidence:  1.0,
+        zoneId:                null,
+      };
+
+      var seg = wa.emitWakeSegment(emitter, vessel, null, simMs);
+      if (seg) {
+        console.log('[WOS] wake segment emitted:', seg.wakeId,
+          '| intensity:', seg.intensityRaw.toFixed(3),
+          '| width:', seg.widthMeters.toFixed(1) + 'm',
+          '| turbulence:', seg.turbulenceRaw.toFixed(3),
+          '| expires in:', Math.round((seg.expiresAtMs - simMs) / 60000) + 'min');
+      } else {
+        console.log('[WOS] wake emission suppressed (budget/interval/distance gate)');
+      }
+      return seg;
+    };
+
+    // _wos.getVesselWake(vesselId)
+    // Return all active wake segments for a vessel.
+    window._wos.getVesselWake = function getVesselWake(vesselId) {
+      var wa = window.SBE && SBE.WakeAuthority;
+      if (!wa) { console.warn('[WOS] WakeAuthority not available'); return []; }
+      var segs = wa.getWakeSegmentsForVessel(String(vesselId));
+      console.log('[WOS] vessel', vesselId, '—', segs.length, 'wake segments');
+      segs.forEach(function (s) {
+        console.log('  ', s.wakeId,
+          '| tier:', s.populationTierAtEmission,
+          '| intensity:', s.intensityRaw.toFixed(3),
+          '| evicted:', s.parentEvicted,
+          '| start:', s.start.lat.toFixed(5), s.start.lng.toFixed(5),
+          '→ end:', s.end.lat.toFixed(5), s.end.lng.toFixed(5));
+      });
+      return segs;
+    };
+
+    // _wos.decayWake()
+    // Manually trigger a wake decay sweep using current performance.now() as sim time.
+    // In production this is driven by the continuity engine on its tick.
+    window._wos.decayWake = function decayWake() {
+      var wa = window.SBE && SBE.WakeAuthority;
+      if (!wa) { console.warn('[WOS] WakeAuthority not available'); return null; }
+      var result = wa.decayWakeSegments(performance.now());
+      console.log('[WOS] wake decay —',
+        'decayed:', result.decayedCount,
+        '| remaining:', result.remainingSegments,
+        '| pressure:', result.budgetPressureActive);
+      return result;
+    };
+
+    // _wos.resolveWakeClass(vesselClass)
+    // Taxonomy-side bridge: maps a vessel class string to WakeAuthority's
+    // 4-value wake class enum (NONE/MINIMAL/STANDARD/HEAVY).
+    // Resolves ISSUE-0523A-001.
+    // Example: _wos.resolveWakeClass('CARGO') → 'STANDARD'
+    window._wos.resolveWakeClass = function resolveWakeClass(vesselClass) {
+      var mtp = SBE.MaritimeTaxonomyProfiles;
+      if (!mtp || !mtp.resolveWakeAuthorityClass) {
+        console.warn('[WOS] MaritimeTaxonomyProfiles not available');
+        return null;
+      }
+      var result = mtp.resolveWakeAuthorityClass(vesselClass);
+      console.log('[WOS] resolveWakeClass(' + vesselClass + ') →', result);
+      return result;
+    };
+
+    // ── 0523E Atmospheric Readability APIs ────────────────────────────────────
+
+    // _wos.debugAtmosphere()
+    // Returns AtmosphericReadability telemetry snapshot.
+    window._wos.debugAtmosphere = function debugAtmosphere() {
+      var ar = SBE.MaritimeAtmosphericReadability;
+      if (!ar) { console.warn('[WOS] MaritimeAtmosphericReadability not available'); return null; }
+      var snap = ar.getDebugSnapshot();
+      console.log('[WOS] atmosphere snapshot —',
+        'vessels:', snap.evaluatedVessels,
+        '| wakes:', snap.evaluatedWakes,
+        '| hidden:', snap.hiddenByAtmosphere,
+        '| silhouette:', snap.silhouetteCount,
+        '| lightOnly:', snap.lightOnlyCount,
+        '| labelSuppressed:', snap.labelSuppressed,
+        '| avgScore:', snap.averageReadabilityScore.toFixed(3));
+      return snap;
+    };
+
+    // _wos.testVesselReadability(vesselId, vesselClass, tier, distM, weather, timeOfDay, provenance?)
+    // Manual readability probe. Defaults: provenance='AIS_VESSEL', clutterPressure=0.2
+    // Example: _wos.testVesselReadability('123', 'FERRY', 'HERO', 800, 'FOG', 'NIGHT')
+    window._wos.testVesselReadability = function testVesselReadability(
+      vesselId, vesselClass, tier, distM, weather, timeOfDay, provenance
+    ) {
+      var ar = SBE.MaritimeAtmosphericReadability;
+      if (!ar) { console.warn('[WOS] MaritimeAtmosphericReadability not available'); return null; }
+      var mtp = SBE.MaritimeTaxonomyProfiles;
+      var taxResistance = 0.5, taxProjection = 0.5, taxLabel = 0.5;
+      if (mtp) {
+        var prof = mtp.getTaxonomyProfile(vesselClass);
+        if (prof && prof.vec) {
+          taxResistance = prof.vec[mtp.F.ATMOSPHERIC_RESISTANCE] || 0.5;
+          taxProjection = prof.vec[mtp.F.PROJECTION_WEIGHT]      || 0.5;
+          taxLabel      = prof.vec[mtp.F.LABEL_PRIORITY]         || 0.5;
+        }
+      }
+      var input = {
+        vesselId:                    vesselId || 'test-vessel',
+        vesselClass:                 vesselClass || 'CARGO',
+        provenance:                  provenance || 'AIS_VESSEL',
+        populationTier:              tier || 'MID',
+        distanceMeters:              distM != null ? distM : 1000,
+        taxonomyAtmosphericResistance: taxResistance,
+        taxonomyProjectionWeight:    taxProjection,
+        taxonomyLabelPriority:       taxLabel,
+        updateAdvisory:              'UPDATE_STANDARD',
+      };
+      var context = {
+        simulationTimeMs: 0,
+        timeOfDay:        timeOfDay  || 'MIDDAY',
+        weatherState:     weather    || 'CLEAR',
+        visibilityMeters: null,
+        viewportScale:    1.0,
+        cameraDistanceMeters: null,
+        clutterPressure:  0.2,
+      };
+      var result = ar.resolveVesselReadability(input, context);
+      console.log('[WOS] vessel readability —',
+        vesselClass, tier, weather, timeOfDay, distM + 'm',
+        '| class:', result.visibilityClass,
+        '| score:', result.readabilityScore.toFixed(3),
+        '| label:', result.labelReadable,
+        '| reasons:', result.reasonCodes.join(',') || 'none');
+      return result;
+    };
+
+    // _wos.testWakeReadability(wakeId, provenance, intensityRaw, ageRatio, weather, timeOfDay)
+    // Example: _wos.testWakeReadability('wake::123::1000', 'AIS_VESSEL', 0.8, 0.3, 'FOG', 'DUSK')
+    window._wos.testWakeReadability = function testWakeReadability(
+      wakeId, provenance, intensityRaw, ageRatio, weather, timeOfDay
+    ) {
+      var ar = SBE.MaritimeAtmosphericReadability;
+      if (!ar) { console.warn('[WOS] MaritimeAtmosphericReadability not available'); return null; }
+      var input = {
+        wakeId:                  wakeId      || 'wake::test::0',
+        vesselId:                'test-vessel',
+        provenance:              provenance  || 'AIS_VESSEL',
+        intensityRaw:            intensityRaw != null ? intensityRaw : 0.8,
+        turbulenceRaw:           0.4,
+        ageRatio:                ageRatio    != null ? ageRatio : 0.0,
+        populationTierAtEmission:'MID',
+      };
+      var context = {
+        simulationTimeMs: 0,
+        timeOfDay:        timeOfDay || 'MIDDAY',
+        weatherState:     weather  || 'CLEAR',
+        visibilityMeters: null,
+        viewportScale:    1.0,
+        cameraDistanceMeters: null,
+        clutterPressure:  0.2,
+      };
+      var result = ar.resolveWakeReadability(input, context);
+      console.log('[WOS] wake readability —',
+        wakeId, weather, timeOfDay,
+        '| class:', result.visibilityClass,
+        '| score:', result.readabilityScore.toFixed(3),
+        '| wakeReadable:', result.wakeReadable,
+        '| reasons:', result.reasonCodes.join(',') || 'none');
+      return result;
+    };
+
+    // ── 0523G Occupancy Renderer APIs ─────────────────────────────────────────
+
+    // _wos.debugOccupancy()
+    // Full debug snapshot: renderer state, frame telemetry, system availability.
+    window._wos.debugOccupancy = function debugOccupancy() {
+      var mor = SBE.MaritimeOccupancyRenderer;
+      if (!mor) { console.warn('[WOS] MaritimeOccupancyRenderer not available'); return null; }
+      var snap = mor.getDebugSnapshot();
+      var tel  = snap.telemetry || {};
+      console.group('[WOS] MaritimeOccupancyRenderer v' + snap.version);
+      console.log('  enabled:', snap.enabled, '| ready:', mor.isReady());
+      console.log('  frames rendered:', tel.framesRendered);
+      console.log('  AIS vessels:    ', tel.aisRendered, '| synthetic:', tel.syntheticRendered);
+      console.log('  wakes:          ', tel.wakesRendered, '| labels:', tel.labelsRendered);
+      console.log('  atmo hidden:    ', tel.atmosphericHidden);
+      console.group('Dependencies');
+      console.log('  AISRuntime:                   ', !!(SBE.AISRuntime));
+      console.log('  MaritimePopulationHierarchy:  ', !!(SBE.MaritimePopulationHierarchy));
+      console.log('  MaritimeSpawnEcology:         ', !!(SBE.MaritimeSpawnEcology));
+      console.log('  WakeAuthority:                ', !!(SBE.WakeAuthority));
+      console.log('  MaritimeAtmosphericReadability:', !!(SBE.MaritimeAtmosphericReadability));
+      console.log('  MaritimeTaxonomyProfiles:     ', !!(SBE.MaritimeTaxonomyProfiles));
+      console.log('  MapboxViewportRuntime:        ', !!(SBE.MapboxViewportRuntime));
+      console.groupEnd();
+      console.groupEnd();
+      return snap;
+    };
+
+    // _wos.enableOccupancyRenderer(bool)
+    // Toggle occupancy renderer on/off without full harbor mode toggle.
+    window._wos.enableOccupancyRenderer = function enableOccupancyRenderer(on) {
+      var mor = SBE.MaritimeOccupancyRenderer;
+      if (!mor) { console.warn('[WOS] MaritimeOccupancyRenderer not available'); return; }
+      mor.enable(on !== false);
+      console.log('[WOS] MaritimeOccupancyRenderer:', mor.isEnabled() ? 'ENABLED' : 'DISABLED');
+    };
+
+    // _wos.seedWaterCorridors()
+    // Inject 35 deterministic seed vessels placed on verified navigable water,
+    // organized into 8 named harbor corridors (Upper Bay, SI Ferry, East River,
+    // Hudson, Kill Van Kull, Verrazzano, Red Hook/BCT, Lower Bay Anchorage).
+    // Renderer-local only — does NOT enter AISRuntime or any authority system.
+    window._wos.seedWaterCorridors = function seedWaterCorridors() {
+      var mor = SBE.MaritimeOccupancyRenderer;
+      if (!mor || !mor.seedWaterCorridors) { console.warn('[WOS] MaritimeOccupancyRenderer.seedWaterCorridors not available'); return; }
+      var count = mor.seedWaterCorridors();
+      console.log('[WOS] seedWaterCorridors — ' + count + ' vessels in water lanes active | call _wos.clearSeedVessels() to remove');
+    };
+
+    // _wos.seedDenseHarbor()
+    // Legacy alias for seedWaterCorridors().
+    window._wos.seedDenseHarbor = function seedDenseHarbor() {
+      var mor = SBE.MaritimeOccupancyRenderer;
+      if (!mor || !mor.seedWaterCorridors) { console.warn('[WOS] MaritimeOccupancyRenderer.seedWaterCorridors not available'); return; }
+      var count = mor.seedWaterCorridors();
+      console.log('[WOS] seedDenseHarbor (→ seedWaterCorridors) — ' + count + ' seed vessels active | call _wos.clearSeedVessels() to remove');
+    };
+
+    // _wos.clearSeedVessels()
+    // Remove all renderer-local seed vessels injected by seedDenseHarbor().
+    // Visual-only — does not affect AISRuntime-backed validation vessels.
+    window._wos.clearSeedVessels = function clearSeedVessels() {
+      var mor = SBE.MaritimeOccupancyRenderer;
+      if (!mor || !mor.clearSeedVessels) { console.warn('[WOS] MaritimeOccupancyRenderer.clearSeedVessels not available'); return; }
+      mor.clearSeedVessels();
+    };
+
+    // _wos.enableMaritimeValidationFeed(bool)
+    // Start or stop the AIS-backed maritime validation feed (0523H).
+    // When enabled, 35 deterministic vessels are injected through AISRuntime.ingestPacket()
+    // at 1Hz — the same path live AIS data will use. Does not require seedWaterCorridors().
+    //   _wos.enableMaritimeValidationFeed(true)   → start feed
+    //   _wos.enableMaritimeValidationFeed(false)  → stop feed (vessels remain in AISRuntime until dormant)
+    window._wos.enableMaritimeValidationFeed = function enableMaritimeValidationFeed(on) {
+      var mvf = SBE.MaritimeValidationFeed;
+      if (!mvf) { console.warn('[WOS] MaritimeValidationFeed not available'); return; }
+      mvf.enable(on !== false);
+      SBE.runtimeFlags = SBE.runtimeFlags || {};
+      SBE.runtimeFlags.enableMaritimeValidationFeed = mvf && on !== false;
+      console.log('[WOS] MaritimeValidationFeed:', (on !== false) ? 'ENABLED' : 'DISABLED',
+        '— call _wos.debugAIS() to inspect active vessels');
+    };
+
+    // _wos.resetMaritimeValidationFeed()
+    // Stop the feed, clear telemetry counters, and reset DR state.
+    // AISRuntime-backed vessels will naturally age to STALE → dormant after ~5 min silence.
+    window._wos.resetMaritimeValidationFeed = function resetMaritimeValidationFeed() {
+      var mvf = SBE.MaritimeValidationFeed;
+      if (!mvf) { console.warn('[WOS] MaritimeValidationFeed not available'); return; }
+      mvf.reset();
+    };
+
+    // _wos.debugMaritimeValidationFeed()
+    // Print feed status: enabled state, ticks emitted, packets injected, active vessels in AISRuntime.
+    window._wos.debugMaritimeValidationFeed = function debugMaritimeValidationFeed() {
+      var mvf = SBE.MaritimeValidationFeed;
+      if (!mvf) { console.warn('[WOS] MaritimeValidationFeed not available'); return null; }
+      return mvf.debug();
+    };
+
+    // _wos.debugBoatSpriteRenderer()
+    // Returns frame-level sprite LOD, draw counts, hover state.
+    // Wired directly in MaritimeOccupancyRenderer.init() — this stub ensures the
+    // helper is callable even if the renderer initialises after main.js runs.
+    window._wos.debugBoatSpriteRenderer = window._wos.debugBoatSpriteRenderer || function debugBoatSpriteRenderer() {
+      var mor = SBE.MaritimeOccupancyRenderer;
+      if (!mor || !mor.debugBoatSpriteRenderer) {
+        console.warn('[WOS] MaritimeOccupancyRenderer.debugBoatSpriteRenderer not available');
+        return null;
+      }
+      return mor.debugBoatSpriteRenderer();
+    };
+
+    // _wos.debugMaritimeRuntimePath()
+    // Full pipeline diagnostic: ValidationFeed → AISRuntime bucket → Renderer frame.
+    // Identifies which layer the vessels are lost in.
+    //   validationFeedEnabled   — is the feed active?
+    //   aisRuntimeActiveCount   — how many vessels in AISRuntime bucket?
+    //   validationMMSIsActive   — how many are validation MMSIs?
+    //   rendererAISCount        — how many did the renderer draw last frame?
+    //   firstValidationVessel   — sample vessel with class, state, position
+    window._wos.debugMaritimeRuntimePath = function debugMaritimeRuntimePath() {
+      var mor = SBE.MaritimeOccupancyRenderer;
+      if (!mor || !mor.debugMaritimeRuntimePath) {
+        console.warn('[WOS] MaritimeOccupancyRenderer.debugMaritimeRuntimePath not available');
+        return null;
+      }
+      return mor.debugMaritimeRuntimePath();
+    };
+
+    // _wos.setBootHarborMode(bool)
+    // Quick escape hatch: toggle harbor isolation without a full restart.
+    //   _wos.setBootHarborMode(false) → show route/cars again (normal mode)
+    //   _wos.setBootHarborMode(true)  → hide route/cars, marine only
+    window._wos.setBootHarborMode = function setBootHarborMode(enabled) {
+      SBE.runtimeFlags = SBE.runtimeFlags || {};
+      SBE.runtimeFlags.harborBootstrapMode = (enabled !== false);
+      var tr = window.SBE && SBE.TrafficRenderer;
+      if (tr) {
+        if (SBE.runtimeFlags.harborBootstrapMode && tr.disable) tr.disable();
+        else if (!SBE.runtimeFlags.harborBootstrapMode && tr.enable) tr.enable();
+      }
+      console.log('[WOS] harborBootstrapMode:', SBE.runtimeFlags.harborBootstrapMode);
+      renderFrame();
+      return SBE.runtimeFlags.harborBootstrapMode;
+    };
+
+    // _wos.enableLandTraffic(bool)
+    // Enables or disables land traffic (TrafficRenderer + TrafficFlowRuntime).
+    // Cars are off by default in maritime runtime (landTrafficEnabled=false).
+    //   _wos.enableLandTraffic(true)  → cars appear immediately
+    //   _wos.enableLandTraffic(false) → cars removed immediately
+    window._wos.enableLandTraffic = function enableLandTraffic(on) {
+      on = (on !== false);
+      SBE.runtimeFlags = SBE.runtimeFlags || {};
+      SBE.runtimeFlags.landTrafficEnabled = on;
+      var tr  = window.SBE && SBE.TrafficRenderer;
+      var tfr = window.SBE && SBE.TrafficFlowRuntime;
+      if (on) {
+        if (tfr && tfr.init && !tfr._initialized) tfr.init();
+        if (tr)  { if (tr.init && !tr._initialized) tr.init(); tr.enable(); }
+        // Update UI checkbox if present
+        var el = document.getElementById('land-traffic-enabled');
+        if (el) el.checked = true;
+        console.log('[WOS] Land traffic: ENABLED');
+      } else {
+        if (tr && tr.disable) tr.disable();
+        var el2 = document.getElementById('land-traffic-enabled');
+        if (el2) el2.checked = false;
+        console.log('[WOS] Land traffic: DISABLED');
+      }
+      return on;
+    };
+
+    // ── Harbor boot auto-run ───────────────────────────────────────────────
+    // 0523K: Maritime now auto-starts as a first-class subsystem (see
+    // _maritimeAutoStart() in the init sequence above). Harbor Validation Mode
+    // is retained as a developer debug harness only — it applies camera framing,
+    // tilt, traffic suppression, and debug vessel injection on top of normal
+    // maritime operation. Not run by default in 'normal' boot mode.
+    if (BOOT_HARBOR_VALIDATION) {
+      window._wos.enableHarborValidationMode(true);
+    }
 
     // ── Grid debug helpers ─────────────────────────────────────────────────
     window._wos.debugRuntimeState = function debugRuntimeState() {
@@ -4876,6 +6476,34 @@
         console.log("[demo]", state.demo.enabled ? "enabled" : "disabled");
         return state.demo.enabled;
       },
+    };
+
+    // ── _wos inspector console API ────────────────────────────────────────────
+    window._wos.showObjectInspector = function() {
+      showObjectInspector();
+      console.log('[inspector] shown (forced)');
+    };
+    window._wos.hideObjectInspector = function() {
+      _inspectorPinned = false;
+      SBE.runtimeFlags.objectInspectorPinned = false;
+      SBE.runtimeFlags.showObjectInspectorWhenEmpty = false;
+      document.body.classList.add('inspector-hidden');
+      var pinBtn = document.getElementById('inspector-pin-btn');
+      if (pinBtn) pinBtn.classList.remove('pinned');
+      _scheduleViewportSync();
+      console.log('[inspector] hidden (forced)');
+    };
+    window._wos.pinObjectInspector = function(on) { pinObjectInspector(on); };
+    window._wos.debugObjectInspector = function() {
+      var snap = {
+        bodyHasInspectorHidden: document.body.classList.contains('inspector-hidden'),
+        pinned: _inspectorPinned,
+        showWhenEmpty: SBE.runtimeFlags.showObjectInspectorWhenEmpty,
+        rightPanelWidth: (document.getElementById('right-panel') || {}).offsetWidth,
+        emptyStateHidden: (document.getElementById('inspector-empty-state') || {}).hidden,
+      };
+      console.table([snap]);
+      return snap;
     };
 
     // ── _wos.auditHiddenArtifacts ──────────────────────────────────────────────
@@ -17090,6 +18718,81 @@
         });
       }
 
+      // ── Maritime System bindings — 0523K ──────────────────────────────────
+      // Controls in World → SYSTEMS section. Each binding writes directly to
+      // SBE.runtimeFlags (read by subsystems next frame) or calls the subsystem
+      // API for immediate effect. No page reload required.
+      (function bindMaritimeSystems() {
+        var rf  = SBE.runtimeFlags;
+        var sys = SBE.systems && SBE.systems.maritime;
+
+        // Maritime Enabled — master switch
+        var maritimeEnabledEl = document.getElementById('maritime-enabled');
+        if (maritimeEnabledEl) {
+          maritimeEnabledEl.checked = !!(rf && rf.maritimeEnabled);
+          maritimeEnabledEl.addEventListener('change', function () {
+            var on = this.checked;
+            if (rf) rf.maritimeEnabled = on;
+            if (sys) sys.enabled = on;
+            var mor = SBE.MaritimeOccupancyRenderer;
+            if (mor) { if (on) mor.enable(true); else mor.enable(false); }
+            var mvf = SBE.MaritimeValidationFeed;
+            if (mvf) { if (on && rf.enableMaritimeValidationFeed) mvf.enable(true); else mvf.enable(false); }
+          });
+        }
+
+        // Validation Feed
+        var valFeedEl = document.getElementById('maritime-validation-feed');
+        if (valFeedEl) {
+          valFeedEl.checked = !!(rf && rf.enableMaritimeValidationFeed);
+          valFeedEl.addEventListener('change', function () {
+            var on = this.checked;
+            if (rf) rf.enableMaritimeValidationFeed = on;
+            if (sys) sys.validationFeed = on;
+            var mvf = SBE.MaritimeValidationFeed;
+            if (mvf) { if (on) mvf.enable(true); else mvf.enable(false); }
+          });
+        }
+
+        // Show Labels
+        var labelsEl = document.getElementById('maritime-show-labels');
+        if (labelsEl) {
+          labelsEl.checked = !!(rf && rf.showMaritimeDebugLabels);
+          labelsEl.addEventListener('change', function () {
+            if (rf) rf.showMaritimeDebugLabels = this.checked;
+          });
+        }
+
+        // Show Wakes
+        var wakesEl = document.getElementById('maritime-show-wakes');
+        if (wakesEl) {
+          wakesEl.checked = !!(rf && (rf.showMaritimeWakeGlow !== false));
+          wakesEl.addEventListener('change', function () {
+            if (rf) rf.showMaritimeWakeGlow = this.checked;
+          });
+        }
+
+        // Show Nav Lights
+        var navLightsEl = document.getElementById('maritime-show-nav-lights');
+        if (navLightsEl) {
+          navLightsEl.checked = !!(rf && (rf.showMaritimeNavLights !== false));
+          navLightsEl.addEventListener('change', function () {
+            if (rf) rf.showMaritimeNavLights = this.checked;
+          });
+        }
+
+        // Land Traffic Enabled
+        var landTrafficEl = document.getElementById('land-traffic-enabled');
+        if (landTrafficEl) {
+          landTrafficEl.checked = !!(rf && rf.landTrafficEnabled);
+          landTrafficEl.addEventListener('change', function () {
+            if (window._wos && window._wos.enableLandTraffic) {
+              window._wos.enableLandTraffic(this.checked);
+            }
+          });
+        }
+      })();
+
       // Field influence slider — operates on selected walker(s)
       var fieldInflEl = document.getElementById("obj-field-influence");
       var fieldInflOut = document.getElementById("obj-field-influence-value");
@@ -19405,6 +21108,199 @@
       renderLayerPanel();
     })();
 
+    // ── Object Inspector contextual visibility ─────────────────────────────────
+    // ── Centralized workspace resize sync ─────────────────────────────────────
+    // Drives all viewport-sensitive subsystems after any layout change:
+    //   • browser window resize
+    //   • inspector collapse / expand
+    //   • drawer open / close
+    //   • initial app boot
+    //
+    // Implementation:
+    //   _scheduleViewportSync() queues one rAF-debounced call. Multiple triggers
+    //   within the same frame collapse to a single sync. _doViewportSync() runs
+    //   the actual resize work in the next animation frame, after the CSS grid
+    //   has fully reflowed (rAF fires after style/layout).
+    //
+    // What gets synced:
+    //   1. Mapbox map — map.resize() recalculates its GL canvas vs container
+    //   2. Maritime overlay canvas — _resizeIfNeeded() already runs every frame;
+    //      no explicit call needed (it reads .canvas-area clientWidth/Height)
+    //   3. SurfaceDrawingRuntime — syncCanvasSize() if available
+    //   4. Main canvas + renderer — only in geo mode (reads .canvas-area bounds);
+    //      applyViewportMode() handles non-geo fixed-size canvases, not touched here
+
+    var _viewportSyncPending = false;
+
+    function _doViewportSync() {
+      _viewportSyncPending = false;
+      // 1. Mapbox map resize — must be called after container layout settles
+      var mvr = window.SBE && SBE.MapboxViewportRuntime;
+      if (mvr && typeof mvr.resize === 'function') {
+        mvr.resize();
+      }
+      // 2. SurfaceDrawingRuntime overlay canvas
+      if (window.SBE && SBE.SurfaceDrawingRuntime &&
+          typeof SBE.SurfaceDrawingRuntime.syncCanvasSize === 'function') {
+        SBE.SurfaceDrawingRuntime.syncCanvasSize();
+      }
+      // 3. Maritime canvas — self-healing via _resizeIfNeeded() in its RAF loop;
+      //    no action needed here.
+    }
+
+    function _scheduleViewportSync() {
+      if (_viewportSyncPending) return;
+      _viewportSyncPending = true;
+      requestAnimationFrame(_doViewportSync);
+    }
+
+    // Wire window resize
+    window.addEventListener('resize', _scheduleViewportSync, { passive: true });
+
+    // Wire DrawerSystem open/close
+    (function _patchDrawerSystemForResize() {
+      var DS = window.SBE && SBE.DrawerSystem;
+      if (!DS) return;
+      var _origOpen  = DS.openDrawer;
+      var _origClose = DS.closeDrawer;
+      if (typeof _origOpen === 'function') {
+        DS.openDrawer = function() {
+          var r = _origOpen.apply(this, arguments);
+          _scheduleViewportSync();
+          return r;
+        };
+      }
+      if (typeof _origClose === 'function') {
+        DS.closeDrawer = function() {
+          var r = _origClose.apply(this, arguments);
+          _scheduleViewportSync();
+          return r;
+        };
+      }
+    })();
+
+    // Boot sync — after initial layout, once all panels are in their starting state
+    _scheduleViewportSync();
+
+    // ── Boot visibility guard ─────────────────────────────────────────────────
+    // body.wos-booting is removed as soon as the Mapbox style is applied —
+    // map.on('style.load') — which fires after style JSON loads but before tile
+    // decode. The basemap is visually coherent at this point (water fills, land
+    // fills, roads). Tile decode continues in the background after reveal.
+    //
+    // Staged reveal:
+    //   Stage 1: map container created (WorkspaceUI.init → _buildMapboxViewport)
+    //   Stage 2: style.load — basemap visible → _markRuntimeReady() fires here
+    //   Stage 3: map.on('load') — tiles decoded (post-reveal, no visual gate)
+    //   Stage 4: deferred systems fire 500–1500ms after stage 2
+    //
+    // Hard limit: if style.load has not fired within 4 seconds, reveal anyway.
+    // This prevents an indefinitely black screen on network failure.
+    //
+    // Non-map fallback: two rAFs (layout then first engine paint).
+
+    function _markRuntimeReady() {
+      if (document.body.classList.contains('wos-runtime-ready')) return;
+      _scheduleViewportSync();           // ensure map has correct dimensions on reveal
+      requestAnimationFrame(function () {
+        document.body.classList.remove('wos-booting');
+        document.body.classList.add('wos-runtime-ready');
+
+        // ── performance mark — first visible frame ──────────────────────────
+        try { performance.mark('wos:first-visible-frame'); } catch (e) {}
+
+        // ── notify WOSBootSequencer ─────────────────────────────────────────
+        var bs = window.SBE && SBE.WOSBootSequencer;
+        if (bs && bs._onFirstVisibleFrame) bs._onFirstVisibleFrame();
+
+        console.log('[WOS boot] runtime ready — canvas revealed',
+          '(' + Math.round(performance.now()) + 'ms)');
+      });
+    }
+
+    // Hard-limit timer: reveal after 4 s even if style.load never fires
+    var _bootHardLimitTimer = setTimeout(function () {
+      console.warn('[WOS boot] hard-limit reached — forcing reveal at 4000ms');
+      _markRuntimeReady();
+    }, 4000);
+
+    (function _wireBootGuard() {
+      var mvr = window.SBE && SBE.MapboxViewportRuntime;
+      if (mvr && typeof mvr.onStyleLoad === 'function') {
+        // Geo / map path — reveal on style.load (basemap visible, pre-tile-decode)
+        mvr.onStyleLoad(function () {
+          clearTimeout(_bootHardLimitTimer);
+          _markRuntimeReady();
+        });
+      } else if (mvr && typeof mvr.onReady === 'function') {
+        // Fallback: older MVR without onStyleLoad
+        clearTimeout(_bootHardLimitTimer);
+        mvr.onReady(function() {
+          requestAnimationFrame(_markRuntimeReady);
+        });
+      } else {
+        // Non-map path — two rAFs: first = layout, second = first engine paint
+        clearTimeout(_bootHardLimitTimer);
+        requestAnimationFrame(function() {
+          requestAnimationFrame(_markRuntimeReady);
+        });
+      }
+    })();
+
+    // Inspector is hidden by default (body.inspector-hidden).
+    // It opens on object selection and collapses when selection is cleared
+    // (unless pinned). Pin persists across selections.
+
+    var _inspectorPinned = false;
+
+    function _applyInspectorVisibility() {
+      var hidden = !_inspectorPinned && !SBE.runtimeFlags.showObjectInspectorWhenEmpty;
+      document.body.classList.toggle('inspector-hidden', hidden);
+      var pinBtn = document.getElementById('inspector-pin-btn');
+      if (pinBtn) pinBtn.classList.toggle('pinned', _inspectorPinned);
+    }
+
+    function showObjectInspector() {
+      SBE.runtimeFlags.showObjectInspectorWhenEmpty = true;
+      document.body.classList.remove('inspector-hidden');
+      _scheduleViewportSync(); // grid column 3 expanded → map needs resize
+    }
+
+    function hideObjectInspectorIfUnpinned() {
+      if (!_inspectorPinned) {
+        SBE.runtimeFlags.showObjectInspectorWhenEmpty = false;
+        document.body.classList.add('inspector-hidden');
+        _scheduleViewportSync(); // grid column 3 collapsed → map needs resize
+      }
+    }
+
+    function pinObjectInspector(on) {
+      _inspectorPinned = (on === undefined) ? !_inspectorPinned : !!on;
+      SBE.runtimeFlags.objectInspectorPinned = _inspectorPinned;
+      _applyInspectorVisibility();
+      _scheduleViewportSync(); // panel width may have changed
+      console.log('[inspector] pin:', _inspectorPinned);
+    }
+
+    // Wire pin button
+    (function _bindInspectorPin() {
+      var btn = document.getElementById('inspector-pin-btn');
+      if (btn) {
+        btn.addEventListener('click', function() { pinObjectInspector(); });
+      }
+    })();
+
+    // Wire empty-state visibility
+    function _syncInspectorEmptyState(hasSelection) {
+      var el = document.getElementById('inspector-empty-state');
+      if (el) el.hidden = hasSelection;
+    }
+
+    // Boot: start collapsed (no selection on load)
+    document.body.classList.add('inspector-hidden');
+    SBE.runtimeFlags.objectInspectorPinned = false;
+    SBE.runtimeFlags.showObjectInspectorWhenEmpty = false;
+
     function syncSelectionPanel() {
       // Guard — state.selection may not be initialized
       if (!state.selection) return;
@@ -19429,6 +21325,8 @@
 
       // ── Canvas Mode (no selection) — show drawing defaults ──
       if (isCanvasMode) {
+        hideObjectInspectorIfUnpinned();
+        _syncInspectorEmptyState(false);
         if (el.lineColor)
           el.lineColor.value = state.defaults.color || "#ff4d4d";
         if (el.strokeWidth) {
@@ -19441,6 +21339,10 @@
         syncInspectorToObject(null);
         return;
       }
+
+      // Object selected — reveal inspector
+      showObjectInspector();
+      _syncInspectorEmptyState(true);
 
       // Pass the real selection to syncSelection — getInspectorState handles all types.
       // For legacy field population (lines/shapes/text/balls), resolve legacySelection.
@@ -23252,10 +25154,22 @@
         ctx.clearRect(0, 0, canvas.width, canvas.height);
       }
 
+      // ── Harbor Bootstrap gate ─────────────────────────────────────────────
+      // When harborBootstrapMode is active, land-traffic overlays are suppressed.
+      // Only marine continuity systems, Mapbox base, and atmospheric overlays run.
+      var _harborMode = !!(
+        window.SBE && SBE.runtimeFlags && SBE.runtimeFlags.harborBootstrapMode
+      );
+
       // ── RuntimeViewportRouter — geographic route overlay (screen space) ───
       // Rendered AFTER camera restore: mbr.project() returns CSS-pixel map
       // coordinates which match canvas pixel space when canvas fills the area.
-      if (window.SBE && SBE.RuntimeViewportRouter) {
+      // Suppressed in harbor mode — route vehicle overlays contaminate marine viewport.
+      if (_harborMode && !state._harborRouterSuppressionLogged) {
+        console.log('[HarborValidation] RuntimeViewportRouter suppressed from startup');
+        state._harborRouterSuppressionLogged = true;
+      }
+      if (window.SBE && SBE.RuntimeViewportRouter && !_harborMode) {
         SBE.RuntimeViewportRouter.render(ctx);
       }
 
@@ -23372,6 +25286,12 @@
       Object.keys(window.noteElements).forEach((n) => {
         updateNoteVisual(Number(n), window.noteElements[n]);
       });
+
+      // ── MarineRenderer — driven by MarineOverlayCanvasRuntime, NOT #engine-canvas ──
+      // Marine rendering was migrated to a dedicated overlay canvas (#marine-overlay-canvas)
+      // to avoid z-index, clearRect, transform, and compositing interference from the
+      // legacy WOS canvas pipeline. MarineOverlayCanvasRuntime owns its own rAF loop.
+      // No marine draw call here.
     }
 
     // ── Collision Particle Emission (profile-based) ───────────────────────────

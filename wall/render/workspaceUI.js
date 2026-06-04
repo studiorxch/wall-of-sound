@@ -602,6 +602,7 @@
   function _buildLowerPanel() {
     _lowerPanel = document.createElement("div");
     _lowerPanel.id = "ws-lower-panel";
+    _lowerPanel.setAttribute("data-watch-hide", "");
 
     var canvasArea = document.querySelector(".canvas-area");
     if (canvasArea) {

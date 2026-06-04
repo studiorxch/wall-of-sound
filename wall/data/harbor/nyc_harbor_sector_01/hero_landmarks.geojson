@@ -1,0 +1,99 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -74.0445,
+          40.6892
+        ]
+      },
+      "properties": {
+        "id": "hero_landmark_statue_of_liberty_001",
+        "layer": "hero_landmark",
+        "label": "Statue of Liberty",
+        "category": "hero_landmark",
+        "priority": 5,
+        "cinematicWeight": 1.0,
+        "minZoom": 8.0,
+        "maxZoom": 18.0,
+        "lod": "hero",
+        "source": "source_hero_landmarks.geojson"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -74.0198,
+          40.6542
+        ]
+      },
+      "properties": {
+        "id": "hero_landmark_brooklyn_army_terminal_002",
+        "layer": "hero_landmark",
+        "label": "Brooklyn Army Terminal",
+        "category": "hero_landmark",
+        "priority": 5,
+        "cinematicWeight": 1.0,
+        "minZoom": 8.5,
+        "maxZoom": 18.0,
+        "lod": "hero",
+        "source": "source_hero_landmarks.geojson"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -74.013,
+          40.708
+        ]
+      },
+      "properties": {
+        "id": "hero_landmark_lower_manhattan_003",
+        "layer": "hero_landmark",
+        "label": "Lower Manhattan",
+        "category": "hero_landmark",
+        "priority": 5,
+        "cinematicWeight": 1.0,
+        "minZoom": 7.5,
+        "maxZoom": 18.0,
+        "lod": "hero",
+        "source": "source_hero_landmarks.geojson"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -74.0165,
+          40.694
+        ]
+      },
+      "properties": {
+        "id": "hero_landmark_governors_island_004",
+        "layer": "hero_landmark",
+        "label": "Governors Island",
+        "category": "hero_landmark",
+        "priority": 5,
+        "cinematicWeight": 0.9,
+        "minZoom": 8.5,
+        "maxZoom": 18.0,
+        "lod": "hero",
+        "source": "source_hero_landmarks.geojson"
+      }
+    }
+  ],
+  "metadata": {
+    "layer": "hero_landmark",
+    "sectorId": "nyc_harbor_sector_01",
+    "lod": "hero",
+    "bakedAt": "2026-05-27T22:50:33.844899Z"
+  }
+}

@@ -16,6 +16,17 @@
   box-sizing: border-box;
 }
 
+/*=====*/
+.time-block,
+.hud-time,
+.clock-overlay,
+.top-right-hud {
+  right: 148px !important;
+  top: 18px !important;
+}
+
+/*=====*/
+
 body {
   margin: 0;
   background: var(--bg);

@@ -1,0 +1,185 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-74.0210, 40.6580], [-74.0168, 40.6580],
+          [-74.0168, 40.6500], [-74.0210, 40.6500],
+          [-74.0228, 40.6520], [-74.0228, 40.6560],
+          [-74.0210, 40.6580]
+        ]]
+      },
+      "properties": {
+        "id": "brooklyn_army_terminal_block",
+        "label": "Brooklyn Army Terminal",
+        "category": "waterfront_block", "priority": 5,
+        "minZoom": 9.5, "maxZoom": 17, "lod": "standard"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-74.0305, 40.6510], [-74.0255, 40.6510],
+          [-74.0255, 40.6440], [-74.0305, 40.6440],
+          [-74.0318, 40.6458], [-74.0318, 40.6492],
+          [-74.0305, 40.6510]
+        ]]
+      },
+      "properties": {
+        "id": "sunset_park_industrial_block",
+        "label": "Sunset Park Industrial Block",
+        "category": "waterfront_block", "priority": 4,
+        "minZoom": 9.5, "maxZoom": 17, "lod": "standard"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-74.0200, 40.6808], [-74.0148, 40.6808],
+          [-74.0148, 40.6718], [-74.0200, 40.6718],
+          [-74.0215, 40.6740], [-74.0215, 40.6786],
+          [-74.0200, 40.6808]
+        ]]
+      },
+      "properties": {
+        "id": "red_hook_container_block",
+        "label": "Red Hook Container Terminal",
+        "category": "waterfront_block", "priority": 4,
+        "minZoom": 9.5, "maxZoom": 17, "lod": "standard"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-74.0175, 40.7005], [-74.0132, 40.7005],
+          [-74.0132, 40.6940], [-74.0175, 40.6940],
+          [-74.0190, 40.6958], [-74.0190, 40.6988],
+          [-74.0175, 40.7005]
+        ]]
+      },
+      "properties": {
+        "id": "bat_north_block",
+        "label": "Brooklyn Army Terminal North Block",
+        "category": "waterfront_block", "priority": 5,
+        "minZoom": 10.0, "maxZoom": 17, "lod": "standard"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-74.0175, 40.7068], [-74.0120, 40.7068],
+          [-74.0120, 40.7005], [-74.0175, 40.7005],
+          [-74.0192, 40.7022], [-74.0192, 40.7052],
+          [-74.0175, 40.7068]
+        ]]
+      },
+      "properties": {
+        "id": "bat_south_block",
+        "label": "Brooklyn Army Terminal South Block",
+        "category": "waterfront_block", "priority": 5,
+        "minZoom": 10.0, "maxZoom": 17, "lod": "standard"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-74.0175, 40.7120], [-74.0098, 40.7120],
+          [-74.0098, 40.7068], [-74.0175, 40.7068],
+          [-74.0188, 40.7082], [-74.0188, 40.7108],
+          [-74.0175, 40.7120]
+        ]]
+      },
+      "properties": {
+        "id": "columbia_street_waterfront_block",
+        "label": "Columbia Street Waterfront",
+        "category": "waterfront_block", "priority": 3,
+        "minZoom": 10.5, "maxZoom": 17, "lod": "standard"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-74.0200, 40.6910], [-74.0120, 40.6910],
+          [-74.0120, 40.6808], [-74.0200, 40.6808],
+          [-74.0215, 40.6830], [-74.0215, 40.6890],
+          [-74.0200, 40.6910]
+        ]]
+      },
+      "properties": {
+        "id": "red_hook_waterfront_block",
+        "label": "Red Hook Waterfront Block",
+        "category": "waterfront_block", "priority": 4,
+        "minZoom": 10.0, "maxZoom": 17, "lod": "standard"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-74.0175, 40.7200], [-74.0088, 40.7200],
+          [-74.0088, 40.7120], [-74.0175, 40.7120],
+          [-74.0188, 40.7138], [-74.0188, 40.7182],
+          [-74.0175, 40.7200]
+        ]]
+      },
+      "properties": {
+        "id": "brooklyn_heights_waterfront_block",
+        "label": "Brooklyn Heights Waterfront",
+        "category": "waterfront_block", "priority": 3,
+        "minZoom": 10.5, "maxZoom": 17, "lod": "standard"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-74.0165, 40.7100], [-74.0098, 40.7100],
+          [-74.0098, 40.7045], [-74.0165, 40.7045],
+          [-74.0178, 40.7060], [-74.0178, 40.7085],
+          [-74.0165, 40.7100]
+        ]]
+      },
+      "properties": {
+        "id": "lower_manhattan_battery_block",
+        "label": "Lower Manhattan Battery Block",
+        "category": "waterfront_block", "priority": 5,
+        "minZoom": 9.5, "maxZoom": 17, "lod": "standard"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-74.0348, 40.6510], [-74.0305, 40.6510],
+          [-74.0305, 40.6440], [-74.0348, 40.6440],
+          [-74.0362, 40.6458], [-74.0362, 40.6492],
+          [-74.0348, 40.6510]
+        ]]
+      },
+      "properties": {
+        "id": "industry_city_block",
+        "label": "Industry City Waterfront",
+        "category": "waterfront_block", "priority": 3,
+        "minZoom": 10.0, "maxZoom": 17, "lod": "standard"
+      }
+    }
+  ]
+}

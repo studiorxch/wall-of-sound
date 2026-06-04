@@ -1,0 +1,239 @@
+/* ── WOS Studio shell styles (0603N) ──────────────────────────────────────────
+   Authoring workspace. Three-panel grid: Library | Stage | Inspector.
+   Dark, dense, instrument-panel aesthetic. No external stylesheet/deps.
+─────────────────────────────────────────────────────────────────────────────── */
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: #07090c; color: #cdd6df;
+  font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
+
+.studio-shell {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr) 360px;
+  grid-template-rows: 56px minmax(0, 1fr);
+  grid-template-areas: "top top top" "lib stage insp";
+  height: 100vh;
+}
+
+/* Top bar */
+.studio-topbar {
+  grid-area: top;
+  display: flex; align-items: center; gap: 18px;
+  padding: 0 18px; border-bottom: 1px solid #1b2530; background: #0a0e13;
+}
+.studio-brand { font-weight: 600; letter-spacing: 0.06em; color: #eaf6ff; }
+.studio-brand span { color: #78e6ff; }
+.studio-tabs { display: flex; gap: 6px; flex: 1; }
+.studio-tabs button {
+  background: transparent; color: #9fb0bd; border: 1px solid transparent;
+  padding: 6px 12px; border-radius: 6px; cursor: pointer; font: inherit;
+}
+.studio-tabs button:hover { color: #dff1fb; background: #111923; }
+.studio-tabs button.active { color: #07090c; background: #78e6ff; border-color: #78e6ff; }
+.studio-walllink { color: #78e6ff; text-decoration: none; font-size: 12px; }
+.studio-walllink:hover { text-decoration: underline; }
+
+/* Panels */
+.studio-library  { grid-area: lib;  border-right: 1px solid #1b2530; overflow: auto; }
+.studio-stage    { grid-area: stage; overflow: auto; }
+.studio-inspector{ grid-area: insp; border-left: 1px solid #1b2530; overflow: auto; }
+
+.studio-panel-title {
+  position: sticky; top: 0; z-index: 2;
+  padding: 10px 14px; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;
+  color: #7d8c99; background: #0a0e13; border-bottom: 1px solid #1b2530;
+}
+.studio-library-body, .studio-stage-body, .studio-inspector-body { padding: 12px 14px; }
+.studio-empty { color: #5c6b78; font-style: italic; padding: 8px 0; }
+
+/* Library tree */
+.studio-cat { margin-bottom: 12px; }
+.studio-cat-name { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
+  color: #6f8190; margin: 6px 0 4px; }
+.studio-asset { padding: 6px 9px; border-radius: 6px; cursor: pointer;
+  border: 1px solid transparent; display: flex; justify-content: space-between; gap: 8px; }
+.studio-asset:hover { background: #111923; }
+.studio-asset.selected { background: #142231; border-color: rgba(120, 230, 255, 0.6); }
+.studio-asset .k { color: #dff1fb; }
+.studio-asset .s { color: #6f8190; font-size: 11px; }
+
+/* 0603Q — identity rows distinct from asset rows */
+.studio-identity { padding: 6px 9px; border-radius: 6px; cursor: pointer;
+  border: 1px solid transparent; display: flex; justify-content: space-between; gap: 8px; }
+.studio-identity:hover { background: #18130c; }
+.studio-identity.selected { background: #1c1610; border-color: rgba(255, 214, 120, 0.55); }
+.studio-identity .k { color: #ffe6b0; }
+.studio-identity .s { color: #8a7a5c; font-size: 11px; }
+
+/* 0603R — assignment controls */
+.studio-assign-controls { display: flex; gap: 8px; margin: 10px 0 6px; }
+.studio-assign-status { color: #9affc4; font-size: 12px; margin: 6px 0; }
+.studio-assign-warn { color: #c8a24a; font-style: italic; }
+.studio-assign-list { margin-top: 10px; border-top: 1px solid #1b2530; padding-top: 8px; }
+.studio-assign-row { display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 7px 8px; border-radius: 6px; border: 1px solid transparent; }
+.studio-assign-row:hover { background: #111923; }
+.studio-assign-row.active { background: #142231; border-color: rgba(120, 230, 255, 0.5); }
+.studio-assign-meta { min-width: 0; }
+.studio-assign-label { color: #dff1fb; font-size: 12px; }
+.studio-assign-sub { color: #6f8190; font: 10px monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* 0603S — persistence (export/import) */
+.studio-persist { margin-top: 12px; border-top: 1px solid #1b2530; padding-top: 8px; }
+.studio-persist summary { cursor: pointer; color: #7d8c99; padding: 6px 0; }
+.studio-import-ta { width: 100%; min-height: 96px; margin: 8px 0; resize: vertical;
+  background: #07111a; color: #cfe9f6; border: 1px solid #2c4456; border-radius: 6px;
+  padding: 8px; font: 11px/1.4 monospace; }
+.studio-import-summary { margin-top: 8px; }
+
+/* 0603Q — inspector context header */
+.studio-inspector-context { margin-bottom: 10px; }
+.studio-context-pill { display: inline-block; font: 11px/1 monospace; letter-spacing: 0.04em;
+  padding: 4px 9px; border-radius: 12px; color: #07090c; background: #78e6ff; }
+
+/* Stage */
+.studio-stage-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+.studio-btn {
+  background: #142231; color: #cfe9f6; border: 1px solid #2c4456;
+  padding: 7px 12px; border-radius: 6px; cursor: pointer; font: inherit;
+}
+.studio-btn:hover { background: #1b2f42; }
+.studio-btn.primary { background: #78e6ff; color: #07090c; border-color: #78e6ff; }
+.studio-note { color: #8a99a6; font-size: 12px; margin: 8px 0; }
+
+/* Tables */
+table.studio-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+table.studio-table th, table.studio-table td { text-align: left; padding: 5px 8px;
+  border-bottom: 1px solid #161f29; white-space: nowrap; }
+table.studio-table th { color: #6f8190; font-weight: 500; position: sticky; top: 0; background: #0a0e13; }
+table.studio-table td { color: #c2d0db; }
+
+/* Palette swatches */
+.studio-pal { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid #161f29; }
+.studio-pal-key { width: 180px; color: #dff1fb; }
+.studio-swatches { display: flex; gap: 4px; }
+.studio-swatch { width: 22px; height: 22px; border-radius: 4px; border: 1px solid #00000055; }
+
+/* ── 0603P Asset preview card + symbolic shapes ─────────────────────────────── */
+.asset-preview-card {
+  --asset-body:#4a5560; --asset-roof:#78e6ff; --asset-side:#2c3640;
+  --asset-glass:#0c1620; --asset-accent:#9fd6ec; --asset-light:#dffbff;
+  border:1px solid #1f2c38; border-radius:10px; background:#0a121b;
+  padding:14px; margin-bottom:6px;
+}
+.asset-preview-head { display:flex; justify-content:space-between; align-items:baseline; gap:10px; }
+.asset-preview-title { color:#eaf6ff; font-weight:600; }
+.asset-preview-id { color:#6f8190; font:11px monospace; }
+.asset-variant-tabs { display:flex; gap:6px; margin:12px 0; flex-wrap:wrap; }
+.asset-variant-tab {
+  background:#142231; color:#9fd6ec; border:1px solid #2c4456;
+  padding:5px 12px; border-radius:14px; cursor:pointer; font:12px monospace;
+}
+.asset-variant-tab:hover { background:#1b2f42; }
+.asset-variant-tab.active { background:#78e6ff; color:#07090c; border-color:#78e6ff; }
+.asset-preview-stage {
+  height:190px; display:flex; align-items:center; justify-content:center;
+  background:repeating-linear-gradient(45deg,#0b141d,#0b141d 10px,#0d1722 10px,#0d1722 20px);
+  border:1px solid #16222e; border-radius:8px; overflow:hidden; margin:6px 0 12px;
+}
+.asset-preview-shape { position:relative; }
+.asset-preview-shape > div { position:absolute; }
+.asset-preview-meta { display:grid; gap:0; }
+.asset-file-slots { margin-top:12px; }
+.studio-assignments { margin-top:14px; }
+.studio-assignments summary { cursor:pointer; color:#7d8c99; padding:8px 0; }
+
+/* City bus — long body + roof + window strip + front accent */
+.asset-preview-shape--city-bus { width:240px; height:64px; }
+.asset-preview-shape--city-bus .ap-body { left:0; top:14px; width:240px; height:50px; background:var(--asset-body); border-radius:6px; }
+.asset-preview-shape--city-bus .ap-roof { left:6px; top:0; width:228px; height:18px; background:var(--asset-roof); border-radius:6px 6px 0 0; }
+.asset-preview-shape--city-bus .ap-window { left:18px; top:24px; width:200px; height:16px; background:var(--asset-glass); border-radius:3px; }
+.asset-preview-shape--city-bus .ap-accent { left:0; top:30px; width:10px; height:34px; background:var(--asset-accent); border-radius:6px 0 0 6px; }
+
+/* Utility truck — cab + tall box + amber beacon */
+.asset-preview-shape--utility-truck { width:200px; height:90px; }
+.asset-preview-shape--utility-truck .ap-body { left:0; top:48px; width:70px; height:42px; background:var(--asset-body); border-radius:5px; }
+.asset-preview-shape--utility-truck .ap-box { left:74px; top:18px; width:126px; height:72px; background:var(--asset-side); border-radius:4px; }
+.asset-preview-shape--utility-truck .ap-beacon { left:96px; top:4px; width:80px; height:12px; background:var(--asset-accent); border-radius:3px; box-shadow:0 0 10px var(--asset-accent); }
+
+/* Station node — puck + pin + cap (vertical) */
+.asset-preview-shape--station-node { width:60px; height:130px; }
+.asset-preview-shape--station-node .ap-puck { left:6px; top:108px; width:48px; height:22px; background:var(--asset-body); border-radius:50%; }
+.asset-preview-shape--station-node .ap-pin  { left:26px; top:34px; width:8px; height:78px; background:var(--asset-body); }
+.asset-preview-shape--station-node .ap-cap  { left:14px; top:14px; width:32px; height:24px; background:var(--asset-accent); border-radius:50%; box-shadow:0 0 12px var(--asset-accent); }
+
+/* Vessel — hull + bow wedge + cabin */
+.asset-preview-shape--vessel-generic { width:230px; height:80px; }
+.asset-preview-shape--vessel-generic .ap-hull { left:0; top:40px; width:200px; height:34px; background:var(--asset-side); border-radius:6px 0 0 14px; }
+.asset-preview-shape--vessel-generic .ap-bow { left:196px; top:40px; width:0; height:0; border-top:17px solid transparent; border-bottom:17px solid transparent; border-left:34px solid var(--asset-side); }
+.asset-preview-shape--vessel-generic .ap-cabin { left:60px; top:14px; width:80px; height:30px; background:var(--asset-roof); border-radius:4px; }
+
+/* Ferry — wider hull + bow + double cabin */
+.asset-preview-shape--passenger-ferry { width:260px; height:86px; }
+.asset-preview-shape--passenger-ferry .ap-hull { left:0; top:46px; width:226px; height:40px; background:var(--asset-side); border-radius:6px 0 0 14px; }
+.asset-preview-shape--passenger-ferry .ap-bow { left:222px; top:46px; width:0; height:0; border-top:20px solid transparent; border-bottom:20px solid transparent; border-left:38px solid var(--asset-side); }
+.asset-preview-shape--passenger-ferry .ap-cabin { left:40px; top:12px; width:150px; height:34px; background:var(--asset-roof); border-radius:4px; }
+.asset-preview-shape--passenger-ferry .ap-cabin2 { left:70px; top:0; width:90px; height:16px; background:var(--asset-accent); border-radius:3px; }
+
+/* 0603T — cargo / container ship — hull + bow + container stacks */
+.asset-preview-shape--cargo-ship { width:250px; height:80px; }
+.asset-preview-shape--cargo-ship .ap-hull { left:0; top:46px; width:220px; height:34px; background:var(--asset-side); border-radius:6px 0 0 12px; }
+.asset-preview-shape--cargo-ship .ap-bow { left:216px; top:46px; width:0; height:0; border-top:17px solid transparent; border-bottom:17px solid transparent; border-left:34px solid var(--asset-side); }
+.asset-preview-shape--cargo-ship .ap-stack { left:30px; top:14px; width:110px; height:34px; background:var(--asset-body); border-radius:3px; }
+.asset-preview-shape--cargo-ship .ap-stack2 { left:150px; top:22px; width:50px; height:26px; background:var(--asset-roof); border-radius:3px; }
+
+/* Tanker — long low hull + bow + midship manifold */
+.asset-preview-shape--tanker { width:260px; height:60px; }
+.asset-preview-shape--tanker .ap-hull { left:0; top:30px; width:230px; height:30px; background:var(--asset-side); border-radius:5px 0 0 12px; }
+.asset-preview-shape--tanker .ap-bow { left:226px; top:30px; width:0; height:0; border-top:15px solid transparent; border-bottom:15px solid transparent; border-left:34px solid var(--asset-side); }
+.asset-preview-shape--tanker .ap-manifold { left:110px; top:14px; width:30px; height:18px; background:var(--asset-accent); border-radius:3px; }
+
+/* Barge — flat low rectangle */
+.asset-preview-shape--barge { width:240px; height:34px; }
+.asset-preview-shape--barge .ap-flat { left:0; top:6px; width:240px; height:22px; background:var(--asset-side); border-radius:3px; }
+
+/* Yacht — sleek hull + low cabin */
+.asset-preview-shape--yacht { width:200px; height:60px; }
+.asset-preview-shape--yacht .ap-hull { left:0; top:34px; width:170px; height:22px; background:var(--asset-roof); border-radius:4px 0 0 16px; }
+.asset-preview-shape--yacht .ap-bow { left:166px; top:34px; width:0; height:0; border-top:11px solid transparent; border-bottom:11px solid transparent; border-left:30px solid var(--asset-roof); }
+.asset-preview-shape--yacht .ap-cabin { left:36px; top:18px; width:80px; height:18px; background:var(--asset-glass); border-radius:4px; }
+
+/* Sailboat — hull + mast + sail */
+.asset-preview-shape--sailboat { width:120px; height:130px; }
+.asset-preview-shape--sailboat .ap-hull { left:0; top:108px; width:120px; height:18px; background:var(--asset-side); border-radius:0 0 16px 16px; }
+.asset-preview-shape--sailboat .ap-mast { left:58px; top:6px; width:4px; height:104px; background:var(--asset-roof); }
+.asset-preview-shape--sailboat .ap-sail { left:24px; top:14px; width:0; height:0; border-left:34px solid var(--asset-accent); border-top:88px solid transparent; }
+
+/* Aircraft — cross (wing + fuselage + tail) */
+.asset-preview-shape--aircraft-light { width:160px; height:120px; }
+.asset-preview-shape--aircraft-light .ap-fuse { left:74px; top:10px; width:12px; height:100px; background:var(--asset-body); border-radius:6px; }
+.asset-preview-shape--aircraft-light .ap-wing { left:14px; top:46px; width:132px; height:14px; background:var(--asset-side); border-radius:7px; }
+.asset-preview-shape--aircraft-light .ap-tail { left:54px; top:92px; width:52px; height:10px; background:var(--asset-side); border-radius:5px; }
+
+/* Train — segmented rail cars */
+.asset-preview-shape--subway-train { width:250px; height:46px; }
+.asset-preview-shape--subway-train .ap-car { top:0; width:78px; height:46px; background:var(--asset-body); border-radius:5px; }
+.asset-preview-shape--subway-train .ap-i0 { left:0; }
+.asset-preview-shape--subway-train .ap-i1 { left:86px; }
+.asset-preview-shape--subway-train .ap-i2 { left:172px; }
+
+/* Ambient car — small body + roof */
+.asset-preview-shape--ambient-car { width:120px; height:48px; }
+.asset-preview-shape--ambient-car .ap-body { left:0; top:18px; width:120px; height:30px; background:var(--asset-body); border-radius:8px; }
+.asset-preview-shape--ambient-car .ap-roof { left:28px; top:0; width:64px; height:24px; background:var(--asset-roof); border-radius:8px 8px 0 0; }
+
+/* Markers */
+.asset-preview-shape--alert-marker { width:60px; height:60px; }
+.asset-preview-shape--alert-marker .ap-diamond { left:6px; top:6px; width:46px; height:46px; background:var(--asset-accent); transform:rotate(45deg); border-radius:6px; box-shadow:0 0 14px var(--asset-accent); }
+.asset-preview-shape--world-prop { width:60px; height:60px; }
+.asset-preview-shape--world-prop .ap-cube { left:6px; top:6px; width:48px; height:48px; background:var(--asset-body); border-radius:6px; }
+.asset-preview-shape--generic-actor { width:40px; height:40px; }
+.asset-preview-shape--generic-actor .ap-dot { left:4px; top:4px; width:32px; height:32px; background:var(--asset-roof); border-radius:50%; }
+
+/* Inspector fields */
+.studio-field { display: flex; justify-content: space-between; gap: 10px;
+  padding: 5px 0; border-bottom: 1px solid #161f29; }
+.studio-field .label { color: #6f8190; }
+.studio-field .value { color: #dff1fb; text-align: right; word-break: break-word; }
+.studio-chip-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.studio-chip { font-size: 11px; padding: 2px 7px; border-radius: 10px;
+  background: #142231; border: 1px solid #2c4456; color: #9fd6ec; }

@@ -1,0 +1,141 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-74.0168, 40.7001], [-74.0178, 40.7001],
+          [-74.0178, 40.6992], [-74.0168, 40.6992],
+          [-74.0168, 40.7001]
+        ]]
+      },
+      "properties": {
+        "id": "battery_ferry_slip_main",
+        "label": "Battery Park Ferry Slip (Main)",
+        "category": "ferry_slip", "priority": 5,
+        "minZoom": 11.0, "maxZoom": 18, "lod": "hero"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-74.0155, 40.6995], [-74.0165, 40.6995],
+          [-74.0165, 40.6985], [-74.0155, 40.6985],
+          [-74.0155, 40.6995]
+        ]]
+      },
+      "properties": {
+        "id": "battery_ferry_slip_secondary",
+        "label": "Battery Park Ferry Slip (Secondary)",
+        "category": "ferry_slip", "priority": 4,
+        "minZoom": 12.0, "maxZoom": 18, "lod": "hero"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-74.0158, 40.6948], [-74.0170, 40.6948],
+          [-74.0170, 40.6936], [-74.0158, 40.6936],
+          [-74.0158, 40.6948]
+        ]]
+      },
+      "properties": {
+        "id": "governors_island_ferry_slip_brooklyn",
+        "label": "Governors Island Ferry Slip (Brooklyn)",
+        "category": "ferry_slip", "priority": 5,
+        "minZoom": 11.5, "maxZoom": 18, "lod": "hero"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-74.0168, 40.6898], [-74.0180, 40.6898],
+          [-74.0180, 40.6885], [-74.0168, 40.6885],
+          [-74.0168, 40.6898]
+        ]]
+      },
+      "properties": {
+        "id": "liberty_island_ferry_slip",
+        "label": "Statue of Liberty Ferry Slip",
+        "category": "ferry_slip", "priority": 5,
+        "minZoom": 11.0, "maxZoom": 18, "lod": "hero"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-74.0765, 40.6908], [-74.0778, 40.6908],
+          [-74.0778, 40.6896], [-74.0765, 40.6896],
+          [-74.0765, 40.6908]
+        ]]
+      },
+      "properties": {
+        "id": "governors_island_ferry_slip_manhattan",
+        "label": "Governors Island Ferry Slip (Manhattan-side)",
+        "category": "ferry_slip", "priority": 4,
+        "minZoom": 11.5, "maxZoom": 18, "lod": "hero"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-74.0185, 40.6962], [-74.0198, 40.6962],
+          [-74.0198, 40.6950], [-74.0185, 40.6950],
+          [-74.0185, 40.6962]
+        ]]
+      },
+      "properties": {
+        "id": "red_hook_ferry_slip",
+        "label": "Red Hook Ferry Slip",
+        "category": "ferry_slip", "priority": 4,
+        "minZoom": 11.5, "maxZoom": 18, "lod": "hero"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-74.0270, 40.6515], [-74.0282, 40.6515],
+          [-74.0282, 40.6504], [-74.0270, 40.6504],
+          [-74.0270, 40.6515]
+        ]]
+      },
+      "properties": {
+        "id": "sunset_park_ferry_slip",
+        "label": "Sunset Park Ferry Slip",
+        "category": "ferry_slip", "priority": 4,
+        "minZoom": 11.5, "maxZoom": 18, "lod": "hero"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-74.0612, 40.6988], [-74.0625, 40.6988],
+          [-74.0625, 40.6975], [-74.0612, 40.6975],
+          [-74.0612, 40.6988]
+        ]]
+      },
+      "properties": {
+        "id": "jersey_city_liberty_ferry_slip",
+        "label": "Jersey City Liberty Ferry Slip",
+        "category": "ferry_slip", "priority": 3,
+        "minZoom": 12.0, "maxZoom": 18, "lod": "standard"
+      }
+    }
+  ]
+}

@@ -1,0 +1,45 @@
+{
+  "sectorId": "nyc_harbor_sector_01",
+  "version": "1.0.0",
+  "generatedAt": "2026-05-27T22:50:33.846138Z",
+  "bounds": {
+    "west": -74.085,
+    "south": 40.6,
+    "east": -73.93,
+    "north": 40.735
+  },
+  "layers": {
+    "shoreline": {
+      "file": "shoreline_polygons.geojson",
+      "featureCount": 10
+    },
+    "pier": {
+      "file": "pier_outlines.geojson",
+      "featureCount": 12
+    },
+    "ferry_slip": {
+      "file": "ferry_slips.geojson",
+      "featureCount": 8
+    },
+    "island": {
+      "file": "island_outlines.geojson",
+      "featureCount": 4
+    },
+    "bridge_context": {
+      "file": "bridge_context_lines.geojson",
+      "featureCount": 4
+    },
+    "waterfront_block": {
+      "file": "waterfront_blocks.geojson",
+      "featureCount": 10
+    },
+    "hero_landmark": {
+      "file": "hero_landmarks.geojson",
+      "featureCount": 4
+    },
+    "harbor_channel": {
+      "file": "harbor_channels.geojson",
+      "featureCount": 5
+    }
+  }
+}

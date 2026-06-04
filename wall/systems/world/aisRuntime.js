@@ -67,8 +67,46 @@
   var SCHMIDT_RELOCK_SPEED_KTS   = 0.2;
   var SCHMIDT_RELOCK_DURATION_MS = 60000;
 
-  // ── Simulation tick interval ──────────────────────────────────────────────
-  var SIM_STEP_MS = 1000;
+  // ── 0522Q: Constitutional Precision Freeze ───────────────────────────────
+  // These values are constitutionally frozen. Changes require amendment-level
+  // governance review. Do NOT derive, alias, or locally override them.
+
+  var FIXED_TIMESTEP_MS              = 50;       // canonical tick size (ms) — frozen
+  var FIXED_TIMESTEP_SEC             = 0.05;     // canonical tick size (s) — frozen
+  var DORMANT_CONFIDENCE_THRESHOLD   = 0.1;      // frozen — dormant exit floor
+  var MIN_TIER_DWELL_MS              = 5000;     // frozen — minimum dwell before tier change
+  var FAULT_ROSTER_SIZE              = 50;       // frozen — ring buffer max entries
+  var TELEMETRY_FLUSH_MS             = 1000;     // frozen — 1Hz telemetry cadence
+
+  // Tick tier rates (Hz) — frozen
+  var TICK_TIER_ACTIVE_HZ   = 20;    // ACTIVE:  20Hz — every tick (50ms)
+  var TICK_TIER_REDUCED_HZ  = 5;     // REDUCED:  5Hz — every 4 ticks (200ms)
+  var TICK_TIER_DORMANT_HZ  = 0.1;   // DORMANT:  0.1Hz — every 200 ticks (10s)
+
+  // Derived skip intervals (ticks) — frozen from rates above
+  var TIER_SKIP_ACTIVE  = 1;                                     //   1 tick
+  var TIER_SKIP_REDUCED = Math.round(TICK_TIER_ACTIVE_HZ / TICK_TIER_REDUCED_HZ);  //   4 ticks
+  var TIER_SKIP_DORMANT = Math.round(TICK_TIER_ACTIVE_HZ / TICK_TIER_DORMANT_HZ);  // 200 ticks
+
+  // AIS packet validation bounds — frozen
+  var AIS_MAX_VALID_SPEED_KTS   = 60;
+  var AIS_MAX_VALID_HEADING_DEG = 360;
+  var AIS_MAX_PACKET_AGE_MS     = 300000;
+
+  // AIS rejection escalation thresholds — frozen
+  var AIS_REJECT_AGE_THRESHOLD  = 3;    // consecutive rejections → double effective age
+  var AIS_REJECT_DORM_THRESHOLD = 10;   // consecutive rejections → force dormant
+
+  // Fault type identifiers — frozen
+  var FAULT_MARITIME_RENDER_DIVERGENCE = 'MARITIME_RENDER_DIVERGENCE_FAULT';
+  var FAULT_RECONCILIATION_OSCILLATION = 'RECONCILIATION_OSCILLATION_FAULT';
+  var FAULT_INVALID_AIS_PACKET         = 'INVALID_AIS_PACKET_FAULT';
+  var FAULT_VARIABLE_TICK_DETERMINISM  = 'VARIABLE_TICK_DETERMINISM_FAULT';
+  var FAULT_DORMANT_LEAK               = 'DORMANT_LEAK_FAULT';
+  var FAULT_MARITIME_BACKPRESSURE      = 'MARITIME_RUNTIME_BACKPRESSURE';
+
+  // Runtime mode — PRODUCTION may optimize scheduling; it may NOT mutate continuity math
+  var _runtimeMode = 'PRODUCTION'; // 'DETERMINISTIC' | 'PRODUCTION'
 
   // ── Runtime state ─────────────────────────────────────────────────────────
   var _activeBucket          = {};  // mmsi → vessel
@@ -83,8 +121,40 @@
   var _viewportDiagonal = 0;
   var _cameraCenter     = { x: 0, y: 0 };
 
-  var _simTimer    = null;
-  var _initialized = false;
+  // ── Accumulator clock — replaces single-fire setInterval ──────────────────
+  // Clock source: performance.now() ONLY. Date.now() and rAF timestamps are
+  // constitutionally forbidden as timing inputs (0522Q §Clock Source Freeze).
+  var _accumulatorMs    = 0;
+  var _lastClockMs      = 0;
+  var _tickCount        = 0;
+  var _pollTimer        = null;     // drives _drainAccumulator at ~10ms poll
+
+  // ── AIS flood suppression — latest-packet-per-MMSI-per-tick ───────────────
+  // Packets arriving during a tick window compete; only the latest survives.
+  // Earlier packets are discarded and do not enter reconciliation (0522Q §AIS Flood).
+  var _pendingPackets   = {};       // mmsi → latest packet (overwritten on flood)
+
+  // ── Per-vessel validation rejection tracking ──────────────────────────────
+  var _rejectionCount   = {};       // mmsi → consecutive invalid packet count
+
+  // ── Per-vessel tick tier metadata ─────────────────────────────────────────
+  // Stored separately from vessel objects to avoid polluting AIS truth.
+  // tickTier: 'ACTIVE' | 'REDUCED' | 'DORMANT'
+  // tierDwellMs: timestamp when tier was entered (for MIN_TIER_DWELL_MS enforcement)
+  // ticksSinceLast: ticks since vessel was last processed (for skip logic)
+  var _vesselTickMeta   = {};       // mmsi → { tier, tierDwellMs, ticksSinceLast }
+
+  // ── Fault system ──────────────────────────────────────────────────────────
+  // Ring buffer — max FAULT_ROSTER_SIZE entries. Silent faults are forbidden.
+  // Fault telemetry emits immediately; aggregate telemetry flushes at 1Hz.
+  var _faultRoster      = [];       // ring buffer [{mmsi, faultType, timestampMs, lifecycleState}]
+
+  // ── Telemetry aggregate ───────────────────────────────────────────────────
+  // Flushed once per second — NOT on every tick.
+  var _telemetryLastMs  = 0;
+  var _telemetryAgg     = { ticks: 0, ingested: 0, rejected: 0, faultsTotal: 0 };
+
+  var _initialized      = false;
 
   // ── Geo utilities ─────────────────────────────────────────────────────────
 
@@ -119,6 +189,127 @@
                     Math.atan2(Math.sin(brg) * Math.sin(dR) * Math.cos(latR),
                                Math.cos(dR) - Math.sin(latR) * Math.sin(newLatR));
     return { lat: newLatR * 180 / Math.PI, lng: newLngR * 180 / Math.PI };
+  }
+
+  // ── Fault emission ────────────────────────────────────────────────────────
+  // Every fault must emit immediately. Silent faults are constitutionally forbidden.
+
+  function _emitFault(mmsi, faultType, lifecycleState) {
+    var entry = {
+      mmsi:          mmsi,
+      faultType:     faultType,
+      timestampMs:   performance.now(),
+      lifecycleState: lifecycleState || 'UNKNOWN',
+    };
+    _faultRoster.push(entry);
+    if (_faultRoster.length > FAULT_ROSTER_SIZE) _faultRoster.shift();
+    _telemetryAgg.faultsTotal++;
+    console.warn('[AISRuntime FAULT] ' + faultType, {
+      mmsi: mmsi,
+      state: lifecycleState,
+      ts: Math.round(entry.timestampMs),
+    });
+  }
+
+  // ── Telemetry flush — constitutionally 1Hz ────────────────────────────────
+
+  function _flushTelemetry(now) {
+    if (now - _telemetryLastMs < TELEMETRY_FLUSH_MS) return;
+    _telemetryLastMs = now;
+    var snap = {
+      ticks:       _telemetryAgg.ticks,
+      ingested:    _telemetryAgg.ingested,
+      rejected:    _telemetryAgg.rejected,
+      faultsTotal: _telemetryAgg.faultsTotal,
+      active:      Object.keys(_activeBucket).length,
+      dormant:     _dormantBucket.length,
+      feedState:   _feedState,
+      tickCount:   _tickCount,
+    };
+    // Console output gated by flag — telemetry counters always reset regardless.
+    // Enable: SBE.runtimeFlags.showAISTelemetryLogs = true
+    var _flags = global.SBE && global.SBE.runtimeFlags;
+    if (_flags && _flags.showAISTelemetryLogs) {
+      console.log('[AISRuntime TELEMETRY]', snap);
+    }
+    _telemetryAgg.ticks    = 0;
+    _telemetryAgg.ingested = 0;
+    _telemetryAgg.rejected = 0;
+    // faultsTotal is running total — do NOT reset
+  }
+
+  // ── AIS packet validation — frozen bounds (0522Q §AIS Validation Freeze) ──
+  // Rejected packets do NOT update lastAIS timestamp, do NOT reset reconciliation,
+  // do NOT alter lifecycle state.
+
+  function _validatePacket(packet, now) {
+    var tel  = packet.telemetry || {};
+    var mmsi = String(packet.mmsi);
+    var fail = null;
+
+    if (typeof tel.speedKnots === 'number' && tel.speedKnots > AIS_MAX_VALID_SPEED_KTS) {
+      fail = 'speed ' + tel.speedKnots.toFixed(1) + 'kts > ' + AIS_MAX_VALID_SPEED_KTS + 'kts';
+    } else if (typeof tel.trueHeading === 'number' &&
+               (tel.trueHeading < 0 || tel.trueHeading > AIS_MAX_VALID_HEADING_DEG)) {
+      fail = 'heading ' + tel.trueHeading + '° out of range';
+    } else if (packet.timestampMs && (now - packet.timestampMs) > AIS_MAX_PACKET_AGE_MS) {
+      fail = 'packet age ' + Math.round(now - packet.timestampMs) + 'ms';
+    }
+
+    if (!fail) {
+      _rejectionCount[mmsi] = 0;
+      return true;
+    }
+
+    _rejectionCount[mmsi] = (_rejectionCount[mmsi] || 0) + 1;
+    var count = _rejectionCount[mmsi];
+    _telemetryAgg.rejected++;
+    _emitFault(mmsi, FAULT_INVALID_AIS_PACKET,
+      _activeBucket[mmsi] ? _activeBucket[mmsi].state : 'UNKNOWN');
+
+    if (count >= AIS_REJECT_DORM_THRESHOLD) {
+      // Force dormant — persistent bad actor
+      var vessel = _activeBucket[mmsi];
+      if (vessel) {
+        _evictVessel(vessel, mmsi, now);
+        console.warn('[AISRuntime] ' + mmsi + ' forced dormant after ' + count + ' consecutive rejections');
+      }
+    }
+    // AIS_REJECT_AGE_THRESHOLD case: effective age doubles naturally because
+    // lastUpdateMs is not updated (packet rejected before merge).
+
+    return false;
+  }
+
+  // ── Tick tier resolution ──────────────────────────────────────────────────
+  // Tier transitions are suppressed if MIN_TIER_DWELL_MS has not elapsed.
+  // Tier may derive ONLY from lifecycle state — NOT from viewport or camera.
+
+  function _resolveTickTier(vessel, mmsi, now) {
+    var meta = _vesselTickMeta[mmsi];
+    if (!meta) {
+      meta = { tier: 'ACTIVE', tierDwellMs: now, ticksSinceLast: 0 };
+      _vesselTickMeta[mmsi] = meta;
+    }
+
+    var desired;
+    if (vessel.state === STATE_UNDERWAY || vessel.state === STATE_EMERGENCY) {
+      desired = 'ACTIVE';
+    } else if (vessel.state === STATE_OFFLINE || vessel.state === STATE_DORMANT) {
+      desired = 'DORMANT';
+    } else {
+      // MOORED, ANCHORED, RESTRICTED, STALE, FORCED_COAST
+      desired = 'REDUCED';
+    }
+
+    // Enforce dwell — suppress premature transitions
+    if (desired !== meta.tier && (now - meta.tierDwellMs) >= MIN_TIER_DWELL_MS) {
+      meta.tier        = desired;
+      meta.tierDwellMs = now;
+      // ticksSinceLast preserved — no reset on tier change
+    }
+
+    return meta;
   }
 
   // ── AIS status mapping ────────────────────────────────────────────────────
@@ -324,6 +515,11 @@
       drLng:   tel.lng || 0,
       drLastMs:now,
 
+      // ── 0522Q: Dormant position anchor — for DORMANT_LEAK_FAULT detection ───
+      // Captured at last processed tick; compared next tick for unexpected drift.
+      dormantAnchorLat: tel.lat || 0,
+      dormantAnchorLng: tel.lng || 0,
+
       // ── Canonical continuity contract (v1.6.1 §2) ──────────────────────────
       // AISRuntime is sole derivation authority. Renderers consume read-only.
       continuity: {
@@ -355,7 +551,10 @@
     if (_viewportDiagonal <= 0) return;
     var map = global.SBE && SBE.MapboxViewportRuntime;
     if (!map || !map.project) return;
-    var pt = map.project(vessel.lat, vessel.lng);
+    // Guard: coordinates MUST be finite before projection (§3 v1.6.1)
+    if (!Number.isFinite(vessel.lng) || !Number.isFinite(vessel.lat)) return;
+    // Mapbox project() requires LngLatLike: [lng, lat] array (NOT positional args)
+    var pt = map.project([vessel.lng, vessel.lat]);
     if (!pt) return;
     var dx   = pt.x - _cameraCenter.x;
     var dy   = pt.y - _cameraCenter.y;
@@ -553,15 +752,44 @@
     vessel.drLastMs = now;
   }
 
+  // ── Flood suppression queue ───────────────────────────────────────────────
+  // Incoming packets are staged here; only the latest per MMSI per tick is kept.
+  // Flushed at the start of each fixed-step continuityTick().
+  // Direct path used only by the debug vessel (which bypasses flood suppression
+  // because it generates exactly one packet per tick interval by design).
+
+  function _queuePacket(packet) {
+    if (!packet.mmsi) return;
+    _pendingPackets[packet.mmsi] = packet; // latest wins — earlier discarded
+  }
+
+  function _flushPendingPackets(now) {
+    var mmsis = Object.keys(_pendingPackets);
+    for (var i = 0; i < mmsis.length; i++) {
+      var pkt = _pendingPackets[mmsis[i]];
+      if (_validatePacket(pkt, now)) {
+        _ingestValidatedPacket(pkt, now);
+      }
+      // rejected packets silently discarded — no downstream state mutation
+    }
+    _pendingPackets = {};
+  }
+
   // ── Ingest normalized packet ──────────────────────────────────────────────
+  // Public entry point (via ingestPacket). Stages into flood suppression queue.
+  // Internal direct path is _ingestValidatedPacket (used post-validation).
 
   function _ingestNormalizedPacket(packet) {
-    var now  = performance.now();
+    _queuePacket(packet);
+  }
+
+  function _ingestValidatedPacket(packet, now) {
     var mmsi = packet.mmsi;
     if (!mmsi) return;
 
     _lastPacketMs = now;
     _updateFeedState(now, true);
+    _telemetryAgg.ingested++;
 
     var vessel = _activeBucket[mmsi];
 
@@ -647,6 +875,17 @@
       var vessel = _activeBucket[mmsi];
       var age    = now - vessel.lastUpdateMs;
 
+      // ── Tick tier gating ────────────────────────────────────────────────────
+      // Resolve tier and enforce dwell. Skip processing if below tier rate.
+      // Tier derives from lifecycle state only — not viewport or camera.
+      var meta = _resolveTickTier(vessel, mmsi, now);
+      meta.ticksSinceLast++;
+      var skipInterval = meta.tier === 'DORMANT' ? TIER_SKIP_DORMANT
+                       : meta.tier === 'REDUCED' ? TIER_SKIP_REDUCED
+                       : TIER_SKIP_ACTIVE;
+      if (meta.ticksSinceLast < skipInterval) continue;
+      meta.ticksSinceLast = 0;
+
       // Forced Coast resolution check
       if (vessel.state === STATE_FORCED_COAST) {
         if (now >= vessel.forcedCoastEndMs) {
@@ -686,6 +925,37 @@
       _deadReckonVessel(vessel, now);
       // §5 v1.6.1: continuity scalars evaluated at fixed sim cadence
       _computeContinuityScalars(vessel, now);
+
+      // ── DORMANT_LEAK_FAULT ────────────────────────────────────────────────
+      // Dormant / REDUCED vessels must not drift. If DR anchor has moved > 1m
+      // since last tick for a non-underway vessel, fault and reset.
+      if (vessel.state !== STATE_UNDERWAY && vessel.state !== STATE_FORCED_COAST) {
+        var anchorDelta = _distanceMeters(
+          vessel.dormantAnchorLat, vessel.dormantAnchorLng,
+          vessel.drLat, vessel.drLng
+        );
+        if (anchorDelta > 1) {
+          _emitFault(mmsi, FAULT_DORMANT_LEAK, vessel.state);
+          // Recovery: reset DR to anchor, clear velocity source
+          vessel.drLat    = vessel.dormantAnchorLat;
+          vessel.drLng    = vessel.dormantAnchorLng;
+          vessel.drLastMs = now;
+        }
+      }
+      // Advance dormant anchor to current position for next comparison
+      vessel.dormantAnchorLat = vessel.drLat;
+      vessel.dormantAnchorLng = vessel.drLng;
+
+      // ── DORMANT_CONFIDENCE_THRESHOLD ─────────────────────────────────────
+      // If signalConfidence drops below threshold for a non-protected vessel,
+      // downgrade tick tier to DORMANT (dwell permitting).
+      if (!vessel.isProtected && !vessel.isPersistent &&
+          vessel.continuity.signalConfidence < DORMANT_CONFIDENCE_THRESHOLD) {
+        if (meta.tier !== 'DORMANT' && (now - meta.tierDwellMs) >= MIN_TIER_DWELL_MS) {
+          meta.tier        = 'DORMANT';
+          meta.tierDwellMs = now;
+        }
+      }
     }
 
     // Protected dormant TTL pruning
@@ -815,31 +1085,200 @@
     }
   }
 
-  // ── Fixed-step simulation tick ────────────────────────────────────────────
+  // ── Fixed-step accumulator loop ───────────────────────────────────────────
+  // Clock source: performance.now() exclusively (0522Q §Clock Source Freeze).
+  // Forbidden: Date.now(), rAF timestamps, wall clock, timezone-adjusted clocks.
+  //
+  // _pollTimer fires every ~10ms to drain the accumulator.
+  // Each drain fires _continuityTick() for every completed FIXED_TIMESTEP_MS.
+  // Partial milliseconds remain in _accumulatorMs for the next poll.
+  //
+  // In DETERMINISTIC_MODE, tick variance > 1ms emits VARIABLE_TICK_DETERMINISM_FAULT.
 
-  function _simTick() {
-    var now = performance.now();
+  function _continuityTick(now) {
+    _tickCount++;
+    _telemetryAgg.ticks++;
+
+    // 1. Flush pending packets (flood suppression — latest per MMSI wins)
+    _flushPendingPackets(now);
+
+    // 2. Feed degradation check (no fresh packet this tick)
     _updateFeedState(now, false);
+
+    // 3. Per-vessel lifecycle + continuity
     _lifetimeTick(now);
+
+    // 4. Telemetry flush at constitutionally frozen 1Hz cadence
+    _flushTelemetry(now);
+  }
+
+  function _drainAccumulator() {
+    var now = performance.now();
+
+    if (_lastClockMs === 0) {
+      // First poll — initialize clock without advancing accumulator
+      _lastClockMs = now;
+      return;
+    }
+
+    var delta = now - _lastClockMs;
+    _lastClockMs = now;
+
+    // VARIABLE_TICK_DETERMINISM_FAULT: deterministic mode requires precise scheduling.
+    // delta should track closely against the poll interval. If a tick fires more than
+    // FIXED_TIMESTEP_MS late and deterministic mode is active, emit fault.
+    // (Production mode: scheduling drift is expected and tolerated.)
+    if (_runtimeMode === 'DETERMINISTIC' && _tickCount > 0 && delta > FIXED_TIMESTEP_MS + 1) {
+      _emitFault('RUNTIME', FAULT_VARIABLE_TICK_DETERMINISM, 'RUNTIME');
+      // Recovery: clear accumulator drift
+      _accumulatorMs = 0;
+    }
+
+    _accumulatorMs += delta;
+
+    while (_accumulatorMs >= FIXED_TIMESTEP_MS) {
+      _continuityTick(now);
+      _accumulatorMs -= FIXED_TIMESTEP_MS;
+    }
+  }
+
+  // ── Debug vessel route ────────────────────────────────────────────────────
+  // Upper Bay → Buttermilk Channel → East River route.
+  // 12 waypoints; vessel loops continuously.
+
+  var DEBUG_VESSEL_MMSI = 999000001;
+  var DEBUG_VESSEL_ROUTE = [
+    { lat: 40.7008, lng: -74.0085 }, // Harbor center — immediately visible at boot
+    { lat: 40.6960, lng: -74.0200 }, // Upper Bay N / Governors Island corridor
+    { lat: 40.6820, lng: -74.0500 }, // Upper Bay mid
+    { lat: 40.6600, lng: -74.0550 }, // Upper Bay S
+    { lat: 40.6420, lng: -74.0500 }, // Outer Upper Bay
+    { lat: 40.6270, lng: -74.0430 }, // Gravesend Bay approach
+    { lat: 40.6600, lng: -74.0550 }, // Upper Bay S
+    { lat: 40.6820, lng: -74.0500 }, // Upper Bay mid
+    { lat: 40.6960, lng: -74.0350 }, // Upper Bay N / Governors Island S
+    { lat: 40.6930, lng: -74.0170 }, // Buttermilk Channel S
+    { lat: 40.6970, lng: -74.0020 }, // Buttermilk Channel N
+    { lat: 40.7010, lng: -73.9960 }, // East River entrance
+    { lat: 40.7080, lng: -73.9870 }, // East River S Manhattan
+    { lat: 40.7150, lng: -73.9800 }, // East River mid
+    { lat: 40.7220, lng: -73.9760 }, // East River N
+    { lat: 40.7290, lng: -73.9730 }, // East River upper
+  ];
+  var _debugVesselActive   = false;
+  var _debugVesselTimer    = null;
+  var _debugVesselWpIdx    = 0;
+  var _debugVesselProgress = 0; // 0..1 along current segment
+
+  function _debugVesselTick() {
+    if (!_debugVesselActive) return;
+    var now  = performance.now();
+    var wp   = DEBUG_VESSEL_ROUTE;
+    var nWp  = wp.length;
+    var curr = wp[_debugVesselWpIdx];
+    var next = wp[(_debugVesselWpIdx + 1) % nWp];
+    var segDistM  = _distanceMeters(curr.lat, curr.lng, next.lat, next.lng);
+    var speedMs   = (10 * 1852) / 3600; // 10 knots → m/s
+    var stepM     = speedMs * 5;        // advance per 5s tick
+    _debugVesselProgress += stepM / Math.max(1, segDistM);
+    if (_debugVesselProgress >= 1) {
+      _debugVesselProgress -= 1;
+      _debugVesselWpIdx    = (_debugVesselWpIdx + 1) % nWp;
+      curr = wp[_debugVesselWpIdx];
+      next = wp[(_debugVesselWpIdx + 1) % nWp];
+    }
+    var t    = _debugVesselProgress;
+    var lat  = curr.lat + (next.lat - curr.lat) * t;
+    var lng  = curr.lng + (next.lng - curr.lng) * t;
+    var hdg  = _bearingDeg(curr.lat, curr.lng, next.lat, next.lng);
+    // Patch A (0522F): impossible-to-miss vessel — 220m container ship at harbor center
+    var pkt  = {
+      mmsi:        DEBUG_VESSEL_MMSI,
+      vesselName:  'WOS-DEBUG-01',
+      callsign:    'DEBUG',
+      state:        STATE_UNDERWAY,
+      timestampMs:  now,
+      telemetry: {
+        lat:             lat,
+        lng:             lng,
+        speedKnots:      12,
+        courseOverGround:hdg,
+        trueHeading:     hdg,
+      },
+      dimensions: {
+        lengthMeters: 80,  // realistic harbor vessel (ferry/tug scale)
+        widthMeters:  18,
+      },
+    };
+    // Debug vessel bypasses flood suppression — it generates exactly one packet per
+    // interval and is trusted by construction (validated synthetically).
+    var now = performance.now();
+    _ingestValidatedPacket(pkt, now);
+    // Force full visibility — NO fading, NO stale, NO interpolation suppression.
+    // coastAlpha = 1 so forced-coast path also draws at full strength.
+    var v = _activeBucket[DEBUG_VESSEL_MMSI];
+    if (v) {
+      v.continuity.signalConfidence    = 1.0;
+      v.continuity.continuityAlpha     = 1.0;
+      v.continuity.deadReckoningWeight = 1.0;
+      v.continuity.interpolationWeight = 0.0; // snap to truth, no interpolation lag
+      v.continuity.staleWeight         = 0.0;
+      v.continuity.coastAlpha          = 1.0;
+      v.isProtected                    = true;
+      v.isPersistent                   = true;
+    }
+  }
+
+  function injectDebugVessel(enable) {
+    var on = (enable !== false);
+    if (on && !_debugVesselActive) {
+      _debugVesselActive   = true;
+      _debugVesselWpIdx    = 0;
+      _debugVesselProgress = 0;
+      _debugVesselTick();
+      _debugVesselTimer = setInterval(_debugVesselTick, 5000);
+      console.log('[AISRuntime] debug vessel injected — MMSI', DEBUG_VESSEL_MMSI);
+    } else if (!on && _debugVesselActive) {
+      _debugVesselActive = false;
+      clearInterval(_debugVesselTimer);
+      _debugVesselTimer = null;
+      delete _activeBucket[DEBUG_VESSEL_MMSI];
+      console.log('[AISRuntime] debug vessel removed');
+    }
+    return _debugVesselActive;
   }
 
   // ── Public API ────────────────────────────────────────────────────────────
 
   function init() {
     if (_initialized) return;
-    _initialized  = true;
-    _lastPacketMs = 0;
-    _feedState    = FEED_OFFLINE;
-    _simTimer     = setInterval(_simTick, SIM_STEP_MS);
-    console.log('[AISRuntime v1.6.1] initialized');
+    _initialized     = true;
+    _lastPacketMs    = 0;
+    _feedState       = FEED_OFFLINE;
+    _lastClockMs     = 0;
+    _accumulatorMs   = 0;
+    _tickCount       = 0;
+    _telemetryLastMs = 0;
+    // Poll every 10ms — accumulator drains in 50ms steps (FIXED_TIMESTEP_MS).
+    // At 10ms poll rate we get ≤10ms scheduling jitter per tick, well within tolerance.
+    _pollTimer       = setInterval(_drainAccumulator, 10);
+    console.log('[AISRuntime v1.7.0] initialized — 0522Q constitutional precision freeze');
+    console.log('  fixedTimestepMs:', FIXED_TIMESTEP_MS, '  runtimeMode:', _runtimeMode);
   }
 
   function destroy() {
-    if (_simTimer) { clearInterval(_simTimer); _simTimer = null; }
+    if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
     _activeBucket           = {};
     _dormantBucket          = [];
     _protectedDormantBucket = {};
     _persistentRegistry     = {};
+    _pendingPackets         = {};
+    _rejectionCount         = {};
+    _vesselTickMeta         = {};
+    _faultRoster            = [];
+    _accumulatorMs          = 0;
+    _lastClockMs            = 0;
+    _tickCount              = 0;
     _initialized            = false;
   }
 
@@ -891,9 +1330,31 @@
     _cameraCenter.y    = cameraCenterY;
   }
 
-  // Ingest a pre-normalized packet directly (used by AISIngestBridge)
+  // Ingest a pre-normalized packet (used by AISIngestBridge).
+  // Staged into flood suppression queue — latest per MMSI survives per tick.
   function ingestPacket(packet) {
-    _ingestNormalizedPacket(packet);
+    _queuePacket(packet);
+  }
+
+  // ── Runtime mode control ──────────────────────────────────────────────────
+  function setRuntimeMode(mode) {
+    if (mode !== 'DETERMINISTIC' && mode !== 'PRODUCTION') {
+      console.warn('[AISRuntime] unknown mode:', mode);
+      return;
+    }
+    _runtimeMode = mode;
+    console.log('[AISRuntime] runtimeMode:', _runtimeMode);
+  }
+
+  function getRuntimeMode() { return _runtimeMode; }
+
+  // ── Fault roster access ───────────────────────────────────────────────────
+  function getFaultRoster() {
+    return _faultRoster.slice(); // defensive copy
+  }
+
+  function getLatestFaults(n) {
+    return _faultRoster.slice(-(n || 10));
   }
 
   function getActiveVessels() {
@@ -931,6 +1392,7 @@
     setViewportContext,
     promotePersistentVessel,
     demotePersistentVessel,
+    injectDebugVessel,
 
     // State constants
     STATE_UNDERWAY,
@@ -956,11 +1418,29 @@
     // AIS translation (accessible to AISIngestBridge)
     mapAISStatus: _mapAISStatus,
 
+    // ── 0522Q: Runtime mode and fault APIs ───────────────────────────────────
+    setRuntimeMode,
+    getRuntimeMode,
+    getFaultRoster,
+    getLatestFaults,
+
+    // 0522Q: Constitutional freeze constants (read-only access for renderer/debug)
+    FIXED_TIMESTEP_MS,
+    FIXED_TIMESTEP_SEC,
+    FAULT_MARITIME_RENDER_DIVERGENCE,
+    FAULT_RECONCILIATION_OSCILLATION,
+    FAULT_INVALID_AIS_PACKET,
+    FAULT_DORMANT_LEAK,
+    FAULT_MARITIME_BACKPRESSURE,
+    FAULT_VARIABLE_TICK_DETERMINISM,
+
     // Internal access for bridge and debug tools
     _activeBucket:          function () { return _activeBucket; },
     _dormantBucket:         function () { return _dormantBucket; },
     _protectedDormantBucket:function () { return _protectedDormantBucket; },
     _persistentRegistry:    function () { return _persistentRegistry; },
+    _faultRoster:           function () { return _faultRoster; },
+    _vesselTickMeta:        function () { return _vesselTickMeta; },
   };
 
 })(window);

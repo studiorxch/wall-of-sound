@@ -1,0 +1,57 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-74.0445, 40.6892]
+      },
+      "properties": {
+        "id": "statue_of_liberty",
+        "label": "Statue of Liberty",
+        "category": "hero_landmark", "priority": 5,
+        "minZoom": 8.0, "maxZoom": 18, "lod": "hero"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-74.0198, 40.6542]
+      },
+      "properties": {
+        "id": "brooklyn_army_terminal",
+        "label": "Brooklyn Army Terminal",
+        "category": "hero_landmark", "priority": 5,
+        "minZoom": 8.5, "maxZoom": 18, "lod": "hero"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-74.0130, 40.7080]
+      },
+      "properties": {
+        "id": "lower_manhattan_skyline",
+        "label": "Lower Manhattan",
+        "category": "hero_landmark", "priority": 5,
+        "minZoom": 7.5, "maxZoom": 18, "lod": "hero"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-74.0165, 40.6940]
+      },
+      "properties": {
+        "id": "governors_island_center",
+        "label": "Governors Island",
+        "category": "hero_landmark", "priority": 5,
+        "minZoom": 8.5, "maxZoom": 18, "lod": "hero"
+      }
+    }
+  ]
+}

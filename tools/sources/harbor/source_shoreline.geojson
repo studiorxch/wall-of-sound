@@ -1,0 +1,272 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-74.0158, 40.7014],
+          [-74.0175, 40.7005],
+          [-74.0185, 40.6995],
+          [-74.0195, 40.6975],
+          [-74.0200, 40.6950],
+          [-74.0195, 40.6920],
+          [-74.0178, 40.6895],
+          [-74.0150, 40.6875],
+          [-74.0122, 40.6845],
+          [-74.0095, 40.6810],
+          [-74.0060, 40.6760],
+          [-74.0028, 40.6710],
+          [-74.0008, 40.6680],
+          [-73.9998, 40.6648]
+        ]
+      },
+      "properties": {
+        "id": "brooklyn_upper_bay_shore",
+        "label": "Brooklyn Upper Bay Shoreline",
+        "category": "shoreline",
+        "priority": 5,
+        "minZoom": 8.5,
+        "maxZoom": 18,
+        "lod": "standard"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-73.9998, 40.6648],
+          [-73.9988, 40.6612],
+          [-73.9975, 40.6568],
+          [-73.9968, 40.6520],
+          [-73.9972, 40.6480],
+          [-73.9985, 40.6442],
+          [-74.0005, 40.6408],
+          [-74.0028, 40.6375],
+          [-74.0058, 40.6345],
+          [-74.0095, 40.6320],
+          [-74.0132, 40.6302],
+          [-74.0168, 40.6290]
+        ]
+      },
+      "properties": {
+        "id": "bay_ridge_shore",
+        "label": "Bay Ridge Shoreline",
+        "category": "shoreline",
+        "priority": 4,
+        "minZoom": 9.0,
+        "maxZoom": 18,
+        "lod": "standard"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-74.0268, 40.6432],
+          [-74.0278, 40.6402],
+          [-74.0285, 40.6355],
+          [-74.0282, 40.6295],
+          [-74.0268, 40.6245],
+          [-74.0248, 40.6180]
+        ]
+      },
+      "properties": {
+        "id": "sunset_park_shore_south",
+        "label": "Sunset Park South Shore",
+        "category": "shoreline",
+        "priority": 4,
+        "minZoom": 9.0,
+        "maxZoom": 18,
+        "lod": "standard"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-74.0158, 40.7014],
+          [-74.0142, 40.7026],
+          [-74.0118, 40.7036],
+          [-74.0090, 40.7044],
+          [-74.0058, 40.7051],
+          [-74.0022, 40.7057],
+          [-73.9998, 40.7062],
+          [-73.9975, 40.7065],
+          [-73.9948, 40.7068]
+        ]
+      },
+      "properties": {
+        "id": "lower_manhattan_west_shore",
+        "label": "Lower Manhattan West Shore",
+        "category": "shoreline",
+        "priority": 5,
+        "minZoom": 8.5,
+        "maxZoom": 18,
+        "lod": "standard"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-73.9948, 40.7068],
+          [-73.9928, 40.7058],
+          [-73.9912, 40.7042],
+          [-73.9902, 40.7022],
+          [-73.9898, 40.7000],
+          [-73.9900, 40.6978],
+          [-73.9908, 40.6958],
+          [-73.9920, 40.6940]
+        ]
+      },
+      "properties": {
+        "id": "battery_park_tip",
+        "label": "Battery Park Tip",
+        "category": "shoreline",
+        "priority": 5,
+        "minZoom": 10.0,
+        "maxZoom": 18,
+        "lod": "hero"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-74.0792, 40.6850],
+          [-74.0745, 40.6820],
+          [-74.0720, 40.6780],
+          [-74.0695, 40.6755],
+          [-74.0658, 40.6725],
+          [-74.0612, 40.6695],
+          [-74.0560, 40.6660],
+          [-74.0500, 40.6620],
+          [-74.0450, 40.6580],
+          [-74.0412, 40.6548],
+          [-74.0380, 40.6518]
+        ]
+      },
+      "properties": {
+        "id": "jersey_city_waterfront",
+        "label": "Jersey City Waterfront",
+        "category": "shoreline",
+        "priority": 3,
+        "minZoom": 8.5,
+        "maxZoom": 15,
+        "lod": "coarse"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-74.0380, 40.6518],
+          [-74.0355, 40.6488],
+          [-74.0332, 40.6455],
+          [-74.0318, 40.6418],
+          [-74.0312, 40.6380],
+          [-74.0315, 40.6342],
+          [-74.0325, 40.6308]
+        ]
+      },
+      "properties": {
+        "id": "bayonne_waterfront",
+        "label": "Bayonne Waterfront",
+        "category": "shoreline",
+        "priority": 3,
+        "minZoom": 9.0,
+        "maxZoom": 15,
+        "lod": "coarse"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-74.0450, 40.6900],
+          [-74.0428, 40.6925],
+          [-74.0398, 40.6952],
+          [-74.0362, 40.6972],
+          [-74.0320, 40.6988],
+          [-74.0278, 40.7002],
+          [-74.0232, 40.7012],
+          [-74.0185, 40.7018],
+          [-74.0158, 40.7014]
+        ]
+      },
+      "properties": {
+        "id": "brooklyn_army_terminal_shore",
+        "label": "Brooklyn Army Terminal Shoreline",
+        "category": "shoreline",
+        "priority": 5,
+        "minZoom": 9.5,
+        "maxZoom": 18,
+        "lod": "standard"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-74.0158, 40.6720],
+          [-74.0165, 40.6745],
+          [-74.0170, 40.6775],
+          [-74.0172, 40.6808],
+          [-74.0168, 40.6842],
+          [-74.0158, 40.6875],
+          [-74.0142, 40.6902],
+          [-74.0120, 40.6922],
+          [-74.0092, 40.6938],
+          [-74.0058, 40.6948],
+          [-74.0022, 40.6952],
+          [-73.9988, 40.6950]
+        ]
+      },
+      "properties": {
+        "id": "red_hook_upper_bay_shore",
+        "label": "Red Hook / Upper Bay Shore",
+        "category": "shoreline",
+        "priority": 4,
+        "minZoom": 9.5,
+        "maxZoom": 18,
+        "lod": "standard"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-74.0450, 40.6900],
+          [-74.0468, 40.6872],
+          [-74.0480, 40.6842],
+          [-74.0488, 40.6808],
+          [-74.0488, 40.6772],
+          [-74.0480, 40.6740],
+          [-74.0465, 40.6712],
+          [-74.0445, 40.6688],
+          [-74.0420, 40.6668]
+        ]
+      },
+      "properties": {
+        "id": "sunset_park_industrial_shore",
+        "label": "Sunset Park Industrial Shore",
+        "category": "shoreline",
+        "priority": 4,
+        "minZoom": 9.5,
+        "maxZoom": 18,
+        "lod": "standard"
+      }
+    }
+  ]
+}

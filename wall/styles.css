@@ -200,7 +200,51 @@ body {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  transition: opacity 160ms ease;
+  transition: width 200ms ease, min-width 200ms ease, max-width 200ms ease, opacity 160ms ease;
+}
+
+/* ── INSPECTOR COLLAPSED (no selection, not pinned) ─────────────────── */
+body.inspector-hidden #right-panel,
+body.inspector-hidden .panel-right {
+  width: 0;
+  min-width: 0;
+  max-width: 0;
+  border-left: none;
+  opacity: 0;
+  pointer-events: none;
+}
+body.inspector-hidden .app-body {
+  grid-template-columns: 50px minmax(0, 1fr) 0px;
+}
+body.inspector-hidden .drawer-panel {
+  right: var(--launcher-rail-width, 0px);
+}
+
+/* ── INSPECTOR PIN BUTTON ───────────────────────────────────────────── */
+.inspector-pin-btn {
+  margin-left: auto;
+  background: none;
+  border: none;
+  cursor: pointer;
+  opacity: 0.4;
+  font-size: 13px;
+  padding: 0 4px;
+  line-height: 1;
+  color: inherit;
+  transition: opacity 120ms ease;
+}
+.inspector-pin-btn:hover { opacity: 0.9; }
+.inspector-pin-btn.pinned { opacity: 1; color: var(--accent, #5b8cff); }
+
+/* ── INSPECTOR EMPTY STATE ──────────────────────────────────────────── */
+#inspector-empty-state {
+  padding: 24px 16px;
+  text-align: center;
+  opacity: 0.45;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  user-select: none;
 }
 
 /* Dim inspector while a drawer is open — subtle focus shift */
@@ -822,6 +866,38 @@ select {
   display: none !important;
 }
 
+/* ── BOOT VISIBILITY GUARD ──────────────────────── */
+/* body.wos-booting is added to <body> at HTML parse time (before any JS).    */
+/* It is removed by _markRuntimeReady() after MapboxViewportRuntime fires its */
+/* load event and a viewport sync rAF has committed.                           */
+/*                                                                             */
+/* Surface shell ownership:                                                    */
+/*   data-surface-shell="legacy-editor"  — the entire WOS drawing editor shell */
+/*     (.app-body: left rail, canvas chrome, transport bar, inspector).        */
+/*     Hidden during boot. Revealed on wos-runtime-ready.                      */
+/*   data-surface-shell="map-world"      — map/world runtime root (if present) */
+/*     Always visible; Mapbox GL initialises regardless of visibility state.   */
+/*                                                                             */
+/* Why opacity+visibility, not display:none:                                   */
+/*   display:none collapses layout — getBoundingClientRect() returns 0 for all */
+/*   children, breaking map.resize() and canvas sizing. opacity+visibility     */
+/*   preserves layout geometry while hiding pixels. Mapbox's GL context and    */
+/*   tile network requests proceed normally; the map is just not yet painted   */
+/*   to screen. On reveal the transition is a pure alpha blend — no reflow.    */
+
+body.wos-booting [data-surface-shell="legacy-editor"] {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* Fade-in on ready — 200ms ease, no transform, no reflow */
+body.wos-runtime-ready [data-surface-shell="legacy-editor"] {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 200ms ease;
+}
+
 /* ── PRESENTATION MODE ──────────────────────────── */
 
 body.presentation .topbar,
@@ -829,6 +905,60 @@ body.presentation .panel-left,
 body.presentation .panel-right,
 body.presentation .transport-bar,
 body.presentation .shortcut-hud {
+  display: none !important;
+}
+
+/* 0528S — collapse grid layout so left/right columns don't leave gaps */
+body.presentation .app-body {
+  grid-template-columns: 0 minmax(0, 1fr) 0 !important;
+}
+
+/* 0528S — left rail: collapse completely (it's a grid-row:1/-1 participant) */
+body.presentation #left-rail {
+  width: 0 !important;
+  min-width: 0 !important;
+  overflow: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
+}
+
+/* 0528S — extended chrome hiding */
+body.presentation #left-panel,
+body.presentation #right-panel,
+body.presentation .tool-group,
+body.presentation .canvas-tool-subbar,
+body.presentation .viewport-controls,
+body.presentation .drawer-panel,
+body.presentation .launcher-btn,
+body.presentation .launcher-rail {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
+}
+
+/* 0528S — Mapbox native controls */
+body.presentation .mapboxgl-ctrl-bottom-left,
+body.presentation .mapboxgl-ctrl-bottom-right,
+body.presentation .mapboxgl-ctrl-top-left,
+body.presentation .mapboxgl-ctrl-top-right,
+body.presentation .mapboxgl-ctrl-group,
+body.presentation .mapboxgl-ctrl {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+/* 0528S/0528V — system HUD toggle button: explicit hide (also carries data-watch-hide) */
+body.presentation #system-hud-toggle,
+body.presentation #system-hud {
+  display: none !important;
+}
+
+/* 0528S — universal opt-in: data-watch-hide / .watch-hide opt any element in.
+   Do NOT tag HUD, map canvas, or atmosphere canvases. */
+body.presentation [data-watch-hide],
+body.presentation .watch-hide {
   display: none !important;
 }
 
@@ -1888,8 +2018,9 @@ body.presentation .shortcut-hud {
 
 .system-hud-toggle {
   position: fixed;
-  left: 10px;
-  bottom: 10px;
+  left: auto;
+  right: 12px;
+  bottom: 58px;   /* sit above the 48px traversal deck */
   z-index: 1200;
   width: 42px;
   height: 26px;

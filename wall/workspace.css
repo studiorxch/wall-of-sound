@@ -1439,3 +1439,33 @@ body.ws-telemetry-active #ws-telemetry-hud { display: block; }
   font-size: 9px;
   padding: 1px 3px;
 }
+
+/* ── PRESENTATION MODE — workspace chrome hiding (0528S) ─────────────────────
+ * Hides the bottom status bar, geo controls, and OP/VIEW/TEL mode chips.
+ * Uses the existing body.presentation class toggled by main.js Tab handler.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/* #ws-lower-panel carries data-watch-hide so display:none comes from styles.css.
+   This rule is belt-and-suspenders and collapses height so the 44px strip vanishes. */
+body.presentation #ws-lower-panel {
+  display: none !important;
+}
+
+body.presentation #ws-geo-controls,
+body.presentation .ws-mode-toggle,
+body.presentation .ws-lower-status {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+/* ── TAB clean-capture: hide Weather + Time Clock HUD, keep Location ─────────
+ * Resolves from the existing body.presentation capture state — no second
+ * visibility system. Weather/clock are only hidden while TAB mode is active;
+ * exiting TAB mode restores them automatically. Location HUD stays visible
+ * for video framing. Nothing is deleted — these remain for 24/7 world mode. */
+body.presentation #world-telemetry-hud .wt-time-block,
+body.presentation #world-telemetry-hud .wt-conditions,
+body.presentation #world-telemetry-hud .wt-drift-label {
+  display: none !important;
+}

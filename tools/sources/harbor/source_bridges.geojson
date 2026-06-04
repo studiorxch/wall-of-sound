@@ -1,0 +1,90 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-74.0441, 40.6065],
+          [-74.0415, 40.6075],
+          [-74.0385, 40.6085],
+          [-74.0352, 40.6090],
+          [-74.0320, 40.6092],
+          [-74.0288, 40.6090],
+          [-74.0258, 40.6085],
+          [-74.0228, 40.6075],
+          [-74.0202, 40.6062]
+        ]
+      },
+      "properties": {
+        "id": "verrazzano_narrows_bridge",
+        "label": "Verrazzano-Narrows Bridge",
+        "category": "bridge_context", "priority": 5,
+        "minZoom": 8.0, "maxZoom": 15, "lod": "coarse"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-73.9969, 40.7061],
+          [-73.9958, 40.7050],
+          [-73.9946, 40.7038],
+          [-73.9935, 40.7026],
+          [-73.9925, 40.7012],
+          [-73.9918, 40.6998],
+          [-73.9912, 40.6982],
+          [-73.9908, 40.6968]
+        ]
+      },
+      "properties": {
+        "id": "brooklyn_bridge",
+        "label": "Brooklyn Bridge",
+        "category": "bridge_context", "priority": 5,
+        "minZoom": 8.0, "maxZoom": 15, "lod": "coarse"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-73.9948, 40.7068],
+          [-73.9935, 40.7055],
+          [-73.9920, 40.7042],
+          [-73.9906, 40.7028],
+          [-73.9892, 40.7015],
+          [-73.9878, 40.7002]
+        ]
+      },
+      "properties": {
+        "id": "manhattan_bridge",
+        "label": "Manhattan Bridge",
+        "category": "bridge_context", "priority": 4,
+        "minZoom": 8.5, "maxZoom": 15, "lod": "coarse"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-73.9758, 40.7146],
+          [-73.9745, 40.7130],
+          [-73.9730, 40.7115],
+          [-73.9716, 40.7102],
+          [-73.9702, 40.7088],
+          [-73.9688, 40.7075]
+        ]
+      },
+      "properties": {
+        "id": "williamsburg_bridge",
+        "label": "Williamsburg Bridge",
+        "category": "bridge_context", "priority": 4,
+        "minZoom": 9.0, "maxZoom": 15, "lod": "coarse"
+      }
+    }
+  ]
+}

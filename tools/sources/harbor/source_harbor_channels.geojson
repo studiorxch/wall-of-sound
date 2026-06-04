@@ -1,0 +1,120 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-74.0322, 40.6008],
+          [-74.0310, 40.6058],
+          [-74.0295, 40.6115],
+          [-74.0278, 40.6175],
+          [-74.0260, 40.6235],
+          [-74.0240, 40.6295],
+          [-74.0215, 40.6355],
+          [-74.0188, 40.6415],
+          [-74.0158, 40.6468],
+          [-74.0122, 40.6520],
+          [-74.0082, 40.6562],
+          [-74.0038, 40.6598],
+          [-73.9992, 40.6628],
+          [-73.9945, 40.6650]
+        ]
+      },
+      "properties": {
+        "id": "main_ship_channel",
+        "label": "Main Ship Channel",
+        "category": "harbor_channel", "priority": 5,
+        "minZoom": 7.5, "maxZoom": 16, "lod": "coarse"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-74.0165, 40.7000],
+          [-74.0235, 40.6968],
+          [-74.0295, 40.6935],
+          [-74.0348, 40.6900],
+          [-74.0390, 40.6880],
+          [-74.0428, 40.6862],
+          [-74.0458, 40.6858]
+        ]
+      },
+      "properties": {
+        "id": "battery_to_statue_liberty_corridor",
+        "label": "Battery–Statue of Liberty Ferry Corridor",
+        "category": "harbor_channel", "priority": 4,
+        "minZoom": 8.5, "maxZoom": 16, "lod": "coarse"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-74.0165, 40.7000],
+          [-74.0215, 40.6985],
+          [-74.0260, 40.6970],
+          [-74.0298, 40.6958],
+          [-74.0328, 40.6948],
+          [-74.0352, 40.6940]
+        ]
+      },
+      "properties": {
+        "id": "battery_to_governors_corridor",
+        "label": "Battery–Governors Island Ferry Corridor",
+        "category": "harbor_channel", "priority": 4,
+        "minZoom": 8.5, "maxZoom": 16, "lod": "coarse"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-74.0165, 40.6952],
+          [-74.0198, 40.6950],
+          [-74.0238, 40.6948],
+          [-74.0278, 40.6944],
+          [-74.0308, 40.6940],
+          [-74.0330, 40.6938],
+          [-74.0352, 40.6940]
+        ]
+      },
+      "properties": {
+        "id": "red_hook_to_governors_corridor",
+        "label": "Red Hook–Governors Island Ferry Corridor",
+        "category": "harbor_channel", "priority": 3,
+        "minZoom": 9.5, "maxZoom": 16, "lod": "coarse"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-74.0265, 40.6510],
+          [-74.0228, 40.6558],
+          [-74.0188, 40.6605],
+          [-74.0148, 40.6652],
+          [-74.0108, 40.6700],
+          [-74.0068, 40.6745],
+          [-74.0028, 40.6790],
+          [-73.9985, 40.6832],
+          [-73.9945, 40.6870],
+          [-73.9918, 40.6908],
+          [-73.9908, 40.6942]
+        ]
+      },
+      "properties": {
+        "id": "sunset_park_to_lower_manhattan_corridor",
+        "label": "Sunset Park–Lower Manhattan Ferry Corridor",
+        "category": "harbor_channel", "priority": 3,
+        "minZoom": 9.5, "maxZoom": 16, "lod": "coarse"
+      }
+    }
+  ]
+}

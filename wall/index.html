@@ -8,9 +8,17 @@
     <title>Wall of Sound</title>
     <link rel="stylesheet" href="./styles.css" />
     <link rel="stylesheet" href="./workspace.css" />
-    <link href="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css" rel="stylesheet" />
+    <link
+      href="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css"
+      rel="stylesheet"
+    />
   </head>
-  <body>
+  <body class="wos-booting">
+    <!-- 0603N — open the Studio authoring workspace (separate page) -->
+    <a href="../studio/index.html" target="_blank" rel="noopener"
+       style="position:fixed;top:8px;right:10px;z-index:9999;font:11px/1 monospace;
+              color:#78e6ff;background:rgba(7,9,12,0.72);border:1px solid #2c4456;
+              border-radius:5px;padding:5px 9px;text-decoration:none;">Studio ↗</a>
     <!-- Buttons preserved as hidden for bindControls compatibility -->
     <button id="load-example" style="display: none">Demo</button>
     <label style="display: none"
@@ -25,9 +33,14 @@
     /></label>
 
     <!-- ── MAIN LAYOUT ──────────────────────────────── -->
-    <div class="app-body">
+    <!-- data-surface-shell="legacy-editor": marks this as the drawing editor  -->
+    <!-- shell. Hidden during wos-booting; revealed on wos-runtime-ready.      -->
+    <!-- The map runtime (Mapbox GL) initialises inside .canvas-area while     -->
+    <!-- this shell is opacity:0 — visibility:hidden preserves layout geometry -->
+    <!-- so getBoundingClientRect() and map.resize() remain accurate.          -->
+    <div class="app-body" data-surface-shell="legacy-editor">
       <!-- LEFT RAIL -->
-      <div id="left-rail">
+      <div id="left-rail" data-watch-hide>
         <div class="rail-icon"></div>
         <button class="launcher-btn" data-drawer="sampler" title="Sampler">
           🍡
@@ -287,11 +300,19 @@
           <button class="tab" data-tab="motion" hidden>Motion</button>
           <!-- canvas tab alias — hidden, IDs preserved for JS compat -->
           <button class="tab" data-tab="canvas" hidden>Frame</button>
+          <button
+            id="inspector-pin-btn"
+            class="inspector-pin-btn"
+            title="Pin inspector open"
+          >
+            📌
+          </button>
         </div>
 
         <!-- Object Tab — actor/entity architecture inspector -->
         <div class="tab-content active" data-tab-content="object">
           <div id="inspector-object">
+            <div id="inspector-empty-state">No object selected</div>
             <!-- ── PATH ──────────────────────────────────────────────────────── -->
             <!-- Movement infrastructure. Routes, corridors, map geometry.      -->
             <div class="insp-section" data-section="object">
@@ -1544,6 +1565,111 @@
             class="sampler-key-list"
             style="display: none"
           ></div>
+
+          <!-- ── SYSTEMS ────────────────────────────────────────────────── -->
+          <!-- 0523K_WOS_MaritimeRuntimeIntegration_v1.0.0                  -->
+          <!-- Runtime subsystem toggles. Updates flags immediately;        -->
+          <!-- no reload required.                                           -->
+          <div class="insp-section" data-section="systems">
+            <button class="insp-section-header" data-toggle="systems">
+              <span class="insp-chevron">▶</span> SYSTEMS
+            </button>
+            <div class="insp-section-body" style="display: none">
+              <!-- ── Maritime ─────────────────────────────────────────── -->
+              <div class="insp-row" style="margin-bottom: 2px">
+                <label
+                  class="insp-label"
+                  style="
+                    font-size: 9px;
+                    opacity: 0.55;
+                    text-transform: uppercase;
+                    letter-spacing: 0.06em;
+                  "
+                  >Maritime</label
+                >
+              </div>
+
+              <!-- Maritime Enabled — master on/off -->
+              <div class="insp-row">
+                <label class="insp-label" for="maritime-enabled">Enabled</label>
+                <div class="insp-control">
+                  <input id="maritime-enabled" type="checkbox" checked />
+                </div>
+              </div>
+
+              <!-- Validation Feed — synthetic vessel ecology -->
+              <div class="insp-row">
+                <label class="insp-label" for="maritime-validation-feed"
+                  >Validation Feed</label
+                >
+                <div class="insp-control">
+                  <input
+                    id="maritime-validation-feed"
+                    type="checkbox"
+                    checked
+                  />
+                </div>
+              </div>
+
+              <!-- Show Labels — debug label overlay -->
+              <div class="insp-row">
+                <label class="insp-label" for="maritime-show-labels"
+                  >Show Labels</label
+                >
+                <div class="insp-control">
+                  <input id="maritime-show-labels" type="checkbox" />
+                </div>
+              </div>
+
+              <!-- Show Wakes -->
+              <div class="insp-row">
+                <label class="insp-label" for="maritime-show-wakes"
+                  >Show Wakes</label
+                >
+                <div class="insp-control">
+                  <input id="maritime-show-wakes" type="checkbox" checked />
+                </div>
+              </div>
+
+              <!-- Show Nav Lights -->
+              <div class="insp-row">
+                <label class="insp-label" for="maritime-show-nav-lights"
+                  >Nav Lights</label
+                >
+                <div class="insp-control">
+                  <input
+                    id="maritime-show-nav-lights"
+                    type="checkbox"
+                    checked
+                  />
+                </div>
+              </div>
+
+              <!-- ── Land Traffic ──────────────────────────────────────── -->
+              <div class="insp-row" style="margin-top: 8px; margin-bottom: 2px">
+                <label
+                  class="insp-label"
+                  style="
+                    font-size: 9px;
+                    opacity: 0.55;
+                    text-transform: uppercase;
+                    letter-spacing: 0.06em;
+                  "
+                  >Land Traffic</label
+                >
+              </div>
+
+              <!-- Land Traffic Enabled — off by default in maritime runtime -->
+              <div class="insp-row">
+                <label class="insp-label" for="land-traffic-enabled"
+                  >Enabled</label
+                >
+                <div class="insp-control">
+                  <input id="land-traffic-enabled" type="checkbox" />
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
         <!-- Motion Brush Tab -->
         <div
@@ -1795,6 +1921,8 @@
       </div>
     </div>
 
+    <!-- ── WOS Boot Sequencer — MUST be first script (accurate script_start mark) ── -->
+    <script src="./systems/boot/wosBootSequencer.js"></script>
     <!-- Engine scripts (unchanged) -->
     <script src="./engine/physics.js"></script>
     <script src="./engine/swarm.js"></script>
@@ -1896,6 +2024,83 @@
     <script src="./registries/rendererRegistry.js"></script>
     <script src="./registries/inspectorRegistry.js"></script>
     <script src="./registries/panelRegistry.js"></script>
+    <!-- ── Maritime Vessel Taxonomy (0523A_WOS_MaritimeVesselTaxonomyProfiles_v1.2.1) ── -->
+    <script src="./registries/maritimeTaxonomyProfiles.js"></script>
+    <!-- ── Object Profile Registry (0528I_WOS_ObjectCustomizationAndGenerationDoctrine_v1.0.0) ── -->
+    <script src="./registries/objectProfileRegistry.js"></script>
+    <!-- ── Maritime Population Hierarchy (0523B_WOS_MaritimePopulationHierarchy_v1.0.0) ── -->
+    <script src="./registries/maritimePopulationHierarchy.js"></script>
+    <!-- ── Maritime Spawn Ecology (0523C_WOS_MaritimeSpawnEcology_v1.2.1) ──────── -->
+    <script src="./ecology/maritimeEcologicalZones.js"></script>
+    <script src="./ecology/maritimeTemporalEcology.js"></script>
+    <script src="./ecology/maritimeSpawnEcology.js"></script>
+    <!-- ── Maritime Wake Authority (0523D_WOS_MaritimeWakeAuthority_v1.1.0) ─────── -->
+    <script src="./systems/world/wakeAuthority.js"></script>
+    <!-- ── Maritime Atmospheric Readability (0523E_WOS_MaritimeAtmosphericReadability_v1.2.0) ── -->
+    <script src="./systems/maritimeAtmosphericReadability.js"></script>
+    <!-- ── Maritime Style Registry (0525B_WOS_MaritimeStyleRegistry_v1.0.1) ── -->
+    <!-- Loads before MapStyleAuthority so generateManifest() delegates to MSR  -->
+    <script src="./systems/presentation/maritimeStyleRegistry.js"></script>
+    <!-- ── Map Style Authority (0525A_WOS_MapStyleAuthority_v1.0.2) ─────────── -->
+    <script src="./systems/presentation/mapStyleAuthority.js"></script>
+    <!-- ── Map Style Recovery Authority (0603H) ──────────────────────────────── -->
+    <script src="./systems/presentation/mapStyleRecoveryAuthority.js"></script>
+    <!-- ── Surface Style Presets (0525D_WOS_SurfaceStylePresets_v1.0.0) ────── -->
+    <!-- Loads after MapStyleAuthority (dependency)                             -->
+    <script src="./systems/presentation/surfaceStylePresetRuntime.js"></script>
+    <!-- ── Procedural Vessel Topology (0525F_WOS_ProceduralVesselTopology_v1.0.1) ── -->
+    <!-- Loads before renderer — renderer queries SBE.ProceduralVesselTopology  -->
+    <script src="./systems/presentation/proceduralVesselTopology.js"></script>
+    <!-- ── Maritime Wake Signature (0526A_WOS_MaritimeWakeSignature_v1.0.0) ── -->
+    <!-- Loads before renderer — renderer queries SBE.MaritimeWakeSignature     -->
+    <script src="./systems/presentation/maritimeWakeSignature.js"></script>
+    <!-- ── Maritime Water Memory (0526B_WOS_MaritimeWaterMemory_v1.0.1) ────── -->
+    <!-- Loads before renderer — renderer queries SBE.MaritimeWaterMemory       -->
+    <!-- Also consumed by MaritimeWakeSignature (must load after it)            -->
+    <script src="./systems/presentation/maritimeWaterMemory.js"></script>
+    <!-- ── Maritime Distance Atmosphere (0526E_WOS_MaritimeDistanceAtmosphere_v1.0.1) -->
+    <!-- Loads before renderer — renderer queries SBE.MaritimeDistanceAtmosphere      -->
+    <script src="./systems/presentation/maritimeDistanceAtmosphere.js"></script>
+    <!-- ── Maritime Light Authority (0526F_WOS_MaritimeLightAuthority_v1.0.2) ──────── -->
+    <!-- Loads after MaritimeDistanceAtmosphere — consumes distance envelopes          -->
+    <script src="./systems/presentation/maritimeLightAuthority.js"></script>
+    <!-- ── Maritime Silhouette Differentiation (0526H_WOS_MaritimeSilhouetteDifferentiation_v1.0.2) -->
+    <!-- Loads after MaritimeLightAuthority — consulted by renderer for readability profiles         -->
+    <script src="./systems/presentation/maritimeSilhouetteDifferentiation.js"></script>
+    <!-- ── Vessel Class Presentation (0527C_WOS_VesselReplacementPass_v1.0.0) ──────────────────── -->
+    <!-- Loads before marineRenderer — provides class resolution + silhouette draw functions        -->
+    <script src="./systems/presentation/vesselClassPresentation.js"></script>
+    <!-- ── Vessel Visual Profile (0528H_WOS_VesselVisualUnificationPass_v1.0.0) ────────────────── -->
+    <!-- Shared color identity authority — must load before maritime25DContext and MOR              -->
+    <script src="./systems/presentation/vesselVisualProfile.js"></script>
+    <!-- ── Maritime 2.5D Context (0527D_WOS_Maritime2_5DContextPass_v1.0.0) ─────────────────────── -->
+    <!-- Loads after vesselClassPresentation, before marineRenderer                                  -->
+    <script src="./systems/presentation/maritime25DContext.js"></script>
+    <!-- ── Aircraft Runtime (0528A_WOS_AirflightRuntimeBootstrap_v1.0.0) ────────────────────────── -->
+    <!-- Load order: runtime → influence field → influence renderer → aircraft renderer → altitude world -->
+    <script src="./systems/world/aircraftRuntime.js"></script>
+    <!-- ── Regional Flight Trip Runtime (0528K_WOS_RegionalFlightTripRuntime_v1.0.0) ── -->
+    <script src="./systems/world/regionalFlightTripRuntime.js"></script>
+    <!-- ── Regional Flight Planner (0528O_WOS_RegionalFlightPlanner_v1.0.0) ── -->
+    <script src="./systems/world/regionalFlightPlanner.js"></script>
+    <script src="./systems/presentation/airspaceInfluenceField.js"></script>
+    <script src="./render/airspaceInfluenceRenderer.js"></script>
+    <script src="./render/aircraftRenderer.js"></script>
+    <!-- ── Altitude Aware World Renderer (0528B_WOS_AltitudeAwareWorldRenderer_v1.0.0) ── -->
+    <script src="./systems/presentation/altitudeAwareWorldRenderer.js"></script>
+    <!-- ── Cloud Atmosphere Layer (0528C_WOS_CloudAtmosphereLayer_v1.0.0) ──────── -->
+    <script src="./systems/presentation/cloudAtmosphereLayer.js"></script>
+    <script src="./render/cloudAtmosphereRenderer.js"></script>
+    <!-- ── Harbor Sector Authority (0528D_WOS_HarborSectorAuthority_v1.0.0) ────── -->
+    <script src="./systems/geography/harborSectorAuthority.js"></script>
+    <!-- ── Harbor Geometry Registry (0528E_WOS_HarborGeometryBakePipeline_v1.0.0) ── -->
+    <script src="./systems/geography/harborGeometryRegistry.js"></script>
+    <!-- ── Harbor Geometry Runtime Style + Renderer (0528G_WOS_HarborGeometryRuntimeRenderer_v1.0.0) ── -->
+    <script src="./systems/presentation/harborGeometryRuntimeStyle.js"></script>
+    <script src="./render/harborGeometryRuntimeRenderer.js"></script>
+    <!-- Debug companions and LiveStylePanel load AFTER main.js — see below     -->
+    <!-- ── Maritime Occupancy Renderer (0523G_WOS_MaritimeOccupancyRenderer_v1.0.0) ── -->
+    <script src="./render/maritimeOccupancyRenderer.js"></script>
     <!-- ── Surface Spatial Model (0518G_WOS_SurfaceSpatialModel_v1.0.0) ──────── -->
     <script src="./engine/surfaceModel.js"></script>
     <script src="./documents/routeDocument.js"></script>
@@ -1927,7 +2132,12 @@
     <script src="./systems/world/passengerMode.js"></script>
     <script src="./systems/world/roadTopologyAlignment.js"></script>
     <script src="./systems/world/aisRuntime.js"></script>
+    <!-- ── Maritime Validation Feed (0523H_WOS_MaritimeValidationFeed_v1.0.0) ── -->
+    <script src="./validation/maritimeValidationFeed.js"></script>
     <script src="./systems/world/aisIngestBridge.js"></script>
+    <script src="./systems/world/overlayGrammar.js"></script>
+    <script src="./systems/world/observabilityCamera.js"></script>
+    <script src="./systems/world/tiltProjectionRuntime.js"></script>
     <script src="./systems/world/subwayTopologyRuntime.js"></script>
     <script src="./systems/world/atmosphereRuntime.js"></script>
     <script src="./systems/world/gridRuntime.js"></script>
@@ -1935,6 +2145,7 @@
     <script src="./engine/surfaceDrawingRuntime.js"></script>
     <script src="./render/trafficRenderer.js"></script>
     <script src="./render/marineRenderer.js"></script>
+    <script src="./systems/world/marineOverlayCanvasRuntime.js"></script>
     <script src="./render/overlays/transitPulseLayer.js"></script>
     <script src="./render/overlays/cinematicHazeLayer.js"></script>
     <script src="./render/overlays/signalDriftLayer.js"></script>
@@ -1942,11 +2153,164 @@
     <script src="./render/overlayRuntime.js"></script>
     <script src="./render/worldHUD.js"></script>
     <script src="./render/worldTelemetryHUD.js"></script>
+    <!-- ── Viewport Location Authority (0530G) — must load BEFORE realitySync ── -->
+    <script src="./systems/world/viewportLocationAuthority.js"></script>
     <script src="./systems/world/realitySyncRuntime.js"></script>
     <script src="./render/environmentalTelemetryHUD.js"></script>
     <script src="./render/atmosphereComposite.js"></script>
     <script src="./render/workspaceUI.js"></script>
     <script src="./main.js"></script>
+
+    <!-- ── WOS Debug Bindings — load AFTER main.js ───────────────────────────
+         main.js owns window._wos and writes it as an object literal.
+         These scripts must bind AFTER that assignment fires so their
+         namespace keys (maritimeStyle / styleAuthority / presets / liveStyle)
+         are not wiped. Core runtime modules (maritimeStyleRegistry.js,
+         mapStyleAuthority.js, surfaceStylePresetRuntime.js) remain BEFORE
+         main.js above. Only debug companions and LiveStylePanel are here.
+    ──────────────────────────────────────────────────────────────────────── -->
+    <!-- ── WOS Boot Debug (load first so audit() works from the console immediately) -->
+    <script src="./systems/boot/wosBootDebug.js"></script>
+    <script src="./systems/presentation/maritimeStyleRegistryDebug.js"></script>
+    <script src="./systems/presentation/mapStyleAuthorityDebug.js"></script>
+    <script src="./systems/presentation/surfaceStylePresetDebug.js"></script>
+    <!-- ── Map Surface Recovery (0601E) ──────────────────────────────────── -->
+    <script src="./systems/presentation/mapSurfaceRecovery.js"></script>
+    <!-- ── Presentation Authority Audit (0601F) ──────────────────────────── -->
+    <script src="./systems/presentation/presentationAuthorityAudit.js"></script>
+    <!-- ── Procedural Vessel Topology Debug (0525F) ──────────────────────── -->
+    <script src="./systems/presentation/proceduralVesselTopologyDebug.js"></script>
+    <!-- ── Maritime Water Memory Debug (0526B) ───────────────────────────── -->
+    <script src="./systems/presentation/maritimeWaterMemoryDebug.js"></script>
+    <!-- ── Maritime Wake Signature Debug (0526C) ──────────────────────────── -->
+    <script src="./systems/presentation/maritimeWakeSignatureDebug.js"></script>
+    <!-- ── Maritime Distance Atmosphere Debug (0526E) ─────────────────────── -->
+    <script src="./systems/presentation/maritimeDistanceAtmosphereDebug.js"></script>
+    <!-- ── Maritime Light Authority Debug (0526F) ─────────────────────────── -->
+    <script src="./systems/presentation/maritimeLightAuthorityDebug.js"></script>
+    <!-- ── Maritime Silhouette Differentiation Debug (0526H) ──────────────── -->
+    <script src="./systems/presentation/maritimeSilhouetteDifferentiationDebug.js"></script>
+    <!-- ── Vessel Replacement Debug (0527C) ─────────────────────────────────── -->
+    <script src="./systems/presentation/vesselReplacementDebug.js"></script>
+    <!-- ── Maritime 2.5D Context Debug (0527D) ───────────────────────────────── -->
+    <script src="./systems/presentation/maritime25DContextDebug.js"></script>
+    <!-- ── Aircraft Debug (0528A) ────────────────────────────────────────────── -->
+    <script src="./systems/presentation/aircraftDebug.js"></script>
+    <!-- ── Atmospheric Continuity Runtime (0528Q) ──────────────────────────── -->
+    <script src="./systems/presentation/atmosphericContinuityRuntime.js"></script>
+    <!-- ── Aircraft Sky Residue Renderer (0528R) ───────────────────────────── -->
+    <script src="./systems/presentation/aircraftSkyResidueRenderer.js"></script>
+    <!-- ── Regional Flight Camera Rig (0528P) ──────────────────────────────── -->
+    <script src="./systems/presentation/regionalFlightCameraRig.js"></script>
+    <!-- ── Building Continuity Runtime (0528W) ───────────────────────────────── -->
+    <script src="./systems/presentation/buildingContinuityRuntime.js"></script>
+    <!-- ── Traversal Continuity Authority (0528X) ────────────────────────────── -->
+    <script src="./systems/presentation/traversalContinuityAuthority.js"></script>
+    <!-- ── Predictive Tile Preload Runtime (0528Z) ───────────────────────────── -->
+    <script src="./systems/presentation/predictiveTilePreloadRuntime.js"></script>
+    <!-- ── Atmospheric Continuity Debug (0528Q) ────────────────────────────── -->
+    <script src="./systems/presentation/atmosphericContinuityDebug.js"></script>
+    <!-- ── Aircraft Residue Debug (0528R) ──────────────────────────────────── -->
+    <script src="./systems/presentation/aircraftResidueDebug.js"></script>
+    <!-- ── Presentation Mode Debug (0528S) ──────────────────────────────────── -->
+    <script src="./systems/presentation/presentationModeDebug.js"></script>
+    <!-- ── Regional Flight Trip Debug (0528K) ───────────────────────────────── -->
+    <script src="./systems/presentation/regionalFlightTripDebug.js"></script>
+    <!-- ── Building Continuity Debug (0528W) ────────────────────────────────── -->
+    <script src="./systems/presentation/buildingContinuityDebug.js"></script>
+    <!-- ── Traversal Continuity Debug (0528X) ────────────────────────────────── -->
+    <script src="./systems/presentation/traversalContinuityDebug.js"></script>
+    <!-- ── Tile Preload Debug (0528Z) ────────────────────────────────────────── -->
+    <script src="./systems/presentation/tilePreloadDebug.js"></script>
+    <!-- ── Mapbox Tile Telemetry (0528AB) ────────────────────────────────────── -->
+    <script src="./systems/presentation/mapboxTileTelemetry.js"></script>
+    <!-- ── Tile Emergence Styling (0528AF) ───────────────────────────────────── -->
+    <script src="./systems/presentation/tileEmergenceStyling.js"></script>
+    <!-- ── Traversal Control Deck (0528V) ────────────────────────────────────── -->
+    <script src="./systems/presentation/traversalControlDeck.js"></script>
+    <!-- ── Traversal HUD — read-only telemetry overlay (0529G) ───────────────── -->
+    <script src="./systems/presentation/traversalHUD.js"></script>
+    <!-- ── Three.js (0531J) — required by WorldSpaceVehicleLayer ───────────── -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+    <!-- ── Vehicle Visual Registry (0601C) — visual identity source of truth ── -->
+    <script src="./systems/render/vehicleVisualRegistry.js"></script>
+    <!-- ── Truth-Driven Actor Authority (0603A) ──────────────────────────────── -->
+    <script src="./systems/actors/actorTypes.js"></script>
+    <script src="./systems/actors/actorSourceRegistry.js"></script>
+    <script src="./systems/actors/publicFeedSourceInventory.js"></script>
+    <script src="./systems/actors/actorIdentityRegistry.js"></script>
+    <script src="./systems/actors/actorVisualRegistry.js"></script>
+    <script src="./systems/actors/truthActorVisualLODPolicy.js"></script>
+    <script src="./systems/actors/actorRenderAuthority.js"></script>
+    <script src="./systems/actors/actorVisualIdentityAuthority.js"></script>
+    <script src="./systems/actors/actorPresentationPaletteRegistry.js"></script>
+    <script src="./systems/actors/actorAssetLibraryAuthority.js"></script>
+    <script src="./systems/actors/marineVesselTaxonomyResolver.js"></script>
+    <script src="./systems/actors/truthActorRuntime.js"></script>
+    <!-- ── Citi Bike GBFS Station Runtime (0603C) ────────────────────────────── -->
+    <script src="./systems/feeds/citibikeStationRuntime.js"></script>
+    <!-- ── Citi Bike Station Visual Profile (0603D) ──────────────────────────── -->
+    <script src="./systems/feeds/citibikeStationVisualProfile.js"></script>
+    <!-- ── World-Space Vehicle Layer (0531J) ─────────────────────────────────── -->
+    <script src="./systems/render/worldSpaceVehicleLayer.js"></script>
+    <!-- ── Three Render-Path Proof Harness (0601I) ───────────────────────────── -->
+    <script src="./systems/render/threePrimitiveVisibilityHarness.js"></script>
+    <!-- ── Hero Vehicle Prototype (0530F) ────────────────────────────────────── -->
+    <script src="./systems/world/heroVehicleRuntime.js"></script>
+    <script src="./systems/render/heroVehicleRenderer.js"></script>
+    <script src="./systems/presentation/heroVehicleDebug.js"></script>
+    <!-- ── Ambient Traffic Runtime (0602K) — after WSL layer + hero runtime ────── -->
+    <script src="./systems/traffic/ambientTrafficRuntime.js"></script>
+    <!-- ── Traffic Occupancy (0531I) ─────────────────────────────────────────── -->
+    <script src="./systems/world/trafficOccupancyRuntime.js"></script>
+    <script src="./systems/render/trafficOccupancyRenderer.js"></script>
+    <script src="./systems/presentation/trafficOccupancyDebug.js"></script>
+    <!-- ── World-Space Vehicle Debug (0531J) ─────────────────────────────────── -->
+    <script src="./systems/presentation/worldSpaceVehicleDebug.js"></script>
+    <!-- ── Mapbox/Three Diagnostic Layer (0531K) ──────────────────────────────── -->
+    <script src="./systems/debug/mapboxThreeDiagnosticLayer.js"></script>
+    <!-- ── Navigation Symbol Suppressor (0530G) ─────────────────────────────── -->
+    <script src="./systems/presentation/navigationSymbolSuppressor.js"></script>
+    <!-- ── Altitude Aware World Renderer Debug (0528B) ───────────────────────── -->
+    <script src="./systems/presentation/altitudeAwareWorldRendererDebug.js"></script>
+    <!-- ── Cloud Atmosphere Debug (0528C) ─────────────────────────────────────── -->
+    <script src="./systems/presentation/cloudAtmosphereDebug.js"></script>
+    <!-- ── Harbor Sector Authority Debug (0528D) ─────────────────────────────── -->
+    <script src="./systems/geography/harborSectorAuthorityDebug.js"></script>
+    <script src="./render/harborSectorDebugRenderer.js"></script>
+    <!-- ── Harbor Geometry Registry Debug (0528E) ────────────────────────────── -->
+    <script src="./systems/geography/harborGeometryRegistryDebug.js"></script>
+    <script src="./render/harborGeometryDebugRenderer.js"></script>
+    <!-- ── Harbor Geometry Runtime Debug (0528G_WOS_HarborGeometryRuntimeRenderer_v1.0.0) ── -->
+    <script src="./systems/presentation/harborGeometryRuntimeDebug.js"></script>
+    <!-- ── Mapbox Style Transfer Audit (0527B_WOS_MapboxStyleTransferAudit_v1.0.0) -->
+    <!-- Recovery audit — restores visible Mapbox styling authority inside WOS       -->
+    <script src="./systems/presentation/mapboxStyleTransferAudit.js"></script>
+    <!-- ── Live Style Panel (0525C_WOS_LiveStylePanel_v1.0.1) ──────────────── -->
+    <script src="./ui/liveStylePanel.js"></script>
+
+    <!-- ── WOS debug namespace integrity check ────────────────────────────── -->
+    <script>
+    (function _wosDebugIntegrityCheck() {
+      var expected = ['maritimeStyle', 'styleAuthority', 'presets', 'liveStyle', 'vesselTopology', 'waterMemory', 'wakeSignature', 'distanceAtmosphere', 'lightAuthority', 'silhouetteDifferentiation'];
+      var missing  = [];
+      for (var i = 0; i < expected.length; i++) {
+        if (!window._wos || !window._wos[expected[i]]) missing.push(expected[i]);
+      }
+      // Check _wos.debug.mapbox separately
+      var mapboxAuditOk = !!(window._wos && window._wos.debug && window._wos.debug.mapbox);
+      if (!mapboxAuditOk) missing.push('debug.mapbox');
+      console.log('[WOS Debug Bindings]',
+        window._wos ? Object.keys(window._wos) : '(window._wos undefined)');
+      if (missing.length) {
+        console.warn('[WOS Debug Bindings] missing namespaces:', missing);
+      } else {
+        console.log('[WOS Debug Bindings] ✓ all namespaces bound — ' +
+          '_wos.maritimeStyle / .styleAuthority / .presets / .liveStyle / .vesselTopology / .waterMemory / .wakeSignature / .distanceAtmosphere / .lightAuthority / .silhouetteDifferentiation / .debug.mapbox ready');
+      }
+    })();
+    </script>
+
     <script src="./systems/routeInputSystem.js"></script>
     <script src="./render/routePanel.js"></script>
     <script src="./ui/routeControls.js"></script>
@@ -2017,15 +2381,7 @@
     </div>
     <div id="overlay-backdrop" class="overlay-backdrop"></div>
 
-    <!-- ── System HUD ────────────────────────────────────────────────────── -->
-    <button
-      id="system-hud-toggle"
-      class="system-hud-toggle"
-      type="button"
-      aria-expanded="false"
-    >
-      SYS
-    </button>
+    <!-- ── System HUD (toggle removed — access via _wos.debug) ─────────── -->
 
     <section id="system-hud" class="system-hud hidden" aria-hidden="true">
       <div class="system-hud__header">
