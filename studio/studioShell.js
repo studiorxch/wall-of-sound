@@ -737,6 +737,27 @@
         return { assetId: a.id, label: a.label, vesselRole: a.metadata && a.metadata.vesselRole,
           expectedAISShipTypes: a.metadata && a.metadata.expectedAISShipTypes }; }) : [];
     },
+    // 0603V — marine taxonomy asset bridge state.
+    marineAssetBridgeState: function () {
+      var b = SBE.MarineTaxonomyAssetBridge;
+      return (b && b.getState) ? b.getState() : null;
+    },
+    // 0603Y — AIS vessel metadata audit (read-only; clean empty state in Studio).
+    aisMetadataAudit: function () {
+      var au = SBE.AISVesselMetadataAudit;
+      return (au && au.audit) ? au.audit() : { marineActorCount: 0, warnings: ['audit_unavailable'], actors: [] };
+    },
+    aisMetadataSample: function (options) {
+      var au = SBE.AISVesselMetadataAudit;
+      return (au && au.sample) ? au.sample(options || {}) : [];
+    },
+    // 0603X — marine palette tokens.
+    marinePalettes: function () {
+      var reg = SBE.ActorPresentationPaletteRegistry;
+      if (!reg || !reg.listPalettes) return { count: 0, palettes: [] };
+      var pals = reg.listPalettes().filter(function (p) { return /^marine\./.test(p.key); });
+      return { count: pals.length, palettes: pals };
+    },
     // 0603T — marine asset pack listing.
     marineAssets: function () {
       var ala = SBE.ActorAssetLibraryAuthority;

@@ -2238,6 +2238,30 @@
     <script src="./systems/actors/actorTypes.js"></script>
     <script src="./systems/actors/actorSourceRegistry.js"></script>
     <script src="./systems/actors/publicFeedSourceInventory.js"></script>
+    <!-- ── Transit (road-pivot): MTA Bus feed inventory (0604G) — inventory-only ─ -->
+    <script src="./systems/transit/mtaBusFeedConfig.js"></script>
+    <script src="./systems/transit/mtaBusFeedSourceInventory.js"></script>
+    <script src="./systems/transit/vendor/gtfsRealtimeBindings.js"></script>
+    <script src="./systems/transit/mtaBusRealtimeAdapter.js"></script>
+    <script src="./systems/transit/mtaBusActorBridge.js"></script>
+    <script src="./systems/transit/busPresentationSelector.js"></script>
+    <script src="./systems/transit/busMotionSmoothing.js"></script>
+    <script src="./systems/transit/transitLiveryHooks.js"></script>
+    <script src="./systems/transit/transitAssignmentAuthority.js"></script>
+    <script src="./systems/transit/transitCameraTargeting.js"></script>
+    <script src="./systems/camera/actorCameraShotPresets.js"></script>
+    <script src="./systems/camera/terrainAwareActorCamera.js"></script>
+    <script src="./systems/camera/occupantPOVCameraFramework.js"></script>
+    <script src="./systems/camera/occupantCameraModes.js"></script>
+    <script src="./systems/camera/transportScopedPOVAuthority.js"></script>
+    <script src="./systems/camera/cameraLensControlPass.js"></script>
+    <script src="./systems/transit/busVisualFallbackRenderer.js"></script>
+    <script src="./systems/transit/busAssetResolver.js"></script>
+    <script src="./systems/transit/articulatedBusPresentationPass.js"></script>
+    <script src="./systems/transit/busDebugLabelPass.js"></script>
+    <script src="./systems/transit/transitPresencePass.js"></script>
+    <script src="./systems/transit/transitStopDwellCuePass.js"></script>
+    <script src="./systems/transit/cruiseMovementField.js"></script>
     <script src="./systems/actors/actorIdentityRegistry.js"></script>
     <script src="./systems/actors/actorVisualRegistry.js"></script>
     <script src="./systems/actors/truthActorVisualLODPolicy.js"></script>
@@ -2246,6 +2270,9 @@
     <script src="./systems/actors/actorPresentationPaletteRegistry.js"></script>
     <script src="./systems/actors/actorAssetLibraryAuthority.js"></script>
     <script src="./systems/actors/marineVesselTaxonomyResolver.js"></script>
+    <script src="./systems/actors/marineTaxonomyAssetBridge.js"></script>
+    <script src="./systems/actors/aisMetadataNormalizer.js"></script>
+    <script src="./systems/actors/aisVesselMetadataAudit.js"></script>
     <script src="./systems/actors/truthActorRuntime.js"></script>
     <!-- ── Citi Bike GBFS Station Runtime (0603C) ────────────────────────────── -->
     <script src="./systems/feeds/citibikeStationRuntime.js"></script>
@@ -2265,6 +2292,8 @@
     <script src="./systems/world/trafficOccupancyRuntime.js"></script>
     <script src="./systems/render/trafficOccupancyRenderer.js"></script>
     <script src="./systems/presentation/trafficOccupancyDebug.js"></script>
+    <!-- ── Harbor Atmosphere (0604A) — presentation-only mood overlay ────────── -->
+    <script src="./systems/presentation/harborAtmosphereRuntime.js"></script>
     <!-- ── World-Space Vehicle Debug (0531J) ─────────────────────────────────── -->
     <script src="./systems/presentation/worldSpaceVehicleDebug.js"></script>
     <!-- ── Mapbox/Three Diagnostic Layer (0531K) ──────────────────────────────── -->

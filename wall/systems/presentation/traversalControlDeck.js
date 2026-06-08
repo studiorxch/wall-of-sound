@@ -267,6 +267,110 @@
     'akl':             { lat: -37.0082,lng: 174.7850, label: 'Auckland Intl' },
   });
 
+  // ── 0606A Simplified CAM menu + Hide-Actor toggle + route lifecycle ─────────
+  // Creator-facing camera labels (stable internal/external vocabulary). External =
+  // films the actor (actor visible); Internal = occupies the actor (actor hidden).
+  // Hide Actor is now a STANDALONE toggle, not a camera entry.
+  var CAM_MENU = [
+    { value: 'ext_lead',      label: 'Ext. Front (Lead)',      family: 'external', external: 'lead' },
+    { value: 'ext_follow',    label: 'Ext. Rear (Follow)',     family: 'external', external: 'follow' },
+    { value: 'ext_side',      label: 'Ext. Side (Profile)',    family: 'external', external: 'side' },
+    { value: 'ext_high',      label: 'Ext. High (Overhead)',   family: 'external', external: 'high' },
+    { value: 'int_dash',      label: 'Int. Dash (Looking In)', family: 'internal', internalViewId: 'driver', look: 'rear' },
+    { value: 'int_driver',    label: 'Int. Driver POV',        family: 'internal', internalViewId: 'driver', look: 'front' },
+    { value: 'int_passenger', label: 'Int. Passenger POV',     family: 'internal', internalViewId: 'passenger', look: 'front' },
+    { value: 'int_rear_seat', label: 'Int. Rear Seat',         family: 'internal', internalViewId: 'rear_seat', look: 'front' },
+  ];
+  var CAM_MENU_BY_VAL = {}; CAM_MENU.forEach(function (m) { CAM_MENU_BY_VAL[m.value] = m; });
+  var _camSelState = { version: '1.0.0', enabled: true, selectedValue: 'ext_follow', selectedShotId: null, family: 'external', lastApplyOk: null, lastError: null };
+  var _camSelEl = null;
+
+  function _camSelOptions() { return CAM_MENU.map(function (m) { return { value: m.value, label: m.label, family: m.family }; }); }
+  function _auth() { return global.SBE && SBE.TransportScopedPOVAuthority; }
+
+  // Hide-Actor: standalone toggle. null = follow camera default (internal hides,
+  // external shows); true/false = manual session override (override wins).
+  var _hideActorManual = null;
+  function _effectiveHideActor(family) { return _hideActorManual != null ? _hideActorManual : (family === 'internal'); }
+  function _applyHideActor(family) {
+    var hide = _effectiveHideActor(family);
+    var hr = global.SBE && SBE.HeroVehicleRenderer;
+    if (hr && typeof hr.setHidden === 'function') { try { hr.setHidden(!!hide); } catch (e) {} }
+    try { var cb = document.getElementById('nav-hide-actor'); if (cb) cb.checked = !!hide; } catch (e) {}
+    return hide;
+  }
+  function setHideActor(on) { _hideActorManual = (on == null) ? null : !!on; return _applyHideActor(_camSelState.family); }
+  function getHideActor() { return { manual: _hideActorManual, effective: _effectiveHideActor(_camSelState.family), family: _camSelState.family }; }
+
+  function _applyCamSelection(val) {
+    var m = CAM_MENU_BY_VAL[val];
+    if (!m) { _camSelState.lastError = 'invalid_selection'; _camSelState.lastApplyOk = false; return { ok: false, lastError: 'invalid_selection' }; }
+    _camSelState.selectedValue = val; _camSelState.family = m.family;
+    var auth = _auth();
+    var tm = (_state.transport === 'drive') ? 'drive' : 'drive';   // CAM is drive-scoped for now
+
+    if (m.family === 'internal') {
+      if (!auth) { _camSelState.lastError = 'transport_pov_unavailable'; _camSelState.lastApplyOk = false; _camSelState.selectedShotId = val; return { ok: false, lastError: 'transport_pov_unavailable' }; }
+      var ri = auth.applyView({ transportMode: tm, family: 'internal', internalViewId: m.internalViewId, lookDirection: m.look || 'front' });
+      _camSelState.selectedShotId = val;
+      _camSelState.lastApplyOk = !!(ri && ri.ok); _camSelState.lastError = (ri && !ri.ok) ? (ri.reason || ri.lastError || 'unknown') : null;
+      _applyHideActor('internal');   // internal default hide (manual override respected)
+      return ri || { ok: false, lastError: 'unknown' };
+    }
+    // External — disengage occupant + shot, set legacy preset, show actor.
+    var sp = global.SBE && SBE.ActorCameraShotPresets;
+    if (sp && typeof sp.disengage === 'function') { try { sp.disengage(); } catch (e) {} }
+    var occL = global.SBE && SBE.OccupantCameraModes;
+    if (occL && typeof occL.disengage === 'function') { try { occL.disengage(); } catch (e) {} }
+    if (auth) { auth.setViewFamily('external'); try { var ext = auth.getProfile('drive'); if (ext && ext.externalViews.indexOf(m.external) >= 0) auth.setExternalView(m.external); } catch (e) {} }
+    var hv = global.SBE && SBE.HeroVehicleRuntime;
+    if (hv && typeof hv.setCameraPreset === 'function') { try { hv.setCameraPreset(m.external); } catch (e) {} }
+    _camSelState.selectedShotId = null; _camSelState.lastApplyOk = true; _camSelState.lastError = null;
+    _applyHideActor('external');    // external default show
+    return { ok: true, external: true, preset: m.external };
+  }
+  function _setCamSelection(val) {
+    if (!CAM_MENU_BY_VAL[val]) { _camSelState.lastError = 'invalid_selection'; return { ok: false, lastError: 'invalid_selection' }; }
+    if (_camSelEl) { try { _camSelEl.value = val; } catch (e) {} }
+    return _applyCamSelection(val);
+  }
+
+  // ── Route lifecycle (Launch / Pause-Play / Stop) — no page reload ───────────
+  var _routeControl = { routeState: 'idle', lastLaunchAt: null, lastStopAt: null, lastPauseAt: null, lastResumeAt: null };
+  function _activeRouteRuntime() {
+    if (_state.transport === 'drive') return global.SBE && SBE.HeroVehicleRuntime;
+    return global.SBE && SBE.RegionalFlightTripRuntime;
+  }
+  function _setRouteState(s) { _routeControl.routeState = s; _updateRouteButtons(); }
+  function pauseRoute() { var rt = _activeRouteRuntime(); if (rt && typeof rt.pause === 'function') { try { rt.pause(); } catch (e) {} } _routeControl.lastPauseAt = Date.now(); _setRouteState('paused'); return getRouteControlState(); }
+  function resumeRoute() { var rt = _activeRouteRuntime(); if (rt && typeof rt.resume === 'function') { try { rt.resume(); } catch (e) {} } _routeControl.lastResumeAt = Date.now(); _setRouteState('running'); return getRouteControlState(); }
+  function togglePauseRoute() { return (_routeControl.routeState === 'running') ? pauseRoute() : (_routeControl.routeState === 'paused' ? resumeRoute() : getRouteControlState()); }
+  function stopRoute() {
+    var rt = _activeRouteRuntime();
+    if (rt && typeof rt.stop === 'function') { try { rt.stop(); } catch (e) {} }
+    var occ = global.SBE && SBE.OccupantCameraModes;
+    if (occ && typeof occ.disengage === 'function') { try { occ.disengage(); } catch (e) {} }
+    _routeControl.lastStopAt = Date.now(); _setRouteState('stopped'); return getRouteControlState();
+  }
+  function getRouteControlState() {
+    var s = _routeControl.routeState;
+    return { routeState: s, transport: _state.transport,
+      canLaunch: !(s === 'running' || s === 'paused' || s === 'launching'),
+      canPause: (s === 'running' || s === 'paused'), canStop: (s === 'running' || s === 'paused' || s === 'launching'),
+      lastLaunchAt: _routeControl.lastLaunchAt, lastStopAt: _routeControl.lastStopAt, lastPauseAt: _routeControl.lastPauseAt, lastResumeAt: _routeControl.lastResumeAt };
+  }
+  function _updateRouteButtons() {
+    if (typeof document === 'undefined' || !document.getElementById) return;
+    var st = getRouteControlState();
+    var lb = document.getElementById('nav-launch');
+    if (lb) { if (st.canLaunch) { lb.classList.remove('launching'); lb.disabled = false; } else { lb.classList.add('launching'); lb.disabled = true; } }
+    var pb = document.getElementById('nav-pause');
+    if (pb) { pb.disabled = !st.canPause; pb.textContent = (_routeControl.routeState === 'paused') ? '▶' : '⏸'; pb.title = (_routeControl.routeState === 'paused') ? 'Play' : 'Pause'; }
+    var sb = document.getElementById('nav-stop'); if (sb) sb.disabled = !st.canStop;
+  }
+  // Re-enable Launch when idle/stopped and the user edits destination/transport.
+  function _routeReadyForRelaunch() { var s = _routeControl.routeState; if (s === 'stopped' || s === 'error') _setRouteState('idle'); else _updateRouteButtons(); }
+
   // ── State ──────────────────────────────────────────────────────────────────────
 
   var _state = {
@@ -404,6 +508,7 @@
   function _showError(msg) {
     var el = document.getElementById('nav-error');
     if (el) { el.textContent = msg; el.classList.add('visible'); }
+    if (typeof _setRouteState === 'function') _setRouteState('error');   // 0606A — re-enable Launch
   }
 
   function _clearError() {
@@ -473,6 +578,7 @@
         _showError('Could not start drive route — check console.');
         return;
       }
+      _setRouteState('running');   // 0606A — running: Launch grays, Pause/Stop enable
       // Record actual route source for HUD honesty (directions vs fallback).
       var s = hv.getState();
       if (global._wos.nav) global._wos.nav.routeSource = s.routeSource;
@@ -497,6 +603,8 @@
 
   function launch() {
     _clearError();
+    _routeControl.lastLaunchAt = Date.now();
+    _setRouteState('launching');   // 0606A — disable Launch while starting
 
     var launchBtn = document.getElementById('nav-launch');
     var toInput   = document.getElementById('nav-to');
@@ -617,6 +725,7 @@
       if (launchBtn) launchBtn.classList.remove('launching');
       return;
     }
+    _setRouteState('running');   // 0606A — flight running
 
     // ── Speed multiplier ──────────────────────────────────────────────────────
     if (rt && typeof rt.setSpeed === 'function') {
@@ -761,7 +870,19 @@
       '  transition: background 130ms, border-color 130ms;',
       '}',
       '.nav-launch:hover { background: rgba(50,170,130,0.22); border-color: rgba(50,170,130,0.50); }',
-      '.nav-launch.launching { opacity: 0.50; pointer-events: none; }',
+      '.nav-launch.launching, .nav-launch:disabled { opacity: 0.45; pointer-events: none; }',
+      /* 0606A route lifecycle + snapshot buttons */
+      '.nav-rctl {',
+      '  flex-shrink: 0; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.16);',
+      '  border-radius: 6px; color: rgba(230,235,240,0.92);',
+      '  font-family: inherit; font-size: 13px; padding: 5px 9px; cursor: pointer; white-space: nowrap;',
+      '  transition: background 130ms, opacity 130ms;',
+      '}',
+      '.nav-rctl:hover { background: rgba(255,255,255,0.14); }',
+      '.nav-rctl:disabled { opacity: 0.35; pointer-events: none; }',
+      /* 0606A Hide Actor toggle */
+      '.nav-hide-lbl { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: rgba(210,216,222,0.85); white-space: nowrap; cursor: pointer; }',
+      '.nav-hide-lbl input { accent-color: rgba(80,215,170,0.95); }',
       /* spacer */
       '.nav-spacer { flex: 1; }',
       /* error */
@@ -819,6 +940,7 @@
         btn.classList.add('active');
         _state.transport = tm.id;
         _clearError();
+        _routeReadyForRelaunch();   // 0606A — transport change re-enables Launch
       });
       transportDiv.appendChild(btn);
     });
@@ -859,29 +981,53 @@
 
     // ── CAM selector (Drive mode only) ────────────────────────────────────────
     // A compact dropdown. Shown/hidden via CSS depending on _state.transport.
-    var CAM_OPTS = ['follow','lead','side','high','hide_actor'];
+    // 0605K.1 — grouped: Legacy modes + 0605I/0605K shot presets (POV/Transit/Walker).
     var camDiv = _make('div', { cls: 'nav-stepper', id: 'nav-cam-wrap' });
     camDiv.appendChild(_make('span', { cls: 'nav-step-lbl', text: 'Cam' }));
     var camSel = document.createElement('select');
     camSel.id = 'nav-cam-sel';
     camSel.className = 'nav-cam-sel';
-    CAM_OPTS.forEach(function (o) {
+    // 0606A — simplified, stable internal/external labels (no Look / no Hide Actor here).
+    CAM_MENU.forEach(function (m) {
       var opt = document.createElement('option');
-      opt.value = o;
-      opt.textContent = o.replace('_', ' ');
+      opt.value = m.value; opt.textContent = m.label;
       camSel.appendChild(opt);
     });
+    camSel.value = 'ext_follow';
+    _camSelEl = camSel;
     camSel.addEventListener('change', function (e) {
       e.stopPropagation();
-      var hv = global.SBE && SBE.HeroVehicleRuntime;
-      if (hv && typeof hv.setCameraPreset === 'function') {
-        hv.setCameraPreset(camSel.value);
-      }
+      _applyCamSelection(camSel.value);   // routes legacy → preset, shot id → applyShot
     });
     camSel.addEventListener('keydown',  function (e) { e.stopPropagation(); });
     camSel.addEventListener('keyup',    function (e) { e.stopPropagation(); });
     camSel.addEventListener('keypress', function (e) { e.stopPropagation(); });
     camDiv.appendChild(camSel);
+    // ── 0605O compact Lens selector (Auto + key profiles; trims stay debug-first) ─
+    var lensSel = document.createElement('select');
+    lensSel.id = 'nav-lens-sel';
+    lensSel.className = 'nav-cam-sel';
+    var LENS_OPTS = [['__auto', 'Lens: Auto'], ['wide', 'Wide'], ['normal', 'Normal'], ['telephoto', 'Telephoto'],
+      ['dashcam', 'Dashcam'], ['helmetcam', 'Helmet'], ['bus_window', 'Bus'], ['ferry_deck', 'Ferry'], ['drone_observer', 'Drone']];
+    LENS_OPTS.forEach(function (o) { var opt = document.createElement('option'); opt.value = o[0]; opt.textContent = o[1]; lensSel.appendChild(opt); });
+    lensSel.addEventListener('change', function (e) {
+      e.stopPropagation();
+      var lc = global.SBE && SBE.CameraLensControlPass;
+      if (!lc) return;
+      try { if (lensSel.value === '__auto') lc.setAutoProfileEnabled(true); else lc.setLensProfile(lensSel.value); } catch (er) {}
+      var occ = global.SBE && SBE.OccupantCameraModes;   // re-apply so the lens change is visible live
+      if (occ && typeof occ.isActive === 'function' && occ.isActive() && typeof occ.reapply === 'function') { try { occ.reapply(); } catch (er2) {} }
+    });
+    lensSel.addEventListener('keydown', function (e) { e.stopPropagation(); });
+    camDiv.appendChild(lensSel);
+    // ── 0606A Hide Actor — standalone toggle (not a camera entry) ───────────────
+    var hideLbl = _make('label', { cls: 'nav-hide-lbl' });
+    var hideCb = document.createElement('input');
+    hideCb.type = 'checkbox'; hideCb.id = 'nav-hide-actor'; hideCb.checked = false;
+    hideCb.addEventListener('change', function (e) { e.stopPropagation(); setHideActor(hideCb.checked); });
+    hideLbl.appendChild(hideCb);
+    hideLbl.appendChild(_make('span', { text: 'Hide Actor' }));
+    camDiv.appendChild(hideLbl);
     // Visibility: only shown when Drive is active transport
     camDiv.style.display = (_state.transport === 'drive') ? 'flex' : 'none';
     row1.appendChild(camDiv);
@@ -900,6 +1046,27 @@
     var launchBtn = _make('button', { cls: 'nav-launch', id: 'nav-launch', text: 'Launch' });
     launchBtn.addEventListener('click', launch);
     row1.appendChild(launchBtn);
+
+    // ── 0606A Route lifecycle + Snapshot controls ──────────────────────────────
+    var pauseBtn = _make('button', { cls: 'nav-rctl', id: 'nav-pause', text: '⏸' });
+    pauseBtn.title = 'Pause'; pauseBtn.disabled = true;
+    pauseBtn.addEventListener('click', function (e) { e.stopPropagation(); togglePauseRoute(); });
+    row1.appendChild(pauseBtn);
+
+    var stopBtn = _make('button', { cls: 'nav-rctl', id: 'nav-stop', text: '⏹' });
+    stopBtn.title = 'Stop'; stopBtn.disabled = true;
+    stopBtn.addEventListener('click', function (e) { e.stopPropagation(); stopRoute(); });
+    row1.appendChild(stopBtn);
+
+    var snapBtn = _make('button', { cls: 'nav-rctl', id: 'nav-snapshot', text: '📸' });
+    snapBtn.title = 'Snapshot (HUD-free PNG)';
+    snapBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var snap = global.SBE && SBE.RuntimeSnapshotCapture;
+      if (snap && typeof snap.capturePNG === 'function') { try { snap.capturePNG({ hideHUD: true, includeMetadata: true, download: true }); } catch (er) {} }
+    });
+    row1.appendChild(snapBtn);
+    _updateRouteButtons();
     nav.appendChild(row1);
 
     // ── Row 2: FROM (auto) + TO (text input) ───────────────────────────────────
@@ -925,7 +1092,7 @@
       'list':      'nav-dest-list',
     });
     if (_state.to) toInput.setAttribute('value', _state.to);
-    toInput.addEventListener('input', _clearError);
+    toInput.addEventListener('input', function () { _clearError(); _routeReadyForRelaunch(); });   // 0606A re-enable Launch
     // stopPropagation: prevent keydown/keyup from reaching main.js global
     // keyboard handlers, which crash on event.key === undefined (IME/composition).
     toInput.addEventListener('keydown', function (e) {
@@ -1175,6 +1342,15 @@
     launch:       launch,
     driveTo:      driveTo,
     DESTINATIONS: DESTINATIONS,
+  });
+
+  // 0605K.1 — CAM dropdown ↔ camera shot bridge (UI triggers; does not own logic).
+  SBE.CameraShotSelectorUI = Object.freeze({
+    VERSION:    '1.0.0',
+    getState:   function () { var o = {}; for (var k in _camSelState) o[k] = _camSelState[k]; return o; },
+    options:    function () { return _camSelOptions(); },
+    setShot:    function (id) { return _setCamSelection(id); },
+    isShotId:   function (id) { return !!CAM_SHOT_IDS[id]; },
   });
 
   // ── Debug binding — with retry guards ─────────────────────────────────────────

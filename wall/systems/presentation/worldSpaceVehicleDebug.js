@@ -22,6 +22,37 @@
   function _wsl()  { return global.SBE && global.SBE.WorldSpaceVehicleLayer; }
   function _mvr()  { return global.SBE && global.SBE.MapboxViewportRuntime; }
 
+  // 0605O — re-apply the active occupant view so a lens/trim change takes effect live.
+  function _reapplyOccupant() {
+    var oc = global.SBE && global.SBE.OccupantCameraModes;
+    if (oc && typeof oc.isActive === 'function' && oc.isActive() && typeof oc.reapply === 'function') { try { oc.reapply(); } catch (e) {} }
+  }
+  // 0605O — lens proof: scope transport, apply internal POV, return lens-adjusted request.
+  function _lensProof(transport, internalView) {
+    var auth = global.SBE && global.SBE.TransportScopedPOVAuthority;
+    var lens = global.SBE && global.SBE.CameraLensControlPass;
+    if (!auth) { console.warn('[camera] TransportScopedPOVAuthority unavailable'); return null; }
+    var r = auth.applyView({ transportMode: transport, family: 'internal', internalViewId: internalView, lookDirection: 'front' });
+    var report = { transport: transport, internalView: internalView, applied: r && r.ok,
+      lensProfile: lens ? lens.getState().lastProfile : null, request: r && r.request };
+    console.log('[camera] lensProof', report);
+    return report;
+  }
+
+  // 0604F — harbor visual proof actor registry (render-only; never live AIS).
+  var _harborProofIds = [];
+  var HARBOR_PROOF_SPEC = [
+    { key: 'tug',       silhouette: 'tug-boat',        palette: 'marine.workboat.orange',   role: 'tug' },
+    { key: 'ferry',     silhouette: 'passenger-ferry', palette: 'marine.ferry.blue-white',  role: 'passenger' },
+    { key: 'cargo',     silhouette: 'cargo-ship',      palette: 'marine.cargo.rust',        role: 'cargo' },
+    { key: 'container', silhouette: 'container-ship',  palette: 'marine.container.dark',    role: 'cargo' },
+    { key: 'tanker',    silhouette: 'tanker',          palette: 'marine.tanker.black-red',  role: 'tanker' },
+    { key: 'barge',     silhouette: 'barge',           palette: 'marine.barge.gray',        role: 'barge' },
+    { key: 'sailboat',  silhouette: 'sailboat',        palette: 'marine.sailboat.white',    role: 'sailing' },
+    { key: 'yacht',     silhouette: 'yacht',           palette: 'marine.yacht.white',       role: 'yacht' },
+    { key: 'unknown',   silhouette: 'unknown-vessel',  palette: 'marine.unknown.gray',      role: 'unknown' },
+  ];
+
   // ── Position helpers ──────────────────────────────────────────────────────────
 
   function _mapCenter() {
@@ -3119,6 +3150,810 @@
       return v;
     },
 
+    // 0603V — marine taxonomy → asset bridge (per-actor payload override).
+    marineAssetBridgeState: function () {
+      var b = global.SBE && SBE.MarineTaxonomyAssetBridge;
+      if (!b) { console.warn('[worldActors] MarineTaxonomyAssetBridge unavailable'); return null; }
+      var s = b.getState(); console.log('[worldActors] marineAssetBridgeState', s); return s;
+    },
+    marineAssetBridgeEnable: function (on) {
+      var b = global.SBE && SBE.MarineTaxonomyAssetBridge;
+      return b ? b.setEnabled(on !== false) : null;
+    },
+    marineAssetBridgeDebug: function (on) {
+      var b = global.SBE && SBE.MarineTaxonomyAssetBridge;
+      return b ? b.setDebug(on !== false) : null;
+    },
+    marineAssetBridgeConfidence: function (n) {
+      var b = global.SBE && SBE.MarineTaxonomyAssetBridge;
+      return b ? b.setMinConfidence(n) : null;
+    },
+    marineAssetBridgeAuditActor: function (actorId) {
+      var b = global.SBE && SBE.MarineTaxonomyAssetBridge;
+      if (!b) { console.warn('[worldActors] MarineTaxonomyAssetBridge unavailable'); return null; }
+      var v = b.auditActor(actorId); console.log('[worldActors] marineAssetBridgeAuditActor', v); return v;
+    },
+    marineAssetBridgeAuditPayload: function (actorId) {
+      var b = global.SBE && SBE.MarineTaxonomyAssetBridge;
+      if (!b) { console.warn('[worldActors] MarineTaxonomyAssetBridge unavailable'); return null; }
+      var v = b.auditPayload(actorId); console.log('[worldActors] marineAssetBridgeAuditPayload', v); return v;
+    },
+    marineAssetBridgeClearCache: function () {
+      var b = global.SBE && SBE.MarineTaxonomyAssetBridge;
+      return b ? b.clearCache() : null;
+    },
+
+    // 0603W — rendered marine geometry report (read-only).
+    marineGeometryState: function () {
+      var wsl = _wsl();
+      if (!wsl || typeof wsl.getState !== 'function') { console.warn('[worldActors] WSL unavailable'); return null; }
+      var st = wsl.getState();
+      var marine = (st.vehicles || []).filter(function (v) { return (v.actorType || '').indexOf('marine') === 0 || /vessel|ferry|boat|ship|tanker|barge|yacht|sailboat|cruise/.test(v.actorType || ''); });
+      var byKind = {};
+      var rows = marine.map(function (v) {
+        var m = (wsl.getMeshDebug && wsl.getMeshDebug(v.id)) || {};
+        var kind = m._marineGeometryKind || '-';
+        byKind[kind] = (byKind[kind] || 0) + 1;
+        return v;
+      });
+      var out = { marineActors: marine.length, byGeometryKind: byKind };
+      console.log('[worldActors] marineGeometryState', out);
+      return out;
+    },
+    marineGeometrySample: function () {
+      var tar = global.SBE && SBE.TruthActorRuntime;
+      var wsl = _wsl();
+      if (!tar) { console.warn('[worldActors] TruthActorRuntime unavailable'); return null; }
+      var rows = tar.listActors().filter(function (a) { return (a.actorType || '').indexOf('marine') === 0; })
+        .slice(0, 20).map(function (a) {
+          var p = a._lastPayload || {};
+          var md = (wsl && wsl.getMeshDebug) ? (wsl.getMeshDebug(a.actorId) || {}) : {};
+          return { id: a.actorId, actorType: a.actorType, assetId: p.assetId, assetLabel: p.assetLabel,
+            silhouetteClass: p.silhouetteClass, taxonomyRole: p.taxonomyRole, taxonomyConfidence: p.taxonomyConfidence,
+            renderVariant: p.renderVariant, marineGeometryKind: md._marineGeometryKind, presentationMeshKind: md._presentationMeshKind };
+        });
+      if (rows.length && console.table) console.table(rows); else console.log(rows);
+      return rows;
+    },
+
+    // 0603Y — AIS vessel metadata audit (read-only).
+    aisMetadataAudit: function () {
+      var au = global.SBE && SBE.AISVesselMetadataAudit;
+      if (!au) { console.warn('[worldActors] AISVesselMetadataAudit unavailable'); return null; }
+      var s = au.audit();
+      console.group('[worldActors] aisMetadataAudit (' + s.marineActorCount + ' marine actors)');
+      console.log('source           :', s.source);
+      if (console.table && s.sourceDiagnostics) console.table(s.sourceDiagnostics); else console.log('sourceDiagnostics:', s.sourceDiagnostics);
+      console.log('metadataCoverage :', s.metadataCoverage);
+      if (s.normalizationCoverage) console.log('normalization    :', s.normalizationCoverage);
+      console.log('taxonomyCoverage :', s.taxonomyCoverage);
+      console.log('bridgeCoverage   :', s.bridgeCoverage);
+      console.log('roleCounts       :', s.roleCounts);
+      console.log('avgQualityScore  :', s.averageQualityScore);
+      if (s.warnings.length) console.warn('warnings         :', s.warnings);
+      var worst = au.sample({ limit: 10, sortBy: 'qualityScore', direction: 'asc' });
+      if (worst.length && console.table) { console.log('worst 10:'); console.table(worst); }
+      console.groupEnd();
+      return s;
+    },
+    aisMetadataSample: function (options) {
+      var au = global.SBE && SBE.AISVesselMetadataAudit;
+      if (!au) { console.warn('[worldActors] AISVesselMetadataAudit unavailable'); return null; }
+      var rows = au.sample(options || {});
+      if (rows.length && console.table) console.table(rows); else console.log(rows);
+      return rows;
+    },
+    aisMetadataAuditActor: function (actorId) {
+      var au = global.SBE && SBE.AISVesselMetadataAudit;
+      if (!au) { console.warn('[worldActors] AISVesselMetadataAudit unavailable'); return null; }
+      var r = au.auditActor(actorId); console.log('[worldActors] aisMetadataAuditActor', r); return r;
+    },
+    aisMetadataSources: function () {
+      var au = global.SBE && SBE.AISVesselMetadataAudit;
+      if (!au || typeof au.sources !== 'function') { console.warn('[worldActors] AISVesselMetadataAudit.sources unavailable'); return null; }
+      var s = au.sources();
+      console.group('[worldActors] aisMetadataSources');
+      console.log('selectedSource :', s.selectedSource, '| marineActorCount:', s.marineActorCount);
+      if (console.table) console.table(s.sourceDiagnostics); else console.log(s.sourceDiagnostics);
+      console.groupEnd();
+      return s;
+    },
+    aisNormalize: function (recordOrActorId) {
+      var nz = global.SBE && SBE.AISMetadataNormalizer;
+      if (!nz) { console.warn('[worldActors] AISMetadataNormalizer unavailable'); return null; }
+      var r = nz.normalize(recordOrActorId);
+      console.log('[worldActors] aisNormalize', r); return r;
+    },
+    aisNormalizeSample: function (options) {
+      var nz = global.SBE && SBE.AISMetadataNormalizer;
+      var au = global.SBE && SBE.AISVesselMetadataAudit;
+      if (!nz) { console.warn('[worldActors] AISMetadataNormalizer unavailable'); return null; }
+      options = options || {};
+      // Source the live marine records via the audit adapter, then normalize a batch.
+      var src = (au && typeof au.sources === 'function') ? au.sources() : null;
+      var records = [];
+      var ais = global.SBE && SBE.AISRuntime;
+      if (ais && typeof ais.getActiveVessels === 'function') { try { records = ais.getActiveVessels(); } catch (e) {} }
+      var batch = nz.normalizeBatch(records);
+      var rows = batch.rows.slice(0, options.limit || 20);
+      console.group('[worldActors] aisNormalizeSample (' + batch.normalizedCount + ' of ' + batch.count + ')');
+      console.log('inferred:', batch.inferredCount, '| rawShipType:', batch.rawShipTypeCount, '| fallback:', batch.fallbackCount, '| avgConfidence:', batch.averageConfidence);
+      if (rows.length && console.table) console.table(rows); else console.log(rows);
+      console.groupEnd();
+      return batch;
+    },
+    aisNormalizationState: function () {
+      var nz = global.SBE && SBE.AISMetadataNormalizer;
+      if (!nz) { console.warn('[worldActors] AISMetadataNormalizer unavailable'); return null; }
+      var s = nz.getState(); console.log('[worldActors] aisNormalizationState', s); return s;
+    },
+    aisNormalizationRules: function () {
+      var nz = global.SBE && SBE.AISMetadataNormalizer;
+      if (!nz) { console.warn('[worldActors] AISMetadataNormalizer unavailable'); return null; }
+      var rules = nz.listRules();
+      if (rules.length && console.table) console.table(rules); else console.log(rules);
+      return rules;
+    },
+    // ── 0604F Harbor visual differentiation ──────────────────────────────────
+    harborVisualTuning: function (on) {
+      var wsl = _wsl();
+      if (!wsl || typeof wsl.setMarineVisualTuningEnabled !== 'function') { console.warn('[worldActors] marine visual tuning unavailable'); return null; }
+      var enabled = wsl.setMarineVisualTuningEnabled(on !== false);
+      var st = wsl.getMarineVisualTuningState();
+      console.log('[worldActors] harborVisualTuning →', enabled, st);
+      return st;
+    },
+    harborVisualState: function () {
+      var wsl = _wsl();
+      if (!wsl || typeof wsl.getMarineVisualSample !== 'function') { console.warn('[worldActors] harbor visual state unavailable'); return null; }
+      var rows = wsl.getMarineVisualSample();
+      var by = { silhouetteClass: {}, assetId: {}, taxonomyRole: {}, marineGeometryKind: {}, opacityBucket: {}, scaleBucket: {} };
+      function bump(o, k) { k = k == null ? 'null' : k; o[k] = (o[k] || 0) + 1; }
+      rows.forEach(function (r) {
+        bump(by.silhouetteClass, r.silhouetteClass);
+        bump(by.assetId, r.assetId);
+        bump(by.taxonomyRole, r.role);
+        bump(by.marineGeometryKind, r.geometryKind);
+        bump(by.opacityBucket, (r.opacity != null ? r.opacity : 1) >= 0.95 ? 'full' : (r.opacity >= 0.8 ? 'muted' : 'faint'));
+        bump(by.scaleBucket, (r.marineTuneScale != null ? r.marineTuneScale : 1) >= 1.2 ? 'emphasized' : (r.marineTuneScale >= 1.0 ? 'normal' : 'reduced'));
+      });
+      var out = { count: rows.length, tuning: wsl.getMarineVisualTuningState(), by: by };
+      console.group('[worldActors] harborVisualState (' + rows.length + ' marine meshes)');
+      console.log('tuning :', out.tuning);
+      console.log('by     :', by);
+      console.groupEnd();
+      return out;
+    },
+    harborVisualSample: function () {
+      var wsl = _wsl();
+      if (!wsl || typeof wsl.getMarineVisualSample !== 'function') { console.warn('[worldActors] harbor visual sample unavailable'); return null; }
+      var rows = wsl.getMarineVisualSample();
+      if (rows.length && console.table) console.table(rows); else console.log(rows);
+      return rows;
+    },
+    harborVisualCompare: function () {
+      var wsl = _wsl();
+      if (!wsl || typeof wsl.getMarineVisualSample !== 'function') { console.warn('[worldActors] harbor visual compare unavailable'); return null; }
+      var rows = wsl.getMarineVisualSample();
+      var cls = { n: 0, scale: 0, op: 0 }, unk = { n: 0, scale: 0, op: 0 };
+      rows.forEach(function (r) {
+        var isUnknown = (r.silhouetteClass === 'unknown-vessel' || r.silhouetteClass === 'vessel-generic' || r.role === 'unknown');
+        var g = isUnknown ? unk : cls;
+        g.n++; g.scale += (r.marineTuneScale != null ? r.marineTuneScale : 1); g.op += (r.opacity != null ? r.opacity : 1);
+      });
+      var out = {
+        classifiedCount: cls.n, unknownCount: unk.n,
+        avgScaleClassified: cls.n ? Math.round((cls.scale / cls.n) * 1000) / 1000 : 0,
+        avgScaleUnknown: unk.n ? Math.round((unk.scale / unk.n) * 1000) / 1000 : 0,
+        classifiedOpacityAvg: cls.n ? Math.round((cls.op / cls.n) * 1000) / 1000 : 0,
+        unknownOpacityAvg: unk.n ? Math.round((unk.op / unk.n) * 1000) / 1000 : 0,
+      };
+      console.log('[worldActors] harborVisualCompare', out);
+      return out;
+    },
+    harborVisualProof: function () {
+      var wsl = _wsl();
+      if (!wsl || typeof wsl.upsertVehicle !== 'function') { console.warn('[worldActors] WSL unavailable'); return null; }
+      var center = _mapCenter() || { lat: 40.6895, lng: -74.0445 };   // NY harbor fallback
+      var made = [];
+      HARBOR_PROOF_SPEC.forEach(function (spec, i) {
+        var pos = _offsetLatLng(center.lat, center.lng, 0, (i - (HARBOR_PROOF_SPEC.length - 1) / 2) * 140);
+        var id = 'harbor_visual_proof_' + spec.key;
+        var ok = wsl.upsertVehicle({
+          id: id, actorType: spec.key === 'ferry' ? 'marine.ferry' : 'marine.vessel',
+          source: 'harbor-visual-proof', lat: pos.lat, lng: pos.lng, headingDeg: 0,
+          label: 'PROOF ' + spec.key.toUpperCase(),
+          silhouetteClass: spec.silhouette, paletteRef: spec.palette,
+          priorityClass: 'harbor-truth', lightClass: 'navigation',
+          taxonomyRole: spec.role, renderVariant: 'lowpoly',
+        });
+        if (ok && _harborProofIds.indexOf(id) === -1) _harborProofIds.push(id);
+        made.push({ id: id, silhouette: spec.silhouette, ok: !!ok });
+      });
+      console.group('[worldActors] harborVisualProof (render-only — not live AIS)');
+      if (console.table) console.table(made); else console.log(made);
+      console.log('clear with _wos.debug.worldActors.clearHarborVisualProof()');
+      console.groupEnd();
+      return made;
+    },
+    clearHarborVisualProof: function () {
+      var wsl = _wsl();
+      if (!wsl || typeof wsl.removeVehicle !== 'function') { console.warn('[worldActors] WSL unavailable'); return 0; }
+      var n = 0;
+      _harborProofIds.forEach(function (id) { try { wsl.removeVehicle(id); n++; } catch (e) {} });
+      _harborProofIds = [];
+      console.log('[worldActors] clearHarborVisualProof removed', n, 'proof actors (live AIS untouched)');
+      return n;
+    },
+    // ── 0604A Harbor atmosphere (presentation-only mood overlay) ─────────────
+    harborAtmosphereState: function () {
+      var a = global.SBE && SBE.HarborAtmosphereRuntime;
+      if (!a) { console.warn('[worldActors] HarborAtmosphereRuntime unavailable'); return null; }
+      var s = a.getState(); console.log('[worldActors] harborAtmosphereState', s); return s;
+    },
+    harborAtmosphereStart: function () {
+      var a = global.SBE && SBE.HarborAtmosphereRuntime;
+      if (!a) { console.warn('[worldActors] HarborAtmosphereRuntime unavailable'); return null; }
+      var ok = a.start(); console.log('[worldActors] harborAtmosphereStart →', ok, a.getState()); return ok;
+    },
+    harborAtmosphereStop: function () {
+      var a = global.SBE && SBE.HarborAtmosphereRuntime;
+      if (!a) { console.warn('[worldActors] HarborAtmosphereRuntime unavailable'); return null; }
+      var ok = a.stop(); console.log('[worldActors] harborAtmosphereStop →', ok); return ok;
+    },
+    harborAtmosphereEnable: function (on) {
+      var a = global.SBE && SBE.HarborAtmosphereRuntime;
+      if (!a) { console.warn('[worldActors] HarborAtmosphereRuntime unavailable'); return null; }
+      var v = a.setEnabled(on !== false); console.log('[worldActors] harborAtmosphereEnable →', v); return v;
+    },
+    harborAtmospherePreset: function (name) {
+      var a = global.SBE && SBE.HarborAtmosphereRuntime;
+      if (!a) { console.warn('[worldActors] HarborAtmosphereRuntime unavailable'); return null; }
+      var ok = a.setPreset(name);
+      console.log('[worldActors] harborAtmospherePreset(' + name + ') →', ok, '| preset:', a.getPreset()); return ok;
+    },
+    harborAtmosphereIntensity: function (n) {
+      var a = global.SBE && SBE.HarborAtmosphereRuntime;
+      if (!a) { console.warn('[worldActors] HarborAtmosphereRuntime unavailable'); return null; }
+      var v = a.setIntensity(n); console.log('[worldActors] harborAtmosphereIntensity →', v); return v;
+    },
+    harborAtmosphereDebug: function (on) {
+      var a = global.SBE && SBE.HarborAtmosphereRuntime;
+      if (!a) { console.warn('[worldActors] HarborAtmosphereRuntime unavailable'); return null; }
+      var v = a.setDebug(on !== false); console.log('[worldActors] harborAtmosphereDebug →', v); return v;
+    },
+    harborAtmosphereRenderOnce: function () {
+      var a = global.SBE && SBE.HarborAtmosphereRuntime;
+      if (!a) { console.warn('[worldActors] HarborAtmosphereRuntime unavailable'); return null; }
+      var ok = a.renderOnce(); console.log('[worldActors] harborAtmosphereRenderOnce →', ok); return ok;
+    },
+    harborAtmosphereWaterGlow: function (on) {
+      var a = global.SBE && SBE.HarborAtmosphereRuntime;
+      if (!a) { console.warn('[worldActors] HarborAtmosphereRuntime unavailable'); return null; }
+      var v = a.setWaterGlow(on !== false); console.log('[worldActors] harborAtmosphereWaterGlow →', v); return v;
+    },
+    harborAtmosphereHaze: function (on) {
+      var a = global.SBE && SBE.HarborAtmosphereRuntime;
+      if (!a) { console.warn('[worldActors] HarborAtmosphereRuntime unavailable'); return null; }
+      var v = a.setHaze(on !== false); console.log('[worldActors] harborAtmosphereHaze →', v); return v;
+    },
+    harborAtmosphereShimmer: function (on) {
+      var a = global.SBE && SBE.HarborAtmosphereRuntime;
+      if (!a) { console.warn('[worldActors] HarborAtmosphereRuntime unavailable'); return null; }
+      var v = a.setShimmer(on !== false); console.log('[worldActors] harborAtmosphereShimmer →', v); return v;
+    },
+    // ── 0604G MTA Bus feed source inventory (inventory-only — no fetch) ──────
+    mtaBusFeedInventoryState: function () {
+      var inv = global.SBE && SBE.MTABusFeedSourceInventory;
+      if (!inv) { console.warn('[worldActors] MTABusFeedSourceInventory unavailable'); return null; }
+      var s = inv.getState();
+      console.group('[worldActors] mtaBusFeedInventoryState');
+      console.log('primarySource :', s.primarySourceId, '| sources:', s.sourceCount, '| registered:', s.registered);
+      console.log('hasApiKey     :', s.hasApiKey, s.hasApiKey ? ('(' + inv.maskedApiKey() + ')') : '');
+      console.log('configured    : vp', s.vehiclePositionsConfigured, '| trip', s.tripUpdatesConfigured, '| alerts', s.alertsConfigured);
+      console.log('lastError     :', s.lastError);
+      console.groupEnd();
+      return s;
+    },
+    mtaBusFeedSources: function () {
+      var inv = global.SBE && SBE.MTABusFeedSourceInventory;
+      if (!inv) { console.warn('[worldActors] MTABusFeedSourceInventory unavailable'); return null; }
+      var rows = inv.getSources();
+      if (rows.length && console.table) console.table(rows); else console.log(rows);
+      return rows;
+    },
+    mtaBusFeedReadiness: function () {
+      var inv = global.SBE && SBE.MTABusFeedSourceInventory;
+      if (!inv) { console.warn('[worldActors] MTABusFeedSourceInventory unavailable'); return null; }
+      var r = inv.getReadiness(); console.log('[worldActors] mtaBusFeedReadiness', r); return r;
+    },
+    mtaBusSetApiKey: function (key) {
+      var inv = global.SBE && SBE.MTABusFeedSourceInventory;
+      if (!inv) { console.warn('[worldActors] MTABusFeedSourceInventory unavailable'); return null; }
+      var ok = inv.setApiKey(key);
+      console.log('[worldActors] mtaBusSetApiKey →', ok, ok ? ('set ' + inv.maskedApiKey()) : ('failed: ' + inv.getState().lastError));
+      return ok;
+    },
+    mtaBusClearApiKey: function () {
+      var inv = global.SBE && SBE.MTABusFeedSourceInventory;
+      if (!inv) { console.warn('[worldActors] MTABusFeedSourceInventory unavailable'); return null; }
+      var ok = inv.clearApiKey(); console.log('[worldActors] mtaBusClearApiKey →', ok); return ok;
+    },
+    // ── 0604H MTA Bus realtime adapter (fetch/decode only — no actors/render) ─
+    mtaBusAdapterState: function () {
+      var a = global.SBE && SBE.MTABusRealtimeAdapter;
+      if (!a) { console.warn('[worldActors] MTABusRealtimeAdapter unavailable'); return null; }
+      var s = a.getState(); console.log('[worldActors] mtaBusAdapterState', s); return s;
+    },
+    mtaBusFetchOnce: function () {
+      var a = global.SBE && SBE.MTABusRealtimeAdapter;
+      if (!a) { console.warn('[worldActors] MTABusRealtimeAdapter unavailable'); return null; }
+      var p = a.fetchOnce();
+      p.then(function (r) { console.log('[worldActors] mtaBusFetchOnce →', r); });
+      return p;   // Promise<{ ok, rowsAdded, failureReason, decodedEntityCount, rejectedEntityCount }>
+    },
+    mtaBusRows: function (limit) {
+      var a = global.SBE && SBE.MTABusRealtimeAdapter;
+      if (!a) { console.warn('[worldActors] MTABusRealtimeAdapter unavailable'); return null; }
+      var rows = a.getRows();
+      var lim = (limit && limit > 0) ? limit : 20;
+      var shown = rows.slice(0, lim);
+      if (shown.length && console.table) console.table(shown); else console.log(shown);
+      console.log('[worldActors] mtaBusRows total', rows.length, 'showing', shown.length);
+      return shown;
+    },
+    mtaBusStats: function () {
+      var a = global.SBE && SBE.MTABusRealtimeAdapter;
+      if (!a) { console.warn('[worldActors] MTABusRealtimeAdapter unavailable'); return null; }
+      var s = a.getStats(); console.log('[worldActors] mtaBusStats', s); return s;
+    },
+    mtaBusClearRows: function () {
+      var a = global.SBE && SBE.MTABusRealtimeAdapter;
+      if (!a) { console.warn('[worldActors] MTABusRealtimeAdapter unavailable'); return null; }
+      var ok = a.clearRows(); console.log('[worldActors] mtaBusClearRows →', ok); return ok;
+    },
+    // ── 0604I MTA Bus actor bridge (raw rows → vehicle.bus truth actors) ─────
+    mtaBusActorBridgeState: function () {
+      var b = global.SBE && SBE.MTABusActorBridge;
+      if (!b) { console.warn('[worldActors] MTABusActorBridge unavailable'); return null; }
+      var s = b.getState(); console.log('[worldActors] mtaBusActorBridgeState', s); return s;
+    },
+    mtaBusActorBridgeSync: function () {
+      var b = global.SBE && SBE.MTABusActorBridge;
+      if (!b) { console.warn('[worldActors] MTABusActorBridge unavailable'); return null; }
+      var r = b.syncFromAdapter(); console.log('[worldActors] mtaBusActorBridgeSync →', r); return r;
+    },
+    mtaBusActorBridgeStats: function () {
+      var b = global.SBE && SBE.MTABusActorBridge;
+      if (!b) { console.warn('[worldActors] MTABusActorBridge unavailable'); return null; }
+      var s = b.getStats(); console.log('[worldActors] mtaBusActorBridgeStats', s); return s;
+    },
+    mtaBusActorBridgeActors: function () {
+      var b = global.SBE && SBE.MTABusActorBridge;
+      if (!b) { console.warn('[worldActors] MTABusActorBridge unavailable'); return null; }
+      var ids = b.getActorIds();
+      console.log('[worldActors] mtaBusActorBridgeActors total', ids.length, ids.slice(0, 50));
+      return ids;
+    },
+    mtaBusActorBridgeClear: function () {
+      var b = global.SBE && SBE.MTABusActorBridge;
+      if (!b) { console.warn('[worldActors] MTABusActorBridge unavailable'); return null; }
+      var n = b.clearBusActors(); console.log('[worldActors] mtaBusActorBridgeClear removed', n); return n;
+    },
+    mtaBusActorBridgeEnable: function (on) {
+      var b = global.SBE && SBE.MTABusActorBridge;
+      if (!b) { console.warn('[worldActors] MTABusActorBridge unavailable'); return null; }
+      var v = b.setEnabled(on !== false); console.log('[worldActors] mtaBusActorBridgeEnable →', v); return v;
+    },
+    // ── 0604J Bus visual fallback renderer (bounded, altitude-aware) ─────────
+    busFallbackStart: function () {
+      var r = global.SBE && SBE.BusVisualFallbackRenderer;
+      if (!r) { console.warn('[worldActors] BusVisualFallbackRenderer unavailable'); return null; }
+      var ok = r.start(); console.log('[worldActors] busFallbackStart →', ok, r.getState()); return ok;
+    },
+    busFallbackStop: function () {
+      var r = global.SBE && SBE.BusVisualFallbackRenderer;
+      if (!r) { console.warn('[worldActors] BusVisualFallbackRenderer unavailable'); return null; }
+      var ok = r.stop(); console.log('[worldActors] busFallbackStop →', ok); return ok;
+    },
+    busFallbackRenderOnce: function () {
+      var r = global.SBE && SBE.BusVisualFallbackRenderer;
+      if (!r) { console.warn('[worldActors] BusVisualFallbackRenderer unavailable'); return null; }
+      var res = r.renderOnce(); console.log('[worldActors] busFallbackRenderOnce →', res); return res;
+    },
+    busFallbackClear: function () {
+      var r = global.SBE && SBE.BusVisualFallbackRenderer;
+      if (!r) { console.warn('[worldActors] BusVisualFallbackRenderer unavailable'); return null; }
+      var n = r.clear(); console.log('[worldActors] busFallbackClear removed', n); return n;
+    },
+    busFallbackState: function () {
+      var r = global.SBE && SBE.BusVisualFallbackRenderer;
+      if (!r) { console.warn('[worldActors] BusVisualFallbackRenderer unavailable'); return null; }
+      var s = r.getState(); console.log('[worldActors] busFallbackState', s); return s;
+    },
+    busFallbackSelection: function () {
+      var r = global.SBE && SBE.BusVisualFallbackRenderer;
+      if (!r) { console.warn('[worldActors] BusVisualFallbackRenderer unavailable'); return null; }
+      var s = r.getSelectionState(); console.log('[worldActors] busFallbackSelection', s); return s;
+    },
+    busFallbackMaxVisible: function (count) {
+      var r = global.SBE && SBE.BusVisualFallbackRenderer;
+      if (!r) { console.warn('[worldActors] BusVisualFallbackRenderer unavailable'); return null; }
+      var v = r.setMaxVisible(count); console.log('[worldActors] busFallbackMaxVisible →', v); return v;
+    },
+    busFallbackDebug: function (on) {
+      var r = global.SBE && SBE.BusVisualFallbackRenderer;
+      if (!r) { console.warn('[worldActors] BusVisualFallbackRenderer unavailable'); return null; }
+      var v = r.setDebug(on !== false); console.log('[worldActors] busFallbackDebug →', v); return v;
+    },
+    busLiveProof: function () {
+      var adapter = global.SBE && SBE.MTABusRealtimeAdapter;
+      var bridge = global.SBE && SBE.MTABusActorBridge;
+      var rend = global.SBE && SBE.BusVisualFallbackRenderer;
+      if (!adapter || !bridge || !rend) { console.warn('[worldActors] bus pipeline incomplete'); return null; }
+      return adapter.fetchOnce().then(function (fetchRes) {
+        var syncRes = bridge.syncFromAdapter();
+        var renderRes = rend.renderOnce();
+        var report = { fetch: fetchRes, sync: syncRes, render: renderRes };
+        console.group('[worldActors] busLiveProof');
+        console.log('fetch :', fetchRes);
+        console.log('sync  :', syncRes);
+        console.log('render:', renderRes);
+        console.groupEnd();
+        return report;
+      });
+    },
+    // ── 0604K Bus presentation selector (selection authority) ────────────────
+    busSelectorStart: function () {
+      var s = global.SBE && SBE.BusPresentationSelector;
+      if (!s) { console.warn('[worldActors] BusPresentationSelector unavailable'); return null; }
+      var ok = s.start(); console.log('[worldActors] busSelectorStart →', ok); return ok;
+    },
+    busSelectorStop: function () {
+      var s = global.SBE && SBE.BusPresentationSelector;
+      if (!s) { console.warn('[worldActors] BusPresentationSelector unavailable'); return null; }
+      var ok = s.stop(); console.log('[worldActors] busSelectorStop →', ok); return ok;
+    },
+    busSelectorState: function () {
+      var s = global.SBE && SBE.BusPresentationSelector;
+      if (!s) { console.warn('[worldActors] BusPresentationSelector unavailable'); return null; }
+      var st = s.getState(); console.log('[worldActors] busSelectorState', st); return st;
+    },
+    busSelectorSelect: function () {
+      var s = global.SBE && SBE.BusPresentationSelector;
+      if (!s) { console.warn('[worldActors] BusPresentationSelector unavailable'); return null; }
+      var sel = s.select();
+      console.group('[worldActors] busSelectorSelect');
+      console.log('profile:', sel.profile, '| budget:', sel.budget, '| selected:', sel.selectedActors.length, '| ready:', sel.readyActors.length, '| zero:', sel.zeroRenderReason);
+      console.log('counts:', sel.counts);
+      console.groupEnd();
+      return sel;
+    },
+    busSelectorLast: function () {
+      var s = global.SBE && SBE.BusPresentationSelector;
+      if (!s) { console.warn('[worldActors] BusPresentationSelector unavailable'); return null; }
+      var l = s.getLastSelection(); console.log('[worldActors] busSelectorLast', l); return l;
+    },
+    busSelectorRejects: function () {
+      var s = global.SBE && SBE.BusPresentationSelector;
+      if (!s) { console.warn('[worldActors] BusPresentationSelector unavailable'); return null; }
+      var r = s.getRejectSummary(); console.log('[worldActors] busSelectorRejects', r); return r;
+    },
+    busSelectorRouteFocus: function (routeIds) {
+      var s = global.SBE && SBE.BusPresentationSelector;
+      if (!s) { console.warn('[worldActors] BusPresentationSelector unavailable'); return null; }
+      var v = s.setRouteFocus(routeIds); console.log('[worldActors] busSelectorRouteFocus →', v); return v;
+    },
+    busSelectorClearRouteFocus: function () {
+      var s = global.SBE && SBE.BusPresentationSelector;
+      if (!s) { console.warn('[worldActors] BusPresentationSelector unavailable'); return null; }
+      var ok = s.clearRouteFocus(); console.log('[worldActors] busSelectorClearRouteFocus →', ok); return ok;
+    },
+    busSelectorViewportPadding: function (px) {
+      var s = global.SBE && SBE.BusPresentationSelector;
+      if (!s) { console.warn('[worldActors] BusPresentationSelector unavailable'); return null; }
+      var v = s.setViewportPaddingPx(px); console.log('[worldActors] busSelectorViewportPadding →', v); return v;
+    },
+    busSelectorReadinessPadding: function (px) {
+      var s = global.SBE && SBE.BusPresentationSelector;
+      if (!s) { console.warn('[worldActors] BusPresentationSelector unavailable'); return null; }
+      var v = s.setReadinessPaddingPx(px); console.log('[worldActors] busSelectorReadinessPadding →', v); return v;
+    },
+    // ── 0604L Bus debug label pass (debug-only labels + follow helpers) ──────
+    busLabelStart: function () {
+      var p = global.SBE && SBE.BusDebugLabelPass;
+      if (!p) { console.warn('[worldActors] BusDebugLabelPass unavailable'); return null; }
+      var ok = p.start(); console.log('[worldActors] busLabelStart →', ok, p.getState()); return ok;
+    },
+    busLabelStop: function () {
+      var p = global.SBE && SBE.BusDebugLabelPass;
+      if (!p) { console.warn('[worldActors] BusDebugLabelPass unavailable'); return null; }
+      var ok = p.stop(); console.log('[worldActors] busLabelStop →', ok); return ok;
+    },
+    busLabelRenderOnce: function () {
+      var p = global.SBE && SBE.BusDebugLabelPass;
+      if (!p) { console.warn('[worldActors] BusDebugLabelPass unavailable'); return null; }
+      var r = p.renderOnce(); console.log('[worldActors] busLabelRenderOnce →', r); return r;
+    },
+    busLabelMode: function (mode) {
+      var p = global.SBE && SBE.BusDebugLabelPass;
+      if (!p) { console.warn('[worldActors] BusDebugLabelPass unavailable'); return null; }
+      var v = p.setMode(mode); console.log('[worldActors] busLabelMode →', v); if (v) p.renderOnce(); return v;
+    },
+    busLabelMaxLabels: function (count) {
+      var p = global.SBE && SBE.BusDebugLabelPass;
+      if (!p) { console.warn('[worldActors] BusDebugLabelPass unavailable'); return null; }
+      var v = p.setMaxLabels(count); console.log('[worldActors] busLabelMaxLabels →', v); return v;
+    },
+    busLabelState: function () {
+      var p = global.SBE && SBE.BusDebugLabelPass;
+      if (!p) { console.warn('[worldActors] BusDebugLabelPass unavailable'); return null; }
+      var s = p.getState(); console.log('[worldActors] busLabelState', s); return s;
+    },
+    busLabels: function () {
+      var p = global.SBE && SBE.BusDebugLabelPass;
+      if (!p) { console.warn('[worldActors] BusDebugLabelPass unavailable'); return null; }
+      var rows = p.getVisibleLabels();
+      if (rows.length && console.table) console.table(rows); else console.log(rows);
+      return rows;
+    },
+    busLabelClear: function () {
+      var p = global.SBE && SBE.BusDebugLabelPass;
+      if (!p) { console.warn('[worldActors] BusDebugLabelPass unavailable'); return null; }
+      var ok = p.clear(); console.log('[worldActors] busLabelClear →', ok); return ok;
+    },
+    followBusRoute: function (routeId) {
+      var p = global.SBE && SBE.BusDebugLabelPass;
+      if (!p) { console.warn('[worldActors] BusDebugLabelPass unavailable'); return null; }
+      var r = p.followRoute(routeId);
+      console.group('[worldActors] followBusRoute ' + routeId);
+      console.log('matches:', r.matches.length, '| camera:', r.cameraControl);
+      if (r.matches.length && console.table) console.table(r.matches); else console.log(r.matches);
+      console.groupEnd();
+      return r;
+    },
+    followBusVehicle: function (vehicleId) {
+      var p = global.SBE && SBE.BusDebugLabelPass;
+      if (!p) { console.warn('[worldActors] BusDebugLabelPass unavailable'); return null; }
+      var r = p.followVehicle(vehicleId);
+      console.group('[worldActors] followBusVehicle ' + vehicleId);
+      console.log('matches:', r.matches.length, '| camera:', r.cameraControl);
+      if (r.matches.length && console.table) console.table(r.matches); else console.log(r.matches);
+      console.groupEnd();
+      return r;
+    },
+    clearBusFollow: function () {
+      var p = global.SBE && SBE.BusDebugLabelPass;
+      if (!p) { console.warn('[worldActors] BusDebugLabelPass unavailable'); return null; }
+      var ok = p.clearFollow(); console.log('[worldActors] clearBusFollow →', ok); return ok;
+    },
+    // ── 0605A Transit presence pass (atmosphere cues over selected buses) ────
+    transitPresenceStart: function () {
+      var t = global.SBE && SBE.TransitPresencePass;
+      if (!t) { console.warn('[worldActors] TransitPresencePass unavailable'); return null; }
+      var ok = t.start(); console.log('[worldActors] transitPresenceStart →', ok, t.getState()); return ok;
+    },
+    transitPresenceStop: function () {
+      var t = global.SBE && SBE.TransitPresencePass;
+      if (!t) { console.warn('[worldActors] TransitPresencePass unavailable'); return null; }
+      var ok = t.stop(); console.log('[worldActors] transitPresenceStop →', ok); return ok;
+    },
+    transitPresenceRenderOnce: function () {
+      var t = global.SBE && SBE.TransitPresencePass;
+      if (!t) { console.warn('[worldActors] TransitPresencePass unavailable'); return null; }
+      var r = t.renderOnce(); console.log('[worldActors] transitPresenceRenderOnce →', r); return r;
+    },
+    transitPresenceClear: function () {
+      var t = global.SBE && SBE.TransitPresencePass;
+      if (!t) { console.warn('[worldActors] TransitPresencePass unavailable'); return null; }
+      var ok = t.clear(); console.log('[worldActors] transitPresenceClear →', ok); return ok;
+    },
+    transitPresenceState: function () {
+      var t = global.SBE && SBE.TransitPresencePass;
+      if (!t) { console.warn('[worldActors] TransitPresencePass unavailable'); return null; }
+      var s = t.getState(); console.log('[worldActors] transitPresenceState', s); return s;
+    },
+    transitPresencePreset: function (name) {
+      var t = global.SBE && SBE.TransitPresencePass;
+      if (!t) { console.warn('[worldActors] TransitPresencePass unavailable'); return null; }
+      var v = t.setPreset(name); console.log('[worldActors] transitPresencePreset(' + name + ') →', v, '| preset:', t.getPreset()); if (v) t.renderOnce(); return v;
+    },
+    transitPresenceIntensity: function (value) {
+      var t = global.SBE && SBE.TransitPresencePass;
+      if (!t) { console.warn('[worldActors] TransitPresencePass unavailable'); return null; }
+      var v = t.setIntensity(value); console.log('[worldActors] transitPresenceIntensity →', v); return v;
+    },
+    transitPresenceMaxCues: function (count) {
+      var t = global.SBE && SBE.TransitPresencePass;
+      if (!t) { console.warn('[worldActors] TransitPresencePass unavailable'); return null; }
+      var v = t.setMaxCues(count); console.log('[worldActors] transitPresenceMaxCues →', v); return v;
+    },
+    transitPresenceDebug: function (on) {
+      var t = global.SBE && SBE.TransitPresencePass;
+      if (!t) { console.warn('[worldActors] TransitPresencePass unavailable'); return null; }
+      var v = t.setDebug(on !== false); console.log('[worldActors] transitPresenceDebug →', v); return v;
+    },
+    busPresenceProof: function () {
+      var self = this;
+      var proof = self.busLiveProof ? self.busLiveProof() : null;
+      var t = global.SBE && SBE.TransitPresencePass;
+      function decorate(busReport) {
+        var presence = t ? t.renderOnce() : null;
+        var report = { bus: busReport, presence: presence };
+        console.group('[worldActors] busPresenceProof');
+        console.log('bus     :', busReport);
+        console.log('presence:', presence);
+        console.groupEnd();
+        return report;
+      }
+      if (proof && typeof proof.then === 'function') return proof.then(decorate);
+      return decorate(proof);
+    },
+    // ── 0605B Bus motion smoothing (presentation-only continuity) ────────────
+    busMotionStart: function () {
+      var m = global.SBE && SBE.BusMotionSmoothing;
+      if (!m) { console.warn('[worldActors] BusMotionSmoothing unavailable'); return null; }
+      var ok = m.start(); console.log('[worldActors] busMotionStart →', ok); return ok;
+    },
+    busMotionStop: function () {
+      var m = global.SBE && SBE.BusMotionSmoothing;
+      if (!m) { console.warn('[worldActors] BusMotionSmoothing unavailable'); return null; }
+      var ok = m.stop(); console.log('[worldActors] busMotionStop →', ok); return ok;
+    },
+    busMotionState: function () {
+      var m = global.SBE && SBE.BusMotionSmoothing;
+      if (!m) { console.warn('[worldActors] BusMotionSmoothing unavailable'); return null; }
+      var s = m.getState(); console.log('[worldActors] busMotionState', s); return s;
+    },
+    busMotionStats: function () {
+      var m = global.SBE && SBE.BusMotionSmoothing;
+      if (!m) { console.warn('[worldActors] BusMotionSmoothing unavailable'); return null; }
+      var s = m.getStats(); console.log('[worldActors] busMotionStats', s); return s;
+    },
+    busMotionInspect: function (actorId) {
+      var m = global.SBE && SBE.BusMotionSmoothing;
+      if (!m) { console.warn('[worldActors] BusMotionSmoothing unavailable'); return null; }
+      var r = m.inspect(actorId); console.log('[worldActors] busMotionInspect', r); return r;
+    },
+    busMotionEnable: function (on) {
+      var m = global.SBE && SBE.BusMotionSmoothing;
+      if (!m) { console.warn('[worldActors] BusMotionSmoothing unavailable'); return null; }
+      var v = m.setEnabled(on !== false); console.log('[worldActors] busMotionEnable →', v); return v;
+    },
+    busMotionDebug: function (on) {
+      var m = global.SBE && SBE.BusMotionSmoothing;
+      if (!m) { console.warn('[worldActors] BusMotionSmoothing unavailable'); return null; }
+      var v = m.setDebug(on !== false); console.log('[worldActors] busMotionDebug →', v); return v;
+    },
+    busMotionClear: function () {
+      var m = global.SBE && SBE.BusMotionSmoothing;
+      if (!m) { console.warn('[worldActors] BusMotionSmoothing unavailable'); return null; }
+      var ok = m.clear(); console.log('[worldActors] busMotionClear →', ok); return ok;
+    },
+    // ── 0605D Cruise movement field (far-altitude aggregate) ─────────────────
+    cruiseFieldStart: function () {
+      var f = global.SBE && SBE.CruiseMovementField;
+      if (!f) { console.warn('[worldActors] CruiseMovementField unavailable'); return null; }
+      var ok = f.start(); console.log('[worldActors] cruiseFieldStart →', ok, f.getState()); return ok;
+    },
+    cruiseFieldStop: function () {
+      var f = global.SBE && SBE.CruiseMovementField;
+      if (!f) { console.warn('[worldActors] CruiseMovementField unavailable'); return null; }
+      var ok = f.stop(); console.log('[worldActors] cruiseFieldStop →', ok); return ok;
+    },
+    cruiseFieldRenderOnce: function () {
+      var f = global.SBE && SBE.CruiseMovementField;
+      if (!f) { console.warn('[worldActors] CruiseMovementField unavailable'); return null; }
+      var r = f.renderOnce(); console.log('[worldActors] cruiseFieldRenderOnce →', r); return r;
+    },
+    cruiseFieldClear: function () {
+      var f = global.SBE && SBE.CruiseMovementField;
+      if (!f) { console.warn('[worldActors] CruiseMovementField unavailable'); return null; }
+      var ok = f.clear(); console.log('[worldActors] cruiseFieldClear →', ok); return ok;
+    },
+    cruiseFieldState: function () {
+      var f = global.SBE && SBE.CruiseMovementField;
+      if (!f) { console.warn('[worldActors] CruiseMovementField unavailable'); return null; }
+      var s = f.getState(); console.log('[worldActors] cruiseFieldState', s); return s;
+    },
+    cruiseFieldCells: function () {
+      var f = global.SBE && SBE.CruiseMovementField;
+      if (!f) { console.warn('[worldActors] CruiseMovementField unavailable'); return null; }
+      var rows = f.getCells();
+      if (rows.length && console.table) console.table(rows.slice(0, 50)); else console.log(rows);
+      return rows;
+    },
+    cruiseFieldPulses: function () {
+      var f = global.SBE && SBE.CruiseMovementField;
+      if (!f) { console.warn('[worldActors] CruiseMovementField unavailable'); return null; }
+      var rows = f.getRenderedPulses();
+      if (rows.length && console.table) console.table(rows.slice(0, 50)); else console.log(rows);
+      return rows;
+    },
+    cruiseFieldPreset: function (name) {
+      var f = global.SBE && SBE.CruiseMovementField;
+      if (!f) { console.warn('[worldActors] CruiseMovementField unavailable'); return null; }
+      var v = f.setPreset(name); console.log('[worldActors] cruiseFieldPreset(' + name + ') →', v, '| preset:', f.getPreset()); if (v) f.renderOnce(); return v;
+    },
+    cruiseFieldIntensity: function (value) {
+      var f = global.SBE && SBE.CruiseMovementField;
+      if (!f) { console.warn('[worldActors] CruiseMovementField unavailable'); return null; }
+      var v = f.setIntensity(value); console.log('[worldActors] cruiseFieldIntensity →', v); return v;
+    },
+    cruiseFieldMaxCells: function (count) {
+      var f = global.SBE && SBE.CruiseMovementField;
+      if (!f) { console.warn('[worldActors] CruiseMovementField unavailable'); return null; }
+      var v = f.setMaxCells(count); console.log('[worldActors] cruiseFieldMaxCells →', v); return v;
+    },
+    cruiseFieldCellSize: function (px) {
+      var f = global.SBE && SBE.CruiseMovementField;
+      if (!f) { console.warn('[worldActors] CruiseMovementField unavailable'); return null; }
+      var v = f.setCellSizePx(px); console.log('[worldActors] cruiseFieldCellSize →', v); return v;
+    },
+    cruiseFieldDebug: function (on) {
+      var f = global.SBE && SBE.CruiseMovementField;
+      if (!f) { console.warn('[worldActors] CruiseMovementField unavailable'); return null; }
+      var v = f.setDebug(on !== false); console.log('[worldActors] cruiseFieldDebug →', v); return v;
+    },
+    cruiseTransitProof: function () {
+      var self = this;
+      var f = global.SBE && SBE.CruiseMovementField;
+      var proof = self.busLiveProof ? self.busLiveProof() : null;
+      function decorate(busReport) {
+        var field = f ? f.renderOnce() : null;
+        var report = { bus: busReport, field: field };
+        console.group('[worldActors] cruiseTransitProof');
+        console.log('bus  :', busReport);
+        console.log('field:', field);
+        console.groupEnd();
+        return report;
+      }
+      if (proof && typeof proof.then === 'function') return proof.then(decorate);
+      return decorate(proof);
+    },
+    // ── 0605F Transit camera aliases (prefixed to avoid 0604L label-follow clash)
+    cameraFollowHero: function () {
+      var c = global.SBE && SBE.TransitCameraTargeting;
+      if (!c) { console.warn('[worldActors] TransitCameraTargeting unavailable'); return null; }
+      var r = c.followHeroBus(); console.log('[worldActors] cameraFollowHero →', r); return r;
+    },
+    cameraFollowVehicle: function (vehicleId) {
+      var c = global.SBE && SBE.TransitCameraTargeting;
+      if (!c) { console.warn('[worldActors] TransitCameraTargeting unavailable'); return null; }
+      var r = c.followVehicle(vehicleId); console.log('[worldActors] cameraFollowVehicle →', r); return r;
+    },
+    cameraFollowRoute: function (routeId) {
+      var c = global.SBE && SBE.TransitCameraTargeting;
+      if (!c) { console.warn('[worldActors] TransitCameraTargeting unavailable'); return null; }
+      var r = c.followRoute(routeId); console.log('[worldActors] cameraFollowRoute →', r); return r;
+    },
+    clearBusFollowCamera: function () {
+      var c = global.SBE && SBE.TransitCameraTargeting;
+      if (!c) { console.warn('[worldActors] TransitCameraTargeting unavailable'); return null; }
+      var ok = c.clearTarget(); console.log('[worldActors] clearBusFollowCamera →', ok); return ok;
+    },
+    // ── 0605C Transit livery aliases ────────────────────────────────────────
+    busLivery: function (vehicleId, liveryKey) {
+      var h = global.SBE && SBE.TransitLiveryHooks;
+      if (!h) { console.warn('[worldActors] TransitLiveryHooks unavailable'); return null; }
+      var ok = h.assignVehicle(vehicleId, liveryKey); console.log('[worldActors] busLivery →', ok); return ok;
+    },
+    routeLivery: function (routeId, liveryKey) {
+      var h = global.SBE && SBE.TransitLiveryHooks;
+      if (!h) { console.warn('[worldActors] TransitLiveryHooks unavailable'); return null; }
+      var ok = h.assignRoute(routeId, liveryKey); console.log('[worldActors] routeLivery →', ok); return ok;
+    },
+    aisMetadataRoleCounts: function () {
+      var au = global.SBE && SBE.AISVesselMetadataAudit;
+      if (!au) { console.warn('[worldActors] AISVesselMetadataAudit unavailable'); return null; }
+      var rc = au.audit().roleCounts; console.log('[worldActors] roleCounts', rc); return rc;
+    },
+    aisMetadataWarnings: function () {
+      var au = global.SBE && SBE.AISVesselMetadataAudit;
+      if (!au) { console.warn('[worldActors] AISVesselMetadataAudit unavailable'); return null; }
+      var w = au.audit().warnings; console.log('[worldActors] warnings', w); return w;
+    },
+
     // 0603K — per-actor visibility tuning (scale/opacity/shadow) report.
     visibilityState: function () {
       var tar = global.SBE && SBE.TruthActorRuntime;
@@ -3429,11 +4264,674 @@
 
   // ── Bind ──────────────────────────────────────────────────────────────────────
 
+  // ── 0604M Transit asset debug namespace (_wos.debug.transit) ────────────────
+  var _transitDebug = {
+    getBusAssetStats: function () {
+      var r = global.SBE && SBE.BusAssetResolver;
+      if (!r) { console.warn('[transit] BusAssetResolver unavailable'); return null; }
+      var s = r.getStats(); console.log('[transit] getBusAssetStats', s);
+      if (console.table) console.table(s.byClass);
+      return s;
+    },
+    inspectBusAsset: function (vehicleId) {
+      var r = global.SBE && SBE.BusAssetResolver;
+      var tar = global.SBE && SBE.TruthActorRuntime;
+      if (!r) { console.warn('[transit] BusAssetResolver unavailable'); return null; }
+      if (!tar || typeof tar.listActors !== 'function') { console.warn('[transit] TruthActorRuntime unavailable'); return null; }
+      var want = String(vehicleId);
+      var actor = null, all = tar.listActors();
+      for (var i = 0; i < all.length; i++) {
+        var a = all[i], md = a.metadata || {};
+        if (String(md.vehicleId) === want || String(a.sourceEntityId) === want) { actor = a; break; }
+      }
+      if (!actor) { console.warn('[transit] no bus actor with vehicleId', want); return { ok: false, reason: 'not_found', vehicleId: want }; }
+      var info = { ok: true, vehicleId: want, actorId: actor.actorId,
+        routeId: (actor.metadata && actor.metadata.routeId) || null,
+        assetClass: r.getAssetClass(actor), profile: r.getPresentationProfile(actor),
+        lat: actor.lat, lng: actor.lng, speedMps: actor.speedMps };
+      console.log('[transit] inspectBusAsset', info); return info;
+    },
+    listBusClasses: function () {
+      var r = global.SBE && SBE.BusAssetResolver;
+      if (!r) { console.warn('[transit] BusAssetResolver unavailable'); return null; }
+      var classes = r.listClasses().map(function (c) { return r.getProfileForClass(c); });
+      if (console.table) console.table(classes); else console.log(classes);
+      return classes;
+    },
+    // ── 0605E Transit assignment authority ────────────────────────────────────
+    assignHeroBus: function (vehicleId, label) {
+      var a = global.SBE && SBE.TransitAssignmentAuthority;
+      if (!a) { console.warn('[transit] TransitAssignmentAuthority unavailable'); return null; }
+      var ok = a.assignHeroBus(vehicleId, label); console.log('[transit] assignHeroBus(' + vehicleId + ') →', ok, a.getHeroBus()); return ok;
+    },
+    assignRandomHeroBus: function () {
+      var a = global.SBE && SBE.TransitAssignmentAuthority;
+      if (!a) { console.warn('[transit] TransitAssignmentAuthority unavailable'); return null; }
+      var ok = a.assignRandomHeroBus(); console.log('[transit] assignRandomHeroBus →', ok, a.getHeroBus()); return ok;
+    },
+    assignNearestHeroBus: function () {
+      var a = global.SBE && SBE.TransitAssignmentAuthority;
+      if (!a) { console.warn('[transit] TransitAssignmentAuthority unavailable'); return null; }
+      var ok = a.assignNearestHeroBus(); console.log('[transit] assignNearestHeroBus →', ok, a.getHeroBus()); return ok;
+    },
+    clearHeroBus: function () {
+      var a = global.SBE && SBE.TransitAssignmentAuthority;
+      if (!a) { console.warn('[transit] TransitAssignmentAuthority unavailable'); return null; }
+      var ok = a.clearHeroBus(); console.log('[transit] clearHeroBus →', ok); return ok;
+    },
+    getHeroBus: function () {
+      var a = global.SBE && SBE.TransitAssignmentAuthority;
+      if (!a) { console.warn('[transit] TransitAssignmentAuthority unavailable'); return null; }
+      var h = a.getHeroBus(); console.log('[transit] getHeroBus', h); return h;
+    },
+    assignTransitVehicle: function (vehicleId, assignment) {
+      var a = global.SBE && SBE.TransitAssignmentAuthority;
+      if (!a) { console.warn('[transit] TransitAssignmentAuthority unavailable'); return null; }
+      var ok = a.assignVehicle(vehicleId, assignment); console.log('[transit] assignTransitVehicle →', ok); return ok;
+    },
+    assignTransitRoute: function (routeId, assignment) {
+      var a = global.SBE && SBE.TransitAssignmentAuthority;
+      if (!a) { console.warn('[transit] TransitAssignmentAuthority unavailable'); return null; }
+      var ok = a.assignRoute(routeId, assignment); console.log('[transit] assignTransitRoute →', ok); return ok;
+    },
+    listTransitAssignments: function () {
+      var a = global.SBE && SBE.TransitAssignmentAuthority;
+      if (!a) { console.warn('[transit] TransitAssignmentAuthority unavailable'); return null; }
+      var l = a.listAssignments(); console.log('[transit] listTransitAssignments', l); return l;
+    },
+    inspectTransitAssignment: function (id) {
+      var a = global.SBE && SBE.TransitAssignmentAuthority;
+      if (!a) { console.warn('[transit] TransitAssignmentAuthority unavailable'); return null; }
+      var r = a.getAssignment(id); console.log('[transit] inspectTransitAssignment(' + id + ')', r); return r;
+    },
+    transitAssignmentState: function () {
+      var a = global.SBE && SBE.TransitAssignmentAuthority;
+      if (!a) { console.warn('[transit] TransitAssignmentAuthority unavailable'); return null; }
+      var s = a.getState(); console.log('[transit] transitAssignmentState', s); return s;
+    },
+    transitAssignmentStats: function () {
+      var a = global.SBE && SBE.TransitAssignmentAuthority;
+      if (!a) { console.warn('[transit] TransitAssignmentAuthority unavailable'); return null; }
+      var s = a.getStats(); console.log('[transit] transitAssignmentStats', s); return s;
+    },
+    clearAllTransitAssignments: function () {
+      var a = global.SBE && SBE.TransitAssignmentAuthority;
+      if (!a) { console.warn('[transit] TransitAssignmentAuthority unavailable'); return null; }
+      var ok = a.clearAll(); console.log('[transit] clearAllTransitAssignments →', ok); return ok;
+    },
+    // ── 0605G Articulated bus presentation ────────────────────────────────────
+    articulatedState: function (actorId) {
+      var p = global.SBE && SBE.ArticulatedBusPresentationPass;
+      if (!p) { console.warn('[transit] ArticulatedBusPresentationPass unavailable'); return null; }
+      var r = actorId != null ? p.getPresentationState(actorId) : p.getState();
+      console.log('[transit] articulatedState', r); return r;
+    },
+    articulatedStats: function () {
+      var p = global.SBE && SBE.ArticulatedBusPresentationPass;
+      if (!p) { console.warn('[transit] ArticulatedBusPresentationPass unavailable'); return null; }
+      var s = p.getStats(); console.log('[transit] articulatedStats', s); return s;
+    },
+    articulatedEnable: function (on) {
+      var p = global.SBE && SBE.ArticulatedBusPresentationPass;
+      if (!p) { console.warn('[transit] ArticulatedBusPresentationPass unavailable'); return null; }
+      var v = p.setEnabled(on !== false); console.log('[transit] articulatedEnable →', v); return v;
+    },
+    articulatedDebug: function (on) {
+      var p = global.SBE && SBE.ArticulatedBusPresentationPass;
+      if (!p) { console.warn('[transit] ArticulatedBusPresentationPass unavailable'); return null; }
+      var v = p.setDebug(on !== false); console.log('[transit] articulatedDebug →', v); return v;
+    },
+    // 0605G.1 — live WSL articulation bend update inspection.
+    articulatedLiveState: function () {
+      var wsl = global.SBE && SBE.WorldSpaceVehicleLayer;
+      if (!wsl || typeof wsl.getArticulationLiveState !== 'function') { console.warn('[transit] WSL articulation state unavailable'); return null; }
+      var s = wsl.getArticulationLiveState(); console.log('[transit] articulatedLiveState', s); return s;
+    },
+    articulatedLiveInspect: function (vehicleIdOrActorId) {
+      var wsl = global.SBE && SBE.WorldSpaceVehicleLayer;
+      if (!wsl || typeof wsl.getArticulationMeshDebug !== 'function') { console.warn('[transit] WSL articulation inspect unavailable'); return null; }
+      // Accept a bus_fallback wsl id, an actorId, or a vehicleId (resolved via truth).
+      var want = String(vehicleIdOrActorId);
+      var ids = [want, 'bus_fallback:' + want, 'bus_fallback:mta:' + want];
+      var tar = global.SBE && SBE.TruthActorRuntime;
+      if (tar && typeof tar.listActors === 'function') {
+        var all = tar.listActors();
+        for (var i = 0; i < all.length; i++) { var a = all[i], md = a.metadata || {}; if (String(md.vehicleId) === want || String(a.sourceEntityId) === want || String(a.actorId) === want) { ids.push('bus_fallback:' + a.actorId); } }
+      }
+      var found = null;
+      for (var j = 0; j < ids.length; j++) { var d = wsl.getArticulationMeshDebug(ids[j]); if (d && d.meshFound) { found = d; break; } }
+      var out = found || { meshFound: false, tried: ids };
+      console.log('[transit] articulatedLiveInspect', out); return out;
+    },
+    // ── 0605H Transit stop/dwell cue pass ─────────────────────────────────────
+    transitDwellStart: function () {
+      var d = global.SBE && SBE.TransitStopDwellCuePass;
+      if (!d) { console.warn('[transit] TransitStopDwellCuePass unavailable'); return null; }
+      var ok = d.start(); console.log('[transit] transitDwellStart →', ok, d.getState()); return ok;
+    },
+    transitDwellStop: function () {
+      var d = global.SBE && SBE.TransitStopDwellCuePass;
+      if (!d) { console.warn('[transit] TransitStopDwellCuePass unavailable'); return null; }
+      var ok = d.stop(); console.log('[transit] transitDwellStop →', ok); return ok;
+    },
+    transitDwellRenderOnce: function () {
+      var d = global.SBE && SBE.TransitStopDwellCuePass;
+      if (!d) { console.warn('[transit] TransitStopDwellCuePass unavailable'); return null; }
+      var r = d.renderOnce(); console.log('[transit] transitDwellRenderOnce →', r); return r;
+    },
+    transitDwellClear: function () {
+      var d = global.SBE && SBE.TransitStopDwellCuePass;
+      if (!d) { console.warn('[transit] TransitStopDwellCuePass unavailable'); return null; }
+      var ok = d.clear(); console.log('[transit] transitDwellClear →', ok); return ok;
+    },
+    transitDwellState: function () {
+      var d = global.SBE && SBE.TransitStopDwellCuePass;
+      if (!d) { console.warn('[transit] TransitStopDwellCuePass unavailable'); return null; }
+      var s = d.getState(); console.log('[transit] transitDwellState', s); return s;
+    },
+    transitDwellStats: function () {
+      var d = global.SBE && SBE.TransitStopDwellCuePass;
+      if (!d) { console.warn('[transit] TransitStopDwellCuePass unavailable'); return null; }
+      var s = d.getStats(); console.log('[transit] transitDwellStats', s); return s;
+    },
+    transitDwellCues: function () {
+      var d = global.SBE && SBE.TransitStopDwellCuePass;
+      if (!d) { console.warn('[transit] TransitStopDwellCuePass unavailable'); return null; }
+      var rows = d.getRenderedCues();
+      if (rows.length && console.table) console.table(rows.slice(0, 50)); else console.log(rows);
+      return rows;
+    },
+    transitDwellPreset: function (name) {
+      var d = global.SBE && SBE.TransitStopDwellCuePass;
+      if (!d) { console.warn('[transit] TransitStopDwellCuePass unavailable'); return null; }
+      var v = d.setPreset(name); console.log('[transit] transitDwellPreset(' + name + ') →', v, '| preset:', d.getPreset()); if (v) d.renderOnce(); return v;
+    },
+    transitDwellIntensity: function (value) {
+      var d = global.SBE && SBE.TransitStopDwellCuePass;
+      if (!d) { console.warn('[transit] TransitStopDwellCuePass unavailable'); return null; }
+      var v = d.setIntensity(value); console.log('[transit] transitDwellIntensity →', v); return v;
+    },
+    transitDwellDebug: function (on) {
+      var d = global.SBE && SBE.TransitStopDwellCuePass;
+      if (!d) { console.warn('[transit] TransitStopDwellCuePass unavailable'); return null; }
+      var v = d.setDebug(on !== false); console.log('[transit] transitDwellDebug →', v); return v;
+    },
+    busDwellProof: function () {
+      var self = this;
+      var d = global.SBE && SBE.TransitStopDwellCuePass;
+      var pr = global.SBE && SBE.TransitPresencePass;
+      var proof = self.busLiveProof ? self.busLiveProof() : null;
+      function decorate(busReport) {
+        var presence = pr ? pr.renderOnce() : null;
+        var dwell = d ? d.renderOnce() : null;
+        var report = { bus: busReport, presence: presence, dwell: dwell };
+        console.group('[transit] busDwellProof');
+        console.log('bus     :', busReport); console.log('presence:', presence); console.log('dwell   :', dwell);
+        console.groupEnd();
+        return report;
+      }
+      if (proof && typeof proof.then === 'function') return proof.then(decorate);
+      return decorate(proof);
+    },
+    // ── 0605F Transit camera targeting ────────────────────────────────────────
+    transitCameraStart: function () {
+      var c = global.SBE && SBE.TransitCameraTargeting;
+      if (!c) { console.warn('[transit] TransitCameraTargeting unavailable'); return null; }
+      var ok = c.start(); console.log('[transit] transitCameraStart →', ok); return ok;
+    },
+    transitCameraStop: function () {
+      var c = global.SBE && SBE.TransitCameraTargeting;
+      if (!c) { console.warn('[transit] TransitCameraTargeting unavailable'); return null; }
+      var ok = c.stop(); console.log('[transit] transitCameraStop →', ok); return ok;
+    },
+    transitCameraState: function () {
+      var c = global.SBE && SBE.TransitCameraTargeting;
+      if (!c) { console.warn('[transit] TransitCameraTargeting unavailable'); return null; }
+      var s = c.getState(); console.log('[transit] transitCameraState', s); return s;
+    },
+    transitCameraStats: function () {
+      var c = global.SBE && SBE.TransitCameraTargeting;
+      if (!c) { console.warn('[transit] TransitCameraTargeting unavailable'); return null; }
+      var s = c.getStats(); console.log('[transit] transitCameraStats', s); return s;
+    },
+    followHeroBus: function () {
+      var c = global.SBE && SBE.TransitCameraTargeting;
+      if (!c) { console.warn('[transit] TransitCameraTargeting unavailable'); return null; }
+      var r = c.followHeroBus(); console.log('[transit] followHeroBus →', r); return r;
+    },
+    followBusVehicle: function (vehicleId) {
+      var c = global.SBE && SBE.TransitCameraTargeting;
+      if (!c) { console.warn('[transit] TransitCameraTargeting unavailable'); return null; }
+      var r = c.followVehicle(vehicleId); console.log('[transit] followBusVehicle →', r); return r;
+    },
+    followBusRoute: function (routeId) {
+      var c = global.SBE && SBE.TransitCameraTargeting;
+      if (!c) { console.warn('[transit] TransitCameraTargeting unavailable'); return null; }
+      var r = c.followRoute(routeId); console.log('[transit] followBusRoute →', r); return r;
+    },
+    followBusActor: function (actorId) {
+      var c = global.SBE && SBE.TransitCameraTargeting;
+      if (!c) { console.warn('[transit] TransitCameraTargeting unavailable'); return null; }
+      var r = c.followActor(actorId); console.log('[transit] followBusActor →', r); return r;
+    },
+    jumpToTransitTarget: function () {
+      var c = global.SBE && SBE.TransitCameraTargeting;
+      if (!c) { console.warn('[transit] TransitCameraTargeting unavailable'); return null; }
+      var r = c.jumpToTarget(); console.log('[transit] jumpToTransitTarget →', r); return r;
+    },
+    frameTransitTarget: function () {
+      var c = global.SBE && SBE.TransitCameraTargeting;
+      if (!c) { console.warn('[transit] TransitCameraTargeting unavailable'); return null; }
+      var r = c.frameTarget(); console.log('[transit] frameTransitTarget →', r); return r;
+    },
+    orbitTransitTarget: function () {
+      var c = global.SBE && SBE.TransitCameraTargeting;
+      if (!c) { console.warn('[transit] TransitCameraTargeting unavailable'); return null; }
+      var r = c.orbitTarget(); console.log('[transit] orbitTransitTarget →', r); return r;
+    },
+    clearTransitCameraTarget: function () {
+      var c = global.SBE && SBE.TransitCameraTargeting;
+      if (!c) { console.warn('[transit] TransitCameraTargeting unavailable'); return null; }
+      var ok = c.clearTarget(); console.log('[transit] clearTransitCameraTarget →', ok); return ok;
+    },
+    getTransitCameraTarget: function () {
+      var c = global.SBE && SBE.TransitCameraTargeting;
+      if (!c) { console.warn('[transit] TransitCameraTargeting unavailable'); return null; }
+      var t = c.getTarget(); console.log('[transit] getTransitCameraTarget', t); return t;
+    },
+    getTransitCameraPosition: function () {
+      var c = global.SBE && SBE.TransitCameraTargeting;
+      if (!c) { console.warn('[transit] TransitCameraTargeting unavailable'); return null; }
+      var p = c.getTargetPosition(); console.log('[transit] getTransitCameraPosition', p); return p;
+    },
+    transitCameraMode: function (mode) {
+      var c = global.SBE && SBE.TransitCameraTargeting;
+      if (!c) { console.warn('[transit] TransitCameraTargeting unavailable'); return null; }
+      var v = c.setMode(mode); console.log('[transit] transitCameraMode →', v); return v;
+    },
+    transitCameraTick: function () {
+      var c = global.SBE && SBE.TransitCameraTargeting;
+      if (!c) { console.warn('[transit] TransitCameraTargeting unavailable'); return null; }
+      var r = c.tick(); console.log('[transit] transitCameraTick →', r); return r;
+    },
+    transitCameraDebug: function (on) {
+      var c = global.SBE && SBE.TransitCameraTargeting;
+      if (!c) { console.warn('[transit] TransitCameraTargeting unavailable'); return null; }
+      var v = c.setDebug(on !== false); console.log('[transit] transitCameraDebug →', v); return v;
+    },
+    // ── 0605C Transit livery hooks ────────────────────────────────────────────
+    liveryState: function () {
+      var h = global.SBE && SBE.TransitLiveryHooks;
+      if (!h) { console.warn('[transit] TransitLiveryHooks unavailable'); return null; }
+      var s = h.getState(); console.log('[transit] liveryState', s); return s;
+    },
+    liveryStats: function () {
+      var h = global.SBE && SBE.TransitLiveryHooks;
+      if (!h) { console.warn('[transit] TransitLiveryHooks unavailable'); return null; }
+      var s = h.getStats(); console.log('[transit] liveryStats', s); return s;
+    },
+    listTransitLiveries: function () {
+      var h = global.SBE && SBE.TransitLiveryHooks;
+      if (!h) { console.warn('[transit] TransitLiveryHooks unavailable'); return null; }
+      var rows = h.listLiveries();
+      if (rows.length && console.table) console.table(rows); else console.log(rows);
+      return rows;
+    },
+    listTransitLiveryAssignments: function () {
+      var h = global.SBE && SBE.TransitLiveryHooks;
+      if (!h) { console.warn('[transit] TransitLiveryHooks unavailable'); return null; }
+      var a = h.listAssignments(); console.log('[transit] assignments', a); return a;
+    },
+    assignBusLivery: function (vehicleId, liveryKey) {
+      var h = global.SBE && SBE.TransitLiveryHooks;
+      if (!h) { console.warn('[transit] TransitLiveryHooks unavailable'); return null; }
+      var ok = h.assignVehicle(vehicleId, liveryKey); console.log('[transit] assignBusLivery(' + vehicleId + ',' + liveryKey + ') →', ok); return ok;
+    },
+    assignRouteLivery: function (routeId, liveryKey) {
+      var h = global.SBE && SBE.TransitLiveryHooks;
+      if (!h) { console.warn('[transit] TransitLiveryHooks unavailable'); return null; }
+      var ok = h.assignRoute(routeId, liveryKey); console.log('[transit] assignRouteLivery(' + routeId + ',' + liveryKey + ') →', ok); return ok;
+    },
+    assignBusClassLivery: function (busAssetClass, liveryKey) {
+      var h = global.SBE && SBE.TransitLiveryHooks;
+      if (!h) { console.warn('[transit] TransitLiveryHooks unavailable'); return null; }
+      var ok = h.assignClass(busAssetClass, liveryKey); console.log('[transit] assignBusClassLivery(' + busAssetClass + ',' + liveryKey + ') →', ok); return ok;
+    },
+    clearBusLivery: function (vehicleId) {
+      var h = global.SBE && SBE.TransitLiveryHooks;
+      if (!h) { console.warn('[transit] TransitLiveryHooks unavailable'); return null; }
+      var ok = h.clearVehicle(vehicleId); console.log('[transit] clearBusLivery →', ok); return ok;
+    },
+    clearRouteLivery: function (routeId) {
+      var h = global.SBE && SBE.TransitLiveryHooks;
+      if (!h) { console.warn('[transit] TransitLiveryHooks unavailable'); return null; }
+      var ok = h.clearRoute(routeId); console.log('[transit] clearRouteLivery →', ok); return ok;
+    },
+    clearBusClassLivery: function (busAssetClass) {
+      var h = global.SBE && SBE.TransitLiveryHooks;
+      if (!h) { console.warn('[transit] TransitLiveryHooks unavailable'); return null; }
+      var ok = h.clearClass(busAssetClass); console.log('[transit] clearBusClassLivery →', ok); return ok;
+    },
+    clearAllTransitLiveries: function () {
+      var h = global.SBE && SBE.TransitLiveryHooks;
+      if (!h) { console.warn('[transit] TransitLiveryHooks unavailable'); return null; }
+      var ok = h.clearAll(); console.log('[transit] clearAllTransitLiveries →', ok); return ok;
+    },
+    inspectBusLivery: function (vehicleId) {
+      var h = global.SBE && SBE.TransitLiveryHooks;
+      var tar = global.SBE && SBE.TruthActorRuntime;
+      if (!h) { console.warn('[transit] TransitLiveryHooks unavailable'); return null; }
+      var want = String(vehicleId), actor = null;
+      if (tar && typeof tar.listActors === 'function') {
+        var all = tar.listActors();
+        for (var i = 0; i < all.length; i++) { var md = all[i].metadata || {}; if (String(md.vehicleId) === want || String(all[i].sourceEntityId) === want) { actor = all[i]; break; } }
+      }
+      var r = actor ? h.resolveForActor(actor) : h.resolveForVehicle(want);
+      console.log('[transit] inspectBusLivery', r); return r;
+    },
+  };
+
+  // ── 0605I Camera shot preset debug namespace (_wos.debug.camera) ────────────
+  var _cameraDebug = {
+    listShots: function () {
+      var c = global.SBE && SBE.ActorCameraShotPresets;
+      if (!c) { console.warn('[camera] ActorCameraShotPresets unavailable'); return null; }
+      var rows = c.listShots();
+      if (rows.length && console.table) console.table(rows); else console.log(rows);
+      return rows;
+    },
+    setShot: function (id) {
+      var c = global.SBE && SBE.ActorCameraShotPresets;
+      if (!c) { console.warn('[camera] ActorCameraShotPresets unavailable'); return null; }
+      var v = c.setShot(id); var r = v ? c.applyShot() : null;
+      console.log('[camera] setShot(' + id + ') →', v, r); return v;
+    },
+    applyShot: function (id) {
+      var c = global.SBE && SBE.ActorCameraShotPresets;
+      if (!c) { console.warn('[camera] ActorCameraShotPresets unavailable'); return null; }
+      var r = c.applyShot(id); console.log('[camera] applyShot', r); return r;
+    },
+    nextShot: function () {
+      var c = global.SBE && SBE.ActorCameraShotPresets;
+      if (!c) { console.warn('[camera] ActorCameraShotPresets unavailable'); return null; }
+      var v = c.nextShot(); var r = c.applyShot(); console.log('[camera] nextShot →', v, r); return v;
+    },
+    previousShot: function () {
+      var c = global.SBE && SBE.ActorCameraShotPresets;
+      if (!c) { console.warn('[camera] ActorCameraShotPresets unavailable'); return null; }
+      var v = c.previousShot(); var r = c.applyShot(); console.log('[camera] previousShot →', v, r); return v;
+    },
+    cameraShotState: function () {
+      var c = global.SBE && SBE.ActorCameraShotPresets;
+      if (!c) { console.warn('[camera] ActorCameraShotPresets unavailable'); return null; }
+      var s = c.getState(); console.log('[camera] cameraShotState', s); return s;
+    },
+    cameraShotStats: function () {
+      var c = global.SBE && SBE.ActorCameraShotPresets;
+      if (!c) { console.warn('[camera] ActorCameraShotPresets unavailable'); return null; }
+      var s = c.getStats(); console.log('[camera] cameraShotStats', s); return s;
+    },
+    // ── 0605K Terrain-aware actor camera ──────────────────────────────────────
+    terrainCameraState: function () {
+      var t = global.SBE && SBE.TerrainAwareActorCamera;
+      if (!t) { console.warn('[camera] TerrainAwareActorCamera unavailable'); return null; }
+      var s = t.getState(); console.log('[camera] terrainCameraState', s); return s;
+    },
+    terrainCameraStats: function () {
+      var t = global.SBE && SBE.TerrainAwareActorCamera;
+      if (!t) { console.warn('[camera] TerrainAwareActorCamera unavailable'); return null; }
+      var s = t.getStats(); console.log('[camera] terrainCameraStats', s); return s;
+    },
+    terrainCameraSample: function (lng, lat) {
+      var t = global.SBE && SBE.TerrainAwareActorCamera;
+      if (!t) { console.warn('[camera] TerrainAwareActorCamera unavailable'); return null; }
+      var e = t.sampleTerrain(lng, lat); console.log('[camera] terrainCameraSample(' + lng + ',' + lat + ') →', e); return e;
+    },
+    terrainCameraGrade: function (lng, lat, headingDeg) {
+      var t = global.SBE && SBE.TerrainAwareActorCamera;
+      if (!t) { console.warn('[camera] TerrainAwareActorCamera unavailable'); return null; }
+      var g = t.sampleGrade(lng, lat, headingDeg); console.log('[camera] terrainCameraGrade →', g); return g;
+    },
+    terrainCameraEnable: function (on) {
+      var t = global.SBE && SBE.TerrainAwareActorCamera;
+      if (!t) { console.warn('[camera] TerrainAwareActorCamera unavailable'); return null; }
+      var v = t.setEnabled(on !== false); console.log('[camera] terrainCameraEnable →', v); return v;
+    },
+    terrainCameraDebug: function (on) {
+      var t = global.SBE && SBE.TerrainAwareActorCamera;
+      if (!t) { console.warn('[camera] TerrainAwareActorCamera unavailable'); return null; }
+      var v = t.setDebug(on !== false); console.log('[camera] terrainCameraDebug →', v); return v;
+    },
+    terrainCameraClearCache: function () {
+      var t = global.SBE && SBE.TerrainAwareActorCamera;
+      if (!t) { console.warn('[camera] TerrainAwareActorCamera unavailable'); return null; }
+      var ok = t.clearCache(); console.log('[camera] terrainCameraClearCache →', ok); return ok;
+    },
+    // ── 0605O Camera lens control pass ────────────────────────────────────────
+    lensState: function () {
+      var l = global.SBE && SBE.CameraLensControlPass;
+      if (!l) { console.warn('[camera] CameraLensControlPass unavailable'); return null; }
+      var s = l.getState(); console.log('[camera] lensState', s); return s;
+    },
+    lensStats: function () {
+      var l = global.SBE && SBE.CameraLensControlPass;
+      if (!l) { console.warn('[camera] CameraLensControlPass unavailable'); return null; }
+      var s = l.getStats(); console.log('[camera] lensStats', s); return s;
+    },
+    lensProfiles: function () {
+      var l = global.SBE && SBE.CameraLensControlPass;
+      if (!l) { console.warn('[camera] CameraLensControlPass unavailable'); return null; }
+      var rows = l.listLensProfiles();
+      if (rows.length && console.table) console.table(rows); else console.log(rows);
+      return rows;
+    },
+    lensProfile: function (id) {
+      var l = global.SBE && SBE.CameraLensControlPass;
+      if (!l) { console.warn('[camera] CameraLensControlPass unavailable'); return null; }
+      var v = l.setLensProfile(id); console.log('[camera] lensProfile →', v); _reapplyOccupant(); return v;
+    },
+    lensAuto: function (on) {
+      var l = global.SBE && SBE.CameraLensControlPass;
+      if (!l) { console.warn('[camera] CameraLensControlPass unavailable'); return null; }
+      var v = l.setAutoProfileEnabled(on !== false); console.log('[camera] lensAuto →', v); _reapplyOccupant(); return v;
+    },
+    lensZoomTrim: function (v) { var l = global.SBE && SBE.CameraLensControlPass; if (!l) return null; var r = l.setZoomTrim(v); console.log('[camera] lensZoomTrim →', r); _reapplyOccupant(); return r; },
+    lensPitchTrim: function (v) { var l = global.SBE && SBE.CameraLensControlPass; if (!l) return null; var r = l.setPitchTrim(v); console.log('[camera] lensPitchTrim →', r); _reapplyOccupant(); return r; },
+    lensBearingTrim: function (v) { var l = global.SBE && SBE.CameraLensControlPass; if (!l) return null; var r = l.setBearingTrim(v); console.log('[camera] lensBearingTrim →', r); _reapplyOccupant(); return r; },
+    lensRollTrim: function (v) { var l = global.SBE && SBE.CameraLensControlPass; if (!l) return null; var r = l.setRollTrim(v); console.log('[camera] lensRollTrim →', r); _reapplyOccupant(); return r; },
+    lensCompositionBias: function (v) { var l = global.SBE && SBE.CameraLensControlPass; if (!l) return null; var r = l.setCompositionBias(v); console.log('[camera] lensCompositionBias →', r); _reapplyOccupant(); return r; },
+    lensResetTrims: function () { var l = global.SBE && SBE.CameraLensControlPass; if (!l) return null; var r = l.resetTrims(); console.log('[camera] lensResetTrims →', r); _reapplyOccupant(); return r; },
+    lensPreview: function (profileId) {
+      var l = global.SBE && SBE.CameraLensControlPass;
+      var oc = global.SBE && SBE.OccupantCameraModes;
+      if (!l) { console.warn('[camera] CameraLensControlPass unavailable'); return null; }
+      var base = (oc && typeof oc.getState === 'function') ? (oc.getState().lastRequest || { zoom: 18, pitch: 60, bearing: 0 }) : { zoom: 18, pitch: 60, bearing: 0 };
+      var r = l.previewLens(base, profileId); console.log('[camera] lensPreview(' + profileId + ')', r); return r;
+    },
+    lensDriveProof: function () { return _lensProof('drive', 'driver'); },
+    lensBikeProof:  function () { return _lensProof('bike', 'bike_rider'); },
+    lensWalkProof:  function () { return _lensProof('walk', 'walker_head'); },
+    lensBusProof:   function () { return _lensProof('transit', 'bus_front'); },
+    lensFerryProof: function () { return _lensProof('ferry', 'ferry_passenger'); },
+    // ── 0605N Transport-scoped POV authority ──────────────────────────────────
+    transportPOVState: function () {
+      var a = global.SBE && SBE.TransportScopedPOVAuthority;
+      if (!a) { console.warn('[camera] TransportScopedPOVAuthority unavailable'); return null; }
+      var s = a.getState(); console.log('[camera] transportPOVState', s); return s;
+    },
+    transportPOVProfiles: function () {
+      var a = global.SBE && SBE.TransportScopedPOVAuthority;
+      if (!a) { console.warn('[camera] TransportScopedPOVAuthority unavailable'); return null; }
+      var p = a.getProfiles();
+      var rows = Object.keys(p).map(function (k) { return { id: k, actorClass: p[k].actorClass, internalViews: p[k].internalViews.join(','), externalViews: p[k].externalViews.join(','), defaultInternal: p[k].defaultInternalView }; });
+      if (console.table) console.table(rows); else console.log(rows);
+      return p;
+    },
+    transportPOVSetTransport: function (mode) {
+      var a = global.SBE && SBE.TransportScopedPOVAuthority;
+      if (!a) { console.warn('[camera] TransportScopedPOVAuthority unavailable'); return null; }
+      var v = a.setTransportMode(mode); console.log('[camera] transportPOVSetTransport →', v, a.getState()); return v;
+    },
+    transportPOVSetFamily: function (family) {
+      var a = global.SBE && SBE.TransportScopedPOVAuthority;
+      if (!a) { console.warn('[camera] TransportScopedPOVAuthority unavailable'); return null; }
+      var v = a.setViewFamily(family); console.log('[camera] transportPOVSetFamily →', v); return v;
+    },
+    transportPOVSetInternal: function (viewId) {
+      var a = global.SBE && SBE.TransportScopedPOVAuthority;
+      if (!a) { console.warn('[camera] TransportScopedPOVAuthority unavailable'); return null; }
+      var v = a.setInternalView(viewId); console.log('[camera] transportPOVSetInternal →', v); return v;
+    },
+    transportPOVSetExternal: function (viewId) {
+      var a = global.SBE && SBE.TransportScopedPOVAuthority;
+      if (!a) { console.warn('[camera] TransportScopedPOVAuthority unavailable'); return null; }
+      var v = a.setExternalView(viewId); console.log('[camera] transportPOVSetExternal →', v); return v;
+    },
+    transportPOVSetLook: function (direction) {
+      var a = global.SBE && SBE.TransportScopedPOVAuthority;
+      if (!a) { console.warn('[camera] TransportScopedPOVAuthority unavailable'); return null; }
+      var v = a.setLookDirection(direction); console.log('[camera] transportPOVSetLook →', v); return v;
+    },
+    transportPOVApply: function () {
+      var a = global.SBE && SBE.TransportScopedPOVAuthority;
+      if (!a) { console.warn('[camera] TransportScopedPOVAuthority unavailable'); return null; }
+      var r = a.applyCurrentView(); console.log('[camera] transportPOVApply', r); return r;
+    },
+    drivePOVProof:  function () { var a = global.SBE && SBE.TransportScopedPOVAuthority; return a ? a.applyView({ transportMode: 'drive', family: 'internal', internalViewId: 'driver', lookDirection: 'front' }) : null; },
+    transitPOVProof: function () { var a = global.SBE && SBE.TransportScopedPOVAuthority; return a ? a.applyView({ transportMode: 'transit', family: 'internal', internalViewId: 'bus_front', lookDirection: 'front' }) : null; },
+    walkPOVProof:   function () { var a = global.SBE && SBE.TransportScopedPOVAuthority; return a ? a.applyView({ transportMode: 'walk', family: 'internal', internalViewId: 'walker_head', lookDirection: 'front' }) : null; },
+    bikePOVProof:   function () { var a = global.SBE && SBE.TransportScopedPOVAuthority; return a ? a.applyView({ transportMode: 'bike', family: 'internal', internalViewId: 'bike_rider', lookDirection: 'front' }) : null; },
+    ferryPOVProof:  function () { var a = global.SBE && SBE.TransportScopedPOVAuthority; return a ? a.applyView({ transportMode: 'ferry', family: 'internal', internalViewId: 'ferry_passenger', lookDirection: 'front' }) : null; },
+    externalCameraProof: function () { var a = global.SBE && SBE.TransportScopedPOVAuthority; return a ? a.applyView({ family: 'external', externalViewId: 'follow' }) : null; },
+    // ── 0605M Occupant camera modes (runtime POV bridge) ──────────────────────
+    occupantModes: function () {
+      var m = global.SBE && SBE.OccupantCameraModes;
+      if (!m) { console.warn('[camera] OccupantCameraModes unavailable'); return null; }
+      var rows = m.listModes();
+      if (rows.length && console.table) console.table(rows); else console.log(rows);
+      return rows;
+    },
+    occupantModeState: function () {
+      var m = global.SBE && SBE.OccupantCameraModes;
+      if (!m) { console.warn('[camera] OccupantCameraModes unavailable'); return null; }
+      var s = m.getState(); console.log('[camera] occupantModeState', s); return s;
+    },
+    occupantModeStats: function () {
+      var m = global.SBE && SBE.OccupantCameraModes;
+      if (!m) { console.warn('[camera] OccupantCameraModes unavailable'); return null; }
+      var s = m.getStats(); console.log('[camera] occupantModeStats', s); return s;
+    },
+    occupantMode: function (modeId) {
+      var m = global.SBE && SBE.OccupantCameraModes;
+      if (!m) { console.warn('[camera] OccupantCameraModes unavailable'); return null; }
+      var v = m.setMode(modeId); console.log('[camera] occupantMode →', v); return v;
+    },
+    occupantModeApply: function (modeId) {
+      var m = global.SBE && SBE.OccupantCameraModes;
+      if (!m) { console.warn('[camera] OccupantCameraModes unavailable'); return null; }
+      var r = m.applyMode(modeId); console.log('[camera] occupantModeApply', r); return r;
+    },
+    occupantModeDisengage: function () {
+      var m = global.SBE && SBE.OccupantCameraModes;
+      if (!m) { console.warn('[camera] OccupantCameraModes unavailable'); return null; }
+      var ok = m.disengage(); console.log('[camera] occupantModeDisengage →', ok); return ok;
+    },
+    occupantModeReapply: function () {
+      var m = global.SBE && SBE.OccupantCameraModes;
+      if (!m) { console.warn('[camera] OccupantCameraModes unavailable'); return null; }
+      var r = m.reapply(); console.log('[camera] occupantModeReapply', r); return r;
+    },
+    driverPOVProof:    function () { var m = global.SBE && SBE.OccupantCameraModes; return m ? m.applyMode('driver') : null; },
+    passengerPOVProof: function () { var m = global.SBE && SBE.OccupantCameraModes; return m ? m.applyMode('passenger') : null; },
+    rearSeatPOVProof:  function () { var m = global.SBE && SBE.OccupantCameraModes; return m ? m.applyMode('rear_seat') : null; },
+    busFrontPOVProof:  function () { var m = global.SBE && SBE.OccupantCameraModes; return m ? m.applyMode('bus_front') : null; },
+    walkerPOVProof:    function () { var m = global.SBE && SBE.OccupantCameraModes; return m ? m.applyMode('walker_head') : null; },
+    bikePOVProof:      function () { var m = global.SBE && SBE.OccupantCameraModes; return m ? m.applyMode('bike_rider') : null; },
+    ferryPOVProof:     function () { var m = global.SBE && SBE.OccupantCameraModes; return m ? m.applyMode('ferry_passenger') : null; },
+    // ── 0605L Occupant POV camera framework (anchor stage) ────────────────────
+    occupantAnchors: function () {
+      var f = global.SBE && SBE.OccupantPOVCameraFramework;
+      if (!f) { console.warn('[camera] OccupantPOVCameraFramework unavailable'); return null; }
+      var rows = f.listAnchors().map(function (id) { var o = f.getAnchorOffset(id); return { anchorId: id, x: o.x, y: o.y, z: o.z }; });
+      if (rows.length && console.table) console.table(rows); else console.log(rows);
+      return rows;
+    },
+    occupantResolve: function (actor, anchorId) {
+      var f = global.SBE && SBE.OccupantPOVCameraFramework;
+      if (!f) { console.warn('[camera] OccupantPOVCameraFramework unavailable'); return null; }
+      // If no actor object passed, resolve against the active hero car.
+      if (actor == null || typeof actor !== 'object') {
+        var aid = (typeof actor === 'string') ? actor : anchorId;
+        var hv = global.SBE && SBE.HeroVehicleRuntime;
+        var s = (hv && typeof hv.getState === 'function') ? hv.getState() : null;
+        actor = s ? { actorType: 'hero_car', lng: s.lng, lat: s.lat, headingDeg: s.headingDeg } : {};
+        anchorId = aid;
+      }
+      var r = f.resolveAnchor(actor, anchorId); console.log('[camera] occupantResolve', r); return r;
+    },
+    occupantProfile: function (vehicleClass) {
+      var f = global.SBE && SBE.OccupantPOVCameraFramework;
+      if (!f) { console.warn('[camera] OccupantPOVCameraFramework unavailable'); return null; }
+      var p = f.getProfile(vehicleClass); console.log('[camera] occupantProfile', p); return p;
+    },
+    // ── 0605K.1 Camera shot selector UI bridge ────────────────────────────────
+    cameraShotSelectorState: function () {
+      var u = global.SBE && SBE.CameraShotSelectorUI;
+      if (!u) { console.warn('[camera] CameraShotSelectorUI unavailable'); return { lastError: 'ui_control_unavailable' }; }
+      var s = u.getState(); console.log('[camera] cameraShotSelectorState', s); return s;
+    },
+    cameraShotSelectorOptions: function () {
+      var u = global.SBE && SBE.CameraShotSelectorUI;
+      if (!u) { console.warn('[camera] CameraShotSelectorUI unavailable'); return null; }
+      var o = u.options();
+      if (o.length && console.table) console.table(o); else console.log(o);
+      return o;
+    },
+    cameraShotSelectorSet: function (id) {
+      var u = global.SBE && SBE.CameraShotSelectorUI;
+      if (!u) { console.warn('[camera] CameraShotSelectorUI unavailable'); return { lastError: 'ui_control_unavailable' }; }
+      var r = u.setShot(id); console.log('[camera] cameraShotSelectorSet(' + id + ') →', r); return r;
+    },
+    cameraWindshieldProof: function () {
+      var c = global.SBE && SBE.ActorCameraShotPresets;
+      if (!c) { console.warn('[camera] ActorCameraShotPresets unavailable'); return null; }
+      var r = c.applyShot('windshield'); console.log('[camera] cameraWindshieldProof', r); return r;
+    },
+    cameraSideWindowProof: function () {
+      var c = global.SBE && SBE.ActorCameraShotPresets;
+      if (!c) { console.warn('[camera] ActorCameraShotPresets unavailable'); return null; }
+      var rl = c.applyShot('left_window'), rr = c.applyShot('right_window');
+      console.log('[camera] cameraSideWindowProof', { left: rl, right: rr }); return { left: rl, right: rr };
+    },
+    cameraRearWindowProof: function () {
+      var c = global.SBE && SBE.ActorCameraShotPresets;
+      if (!c) { console.warn('[camera] ActorCameraShotPresets unavailable'); return null; }
+      var r = c.applyShot('rear_window'); console.log('[camera] cameraRearWindowProof', r); return r;
+    },
+    terrainCameraProof: function () {
+      var c = global.SBE && SBE.ActorCameraShotPresets;
+      var t = global.SBE && SBE.TerrainAwareActorCamera;
+      var ct = global.SBE && SBE.TransitCameraTargeting;
+      if (!t) { console.warn('[camera] TerrainAwareActorCamera unavailable'); return null; }
+      var shotState = c ? c.getState() : null;
+      var terrState = t.getState();
+      var sample = null;
+      if (ct && typeof ct.getTargetPosition === 'function') { var pos = ct.getTargetPosition(); if (pos) sample = t.sampleTerrain(pos.lng, pos.lat); }
+      var report = { shot: shotState, terrain: terrState, targetTerrainElevationM: sample };
+      console.group('[camera] terrainCameraProof');
+      console.log('shot   :', shotState); console.log('terrain:', terrState); console.log('targetElevM:', sample);
+      console.groupEnd();
+      return report;
+    },
+  };
+
   function _bind() {
     global._wos             = global._wos             || {};
     global._wos.debug       = global._wos.debug       || {};
     global._wos.debug.worldVehicles = _debugObj;
     global._wos.debug.worldActors   = _worldActorsDebug;
+    global._wos.debug.transit       = _transitDebug;
+    global._wos.debug.camera        = _cameraDebug;
   }
   _bind();
   global.setTimeout(_bind, 300);

@@ -362,6 +362,13 @@
     var map = mvr && typeof mvr.getMap === 'function' ? mvr.getMap() : null;
     if (!map) return;
 
+    // 0605K.2B / 0605M — yield the viewport while an actor camera shot OR occupant
+    // camera mode owns it. Those systems drive the camera per-frame; do not override.
+    var shotCam = global.SBE && SBE.ActorCameraShotPresets;
+    if (shotCam && typeof shotCam.isEngaged === 'function' && shotCam.isEngaged()) return;
+    var occCam = global.SBE && SBE.OccupantCameraModes;
+    if (occCam && typeof occCam.isActive === 'function' && occCam.isActive()) return;
+
     var preset = CAMERA_PRESETS[_cameraPreset] || CAMERA_PRESETS.follow;
 
     // Actor visibility — hide_actor preset hides marker, keeps motion

@@ -31,7 +31,7 @@
     'mta.bus.blue-white':   P('mta.bus.blue-white',   { body: 0x1f5fa8, roof: 0xf4f7fb, side: 0x174073, glass: 0x101820, accent: 0xffffff, light: 0xfff4c2 }),
     'dot.yellow-orange':    P('dot.yellow-orange',    { body: 0xf5b21b, roof: 0xffd35a, side: 0xa86400, glass: 0x1c1c1c, accent: 0xff6a00, light: 0xffc400 }),
     'synthetic.muted-road': P('synthetic.muted-road', { body: 0x45515c, roof: 0x66717b, side: 0x252d34, glass: 0x111820, accent: 0x9aa8b4, light: 0xbddcff }),
-    'marine.truth-blue':    P('marine.truth-blue',    { body: 0x2a78a8, roof: 0xe9f2f7, side: 0x15445f, glass: 0x0b1c24, accent: 0x8fdcff, light: 0xffffff }),
+    'marine.truth-blue':    P('marine.truth-blue',    { body: 0x1f6f8b, roof: 0xd9f2ff, side: 0x13485f, glass: 0x0b1f2a, accent: 0x52e0ff, light: 0xffffff, stroke: 0x06202c }),
     'nyc.ferry.blue-white': P('nyc.ferry.blue-white', { body: 0x1c5fb0, roof: 0xf2f7fb, side: 0x123f73, glass: 0x0b1c24, accent: 0xffffff, light: 0xffffff }),
     'aircraft.cool-white':  P('aircraft.cool-white',  { body: 0xdfe8ef, roof: 0xf4f8fb, side: 0xb6c4cf, glass: 0x223040, accent: 0xbfe0ff, light: 0xe8f6ff, opacity: 0.92 }),
     'mta.subway.line-color':P('mta.subway.line-color',{ body: 0x8a8d90, roof: 0xc8ccd0, side: 0x55585b, glass: 0x101418, accent: 0xff8c1a, light: 0xfff0c2 }),
@@ -45,6 +45,21 @@
     'transit.generic':      P('transit.generic',      { body: 0x3a6ea5, roof: 0xeef3f8, side: 0x244766, glass: 0x101820, accent: 0xffffff, light: 0xfff4c2 }),
     'civic.alert':          P('civic.alert',          { body: 0xff4d4d, roof: 0xff8080, side: 0xa11f1f, glass: 0x1c1010, accent: 0xffd24d, light: 0xff5050 }),
     'world.generic':        P('world.generic',        { body: 0x808890, roof: 0xa0a8b0, side: 0x565c63, glass: 0x141a20, accent: 0xffffff, light: 0xffffff }),
+    // ── 0603X Marine asset palette pack — role-distinct harbor colours ────────
+    'marine.workboat.orange':  P('marine.workboat.orange',  { body: 0xf28c28, roof: 0xf7c95f, side: 0x8f4a18, glass: 0x10202a, accent: 0xffd34d, light: 0xffffff, stroke: 0x241308 }),
+    'marine.service.yellow':   P('marine.service.yellow',   { body: 0xf4c430, roof: 0xffe38a, side: 0x9b6d00, glass: 0x111b20, accent: 0xff7a00, light: 0xffffff, stroke: 0x241b00 }),
+    'marine.police.blue-white':P('marine.police.blue-white',{ body: 0xeff7ff, roof: 0xffffff, side: 0x184f9c, glass: 0x071523, accent: 0x2aa8ff, light: 0xffffff, stroke: 0x061426 }),
+    'marine.fire.red-white':   P('marine.fire.red-white',   { body: 0xd92d20, roof: 0xffffff, side: 0x7a120d, glass: 0x160b0b, accent: 0xffd34d, light: 0xffffff, stroke: 0x260606 }),
+    'marine.cargo.rust':       P('marine.cargo.rust',       { body: 0x9a4b22, roof: 0xd9b08c, side: 0x4f2815, glass: 0x111820, accent: 0xf0a04b, light: 0xffffff, stroke: 0x1f0e08 }),
+    'marine.container.dark':   P('marine.container.dark',   { body: 0x2c3e50, roof: 0x5d6d7e, side: 0x17202a, glass: 0x08131d, accent: 0xe67e22, light: 0xffffff, stroke: 0x061018 }),
+    'marine.tanker.black-red': P('marine.tanker.black-red', { body: 0x1f1f1f, roof: 0x5a5a5a, side: 0x0d0d0d, glass: 0x101820, accent: 0xb3261e, light: 0xffffff, stroke: 0x000000 }),
+    'marine.barge.gray':       P('marine.barge.gray',       { body: 0x6f7478, roof: 0x9ea5aa, side: 0x3c4246, glass: 0x111820, accent: 0xd6b15f, light: 0xffffff, stroke: 0x171a1d }),
+    'marine.ferry.blue-white': P('marine.ferry.blue-white', { body: 0xf3f8ff, roof: 0xffffff, side: 0x1f6fba, glass: 0x081827, accent: 0x4dd8ff, light: 0xffffff, stroke: 0x061a2b }),
+    'marine.cruise.white':     P('marine.cruise.white',     { body: 0xf8fbff, roof: 0xffffff, side: 0xbfd2e2, glass: 0x0d2538, accent: 0x79d8ff, light: 0xffffff, stroke: 0x4f6170 }),
+    'marine.yacht.white':      P('marine.yacht.white',      { body: 0xfafafa, roof: 0xffffff, side: 0xcfd8dc, glass: 0x0a2233, accent: 0x58d8ff, light: 0xffffff, stroke: 0x68777f }),
+    'marine.sailboat.white':   P('marine.sailboat.white',   { body: 0xf8f8f2, roof: 0xffffff, side: 0xd9d9cf, glass: 0x102838, accent: 0xfff2b8, light: 0xffffff, stroke: 0x6f6f64 }),
+    'marine.fishing.green-white': P('marine.fishing.green-white', { body: 0x2e7d5b, roof: 0xf2fff8, side: 0x164d37, glass: 0x0c1e18, accent: 0xffd166, light: 0xffffff, stroke: 0x062014 }),
+    'marine.unknown.gray':     P('marine.unknown.gray',     { body: 0x7c858b, roof: 0xaeb7bd, side: 0x4c555b, glass: 0x111820, accent: 0x9aa0a6, light: 0xffffff, stroke: 0x22282c, opacity: 0.85 }),
   };
 
   var _stats = { resolved: 0, fallback: 0, lastRef: null };

@@ -173,6 +173,13 @@
         }
       } catch (e2) {}
     }
+
+    // 0603V — per-actor marine taxonomy override (after base asset resolution).
+    // Only affects marine actors above the confidence gate; no-op otherwise.
+    var mtb = SBE.MarineTaxonomyAssetBridge;
+    if (mtb && typeof mtb.applyToPayload === 'function') {
+      try { payload = mtb.applyToPayload(actor, payload); } catch (e3) {}
+    }
     return payload;
   }
 

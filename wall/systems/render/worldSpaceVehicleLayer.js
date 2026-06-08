@@ -31,7 +31,11 @@
   'use strict';
 
   var SBE     = (global.SBE = global.SBE || {});
-  var VERSION = '1.30.0';
+  var VERSION = '1.33.0';
+  // 0605G.1 — live articulation bend updates (transform hook between rebuilds).
+  var ARTICULATION_BEND_EPSILON_DEG = 0.5;
+  var _articulationLiveUpdateCount = 0;
+  var _lastArticulationUpdate = null;
 
   // ── Constants ─────────────────────────────────────────────────────────────────
   var LAYER_ID         = 'wos-world-space-vehicles';
@@ -1102,6 +1106,58 @@
     var p = _visibilityProfile(silhouetteClass);
     return p && p.scale != null ? p.scale : 1.0;
   }
+
+  // ── 0604F Harbor visual differentiation tuning ──────────────────────────────
+  // Centralized per-silhouette marine presentation multipliers (scale / shadow /
+  // opacity / priority). Applied ONCE per fresh upsert (resolved.finalScale is
+  // rebuilt each frame, so scale never compounds). Presentation only — WSL does
+  // NOT read AIS shipType, infer class, or touch taxonomy/assignments. The
+  // silhouetteClass is already resolved upstream (resolver→bridge→ARA).
+  var MARINE_VISUAL_TUNING = {
+    'tug-boat':        { scale: 1.35, shadow: 1.20, opacity: 1.00, priority: 1.15 },
+    'pilot-boat':      { scale: 1.30, shadow: 1.15, opacity: 1.00, priority: 1.15 },
+    'service-boat':    { scale: 1.25, shadow: 1.15, opacity: 1.00, priority: 1.10 },
+    'police-boat':     { scale: 1.30, shadow: 1.15, opacity: 1.00, priority: 1.25 },
+    'fire-boat':       { scale: 1.35, shadow: 1.20, opacity: 1.00, priority: 1.30 },
+    'cargo-ship':      { scale: 1.20, shadow: 1.25, opacity: 1.00, priority: 1.10 },
+    'container-ship':  { scale: 1.25, shadow: 1.30, opacity: 1.00, priority: 1.15 },
+    'tanker':          { scale: 1.25, shadow: 1.30, opacity: 1.00, priority: 1.15 },
+    'barge':           { scale: 1.25, shadow: 1.35, opacity: 0.95, priority: 1.05 },
+    'passenger-ferry': { scale: 1.25, shadow: 1.25, opacity: 1.00, priority: 1.20 },
+    'cruise-ship':     { scale: 1.35, shadow: 1.35, opacity: 1.00, priority: 1.20 },
+    'yacht':           { scale: 1.20, shadow: 1.10, opacity: 1.00, priority: 1.00 },
+    'sailboat':        { scale: 1.45, shadow: 1.10, opacity: 1.00, priority: 1.10 },
+    'fishing-boat':    { scale: 1.25, shadow: 1.15, opacity: 1.00, priority: 1.05 },
+    'unknown-vessel':  { scale: 0.90, shadow: 0.85, opacity: 0.72, priority: 0.70 },
+    'vessel-generic':  { scale: 0.95, shadow: 0.90, opacity: 0.82, priority: 0.80 },
+  };
+  var _marineVisualTuningEnabled = true;
+  var _marineTuneStats = { tunedActorCount: 0, bySilhouette: {}, lastTunedActorId: null, lastTunedSilhouette: null };
+  var _marineTunedIds = {};   // unique-actor accounting (avoid per-frame inflation)
+  function _resolveMarineVisualTuning(silhouetteClass) {
+    if (!_marineVisualTuningEnabled) return null;
+    return MARINE_VISUAL_TUNING[silhouetteClass] || null;
+  }
+  function _recordMarineTune(actorId, silhouetteClass) {
+    if (!_marineTunedIds[actorId]) {
+      _marineTunedIds[actorId] = true;
+      _marineTuneStats.tunedActorCount++;
+      _marineTuneStats.bySilhouette[silhouetteClass] = (_marineTuneStats.bySilhouette[silhouetteClass] || 0) + 1;
+    }
+    _marineTuneStats.lastTunedActorId = actorId;
+    _marineTuneStats.lastTunedSilhouette = silhouetteClass;
+  }
+  function setMarineVisualTuningEnabled(on) { _marineVisualTuningEnabled = on !== false; return _marineVisualTuningEnabled; }
+  function getMarineVisualTuningState() {
+    return {
+      enabled: _marineVisualTuningEnabled,
+      profileCount: Object.keys(MARINE_VISUAL_TUNING).length,
+      tunedActorCount: _marineTuneStats.tunedActorCount,
+      bySilhouette: (function () { var o = {}; for (var k in _marineTuneStats.bySilhouette) o[k] = _marineTuneStats.bySilhouette[k]; return o; })(),
+      lastTunedActorId: _marineTuneStats.lastTunedActorId,
+      lastTunedSilhouette: _marineTuneStats.lastTunedSilhouette,
+    };
+  }
   function _palette(payload) {
     var ref = payload && payload.paletteRef;
     var reg = global.SBE && SBE.ActorPresentationPaletteRegistry;
@@ -1190,6 +1246,148 @@
     return g;
   }
 
+  // ── 0604M Bus asset pack — distinct fleet silhouettes (+Y front) ────────────
+  // Additive bus-class builders. `city-bus` (above) is untouched. Each class is a
+  // readable low-poly transit form differentiated by length/height/accent so the
+  // fleet hierarchy is identifiable from above. Presentation only.
+  var BUS_CLASS_DIM = {
+    'bus-standard':    { w: 3.2, l: 11.5, h: 2.8, accent: 0x2aa8ff, artic: false },
+    'bus-articulated': { w: 3.2, l: 18.0, h: 2.8, accent: 0x37d67a, artic: true  },
+    'bus-express':     { w: 3.0, l: 12.5, h: 3.1, accent: 0xffc400, artic: false },
+    'bus-shuttle':     { w: 2.6, l: 7.5,  h: 2.6, accent: 0xff7a3d, artic: false },
+  };
+  function _buildBusClassMesh(kind, payload) {
+    var THREE = global.THREE;
+    var D = BUS_CLASS_DIM[kind] || BUS_CLASS_DIM['bus-standard'];
+    var W = D.w, L = D.l, H = D.h;
+    var pal = _palette(payload);
+    var op = _materialOpacity(payload && payload.materialClass);
+    var vp = _visibilityProfile('city-bus') || {};
+    var g = new THREE.Group();
+    g.add(_contactShadow(W, L, payload && payload.priorityClass, vp.shadow));
+
+    if (D.artic) {
+      // Two body segments + accordion joint (reads as an articulated bus).
+      // 0605G.1 — rear + joint live in pivot groups at origin so bend can be
+      // applied/updated live without a full mesh rebuild.
+      var segL = L * 0.46;
+      var frontCy = L * 0.5 - segL * 0.5, rearCy = -L * 0.5 + segL * 0.5;
+      // Front segment (heading-aligned anchor).
+      var fseg = new THREE.Mesh(_box(W, segL, H * 0.74), _matBasic(pal.body, { transparent: op < 1, opacity: op }));
+      fseg.position.set(0, frontCy, H * 0.37); if (fseg.userData) fseg.userData.part = 'front'; g.add(fseg);
+      var froof = new THREE.Mesh(_box(W * 0.97, segL * 0.96, H * 0.30), _matBasic(pal.roof));
+      froof.position.set(0, frontCy, H * 0.74 + H * 0.15); g.add(froof);
+      // Rear segment group (pivot at origin / joint).
+      var rearGroup = new THREE.Group(); if (rearGroup.userData) rearGroup.userData.part = 'rear';
+      var rseg = new THREE.Mesh(_box(W, segL, H * 0.74), _matBasic(pal.body, { transparent: op < 1, opacity: op }));
+      rseg.position.set(0, rearCy, H * 0.37); rearGroup.add(rseg);
+      var rroof = new THREE.Mesh(_box(W * 0.97, segL * 0.96, H * 0.30), _matBasic(pal.roof));
+      rroof.position.set(0, rearCy, H * 0.74 + H * 0.15); rearGroup.add(rroof);
+      g.add(rearGroup);
+      // Accordion joint group.
+      var jointGroup = new THREE.Group(); if (jointGroup.userData) jointGroup.userData.part = 'joint';
+      var joint = new THREE.Mesh(_box(W * 0.9, L * 0.08, H * 0.72), _matBasic(pal.side));
+      joint.position.set(0, 0, H * 0.36); jointGroup.add(joint);
+      g.add(jointGroup);
+      // Tag the group + apply the initial bend.
+      if (g.userData) {
+        g.userData.articulated = true;
+        g.userData.articulationParts = { front: fseg, joint: jointGroup, rear: rearGroup };
+      }
+      var initBend = (payload && typeof payload.articulationBendDeg === 'number' && isFinite(payload.articulationBendDeg)) ? payload.articulationBendDeg : 0;
+      var initSimpl = !!(payload && payload.metadata && payload.metadata.articulationSimplified);
+      var ir = (initSimpl ? 0 : initBend) * Math.PI / 180;
+      jointGroup.rotation.z = ir * 0.5; rearGroup.rotation.z = ir;
+      if (g.userData) { g.userData.articulationBendDeg = initSimpl ? 0 : initBend; g.userData.articulationSimplified = initSimpl; }
+    } else {
+      var body = new THREE.Mesh(_box(W, L, H * 0.74), _matBasic(pal.body, { transparent: op < 1, opacity: op }));
+      body.position.z = H * 0.37; g.add(body);
+      var roof = new THREE.Mesh(_box(W * 0.97, L * 0.97, H * 0.30), _matBasic(pal.roof));
+      roof.position.z = H * 0.74 + H * 0.15; g.add(roof);
+    }
+
+    // Window strips (express = darker tint).
+    var glassOp = (kind === 'bus-express') ? 0.7 : 0.95;
+    [ W * 0.5, -W * 0.5 ].forEach(function (x) {
+      var strip = new THREE.Mesh(_box(0.08, L * 0.9, H * 0.4), _matBasic(pal.glass, { transparent: true, opacity: glassOp }));
+      strip.position.set(x, 0, H * 0.55); g.add(strip);
+    });
+    var wind = new THREE.Mesh(new THREE.PlaneGeometry(W * 0.84, H * 0.46), _matBasic(pal.glass, { transparent: true, opacity: 0.9, side: THREE.DoubleSide }));
+    wind.position.set(0, L * 0.49, H * 0.58); wind.rotation.x = 0.2; g.add(wind);
+    var fascia = new THREE.Mesh(_box(W * 0.98, 0.18, H * 0.5), _matBasic(pal.side));
+    fascia.position.set(0, L * 0.5, H * 0.3); g.add(fascia);
+    // Class accent strip (colour encodes the fleet class).
+    var rstrip = new THREE.Mesh(_box(W * 0.86, 0.5, H * 0.3), _matBasic(D.accent));
+    rstrip.position.set(0, L * 0.45, H * 0.2); g.add(rstrip);
+    _lightCues(g, (payload && payload.lightClass) || 'head-tail', pal, W, L, H);
+    g._busClass = kind;
+    _recordShapeBuild('identity:' + kind, 'vehicle.bus', payload && payload.paletteRef, { w: W, l: L, h: H });
+    return g;
+  }
+
+  // 0605G.1 — apply an updated articulation bend to an EXISTING articulated mesh
+  // by rotating the named joint/rear pivot groups. Bend-only → no rebuild. Skips
+  // non-articulated meshes and sub-epsilon changes. Never mutates truth.
+  function _readPayloadBend(v) {
+    if (v && typeof v.articulationBendDeg === 'number' && isFinite(v.articulationBendDeg)) return v.articulationBendDeg;
+    if (v && v.metadata && typeof v.metadata.articulationBendDeg === 'number' && isFinite(v.metadata.articulationBendDeg)) return v.metadata.articulationBendDeg;
+    return 0;
+  }
+  function _applyArticulationLiveUpdate(mesh, v) {
+    if (!mesh || !mesh.userData || !mesh.userData.articulated) return false;
+    var parts = mesh.userData.articulationParts;
+    if (!parts) return false;
+    var newSimplified = !!(v && v.metadata && v.metadata.articulationSimplified);
+    var effBend = newSimplified ? 0 : _readPayloadBend(v);
+    var prevBend = mesh.userData.articulationBendDeg || 0;
+    var simplifiedChanged = (!!mesh.userData.articulationSimplified !== newSimplified);
+    if (!simplifiedChanged && Math.abs(effBend - prevBend) < ARTICULATION_BEND_EPSILON_DEG) return false;
+    var rad = effBend * Math.PI / 180;
+    if (parts.joint && parts.joint.rotation) parts.joint.rotation.z = rad * 0.5;
+    if (parts.rear && parts.rear.rotation) parts.rear.rotation.z = rad;
+    mesh.userData.articulationBendDeg = effBend;
+    mesh.userData.articulationSimplified = newSimplified;
+    _articulationLiveUpdateCount++;
+    _lastArticulationUpdate = { id: v && v.id, bendDeg: Math.round(effBend * 100) / 100, simplified: newSimplified, timestamp: Date.now() };
+    return true;
+  }
+  function _articulationMeshDebug(id) {
+    var m = _meshes[id];
+    if (!m) return { meshFound: false, id: id };
+    var ud = m.userData || {};
+    var partCount = ud.articulationParts ? Object.keys(ud.articulationParts).length : 0;
+    return { meshFound: true, id: id, articulated: !!ud.articulated, bendDeg: ud.articulationBendDeg != null ? ud.articulationBendDeg : null,
+      simplified: !!ud.articulationSimplified, partCount: partCount };
+  }
+
+  // 0605G — single articulated segment (front box / accordion joint / rear box).
+  // Optional `payload.articulationBendDeg` rotates the part for a visible bend.
+  function _buildBusSegmentMesh(kind, payload) {
+    var THREE = global.THREE;
+    var pal = _palette(payload);
+    var W = 3.2, H = 2.8;
+    var g = new THREE.Group();
+    g.add(_contactShadow(W, 9, payload && payload.priorityClass));
+    var bend = (payload && typeof payload.articulationBendDeg === 'number' && isFinite(payload.articulationBendDeg)) ? payload.articulationBendDeg : 0;
+    if (kind === 'bus-articulated-joint') {
+      var acc = new THREE.Mesh(_box(W * 0.9, 1.6, H * 0.72), _matBasic(pal.side));
+      acc.position.z = H * 0.37; g.add(acc);
+      for (var r = -1; r <= 1; r++) { var rib = new THREE.Mesh(_box(W * 0.95, 0.18, H * 0.74), _matBasic(pal.body, { transparent: true, opacity: 0.6 })); rib.position.set(0, r * 0.5, H * 0.37); g.add(rib); }
+    } else {
+      var L = 8.5;
+      var body = new THREE.Mesh(_box(W, L, H * 0.74), _matBasic(pal.body));
+      body.position.z = H * 0.37; g.add(body);
+      var roof = new THREE.Mesh(_box(W * 0.97, L * 0.96, H * 0.30), _matBasic(pal.roof));
+      roof.position.z = H * 0.74 + H * 0.15; g.add(roof);
+      [W * 0.5, -W * 0.5].forEach(function (x) { var strip = new THREE.Mesh(_box(0.08, L * 0.85, H * 0.4), _matBasic(pal.glass, { transparent: true, opacity: 0.92 })); strip.position.set(x, 0, H * 0.55); g.add(strip); });
+      if (kind === 'bus-articulated-front') { var rstrip = new THREE.Mesh(_box(W * 0.86, 0.5, H * 0.3), _matBasic(0x37d67a)); rstrip.position.set(0, L * 0.45, H * 0.2); g.add(rstrip); }
+    }
+    if (bend) g.rotation.z = (kind === 'bus-articulated-rear' ? -bend : bend) * Math.PI / 180;
+    g._busClass = kind;
+    _recordShapeBuild('identity:' + kind, 'vehicle.bus', payload && payload.paletteRef, { w: W, h: H });
+    return g;
+  }
+
   // 2. Utility truck — chunky civic service vehicle with equipment block (+Y front).
   // 0603K: taller equipment box, bolder hazard stripe, wider amber beacon bar.
   function _buildUtilityTruckMesh(payload) {
@@ -1224,21 +1422,175 @@
     var op = _materialOpacity(payload && payload.materialClass);
     var vp = _visibilityProfile(kind) || {};
     var g = new THREE.Group();
-    g.add(_contactShadow(W, L, (payload && payload.priorityClass) || 'harbor-truth', vp.shadow));
+    g.add(_contactShadow(W, L, (payload && payload.priorityClass) || 'harbor-truth', (vp.shadow || 1.0) * _marineTuneShadowMul(kind)));
     var hull = new THREE.Mesh(_box(W, L * 0.92, H * 0.5), _matBasic(pal.side, { transparent: op < 1, opacity: op }));
     hull.position.z = H * 0.25; g.add(hull);
     // More prominent bow wedge (+Y).
     var bow = new THREE.Mesh(new THREE.CylinderGeometry(0.1, W * 0.55, L * 0.24, 3), _matBasic(pal.side));
     bow.rotation.x = -Math.PI / 2; bow.position.set(0, L * 0.52, H * 0.25); g.add(bow);
-    // Taller, brighter deckhouse clearly above the hull deck.
+    // Broad passenger deckhouse clearly above the hull deck.
     var cab = new THREE.Mesh(_box(W * 0.74, L * 0.52, H * 0.7), _matBasic(pal.roof));
     cab.position.set(0, -L * 0.05, H * 0.5 + H * 0.35); g.add(cab);
+    // 0604F — passenger window strip (ferry/cruise read as public transit from above).
+    var isPassenger = (kind === 'passenger-ferry' || kind === 'cruise-ship');
+    if (isPassenger) {
+      [ W * 0.38, -W * 0.38 ].forEach(function (x) {
+        var win = new THREE.Mesh(_box(0.1, L * 0.5, H * 0.28), _matBasic(pal.glass, { transparent: true, opacity: 0.92 }));
+        win.position.set(x, -L * 0.05, H * 0.5 + H * 0.32); g.add(win);
+      });
+    }
     _lightCues(g, (payload && payload.lightClass) || 'navigation', pal, W, L, H);
-    _recordShapeBuild('identity:' + kind, 'marine', payload && payload.paletteRef, { w: W, l: L, h: H });
+    g._marineGeometryKind = kind;
+    _recordShapeBuild('marine:' + kind, 'marine', payload && payload.paletteRef, { w: W, l: L, h: H });
     return g;
   }
-  function _buildVesselMesh(payload) { return _buildHullMesh(payload, 5.0, 18.0, 2.5, 'vessel-generic'); }
-  function _buildFerryMesh(payload)  { return _buildHullMesh(payload, 6.0, 22.0, 3.2, 'passenger-ferry'); }
+  function _buildVesselMesh(payload) { return _buildHullMesh(payload, 7.0, 24.0, 4.0, 'vessel-generic'); }
+  function _buildFerryMesh(payload)  { return _buildHullMesh(payload, 10.0, 35.0, 6.0, 'passenger-ferry'); }
+  // 0604F — cruise reads taller/longer than a commuter ferry.
+  function _buildCruiseMesh(payload) { return _buildHullMesh(payload, 12.0, 48.0, 9.0, 'cruise-ship'); }
+  // 0604F — centralized marine shadow multiplier (keeps tuning in one place).
+  function _marineTuneShadowMul(kind) { var t = _resolveMarineVisualTuning(kind); return (t && t.shadow != null) ? t.shadow : 1.0; }
+
+  // ── 0603W Marine geometry pass — compact low-poly silhouettes (+Y = bow) ─────
+  // Shared marine primitives: hull box, bow wedge, contact shadow, lights.
+  function _marineHull(g, pal, W, L, H, hullFrac) {
+    var THREE = global.THREE;
+    var hf = hullFrac || 0.5;
+    var hull = new THREE.Mesh(_box(W, L * 0.9, H * hf), _matBasic(pal.side));
+    hull.position.z = H * hf * 0.5; g.add(hull);
+    var bow = new THREE.Mesh(new THREE.CylinderGeometry(0.1, W * 0.52, L * 0.18, 3), _matBasic(pal.side));
+    bow.rotation.x = -Math.PI / 2; bow.position.set(0, L * 0.5, H * hf * 0.5); g.add(bow);
+    return H * hf;   // deck height
+  }
+
+  // Workboats: tug / pilot / service / police / fire / fishing — compact hull,
+  // high forward cabin, rear deck, optional rig. Differentiated by palette/light.
+  function _buildMarineWorkboatMesh(kind, payload) {
+    var THREE = global.THREE;
+    var pal = _palette(payload);
+    var fishing = (kind === 'fishing-boat');
+    var W = fishing ? 5.0 : 5.0, L = fishing ? 16.0 : 14.0, H = fishing ? 3.0 : 3.5;
+    var g = new THREE.Group();
+    g.add(_contactShadow(W, L, (payload && payload.priorityClass) || 'commercial', _marineTuneShadowMul(kind)));
+    var deck = _marineHull(g, pal, W, L, H, 0.5);
+    // 0604F — taller, forward-set cabin so workboats read chunky from above.
+    var cab = new THREE.Mesh(_box(W * 0.74, L * (fishing ? 0.30 : 0.42), H * 0.92), _matBasic(pal.roof));
+    cab.position.set(0, fishing ? L * 0.22 : L * 0.12, deck + H * 0.46); g.add(cab);
+    // Flatter, visibly separate rear deck.
+    var rear = new THREE.Mesh(_box(W * 0.92, L * 0.32, H * 0.10), _matBasic(pal.body));
+    rear.position.set(0, -L * 0.30, deck + H * 0.05); g.add(rear);
+    // 0604F — roof beacon cap for service/emergency light classes.
+    var lc = payload && payload.lightClass;
+    if (lc === 'amber-flash' || lc === 'nav-strobe' || kind === 'fire-boat' || kind === 'police-boat') {
+      var beacon = new THREE.Mesh(_box(W * 0.3, L * 0.08, H * 0.18),
+        _matBasic(kind === 'fire-boat' ? 0xff3b30 : (kind === 'police-boat' ? 0x2b6cff : pal.accent)));
+      beacon.position.set(0, fishing ? L * 0.22 : L * 0.12, deck + H * 0.98); g.add(beacon);
+    }
+    if (fishing) {   // small mast/rig pole
+      var mast = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, H * 1.4, 6), _matBasic(pal.accent));
+      mast.position.set(0, L * 0.1, deck + H * 1.0); g.add(mast);
+    }
+    _lightCues(g, (payload && payload.lightClass) || 'navigation', pal, W, L, H);
+    g._marineGeometryKind = kind;
+    _recordShapeBuild('marine:' + kind, 'marine', payload && payload.paletteRef, { w: W, l: L, h: H });
+    return g;
+  }
+
+  // Cargo-like: cargo-ship / container-ship / tanker / barge — long hull, role
+  // superstructure (stacks / containers / tank capsules / flat deck).
+  function _buildMarineCargoLikeMesh(kind, payload) {
+    var THREE = global.THREE;
+    var pal = _palette(payload);
+    var DIM = {
+      'cargo-ship':     { w: 10, l: 45, h: 6 }, 'container-ship': { w: 14, l: 75, h: 8 },
+      'tanker':         { w: 13, l: 70, h: 7 }, 'barge':          { w: 16, l: 55, h: 2 },
+    }[kind] || { w: 12, l: 50, h: 6 };
+    var W = DIM.w, L = DIM.l, H = DIM.h;
+    var g = new THREE.Group();
+    g.add(_contactShadow(W, L, (payload && payload.priorityClass) || 'commercial', _marineTuneShadowMul(kind)));
+
+    if (kind === 'barge') {
+      // Flat low deck raft — no tall cabin.
+      var flat = new THREE.Mesh(_box(W, L * 0.96, H), _matBasic(pal.side));
+      flat.position.z = H * 0.5; g.add(flat);
+      for (var p = -1; p <= 1; p++) {   // deck panel seams
+        var panel = new THREE.Mesh(_box(W * 0.9, L * 0.26, H * 0.2), _matBasic(pal.body, { transparent: true, opacity: 0.5 }));
+        panel.position.set(0, p * L * 0.3, H + 0.05); g.add(panel);
+      }
+      g._marineGeometryKind = kind;
+      _recordShapeBuild('marine:barge', 'marine', payload && payload.paletteRef, { w: W, l: L, h: H });
+      return g;
+    }
+
+    var deck = _marineHull(g, pal, W, L, H, 0.55);
+    if (kind === 'tanker') {
+      // Rounded tank capsules along the deck + small rear bridge.
+      for (var t = -1; t <= 1; t++) {
+        var tank = new THREE.Mesh(new THREE.CylinderGeometry(W * 0.32, W * 0.32, L * 0.22, 10), _matBasic(pal.roof));
+        tank.position.set(0, t * L * 0.24, deck + W * 0.3); g.add(tank);
+      }
+      var br = new THREE.Mesh(_box(W * 0.7, L * 0.1, H * 0.6), _matBasic(pal.body));
+      br.position.set(0, -L * 0.42, deck + H * 0.3); g.add(br);
+      // 0604F — red deck accent stripe so tankers read as industrial/hazard.
+      var stripe = new THREE.Mesh(_box(W * 0.9, L * 0.86, 0.25), _matBasic(pal.accent || 0xcc2222));
+      stripe.position.set(0, 0, deck + 0.14); g.add(stripe);
+    } else if (kind === 'container-ship') {
+      // Grid of small container blocks + rear cabin.
+      for (var row = -2; row <= 2; row++) {
+        for (var col = -1; col <= 1; col++) {
+          var box = new THREE.Mesh(_box(W * 0.26, L * 0.14, H * 0.5),
+            _matBasic([0xe63e2a, 0x2b8cde, 0xf5c518, 0x3ab56f][(row + col + 8) % 4]));
+          box.position.set(col * W * 0.3, row * L * 0.16, deck + H * 0.25); g.add(box);
+        }
+      }
+      var ccab = new THREE.Mesh(_box(W * 0.8, L * 0.08, H * 0.7), _matBasic(pal.roof));
+      ccab.position.set(0, -L * 0.42, deck + H * 0.35); g.add(ccab);
+    } else {
+      // Cargo — 3 block stacks + rear cabin.
+      for (var s = -1; s <= 1; s++) {
+        var stack = new THREE.Mesh(_box(W * 0.7, L * 0.18, H * 0.45), _matBasic(pal.body));
+        stack.position.set(0, s * L * 0.2 + L * 0.05, deck + H * 0.22); g.add(stack);
+      }
+      var cab2 = new THREE.Mesh(_box(W * 0.8, L * 0.1, H * 0.7), _matBasic(pal.roof));
+      cab2.position.set(0, -L * 0.42, deck + H * 0.35); g.add(cab2);
+    }
+    _lightCues(g, (payload && payload.lightClass) || 'navigation', pal, W, L, H);
+    g._marineGeometryKind = kind;
+    _recordShapeBuild('marine:' + kind, 'marine', payload && payload.paletteRef, { w: W, l: L, h: H });
+    return g;
+  }
+
+  // Private craft: yacht (sleek hull + cabin + glass) / sailboat (mast + sail).
+  function _buildMarinePrivateCraftMesh(kind, payload) {
+    var THREE = global.THREE;
+    var pal = _palette(payload);
+    var g = new THREE.Group();
+    if (kind === 'sailboat') {
+      var W = 4.0, L = 16.0, H = 2.0;
+      g.add(_contactShadow(W, L, (payload && payload.priorityClass) || 'background', _marineTuneShadowMul('sailboat')));
+      var deck = _marineHull(g, pal, W, L, H, 0.5);
+      // 0604F — taller mast + larger sail so the rig reads from an angled view.
+      var mast = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 12.5, 6), _matBasic(pal.roof));
+      mast.position.set(0, L * 0.05, deck + 6.25); g.add(mast);
+      // Triangular sail plane (between bow and mast).
+      var sail = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 3.2, 11.0, 3), _matBasic(pal.accent, { side: THREE.DoubleSide }));
+      sail.rotation.z = -0.18; sail.position.set(0, L * 0.18, deck + 5.6); g.add(sail);
+      g._marineGeometryKind = 'sailboat';
+      _recordShapeBuild('marine:sailboat', 'marine', payload && payload.paletteRef, { w: W, l: L, h: H });
+      return g;
+    }
+    // Yacht — tapered hull, low cabin, glass strip, pointed bow.
+    var yW = 4.5, yL = 18.0, yH = 3.0;
+    g.add(_contactShadow(yW, yL, (payload && payload.priorityClass) || 'background', _marineTuneShadowMul('yacht')));
+    var ydeck = _marineHull(g, pal, yW, yL, yH, 0.42);
+    var cabin = new THREE.Mesh(_box(yW * 0.7, yL * 0.5, yH * 0.4), _matBasic(pal.roof));
+    cabin.position.set(0, yL * 0.02, ydeck + yH * 0.22); g.add(cabin);
+    var glass = new THREE.Mesh(_box(yW * 0.74, yL * 0.36, yH * 0.18), _matBasic(pal.glass, { transparent: true, opacity: 0.8 }));
+    glass.position.set(0, yL * 0.06, ydeck + yH * 0.34); g.add(glass);
+    g._marineGeometryKind = 'yacht';
+    _recordShapeBuild('marine:yacht', 'marine', payload && payload.paletteRef, { w: yW, l: yL, h: yH });
+    return g;
+  }
 
   // 6. Aircraft light token — low-poly cross (wing + fuselage + tail). 0603K:
   // wider wing/tail span and forced opacity 1.0 so it reads from regional zoom.
@@ -1266,16 +1618,39 @@
     var sil = payload.silhouetteClass;
     switch (sil) {
       case 'city-bus':        return _buildCityBusMesh(payload);
+      // 0604M — distinct bus fleet silhouettes.
+      case 'bus-standard':
+      case 'bus-articulated':
+      case 'bus-express':
+      case 'bus-shuttle':     return _buildBusClassMesh(sil, payload);
+      // 0605G — articulated bus segment silhouettes (front / joint / rear).
+      case 'bus-articulated-front':
+      case 'bus-articulated-joint':
+      case 'bus-articulated-rear': return _buildBusSegmentMesh(sil, payload);
       case 'utility-truck':   return _buildUtilityTruckMesh(payload);
       case 'station-node':    return _buildStationMesh(variant, visualState, payload);
-      case 'vessel-generic':  return _buildVesselMesh(payload);
-      case 'passenger-ferry': return _buildFerryMesh(payload);
       case 'aircraft-light':  return _buildAircraftTokenMesh(payload);
+      // 0603W — distinct marine silhouettes.
+      case 'vessel-generic':
+      case 'unknown-vessel':  return _buildVesselMesh(payload);
+      case 'passenger-ferry': return _buildFerryMesh(payload);
+      case 'cruise-ship':     return _buildCruiseMesh(payload);
+      case 'tug-boat':
+      case 'pilot-boat':
+      case 'service-boat':
+      case 'police-boat':
+      case 'fire-boat':
+      case 'fishing-boat':    return _buildMarineWorkboatMesh(sil, payload);
+      case 'cargo-ship':
+      case 'container-ship':
+      case 'tanker':
+      case 'barge':           return _buildMarineCargoLikeMesh(sil, payload);
+      case 'yacht':
+      case 'sailboat':        return _buildMarinePrivateCraftMesh(sil, payload);
     }
-    // 0603T — marine asset-pack silhouettes WSL doesn't yet model fall back to
-    // the generic vessel / ferry builders (NOT a car). Presentation only.
+    // Safety net: any other marine-ish silhouette → generic vessel (never a car).
     if (/ferry|cruise/.test(sil)) return _buildFerryMesh(payload);
-    if (/boat|ship|vessel|tanker|barge|yacht|sailboat/.test(sil)) return _buildVesselMesh(payload);
+    if (/boat|ship|vessel|tanker|barge|yacht|sailboat|marine/.test(sil)) return _buildVesselMesh(payload);
     return null;   // ambient-car etc. → existing builders
   }
 
@@ -2060,10 +2435,15 @@
     // 0603J/0603K — apply identity scale-class × visibility multipliers ONCE
     // (resolved is fresh each upsert, so this never compounds). Floor prevents
     // collapse into scene noise. Only for identity-bearing actors.
+    // 0604F — resolve marine visual tuning once (null when disabled / non-marine).
+    var _mvt = _resolveMarineVisualTuning(v.silhouetteClass);
     if (v.scaleClass || v.silhouetteClass) {
       var idScale = _scaleClassMul(v.scaleClass) * _visibilityScaleMul(v.silhouetteClass);
+      if (_mvt && _mvt.scale != null) idScale *= _mvt.scale;   // applied to fresh resolve → never compounds
       resolved.finalScale = Math.max(VISIBILITY_SCALE_FLOOR, resolved.finalScale * idScale);
     }
+    // 0604F — effective opacity: classified vessels stay full; unknown/generic muted.
+    var _marineOpacity = (_mvt && _mvt.opacity != null && _mvt.opacity < 1) ? _mvt.opacity : null;
 
     // Create/rebuild mesh only when the actor DEFINITION changes:
     //   - new actor (no prev mesh)
@@ -2125,6 +2505,9 @@
         if (v.assetCategory != null) mesh._assetCategory = v.assetCategory;
         if (v.assetLabel != null)    mesh._assetLabel    = v.assetLabel;
         if (v.renderVariant != null) mesh._renderVariant = v.renderVariant;
+        // 0603W — taxonomy annotations (stored, never resolved by WSL).
+        if (v.taxonomyRole != null)       mesh._taxonomyRole       = v.taxonomyRole;
+        if (v.taxonomyConfidence != null) mesh._taxonomyConfidence = v.taxonomyConfidence;
         if (v.materialClass != null)     mesh._materialClass     = v.materialClass;
         if (v.lightClass != null)        mesh._lightClass        = v.lightClass;
         if (v.decalClass != null)        mesh._decalClass        = v.decalClass;
@@ -2139,7 +2522,16 @@
           var _vp = _visibilityProfile(v.silhouetteClass);
           mesh._visibilityShadowMultiplier = _vp && _vp.shadow != null ? _vp.shadow : 1.0;
         }
-        if (v.opacity != null && v.opacity < 1) _setMeshOpacity(mesh, v.opacity);
+        // 0604F — stamp marine tuning for debug + record stats (fresh build only).
+        if (_mvt) {
+          mesh._marineTuning = { scale: _mvt.scale, shadow: _mvt.shadow, opacity: _mvt.opacity, priority: _mvt.priority };
+          mesh._marineTuneScale = _mvt.scale; mesh._marineTuneOpacity = _mvt.opacity;
+          _recordMarineTune(v.id, v.silhouetteClass);
+        }
+        // 0604F — apply effective opacity (explicit payload opacity wins if lower).
+        var _buildOpacity = (v.opacity != null && v.opacity < 1) ? v.opacity : 1;
+        if (_marineOpacity != null && _marineOpacity < _buildOpacity) _buildOpacity = _marineOpacity;
+        if (_buildOpacity < 1) _setMeshOpacity(mesh, _buildOpacity);
         _meshes[v.id]   = mesh;
         // Per-object scene (created when renderer ready; re-attached in onAdd otherwise)
         if (global.THREE && (_scene || _renderer)) _scenes[v.id] = _makeScene(mesh);
@@ -2163,10 +2555,15 @@
       return false;
     }
 
+    // 0605G.1 — live articulation bend update (transform-only; no rebuild for
+    // bend changes, only for non-articulated meshes does this no-op).
+    try { _applyArticulationLiveUpdate(_meshes[v.id], v); } catch (e) {}
+
     // 0603E — opacity reinforcement for truth actors (e.g. station nodes). Only
     // re-applies when the target actually changed (avoids per-frame churn).
-    if (v.opacity != null) {
-      var tgt = Math.max(0, Math.min(1, Number(v.opacity)));
+    if (v.opacity != null || _marineOpacity != null) {
+      var tgt = (v.opacity != null) ? Math.max(0, Math.min(1, Number(v.opacity))) : 1;
+      if (_marineOpacity != null && _marineOpacity < tgt) tgt = _marineOpacity;   // 0604F muted vessels
       var em = _meshes[v.id];
       if (em && (em._appliedOpacity == null || Math.abs(em._appliedOpacity - tgt) > 0.001)) {
         _setMeshOpacity(em, tgt);
@@ -3177,6 +3574,52 @@
     getDepthState:          getDepthState,
     getActorDepthPolicyState: getActorDepthPolicyState,
     getActorVisibilityProfile: function () { var o = {}; for (var k in ACTOR_VISIBILITY_PROFILE) if (ACTOR_VISIBILITY_PROFILE.hasOwnProperty(k)) o[k] = ACTOR_VISIBILITY_PROFILE[k]; return o; },
+    // 0604F — harbor visual differentiation tuning (presentation only).
+    setMarineVisualTuningEnabled: setMarineVisualTuningEnabled,
+    getMarineVisualTuningState:   getMarineVisualTuningState,
+    // 0605G.1 — articulation live-update state + per-mesh inspection.
+    getArticulationLiveState: function () {
+      return { articulationLiveUpdateCount: _articulationLiveUpdateCount, lastArticulationUpdate: _lastArticulationUpdate,
+        bendEpsilonDeg: ARTICULATION_BEND_EPSILON_DEG };
+    },
+    getArticulationMeshDebug: function (id) { return _articulationMeshDebug(id); },
+    getMarineVisualTuning: function () { var o = {}; for (var k in MARINE_VISUAL_TUNING) if (MARINE_VISUAL_TUNING.hasOwnProperty(k)) o[k] = MARINE_VISUAL_TUNING[k]; return o; },
+    getMarineVisualSample: function () {
+      var rows = [];
+      for (var id in _meshes) {
+        if (!_meshes.hasOwnProperty(id)) continue;
+        var m = _meshes[id]; if (!m) continue;
+        var sil = m._silhouetteClass || null;
+        if (!sil || !MARINE_VISUAL_TUNING.hasOwnProperty(sil)) {
+          // include only marine-ish meshes (have a marine geometry kind).
+          if (!m._marineGeometryKind) continue;
+        }
+        var v = _vehicles[id] || {};
+        rows.push({
+          id: id, name: v.label || v.name || null,
+          role: m._taxonomyRole || null,
+          confidence: m._taxonomyConfidence != null ? m._taxonomyConfidence : null,
+          assetId: m._assetId || null,
+          silhouetteClass: sil,
+          geometryKind: m._marineGeometryKind || null,
+          paletteRef: m._paletteRef || null,
+          scale: m._presentationScaleMultiplier != null ? Math.round(m._presentationScaleMultiplier * 1000) / 1000 : null,
+          marineTuneScale: m._marineTuneScale != null ? m._marineTuneScale : null,
+          opacity: m._appliedOpacity != null ? m._appliedOpacity : 1,
+          visible: m.visible !== false,
+        });
+      }
+      return rows;
+    },
+    // 0603W — read-only mesh presentation stamps for a registered actor.
+    getMeshDebug: function (id) {
+      var m = _meshes[id];
+      if (!m) return null;
+      return { _marineGeometryKind: m._marineGeometryKind || null, _presentationMeshKind: m._presentationMeshKind || null,
+        _assetId: m._assetId || null, _assetKey: m._assetKey || null, _silhouetteClass: m._silhouetteClass || null,
+        _taxonomyRole: m._taxonomyRole || null, _taxonomyConfidence: m._taxonomyConfidence != null ? m._taxonomyConfidence : null,
+        _renderVariant: m._renderVariant || null };
+    },
     setVisibilityBoost:     setVisibilityBoost,
     getVisibilityBoost:     getVisibilityBoost,
     setHeroAlwaysOn:        setHeroAlwaysOn,

@@ -89,6 +89,21 @@
   function resolveVessel(input) {
     input = input || {};
     var shipType = _extractShipType(input);
+
+    // 0604C — if raw AIS shipType is absent, consult the read-only normalizer for
+    // a derived pseudo shipType (name/dimension hint). Never mutates input.
+    var normInfo = null;
+    if (shipType == null && SBE.AISMetadataNormalizer && typeof SBE.AISMetadataNormalizer.normalize === 'function') {
+      try {
+        var nr = SBE.AISMetadataNormalizer.normalize(input);
+        if (nr && nr.ok && nr.inference && nr.inference.applied && nr.inference.pseudoShipType != null) {
+          shipType = nr.inference.pseudoShipType;
+          normInfo = { normalized: true, normalizationSource: nr.inference.source,
+            normalizationConfidence: nr.inference.confidence, normalizationReason: nr.inference.reason };
+        }
+      } catch (e) {}
+    }
+
     var nameHint = _nameHint(input);
     var lengthM = _num(input.lengthM) || (input.metadata && _num(input.metadata.lengthM)) || null;
     var name = ((input.name || '') + '').toLowerCase();
@@ -97,8 +112,17 @@
 
     if (shipType != null) {
       var r = _roleFromShipType(shipType);
-      if (r) { role = r.role; source = 'shipType'; confidence = r.range ? 0.80 : 0.90;
-        reason = 'AIS shipType ' + shipType + ' maps to ' + role; }
+      if (r) {
+        role = r.role;
+        if (normInfo) {
+          // Derived pseudo shipType — keep confidence at the normalizer's level, not raw-AIS level.
+          source = 'normalized'; confidence = Math.min(r.range ? 0.80 : 0.90, normInfo.normalizationConfidence);
+          reason = 'Normalized pseudo shipType ' + shipType + ' maps to ' + role + ' (' + normInfo.normalizationReason + ')';
+        } else {
+          source = 'shipType'; confidence = r.range ? 0.80 : 0.90;
+          reason = 'AIS shipType ' + shipType + ' maps to ' + role;
+        }
+      }
     }
     if (!role) { var tr = _textRole(input); if (tr) { role = tr; source = 'vesselType'; confidence = 0.70; reason = 'Declared vessel type maps to ' + role; } }
     if (!role && nameHint) { role = nameHint; source = 'name'; confidence = 0.65; reason = 'Name/callsign hint maps to ' + role; }
@@ -149,6 +173,10 @@
       assetId: assetId, assetLabel: asset ? asset.label : null,
       assetSilhouetteClass: asset ? asset.silhouetteClass : null,
       fallbackUsed: fallbackUsed,
+      normalized: !!normInfo,
+      normalizationSource: normInfo ? normInfo.normalizationSource : null,
+      normalizationConfidence: normInfo ? normInfo.normalizationConfidence : null,
+      normalizationReason: normInfo ? normInfo.normalizationReason : null,
       metadata: { expectedAISShipTypesMatched: expectedMatched, lengthM: lengthM },
     };
   }
