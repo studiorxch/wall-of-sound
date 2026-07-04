@@ -60,3 +60,6 @@ sound/data/**/*.aiff
 Archive
 wall_v20260508
 wall-of-sound/interesting-bohr-9b2e37
+
+# Local snapshots
+snapshots/
