@@ -1,0 +1,13 @@
+---
+title:
+source_url
+source_type
+creator:
+year:
+category:
+tags:
+visual_signals:
+usable_for:
+rights_status:
+notes:
+---

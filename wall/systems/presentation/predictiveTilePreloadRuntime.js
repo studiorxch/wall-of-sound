@@ -215,11 +215,18 @@
     if (_container && document.body.contains(_container)) return _container;
     _container = document.createElement('div');
     _container.id = 'wos-preload-map';
+    // Belt-and-suspenders containment: off-screen + opacity:0 + clip-path.
+    // clip-path:inset(100%) ensures nothing renders even if a parent CSS
+    // transform converts position:fixed to position:absolute (which would
+    // shift the -9999px origin and could expose the WebGL canvas in
+    // screenshot/capture tools or when embedded inside a transformed iframe.
     _container.style.cssText = [
       'position:fixed', 'left:-9999px', 'top:-9999px',
       'width:'  + MAP_WIDTH  + 'px',
       'height:' + MAP_HEIGHT + 'px',
       'opacity:0', 'pointer-events:none', 'z-index:-1',
+      'clip-path:inset(100%)',
+      'visibility:hidden',
     ].join(';');
     document.body.appendChild(_container);
     return _container;

@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Canvas Studio</title>
+  <link rel="stylesheet" href="../../wall/styles.css">
+  <link rel="stylesheet" href="../../wall/workspace.css">
+  <style>
+    /* Canvas Studio context — no Mapbox boot gate, no left-rail nav */
+    html, body { height: 100%; margin: 0; overflow: hidden; }
+
+    /* Bypass wos-booting/wos-runtime-ready reveal gate — canvas is immediately visible */
+    [data-surface-shell="legacy-editor"] {
+      opacity: 1 !important;
+      visibility: visible !important;
+      pointer-events: auto !important;
+    }
+
+    /* No left rail in canvas studio */
+    #left-panel { display: none !important; }
+
+    /* Tool group and tool subbar are visible here (hidden in Wall) */
+    .tool-group { display: flex !important; }
+    #canvas-tool-subbar { display: block !important; }
+
+    /* Stretch app-body to fill the iframe */
+    .app-body { height: 100vh; }
+  </style>
+</head>
+<body>
+  <!-- Hidden compat elements — controls.js and main.js query these by ID -->
+  <button id="clear-balls" style="display:none">Clear Balls</button>
+  <button id="load-example" style="display:none">Demo</button>
+  <label style="display:none"><input id="scene-file" type="file" accept="application/json"></label>
+  <button id="save-scene" style="display:none">Save</button>
+  <label style="display:none"><input id="text-font-file" type="file" accept=".ttf,.otf,.woff,.woff2,font/ttf,font/otf,font/woff,font/woff2"></label>
+  <input id="background-file" type="file" accept="image/*" style="display:none">
+  <select id="frame-select" style="display:none"><option value="phone">Phone</option><option value="tablet">Tablet</option><option value="desktop">Desktop</option></select>
+  <span id="text-font-status" style="display:none"></span>
+  <label style="display:none"><input id="transparent-bg" type="checkbox"></label>
+  <!-- Grid system compat stubs -->
+  <select id="grid-bank-select" style="display:none"></select>
+  <button id="generate-bauhaus-grid" style="display:none">Grid</button>
+  <button id="clear-grid-layers" style="display:none">Clear</button>
+  <div id="grid-layer-list" style="display:none"></div>
+  <div id="layer-controls-list" style="display:none"></div>
+  <!-- Shortcut HUD compat stub -->
+  <div id="shortcut-hud" style="display:none"><button id="close-shortcuts" type="button">×</button></div>
+
+  <!-- ── MAIN LAYOUT ─────────────────────────────────────────────────────── -->
+  <div class="app-body" data-surface-shell="legacy-editor">
+
+    <!-- Left panel — hidden, IDs preserved for JS compat -->
+    <aside id="left-panel" class="panel panel-left" hidden>
+      <button id="duplicate-selection" style="display:none" type="button">Duplicate</button>
+      <button id="delete-selection" style="display:none" type="button">Delete</button>
+      <button id="undo-action" style="display:none" type="button">Undo</button>
+      <div id="pattern-section" style="display:none">
+        <input type="number" id="grid-cols" value="3">
+        <input type="number" id="grid-rows" value="3">
+        <input type="number" id="grid-spacing-x" value="120">
+        <input type="number" id="grid-spacing-y" value="120">
+        <button id="duplicate-pattern" type="button">Duplicate</button>
+      </div>
+    </aside>
+
+    <!-- CENTER: Canvas authoring area -->
+    <main class="canvas-area">
+      <!-- Note column — MIDI note selector for sampler (R4: preserve sampler) -->
+      <div class="note-column" id="note-section" aria-label="Note selector">
+        <button class="note-cell active" data-note-class="0">C</button>
+        <button class="note-cell" data-note-class="1">C#</button>
+        <button class="note-cell" data-note-class="2">D</button>
+        <button class="note-cell" data-note-class="3">D#</button>
+        <button class="note-cell" data-note-class="4">E</button>
+        <button class="note-cell" data-note-class="5">F</button>
+        <button class="note-cell" data-note-class="6">F#</button>
+        <button class="note-cell" data-note-class="7">G</button>
+        <button class="note-cell" data-note-class="8">G#</button>
+        <button class="note-cell" data-note-class="9">A</button>
+        <button class="note-cell" data-note-class="10">A#</button>
+        <button class="note-cell" data-note-class="11">B</button>
+        <input id="active-note" type="hidden" value="60">
+      </div>
+
+      <div id="stage-grid"></div>
+      <div id="canvas-tool-subbar" class="canvas-tool-subbar"></div>
+
+      <!-- Viewport zoom controls -->
+      <div class="viewport-controls" id="viewport-controls">
+        <select id="viewport-mode" title="Orientation" style="background:var(--panel,#1a1a1f);border:1px solid rgba(255,255,255,0.12);color:inherit;font-size:10px;padding:2px 4px;border-radius:3px;cursor:pointer;opacity:0.7">
+          <option value="portrait">Portrait</option>
+          <option value="landscape">Landscape</option>
+        </select>
+        <button class="vp-btn" id="vp-zoom-out" title="Zoom Out (Ctrl −)">−</button>
+        <span class="vp-zoom-label" id="vp-zoom-label">100%</span>
+        <button class="vp-btn" id="vp-zoom-in" title="Zoom In (Ctrl +)">+</button>
+        <button class="vp-btn vp-btn--fit" id="vp-zoom-fit" title="Fit to view">Fit</button>
+      </div>
+
+      <!-- Canvas surface -->
+      <div class="canvas-wrap" id="canvas-wrap">
+        <canvas id="engine-canvas" width="1080" height="1920"></canvas>
+      </div>
+
+      <!-- Tool buttons — visible in Canvas Studio -->
+      <div class="tool-group">
+        <button class="tool" data-tool="select" title="Select (V)">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M2 1L12 7L7 8.5L5 13L2 1Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <button class="tool active" data-tool="pen" title="Motion (P · D · M)">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <line x1="7" y1="1" x2="7" y2="4.2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+            <line x1="7" y1="9.8" x2="7" y2="13" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+            <line x1="1" y1="7" x2="4.2" y2="7" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+            <line x1="9.8" y1="7" x2="13" y2="7" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+            <circle cx="7" cy="7" r="1" fill="currentColor"/>
+          </svg>
+        </button>
+        <button class="tool" data-tool="text" title="Text (T)">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <text x="3" y="12" font-size="12" font-weight="700" fill="currentColor">A</text>
+          </svg>
+        </button>
+        <button class="tool" data-tool="ball" title="Ball (B)">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.4" fill="none"/>
+            <circle cx="7" cy="7" r="1.5" fill="currentColor"/>
+          </svg>
+        </button>
+        <button class="tool" data-action="sampler" title="Sampler">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <rect x="2" y="5" width="10" height="6" rx="1" stroke="currentColor" stroke-width="1.3" fill="none"/>
+            <line x1="5" y1="5" x2="5" y2="3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+            <line x1="9" y1="5" x2="9" y2="3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+            <circle cx="7" cy="8" r="1" fill="currentColor"/>
+          </svg>
+        </button>
+        <button class="tool" data-tool="shape" title="Shape (S)" style="display:none">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <polygon points="7,1 13,11 1,11" stroke="currentColor" stroke-width="1.4" fill="none"/>
+          </svg>
+        </button>
+      </div>
+    </main>
+
+    <!-- Transport bar -->
+    <div class="transport-bar">
+      <div class="topbar-center">
+        <input id="bpm-input" type="number" min="60" max="180" step="0.1" value="120.0" title="BPM">
+        <select id="bar-count" title="Bars">
+          <option value="8">8 Bars</option>
+          <option value="16">16 Bars</option>
+          <option value="32">32 Bars</option>
+        </select>
+        <select id="quantize-division" title="Division">
+          <option value="0.25">1/4</option>
+          <option value="0.125">1/8</option>
+          <option value="0.0625">1/16</option>
+        </select>
+        <label class="toggle-btn" title="Quantize">
+          <input id="quantize-enabled" type="checkbox">
+          <span>Q</span>
+        </label>
+      </div>
+      <div class="transport-status">
+        <span id="engine-status">STOP</span>
+        <span id="scene-stats">0L 0T 0B</span>
+      </div>
+      <div class="transport-controls">
+        <button id="toggle-playback" class="transport-btn" title="Play/Pause">&#9654;</button>
+        <button id="record-loop" class="transport-btn rec" title="Record">&#9679;</button>
+        <button id="stop-loop" class="transport-btn" title="Stop">&#9632;</button>
+        <button id="clear-scene" class="transport-btn" title="Clear">&#10005;</button>
+        <button id="export-loop" class="transport-btn hidden" title="Export">EXP</button>
+        <button id="retake-loop" class="transport-btn hidden" title="Retake">RE</button>
+      </div>
+    </div>
+
+    <!-- RIGHT PANEL: Inspector — canvas-relevant fields only -->
+    <aside id="right-panel" class="panel panel-right">
+      <div class="inspector-tabs">
+        <button class="tab active" data-tab="object">Object</button>
+        <!-- world/routes/motion tabs hidden — require Wall Mapbox runtime -->
+        <button class="tab" data-tab="layers" hidden>Layers</button>
+        <button class="tab" data-tab="world" hidden>World</button>
+        <button class="tab" data-tab="routes" hidden>Routes</button>
+        <button class="tab" data-tab="motion" hidden>Motion</button>
+        <button class="tab" data-tab="canvas" hidden>Frame</button>
+        <button id="inspector-pin-btn" class="inspector-pin-btn" title="Pin inspector open">📌</button>
+      </div>
+
+      <!-- Object tab — canvas stroke, text, ball inspector fields -->
+      <div class="tab-content active" data-tab-content="object">
+        <div id="inspector-object">
+          <div id="inspector-empty-state">No object selected</div>
+
+          <!-- Legacy hidden compat inputs -->
+          <input id="av-enabled" type="hidden" value="1">
+          <input id="av-mode" type="hidden" value="none">
+
+          <!-- Text inspector block (shown when text object selected) -->
+          <div id="text-inspector-block" style="display:none">
+            <div class="insp-row">
+              <label class="insp-label" for="text-content">Text</label>
+              <div class="insp-control"><input id="text-content" type="text" placeholder="Enter text"></div>
+            </div>
+            <div class="insp-row">
+              <label class="insp-label" for="text-size">Size</label>
+              <div class="insp-control insp-slider-num">
+                <input id="text-size" type="range" min="8" max="200" step="1" value="48">
+                <output id="text-size-value">48</output>
+              </div>
+            </div>
+            <div class="insp-row">
+              <label class="insp-label">X</label>
+              <div class="insp-control"><input id="text-x" type="number" value="0"></div>
+            </div>
+            <div class="insp-row">
+              <label class="insp-label">Y</label>
+              <div class="insp-control"><input id="text-y" type="number" value="0"></div>
+            </div>
+            <div class="insp-row">
+              <label class="insp-label" for="text-scale">Scale</label>
+              <div class="insp-control insp-slider-num">
+                <input id="text-scale" type="range" min="0.1" max="5" step="0.01" value="1">
+                <output id="text-scale-value">1.0</output>
+              </div>
+            </div>
+            <div class="insp-row">
+              <label class="insp-label" for="text-rotation">Rotate</label>
+              <div class="insp-control insp-slider-num">
+                <input id="text-rotation" type="range" min="-180" max="180" step="1" value="0">
+                <output id="text-rotation-value">0</output>
+              </div>
+            </div>
+            <div class="insp-row">
+              <label class="insp-label">Center</label>
+              <div class="insp-control"><button id="center-text" type="button">Center</button></div>
+            </div>
+          </div>
+
+          <!-- Line/Stroke fields -->
+          <div class="insp-row">
+            <label class="insp-label" for="line-color">Color</label>
+            <div class="insp-control"><input id="line-color" type="color" value="#ffffff"></div>
+          </div>
+          <div class="insp-row">
+            <label class="insp-label" for="line-thickness">Width</label>
+            <div class="insp-control insp-slider-num">
+              <input id="line-thickness" type="range" min="1" max="80" step="1" value="4">
+              <output id="line-thickness-value">4</output>
+            </div>
+          </div>
+          <div class="insp-row">
+            <label class="insp-label" for="stroke-width">Stroke</label>
+            <div id="stroke-width-field" class="insp-control insp-slider-num">
+              <input id="stroke-width" type="range" min="0" max="20" step="0.5" value="2">
+              <output id="stroke-width-value">2.0</output>
+            </div>
+          </div>
+          <div class="insp-row">
+            <label class="insp-label" for="line-mechanic">Mechanic</label>
+            <div class="insp-control">
+              <select id="line-mechanic">
+                <option value="route">Route</option>
+                <option value="draw">Draw</option>
+              </select>
+            </div>
+          </div>
+          <div class="insp-row">
+            <label class="insp-label" for="line-behavior">Behavior</label>
+            <div class="insp-control">
+              <select id="line-behavior">
+                <option value="none">None</option>
+                <option value="bounce">Bounce</option>
+                <option value="loop">Loop</option>
+              </select>
+            </div>
+          </div>
+          <div class="insp-row">
+            <label class="insp-label" for="line-strength">Strength</label>
+            <div class="insp-control insp-slider-num">
+              <input id="line-strength" type="range" min="0" max="2" step="0.01" value="1">
+              <output id="line-strength-value">1.0</output>
+            </div>
+          </div>
+
+          <!-- Ball fields -->
+          <div class="insp-row">
+            <label class="insp-label" for="ball-count">Balls</label>
+            <div class="insp-control insp-slider-num">
+              <input id="ball-count" type="range" min="1" max="64" step="1" value="4">
+              <output id="ball-count-value">4</output>
+            </div>
+          </div>
+          <div class="insp-row">
+            <label class="insp-label" for="ball-speed">Speed</label>
+            <div class="insp-control insp-slider-num">
+              <input id="ball-speed" type="range" min="0.1" max="5" step="0.1" value="1.4">
+              <output id="ball-speed-value">1.4</output>
+            </div>
+          </div>
+          <div class="insp-row">
+            <label class="insp-label" for="ball-spread">Spread</label>
+            <div class="insp-control insp-slider-num">
+              <input id="ball-spread" type="range" min="0" max="1" step="0.01" value="0.22">
+              <output id="ball-spread-value">0.22</output>
+            </div>
+          </div>
+
+          <!-- Motion inspector block -->
+          <div id="motion-inspector-block" style="display:none">
+            <div class="insp-row">
+              <label class="insp-label" for="motion-enabled">Motion</label>
+              <div class="insp-control"><input id="motion-enabled" type="checkbox"></div>
+            </div>
+            <div class="insp-row">
+              <label class="insp-label" for="motion-vx">Vx</label>
+              <div class="insp-control insp-slider-num">
+                <input id="motion-vx" type="range" min="-5" max="5" step="0.1" value="0">
+                <output id="motion-vx-value">0.0</output>
+              </div>
+            </div>
+            <div class="insp-row">
+              <label class="insp-label" for="motion-vy">Vy</label>
+              <div class="insp-control insp-slider-num">
+                <input id="motion-vy" type="range" min="-5" max="5" step="0.1" value="0">
+                <output id="motion-vy-value">0.0</output>
+              </div>
+            </div>
+            <div class="insp-row">
+              <label class="insp-label" for="motion-rot">Rot</label>
+              <div class="insp-control insp-slider-num">
+                <input id="motion-rot" type="range" min="-5" max="5" step="0.1" value="0">
+                <output id="motion-rot-value">0.0</output>
+              </div>
+            </div>
+            <div class="insp-row">
+              <label class="insp-label" for="motion-loop">Loop</label>
+              <div class="insp-control"><input id="motion-loop" type="checkbox"></div>
+            </div>
+          </div>
+
+          <!-- Walker inspector block — mirrors wall/index.html data-section="walker" -->
+          <div class="insp-section" data-section="walker">
+            <button class="insp-section-header" data-toggle="walker">
+              <span class="insp-chevron">▶</span> BEHAVIOR
+            </button>
+            <div class="insp-section-body" style="display:none">
+              <div class="insp-row">
+                <label class="insp-label" for="obj-walker">Enabled</label>
+                <div class="insp-control"><input id="obj-walker" type="checkbox"></div>
+              </div>
+              <div class="insp-row">
+                <label class="insp-label" for="obj-motionMode">Movement</label>
+                <div class="insp-control">
+                  <select id="obj-motionMode">
+                    <option value="projectile">Projectile</option>
+                    <option value="pingpong">Ping-Pong</option>
+                    <option value="loop">Loop</option>
+                    <option value="tunnel">Tunnel</option>
+                    <option value="once">Once</option>
+                    <option value="none">None</option>
+                  </select>
+                </div>
+              </div>
+              <div class="insp-row">
+                <label class="insp-label" for="obj-speed">Speed</label>
+                <div class="insp-control insp-slider-num">
+                  <input id="obj-speed" type="range" min="0.01" max="1.0" step="0.01" value="0.20">
+                  <output id="obj-speed-value">0.20</output>
+                </div>
+              </div>
+              <div class="insp-row">
+                <label class="insp-label" for="av-rotation">Rotation</label>
+                <div class="insp-control">
+                  <select id="av-rotation">
+                    <option value="none">None</option>
+                    <option value="motion">Motion</option>
+                    <option value="field">Field</option>
+                  </select>
+                </div>
+              </div>
+              <div class="insp-row">
+                <label class="insp-label" for="obj-field-influence">Field</label>
+                <div class="insp-control insp-slider-num">
+                  <input id="obj-field-influence" type="range" min="0" max="2" step="0.05" value="1">
+                  <output id="obj-field-influence-value">1.0</output>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Behavior emitter stubs (hidden, required by controls.js) -->
+          <div id="behavior-emitter-fields" style="display:none">
+            <input id="behavior-emitter-rate" type="range" min="0" max="10" value="1">
+            <output id="behavior-emitter-rate-value">1</output>
+            <input id="behavior-emitter-density" type="range" min="0" max="10" value="1">
+            <output id="behavior-emitter-density-value">1</output>
+            <input id="behavior-emitter-direction" type="range" min="0" max="360" value="0">
+            <output id="behavior-emitter-direction-value">0</output>
+            <input id="behavior-emitter-spread" type="range" min="0" max="360" value="60">
+            <output id="behavior-emitter-spread-value">60</output>
+            <input id="behavior-emitter-speed" type="range" min="0" max="10" value="2">
+            <output id="behavior-emitter-speed-value">2</output>
+            <input id="behavior-emitter-size" type="range" min="1" max="100" value="10">
+            <output id="behavior-emitter-size-value">10</output>
+            <input id="behavior-emitter-life" type="range" min="0.1" max="10" value="2">
+            <output id="behavior-emitter-life-value">2</output>
+            <select id="behavior-emitter-style"><option value="dot">Dot</option></select>
+          </div>
+
+          <!-- World fields stub (hidden) -->
+          <input id="world-mode" type="hidden" value="local">
+          <input id="world-strength" type="range" min="0" max="1" value="0.5" style="display:none">
+          <output id="world-strength-value" style="display:none">0.5</output>
+          <input id="toggle-hit-count" type="checkbox" style="display:none">
+
+          <!-- Particle stubs -->
+          <select id="particle-shape" style="display:none"><option value="circle">Circle</option></select>
+          <input id="particle-trail" type="checkbox" style="display:none">
+        </div>
+      </div>
+
+      <!-- Other tabs — stubs required by tab-switching logic -->
+      <div class="tab-content" data-tab-content="layers" style="display:none"></div>
+      <div class="tab-content" data-tab-content="world" style="display:none"></div>
+      <div class="tab-content" data-tab-content="routes" style="display:none"></div>
+      <div class="tab-content" data-tab-content="motion" style="display:none"></div>
+      <div class="tab-content" data-tab-content="canvas" style="display:none"></div>
+    </aside>
+  </div>
+
+  <!-- Drop overlay for audio files -->
+  <div id="drop-overlay" class="hidden">
+    <div class="drop-message">DROP AUDIO FILES HERE<br><span>Assigned to current note</span></div>
+  </div>
+
+  <!-- Drawer system containers -->
+  <div id="launcher-rail" class="launcher-rail" aria-hidden="true"></div>
+  <aside id="drawer-panel" class="drawer-panel" aria-hidden="true">
+    <div id="drawer-content"></div>
+  </aside>
+
+  <!-- Overlay panel (sampler / library) -->
+  <div id="overlay-panel" class="overlay-panel" aria-hidden="true">
+    <div class="overlay-panel__inner">
+      <div class="overlay-panel__header">
+        <span id="overlay-panel-title" class="overlay-panel__title">Sampler</span>
+        <button id="overlay-panel-close" class="overlay-panel__close" aria-label="Close">✕</button>
+      </div>
+      <div class="overlay-panel__body">
+        <div id="overlay-view-sampler" class="overlay-view">
+          <p class="dim" style="font-size:10px;opacity:0.5;padding:4px 0 8px">
+            Select a bank, then drag audio files onto the canvas.
+          </p>
+          <div id="bank-grid" class="bank-grid"></div>
+          <div style="margin-top:10px;font-size:9px;opacity:0.4;letter-spacing:0.06em;text-transform:uppercase">
+            Active bank receives dropped audio
+          </div>
+        </div>
+        <div id="overlay-view-library" class="overlay-view" style="display:none">
+          <p class="dim" style="font-size:10px;opacity:0.5;padding:4px 0 8px">Shape library. Click to insert.</p>
+          <div id="shape-library-list"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="overlay-backdrop" class="overlay-backdrop"></div>
+
+  <!-- System HUD compat stub -->
+  <section id="system-hud" class="system-hud hidden" aria-hidden="true">
+    <div class="system-hud__header">
+      <div><div class="system-hud__title">System HUD</div></div>
+      <button id="system-hud-close" class="system-hud__close" type="button" aria-label="Close">×</button>
+    </div>
+    <div class="system-hud__summary" id="system-hud-summary"></div>
+    <div class="system-hud__body">
+      <details class="system-hud__section" open><summary>Registry</summary><div id="system-hud-registry"></div></details>
+      <details class="system-hud__section"><summary>Schemas</summary><div id="system-hud-schemas"></div></details>
+      <details class="system-hud__section"><summary>Runtime</summary><div id="system-hud-runtime"></div></details>
+    </div>
+  </section>
+
+  <!-- Symbol workbench compat stub -->
+  <div id="split-handle" class="split-handle" hidden aria-hidden="true"></div>
+  <section id="symbol-workbench" hidden><div id="symbol-workbench-content"></div></section>
+
+  <!-- Context menu -->
+  <ul id="canvas-context-menu" class="ctx-menu" style="display:none">
+    <li class="ctx-item" data-action="new">New</li>
+    <li class="ctx-item" data-action="open">Open</li>
+    <li class="ctx-item" data-action="save">Save</li>
+    <li class="ctx-item" data-action="demo">Demo World</li>
+    <li class="ctx-divider"></li>
+    <li class="ctx-item" data-action="sampler">Sampler ›</li>
+    <li class="ctx-item" data-action="library">Library ›</li>
+  </ul>
+
+  <!-- Overlay / context menu wiring (inline, same as wall/index.html) -->
+  <script>
+    (function () {
+      var panel    = document.getElementById('overlay-panel');
+      var backdrop = document.getElementById('overlay-backdrop');
+      var ctxMenu  = document.getElementById('canvas-context-menu');
+      var titleEl  = document.getElementById('overlay-panel-title');
+      var views    = { sampler: 'overlay-view-sampler', library: 'overlay-view-library' };
+
+      function openPanel(view) {
+        Object.values(views).forEach(function (id) { document.getElementById(id).style.display = 'none'; });
+        var el = document.getElementById(views[view]);
+        if (el) el.style.display = '';
+        titleEl.textContent = view.charAt(0).toUpperCase() + view.slice(1);
+        panel.classList.add('open'); backdrop.classList.add('open');
+        panel.setAttribute('aria-hidden', 'false');
+      }
+      function closePanel() {
+        panel.classList.remove('open'); backdrop.classList.remove('open');
+        panel.setAttribute('aria-hidden', 'true');
+      }
+      function closeCtx() { ctxMenu.style.display = 'none'; }
+
+      var canvasWrap = document.getElementById('canvas-wrap');
+      if (canvasWrap) {
+        canvasWrap.addEventListener('contextmenu', function (e) {
+          e.preventDefault();
+          ctxMenu.style.left = e.clientX + 'px'; ctxMenu.style.top = e.clientY + 'px';
+          ctxMenu.style.display = '';
+        });
+      }
+
+      document.addEventListener('click', closeCtx);
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') {
+          closeCtx();
+          var DS = window.SBE && window.SBE.DrawerSystem;
+          if (!DS || DS.getActiveId() === null) closePanel();
+        }
+      });
+
+      ctxMenu.addEventListener('click', function (e) {
+        var item = e.target.closest('.ctx-item');
+        if (!item) return;
+        var action = item.dataset.action;
+        closeCtx();
+        if (action === 'sampler' || action === 'library') {
+          var DS = window.SBE && window.SBE.DrawerSystem;
+          if (DS) { DS.openDrawer(action); } else { openPanel(action); }
+          return;
+        }
+        var map = { new: 'clear-scene', demo: 'load-example', open: 'scene-file', save: 'save-scene' };
+        var btnId = map[action];
+        if (btnId) { var btn = document.getElementById(btnId); if (btn) btn.click(); }
+      });
+
+      document.getElementById('overlay-panel-close').addEventListener('click', closePanel);
+      backdrop.addEventListener('click', closePanel);
+
+      document.querySelectorAll('.tool[data-action="sampler"]').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          var DS = window.SBE && SBE.DrawerSystem;
+          if (DS) DS.openDrawer('sampler'); else openPanel('sampler');
+        });
+      });
+    })();
+  </script>
+
+  <!-- ── Canvas engine scripts ───────────────────────────────────────────── -->
+  <!-- Load order mirrors wall/index.html. Mapbox GL JS and map-dependent    -->
+  <!-- runtimes are excluded — all system inits in main.js are guarded.      -->
+  <script>window.SBE = window.SBE || {};</script>
+  <script src="../../wall/systems/boot/wosBootSequencer.js"></script>
+
+  <!-- Engine core -->
+  <script src="../../wall/engine/physics.js"></script>
+  <script src="../../wall/engine/swarm.js"></script>
+  <script src="../../wall/engine/lineSystem.js"></script>
+  <script src="../../wall/engine/textSystem.js"></script>
+  <script src="../../wall/engine/shapeSystem.js"></script>
+  <script src="../../wall/engine/shapeTransforms.js"></script>
+  <script src="../../wall/engine/motionSystem.js"></script>
+  <script src="../../wall/engine/eventbus.js"></script>
+  <script src="../../wall/engine/collision.js"></script>
+  <script src="../../wall/engine/particleSystem.js"></script>
+  <script src="../../wall/engine/materialSystem.js"></script>
+  <script src="../../wall/engine/gridSystem.js"></script>
+  <script src="../../wall/engine/glyphRenderer.js"></script>
+  <script src="../../wall/engine/pathSampler.js"></script>
+  <script src="../../wall/engine/symbolRenderer.js"></script>
+  <script src="../../wall/engine/symbolObjectSystem.js"></script>
+  <script src="../../wall/engine/glyphConstructor.js"></script>
+  <script src="../../wall/engine/symbolPreviewRenderer.js"></script>
+
+  <!-- MIDI -->
+  <script src="../../wall/midi/midiOut.js"></script>
+
+  <!-- Renderer -->
+  <script src="../../wall/render/canvasRenderer.js"></script>
+
+  <!-- State -->
+  <script src="../../wall/state/examplePreset.js"></script>
+  <script src="../../wall/state/sceneManager.js"></script>
+
+  <!-- UI systems -->
+  <script src="../../wall/ui/events.js"></script>
+  <script src="../../wall/ui/drawerSystem.js"></script>
+  <script src="../../wall/ui/glyphDrawer.js"></script>
+  <script src="../../wall/ui/samplerDrawer.js"></script>
+  <script src="../../wall/ui/libraryDrawer.js"></script>
+  <script src="../../wall/ui/symbolSystem.js"></script>
+  <script src="../../wall/engine/fieldRenderer.js"></script>
+  <script src="../../wall/engine/fieldVisualizer.js"></script>
+  <script src="../../wall/ui/symbolDrawer.js"></script>
+  <script src="../../wall/ui/viewportSystem.js"></script>
+  <script src="../../wall/ui/controls.js"></script>
+  <script src="../../wall/ui/drawTools.js"></script>
+
+  <!-- MIDI import (Tone.js) -->
+  <script src="https://cdn.jsdelivr.net/npm/@tonejs/midi/build/Midi.min.js"></script>
+  <script src="../../wall/midi/midiImporter.js"></script>
+
+  <!-- Registry and schema systems -->
+  <script src="../../wall/engine/registry.js"></script>
+  <script src="../../wall/engine/schemas.js"></script>
+  <script src="../../wall/engine/routeIngestion.js"></script>
+  <script src="../../wall/engine/routeCamera.js"></script>
+  <script src="../../wall/engine/universalClock.js"></script>
+  <script src="../../wall/engine/environmentState.js"></script>
+  <script src="../../wall/engine/agentNeeds.js"></script>
+
+  <!-- JSZip (scene import/export) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+  <script src="../../wall/engine/spatialInfrastructure.js"></script>
+  <script src="../../wall/engine/aquariumCamera.js"></script>
+  <script src="../../wall/engine/commsSystem.js"></script>
+  <script src="../../wall/engine/worldInspector.js"></script>
+  <script src="../../wall/engine/directorMode.js"></script>
+  <script src="../../wall/render/stageLightingRenderer.js"></script>
+
+  <!-- Persistence and workspace -->
+  <script src="../../wall/utils/id.js"></script>
+  <script src="../../wall/persistence/surfacePersistence.js"></script>
+  <script src="../../wall/engine/workspaceEventBus.js"></script>
+  <script src="../../wall/engine/documentRegistry.js"></script>
+  <script src="../../wall/registries/runtimeRegistry.js"></script>
+  <script src="../../wall/registries/rendererRegistry.js"></script>
+  <script src="../../wall/registries/inspectorRegistry.js"></script>
+  <script src="../../wall/registries/panelRegistry.js"></script>
+  <script src="../../wall/registries/objectProfileRegistry.js"></script>
+
+  <!-- Surface and document model -->
+  <script src="../../wall/engine/surfaceModel.js"></script>
+  <script src="../../wall/documents/canvasDocument.js"></script>
+  <script src="../../wall/documents/soundscapeDocument.js"></script>
+  <script src="../../wall/documents/routeDocument.js"></script>
+  <script src="../../wall/documents/worldDocument.js"></script>
+  <script src="../../wall/runtimes/routePlannerRuntime.js"></script>
+  <script src="../../wall/engine/runtimeViewportRouter.js"></script>
+  <script src="../../wall/engine/workspace.js"></script>
+  <script src="../../wall/engine/viewportLocationAuthority.js"></script>
+
+  <!-- Canvas engine (main.js) — boots on DOMContentLoaded -->
+  <!-- Mapbox-dependent runtimes are NOT loaded; all init guards in main.js  -->
+  <!-- handle their absence cleanly (if (SBE.X) { SBE.X.init(); }).         -->
+  <script src="../../wall/main.js"></script>
+</body>
+</html>

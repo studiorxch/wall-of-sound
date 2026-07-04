@@ -74,10 +74,11 @@
   var UPDATE_MS = 500;
 
   // ── Display mode ─────────────────────────────────────────────────────────────
-  // cinematic  — compact: transport, location, time, weather, speed, cam preset
-  // full       — all diagnostic rows (default for flight, debug for drive)
-  // hidden     — hides the traversal overlay entirely
-  var _displayMode = 'full';   // start full; switch via _wos.debug.hud.mode()
+  // broadcast    — clean flight panel for streaming/recording (default)
+  // diagnostics  — broadcast + raw debug rows (zoom, pitch, actor, rig, etc.)
+  // hidden       — hides the traversal overlay entirely
+  // Legacy aliases accepted: 'full' → diagnostics, 'cinematic' → broadcast
+  var _displayMode = 'broadcast';
 
   // Freeze guard: track when progress last advanced. If active trip stops
   // advancing for >3s, surface a warning so user can see why nothing moves.
@@ -97,38 +98,238 @@
     var s = document.createElement('style');
     s.id  = 'wos-hud-css';
     s.textContent = [
+
+      // ══════════════════════════════════════════════════════════════════════
+      // HOLOGRAPHIC FLIGHT OVERLAY
+      // Philosophy: distributed text projection, not a UI widget.
+      //   - No panel, no border-radius, no card chrome
+      //   - Corner-bracket scan zone for the NEAR cluster
+      //   - Thin vector guide lines as structural markers
+      //   - Translucent scan fields (2-4% white) as illuminated zones
+      //   - Text-shadow stack makes type readable over any terrain/tile
+      //   - All decorative geometry drawn with CSS borders, no images
+      // ══════════════════════════════════════════════════════════════════════
+
+      // ── Root container — open area, no backing ────────────────────────────
       '#wos-hud {',
       '  position: fixed;',
-      '  top: 14px; right: 14px;',
+      '  bottom: 30px; right: 22px;',
       '  z-index: 950;',
-      '  background: rgba(4,5,7,0.88);',
-      '  border: 1px solid rgba(255,255,255,0.08);',
-      '  border-radius: 6px;',
-      '  padding: 9px 12px 10px;',
+      '  width: 224px;',
+      '  padding: 0;',
+      '  background: none;',
+      '  border: none;',
+      '  border-radius: 0;',
+      '  box-shadow: none;',
       '  font-family: "SF Mono","Fira Mono",ui-monospace,monospace;',
       '  font-size: 10px;',
-      '  line-height: 1.75;',
-      '  color: rgba(255,255,255,0.55);',
-      '  min-width: 150px;',
-      '  backdrop-filter: blur(8px);',
-      '  -webkit-backdrop-filter: blur(8px);',
+      '  line-height: 1.0;',
+      '  color: rgba(255,255,255,0.82);',
       '  pointer-events: none;',
-      '  white-space: pre;',
+      '  user-select: none;',
       '}',
       '#wos-hud.hud-hidden { display: none; }',
-      '.hud-label {',
-      '  font-size: 9px; letter-spacing: 0.10em; text-transform: uppercase;',
-      '  color: rgba(255,255,255,0.22);',
+
+      // Corner-vignette wash: dark radial gradient emanating from bottom-right.
+      // Gives the text a dark surface to read against without a visible box.
+      '#wos-hud::before {',
+      '  content: "";',
+      '  position: absolute;',
+      '  inset: -32px -22px -30px -56px;',
+      '  background: radial-gradient(',
+      '    ellipse 110% 110% at 102% 102%,',
+      '    rgba(0,0,2,0.45) 0%,',
+      '    rgba(0,0,2,0.18) 45%,',
+      '    transparent 72%);',
+      '  pointer-events: none;',
+      '  z-index: -1;',
       '}',
-      '.hud-value { color: rgba(255,255,255,0.80); }',
-      '.hud-dim   { color: rgba(255,255,255,0.30); }',
-      '.hud-sep   {',
-      '  border: none; border-top: 1px solid rgba(255,255,255,0.06);',
-      '  margin: 5px 0; display: block;',
+
+      // Text-shadow stack — applied to all child text.
+      // Three layers: sharp dark core / soft halo / wide diffuse bloom.
+      // Keeps type readable over bright terrain, ocean, or clouds.
+      '#wos-hud * {',
+      '  text-shadow:',
+      '    0 1px 2px rgba(0,0,0,1.0),',
+      '    0 0  10px rgba(0,0,0,0.85),',
+      '    0 0  26px rgba(0,0,0,0.50);',
       '}',
-      '.hud-row   { display: flex; justify-content: space-between; gap: 12px; }',
-      '.hud-inactive { color: rgba(255,255,255,0.18); font-style: italic; }',
-      '.hud-warn { color: rgba(255,170,90,0.95); font-size: 10px; }',
+
+      // ── Header strip ──────────────────────────────────────────────────────
+      // Transport label left / guide line / route right.
+      // The guide line is a pure vector element — thin, very dim, structural.
+      '.hud-header {',
+      '  display: flex;',
+      '  align-items: center;',
+      '  gap: 0;',
+      '  margin-bottom: 16px;',
+      '}',
+      '.hud-h-transport {',
+      '  font-size: 7.5px;',
+      '  font-weight: 700;',
+      '  letter-spacing: 0.20em;',
+      '  text-transform: uppercase;',
+      '  color: rgba(255,255,255,0.30);',
+      '  flex-shrink: 0;',
+      '  padding-right: 8px;',
+      '}',
+      '.hud-h-transport.flight { color: rgba(160,215,255,0.48); }',
+      '.hud-h-transport.drive  { color: rgba(160,245,170,0.45); }',
+      // The guide line: a thin line that fills the gap between label and route
+      '.hud-h-rule {',
+      '  flex: 1;',
+      '  height: 1px;',
+      '  background: rgba(255,255,255,0.13);',
+      '  position: relative;',
+      '  top: 0px;',
+      '}',
+      '.hud-h-route {',
+      '  font-size: 10.5px;',
+      '  font-weight: 500;',
+      '  color: rgba(255,255,255,0.80);',
+      '  letter-spacing: 0.04em;',
+      '  padding-left: 10px;',
+      '  white-space: nowrap;',
+      '  overflow: hidden;',
+      '  text-overflow: ellipsis;',
+      '  max-width: 148px;',
+      '}',
+      '.hud-h-route-arrow {',
+      '  color: rgba(255,255,255,0.25);',
+      '  margin: 0 5px;',
+      '  font-weight: 300;',
+      '}',
+      '.hud-h-diag {',
+      '  font-size: 7px;',
+      '  letter-spacing: 0.16em;',
+      '  text-transform: uppercase;',
+      '  color: rgba(255,200,70,0.42);',
+      '  padding-left: 8px;',
+      '  flex-shrink: 0;',
+      '}',
+
+      // NEAR removed from broadcast — top WorldTelemetryHUD already shows location.
+
+      // ── Telemetry grid ────────────────────────────────────────────────────
+      // No section headers. Sparse rows: small uppercase label left, value right.
+      // Guide rule separates altitude block from progress block.
+      '.hud-trow {',
+      '  display: flex;',
+      '  align-items: baseline;',
+      '  justify-content: space-between;',
+      '  gap: 6px;',
+      '  margin-top: 7px;',
+      '}',
+      '.hud-tl {',
+      '  font-size: 7.5px;',
+      '  letter-spacing: 0.14em;',
+      '  text-transform: uppercase;',
+      '  color: rgba(255,255,255,0.26);',
+      '  flex-shrink: 0;',
+      '}',
+      '.hud-tv {',
+      '  font-size: 11px;',
+      '  color: rgba(255,255,255,0.78);',
+      '  text-align: right;',
+      '  white-space: nowrap;',
+      '  overflow: hidden;',
+      '  text-overflow: ellipsis;',
+      '}',
+      '.hud-tv.b {',
+      '  color: rgba(255,255,255,0.96);',
+      '  font-weight: 600;',
+      '  font-size: 12.5px;',
+      '}',
+
+      // Phase: pure colored text inline with ALT row, no chip/border
+      '.hud-phase {',
+      '  font-size: 7.5px;',
+      '  font-weight: 700;',
+      '  letter-spacing: 0.16em;',
+      '  text-transform: uppercase;',
+      '}',
+      '.hud-phase.climb   { color: rgba(120,215,255,0.85); }',
+      '.hud-phase.cruise  { color: rgba(130,255,185,0.80); }',
+      '.hud-phase.descent { color: rgba(255,200,90,0.85); }',
+      '.hud-phase.unknown { color: rgba(255,255,255,0.28); }',
+
+      // Thin vector guide rule between telemetry clusters
+      '.hud-guide {',
+      '  height: 1px;',
+      '  background: rgba(255,255,255,0.09);',
+      '  margin: 10px 0;',
+      '}',
+      // Guide with tick mark at right end (avionics feel)
+      '.hud-guide-tick {',
+      '  height: 1px;',
+      '  position: relative;',
+      '  background: rgba(255,255,255,0.09);',
+      '  margin: 10px 0;',
+      '}',
+      '.hud-guide-tick::after {',
+      '  content: "";',
+      '  position: absolute;',
+      '  right: 0; top: -2px;',
+      '  width: 1px; height: 5px;',
+      '  background: rgba(255,255,255,0.22);',
+      '}',
+
+      // Progress bar: 1px vector line, no frame
+      '.hud-prog-track {',
+      '  height: 1px;',
+      '  background: rgba(255,255,255,0.10);',
+      '  margin: 5px 0 0;',
+      '  position: relative;',
+      '}',
+      '.hud-prog-fill {',
+      '  position: absolute;',
+      '  left: 0; top: 0;',
+      '  height: 1px;',
+      '  background: rgba(255,255,255,0.55);',
+      '  transition: width 0.4s linear;',
+      '}',
+      // Playhead dot at the fill edge
+      '.hud-prog-head {',
+      '  position: absolute;',
+      '  top: -2px;',
+      '  width: 2px; height: 5px;',
+      '  background: rgba(255,255,255,0.80);',
+      '  transition: left 0.4s linear;',
+      '}',
+
+      // Diagnostics block (diagnostics mode only)
+      '.hud-diag {',
+      '  margin-top: 14px;',
+      '  padding-top: 10px;',
+      '  border-top: 1px solid rgba(255,200,70,0.10);',
+      '}',
+      '.hud-diag-cap {',
+      '  font-size: 6.5px;',
+      '  letter-spacing: 0.20em;',
+      '  text-transform: uppercase;',
+      '  color: rgba(255,200,70,0.32);',
+      '  margin-bottom: 6px;',
+      '  display: block;',
+      '}',
+      '.hud-diag .hud-trow { margin-top: 5px; }',
+      '.hud-diag .hud-tl   { color: rgba(255,200,70,0.26); }',
+      '.hud-diag .hud-tv   { color: rgba(255,255,255,0.36); font-size: 9.5px; }',
+
+      // Warnings
+      '.hud-warn {',
+      '  margin-top: 10px;',
+      '  font-size: 8.5px;',
+      '  letter-spacing: 0.04em;',
+      '  color: rgba(255,165,50,0.95);',
+      '}',
+
+      // Idle (no trip active)
+      '.hud-idle {',
+      '  font-size: 8.5px;',
+      '  letter-spacing: 0.08em;',
+      '  color: rgba(255,255,255,0.16);',
+      '}',
+
     ].join('\n');
     document.head.appendChild(s);
   }
@@ -317,6 +518,25 @@
     var altStep   = nav && nav.altStep ? nav.altStep : null;
     var transport = nav ? nav.transport : null;
     var toLabel   = nav ? nav.to        : null;
+    var fromLabel = nav ? nav.from      : null;
+
+    // Current location from ViewportLocationAuthority (reverse-geocoded city/region)
+    var vla      = global.SBE && SBE.ViewportLocationAuthority;
+    var vlaState = vla && typeof vla.getState === 'function' ? vla.getState() : null;
+    var nearLabel = null;
+    if (vlaState) {
+      if (vlaState.label && vlaState.region) {
+        nearLabel = vlaState.label + ', ' + vlaState.region;
+      } else if (vlaState.label) {
+        nearLabel = vlaState.label;
+      } else if (vlaState.region) {
+        nearLabel = vlaState.region;
+      } else if (vlaState.latitude != null) {
+        // Geocode not yet available — show raw coords as fallback
+        nearLabel = vlaState.latitude.toFixed(3) + ', ' + vlaState.longitude.toFixed(3);
+      }
+    }
+
     var actorAltFt = (active && rtState.current && rtState.current.altitudeFt != null)
       ? rtState.current.altitudeFt
       : (altStep ? altStep.altitudeFt : null);
@@ -325,6 +545,8 @@
       active:    active,
       transport: transport,
       toLabel:   toLabel,
+      fromLabel: fromLabel,
+      nearLabel: nearLabel,
       progress:  progress,
       realMs:    realMs,      // REAL: wall-clock elapsed
       simMs:     simMs,       // SIM:  simulated elapsed
@@ -367,124 +589,129 @@
     return ft.toLocaleString() + ' ft';
   }
 
-  function _row(label, value) {
-    var padded = (label + '          ').slice(0, 10);
-    return '<span class="hud-dim">' + padded + '</span>'
-         + '<span class="hud-value">' + (value != null ? value : '—') + '</span>';
+  // ── Render helpers ────────────────────────────────────────────────────────────
+
+  function _trow(label, value, bright) {
+    return '<div class="hud-trow">'
+      + '<span class="hud-tl">' + label + '</span>'
+      + '<span class="hud-tv' + (bright ? ' b' : '') + '">' + (value != null ? value : '—') + '</span>'
+      + '</div>';
+  }
+
+  function _phaseText(phase) {
+    if (!phase) return null;
+    var p = phase.toLowerCase();
+    var cls = p.indexOf('climb')   !== -1 ? 'climb'
+            : p.indexOf('cruise')  !== -1 ? 'cruise'
+            : p.indexOf('descent') !== -1 ? 'descent'
+            : 'unknown';
+    return '<span class="hud-phase ' + cls + '">' + phase.toUpperCase() + '</span>';
+  }
+
+  function _progTrack(pct) {
+    var w = pct != null ? Math.min(100, Math.max(0, pct)) : 0;
+    var wPx = (w / 100 * 224).toFixed(1);   // approx pixel offset for head
+    return '<div class="hud-prog-track">'
+      + '<div class="hud-prog-fill" style="width:' + w.toFixed(1) + '%"></div>'
+      + '<div class="hud-prog-head" style="left:calc(' + w.toFixed(1) + '% - 1px)"></div>'
+      + '</div>';
   }
 
   function _render() {
     if (!_el || !_visible) return;
+    if (_displayMode === 'hidden') { _el.innerHTML = ''; return; }
 
-    // hidden mode: blank the overlay
-    if (_displayMode === 'hidden') {
-      _el.innerHTML = '';
+    var d    = _gather();
+    var mode = _displayMode;
+    if (mode === 'full')      mode = 'diagnostics';
+    if (mode === 'cinematic') mode = 'broadcast';
+
+    if (!d.active) {
+      _el.innerHTML = '<div class="hud-idle">no active trip</div>';
       return;
     }
 
-    var d = _gather();
-    var lines = [];
+    var transport = (d.transport || 'flight').toLowerCase();
+    var isDrive   = (d.mode === 'drive');
+    var html      = '';
 
-    if (!d.active) {
-      lines.push('<span class="hud-dim">no active trip</span>');
+    // ── Header: TRANSPORT ──── ROUTE ──────────────────────────────────────────
+    var routeStr = (d.fromLabel && d.toLabel)
+      ? d.fromLabel + '<span class="hud-h-route-arrow"> → </span>' + d.toLabel
+      : (d.toLabel || '—');
+    html += '<div class="hud-header">'
+          + '<span class="hud-h-transport ' + transport + '">' + transport.toUpperCase() + '</span>'
+          + '<span class="hud-h-rule"></span>'
+          + '<span class="hud-h-route">' + routeStr + '</span>'
+          + (mode === 'diagnostics' ? '<span class="hud-h-diag">DIAG</span>' : '')
+          + '</div>';
 
-    } else if (_displayMode === 'cinematic') {
-      // ── Cinematic mode: transport › dest  speed  cam preset ─────────────────
-      var tLbl  = (d.transport || 'flight').toUpperCase();
-      var cDest = d.toLabel || '—';
-      lines.push('<span class="hud-value">' + tLbl + '</span>'
-               + '<span class="hud-dim">  › </span>'
-               + '<span class="hud-value">' + cDest + '</span>');
-      lines.push('<hr class="hud-sep">');
-      lines.push(_row('SPEED',  _fmtSpeed(d.speedMult)));
-      lines.push(_row('PROG',   d.progress != null ? _fmtPct(d.progress) : '—'));
-      if (d.mode === 'drive') {
-        var hvrt = global.SBE && SBE.HeroVehicleRuntime;
-        var cp   = hvrt && typeof hvrt.getCameraPreset === 'function' ? hvrt.getCameraPreset() : null;
-        if (cp) lines.push(_row('CAM', cp));
-        if (d.routeLabel) lines.push(_row('ROUTE', d.routeLabel));
-      }
+    // ── Telemetry cluster A: altitude + phase ─────────────────────────────────
+    // NEAR not shown in broadcast — top WorldTelemetryHUD strip already has location.
+    var phaseHtml  = d.tripPhase ? _phaseText(d.tripPhase) : null;
+    var altLabel   = phaseHtml ? 'Alt&nbsp;&nbsp;' + phaseHtml : 'Alt';
+    html += '<div class="hud-trow">'
+          + '<span class="hud-tl">' + altLabel + '</span>'
+          + '<span class="hud-tv b">' + _fmtAlt(d.actorAltitudeFt) + '</span>'
+          + '</div>';
+    // Target altitude only when it differs from current (e.g. climbing)
+    if (d.altitudeStepLabel && d.altitudeStepFt !== d.actorAltitudeFt) {
+      html += _trow('Target', d.altitudeStepLabel + ' · ' + _fmtAlt(d.altitudeStepFt));
+    }
 
+    // ── Vector guide rule with tick ───────────────────────────────────────────
+    html += '<div class="hud-guide-tick"></div>';
+
+    // ── Telemetry cluster B: progress + time + distance + speed ───────────────
+    // Progress row: label + bar + percentage on same visual line
+    var progPct  = d.progress != null ? _fmtPct(d.progress) : '—';
+    html += '<div class="hud-trow">'
+          + '<span class="hud-tl">Prog</span>'
+          + '<span class="hud-tv b">' + progPct + '</span>'
+          + '</div>';
+    html += _progTrack(d.progress);
+
+    if (isDrive) {
+      if (d.distKm   != null) html += _trow('Dist',    _fmtKm(d.distKm));
+      if (d.realMs   != null) html += _trow('Elapsed', _fmtDuration(d.realMs));
     } else {
-      // ── Full mode ─────────────────────────────────────────────────────────────
-      // ── Transport + destination ──────────────────────────────────────────────
-      var tLabel = (d.transport || 'flight').toUpperCase();
-      var dest   = d.toLabel || '—';
-      lines.push('<span class="hud-value">' + tLabel + '</span>'
-               + '<span class="hud-dim">  › </span>'
-               + '<span class="hud-value">' + dest + '</span>');
+      if (d.remainMs != null) html += _trow('Remain',  _fmtDuration(d.remainMs), true);
+      if (d.distKm   != null) html += _trow('Dist',    _fmtKm(d.distKm));
+      html += _trow('Speed', _fmtSpeed(d.speedMult));
+    }
 
-      lines.push('<hr class="hud-sep">');
-
-      // ── Actor / POV ────────────────────────────────────────────────────────────
-      // Actor = movement truth. POV = camera interpretation.
-      // ALT = runtime actor altitude (movement truth, changes during climb/descent)
-      // ALT SET = selected intent from altitude stepper (target)
-      lines.push(_row('ACTOR',   d.actorType  || 'unknown'));
-      lines.push(_row('POV',     d.povType    || 'unknown'));
-      lines.push(_row('ALT',     _fmtAlt(d.actorAltitudeFt)));
-      if (d.altitudeStepLabel) {
-        lines.push(_row('ALT SET', d.altitudeStepLabel + ' / ' + _fmtAlt(d.altitudeStepFt)));
-      }
-
-      lines.push('<hr class="hud-sep">');
-
-      if (d.mode === 'drive') {
-        // ── Drive: ROUTE source must never be hidden ───────────────────────────
-        lines.push(_row('ROUTE', d.routeLabel || '—'));
-        lines.push(_row('PROG',  d.progress != null ? _fmtPct(d.progress) : '—'));
-        if (d.distKm != null) lines.push(_row('DIST', _fmtKm(d.distKm)));
-        lines.push(_row('REAL',  d.realMs != null ? _fmtDuration(d.realMs) : '—'));
-      } else {
-        // ── Flight: REAL / SIM / REMAIN / PROG ────────────────────────────────
-        // REAL  = wall-clock time since Launch was pressed
-        // SIM   = simulated world time elapsed (REAL × speedMult)
-        // REMAIN = remaining wall-clock time at current speed
-        lines.push(_row('REAL',   d.realMs   != null ? _fmtDuration(d.realMs)   : '—'));
-        lines.push(_row('SIM',    d.simMs    != null ? _fmtDuration(d.simMs)    : '—'));
-        lines.push(_row('REMAIN', d.remainMs != null ? _fmtDuration(d.remainMs) : '—'));
-        lines.push(_row('PROG',   d.progress != null ? _fmtPct(d.progress) : '—'));
-        if (d.distKm != null) lines.push(_row('DIST', _fmtKm(d.distKm)));
-      }
-
-      lines.push('<hr class="hud-sep">');
-
-      // ── Speed + phase ──────────────────────────────────────────────────────────
-      lines.push(_row('SPEED', _fmtSpeed(d.speedMult)));
-      if (d.tripPhase) {
-        lines.push(_row('PHASE', d.tripPhase));
-      }
-
-      lines.push('<hr class="hud-sep">');
-
-      // ── Camera (POV presentation scale) ───────────────────────────────────────
+    // ── Diagnostics block (hidden in broadcast) ───────────────────────────────
+    if (mode === 'diagnostics') {
       var zm  = d.zoom    != null ? d.zoom.toFixed(1) : '—';
       var pt  = d.pitch   != null ? d.pitch.toFixed(1) + '°' : '—';
       var brg = d.bearing != null ? Math.round((d.bearing + 360) % 360) + '°' : '—';
-      lines.push(_row('ZOOM',    zm));
-      lines.push(_row('PITCH',   pt));
-      lines.push(_row('BEARING', brg));
-      lines.push(_row('CAM OWN', d.cameraOwner || '—'));
-      lines.push(_row('MOVE',    d.moveMode    || '—'));
+      html += '<div class="hud-diag">';
+      html += '<span class="hud-diag-cap">Diagnostics</span>';
+      if (d.nearLabel) html += _trow('Near', d.nearLabel);
+      html += _trow('Actor',   d.actorType   || '—');
+      html += _trow('Cam',     d.cameraOwner || '—');
+      html += _trow('Move',    d.moveMode    || '—');
+      html += _trow('Zoom',    zm);
+      html += _trow('Pitch',   pt);
+      html += _trow('Bearing', brg);
+      if (d.realMs != null) html += _trow('Real', _fmtDuration(d.realMs));
+      if (d.simMs  != null) html += _trow('Sim',  _fmtDuration(d.simMs));
+      html += '</div>';
+    }
 
-      // ── Warnings ──────────────────────────────────────────────────────────────
-      if (d.stale) {
-        lines.push('<hr class="hud-sep">');
-        lines.push('<span class="hud-warn">⚠ Progress not advancing &gt;3s</span>');
-      }
-      if (d.cameraStuck) {
-        if (!d.stale) lines.push('<hr class="hud-sep">');
-        lines.push('<span class="hud-warn">⚠ Camera not following actor</span>');
-      }
-    }   // end full mode else
+    // ── Warnings ──────────────────────────────────────────────────────────────
+    if (d.stale)       html += '<div class="hud-warn">⚠ progress stalled</div>';
+    if (d.cameraStuck) html += '<div class="hud-warn">⚠ camera not following</div>';
 
-    _el.innerHTML = lines.join('\n');
+    _el.innerHTML = html;
   }
 
   // ── Display mode control ──────────────────────────────────────────────────────
+  var _VALID_MODES = { broadcast: 1, diagnostics: 1, hidden: 1, full: 1, cinematic: 1 };
+
   function setDisplayMode(m) {
-    if (m !== 'cinematic' && m !== 'full' && m !== 'hidden') {
-      console.warn('[TraversalHUD] unknown mode:', m, '— use: cinematic | full | hidden');
+    if (!_VALID_MODES[m]) {
+      console.warn('[TraversalHUD] unknown mode:', m, '— use: broadcast | diagnostics | hidden');
       return;
     }
     _displayMode = m;
@@ -609,8 +836,10 @@
     // Auto-watch: show HUD when a trip becomes active
     global.setTimeout(_autoWatch, 2000);
     console.log('[TraversalHUD] v' + VERSION + ' loaded — auto-shows on trip start');
-    console.log('  _wos.debug.hud.toggle()   — show/hide');
-    console.log('  _wos.debug.hud.snapshot() — read current values');
+    console.log('  _wos.debug.hud.toggle()          — show/hide');
+    console.log('  _wos.debug.hud.mode("broadcast") — broadcast panel (default)');
+    console.log('  _wos.debug.hud.mode("diagnostics") — + raw debug rows');
+    console.log('  _wos.debug.hud.snapshot()        — read current values');
   }
 
   if (document.readyState === 'loading') {

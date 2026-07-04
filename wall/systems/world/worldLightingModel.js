@@ -65,6 +65,11 @@
   var _roadLayerCache  = null;
   var _poiLayerCache   = null;
 
+  // Returns true when Orbital Earth is active — satellite style has no WOS road/POI layers.
+  function _orbitalActive() {
+    return document.body.classList.contains('wos-orbital-earth-active');
+  }
+
   function _discoverLayers() {
     if (_roadLayerCache) return;
     var map = _map();
@@ -133,6 +138,7 @@
   // Result stored in _state.roadSegments as raw geo arrays.
   // Compositor projects these per-frame via mbr.getMap().project().
   function _queryRoadSegments() {
+    if (_orbitalActive()) { _state.roadSegments = []; return; }
     var map = _map();
     if (!map) { _state.roadSegments = []; return; }
 
@@ -152,7 +158,11 @@
 
     // Inset bbox — ignore extreme edges where features are half-clipped
     var bbox = [[W * 0.08, H * 0.08], [W * 0.92, H * 0.92]];
-    var layerIds = _roadLayerCache.map(function (r) { return r.id; });
+    // Filter to layers that actually exist in the current style — guards against
+    // stale cache after a setStyle() call (e.g. satellite style on Orbital entry).
+    var allIds = _roadLayerCache.map(function (r) { return r.id; });
+    var layerIds = allIds.filter(function (id) { try { return !!map.getLayer(id); } catch(e) { return false; } });
+    if (!layerIds.length) { _state.roadSegments = []; return; }
     var layerMap = {};
     _roadLayerCache.forEach(function (r) { layerMap[r.id] = r.width; });
 
@@ -205,6 +215,7 @@
   // lighting pockets. Each cell with sufficient density becomes a zone.
   // Zone color and opacity are modulated by atmosphere state.
   function _computeAmbientZones(atm) {
+    if (_orbitalActive()) { _state.ambientZones = []; _state.urbanDensity = 0; return; }
     var map = _map();
     if (!map) { _state.ambientZones = []; return; }
 
@@ -216,8 +227,12 @@
 
     // Query road + POI features for density estimation
     _discoverLayers();
-    var roadIds = _roadLayerCache ? _roadLayerCache.map(function(r){return r.id;}) : [];
-    var poiIds  = _poiLayerCache  || [];
+    var allRoadIds = _roadLayerCache ? _roadLayerCache.map(function(r){return r.id;}) : [];
+    var allPoiIds  = _poiLayerCache  || [];
+    // Filter to layers present in the current style — prevents "layer does not exist" errors
+    // when _roadLayerCache was built from the WOS style but the satellite style is now active.
+    var roadIds = allRoadIds.filter(function(id){ try { return !!map.getLayer(id); } catch(e){ return false; } });
+    var poiIds  = allPoiIds.filter(function(id){  try { return !!map.getLayer(id); } catch(e){ return false; } });
 
     var roadFeats = [], poiFeats = [];
     try {
@@ -395,6 +410,16 @@
     if (atm) _atm = atm;
     _state.roadWetness    = _computeRoadWetness(_atm);
     _state.driftIntensity = _computeDriftIntensity(_atm);
+
+    // Reset layer cache on style change so WOS layers are re-discovered after
+    // Orbital exit restores the WOS style (satellite has no road/POI layers).
+    var map0 = _map();
+    if (map0 && map0.on) {
+      map0.on('style.load', function () {
+        _roadLayerCache = null;
+        _poiLayerCache  = null;
+      });
+    }
 
     // Initial query — map may not be ready yet; if not, camera events will trigger
     setTimeout(function () {

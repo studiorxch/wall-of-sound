@@ -80,7 +80,24 @@
       return;
     }
 
-    // 2. Map camera center
+    // 2. Flight actor position — read directly when a regional flight is active.
+    //    RegionalFlightCameraRig calls map.jumpTo() each frame so map.getCenter()
+    //    also follows the aircraft, but geocoding can lag at trip start (showing
+    //    the origin city). Reading rtState.current here lets _maybeUpdateLocality()
+    //    detect movement immediately without waiting for the camera to settle.
+    var rftr = global.SBE && SBE.RegionalFlightTripRuntime;
+    if (rftr && typeof rftr.getState === 'function') {
+      var rftState = rftr.getState();
+      if (rftState && rftState.active && rftState.current &&
+          rftState.current.lat != null && rftState.current.lng != null) {
+        _lat    = rftState.current.lat;
+        _lng    = rftState.current.lng;
+        _source = 'flight';
+        return;
+      }
+    }
+
+    // 3. Map camera center
     var mvr = global.SBE && SBE.MapboxViewportRuntime;
     var map = mvr && typeof mvr.getMap === 'function' ? mvr.getMap() : null;
     if (map) {
@@ -199,6 +216,23 @@
             },
           });
         }
+
+        // Notify PLAY parent window so its map overlay can show current location.
+        // PLAY listens for 'wall:location' in BroadcastHudShell.
+        try {
+          if (global.parent && global.parent !== global) {
+            global.parent.postMessage({
+              type: 'wall:location',
+              payload: {
+                city:      cityPart,
+                region:    regionPart,
+                label:     _label,
+                latitude:  _lat,
+                longitude: _lng,
+              },
+            }, '*');
+          }
+        } catch (e) { /* cross-origin guard */ }
       })
       .catch(function () { /* API unreachable — keep previous label */ });
   }

@@ -6506,6 +6506,171 @@
       return snap;
     };
 
+    // ── _wos.debug.creator — 0609A Creator Tool Recovery Pass ────────────────
+    (function _bindCreatorDebug() {
+      var INVENTORY = [
+        { toolId: 'canvas-select',       label: 'Canvas Select',       status: 'LIVE',                  owner: 'wall/main.js',                    entryPoint: 'state.tool = "select"',          recoveryAction: 'openCanvas()' },
+        { toolId: 'canvas-motion',       label: 'Canvas Motion',       status: 'LIVE',                  owner: 'wall/main.js',                    entryPoint: 'state.tool = "motion"',          recoveryAction: 'openCanvas()' },
+        { toolId: 'canvas-ball',         label: 'Canvas Ball',         status: 'LIVE',                  owner: 'wall/main.js',                    entryPoint: 'state.tool = "ball"',            recoveryAction: 'openCanvas()' },
+        { toolId: 'canvas-text',         label: 'Canvas Text',         status: 'LIVE',                  owner: 'wall/main.js',                    entryPoint: 'state.tool = "text"',            recoveryAction: 'openCanvas()' },
+        { toolId: 'object-panel',        label: 'Object Panel',        status: 'DISCONNECTED',          owner: 'wall/index.html #right-panel',    entryPoint: 'showObjectInspector()',          recoveryAction: 'openObjectPanel()' },
+        { toolId: 'midi-drop',           label: 'MIDI Drop',           status: 'LIVE',                  owner: 'wall/main.js drop handler',       entryPoint: 'drag .mid file onto canvas',     recoveryAction: 'proofMidiDrop()' },
+        { toolId: 'world-space-drawing', label: 'World-Space Drawing', status: 'LIVE',                  owner: 'SBE.SurfaceDrawingRuntime',        entryPoint: 'SurfaceDrawingRuntime',          recoveryAction: 'proofWorldSpaceDrawing()' },
+        { toolId: 'glyphlab',            label: 'GlyphLab',            status: 'LIVE',                  owner: 'wall/ui/glyphDrawer.js',           entryPoint: 'DrawerSystem.openDrawer("glyph")', recoveryAction: 'openGlyphLab()' },
+        { toolId: 'colorlab',            label: 'ColorLab',            status: 'EXTERNAL_DISCONNECTED', owner: 'src-2026May24.zip',               entryPoint: 'external — not integrated',      recoveryAction: 'openColorLab()' },
+        { toolId: 'studio-asset-library',label: 'Studio Asset Library',status: 'LIVE',                  owner: 'studio/studioShell.js',           entryPoint: '../studio/index.html#asset-library', recoveryAction: 'openStudio()' },
+        { toolId: 'studio-actor-library',label: 'Studio Actor Library',status: 'LIVE',                  owner: 'studio/studioShell.js',           entryPoint: '../studio/index.html#actor-library', recoveryAction: 'openStudio()' },
+        { toolId: 'studio-glyph-lab',    label: 'Studio Glyph Lab',   status: 'PLACEHOLDER',           owner: 'studio/studioShell.js',           entryPoint: '../studio/index.html#glyph-lab', recoveryAction: 'openGlyphLab()' },
+        { toolId: 'studio-palette-lab',  label: 'Studio Palette Lab',  status: 'LIVE',                  owner: 'studio/studioShell.js',           entryPoint: '../studio/index.html#palette-lab', recoveryAction: 'openStudio()' },
+        { toolId: 'studio-proof-stage',  label: 'Studio Proof Stage',  status: 'LIVE',                  owner: 'studio/studioShell.js',           entryPoint: '../studio/index.html#proof-stage', recoveryAction: 'openStudio()' },
+        { toolId: 'runtime-left-rail',   label: 'Runtime Left Rail',   status: 'LIVE',                  owner: 'wall/index.html #left-rail',      entryPoint: '#left-rail .rail-nav-btn',       recoveryAction: '0609A recovery applied' },
+        { toolId: 'studio-launcher',     label: 'Studio Launcher',     status: 'LIVE',                  owner: 'wall/index.html #rail-studio',    entryPoint: 'rail-nav-btn[data-creator-action=studio]', recoveryAction: '0609A — moved to left rail' },
+      ];
+
+      function _result(ok, toolId, status, action, owner, message) {
+        return { ok: ok, toolId: toolId, status: status, action: action, owner: owner, message: message };
+      }
+
+      var creator = {
+        creatorToolInventory: function () {
+          console.group('[creator] Tool Inventory (' + INVENTORY.length + ' tools)');
+          INVENTORY.forEach(function (t) { console.log(t.status + '\t' + t.toolId + '\t' + t.label); });
+          console.groupEnd();
+          return INVENTORY.slice();
+        },
+
+        creatorToolStatus: function (toolId) {
+          var t = null; for (var i = 0; i < INVENTORY.length; i++) { if (INVENTORY[i].toolId === toolId) { t = INVENTORY[i]; break; } }
+          if (!t) return _result(false, toolId, 'MISSING', 'not_found', null, 'Tool not in inventory: ' + toolId);
+          console.log('[creator] status:', t.toolId, '→', t.status, '|', t.owner);
+          return Object.assign({}, t, { ok: t.status === 'LIVE' });
+        },
+
+        openCanvas: function () {
+          try {
+            if (typeof state !== 'undefined' && state.tool !== undefined) {
+              state.tool = 'select';
+              console.log('[creator] Canvas activated — select tool');
+              return _result(true, 'canvas-select', 'LIVE', 'opened', 'wall/main.js', 'Canvas set to select tool.');
+            }
+          } catch (e) {}
+          return _result(false, 'canvas-select', 'DISCONNECTED', 'not_opened', 'wall/main.js', 'Canvas state not accessible.');
+        },
+
+        openObjectPanel: function () {
+          try {
+            showObjectInspector();
+            pinObjectInspector(true);
+            var tabBtns = document.querySelectorAll('.insp-tab-btn');
+            tabBtns.forEach(function (b) { if ((b.textContent || '').toLowerCase().indexOf('object') >= 0) b.click(); });
+            console.log('[creator] Object Panel opened and pinned');
+            return _result(true, 'object-panel', 'LIVE', 'opened', 'wall/index.html #right-panel', 'Object Inspector shown and pinned.');
+          } catch (e) {
+            return _result(false, 'object-panel', 'DISCONNECTED', 'not_opened', 'wall/index.html #right-panel', 'openObjectPanel failed: ' + (e && e.message));
+          }
+        },
+
+        openGlyphLab: function () {
+          try {
+            var DS = window.SBE && SBE.DrawerSystem;
+            if (DS && typeof DS.openDrawer === 'function') {
+              DS.openDrawer('glyph');
+              return _result(true, 'glyphlab', 'LIVE', 'opened', 'wall/ui/glyphDrawer.js', 'GlyphLab drawer opened via DrawerSystem.');
+            }
+          } catch (e) {}
+          return _result(false, 'glyphlab', 'DISCONNECTED', 'not_opened', 'wall/ui/glyphDrawer.js', 'DrawerSystem not available — GlyphLab drawer could not open.');
+        },
+
+        openColorLab: function () {
+          var integrated = window.SBE && (SBE.ColorLab || SBE.ColorLabRuntime);
+          if (integrated) return _result(true, 'colorlab', 'LIVE', 'opened', 'SBE.ColorLab', 'Integrated ColorLab found.');
+          console.warn('[creator] ColorLab is EXTERNAL_DISCONNECTED. External source: src-2026May24.zip. Bridge pending via Studio Palette Lab.');
+          return _result(false, 'colorlab', 'EXTERNAL_DISCONNECTED', 'not_opened', 'src-2026May24.zip', 'ColorLab exists externally but no integrated route was found. Source: src-2026May24.zip. Future bridge: ColorLab → Palette Package Export → Studio Palette Lab.');
+        },
+
+        openStudio: function () {
+          try { window.open('../studio/index.html#asset-library', '_blank', 'noopener'); return _result(true, 'studio-asset-library', 'LIVE', 'opened', '../studio/index.html', 'Studio opened in new tab.'); }
+          catch (e) { return _result(false, 'studio', 'BROKEN', 'not_opened', '../studio/index.html', 'window.open failed: ' + (e && e.message)); }
+        },
+
+        proofWorldSpaceDrawing: function () {
+          var sdr = window.SBE && SBE.SurfaceDrawingRuntime;
+          var ws  = window.SBE && SBE.Workspace;
+          var map = null; try { var mvr = SBE.MapboxViewportRuntime; map = mvr && mvr.getMap ? mvr.getMap() : null; } catch (e) {}
+          var report = {
+            ok: !!sdr,
+            toolId: 'world-space-drawing',
+            surfaceDrawingRuntime: !!sdr,
+            workspace: !!ws,
+            activeInteractionMode: (sdr && typeof sdr.getMode === 'function') ? sdr.getMode() : null,
+            surfaceOverlay: !!(sdr && typeof sdr.getCanvas === 'function' && sdr.getCanvas()),
+            mapProjectionAvailable: !!(map && typeof map.project === 'function'),
+            mapUnprojectionAvailable: !!(map && typeof map.unproject === 'function'),
+          };
+          console.log('[creator] proofWorldSpaceDrawing:', report);
+          return report;
+        },
+
+        proofMidiDrop: function () {
+          var mi = window.SBE && SBE.MidiImporter;
+          var dropHandler = null;
+          try {
+            var canvas = document.querySelector('.canvas-area');
+            if (canvas) { var evts = canvas._midiDropBound || canvas.__midiDrop; dropHandler = !!evts; }
+          } catch (e) {}
+          var sel = null; try { sel = (typeof state !== 'undefined' && state.selection) ? state.selection : null; } catch (e) {}
+          var report = {
+            ok: !!mi,
+            toolId: 'midi-drop',
+            midiImporterFound: !!mi,
+            dropHandlerFound: dropHandler !== false,
+            supportedAssignmentTarget: 'stroke (via selected object or sampler note)',
+            currentSelectionState: sel ? { count: Array.isArray(sel) ? sel.length : 1 } : null,
+            instructions: 'Drag a .mid file onto the canvas. If a stroke is selected it becomes the assignment target; otherwise the active sampler note is used.',
+          };
+          console.log('[creator] proofMidiDrop:', report);
+          return report;
+        },
+      };
+
+      window._wos = window._wos || {};
+      window._wos.debug = window._wos.debug || {};
+      window._wos.debug.creator = creator;
+      // ── §BEPR-DEBUG — BuildingEditProjectionRuntime debug binding ─────────────
+      // Placeholder; overwritten by buildingEditProjectionRuntime.js which loads
+      // after main.js and self-registers on _wos.debug.buildingEdits.
+      window._wos.debug.buildingEdits = window._wos.debug.buildingEdits || null;
+      // ── §BRR-DEBUG — BuildingReplacementRuntime debug binding ────────────────
+      // Placeholder; overwritten by buildingReplacementRuntime.js (loads after main.js).
+      window._wos.debug.buildingReplacement = window._wos.debug.buildingReplacement || null;
+      // ── §EBA-DEBUG — EditableBasemapAuthority debug binding ───────────────────
+      // Placeholder; overwritten by editableBasemapAuthority.js onReady re-wire.
+      window._wos.debug.buildings = window._wos.debug.buildings || null;
+      // ── §TVPL-DEBUG — ThreeViewStyleParityLock debug binding ─────────────────
+      // Placeholder; overwritten by threeViewStyleParityLock.js onReady re-wire.
+      window._wos.debug.mapViewParity = window._wos.debug.mapViewParity || null;
+
+      // ── Wire left-rail nav buttons ────────────────────────────────────────────
+      (function _bindRailButtons() {
+        var buttons = document.querySelectorAll('[data-creator-action]');
+        buttons.forEach(function (btn) {
+          btn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            var action = btn.dataset.creatorAction;
+            switch (action) {
+              case 'wall':     btn.blur(); break;
+              case 'studio':   creator.openStudio(); break;
+              case 'canvas':   creator.openCanvas(); break;
+              case 'glyphlab': creator.openGlyphLab(); break;
+              case 'colorlab': { var r = creator.openColorLab(); if (!r.ok) console.info('[creator] ColorLab:', r.message); break; }
+              case 'settings': { console.info('[creator] Settings: no dedicated settings route yet. Use _wos.debug.creator.creatorToolInventory() for tool status.'); break; }
+              case 'help':     { console.info('[creator] Help: WOS creator tools — run _wos.debug.creator.creatorToolInventory() to see all tools and status.'); break; }
+            }
+          });
+        });
+      })();
+    })();
+
     // ── _wos.auditHiddenArtifacts ──────────────────────────────────────────────
     window._wos.auditHiddenArtifacts = function auditHiddenArtifacts() {
       var result = {

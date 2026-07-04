@@ -12,13 +12,87 @@
       href="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css"
       rel="stylesheet"
     />
+  <!-- 0624O — Embed mode: ?embed=1 or ?controls=0 or ?hud=0 or ?chrome=0 hides WOS control chrome -->
+  <!-- 0629A — OBS mode: ?obs=1 hides authoring chrome but keeps flight HUD -->
+  <script>
+    (function() {
+      var p = new URLSearchParams(window.location.search);
+      if (p.get('embed') === '1' || p.get('controls') === '0' || p.get('hud') === '0' || p.get('chrome') === '0') {
+        document.documentElement.classList.add('wos-embed');
+      }
+      if (p.get('obs') === '1') {
+        document.documentElement.classList.add('wos-obs');
+      }
+    })();
+  </script>
+  <style>
+    /* Inline so it is never stale from stylesheet cache */
+    /* Hide WOS chrome in embed mode */
+    .wos-embed #left-rail,
+    .wos-embed #launcher-rail,
+    .wos-embed #drawer-panel,
+    .wos-embed #overlay-panel,
+    .wos-embed #left-panel,
+    .wos-embed #right-panel,
+    .wos-embed #viewport-controls,
+    .wos-embed .transport-bar,
+    .wos-embed #wos-hud,
+    .wos-embed .mapboxgl-ctrl-top-left,
+    .wos-embed .mapboxgl-ctrl-top-right,
+    .wos-embed .mapboxgl-ctrl-bottom-left,
+    .wos-embed .mapboxgl-ctrl-bottom-right,
+    .wos-embed .mapboxgl-ctrl-group { display: none !important; }
+    /* Hide WOS telemetry/weather/clock overlays */
+    .wos-embed #world-telemetry-hud,
+    .wos-embed #world-hud,
+    .wos-embed .wt-reality { display: none !important; }
+    /* #wos-nav kept visible — provides vehicle/camera/traversal controls in embed */
+    /* Ensure map canvas stays interactive */
+    .wos-embed .mapboxgl-canvas,
+    .wos-embed .mapboxgl-canvas-container,
+    .wos-embed .canvas-area { pointer-events: auto !important; }
+    /* Belt-and-suspenders: hide any stray mapbox ctrl groups */
+    .wos-embed .mapboxgl-ctrl-group { display: none !important; }
+    /* 0629A — OBS broadcast mode: hide authoring chrome, keep flight HUD */
+    .wos-obs #left-rail,
+    .wos-obs #launcher-rail,
+    .wos-obs #drawer-panel,
+    .wos-obs #overlay-panel,
+    .wos-obs #left-panel,
+    .wos-obs #right-panel,
+    .wos-obs #viewport-controls,
+    .wos-obs .transport-bar,
+    .wos-obs .mapboxgl-ctrl-top-left,
+    .wos-obs .mapboxgl-ctrl-top-right,
+    .wos-obs .mapboxgl-ctrl-bottom-left,
+    .wos-obs .mapboxgl-ctrl-bottom-right,
+    .wos-obs .mapboxgl-ctrl-group,
+    .wos-obs #wos-nav { display: none !important; }
+    .wos-obs #world-telemetry-hud,
+    .wos-obs #world-hud,
+    .wos-obs .wt-reality { display: none !important; }
+    /* #wos-hud (flight HUD) intentionally kept visible in obs mode */
+    /* 0625N — PLAY TAB clean-capture state: hide all map chrome (expanded) */
+    body.play-controls-hidden #wos-nav,
+    body.play-controls-hidden .mapboxgl-ctrl-top-right,
+    body.play-controls-hidden .mapboxgl-ctrl-bottom-right,
+    body.play-controls-hidden .mapboxgl-ctrl-top-left,
+    body.play-controls-hidden .mapboxgl-ctrl-bottom-left,
+    body.play-controls-hidden .mapboxgl-ctrl-group,
+    body.play-controls-hidden .mapboxgl-ctrl,
+    body.play-controls-hidden button.mapboxgl-ctrl-zoom-in,
+    body.play-controls-hidden button.mapboxgl-ctrl-zoom-out,
+    body.play-controls-hidden button.mapboxgl-ctrl-compass,
+    body.play-controls-hidden #viewport-controls,
+    body.play-controls-hidden .wos-map-overlay-controls {
+      display: none !important;
+      opacity: 0 !important;
+      pointer-events: none !important;
+    }
+  </style>
   </head>
   <body class="wos-booting">
-    <!-- 0603N — open the Studio authoring workspace (separate page) -->
-    <a href="../studio/index.html" target="_blank" rel="noopener"
-       style="position:fixed;top:8px;right:10px;z-index:9999;font:11px/1 monospace;
-              color:#78e6ff;background:rgba(7,9,12,0.72);border:1px solid #2c4456;
-              border-radius:5px;padding:5px 9px;text-decoration:none;">Studio ↗</a>
+    <!-- 0609A — Studio launcher moved to left rail; obstructive fixed link removed -->
     <!-- Buttons preserved as hidden for bindControls compatibility -->
     <button id="load-example" style="display: none">Demo</button>
     <label style="display: none"
@@ -39,16 +113,40 @@
     <!-- this shell is opacity:0 — visibility:hidden preserves layout geometry -->
     <!-- so getBoundingClientRect() and map.resize() remain accurate.          -->
     <div class="app-body" data-surface-shell="legacy-editor">
-      <!-- LEFT RAIL -->
+      <!-- LEFT RAIL — 0610A: broadcast surface only -->
       <div id="left-rail" data-watch-hide>
-        <div class="rail-icon"></div>
-        <button class="launcher-btn" data-drawer="sampler" title="Sampler">
+        <!--<div class="rail-icon"></div>-->
+        <button
+          class="rail-nav-btn"
+          data-creator-action="studio"
+          id="rail-studio"
+          title="Studio — creator tools"
+        >
+          🎙️
+        </button>
+        <!-- Legacy drawers — hidden, retained for bindLauncherControls compatibility -->
+        <button
+          class="launcher-btn"
+          data-drawer="sampler"
+          title="Sampler"
+          style="display: none"
+        >
           🍡
         </button>
-        <button class="launcher-btn" data-drawer="library" title="Library">
+        <button
+          class="launcher-btn"
+          data-drawer="library"
+          title="Library"
+          style="display: none"
+        >
           📚
         </button>
-        <button class="launcher-btn" data-workbench="symbols" title="SymbolLab">
+        <button
+          class="launcher-btn"
+          data-workbench="symbols"
+          title="SymbolLab"
+          style="display: none"
+        >
           ✦
         </button>
       </div>
@@ -93,7 +191,11 @@
           <input id="active-note" type="hidden" value="60" />
         </div>
         <div id="stage-grid"></div>
-        <div id="canvas-tool-subbar" class="canvas-tool-subbar"></div>
+        <div
+          id="canvas-tool-subbar"
+          class="canvas-tool-subbar"
+          style="display: none"
+        ></div>
         <!-- Viewport zoom controls — floating HUD, bottom-right of canvas area -->
         <div class="viewport-controls" id="viewport-controls">
           <!-- Orientation toggle — Portrait / Landscape -->
@@ -132,7 +234,7 @@
         <div class="canvas-wrap" id="canvas-wrap">
           <canvas id="engine-canvas" width="1080" height="1920"></canvas>
         </div>
-        <div class="tool-group">
+        <div class="tool-group" style="display: none">
           <!-- SELECT tool — dedicated non-drawing mode for click-select, marquee, transform -->
           <button class="tool" data-tool="select" title="Select (V)">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
@@ -2204,6 +2306,47 @@
     <script src="./systems/presentation/regionalFlightCameraRig.js"></script>
     <!-- ── Building Continuity Runtime (0528W) ───────────────────────────────── -->
     <script src="./systems/presentation/buildingContinuityRuntime.js"></script>
+    <!-- ── Building Authority Runtime (0612A) — must load before projection ──── -->
+    <script src="./systems/presentation/buildingAuthorityRuntime.js"></script>
+    <!-- ── Building Edit Projection Runtime (0609T) ──────────────────────────── -->
+    <script src="./systems/presentation/buildingEditProjectionRuntime.js"></script>
+    <!-- ── Building Replacement Runtime (0609V) ──────────────────────────────── -->
+    <script src="./systems/runtime/buildingReplacementRuntime.js"></script>
+    <!-- ── Building Style Kit (0610E) ─────────────────────────────────────────── -->
+    <script src="./systems/runtime/buildingStyleKit.js"></script>
+    <!-- ── Phase 8: WOS Wall Runtime Bundle Pipeline (0614) ──────────────────── -->
+    <!-- Shared WOS palette (Studio + Wall) -->
+    <script src="../shared/data/wosPalette.js"></script>
+    <!-- Wall runtime modules — load order: diagnostics → filter → mat → structure → loader -->
+    <script src="./systems/runtime/wallRuntimeDiagnostics.js"></script>
+    <script src="./systems/runtime/wallRuntimeActorFilter.js"></script>
+    <script src="./systems/runtime/wallRuntimeMaterialOverrideApplicator.js"></script>
+    <script src="./systems/runtime/wallRuntimeStructureReplacementLayer.js"></script>
+    <!-- 0616H: Custom asset registry — must load before bundle loader -->
+    <script src="./systems/runtime/wallRuntimeCustomAssetRegistry.js"></script>
+    <script src="./systems/runtime/wallRuntimeGlbAssetRegistry.js"></script>
+    <!-- 0616L: Broadcast readiness — must load before bundle loader -->
+    <script src="./systems/runtime/wallRuntimeBroadcastReadiness.js"></script>
+    <!-- 0618A: wallRuntimeBundleLoader moved to after Three.js / GLTFLoader / GlbRenderLayer -->
+    <!-- ── Selected Buildings Only Mode (0612D) — REMOVED (0612G R1):
+         obsolete-audit-artifact, replaced by 0612E EditableBasemapAuthority.
+         File retained on disk as archive; must not execute during Wall boot. -->
+    <!-- ── Editable Basemap Authority (0612E) ────────────────────────────────── -->
+    <script src="./systems/presentation/editableBasemapAuthority.js"></script>
+    <!-- ── WOS Map Style Authority (0612Q) ────────────────────────────────────── -->
+    <script src="./systems/presentation/wosMapStyleAuthority.js"></script>
+    <!-- ── Three-View Style Parity Lock (0612F) ──────────────────────────────── -->
+    <script src="./systems/presentation/threeViewStyleParityLock.js"></script>
+    <!-- ── Building Illustration Pass (0612R) ────────────────────────────────── -->
+    <script src="./systems/presentation/buildingIllustrationPass.js"></script>
+    <!-- ── Building Material Illustration Runtime (0612S) ────────────────────── -->
+    <script src="./systems/presentation/buildingMaterialIllustrationRuntime.js"></script>
+    <!-- ── City Density Authority (0612K) ────────────────────────────────────── -->
+    <script src="./systems/presentation/cityDensityAuthority.js"></script>
+    <!-- ── Studio → Wall Publish Authority (0612L) ───────────────────────────── -->
+    <script src="./systems/presentation/studioWallPublishAuthority.js"></script>
+    <!-- ── Building Zero-State Proof (0612M) ─────────────────────────────────── -->
+    <script src="./systems/presentation/buildingZeroStateProof.js"></script>
     <!-- ── Traversal Continuity Authority (0528X) ────────────────────────────── -->
     <script src="./systems/presentation/traversalContinuityAuthority.js"></script>
     <!-- ── Predictive Tile Preload Runtime (0528Z) ───────────────────────────── -->
@@ -2226,12 +2369,61 @@
     <script src="./systems/presentation/mapboxTileTelemetry.js"></script>
     <!-- ── Tile Emergence Styling (0528AF) ───────────────────────────────────── -->
     <script src="./systems/presentation/tileEmergenceStyling.js"></script>
+    <!-- ── Runtime Snapshot Capture (0606A) ─────────────────────────────────── -->
+    <script src="./systems/presentation/runtimeSnapshotCapture.js"></script>
     <!-- ── Traversal Control Deck (0528V) ────────────────────────────────────── -->
     <script src="./systems/presentation/traversalControlDeck.js"></script>
     <!-- ── Traversal HUD — read-only telemetry overlay (0529G) ───────────────── -->
     <script src="./systems/presentation/traversalHUD.js"></script>
+    <!-- ── Snapshot runtime — S / Shift+S PNG capture (0628E, 0629A) ──────── -->
+    <script src="./systems/presentation/wosSnapshotRuntime.js"></script>
+    <!-- ── Boot runtime — ?mode=flight&destination=Miami URL preset (0629A) ── -->
+    <script src="./systems/presentation/wosChannelBootRuntime.js"></script>
     <!-- ── Three.js (0531J) — required by WorldSpaceVehicleLayer ───────────── -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+    <!-- ── GLTFLoader (0618A) — non-ESM build, sets THREE.GLTFLoader ────────── -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/loaders/GLTFLoader.js"></script>
+    <!-- ── 0625E: ThreeSkyLayer — Mapbox custom layer atmospheric sky shader ── -->
+    <script src="./threeSkyLayer.js"></script>
+    <!-- ── 0626: WOS Runtime stabilisation — must load before Orbital ───────── -->
+    <script src="./systems/runtime/WosRuntimeModeState.js"></script>
+    <!-- 0627 Presentation routing — must load before traversal deck and debug companions -->
+    <script src="./systems/presentation/WosPresentationModeState.js"></script>
+    <script src="./systems/presentation/WosPresentationRouter.js"></script>
+    <script src="./systems/runtime/WosEndpointGuard.js"></script>
+    <script src="./systems/runtime/WosStartupCoordinator.js"></script>
+    <script src="./systems/runtime/WosModeTransitionController.js"></script>
+    <!-- ── 0626: WOS Orbital Mode — data → logic → interface load order ─────── -->
+    <script src="./systems/orbital/OrbitalEffectState.js"></script>
+    <script src="./systems/orbital/OrbitalPresetRegistry.js"></script>
+    <script src="./systems/orbital/OrbitalOverlayRoles.js"></script>
+    <script src="./systems/orbital/OrbitalMapContext.js"></script>
+    <script src="./systems/orbital/WosMapStyleTokens.js"></script>
+    <script src="./systems/orbital/OrbitalAudioOverlayController.js"></script>
+    <script src="./systems/orbital/OrbitalEarthMode.js"></script>
+    <script src="./systems/orbital/OrbitalAudioReactiveBridge.js"></script>
+    <script src="./systems/orbital/PlayToWosVisualBridge.js"></script>
+    <script src="./systems/orbital/OrbitalDiagnostics.js"></script>
+    <script src="./systems/orbital/OrbitalCameraRig.js"></script>
+    <script src="./systems/orbital/OrbitalMotionController.js"></script>
+    <script src="./systems/orbital/OrbitalHudAdapter.js"></script>
+    <script src="./systems/orbital/OrbitalFxPanel.js"></script>
+    <script src="./systems/orbital/OrbitalModeController.js"></script>
+    <!-- ── 0627: WOS Moon Mode — data → scale → visibility → transit → views → controller ── -->
+    <script src="./systems/moon/MoonObjectRegistry.js"></script>
+    <script src="./systems/moon/MoonScaleModel.js"></script>
+    <script src="./systems/moon/MoonEarthVisibility.js"></script>
+    <script src="./systems/moon/CislunarTransitController.js"></script>
+    <script src="./systems/moon/MoonSurfaceView.js"></script>
+    <script src="./systems/moon/MoonOrbitView.js"></script>
+    <script src="./systems/moon/MoonModeController.js"></script>
+    <!-- ── GLB Runtime Render Layer (0618A) ──────────────────────────────────── -->
+    <script src="./systems/runtime/wallRuntimeGlbRenderLayer.js"></script>
+    <!-- ── Building Texture Registry + Applicator (0618B) ───────────────────── -->
+    <script src="./systems/runtime/wallRuntimeBuildingTextureRegistry.js"></script>
+    <script src="./systems/runtime/wallRuntimeBuildingTextureApplicator.js"></script>
+    <!-- ── Bundle Loader (0618A: moved here — must load after THREE+GLTFLoader+GlbRenderLayer) -->
+    <script src="./systems/runtime/wallRuntimeBundleLoader.js"></script>
     <!-- ── Vehicle Visual Registry (0601C) — visual identity source of truth ── -->
     <script src="./systems/render/vehicleVisualRegistry.js"></script>
     <!-- ── Truth-Driven Actor Authority (0603A) ──────────────────────────────── -->
@@ -2280,6 +2472,10 @@
     <script src="./systems/feeds/citibikeStationVisualProfile.js"></script>
     <!-- ── World-Space Vehicle Layer (0531J) ─────────────────────────────────── -->
     <script src="./systems/render/worldSpaceVehicleLayer.js"></script>
+    <!-- ── Organic Building Surface Pattern Runtime (0612T) ──────────────────── -->
+    <script src="./systems/presentation/organicBuildingSurfacePatternRuntime.js"></script>
+    <!-- ── All Visible Building Surface Texture Runtime (0612U) ─────────────── -->
+    <script src="./systems/presentation/allVisibleBuildingSurfaceTextureRuntime.js"></script>
     <!-- ── Three Render-Path Proof Harness (0601I) ───────────────────────────── -->
     <script src="./systems/render/threePrimitiveVisibilityHarness.js"></script>
     <!-- ── Hero Vehicle Prototype (0530F) ────────────────────────────────────── -->
@@ -2320,24 +2516,44 @@
 
     <!-- ── WOS debug namespace integrity check ────────────────────────────── -->
     <script>
-    (function _wosDebugIntegrityCheck() {
-      var expected = ['maritimeStyle', 'styleAuthority', 'presets', 'liveStyle', 'vesselTopology', 'waterMemory', 'wakeSignature', 'distanceAtmosphere', 'lightAuthority', 'silhouetteDifferentiation'];
-      var missing  = [];
-      for (var i = 0; i < expected.length; i++) {
-        if (!window._wos || !window._wos[expected[i]]) missing.push(expected[i]);
-      }
-      // Check _wos.debug.mapbox separately
-      var mapboxAuditOk = !!(window._wos && window._wos.debug && window._wos.debug.mapbox);
-      if (!mapboxAuditOk) missing.push('debug.mapbox');
-      console.log('[WOS Debug Bindings]',
-        window._wos ? Object.keys(window._wos) : '(window._wos undefined)');
-      if (missing.length) {
-        console.warn('[WOS Debug Bindings] missing namespaces:', missing);
-      } else {
-        console.log('[WOS Debug Bindings] ✓ all namespaces bound — ' +
-          '_wos.maritimeStyle / .styleAuthority / .presets / .liveStyle / .vesselTopology / .waterMemory / .wakeSignature / .distanceAtmosphere / .lightAuthority / .silhouetteDifferentiation / .debug.mapbox ready');
-      }
-    })();
+      (function _wosDebugIntegrityCheck() {
+        var expected = [
+          "maritimeStyle",
+          "styleAuthority",
+          "presets",
+          "liveStyle",
+          "vesselTopology",
+          "waterMemory",
+          "wakeSignature",
+          "distanceAtmosphere",
+          "lightAuthority",
+          "silhouetteDifferentiation",
+        ];
+        var missing = [];
+        for (var i = 0; i < expected.length; i++) {
+          if (!window._wos || !window._wos[expected[i]])
+            missing.push(expected[i]);
+        }
+        // Check _wos.debug.mapbox separately
+        var mapboxAuditOk = !!(
+          window._wos &&
+          window._wos.debug &&
+          window._wos.debug.mapbox
+        );
+        if (!mapboxAuditOk) missing.push("debug.mapbox");
+        console.log(
+          "[WOS Debug Bindings]",
+          window._wos ? Object.keys(window._wos) : "(window._wos undefined)",
+        );
+        if (missing.length) {
+          console.warn("[WOS Debug Bindings] missing namespaces:", missing);
+        } else {
+          console.log(
+            "[WOS Debug Bindings] ✓ all namespaces bound — " +
+              "_wos.maritimeStyle / .styleAuthority / .presets / .liveStyle / .vesselTopology / .waterMemory / .wakeSignature / .distanceAtmosphere / .lightAuthority / .silhouetteDifferentiation / .debug.mapbox ready",
+          );
+        }
+      })();
     </script>
 
     <script src="./systems/routeInputSystem.js"></script>
@@ -2574,6 +2790,185 @@
           .getElementById("overlay-panel-close")
           .addEventListener("click", closePanel);
         backdrop.addEventListener("click", closePanel);
+      })();
+    </script>
+
+    <!-- 0625D — PLAY → WOS camera bridge. Accepts play:set-camera-mode postMessages
+         from the PLAY parent window and routes to SBE.CameraShotSelectorUI.setShot().
+         Valid modes: ext_follow, int_driver, int_passenger (+ shot presets).
+         Origin is not validated (PLAY is a different port = cross-origin sibling). -->
+    <script>
+      (function () {
+        var VALID_MODES = {
+          ext_follow: true, int_driver: true, int_passenger: true,
+          dashcam: true, helmetcam: true, bus_window: true, ferry_deck: true, drone_observer: true,
+        };
+        window.addEventListener("message", function (e) {
+          if (!e.data || e.data.type !== "play:set-camera-mode") return;
+          var mode = e.data.mode;
+          if (typeof mode !== "string" || !VALID_MODES[mode]) return;
+          var sel = window.SBE && window.SBE.CameraShotSelectorUI;
+          if (sel && typeof sel.setShot === "function") sel.setShot(mode);
+        });
+      })();
+    </script>
+
+    <!-- 0625M — Sky/cloud audit diagnostic (embed-only, dev console only) -->
+    <script>
+      (function () {
+        if (window === window.parent) return; // only runs when embedded
+        // Deferred 2s to allow SBE and layer registration to settle
+        setTimeout(function () {
+          var skyInstalled = !!(window.SBE && window.SBE.ThreeSkyLayer);
+          var cloudCanvas = document.querySelector('.mapboxgl-canvas-container canvas[style*="z-index"]');
+          var cloudInstalled = !!(window.SBE && window.SBE.CloudAtmosphereRenderer) || !!cloudCanvas;
+          console.log('[WOS 0625M] SKY audit — ThreeSkyLayer registered:', skyInstalled,
+            '| note: renderingMode=2d renders behind map; only visible at horizon with camera pitched up');
+          console.log('[WOS 0625M] CLOUD audit — CloudAtmosphereRenderer canvas overlay:', cloudInstalled,
+            '| z-index:7.5 over map canvas; opacity depends on phase/coverage; night phase = low coverage');
+          if (skyInstalled) {
+            var st = window.SBE.ThreeSkyLayer.getStatus ? window.SBE.ThreeSkyLayer.getStatus() : null;
+            if (st) console.log('[WOS 0625M] SKY status:', JSON.stringify(st));
+          }
+        }, 2000);
+      })();
+    </script>
+
+    <!-- 0625I — WALL → PLAY runtime bridge: heartbeat, pong, route-stop.
+         Only runs when WOS is embedded in an iframe (window !== window.parent).
+         Sends wall:heartbeat every 1s with real runtime payload.
+         Replies wall:pong to PLAY ping messages for RTT measurement.
+         Accepts play:route-stop to call SBE.TraversalControlDeck.stop(). -->
+    <script>
+      (function () {
+        if (window === window.parent) return; // standalone — do not start bridge
+
+        // ── Heartbeat ───────────────────────────────────────────────────────────
+        function getHeartbeatPayload() {
+          var p = { wallTime: Date.now(), source: "wall" };
+          var tcd = window.SBE && window.SBE.TraversalControlDeck;
+          if (tcd && typeof tcd.getRouteState === "function") {
+            var rs = tcd.getRouteState();
+            p.routeState = rs.routeState;
+            p.canStop    = rs.canStop;
+            p.canPause   = rs.canPause;
+            p.transport  = rs.transport || 'flight';
+          }
+          var cam = window.SBE && window.SBE.CameraShotSelectorUI;
+          if (cam && typeof cam.getState === "function") {
+            p.cameraMode = cam.getState().selected;
+          }
+          var sky = window.SBE && window.SBE.ThreeSkyLayer;
+          if (sky && typeof sky.getStatus === "function") {
+            p.skyRenderer = sky.getStatus().renderer;
+          }
+          var mvr = window.SBE && window.SBE.MapboxViewportRuntime;
+          if (mvr && typeof mvr.getMap === "function") {
+            var map = mvr.getMap();
+            if (map) {
+              try {
+                var ctr = map.getCenter();
+                p.mapCenter = { lng: ctr.lng, lat: ctr.lat };
+                p.mapZoom   = map.getZoom();
+              } catch (ex) {}
+            }
+          }
+          return p;
+        }
+
+        function sendHeartbeat() {
+          try { window.parent.postMessage({ type: "wall:heartbeat", payload: getHeartbeatPayload() }, "*"); } catch (ex) {}
+        }
+
+        // Start after a short delay so SBE runtimes have time to register.
+        setTimeout(function () {
+          sendHeartbeat();
+          setInterval(sendHeartbeat, 1000);
+        }, 800);
+
+        // ── Pong (PLAY ping → WALL pong for RTT) ───────────────────────────────
+        window.addEventListener("message", function (e) {
+          if (!e.data || e.data.type !== "play:ping") return;
+          var pl = e.data.payload;
+          if (!pl || typeof pl.pingId !== "string") return;
+          try {
+            window.parent.postMessage({
+              type: "wall:pong",
+              payload: { pingId: pl.pingId, sentAt: pl.sentAt, wallAt: performance.now() }
+            }, "*");
+          } catch (ex) {}
+        });
+
+        // ── Screensnap bridge (PLAY → WALL canvas capture) ────────────────────
+        window.addEventListener("message", function (e) {
+          if (!e.data || e.data.type !== "play:snap-request") return;
+          var requestId = e.data.requestId;
+          try {
+            var mvr = window.SBE && window.SBE.MapboxViewportRuntime;
+            var map = mvr && typeof mvr.getMap === "function" ? mvr.getMap() : null;
+            var canvas = map ? map.getCanvas() : null;
+            if (!canvas) {
+              // fall back to any canvas on the page
+              canvas = document.querySelector("canvas");
+            }
+            if (!canvas) {
+              window.parent.postMessage({ type: "wall:snap-data", requestId: requestId, error: "CANVAS NOT FOUND" }, "*");
+              return;
+            }
+            var dataUrl = canvas.toDataURL("image/png");
+            window.parent.postMessage({ type: "wall:snap-data", requestId: requestId, dataUrl: dataUrl }, "*");
+          } catch (ex) {
+            window.parent.postMessage({ type: "wall:snap-data", requestId: requestId, error: "CANVAS BLOCKED" }, "*");
+          }
+        });
+
+        // ── Controls visibility bridge (PLAY → WALL nav/controls hide/show) ───
+        window.addEventListener("message", function (e) {
+          if (!e.data || e.data.type !== "play:controls-visibility") return;
+          var visible = e.data.visible !== false;
+          if (visible) {
+            document.body.classList.remove("play-controls-hidden");
+          } else {
+            document.body.classList.add("play-controls-hidden");
+          }
+          // Also directly toggle wos-nav so it restores without waiting for CSS
+          var nav = document.getElementById("wos-nav");
+          if (nav) nav.style.display = visible ? "" : "none";
+          // 0625N/P — send ack so PLAY can confirm receipt and diagnose hiding
+          var found = document.querySelectorAll('.mapboxgl-ctrl-group').length;
+          var wosNav = document.getElementById("wos-nav");
+          var wosNavFound = !!wosNav;
+          try {
+            window.parent.postMessage({
+              type: "wall:controls-visibility-ack",
+              payload: {
+                visible: visible,
+                bodyClassApplied: !visible,
+                mapboxControlsFound: found,
+                wosNavFound: wosNavFound
+              }
+            }, "*");
+          } catch (ex) {}
+        });
+
+        // ── Route stop bridge (PLAY → WALL stop) ───────────────────────────────
+        window.addEventListener("message", function (e) {
+          if (!e.data || e.data.type !== "play:route-stop") return;
+          var pl = e.data.payload;
+          if (!pl || typeof pl.requestId !== "string") return;
+          var ok = false; var state = "unavailable";
+          var tcd = window.SBE && window.SBE.TraversalControlDeck;
+          if (tcd && typeof tcd.stop === "function") {
+            try { var r = tcd.stop(); ok = true; state = (r && r.routeState) || "stopped"; }
+            catch (ex) { state = "error"; }
+          }
+          try {
+            window.parent.postMessage({
+              type: "wall:route-stop-result",
+              payload: { requestId: pl.requestId, ok: ok, state: state }
+            }, "*");
+          } catch (ex2) {}
+        });
       })();
     </script>
   </body>

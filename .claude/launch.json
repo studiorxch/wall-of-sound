@@ -4,8 +4,36 @@
     {
       "name": "wall-of-sound",
       "runtimeExecutable": "npx",
-      "runtimeArgs": ["serve", "-p", "5500", "wall"],
+      "runtimeArgs": ["serve", "-p", "5500", "."],
+      "cwd": "/Users/studio/Projects/wall-of-sound/wall",
       "port": 5500
+    },
+    {
+      "name": "wos-root",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["serve", "-p", "5502", "."],
+      "port": 5502
+    },
+    {
+      "name": "studio",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["serve", "-p", "5503", "."],
+      "port": 5503
+    },
+    {
+      "name": "colorlab",
+      "runtimeExecutable": "/Users/studio/.nvm/versions/node/v20.19.6/bin/node",
+      "runtimeArgs": ["node_modules/vite/bin/vite.js"],
+      "cwd": "/Users/studio/Projects/wall-of-sound/colorlab",
+      "port": 5174
+    },
+    {
+      "name": "play",
+      "runtimeExecutable": "/Users/studio/.nvm/versions/node/v20.19.6/bin/node",
+      "runtimeArgs": ["node_modules/vite/bin/vite.js"],
+      "cwd": "/Users/studio/Projects/wall-of-sound/play",
+      "port": 5173,
+      "autoPort": true
     }
   ]
 }

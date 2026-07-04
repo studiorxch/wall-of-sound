@@ -1,0 +1,4 @@
+  Drafts
+  Reviewed
+  Approved
+  Rejected

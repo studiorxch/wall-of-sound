@@ -200,7 +200,11 @@ body {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  transition: width 200ms ease, min-width 200ms ease, max-width 200ms ease, opacity 160ms ease;
+  transition:
+    width 200ms ease,
+    min-width 200ms ease,
+    max-width 200ms ease,
+    opacity 160ms ease;
 }
 
 /* ── INSPECTOR COLLAPSED (no selection, not pinned) ─────────────────── */
@@ -233,8 +237,13 @@ body.inspector-hidden .drawer-panel {
   color: inherit;
   transition: opacity 120ms ease;
 }
-.inspector-pin-btn:hover { opacity: 0.9; }
-.inspector-pin-btn.pinned { opacity: 1; color: var(--accent, #5b8cff); }
+.inspector-pin-btn:hover {
+  opacity: 0.9;
+}
+.inspector-pin-btn.pinned {
+  opacity: 1;
+  color: var(--accent, #5b8cff);
+}
 
 /* ── INSPECTOR EMPTY STATE ──────────────────────────────────────────── */
 #inspector-empty-state {
@@ -2020,7 +2029,7 @@ body.presentation .watch-hide {
   position: fixed;
   left: auto;
   right: 12px;
-  bottom: 58px;   /* sit above the 48px traversal deck */
+  bottom: 58px; /* sit above the 48px traversal deck */
   z-index: 1200;
   width: 42px;
   height: 26px;
@@ -2791,6 +2800,58 @@ body.split-dragging {
   letter-spacing: 0.04em;
 }
 
+/* ── Geo camera controls overlay (#ws-geo-controls) ──────────────────── */
+#ws-geo-controls {
+  position: absolute;
+  right: 12px;
+  bottom: 120px;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  pointer-events: auto;
+  opacity: 0.32;
+  transition: opacity 200ms;
+}
+
+#ws-geo-controls:hover {
+  opacity: 0.82;
+}
+
+.ws-geo-btn {
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  line-height: 1;
+  background: transparent;
+  border: 1px solid rgba(160, 210, 230, 0.18);
+  border-radius: 6px;
+  color: rgba(220, 240, 255, 0.70);
+  cursor: pointer;
+  padding: 0;
+  transition: background 120ms, color 120ms, border-color 120ms;
+}
+
+.ws-geo-btn:hover {
+  background: rgba(200, 230, 255, 0.12);
+  border-color: rgba(160, 210, 230, 0.36);
+  color: rgba(220, 240, 255, 0.95);
+}
+
+.ws-geo-btn--active {
+  background: rgba(50, 185, 140, 0.12);
+  border-color: rgba(50, 185, 140, 0.38);
+  color: rgba(80, 215, 170, 0.92);
+}
+
+.ws-geo-btn--active:hover {
+  background: rgba(50, 185, 140, 0.20);
+}
+
+/* ── Viewport zoom label ───────────────────────────────────────────────── */
 .vp-zoom-label {
   min-width: 34px;
   text-align: center;
@@ -4049,4 +4110,146 @@ body.split-dragging {
 }
 .layer-opacity-row input[type="range"] {
   flex: 1;
+}
+
+/* ── 0606A Snapshot clean mode — hides HUD for PNG export ─────────────────── */
+/* Applied as body class "snapshot-clean" during capturePNG(); removed after.  */
+body.snapshot-clean #wos-nav,
+body.snapshot-clean #wos-hud,
+body.snapshot-clean #left-rail,
+body.snapshot-clean .panel-left,
+body.snapshot-clean .panel-right,
+body.snapshot-clean .drawer-panel,
+body.snapshot-clean #right-panel,
+body.snapshot-clean .debug-overlay,
+body.snapshot-clean [data-watch-hide] {
+  display: none !important;
+}
+
+/* ── 0609A Recovery Rail buttons — same geometry as launcher-btn ─────────── */
+.rail-nav-btn {
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.5);
+  border-radius: 7px;
+  cursor: pointer;
+  font-size: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    background 0.12s,
+    border-color 0.12s,
+    color 0.12s;
+  flex-shrink: 0;
+}
+.rail-nav-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.16);
+  color: rgba(255, 255, 255, 0.8);
+}
+.rail-nav-btn.active {
+  border-color: var(--accent, #3dd8c5);
+  color: var(--accent, #3dd8c5);
+  background: rgba(61, 216, 197, 0.08);
+}
+
+/* ── 0624O — Embed / clean mode for PLAY Broadcast HUD ─────────────────────
+   Applied when ?embed=1, ?controls=0, ?hud=0, or ?chrome=0 is in the URL.
+   Hides WOS control chrome; preserves the map canvas and route surface.
+   ────────────────────────────────────────────────────────────────────────── */
+/* Hide WOS chrome — keep #wos-nav (routes controller) visible */
+.wos-embed #left-rail,
+.wos-embed #launcher-rail,
+.wos-embed #drawer-panel,
+.wos-embed #overlay-panel,
+.wos-embed #left-panel,
+.wos-embed #right-panel,
+.wos-embed #viewport-controls,
+.wos-embed .transport-bar,
+.wos-embed #wos-hud,
+.wos-embed .mapboxgl-ctrl-top-left,
+.wos-embed .mapboxgl-ctrl-top-right,
+.wos-embed .mapboxgl-ctrl-bottom-left,
+.wos-embed .mapboxgl-ctrl-bottom-right {
+  display: none !important;
+}
+/* Hide WOS telemetry/weather/clock overlays in embed */
+.wos-embed #world-telemetry-hud,
+.wos-embed #world-hud,
+.wos-embed .wt-reality {
+  display: none !important;
+}
+
+/* #wos-nav (traversalControlDeck) stays visible in embed — provides vehicle/camera controls.
+   Do not hide globally. TAB/Show in PLAY controls the PLAY operator bar, not WOS nav. */
+
+/* Ensure map canvas still receives pointer events in embed */
+.wos-embed .mapboxgl-canvas,
+.wos-embed .mapboxgl-canvas-container,
+.wos-embed .canvas-area {
+  pointer-events: auto !important;
+}
+
+/* Belt-and-suspenders: hide stray mapbox ctrl groups */
+.wos-embed .mapboxgl-ctrl-group {
+  display: none !important;
+}
+
+/* Collapse grid side columns in embed so canvas-area fills the full iframe.
+   Without this, the inspector (300px) and rail (50px) columns remain allocated
+   even when hidden, leaving gaps beside the map that expose background content.
+   Mirrors body.presentation .app-body collapse pattern.                      */
+.wos-embed .app-body {
+  grid-template-columns: 0 minmax(0, 1fr) 0 !important;
+}
+
+/* 0625N — Mapbox controls: subtle transparent style in visible state */
+.mapboxgl-ctrl-group {
+  background: rgba(5, 9, 14, 0.05) !important;
+  border: 1px solid rgba(160, 210, 230, 0.18) !important;
+  box-shadow: none !important;
+  backdrop-filter: blur(3px);
+}
+.mapboxgl-ctrl-group button {
+  background: rgba(5, 9, 14, 0.05) !important;
+  color: rgba(220, 245, 255, 0.05) !important;
+}
+/* ── WOS Orbital isolation — startup safety defaults ─────────────────────────
+   These CSS defaults enforce the expected initial state for orbital elements.
+   JS inline styles and class-based rules override these when orbital is active.
+   Purpose: recover from any stuck state left by a previous session.
+
+   IMPORTANT: Do NOT use visibility !important on Mapbox elements.
+   The boot shell (.app-body[data-surface-shell="legacy-editor"]) uses
+   visibility:hidden during wos-booting. Overriding that with !important
+   would expose a partially-initialized canvas before the map is ready.     */
+
+/* Only orbital-active class may dim the map */
+body.wos-orbital-active .mapboxgl-map {
+  filter: brightness(0.08) !important;
+}
+/* Transition overlays and orbital canvas hidden by default */
+#orbital-mode-canvas    { display: none; }
+#wos-transition-overlay { display: none; }
+#wos-atm-bridge         { display: none; }
+/* FX button hidden by default; shown via JS when orbital transport active */
+#nav-orbital-fx         { display: none; }
+
+/* ── Orbital Earth broadcast containment ──────────────────────────────────────
+   Collapse the app-body grid to a single full-width column so the map canvas
+   fills the entire viewport. Without this, the inspector (300px) and left-rail
+   (50px) columns remain allocated even when hidden, leaving a 350px gap beside
+   the canvas-area that can expose other content or the preload map canvas.
+   Mirrors body.presentation .app-body collapse pattern.                      */
+body.wos-orbital-earth-active .app-body {
+  grid-template-columns: 0 minmax(0, 1fr) 0 !important;
+}
+
+/* ── end WOS Orbital isolation ─────────────────────────────────────────────── */
+
+.mapboxgl-ctrl-group button:hover {
+  background: rgba(50, 180, 220, 0.05) !important;
 }

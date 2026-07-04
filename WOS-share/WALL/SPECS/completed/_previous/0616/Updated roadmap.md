@@ -1,0 +1,52 @@
+- **0616A_WOS_StudioAssetPackAuthoringPass_v1.0.0_BUILD**
+    - Seed usable structure / vehicle / maritime / aircraft / prop assets
+    - Clean labels, categories, tags, silhouette classes
+    - Reduce placeholder dependency
+- **0616B_WOS_ProxyShapeEditorPass_v1.0.0_BUILD**
+    - Create editable parametric 3D forms
+    - Shape controls: length, width, height, roof, cabin, taper, wings, mast, base
+    - Studio-only form authoring
+- **0616C_WOS_ObjectColorMaterialAuthoringPass_v1.0.0_BUILD**
+    - Add object color controls
+    - Body / roof / glass / accent / edge / emissive colors
+    - Material class, roughness, metalness, opacity
+- **0616D_WOS_CustomStudioAssetSavePass_v1.0.0_BUILD**
+    - Save designed forms as reusable Studio assets
+    - Store `shapeRecipe`
+    - Store `materialRecipe`
+    - Keep actor manifests clean
+- **0616E_WOS_CustomAssetPlacementPass_v1.0.0_BUILD**
+    - Select custom Studio asset
+    - Place it on 3D Canvas
+    - Render from saved shape/material recipe
+    - Support edit / duplicate / delete / focus
+- **0616F_WOS_CustomAssetInspectorEditPass_v1.0.0_BUILD**
+    - Reopen saved custom asset
+    - Edit form and material
+    - Version/fork custom asset
+    - Refresh placed actors using that asset
+- **0616G_WOS_CustomAssetPromotionGatePass_v1.0.0_BUILD**
+    - Validate custom asset recipes
+    - Block malformed geometry/materials
+    - Prepare custom asset for publish eligibility
+- **0616H_WOS_CustomAssetPublishRuntimePass_v1.0.0_BUILD**
+    - Publish custom assets to Wall bundle
+    - Add runtime-safe asset recipe loading
+    - Render custom assets in Wall
+- **0616I_WOS_StudioObjectLibraryManagementPass_v1.0.0_BUILD**
+    - Search/filter custom assets
+    - Archive/delete unused custom assets
+    - Add thumbnails/previews
+    - Organize by category
+- **0616J_WOS_GLBImportBridgePass_v1.0.0_BUILD**
+    - Add controlled GLB import path
+    - Validate file size / origin / scale / bounds
+    - Keep parametric recipe path as primary
+- **0616K_WOS_MapObjectCompositionPass_v1.0.0_BUILD**
+    - Group multiple objects into compositions
+    - Place kits: kiosk sets, rooftop sets, event props, docks, stage blocks
+- **0616L_WOS_BroadcastReadyCustomObjectPass_v1.0.0_BUILD**
+    - Optimize custom objects for Wall
+    - Add LOD behavior
+    - Add runtime diagnostics
+    - Confirm OBS/broadcast stability

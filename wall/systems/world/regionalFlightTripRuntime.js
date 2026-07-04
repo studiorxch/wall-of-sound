@@ -1,4 +1,4 @@
-// ── RegionalFlightTripRuntime v1.2.0 ─────────────────────────────────────────
+// ── RegionalFlightTripRuntime v1.3.0 ─────────────────────────────────────────
 // 0528K_WOS_RegionalFlightTripRuntime_v1.0.0
 // 0528O_WOS_RegionalFlightPlanner_v1.0.0 — startGeneratedTrip() added
 // 0528T_WOS_SurfaceGlideWatchabilityProfile_v1.0.0 — traversal profiles added
@@ -30,7 +30,7 @@
 
   var SBE = (global.SBE = global.SBE || {});
 
-  var VERSION = '1.2.0';
+  var VERSION = '1.3.0';
 
   // ── Trip segment boundaries (normalized progress 0–1) ────────────────────────
 
@@ -60,8 +60,8 @@
   // ── Cloud presets per trip phase ──────────────────────────────────────────────
 
   var CLOUD_BY_PHASE = Object.freeze({
-    PREPARE:   'clear',
-    TAXI_HOLD: 'clear',
+    PREPARE:   'harbor_fog',
+    TAXI_HOLD: 'harbor_fog',
     TAKEOFF:   'thin',
     CLIMB:     'thin',
     CRUISE:    'harbor_fog',
@@ -228,6 +228,77 @@
         { lat: 40.6852, lng: -74.0295, label: 'Governors Island W' },
         { lat: 40.6945, lng: -74.0232, label: 'Hudson return' },
         { lat: 40.7033, lng: -74.0170, label: 'Battery Park tip' },
+      ],
+    },
+
+    // ── JFK → Miami — East Coast cruise flight ────────────────────────────────────
+    // Southbound from JFK along the Eastern Seaboard to MIA.
+    // Route hugs the Atlantic coast through NJ, VA, NC, SC, GA, and FL.
+    // durationMs: 3 hours at default speed=1 (cruise phase: ~0.24→0.76, ~90 min).
+    // No loop — trip completes on arrival at MIA.
+
+    jfk_to_mia_001: {
+      id:                   'jfk_to_mia_001',
+      label:                'JFK → Miami — East Coast',
+      originAirportId:      'JFK',
+      destinationAirportId: 'MIA',
+      durationMs:           3 * 60 * 60 * 1000,   // 3 hours
+      aircraftClass:        'regional',
+      cruiseAltitudeFt:     35000,
+      cruiseSpeedKts:       480,
+      cameraProfile:        'regional_observer',
+      departureDeg:         180,
+      route: [
+        { lat: 40.6413, lng: -73.7781, label: 'JFK departure' },
+        { lat: 40.1000, lng: -74.0000, label: 'New Jersey coast' },
+        { lat: 39.3200, lng: -74.6100, label: 'Atlantic City' },
+        { lat: 38.2000, lng: -75.0000, label: 'Maryland coast' },
+        { lat: 37.0000, lng: -75.6000, label: 'Virginia Beach' },
+        { lat: 35.8000, lng: -75.8000, label: 'Cape Hatteras' },
+        { lat: 34.2000, lng: -77.8000, label: 'Cape Fear' },
+        { lat: 33.0000, lng: -79.5000, label: 'Myrtle Beach' },
+        { lat: 31.5000, lng: -80.8000, label: 'Savannah' },
+        { lat: 30.3000, lng: -81.4000, label: 'Jacksonville' },
+        { lat: 29.0000, lng: -80.5000, label: 'Cape Canaveral' },
+        { lat: 27.5000, lng: -80.3000, label: 'Vero Beach' },
+        { lat: 26.5000, lng: -80.1000, label: 'West Palm Beach' },
+        { lat: 25.9000, lng: -80.1500, label: 'Miami approach' },
+        { lat: 25.7959, lng: -80.2870, label: 'MIA' },
+      ],
+    },
+
+    // ── Miami Flight Hold — cruise loop over Biscayne Bay / Miami Beach ─────────
+    // Designed for broadcast Flight Hold channel: continuous cruise altitude loop,
+    // calm forward camera, slow cloud drift, no aggressive routing changes.
+    // loop:true keeps the trip in CRUISE phase indefinitely.
+    // Start via: SBE.RegionalFlightTripRuntime.start('miami_flight_hold_001')
+    //            then jump(0.45) to enter CRUISE immediately.
+
+    miami_flight_hold_001: {
+      id:                   'miami_flight_hold_001',
+      label:                'Miami Flight Hold — Biscayne Bay Cruise',
+      originAirportId:      'MIA',
+      destinationAirportId: 'MIA',
+      durationMs:           2 * 60 * 60 * 1000,   // 2-hour loop
+      aircraftClass:        'regional',
+      cruiseAltitudeFt:     35000,
+      cruiseSpeedKts:       480,
+      cameraProfile:        'regional_observer',
+      loop:                 true,
+      departureDeg:         330,
+      route: [
+        { lat: 25.7959, lng: -80.2870, label: 'MIA departure' },
+        { lat: 25.8200, lng: -80.1700, label: 'Hialeah climb' },
+        { lat: 25.8600, lng: -80.1200, label: 'Opa-locka NW' },
+        { lat: 25.9200, lng: -80.1500, label: 'North Miami' },
+        { lat: 25.9600, lng: -80.1200, label: 'Aventura coast' },
+        { lat: 25.9300, lng: -80.0800, label: 'Bal Harbour' },
+        { lat: 25.8600, lng: -80.1000, label: 'Surfside' },
+        { lat: 25.8100, lng: -80.1200, label: 'Miami Beach N' },
+        { lat: 25.7900, lng: -80.1300, label: 'South Beach' },
+        { lat: 25.7600, lng: -80.1900, label: 'Brickell Bay' },
+        { lat: 25.7700, lng: -80.2500, label: 'Coconut Grove' },
+        { lat: 25.7959, lng: -80.2870, label: 'MIA return' },
       ],
     },
   };

@@ -1,0 +1,19 @@
+flow-curve-builder/
+  package.json
+  vite.config.ts
+  tsconfig.json
+  index.html
+  src/
+  sample-tracks.csv
+
+
+# START ANALYZER
+  cd tools/track-pool-analyzer
+python3 -m venv .venv
+.venv/bin/pip install librosa soundfile numpy scipy mutagen tqdm
+
+
+.venv/bin/python analyze_folder.py \
+  --input "/Users/studio/Music/_INBOX/Playlists : Mixes/Mapgasm" \
+  --output "./real-track-pool.csv" \
+  --overwrite

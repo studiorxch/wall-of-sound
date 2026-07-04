@@ -13,31 +13,13 @@
   // Responds to SBE.Workspace events: tabsChanged, activeDocumentChanged,
   // sidebarContextChanged. Never touches simulation state.
 
-  // ── Sidebar nav definition (0520_WOS_WorldRuntimeArchitecture_v1.0.0) ───────
-  // Sections mirror the canonical runtime hierarchy:
-  //   WORLD → ZONES → SYSTEMS → VISUALIZATION → (utility)
-  // Items with `section` render as non-interactive section labels.
-  var NAV_ITEMS = [
-    { section: "WORLD" },
-    { ctx: "world",     icon: "◎", tooltip: "World" },
-    { section: "ZONES" },
-    { ctx: "zones",     icon: "⬡", tooltip: "Zones" },
-    { section: "SYSTEMS" },
-    { ctx: "routes",    icon: "⬡", tooltip: "Routes" },
-    { ctx: "layers",    icon: "▤", tooltip: "Layers" },
-    { ctx: "sequences", icon: "⋮⋮", tooltip: "Sequences" },
-    { section: "VIZ" },
-    { ctx: "assets",    icon: "◻", tooltip: "Assets" },
-    { section: "—" },
-    { ctx: "settings",  icon: "⚙", tooltip: "Settings" },
-    { ctx: "help",      icon: "?",  tooltip: "Help" },
-  ];
+  // 0610B — NAV_ITEMS (WORLD/ZONES/SYSTEMS/VIZ sidebar nav) removed.
+  // All setSidebarContext() buttons were dead UI: sidebar:changed had no panel
+  // handler. Surface rail (channel nodes) is the retained channel navigation.
 
   // ── DOM refs ──────────────────────────────────────────────────────────────
-  var _surfaceRail = null;   // replaces _tabBar
-  var _sidebarNav  = null;
+  var _surfaceRail = null;
   var _lowerPanel  = null;
-  var _navBtns     = {};   // ctx → button element
 
   // ── Init ──────────────────────────────────────────────────────────────────
   function init() {
@@ -53,8 +35,7 @@
     if (SBE.WorldAtmosphereSystem) SBE.WorldAtmosphereSystem.init();
 
     _buildMapboxViewport();
-    _buildSidebarNav();
-    _buildSurfaceRail();   // injected above sidebar nav in left-rail
+    _buildSurfaceRail();
     _buildLowerPanel();
 
     // Mark canvas-area for padding overrides
@@ -67,7 +48,6 @@
     SBE.WorkspaceEventBus.on("surface:activated",              _onActiveDocChanged);
     SBE.WorkspaceEventBus.on("surface:updated",                _onSurfaceIdentityUpdated);
     SBE.WorkspaceEventBus.on("surface:presenceUpdated",        _onPresenceUpdated);
-    SBE.WorkspaceEventBus.on("sidebar:changed",                _onSidebarContextChanged);
     SBE.WorkspaceEventBus.on("surface:saved",                  _updateLowerPanel);
     SBE.WorkspaceEventBus.on("surface:loaded",                 _updateLowerPanel);
     SBE.WorkspaceEventBus.on("workspace:interactionModeChanged", _updateLowerPanel);
@@ -80,7 +60,6 @@
 
     // Initial render
     _onTabsChanged({ docs: SBE.Workspace.getAllSurfaces(), activeId: _getActiveId() });
-    _onSidebarContextChanged({ context: SBE.Workspace.getSidebarContext() });
     _updateLowerPanel();
 
     // Deferred presence flush — ensures SPM pulse classes are applied after
@@ -210,31 +189,6 @@
     bar.appendChild(_btn("↑", "Reset bearing", function() {
       var m = _map(); if (m) m.resetNorth({ duration: 400 });
     }));
-    bar.appendChild(_btn("⊡", "Fit active route", function() {
-      // Try RouteInputSystem first, fall back to routePlanner runtime
-      var routes = SBE.RouteInputSystem ? SBE.RouteInputSystem.getRoutes() : [];
-      if (routes.length) {
-        SBE.RouteInputSystem.fitRoute(routes[0].id);
-        return;
-      }
-      var surf = SBE.Workspace && SBE.Workspace.getActiveSurface();
-      var rt = surf && surf.runtime;
-      var rtRoutes = rt && rt.routes;
-      if (rtRoutes && rtRoutes.length) {
-        var r = rtRoutes[0];
-        var wps = r.waypoints || [];
-        if (!wps.length) return;
-        var m = _map();
-        if (!m) return;
-        var lngs = wps.map(function(w) { return w.longitude; });
-        var lats = wps.map(function(w) { return w.latitude; });
-        m.fitBounds([
-          [Math.min.apply(null, lngs), Math.min.apply(null, lats)],
-          [Math.max.apply(null, lngs), Math.max.apply(null, lats)]
-        ], { padding: 80, duration: 600 });
-      }
-    }));
-
     // Draw mode toggle — switches workspace interaction mode to "draw"
     var drawBtn = _btn("✏", "Draw on map", function() {
       if (!SBE.Workspace) return;
@@ -361,12 +315,8 @@
     _surfaceRail.id = "ws-surface-rail";
     _surfaceRail.setAttribute("aria-label", "Surface rail — world destinations");
 
-    // ＋ add button lives at the bottom of the rail (populated in _renderSurfaceNodes)
     var leftRail = document.getElementById("left-rail");
-    if (leftRail && _sidebarNav) {
-      // Insert ABOVE existing sidebar nav
-      leftRail.insertBefore(_surfaceRail, _sidebarNav);
-    } else if (leftRail) {
+    if (leftRail) {
       leftRail.insertBefore(_surfaceRail, leftRail.firstChild);
     } else {
       console.warn("[WorkspaceUI] #left-rail not found — surface rail not injected");
@@ -552,50 +502,6 @@
       }
     });
     input.addEventListener("blur", commit);
-  }
-
-  // ── Sidebar nav ───────────────────────────────────────────────────────────
-  // Renders NAV_ITEMS with section header support.
-  // Items with `section` property render as non-interactive dividers.
-  function _buildSidebarNav() {
-    _sidebarNav = document.createElement("div");
-    _sidebarNav.id = "ws-sidebar-nav";
-
-    NAV_ITEMS.forEach(function (item) {
-      if (item.section !== undefined) {
-        // Section divider label
-        var label = document.createElement("div");
-        label.className = "ws-nav-section";
-        label.textContent = item.section;
-        _sidebarNav.appendChild(label);
-        return;
-      }
-      var btn = document.createElement("button");
-      btn.className = "ws-nav-btn";
-      btn.dataset.ctx = item.ctx;
-      btn.dataset.tooltip = item.tooltip;
-      btn.title = item.tooltip;
-      btn.textContent = item.icon;
-      btn.addEventListener("click", function () {
-        SBE.Workspace.setSidebarContext(item.ctx);
-      });
-      _sidebarNav.appendChild(btn);
-      _navBtns[item.ctx] = btn;
-    });
-
-    var leftRail = document.getElementById("left-rail");
-    if (leftRail) {
-      leftRail.insertBefore(_sidebarNav, leftRail.firstChild);
-    } else {
-      console.warn("[WorkspaceUI] #left-rail not found — sidebar nav not injected");
-    }
-  }
-
-  function _onSidebarContextChanged(evt) {
-    var ctx = evt.context;
-    Object.keys(_navBtns).forEach(function (key) {
-      _navBtns[key].classList.toggle("ws-nav-btn--active", key === ctx);
-    });
   }
 
   // ── Lower panel ───────────────────────────────────────────────────────────

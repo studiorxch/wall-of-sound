@@ -1,14 +1,54 @@
-node_modules/
+# Root
+note.txt
+_docs
+
+# Music Library media / generated library content
+library/catalog/audio/
+library/external/audio/
+library/reference/audio/
+
+# Large audio files anywhere in library
+library/**/*.mp3
+library/**/*.wav
+library/**/*.flac
+library/**/*.aiff
+library/**/*.aif
+library/**/*.m4a
+library/**/*.ogg
+
+
+
+snapshots
+
+*.zip
+
+
 .DS_Store
 .env
 sound/venv/
 __pycache__/
+
+
+
+.claude
+.obsidian
+.venv
 .vscode
+node_modules/
+play/.claude
+play/.obsidian
+play/.venv
+play/.vscode
+play/node_modules/
+colorlab/.claude
+colorlab/node_modules/
 
 # Sound
 sound/data/sources/*
 sound/data/slices/*
 sound/data/stems/*
+
+
 # Ignore audio anywhere inside sound data
 sound/data/**/*.wav
 sound/data/**/*.mp3

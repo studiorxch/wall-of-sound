@@ -64,19 +64,30 @@
     var hv = SBE.HeroVehicleRuntime, ft = SBE.RegionalFlightTripRuntime;
     var rs = (transportMode === 'drive' && hv && hv.getState) ? hv.getState() : ((ft && ft.getState) ? ft.getState() : null);
     if (rs) route = { from: rs.from || null, to: rs.to || null, active: !!rs.active, paused: !!rs.paused };
-    return { center: center, zoom: zoom, pitch: pitch, bearing: bearing, transportMode: transportMode, cameraMode: cameraMode, lensProfile: lensProfile, route: route };
+    // Current locality label from ViewportLocationAuthority (reverse-geocoded)
+    var locality = null;
+    var vla = SBE.ViewportLocationAuthority;
+    if (vla && typeof vla.getState === 'function') {
+      var vs = vla.getState();
+      locality = vs.label ? (vs.label + (vs.region ? ', ' + vs.region : '')) : (vs.region || null);
+    }
+    return { center: center, zoom: zoom, pitch: pitch, bearing: bearing, transportMode: transportMode, cameraMode: cameraMode, lensProfile: lensProfile, route: route, locality: locality };
   }
 
   function _filename(prefix, ctx, t) {
     var lat = ctx.center ? (Math.round(ctx.center.lat * 1e6) / 1e6) : 'na';
     var lng = ctx.center ? (Math.round(ctx.center.lng * 1e6) / 1e6) : 'na';
-    return [_safe(prefix || 'WOS'), t.date, t.time, t.ampm, _safe(ctx.transportMode), _safe(ctx.cameraMode), lat, lng].join('_') + '.png';
+    var parts = [_safe(prefix || 'WOS'), t.date, t.time, t.ampm, _safe(ctx.transportMode), _safe(ctx.cameraMode)];
+    if (ctx.locality) parts.push(_safe(ctx.locality));
+    parts.push(lat, lng);
+    return parts.join('_') + '.png';
   }
 
   function _buildMetadata(ctx, t, filename) {
     return {
       app: 'WOS', capturedAtISO: t.iso, localLabel: t.local, filename: filename,
       map: { centerLng: ctx.center ? ctx.center.lng : null, centerLat: ctx.center ? ctx.center.lat : null, zoom: ctx.zoom, pitch: ctx.pitch, bearing: ctx.bearing },
+      locality: ctx.locality || null,
       transportMode: ctx.transportMode, cameraMode: ctx.cameraMode, lensProfile: ctx.lensProfile, route: ctx.route,
       composition: 'mapbox_canvas',
       coordinateReturnHint: 'Paste lat,lng into destination or run _wos.debug.snapshot.recenter(lng, lat, zoom).',

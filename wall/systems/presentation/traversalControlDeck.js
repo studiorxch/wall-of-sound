@@ -21,11 +21,11 @@
 // Placement: wall/systems/presentation/traversalControlDeck.js
 // ──────────────────────────────────────────────────────────────────────────────
 (function (global) {
-  'use strict';
+  "use strict";
 
-  var SBE         = (global.SBE = global.SBE || {});
-  var VERSION     = '5.0.0';
-  var STORAGE_KEY = 'wos.nav.v1';
+  var SBE = (global.SBE = global.SBE || {});
+  var VERSION = "5.0.0";
+  var STORAGE_KEY = "wos.nav.v1";
 
   // ── Transport modes ───────────────────────────────────────────────────────────
 
@@ -34,11 +34,12 @@
   // disabled     = greyed out, not tappable (Transit — requires schedule data)
 
   var TRANSPORT_MODES = Object.freeze([
-    { id: 'flight',  icon: '✈',  label: 'Flight',  status: 'active'       },
-    { id: 'drive',   icon: '🚗', label: 'Drive',   status: 'prototype'    },
-    { id: 'walk',    icon: '🚶', label: 'Walk',    status: 'experimental' },
-    { id: 'bike',    icon: '🚲', label: 'Bike',    status: 'experimental' },
-    { id: 'transit', icon: '🚌', label: 'Transit', status: 'disabled'     },
+    { id: "flight",  icon: "✈",  label: "Flight",  status: "active" },
+    { id: "drive",   icon: "🚗", label: "Drive",   status: "prototype" },
+    { id: "walk",    icon: "🚶", label: "Walk",    status: "experimental" },
+    { id: "bike",    icon: "🚲", label: "Bike",    status: "experimental" },
+    { id: "transit", icon: "🚌", label: "Transit", status: "disabled" },
+    { id: "orbital", icon: "🌍", label: "Orbital", status: "active" },
   ]);
 
   // ── Speed steps ───────────────────────────────────────────────────────────────
@@ -53,8 +54,10 @@
   // 1x          = world-time reference (real flight takes real hours)
   // 2x–10x      = watchable compression
   // 20x–80x     = fast compression / debug
-  var TRAVERSAL_SPEED_STEPS = Object.freeze([0.05, 0.10, 0.25, 0.5, 1, 2, 5, 10, 20, 40, 80]);
-  var SPEED_DEFAULT_INDEX    = 4;   // 1x
+  var TRAVERSAL_SPEED_STEPS = Object.freeze([
+    0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 20, 40, 80,
+  ]);
+  var SPEED_DEFAULT_INDEX = 4; // 1x
 
   // ── Altitude steps ────────────────────────────────────────────────────────────
   // Altitude = camera operating envelope, NOT assumed aircraft type.
@@ -64,18 +67,30 @@
 
   var FLIGHT_ALTITUDE_STEPS = Object.freeze([
     // ── Low-altitude / drone envelope ────────────────────────────────────────
-    { id: 'drone',     label: 'Drone',     altitudeFt: 25,    zoom: 17.5, pitch: 30 },
-    { id: 'low_drone', label: 'Low Drone', altitudeFt: 50,    zoom: 17.0, pitch: 32 },
-    { id: 'urban',     label: 'Urban',     altitudeFt: 100,   zoom: 16.5, pitch: 35 },
-    { id: 'rooftop',   label: 'Rooftop',   altitudeFt: 250,   zoom: 16.0, pitch: 38 },
+    { id: "drone", label: "Drone", altitudeFt: 25, zoom: 17.5, pitch: 30 },
+    {
+      id: "low_drone",
+      label: "Low Drone",
+      altitudeFt: 50,
+      zoom: 17.0,
+      pitch: 32,
+    },
+    { id: "urban", label: "Urban", altitudeFt: 100, zoom: 16.5, pitch: 35 },
+    { id: "rooftop", label: "Rooftop", altitudeFt: 250, zoom: 16.0, pitch: 38 },
     // ── Flight envelope ───────────────────────────────────────────────────────
-    { id: 'ground',    label: 'Ground',    altitudeFt: 500,   zoom: 15.0, pitch: 42 },
-    { id: 'low',       label: 'Low',       altitudeFt: 1500,  zoom: 14.0, pitch: 44 },
-    { id: 'city',      label: 'City',      altitudeFt: 5000,  zoom: 13.0, pitch: 46 },
-    { id: 'regional',  label: 'Regional',  altitudeFt: 12000, zoom: 12.0, pitch: 48 },
-    { id: 'cruise',    label: 'Cruise',    altitudeFt: 35000, zoom: 11.0, pitch: 50 },
+    { id: "ground", label: "Ground", altitudeFt: 500, zoom: 15.0, pitch: 42 },
+    { id: "low", label: "Low", altitudeFt: 1500, zoom: 14.0, pitch: 44 },
+    { id: "city", label: "City", altitudeFt: 5000, zoom: 13.0, pitch: 46 },
+    {
+      id: "regional",
+      label: "Regional",
+      altitudeFt: 12000,
+      zoom: 12.0,
+      pitch: 48,
+    },
+    { id: "cruise", label: "Cruise", altitudeFt: 35000, zoom: 11.0, pitch: 50 },
   ]);
-  var ALTITUDE_DEFAULT_INDEX = 8;   // cruise
+  var ALTITUDE_DEFAULT_INDEX = 8; // cruise
 
   // Cruise speed used to compute simulated trip duration from route distance.
   var CRUISE_SPEED_KMH = 800;
@@ -83,19 +98,22 @@
   // ── Haversine distance ────────────────────────────────────────────────────────
 
   function _haversineKm(lat1, lng1, lat2, lng2) {
-    var R    = 6371;
-    var dLat = (lat2 - lat1) * Math.PI / 180;
-    var dLng = (lng2 - lng1) * Math.PI / 180;
-    var a    = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-               Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-               Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    var R = 6371;
+    var dLat = ((lat2 - lat1) * Math.PI) / 180;
+    var dLng = ((lng2 - lng1) * Math.PI) / 180;
+    var a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos((lat1 * Math.PI) / 180) *
+        Math.cos((lat2 * Math.PI) / 180) *
+        Math.sin(dLng / 2) *
+        Math.sin(dLng / 2);
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   }
 
   // ── Format helpers ────────────────────────────────────────────────────────────
 
   function _fmtSpeed(mult) {
-    return mult < 1 ? mult.toFixed(2) + 'x' : mult + 'x';
+    return mult < 1 ? mult.toFixed(2) + "x" : mult + "x";
   }
 
   function _fmtAltStep(step) {
@@ -107,164 +125,164 @@
 
   var DESTINATIONS = Object.freeze({
     // ── United States ──────────────────────────────────────────────────────────
-    'new york':        { lat: 40.7128, lng: -74.0060, label: 'New York' },
-    'new york city':   { lat: 40.7128, lng: -74.0060, label: 'New York' },
-    'nyc':             { lat: 40.7128, lng: -74.0060, label: 'New York' },
-    'manhattan':       { lat: 40.7831, lng: -73.9712, label: 'Manhattan' },
-    'brooklyn':        { lat: 40.6782, lng: -73.9442, label: 'Brooklyn' },
-    'boston':          { lat: 42.3601, lng: -71.0589, label: 'Boston' },
-    'los angeles':     { lat: 34.0522, lng: -118.2437,label: 'Los Angeles' },
-    'la':              { lat: 34.0522, lng: -118.2437,label: 'Los Angeles' },
-    'chicago':         { lat: 41.8781, lng: -87.6298, label: 'Chicago' },
-    'miami':           { lat: 25.7617, lng: -80.1918, label: 'Miami' },
-    'washington':      { lat: 38.9072, lng: -77.0369, label: 'Washington DC' },
-    'dc':              { lat: 38.9072, lng: -77.0369, label: 'Washington DC' },
-    'san francisco':   { lat: 37.7749, lng: -122.4194,label: 'San Francisco' },
-    'sf':              { lat: 37.7749, lng: -122.4194,label: 'San Francisco' },
-    'seattle':         { lat: 47.6062, lng: -122.3321,label: 'Seattle' },
-    'philadelphia':    { lat: 39.9526, lng: -75.1652, label: 'Philadelphia' },
-    'atlanta':         { lat: 33.7490, lng: -84.3880, label: 'Atlanta' },
-    'dallas':          { lat: 32.7767, lng: -96.7970, label: 'Dallas' },
-    'houston':         { lat: 29.7604, lng: -95.3698, label: 'Houston' },
-    'denver':          { lat: 39.7392, lng: -104.9903,label: 'Denver' },
-    'phoenix':         { lat: 33.4484, lng: -112.0740,label: 'Phoenix' },
-    'las vegas':       { lat: 36.1699, lng: -115.1398,label: 'Las Vegas' },
-    'honolulu':        { lat: 21.3069, lng: -157.8583,label: 'Honolulu' },
-    'hawaii':          { lat: 21.3069, lng: -157.8583,label: 'Honolulu' },
-    'new orleans':     { lat: 29.9511, lng: -90.0715, label: 'New Orleans' },
-    'minneapolis':     { lat: 44.9778, lng: -93.2650, label: 'Minneapolis' },
-    'portland':        { lat: 45.5051, lng: -122.6750,label: 'Portland' },
-    'detroit':         { lat: 42.3314, lng: -83.0458, label: 'Detroit' },
-    'san diego':       { lat: 32.7157, lng: -117.1611,label: 'San Diego' },
-    'nashville':       { lat: 36.1627, lng: -86.7816, label: 'Nashville' },
+    "new york": { lat: 40.7128, lng: -74.006, label: "New York" },
+    "new york city": { lat: 40.7128, lng: -74.006, label: "New York" },
+    nyc: { lat: 40.7128, lng: -74.006, label: "New York" },
+    manhattan: { lat: 40.7831, lng: -73.9712, label: "Manhattan" },
+    brooklyn: { lat: 40.6782, lng: -73.9442, label: "Brooklyn" },
+    boston: { lat: 42.3601, lng: -71.0589, label: "Boston" },
+    "los angeles": { lat: 34.0522, lng: -118.2437, label: "Los Angeles" },
+    la: { lat: 34.0522, lng: -118.2437, label: "Los Angeles" },
+    chicago: { lat: 41.8781, lng: -87.6298, label: "Chicago" },
+    miami: { lat: 25.7617, lng: -80.1918, label: "Miami" },
+    washington: { lat: 38.9072, lng: -77.0369, label: "Washington DC" },
+    dc: { lat: 38.9072, lng: -77.0369, label: "Washington DC" },
+    "san francisco": { lat: 37.7749, lng: -122.4194, label: "San Francisco" },
+    sf: { lat: 37.7749, lng: -122.4194, label: "San Francisco" },
+    seattle: { lat: 47.6062, lng: -122.3321, label: "Seattle" },
+    philadelphia: { lat: 39.9526, lng: -75.1652, label: "Philadelphia" },
+    atlanta: { lat: 33.749, lng: -84.388, label: "Atlanta" },
+    dallas: { lat: 32.7767, lng: -96.797, label: "Dallas" },
+    houston: { lat: 29.7604, lng: -95.3698, label: "Houston" },
+    denver: { lat: 39.7392, lng: -104.9903, label: "Denver" },
+    phoenix: { lat: 33.4484, lng: -112.074, label: "Phoenix" },
+    "las vegas": { lat: 36.1699, lng: -115.1398, label: "Las Vegas" },
+    honolulu: { lat: 21.3069, lng: -157.8583, label: "Honolulu" },
+    hawaii: { lat: 21.3069, lng: -157.8583, label: "Honolulu" },
+    "new orleans": { lat: 29.9511, lng: -90.0715, label: "New Orleans" },
+    minneapolis: { lat: 44.9778, lng: -93.265, label: "Minneapolis" },
+    portland: { lat: 45.5051, lng: -122.675, label: "Portland" },
+    detroit: { lat: 42.3314, lng: -83.0458, label: "Detroit" },
+    "san diego": { lat: 32.7157, lng: -117.1611, label: "San Diego" },
+    nashville: { lat: 36.1627, lng: -86.7816, label: "Nashville" },
     // ── Airport codes ──────────────────────────────────────────────────────────
-    'jfk':             { lat: 40.6413, lng: -73.7781, label: 'JFK' },
-    'lga':             { lat: 40.7769, lng: -73.8740, label: 'LaGuardia' },
-    'ewr':             { lat: 40.6895, lng: -74.1745, label: 'Newark' },
-    'bos':             { lat: 42.3656, lng: -71.0096, label: 'Boston Logan' },
-    'lax':             { lat: 33.9425, lng: -118.4081,label: 'LAX' },
-    'ord':             { lat: 41.9742, lng: -87.9073, label: "O'Hare" },
-    'mia':             { lat: 25.7959, lng: -80.2870, label: 'Miami Intl' },
-    'sfo':             { lat: 37.6213, lng: -122.3790,label: 'SFO' },
-    'sea':             { lat: 47.4502, lng: -122.3088,label: 'Seattle-Tacoma' },
-    'dfw':             { lat: 32.8998, lng: -97.0403, label: 'Dallas Fort Worth' },
-    'atl':             { lat: 33.6407, lng: -84.4277, label: 'Atlanta Hartsfield' },
-    'den':             { lat: 39.8561, lng: -104.6737,label: 'Denver Intl' },
-    'iad':             { lat: 38.9531, lng: -77.4565, label: 'Dulles' },
-    'dca':             { lat: 38.8512, lng: -77.0402, label: 'Reagan National' },
+    jfk: { lat: 40.6413, lng: -73.7781, label: "JFK" },
+    lga: { lat: 40.7769, lng: -73.874, label: "LaGuardia" },
+    ewr: { lat: 40.6895, lng: -74.1745, label: "Newark" },
+    bos: { lat: 42.3656, lng: -71.0096, label: "Boston Logan" },
+    lax: { lat: 33.9425, lng: -118.4081, label: "LAX" },
+    ord: { lat: 41.9742, lng: -87.9073, label: "O'Hare" },
+    mia: { lat: 25.7959, lng: -80.287, label: "Miami Intl" },
+    sfo: { lat: 37.6213, lng: -122.379, label: "SFO" },
+    sea: { lat: 47.4502, lng: -122.3088, label: "Seattle-Tacoma" },
+    dfw: { lat: 32.8998, lng: -97.0403, label: "Dallas Fort Worth" },
+    atl: { lat: 33.6407, lng: -84.4277, label: "Atlanta Hartsfield" },
+    den: { lat: 39.8561, lng: -104.6737, label: "Denver Intl" },
+    iad: { lat: 38.9531, lng: -77.4565, label: "Dulles" },
+    dca: { lat: 38.8512, lng: -77.0402, label: "Reagan National" },
     // ── Canada ─────────────────────────────────────────────────────────────────
-    'toronto':         { lat: 43.6532, lng: -79.3832, label: 'Toronto' },
-    'montreal':        { lat: 45.5017, lng: -73.5673, label: 'Montreal' },
-    'vancouver':       { lat: 49.2827, lng: -123.1207,label: 'Vancouver' },
-    'yyc':             { lat: 51.0447, lng: -114.0719,label: 'Calgary' },
-    'yyz':             { lat: 43.6777, lng: -79.6248, label: 'Toronto Pearson' },
-    'yul':             { lat: 45.4707, lng: -73.7408, label: 'Montreal Trudeau' },
-    'yvr':             { lat: 49.1967, lng: -123.1815,label: 'Vancouver Intl' },
+    toronto: { lat: 43.6532, lng: -79.3832, label: "Toronto" },
+    montreal: { lat: 45.5017, lng: -73.5673, label: "Montreal" },
+    vancouver: { lat: 49.2827, lng: -123.1207, label: "Vancouver" },
+    yyc: { lat: 51.0447, lng: -114.0719, label: "Calgary" },
+    yyz: { lat: 43.6777, lng: -79.6248, label: "Toronto Pearson" },
+    yul: { lat: 45.4707, lng: -73.7408, label: "Montreal Trudeau" },
+    yvr: { lat: 49.1967, lng: -123.1815, label: "Vancouver Intl" },
     // ── Mexico / Caribbean ──────────────────────────────────────────────────────
-    'mexico city':     { lat: 19.4326, lng: -99.1332, label: 'Mexico City' },
-    'cancun':          { lat: 21.1619, lng: -86.8515, label: 'Cancun' },
-    'havana':          { lat: 23.1136, lng: -82.3666, label: 'Havana' },
+    "mexico city": { lat: 19.4326, lng: -99.1332, label: "Mexico City" },
+    cancun: { lat: 21.1619, lng: -86.8515, label: "Cancun" },
+    havana: { lat: 23.1136, lng: -82.3666, label: "Havana" },
     // ── South America ───────────────────────────────────────────────────────────
-    'buenos aires':    { lat: -34.6037,lng: -58.3816, label: 'Buenos Aires' },
-    'sao paulo':       { lat: -23.5505,lng: -46.6333, label: 'São Paulo' },
-    'rio de janeiro':  { lat: -22.9068,lng: -43.1729, label: 'Rio de Janeiro' },
-    'rio':             { lat: -22.9068,lng: -43.1729, label: 'Rio de Janeiro' },
-    'bogota':          { lat: 4.7110,  lng: -74.0721, label: 'Bogotá' },
-    'lima':            { lat: -12.0464,lng: -77.0428, label: 'Lima' },
-    'santiago':        { lat: -33.4489,lng: -70.6693, label: 'Santiago' },
+    "buenos aires": { lat: -34.6037, lng: -58.3816, label: "Buenos Aires" },
+    "sao paulo": { lat: -23.5505, lng: -46.6333, label: "São Paulo" },
+    "rio de janeiro": { lat: -22.9068, lng: -43.1729, label: "Rio de Janeiro" },
+    rio: { lat: -22.9068, lng: -43.1729, label: "Rio de Janeiro" },
+    bogota: { lat: 4.711, lng: -74.0721, label: "Bogotá" },
+    lima: { lat: -12.0464, lng: -77.0428, label: "Lima" },
+    santiago: { lat: -33.4489, lng: -70.6693, label: "Santiago" },
     // ── Europe ──────────────────────────────────────────────────────────────────
-    'london':          { lat: 51.5074, lng: -0.1278,  label: 'London' },
-    'paris':           { lat: 48.8566, lng: 2.3522,   label: 'Paris' },
-    'berlin':          { lat: 52.5200, lng: 13.4050,  label: 'Berlin' },
-    'amsterdam':       { lat: 52.3676, lng: 4.9041,   label: 'Amsterdam' },
-    'madrid':          { lat: 40.4168, lng: -3.7038,  label: 'Madrid' },
-    'barcelona':       { lat: 41.3851, lng: 2.1734,   label: 'Barcelona' },
-    'rome':            { lat: 41.9028, lng: 12.4964,  label: 'Rome' },
-    'milan':           { lat: 45.4642, lng: 9.1900,   label: 'Milan' },
-    'zurich':          { lat: 47.3769, lng: 8.5417,   label: 'Zurich' },
-    'vienna':          { lat: 48.2082, lng: 16.3738,  label: 'Vienna' },
-    'brussels':        { lat: 50.8503, lng: 4.3517,   label: 'Brussels' },
-    'lisbon':          { lat: 38.7223, lng: -9.1393,  label: 'Lisbon' },
-    'dublin':          { lat: 53.3498, lng: -6.2603,  label: 'Dublin' },
-    'stockholm':       { lat: 59.3293, lng: 18.0686,  label: 'Stockholm' },
-    'oslo':            { lat: 59.9139, lng: 10.7522,  label: 'Oslo' },
-    'copenhagen':      { lat: 55.6761, lng: 12.5683,  label: 'Copenhagen' },
-    'helsinki':        { lat: 60.1699, lng: 24.9384,  label: 'Helsinki' },
-    'athens':          { lat: 37.9838, lng: 23.7275,  label: 'Athens' },
-    'istanbul':        { lat: 41.0082, lng: 28.9784,  label: 'Istanbul' },
-    'moscow':          { lat: 55.7558, lng: 37.6176,  label: 'Moscow' },
-    'prague':          { lat: 50.0755, lng: 14.4378,  label: 'Prague' },
-    'warsaw':          { lat: 52.2297, lng: 21.0122,  label: 'Warsaw' },
-    'budapest':        { lat: 47.4979, lng: 19.0402,  label: 'Budapest' },
-    'edinburgh':       { lat: 55.9533, lng: -3.1883,  label: 'Edinburgh' },
-    'manchester':      { lat: 53.4808, lng: -2.2426,  label: 'Manchester' },
+    london: { lat: 51.5074, lng: -0.1278, label: "London" },
+    paris: { lat: 48.8566, lng: 2.3522, label: "Paris" },
+    berlin: { lat: 52.52, lng: 13.405, label: "Berlin" },
+    amsterdam: { lat: 52.3676, lng: 4.9041, label: "Amsterdam" },
+    madrid: { lat: 40.4168, lng: -3.7038, label: "Madrid" },
+    barcelona: { lat: 41.3851, lng: 2.1734, label: "Barcelona" },
+    rome: { lat: 41.9028, lng: 12.4964, label: "Rome" },
+    milan: { lat: 45.4642, lng: 9.19, label: "Milan" },
+    zurich: { lat: 47.3769, lng: 8.5417, label: "Zurich" },
+    vienna: { lat: 48.2082, lng: 16.3738, label: "Vienna" },
+    brussels: { lat: 50.8503, lng: 4.3517, label: "Brussels" },
+    lisbon: { lat: 38.7223, lng: -9.1393, label: "Lisbon" },
+    dublin: { lat: 53.3498, lng: -6.2603, label: "Dublin" },
+    stockholm: { lat: 59.3293, lng: 18.0686, label: "Stockholm" },
+    oslo: { lat: 59.9139, lng: 10.7522, label: "Oslo" },
+    copenhagen: { lat: 55.6761, lng: 12.5683, label: "Copenhagen" },
+    helsinki: { lat: 60.1699, lng: 24.9384, label: "Helsinki" },
+    athens: { lat: 37.9838, lng: 23.7275, label: "Athens" },
+    istanbul: { lat: 41.0082, lng: 28.9784, label: "Istanbul" },
+    moscow: { lat: 55.7558, lng: 37.6176, label: "Moscow" },
+    prague: { lat: 50.0755, lng: 14.4378, label: "Prague" },
+    warsaw: { lat: 52.2297, lng: 21.0122, label: "Warsaw" },
+    budapest: { lat: 47.4979, lng: 19.0402, label: "Budapest" },
+    edinburgh: { lat: 55.9533, lng: -3.1883, label: "Edinburgh" },
+    manchester: { lat: 53.4808, lng: -2.2426, label: "Manchester" },
     // Airport codes
-    'lhr':             { lat: 51.4700, lng: -0.4543,  label: 'London Heathrow' },
-    'cdg':             { lat: 49.0097, lng: 2.5479,   label: 'Paris CDG' },
-    'ams':             { lat: 52.3105, lng: 4.7683,   label: 'Amsterdam Schiphol' },
-    'fra':             { lat: 50.0379, lng: 8.5622,   label: 'Frankfurt' },
-    'mad':             { lat: 40.4719, lng: -3.5626,  label: 'Madrid Barajas' },
-    'fco':             { lat: 41.8003, lng: 12.2389,  label: 'Rome Fiumicino' },
-    'zrh':             { lat: 47.4647, lng: 8.5492,   label: 'Zurich' },
-    'vie':             { lat: 48.1103, lng: 16.5697,  label: 'Vienna' },
-    'ist':             { lat: 41.2753, lng: 28.7519,  label: 'Istanbul' },
+    lhr: { lat: 51.47, lng: -0.4543, label: "London Heathrow" },
+    cdg: { lat: 49.0097, lng: 2.5479, label: "Paris CDG" },
+    ams: { lat: 52.3105, lng: 4.7683, label: "Amsterdam Schiphol" },
+    fra: { lat: 50.0379, lng: 8.5622, label: "Frankfurt" },
+    mad: { lat: 40.4719, lng: -3.5626, label: "Madrid Barajas" },
+    fco: { lat: 41.8003, lng: 12.2389, label: "Rome Fiumicino" },
+    zrh: { lat: 47.4647, lng: 8.5492, label: "Zurich" },
+    vie: { lat: 48.1103, lng: 16.5697, label: "Vienna" },
+    ist: { lat: 41.2753, lng: 28.7519, label: "Istanbul" },
     // ── Middle East ──────────────────────────────────────────────────────────────
-    'dubai':           { lat: 25.2048, lng: 55.2708,  label: 'Dubai' },
-    'abu dhabi':       { lat: 24.4539, lng: 54.3773,  label: 'Abu Dhabi' },
-    'doha':            { lat: 25.2854, lng: 51.5310,  label: 'Doha' },
-    'riyadh':          { lat: 24.7136, lng: 46.6753,  label: 'Riyadh' },
-    'tel aviv':        { lat: 32.0853, lng: 34.7818,  label: 'Tel Aviv' },
-    'dxb':             { lat: 25.2532, lng: 55.3657,  label: 'Dubai Intl' },
-    'doh':             { lat: 25.2609, lng: 51.6138,  label: 'Hamad Intl' },
+    dubai: { lat: 25.2048, lng: 55.2708, label: "Dubai" },
+    "abu dhabi": { lat: 24.4539, lng: 54.3773, label: "Abu Dhabi" },
+    doha: { lat: 25.2854, lng: 51.531, label: "Doha" },
+    riyadh: { lat: 24.7136, lng: 46.6753, label: "Riyadh" },
+    "tel aviv": { lat: 32.0853, lng: 34.7818, label: "Tel Aviv" },
+    dxb: { lat: 25.2532, lng: 55.3657, label: "Dubai Intl" },
+    doh: { lat: 25.2609, lng: 51.6138, label: "Hamad Intl" },
     // ── Asia ─────────────────────────────────────────────────────────────────────
-    'tokyo':           { lat: 35.6762, lng: 139.6503, label: 'Tokyo' },
-    'osaka':           { lat: 34.6937, lng: 135.5023, label: 'Osaka' },
-    'beijing':         { lat: 39.9042, lng: 116.4074, label: 'Beijing' },
-    'shanghai':        { lat: 31.2304, lng: 121.4737, label: 'Shanghai' },
-    'hong kong':       { lat: 22.3193, lng: 114.1694, label: 'Hong Kong' },
-    'singapore':       { lat: 1.3521,  lng: 103.8198, label: 'Singapore' },
-    'bangkok':         { lat: 13.7563, lng: 100.5018, label: 'Bangkok' },
-    'seoul':           { lat: 37.5665, lng: 126.9780, label: 'Seoul' },
-    'taipei':          { lat: 25.0330, lng: 121.5654, label: 'Taipei' },
-    'kuala lumpur':    { lat: 3.1390,  lng: 101.6869, label: 'Kuala Lumpur' },
-    'jakarta':         { lat: -6.2088, lng: 106.8456, label: 'Jakarta' },
-    'delhi':           { lat: 28.6139, lng: 77.2090,  label: 'Delhi' },
-    'new delhi':       { lat: 28.6139, lng: 77.2090,  label: 'New Delhi' },
-    'mumbai':          { lat: 19.0760, lng: 72.8777,  label: 'Mumbai' },
-    'bangalore':       { lat: 12.9716, lng: 77.5946,  label: 'Bangalore' },
-    'karachi':         { lat: 24.8607, lng: 67.0011,  label: 'Karachi' },
-    'manila':          { lat: 14.5995, lng: 120.9842, label: 'Manila' },
+    tokyo: { lat: 35.6762, lng: 139.6503, label: "Tokyo" },
+    osaka: { lat: 34.6937, lng: 135.5023, label: "Osaka" },
+    beijing: { lat: 39.9042, lng: 116.4074, label: "Beijing" },
+    shanghai: { lat: 31.2304, lng: 121.4737, label: "Shanghai" },
+    "hong kong": { lat: 22.3193, lng: 114.1694, label: "Hong Kong" },
+    singapore: { lat: 1.3521, lng: 103.8198, label: "Singapore" },
+    bangkok: { lat: 13.7563, lng: 100.5018, label: "Bangkok" },
+    seoul: { lat: 37.5665, lng: 126.978, label: "Seoul" },
+    taipei: { lat: 25.033, lng: 121.5654, label: "Taipei" },
+    "kuala lumpur": { lat: 3.139, lng: 101.6869, label: "Kuala Lumpur" },
+    jakarta: { lat: -6.2088, lng: 106.8456, label: "Jakarta" },
+    delhi: { lat: 28.6139, lng: 77.209, label: "Delhi" },
+    "new delhi": { lat: 28.6139, lng: 77.209, label: "New Delhi" },
+    mumbai: { lat: 19.076, lng: 72.8777, label: "Mumbai" },
+    bangalore: { lat: 12.9716, lng: 77.5946, label: "Bangalore" },
+    karachi: { lat: 24.8607, lng: 67.0011, label: "Karachi" },
+    manila: { lat: 14.5995, lng: 120.9842, label: "Manila" },
     // Airport codes
-    'nrt':             { lat: 35.7720, lng: 140.3929, label: 'Tokyo Narita' },
-    'hnd':             { lat: 35.5494, lng: 139.7798, label: 'Tokyo Haneda' },
-    'pvg':             { lat: 31.1443, lng: 121.8083, label: 'Shanghai Pudong' },
-    'hkg':             { lat: 22.3080, lng: 113.9185, label: 'Hong Kong Intl' },
-    'sin':             { lat: 1.3644,  lng: 103.9915, label: 'Singapore Changi' },
-    'icn':             { lat: 37.4602, lng: 126.4407, label: 'Seoul Incheon' },
-    'del':             { lat: 28.5562, lng: 77.1000,  label: 'Delhi Indira Gandhi' },
-    'bom':             { lat: 19.0896, lng: 72.8656,  label: 'Mumbai Chhatrapati' },
+    nrt: { lat: 35.772, lng: 140.3929, label: "Tokyo Narita" },
+    hnd: { lat: 35.5494, lng: 139.7798, label: "Tokyo Haneda" },
+    pvg: { lat: 31.1443, lng: 121.8083, label: "Shanghai Pudong" },
+    hkg: { lat: 22.308, lng: 113.9185, label: "Hong Kong Intl" },
+    sin: { lat: 1.3644, lng: 103.9915, label: "Singapore Changi" },
+    icn: { lat: 37.4602, lng: 126.4407, label: "Seoul Incheon" },
+    del: { lat: 28.5562, lng: 77.1, label: "Delhi Indira Gandhi" },
+    bom: { lat: 19.0896, lng: 72.8656, label: "Mumbai Chhatrapati" },
     // ── Africa ───────────────────────────────────────────────────────────────────
-    'cairo':           { lat: 30.0444, lng: 31.2357,  label: 'Cairo' },
-    'lagos':           { lat: 6.5244,  lng: 3.3792,   label: 'Lagos' },
-    'johannesburg':    { lat: -26.2041,lng: 28.0473,  label: 'Johannesburg' },
-    'cape town':       { lat: -33.9249,lng: 18.4241,  label: 'Cape Town' },
-    'nairobi':         { lat: -1.2921, lng: 36.8219,  label: 'Nairobi' },
-    'casablanca':      { lat: 33.5731, lng: -7.5898,  label: 'Casablanca' },
-    'accra':           { lat: 5.6037,  lng: -0.1870,  label: 'Accra' },
-    'addis ababa':     { lat: 9.0320,  lng: 38.7469,  label: 'Addis Ababa' },
-    'los':             { lat: 6.5774,  lng: 3.3212,   label: 'Lagos Murtala Muhammed' },
-    'cai':             { lat: 30.1219, lng: 31.4056,  label: 'Cairo Intl' },
-    'jnb':             { lat: -26.1367,lng: 28.2411,  label: 'OR Tambo' },
+    cairo: { lat: 30.0444, lng: 31.2357, label: "Cairo" },
+    lagos: { lat: 6.5244, lng: 3.3792, label: "Lagos" },
+    johannesburg: { lat: -26.2041, lng: 28.0473, label: "Johannesburg" },
+    "cape town": { lat: -33.9249, lng: 18.4241, label: "Cape Town" },
+    nairobi: { lat: -1.2921, lng: 36.8219, label: "Nairobi" },
+    casablanca: { lat: 33.5731, lng: -7.5898, label: "Casablanca" },
+    accra: { lat: 5.6037, lng: -0.187, label: "Accra" },
+    "addis ababa": { lat: 9.032, lng: 38.7469, label: "Addis Ababa" },
+    los: { lat: 6.5774, lng: 3.3212, label: "Lagos Murtala Muhammed" },
+    cai: { lat: 30.1219, lng: 31.4056, label: "Cairo Intl" },
+    jnb: { lat: -26.1367, lng: 28.2411, label: "OR Tambo" },
     // ── Oceania ───────────────────────────────────────────────────────────────────
-    'sydney':          { lat: -33.8688,lng: 151.2093, label: 'Sydney' },
-    'melbourne':       { lat: -37.8136,lng: 144.9631, label: 'Melbourne' },
-    'brisbane':        { lat: -27.4698,lng: 153.0251, label: 'Brisbane' },
-    'perth':           { lat: -31.9505,lng: 115.8605, label: 'Perth' },
-    'auckland':        { lat: -36.8509,lng: 174.7645, label: 'Auckland' },
-    'sydney':          { lat: -33.8688,lng: 151.2093, label: 'Sydney' },
-    'syd':             { lat: -33.9461,lng: 151.1772, label: 'Sydney Kingsford Smith' },
-    'mel':             { lat: -37.6690,lng: 144.8410, label: 'Melbourne Tullamarine' },
-    'akl':             { lat: -37.0082,lng: 174.7850, label: 'Auckland Intl' },
+    sydney: { lat: -33.8688, lng: 151.2093, label: "Sydney" },
+    melbourne: { lat: -37.8136, lng: 144.9631, label: "Melbourne" },
+    brisbane: { lat: -27.4698, lng: 153.0251, label: "Brisbane" },
+    perth: { lat: -31.9505, lng: 115.8605, label: "Perth" },
+    auckland: { lat: -36.8509, lng: 174.7645, label: "Auckland" },
+    sydney: { lat: -33.8688, lng: 151.2093, label: "Sydney" },
+    syd: { lat: -33.9461, lng: 151.1772, label: "Sydney Kingsford Smith" },
+    mel: { lat: -37.669, lng: 144.841, label: "Melbourne Tullamarine" },
+    akl: { lat: -37.0082, lng: 174.785, label: "Auckland Intl" },
   });
 
   // ── 0606A Simplified CAM menu + Hide-Actor toggle + route lifecycle ─────────
@@ -272,116 +290,310 @@
   // films the actor (actor visible); Internal = occupies the actor (actor hidden).
   // Hide Actor is now a STANDALONE toggle, not a camera entry.
   var CAM_MENU = [
-    { value: 'ext_lead',      label: 'Ext. Front (Lead)',      family: 'external', external: 'lead' },
-    { value: 'ext_follow',    label: 'Ext. Rear (Follow)',     family: 'external', external: 'follow' },
-    { value: 'ext_side',      label: 'Ext. Side (Profile)',    family: 'external', external: 'side' },
-    { value: 'ext_high',      label: 'Ext. High (Overhead)',   family: 'external', external: 'high' },
-    { value: 'int_dash',      label: 'Int. Dash (Looking In)', family: 'internal', internalViewId: 'driver', look: 'rear' },
-    { value: 'int_driver',    label: 'Int. Driver POV',        family: 'internal', internalViewId: 'driver', look: 'front' },
-    { value: 'int_passenger', label: 'Int. Passenger POV',     family: 'internal', internalViewId: 'passenger', look: 'front' },
-    { value: 'int_rear_seat', label: 'Int. Rear Seat',         family: 'internal', internalViewId: 'rear_seat', look: 'front' },
+    {
+      value: "ext_lead",
+      label: "Ext. Front (Lead)",
+      family: "external",
+      external: "lead",
+    },
+    {
+      value: "ext_follow",
+      label: "Ext. Rear (Follow)",
+      family: "external",
+      external: "follow",
+    },
+    {
+      value: "ext_side",
+      label: "Ext. Side (Profile)",
+      family: "external",
+      external: "side",
+    },
+    {
+      value: "ext_high",
+      label: "Ext. High (Overhead)",
+      family: "external",
+      external: "high",
+    },
+    {
+      value: "int_dash",
+      label: "Int. Dash (Looking In)",
+      family: "internal",
+      internalViewId: "driver",
+      look: "rear",
+    },
+    {
+      value: "int_driver",
+      label: "Int. Driver POV",
+      family: "internal",
+      internalViewId: "driver",
+      look: "front",
+    },
+    {
+      value: "int_passenger",
+      label: "Int. Passenger POV",
+      family: "internal",
+      internalViewId: "passenger",
+      look: "front",
+    },
+    {
+      value: "int_rear_seat",
+      label: "Int. Rear Seat",
+      family: "internal",
+      internalViewId: "rear_seat",
+      look: "front",
+    },
   ];
-  var CAM_MENU_BY_VAL = {}; CAM_MENU.forEach(function (m) { CAM_MENU_BY_VAL[m.value] = m; });
-  var _camSelState = { version: '1.0.0', enabled: true, selectedValue: 'ext_follow', selectedShotId: null, family: 'external', lastApplyOk: null, lastError: null };
+  var CAM_MENU_BY_VAL = {};
+  CAM_MENU.forEach(function (m) {
+    CAM_MENU_BY_VAL[m.value] = m;
+  });
+  var _camSelState = {
+    version: "1.0.0",
+    enabled: true,
+    selectedValue: "ext_follow",
+    selectedShotId: null,
+    family: "external",
+    lastApplyOk: null,
+    lastError: null,
+  };
   var _camSelEl = null;
 
-  function _camSelOptions() { return CAM_MENU.map(function (m) { return { value: m.value, label: m.label, family: m.family }; }); }
-  function _auth() { return global.SBE && SBE.TransportScopedPOVAuthority; }
+  function _camSelOptions() {
+    return CAM_MENU.map(function (m) {
+      return { value: m.value, label: m.label, family: m.family };
+    });
+  }
+  function _auth() {
+    return global.SBE && SBE.TransportScopedPOVAuthority;
+  }
 
   // Hide-Actor: standalone toggle. null = follow camera default (internal hides,
   // external shows); true/false = manual session override (override wins).
   var _hideActorManual = null;
-  function _effectiveHideActor(family) { return _hideActorManual != null ? _hideActorManual : (family === 'internal'); }
+  function _effectiveHideActor(family) {
+    return _hideActorManual != null ? _hideActorManual : family === "internal";
+  }
   function _applyHideActor(family) {
     var hide = _effectiveHideActor(family);
     var hr = global.SBE && SBE.HeroVehicleRenderer;
-    if (hr && typeof hr.setHidden === 'function') { try { hr.setHidden(!!hide); } catch (e) {} }
-    try { var cb = document.getElementById('nav-hide-actor'); if (cb) cb.checked = !!hide; } catch (e) {}
+    if (hr && typeof hr.setHidden === "function") {
+      try {
+        hr.setHidden(!!hide);
+      } catch (e) {}
+    }
+    try {
+      var cb = document.getElementById("nav-hide-actor");
+      if (cb) cb.checked = !!hide;
+    } catch (e) {}
     return hide;
   }
-  function setHideActor(on) { _hideActorManual = (on == null) ? null : !!on; return _applyHideActor(_camSelState.family); }
-  function getHideActor() { return { manual: _hideActorManual, effective: _effectiveHideActor(_camSelState.family), family: _camSelState.family }; }
+  function setHideActor(on) {
+    _hideActorManual = on == null ? null : !!on;
+    return _applyHideActor(_camSelState.family);
+  }
+  function getHideActor() {
+    return {
+      manual: _hideActorManual,
+      effective: _effectiveHideActor(_camSelState.family),
+      family: _camSelState.family,
+    };
+  }
 
   function _applyCamSelection(val) {
     var m = CAM_MENU_BY_VAL[val];
-    if (!m) { _camSelState.lastError = 'invalid_selection'; _camSelState.lastApplyOk = false; return { ok: false, lastError: 'invalid_selection' }; }
-    _camSelState.selectedValue = val; _camSelState.family = m.family;
+    if (!m) {
+      _camSelState.lastError = "invalid_selection";
+      _camSelState.lastApplyOk = false;
+      return { ok: false, lastError: "invalid_selection" };
+    }
+    _camSelState.selectedValue = val;
+    _camSelState.family = m.family;
     var auth = _auth();
-    var tm = (_state.transport === 'drive') ? 'drive' : 'drive';   // CAM is drive-scoped for now
+    var tm = _state.transport === "drive" ? "drive" : "drive"; // CAM is drive-scoped for now
 
-    if (m.family === 'internal') {
-      if (!auth) { _camSelState.lastError = 'transport_pov_unavailable'; _camSelState.lastApplyOk = false; _camSelState.selectedShotId = val; return { ok: false, lastError: 'transport_pov_unavailable' }; }
-      var ri = auth.applyView({ transportMode: tm, family: 'internal', internalViewId: m.internalViewId, lookDirection: m.look || 'front' });
+    if (m.family === "internal") {
+      if (!auth) {
+        _camSelState.lastError = "transport_pov_unavailable";
+        _camSelState.lastApplyOk = false;
+        _camSelState.selectedShotId = val;
+        return { ok: false, lastError: "transport_pov_unavailable" };
+      }
+      var ri = auth.applyView({
+        transportMode: tm,
+        family: "internal",
+        internalViewId: m.internalViewId,
+        lookDirection: m.look || "front",
+      });
       _camSelState.selectedShotId = val;
-      _camSelState.lastApplyOk = !!(ri && ri.ok); _camSelState.lastError = (ri && !ri.ok) ? (ri.reason || ri.lastError || 'unknown') : null;
-      _applyHideActor('internal');   // internal default hide (manual override respected)
-      return ri || { ok: false, lastError: 'unknown' };
+      _camSelState.lastApplyOk = !!(ri && ri.ok);
+      _camSelState.lastError =
+        ri && !ri.ok ? ri.reason || ri.lastError || "unknown" : null;
+      _applyHideActor("internal"); // internal default hide (manual override respected)
+      return ri || { ok: false, lastError: "unknown" };
     }
     // External — disengage occupant + shot, set legacy preset, show actor.
     var sp = global.SBE && SBE.ActorCameraShotPresets;
-    if (sp && typeof sp.disengage === 'function') { try { sp.disengage(); } catch (e) {} }
+    if (sp && typeof sp.disengage === "function") {
+      try {
+        sp.disengage();
+      } catch (e) {}
+    }
     var occL = global.SBE && SBE.OccupantCameraModes;
-    if (occL && typeof occL.disengage === 'function') { try { occL.disengage(); } catch (e) {} }
-    if (auth) { auth.setViewFamily('external'); try { var ext = auth.getProfile('drive'); if (ext && ext.externalViews.indexOf(m.external) >= 0) auth.setExternalView(m.external); } catch (e) {} }
+    if (occL && typeof occL.disengage === "function") {
+      try {
+        occL.disengage();
+      } catch (e) {}
+    }
+    if (auth) {
+      auth.setViewFamily("external");
+      try {
+        var ext = auth.getProfile("drive");
+        if (ext && ext.externalViews.indexOf(m.external) >= 0)
+          auth.setExternalView(m.external);
+      } catch (e) {}
+    }
     var hv = global.SBE && SBE.HeroVehicleRuntime;
-    if (hv && typeof hv.setCameraPreset === 'function') { try { hv.setCameraPreset(m.external); } catch (e) {} }
-    _camSelState.selectedShotId = null; _camSelState.lastApplyOk = true; _camSelState.lastError = null;
-    _applyHideActor('external');    // external default show
+    if (hv && typeof hv.setCameraPreset === "function") {
+      try {
+        hv.setCameraPreset(m.external);
+      } catch (e) {}
+    }
+    _camSelState.selectedShotId = null;
+    _camSelState.lastApplyOk = true;
+    _camSelState.lastError = null;
+    _applyHideActor("external"); // external default show
     return { ok: true, external: true, preset: m.external };
   }
   function _setCamSelection(val) {
-    if (!CAM_MENU_BY_VAL[val]) { _camSelState.lastError = 'invalid_selection'; return { ok: false, lastError: 'invalid_selection' }; }
-    if (_camSelEl) { try { _camSelEl.value = val; } catch (e) {} }
+    if (!CAM_MENU_BY_VAL[val]) {
+      _camSelState.lastError = "invalid_selection";
+      return { ok: false, lastError: "invalid_selection" };
+    }
+    if (_camSelEl) {
+      try {
+        _camSelEl.value = val;
+      } catch (e) {}
+    }
     return _applyCamSelection(val);
   }
 
   // ── Route lifecycle (Launch / Pause-Play / Stop) — no page reload ───────────
-  var _routeControl = { routeState: 'idle', lastLaunchAt: null, lastStopAt: null, lastPauseAt: null, lastResumeAt: null };
+  var _routeControl = {
+    routeState: "idle",
+    lastLaunchAt: null,
+    lastStopAt: null,
+    lastPauseAt: null,
+    lastResumeAt: null,
+  };
   function _activeRouteRuntime() {
-    if (_state.transport === 'drive') return global.SBE && SBE.HeroVehicleRuntime;
+    if (_state.transport === "drive")
+      return global.SBE && SBE.HeroVehicleRuntime;
     return global.SBE && SBE.RegionalFlightTripRuntime;
   }
-  function _setRouteState(s) { _routeControl.routeState = s; _updateRouteButtons(); }
-  function pauseRoute() { var rt = _activeRouteRuntime(); if (rt && typeof rt.pause === 'function') { try { rt.pause(); } catch (e) {} } _routeControl.lastPauseAt = Date.now(); _setRouteState('paused'); return getRouteControlState(); }
-  function resumeRoute() { var rt = _activeRouteRuntime(); if (rt && typeof rt.resume === 'function') { try { rt.resume(); } catch (e) {} } _routeControl.lastResumeAt = Date.now(); _setRouteState('running'); return getRouteControlState(); }
-  function togglePauseRoute() { return (_routeControl.routeState === 'running') ? pauseRoute() : (_routeControl.routeState === 'paused' ? resumeRoute() : getRouteControlState()); }
+  function _setRouteState(s) {
+    _routeControl.routeState = s;
+    _updateRouteButtons();
+  }
+  function pauseRoute() {
+    var rt = _activeRouteRuntime();
+    if (rt && typeof rt.pause === "function") {
+      try {
+        rt.pause();
+      } catch (e) {}
+    }
+    _routeControl.lastPauseAt = Date.now();
+    _setRouteState("paused");
+    return getRouteControlState();
+  }
+  function resumeRoute() {
+    var rt = _activeRouteRuntime();
+    if (rt && typeof rt.resume === "function") {
+      try {
+        rt.resume();
+      } catch (e) {}
+    }
+    _routeControl.lastResumeAt = Date.now();
+    _setRouteState("running");
+    return getRouteControlState();
+  }
+  function togglePauseRoute() {
+    return _routeControl.routeState === "running"
+      ? pauseRoute()
+      : _routeControl.routeState === "paused"
+        ? resumeRoute()
+        : getRouteControlState();
+  }
   function stopRoute() {
     var rt = _activeRouteRuntime();
-    if (rt && typeof rt.stop === 'function') { try { rt.stop(); } catch (e) {} }
+    if (rt && typeof rt.stop === "function") {
+      try {
+        rt.stop();
+      } catch (e) {}
+    }
     var occ = global.SBE && SBE.OccupantCameraModes;
-    if (occ && typeof occ.disengage === 'function') { try { occ.disengage(); } catch (e) {} }
-    _routeControl.lastStopAt = Date.now(); _setRouteState('stopped'); return getRouteControlState();
+    if (occ && typeof occ.disengage === "function") {
+      try {
+        occ.disengage();
+      } catch (e) {}
+    }
+    _routeControl.lastStopAt = Date.now();
+    _setRouteState("stopped");
+    return getRouteControlState();
   }
   function getRouteControlState() {
     var s = _routeControl.routeState;
-    return { routeState: s, transport: _state.transport,
-      canLaunch: !(s === 'running' || s === 'paused' || s === 'launching'),
-      canPause: (s === 'running' || s === 'paused'), canStop: (s === 'running' || s === 'paused' || s === 'launching'),
-      lastLaunchAt: _routeControl.lastLaunchAt, lastStopAt: _routeControl.lastStopAt, lastPauseAt: _routeControl.lastPauseAt, lastResumeAt: _routeControl.lastResumeAt };
+    return {
+      routeState: s,
+      transport: _state.transport,
+      canLaunch: !(s === "running" || s === "paused" || s === "launching"),
+      canPause: s === "running" || s === "paused",
+      canStop: s === "running" || s === "paused" || s === "launching",
+      lastLaunchAt: _routeControl.lastLaunchAt,
+      lastStopAt: _routeControl.lastStopAt,
+      lastPauseAt: _routeControl.lastPauseAt,
+      lastResumeAt: _routeControl.lastResumeAt,
+    };
   }
   function _updateRouteButtons() {
-    if (typeof document === 'undefined' || !document.getElementById) return;
+    if (typeof document === "undefined" || !document.getElementById) return;
     var st = getRouteControlState();
-    var lb = document.getElementById('nav-launch');
-    if (lb) { if (st.canLaunch) { lb.classList.remove('launching'); lb.disabled = false; } else { lb.classList.add('launching'); lb.disabled = true; } }
-    var pb = document.getElementById('nav-pause');
-    if (pb) { pb.disabled = !st.canPause; pb.textContent = (_routeControl.routeState === 'paused') ? '▶' : '⏸'; pb.title = (_routeControl.routeState === 'paused') ? 'Play' : 'Pause'; }
-    var sb = document.getElementById('nav-stop'); if (sb) sb.disabled = !st.canStop;
+    var lb = document.getElementById("nav-launch");
+    if (lb) {
+      if (st.canLaunch) {
+        lb.classList.remove("launching");
+        lb.disabled = false;
+      } else {
+        lb.classList.add("launching");
+        lb.disabled = true;
+      }
+    }
+    var pb = document.getElementById("nav-pause");
+    if (pb) {
+      pb.disabled = !st.canPause;
+      pb.textContent = _routeControl.routeState === "paused" ? "▶" : "⏸";
+      pb.title = _routeControl.routeState === "paused" ? "Play" : "Pause";
+    }
+    var sb = document.getElementById("nav-stop");
+    if (sb) sb.disabled = !st.canStop;
   }
   // Re-enable Launch when idle/stopped and the user edits destination/transport.
-  function _routeReadyForRelaunch() { var s = _routeControl.routeState; if (s === 'stopped' || s === 'error') _setRouteState('idle'); else _updateRouteButtons(); }
+  function _routeReadyForRelaunch() {
+    var s = _routeControl.routeState;
+    if (s === "stopped" || s === "error") _setRouteState("idle");
+    else _updateRouteButtons();
+  }
 
   // ── State ──────────────────────────────────────────────────────────────────────
 
   var _state = {
-    transport:     'flight',
-    to:            '',
-    speedIndex:    SPEED_DEFAULT_INDEX,     // index into TRAVERSAL_SPEED_STEPS
-    altitudeIndex: ALTITUDE_DEFAULT_INDEX,  // index into FLIGHT_ALTITUDE_STEPS
+    transport: "flight",
+    to: "",
+    speedIndex: SPEED_DEFAULT_INDEX, // index into TRAVERSAL_SPEED_STEPS
+    altitudeIndex: ALTITUDE_DEFAULT_INDEX, // index into FLIGHT_ALTITUDE_STEPS
   };
 
   var _mounted = false;
-  var _root    = null;
+  var _root = null;
 
   // ── Persistence ────────────────────────────────────────────────────────────────
 
@@ -391,28 +603,48 @@
       if (raw) {
         var saved = JSON.parse(raw);
         if (saved.to !== undefined) _state.to = saved.to;
-        if (saved.speedIndex    != null && saved.speedIndex    < TRAVERSAL_SPEED_STEPS.length)
-          _state.speedIndex    = saved.speedIndex;
-        if (saved.altitudeIndex != null && saved.altitudeIndex < FLIGHT_ALTITUDE_STEPS.length)
+        if (
+          saved.speedIndex != null &&
+          saved.speedIndex < TRAVERSAL_SPEED_STEPS.length
+        )
+          _state.speedIndex = saved.speedIndex;
+        if (
+          saved.altitudeIndex != null &&
+          saved.altitudeIndex < FLIGHT_ALTITUDE_STEPS.length
+        )
           _state.altitudeIndex = saved.altitudeIndex;
       }
-    } catch (e) { /* ignore */ }
+    } catch (e) {
+      /* ignore */
+    }
   }
 
   function _saveState() {
     try {
       if (global.localStorage) {
-        global.localStorage.setItem(STORAGE_KEY, JSON.stringify({
-          to:            _state.to,
-          speedIndex:    _state.speedIndex,
-          altitudeIndex: _state.altitudeIndex,
-        }));
+        global.localStorage.setItem(
+          STORAGE_KEY,
+          JSON.stringify({
+            to: _state.to,
+            speedIndex: _state.speedIndex,
+            altitudeIndex: _state.altitudeIndex,
+          }),
+        );
       }
-    } catch (e) { /* ignore */ }
+    } catch (e) {
+      /* ignore */
+    }
   }
 
-  function _currentSpeedMult()  { return TRAVERSAL_SPEED_STEPS[_state.speedIndex] || 1; }
-  function _currentAltStep()    { return FLIGHT_ALTITUDE_STEPS[_state.altitudeIndex] || FLIGHT_ALTITUDE_STEPS[ALTITUDE_DEFAULT_INDEX]; }
+  function _currentSpeedMult() {
+    return TRAVERSAL_SPEED_STEPS[_state.speedIndex] || 1;
+  }
+  function _currentAltStep() {
+    return (
+      FLIGHT_ALTITUDE_STEPS[_state.altitudeIndex] ||
+      FLIGHT_ALTITUDE_STEPS[ALTITUDE_DEFAULT_INDEX]
+    );
+  }
 
   // ── Current location — reads live from the visible Mapbox map ─────────────────
 
@@ -420,38 +652,43 @@
     try {
       var mvr = global.SBE && SBE.MapboxViewportRuntime;
       if (!mvr) return null;
-      var map = typeof mvr.getMap === 'function' ? mvr.getMap() : null;
+      var map = typeof mvr.getMap === "function" ? mvr.getMap() : null;
       if (!map) return null;
       var c = map.getCenter();
-      return { lat: c.lat, lng: c.lng, label: 'Current location' };
-    } catch (e) { return null; }
+      return { lat: c.lat, lng: c.lng, label: "Current location" };
+    } catch (e) {
+      return null;
+    }
   }
 
   // ── Destination normalization ────────────────────────────────────────────────
 
   function _stripDiacritics(s) {
-    return s.normalize('NFD').replace(/[̀-ͯ]/g, '');
+    return s.normalize("NFD").replace(/[̀-ͯ]/g, "");
   }
 
   function _normalizeKey(s) {
-    return _stripDiacritics(String(s || '')).toLowerCase()
-      .replace(/[-_./]/g, ' ').replace(/\s+/g, ' ').trim();
+    return _stripDiacritics(String(s || ""))
+      .toLowerCase()
+      .replace(/[-_./]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
   }
 
   // Alias map: common misspellings / nicknames → canonical DESTINATIONS key
   var DESTINATION_ALIASES = Object.freeze({
-    'sao paolo':    'sao paulo',
-    'sao paulo':    'sao paulo',
-    'philly':       'philadelphia',
-    'chi town':     'chicago',
-    'vegas':        'las vegas',
-    'big apple':    'new york',
-    'cdmx':         'mexico city',
-    'df':           'mexico city',
-    'bombay':       'mumbai',
-    'peking':       'beijing',
-    'frisco':       'san francisco',
-    'kiev':         'kyiv',
+    "sao paolo": "sao paulo",
+    "sao paulo": "sao paulo",
+    philly: "philadelphia",
+    "chi town": "chicago",
+    vegas: "las vegas",
+    "big apple": "new york",
+    cdmx: "mexico city",
+    df: "mexico city",
+    bombay: "mumbai",
+    peking: "beijing",
+    frisco: "san francisco",
+    kiev: "kyiv",
   });
 
   // Pre-built normalized index: _normalizeKey(canonicalKey) → DESTINATIONS entry
@@ -491,12 +728,23 @@
     }
 
     // lat,lng literal  e.g. "40.71,-74.01"
-    var parts = norm.replace(/\s/g, '').split(',');
+    var parts = norm.replace(/\s/g, "").split(",");
     if (parts.length === 2) {
       var lat = parseFloat(parts[0]);
       var lng = parseFloat(parts[1]);
-      if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
-        return { lat: lat, lng: lng, label: lat.toFixed(2) + ', ' + lng.toFixed(2) };
+      if (
+        !isNaN(lat) &&
+        !isNaN(lng) &&
+        lat >= -90 &&
+        lat <= 90 &&
+        lng >= -180 &&
+        lng <= 180
+      ) {
+        return {
+          lat: lat,
+          lng: lng,
+          label: lat.toFixed(2) + ", " + lng.toFixed(2),
+        };
       }
     }
 
@@ -506,14 +754,17 @@
   // ── Error display ─────────────────────────────────────────────────────────────
 
   function _showError(msg) {
-    var el = document.getElementById('nav-error');
-    if (el) { el.textContent = msg; el.classList.add('visible'); }
-    if (typeof _setRouteState === 'function') _setRouteState('error');   // 0606A — re-enable Launch
+    var el = document.getElementById("nav-error");
+    if (el) {
+      el.textContent = msg;
+      el.classList.add("visible");
+    }
+    if (typeof _setRouteState === "function") _setRouteState("error"); // 0606A — re-enable Launch
   }
 
   function _clearError() {
-    var el = document.getElementById('nav-error');
-    if (el) el.classList.remove('visible');
+    var el = document.getElementById("nav-error");
+    if (el) el.classList.remove("visible");
   }
 
   // ── Launch ────────────────────────────────────────────────────────────────────
@@ -528,64 +779,66 @@
 
   function _launchDrive(fromLoc, toLoc, toText) {
     var hv = global.SBE && SBE.HeroVehicleRuntime;
-    if (!hv || typeof hv.startRoute !== 'function') {
-      _showError('Drive runtime not ready — try again in a moment.');
+    if (!hv || typeof hv.startRoute !== "function") {
+      _showError("Drive runtime not ready — try again in a moment.");
       return;
     }
 
     // Stop any active flight so the two actors don't fight over the camera.
     var rt = global.SBE && SBE.RegionalFlightTripRuntime;
-    if (rt && typeof rt.stop === 'function') rt.stop();
+    if (rt && typeof rt.stop === "function") rt.stop();
 
     var speedMult = _currentSpeedMult();
-    var altStep   = _currentAltStep();
-    var distKm    = _haversineKm(fromLoc.lat, fromLoc.lng, toLoc.lat, toLoc.lng);
+    var altStep = _currentAltStep();
+    var distKm = _haversineKm(fromLoc.lat, fromLoc.lng, toLoc.lat, toLoc.lng);
 
     _state.to = toText;
     _saveState();
 
     // Expose nav state for HUD telemetry (transport: drive).
-    global._wos     = global._wos || {};
+    global._wos = global._wos || {};
     global._wos.nav = {
-      transport:    'drive',
-      to:           toLoc.label,
-      from:         fromLoc.label,
-      toLoc:        toLoc,
-      fromLoc:      fromLoc,
-      distanceKm:   distKm,
+      transport: "drive",
+      to: toLoc.label,
+      from: fromLoc.label,
+      toLoc: toLoc,
+      fromLoc: fromLoc,
+      distanceKm: distKm,
       launchRealMs: Date.now(),
-      speedMult:    speedMult,
-      altStep:      altStep,
-      routeSource:  null,   // filled in once the route resolves
+      speedMult: speedMult,
+      altStep: altStep,
+      routeSource: null, // filled in once the route resolves
     };
 
-    var launchBtn = document.getElementById('nav-launch');
-    if (launchBtn) launchBtn.classList.add('launching');
+    var launchBtn = document.getElementById("nav-launch");
+    if (launchBtn) launchBtn.classList.add("launching");
 
-    console.group('[WOSNav] Drive launch');
-    console.log('from:', fromLoc.label, '→ to:', toLoc.label);
-    console.log('speed:', _fmtSpeed(speedMult));
+    console.group("[WOSNav] Drive launch");
+    console.log("from:", fromLoc.label, "→ to:", toLoc.label);
+    console.log("speed:", _fmtSpeed(speedMult));
     console.groupEnd();
 
     hv.startRoute({
-      from:            fromLoc,
-      to:              toLoc,
+      from: fromLoc,
+      to: toLoc,
       destinationText: toText,
       speedMultiplier: speedMult,
-    }).then(function (ok) {
-      if (launchBtn) launchBtn.classList.remove('launching');
-      if (!ok) {
-        _showError('Could not start drive route — check console.');
-        return;
-      }
-      _setRouteState('running');   // 0606A — running: Launch grays, Pause/Stop enable
-      // Record actual route source for HUD honesty (directions vs fallback).
-      var s = hv.getState();
-      if (global._wos.nav) global._wos.nav.routeSource = s.routeSource;
-    }).catch(function (e) {
-      if (launchBtn) launchBtn.classList.remove('launching');
-      _showError('Drive error: ' + (e && e.message ? e.message : 'unknown'));
-    });
+    })
+      .then(function (ok) {
+        if (launchBtn) launchBtn.classList.remove("launching");
+        if (!ok) {
+          _showError("Could not start drive route — check console.");
+          return;
+        }
+        _setRouteState("running"); // 0606A — running: Launch grays, Pause/Stop enable
+        // Record actual route source for HUD honesty (directions vs fallback).
+        var s = hv.getState();
+        if (global._wos.nav) global._wos.nav.routeSource = s.routeSource;
+      })
+      .catch(function (e) {
+        if (launchBtn) launchBtn.classList.remove("launching");
+        _showError("Drive error: " + (e && e.message ? e.message : "unknown"));
+      });
   }
 
   // Public: drive to a destination string (resolves origin from map center).
@@ -593,10 +846,16 @@
   function driveTo(toText) {
     _clearError();
     var fromLoc = _getCurrentMapCenter();
-    if (!fromLoc) { _showError('Map not ready.'); return false; }
+    if (!fromLoc) {
+      _showError("Map not ready.");
+      return false;
+    }
     var toLoc = _resolveDestination(toText);
-    if (!toLoc) { _showError('"' + toText + '" not found.'); return false; }
-    _state.transport = 'drive';
+    if (!toLoc) {
+      _showError('"' + toText + '" not found.');
+      return false;
+    }
+    _state.transport = "drive";
     _launchDrive(fromLoc, toLoc, String(toText));
     return true;
   }
@@ -604,42 +863,45 @@
   function launch() {
     _clearError();
     _routeControl.lastLaunchAt = Date.now();
-    _setRouteState('launching');   // 0606A — disable Launch while starting
+    _setRouteState("launching"); // 0606A — disable Launch while starting
 
-    var launchBtn = document.getElementById('nav-launch');
-    var toInput   = document.getElementById('nav-to');
-    var toText    = (toInput ? toInput.value : _state.to || '').trim();
+    var launchBtn = document.getElementById("nav-launch");
+    var toInput = document.getElementById("nav-to");
+    var toText = (toInput ? toInput.value : _state.to || "").trim();
 
     // ── Resolve FROM: current map center ──────────────────────────────────────
     var fromLoc = _getCurrentMapCenter();
     if (!fromLoc) {
-      _showError('Map not ready — please wait a moment.');
+      _showError("Map not ready — please wait a moment.");
       return;
     }
 
     // ── Resolve TO: destination from table ────────────────────────────────────
     if (!toText) {
-      _showError('Enter a destination — city, airport code, or coordinates.');
+      _showError("Enter a destination — city, airport code, or coordinates.");
       return;
     }
 
     var toLoc = _resolveDestination(toText);
     if (!toLoc) {
-      _showError('"' + toText + '" not found. Try: Boston, Tokyo, London, JFK…');
+      _showError(
+        '"' + toText + '" not found. Try: Boston, Tokyo, London, JFK…',
+      );
       return;
     }
 
     // Sanity: same location
     var distDeg = Math.sqrt(
-      Math.pow(fromLoc.lat - toLoc.lat, 2) + Math.pow(fromLoc.lng - toLoc.lng, 2)
+      Math.pow(fromLoc.lat - toLoc.lat, 2) +
+        Math.pow(fromLoc.lng - toLoc.lng, 2),
     );
     if (distDeg < 0.01) {
-      _showError('Already there. Enter a different destination.');
+      _showError("Already there. Enter a different destination.");
       return;
     }
 
     // ── Drive prototype: hand off to HeroVehicleRuntime ───────────────────────
-    if (_state.transport === 'drive') {
+    if (_state.transport === "drive") {
       _launchDrive(fromLoc, toLoc, toText);
       return;
     }
@@ -648,9 +910,12 @@
     // durationMs = time a real aircraft would take at CRUISE_SPEED_KMH.
     // real_time = durationMs / speedMult — user controls compression via stepper.
     var speedMult = _currentSpeedMult();
-    var distKm    = _haversineKm(fromLoc.lat, fromLoc.lng, toLoc.lat, toLoc.lng);
-    var simHours  = distKm / CRUISE_SPEED_KMH;
-    var durationMs = Math.max(5 * 60 * 1000, Math.round(simHours * 3600 * 1000));
+    var distKm = _haversineKm(fromLoc.lat, fromLoc.lng, toLoc.lat, toLoc.lng);
+    var simHours = distKm / CRUISE_SPEED_KMH;
+    var durationMs = Math.max(
+      5 * 60 * 1000,
+      Math.round(simHours * 3600 * 1000),
+    );
     var realMinutes = durationMs / speedMult / 60000;
 
     _state.to = toText;
@@ -658,239 +923,257 @@
 
     // Expose nav state — TraversalHUD reads this for telemetry
     var launchRealMs = Date.now();
-    global._wos       = global._wos       || {};
-    global._wos.nav   = {
-      transport:   _state.transport,
-      to:          toLoc.label,
-      from:        fromLoc.label,
-      toLoc:       toLoc,
-      fromLoc:     fromLoc,
-      distanceKm:  distKm,
+    global._wos = global._wos || {};
+    global._wos.nav = {
+      transport: _state.transport,
+      to: toLoc.label,
+      from: fromLoc.label,
+      toLoc: toLoc,
+      fromLoc: fromLoc,
+      distanceKm: distKm,
       launchRealMs: launchRealMs,
-      speedMult:   speedMult,
-      altStep:     _currentAltStep(),
+      speedMult: speedMult,
+      altStep: _currentAltStep(),
     };
 
-    if (launchBtn) launchBtn.classList.add('launching');
+    if (launchBtn) launchBtn.classList.add("launching");
 
-    console.group('[WOSNav] Launch');
-    console.log('from    :', fromLoc.label, '(', fromLoc.lat.toFixed(4), fromLoc.lng.toFixed(4), ')');
-    console.log('to      :', toLoc.label,   '(', toLoc.lat.toFixed(4),   toLoc.lng.toFixed(4), ')');
-    console.log('distance:', Math.round(distKm) + ' km');
-    console.log('speed   :', _fmtSpeed(speedMult), '— ~' + realMinutes.toFixed(1) + ' real min');
-    console.log('sim dur :', Math.round(durationMs / 60000) + ' min simulated');
+    console.group("[WOSNav] Launch");
+    console.log(
+      "from    :",
+      fromLoc.label,
+      "(",
+      fromLoc.lat.toFixed(4),
+      fromLoc.lng.toFixed(4),
+      ")",
+    );
+    console.log(
+      "to      :",
+      toLoc.label,
+      "(",
+      toLoc.lat.toFixed(4),
+      toLoc.lng.toFixed(4),
+      ")",
+    );
+    console.log("distance:", Math.round(distKm) + " km");
+    console.log(
+      "speed   :",
+      _fmtSpeed(speedMult),
+      "— ~" + realMinutes.toFixed(1) + " real min",
+    );
+    console.log("sim dur :", Math.round(durationMs / 60000) + " min simulated");
     console.groupEnd();
 
     // ── Stop any existing trip ─────────────────────────────────────────────────
     var rt = global.SBE && SBE.RegionalFlightTripRuntime;
-    if (rt && typeof rt.stop === 'function') rt.stop();
+    if (rt && typeof rt.stop === "function") rt.stop();
 
     // ── Presentation mode ──────────────────────────────────────────────────────
-    if (global._wos && typeof global._wos.presentationMode === 'function') {
+    if (global._wos && typeof global._wos.presentationMode === "function") {
       global._wos.presentationMode(true);
     }
 
     // ── Traversal profile ──────────────────────────────────────────────────────
-    if (rt && typeof rt.setTraversalProfile === 'function') {
-      rt.setTraversalProfile('regional');
+    if (rt && typeof rt.setTraversalProfile === "function") {
+      rt.setTraversalProfile("regional");
     }
 
     // ── Altitude step (must be resolved before startGeneratedTrip) ──────────
     var altStep = _currentAltStep();
 
     // ── Build and start generated trip ────────────────────────────────────────
-    if (!rt || typeof rt.startGeneratedTrip !== 'function') {
-      _showError('Trip runtime not ready — try again in a moment.');
-      if (launchBtn) launchBtn.classList.remove('launching');
+    if (!rt || typeof rt.startGeneratedTrip !== "function") {
+      _showError("Trip runtime not ready — try again in a moment.");
+      if (launchBtn) launchBtn.classList.remove("launching");
       return;
     }
 
     var tripOk = rt.startGeneratedTrip({
-      id:               'nav_trip_' + Date.now(),
-      label:            fromLoc.label + ' → ' + toLoc.label,
-      durationMs:       durationMs,
-      aircraftClass:    'regional',
+      id: "nav_trip_" + Date.now(),
+      label: fromLoc.label + " → " + toLoc.label,
+      durationMs: durationMs,
+      aircraftClass: "regional",
       cruiseAltitudeFt: altStep.altitudeFt,
-      cruiseSpeedKts:   420,
+      cruiseSpeedKts: 420,
       // Nav trips move from launch — no PREPARE/TAXI pin at origin.
-      movementMode:     'continuous',
+      movementMode: "continuous",
       route: [
         { lat: fromLoc.lat, lng: fromLoc.lng, label: fromLoc.label },
-        { lat: toLoc.lat,   lng: toLoc.lng,   label: toLoc.label   },
+        { lat: toLoc.lat, lng: toLoc.lng, label: toLoc.label },
       ],
     });
 
     if (!tripOk) {
-      _showError('Could not start route — check console for details.');
-      if (launchBtn) launchBtn.classList.remove('launching');
+      _showError("Could not start route — check console for details.");
+      if (launchBtn) launchBtn.classList.remove("launching");
       return;
     }
-    _setRouteState('running');   // 0606A — flight running
+    _setRouteState("running"); // 0606A — flight running
 
     // ── Speed multiplier ──────────────────────────────────────────────────────
-    if (rt && typeof rt.setSpeed === 'function') {
+    if (rt && typeof rt.setSpeed === "function") {
       rt.setSpeed(speedMult);
     }
 
     // ── Camera authority ─────────────────────────────────────────────────────
     // Deck owns presentation intent. Both the runtime's slow flyTo and the
     // rig's per-frame jumpTo must obey the selected altitude step's zoom/pitch.
-    if (typeof rt.setCameraProfile === 'function') {
+    if (typeof rt.setCameraProfile === "function") {
       rt.setCameraProfile({ zoom: altStep.zoom, pitch: altStep.pitch });
     }
     var rig = global.SBE && SBE.RegionalFlightCameraRig;
     if (rig) {
-      if (typeof rig.setGlideCamera === 'function') {
+      if (typeof rig.setGlideCamera === "function") {
         rig.setGlideCamera({ zoom: altStep.zoom, pitch: altStep.pitch });
       }
       // External profile override: applied AFTER profile-specific resolution,
       // so it wins over the regional/surface_glide curves.
-      if (typeof rig.setCameraProfile === 'function') {
+      if (typeof rig.setCameraProfile === "function") {
         rig.setCameraProfile({ zoom: altStep.zoom, pitch: altStep.pitch });
       }
-      if (typeof rig.setEnabled  === 'function') rig.setEnabled(true);
-      if (typeof rig.setSmoothing === 'function') rig.setSmoothing(0.75);
+      if (typeof rig.setEnabled === "function") rig.setEnabled(true);
+      if (typeof rig.setSmoothing === "function") rig.setSmoothing(0.75);
     }
 
     // ── Support systems (silent) ──────────────────────────────────────────────
     var ptpr = global.SBE && SBE.PredictiveTilePreloadRuntime;
     if (ptpr) {
-      if (typeof ptpr.start === 'function') ptpr.start();
+      if (typeof ptpr.start === "function") ptpr.start();
     }
 
     var tca = global.SBE && SBE.TraversalContinuityAuthority;
-    if (tca && typeof tca.setEnabled === 'function') {
+    if (tca && typeof tca.setEnabled === "function") {
       tca.setEnabled(true);
-      tca.setExposureBias('cinematic');
+      tca.setExposureBias("cinematic");
       tca.setAutoGate(false);
     }
 
     var tes = global.SBE && SBE.TileEmergenceStyling;
-    if (tes && typeof tes.start === 'function') tes.start();
+    if (tes && typeof tes.start === "function") tes.start();
 
     // ── Update FROM label to show where we launched from ──────────────────────
-    var fromEl = document.getElementById('nav-from-display');
+    var fromEl = document.getElementById("nav-from-display");
     if (fromEl) fromEl.textContent = fromLoc.label;
 
     global.setTimeout(function () {
-      if (launchBtn) launchBtn.classList.remove('launching');
+      if (launchBtn) launchBtn.classList.remove("launching");
     }, 800);
   }
 
   // ── CSS ───────────────────────────────────────────────────────────────────────
 
   function _injectCSS() {
-    if (document.getElementById('wos-nav-css')) return;
-    var s = document.createElement('style');
-    s.id  = 'wos-nav-css';
+    if (document.getElementById("wos-nav-css")) return;
+    var s = document.createElement("style");
+    s.id = "wos-nav-css";
     s.textContent = [
-      '#wos-nav {',
-      '  position: fixed; bottom: 0; left: 0; right: 0; z-index: 900;',
-      '  background: rgba(6,7,10,0.97);',
-      '  border-top: 1px solid rgba(255,255,255,0.07);',
-      '  backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);',
+      "#wos-nav {",
+      "  position: fixed; bottom: 0; left: 0; right: 0; z-index: 900;",
+      "  background: rgba(6,10,18,0.72);",
+      "  border-top: 1px solid rgba(160,210,230,0.14);",
+      "  backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);",
       '  font-family: -apple-system,"SF Pro Text","Helvetica Neue",Arial,sans-serif;',
-      '  font-size: 13px; color: rgba(255,255,255,0.80);',
-      '  user-select: none; padding: 8px 16px 10px;',
-      '  display: flex; flex-direction: column; gap: 7px; box-sizing: border-box;',
-      '}',
-      '.nav-row { display: flex; align-items: center; gap: 8px; min-height: 28px; }',
+      "  font-size: 13px; color: rgba(255,255,255,0.80);",
+      "  user-select: none; padding: 8px 16px 10px;",
+      "  display: flex; flex-direction: column; gap: 7px; box-sizing: border-box;",
+      "}",
+      ".nav-row { display: flex; align-items: center; gap: 8px; min-height: 28px; }",
       /* transport */
-      '.nav-transport { display: flex; gap: 3px; }',
-      '.nav-mode {',
-      '  border: none; outline: none; cursor: pointer;',
-      '  background: rgba(255,255,255,0.04); border-radius: 6px;',
-      '  padding: 4px 10px; font-family: inherit; font-size: 13px;',
-      '  color: rgba(255,255,255,0.32); transition: background 120ms, color 120ms;',
-      '}',
-      '.nav-mode:hover:not([disabled]) { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.60); }',
-      '.nav-mode.active { background: rgba(50,185,140,0.15); color: rgba(60,220,165,0.95); }',
-      '.nav-mode[disabled] { cursor: default; opacity: 0.18; }',
+      ".nav-transport { display: flex; gap: 3px; }",
+      ".nav-mode {",
+      "  border: none; outline: none; cursor: pointer;",
+      "  background: rgba(255,255,255,0.04); border-radius: 6px;",
+      "  padding: 4px 10px; font-family: inherit; font-size: 13px;",
+      "  color: rgba(255,255,255,0.32); transition: background 120ms, color 120ms;",
+      "}",
+      ".nav-mode:hover:not([disabled]) { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.60); }",
+      ".nav-mode.active { background: rgba(50,185,140,0.15); color: rgba(60,220,165,0.95); }",
+      ".nav-mode[disabled] { cursor: default; opacity: 0.18; }",
       /* experimental: visible and clickable, but clearly not production */
-      '.nav-mode-exp { opacity: 0.42; cursor: pointer; }',
-      '.nav-mode-exp:hover { opacity: 0.60; }',
+      ".nav-mode-exp { opacity: 0.42; cursor: pointer; }",
+      ".nav-mode-exp:hover { opacity: 0.60; }",
       /* inputs */
-      '.nav-fields { display: flex; gap: 8px; flex: 1; align-items: stretch; }',
-      '.nav-field { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; }',
-      '.nav-field-lbl {',
-      '  font-size: 11px; font-weight: 600; letter-spacing: 0.05em;',
-      '  color: rgba(255,255,255,0.28); text-transform: uppercase; min-width: 34px; flex-shrink: 0;',
-      '}',
-      '.nav-input {',
-      '  flex: 1; background: rgba(255,255,255,0.06);',
-      '  border: 1px solid rgba(255,255,255,0.10); border-radius: 6px;',
-      '  color: rgba(255,255,255,0.90); font-family: inherit; font-size: 13px;',
-      '  padding: 5px 10px; outline: none; min-width: 0;',
-      '  transition: border-color 120ms, background 120ms; box-sizing: border-box;',
-      '}',
-      '.nav-input:focus { border-color: rgba(50,185,140,0.50); background: rgba(255,255,255,0.09); }',
-      '.nav-input::placeholder { color: rgba(255,255,255,0.18); }',
-      '.nav-from-static {',
-      '  flex: 1; padding: 5px 10px; font-size: 12px;',
-      '  color: rgba(255,255,255,0.40); font-style: italic;',
-      '  background: rgba(255,255,255,0.02); border-radius: 6px;',
-      '  border: 1px solid rgba(255,255,255,0.06);',
-      '  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;',
-      '}',
+      ".nav-fields { display: flex; gap: 8px; flex: 1; align-items: stretch; }",
+      ".nav-field { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; }",
+      ".nav-field-lbl {",
+      "  font-size: 11px; font-weight: 600; letter-spacing: 0.05em;",
+      "  color: rgba(255,255,255,0.28); text-transform: uppercase; min-width: 34px; flex-shrink: 0;",
+      "}",
+      ".nav-input {",
+      "  flex: 1; background: rgba(255,255,255,0.06);",
+      "  border: 1px solid rgba(255,255,255,0.10); border-radius: 6px;",
+      "  color: rgba(255,255,255,0.90); font-family: inherit; font-size: 13px;",
+      "  padding: 5px 10px; outline: none; min-width: 0;",
+      "  transition: border-color 120ms, background 120ms; box-sizing: border-box;",
+      "}",
+      ".nav-input:focus { border-color: rgba(50,185,140,0.50); background: rgba(255,255,255,0.09); }",
+      ".nav-input::placeholder { color: rgba(255,255,255,0.18); }",
+      ".nav-from-static {",
+      "  flex: 1; padding: 5px 10px; font-size: 12px;",
+      "  color: rgba(255,255,255,0.40); font-style: italic;",
+      "  background: rgba(255,255,255,0.02); border-radius: 6px;",
+      "  border: 1px solid rgba(255,255,255,0.06);",
+      "  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;",
+      "}",
       /* steppers: Speed and Altitude */
-      '.nav-stepper { display: flex; align-items: center; gap: 5px; flex-shrink: 0; }',
-      '.nav-step-lbl {',
-      '  font-size: 9px; letter-spacing: 0.10em; text-transform: uppercase;',
-      '  color: rgba(255,255,255,0.28); min-width: 36px; flex-shrink: 0;',
-      '}',
-      '.nav-step-btn {',
-      '  width: 22px; height: 22px; border-radius: 4px; flex-shrink: 0;',
-      '  border: 1px solid rgba(255,255,255,0.10);',
-      '  background: rgba(255,255,255,0.04);',
-      '  color: rgba(255,255,255,0.60); font-size: 15px; line-height: 1;',
-      '  cursor: pointer; display: flex; align-items: center; justify-content: center;',
-      '  transition: background 100ms, color 100ms;',
-      '}',
-      '.nav-step-btn:hover { background: rgba(255,255,255,0.10); color: rgba(255,255,255,0.90); }',
-      '.nav-step-btn:disabled { opacity: 0.20; cursor: default; }',
-      '.nav-step-val {',
+      ".nav-stepper { display: flex; align-items: center; gap: 5px; flex-shrink: 0; }",
+      ".nav-step-lbl {",
+      "  font-size: 9px; letter-spacing: 0.10em; text-transform: uppercase;",
+      "  color: rgba(255,255,255,0); min-width: 36px; flex-shrink: 0;",
+      "}",
+      ".nav-step-btn {",
+      "  width: 22px; height: 22px; border-radius: 4px; flex-shrink: 0;",
+      "  border: 1px solid rgba(160,210,230,0.28);",
+      "  background: rgba(200,230,255,0.10);",
+      "  color: rgba(220,240,255,0.82); font-size: 15px; line-height: 1;",
+      "  cursor: pointer; display: flex; align-items: center; justify-content: center;",
+      "  transition: background 100ms, color 100ms;",
+      "}",
+      ".nav-step-btn:hover { background: rgba(200,230,255,0.20); color: rgba(255,255,255,0.96); }",
+      ".nav-step-btn:disabled { opacity: 0.20; cursor: default; }",
+      ".nav-step-val {",
       '  font-family: "SF Mono","Fira Mono",ui-monospace,monospace;',
-      '  font-size: 11px; color: rgba(255,255,255,0.85);',
-      '  min-width: 60px; text-align: center; white-space: nowrap;',
-      '}',
-      '.nav-cam-sel {',
-      '  background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12);',
-      '  border-radius: 5px; color: rgba(255,255,255,0.82);',
-      '  font-family: inherit; font-size: 11px; padding: 3px 6px;',
-      '  cursor: pointer; outline: none; appearance: none; -webkit-appearance: none;',
-      '}',
-      '.nav-cam-sel:focus { border-color: rgba(50,185,140,0.50); }',
+      "  font-size: 11px; color: rgba(255,255,255,0.85);",
+      "  min-width: 60px; text-align: center; white-space: nowrap;",
+      "}",
+      ".nav-cam-sel {",
+      "  background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12);",
+      "  border-radius: 5px; color: rgba(255,255,255,0.82);",
+      "  font-family: inherit; font-size: 11px; padding: 3px 6px;",
+      "  cursor: pointer; outline: none; appearance: none; -webkit-appearance: none;",
+      "}",
+      ".nav-cam-sel:focus { border-color: rgba(50,185,140,0.50); }",
       /* launch */
-      '.nav-launch {',
-      '  flex-shrink: 0;',
-      '  background: rgba(50,170,130,0.12); border: 1px solid rgba(50,170,130,0.32);',
-      '  border-radius: 6px; color: rgba(80,215,170,0.95);',
-      '  font-family: inherit; font-size: 13px; font-weight: 500;',
-      '  padding: 5px 22px; cursor: pointer; white-space: nowrap;',
-      '  transition: background 130ms, border-color 130ms;',
-      '}',
-      '.nav-launch:hover { background: rgba(50,170,130,0.22); border-color: rgba(50,170,130,0.50); }',
-      '.nav-launch.launching, .nav-launch:disabled { opacity: 0.45; pointer-events: none; }',
+      ".nav-launch {",
+      "  flex-shrink: 0;",
+      "  background: rgba(50,170,130,0.12); border: 1px solid rgba(50,170,130,0.32);",
+      "  border-radius: 6px; color: rgba(80,215,170,0.95);",
+      "  font-family: inherit; font-size: 13px; font-weight: 500;",
+      "  padding: 5px 22px; cursor: pointer; white-space: nowrap;",
+      "  transition: background 130ms, border-color 130ms;",
+      "}",
+      ".nav-launch:hover { background: rgba(50,170,130,0.22); border-color: rgba(50,170,130,0.50); }",
+      ".nav-launch.launching, .nav-launch:disabled { opacity: 0.45; pointer-events: none; }",
       /* 0606A route lifecycle + snapshot buttons */
-      '.nav-rctl {',
-      '  flex-shrink: 0; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.16);',
-      '  border-radius: 6px; color: rgba(230,235,240,0.92);',
-      '  font-family: inherit; font-size: 13px; padding: 5px 9px; cursor: pointer; white-space: nowrap;',
-      '  transition: background 130ms, opacity 130ms;',
-      '}',
-      '.nav-rctl:hover { background: rgba(255,255,255,0.14); }',
-      '.nav-rctl:disabled { opacity: 0.35; pointer-events: none; }',
+      ".nav-rctl {",
+      "  flex-shrink: 0; background: rgba(200,230,255,0.10); border: 1px solid rgba(160,210,230,0.28);",
+      "  border-radius: 6px; color: rgba(220,240,255,0.90);",
+      "  font-family: inherit; font-size: 13px; padding: 5px 9px; cursor: pointer; white-space: nowrap;",
+      "  transition: background 130ms, opacity 130ms;",
+      "}",
+      ".nav-rctl:hover { background: rgba(200,230,255,0.20); }",
+      ".nav-rctl:disabled { opacity: 0.35; pointer-events: none; }",
       /* 0606A Hide Actor toggle */
-      '.nav-hide-lbl { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: rgba(210,216,222,0.85); white-space: nowrap; cursor: pointer; }',
-      '.nav-hide-lbl input { accent-color: rgba(80,215,170,0.95); }',
+      ".nav-hide-lbl { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: rgba(210,216,222,0.85); white-space: nowrap; cursor: pointer; }",
+      ".nav-hide-lbl input { accent-color: rgba(80,215,170,0.95); }",
       /* spacer */
-      '.nav-spacer { flex: 1; }',
+      ".nav-spacer { flex: 1; }",
       /* error */
-      '.nav-error {',
-      '  font-size: 11px; color: rgba(255,110,90,0.90); padding: 0; display: none;',
-      '}',
-      '.nav-error.visible { display: block; }',
-    ].join('\n');
+      ".nav-error {",
+      "  font-size: 11px; color: rgba(255,110,90,0.90); padding: 0; display: none;",
+      "}",
+      ".nav-error.visible { display: block; }",
+    ].join("\n");
     document.head.appendChild(s);
   }
 
@@ -900,9 +1183,9 @@
     var el = document.createElement(tag);
     if (attrs) {
       Object.keys(attrs).forEach(function (k) {
-        if      (k === 'cls')  el.className = attrs[k];
-        else if (k === 'text') el.textContent = attrs[k];
-        else                   el.setAttribute(k, attrs[k]);
+        if (k === "cls") el.className = attrs[k];
+        else if (k === "text") el.textContent = attrs[k];
+        else el.setAttribute(k, attrs[k]);
       });
     }
     return el;
@@ -911,69 +1194,138 @@
   // ── Build DOM ─────────────────────────────────────────────────────────────────
 
   function _build() {
-    var nav = _make('div', { id: 'wos-nav' });
-    nav.setAttribute('data-watch-hide', '');
+    var nav = _make("div", { id: "wos-nav" });
+    nav.setAttribute("data-watch-hide", "");
 
     // ── Row 1: Transport tabs · Speed · Launch ─────────────────────────────────
-    var row1 = _make('div', { cls: 'nav-row' });
+    var row1 = _make("div", { cls: "nav-row" });
 
-    var transportDiv = _make('div', { cls: 'nav-transport' });
+    var transportDiv = _make("div", { cls: "nav-transport" });
     TRANSPORT_MODES.forEach(function (tm) {
-      var extraCls = tm.status === 'experimental' ? ' nav-mode-exp'
-                   : tm.status === 'disabled'     ? ' nav-mode-dis'
-                   : '';
-      var btn = _make('button', {
-        cls:   'nav-mode' + (tm.id === _state.transport ? ' active' : '') + extraCls,
-        text:  tm.icon + ' ' + tm.label,
-        title: tm.status === 'experimental' ? tm.label + ' — experimental'
-             : tm.status === 'disabled'     ? tm.label + ' — not yet available'
-             : tm.label,
+      var extraCls =
+        tm.status === "experimental"
+          ? " nav-mode-exp"
+          : tm.status === "disabled"
+            ? " nav-mode-dis"
+            : "";
+      var btn = _make("button", {
+        cls:
+          "nav-mode" + (tm.id === _state.transport ? " active" : "") + extraCls,
+        text: tm.label,
+        title:
+          tm.status === "experimental"
+            ? tm.label + " — experimental"
+            : tm.status === "disabled"
+              ? tm.label + " — not yet available"
+              : tm.label,
       });
-      if (tm.status === 'disabled') btn.setAttribute('disabled', 'disabled');
-      btn.addEventListener('click', function () {
-        if (tm.status === 'disabled') return;
-        if (tm.status === 'experimental') {
-          _showError(tm.label + ' routing is experimental — coming soon. Use Flight for now.');
+      if (tm.status === "disabled") btn.setAttribute("disabled", "disabled");
+      btn.dataset.transportId = tm.id;
+      btn.addEventListener("click", function () {
+        if (tm.status === "disabled") return;
+        if (tm.status === "experimental") {
+          _showError(
+            tm.label +
+              " routing is experimental — coming soon. Use Flight for now.",
+          );
           return;
         }
-        nav.querySelectorAll('.nav-mode').forEach(function (b) { b.classList.remove('active'); });
-        btn.classList.add('active');
+        nav.querySelectorAll(".nav-mode").forEach(function (b) {
+          b.classList.remove("active");
+        });
+        btn.classList.add("active");
         _state.transport = tm.id;
         _clearError();
-        _routeReadyForRelaunch();   // 0606A — transport change re-enables Launch
+        _routeReadyForRelaunch(); // 0606A — transport change re-enables Launch
+        // Notify orbital system — route through startup coordinator for readiness gate
+        if (tm.id === 'orbital') {
+          var coord = SBE.WosStartupCoordinator;
+          if (coord && coord.requestOrbitalEntry) {
+            var ok = coord.requestOrbitalEntry();
+            if (!ok) {
+              // Blocked — revert UI to previous transport
+              btn.classList.remove('active');
+              var prevId = _state.transport !== 'orbital' ? _state.transport : 'flight';
+              nav.querySelectorAll('.nav-mode').forEach(function (b) {
+                if (b.dataset && b.dataset.transportId === prevId) b.classList.add('active');
+              });
+              _state.transport = prevId;
+              return;
+            }
+          } else if (SBE.OrbitalMode && SBE.OrbitalMode.onTransportSelected) {
+            SBE.OrbitalMode.onTransportSelected('orbital');
+          }
+        } else if (SBE.OrbitalMode && SBE.OrbitalMode.isActive && SBE.OrbitalMode.isActive()) {
+          // Returning from orbital — use transition controller
+          var tc = SBE.WosModeTransitionController;
+          if (tc && tc.transitionToMap) tc.transitionToMap();
+          else if (SBE.OrbitalMode.exit) SBE.OrbitalMode.exit();
+        }
       });
       transportDiv.appendChild(btn);
     });
     row1.appendChild(transportDiv);
-    row1.appendChild(_make('div', { cls: 'nav-spacer' }));
+    row1.appendChild(_make("div", { cls: "nav-spacer" }));
 
     // ── Speed stepper ──────────────────────────────────────────────────────────
-    var spdDiv = _make('div', { cls: 'nav-stepper' });
-    spdDiv.appendChild(_make('span', { cls: 'nav-step-lbl', text: 'Speed' }));
-    var spdDn = _make('button', { cls: 'nav-step-btn', id: 'nav-speed-dn', text: '−' });
-    var spdUp = _make('button', { cls: 'nav-step-btn', id: 'nav-speed-up', text: '+' });
-    var spdVal = _make('span',  { cls: 'nav-step-val', id: 'nav-speed-val',
-      text: _fmtSpeed(_currentSpeedMult()) });
-    if (_state.speedIndex <= 0) spdDn.setAttribute('disabled', 'disabled');
-    if (_state.speedIndex >= TRAVERSAL_SPEED_STEPS.length - 1) spdUp.setAttribute('disabled', 'disabled');
-    spdDn.addEventListener('click', function () { _stepSpeed(-1); });
-    spdUp.addEventListener('click', function () { _stepSpeed(1); });
+    var spdDiv = _make("div", { cls: "nav-stepper" });
+    spdDiv.appendChild(_make("span", { cls: "nav-step-lbl", text: "Speed" }));
+    var spdDn = _make("button", {
+      cls: "nav-step-btn",
+      id: "nav-speed-dn",
+      text: "−",
+    });
+    var spdUp = _make("button", {
+      cls: "nav-step-btn",
+      id: "nav-speed-up",
+      text: "+",
+    });
+    var spdVal = _make("span", {
+      cls: "nav-step-val",
+      id: "nav-speed-val",
+      text: _fmtSpeed(_currentSpeedMult()),
+    });
+    if (_state.speedIndex <= 0) spdDn.setAttribute("disabled", "disabled");
+    if (_state.speedIndex >= TRAVERSAL_SPEED_STEPS.length - 1)
+      spdUp.setAttribute("disabled", "disabled");
+    spdDn.addEventListener("click", function () {
+      _stepSpeed(-1);
+    });
+    spdUp.addEventListener("click", function () {
+      _stepSpeed(1);
+    });
     spdDiv.appendChild(spdDn);
     spdDiv.appendChild(spdVal);
     spdDiv.appendChild(spdUp);
     row1.appendChild(spdDiv);
 
     // ── Altitude stepper ───────────────────────────────────────────────────────
-    var altDiv = _make('div', { cls: 'nav-stepper' });
-    altDiv.appendChild(_make('span', { cls: 'nav-step-lbl', text: 'Alt' }));
-    var altDn = _make('button', { cls: 'nav-step-btn', id: 'nav-alt-dn', text: '−' });
-    var altUp = _make('button', { cls: 'nav-step-btn', id: 'nav-alt-up', text: '+' });
-    var altVal = _make('span',  { cls: 'nav-step-val', id: 'nav-alt-val',
-      text: _fmtAltStep(_currentAltStep()) });
-    if (_state.altitudeIndex <= 0) altDn.setAttribute('disabled', 'disabled');
-    if (_state.altitudeIndex >= FLIGHT_ALTITUDE_STEPS.length - 1) altUp.setAttribute('disabled', 'disabled');
-    altDn.addEventListener('click', function () { _stepAltitude(-1); });
-    altUp.addEventListener('click', function () { _stepAltitude(1); });
+    var altDiv = _make("div", { cls: "nav-stepper", id: "nav-alt-wrap" });
+    altDiv.appendChild(_make("span", { cls: "nav-step-lbl", text: "Alt" }));
+    var altDn = _make("button", {
+      cls: "nav-step-btn",
+      id: "nav-alt-dn",
+      text: "−",
+    });
+    var altUp = _make("button", {
+      cls: "nav-step-btn",
+      id: "nav-alt-up",
+      text: "+",
+    });
+    var altVal = _make("span", {
+      cls: "nav-step-val",
+      id: "nav-alt-val",
+      text: _fmtAltStep(_currentAltStep()),
+    });
+    if (_state.altitudeIndex <= 0) altDn.setAttribute("disabled", "disabled");
+    if (_state.altitudeIndex >= FLIGHT_ALTITUDE_STEPS.length - 1)
+      altUp.setAttribute("disabled", "disabled");
+    altDn.addEventListener("click", function () {
+      _stepAltitude(-1);
+    });
+    altUp.addEventListener("click", function () {
+      _stepAltitude(1);
+    });
     altDiv.appendChild(altDn);
     altDiv.appendChild(altVal);
     altDiv.appendChild(altUp);
@@ -982,127 +1334,237 @@
     // ── CAM selector (Drive mode only) ────────────────────────────────────────
     // A compact dropdown. Shown/hidden via CSS depending on _state.transport.
     // 0605K.1 — grouped: Legacy modes + 0605I/0605K shot presets (POV/Transit/Walker).
-    var camDiv = _make('div', { cls: 'nav-stepper', id: 'nav-cam-wrap' });
-    camDiv.appendChild(_make('span', { cls: 'nav-step-lbl', text: 'Cam' }));
-    var camSel = document.createElement('select');
-    camSel.id = 'nav-cam-sel';
-    camSel.className = 'nav-cam-sel';
+    var camDiv = _make("div", { cls: "nav-stepper", id: "nav-cam-wrap" });
+    camDiv.appendChild(_make("span", { cls: "nav-step-lbl", text: "Cam" }));
+    var camSel = document.createElement("select");
+    camSel.id = "nav-cam-sel";
+    camSel.className = "nav-cam-sel";
     // 0606A — simplified, stable internal/external labels (no Look / no Hide Actor here).
     CAM_MENU.forEach(function (m) {
-      var opt = document.createElement('option');
-      opt.value = m.value; opt.textContent = m.label;
+      var opt = document.createElement("option");
+      opt.value = m.value;
+      opt.textContent = m.label;
       camSel.appendChild(opt);
     });
-    camSel.value = 'ext_follow';
+    camSel.value = "ext_follow";
     _camSelEl = camSel;
-    camSel.addEventListener('change', function (e) {
+    camSel.addEventListener("change", function (e) {
       e.stopPropagation();
-      _applyCamSelection(camSel.value);   // routes legacy → preset, shot id → applyShot
+      _applyCamSelection(camSel.value); // routes legacy → preset, shot id → applyShot
     });
-    camSel.addEventListener('keydown',  function (e) { e.stopPropagation(); });
-    camSel.addEventListener('keyup',    function (e) { e.stopPropagation(); });
-    camSel.addEventListener('keypress', function (e) { e.stopPropagation(); });
+    camSel.addEventListener("keydown", function (e) {
+      e.stopPropagation();
+    });
+    camSel.addEventListener("keyup", function (e) {
+      e.stopPropagation();
+    });
+    camSel.addEventListener("keypress", function (e) {
+      e.stopPropagation();
+    });
     camDiv.appendChild(camSel);
     // ── 0605O compact Lens selector (Auto + key profiles; trims stay debug-first) ─
-    var lensSel = document.createElement('select');
-    lensSel.id = 'nav-lens-sel';
-    lensSel.className = 'nav-cam-sel';
-    var LENS_OPTS = [['__auto', 'Lens: Auto'], ['wide', 'Wide'], ['normal', 'Normal'], ['telephoto', 'Telephoto'],
-      ['dashcam', 'Dashcam'], ['helmetcam', 'Helmet'], ['bus_window', 'Bus'], ['ferry_deck', 'Ferry'], ['drone_observer', 'Drone']];
-    LENS_OPTS.forEach(function (o) { var opt = document.createElement('option'); opt.value = o[0]; opt.textContent = o[1]; lensSel.appendChild(opt); });
-    lensSel.addEventListener('change', function (e) {
+    var lensSel = document.createElement("select");
+    lensSel.id = "nav-lens-sel";
+    lensSel.className = "nav-cam-sel";
+    var LENS_OPTS = [
+      ["__auto", "Lens: Auto"],
+      ["wide", "Wide"],
+      ["normal", "Normal"],
+      ["telephoto", "Telephoto"],
+      ["dashcam", "Dashcam"],
+      ["helmetcam", "Helmet"],
+      ["bus_window", "Bus"],
+      ["ferry_deck", "Ferry"],
+      ["drone_observer", "Drone"],
+    ];
+    LENS_OPTS.forEach(function (o) {
+      var opt = document.createElement("option");
+      opt.value = o[0];
+      opt.textContent = o[1];
+      lensSel.appendChild(opt);
+    });
+    lensSel.addEventListener("change", function (e) {
       e.stopPropagation();
       var lc = global.SBE && SBE.CameraLensControlPass;
       if (!lc) return;
-      try { if (lensSel.value === '__auto') lc.setAutoProfileEnabled(true); else lc.setLensProfile(lensSel.value); } catch (er) {}
-      var occ = global.SBE && SBE.OccupantCameraModes;   // re-apply so the lens change is visible live
-      if (occ && typeof occ.isActive === 'function' && occ.isActive() && typeof occ.reapply === 'function') { try { occ.reapply(); } catch (er2) {} }
+      try {
+        if (lensSel.value === "__auto") lc.setAutoProfileEnabled(true);
+        else lc.setLensProfile(lensSel.value);
+      } catch (er) {}
+      var occ = global.SBE && SBE.OccupantCameraModes; // re-apply so the lens change is visible live
+      if (
+        occ &&
+        typeof occ.isActive === "function" &&
+        occ.isActive() &&
+        typeof occ.reapply === "function"
+      ) {
+        try {
+          occ.reapply();
+        } catch (er2) {}
+      }
     });
-    lensSel.addEventListener('keydown', function (e) { e.stopPropagation(); });
+    lensSel.addEventListener("keydown", function (e) {
+      e.stopPropagation();
+    });
     camDiv.appendChild(lensSel);
     // ── 0606A Hide Actor — standalone toggle (not a camera entry) ───────────────
-    var hideLbl = _make('label', { cls: 'nav-hide-lbl' });
-    var hideCb = document.createElement('input');
-    hideCb.type = 'checkbox'; hideCb.id = 'nav-hide-actor'; hideCb.checked = false;
-    hideCb.addEventListener('change', function (e) { e.stopPropagation(); setHideActor(hideCb.checked); });
+    var hideLbl = _make("label", { cls: "nav-hide-lbl" });
+    var hideCb = document.createElement("input");
+    hideCb.type = "checkbox";
+    hideCb.id = "nav-hide-actor";
+    hideCb.checked = false;
+    hideCb.addEventListener("change", function (e) {
+      e.stopPropagation();
+      setHideActor(hideCb.checked);
+    });
     hideLbl.appendChild(hideCb);
-    hideLbl.appendChild(_make('span', { text: 'Hide Actor' }));
+    hideLbl.appendChild(_make("span", { text: "Hide Actor" }));
     camDiv.appendChild(hideLbl);
     // Visibility: only shown when Drive is active transport
-    camDiv.style.display = (_state.transport === 'drive') ? 'flex' : 'none';
+    camDiv.style.display = _state.transport === "drive" ? "flex" : "none";
     row1.appendChild(camDiv);
 
     // When transport tab switches, show/hide CAM selector
-    nav.querySelectorAll && setTimeout(function () {
-      var tabBtns = nav.querySelectorAll('.nav-mode');
-      tabBtns.forEach(function (b) {
-        b.addEventListener('click', function () {
-          var wrap = document.getElementById('nav-cam-wrap');
-          if (wrap) wrap.style.display = (_state.transport === 'drive') ? 'flex' : 'none';
+    nav.querySelectorAll &&
+      setTimeout(function () {
+        var tabBtns = nav.querySelectorAll(".nav-mode");
+        tabBtns.forEach(function (b) {
+          b.addEventListener("click", function () {
+            var wrap = document.getElementById("nav-cam-wrap");
+            if (wrap)
+              wrap.style.display =
+                _state.transport === "drive" ? "flex" : "none";
+          });
         });
-      });
-    }, 50);
+      }, 50);
 
-    var launchBtn = _make('button', { cls: 'nav-launch', id: 'nav-launch', text: 'Launch' });
-    launchBtn.addEventListener('click', launch);
+    var launchBtn = _make("button", {
+      cls: "nav-launch",
+      id: "nav-launch",
+      text: "Launch",
+    });
+    launchBtn.addEventListener("click", launch);
     row1.appendChild(launchBtn);
 
     // ── 0606A Route lifecycle + Snapshot controls ──────────────────────────────
-    var pauseBtn = _make('button', { cls: 'nav-rctl', id: 'nav-pause', text: '⏸' });
-    pauseBtn.title = 'Pause'; pauseBtn.disabled = true;
-    pauseBtn.addEventListener('click', function (e) { e.stopPropagation(); togglePauseRoute(); });
+    var pauseBtn = _make("button", {
+      cls: "nav-rctl",
+      id: "nav-pause",
+      text: "⏸",
+    });
+    pauseBtn.title = "Pause";
+    pauseBtn.disabled = true;
+    pauseBtn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      togglePauseRoute();
+    });
     row1.appendChild(pauseBtn);
 
-    var stopBtn = _make('button', { cls: 'nav-rctl', id: 'nav-stop', text: '⏹' });
-    stopBtn.title = 'Stop'; stopBtn.disabled = true;
-    stopBtn.addEventListener('click', function (e) { e.stopPropagation(); stopRoute(); });
+    var stopBtn = _make("button", {
+      cls: "nav-rctl",
+      id: "nav-stop",
+      text: "⏹",
+    });
+    stopBtn.title = "Stop";
+    stopBtn.disabled = true;
+    stopBtn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      stopRoute();
+    });
     row1.appendChild(stopBtn);
 
-    var snapBtn = _make('button', { cls: 'nav-rctl', id: 'nav-snapshot', text: '📸' });
-    snapBtn.title = 'Snapshot (HUD-free PNG)';
-    snapBtn.addEventListener('click', function (e) {
+    var snapBtn = _make("button", {
+      cls: "nav-rctl",
+      id: "nav-snapshot",
+      text: "📸",
+    });
+    snapBtn.title = "Snapshot (HUD-free PNG)";
+    snapBtn.addEventListener("click", function (e) {
       e.stopPropagation();
       var snap = global.SBE && SBE.RuntimeSnapshotCapture;
-      if (snap && typeof snap.capturePNG === 'function') { try { snap.capturePNG({ hideHUD: true, includeMetadata: true, download: true }); } catch (er) {} }
+      if (snap && typeof snap.capturePNG === "function") {
+        try {
+          snap.capturePNG({
+            hideHUD: true,
+            includeMetadata: true,
+            download: true,
+          });
+        } catch (er) {}
+      }
     });
     row1.appendChild(snapBtn);
+
+    // ── Orbital FX button — visible only when orbital transport is active ─────
+    var orbFxBtn = _make("button", {
+      cls: "nav-rctl",
+      id: "nav-orbital-fx",
+      text: "⚙ FX",
+    });
+    orbFxBtn.title = "Orbital FX Panel";
+    orbFxBtn.style.display = _state.transport === 'orbital' ? 'inline-flex' : 'none';
+    orbFxBtn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      if (SBE.OrbitalMode && SBE.OrbitalMode.toggleFxPanel) {
+        SBE.OrbitalMode.toggleFxPanel();
+      }
+    });
+    row1.appendChild(orbFxBtn);
+
+    // Keep orbital FX button visibility in sync with transport selection
+    setTimeout(function () {
+      nav.querySelectorAll('.nav-mode').forEach(function (b) {
+        b.addEventListener('click', function () {
+          var fxBtn = document.getElementById('nav-orbital-fx');
+          if (fxBtn) fxBtn.style.display = _state.transport === 'orbital' ? 'inline-flex' : 'none';
+        });
+      });
+    }, 60);
+
     _updateRouteButtons();
     nav.appendChild(row1);
 
     // ── Row 2: FROM (auto) + TO (text input) ───────────────────────────────────
-    var row2 = _make('div', { cls: 'nav-row' });
+    var row2 = _make("div", { cls: "nav-row" });
 
     // FROM — shows current map location, read-only
-    var fromField = _make('div', { cls: 'nav-field' });
-    fromField.appendChild(_make('span', { cls: 'nav-field-lbl', text: 'FROM' }));
-    var fromDisplay = _make('div', { cls: 'nav-from-static', id: 'nav-from-display' });
+    var fromField = _make("div", { cls: "nav-field" });
+    fromField.appendChild(
+      _make("span", { cls: "nav-field-lbl", text: "FROM" }),
+    );
+    var fromDisplay = _make("div", {
+      cls: "nav-from-static",
+      id: "nav-from-display",
+    });
     var initLoc = _getCurrentMapCenter();
-    fromDisplay.textContent = initLoc ? initLoc.label : 'Current location';
+    fromDisplay.textContent = initLoc ? initLoc.label : "Current location";
     fromField.appendChild(fromDisplay);
     row2.appendChild(fromField);
 
     // TO — free text
-    var toField = _make('div', { cls: 'nav-field' });
-    toField.appendChild(_make('span', { cls: 'nav-field-lbl', text: 'TO' }));
-    var toInput = _make('input', {
-      cls:         'nav-input',
-      id:          'nav-to',
-      type:        'text',
-      placeholder: 'Boston, Tokyo, London, JFK…',
-      'list':      'nav-dest-list',
+    var toField = _make("div", { cls: "nav-field" });
+    toField.appendChild(_make("span", { cls: "nav-field-lbl", text: "TO" }));
+    var toInput = _make("input", {
+      cls: "nav-input",
+      id: "nav-to",
+      type: "text",
+      placeholder: "Boston, Tokyo, London, JFK…",
+      list: "nav-dest-list",
     });
-    if (_state.to) toInput.setAttribute('value', _state.to);
-    toInput.addEventListener('input', function () { _clearError(); _routeReadyForRelaunch(); });   // 0606A re-enable Launch
+    if (_state.to) toInput.setAttribute("value", _state.to);
+    toInput.addEventListener("input", function () {
+      _clearError();
+      _routeReadyForRelaunch();
+    }); // 0606A re-enable Launch
     // stopPropagation: prevent keydown/keyup from reaching main.js global
     // keyboard handlers, which crash on event.key === undefined (IME/composition).
-    toInput.addEventListener('keydown', function (e) {
+    toInput.addEventListener("keydown", function (e) {
       e.stopPropagation();
-      if (e.key === 'Enter') launch();
+      if (e.key === "Enter") launch();
     });
-    toInput.addEventListener('keyup', function (e) {
+    toInput.addEventListener("keyup", function (e) {
       e.stopPropagation();
     });
-    toInput.addEventListener('keypress', function (e) {
+    toInput.addEventListener("keypress", function (e) {
       e.stopPropagation();
     });
     toField.appendChild(toInput);
@@ -1111,15 +1573,40 @@
     nav.appendChild(row2);
 
     // ── Row 3: Error ───────────────────────────────────────────────────────────
-    nav.appendChild(_make('div', { cls: 'nav-error', id: 'nav-error' }));
+    nav.appendChild(_make("div", { cls: "nav-error", id: "nav-error" }));
 
     // Datalist suggestions
-    var dl = document.createElement('datalist');
-    dl.id = 'nav-dest-list';
-    ['New York','Boston','London','Paris','Tokyo','Singapore','Dubai','Sydney',
-     'Los Angeles','Chicago','Miami','Toronto','Berlin','Amsterdam','Rome',
-     'Hong Kong','Seoul','Mumbai','Cairo','Lagos','São Paulo','JFK','LHR','NRT'].forEach(function (s) {
-      var opt = document.createElement('option'); opt.value = s; dl.appendChild(opt);
+    var dl = document.createElement("datalist");
+    dl.id = "nav-dest-list";
+    [
+      "New York",
+      "Boston",
+      "London",
+      "Paris",
+      "Tokyo",
+      "Singapore",
+      "Dubai",
+      "Sydney",
+      "Los Angeles",
+      "Chicago",
+      "Miami",
+      "Toronto",
+      "Berlin",
+      "Amsterdam",
+      "Rome",
+      "Hong Kong",
+      "Seoul",
+      "Mumbai",
+      "Cairo",
+      "Lagos",
+      "São Paulo",
+      "JFK",
+      "LHR",
+      "NRT",
+    ].forEach(function (s) {
+      var opt = document.createElement("option");
+      opt.value = s;
+      dl.appendChild(opt);
     });
     nav.appendChild(dl);
 
@@ -1135,9 +1622,11 @@
     _root = _build();
     document.body.appendChild(_root);
     _mounted = true;
-    var lower = document.getElementById('ws-lower-panel');
-    if (lower) lower.style.display = 'none';
-    console.log('[WOSNav] v' + VERSION + ' ready — type a destination and Launch');
+    var lower = document.getElementById("ws-lower-panel");
+    if (lower) lower.style.display = "none";
+    console.log(
+      "[WOSNav] v" + VERSION + " ready — type a destination and Launch",
+    );
   }
 
   function unmount() {
@@ -1147,31 +1636,38 @@
     _mounted = false;
   }
 
-  function show() { if (_root) _root.style.removeProperty('display'); }
-  function hide() { if (_root) _root.style.display = 'none'; }
+  function show() {
+    if (_root) _root.style.removeProperty("display");
+  }
+  function hide() {
+    if (_root) _root.style.display = "none";
+  }
 
   // ── Step functions — shared by UI buttons and debug commands ─────────────────
 
   function _stepSpeed(dir) {
-    var next = Math.max(0, Math.min(TRAVERSAL_SPEED_STEPS.length - 1, _state.speedIndex + dir));
+    var next = Math.max(
+      0,
+      Math.min(TRAVERSAL_SPEED_STEPS.length - 1, _state.speedIndex + dir),
+    );
     _state.speedIndex = next;
     var mult = _currentSpeedMult();
 
     // Update UI
-    var valEl = document.getElementById('nav-speed-val');
+    var valEl = document.getElementById("nav-speed-val");
     if (valEl) valEl.textContent = _fmtSpeed(mult);
-    var dnEl = document.getElementById('nav-speed-dn');
-    var upEl = document.getElementById('nav-speed-up');
-    if (dnEl) dnEl.disabled = (next <= 0);
-    if (upEl) upEl.disabled = (next >= TRAVERSAL_SPEED_STEPS.length - 1);
+    var dnEl = document.getElementById("nav-speed-dn");
+    var upEl = document.getElementById("nav-speed-up");
+    if (dnEl) dnEl.disabled = next <= 0;
+    if (upEl) upEl.disabled = next >= TRAVERSAL_SPEED_STEPS.length - 1;
 
     // Apply live to running flight trip (no restart)
     var rt = global.SBE && SBE.RegionalFlightTripRuntime;
-    if (rt && typeof rt.setSpeed === 'function') rt.setSpeed(mult);
+    if (rt && typeof rt.setSpeed === "function") rt.setSpeed(mult);
 
     // Apply live to running hero vehicle (no restart)
     var hv = global.SBE && SBE.HeroVehicleRuntime;
-    if (hv && typeof hv.setSpeed === 'function') hv.setSpeed(mult);
+    if (hv && typeof hv.setSpeed === "function") hv.setSpeed(mult);
 
     // Update nav state
     if (global._wos && global._wos.nav) global._wos.nav.speedMult = mult;
@@ -1181,25 +1677,28 @@
   }
 
   function _stepAltitude(dir) {
-    var next = Math.max(0, Math.min(FLIGHT_ALTITUDE_STEPS.length - 1, _state.altitudeIndex + dir));
+    var next = Math.max(
+      0,
+      Math.min(FLIGHT_ALTITUDE_STEPS.length - 1, _state.altitudeIndex + dir),
+    );
     _state.altitudeIndex = next;
     var step = _currentAltStep();
 
     // Update UI
-    var valEl = document.getElementById('nav-alt-val');
+    var valEl = document.getElementById("nav-alt-val");
     if (valEl) valEl.textContent = _fmtAltStep(step);
-    var dnEl = document.getElementById('nav-alt-dn');
-    var upEl = document.getElementById('nav-alt-up');
-    if (dnEl) dnEl.disabled = (next <= 0);
-    if (upEl) upEl.disabled = (next >= FLIGHT_ALTITUDE_STEPS.length - 1);
+    var dnEl = document.getElementById("nav-alt-dn");
+    var upEl = document.getElementById("nav-alt-up");
+    if (dnEl) dnEl.disabled = next <= 0;
+    if (upEl) upEl.disabled = next >= FLIGHT_ALTITUDE_STEPS.length - 1;
 
     // Apply live to camera rig (presentation interpretation)
     var rig = global.SBE && SBE.RegionalFlightCameraRig;
     if (rig) {
-      if (typeof rig.setGlideCamera === 'function') {
+      if (typeof rig.setGlideCamera === "function") {
         rig.setGlideCamera({ zoom: step.zoom, pitch: step.pitch });
       }
-      if (typeof rig.setCameraProfile === 'function') {
+      if (typeof rig.setCameraProfile === "function") {
         rig.setCameraProfile({ zoom: step.zoom, pitch: step.pitch });
       }
     }
@@ -1207,10 +1706,10 @@
     // Apply live to runtime (actor movement truth + camera profile)
     var rt = global.SBE && SBE.RegionalFlightTripRuntime;
     if (rt) {
-      if (typeof rt.setCruiseAltitude === 'function') {
+      if (typeof rt.setCruiseAltitude === "function") {
         rt.setCruiseAltitude(step.altitudeFt);
       }
-      if (typeof rt.setCameraProfile === 'function') {
+      if (typeof rt.setCameraProfile === "function") {
         rt.setCameraProfile({ zoom: step.zoom, pitch: step.pitch });
       }
     }
@@ -1219,66 +1718,81 @@
     if (global._wos && global._wos.nav) global._wos.nav.altStep = step;
     _saveState();
 
-    return { altitudeFt: step.altitudeFt, zoom: step.zoom, pitch: step.pitch,
-             label: step.label, index: next };
+    return {
+      altitudeFt: step.altitudeFt,
+      zoom: step.zoom,
+      pitch: step.pitch,
+      label: step.label,
+      index: next,
+    };
   }
 
   // ── Debug: actor state snapshot ───────────────────────────────────────────────
 
   function _actorState() {
-    var rt  = global.SBE && SBE.RegionalFlightTripRuntime;
+    var rt = global.SBE && SBE.RegionalFlightTripRuntime;
     var mvr = global.SBE && SBE.MapboxViewportRuntime;
-    var map = mvr && typeof mvr.getMap === 'function' ? mvr.getMap() : null;
+    var map = mvr && typeof mvr.getMap === "function" ? mvr.getMap() : null;
     var nav = global._wos && global._wos.nav;
-    var rts = rt && typeof rt.getState === 'function' ? rt.getState() : null;
-    var altStep   = _currentAltStep();
+    var rts = rt && typeof rt.getState === "function" ? rt.getState() : null;
+    var altStep = _currentAltStep();
     var speedMult = _currentSpeedMult();
 
     // actorAltitudeFt = movement truth. Prefer the live actor entity altitude
     // from the runtime (which climbs/cruises/descends during the trip). Fall
     // back to the altitude-step intent when no actor entity exists yet.
-    var actorAltFt = (rts && rts.current && rts.current.altitudeFt != null)
-      ? rts.current.altitudeFt
-      : (altStep ? altStep.altitudeFt : null);
+    var actorAltFt =
+      rts && rts.current && rts.current.altitudeFt != null
+        ? rts.current.altitudeFt
+        : altStep
+          ? altStep.altitudeFt
+          : null;
 
     // Actor type is inferred from altitude envelope — not hardcoded to 'aircraft'.
     // Altitude represents camera operating envelope; the actor type is display context.
     var actorType = altStep
-      ? (altStep.altitudeFt <=  100 ? 'drone'
-       : altStep.altitudeFt <=  500 ? 'low-flight'
-       : altStep.altitudeFt <= 5000 ? 'aircraft'
-       : 'aircraft')
-      : 'unknown';
+      ? altStep.altitudeFt <= 100
+        ? "drone"
+        : altStep.altitudeFt <= 500
+          ? "low-flight"
+          : altStep.altitudeFt <= 5000
+            ? "aircraft"
+            : "aircraft"
+      : "unknown";
 
     return {
       // Actor — movement truth
-      actorType:           actorType,
-      transportState:      _state.transport,
-      actorAltitudeFt:     actorAltFt,
-      altitudeStepFt:      altStep ? altStep.altitudeFt : null,  // UI intent (POV preset)
-      altitudeStepLabel:   altStep ? altStep.label : null,
+      actorType: actorType,
+      transportState: _state.transport,
+      actorAltitudeFt: actorAltFt,
+      altitudeStepFt: altStep ? altStep.altitudeFt : null, // UI intent (POV preset)
+      altitudeStepLabel: altStep ? altStep.label : null,
       // POV — camera interpretation
-      povType:             'forward',
+      povType: "forward",
       povAltitudeOffsetFt: 0,
       // Presentation scale
-      zoom:      map ? Math.round(map.getZoom()    * 100) / 100 : null,
-      pitch:     map ? Math.round(map.getPitch()   * 10)  / 10  : null,
-      bearing:   map ? Math.round(((map.getBearing() % 360) + 360) % 360) : null,
+      zoom: map ? Math.round(map.getZoom() * 100) / 100 : null,
+      pitch: map ? Math.round(map.getPitch() * 10) / 10 : null,
+      bearing: map ? Math.round(((map.getBearing() % 360) + 360) % 360) : null,
       // Speed
       speedMultiplier: speedMult,
-      speedLabel:      _fmtSpeed(speedMult),
+      speedLabel: _fmtSpeed(speedMult),
       // Trip
-      routeDistanceKm: nav && nav.distanceKm ? Math.round(nav.distanceKm) : null,
-      progressPct:     rts ? rts.progressPct : null,
-      phase:           rts ? rts.tripPhase   : null,
+      routeDistanceKm:
+        nav && nav.distanceKm ? Math.round(nav.distanceKm) : null,
+      progressPct: rts ? rts.progressPct : null,
+      phase: rts ? rts.tripPhase : null,
     };
   }
 
   function actor() {
     var s = _actorState();
-    console.group('[TraversalDeck] actor()');
+    console.group("[TraversalDeck] actor()");
     Object.keys(s).forEach(function (k) {
-      console.log((k + '             ').slice(0, 22) + ':', s[k] != null ? s[k] : '—');
+      console.log(
+        (k + "             ").slice(0, 22) + ":",
+        s[k] != null ? s[k] : "—",
+      );
     });
     console.groupEnd();
     return s;
@@ -1288,120 +1802,244 @@
 
   function cloudFeasibility() {
     var report = {
-      doctrine: 'Real weather determines cloud truth. WOS determines visual interpretation. No fake clouds.',
+      doctrine:
+        "Real weather determines cloud truth. WOS determines visual interpretation. No fake clouds.",
       requiredFields: [
-        'cloudCoverPct',
-        'cloudCeilingFt',
-        'cloudLayerAltitudeFt',
-        'visibilityMeters',
-        'weatherConditionRaw',
+        "cloudCoverPct",
+        "cloudCeilingFt",
+        "cloudLayerAltitudeFt",
+        "visibilityMeters",
+        "weatherConditionRaw",
       ],
       availableNow: {},
-      missing: ['cloudCoverPct','cloudCeilingFt','cloudLayerAltitudeFt','visibilityMeters','weatherConditionRaw'],
-      status: 'investigation-only',
-      rule: 'If real weather says clear sky, WOS may render clear sky. No synthetic clouds.',
+      missing: [
+        "cloudCoverPct",
+        "cloudCeilingFt",
+        "cloudLayerAltitudeFt",
+        "visibilityMeters",
+        "weatherConditionRaw",
+      ],
+      status: "investigation-only",
+      rule: "If real weather says clear sky, WOS may render clear sky. No synthetic clouds.",
     };
-    console.group('[TraversalDeck] cloudFeasibility()');
-    console.log('status  :', report.status);
-    console.log('doctrine:', report.doctrine);
-    console.log('missing :', report.missing.join(', '));
+    console.group("[TraversalDeck] cloudFeasibility()");
+    console.log("status  :", report.status);
+    console.log("doctrine:", report.doctrine);
+    console.log("missing :", report.missing.join(", "));
     console.groupEnd();
     return report;
   }
 
   function heroVehicleFeasibility() {
     var report = {
-      actorType:                'car',
-      requiredRouteAuthority:   'road-network-polyline',
-      requiredDataSource:       'Mapbox Directions API (profile: mapbox/driving) or equivalent',
+      actorType: "car",
+      requiredRouteAuthority: "road-network-polyline",
+      requiredDataSource:
+        "Mapbox Directions API (profile: mapbox/driving) or equivalent",
       trafficRequiredForPrototype: false,
-      firstPrototype:           'single hero car following one road-aware route',
-      expansionPath:            'fetch Directions API → convert polyline to waypoints → startGeneratedTrip',
-      sharedExpansionPath:      'Drive / Walk / Bike all use same Mapbox Directions API pattern',
-      recommendedPOV:           ['chase', 'side', 'overhead'],
-      status:                   'high-feasibility — investigation-only',
-      note:                     'Hero car does not require traffic simulation for first prototype.',
+      firstPrototype: "single hero car following one road-aware route",
+      expansionPath:
+        "fetch Directions API → convert polyline to waypoints → startGeneratedTrip",
+      sharedExpansionPath:
+        "Drive / Walk / Bike all use same Mapbox Directions API pattern",
+      recommendedPOV: ["chase", "side", "overhead"],
+      status: "high-feasibility — investigation-only",
+      note: "Hero car does not require traffic simulation for first prototype.",
     };
-    console.group('[TraversalDeck] heroVehicleFeasibility()');
-    console.log('status    :', report.status);
-    console.log('dataSource:', report.requiredDataSource);
-    console.log('blocker   :', 'none technical — needs Directions API integration');
-    console.log('note      :', report.note);
+    console.group("[TraversalDeck] heroVehicleFeasibility()");
+    console.log("status    :", report.status);
+    console.log("dataSource:", report.requiredDataSource);
+    console.log(
+      "blocker   :",
+      "none technical — needs Directions API integration",
+    );
+    console.log("note      :", report.note);
     console.groupEnd();
     return report;
   }
 
   // ── Exports ───────────────────────────────────────────────────────────────────
 
+  function selectTransport(id) {
+    var nav = document.getElementById('wos-nav');
+    if (!nav) return;
+    var btns = nav.querySelectorAll('.nav-mode');
+    btns.forEach(function (b) {
+      if (b.dataset && b.dataset.transportId === id) {
+        b.click();
+      }
+    });
+  }
+
   SBE.TraversalControlDeck = Object.freeze({
-    VERSION:      VERSION,
-    mount:        mount,
-    unmount:      unmount,
-    show:         show,
-    hide:         hide,
-    launch:       launch,
-    driveTo:      driveTo,
+    VERSION: VERSION,
+    mount: mount,
+    unmount: unmount,
+    show: show,
+    hide: hide,
+    launch: launch,
+    driveTo: driveTo,
     DESTINATIONS: DESTINATIONS,
+    stop: stopRoute,
+    pause: pauseRoute,
+    resume: resumeRoute,
+    getRouteState: getRouteControlState,
+    selectTransport: selectTransport,
   });
 
   // 0605K.1 — CAM dropdown ↔ camera shot bridge (UI triggers; does not own logic).
   SBE.CameraShotSelectorUI = Object.freeze({
-    VERSION:    '1.0.0',
-    getState:   function () { var o = {}; for (var k in _camSelState) o[k] = _camSelState[k]; return o; },
-    options:    function () { return _camSelOptions(); },
-    setShot:    function (id) { return _setCamSelection(id); },
-    isShotId:   function (id) { return !!CAM_SHOT_IDS[id]; },
+    VERSION: "1.0.0",
+    getState: function () {
+      var o = {};
+      for (var k in _camSelState) o[k] = _camSelState[k];
+      return o;
+    },
+    options: function () {
+      return _camSelOptions();
+    },
+    setShot: function (id) {
+      return _setCamSelection(id);
+    },
+    isShotId: function (id) {
+      return !!CAM_MENU_BY_VAL[id];
+    },
   });
 
   // ── Debug binding — with retry guards ─────────────────────────────────────────
   // main.js overwrites window._wos after scripts load, so we rebind on a delay.
 
+  var _debugNavObj = {
+    routeControls: function () {
+      var s = getRouteControlState();
+      console.log("[WOSNav] routeControls:", s);
+      return s;
+    },
+    pause: function () {
+      return pauseRoute();
+    },
+    play: function () {
+      return resumeRoute();
+    },
+    stop: function () {
+      return stopRoute();
+    },
+    snapshot: function (opts) {
+      var snap = global.SBE && SBE.RuntimeSnapshotCapture;
+      if (snap)
+        return snap.capturePNG(
+          opts || { hideHUD: true, includeMetadata: true, download: true },
+        );
+      return { ok: false, reason: "RuntimeSnapshotCapture not loaded" };
+    },
+    snapshotState: function () {
+      var snap = global.SBE && SBE.RuntimeSnapshotCapture;
+      return snap ? snap.getState() : null;
+    },
+  };
+
+  var _debugSnapObj = {
+    capture: function (opts) {
+      var snap = global.SBE && SBE.RuntimeSnapshotCapture;
+      if (snap)
+        return snap.capturePNG(
+          opts || { hideHUD: true, includeMetadata: true, download: true },
+        );
+      return { ok: false, reason: "RuntimeSnapshotCapture not loaded" };
+    },
+    state: function () {
+      var snap = global.SBE && SBE.RuntimeSnapshotCapture;
+      return snap ? snap.getState() : null;
+    },
+    stats: function () {
+      var snap = global.SBE && SBE.RuntimeSnapshotCapture;
+      return snap ? snap.getStats() : null;
+    },
+    recenter: function (lng, lat, zoom) {
+      var snap = global.SBE && SBE.RuntimeSnapshotCapture;
+      return snap
+        ? snap.recenter(lng, lat, zoom)
+        : { ok: false, reason: "RuntimeSnapshotCapture not loaded" };
+    },
+    svgStatus: function () {
+      var snap = global.SBE && SBE.RuntimeSnapshotCapture;
+      return snap
+        ? snap.svgStatus()
+        : { svgAvailable: false, reason: "RuntimeSnapshotCapture not loaded" };
+    },
+  };
+
   var _debugObj = {
     // ── Navigation ────────────────────────────────────────────────────────────
     launch: launch,
     go: function (to) {
-      var toEl = document.getElementById('nav-to');
+      var toEl = document.getElementById("nav-to");
       if (toEl) toEl.value = to;
       _state.to = to;
       launch();
     },
     resolve: function (name) {
       var r = _resolveDestination(name);
-      console.log('[WOSNav] resolve:', name, '→', r ? r.label + ' (' + r.lat.toFixed(4) + ',' + r.lng.toFixed(4) + ')' : 'NOT FOUND');
+      console.log(
+        "[WOSNav] resolve:",
+        name,
+        "→",
+        r
+          ? r.label + " (" + r.lat.toFixed(4) + "," + r.lng.toFixed(4) + ")"
+          : "NOT FOUND",
+      );
       return r;
     },
     where: function () {
       var c = _getCurrentMapCenter();
-      console.log('[WOSNav] current location:', c);
+      console.log("[WOSNav] current location:", c);
       return c;
     },
     // ── Speed stepper (read + write) ──────────────────────────────────────────
-    speedUp:   function () { return _stepSpeed(1);  },
-    speedDown: function () { return _stepSpeed(-1); },
+    speedUp: function () {
+      return _stepSpeed(1);
+    },
+    speedDown: function () {
+      return _stepSpeed(-1);
+    },
     speed: function () {
       var mult = _currentSpeedMult();
-      console.log('[TraversalDeck] speed:', _fmtSpeed(mult), '(index ' + _state.speedIndex + ')');
-      return { speedMultiplier: mult, label: _fmtSpeed(mult), index: _state.speedIndex };
+      console.log(
+        "[TraversalDeck] speed:",
+        _fmtSpeed(mult),
+        "(index " + _state.speedIndex + ")",
+      );
+      return {
+        speedMultiplier: mult,
+        label: _fmtSpeed(mult),
+        index: _state.speedIndex,
+      };
     },
     // ── Altitude stepper (read + write) ───────────────────────────────────────
-    altitudeUp:   function () { return _stepAltitude(1);  },
-    altitudeDown: function () { return _stepAltitude(-1); },
+    altitudeUp: function () {
+      return _stepAltitude(1);
+    },
+    altitudeDown: function () {
+      return _stepAltitude(-1);
+    },
     altitude: function () {
       var s = _currentAltStep();
-      console.log('[TraversalDeck] altitude:', s.label, '—', _fmtAltStep(s));
+      console.log("[TraversalDeck] altitude:", s.label, "—", _fmtAltStep(s));
       return s;
     },
     // ── Actor / telemetry (read-only) ─────────────────────────────────────────
-    actor:    actor,
+    actor: actor,
     // ── Feasibility reports ───────────────────────────────────────────────────
-    cloudFeasibility:      cloudFeasibility,
+    cloudFeasibility: cloudFeasibility,
     heroVehicleFeasibility: heroVehicleFeasibility,
   };
 
   function _bindDebug() {
-    global._wos             = global._wos             || {};
-    global._wos.debug       = global._wos.debug       || {};
+    global._wos = global._wos || {};
+    global._wos.debug = global._wos.debug || {};
     global._wos.debug.traversalDeck = _debugObj;
+    global._wos.debug.nav = _debugNavObj;
+    global._wos.debug.snapshot = _debugSnapObj;
   }
 
   _bindDebug();
@@ -1411,12 +2049,13 @@
 
   // ── Auto-mount ─────────────────────────────────────────────────────────────────
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', function () { setTimeout(mount, 0); });
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", function () {
+      setTimeout(mount, 0);
+    });
   } else {
     setTimeout(mount, 0);
   }
 
-  console.log('[WOSNav] v' + VERSION + ' loaded');
-
+  console.log("[WOSNav] v" + VERSION + " loaded");
 })(window);

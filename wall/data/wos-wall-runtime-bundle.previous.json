@@ -1,0 +1,62 @@
+{
+  "bundleVersion": "1.0.4",
+  "publishedAt": "2026-06-15T20:13:17.606Z",
+  "publishedBy": "studio-author",
+  "metadata": {
+    "source": "studio",
+    "studioVersion": "1.0.0"
+  },
+  "registry": [
+    {
+      "objectId": "08cf6a00-c23d-485e-9c16-2952a4cd4e6d",
+      "status": "promoted",
+      "specVersion": "1.0.0",
+      "promotedAt": "2026-06-14T16:28:52.292Z",
+      "promotedBy": "author",
+      "supersedes": null,
+      "supersededBy": null,
+      "dependents": [],
+      "retiredAt": null,
+      "retiredBy": null,
+      "retireReason": null
+    }
+  ],
+  "actors": [
+    {
+      "objectId": "08cf6a00-c23d-485e-9c16-2952a4cd4e6d",
+      "actorCategory": "prop",
+      "actorType": "custom",
+      "assetId": "asset://marine/vessel_generic",
+      "anchor": {
+        "lat": 40.682141295834356,
+        "lon": -74.03446820332671,
+        "altM": 0,
+        "headingDeg": 219.8
+      },
+      "lod": {
+        "highM": 500,
+        "medM": 2000,
+        "lowM": 8000,
+        "billboardM": 20000
+      },
+      "scalars": {
+        "continuityAlpha": null,
+        "deadReckoningWeight": 0,
+        "coastAlpha": null,
+        "staleWeight": null,
+        "interpolationWeight": null
+      },
+      "liveTracking": null,
+      "meta": {
+        "specVersion": "1.0.0",
+        "authoredAt": "2026-06-14T16:25:42.815Z",
+        "promoted": true,
+        "lifecycleState": "PROMOTED",
+        "displayLabel": "",
+        "changeReason": "",
+        "supersedes": null,
+        "promotedAt": "2026-06-14T16:28:52.292Z"
+      }
+    }
+  ]
+}

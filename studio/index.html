@@ -4,7 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>WOS Studio</title>
+  <base href="/studio/" />
   <link rel="stylesheet" href="./styles.css" />
+  <link href="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css" rel="stylesheet" />
 </head>
 <body>
   <!-- ── WOS Studio authoring shell (0603N) ──────────────────────────────────────
@@ -15,14 +17,22 @@
   <div class="studio-shell">
     <header class="studio-topbar">
       <div class="studio-brand">WOS&nbsp;<span>Studio</span></div>
+      <!-- 0612P Studio nav authority compression:
+           Glyph Lab tab REMOVED — false authority; it was only a redirect notice.
+           Glyph/symbol authoring lives in Canvas (Symbols drawer), which never left.
+           Palette Lab tab HIDDEN — premature authority; read-only viewer until the
+           ColorLab → Palette Package Export bridge exists. Internals preserved;
+           reachable via #palette-lab for debug. -->
+      <!-- 0617A: Nav simplified to Library | Map | Canvas | Broadcast.
+           Inspector removed from nav — persistent right-side panel only.
+           3D Canvas renamed Map (world placement). Canvas is blank staging.
+           Broadcast replaces Open Wall. -->
       <nav class="studio-tabs" id="studio-tabs">
-        <button data-mode="asset-library" class="active">Asset Library</button>
-        <button data-mode="actor-library">Actor Library</button>
-        <button data-mode="glyph-lab">Glyph Lab</button>
-        <button data-mode="palette-lab">Palette Lab</button>
-        <button data-mode="proof-stage">Proof Stage</button>
+        <button data-mode="library">Library</button>
+        <button data-mode="map" class="active">Map</button>
+        <button data-mode="canvas">Canvas</button>
       </nav>
-      <a class="studio-walllink" href="../wall/index.html">Open Wall →</a>
+      <a class="studio-walllink" href="../wall/index.html" target="_blank" rel="noopener">Broadcast</a>
     </header>
 
     <aside class="studio-library" id="studio-library">
@@ -63,6 +73,95 @@
   <script src="../wall/systems/actors/truthActorRuntime.js"></script>
   <!-- Proof harness commands (lazy; calls TruthActorRuntime, warns if no map) ───── -->
   <script src="../wall/systems/presentation/worldSpaceVehicleDebug.js"></script>
+  <!-- Mapbox GL JS — required by Map Lab (Studio-owned instance, not wall runtime) -->
+  <script src="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js"></script>
+  <!-- ── WOS Map Style Authority (0612Q) — MUST load before mapboxAdapter ────── -->
+  <script src="../wall/systems/presentation/wosMapStyleAuthority.js"></script>
+  <!-- Map Lab modules — load order: adapter → selection → inspector → registry → stylekit → preview → view -->
+  <script src="./mapLab/mapboxAdapter.js"></script>
+  <script src="./mapLab/mapSelection.js"></script>
+  <script src="./mapLab/mapInspector.js"></script>
+  <script src="./mapLab/buildingEditRegistry.js"></script>
+  <!-- BuildingStyleKit — geometry LOD generators shared by Wall and Studio (0610G) -->
+  <script src="../wall/systems/runtime/buildingStyleKit.js"></script>
+  <!-- BuildingPreviewRuntime — Author/Preview parity rendering (0610G) -->
+  <script src="./mapLab/buildingPreviewRuntime.js"></script>
+  <script src="./mapLab/mapLabView.js"></script>
+  <!-- ── Three-View Style Parity Lock (0612F) ─────────────────────────────────── -->
+  <script src="../wall/systems/presentation/threeViewStyleParityLock.js"></script>
+  <!-- ── Building Illustration Pass (0612R) ────────────────────────────────────── -->
+  <script src="../wall/systems/presentation/buildingIllustrationPass.js"></script>
+  <!-- ── Building Material Illustration Runtime (0612S) ───────────────────────── -->
+  <script src="../wall/systems/presentation/buildingMaterialIllustrationRuntime.js"></script>
+  <!-- ── Three.js (0612T) — required by OrganicBuildingSurfacePatternRuntime ──── -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+  <!-- ── Organic Building Surface Pattern Runtime (0612T) ──────────────────────── -->
+  <script src="../wall/systems/presentation/organicBuildingSurfacePatternRuntime.js"></script>
+  <!-- ── All Visible Building Surface Texture Runtime (0612U) ─────────────────── -->
+  <script src="../wall/systems/presentation/allVisibleBuildingSurfaceTextureRuntime.js"></script>
+  <!-- ── Studio → Wall Publish Authority (0612L) ──────────────────────────────── -->
+  <script src="../wall/systems/presentation/studioWallPublishAuthority.js"></script>
+  <!-- ── 3D Canvas Lab data + logic layer (0613) ──────────────────────────────── -->
+  <script src="./actors/actorManifestStore.js"></script>
+  <script src="./actors/assetResolver.js"></script>
+  <!-- 0616A: Studio Asset Pack — registers via existing ActorAssetLibraryAuthority.registerAsset() -->
+  <script src="./actors/studioAssetPack.js"></script>
+  <!-- 0616D: Custom Studio Asset Store — Studio-local recipe persistence, registers via ALA too -->
+  <script src="./actors/customStudioAssetStore.js"></script>
+  <!-- 0616J: GLB Import Store — after customStudioAssetStore, before placement controllers -->
+  <script src="./actors/glbImportStore.js"></script>
+  <!-- 0617C: GLB Runtime Package Store — after glbImportStore, before publisher -->
+  <script src="./actors/glbRuntimePackageStore.js"></script>
+  <!-- 0618B: Building Texture Package Store + Assignment Controller — before publisher -->
+  <script src="./buildings/buildingTexturePackageStore.js"></script>
+  <script src="./buildings/buildingTextureAssignmentController.js"></script>
+  <!-- 0618C: Building Texture Preview Controller — after assignment controller, before shell -->
+  <script src="./buildings/buildingTexturePreviewController.js"></script>
+  <!-- 0618D: Building Texture Proof Controller — after preview controller, before shell -->
+  <script src="./buildings/buildingTextureProofController.js"></script>
+  <!-- 0616K: Composition Store — after glbImportStore, before placement controllers -->
+  <script src="./actors/compositionStore.js"></script>
+  <!-- 0616L: Broadcast Readiness Analyzer — after compositionStore, before publisher -->
+  <script src="./actors/broadcastReadinessAnalyzer.js"></script>
+  <script src="./actors/actorPlacementController.js"></script>
+  <script src="./actors/undoRedoController.js"></script>
+  <script src="./actors/actorRegistryController.js"></script>
+  <!-- 0616G: Custom Asset Governance Validator — must load before promotionGateController -->
+  <script src="./actors/customAssetGovernanceValidator.js"></script>
+  <script src="./actors/promotionGateController.js"></script>
+  <script src="./actors/feedBindingController.js"></script>
+  <script src="./actors/retirementController.js"></script>
+  <script src="./actors/inspectorController.js"></script>
+  <!-- 3D Canvas view controllers (Phase 3) -->
+  <script src="./views/gizmoController.js"></script>
+  <script src="./views/lodRingController.js"></script>
+  <script src="./views/libraryController.js"></script>
+  <!-- Phase 5: 3D Actor Object Render Layer -->
+  <script src="./views/actorProxyGeometryFactory.js"></script>
+  <script src="./views/actorObjectRenderLayer.js"></script>
+  <!-- 0616J: GLB Import Controller — after render layer -->
+  <script src="./views/glbImportController.js"></script>
+  <!-- 0616K: Composition Controller — after glbImportController -->
+  <script src="./views/compositionController.js"></script>
+  <!-- Phase 6: Building Selection + Replacement Authoring -->
+  <script src="./views/buildingSelectionController.js"></script>
+  <script src="./views/buildingReplacementLayer.js"></script>
+  <!-- Phase 7: Building Surface Material Overrides (palette shared with Wall) -->
+  <script src="../shared/data/wosPalette.js"></script>
+  <script src="./views/materialOverrideController.js"></script>
+  <!-- 0616B: Parametric Proxy Shape Editor (session preview only, never published) -->
+  <script src="./views/proxyShapeEditorController.js"></script>
+  <!-- 0616C: Object Color/Material Authoring (session preview only, never published) -->
+  <script src="./views/objectMaterialAuthoringController.js"></script>
+  <!-- Phase 8: Studio → Wall publish pipeline -->
+  <script src="./systems/publish/studioPublisher.js"></script>
+  <!-- 0619F: Mapbox Access Controller — token/style authority before MapLookController -->
+  <script src="./views/mapboxAccessController.js"></script>
+  <!-- 0615C: Map Look Authoring Surface (session-only, never written to manifests or Wall) -->
+  <script src="./views/mapLookController.js"></script>
+  <!-- 0615B: Actor Location Intelligence (session-only, never written to manifests) -->
+  <script src="./views/actorLocationResolver.js"></script>
+  <script src="./views/threeDCanvasView.js"></script>
   <!-- Studio shell UI ─────────────────────────────────────────────────────────── -->
   <script src="./studioShell.js"></script>
 </body>
