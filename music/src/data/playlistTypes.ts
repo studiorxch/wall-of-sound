@@ -12,6 +12,15 @@ export type TrackSlot = {
   assignedTrackId?: string;
   warningLevel: WarningLevel;
   warningMessages: string[];
+  // Section origin (0711_MUSIC_Playlist_Section_Weights_Restore) — optional so
+  // old slots / non-sectioned playlists are unaffected.
+  sectionId?: string;
+  sectionLabel?: string;
+  sectionIndex?: number;
+  // Nested Middle sub-sections (0711_MUSIC_Nested_Middle_Section_Generator) —
+  // set only when sectionId refers to a child (leaf) of a parent section.
+  parentSectionId?: string;
+  parentSectionLabel?: string;
 };
 
 /**

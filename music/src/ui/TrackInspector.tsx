@@ -1,5 +1,8 @@
 import { useState, useEffect } from "react";
 import type { Track, TrackSourceOwner, PlatformUse, AnalysisStatus, AnalyzerJobStatus } from "../data/trackTypes";
+import { toPortableAudioPath, resolveAudioUrl, type AudioCategory } from "../logic/audioPathResolver";
+import { isBeatMapTrustedForAnalysis } from "../logic/beatMap/beatMapTrust";
+import { isPlaybackBoundsTrusted } from "../logic/playbackBounds/playbackBoundsTrust";
 
 type Props = {
   track: Track;
@@ -15,12 +18,14 @@ type Props = {
   onRestoreSuggestionsFromImport?: (trackId: string) => void;
   onRestoreSuggestionsFromMechanical?: (trackId: string) => void;
   onClearSuggestedMoods?: (trackId: string) => void;
+  onCreateLoops?: (trackId: string) => void;
+  onImportStems?: (trackId: string) => void;
 };
 
 const OWNER_OPTIONS: { value: TrackSourceOwner; label: string }[] = [
   { value: "studiorich", label: "StudioRich" },
   { value: "external",   label: "External" },
-  { value: "reference",  label: "Reference" },
+  { value: "reference",  label: "Sounds" },
   { value: "unknown",    label: "Unknown" },
 ];
 
@@ -40,6 +45,33 @@ const ANALYSIS_STATUS_OPTIONS: { value: AnalysisStatus; label: string }[] = [
   { value: "failed",       label: "Analysis failed" },
 ];
 
+function ownerToCategory(owner: TrackSourceOwner): AudioCategory {
+  if (owner === "reference") return "reference";
+  if (owner === "external") return "external";
+  return "catalog";
+}
+
+function buildAudioPatch(rawInput: string, track: Track): Partial<Track> {
+  const trimmed = rawInput.trim();
+  if (!trimmed) return { filePath: undefined };
+
+  const category = ownerToCategory(track.sourceOwner ?? "studiorich");
+  const portable = toPortableAudioPath({ value: trimmed, category });
+  if (portable) {
+    return {
+      audioRelPath: portable.audioRelPath,
+      audioFileName: portable.audioFileName,
+      audioCategory: portable.audioCategory,
+      audioStatus: "linked" as const,
+      // Clear legacy absolute path so playback doesn't fall back to it
+      filePath: undefined,
+    };
+  }
+
+  // Could not parse — keep the raw value in filePath as fallback (legacy)
+  return { filePath: trimmed };
+}
+
 function useTrackForm(track: Track) {
   const [title, setTitle]                   = useState(track.title ?? "");
   const [artist, setArtist]                 = useState(track.artist ?? "");
@@ -53,11 +85,13 @@ function useTrackForm(track: Track) {
   const [notes, setNotes]                   = useState(track.notes ?? "");
   const [bpm, setBpm]                       = useState(String(track.bpm ?? ""));
   const [musicalKey, setMusicalKey]         = useState(track.musicalKey ?? "");
-  const [camelotKey, setCamelotKey]         = useState(track.camelotKey ?? "");
+  const [camelotKey, setCamelotKey]         = useState<string>(track.camelotKey ?? "");
   const [energy, setEnergy]                 = useState(String(track.energy ?? ""));
   const [durationSeconds, setDurationSecs]  = useState(String(track.durationSeconds ?? ""));
   const [analysisStatus, setAnalysisStatus] = useState<AnalysisStatus>(track.analysisStatus ?? "not_analyzed");
-  const [filePath, setFilePath]             = useState(track.filePath ?? "");
+  const [audioRelPathInput, setAudioRelPathInput] = useState(
+    (track as unknown as { audioRelPath?: string }).audioRelPath ?? track.filePath ?? ""
+  );
   const [coverImagePath, setCoverImagePath] = useState(track.coverImagePath ?? "");
   const [moodTagsRaw, setMoodTagsRaw]       = useState((track.moodTags ?? []).join(", "));
   const [mechMoodsRaw, setMechMoodsRaw]     = useState((track.mechanicalMoodTags ?? []).join(", "));
@@ -83,7 +117,9 @@ function useTrackForm(track: Track) {
     setEnergy(String(track.energy ?? ""));
     setDurationSecs(String(track.durationSeconds ?? ""));
     setAnalysisStatus(track.analysisStatus ?? "not_analyzed");
-    setFilePath(track.filePath ?? "");
+    setAudioRelPathInput(
+      (track as unknown as { audioRelPath?: string }).audioRelPath ?? track.filePath ?? ""
+    );
     setCoverImagePath(track.coverImagePath ?? "");
     setMoodTagsRaw((track.moodTags ?? []).join(", "));
     setMechMoodsRaw((track.mechanicalMoodTags ?? []).join(", "));
@@ -106,12 +142,16 @@ function useTrackForm(track: Track) {
       comment: comment.trim() || undefined,
       notes: notes.trim() || undefined,
       bpm: parseFloat(bpm) || track.bpm,
+      // 0712_MUSIC_BPM_Key_Detection_Engine §17 — manual correction outranks
+      // detected/imported values and must survive reanalysis.
+      bpmSource: bpm.trim() ? "manual" : track.bpmSource,
       musicalKey: musicalKey.trim() || undefined,
       camelotKey: (camelotKey.trim() || track.camelotKey) as Track["camelotKey"],
+      keySource: camelotKey.trim() ? "manual" : track.keySource,
       energy: parseFloat(energy) || track.energy,
       durationSeconds: parseFloat(durationSeconds) || track.durationSeconds,
       analysisStatus,
-      filePath: filePath.trim() || undefined,
+      ...buildAudioPatch(audioRelPathInput, track),
       coverImagePath: coverImagePath.trim() || undefined,
       moodTags: moodTagsRaw.trim() ? moodTagsRaw.split(",").map((t) => t.trim()).filter(Boolean) : undefined,
       mechanicalMoodTags: mechMoodsRaw.trim()
@@ -145,7 +185,7 @@ function useTrackForm(track: Track) {
     bpm, setBpm, musicalKey, setMusicalKey, camelotKey, setCamelotKey,
     energy, setEnergy, durationSeconds, setDurationSecs,
     analysisStatus, setAnalysisStatus,
-    filePath, setFilePath, coverImagePath, setCoverImagePath,
+    audioRelPathInput, setAudioRelPathInput, coverImagePath, setCoverImagePath,
     moodTagsRaw, setMoodTagsRaw, mechMoodsRaw, setMechMoodsRaw,
     sourceOwner, setSourceOwner, sourceLibrary, setSourceLibrary,
     catalogId, setCatalogId, platformUse, togglePlatformUse,
@@ -167,6 +207,8 @@ export function TrackInspector({
   onRestoreSuggestionsFromImport,
   onRestoreSuggestionsFromMechanical,
   onClearSuggestedMoods,
+  onCreateLoops,
+  onImportStems,
 }: Props) {
   const form = useTrackForm(track);
   const [imgFailed, setImgFailed] = useState(false);
@@ -306,8 +348,24 @@ export function TrackInspector({
           </div>
         )}
         <div className="te-row">
-          <label className="te-label">File Path</label>
-          <input className="te-input" value={form.filePath} onChange={(e) => form.setFilePath(e.target.value)} placeholder="/path/to/file.flac" />
+          <label className="te-label">Audio File</label>
+          <input
+            className="te-input"
+            value={form.audioRelPathInput}
+            onChange={(e) => form.setAudioRelPathInput(e.target.value)}
+            placeholder="catalog/audio/filename.flac or filename.flac"
+            title="Relative path from library/music/ root, e.g. catalog/audio/track.flac"
+          />
+          {resolveAudioUrl(
+            (() => {
+              const t = track as unknown as { audioRelPath?: string };
+              return t.audioRelPath;
+            })()
+          ) && (
+            <span className="te-value-dim" style={{ fontSize: "0.7em", opacity: 0.6 }}>
+              {resolveAudioUrl((track as unknown as { audioRelPath?: string }).audioRelPath)}
+            </span>
+          )}
         </div>
         {track.sunoId && (
           <div className="te-row">
@@ -348,6 +406,70 @@ export function TrackInspector({
             <select className="te-select" value={form.analysisStatus} onChange={(e) => form.setAnalysisStatus(e.target.value as AnalysisStatus)}>
               {ANALYSIS_STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
+          </div>
+        </div>
+
+        {/* Beat Map (0713_MUSIC_Track_Beat_Map_Foundation §21) — compact
+            read-only diagnostic, not a grid editor. */}
+        <div className="te-section-label">Beat Map</div>
+        <div className="te-row-group">
+          <div className="te-row te-row-half">
+            <label className="te-label">Status</label>
+            <span className="te-value-dim">
+              {!track.beatMap ? "Missing" : isBeatMapTrustedForAnalysis(track.beatMap) ? "Trusted" : "Partial"}
+            </span>
+          </div>
+          <div className="te-row te-row-half">
+            <label className="te-label">Tempo</label>
+            <span className="te-value-dim">
+              {track.beatMap ? (track.beatMap.tempoStable ? "Stable" : "Drifting") : "—"}
+            </span>
+          </div>
+        </div>
+        <div className="te-row-group">
+          <div className="te-row te-row-half">
+            <label className="te-label">Intro</label>
+            <span className="te-value-dim">
+              {track.beatMap?.introRegion ? `${track.beatMap.introRegion.cleanBars} clean bars` : "—"}
+            </span>
+          </div>
+          <div className="te-row te-row-half">
+            <label className="te-label">Outro</label>
+            <span className="te-value-dim">
+              {track.beatMap?.outroRegion ? `${track.beatMap.outroRegion.cleanBars} clean bars` : "—"}
+            </span>
+          </div>
+        </div>
+
+        {/* Playback Bounds (0714_MUSIC_Track_Playback_Bounds §27) — compact
+            read-only diagnostic. No waveform editing. */}
+        <div className="te-section-label">Playback Bounds</div>
+        <div className="te-row-group">
+          <div className="te-row te-row-half">
+            <label className="te-label">Status</label>
+            <span className="te-value-dim">
+              {!track.playbackBounds ? "Missing" : isPlaybackBoundsTrusted(track.playbackBounds) ? "Trusted" : "Partial"}
+            </span>
+          </div>
+          <div className="te-row te-row-half">
+            <label className="te-label">Effective</label>
+            <span className="te-value-dim">
+              {track.playbackBounds ? `${track.playbackBounds.effectiveDurationSeconds.toFixed(1)}s` : "—"}
+            </span>
+          </div>
+        </div>
+        <div className="te-row-group">
+          <div className="te-row te-row-half">
+            <label className="te-label">Start</label>
+            <span className="te-value-dim">
+              {track.playbackBounds ? `${track.playbackBounds.preferredStartSeconds.toFixed(2)}s (${track.playbackBounds.startClassification})` : "—"}
+            </span>
+          </div>
+          <div className="te-row te-row-half">
+            <label className="te-label">End</label>
+            <span className="te-value-dim">
+              {track.playbackBounds ? `${track.playbackBounds.preferredEndSeconds.toFixed(2)}s (${track.playbackBounds.endClassification})` : "—"}
+            </span>
           </div>
         </div>
 
@@ -438,6 +560,20 @@ export function TrackInspector({
           {track.mechanicalAnalysisStatus && onReanalyze && (
             <button className="tb-btn" disabled={analyzerJobStatus === "running"} onClick={() => onReanalyze(track.trackId)}>
               Reanalyze
+            </button>
+          )}
+          {onCreateLoops && (
+            <button className="tb-btn" onClick={() => onCreateLoops(track.trackId)} title="Open in AUDIOLAB / Sectional Looper">
+              Create Loops
+            </button>
+          )}
+          {/* 0715G_MUSIC_Sectional_Looper_Simplification_And_Stem_Ready_Export
+              §5 — "Import," never "Create Stems": this only registers
+              already-separated files the user picks; it does not run Demucs
+              itself. Not shown on a stem track (it has no stems of its own). */}
+          {onImportStems && track.derivedKind !== "stem" && (
+            <button className="tb-btn" onClick={() => onImportStems(track.trackId)} title="Register already-separated Demucs stem files (drums/bass/vocals/other) for this track">
+              Import Existing Stems
             </button>
           )}
         </div>

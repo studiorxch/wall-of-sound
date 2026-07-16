@@ -16,7 +16,7 @@ type Props = {
 const OWNER_OPTIONS: { value: TrackSourceOwner; label: string }[] = [
   { value: "studiorich", label: "StudioRich" },
   { value: "external",   label: "External" },
-  { value: "reference",  label: "Reference" },
+  { value: "reference",  label: "Sounds" },
   { value: "unknown",    label: "Unknown" },
 ];
 
@@ -66,7 +66,7 @@ export function TrackEditorPanel({ track, onSave, onClose, onAnalyzeTrack, onRea
 
   const [bpm, setBpm]                       = useState(String(track.bpm ?? ""));
   const [musicalKey, setMusicalKey]         = useState(track.musicalKey ?? "");
-  const [camelotKey, setCamelotKey]         = useState(track.camelotKey ?? "");
+  const [camelotKey, setCamelotKey]         = useState<string>(track.camelotKey ?? "");
   const [energy, setEnergy]                 = useState(String(track.energy ?? ""));
   const [durationSeconds, setDurationSecs]  = useState(String(track.durationSeconds ?? ""));
   const [analysisStatus, setAnalysisStatus] = useState<AnalysisStatus>(track.analysisStatus ?? "not_analyzed");
@@ -128,8 +128,12 @@ export function TrackEditorPanel({ track, onSave, onClose, onAnalyzeTrack, onRea
       comment: comment.trim() || undefined,
       notes: notes.trim() || undefined,
       bpm: parseFloat(bpm) || track.bpm,
+      // 0712_MUSIC_BPM_Key_Detection_Engine §17 — manual correction outranks
+      // detected/imported values and must survive reanalysis.
+      bpmSource: bpm.trim() ? "manual" : track.bpmSource,
       musicalKey: musicalKey.trim() || undefined,
       camelotKey: (camelotKey.trim() || track.camelotKey) as Track["camelotKey"],
+      keySource: camelotKey.trim() ? "manual" : track.keySource,
       energy: parseFloat(energy) || track.energy,
       durationSeconds: parseFloat(durationSeconds) || track.durationSeconds,
       analysisStatus,

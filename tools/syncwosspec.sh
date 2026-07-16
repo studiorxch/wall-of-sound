@@ -1,5 +1,5 @@
 #!/bin/zsh
-# Sync PLAY + WALL specs/source files to Google Drive for ChatGPT/Claude sharing.
+# Sync MUSIC + COLORLAB + WALL specs/source files to Google Drive for ChatGPT/Claude sharing.
 #
 # Usage:
 #   /Users/studio/Projects/wall-of-sound/tools/syncwosspec.sh
@@ -15,7 +15,9 @@ MODE="${1:-once}"
 
 PROJECTS_ROOT="/Users/studio/Projects"
 WOS_ROOT="$PROJECTS_ROOT/wall-of-sound"
-PLAY_ROOT="$WOS_ROOT/play"
+MUSIC_ROOT="$WOS_ROOT/music"
+COLORLAB_ROOT="$WOS_ROOT/colorlab"
+LIBRARY_MUSIC_ROOT="$WOS_ROOT/library/music"
 
 GOOGLE_SHARE="/Users/studio/Library/CloudStorage/GoogleDrive-richardjlau@gmail.com/My Drive/chatGPT-share"
 
@@ -73,10 +75,72 @@ sync_folder() {
     --exclude "node_modules/" \
     --exclude ".git/" \
     --exclude "dist/" \
+    --exclude "build/" \
     --exclude ".vite/" \
+    --exclude ".cache/" \
     --exclude "coverage/" \
     --exclude ".env" \
     --exclude ".env.*" \
+    --exclude "*.log" \
+    "$source/" "$dest/" >> "$SYNC_LOG" 2>&1
+
+  log "Done: $label"
+}
+
+sync_library_music() {
+  local source="$1"
+  local dest="$2"
+  local label="$3"
+
+  assert_dir_exists "$source" "$label"
+
+  mkdir -p "$dest"
+
+  log "Syncing $label"
+  log "From: $source"
+  log "To:   $dest"
+
+  rsync -av --delete \
+    --exclude ".DS_Store" \
+    --exclude ".git/" \
+    --exclude "node_modules/" \
+    --exclude "dist/" \
+    --exclude "build/" \
+    --exclude ".vite/" \
+    --exclude ".cache/" \
+    --exclude "coverage/" \
+    --exclude ".env" \
+    --exclude ".env.*" \
+    --exclude "*.log" \
+    --exclude "catalog/audio/" \
+    --exclude "external/audio/" \
+    --exclude "reference/audio/" \
+    --exclude "*.aif" \
+    --exclude "*.aiff" \
+    --exclude "*.flac" \
+    --exclude "*.m4a" \
+    --exclude "*.mp3" \
+    --exclude "*.ogg" \
+    --exclude "*.wav" \
+    --exclude "*.aac" \
+    --exclude "*.alac" \
+    --exclude "*.wma" \
+    --exclude "*.jpg" \
+    --exclude "*.jpeg" \
+    --exclude "*.png" \
+    --exclude "*.gif" \
+    --exclude "*.webp" \
+    --exclude "*.svg" \
+    --exclude "*.tif" \
+    --exclude "*.tiff" \
+    --exclude "*.bmp" \
+    --exclude "*.heic" \
+    --exclude "*.mp4" \
+    --exclude "*.mov" \
+    --exclude "*.mkv" \
+    --exclude "*.avi" \
+    --exclude "*.webm" \
+    --exclude "*.m4v" \
     "$source/" "$dest/" >> "$SYNC_LOG" 2>&1
 
   log "Done: $label"
@@ -117,7 +181,9 @@ run_sync() {
   log "Starting syncwosspec"
 
   assert_dir_exists "$WOS_ROOT" "WOS root"
-  assert_dir_exists "$PLAY_ROOT" "PLAY root"
+  assert_dir_exists "$MUSIC_ROOT" "MUSIC root"
+  assert_dir_exists "$COLORLAB_ROOT" "ColorLab root"
+  assert_dir_exists "$LIBRARY_MUSIC_ROOT" "Library music root"
 
   # WOS source syncing
   sync_folder "$WOS_ROOT/wall" "$GOOGLE_SHARE/WOS/source/wall" "WALL source"
@@ -128,11 +194,14 @@ run_sync() {
   # WOS-share syncing
   sync_folder "$WOS_ROOT/WOS-share" "$GOOGLE_SHARE/WOS-share" "WOS-SHARE"
 
-  # PLAY source syncing
-  sync_folder "$PLAY_ROOT/src" "$GOOGLE_SHARE/PLAY/SOURCE/src" "PLAY flow curve builder source"
-  sync_folder "$PLAY_ROOT/public" "$GOOGLE_SHARE/PLAY/SOURCE/public" "PLAY public assets"
+  # LIBRARY music metadata/context syncing
+  sync_library_music "$LIBRARY_MUSIC_ROOT" "$GOOGLE_SHARE/LIBRARY/MUSIC" "Library music"
 
-  local flow_curve_builder_files=(
+  # MUSIC source syncing
+  sync_folder "$MUSIC_ROOT/src" "$GOOGLE_SHARE/MUSIC/SOURCE/src" "MUSIC source"
+  sync_folder "$MUSIC_ROOT/public" "$GOOGLE_SHARE/MUSIC/SOURCE/public" "MUSIC public assets"
+
+  local music_files=(
     "vite.config.ts"
     "tsconfig.json"
     "tsconfig.app.json"
@@ -147,10 +216,32 @@ run_sync() {
   )
 
   sync_file_list \
-    "$PLAY_ROOT/flow-curve-builder" \
-    "$GOOGLE_SHARE/PLAY/SOURCE/flow-curve-builder" \
-    "PLAY flow-curve-builder source files" \
-    "${flow_curve_builder_files[@]}"
+    "$MUSIC_ROOT" \
+    "$GOOGLE_SHARE/MUSIC/SOURCE" \
+    "MUSIC source files" \
+    "${music_files[@]}"
+
+  # COLORLAB source syncing
+  sync_folder "$COLORLAB_ROOT/src" "$GOOGLE_SHARE/COLORLAB/SOURCE/src" "ColorLab source"
+  sync_folder "$COLORLAB_ROOT/public" "$GOOGLE_SHARE/COLORLAB/SOURCE/public" "ColorLab public assets"
+
+  local colorlab_files=(
+    "vite.config.ts"
+    "tsconfig.json"
+    "tsconfig.app.json"
+    "tsconfig.node.json"
+    "eslint.config.js"
+    "package.json"
+    "package-lock.json"
+    "index.html"
+    "README.md"
+  )
+
+  sync_file_list \
+    "$COLORLAB_ROOT" \
+    "$GOOGLE_SHARE/COLORLAB/SOURCE" \
+    "ColorLab source files" \
+    "${colorlab_files[@]}"
 
   log "All selected folders synced to Google Drive"
 }
@@ -177,9 +268,14 @@ watch_sync() {
     --exclude "/node_modules/" \
     --exclude "/.git/" \
     --exclude "/dist/" \
+    --exclude "/build/" \
     --exclude "/.vite/" \
+    --exclude "/.cache/" \
     --exclude "/coverage/" \
     --exclude "/.DS_Store$" \
+    --exclude "/library/music/catalog/audio/" \
+    --exclude "/library/music/external/audio/" \
+    --exclude "/library/music/reference/audio/" \
     "$WOS_ROOT" | while read -r event_count; do
 
     echo ""

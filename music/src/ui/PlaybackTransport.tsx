@@ -44,6 +44,15 @@ function DockStars({ track, onChange }: { track: Track; onChange?: (id: string, 
   );
 }
 
+function fmtBpm(bpm: number | undefined | null) {
+  if (!bpm || isNaN(bpm)) return null;
+  return `${Math.round(bpm)} BPM`;
+}
+function fmtEnergy(e: number | undefined | null) {
+  if (e == null || isNaN(e)) return null;
+  return `E ${e.toFixed(2)}`;
+}
+
 export function PlaybackTransport({
   status, currentSlotIndex, currentTrack, errorMessage,
   totalSlots, currentTimeSeconds, durationSeconds,
@@ -59,6 +68,11 @@ export function PlaybackTransport({
     ? `${fmtTime(currentTimeSeconds)} / ${fmtTime(durationSeconds)}`
     : currentTimeSeconds > 0 ? fmtTime(currentTimeSeconds) : "";
 
+  const bpmStr = fmtBpm(currentTrack?.bpm);
+  const keyStr = currentTrack?.camelotKey?.trim() || null;
+  const energyStr = fmtEnergy(currentTrack?.energy);
+  const hasStats = currentTrack && (bpmStr || keyStr || energyStr);
+
   // suppress unused — kept for keyboard handler in App
   void onStop; void onPlayFromSlot; void totalSlots;
 
@@ -72,7 +86,16 @@ export function PlaybackTransport({
         <div className="pd-info">
           <span className="pd-title">{currentTrack?.title ?? (hasSlot ? "(no file)" : "—")}</span>
           <span className="pd-artist">{currentTrack?.artist ?? ""}</span>
-          {currentTrack && <DockStars track={currentTrack} onChange={onRateTrack} />}
+          <div className="pd-stats-row">
+            {currentTrack && <DockStars track={currentTrack} onChange={onRateTrack} />}
+            {hasStats && (
+              <span className="pd-stat-pills">
+                {bpmStr && <span className="pd-stat">{bpmStr}</span>}
+                {keyStr && <span className="pd-stat">{keyStr}</span>}
+                {energyStr && <span className="pd-stat">{energyStr}</span>}
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Controls */}

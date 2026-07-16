@@ -31,14 +31,17 @@ type Props = {
   onCurveChange: (curve: FlowCurve) => void;
   nowPlayingSlotIndex: number | null;
   hoveredSlotIndex: number | null;
+  selectedSlotIndex?: number | null;
   onNodeHoverChange: (idx: number | null) => void;
+  onNodeClick?: (idx: number) => void;
   readOnly?: boolean;
   displayMode?: FlowCurveDisplayMode;
 };
 
 export function FlowCurveCanvas({
   curve, slots, tracksById, locks, onCurveChange,
-  nowPlayingSlotIndex, hoveredSlotIndex, onNodeHoverChange,
+  nowPlayingSlotIndex, hoveredSlotIndex, selectedSlotIndex = null,
+  onNodeHoverChange, onNodeClick,
   readOnly = false,
   displayMode = "editor",
 }: Props) {
@@ -268,6 +271,7 @@ export function FlowCurveCanvas({
           if (!n.hasTrack) return null;
           const isNowPlaying = n.slotIndex === nowPlayingSlotIndex;
           const isHovered = n.slotIndex === hoveredSlotIndex;
+          const isSelected = n.slotIndex === selectedSlotIndex;
           // In minimal mode, only show the now-playing node
           if (isMinimal && !isNowPlaying) return null;
           const ringColor = n.warningLevel === "red" ? "var(--red)" : n.warningLevel === "yellow" ? "var(--yellow)" : "none";
@@ -276,9 +280,9 @@ export function FlowCurveCanvas({
             : n.isLocked
             ? "var(--accent)"
             : "#fff";
-          const nodeR = isHovered ? NODE_R + 2 : NODE_R;
+          const nodeR = (isHovered || isSelected) ? NODE_R + 2 : NODE_R;
           // HUD: non-playing nodes are more transparent
-          const baseOpacity = isHud && !isNowPlaying && !isHovered ? 0.35 : isHovered ? 1 : 0.85;
+          const baseOpacity = isHud && !isNowPlaying && !isHovered ? 0.35 : (isHovered || isSelected) ? 1 : 0.85;
           // HUD: suppress warning rings on non-critical items
           const showWarningRing = n.warningLevel !== "none" && (!isHud || n.warningLevel === "red");
 
@@ -286,14 +290,18 @@ export function FlowCurveCanvas({
             <g
               key={i}
               className="track-node"
+              style={{ cursor: onNodeClick ? "pointer" : "default" }}
               onMouseEnter={() => onNodeHoverChange(n.slotIndex)}
               onMouseLeave={() => onNodeHoverChange(null)}
-              onClick={(e) => e.stopPropagation()}
+              onClick={(e) => { e.stopPropagation(); onNodeClick?.(n.slotIndex); }}
             >
               <title>{n.tooltip}</title>
               <circle cx={n.x} cy={n.y} r={NODE_R + 6} fill="transparent" />
               {isNowPlaying && (
                 <circle cx={n.x} cy={n.y} r={nodeR + 5} fill="none" stroke="var(--green)" strokeWidth={1} opacity={0.5} />
+              )}
+              {isSelected && !isNowPlaying && (
+                <circle cx={n.x} cy={n.y} r={nodeR + 5} fill="none" stroke="var(--accent)" strokeWidth={1.5} opacity={0.8} />
               )}
               {showWarningRing && (
                 <circle cx={n.x} cy={n.y} r={nodeR + 3} fill="none" stroke={ringColor} strokeWidth={1.5} opacity={isHud ? 0.4 : 0.7} />
@@ -371,6 +379,53 @@ export function FlowCurveCanvas({
           </g>
         )}
       </svg>
+
+      {/* Rich node inspector — shown when a node is hovered */}
+      {(() => {
+        if (isHud || hoveredSlotIndex === null) return null;
+        const hoveredNode = trackNodes.find((n) => n.slotIndex === hoveredSlotIndex);
+        const hoveredSlot = slots.find((s) => s.slotIndex === hoveredSlotIndex);
+        const hoveredTrack = hoveredSlot?.assignedTrackId ? tracksById.get(hoveredSlot.assignedTrackId) : undefined;
+        if (!hoveredNode || !hoveredSlot) return null;
+
+        // Position: convert SVG x to % for left anchor, cap at right edge
+        const leftPct = Math.min(85, (hoveredNode.x / W) * 100);
+        const above = hoveredNode.y < H / 2; // show below if node is high, above if low
+
+        return (
+          <div
+            className={`fcc-inspector${above ? " fcc-inspector--below" : " fcc-inspector--above"}`}
+            style={{ left: `${leftPct}%` }}
+          >
+            <div className="fcc-inspector-title">
+              #{hoveredNode.slotNum} — {hoveredTrack?.title ?? "Empty Slot"}
+            </div>
+            {hoveredTrack && (
+              <div className="fcc-inspector-meta">
+                {hoveredTrack.bpm ? `${hoveredTrack.bpm} BPM` : "—"}
+                {hoveredTrack.camelotKey ? ` · ${hoveredTrack.camelotKey}` : ""}
+                {hoveredTrack.energy != null ? ` · E ${hoveredTrack.energy.toFixed(2)}` : ""}
+                {hoveredTrack.durationSeconds ? ` · ${Math.floor(hoveredTrack.durationSeconds / 60)}:${String(Math.round(hoveredTrack.durationSeconds % 60)).padStart(2, "0")}` : ""}
+              </div>
+            )}
+            {(hoveredSlot.warningMessages ?? []).length > 0 && (
+              <div className="fcc-inspector-warnings">
+                {(hoveredSlot.warningMessages ?? []).map((msg, i) => (
+                  <div
+                    key={i}
+                    className={`fcc-inspector-warn-item fcc-inspector-warn--${hoveredSlot.warningLevel}`}
+                  >
+                    {msg}
+                  </div>
+                ))}
+              </div>
+            )}
+            {(hoveredSlot.warningMessages ?? []).length === 0 && hoveredTrack && (
+              <div className="fcc-inspector-clean">No warnings</div>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }

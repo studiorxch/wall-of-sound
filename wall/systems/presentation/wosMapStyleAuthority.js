@@ -59,13 +59,15 @@
   var DEFAULT_PROFILE_ID = 'wos.dark.cyan';
   var STORAGE_KEY        = 'wos:styleAuthority:activeProfile';
 
-  // ── Shared Mapbox token — both Wall and Studio resolve via SBE.MapboxToken ──
-  // 0619F: exposing here because wosMapStyleAuthority.js is the one shared module
-  // loaded by both wall/index.html (before mapboxViewportRuntime) and studio/index.html.
-  // Wall's mapboxViewportRuntime.js continues to use its own ACCESS_TOKEN constant —
-  // that is unchanged. Studio reads SBE.MapboxToken via WOSMapboxAccessController.
+  // ── Shared Mapbox token — resolved from wall/mapbox-env.js global ───────
+  // wall/mapbox-env.js (gitignored) is loaded before this file in both
+  // wall/index.html and studio/index.html, setting window.SBE.MapboxToken.
+  // This block is a fallback guard only — the token should already be set.
   if (!SBE.MapboxToken) {
-    SBE.MapboxToken = 'MAPBOX_TOKEN_REMOVED';
+    SBE.MapboxToken = (global.MAPBOX_TOKEN) || "";
+    if (!SBE.MapboxToken) {
+      console.warn("[WOSMapStyleAuthority] Mapbox token missing — set VITE_MAPBOX_TOKEN in wall-of-sound/.env.local");
+    }
   }
 
   // ── State ─────────────────────────────────────────────────────────────────────

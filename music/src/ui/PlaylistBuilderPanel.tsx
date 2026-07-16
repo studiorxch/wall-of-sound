@@ -1,5 +1,9 @@
 import { useState, useMemo } from "react";
 import type { Track, TrackSourceOwner, MechanicalMoodTag, TrackRating } from "../data/trackTypes";
+import type { PlaylistArcConfig } from "../data/playlistArcTypes";
+import { DEFAULT_THREE_PART_SECTIONS } from "../data/playlistArcTypes";
+import { PlaylistMoodArcPanel } from "./PlaylistMoodArcPanel";
+import { normalizeTrackGenreIndexTokens } from "../logic/genreTaxonomy";
 
 export type BuilderCreateMode = "create" | "create_fit_curve" | "create_fill_time";
 
@@ -25,11 +29,12 @@ export interface PlaylistBuilderResult {
   title: string;
   filters: PlaylistBuilderFilters;
   mode: BuilderCreateMode;
+  arcConfig?: PlaylistArcConfig;
 }
 
 const ALL_OWNERS: TrackSourceOwner[] = ["studiorich", "external", "reference", "unknown"];
 const OWNER_LABELS: Record<TrackSourceOwner, string> = {
-  studiorich: "StudioRich", external: "External", reference: "Reference", unknown: "Unknown",
+  studiorich: "StudioRich", external: "External", reference: "Sounds", unknown: "Unknown",
 };
 
 const MECHANICAL_MOODS: MechanicalMoodTag[] = [
@@ -40,14 +45,14 @@ const MECHANICAL_MOODS: MechanicalMoodTag[] = [
 
 function matchesFilters(t: Track, f: PlaylistBuilderFilters): boolean {
   if (f.sourceOwners.length && !f.sourceOwners.includes(t.sourceOwner ?? "unknown")) return false;
-  if (f.bpmMin !== undefined && t.bpm < f.bpmMin) return false;
-  if (f.bpmMax !== undefined && t.bpm > f.bpmMax) return false;
+  if (f.bpmMin !== undefined && (t.bpm ?? -Infinity) < f.bpmMin) return false;
+  if (f.bpmMax !== undefined && (t.bpm ?? Infinity) > f.bpmMax) return false;
   if (f.energyMin !== undefined && t.energy < f.energyMin) return false;
   if (f.energyMax !== undefined && t.energy > f.energyMax) return false;
   if (f.ratingMin !== undefined && f.ratingMin > 0 && (t.rating ?? 0) < f.ratingMin) return false;
   if (f.primaryMood && t.primaryMood !== f.primaryMood) return false;
   if (f.genres.length) {
-    const tg = [t.genre ?? "", ...(t.genres ?? [])].map((g) => g.toLowerCase());
+    const tg = normalizeTrackGenreIndexTokens(t);
     if (!f.genres.some((g) => tg.includes(g.toLowerCase()))) return false;
   }
   if (f.grouping && t.grouping !== f.grouping) return false;
@@ -89,6 +94,11 @@ export function PlaylistBuilderPanel({ libraryTracks, onConfirm, onCancel, defau
   const [analysisStatus, setAnalysisStatus] = useState("");
   const [mechStatus, setMechStatus] = useState("");
   const [mode, setMode] = useState<BuilderCreateMode>("create");
+  const [builderTab, setBuilderTab] = useState<"filters" | "arc">("filters");
+  const [arcConfig, setArcConfig] = useState<PlaylistArcConfig>({
+    mode: "three_part",
+    sections: DEFAULT_THREE_PART_SECTIONS.map((s) => ({ ...s })),
+  });
 
   // Derive distinct values from library for dropdowns
   const { distinctMoods, distinctGroupings, distinctGenres } = useMemo(() => {
@@ -97,9 +107,14 @@ export function PlaylistBuilderPanel({ libraryTracks, onConfirm, onCancel, defau
     const genres = new Set<string>();
     for (const t of libraryTracks) {
       if (t.primaryMood) moods.add(t.primaryMood);
-      if (t.grouping) groupings.add(t.grouping);
-      if (t.genre) genres.add(t.genre);
-      t.genres?.forEach((g) => genres.add(g));
+      // grouping may be stored as string or string[] at runtime — handle both.
+      const rawGrouping = t.grouping as unknown;
+      if (Array.isArray(rawGrouping)) {
+        (rawGrouping as string[]).forEach((g) => g && groupings.add(g));
+      } else if (rawGrouping) {
+        groupings.add(rawGrouping as string);
+      }
+      normalizeTrackGenreIndexTokens(t).forEach((g) => genres.add(g));
     }
     return {
       distinctMoods: [...moods].sort(),
@@ -143,8 +158,12 @@ export function PlaylistBuilderPanel({ libraryTracks, onConfirm, onCancel, defau
     setMoodTags((prev) => prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m]);
   }
 
+  const arcTrackCount = filters.trackCount ? Number(filters.trackCount) : 12;
+
   function handleConfirm() {
-    onConfirm({ title, filters, mode });
+    const result: PlaylistBuilderResult = { title, filters, mode };
+    if (builderTab === "arc") result.arcConfig = arcConfig;
+    onConfirm(result);
   }
 
   return (
@@ -155,8 +174,24 @@ export function PlaylistBuilderPanel({ libraryTracks, onConfirm, onCancel, defau
           <button className="export-modal-close" onClick={onCancel}>✕</button>
         </div>
 
+        {/* Tab bar */}
+        <div className="pb-tab-bar">
+          <button
+            className={`pb-tab${builderTab === "filters" ? " active" : ""}`}
+            onClick={() => setBuilderTab("filters")}
+          >
+            Filters
+          </button>
+          <button
+            className={`pb-tab${builderTab === "arc" ? " active" : ""}`}
+            onClick={() => setBuilderTab("arc")}
+          >
+            Mood Arc
+          </button>
+        </div>
+
         <div className="pb-body">
-          {/* Playlist name */}
+          {/* Playlist name — always visible */}
           <div className="pb-field-row">
             <label className="pb-label">Playlist Name</label>
             <input
@@ -167,6 +202,30 @@ export function PlaylistBuilderPanel({ libraryTracks, onConfirm, onCancel, defau
             />
           </div>
 
+          {builderTab === "arc" && (
+            <>
+              {/* Track count needed for section calculation */}
+              <div className="pb-section-header">Target Track Count</div>
+              <div className="pb-range-row">
+                <span className="pb-range-label">Track Count</span>
+                <input
+                  className="pb-input-sm"
+                  placeholder="e.g. 12"
+                  value={trackCount}
+                  onChange={(e) => setTrackCount(e.target.value)}
+                  type="number" min={3}
+                />
+              </div>
+              <PlaylistMoodArcPanel
+                libraryTracks={libraryTracks}
+                config={arcConfig}
+                totalTrackCount={arcTrackCount}
+                onChange={setArcConfig}
+              />
+            </>
+          )}
+
+          {builderTab === "filters" && (<>
           {/* Source owners */}
           <div className="pb-section-header">Source</div>
           <div className="pb-chip-row">
@@ -304,17 +363,24 @@ export function PlaylistBuilderPanel({ libraryTracks, onConfirm, onCancel, defau
               </button>
             ))}
           </div>
+          </>)}
         </div>
 
         <div className="pb-footer">
           <button className="tb-btn" onClick={onCancel}>Cancel</button>
           <button
             className="tb-btn ph-btn-primary"
-            disabled={matchingTracks.length === 0 || !title.trim()}
+            disabled={!title.trim() || (builderTab === "filters" ? matchingTracks.length === 0 : false)}
             onClick={handleConfirm}
           >
-            {mode === "create" ? "Create Playlist" : mode === "create_fit_curve" ? "Create + Fit Curve" : "Create + Fill Time"}
-            {matchingTracks.length > 0 && <span className="pb-btn-count"> ({matchingTracks.length})</span>}
+            {builderTab === "arc"
+              ? "Create Arc Playlist"
+              : mode === "create" ? "Create Playlist"
+              : mode === "create_fit_curve" ? "Create + Fit Curve"
+              : "Create + Fill Time"}
+            {builderTab === "filters" && matchingTracks.length > 0 && (
+              <span className="pb-btn-count"> ({matchingTracks.length})</span>
+            )}
           </button>
         </div>
       </div>

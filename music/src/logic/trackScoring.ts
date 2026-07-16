@@ -10,16 +10,16 @@ export function scoreTrackForSlot(params: {
 }): number {
   const { track, slot, previousTrack, allTracks } = params;
 
-  const allBpms = allTracks.map((t) => t.bpm);
+  const allBpms = allTracks.map((t) => t.bpm ?? 120);
   const minBpm = Math.min(...allBpms);
   const maxBpm = Math.max(...allBpms);
   const bpmRange = maxBpm - minBpm || 1;
 
   const energyDistance = Math.abs(track.energy - slot.targetEnergy);
-  const bpmDistance = Math.abs(track.bpm - slot.targetBpm) / bpmRange;
+  const bpmDistance = Math.abs((track.bpm ?? 120) - slot.targetBpm) / bpmRange;
 
   const camelotPenalty = previousTrack
-    ? getCamelotPenalty(previousTrack.camelotKey, track.camelotKey) / 40
+    ? getCamelotPenalty(previousTrack.camelotKey ?? "", track.camelotKey ?? "") / 40
     : 0;
 
   const avgDuration = allTracks.reduce((s, t) => s + t.durationSeconds, 0) / allTracks.length;

@@ -58,6 +58,9 @@ export type CollectionGridProps<T> = {
     close: () => void;
   }) => ReactNode;
 
+  // Optional slot rendered between toolbar and grid (e.g. mood picker filter bar)
+  headerSlot?: ReactNode;
+
   // Card rendering — receives the item plus a pre-bound onContextMenu handler.
   renderCard: (item: T, bag: CollectionGridCtxBag) => ReactNode;
 };
@@ -78,6 +81,7 @@ export function CollectionGrid<T>({
   deleteModalBody,
   deleteActionLabel,
   minItemsForDelete = 1,
+  headerSlot,
   renderCtxMenu,
   renderCard,
 }: CollectionGridProps<T>) {
@@ -152,6 +156,7 @@ export function CollectionGrid<T>({
         <span className="pg-toolbar-title">{title}</span>
         {createControl}
       </div>
+      {headerSlot && <div className="pg-header-slot">{headerSlot}</div>}
 
       <div className="pg-grid">
         {items.map((item) => renderCard(item, ctxBag))}

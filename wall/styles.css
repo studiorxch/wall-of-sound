@@ -1980,6 +1980,13 @@ body.presentation .watch-hide {
   );
   background-size: 26px 26px;
 }
+/* Hide dot grid in any broadcast/embed/obs context — z-index:0 stacks above
+   Mapbox (z-index:auto), causing the dot pattern to overlay the map. */
+.wos-embed #stage-grid,
+.wos-obs #stage-grid,
+body.play-controls-hidden #stage-grid {
+  display: none !important;
+}
 
 /* ── Viewport mode select (Canvas tab) ──────────────────────────────── */
 #viewport-mode {

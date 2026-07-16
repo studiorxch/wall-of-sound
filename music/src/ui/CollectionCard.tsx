@@ -24,6 +24,7 @@ export type CollectionCardProps = {
   timestampSlot?: ReactNode;
   hoverActions: ReactNode;
   activeClass?: string;
+  style?: React.CSSProperties;
   onClick: () => void;
   onContextMenu: (e: React.MouseEvent) => void;
 };
@@ -37,12 +38,14 @@ export function CollectionCard({
   timestampSlot,
   hoverActions,
   activeClass,
+  style,
   onClick,
   onContextMenu,
 }: CollectionCardProps) {
   return (
     <div
       className={`pgc${activeClass ? ` ${activeClass}` : ""}`}
+      style={style}
       onClick={onClick}
       onContextMenu={onContextMenu}
       title={title}

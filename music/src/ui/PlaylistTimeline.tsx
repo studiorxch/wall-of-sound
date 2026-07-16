@@ -50,8 +50,8 @@ export function PlaylistTimeline({ slots, tracksById, lockedTrackIds, onToggleLo
                   <span className="slot-artist">{track.artist}</span>
                   <span className="slot-sep">–</span>
                   <span className="slot-title">{track.title}</span>
-                  <span className="slot-meta">{track.bpm} BPM</span>
-                  <span className="slot-meta">{track.camelotKey}</span>
+                  <span className="slot-meta">{track.bpm && track.bpm > 0 ? `${track.bpm} BPM` : "—"}</span>
+                  <span className="slot-meta">{track.camelotKey ?? "—"}</span>
                   <span className="slot-meta">E {formatNumber(track.energy, 2, "—")}</span>
                   <span className="slot-meta">{fmtDuration(track.durationSeconds)}</span>
                   {track.energySource === "estimated" && <span className="est-badge" title="Energy estimated from BPM">~E</span>}

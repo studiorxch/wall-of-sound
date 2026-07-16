@@ -1,4 +1,5 @@
 import type { PlayProject, PlaylistRecord } from "./playProjectTypes";
+import { saveMusicState, loadMusicState, loadMusicStateAsync, primeStateCache, type MusicSaveReason } from "../logic/musicAutosave";
 import { DEFAULT_LIBRARY_SOURCES } from "./librarySourceTypes";
 import type { PlaylistProject } from "./playlistTypes";
 import { normalizeWarningMessages } from "./playlistTypes";
@@ -7,19 +8,20 @@ import { generateFlowCurve } from "../logic/curvePresets";
 import { sourceGroupIdFor } from "../logic/sourceEligibility";
 import { isValidScheduleBlock } from "../logic/scheduleResolver";
 import { normalizeTrackMetadata } from "../logic/trackMetadata";
+import { normalizeEnergyEnvelope, defaultEnvelopeForSection } from "../logic/playlistEnergyEnvelope";
+import { migrateApprovedLoopsToRevisionsV1 } from "./migrations/migrateLoopRevisionsV1";
 
 function makeDefaultSchedule(): ScheduleState {
   const ts = nowIso();
   return {
     scheduleId: genId("sched"),
-    title: "PLAY Schedule",
+    title: "MUSIC Schedule",
     blocks: [],
     createdAt: ts,
     updatedAt: ts,
   };
 }
 
-const V2_KEY = "play-project-v2";
 const V1_KEY = "flow_curve_project";
 
 function nowIso(): string {
@@ -62,40 +64,18 @@ function migrateV1(p: PlaylistProject): PlayProject {
   };
 }
 
-export function savePlayProject(project: PlayProject): boolean {
-  try {
-    // objectUrl is a session-only blob URL — strip before persisting
-    const toStore = {
-      ...project,
-      libraryTracks: project.libraryTracks.map(({ objectUrl: _u, ...rest }) => rest),
-    };
-    localStorage.setItem(V2_KEY, JSON.stringify(toStore));
-    return true;
-  } catch (err) {
-    // Quota exceeded or serialization failure — log with size hint so it's diagnosable
-    const approxKb = Math.round(JSON.stringify(project.libraryTracks).length / 1024);
-    console.warn(
-      `[PLAY] savePlayProject failed — localStorage quota exceeded? Library: ${project.libraryTracks.length} tracks (~${approxKb} KB).`,
-      err,
-    );
-    return false;
-  }
-}
-
-/**
- * Validate that a parsed value has the minimum viable v2 project shape.
- * Returns true only if it is structurally a usable project (an object with a
- * playlists array). Missing optional metadata is NOT a validation failure —
- * that is handled by repairStoredProject.
- */
-function validateStoredProject(value: unknown): value is PlayProject {
-  if (!value || typeof value !== "object") return false;
-  const p = value as Partial<PlayProject>;
-  if (p.schemaVersion !== "play-project-v2") return false;
-  if (!Array.isArray(p.playlists)) return false;
-  // A project with zero playlists but a library is still hydratable (repair adds a playlist).
-  if (p.playlists.length === 0 && !Array.isArray(p.libraryTracks)) return false;
-  return true;
+// savePlayProject routes through the centralized autosave system.
+// Pass a reason when known; defaults to "unknown" for legacy call sites.
+export function savePlayProject(
+  project: PlayProject,
+  opts?: { reason?: MusicSaveReason; allowDestructive?: boolean; confirmedByUser?: boolean },
+): boolean {
+  const result = saveMusicState(project, {
+    reason: opts?.reason ?? "unknown",
+    allowDestructive: opts?.allowDestructive,
+    confirmedByUser: opts?.confirmedByUser,
+  });
+  return result.ok;
 }
 
 /**
@@ -123,6 +103,18 @@ export function repairStoredProject(project: PlayProject): PlayProject {
     }
   }
   if (!Array.isArray(repaired.libraryScanReports)) repaired.libraryScanReports = [];
+  if (!Array.isArray(repaired.crates)) repaired.crates = [];
+  if (!Array.isArray(repaired.loops)) repaired.loops = [];
+  if (!Array.isArray(repaired.audioExperiments)) repaired.audioExperiments = [];
+  if (!Array.isArray(repaired.loopRenders)) repaired.loopRenders = [];
+  // 0715C — shape-repair only; the approved-loop→revision migration itself
+  // is a separate, explicit, versioned step (migrateApprovedLoopsToRevisionsV1),
+  // never folded in here.
+  if (!Array.isArray(repaired.loopWorkspaceDrafts)) repaired.loopWorkspaceDrafts = [];
+  if (!Array.isArray(repaired.loopRevisions)) repaired.loopRevisions = [];
+  if (!repaired.loopBinViewState || typeof repaired.loopBinViewState !== "object") {
+    repaired.loopBinViewState = { tab: "approved", filters: {}, sort: "start_time", updatedAt: nowIso() };
+  }
 
   // Repair activePlaylistId: if missing or pointing at a deleted playlist,
   // fall back to the first playlist rather than discarding the project.
@@ -154,6 +146,21 @@ export function repairStoredProject(project: PlayProject): PlayProject {
         ? pl.slots.map((s) => ({ ...s, warningMessages: normalizeWarningMessages(s.warningMessages) }))
         : [],
     };
+    // Energy-envelope migration (0712_MUSIC_Playlist_Section_Energy_Envelopes
+    // §4.2) — a section saved before this feature existed has no
+    // `energyEnvelope` at all; one saved by a partially-written draft might
+    // have a malformed one. Never overwrite an already-valid explicit
+    // envelope; every section must leave this repair with a complete,
+    // normalized one.
+    if (base.shapeConfig && Array.isArray(base.shapeConfig.sections)) {
+      base.shapeConfig = {
+        ...base.shapeConfig,
+        sections: base.shapeConfig.sections.map((sec) => ({
+          ...sec,
+          energyEnvelope: normalizeEnergyEnvelope(sec.energyEnvelope, defaultEnvelopeForSection(sec.id)),
+        })),
+      };
+    }
     // 0624J — ensure colorTheme has id/name; migrate to colorThemes if absent
     let colorTheme = base.colorTheme;
     if (colorTheme) {
@@ -245,28 +252,46 @@ export function repairStoredProject(project: PlayProject): PlayProject {
   return repaired;
 }
 
-export function loadPlayProject(): PlayProject | null {
+/** Async load from IndexedDB with migration. Use this in the startup useEffect. */
+export async function loadPlayProjectAsync(): Promise<PlayProject | null> {
+  const result = await loadMusicStateAsync();
+  if (result?.state) {
+    primeStateCache(result.state);
+    // 0715C §37 — explicit, versioned, idempotent migration; called
+    // directly here (same load path as migrateV1 below), never folded
+    // into repairStoredProject itself.
+    return migrateApprovedLoopsToRevisionsV1(repairStoredProject(result.state));
+  }
+  // Fall through to legacy v1 format
   try {
-    const raw2 = localStorage.getItem(V2_KEY);
-    if (raw2) {
-      const parsed: unknown = JSON.parse(raw2);
-      if (validateStoredProject(parsed)) {
-        return repairStoredProject(parsed);
-      }
-      // v2 key present but malformed — warn, then try v1 below rather than crashing.
-      console.warn("[PLAY] Saved project failed validation; attempting v1 fallback / default.");
-    }
-    // Fall back to v1 migration
     const raw1 = localStorage.getItem(V1_KEY);
     if (raw1) {
       const v1 = JSON.parse(raw1) as PlaylistProject;
-      return migrateV1(v1);
+      return migrateApprovedLoopsToRevisionsV1(migrateV1(v1));
     }
-    return null;
   } catch (err) {
-    console.warn("[PLAY] Failed to load saved project from storage:", err);
-    return null;
+    console.warn("[PLAY] Failed to load v1 fallback:", err);
   }
+  return null;
+}
+
+export function loadPlayProject(): PlayProject | null {
+  // loadMusicState() handles cache + localStorage fallback for useState initializers.
+  // Prefer loadPlayProjectAsync() in the startup useEffect — it reads from IDB.
+  const state = loadMusicState();
+  if (state) return migrateApprovedLoopsToRevisionsV1(repairStoredProject(state));
+
+  // Final fallback: v1 legacy format
+  try {
+    const raw1 = localStorage.getItem(V1_KEY);
+    if (raw1) {
+      const v1 = JSON.parse(raw1) as PlaylistProject;
+      return migrateApprovedLoopsToRevisionsV1(migrateV1(v1));
+    }
+  } catch (err) {
+    console.warn("[PLAY] Failed to load v1 fallback:", err);
+  }
+  return null;
 }
 
 export function loadPlayProjectFromJson(jsonText: string): PlayProject | null {

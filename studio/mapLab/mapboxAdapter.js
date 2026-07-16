@@ -50,8 +50,14 @@
 (function (global) {
   'use strict';
 
+  // ── Access token — resolved at runtime from wall/mapbox-env.js global ───
+  // Set VITE_MAPBOX_TOKEN in wall-of-sound/.env.local and copy
+  // wall/mapbox-env.template.js → wall/mapbox-env.js to populate the global.
   var ACCESS_TOKEN =
-    'MAPBOX_TOKEN_REMOVED';
+    (global.SBE && global.SBE.MapboxToken) || global.MAPBOX_TOKEN || "";
+  if (!ACCESS_TOKEN) {
+    console.warn("[MapboxAdapter] Mapbox token missing — set VITE_MAPBOX_TOKEN in wall-of-sound/.env.local");
+  }
 
   // Style URLs — source of truth: wall/runtimes/mapboxViewportRuntime.js STYLES.*
   // Not re-exported by that runtime; duplicated here with a comment reference.

@@ -7,10 +7,7 @@ import {
   normalizeSourceOwner,
 } from "../logic/trackMetadata";
 import { suggestMoodsFromAnalysis } from "../logic/moodSuggestions";
-
-function isValidCamelotKey(key: string): key is CamelotKey {
-  return /^(1[0-2]|[1-9])[AB]$/.test(key);
-}
+import { isValidCamelotKey } from "../logic/camelot";
 
 function generateTrackId(): string {
   return `track_${Math.random().toString(36).slice(2, 10)}`;
@@ -125,7 +122,9 @@ export function parseCsvTracks(csvText: string, opts?: {
     const camelotRaw = row["camelotkey"] || row["camelot_key"] || row["camelot"] || "";
     const keyRaw = row["key"] || "";
     const scaleRaw = row["scale"] || "";
-    let camelotKey: CamelotKey = "1A";
+    // 0712_MUSIC_BPM_Key_Persistence_Repair: no fabricated default — stays
+    // undefined ("—" in the UI) unless a real Camelot/key value was parsed.
+    let camelotKey: CamelotKey | undefined;
     let rawKey: string | undefined;
     let musicalKey: string | undefined;
 
@@ -275,7 +274,9 @@ export function parseCsvTracks(csvText: string, opts?: {
       title,
       artist,
       bpm: bpmRaw,
+      bpmSource: "csv_metadata",
       camelotKey,
+      keySource: camelotKey ? "csv_metadata" : undefined,
       durationSeconds: durationRaw!,
       energy,
       energySource,

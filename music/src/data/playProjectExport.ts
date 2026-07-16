@@ -70,6 +70,14 @@ export function downloadPlayProjectExport(project: PlayProject): string {
  * Read a File, parse it as a PLAY project export envelope or raw v2 project.
  * Rejects with a user-readable message if the file is malformed or unrecognized.
  * Returns the raw PlayProject (caller must repair before loading into state).
+ *
+ * Migration path (0712_MUSIC_Library_Overflow_Menu_Pruning §3/§11): the
+ * now-removed "Download Backup" menu action, and Data Management's snapshot
+ * downloads, wrapped the same PlayProject under a `state` key instead of
+ * `project` (`{ snapshotType, createdAt, summary, state }` or
+ * `{ label, exportedAt, state }`) with no exportKind/exportVersion tag.
+ * Existing files in either legacy shape remain importable here rather than
+ * being orphaned by the menu consolidation.
  */
 export function readPlayProjectExportFile(file: File): Promise<PlayProject> {
   return new Promise((resolve, reject) => {
@@ -90,9 +98,21 @@ export function readPlayProjectExportFile(file: File): Promise<PlayProject> {
           resolve(parsed as PlayProject);
           return;
         }
-        reject(new Error("Invalid PLAY project file.\nMissing playlists/tracks/project schema."));
+        // Legacy backup/snapshot envelope — same PlayProject, wrapped under `state`.
+        if (
+          parsed &&
+          typeof parsed === "object" &&
+          "state" in (parsed as Record<string, unknown>) &&
+          (parsed as Record<string, unknown>).state &&
+          typeof (parsed as Record<string, unknown>).state === "object" &&
+          ((parsed as Record<string, unknown>).state as Record<string, unknown>).schemaVersion === "play-project-v2"
+        ) {
+          resolve((parsed as Record<string, unknown>).state as PlayProject);
+          return;
+        }
+        reject(new Error("Invalid library file.\nMissing playlists/tracks/library schema."));
       } catch {
-        reject(new Error("Invalid PLAY project file.\nCould not parse JSON."));
+        reject(new Error("Invalid library file.\nCould not parse JSON."));
       }
     };
     reader.onerror = () => reject(new Error("Failed to read file."));

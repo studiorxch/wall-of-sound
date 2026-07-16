@@ -5,7 +5,7 @@ import type { Track } from "../data/trackTypes";
  * Source badge labels and style keys.
  * CSS classes (badge-teal / badge-ext / badge-ref) already defined in styles.css.
  */
-export type SourceKey = "CAT" | "EXT" | "REF" | "UNK";
+export type SourceKey = "CAT" | "EXT" | "REF" | "ART" | "UNK";
 
 const SOURCE_KEY_MAP: Record<TrackSourceOwner, SourceKey> = {
   studiorich: "CAT",
@@ -18,19 +18,26 @@ const BADGE_CLS: Record<SourceKey, string> = {
   CAT: "badge-teal",
   EXT: "badge-ext",
   REF: "badge-ref",
+  ART: "badge-art",
   UNK: "badge-unk",
 };
 
 type SourceBadgeProps = {
-  source: TrackSourceOwner | SourceKey;
+  source: TrackSourceOwner | SourceKey | "artists";
   className?: string;
 };
 
-/** Single source badge — CAT / EXT / REF / UNK. */
+const OWNER_TO_KEY: Record<string, SourceKey> = {
+  studiorich: "CAT",
+  external:   "EXT",
+  reference:  "REF",
+  unknown:    "UNK",
+  artists:    "ART",
+};
+
+/** Single source badge — CAT / EXT / REF / ART / UNK. */
 export function SourceBadge({ source, className = "" }: SourceBadgeProps) {
-  const key: SourceKey = source in SOURCE_KEY_MAP
-    ? SOURCE_KEY_MAP[source as TrackSourceOwner]
-    : source as SourceKey;
+  const key: SourceKey = OWNER_TO_KEY[source] ?? (source as SourceKey);
   const cls = BADGE_CLS[key] ?? "badge-unk";
   return (
     <span className={`warn-badge ${cls}${className ? ` ${className}` : ""}`}>{key}</span>

@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { PlayProject } from "../data/playProjectTypes";
 import { parseCsvTracks } from "../data/importCsv";
@@ -15,6 +15,9 @@ type Props = {
   onTracksImported: (tracks: Track[], destination: ImportDestination) => void;
   onProjectLoaded: (p: PlayProject) => void;
   onExportProject: () => void;
+  /** Opens the Version History screen (0712_MUSIC_Library_Overflow_Menu_Pruning §6/§8). */
+  onOpenVersionHistory?: () => void;
+  currentProjectSummary?: { playlistCount: number; crateCount: number; trackCount: number };
   workspaceMode: WorkspaceMode;
   onWorkspaceModeChange: (m: WorkspaceMode) => void;
   lastExportedAt: string | null;
@@ -36,17 +39,10 @@ type ImportSource = "studiorich" | "external" | "reference" | "playlist" | "grou
 const SOURCE_IMPORT_OPTIONS: { value: ImportSource; label: string; desc: string }[] = [
   { value: "studiorich", label: "Catalog",   desc: "sourceOwner=studiorich · internal use" },
   { value: "external",   label: "External Library",     desc: "sourceOwner=external · Mixcloud / reference" },
-  { value: "reference",  label: "Reference Library",    desc: "sourceOwner=reference · reference only" },
+  { value: "reference",  label: "Sounds Library",       desc: "sourceOwner=reference · reference only" },
   { value: "playlist",   label: "Current Playlist",     desc: "Add to library + active playlist" },
   { value: "group",      label: "Library Group",        desc: "Add to library and tag with a group" },
 ];
-
-// Map source → ImportDestination for backward compat with handleTracksImported
-function sourceToDestination(src: ImportSource): ImportDestination {
-  if (src === "playlist") return "playlist";
-  if (src === "group") return "group";
-  return "library"; // studiorich / external / reference all go to library
-}
 
 function ImportSourcePicker({
   onConfirm,
@@ -60,7 +56,7 @@ function ImportSourcePicker({
   return (
     <div className="import-dest-overlay" onClick={onCancel}>
       <div className="import-dest-dialog" onClick={(e) => e.stopPropagation()}>
-        <div className="import-dest-title">Import CSV — choose destination</div>
+        <div className="import-dest-title">Import metadata CSV — choose destination</div>
         <div className="import-dest-label" style={{ marginTop: 0, marginBottom: 6, fontSize: 11, color: "var(--text-dim)" }}>
           Select where the imported tracks will land before choosing a file.
         </div>
@@ -140,6 +136,8 @@ export function TopBar({
   onTracksImported,
   onProjectLoaded,
   onExportProject,
+  onOpenVersionHistory,
+  currentProjectSummary,
   workspaceMode,
   onWorkspaceModeChange,
   lastExportedAt,
@@ -149,6 +147,8 @@ export function TopBar({
 }: Props) {
   const csvRef = useRef<HTMLInputElement>(null);
   const jsonRef = useRef<HTMLInputElement>(null);
+  const overflowTriggerRef = useRef<HTMLButtonElement>(null);
+  const overflowPanelRef = useRef<HTMLDivElement>(null);
   const [flash, setFlash] = useState("");
   const [pendingImport, setPendingImport] = useState<{
     tracks: Track[];
@@ -184,7 +184,7 @@ export function TopBar({
       defaultAnalysisSources: ["import", "external_tool"] as Track["analysisSources"],
     } : src === "reference" ? {
       defaultSourceOwner: "reference" as const,
-      defaultSourceLibrary: "Reference",
+      defaultSourceLibrary: "Sounds",
       defaultPlatformUse: ["reference_only"] as Track["platformUse"],
       defaultAnalysisStatus: "partial" as const,
       defaultAnalysisSources: ["import", "external_tool"] as Track["analysisSources"],
@@ -232,8 +232,7 @@ export function TopBar({
     if (!file) return;
     readPlayProjectExportFile(file)
       .then((p) => {
-        onProjectLoaded(p);
-        showFlash("Project imported");
+        setPendingProjectImport(p);
       })
       .catch((err: Error) => {
         showFlash(err.message.split("\n")[0]);
@@ -243,24 +242,58 @@ export function TopBar({
 
   function handleExport() {
     onExportProject();
-    showFlash("Project exported");
+    showFlash("Library exported");
   }
 
   // ── Storage status label ──────────────────────────────────────────────────
   let statusLabel: string;
   let statusMod: string;
   if (lastExportedAt === null) {
-    statusLabel = "Project not exported yet";
+    statusLabel = "Library not exported yet";
     statusMod = "never";
   } else if (isProjectDirty) {
-    statusLabel = "Unsaved to project file";
+    statusLabel = "Unsaved library changes";
     statusMod = "dirty";
   } else {
-    statusLabel = `Project file exported · ${formatExportTime(lastExportedAt)}`;
+    statusLabel = `Library exported · ${formatExportTime(lastExportedAt)}`;
     statusMod = "clean";
   }
 
   const [showProject, setShowProject] = useState(false);
+  const [pendingProjectImport, setPendingProjectImport] = useState<PlayProject | null>(null);
+
+  // Move focus into the menu when it opens via keyboard (Enter/Space/ArrowDown
+  // on the trigger) so Arrow-key navigation has something to start from.
+  useEffect(() => {
+    if (!showProject) return;
+    const first = overflowPanelRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]:not(:disabled)');
+    first?.focus();
+  }, [showProject]);
+
+  // Overflow menu keyboard behavior (0712_MUSIC_Library_Overflow_Menu_Pruning
+  // §10): Escape closes and returns focus to the trigger; Arrow keys move
+  // focus among the menu's items (Enter/Space to open is native <button>
+  // behavior, handled on the trigger itself).
+  function handleOverflowMenuKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      setShowProject(false);
+      overflowTriggerRef.current?.focus();
+      return;
+    }
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      const items = Array.from(
+        overflowPanelRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)') ?? [],
+      );
+      if (!items.length) return;
+      const currentIndex = items.indexOf(document.activeElement as HTMLButtonElement);
+      const nextIndex = e.key === "ArrowDown"
+        ? (currentIndex + 1) % items.length
+        : (currentIndex - 1 + items.length) % items.length;
+      items[nextIndex]?.focus();
+    }
+  }
 
   return (
     <>
@@ -277,6 +310,40 @@ export function TopBar({
           onConfirm={handleDestinationConfirm}
           onCancel={() => setPendingImport(null)}
         />
+      )}
+      {pendingProjectImport && (
+        <div className="import-dest-overlay" onClick={() => setPendingProjectImport(null)}>
+          <div className="import-dest-dialog" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 380 }}>
+            <div className="import-dest-title">Replace library?</div>
+            <div className="import-dest-label" style={{ marginTop: 4, marginBottom: 12, fontSize: 11, color: "var(--text-dim)" }}>
+              This will replace your current library with the imported file. Your playlists, crates, and tracks will be overwritten.
+            </div>
+            {currentProjectSummary && (
+              <div style={{ fontSize: 11, color: "var(--text-dim)", marginBottom: 12, background: "var(--surface-raised, rgba(0,0,0,0.15))", padding: "6px 10px", borderRadius: 4 }}>
+                Current: {currentProjectSummary.playlistCount} playlist{currentProjectSummary.playlistCount !== 1 ? "s" : ""}, {currentProjectSummary.crateCount} crate{currentProjectSummary.crateCount !== 1 ? "s" : ""}, {currentProjectSummary.trackCount} track{currentProjectSummary.trackCount !== 1 ? "s" : ""}
+              </div>
+            )}
+            {pendingProjectImport.playlists && (
+              <div style={{ fontSize: 11, color: "var(--text-dim)", marginBottom: 16, background: "var(--surface-raised, rgba(0,0,0,0.15))", padding: "6px 10px", borderRadius: 4 }}>
+                Importing: {pendingProjectImport.playlists.length} playlist{pendingProjectImport.playlists.length !== 1 ? "s" : ""}, {(pendingProjectImport as unknown as { crates?: unknown[] }).crates?.length ?? 0} crate{((pendingProjectImport as unknown as { crates?: unknown[] }).crates?.length ?? 0) !== 1 ? "s" : ""}, {pendingProjectImport.libraryTracks?.length ?? 0} track{(pendingProjectImport.libraryTracks?.length ?? 0) !== 1 ? "s" : ""}
+              </div>
+            )}
+            <div className="import-dest-actions">
+              <button className="tb-btn" onClick={() => setPendingProjectImport(null)}>Cancel</button>
+              <button
+                className="ph-btn-danger"
+                style={{ marginLeft: 8, padding: "5px 14px", borderRadius: 4, fontSize: 12, background: "var(--danger, #c0392b)", color: "#fff", border: "none", cursor: "pointer" }}
+                onClick={() => {
+                  onProjectLoaded(pendingProjectImport);
+                  setPendingProjectImport(null);
+                  showFlash("Library imported");
+                }}
+              >
+                Replace library
+              </button>
+            </div>
+          </div>
+        </div>
       )}
       <header className="top-bar" onClick={() => setShowProject(false)}>
         {/* Left: logo */}
@@ -333,20 +400,36 @@ export function TopBar({
           </div>
           <div className="ph-dropdown" onClick={(e) => e.stopPropagation()}>
             <button
+              ref={overflowTriggerRef}
               className="tb-icon-btn"
               onClick={() => setShowProject((v) => !v)}
-              title="Project — export / import JSON"
+              onKeyDown={(e) => {
+                // Enter/Space already open the menu via native button click
+                // activation — only ArrowDown needs explicit handling here.
+                if (e.key === "ArrowDown") {
+                  e.preventDefault();
+                  setShowProject(true);
+                }
+              }}
+              title="More Library Actions"
+              aria-label="More Library Actions"
+              aria-haspopup="menu"
+              aria-expanded={showProject}
             >
               ···
             </button>
             {showProject && (
               <div
+                ref={overflowPanelRef}
                 className="ph-dropdown-panel ph-dropdown-panel-right"
-                style={{ top: 32, minWidth: 220 }}
+                style={{ top: 32, minWidth: 220, maxHeight: "calc(100vh - 60px)", overflowY: "auto" }}
+                role="menu"
+                aria-label="More Library Actions"
+                onKeyDown={handleOverflowMenuKeyDown}
               >
                 {pageMenuItems.length > 0 && (
                   <>
-                    <div className="ph-dropdown-label">Page Actions</div>
+                    <div className="ph-dropdown-label" role="group" aria-label="Page Actions">Page Actions</div>
                     {pageMenuItems.map((item, i) =>
                       item.sep ? (
                         <div key={`psep-${i}`} className="ph-dropdown-sep" />
@@ -354,6 +437,7 @@ export function TopBar({
                         <button
                           key={`pact-${i}`}
                           className="tb-btn"
+                          role="menuitem"
                           style={{ marginTop: 4, width: "100%" }}
                           disabled={item.disabled}
                           onClick={() => { item.action(); setShowProject(false); }}
@@ -365,49 +449,69 @@ export function TopBar({
                     <div className="ph-dropdown-sep" style={{ marginTop: 8 }} />
                   </>
                 )}
-                <div className="ph-dropdown-label">Project File</div>
+
                 <div
                   className={`tb-save-status tb-save-status--${statusMod}`}
                   style={{ fontSize: 11, padding: "4px 0" }}
                 >
                   {statusLabel}
                 </div>
-                <div className="ph-dropdown-label" style={{ marginTop: 12 }}>
-                  Tracks
-                </div>
+
+                <div className="ph-dropdown-label" style={{ marginTop: 10 }} role="group" aria-label="Import">Import</div>
                 <button
                   className="tb-btn"
+                  role="menuitem"
                   style={{ marginTop: 4, width: "100%" }}
                   onClick={() => {
                     setShowProject(false);
                     setShowSourcePicker(true);
                   }}
                 >
-                  Import CSV
+                  Import metadata CSV…
                 </button>
-                <div className="ph-dropdown-label" style={{ marginTop: 12 }}>
-                  Project File
-                </div>
+
+                <div className="ph-dropdown-sep" style={{ marginTop: 12 }} />
+                <div className="ph-dropdown-label" role="group" aria-label="Library">Library</div>
                 <button
                   className="tb-btn"
+                  role="menuitem"
                   style={{ marginTop: 4, width: "100%" }}
                   onClick={() => {
                     handleExport();
                     setShowProject(false);
                   }}
                 >
-                  Export Project JSON
+                  Export library
                 </button>
                 <button
                   className="tb-btn"
+                  role="menuitem"
                   style={{ marginTop: 6, width: "100%" }}
                   onClick={() => {
                     jsonRef.current?.click();
                     setShowProject(false);
                   }}
                 >
-                  Import Project JSON
+                  Import library…
                 </button>
+
+                {onOpenVersionHistory && (
+                  <>
+                    <div className="ph-dropdown-sep" style={{ marginTop: 12 }} />
+                    <div className="ph-dropdown-label" role="group" aria-label="Version History">Version history</div>
+                    <button
+                      className="tb-btn"
+                      role="menuitem"
+                      style={{ marginTop: 4, width: "100%" }}
+                      onClick={() => {
+                        onOpenVersionHistory();
+                        setShowProject(false);
+                      }}
+                    >
+                      Version history…
+                    </button>
+                  </>
+                )}
               </div>
             )}
           </div>

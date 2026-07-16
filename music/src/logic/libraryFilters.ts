@@ -1,4 +1,5 @@
 import type { Track, TrackSourceOwner, TrackArchiveStatus } from "../data/trackTypes";
+import { normalizeTrackGenreTokens, normalizeTrackGenreIndexTokens } from "./genreTaxonomy";
 
 export type LibraryTrackFilters = {
   search?: string;
@@ -48,7 +49,7 @@ export function filterTracksByLibraryFilters(
     if (searchLower) {
       const hay = [
         t.title, t.artist, t.albumTitle ?? "", t.grouping ?? "",
-        t.genre ?? "", ...(t.genres ?? []), ...(t.moodTags ?? []),
+        ...normalizeTrackGenreTokens(t), ...(t.moodTags ?? []),
       ].join(" ").toLowerCase();
       if (!hay.includes(searchLower)) return false;
     }
@@ -61,10 +62,10 @@ export function filterTracksByLibraryFilters(
     if (groupingLower) {
       if ((t.grouping ?? "").toLowerCase() !== groupingLower) return false;
     }
-    // Genre — matches genre string or any in genres[]
+    // Genre — matches an exact normalized canonical Genre-index token
     if (genreLower) {
-      const trackGenres = [...(t.genres ?? []), ...(t.genre ? [t.genre] : [])].map((g) => g.toLowerCase());
-      if (!trackGenres.some((g) => g.includes(genreLower))) return false;
+      const trackGenres = normalizeTrackGenreIndexTokens(t);
+      if (!trackGenres.some((g) => g === genreLower)) return false;
     }
     // Source owner
     if (ownerFilter) {
@@ -116,9 +117,14 @@ export function buildFilterOptions(tracks: Track[]): {
 
   for (const t of tracks) {
     (t.moodTags ?? []).forEach((m) => m && moodSet.add(m));
-    if (t.grouping) groupingSet.add(t.grouping);
-    (t.genres ?? []).forEach((g) => g && genreSet.add(g));
-    if (t.genre) t.genre.split(",").map((g) => g.trim()).filter(Boolean).forEach((g) => genreSet.add(g));
+    // grouping may be stored as string or string[] at runtime — handle both.
+    const rawGrouping = t.grouping as unknown;
+    if (Array.isArray(rawGrouping)) {
+      (rawGrouping as string[]).forEach((g) => g && groupingSet.add(g));
+    } else if (rawGrouping) {
+      groupingSet.add(rawGrouping as string);
+    }
+    normalizeTrackGenreIndexTokens(t).forEach((g) => genreSet.add(g));
     if (t.sourceOwner) ownerSet.add(t.sourceOwner);
   }
 

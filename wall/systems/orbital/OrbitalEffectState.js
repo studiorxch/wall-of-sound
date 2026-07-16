@@ -45,10 +45,10 @@
       routeArcIntensity:    0.16,
       bloomIntensity:       0.12,
       // visual sub-group — post-process / texture overlays
-      textureNoiseIntensity:   0.08,
-      grainIntensity:          0.06,
+      textureNoiseIntensity:   0.00,
+      grainIntensity:          0.00,
       glowRadius:              0.14,
-      scanlineIntensity:       0.04,
+      scanlineIntensity:       0.00,
       staticBackgroundEnabled: false,
       trackCardVisible:     true,
       hudSafeMode:          true,

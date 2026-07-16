@@ -28,10 +28,10 @@
       "port": 5174
     },
     {
-      "name": "play",
+      "name": "music",
       "runtimeExecutable": "/Users/studio/.nvm/versions/node/v20.19.6/bin/node",
       "runtimeArgs": ["node_modules/vite/bin/vite.js"],
-      "cwd": "/Users/studio/Projects/wall-of-sound/play",
+      "cwd": "/Users/studio/Projects/wall-of-sound/music",
       "port": 5173,
       "autoPort": true
     }

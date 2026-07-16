@@ -2,6 +2,7 @@ import type { TrackSlot, WarningLevel } from "../data/playlistTypes";
 import type { Track } from "../data/trackTypes";
 import { getCamelotPenalty } from "./camelot";
 import { formatNumber } from "./dateFormat";
+import { buildTrackReadiness } from "./metadataReadiness";
 
 const ENERGY_YELLOW = 0.2;
 const ENERGY_RED = 0.35;
@@ -35,32 +36,57 @@ export function evaluateSlotWarnings(params: {
         messages.push("Assigned track not found in library");
         level = "red";
       } else {
-        // Energy check
-        const energyDiff = Math.abs(track.energy - slot.targetEnergy);
-        if (energyDiff > ENERGY_RED) {
-          messages.push(
-            `Energy mismatch: track ${formatNumber(track.energy, 2)} vs target ${formatNumber(slot.targetEnergy, 2)}`
-          );
-          level = worst(level, "red");
-        } else if (energyDiff > ENERGY_YELLOW) {
-          messages.push(
-            `Weak energy fit: track ${formatNumber(track.energy, 2)} vs target ${formatNumber(slot.targetEnergy, 2)}`
-          );
+        // ── Metadata warnings (separate from musical flow warnings) ─────────
+        const readiness = buildTrackReadiness(track);
+        if (!readiness.hasDuration) {
+          messages.push("Missing duration (estimated 3:00)");
+          level = worst(level, "yellow");
+        }
+        if (!readiness.hasBpm) {
+          messages.push("Missing BPM");
+          level = worst(level, "yellow");
+        }
+        if (!readiness.hasKey) {
+          messages.push("Missing key");
+          level = worst(level, "yellow");
+        }
+        if (!readiness.hasEnergy) {
+          messages.push("Missing energy");
           level = worst(level, "yellow");
         }
 
-        // BPM check
-        const bpmDiff = Math.abs(track.bpm - slot.targetBpm) / (slot.targetBpm || 1);
-        if (bpmDiff > BPM_RED_PCT) {
-          messages.push(
-            `BPM gap: track ${track.bpm} BPM vs target ${Math.round(slot.targetBpm)} BPM`
-          );
-          level = worst(level, "red");
-        } else if (bpmDiff > BPM_YELLOW_PCT) {
-          messages.push(
-            `BPM drift: track ${track.bpm} BPM vs target ${Math.round(slot.targetBpm)} BPM`
-          );
-          level = worst(level, "yellow");
+        // ── Musical flow warnings ────────────────────────────────────────────
+
+        // Energy check (only meaningful when energy metadata exists)
+        if (readiness.hasEnergy) {
+          const energyDiff = Math.abs(track.energy - slot.targetEnergy);
+          if (energyDiff > ENERGY_RED) {
+            messages.push(
+              `Energy mismatch: track ${formatNumber(track.energy, 2)} vs target ${formatNumber(slot.targetEnergy, 2)}`
+            );
+            level = worst(level, "red");
+          } else if (energyDiff > ENERGY_YELLOW) {
+            messages.push(
+              `Weak energy fit: track ${formatNumber(track.energy, 2)} vs target ${formatNumber(slot.targetEnergy, 2)}`
+            );
+            level = worst(level, "yellow");
+          }
+        }
+
+        // BPM check (only meaningful when BPM metadata exists)
+        if (readiness.hasBpm) {
+          const bpmDiff = Math.abs((track.bpm ?? 0) - slot.targetBpm) / (slot.targetBpm || 1);
+          if (bpmDiff > BPM_RED_PCT) {
+            messages.push(
+              `BPM gap: track ${track.bpm} BPM vs target ${Math.round(slot.targetBpm)} BPM`
+            );
+            level = worst(level, "red");
+          } else if (bpmDiff > BPM_YELLOW_PCT) {
+            messages.push(
+              `BPM drift: track ${track.bpm} BPM vs target ${Math.round(slot.targetBpm)} BPM`
+            );
+            level = worst(level, "yellow");
+          }
         }
 
         // Camelot and adjacent BPM drift vs previous slot
@@ -69,23 +95,27 @@ export function evaluateSlotWarnings(params: {
           if (prevSlot.assignedTrackId) {
             const prevTrack = tracksById.get(prevSlot.assignedTrackId);
             if (prevTrack) {
-              const penalty = getCamelotPenalty(prevTrack.camelotKey, track.camelotKey);
-              if (penalty >= CAMELOT_RED) {
-                messages.push(`Risky key change: ${prevTrack.camelotKey} → ${track.camelotKey}`);
-                level = worst(level, "red");
-              } else if (penalty >= CAMELOT_YELLOW) {
-                messages.push(`Moderate key change: ${prevTrack.camelotKey} → ${track.camelotKey}`);
-                level = worst(level, "yellow");
+              if (readiness.hasKey && buildTrackReadiness(prevTrack).hasKey) {
+                const penalty = getCamelotPenalty(prevTrack.camelotKey ?? "", track.camelotKey ?? "");
+                if (penalty >= CAMELOT_RED) {
+                  messages.push(`Risky key change: ${prevTrack.camelotKey} → ${track.camelotKey}`);
+                  level = worst(level, "red");
+                } else if (penalty >= CAMELOT_YELLOW) {
+                  messages.push(`Moderate key change: ${prevTrack.camelotKey} → ${track.camelotKey}`);
+                  level = worst(level, "yellow");
+                }
               }
 
-              const adjRawDiff = Math.abs(track.bpm - prevTrack.bpm);
-              const adjPct = adjRawDiff / (prevTrack.bpm || 1);
-              if (adjPct > 0.20) {
-                messages.push(`Adjacent BPM gap: ${prevTrack.bpm}→${track.bpm} (${Math.round(adjPct * 100)}%)`);
-                level = worst(level, "red");
-              } else if (adjPct > 0.10) {
-                messages.push(`Adjacent BPM drift: ${prevTrack.bpm}→${track.bpm} (${Math.round(adjPct * 100)}%)`);
-                level = worst(level, "yellow");
+              if (readiness.hasBpm && buildTrackReadiness(prevTrack).hasBpm) {
+                const adjRawDiff = Math.abs((track.bpm ?? 0) - (prevTrack.bpm ?? 0));
+                const adjPct = adjRawDiff / (prevTrack.bpm || 1);
+                if (adjPct > 0.20) {
+                  messages.push(`Adjacent BPM gap: ${prevTrack.bpm}→${track.bpm} (${Math.round(adjPct * 100)}%)`);
+                  level = worst(level, "red");
+                } else if (adjPct > 0.10) {
+                  messages.push(`Adjacent BPM drift: ${prevTrack.bpm}→${track.bpm} (${Math.round(adjPct * 100)}%)`);
+                  level = worst(level, "yellow");
+                }
               }
             }
           }

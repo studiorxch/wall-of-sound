@@ -17,7 +17,7 @@ export function generateTrackSlots(params: {
     tracks.length
   );
 
-  const bpms = tracks.map((t) => t.bpm);
+  const bpms = tracks.map((t) => t.bpm ?? 120);
   const minBpm = Math.min(...bpms);
   const maxBpm = Math.max(...bpms);
 

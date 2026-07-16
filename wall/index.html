@@ -23,6 +23,10 @@
       if (p.get('obs') === '1') {
         document.documentElement.classList.add('wos-obs');
       }
+      // Auto-detect iframe context — always treat embedded runs as wos-embed
+      if (window.self !== window.top) {
+        document.documentElement.classList.add('wos-embed');
+      }
     })();
   </script>
   <style>
@@ -2212,7 +2216,13 @@
     <script src="./documents/mediaDocument.js"></script>
     <script src="./documents/overlayDocument.js"></script>
     <script src="./documents/simulationDocument.js"></script>
+    <!-- Mapbox token bridge — sets window.SBE.MapboxToken + window.MAPBOX_TOKEN -->
+    <!-- Copy wall/mapbox-env.template.js → wall/mapbox-env.js (gitignored) and fill token -->
+    <script src="./mapbox-env.js" onerror="console.warn('[WOS] Mapbox token missing — set VITE_MAPBOX_TOKEN in wall-of-sound/.env.local and copy wall/mapbox-env.template.js → wall/mapbox-env.js')"></script>
     <script src="./runtimes/mapboxViewportRuntime.js"></script>
+    <script src="./runtimes/broadcastStyleCleanup.js"></script>
+    <script src="./runtimes/broadcastMinimalStyle.js"></script>
+    <script src="./runtimes/broadcastMapIsolation.js"></script>
     <script src="./render/mapboxOperatorRenderer.js"></script>
     <script src="./render/mapboxPresentationRenderer.js"></script>
     <script src="./runtimes/routePlannerRuntime.js"></script>
@@ -2950,6 +2960,16 @@
             }, "*");
           } catch (ex) {}
         });
+
+        // ── Tab key bridge (WALL → PLAY) — forward Tab to parent so PLAY can toggle HUD visibility
+        if (window.parent !== window) {
+          window.addEventListener("keydown", function (e) {
+            if (e.key === "Tab") {
+              e.preventDefault();
+              try { window.parent.postMessage({ type: "wall:tab-key" }, "*"); } catch (ex) {}
+            }
+          }, { capture: true });
+        }
 
         // ── Route stop bridge (PLAY → WALL stop) ───────────────────────────────
         window.addEventListener("message", function (e) {

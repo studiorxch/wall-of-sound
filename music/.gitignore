@@ -12,6 +12,12 @@ dist
 dist-ssr
 *.local
 
+# Isolated Python venv + downloaded model weights for stem separation.
+# requirements.lock.txt IS tracked (pinned versions); the venv/cache are not.
+tools/stem-separator/.venv
+tools/stem-separator/model-cache
+tools/stem-separator/output
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

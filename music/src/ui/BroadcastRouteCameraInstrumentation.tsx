@@ -1,5 +1,10 @@
 import { getSkyParams } from "../runtime/skyAtmosphereModel";
 import type { SyncState } from "../runtime/broadcastIndicatorRegistry";
+import {
+  BROADCAST_OVERLAYS,
+  type BroadcastOverlayId,
+  type BroadcastOverlayState,
+} from "../config/broadcastOverlays";
 
 // Route camera + sky/atmosphere instrumentation panel.
 //
@@ -32,6 +37,15 @@ export const CAM_POV_MODES = [
 
 export type CamPovModeId = typeof CAM_POV_MODES[number]["id"];
 
+// 0709 — broadcast map style modes; applied WOS-side by broadcastMapIsolation.js
+export const BROADCAST_MAP_MODES = [
+  { id: "normal",  label: "NORMAL",  title: "StudioRich remote style" },
+  { id: "cleaned", label: "CLEANED", title: "StudioRich style with broadcast cleanup" },
+  { id: "minimal", label: "MINIMAL", title: "Clean OBS-safe style" },
+] as const;
+
+export type BroadcastMapModeId = typeof BROADCAST_MAP_MODES[number]["id"];
+
 type Props = {
   controlsVisible: boolean;
   hourOfDay: number;
@@ -48,6 +62,12 @@ type Props = {
   skyRendererBlockReason?: string;
   // WALL sync state — for sky visibility status
   syncState?: SyncState;
+  // Overlay registry state
+  broadcastOverlays?: BroadcastOverlayState;
+  onToggleOverlay?: (id: BroadcastOverlayId) => void;
+  // Map style mode — applied WOS-side via play:set-map-mode bridge
+  mapMode?: BroadcastMapModeId;
+  onMapMode?: (mode: BroadcastMapModeId) => void;
 };
 
 function fmt2(n: number) {
@@ -66,6 +86,10 @@ export function BroadcastRouteCameraInstrumentation({
   skyRenderer,
   skyRendererBlockReason,
   syncState,
+  broadcastOverlays,
+  onToggleOverlay,
+  mapMode,
+  onMapMode,
 }: Props) {
   if (!controlsVisible) return null;
 
@@ -151,6 +175,51 @@ export function BroadcastRouteCameraInstrumentation({
           <span className={`brci-value${dim ? " brci-value--dim" : ""}`}>{value}</span>
         </div>
       ))}
+
+      {onMapMode && (
+        <>
+          <div className="brci-sep" />
+          <div className="brci-section-label">MAP STYLE</div>
+          <div className="brci-row brci-row--pov">
+            <span className="brci-pov-btns">
+              {BROADCAST_MAP_MODES.map((m) => (
+                <button
+                  key={m.id}
+                  className={`brci-cam-btn${mapMode === m.id ? " brci-cam-btn--active" : ""}`}
+                  onClick={() => onMapMode(m.id)}
+                  title={m.title}
+                >
+                  {m.label}
+                </button>
+              ))}
+            </span>
+          </div>
+        </>
+      )}
+
+      {broadcastOverlays && onToggleOverlay && (
+        <>
+          <div className="brci-sep" />
+          <div className="brci-section-label">OVERLAYS</div>
+          {BROADCAST_OVERLAYS.map(({ id, label, compressionRisk }) => {
+            const enabled = broadcastOverlays[id];
+            return (
+              <div key={id} className="brci-overlay-row">
+                <button
+                  className={`brci-overlay-toggle${enabled ? " brci-overlay-toggle--on" : ""}`}
+                  onClick={() => onToggleOverlay(id)}
+                  title={compressionRisk === "high" ? "⚠ High compression risk" : undefined}
+                >
+                  {enabled ? "■" : "□"}
+                </button>
+                <span className={`brci-overlay-label${compressionRisk === "high" && enabled ? " brci-overlay-label--warn" : ""}`}>
+                  {label}
+                </span>
+              </div>
+            );
+          })}
+        </>
+      )}
     </div>
   );
 }

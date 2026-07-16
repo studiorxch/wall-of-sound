@@ -150,7 +150,7 @@ export function BroadcastCardPreview({
       </div>
 
       {/* Bottom branding */}
-      <div className="bc-branding">PLAY</div>
+      <div className="bc-branding">MUSIC</div>
 
       {/* Bottom accent line */}
       <div

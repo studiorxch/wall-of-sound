@@ -1,10 +1,11 @@
 import { useState } from "react";
+import { SourceBadge } from "./SourceBadge";
 import type { PlaylistRecord } from "../data/playProjectTypes";
 import type { Track, TrackSourceOwner } from "../data/trackTypes";
 import type { MusicSourcePool } from "../data/sourcePoolTypes";
 import { type TrackDragPayload } from "../logic/playlistMembership";
 
-export type ViewMode = "playlist" | "library" | "groups" | "orphans" | "excluded" | "locks" | "playlists_grid" | "sampler_banks_grid";
+export type ViewMode = "playlist" | "library" | "groups" | "orphans" | "excluded" | "locks" | "playlists_grid" | "sampler_banks_grid" | "crates_grid" | "crate_detail" | "artists" | "mood_signal_audit" | "analyzer_review" | "loop_library" | "sectional_looper";
 
 type Props = {
   playlists: PlaylistRecord[];
@@ -27,24 +28,25 @@ type Props = {
   onPlayOnDeckA?: (playlistId: string) => void;
   onPlayOnDeckB?: (playlistId: string) => void;
   onCreateSamplerBank?: () => void;
+  crateCount?: number;
+  onViewCrates?: () => void;
+  artistCount?: number;
+  onImportAudioClick?: () => void;
+  loopCount?: number;
 };
 
 
 export function FileManager({
-  playlists, activePlaylistId, libraryTracks,
-  orphanCount, excludedCount, lockedCount,
-  viewMode, sourceOwnerFilter, onSelectPlaylist, onViewModeChange, onSourceOwnerFilterChange,
-  onCreatePlaylist, onDuplicatePlaylist, onDeletePlaylist, onDropTracksOnPlaylist,
-  onPlayOnDeckA, onPlayOnDeckB, onCreateSamplerBank,
+  playlists, activePlaylistId: _activePlaylistId, libraryTracks,
+  orphanCount: _orphanCount, excludedCount: _excludedCount, lockedCount: _lockedCount,
+  viewMode, sourceOwnerFilter, onSelectPlaylist: _onSelectPlaylist, onViewModeChange, onSourceOwnerFilterChange,
+  onCreatePlaylist: _onCreatePlaylist, onDuplicatePlaylist, onDeletePlaylist, onDropTracksOnPlaylist: _onDropTracksOnPlaylist,
+  onPlayOnDeckA, onPlayOnDeckB, onCreateSamplerBank: _onCreateSamplerBank,
+  crateCount = 0, onViewCrates, artistCount = 0, onImportAudioClick, loopCount = 0,
 }: Props) {
   const [collapsed, setCollapsed] = useState(false);
   const [ctxMenu, setCtxMenu] = useState<{ playlistId: string; x: number; y: number } | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
-
-  function handlePlaylistClick(id: string) {
-    onSelectPlaylist(id);
-    onViewModeChange("playlist");
-  }
 
   return (
     <nav
@@ -66,17 +68,24 @@ export function FileManager({
             const counts: Record<TrackSourceOwner, number> = { studiorich: 0, external: 0, reference: 0, unknown: 0 };
             for (const t of libraryTracks) counts[t.sourceOwner ?? "unknown"]++;
 
-            const sourceRows: { owner: TrackSourceOwner; label: string; badge: string }[] = [
-              { owner: "studiorich", label: "Catalog", badge: "CAT" },
-              { owner: "external",   label: "External",           badge: "EXT" },
-              { owner: "reference",  label: "Reference",          badge: "REF" },
+            const sourceRows: { owner: TrackSourceOwner; label: string }[] = [
+              { owner: "studiorich", label: "Catalog" },
+              { owner: "external",   label: "External" },
+              { owner: "reference",  label: "Sounds" },
             ];
 
             return (
               <div className="fm-section">
-                <div className="fm-section-header">Libraries</div>
+                <div className="fm-section-header">
+                  <span>Libraries</span>
+                  {onImportAudioClick && (
+                    <button className="fm-section-action" onClick={onImportAudioClick} title="Import audio into Catalog, External, or Sounds">
+                      + Import Audio
+                    </button>
+                  )}
+                </div>
 
-                {sourceRows.map(({ owner, label, badge }) => {
+                {sourceRows.map(({ owner, label }) => {
                   const count = counts[owner];
                   const isActive = viewMode === "library" && sourceOwnerFilter === owner;
                   return (
@@ -88,7 +97,7 @@ export function FileManager({
                         onSourceOwnerFilterChange?.(owner);
                       }}
                     >
-                      <span className={`fm-source-badge fm-source-${owner}`}>{badge}</span>
+                      <SourceBadge source={owner} />
                       <span className="fm-label">{label}</span>
                       {count > 0 && <span className="fm-count">{count}</span>}
                       {count === 0 && <span className="fm-count fm-count-empty">0</span>}
@@ -96,9 +105,55 @@ export function FileManager({
                   );
                 })}
 
+                <button
+                  className={`fm-item fm-nav-item${viewMode === "artists" ? " active" : ""}`}
+                  onClick={() => onViewModeChange("artists")}
+                >
+                  <SourceBadge source="ART" />
+                  <span className="fm-label">Artists</span>
+                  {artistCount > 0 && <span className="fm-count">{artistCount}</span>}
+                </button>
+
+                <button
+                  className={`fm-item fm-nav-item${viewMode === "loop_library" ? " active" : ""}`}
+                  onClick={() => onViewModeChange("loop_library")}
+                >
+                  <span className="fm-nav-icon">↻</span>
+                  <span className="fm-label">Loops</span>
+                  {loopCount > 0 && <span className="fm-count">{loopCount}</span>}
+                </button>
+
+                <button
+                  className={`fm-item fm-nav-item${viewMode === "mood_signal_audit" ? " active" : ""}`}
+                  onClick={() => onViewModeChange("mood_signal_audit")}
+                >
+                  <span className="fm-nav-icon" style={{ color: "var(--mood-calm)" }}>◉</span>
+                  <span className="fm-label">Mood Signals</span>
+                </button>
+
+                <button
+                  className={`fm-item fm-nav-item${viewMode === "analyzer_review" ? " active" : ""}`}
+                  onClick={() => onViewModeChange("analyzer_review")}
+                >
+                  <span className="fm-nav-icon" style={{ color: "var(--mood-hypnotic, var(--mood-calm))" }}>⊞</span>
+                  <span className="fm-label">Analyzer Review</span>
+                </button>
+
               </div>
             );
           })()}
+
+          {/* AUDIOLAB / Experiments (§3, §25) */}
+          <div className="fm-section">
+            <div className="fm-section-header">AudioLab</div>
+            <button
+              className={`fm-item fm-nav-item${viewMode === "sectional_looper" ? " active" : ""}`}
+              onClick={() => onViewModeChange("sectional_looper")}
+            >
+              <span className="fm-nav-icon">⟲</span>
+              <span className="fm-label">Sectional Looper</span>
+            </button>
+          </div>
 
           {/* Collections — category nav (grid pages) */}
           {(() => {
@@ -107,6 +162,14 @@ export function FileManager({
             return (
               <div className="fm-section">
                 <div className="fm-section-header">Collections</div>
+                <button
+                  className={`fm-item fm-nav-item${viewMode === "crates_grid" || viewMode === "crate_detail" ? " active" : ""}`}
+                  onClick={() => onViewCrates ? onViewCrates() : onViewModeChange("crates_grid")}
+                >
+                  <span className="fm-nav-icon">◈</span>
+                  <span className="fm-label">Crates</span>
+                  <span className="fm-count">{crateCount}</span>
+                </button>
                 <button
                   className={`fm-item fm-nav-item${viewMode === "playlists_grid" ? " active" : ""}`}
                   onClick={() => onViewModeChange("playlists_grid")}
@@ -120,7 +183,7 @@ export function FileManager({
                   onClick={() => onViewModeChange("sampler_banks_grid")}
                 >
                   <span className="fm-nav-icon">▦</span>
-                  <span className="fm-label">Sampler Banks</span>
+                  <span className="fm-label">Banks</span>
                   <span className="fm-count">{bankCount}</span>
                 </button>
               </div>

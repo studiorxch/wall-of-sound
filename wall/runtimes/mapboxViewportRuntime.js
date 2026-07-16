@@ -9,9 +9,11 @@
   // The map renders in #mapbox-viewport beneath the WOS canvas.
   // All geographic coordinate conversion routes through this runtime.
 
-  // ── Access token — replace with your Mapbox public token ─────────────────
+  // ── Access token — resolved at runtime from wall/mapbox-env.js global ───
+  // Set VITE_MAPBOX_TOKEN in wall-of-sound/.env.local and copy
+  // wall/mapbox-env.template.js → wall/mapbox-env.js to populate the global.
   var ACCESS_TOKEN =
-    "MAPBOX_TOKEN_REMOVED";
+    (global.SBE && global.SBE.MapboxToken) || global.MAPBOX_TOKEN || "";
 
   // ── Map styles ────────────────────────────────────────────────────────────
   // operator:     Mapbox built-in dark-v11. Used for routing/infrastructure work.
@@ -49,9 +51,9 @@
       console.error("[MapboxViewportRuntime] mapboxgl not loaded");
       return;
     }
-    if (ACCESS_TOKEN.indexOf("REPLACE") !== -1) {
+    if (!ACCESS_TOKEN) {
       console.warn(
-        "[MapboxViewportRuntime] Mapbox access token not set — map will not load",
+        "[MapboxViewportRuntime] Mapbox token missing — set VITE_MAPBOX_TOKEN in wall-of-sound/.env.local"
       );
     }
 
@@ -68,12 +70,18 @@
       antialias: true,
       attributionControl: false,
       prefetchZoomDelta: 2,    // pre-fetch adjacent zoom levels for smoother tile transitions
+      preserveDrawingBuffer: true,  // required for toDataURL() snapshots (WebGL clears buffer each frame by default)
     });
 
     // style.load — fires after the style JSON is applied, before tile decode.
     // This is the earliest moment the map is visually coherent (basemap colors,
     // water fills, land fills). Used to reveal the UI shell early.
     _map.on("style.load", function () {
+      // Clear any fog/atmosphere baked into the style — custom styles can carry a fog
+      // layer (e.g. a purple haze on the presentation style). WOS uses ThreeSkyLayer
+      // for sky above the horizon and PredictiveTilePreloadRuntime for traversal haze.
+      try { if (_map.setFog) _map.setFog(null); } catch (e) {}
+
       if (_styleLoaded) return; // guard re-entrant style switches
       _styleLoaded = true;
       var _t = performance.now();

@@ -1,4 +1,5 @@
 import { useState, useRef } from "react";
+import { createPortal } from "react-dom";
 import type { PlaylistRecord, PlaylistImage } from "../data/playProjectTypes";
 
 type Props = {
@@ -8,18 +9,53 @@ type Props = {
   onDescriptionChange: (d: string) => void;
   onCoverImageChange: (img: PlaylistImage | undefined) => void;
   onBackgroundImageChange: (img: PlaylistImage | undefined) => void;
+  onBroadcastBgChange: (src: string | undefined) => void;
   onMoodTagsChange: (tags: string[]) => void;
 };
 
 function nowIso() { return new Date().toISOString(); }
 
-function readFileAsDataUrl(file: File): Promise<string> {
+// UI thumbnail — small enough for localStorage, fine for cover art slots
+const THUMB_MAX_DIM = 400;
+const THUMB_QUALITY = 0.75;
+
+// Broadcast background — large-display asset, must hold up at 1080p/4K
+const BROADCAST_MAX_DIM = 3840;
+const BROADCAST_QUALITY = 0.92;
+
+function compressToDataUrl(
+  file: File,
+  maxDim: number,
+  quality: number,
+): Promise<string> {
   return new Promise((resolve, reject) => {
     const r = new FileReader();
-    r.onload = () => resolve(r.result as string);
     r.onerror = reject;
+    r.onload = () => {
+      const img = new Image();
+      img.onerror = reject;
+      img.onload = () => {
+        const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+        const w = Math.round(img.width * scale);
+        const h = Math.round(img.height * scale);
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        canvas.getContext("2d")!.drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      };
+      img.src = r.result as string;
+    };
     r.readAsDataURL(file);
   });
+}
+
+function compressThumb(file: File): Promise<string> {
+  return compressToDataUrl(file, THUMB_MAX_DIM, THUMB_QUALITY);
+}
+
+function compressBroadcast(file: File): Promise<string> {
+  return compressToDataUrl(file, BROADCAST_MAX_DIM, BROADCAST_QUALITY);
 }
 
 function ArtworkSlot({
@@ -30,7 +66,7 @@ function ArtworkSlot({
   image: PlaylistImage | undefined;
   onFile: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onClear: () => void;
-  fileRef: React.RefObject<HTMLInputElement>;
+  fileRef: React.RefObject<HTMLInputElement | null>;
 }) {
   return (
     <div className="pip-artwork-slot">
@@ -60,7 +96,7 @@ function ArtworkSlot({
 export function PlaylistIdentityPanel({
   playlist, onClose,
   onTitleChange, onDescriptionChange,
-  onCoverImageChange, onBackgroundImageChange, onMoodTagsChange,
+  onCoverImageChange, onBackgroundImageChange, onBroadcastBgChange, onMoodTagsChange,
 }: Props) {
   const [tagsInput, setTagsInput] = useState(playlist.mood?.tags?.join(", ") ?? "");
   const coverFileRef = useRef<HTMLInputElement>(null);
@@ -69,7 +105,7 @@ export function PlaylistIdentityPanel({
   async function handleCoverFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    const src = await readFileAsDataUrl(file);
+    const src = await compressThumb(file);
     onCoverImageChange({ src, source: "uploaded", createdAt: nowIso(), alt: file.name });
     e.target.value = "";
   }
@@ -77,8 +113,13 @@ export function PlaylistIdentityPanel({
   async function handleBgFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    const src = await readFileAsDataUrl(file);
-    onBackgroundImageChange({ src, source: "uploaded", createdAt: nowIso(), alt: file.name });
+    // Generate both sizes in parallel — thumb for UI slots, broadcast for fullscreen
+    const [thumbSrc, broadcastSrc] = await Promise.all([
+      compressThumb(file),
+      compressBroadcast(file),
+    ]);
+    onBackgroundImageChange({ src: thumbSrc, source: "uploaded", createdAt: nowIso(), alt: file.name });
+    onBroadcastBgChange(broadcastSrc);
     e.target.value = "";
   }
 
@@ -87,7 +128,7 @@ export function PlaylistIdentityPanel({
     onMoodTagsChange(tags);
   }
 
-  return (
+  return createPortal(
     <div className="export-modal-overlay" onClick={onClose}>
       <div
         className="export-modal pip-modal"
@@ -112,7 +153,7 @@ export function PlaylistIdentityPanel({
               label="Background"
               image={playlist.backgroundImage}
               onFile={handleBgFile}
-              onClear={() => onBackgroundImageChange(undefined)}
+              onClear={() => { onBackgroundImageChange(undefined); onBroadcastBgChange(undefined); }}
               fileRef={bgFileRef}
             />
           </div>
@@ -167,6 +208,7 @@ export function PlaylistIdentityPanel({
           <button className="tb-btn ph-btn-primary" onClick={onClose}>Save Changes</button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

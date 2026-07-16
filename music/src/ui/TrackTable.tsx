@@ -47,8 +47,8 @@ export function TrackTable({ tracks, excludedTrackIds, lockedTrackIds, onExclude
                 <tr key={t.trackId} className={excluded ? "row-excluded" : ""}>
                   <td>{t.title}</td>
                   <td>{t.artist}</td>
-                  <td>{t.bpm}</td>
-                  <td>{t.camelotKey}</td>
+                  <td>{t.bpm && t.bpm > 0 ? t.bpm : "—"}</td>
+                  <td>{t.camelotKey ?? "—"}</td>
                   <td>
                     {formatNumber(t.energy, 2, "—")}
                     {t.energySource === "estimated" && <span className="est-badge" title="Estimated from BPM"> ~</span>}

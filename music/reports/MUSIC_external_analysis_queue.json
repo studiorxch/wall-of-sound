@@ -1,0 +1,2306 @@
+[
+  {
+    "recordId": "ext_mr9smtpl_wb0b",
+    "artist": "Soulphiction",
+    "title": "White Ropes",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/01. Soulphiction - White Ropes.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_agtt",
+    "artist": "Isolée",
+    "title": "Beau Mot Plage",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/02. Isolée - Beau Mot Plage.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_t2x5",
+    "artist": "Herbert, Matthew Herbert",
+    "title": "Going Around",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/03. Herbert, Matthew Herbert - Going Around.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_c1zv",
+    "artist": "Pantha Du Prince",
+    "title": "Lay in a Shimmer",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/04. Pantha Du Prince - Lay in a Shimmer.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_3sqx",
+    "artist": "STL",
+    "title": "Silent State",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/05. STL - Silent State.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_fs4x",
+    "artist": "Closer Musik",
+    "title": "Closer Dancer",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/06. Closer Musik - Closer Dancer.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_ulai",
+    "artist": "Argy",
+    "title": "Love Dose (Luciano Remix)",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/07. Argy - Love Dose (Luciano Remix).mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_6cl1",
+    "artist": "Superpitcher",
+    "title": "Happiness",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/08. Superpitcher - Happiness.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_e4g9",
+    "artist": "Matias Aguayo",
+    "title": "Minimal",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/09. Matias Aguayo - Minimal.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_p1m1",
+    "artist": "Ricardo Villalobos",
+    "title": "Ichso (Original Mix)",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/10. Ricardo Villalobos - Ichso (Original Mix).mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_ojn5",
+    "artist": "Farben",
+    "title": "Love To Love You Baby (Textstar Version)",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/11. Farben - Love To Love You Baby (Textstar Version).mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_0meu",
+    "artist": "Maurizio",
+    "title": "M07a",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/12. Maurizio - M07a.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_36x7",
+    "artist": "burger-ink",
+    "title": "Elvism",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/13. burger-ink - Elvism.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_mmq9",
+    "artist": "IZ, Diz",
+    "title": "Mouth (Brad Peep's Remix For Friends)",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/14. IZ, Diz - Mouth (Brad Peep's Remix For Friends).mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_i0rw",
+    "artist": "M-i-5",
+    "title": "Eng",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/15. M-i-5 - Eng.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_8hnz",
+    "artist": "Luciano",
+    "title": "Father",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/16. Luciano - Father.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_dihi",
+    "artist": "Robag Wruhme",
+    "title": "Wuzzelbud Kk",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/17. Robag Wruhme - Wuzzelbud Kk.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_lre8",
+    "artist": "Steve Bug, Richie Hawtin",
+    "title": "Low Blow (Bug vs. Hawtin)",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/18. Steve Bug, Richie Hawtin - Low Blow (Bug vs. Hawtin).mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_blkb",
+    "artist": "Thomas Brinkmann",
+    "title": "Isch",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/19. Thomas Brinkmann - Isch.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_t3bf",
+    "artist": "Markus Nikolai",
+    "title": "Passion (Freaks Return of the Blue Meany Vocal)",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/20. Markus Nikolai - Passion (Freaks Return of the Blue Meany Vocal).mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_5jm8",
+    "artist": "Mike Ink",
+    "title": "Polka Trax 1",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/21. Mike Ink - Polka Trax 1.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_zz8y",
+    "artist": "Basic Channel",
+    "title": "Phylyps Trak Ii-Ii",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/22. Basic Channel - Phylyps Trak Ii-Ii/22. Basic Channel - Phylyps Trak Ii-Ii.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_8yet",
+    "artist": "Michael Mayer",
+    "title": "Lovefood",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/23. Michael Mayer - Lovefood.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_jzg7",
+    "artist": "DBX",
+    "title": "Losing Control (Richie Hawtin Remix)",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/24. DBX - Losing Control (Richie Hawtin Remix).mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_i746",
+    "artist": "MRI",
+    "title": "Dauerläufer",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/25. MRI - Dauerläufer.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_h5mm",
+    "artist": "Petre Inspirescu",
+    "title": "Mostra",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/26. Petre Inspirescu - Mostra.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_wrd5",
+    "artist": "Rhadoo",
+    "title": "Bau",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/27. Rhadoo - Bau.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_63e2",
+    "artist": "Plastikman",
+    "title": "Spastik (Dubfire Rework)",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/28. Plastikman - Spastik (Dubfire Rework).mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_cv9e",
+    "artist": "Johnny D",
+    "title": "Orbitalife",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/29. Johnny D - Orbitalife.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_9ewm",
+    "artist": "Lawrence",
+    "title": "Swap",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/30. Lawrence - Swap.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_qhjj",
+    "artist": "Herbert, Matthew Herbert",
+    "title": "The Audience",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/31. Herbert, Matthew Herbert - The Audience.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_g2ug",
+    "artist": "Mathew Jonson",
+    "title": "Marionette",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/32. Mathew Jonson - Marionette.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_mtqs",
+    "artist": "DJ Koze",
+    "title": "The Geklöppel Continues",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/33. DJ Koze - The Geklöppel Continues.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_7as3",
+    "artist": "Luciano, Quenum",
+    "title": "Orange Mistake",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/34. Luciano, Quenum - Orange Mistake.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_svbl",
+    "artist": "Soulphiction",
+    "title": "Velveteens",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/35. Soulphiction - Velveteens.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_fu5s",
+    "artist": "Heiko Laux",
+    "title": "Moved (Ricardo Villalobos Remix)",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/36. Heiko Laux - Moved (Ricardo Villalobos Remix).mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_6h3j",
+    "artist": "The MFA",
+    "title": "The Difference It Makes",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/37. The MFA - The Difference It Makes - The Difference It Makes.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_dcn1",
+    "artist": "Pole",
+    "title": "Achterbahn (Dimbiman Remix)",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/38. Pole - Achterbahn (Dimbiman Remix).mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_cq6p",
+    "artist": "Matthew Dear",
+    "title": "Dog Days (Pantytec Remix)",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/39. Matthew Dear - Dog Days (Pantytec Remix).mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_fbup",
+    "artist": "Losoul",
+    "title": "Raw Beauty",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/40. Losoul - Raw Beauty.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_eyub",
+    "artist": "Wighnomy Brothers",
+    "title": "Wurz + Blosse",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/41. Wighnomy Brothers - Wurz + Blosse.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_944a",
+    "artist": "Moomin",
+    "title": "Sleep Tight (Original Mix)",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/42. Moomin - Sleep Tight (Original Mix).mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_ac4f",
+    "artist": "",
+    "title": "43. Audio Werner - ",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/43. Audio Werner - .mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_9c6r",
+    "artist": "Willow",
+    "title": "Untitled A1",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/44. Willow - Untitled A1.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_jf0q",
+    "artist": "Cosmic Sandwich",
+    "title": "Cosmic Sandwich (Extended Version)",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/45. Cosmic Sandwich - Cosmic Sandwich (Extended Version).mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_i7qg",
+    "artist": "Dominik Eulberg",
+    "title": "Sansula (Max Cooper's ''Lost in Sound'' Mix)",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/46. Dominik Eulberg - Sansula (Max Cooper's ''Lost in Sound'' Mix).mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_24en",
+    "artist": "Jan Jelinek",
+    "title": "Tendency",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/47. Jan Jelinek - Tendency.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_rsaw",
+    "artist": "Smallpeople, Rau",
+    "title": "Unke (Original)",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/48. Smallpeople, Rau - Unke (Original).mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_bzma",
+    "artist": "Sieg über die Sonne",
+    "title": "Gone",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/49. Sieg über die Sonne - Gone.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_7grf",
+    "artist": "Cobblestone Jazz",
+    "title": "Lime In Da Coconut",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/50. Cobblestone Jazz - Lime In Da Coconut.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_1gut",
+    "artist": "Cabanne",
+    "title": "Boulinge",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/51. Cabanne - Boulinge.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_cx4o",
+    "artist": "Markus Nikolai",
+    "title": "Wheelsucker",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/52. Markus Nikolai - Wheelsucker.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_7t07",
+    "artist": "Sven Väth",
+    "title": "Cala Llonga (Ricardo Villalobos Remix)",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/53. Sven Väth - Cala Llonga (Ricardo Villalobos Remix).mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_3h2j",
+    "artist": "Maayan Nidam",
+    "title": "Perplexday",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/54. Maayan Nidam - Perplexday.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_xmk4",
+    "artist": "Kassem Mosse",
+    "title": "Untitled B1",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/55. Kassem Mosse - Untitled B1.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_2ijm",
+    "artist": "DJ Koze",
+    "title": "Getreide-phunk",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/56. DJ Koze - Getreide-phunk.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_r1wl",
+    "artist": "Trentemøller",
+    "title": "Polar Shift (Original Mix)",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/57. Trentemøller - Polar Shift (Original Mix).mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_h9ow",
+    "artist": "Bruno Pronsato",
+    "title": "There's Galaxies Better (Melchior Productions Ltd. Spacelab Mix)",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/58. Theres Galaxies Better (Melchior Productions Ltd. Spacelab Mix)/58. Bruno Pronsato - There's Galaxies Better (Melchior Productions Ltd. Spacelab Mix).mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_dgsl",
+    "artist": "Mathew Jonson",
+    "title": "Return of the Zombie Bikers",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/59. Mathew Jonson - Return of the Zombie Bikers.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_tlki",
+    "artist": "Losoul",
+    "title": "What The ..",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/60. Losoul - What The ...mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_5vk6",
+    "artist": "Willow",
+    "title": "Feel Me",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/61. Willow - Feel Me.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_f9my",
+    "artist": "DeWalta",
+    "title": "Eftive",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/62. DeWalta - Eftive.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_i9cl",
+    "artist": "Luomo",
+    "title": "Synkro",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/63. Luomo - Synkro.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_gcwr",
+    "artist": "Matthew Herbert",
+    "title": "Mistakes (Housey Housey Version)",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/64. Matthew Herbert - Mistakes (Housey Housey Version).mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_t81v",
+    "artist": "Akufen",
+    "title": "Battlestar Galacticlown (Original Mix)",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/65. Akufen - Battlestar Galacticlown (Original Mix).mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_6crt",
+    "artist": "Efdemin",
+    "title": "Bergwein",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/66. Efdemin - Bergwein.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_4fre",
+    "artist": "Maurizio",
+    "title": "M04a (Full 12'' Length)",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/67. Maurizio - M04a (Full 12'' Length).mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_y5e8",
+    "artist": "STL",
+    "title": "Earworm (Original Mix)",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/68. STL - Earworm (Original Mix).mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_x4kj",
+    "artist": "Melchior Productions Ltd.",
+    "title": "Cinza De Fenix",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/69. Melchior Productions Ltd. - Cinza De Fenix.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_wpj0",
+    "artist": "Marc Houle",
+    "title": "Borrowed Gear",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/70. Marc Houle - Borrowed Gear.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_12ds",
+    "artist": "UND",
+    "title": "Rodeo (Crowd Pleaser Remix)",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/71. UND - Rodeo (Crowd Pleaser Remix).mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_5kco",
+    "artist": "Minilogue",
+    "title": "The Girl from Botany Bay (Original Mix)",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/72. Minilogue - The Girl from Botany Bay (Original Mix).mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_qhfk",
+    "artist": "The Field",
+    "title": "Over The Ice",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/73. The Field - Over The Ice.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_a97g",
+    "artist": "Kassem Mosse",
+    "title": "Untitled A1",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/74. Kassem Mosse - Untitled A1.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_ad90",
+    "artist": "Ricardo Villalobos",
+    "title": "Humusweg",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/75. Ricardo Villalobos - Humusweg.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_zuet",
+    "artist": "Michael Mayer",
+    "title": "Pride Is Weaker Than Love",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/76. Michael Mayer - Pride Is Weaker Than Love.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_fdom",
+    "artist": "Robag Wruhme, Wighnomy Brothers",
+    "title": "Killerteppich",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/77. Robag Wruhme, Wighnomy Brothers - Killerteppich.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_j8tc",
+    "artist": "Christopher Rau",
+    "title": "Like Yesterday (Original)",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/78. Christopher Rau - Like Yesterday (Original).mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_vrla",
+    "artist": "Matthew Dear",
+    "title": "Stealing Moves",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/79. Matthew Dear - Stealing Moves.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_269h",
+    "artist": "Dominik Eulberg",
+    "title": "Der Tanz Der Gluehwuermchen",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/80. Dominik Eulberg - Der Tanz Der Gluehwuermchen.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_b3p0",
+    "artist": "Thomas Brinkmann",
+    "title": "Loplop",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/81. Thomas Brinkmann - Loplop.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_9xju",
+    "artist": "Petre Inspirescu",
+    "title": "Galantar",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/82. Petre Inspirescu - Galantar.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_wmx7",
+    "artist": "Smallpeople",
+    "title": "Black Ice (Original Mix)",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/83. Smallpeople - Black Ice (Original Mix).mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_2m1s",
+    "artist": "Melchior Productions Ltd.",
+    "title": "Todo Mundo",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/84. Melchior Productions Ltd. - Todo Mundo.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_94i4",
+    "artist": "James Holden",
+    "title": "Lump",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/85. James Holden - Lump.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_vujh",
+    "artist": "Superpitcher",
+    "title": "Baby´s On Fire",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/86. Superpitcher - Baby´s On Fire.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_p5bk",
+    "artist": "Lowtec",
+    "title": "Meandyou.dub",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/87. Lowtec - Meandyou.dub.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_3ikc",
+    "artist": "Cobblestone Jazz",
+    "title": "India In Me",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/88. Cobblestone Jazz - India In Me.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_cv6b",
+    "artist": "Trentemøller",
+    "title": "Moan (Trentemoeller Remix)",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/89. Trentemøller - Moan (Trentemoeller Remix).mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_otn1",
+    "artist": "Isolée",
+    "title": "Raum2",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/90. Isolée - Raum2.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_8fm7",
+    "artist": "Onur Özer",
+    "title": "Envy",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/91. Onur Özer - Envy.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_1xxj",
+    "artist": "Sascha Dive",
+    "title": "Jus Groove",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/92. Sascha Dive - Jus Groove.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_pky4",
+    "artist": "Wighnomy Bros.",
+    "title": "Wombat",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/93. Wighnomy Bros. - Wombat.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_zdad",
+    "artist": "Dettinger",
+    "title": "Lemon",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/94. Dettinger - Lemon.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_9id6",
+    "artist": "Federico Molinari",
+    "title": "Takk Brett (Original Mix)",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/95. Federico Molinari - Takk Brett (Original Mix).mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr9smtpl_upi3",
+    "artist": "Booka Shade",
+    "title": "Body Language (Interpretation)",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/96. Booka Shade - Body Language (Interpretation).mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_fwhs",
+    "artist": "Soulphiction",
+    "title": "White Ropes",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/01. Soulphiction - White Ropes.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_wvg5",
+    "artist": "Isolée",
+    "title": "Beau Mot Plage",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/02. Isolée - Beau Mot Plage.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_vyrc",
+    "artist": "Herbert, Matthew Herbert",
+    "title": "Going Around",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/03. Herbert, Matthew Herbert - Going Around.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_bfoe",
+    "artist": "Pantha Du Prince",
+    "title": "Lay in a Shimmer",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/04. Pantha Du Prince - Lay in a Shimmer.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_rz3g",
+    "artist": "STL",
+    "title": "Silent State",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/05. STL - Silent State.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_4glm",
+    "artist": "Closer Musik",
+    "title": "Closer Dancer",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/06. Closer Musik - Closer Dancer.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_gkup",
+    "artist": "Argy",
+    "title": "Love Dose (Luciano Remix)",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/07. Argy - Love Dose (Luciano Remix).mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_adfr",
+    "artist": "Superpitcher",
+    "title": "Happiness",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/08. Superpitcher - Happiness.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_n81g",
+    "artist": "Matias Aguayo",
+    "title": "Minimal",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/09. Matias Aguayo - Minimal.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_hi9h",
+    "artist": "Ricardo Villalobos",
+    "title": "Ichso (Original Mix)",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/10. Ricardo Villalobos - Ichso (Original Mix).mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_55bw",
+    "artist": "Farben",
+    "title": "Love To Love You Baby (Textstar Version)",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/11. Farben - Love To Love You Baby (Textstar Version).mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_ukhw",
+    "artist": "Maurizio",
+    "title": "M07a",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/12. Maurizio - M07a.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_8tkq",
+    "artist": "burger-ink",
+    "title": "Elvism",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/13. burger-ink - Elvism.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_k8mb",
+    "artist": "IZ, Diz",
+    "title": "Mouth (Brad Peep's Remix For Friends)",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/14. IZ, Diz - Mouth (Brad Peep's Remix For Friends).mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_8jnq",
+    "artist": "M-i-5",
+    "title": "Eng",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/15. M-i-5 - Eng.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_4mbp",
+    "artist": "Luciano",
+    "title": "Father",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/16. Luciano - Father.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_omkq",
+    "artist": "Robag Wruhme",
+    "title": "Wuzzelbud Kk",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/17. Robag Wruhme - Wuzzelbud Kk.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_3foe",
+    "artist": "Steve Bug, Richie Hawtin",
+    "title": "Low Blow (Bug vs. Hawtin)",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/18. Steve Bug, Richie Hawtin - Low Blow (Bug vs. Hawtin).mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_2p3h",
+    "artist": "Thomas Brinkmann",
+    "title": "Isch",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/19. Thomas Brinkmann - Isch.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_ugbp",
+    "artist": "Markus Nikolai",
+    "title": "Passion (Freaks Return of the Blue Meany Vocal)",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/20. Markus Nikolai - Passion (Freaks Return of the Blue Meany Vocal).mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_aloc",
+    "artist": "Mike Ink",
+    "title": "Polka Trax 1",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/21. Mike Ink - Polka Trax 1.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_9sb1",
+    "artist": "Basic Channel",
+    "title": "Phylyps Trak Ii-Ii",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/22. Basic Channel - Phylyps Trak Ii-Ii/22. Basic Channel - Phylyps Trak Ii-Ii.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_xueq",
+    "artist": "Michael Mayer",
+    "title": "Lovefood",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/23. Michael Mayer - Lovefood.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_64op",
+    "artist": "DBX",
+    "title": "Losing Control (Richie Hawtin Remix)",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/24. DBX - Losing Control (Richie Hawtin Remix).mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_joox",
+    "artist": "MRI",
+    "title": "Dauerläufer",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/25. MRI - Dauerläufer.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_4c0m",
+    "artist": "Petre Inspirescu",
+    "title": "Mostra",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/26. Petre Inspirescu - Mostra.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_4efe",
+    "artist": "Rhadoo",
+    "title": "Bau",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/27. Rhadoo - Bau.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_s0wz",
+    "artist": "Plastikman",
+    "title": "Spastik (Dubfire Rework)",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/28. Plastikman - Spastik (Dubfire Rework).mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_sblg",
+    "artist": "Johnny D",
+    "title": "Orbitalife",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/29. Johnny D - Orbitalife.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_2iit",
+    "artist": "Lawrence",
+    "title": "Swap",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/30. Lawrence - Swap.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_0jtb",
+    "artist": "Herbert, Matthew Herbert",
+    "title": "The Audience",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/31. Herbert, Matthew Herbert - The Audience.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_m5li",
+    "artist": "Mathew Jonson",
+    "title": "Marionette",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/32. Mathew Jonson - Marionette.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_h5xn",
+    "artist": "DJ Koze",
+    "title": "The Geklöppel Continues",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/33. DJ Koze - The Geklöppel Continues.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_i7lh",
+    "artist": "Luciano, Quenum",
+    "title": "Orange Mistake",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/34. Luciano, Quenum - Orange Mistake.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_qsk5",
+    "artist": "Soulphiction",
+    "title": "Velveteens",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/35. Soulphiction - Velveteens.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_8wir",
+    "artist": "Heiko Laux",
+    "title": "Moved (Ricardo Villalobos Remix)",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/36. Heiko Laux - Moved (Ricardo Villalobos Remix).mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_hdux",
+    "artist": "The MFA",
+    "title": "The Difference It Makes",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/37. The MFA - The Difference It Makes - The Difference It Makes.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_0i89",
+    "artist": "Pole",
+    "title": "Achterbahn (Dimbiman Remix)",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/38. Pole - Achterbahn (Dimbiman Remix).mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_wy9t",
+    "artist": "Matthew Dear",
+    "title": "Dog Days (Pantytec Remix)",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/39. Matthew Dear - Dog Days (Pantytec Remix).mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_5m8k",
+    "artist": "Losoul",
+    "title": "Raw Beauty",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/40. Losoul - Raw Beauty.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_06wx",
+    "artist": "Wighnomy Brothers",
+    "title": "Wurz + Blosse",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/41. Wighnomy Brothers - Wurz + Blosse.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_52f8",
+    "artist": "Moomin",
+    "title": "Sleep Tight (Original Mix)",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/42. Moomin - Sleep Tight (Original Mix).mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_k7l1",
+    "artist": "",
+    "title": "43. Audio Werner - ",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/43. Audio Werner - .mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_5ile",
+    "artist": "Willow",
+    "title": "Untitled A1",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/44. Willow - Untitled A1.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_t1s1",
+    "artist": "Cosmic Sandwich",
+    "title": "Cosmic Sandwich (Extended Version)",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/45. Cosmic Sandwich - Cosmic Sandwich (Extended Version).mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_g4n5",
+    "artist": "Dominik Eulberg",
+    "title": "Sansula (Max Cooper's ''Lost in Sound'' Mix)",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/46. Dominik Eulberg - Sansula (Max Cooper's ''Lost in Sound'' Mix).mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_lvvm",
+    "artist": "Jan Jelinek",
+    "title": "Tendency",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/47. Jan Jelinek - Tendency.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_705z",
+    "artist": "Smallpeople, Rau",
+    "title": "Unke (Original)",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/48. Smallpeople, Rau - Unke (Original).mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_26o4",
+    "artist": "Sieg über die Sonne",
+    "title": "Gone",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/49. Sieg über die Sonne - Gone.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_8pj4",
+    "artist": "Cobblestone Jazz",
+    "title": "Lime In Da Coconut",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/50. Cobblestone Jazz - Lime In Da Coconut.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_oygd",
+    "artist": "Cabanne",
+    "title": "Boulinge",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/51. Cabanne - Boulinge.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_peda",
+    "artist": "Markus Nikolai",
+    "title": "Wheelsucker",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/52. Markus Nikolai - Wheelsucker.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_tfuy",
+    "artist": "Sven Väth",
+    "title": "Cala Llonga (Ricardo Villalobos Remix)",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/53. Sven Väth - Cala Llonga (Ricardo Villalobos Remix).mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_kfmd",
+    "artist": "Maayan Nidam",
+    "title": "Perplexday",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/54. Maayan Nidam - Perplexday.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_goct",
+    "artist": "Kassem Mosse",
+    "title": "Untitled B1",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/55. Kassem Mosse - Untitled B1.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_obe0",
+    "artist": "DJ Koze",
+    "title": "Getreide-phunk",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/56. DJ Koze - Getreide-phunk.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_gfjo",
+    "artist": "Trentemøller",
+    "title": "Polar Shift (Original Mix)",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/57. Trentemøller - Polar Shift (Original Mix).mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_ecxe",
+    "artist": "Bruno Pronsato",
+    "title": "There's Galaxies Better (Melchior Productions Ltd. Spacelab Mix)",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/58. Theres Galaxies Better (Melchior Productions Ltd. Spacelab Mix)/58. Bruno Pronsato - There's Galaxies Better (Melchior Productions Ltd. Spacelab Mix).mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_cwhe",
+    "artist": "Mathew Jonson",
+    "title": "Return of the Zombie Bikers",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/59. Mathew Jonson - Return of the Zombie Bikers.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_t6uf",
+    "artist": "Losoul",
+    "title": "What The ..",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/60. Losoul - What The ...mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_dri2",
+    "artist": "Willow",
+    "title": "Feel Me",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/61. Willow - Feel Me.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_fszo",
+    "artist": "DeWalta",
+    "title": "Eftive",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/62. DeWalta - Eftive.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_ix2a",
+    "artist": "Luomo",
+    "title": "Synkro",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/63. Luomo - Synkro.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_q4f3",
+    "artist": "Matthew Herbert",
+    "title": "Mistakes (Housey Housey Version)",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/64. Matthew Herbert - Mistakes (Housey Housey Version).mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_qf67",
+    "artist": "Akufen",
+    "title": "Battlestar Galacticlown (Original Mix)",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/65. Akufen - Battlestar Galacticlown (Original Mix).mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_vxxo",
+    "artist": "Efdemin",
+    "title": "Bergwein",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/66. Efdemin - Bergwein.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_yes4",
+    "artist": "Maurizio",
+    "title": "M04a (Full 12'' Length)",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/67. Maurizio - M04a (Full 12'' Length).mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_h8hu",
+    "artist": "STL",
+    "title": "Earworm (Original Mix)",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/68. STL - Earworm (Original Mix).mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_mb3g",
+    "artist": "Melchior Productions Ltd.",
+    "title": "Cinza De Fenix",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/69. Melchior Productions Ltd. - Cinza De Fenix.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_r1wc",
+    "artist": "Marc Houle",
+    "title": "Borrowed Gear",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/70. Marc Houle - Borrowed Gear.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_t0g8",
+    "artist": "UND",
+    "title": "Rodeo (Crowd Pleaser Remix)",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/71. UND - Rodeo (Crowd Pleaser Remix).mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_4x1r",
+    "artist": "Minilogue",
+    "title": "The Girl from Botany Bay (Original Mix)",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/72. Minilogue - The Girl from Botany Bay (Original Mix).mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_t52r",
+    "artist": "The Field",
+    "title": "Over The Ice",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/73. The Field - Over The Ice.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_u1wm",
+    "artist": "Kassem Mosse",
+    "title": "Untitled A1",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/74. Kassem Mosse - Untitled A1.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_9ri4",
+    "artist": "Ricardo Villalobos",
+    "title": "Humusweg",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/75. Ricardo Villalobos - Humusweg.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_bhhz",
+    "artist": "Michael Mayer",
+    "title": "Pride Is Weaker Than Love",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/76. Michael Mayer - Pride Is Weaker Than Love.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_htk1",
+    "artist": "Robag Wruhme, Wighnomy Brothers",
+    "title": "Killerteppich",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/77. Robag Wruhme, Wighnomy Brothers - Killerteppich.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_551a",
+    "artist": "Christopher Rau",
+    "title": "Like Yesterday (Original)",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/78. Christopher Rau - Like Yesterday (Original).mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_uawd",
+    "artist": "Matthew Dear",
+    "title": "Stealing Moves",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/79. Matthew Dear - Stealing Moves.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_o0jw",
+    "artist": "Dominik Eulberg",
+    "title": "Der Tanz Der Gluehwuermchen",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/80. Dominik Eulberg - Der Tanz Der Gluehwuermchen.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_ey5z",
+    "artist": "Thomas Brinkmann",
+    "title": "Loplop",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/81. Thomas Brinkmann - Loplop.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_wi3j",
+    "artist": "Petre Inspirescu",
+    "title": "Galantar",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/82. Petre Inspirescu - Galantar.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_kp72",
+    "artist": "Smallpeople",
+    "title": "Black Ice (Original Mix)",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/83. Smallpeople - Black Ice (Original Mix).mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_hq8q",
+    "artist": "Melchior Productions Ltd.",
+    "title": "Todo Mundo",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/84. Melchior Productions Ltd. - Todo Mundo.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_y7nm",
+    "artist": "James Holden",
+    "title": "Lump",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/85. James Holden - Lump.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_w9tn",
+    "artist": "Superpitcher",
+    "title": "Baby´s On Fire",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/86. Superpitcher - Baby´s On Fire.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_via8",
+    "artist": "Lowtec",
+    "title": "Meandyou.dub",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/87. Lowtec - Meandyou.dub.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_ixkp",
+    "artist": "Cobblestone Jazz",
+    "title": "India In Me",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/88. Cobblestone Jazz - India In Me.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_pgkv",
+    "artist": "Trentemøller",
+    "title": "Moan (Trentemoeller Remix)",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/89. Trentemøller - Moan (Trentemoeller Remix).mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_kp0y",
+    "artist": "Isolée",
+    "title": "Raum2",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/90. Isolée - Raum2.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_mn4l",
+    "artist": "Onur Özer",
+    "title": "Envy",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/91. Onur Özer - Envy.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_7zz2",
+    "artist": "Sascha Dive",
+    "title": "Jus Groove",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/92. Sascha Dive - Jus Groove.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_gqoh",
+    "artist": "Wighnomy Bros.",
+    "title": "Wombat",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/93. Wighnomy Bros. - Wombat.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_bn0h",
+    "artist": "Dettinger",
+    "title": "Lemon",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/94. Dettinger - Lemon.mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_8kq8",
+    "artist": "Federico Molinari",
+    "title": "Takk Brett (Original Mix)",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/95. Federico Molinari - Takk Brett (Original Mix).mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  },
+  {
+    "recordId": "ext_mr3z12ib_veof",
+    "artist": "Booka Shade",
+    "title": "Body Language (Interpretation)",
+    "audioPath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/96. Booka Shade - Body Language (Interpretation).mp3",
+    "needs": [
+      "moodTags",
+      "mood",
+      "grouping",
+      "genres"
+    ]
+  }
+]

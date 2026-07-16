@@ -1,0 +1,1250 @@
+{
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/01. Soulphiction - White Ropes.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/01. Soulphiction - White Ropes.mp3",
+    "fileSizeBytes": 9638027,
+    "mtimeMs": 1772145506669,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 123.05,
+      "key_camelot": "9A",
+      "energy": 0.3846,
+      "duration_sec": 235.26
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/02. Isolée - Beau Mot Plage.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/02. Isolée - Beau Mot Plage.mp3",
+    "fileSizeBytes": 16147740,
+    "mtimeMs": 1772145527140,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 129.2,
+      "key_camelot": "10A",
+      "energy": 0.3144,
+      "duration_sec": 398.0
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/03. Herbert, Matthew Herbert - Going Around.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/03. Herbert, Matthew Herbert - Going Around.mp3",
+    "fileSizeBytes": 16854205,
+    "mtimeMs": 1772145405330,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 114.84,
+      "key_camelot": "7A",
+      "energy": 0.2436,
+      "duration_sec": 415.65
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/04. Pantha Du Prince - Lay in a Shimmer.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/04. Pantha Du Prince - Lay in a Shimmer.mp3",
+    "fileSizeBytes": 15987854,
+    "mtimeMs": 1772145293330,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 99.38,
+      "key_camelot": "9B",
+      "energy": 0.1961,
+      "duration_sec": 394.01
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/05. STL - Silent State.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/05. STL - Silent State.mp3",
+    "fileSizeBytes": 28565252,
+    "mtimeMs": 1772145460910,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 120.19,
+      "key_camelot": "4A",
+      "energy": 0.286,
+      "duration_sec": 708.44
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/06. Closer Musik - Closer Dancer.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/06. Closer Musik - Closer Dancer.mp3",
+    "fileSizeBytes": 17935493,
+    "mtimeMs": 1772145475390,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 114.84,
+      "key_camelot": "7A",
+      "energy": 0.2708,
+      "duration_sec": 442.7
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/07. Argy - Love Dose (Luciano Remix).mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/07. Argy - Love Dose (Luciano Remix).mp3",
+    "fileSizeBytes": 16301297,
+    "mtimeMs": 1772145367930,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 126.05,
+      "key_camelot": "3A",
+      "energy": 0.4724,
+      "duration_sec": 401.84
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/08. Superpitcher - Happiness.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/08. Superpitcher - Happiness.mp3",
+    "fileSizeBytes": 16392167,
+    "mtimeMs": 1772145358510,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 126.05,
+      "key_camelot": "4A",
+      "energy": 0.3208,
+      "duration_sec": 404.12
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/09. Matias Aguayo - Minimal.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/09. Matias Aguayo - Minimal.mp3",
+    "fileSizeBytes": 15970027,
+    "mtimeMs": 1772145416690,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 129.2,
+      "key_camelot": "1A",
+      "energy": 0.3899,
+      "duration_sec": 393.56
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/10. Ricardo Villalobos - Ichso (Original Mix).mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/10. Ricardo Villalobos - Ichso (Original Mix).mp3",
+    "fileSizeBytes": 28872623,
+    "mtimeMs": 1772145484500,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 129.2,
+      "key_camelot": "4A",
+      "energy": 0.1975,
+      "duration_sec": 716.17
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/11. Farben - Love To Love You Baby (Textstar Version).mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/11. Farben - Love To Love You Baby (Textstar Version).mp3",
+    "fileSizeBytes": 15111243,
+    "mtimeMs": 1772145478540,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 117.45,
+      "key_camelot": "6A",
+      "energy": 0.239,
+      "duration_sec": 372.08
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/12. Maurizio - M07a.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/12. Maurizio - M07a.mp3",
+    "fileSizeBytes": 29122123,
+    "mtimeMs": 1772145511410,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 123.05,
+      "key_camelot": "7A",
+      "energy": 0.3609,
+      "duration_sec": 722.37
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/13. burger-ink - Elvism.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/13. burger-ink - Elvism.mp3",
+    "fileSizeBytes": 12807276,
+    "mtimeMs": 1772144839760,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 120.19,
+      "key_camelot": "9A",
+      "energy": 0.2552,
+      "duration_sec": 314.54
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/14. IZ, Diz - Mouth (Brad Peep's Remix For Friends).mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/14. IZ, Diz - Mouth (Brad Peep's Remix For Friends).mp3",
+    "fileSizeBytes": 18166604,
+    "mtimeMs": 1772145396450,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 126.05,
+      "key_camelot": "12A",
+      "energy": 0.1947,
+      "duration_sec": 448.47
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/15. M-i-5 - Eng.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/15. M-i-5 - Eng.mp3",
+    "fileSizeBytes": 15334696,
+    "mtimeMs": 1772145433280,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 132.51,
+      "key_camelot": "10A",
+      "energy": 0.3158,
+      "duration_sec": 377.68
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/16. Luciano - Father.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/16. Luciano - Father.mp3",
+    "fileSizeBytes": 32990444,
+    "mtimeMs": 1772145486040,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 126.05,
+      "key_camelot": "2A",
+      "energy": 0.2572,
+      "duration_sec": 819.07
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/17. Robag Wruhme - Wuzzelbud Kk.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/17. Robag Wruhme - Wuzzelbud Kk.mp3",
+    "fileSizeBytes": 15010842,
+    "mtimeMs": 1772145315140,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 129.2,
+      "key_camelot": "8A",
+      "energy": 0.3076,
+      "duration_sec": 369.58
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/18. Steve Bug, Richie Hawtin - Low Blow (Bug vs. Hawtin).mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/18. Steve Bug, Richie Hawtin - Low Blow (Bug vs. Hawtin).mp3",
+    "fileSizeBytes": 19586644,
+    "mtimeMs": 1772145395190,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "partial",
+      "bpm": 60.8,
+      "key_camelot": "2A",
+      "energy": 0.418,
+      "duration_sec": 483.97
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/19. Thomas Brinkmann - Isch.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/19. Thomas Brinkmann - Isch.mp3",
+    "fileSizeBytes": 10577410,
+    "mtimeMs": 1772144867020,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 60.09,
+      "key_camelot": "1A",
+      "energy": 0.2657,
+      "duration_sec": 258.72
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/20. Markus Nikolai - Passion (Freaks Return of the Blue Meany Vocal).mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/20. Markus Nikolai - Passion (Freaks Return of the Blue Meany Vocal).mp3",
+    "fileSizeBytes": 19749639,
+    "mtimeMs": 1772145335060,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 129.2,
+      "key_camelot": "6A",
+      "energy": 0.3036,
+      "duration_sec": 488.05
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/21. Mike Ink - Polka Trax 1.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/21. Mike Ink - Polka Trax 1.mp3",
+    "fileSizeBytes": 15509275,
+    "mtimeMs": 1772145501760,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 129.2,
+      "key_camelot": "8A",
+      "energy": 0.393,
+      "duration_sec": 382.09
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/22. Basic Channel - Phylyps Trak Ii-Ii/22. Basic Channel - Phylyps Trak Ii-Ii.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/22. Basic Channel - Phylyps Trak Ii-Ii/22. Basic Channel - Phylyps Trak Ii-Ii.mp3",
+    "fileSizeBytes": 31972695,
+    "mtimeMs": 1772145481680,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 129.2,
+      "key_camelot": "2A",
+      "energy": 0.2239,
+      "duration_sec": 793.63
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/23. Michael Mayer - Lovefood.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/23. Michael Mayer - Lovefood.mp3",
+    "fileSizeBytes": 11096259,
+    "mtimeMs": 1772145186690,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 126.05,
+      "key_camelot": "9A",
+      "energy": 0.2396,
+      "duration_sec": 271.63
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/24. DBX - Losing Control (Richie Hawtin Remix).mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/24. DBX - Losing Control (Richie Hawtin Remix).mp3",
+    "fileSizeBytes": 15833333,
+    "mtimeMs": 1772145402190,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 129.2,
+      "key_camelot": "6A",
+      "energy": 0.6384,
+      "duration_sec": 390.06
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/25. MRI - Dauerläufer.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/25. MRI - Dauerläufer.mp3",
+    "fileSizeBytes": 16909386,
+    "mtimeMs": 1772145299450,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 129.2,
+      "key_camelot": "2A",
+      "energy": 0.1498,
+      "duration_sec": 417.05
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/26. Petre Inspirescu - Mostra.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/26. Petre Inspirescu - Mostra.mp3",
+    "fileSizeBytes": 28292646,
+    "mtimeMs": 1772145524160,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 126.05,
+      "key_camelot": "10A",
+      "energy": 0.3202,
+      "duration_sec": 701.62
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/27. Rhadoo - Bau.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/27. Rhadoo - Bau.mp3",
+    "fileSizeBytes": 22617755,
+    "mtimeMs": 1772145408230,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 126.05,
+      "key_camelot": "1A",
+      "energy": 0.3642,
+      "duration_sec": 559.75
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/28. Plastikman - Spastik (Dubfire Rework).mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/28. Plastikman - Spastik (Dubfire Rework).mp3",
+    "fileSizeBytes": 22955268,
+    "mtimeMs": 1772145425810,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 129.2,
+      "key_camelot": "2A",
+      "energy": 0.2865,
+      "duration_sec": 568.19
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/29. Johnny D - Orbitalife.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/29. Johnny D - Orbitalife.mp3",
+    "fileSizeBytes": 28550602,
+    "mtimeMs": 1772145459340,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 129.2,
+      "key_camelot": "1A",
+      "energy": 0.2214,
+      "duration_sec": 707.74
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/30. Lawrence - Swap.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/30. Lawrence - Swap.mp3",
+    "fileSizeBytes": 15909499,
+    "mtimeMs": 1772145452690,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 126.05,
+      "key_camelot": "3A",
+      "energy": 0.2304,
+      "duration_sec": 392.05
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/31. Herbert, Matthew Herbert - The Audience.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/31. Herbert, Matthew Herbert - The Audience.mp3",
+    "fileSizeBytes": 15267947,
+    "mtimeMs": 1772145128830,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 120.19,
+      "key_camelot": "7A",
+      "energy": 0.2475,
+      "duration_sec": 375.97
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/32. Mathew Jonson - Marionette.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/32. Mathew Jonson - Marionette.mp3",
+    "fileSizeBytes": 27545411,
+    "mtimeMs": 1772145456200,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 129.2,
+      "key_camelot": "11A",
+      "energy": 0.23,
+      "duration_sec": 682.92
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/33. DJ Koze - The Geklöppel Continues.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/33. DJ Koze - The Geklöppel Continues.mp3",
+    "fileSizeBytes": 15188471,
+    "mtimeMs": 1772145313940,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 114.84,
+      "key_camelot": "11A",
+      "energy": 0.3248,
+      "duration_sec": 374.02
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/34. Luciano, Quenum - Orange Mistake.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/34. Luciano, Quenum - Orange Mistake.mp3",
+    "fileSizeBytes": 28263433,
+    "mtimeMs": 1772145423010,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 126.05,
+      "key_camelot": "6A",
+      "energy": 0.3673,
+      "duration_sec": 700.89
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/35. Soulphiction - Velveteens.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/35. Soulphiction - Velveteens.mp3",
+    "fileSizeBytes": 15509234,
+    "mtimeMs": 1772145522960,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 99.38,
+      "key_camelot": "5A",
+      "energy": 0.2437,
+      "duration_sec": 382.03
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/36. Heiko Laux - Moved (Ricardo Villalobos Remix).mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/36. Heiko Laux - Moved (Ricardo Villalobos Remix).mp3",
+    "fileSizeBytes": 29885082,
+    "mtimeMs": 1772145519980,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 129.2,
+      "key_camelot": "8A",
+      "energy": 0.4118,
+      "duration_sec": 741.43
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/37. The MFA - The Difference It Makes - The Difference It Makes.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/37. The MFA - The Difference It Makes - The Difference It Makes.mp3",
+    "fileSizeBytes": 21068286,
+    "mtimeMs": 1772145212540,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 126.05,
+      "key_camelot": "12A",
+      "energy": 0.1806,
+      "duration_sec": 521.01
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/38. Pole - Achterbahn (Dimbiman Remix).mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/38. Pole - Achterbahn (Dimbiman Remix).mp3",
+    "fileSizeBytes": 16528010,
+    "mtimeMs": 1772145234750,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 129.2,
+      "key_camelot": "7A",
+      "energy": 0.2033,
+      "duration_sec": 407.56
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/39. Matthew Dear - Dog Days (Pantytec Remix).mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/39. Matthew Dear - Dog Days (Pantytec Remix).mp3",
+    "fileSizeBytes": 14832110,
+    "mtimeMs": 1772145465820,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 126.05,
+      "key_camelot": "12A",
+      "energy": 0.2404,
+      "duration_sec": 365.08
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/40. Losoul - Raw Beauty.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/40. Losoul - Raw Beauty.mp3",
+    "fileSizeBytes": 16267826,
+    "mtimeMs": 1772145124120,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 123.05,
+      "key_camelot": "3A",
+      "energy": 0.2947,
+      "duration_sec": 401.01
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/41. Wighnomy Brothers - Wurz + Blosse.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/41. Wighnomy Brothers - Wurz + Blosse.mp3",
+    "fileSizeBytes": 15435151,
+    "mtimeMs": 1772145490760,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 62.26,
+      "key_camelot": "8A",
+      "energy": 0.4633,
+      "duration_sec": 380.19
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/42. Moomin - Sleep Tight (Original Mix).mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/42. Moomin - Sleep Tight (Original Mix).mp3",
+    "fileSizeBytes": 16412078,
+    "mtimeMs": 1772145498320,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 123.05,
+      "key_camelot": "1A",
+      "energy": 0.233,
+      "duration_sec": 404.6
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/43. Audio Werner - .mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/43. Audio Werner - .mp3",
+    "fileSizeBytes": 24810987,
+    "mtimeMs": 1772145441129,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 126.05,
+      "key_camelot": "8A",
+      "energy": 0.3053,
+      "duration_sec": 614.58
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/44. Willow - Untitled A1.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/44. Willow - Untitled A1.mp3",
+    "fileSizeBytes": 18147610,
+    "mtimeMs": 1772145336480,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 120.19,
+      "key_camelot": "10A",
+      "energy": 0.3815,
+      "duration_sec": 448.0
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/45. Cosmic Sandwich - Cosmic Sandwich (Extended Version).mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/45. Cosmic Sandwich - Cosmic Sandwich (Extended Version).mp3",
+    "fileSizeBytes": 26053499,
+    "mtimeMs": 1772145216410,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 123.05,
+      "key_camelot": "7A",
+      "energy": 0.49,
+      "duration_sec": 645.64
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/46. Dominik Eulberg - Sansula (Max Cooper's ''Lost in Sound'' Mix).mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/46. Dominik Eulberg - Sansula (Max Cooper's ''Lost in Sound'' Mix).mp3",
+    "fileSizeBytes": 19670161,
+    "mtimeMs": 1772145388919,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 120.19,
+      "key_camelot": "8A",
+      "energy": 0.3959,
+      "duration_sec": 486.06
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/47. Jan Jelinek - Tendency.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/47. Jan Jelinek - Tendency.mp3",
+    "fileSizeBytes": 17877017,
+    "mtimeMs": 1772145503390,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 123.05,
+      "key_camelot": "8A",
+      "energy": 0.4118,
+      "duration_sec": 441.24
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/48. Smallpeople, Rau - Unke (Original).mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/48. Smallpeople, Rau - Unke (Original).mp3",
+    "fileSizeBytes": 15423632,
+    "mtimeMs": 1772144928190,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 123.05,
+      "key_camelot": "12A",
+      "energy": 0.1385,
+      "duration_sec": 379.89
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/49. Sieg über die Sonne - Gone.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/49. Sieg über die Sonne - Gone.mp3",
+    "fileSizeBytes": 14125837,
+    "mtimeMs": 1772145377690,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 129.2,
+      "key_camelot": "9B",
+      "energy": 0.3612,
+      "duration_sec": 347.46
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/50. Cobblestone Jazz - Lime In Da Coconut.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/50. Cobblestone Jazz - Lime In Da Coconut.mp3",
+    "fileSizeBytes": 22757735,
+    "mtimeMs": 1772145469450,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 129.2,
+      "key_camelot": "1A",
+      "energy": 0.2808,
+      "duration_sec": 563.24
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/51. Cabanne - Boulinge.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/51. Cabanne - Boulinge.mp3",
+    "fileSizeBytes": 4944278,
+    "mtimeMs": 1772145346460,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 129.2,
+      "key_camelot": "8A",
+      "energy": 0.3384,
+      "duration_sec": 117.92
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/52. Markus Nikolai - Wheelsucker.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/52. Markus Nikolai - Wheelsucker.mp3",
+    "fileSizeBytes": 16589688,
+    "mtimeMs": 1772145427669,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 132.51,
+      "key_camelot": "5A",
+      "energy": 0.1909,
+      "duration_sec": 409.05
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/53. Sven Väth - Cala Llonga (Ricardo Villalobos Remix).mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/53. Sven Väth - Cala Llonga (Ricardo Villalobos Remix).mp3",
+    "fileSizeBytes": 26362681,
+    "mtimeMs": 1772145521370,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 126.05,
+      "key_camelot": "11A",
+      "energy": 0.3348,
+      "duration_sec": 653.38
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/54. Maayan Nidam - Perplexday.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/54. Maayan Nidam - Perplexday.mp3",
+    "fileSizeBytes": 19476816,
+    "mtimeMs": 1772145439600,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "partial",
+      "bpm": 60.8,
+      "key_camelot": "4A",
+      "energy": 0.4181,
+      "duration_sec": 481.23
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/55. Kassem Mosse - Untitled B1.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/55. Kassem Mosse - Untitled B1.mp3",
+    "fileSizeBytes": 13881322,
+    "mtimeMs": 1772145413390,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 109.96,
+      "key_camelot": "4B",
+      "energy": 0.3398,
+      "duration_sec": 341.34
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/56. DJ Koze - Getreide-phunk.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/56. DJ Koze - Getreide-phunk.mp3",
+    "fileSizeBytes": 15823735,
+    "mtimeMs": 1772145398340,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 123.05,
+      "key_camelot": "5A",
+      "energy": 0.3198,
+      "duration_sec": 389.88
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/57. Trentemøller - Polar Shift (Original Mix).mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/57. Trentemøller - Polar Shift (Original Mix).mp3",
+    "fileSizeBytes": 20541540,
+    "mtimeMs": 1772145464070,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 126.05,
+      "key_camelot": "2A",
+      "energy": 0.3904,
+      "duration_sec": 507.84
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/58. Theres Galaxies Better (Melchior Productions Ltd. Spacelab Mix)/58. Bruno Pronsato - There's Galaxies Better (Melchior Productions Ltd. Spacelab Mix).mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/58. Theres Galaxies Better (Melchior Productions Ltd. Spacelab Mix)/58. Bruno Pronsato - There's Galaxies Better (Melchior Productions Ltd. Spacelab Mix).mp3",
+    "fileSizeBytes": 21439250,
+    "mtimeMs": 1772145472280,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 126.05,
+      "key_camelot": "12A",
+      "energy": 0.3063,
+      "duration_sec": 530.28
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/59. Mathew Jonson - Return of the Zombie Bikers.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/59. Mathew Jonson - Return of the Zombie Bikers.mp3",
+    "fileSizeBytes": 24720252,
+    "mtimeMs": 1772145390320,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 129.2,
+      "key_camelot": "1A",
+      "energy": 0.2915,
+      "duration_sec": 612.31
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/60. Losoul - What The ...mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/60. Losoul - What The ...mp3",
+    "fileSizeBytes": 7378897,
+    "mtimeMs": 1772145132320,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 126.05,
+      "key_camelot": "11B",
+      "energy": 0.2008,
+      "duration_sec": 178.78
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/61. Willow - Feel Me.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/61. Willow - Feel Me.mp3",
+    "fileSizeBytes": 17428709,
+    "mtimeMs": 1772145449710,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 61.52,
+      "key_camelot": "6A",
+      "energy": 0.2292,
+      "duration_sec": 430.03
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/62. DeWalta - Eftive.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/62. DeWalta - Eftive.mp3",
+    "fileSizeBytes": 20826729,
+    "mtimeMs": 1772145451290,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "partial",
+      "bpm": 62.26,
+      "key_camelot": "3A",
+      "energy": 0.2739,
+      "duration_sec": 514.98
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/63. Luomo - Synkro.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/63. Luomo - Synkro.mp3",
+    "fileSizeBytes": 33791831,
+    "mtimeMs": 1772145383120,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 120.19,
+      "key_camelot": "5A",
+      "energy": 0.4336,
+      "duration_sec": 839.11
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/64. Matthew Herbert - Mistakes (Housey Housey Version).mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/64. Matthew Herbert - Mistakes (Housey Housey Version).mp3",
+    "fileSizeBytes": 13180317,
+    "mtimeMs": 1772145256440,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 60.09,
+      "key_camelot": "5A",
+      "energy": 0.273,
+      "duration_sec": 323.81
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/65. Akufen - Battlestar Galacticlown (Original Mix).mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/65. Akufen - Battlestar Galacticlown (Original Mix).mp3",
+    "fileSizeBytes": 14735063,
+    "mtimeMs": 1772145243649,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 126.05,
+      "key_camelot": "9A",
+      "energy": 0.244,
+      "duration_sec": 362.66
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/66. Efdemin - Bergwein.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/66. Efdemin - Bergwein.mp3",
+    "fileSizeBytes": 18913543,
+    "mtimeMs": 1772145337890,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 123.05,
+      "key_camelot": "11A",
+      "energy": 0.3226,
+      "duration_sec": 467.15
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/67. Maurizio - M04a (Full 12'' Length).mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/67. Maurizio - M04a (Full 12'' Length).mp3",
+    "fileSizeBytes": 16236519,
+    "mtimeMs": 1772145407070,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 126.05,
+      "key_camelot": "3B",
+      "energy": 0.3608,
+      "duration_sec": 400.22
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/68. STL - Earworm (Original Mix).mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/68. STL - Earworm (Original Mix).mp3",
+    "fileSizeBytes": 15834269,
+    "mtimeMs": 1772145434669,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 114.84,
+      "key_camelot": "12A",
+      "energy": 0.2722,
+      "duration_sec": 390.17
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/69. Melchior Productions Ltd. - Cinza De Fenix.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/69. Melchior Productions Ltd. - Cinza De Fenix.mp3",
+    "fileSizeBytes": 25175690,
+    "mtimeMs": 1772145404240,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 123.05,
+      "key_camelot": "6A",
+      "energy": 0.2153,
+      "duration_sec": 623.7
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/70. Marc Houle - Borrowed Gear.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/70. Marc Houle - Borrowed Gear.mp3",
+    "fileSizeBytes": 11069532,
+    "mtimeMs": 1772145342590,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 123.05,
+      "key_camelot": "4A",
+      "energy": 0.2516,
+      "duration_sec": 271.05
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/71. UND - Rodeo (Crowd Pleaser Remix).mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/71. UND - Rodeo (Crowd Pleaser Remix).mp3",
+    "fileSizeBytes": 20801680,
+    "mtimeMs": 1772145513149,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 120.19,
+      "key_camelot": "1A",
+      "energy": 0.2735,
+      "duration_sec": 514.35
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/72. Minilogue - The Girl from Botany Bay (Original Mix).mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/72. Minilogue - The Girl from Botany Bay (Original Mix).mp3",
+    "fileSizeBytes": 26001119,
+    "mtimeMs": 1772145505669,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 129.2,
+      "key_camelot": "5A",
+      "energy": 0.1216,
+      "duration_sec": 644.39
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/73. The Field - Over The Ice.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/73. The Field - Over The Ice.mp3",
+    "fileSizeBytes": 16867592,
+    "mtimeMs": 1772145331030,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 126.05,
+      "key_camelot": "6A",
+      "energy": 0.4768,
+      "duration_sec": 416.0
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/74. Kassem Mosse - Untitled A1.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/74. Kassem Mosse - Untitled A1.mp3",
+    "fileSizeBytes": 33511820,
+    "mtimeMs": 1772145510020,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "partial",
+      "bpm": 62.26,
+      "key_camelot": "6A",
+      "energy": 0.1796,
+      "duration_sec": 832.11
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/75. Ricardo Villalobos - Humusweg.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/75. Ricardo Villalobos - Humusweg.mp3",
+    "fileSizeBytes": 30216256,
+    "mtimeMs": 1772145387840,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 129.2,
+      "key_camelot": "11A",
+      "energy": 0.2477,
+      "duration_sec": 749.77
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/76. Michael Mayer - Pride Is Weaker Than Love.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/76. Michael Mayer - Pride Is Weaker Than Love.mp3",
+    "fileSizeBytes": 17032816,
+    "mtimeMs": 1772145370060,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 129.2,
+      "key_camelot": "11A",
+      "energy": 0.3588,
+      "duration_sec": 420.13
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/77. Robag Wruhme, Wighnomy Brothers - Killerteppich.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/77. Robag Wruhme, Wighnomy Brothers - Killerteppich.mp3",
+    "fileSizeBytes": 14661968,
+    "mtimeMs": 1772145431580,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 126.05,
+      "key_camelot": "6A",
+      "energy": 0.276,
+      "duration_sec": 360.86
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/78. Christopher Rau - Like Yesterday (Original).mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/78. Christopher Rau - Like Yesterday (Original).mp3",
+    "fileSizeBytes": 17529126,
+    "mtimeMs": 1772145526070,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 120.19,
+      "key_camelot": "1A",
+      "energy": 0.3268,
+      "duration_sec": 432.53
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/79. Matthew Dear - Stealing Moves.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/79. Matthew Dear - Stealing Moves.mp3",
+    "fileSizeBytes": 16714075,
+    "mtimeMs": 1772145508780,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 129.2,
+      "key_camelot": "1A",
+      "energy": 0.4931,
+      "duration_sec": 412.15
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/80. Dominik Eulberg - Der Tanz Der Gluehwuermchen.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/80. Dominik Eulberg - Der Tanz Der Gluehwuermchen.mp3",
+    "fileSizeBytes": 15400663,
+    "mtimeMs": 1772145419830,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 120.19,
+      "key_camelot": "8A",
+      "energy": 0.226,
+      "duration_sec": 379.33
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/81. Thomas Brinkmann - Loplop.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/81. Thomas Brinkmann - Loplop.mp3",
+    "fileSizeBytes": 22161097,
+    "mtimeMs": 1772145477320,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 123.05,
+      "key_camelot": "6A",
+      "energy": 0.3434,
+      "duration_sec": 548.34
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/82. Petre Inspirescu - Galantar.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/82. Petre Inspirescu - Galantar.mp3",
+    "fileSizeBytes": 20871786,
+    "mtimeMs": 1772145499890,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 126.05,
+      "key_camelot": "6A",
+      "energy": 0.2396,
+      "duration_sec": 516.1
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/83. Smallpeople - Black Ice (Original Mix).mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/83. Smallpeople - Black Ice (Original Mix).mp3",
+    "fileSizeBytes": 17581348,
+    "mtimeMs": 1772145013490,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 120.19,
+      "key_camelot": "11A",
+      "energy": 0.291,
+      "duration_sec": 433.84
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/84. Melchior Productions Ltd. - Todo Mundo.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/84. Melchior Productions Ltd. - Todo Mundo.mp3",
+    "fileSizeBytes": 27409670,
+    "mtimeMs": 1772145497270,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 126.05,
+      "key_camelot": "7A",
+      "energy": 0.3311,
+      "duration_sec": 679.55
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/85. James Holden - Lump.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/85. James Holden - Lump.mp3",
+    "fileSizeBytes": 15040165,
+    "mtimeMs": 1772145374760,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 126.05,
+      "key_camelot": "7A",
+      "energy": 0.2955,
+      "duration_sec": 370.31
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/86. Superpitcher - Baby´s On Fire.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/86. Superpitcher - Baby´s On Fire.mp3",
+    "fileSizeBytes": 15319076,
+    "mtimeMs": 1772145236510,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 126.05,
+      "key_camelot": "4B",
+      "energy": 0.3515,
+      "duration_sec": 377.29
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/87. Lowtec - Meandyou.dub.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/87. Lowtec - Meandyou.dub.mp3",
+    "fileSizeBytes": 14963833,
+    "mtimeMs": 1772145515250,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 114.84,
+      "key_camelot": "12A",
+      "energy": 0.3711,
+      "duration_sec": 368.4
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/88. Cobblestone Jazz - India In Me.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/88. Cobblestone Jazz - India In Me.mp3",
+    "fileSizeBytes": 32795004,
+    "mtimeMs": 1772145360300,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 129.2,
+      "key_camelot": "1A",
+      "energy": 0.0828,
+      "duration_sec": 814.18
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/89. Trentemøller - Moan (Trentemoeller Remix).mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/89. Trentemøller - Moan (Trentemoeller Remix).mp3",
+    "fileSizeBytes": 18046327,
+    "mtimeMs": 1772145487610,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 120.19,
+      "key_camelot": "4A",
+      "energy": 0.3413,
+      "duration_sec": 445.45
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/90. Isolée - Raum2.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/90. Isolée - Raum2.mp3",
+    "fileSizeBytes": 20678319,
+    "mtimeMs": 1772145436780,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 114.84,
+      "key_camelot": "6A",
+      "energy": 0.2421,
+      "duration_sec": 511.32
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/91. Onur Özer - Envy.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/91. Onur Özer - Envy.mp3",
+    "fileSizeBytes": 16280339,
+    "mtimeMs": 1772145445330,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 129.2,
+      "key_camelot": "6A",
+      "energy": 0.4559,
+      "duration_sec": 401.32
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/92. Sascha Dive - Jus Groove.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/92. Sascha Dive - Jus Groove.mp3",
+    "fileSizeBytes": 24325099,
+    "mtimeMs": 1772145391899,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 120.19,
+      "key_camelot": "8B",
+      "energy": 0.4453,
+      "duration_sec": 602.43
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/93. Wighnomy Bros. - Wombat.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/93. Wighnomy Bros. - Wombat.mp3",
+    "fileSizeBytes": 15117395,
+    "mtimeMs": 1772145326649,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 120.19,
+      "key_camelot": "4A",
+      "energy": 0.396,
+      "duration_sec": 372.24
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/94. Dettinger - Lemon.mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/94. Dettinger - Lemon.mp3",
+    "fileSizeBytes": 14441318,
+    "mtimeMs": 1772145489180,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 132.51,
+      "key_camelot": "3A",
+      "energy": 0.3968,
+      "duration_sec": 355.34
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/95. Federico Molinari - Takk Brett (Original Mix).mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/95. Federico Molinari - Takk Brett (Original Mix).mp3",
+    "fileSizeBytes": 16293004,
+    "mtimeMs": 1772145474340,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 126.05,
+      "key_camelot": "10A",
+      "energy": 0.2028,
+      "duration_sec": 401.63
+    }
+  },
+  "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/96. Booka Shade - Body Language (Interpretation).mp3": {
+    "sourcePath": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/96. Booka Shade - Body Language (Interpretation).mp3",
+    "fileSizeBytes": 12238891,
+    "mtimeMs": 1772145282090,
+    "analysisVersion": "music-analysis-v1.0.0",
+    "result": {
+      "status": "analyzed",
+      "bpm": 129.2,
+      "key_camelot": "11A",
+      "energy": 0.278,
+      "duration_sec": 300.28
+    }
+  }
+}

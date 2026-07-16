@@ -1,17 +1,36 @@
-import { useState } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
+import { effectiveDuration } from "../logic/metadataReadiness";
+import { resolveCrateTracks } from "../logic/resolveCrate";
+import { computePlaylistUiState, type PlaylistUiStateSummary } from "../logic/playlistUiState";
+import { SourceBadge, getSourceComposition } from "./SourceBadge";
 import type {
   PlaylistRecord,
   PlaylistImage,
   PlaylistBroadcastIdentity,
   PlayColorTheme,
   PlaylistSourcePolicy,
+  PlaylistDuplicateRules,
+  DuplicateFamilyMode,
+  DuplicatePreferredVariant,
 } from "../data/playProjectTypes";
+import { DEFAULT_DUPLICATE_RULES } from "../data/playProjectTypes";
 import type { Track, TrackSourceOwner } from "../data/trackTypes";
 import type { CurvePresetType } from "../data/flowCurveTypes";
 import type { MusicSourcePool } from "../data/sourcePoolTypes";
 import type { LibraryTrackFilters } from "../logic/libraryFilters";
 import { PlaylistIdentityPanel } from "./PlaylistIdentityPanel";
+import { CollectionDetailBar } from "./CollectionDetailBar";
+import { PlaylistPathOptionsPanel } from "./PlaylistPathOptionsPanel";
 import { fmtUpdatedLabel, fmtShortDate } from "../logic/dateFormat";
+import { getCrateVisualToken } from "../logic/crateMoodSummary";
+import { PlaylistMoodArcPanel } from "./PlaylistMoodArcPanel";
+import type { PlaylistArcConfig } from "../data/playlistArcTypes";
+import { DEFAULT_THREE_PART_SECTIONS, DEFAULT_FOUR_PART_SECTIONS } from "../data/playlistArcTypes";
+import { PlaylistAnalyzerReviewView } from "./playlistAnalyzer/PlaylistAnalyzerReviewView";
+import { PlaylistRepairPanel } from "./playlistRepair/PlaylistRepairPanel";
+import { PlaylistPreparationPanel } from "./playlistTransition/PlaylistPreparationPanel";
+import type { PlaylistRepairState, LibraryGapRecord, PlaylistReanalysisProgress } from "../data/playlistRepairTypes";
 
 const ROLE_LABELS: Record<
   NonNullable<PlaylistRecord["playlistRole"]>,
@@ -60,8 +79,6 @@ const PRESET_ORDER: CurvePresetType[] = [
 type Props = {
   playlist: PlaylistRecord;
   libraryTracks: Track[];
-  totalTrackCount: number;
-  totalDurationSeconds: number;
   flash?: string;
   onTitleChange: (t: string) => void;
   onDescriptionChange: (d: string) => void;
@@ -69,9 +86,14 @@ type Props = {
   onPresetChange: (p: CurvePresetType) => void;
   onFillMissingTime: () => void;
   onRegenerateFromCurve: () => void;
+  // Blocked-track cleanup (0709) — codec/unplayable/missing-audio tracks
+  // currently assigned to playlist slots.
+  blockedTrackCount?: number;
+  onRemoveBlockedTracks?: () => void;
   onExportM3u: () => void;
   onCoverImageChange: (img: PlaylistImage | undefined) => void;
   onBackgroundImageChange: (img: PlaylistImage | undefined) => void;
+  onBroadcastBgChange: (src: string | undefined) => void;
   onAccentColorChange: (color: string | undefined) => void;
   onMoodTagsChange: (tags: string[]) => void;
   onBroadcastIdentityChange: (bi: PlaylistBroadcastIdentity) => void;
@@ -92,7 +114,50 @@ type Props = {
   onSourcePolicyChange?: (policy: PlaylistSourcePolicy | undefined) => void;
   onAllowedSourceOwnersChange?: (owners: TrackSourceOwner[] | undefined) => void;
   onAddMusic?: () => void;
-  children?: React.ReactNode;
+  onGoHome?: () => void;
+  onNewPlaylist?: () => void;
+  // Crate Sources (Phase 1)
+  crates?: import("../data/crateTypes").CrateRecord[];
+  cratePoolTracks?: import("../data/trackTypes").Track[];
+  onAddCrate?: (crateId: string) => void;
+  onRemoveCrate?: (crateId: string) => void;
+  onOpenCrate?: (crateId: string) => void;
+  // Duplicate family rules (Phase 2 — 0704D)
+  onSetDuplicateRules?: (rules: PlaylistDuplicateRules) => void;
+  // Sections / Weights (0711)
+  onArcConfigChange?: (config: PlaylistArcConfig) => void;
+  onRegenerateWithSections?: () => void;
+  // Playlist Path Options (0704G)
+  pathOptions?: import("../data/playlistPathTypes").PlaylistPathOption[];
+  acceptedPathOptionId?: string;
+  isGeneratingOptions?: boolean;
+  onGenerateOptions?: () => void;
+  onAcceptOption?: (optionId: string) => void;
+  onDuplicateOption?: (optionId: string) => void;
+  onFixMetadata?: () => void;
+  // Metadata stale detection (0705E)
+  currentMetadataRevision?: string;
+  metadataRepairImpact?: import("../data/playlistPathTypes").PlaylistMetadataRepairImpact;
+  // Crate-change stale reason (0707_PlaylistOptionsCrateFlowCleanup)
+  playlistOptionsStaleReason?: PlaylistRecord["playlistOptionsStaleReason"];
+  // Artwork display mode (0706A)
+  onArtworkDisplayModeChange?: (mode: NonNullable<PlaylistRecord["artworkDisplayMode"]>) => void;
+  // Recovery warning integration
+  recoveryWarning?: boolean;
+  onReviewRecovery?: () => void;
+  // Options popup control (lifted to App.tsx)
+  showOptionsPopup?: boolean;
+  onOpenOptionsPopup?: () => void;
+  onCloseOptionsPopup?: () => void;
+  // Playlist Local Repair (0713_MUSIC_Playlist_Local_Repair_And_Gap_Analysis)
+  libraryGaps?: LibraryGapRecord[];
+  onLibraryGapsChange?: (gaps: LibraryGapRecord[]) => void;
+  onReplaceSlot?: (trackId: string, slotIndex: number) => void;
+  onRepairStateChange?: (state: PlaylistRepairState) => void;
+  onReanalyzePlaylist?: () => void;
+  reanalysisProgress?: PlaylistReanalysisProgress | null;
+  reanalysisRunning?: boolean;
+  onPreparationChange?: (preparation: import("../data/playProjectTypes").PlaylistRecord["playbackPreparation"]) => void;
 };
 
 function fmtDur(secs: number): string {
@@ -142,11 +207,59 @@ function PlaylistCoverThumb({
   );
 }
 
+// Portal-rendered dropdown — escapes overflow:hidden containers
+function DropdownPortal({
+  open,
+  anchorRef,
+  align = "left",
+  onClose,
+  children,
+}: {
+  open: boolean;
+  anchorRef: React.RefObject<HTMLElement | null>;
+  align?: "left" | "right";
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  const [rect, setRect] = useState<DOMRect | null>(null);
+
+  useEffect(() => {
+    if (open && anchorRef.current) {
+      setRect(anchorRef.current.getBoundingClientRect());
+    } else {
+      setRect(null);
+    }
+  }, [open, anchorRef]);
+
+  useEffect(() => {
+    if (!open) return;
+    function handleMouseDown(_e: MouseEvent) {
+      onClose();
+    }
+    document.addEventListener("mousedown", handleMouseDown);
+    return () => document.removeEventListener("mousedown", handleMouseDown);
+  }, [open, onClose]);
+
+  if (!open || !rect) return null;
+  const style: React.CSSProperties = {
+    position: "fixed",
+    top: rect.bottom + 4,
+    zIndex: 1000,
+    ...(align === "right"
+      ? { right: window.innerWidth - rect.right }
+      : { left: rect.left }),
+  };
+  return createPortal(
+    <div style={style} onMouseDown={(e) => e.stopPropagation()}>
+      {children}
+    </div>,
+    document.body,
+  );
+}
+
 export function PlaylistHeader({
   playlist,
   libraryTracks,
-  totalTrackCount,
-  totalDurationSeconds,
   flash,
   onTitleChange,
   onDescriptionChange,
@@ -154,12 +267,15 @@ export function PlaylistHeader({
   onPresetChange,
   onFillMissingTime,
   onRegenerateFromCurve,
+  blockedTrackCount = 0,
+  onRemoveBlockedTracks,
   onExportM3u,
   onCoverImageChange,
   onBackgroundImageChange,
-  onAccentColorChange,
+  onBroadcastBgChange,
+  onAccentColorChange: _onAccentColorChange,
   onMoodTagsChange,
-  onBroadcastIdentityChange,
+  onBroadcastIdentityChange: _onBroadcastIdentityChange,
   sourcePools = [],
   onCreateSourcePool,
   onSetPlaylistRole,
@@ -168,46 +284,146 @@ export function PlaylistHeader({
   onSetRegenerationMode,
   onSetTemplateSourceFilters,
   onCreateFromTemplate,
-  onColorThemesChange,
+  onColorThemesChange: _onColorThemesChange,
   onSourcePolicyChange,
   onAllowedSourceOwnersChange,
-  onAddMusic,
-  children,
+  onAddMusic: _onAddMusic,
+  onGoHome,
+  onNewPlaylist,
+  crates = [],
+  cratePoolTracks = [],
+  onAddCrate,
+  onRemoveCrate,
+  onOpenCrate,
+  onSetDuplicateRules,
+  onArcConfigChange,
+  onRegenerateWithSections,
+  pathOptions = [],
+  acceptedPathOptionId,
+  isGeneratingOptions = false,
+  onGenerateOptions,
+  onAcceptOption,
+  onDuplicateOption,
+  onFixMetadata: _onFixMetadata,
+  currentMetadataRevision,
+  metadataRepairImpact,
+  playlistOptionsStaleReason,
+  onArtworkDisplayModeChange,
+  recoveryWarning,
+  onReviewRecovery,
+  showOptionsPopup = false,
+  onOpenOptionsPopup,
+  onCloseOptionsPopup,
+  libraryGaps = [],
+  onLibraryGapsChange,
+  onReplaceSlot,
+  onRepairStateChange,
+  onReanalyzePlaylist,
+  reanalysisProgress = null,
+  reanalysisRunning = false,
+  onPreparationChange,
 }: Props) {
-  const [showCurveTools, setShowCurveTools] = useState(false);
+  // Accepted playlist read mode (0705K)
+  const acceptedOutputCount = playlist.slots.filter((s) => s.assignedTrackId).length;
+  const isAcceptedMode = Boolean(acceptedPathOptionId) && acceptedOutputCount > 0;
+
+  // Computed playlist UI state
+  const tracksById = new Map(libraryTracks.map((t) => [t.trackId, t]));
+  const uiState: PlaylistUiStateSummary = useMemo(
+    () => computePlaylistUiState(playlist, tracksById, recoveryWarning),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [playlist, libraryTracks, recoveryWarning],
+  );
+  const isDraftEmpty = uiState.state === "draft_empty" || uiState.state === "needs_crates";
+
+  const [_showCurveTools, setShowCurveTools] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showArcPanel, setShowArcPanel] = useState(false);
   const [showIdentity, setShowIdentity] = useState(false);
+  const [showAnalyzerReview, setShowAnalyzerReview] = useState(false);
+  const [showRepairPanel, setShowRepairPanel] = useState(false);
+  const [showPreparationPanel, setShowPreparationPanel] = useState(false);
+  const [showCratePicker, setShowCratePicker] = useState(false);
+  const settingsBtnRef = useRef<HTMLButtonElement>(null);
+  const addCrateBtnRef = useRef<HTMLButtonElement>(null);
+  const showOptionsDrawer = showOptionsPopup;
+  const setShowOptionsDrawer = (open: boolean) => open ? onOpenOptionsPopup?.() : onCloseOptionsPopup?.();
+
   const [confirmPreset, setConfirmPreset] = useState<CurvePresetType | null>(
     null,
   );
   const [confirmRegen, setConfirmRegen] = useState(false);
 
-  const tracksById = new Map(libraryTracks.map((t) => [t.trackId, t]));
   const assignedSlots = playlist.slots.filter((s) => s.assignedTrackId);
-  const totalDur = assignedSlots.reduce(
-    (sum, s) =>
-      sum + (tracksById.get(s.assignedTrackId!)?.durationSeconds ?? 0),
-    0,
-  );
-  const targetSecs = playlist.targetDurationMinutes * 60;
+  const { totalDur, totalDurIsEstimated } = (() => {
+    let sum = 0; let anyEstimated = false;
+    for (const s of assignedSlots) {
+      const t = tracksById.get(s.assignedTrackId!);
+      if (t) {
+        sum += effectiveDuration(t);
+        if ((t.durationSeconds ?? 0) <= 0) anyEstimated = true;
+      }
+    }
+    return { totalDur: sum, totalDurIsEstimated: anyEstimated };
+  })();
   const count = assignedSlots.length;
 
   const role = playlist.playlistRole ?? "static";
   const isTemplate = role === "template";
   const isGenerated = role === "event_generated";
 
-  let statsStr = `${count} track${count !== 1 ? "s" : ""} · ${fmtDur(totalDur)}`;
-  if (targetSecs > 0) {
-    const diff = totalDur - targetSecs;
-    if (diff < -30)
-      statsStr += ` · target ${fmtDur(targetSecs)} · missing ${fmtDur(-diff)}`;
-    else if (diff > 30)
-      statsStr += ` · target ${fmtDur(targetSecs)} · +${fmtDur(diff)} buffer`;
-    else if (targetSecs > 0)
-      statsStr += ` · target ${fmtDur(targetSecs)} · ✓ on target`;
+  let statsStr: string;
+  if (isAcceptedMode) {
+    statsStr = `${count} track${count !== 1 ? "s" : ""} · ${fmtDur(totalDur)}${totalDurIsEstimated ? " est" : ""}`;
+  } else {
+    statsStr = `${count} track${count !== 1 ? "s" : ""} · ${fmtDur(totalDur)}${totalDurIsEstimated ? " est" : ""}`;
   }
 
+  const isOptionsStale = !!(playlistOptionsStaleReason && playlistOptionsStaleReason !== "options_never_generated");
+  const sourceComposition = useMemo(
+    () => getSourceComposition(cratePoolTracks.map((t) => t.trackId), cratePoolTracks),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [cratePoolTracks],
+  );
+
   const presetType = playlist.curve.presetType;
+
+  // Crate pool derived stats
+  const attachedCrateIds = new Set(playlist.crateIds ?? []);
+  const attachedCrates = crates.filter((c) => attachedCrateIds.has(c.id));
+  const hasCrates = attachedCrates.length > 0;
+
+  const crateCountsById = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const c of attachedCrates) {
+      m.set(c.id, resolveCrateTracks(c, libraryTracks).tracks.length);
+    }
+    return m;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playlist.crateIds, libraryTracks]);
+
+  // allTagsCountById: tracks where ANY moodTag matches the crate's single mood filter,
+  // ignoring sourceOwner — used to detect stale crate membership.
+  const allTagsCountById = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const c of attachedCrates) {
+      if (c.filters.moodTags.length !== 1) continue;
+      const mood = c.filters.moodTags[0].toLowerCase();
+      m.set(c.id, libraryTracks.filter((t) => (t.moodTags ?? []).some((mt) => mt.toLowerCase() === mood)).length);
+    }
+    return m;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playlist.crateIds, libraryTracks]);
+
+  const poolCount = cratePoolTracks.length;
+
+  const assignedTrackIdSet = useMemo(() => {
+    const s = new Set<string>();
+    for (const sl of playlist.slots) { if (sl.assignedTrackId) s.add(sl.assignedTrackId); }
+    return s;
+  }, [playlist.slots]);
+  const outputCount = assignedTrackIdSet.size;
+  const nextCandidatesCount = cratePoolTracks.filter((t) => !assignedTrackIdSet.has(t.trackId)).length;
 
   function handlePresetClick(p: CurvePresetType) {
     if (p === presetType) return;
@@ -221,6 +437,15 @@ export function PlaylistHeader({
 
   return (
     <div className="playlist-header" onClick={closeDropdowns}>
+      {onGoHome && (
+        <CollectionDetailBar
+          collectionLabel="Playlists"
+          onBackToCollection={onGoHome}
+          createLabel={onNewPlaylist ? "+ New Playlist" : undefined}
+          onCreate={onNewPlaylist}
+        />
+      )}
+
       <div className="ph-top" onClick={(e) => e.stopPropagation()}>
         {/* Row 1: cover + meta */}
         <div className="ph-identity-row">
@@ -240,7 +465,15 @@ export function PlaylistHeader({
               spellCheck={false}
             />
             <div className="ph-stats">
-              {statsStr}
+              {uiState.showHeaderBadge && (
+                <span className={`ph-state-badge ph-state-badge--${uiState.severity}`} title={uiState.description}>
+                  {uiState.label}
+                </span>
+              )}
+              {sourceComposition.map((k) => (
+                <SourceBadge key={k} source={k} />
+              ))}
+              {!isDraftEmpty && <span className="ph-stats-text">{statsStr}</span>}
               {(isTemplate || isGenerated) && (
                 <span className={`ph-role-badge ph-role-badge--${role}`}>
                   {ROLE_LABELS[role]}
@@ -260,114 +493,30 @@ export function PlaylistHeader({
         </div>
       </div>
 
-      {/* Curve canvas + right-side tool stack */}
-      <div className="ph-curve-row" onClick={(e) => e.stopPropagation()}>
-        <div className="ph-curve-slot">{children}</div>
-
-        <div className="ph-tool-stack">
-          {/* Fill Time */}
+      {/* Blocked-track cleanup banner (0709) */}
+      {blockedTrackCount > 0 && onRemoveBlockedTracks && (
+        <div className="ph-blocked-banner" onClick={(e) => e.stopPropagation()}>
+          <span className="ph-blocked-banner-text">
+            This playlist contains blocked tracks.
+          </span>
           <button
-            className="ph-tool-btn"
-            onClick={onFillMissingTime}
-            title="Fill missing time with eligible tracks"
+            className="tb-btn sm ph-blocked-banner-btn"
+            onClick={onRemoveBlockedTracks}
+            title="Remove codec-blocked, unplayable, and missing-audio tracks from this playlist"
           >
-            Fill Time
+            Remove Blocked Tracks ({blockedTrackCount})
           </button>
+        </div>
+      )}
 
-          {/* Curve — shape presets */}
-          <div className="ph-dropdown ph-tool-dropdown">
-            <button
-              className="ph-tool-btn"
-              onClick={(e) => {
-                e.stopPropagation();
-                setShowCurveTools((v) => !v);
-                setShowSettings(false);
-              }}
-              title="Curve shape presets + regenerate"
-            >
-              Curve
-            </button>
-            {showCurveTools && (
-              <div
-                className="ph-dropdown-panel ph-dropdown-panel-right"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className="ph-dropdown-label">Templates</div>
-                <div className="ph-preset-row">
-                  {PRESET_ORDER.map((p) => {
-                    const shape = PRESET_SHAPES[p];
-                    return (
-                      <button
-                        key={p}
-                        className={`tb-preset-btn${presetType === p ? " active" : ""}`}
-                        title={shape.label}
-                        onClick={() => handlePresetClick(p)}
-                      >
-                        <svg
-                          viewBox="0 0 28 16"
-                          width="28"
-                          height="16"
-                          fill="none"
-                        >
-                          <path
-                            d={shape.path}
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
-                      </button>
-                    );
-                  })}
-                </div>
-                <button
-                  className="tb-btn ph-btn-primary"
-                  style={{ marginTop: 10, width: "100%" }}
-                  onClick={() => {
-                    setConfirmRegen(true);
-                    setShowCurveTools(false);
-                  }}
-                >
-                  Regenerate From Curve
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* M3U export */}
-          <button
-            className="ph-tool-btn"
-            onClick={onExportM3u}
-            title="Export playlist as M3U"
-          >
-            M3U
-          </button>
-
-          {/* Form — identity / profile editor */}
-          <button
-            className="ph-tool-btn"
-            onClick={() => setShowIdentity(true)}
-            title="Edit playlist profile and identity"
-          >
-            Form
-          </button>
-
-          {/* Add Music */}
-          {onAddMusic && (
-            <button
-              className="ph-tool-btn ph-tool-btn--add-music"
-              onClick={onAddMusic}
-              title="Browse and add tracks to this playlist"
-            >
-              + Music
-            </button>
-          )}
-
+      {/* Curve area: horizontal toolbar above full-width chart */}
+      <div className="ph-curve-area" onClick={(e) => e.stopPropagation()}>
+        <div className="ph-curve-toolbar">
           {/* Settings dropdown */}
-          <div className="ph-dropdown ph-tool-dropdown">
+          <div className="ph-dropdown ph-ct-dropdown">
             <button
-              className="ph-tool-btn"
+              ref={settingsBtnRef}
+              className="ph-ct-btn"
               onClick={(e) => {
                 e.stopPropagation();
                 setShowSettings((v) => !v);
@@ -375,14 +524,243 @@ export function PlaylistHeader({
               }}
               title="Playlist settings"
             >
-              Settings
+              ⚙ Playlist Settings
             </button>
-            {showSettings && (
+            <DropdownPortal
+              open={showSettings}
+              anchorRef={settingsBtnRef}
+              align="right"
+              onClose={() => setShowSettings(false)}
+            >
               <div
-                className="ph-dropdown-panel ph-dropdown-panel-right"
+                className="ph-dropdown-panel"
                 onClick={(e) => e.stopPropagation()}
               >
-                <div className="ph-dropdown-label">Target Duration</div>
+                {/* Identity + Exports — always in Settings */}
+                <div className="ph-dropdown-label">Identity</div>
+                <button
+                  className="tb-btn"
+                  style={{ marginTop: 4, width: "100%" }}
+                  onClick={() => { setShowIdentity(true); setShowSettings(false); }}
+                >
+                  Edit Playlist Profile
+                </button>
+                <div className="ph-dropdown-label" style={{ marginTop: 10 }}>Analyzer</div>
+                <button
+                  className="tb-btn"
+                  style={{ marginTop: 4, width: "100%" }}
+                  onClick={() => { setShowAnalyzerReview(true); setShowSettings(false); }}
+                >
+                  Analyze Playlist
+                </button>
+                <button
+                  className="tb-btn"
+                  style={{ marginTop: 4, width: "100%" }}
+                  onClick={() => { setShowRepairPanel(true); setShowSettings(false); }}
+                >
+                  Repair Playlist
+                </button>
+                <button
+                  className="tb-btn"
+                  style={{ marginTop: 4, width: "100%" }}
+                  onClick={() => { setShowPreparationPanel(true); setShowSettings(false); }}
+                >
+                  Prepare for Playback
+                </button>
+                <div className="ph-dropdown-label" style={{ marginTop: 10 }}>Exports</div>
+                <button
+                  className="tb-btn"
+                  style={{ marginTop: 4, width: "100%" }}
+                  onClick={() => { onExportM3u(); setShowSettings(false); }}
+                >
+                  ↓ Export M3U
+                </button>
+                <div className="ph-dropdown-label" style={{ marginTop: 10 }}>Broadcast</div>
+                <button
+                  className="tb-btn"
+                  style={{ marginTop: 4, width: "100%", opacity: 0.5, cursor: "not-allowed" }}
+                  disabled
+                  title="Playlist-to-broadcast handoff coming soon"
+                >
+                  Prepare Countdown Screen
+                </button>
+
+                {recoveryWarning && onReviewRecovery && (
+                  <>
+                    <div className="ph-dropdown-label" style={{ marginTop: 10 }}>Data Management</div>
+                    <button
+                      className="tb-btn"
+                      style={{ marginTop: 4, width: "100%" }}
+                      onClick={() => { onReviewRecovery(); setShowSettings(false); }}
+                    >
+                      Backups &amp; Recovery
+                    </button>
+                  </>
+                )}
+
+                {/* Curve tools — moved from main toolbar */}
+                {!isAcceptedMode && (
+                  <>
+                    <div className="ph-dropdown-label" style={{ marginTop: 10 }}>Flow Curve</div>
+                    <div className="ph-preset-row" style={{ marginTop: 4 }}>
+                      {PRESET_ORDER.map((p) => {
+                        const shape = PRESET_SHAPES[p];
+                        return (
+                          <button
+                            key={p}
+                            className={`tb-preset-btn${presetType === p ? " active" : ""}`}
+                            title={shape.label}
+                            onClick={() => { handlePresetClick(p); setShowSettings(false); }}
+                          >
+                            <svg viewBox="0 0 28 16" width="28" height="16" fill="none">
+                              <path d={shape.path} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {hasCrates && poolCount > 0 && (
+                      <div className="ph-curve-pool-stat" style={{ marginTop: 4 }}>
+                        Crate Pool: {poolCount} · Output: {outputCount} · Next: {nextCandidatesCount}
+                      </div>
+                    )}
+                    {onSetDuplicateRules && (() => {
+                      const dr = playlist.duplicateRules ?? DEFAULT_DUPLICATE_RULES;
+                      function patchDR(partial: Partial<PlaylistDuplicateRules>) {
+                        onSetDuplicateRules!({ ...dr, ...partial });
+                      }
+                      return (
+                        <div className="ph-dup-rules" style={{ marginTop: 8 }}>
+                          <div className="ph-dropdown-label">Duplicate Family</div>
+                          <div className="ph-dup-mode-btns" style={{ marginTop: 4 }}>
+                            {([
+                              { value: "allow", label: "Allow" },
+                              { value: "avoid_family", label: "One per family" },
+                              { value: "separate_family", label: "Separate" },
+                            ] as { value: DuplicateFamilyMode; label: string }[]).map(({ value, label }) => (
+                              <button
+                                key={value}
+                                className={`ph-dup-btn${dr.mode === value ? " active" : ""}`}
+                                onClick={() => patchDR({ mode: value })}
+                              >
+                                {label}
+                              </button>
+                            ))}
+                          </div>
+                          {dr.mode === "separate_family" && (
+                            <div className="ph-dup-sep-row" style={{ marginTop: 6 }}>
+                              <span className="ph-tf-label">Separate by</span>
+                              <input
+                                className="tb-num"
+                                type="number"
+                                min={1}
+                                max={50}
+                                value={dr.separationTracks}
+                                onChange={(e) => {
+                                  const v = parseInt(e.target.value, 10);
+                                  if (!isNaN(v) && v >= 1) patchDR({ separationTracks: v });
+                                }}
+                              />
+                              <span className="ph-tf-label">tracks</span>
+                            </div>
+                          )}
+                          <div className="ph-dropdown-label" style={{ marginTop: 8 }}>Preferred Variant</div>
+                          <select
+                            className="ph-select"
+                            style={{ marginTop: 4, width: "100%" }}
+                            value={dr.preferredVariant}
+                            onChange={(e) => patchDR({ preferredVariant: e.target.value as DuplicatePreferredVariant })}
+                          >
+                            <option value="none">No preference</option>
+                            <option value="non_s01">Prefer non-S01/final</option>
+                            <option value="highest_rating">Prefer highest rated</option>
+                            <option value="longest">Prefer longest</option>
+                            <option value="shortest">Prefer shortest</option>
+                            <option value="newest">Prefer newest</option>
+                          </select>
+                        </div>
+                      );
+                    })()}
+                    <button
+                      className="tb-btn"
+                      style={{ marginTop: 10, width: "100%" }}
+                      onClick={() => { setConfirmRegen(true); setShowSettings(false); }}
+                    >
+                      {hasCrates ? "Regenerate From Crate" : "Regenerate From Curve"}
+                    </button>
+                    {onFillMissingTime && (
+                      <button
+                        className="tb-btn"
+                        style={{ marginTop: 6, width: "100%" }}
+                        onClick={() => { onFillMissingTime(); setShowSettings(false); }}
+                        title="Fill missing time with eligible tracks"
+                      >
+                        ⧗ Fill Time
+                      </button>
+                    )}
+                  </>
+                )}
+
+                {onArcConfigChange && (
+                  <>
+                    <div className="ph-dropdown-label" style={{ marginTop: 10 }}>Sections / Weights</div>
+                    <div className="ph-arc-summary-row">
+                      <span className="ph-arc-summary-text">
+                        {playlist.arcConfig && playlist.arcConfig.mode !== "none"
+                          ? `${playlist.arcConfig.sections.length} sections: ${playlist.arcConfig.sections.map((s) => `${s.label} ${Math.round(s.weight * 100)}%`).join(", ")}`
+                          : "Off — flat pool generation"}
+                      </span>
+                      <button
+                        className="tb-btn sm"
+                        onClick={() => setShowArcPanel((v) => !v)}
+                      >
+                        {showArcPanel ? "Hide" : "Edit"}
+                      </button>
+                    </div>
+                    {showArcPanel && (
+                      <div className="ph-arc-panel-wrap">
+                        <div className="ph-arc-mode-row">
+                          {(["none", "three_part", "four_part"] as const).map((m) => (
+                            <button
+                              key={m}
+                              className={`arc-mode-btn${(playlist.arcConfig?.mode ?? "none") === m ? " active" : ""}`}
+                              onClick={() => onArcConfigChange(
+                                m === "none"
+                                  ? { mode: "none", sections: playlist.arcConfig?.sections ?? [] }
+                                  : { mode: m, sections: (playlist.arcConfig?.sections?.length ? playlist.arcConfig.sections
+                                      : (m === "three_part" ? DEFAULT_THREE_PART_SECTIONS : DEFAULT_FOUR_PART_SECTIONS)) },
+                              )}
+                            >
+                              {m === "none" ? "Off" : m === "three_part" ? "3-Part" : "4-Part"}
+                            </button>
+                          ))}
+                        </div>
+                        {playlist.arcConfig && playlist.arcConfig.mode !== "none" && (
+                          <>
+                            <PlaylistMoodArcPanel
+                              libraryTracks={libraryTracks}
+                              config={playlist.arcConfig}
+                              totalTrackCount={playlist.targetTrackCount ?? playlist.slots.filter((s) => s.assignedTrackId).length ?? 12}
+                              onChange={onArcConfigChange}
+                            />
+                            {onRegenerateWithSections && (
+                              <button
+                                className="tb-btn ph-btn-primary"
+                                style={{ marginTop: 8, width: "100%" }}
+                                onClick={() => { onRegenerateWithSections(); setShowSettings(false); }}
+                              >
+                                ↻ Regenerate With Sections
+                              </button>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
+
+                <div className="ph-dropdown-label" style={{ marginTop: 10 }}>Timing</div>
+                <div className="ph-dropdown-label">{""}</div>
                 <div
                   style={{
                     display: "flex",
@@ -671,6 +1049,30 @@ export function PlaylistHeader({
                   </>
                 )}
 
+                {/* Artwork Display Mode (0706A) */}
+                {onArtworkDisplayModeChange && (
+                  <>
+                    <div className="ph-dropdown-label" style={{ marginTop: 12 }}>
+                      Artwork Display
+                    </div>
+                    <div className="ph-mode-btns" style={{ marginTop: 4 }}>
+                      {([
+                        { value: "cover_only" as const, label: "Cover Only" },
+                        { value: "banner" as const, label: "Banner" },
+                        { value: "full_atmosphere" as const, label: "Atmosphere" },
+                      ]).map(({ value, label }) => (
+                        <button
+                          key={value}
+                          className={`ph-mode-btn${(playlist.artworkDisplayMode ?? "cover_only") === value ? " active" : ""}`}
+                          onClick={() => onArtworkDisplayModeChange(value)}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+
                 {/* Source policy (0630C) */}
                 {(onSourcePolicyChange || onAllowedSourceOwnersChange) && (
                   <>
@@ -725,23 +1127,238 @@ export function PlaylistHeader({
                   </>
                 )}
               </div>
-            )}
+            </DropdownPortal>
           </div>
         </div>
+
+        {/* Empty playlist guided setup */}
+        {isDraftEmpty && (
+          <div className="ph-empty-setup">
+            <div className="ph-empty-steps">
+              <div className="ph-empty-step">
+                <span className="ph-empty-step-num">1</span>
+                <div className="ph-empty-step-body">
+                  <div className="ph-empty-step-title">Add crate sources</div>
+                  <div className="ph-empty-step-desc">Choose one or more crates as the track pool for this playlist.</div>
+                </div>
+              </div>
+              <div className="ph-empty-step">
+                <span className="ph-empty-step-num">2</span>
+                <div className="ph-empty-step-body">
+                  <div className="ph-empty-step-title">Generate playlist options</div>
+                  <div className="ph-empty-step-desc">MUSIC scores and arranges candidate tracks from your crate pool.</div>
+                </div>
+              </div>
+              <div className="ph-empty-step">
+                <span className="ph-empty-step-num">3</span>
+                <div className="ph-empty-step-body">
+                  <div className="ph-empty-step-title">Accept a playlist output</div>
+                  <div className="ph-empty-step-desc">Pick the option you like and confirm it as the playlist.</div>
+                </div>
+              </div>
+            </div>
+            {onAddCrate && (() => {
+              const availableCrates = crates.filter((c) => !attachedCrateIds.has(c.id));
+              return (
+                <div className="ph-empty-crate-action">
+                  <button
+                    ref={addCrateBtnRef}
+                    className="ph-empty-add-crate"
+                    onClick={(e) => { e.stopPropagation(); setShowCratePicker((v) => !v); }}
+                  >
+                    + Add Crate
+                  </button>
+                  <DropdownPortal
+                    open={showCratePicker}
+                    anchorRef={addCrateBtnRef}
+                    align="left"
+                    onClose={() => setShowCratePicker(false)}
+                  >
+                    <div className="ph-crate-picker" onClick={(e) => e.stopPropagation()}>
+                      {availableCrates.length === 0 && (
+                        <div className="ph-crate-picker-empty">No crates available — create a crate first.</div>
+                      )}
+                      {availableCrates.map((c) => (
+                        <button
+                          key={c.id}
+                          className="ph-crate-picker-item"
+                          onClick={() => { onAddCrate(c.id); setShowCratePicker(false); }}
+                        >
+                          ◈ {c.name}
+                        </button>
+                      ))}
+                    </div>
+                  </DropdownPortal>
+                </div>
+              );
+            })()}
+          </div>
+        )}
+
+        {/* Accepted mode: compact crate pool summary — hidden (redundant with crate chips) */}
+
+        {/* Crate Sources — hidden when in draft_empty guided setup */}
+        {!isDraftEmpty && (onAddCrate || (playlist.crateIds && playlist.crateIds.length > 0)) && (() => {
+          const availableCrates = crates.filter((c) => !attachedCrateIds.has(c.id));
+          return (
+            <div className="ph-crate-sources">
+              <div className="ph-crate-row">
+                <span className="ph-crate-label">Crates</span>
+                <div className="ph-crate-chips">
+                  {attachedCrates.map((c) => {
+                    const cnt = crateCountsById.get(c.id) ?? 0;
+                    const allTags = allTagsCountById.get(c.id);
+                    const staleDelta = allTags != null ? allTags - cnt : 0;
+                    const isStale = staleDelta > 10 && cnt < allTags! * 0.8;
+                    const vt = getCrateVisualToken(c, []);
+                    const accentVar = vt.colorToken ? `var(${vt.colorToken})` : undefined;
+                    return (
+                      <span
+                        key={c.id}
+                        className="ph-crate-chip"
+                        style={accentVar ? { "--chip-accent": accentVar } as React.CSSProperties : undefined}
+                      >
+                        {onOpenCrate
+                          ? <button className="ph-crate-chip-label" title="Open crate" onClick={() => onOpenCrate(c.id)}>{c.name}</button>
+                          : <span className="ph-crate-chip-label">{c.name}</span>}
+                        {cnt > 0 && <span className="ph-crate-chip-count">{cnt}</span>}
+                        {isStale && <span className="ph-crate-chip-warn" title={`${staleDelta} tracks excluded by source filter`}>⚠</span>}
+                        {onRemoveCrate && (
+                          <button className="ph-crate-chip-remove" title="Remove crate" onClick={() => onRemoveCrate(c.id)}>×</button>
+                        )}
+                      </span>
+                    );
+                  })}
+                  {!hasCrates && onAddCrate && (
+                    <span className="ph-crate-empty-hint">No crates selected — add one or more crates to generate playlist options.</span>
+                  )}
+                  {onAddCrate && (
+                    <div className="ph-crate-add-wrap">
+                      <button
+                        ref={addCrateBtnRef}
+                        className="ph-crate-add-btn"
+                        onClick={(e) => { e.stopPropagation(); setShowCratePicker((v) => !v); }}
+                      >
+                        + Add Crate
+                      </button>
+                      <DropdownPortal
+                        open={showCratePicker}
+                        anchorRef={addCrateBtnRef}
+                        align="left"
+                        onClose={() => setShowCratePicker(false)}
+                      >
+                        <div className="ph-crate-picker" onClick={(e) => e.stopPropagation()}>
+                          {availableCrates.length === 0 && (
+                            <div className="ph-crate-picker-empty">All crates already attached</div>
+                          )}
+                          {availableCrates.map((c) => (
+                            <button
+                              key={c.id}
+                              className="ph-crate-picker-item"
+                              onClick={() => { onAddCrate(c.id); setShowCratePicker(false); }}
+                            >
+                              ◈ {c.name}
+                            </button>
+                          ))}
+                        </div>
+                      </DropdownPortal>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Stale CTA — shown in crate row when options are stale in accepted mode */}
+              {isOptionsStale && isAcceptedMode && onOpenOptionsPopup && (
+                <button className="ph-stale-cta" onClick={onOpenOptionsPopup}>
+                  Options stale · Regenerate
+                </button>
+              )}
+
+              {/* Options panel — suppressed in accepted mode (access via Flow panel popup) */}
+              {hasCrates && poolCount > 0 && onGenerateOptions && !isAcceptedMode && pathOptions.length === 0 && (
+                <PlaylistPathOptionsPanel
+                  options={pathOptions}
+                  acceptedOptionId={acceptedPathOptionId}
+                  crates={crates}
+                  tracksById={tracksById}
+                  targetDurationSeconds={playlist.targetDurationMinutes * 60}
+                  isGenerating={isGeneratingOptions}
+                  onGenerate={onGenerateOptions}
+                  onAccept={(id) => onAcceptOption?.(id)}
+                  onDuplicate={(id) => onDuplicateOption?.(id)}
+                  currentMetadataRevision={currentMetadataRevision}
+                  metadataRepairImpact={metadataRepairImpact}
+                  isAcceptedMode={false}
+                  isCrateOptionsOpen={false}
+                  hideAcceptedBar={true}
+                />
+              )}
+              {hasCrates && poolCount > 0 && onGenerateOptions && !isAcceptedMode && pathOptions.length > 0 && (
+                <div className="ph-review-options-cta">
+                  <span className="ph-review-options-count">{pathOptions.length} option{pathOptions.length !== 1 ? "s" : ""} generated</span>
+                  <button className="ph-review-options-btn" onClick={onOpenOptionsPopup}>
+                    Review Options
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        })()}
       </div>
 
       {/* Identity panel */}
       {showIdentity && (
         <PlaylistIdentityPanel
           playlist={playlist}
-          totalTrackCount={totalTrackCount}
-          totalDurationSeconds={totalDurationSeconds}
           onClose={() => setShowIdentity(false)}
           onTitleChange={onTitleChange}
           onDescriptionChange={onDescriptionChange}
           onCoverImageChange={onCoverImageChange}
           onBackgroundImageChange={onBackgroundImageChange}
+          onBroadcastBgChange={onBroadcastBgChange}
           onMoodTagsChange={onMoodTagsChange}
+        />
+      )}
+
+      {/* Playlist Analyzer Review (0712_MUSIC_Playlist_Analyzer_Review + 0713 repair integration) */}
+      {showAnalyzerReview && (
+        <PlaylistAnalyzerReviewView
+          playlist={playlist}
+          libraryTracks={libraryTracks}
+          crates={crates}
+          libraryGaps={libraryGaps}
+          onReanalyzePlaylist={() => onReanalyzePlaylist?.()}
+          reanalysisProgress={reanalysisProgress}
+          reanalysisRunning={reanalysisRunning}
+          onClose={() => setShowAnalyzerReview(false)}
+        />
+      )}
+
+      {/* Playlist Local Repair (0713_MUSIC_Playlist_Local_Repair_And_Gap_Analysis) */}
+      {showRepairPanel && (
+        <PlaylistRepairPanel
+          playlist={playlist}
+          libraryTracks={libraryTracks}
+          crates={crates}
+          libraryGaps={libraryGaps}
+          onLibraryGapsChange={(gaps) => onLibraryGapsChange?.(gaps)}
+          onReplaceSlot={(trackId, slotIndex) => onReplaceSlot?.(trackId, slotIndex)}
+          onRepairStateChange={(state) => onRepairStateChange?.(state)}
+          onReanalyzePlaylist={() => onReanalyzePlaylist?.()}
+          reanalysisProgress={reanalysisProgress}
+          reanalysisRunning={reanalysisRunning}
+          onPreparationChange={(preparation) => onPreparationChange?.(preparation)}
+          onClose={() => setShowRepairPanel(false)}
+        />
+      )}
+
+      {/* Playlist Transition Preparation (0714_MUSIC_Playlist_Transition_Preparation) */}
+      {showPreparationPanel && (
+        <PlaylistPreparationPanel
+          playlist={playlist}
+          libraryTracks={libraryTracks}
+          onPreparationChange={(preparation) => onPreparationChange?.(preparation)}
+          onClose={() => setShowPreparationPanel(false)}
         />
       )}
 
@@ -757,7 +1374,7 @@ export function PlaylistHeader({
             onClick={(e) => e.stopPropagation()}
           >
             <div className="export-modal-header">
-              <span>Regenerate Playlist From Curve?</span>
+              <span>{hasCrates ? "Regenerate From Crate?" : "Regenerate Playlist From Curve?"}</span>
               <button
                 className="export-modal-close"
                 onClick={() => setConfirmRegen(false)}
@@ -773,11 +1390,9 @@ export function PlaylistHeader({
                 lineHeight: 1.5,
               }}
             >
-              This will rebuild track assignments from the active flow curve.
-              <br />
-              <br />
-              Manual edits and slot order will be replaced. Locked tracks will
-              stay fixed.
+              {hasCrates
+                ? "This will rebuild Playlist Output from the selected crate pool using the active Flow Curve. Manual edits and slot order will be replaced. Locked tracks will stay fixed."
+                : "This will rebuild track assignments from the active flow curve. Manual edits and slot order will be replaced. Locked tracks will stay fixed."}
             </div>
             <div className="export-modal-footer">
               <button className="tb-btn" onClick={() => setConfirmRegen(false)}>
@@ -790,7 +1405,7 @@ export function PlaylistHeader({
                   setConfirmRegen(false);
                 }}
               >
-                Regenerate
+                {hasCrates ? "Regenerate From Crate" : "Regenerate"}
               </button>
             </div>
           </div>
@@ -848,6 +1463,164 @@ export function PlaylistHeader({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Options drawer */}
+      {showOptionsDrawer && createPortal(
+        <div
+          className="export-modal-overlay"
+          onClick={() => setShowOptionsDrawer(false)}
+        >
+          <div
+            className="ph-options-drawer"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="export-modal-header">
+              <span>Playlist Options</span>
+              <button
+                className="export-modal-close"
+                onClick={() => setShowOptionsDrawer(false)}
+              >
+                ✕
+              </button>
+            </div>
+            <div className="ph-options-drawer-body">
+              {/* Playlist state + source pool header */}
+              <div className="ph-drawer-state-row">
+                <span className={`ph-state-badge ph-state-badge--${uiState.severity}`} title={uiState.description}>
+                  {uiState.label}
+                </span>
+                {sourceComposition.map((k) => (
+                  <SourceBadge key={k} source={k} />
+                ))}
+              </div>
+
+              {/* Crate sources inside drawer */}
+              <div className="ph-crate-sources ph-crate-sources--drawer">
+                <div className="ph-crate-row">
+                  <span className="ph-crate-label">Crate Sources</span>
+                  <div className="ph-crate-chips">
+                    {attachedCrates.map((c) => {
+                      const cnt = crateCountsById.get(c.id) ?? 0;
+                      const vt = getCrateVisualToken(c, []);
+                      const accentVar = vt.colorToken ? `var(${vt.colorToken})` : undefined;
+                      return (
+                        <span
+                          key={c.id}
+                          className="ph-crate-chip"
+                          style={accentVar ? { "--chip-accent": accentVar } as React.CSSProperties : undefined}
+                        >
+                          {onOpenCrate
+                            ? <button className="ph-crate-chip-label" onClick={() => { onOpenCrate(c.id); setShowOptionsDrawer(false); }}>{c.name}</button>
+                            : <span className="ph-crate-chip-label">{c.name}</span>}
+                          {cnt > 0 && <span className="ph-crate-chip-count">{cnt}</span>}
+                          {onRemoveCrate && (
+                            <button className="ph-crate-chip-remove" onClick={() => onRemoveCrate(c.id)}>×</button>
+                          )}
+                        </span>
+                      );
+                    })}
+                    {!hasCrates && <span className="ph-crate-empty-hint">No crates selected — add one or more crates to generate playlist options.</span>}
+                    {onAddCrate && (() => {
+                      const availableCrates = crates.filter((c) => !attachedCrateIds.has(c.id));
+                      return (
+                        <div className="ph-crate-add-wrap">
+                          <button ref={addCrateBtnRef} className="ph-crate-add-btn" onClick={(e) => { e.stopPropagation(); setShowCratePicker((v) => !v); }}>
+                            + Add Crate
+                          </button>
+                          <DropdownPortal
+                            open={showCratePicker}
+                            anchorRef={addCrateBtnRef}
+                            align="left"
+                            onClose={() => setShowCratePicker(false)}
+                          >
+                            <div className="ph-crate-picker" onClick={(e) => e.stopPropagation()}>
+                              {availableCrates.length === 0 && (
+                                <div className="ph-crate-picker-empty">All crates already attached</div>
+                              )}
+                              {availableCrates.map((c) => (
+                                <button key={c.id} className="ph-crate-picker-item" onClick={() => { onAddCrate(c.id); setShowCratePicker(false); }}>
+                                  ◈ {c.name}
+                                </button>
+                              ))}
+                            </div>
+                          </DropdownPortal>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+              </div>
+
+              {/* Stale banner for crate changes */}
+              {playlistOptionsStaleReason === "crate_sources_changed" && (
+                <div className="ppo-stale-banner">
+                  <div className="ppo-stale-banner-main">
+                    Crate sources changed after these options were generated. Regenerate Options to score the current crate pool.
+                  </div>
+                  <div className="ppo-stale-note">
+                    Existing accepted playlist output will not change until you accept a new option.
+                  </div>
+                </div>
+              )}
+              {playlistOptionsStaleReason === "track_pool_changed" && (
+                <div className="ppo-stale-banner">
+                  <div className="ppo-stale-banner-main">
+                    The crate track pool changed after these options were generated. Regenerate Options to rebuild candidates.
+                  </div>
+                </div>
+              )}
+
+              {/* Mood Target placeholder */}
+              <div className="ph-mood-target">
+                <div className="ph-mood-target-label">Mood Target</div>
+                {playlist.mood?.tags && playlist.mood.tags.length > 0 ? (
+                  <div className="ph-mood-target-chips">
+                    {playlist.mood.tags.map((tag: string) => (
+                      <span key={tag} className="ph-mood-target-chip">{tag}</span>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="ph-mood-target-empty">Mood weights not configured yet.</div>
+                )}
+              </div>
+
+              {/* Broadcast placeholder */}
+              <div className="ph-broadcast-placeholder">
+                <div className="ph-broadcast-label">Broadcast</div>
+                <button className="ph-broadcast-btn" disabled title="Full playlist-to-broadcast handoff coming soon">
+                  Prepare Countdown Screen
+                  <span className="ph-broadcast-soon">coming soon</span>
+                </button>
+              </div>
+
+              {/* Options panel */}
+              {onGenerateOptions && (hasCrates && poolCount > 0 ? (
+                <PlaylistPathOptionsPanel
+                  options={pathOptions}
+                  acceptedOptionId={acceptedPathOptionId}
+                  crates={crates}
+                  tracksById={tracksById}
+                  targetDurationSeconds={playlist.targetDurationMinutes * 60}
+                  isGenerating={isGeneratingOptions}
+                  onGenerate={onGenerateOptions}
+                  onAccept={(id) => { onAcceptOption?.(id); setShowOptionsDrawer(false); }}
+                  onDuplicate={(id) => { onDuplicateOption?.(id); setShowOptionsDrawer(false); }}
+                  currentMetadataRevision={currentMetadataRevision}
+                  metadataRepairImpact={metadataRepairImpact}
+                  isAcceptedMode={false}
+                />
+              ) : (
+                <div className="ph-options-no-crates">
+                  {!hasCrates
+                    ? "Add at least one crate to generate playlist options."
+                    : "No eligible tracks in selected crates. Add tracks to a crate first."}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

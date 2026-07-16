@@ -75,6 +75,8 @@
   <script src="../wall/systems/presentation/worldSpaceVehicleDebug.js"></script>
   <!-- Mapbox GL JS — required by Map Lab (Studio-owned instance, not wall runtime) -->
   <script src="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js"></script>
+  <!-- Mapbox token bridge — sets window.SBE.MapboxToken + window.MAPBOX_TOKEN -->
+  <script src="../wall/mapbox-env.js" onerror="console.warn('[WOS] Mapbox token missing — copy wall/mapbox-env.template.js → wall/mapbox-env.js and fill token')"></script>
   <!-- ── WOS Map Style Authority (0612Q) — MUST load before mapboxAdapter ────── -->
   <script src="../wall/systems/presentation/wosMapStyleAuthority.js"></script>
   <!-- Map Lab modules — load order: adapter → selection → inspector → registry → stylekit → preview → view -->

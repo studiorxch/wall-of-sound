@@ -57,7 +57,7 @@ type ScoreFn = (track: Track, energy: number, brightness: number, bpmN: number, 
 
 const TAG_SCORERS: Record<MechanicalMoodTag, ScoreFn> = {
 
-  opener(t, energy, brightness, bpmN, rhythmD, kw, notes) {
+  opener(_t, energy, brightness, bpmN, _rhythmD, kw, notes) {
     let s = 0;
     if (energy > 0.65) { s += 0.38; notes.push("high energy"); }
     if (bpmN > 0.42) { s += 0.28; notes.push("fast BPM"); }
@@ -77,7 +77,7 @@ const TAG_SCORERS: Record<MechanicalMoodTag, ScoreFn> = {
     return s;
   },
 
-  drop(t, energy, brightness, bpmN, rhythmD, kw, notes) {
+  drop(_t, energy, _brightness, bpmN, rhythmD, kw, notes) {
     let s = 0;
     if (energy > 0.78) { s += 0.45; notes.push("very high energy"); }
     if (bpmN > 0.55) { s += 0.3; notes.push("fast BPM"); }
@@ -86,7 +86,7 @@ const TAG_SCORERS: Record<MechanicalMoodTag, ScoreFn> = {
     return s;
   },
 
-  lift(t, energy, brightness, bpmN, _rd, kw, notes) {
+  lift(_t, energy, brightness, bpmN, _rd, kw, notes) {
     let s = 0;
     if (energy > 0.65) { s += 0.35; notes.push("high energy"); }
     if (brightness > 0.6) { s += 0.42; notes.push("high brightness"); }
@@ -95,7 +95,7 @@ const TAG_SCORERS: Record<MechanicalMoodTag, ScoreFn> = {
     return s;
   },
 
-  brightener(t, energy, brightness, bpmN, _rd, kw, notes) {
+  brightener(_t, energy, brightness, _bpmN, _rd, kw, notes) {
     let s = 0;
     if (brightness > 0.65) { s += 0.52; notes.push("high brightness"); }
     if (energy > 0.4 && energy < 0.8) { s += 0.28; notes.push("moderate energy"); }
@@ -103,7 +103,7 @@ const TAG_SCORERS: Record<MechanicalMoodTag, ScoreFn> = {
     return s;
   },
 
-  pulse(t, energy, brightness, bpmN, rhythmD, kw, notes) {
+  pulse(_t, energy, _brightness, bpmN, rhythmD, kw, notes) {
     let s = 0;
     if (energy > 0.5 && energy < 0.82) { s += 0.28; notes.push("medium-high energy"); }
     if (rhythmD > 0.7) { s += 0.4; notes.push("dense rhythm"); }
@@ -112,7 +112,7 @@ const TAG_SCORERS: Record<MechanicalMoodTag, ScoreFn> = {
     return s;
   },
 
-  build(t, energy, brightness, bpmN, _rd, kw, notes) {
+  build(_t, energy, brightness, bpmN, _rd, kw, notes) {
     let s = 0;
     if (energy > 0.45 && energy < 0.75) { s += 0.3; notes.push("building energy range"); }
     if (bpmN > 0.33 && bpmN < 0.65) { s += 0.28; notes.push("build BPM range"); }
@@ -121,7 +121,7 @@ const TAG_SCORERS: Record<MechanicalMoodTag, ScoreFn> = {
     return s;
   },
 
-  plateau(t, energy, brightness, bpmN, rhythmD, kw, notes) {
+  plateau(_t, energy, _brightness, bpmN, rhythmD, _kw, notes) {
     let s = 0;
     if (energy > 0.45 && energy < 0.7) { s += 0.4; notes.push("stable energy range"); }
     if (bpmN > 0.28 && bpmN < 0.55) { s += 0.3; notes.push("stable BPM"); }
@@ -129,7 +129,7 @@ const TAG_SCORERS: Record<MechanicalMoodTag, ScoreFn> = {
     return s;
   },
 
-  hold(t, energy, brightness, bpmN, rhythmD, kw, notes) {
+  hold(_t, energy, _brightness, bpmN, rhythmD, kw, notes) {
     let s = 0;
     if (energy > 0.3 && energy < 0.58) { s += 0.42; notes.push("held energy"); }
     if (bpmN > 0.2 && bpmN < 0.48) { s += 0.3; notes.push("moderate BPM"); }
@@ -138,7 +138,7 @@ const TAG_SCORERS: Record<MechanicalMoodTag, ScoreFn> = {
     return s;
   },
 
-  anchor(t, energy, brightness, bpmN, rhythmD, kw, notes) {
+  anchor(t, energy, _brightness, bpmN, rhythmD, _kw, notes) {
     let s = 0;
     if (t.groove) { s += 0.42; notes.push("groove field present"); }
     if (energy > 0.38 && energy < 0.7) { s += 0.28; notes.push("anchor energy range"); }
@@ -147,7 +147,7 @@ const TAG_SCORERS: Record<MechanicalMoodTag, ScoreFn> = {
     return s;
   },
 
-  bridge(t, energy, brightness, bpmN, _rd, kw, notes) {
+  bridge(_t, energy, brightness, bpmN, _rd, kw, notes) {
     let s = 0;
     if (energy > 0.28 && energy < 0.62) { s += 0.35; notes.push("bridge energy range"); }
     if (brightness > 0.3 && brightness < 0.65) { s += 0.25; notes.push("mid brightness"); }
@@ -156,7 +156,7 @@ const TAG_SCORERS: Record<MechanicalMoodTag, ScoreFn> = {
     return s;
   },
 
-  transition(t, energy, brightness, bpmN, _rd, kw, notes) {
+  transition(t, energy, _brightness, bpmN, _rd, kw, notes) {
     let s = 0;
     if (energy > 0.32 && energy < 0.62) { s += 0.3; notes.push("transition energy"); }
     const dur = t.durationSeconds ?? 0;
@@ -166,7 +166,7 @@ const TAG_SCORERS: Record<MechanicalMoodTag, ScoreFn> = {
     return s;
   },
 
-  recovery(t, energy, brightness, bpmN, _rd, kw, notes) {
+  recovery(_t, energy, _brightness, bpmN, _rd, kw, notes) {
     let s = 0;
     if (energy > 0.22 && energy < 0.52) { s += 0.42; notes.push("recovery energy"); }
     if (bpmN > 0.2 && bpmN < 0.42) { s += 0.3; notes.push("slower BPM"); }
@@ -174,7 +174,7 @@ const TAG_SCORERS: Record<MechanicalMoodTag, ScoreFn> = {
     return s;
   },
 
-  reset(t, energy, brightness, bpmN, _rd, kw, notes) {
+  reset(_t, energy, _brightness, bpmN, _rd, kw, notes) {
     let s = 0;
     if (energy < 0.4) { s += 0.45; notes.push("low energy"); }
     if (bpmN < 0.35) { s += 0.35; notes.push("slow BPM"); }
@@ -182,7 +182,7 @@ const TAG_SCORERS: Record<MechanicalMoodTag, ScoreFn> = {
     return s;
   },
 
-  drift(t, energy, brightness, bpmN, _rd, kw, notes) {
+  drift(_t, energy, brightness, bpmN, _rd, kw, notes) {
     let s = 0;
     if (energy < 0.35) { s += 0.4; notes.push("very low energy"); }
     if (bpmN < 0.3) { s += 0.3; notes.push("slow BPM"); }
@@ -191,7 +191,7 @@ const TAG_SCORERS: Record<MechanicalMoodTag, ScoreFn> = {
     return s;
   },
 
-  deepener(t, energy, brightness, bpmN, _rd, kw, notes) {
+  deepener(_t, energy, brightness, _bpmN, _rd, kw, notes) {
     let s = 0;
     if (brightness < 0.4) { s += 0.48; notes.push("low brightness"); }
     if (energy > 0.35 && energy < 0.68) { s += 0.35; notes.push("mid energy"); }
@@ -199,7 +199,7 @@ const TAG_SCORERS: Record<MechanicalMoodTag, ScoreFn> = {
     return s;
   },
 
-  shadow(t, energy, brightness, bpmN, _rd, kw, notes) {
+  shadow(_t, energy, brightness, _bpmN, _rd, kw, notes) {
     let s = 0;
     if (brightness < 0.28) { s += 0.55; notes.push("very low brightness"); }
     if (energy > 0.18 && energy < 0.58) { s += 0.3; notes.push("mid-low energy"); }
@@ -207,7 +207,7 @@ const TAG_SCORERS: Record<MechanicalMoodTag, ScoreFn> = {
     return s;
   },
 
-  tension(t, energy, brightness, bpmN, rhythmD, kw, notes) {
+  tension(_t, energy, brightness, _bpmN, rhythmD, kw, notes) {
     let s = 0;
     if (energy > 0.62) { s += 0.42; notes.push("high energy"); }
     if (brightness < 0.42) { s += 0.42; notes.push("low brightness"); }
@@ -216,7 +216,7 @@ const TAG_SCORERS: Record<MechanicalMoodTag, ScoreFn> = {
     return s;
   },
 
-  release(t, energy, brightness, bpmN, _rd, kw, notes) {
+  release(_t, energy, brightness, bpmN, _rd, kw, notes) {
     let s = 0;
     if (energy > 0.32 && energy < 0.68) { s += 0.3; notes.push("release energy"); }
     if (brightness > 0.58) { s += 0.42; notes.push("high brightness"); }
@@ -225,7 +225,7 @@ const TAG_SCORERS: Record<MechanicalMoodTag, ScoreFn> = {
     return s;
   },
 
-  disruptor(t, energy, brightness, bpmN, rhythmD, kw, notes) {
+  disruptor(_t, energy, _brightness, bpmN, rhythmD, kw, notes) {
     let s = 0;
     if (bpmN > 0.62) { s += 0.35; notes.push("very fast BPM"); }
     if (energy > 0.83) { s += 0.35; notes.push("very high energy"); }

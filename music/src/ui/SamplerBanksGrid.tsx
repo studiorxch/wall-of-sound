@@ -45,17 +45,17 @@ export function SamplerBanksGrid({ banks, loadedBankId, onOpen, onLoadInSampler,
     <CollectionGrid
       items={banks}
       itemId={(b) => b.playlistId}
-      title="Sampler Banks"
-      createLabel="+ New Sampler Bank"
+      title="Banks"
+      createLabel="+ New Bank"
       createWithNamePrompt
       createNamePlaceholder="Bank name…"
-      defaultCreateName="New Sampler Bank"
+      defaultCreateName="New Bank"
       onCreate={onCreate}
-      emptyMessage="No Sampler Banks yet."
+      emptyMessage="No Banks yet."
       onDelete={onDelete}
       onDuplicate={onDuplicate}
-      deleteModalTitle="Delete Sampler Bank?"
-      deleteModalBody={(b) => `"${b.title}" will be removed. Reference tracks are not deleted.`}
+      deleteModalTitle="Delete Bank?"
+      deleteModalBody={(b) => `"${b.title}" will be removed. Sounds tracks are not deleted.`}
       deleteActionLabel="Delete Bank"
       minItemsForDelete={2}
       renderCtxMenu={(id, { startDelete, onDuplicate: dup, close }) => {

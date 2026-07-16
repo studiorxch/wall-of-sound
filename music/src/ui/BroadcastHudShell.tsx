@@ -21,10 +21,16 @@ import {
 import { TypedTrackIndexOverlay } from "./TypedTrackIndexOverlay";
 import { BroadcastMicrographicsGrid } from "./BroadcastMicrographicsGrid";
 import { BroadcastSignalStrip } from "./BroadcastSignalStrip";
-import { BroadcastRouteCameraInstrumentation, type CamPovModeId } from "./BroadcastRouteCameraInstrumentation";
+import { BroadcastRouteCameraInstrumentation, type CamPovModeId, type BroadcastMapModeId } from "./BroadcastRouteCameraInstrumentation";
 import { BroadcastSmartGridOverlay } from "./BroadcastSmartGridOverlay";
 import type { SyncState, StopResult } from "../runtime/broadcastIndicatorRegistry";
 import { requestSnapViaWall, type SnapResult } from "../runtime/broadcastScreensnap";
+import {
+  createDefaultBroadcastOverlayState,
+  getBroadcastOverlayClassNames,
+  type BroadcastOverlayId,
+  type BroadcastOverlayState,
+} from "../config/broadcastOverlays";
 
 // 0625G: BroadcastViewMode (operate/show) removed — TAB is the only visibility toggle.
 
@@ -89,7 +95,6 @@ type Props = {
   onStop: () => void;
   onNext: () => void;
   onPrevious: () => void;
-  onAutoplayToggle: () => void;
   onSeek: (t: number) => void;
   onNodeHoverChange: (idx: number | null) => void;
   onExitHud: () => void;
@@ -238,7 +243,15 @@ export function BroadcastHudShell({
   const [routeStatus, setRouteStatus] = useState<BroadcastRouteStatus>("idle");
   const [activeRouteUrl, setActiveRouteUrl] = useState<string | null>(null);
   const [controlsVisible, setControlsVisible] = useState(true);
+  const [broadcastOverlays, setBroadcastOverlays] = useState<BroadcastOverlayState>(
+    createDefaultBroadcastOverlayState,
+  );
+  function toggleOverlay(id: BroadcastOverlayId) {
+    setBroadcastOverlays((prev) => ({ ...prev, [id]: !prev[id] }));
+  }
   const [activeCamMode, setActiveCamMode] = useState<CamPovModeId>("ext_follow");
+  // 0709 — broadcast map style mode; WOS owns resolution/persistence, syncs via wall:map-mode
+  const [broadcastMapMode, setBroadcastMapMode] = useState<BroadcastMapModeId>("minimal");
   const [skyRenderer, setSkyRenderer] = useState<"sky-bridge" | "three-sky" | "unavailable">("sky-bridge");
   const [skyRendererBlockReason, setSkyRendererBlockReason] = useState<string | undefined>(undefined);
   // 0625I — runtime bridge state
@@ -249,6 +262,7 @@ export function BroadcastHudShell({
   const [snapStatus, setSnapStatus] = useState<SnapResult | null>(null);
   const [wallTransport, setWallTransport] = useState<string>("flight");
   const [wallLocation, setWallLocation] = useState<WallLocation | null>(null);
+  const [broadcastVisualMode, setBroadcastVisualMode] = useState<"title_screen" | "map">("title_screen");
   const snapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const ackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastHeartbeatAtRef = useRef<number | null>(null);
@@ -318,6 +332,17 @@ export function BroadcastHudShell({
           if (typeof p.transport === "string") setWallTransport(p.transport);
           break;
         }
+        case "wall:tab-key": {
+          // Tab forwarded from embedded WOS iframe — same as local Tab handler
+          setControlsVisible((v) => {
+            const next = !v;
+            wosIframeRef.current?.contentWindow?.postMessage(
+              { type: "play:controls-visibility", visible: next }, "*",
+            );
+            return next;
+          });
+          break;
+        }
         case "wall:controls-visibility-ack": {
           const p = e.data.payload;
           if (!p) break;
@@ -352,6 +377,13 @@ export function BroadcastHudShell({
           const p = e.data.payload;
           if (!p) break;
           setStopResult(p.ok ? "stopped" : "failed");
+          break;
+        }
+        case "wall:map-mode": {
+          const m = e.data.payload?.mode;
+          if (m === "normal" || m === "cleaned" || m === "minimal") {
+            setBroadcastMapMode(m);
+          }
           break;
         }
       }
@@ -533,31 +565,58 @@ export function BroadcastHudShell({
     );
   }
 
+  // Map style bridge — WOS listener in broadcastMapIsolation.js applies + persists,
+  // then replies wall:map-mode which confirms the state shown in the toggle.
+  function handleMapMode(mode: BroadcastMapModeId) {
+    setBroadcastMapMode(mode);
+    wosIframeRef.current?.contentWindow?.postMessage(
+      { type: "play:set-map-mode", mode },
+      "*",
+    );
+  }
+
   const assignedSlots = slots.filter((s) => s.assignedTrackId);
   const totalDur = assignedSlots.reduce(
     (sum, s) => sum + (tracksById.get(s.assignedTrackId!)?.durationSeconds ?? 0), 0,
   );
   const count = assignedSlots.length;
 
-  const bgSrc = playlist.backgroundImage?.src;
-  const coverSrc = playlist.coverImage?.src;
+  // Normalized art source — || instead of ?? so empty strings fall through
+  // broadcastBackgroundArt (1280px/0.87) preferred over the 400px UI thumbnail
+  const resolvedBgSrc =
+    playlist.backgroundArtUrl?.trim() ||
+    playlist.broadcastBackgroundArt ||
+    playlist.backgroundImage?.src ||
+    null;
+  const resolvedCoverSrc =
+    playlist.coverArtUrl?.trim() ||
+    playlist.coverImage?.src ||
+    null;
+  const artSrc = resolvedBgSrc ?? resolvedCoverSrc;
+  const isBlurFallback = !resolvedBgSrc && Boolean(resolvedCoverSrc);
 
   const shellClass = [
-    "hud-shell hud-shell-stage",
+    "hud-shell hud-shell-stage broadcast-root",
     controlsVisible ? "hud-shell--controls-visible" : "hud-shell--controls-hidden",
-  ].join(" ");
+    getBroadcastOverlayClassNames(broadcastOverlays),
+  ].filter(Boolean).join(" ");
 
   return (
     <div className={shellClass} style={themeVars(theme)}>
-      {/* Background (non-map playlists) */}
-      {bgSrc ? (
-        <div className="hud-bg" style={{ backgroundImage: `url(${bgSrc})` }} />
-      ) : coverSrc ? (
-        <div className="hud-bg hud-bg-cover-blur" style={{ backgroundImage: `url(${coverSrc})` }} />
-      ) : null}
+      {/* Artwork background — title_screen mode only; z-index 2 above route-stage (z-index 1) */}
+      {broadcastVisualMode === "title_screen" && artSrc && (
+        <div
+          className={`hud-bg${isBlurFallback ? " hud-bg-cover-blur" : ""}`}
+          style={{ backgroundImage: `url(${artSrc})` }}
+        />
+      )}
 
-      {/* Route / map stage — always present */}
-      <div className="hud-route-stage">
+      {/* Route / map stage — kept mounted in title_screen mode but hidden so WOS runtime stays warm */}
+      <div
+        className="hud-route-stage"
+        aria-hidden={broadcastVisualMode !== "map"}
+        data-active={broadcastVisualMode === "map"}
+      >
         {routeStatus === "live" && activeRouteUrl ? (
           <RouteIframe ref={wosIframeRef} url={activeRouteUrl} />
         ) : (
@@ -571,8 +630,7 @@ export function BroadcastHudShell({
         {wallLocation && <WallLocationTag {...wallLocation} />}
       </div>
 
-      {/* Subtle atmosphere wash — pointer-events: none */}
-      <div className="hud-atmosphere-wash" />
+      {/* atmosphere wash removed — 0709: compression-hostile overlay */}
 
       {/* Typed track index reveal — appears on track change, pointer-transparent */}
       <TypedTrackIndexOverlay
@@ -621,12 +679,16 @@ export function BroadcastHudShell({
           skyRendererBlockReason={skyRendererBlockReason}
           transport={wallTransport}
           syncState={syncState}
+          broadcastOverlays={broadcastOverlays}
+          onToggleOverlay={toggleOverlay}
+          mapMode={broadcastMapMode}
+          onMapMode={handleMapMode}
         />
       </div>
 
       {/* Main body (grid / secondary layers) */}
       <div className="hud-body">
-        <div className="hud-atmosphere-zone" />
+        {/* hud-atmosphere-zone removed — 0709: compression-hostile overlay */}
         <BroadcastGridLayer
           visible={gridVisible}
           rows={4} columns={6}
@@ -649,6 +711,46 @@ export function BroadcastHudShell({
       {/* Operator toolbar — TAB is the only hide/show toggle (0625G: removed Operate/Show/Snapshot) */}
       {/* 0625H: music button moved to BroadcastSmartGridOverlay (top-left audio cluster) */}
       <div className="hud-operator-bar">
+        {/* Visual mode switcher */}
+        <div
+          className="broadcast-visual-mode-toggle"
+          role="tablist"
+          aria-label="Broadcast visual mode"
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={broadcastVisualMode === "title_screen"}
+            className={broadcastVisualMode === "title_screen" ? "is-active" : ""}
+            onClick={() => {
+              setBroadcastVisualMode("title_screen");
+              console.log("[BroadcastVisualMode]", {
+                broadcastVisualMode: "title_screen",
+                selectedPlaylistId: playlist.playlistId,
+                hasBroadcastBackgroundArt: Boolean(playlist.broadcastBackgroundArt),
+              });
+            }}
+          >
+            Title Screen
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={broadcastVisualMode === "map"}
+            className={broadcastVisualMode === "map" ? "is-active" : ""}
+            onClick={() => {
+              setBroadcastVisualMode("map");
+              console.log("[BroadcastVisualMode]", {
+                broadcastVisualMode: "map",
+                selectedPlaylistId: playlist.playlistId,
+                hasBroadcastBackgroundArt: Boolean(playlist.broadcastBackgroundArt),
+              });
+            }}
+          >
+            Map
+          </button>
+        </div>
+
         {/* Route status pill */}
         {routeStatus === "live" && (
           <span className="hud-route-status hud-route-status--live">Routes: Live</span>

@@ -1,4 +1,5 @@
 import type { Track } from "../data/trackTypes";
+import { inferAudioRelPath, type AudioCategory } from "./audioPathResolver";
 
 function normalize(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -145,7 +146,24 @@ export function linkAudioFiles(
       const objUrl = URL.createObjectURL(matchFile);
       objectUrls.set(t.trackId, objUrl);
       report.playableCount++;
-      return { ...t, filePath: matchRel, audioLinked: true, audioMissing: false, audioLastScannedAt: now, objectUrl: objUrl };
+      // Derive portable audioRelPath — prefer existing audioFileName, fallback to matched file name
+      const linkedFileName = t.audioFilename ?? t.fileName ?? matchFile.name;
+      const cat: AudioCategory =
+        t.sourceOwner === "reference" ? "reference" :
+        t.sourceOwner === "external" ? "external" : "catalog";
+      const audioRelPath = t.audioRelPath ?? inferAudioRelPath(cat, linkedFileName);
+      return {
+        ...t,
+        filePath: matchRel,
+        audioLinked: true,
+        audioMissing: false,
+        audioLastScannedAt: now,
+        objectUrl: objUrl,
+        audioFileName: linkedFileName,
+        audioRelPath,
+        audioCategory: cat,
+        audioStatus: "linked" as const,
+      };
     }
 
     report.missingCount++;
