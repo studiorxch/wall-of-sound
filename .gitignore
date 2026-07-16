@@ -1,6 +1,12 @@
 # Root
+.env
+.env.local
+*.env.local
 note.txt
 _docs
+
+# Generated AI handoff mirror
+WOS-share/
 
 # Music Library media / generated library content
 library/catalog/audio/
@@ -35,11 +41,11 @@ __pycache__/
 .venv
 .vscode
 node_modules/
-play/.claude
-play/.obsidian
-play/.venv
-play/.vscode
-play/node_modules/
+music/.claude
+music/.obsidian
+music/.venv
+music/.vscode
+music/node_modules/
 colorlab/.claude
 colorlab/node_modules/
 
@@ -63,3 +69,15 @@ wall-of-sound/interesting-bohr-9b2e37
 
 # Local snapshots
 snapshots/
+mapbox-env.js
+wall/mapbox-env.js
+
+# AudioLab
+audiolab/input/**
+!audiolab/input/.gitkeep
+audiolab/output/**
+!audiolab/output/.gitkeep
+!audiolab/output/analysis-json/.gitkeep
+!audiolab/output/analysis-csv/.gitkeep
+!audiolab/output/reports/.gitkeep
+audiolab/.venv/
