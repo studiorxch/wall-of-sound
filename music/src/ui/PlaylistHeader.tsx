@@ -158,6 +158,9 @@ type Props = {
   reanalysisProgress?: PlaylistReanalysisProgress | null;
   reanalysisRunning?: boolean;
   onPreparationChange?: (preparation: import("../data/playProjectTypes").PlaylistRecord["playbackPreparation"]) => void;
+  // 0718A_MUSIC_RADIO_Clean_Board_and_Explicit_Send_Flows §3 — explicit
+  // send affordance, MUSIC-side; never auto-publishes.
+  onSendToRadio?: () => void;
 };
 
 function fmtDur(secs: number): string {
@@ -322,6 +325,7 @@ export function PlaylistHeader({
   reanalysisProgress = null,
   reanalysisRunning = false,
   onPreparationChange,
+  onSendToRadio,
 }: Props) {
   // Accepted playlist read mode (0705K)
   const acceptedOutputCount = playlist.slots.filter((s) => s.assignedTrackId).length;
@@ -512,6 +516,16 @@ export function PlaylistHeader({
       {/* Curve area: horizontal toolbar above full-width chart */}
       <div className="ph-curve-area" onClick={(e) => e.stopPropagation()}>
         <div className="ph-curve-toolbar">
+          {/* 0718A §3 — explicit send affordance; never auto-publishes */}
+          {onSendToRadio && (
+            <button
+              className="ph-ct-btn"
+              onClick={(e) => { e.stopPropagation(); onSendToRadio(); }}
+              title="Send this playlist to RADIO"
+            >
+              ◎ Send → RADIO
+            </button>
+          )}
           {/* Settings dropdown */}
           <div className="ph-dropdown ph-ct-dropdown">
             <button

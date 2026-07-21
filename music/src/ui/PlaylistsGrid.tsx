@@ -15,6 +15,9 @@ type Props = {
   onDuplicate: (id: string) => void;
   onDelete: (id: string) => void;
   onCreate: () => void;
+  // 0718A_MUSIC_RADIO_Clean_Board_and_Explicit_Send_Flows §3 — explicit
+  // send affordance, MUSIC-side; never auto-publishes.
+  onSendToRadio: (id: string) => void;
 };
 
 function fmtDurShort(secs: number): string {
@@ -44,7 +47,7 @@ function CoverBlock({ playlist }: { playlist: PlaylistRecord }) {
   );
 }
 
-export function PlaylistsGrid({ playlists, libraryTracks, activePlaylistId, onOpen, onPlay, onDuplicate, onDelete, onCreate }: Props) {
+export function PlaylistsGrid({ playlists, libraryTracks, activePlaylistId, onOpen, onPlay, onDuplicate, onDelete, onCreate, onSendToRadio }: Props) {
   const tracksById = new Map(libraryTracks.map((t) => [t.trackId, t]));
 
   function cardStats(pl: PlaylistRecord) {
@@ -76,6 +79,7 @@ export function PlaylistsGrid({ playlists, libraryTracks, activePlaylistId, onOp
           <button className="ctx-item" onClick={() => { onPlay(id); close(); }}>Play</button>
           <div className="ctx-sep" />
           {dup && <button className="ctx-item" onClick={() => dup(id)}>Duplicate</button>}
+          <button className="ctx-item" onClick={() => { onSendToRadio(id); close(); }}>◎ Send → RADIO</button>
           <div className="ctx-sep" />
           <button
             className={`ctx-item danger${playlists.length <= 1 ? " ctx-item-disabled" : ""}`}

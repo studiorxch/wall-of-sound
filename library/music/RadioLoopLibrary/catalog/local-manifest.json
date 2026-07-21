@@ -1,0 +1,36 @@
+{
+  "schemaVersion": "1.0.0",
+  "generatedAt": "2026-07-17T20:07:51.965Z",
+  "entries": [
+    {
+      "radioLoopId": "rloop_000002",
+      "packageVersion": 1,
+      "status": "RADIO_READY",
+      "source": {
+        "trackId": "ext_mr9smtpl_wb0b",
+        "loopId": "loop_mroo8kjl_8w452v"
+      },
+      "relativePackagePath": "packages/rloop_000002/v1"
+    },
+    {
+      "radioLoopId": "rloop_000002",
+      "packageVersion": 2,
+      "status": "RADIO_READY",
+      "source": {
+        "trackId": "ext_mr9smtpl_wb0b",
+        "loopId": "loop_mroo8kjl_8w452v"
+      },
+      "relativePackagePath": "packages/rloop_000002/v2"
+    },
+    {
+      "radioLoopId": "rloop_000002",
+      "packageVersion": 3,
+      "status": "RADIO_READY",
+      "source": {
+        "trackId": "ext_mr9smtpl_wb0b",
+        "loopId": "loop_mroo8kjl_8w452v"
+      },
+      "relativePackagePath": "packages/rloop_000002/v3"
+    }
+  ]
+}

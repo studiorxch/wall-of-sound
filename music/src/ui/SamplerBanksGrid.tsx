@@ -14,6 +14,9 @@ type Props = {
   onDelete: (id: string) => void;
   onCreate: (title?: string) => void;
   onRename?: (id: string, title: string) => void;
+  // 0718A_MUSIC_RADIO_Clean_Board_and_Explicit_Send_Flows §4 — explicit
+  // send affordance, MUSIC-side; never auto-publishes.
+  onSendToRadio: (id: string) => void;
 };
 
 // Inline rename lives here (not in CollectionGrid) because it's sampler-specific.
@@ -38,7 +41,7 @@ function useBankRename(onRename?: (id: string, title: string) => void) {
   return { renameId, renameName, setRenameName, renameInputRef, startRename, submitRename };
 }
 
-export function SamplerBanksGrid({ banks, loadedBankId, onOpen, onLoadInSampler, onDuplicate, onDelete, onCreate, onRename }: Props) {
+export function SamplerBanksGrid({ banks, loadedBankId, onOpen, onLoadInSampler, onDuplicate, onDelete, onCreate, onRename, onSendToRadio }: Props) {
   const rename = useBankRename(onRename);
 
   return (
@@ -69,6 +72,7 @@ export function SamplerBanksGrid({ banks, loadedBankId, onOpen, onLoadInSampler,
               <button className="ctx-item" onClick={() => { rename.startRename(id, bank?.title ?? ""); close(); }}>Rename…</button>
             )}
             {dup && <button className="ctx-item" onClick={() => dup(id)}>Duplicate</button>}
+            <button className="ctx-item" onClick={() => { onSendToRadio(id); close(); }}>◎ Send → RADIO</button>
             <div className="ctx-sep" />
             <button
               className={`ctx-item danger${banks.length <= 1 ? " ctx-item-disabled" : ""}`}

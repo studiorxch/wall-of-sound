@@ -106,6 +106,35 @@ import type { LoopRenderRecord, LoopRenderSettings } from "./data/loopRenderType
 import { defaultRenderSettings } from "./data/loopRenderTypes";
 import { renderLoopToWav, downloadWavBuffer, verifyRenderedAudioIntegrity } from "./logic/loops/loopRenderService";
 import { resolveActiveLoopBoundsFrames } from "./logic/loops/loopRevisions";
+import type { RadioPromotionFormInput } from "./data/radioLoopTypes";
+import { promoteLoopToRadio, type PromoteLoopToRadioResult, type RadioPromotionPhase } from "./logic/radio/radioPromotionOrchestrator";
+import { useRadioLoopAudition } from "./logic/radio/radioLoopAudition";
+// 0717D_RADIO_Playlist_Inbox_and_Performance_Foundation
+import type { RadioAssetKind, RadioInboxItem } from "./data/radioInboxTypes";
+import type { RadioPlaylist } from "./data/radioPlaylistTypes";
+import { resolveOrCreateInboxItem, type RadioInboxSourceRef } from "./logic/radio/radioInboxResolver";
+import { sendPlaylistToRadio } from "./logic/radio/musicToRadioPlaylistSync";
+import { compareMusicPlaylistToRadioPlaylist, type RadioPlaylistUpdateDiff } from "./logic/radio/radioPlaylistUpdateComparison";
+import { computeSourceFingerprint } from "./logic/playbackBounds/computeTrackPlaybackBounds";
+// 0718A_MUSIC_RADIO_Clean_Board_and_Explicit_Send_Flows
+import type { RadioBank } from "./data/radioBankTypes";
+import type { RadioDashboardReceipt } from "./data/radioDashboardReceiptTypes";
+import { sendBankToRadio } from "./logic/radio/musicToRadioBankSync";
+import { compareMusicBankToRadioBank, type RadioBankUpdateDiff } from "./logic/radio/radioBankUpdateComparison";
+import { addAssetReceipt, addOrReactivateReceipt, dismissReceipt, migrateLegacyInboxItemsToReceipts } from "./logic/radio/radioDashboardReceipts";
+import { RadioDashboardView } from "./ui/radio/RadioDashboardView";
+// 0718B_RADIO_Web_Publication_Asset_Export_Bridge
+import type { RadioWebExportRecord } from "./data/radioWebBundleTypes";
+import type { LoopchainDraft, RadioLoopchainSectionAcceptance, LoopchainObservation } from "./data/radioLoopchainTypes";
+import { RadioPlaylistsView } from "./ui/radio/RadioPlaylistsView";
+import { RadioLoopchainPlayer } from "./ui/radio/RadioLoopchainPlayer";
+import { RadioBanksView } from "./ui/radio/RadioBanksView";
+import { type RadioLooperSharedProps } from "./ui/radio/RadioMultiTrackPrepWorkspace";
+import { RadioPlaylistUpdateCompareDialog } from "./ui/radio/RadioPlaylistUpdateCompareDialog";
+import { CollectionsOverview } from "./ui/CollectionsOverview";
+import type { CompleteSongAnalysis } from "./data/songAnalysisTypes";
+import { createSongAnalysisOrchestrator } from "./logic/songAnalysis/songAnalysisOrchestrator";
+import type { ChunkedDspProgress } from "./logic/dspFeatureExtraction";
 import { defaultCrateFilters } from "./data/crateTypes";
 import { CratesGrid } from "./ui/CratesGrid";
 import { CrateDetail } from "./ui/CrateDetail";
@@ -309,6 +338,42 @@ export default function App() {
   // advances inside migrateApprovedLoopsToRevisionsV1 at LOAD time, never
   // here, so a save must not silently reset it to undefined.
   const loopRevisionsMigrationVersionRef = useRef<number | undefined>(loadPlayProject()?.loopRevisionsMigrationVersion);
+  // 0717C_MUSIC_Complete_Song_Intelligence_and_Section_Map — one
+  // CompleteSongAnalysis per source track, project-level for the same
+  // reason as loops/loopRevisions above.
+  const [songAnalyses, setSongAnalyses] = useState<CompleteSongAnalysis[]>(() => loadPlayProject()?.songAnalyses ?? []);
+  const songAnalysesRef = useRef<CompleteSongAnalysis[]>([]);
+  // 0717D_RADIO_Playlist_Inbox_and_Performance_Foundation — RADIO Inbox
+  // items and RADIO Playlists, client-local, project-level for the same
+  // reason as loops/songAnalyses above.
+  const [radioInboxItems, setRadioInboxItems] = useState<RadioInboxItem[]>(() => loadPlayProject()?.radioInboxItems ?? []);
+  const radioInboxItemsRef = useRef<RadioInboxItem[]>([]);
+  const [radioPlaylists, setRadioPlaylists] = useState<RadioPlaylist[]>(() => loadPlayProject()?.radioPlaylists ?? []);
+  const radioPlaylistsRef = useRef<RadioPlaylist[]>([]);
+  // 0718A_MUSIC_RADIO_Clean_Board_and_Explicit_Send_Flows — RADIO Banks and
+  // the persisted dashboard receipt log, same project-level reason as
+  // radioInboxItems/radioPlaylists above.
+  const [radioBanks, setRadioBanks] = useState<RadioBank[]>(() => loadPlayProject()?.radioBanks ?? []);
+  const radioBanksRef = useRef<RadioBank[]>([]);
+  const [radioDashboardReceipts, setRadioDashboardReceipts] = useState<RadioDashboardReceipt[]>(() => loadPlayProject()?.radioDashboardReceipts ?? []);
+  const radioDashboardReceiptsRef = useRef<RadioDashboardReceipt[]>([]);
+  // 0718B_RADIO_Web_Publication_Asset_Export_Bridge — persisted export
+  // history; only ever appended to by a validated Web Bundle export (see
+  // radioWebBundleExportOrchestrator.ts's buildExportRecord).
+  const [radioWebExports, setRadioWebExports] = useState<RadioWebExportRecord[]>(() => loadPlayProject()?.radioWebExports ?? []);
+  const radioWebExportsRef = useRef<RadioWebExportRecord[]>([]);
+  // 0721_MUSIC_RADIO_Sectional_Loopchain_Player — one working chain draft,
+  // plus its region-bound loop acceptances and local observation log,
+  // project-level for the same reason as songAnalyses/radioPlaylists above.
+  const [loopchainDraft, setLoopchainDraft] = useState<LoopchainDraft | undefined>(() => loadPlayProject()?.loopchainDraft);
+  const loopchainDraftRef = useRef<LoopchainDraft | undefined>(undefined);
+  const [loopchainSectionAcceptances, setLoopchainSectionAcceptances] = useState<RadioLoopchainSectionAcceptance[]>(() => loadPlayProject()?.loopchainSectionAcceptances ?? []);
+  const loopchainSectionAcceptancesRef = useRef<RadioLoopchainSectionAcceptance[]>([]);
+  const [loopchainObservations, setLoopchainObservations] = useState<LoopchainObservation[]>(() => loadPlayProject()?.loopchainObservations ?? []);
+  const loopchainObservationsRef = useRef<LoopchainObservation[]>([]);
+  // Session-only — which real songs the player was opened with (from
+  // RADIO Playlists' currently-bound source tracks); never persisted.
+  const [loopchainCandidateSourceTrackIds, setLoopchainCandidateSourceTrackIds] = useState<string[]>([]);
   const decodedSourceBufferCacheRef = useRef<Map<string, AudioBuffer>>(new Map());
   const renderDecodeCtxRef = useRef<AudioContext | null>(null);
   // ── Playlist Local Repair — library gap register (0713_MUSIC_Playlist_Local_Repair_And_Gap_Analysis) ──
@@ -475,6 +540,15 @@ export default function App() {
   useEffect(() => { loopRendersRef.current = loopRenders; }, [loopRenders]);
   useEffect(() => { loopWorkspaceDraftsRef.current = loopWorkspaceDrafts; }, [loopWorkspaceDrafts]);
   useEffect(() => { loopRevisionsRef.current = loopRevisions; }, [loopRevisions]);
+  useEffect(() => { songAnalysesRef.current = songAnalyses; }, [songAnalyses]);
+  useEffect(() => { radioInboxItemsRef.current = radioInboxItems; }, [radioInboxItems]);
+  useEffect(() => { radioPlaylistsRef.current = radioPlaylists; }, [radioPlaylists]);
+  useEffect(() => { radioBanksRef.current = radioBanks; }, [radioBanks]);
+  useEffect(() => { radioWebExportsRef.current = radioWebExports; }, [radioWebExports]);
+  useEffect(() => { radioDashboardReceiptsRef.current = radioDashboardReceipts; }, [radioDashboardReceipts]);
+  useEffect(() => { loopchainDraftRef.current = loopchainDraft; }, [loopchainDraft]);
+  useEffect(() => { loopchainSectionAcceptancesRef.current = loopchainSectionAcceptances; }, [loopchainSectionAcceptances]);
+  useEffect(() => { loopchainObservationsRef.current = loopchainObservations; }, [loopchainObservations]);
   useEffect(() => { loopBinViewStateRef.current = loopBinViewState; }, [loopBinViewState]);
   useEffect(() => { libraryGapsRef.current = libraryGaps; }, [libraryGaps]);
 
@@ -535,6 +609,15 @@ export default function App() {
       loopRenders: loopRendersRef.current.length ? loopRendersRef.current : undefined,
       loopWorkspaceDrafts: loopWorkspaceDraftsRef.current.length ? loopWorkspaceDraftsRef.current : undefined,
       loopRevisions: loopRevisionsRef.current.length ? loopRevisionsRef.current : undefined,
+      songAnalyses: songAnalysesRef.current.length ? songAnalysesRef.current : undefined,
+      radioInboxItems: radioInboxItemsRef.current.length ? radioInboxItemsRef.current : undefined,
+      radioPlaylists: radioPlaylistsRef.current.length ? radioPlaylistsRef.current : undefined,
+      radioBanks: radioBanksRef.current.length ? radioBanksRef.current : undefined,
+      radioDashboardReceipts: radioDashboardReceiptsRef.current.length ? radioDashboardReceiptsRef.current : undefined,
+      radioWebExports: radioWebExportsRef.current.length ? radioWebExportsRef.current : undefined,
+      loopchainDraft: loopchainDraftRef.current,
+      loopchainSectionAcceptances: loopchainSectionAcceptancesRef.current.length ? loopchainSectionAcceptancesRef.current : undefined,
+      loopchainObservations: loopchainObservationsRef.current.length ? loopchainObservationsRef.current : undefined,
       loopBinViewState: loopBinViewStateRef.current,
       loopRevisionsMigrationVersion: loopRevisionsMigrationVersionRef.current,
       libraryGaps: libraryGapsRef.current.length ? libraryGapsRef.current : undefined,
@@ -1552,6 +1635,60 @@ export default function App() {
     }
   }
 
+  // 0717C_MUSIC_Complete_Song_Intelligence_and_Section_Map — song analysis
+  // lifecycle. 0717D_RADIO_Playlist_Inbox_and_Performance_Foundation §16
+  // extracted the actual orchestration logic (dedup/attach-to-in-flight,
+  // state transitions, cancellation, the armed-cancel debug hook) out of
+  // this file into songAnalysisOrchestrator.ts — a plain, testable factory
+  // — since this codebase has no React-component test harness (the same
+  // reason 0717B extracted sectionalRadioBridgeOrchestrator.ts). App.tsx
+  // now only owns the actual persisted state + a stable orchestrator
+  // instance closed over accessor/mutator callbacks into that state.
+  const [songAnalysisProgress, setSongAnalysisProgress] = useState<Record<string, ChunkedDspProgress>>({});
+
+  function handleSaveSongAnalysis(analysis: CompleteSongAnalysis) {
+    const exists = songAnalysesRef.current.some((a) => a.id === analysis.id);
+    const next = exists
+      ? songAnalysesRef.current.map((a) => (a.id === analysis.id ? analysis : a))
+      : [...songAnalysesRef.current, analysis];
+    songAnalysesRef.current = next;
+    setSongAnalyses(next);
+    savePlayProject(makeProj(playlistsRef.current));
+  }
+
+  function handleUpdateSongAnalysis(id: string, patch: Partial<CompleteSongAnalysis>) {
+    const next = songAnalysesRef.current.map((a) => (a.id === id ? { ...a, ...patch, updatedAt: nowIso() } : a));
+    songAnalysesRef.current = next;
+    setSongAnalyses(next);
+    savePlayProject(makeProj(playlistsRef.current));
+  }
+
+  const songAnalysisOrchestratorRef = useRef(
+    createSongAnalysisOrchestrator({
+      getSongAnalyses: () => songAnalysesRef.current,
+      saveSongAnalysis: handleSaveSongAnalysis,
+      updateSongAnalysis: handleUpdateSongAnalysis,
+      getDecodedSourceBufferForRender,
+      setProgress: (trackId, progress) => setSongAnalysisProgress((prev) => ({ ...prev, [trackId]: progress })),
+    }),
+  );
+  const ensureSongAnalysisReady = songAnalysisOrchestratorRef.current.ensureSongAnalysisReady;
+  const cancelSongAnalysis = songAnalysisOrchestratorRef.current.cancelSongAnalysis;
+  const recomputeSongAnalysisStatus = songAnalysisOrchestratorRef.current.recomputeSongAnalysisStatus;
+
+  // 0717C debt closure #2 — deterministic live-Cancel proof, mirrors the
+  // armMidTransitionPause install pattern below (App.tsx:5020-5023). No
+  // dependency array (runs after every render): window.MUSIC_DEBUG itself
+  // is installed asynchronously (inside the startup-recovery effect, after
+  // an awaited assessStartupRecovery() call), so a mount-only effect here
+  // can run before it exists and never get a second chance to attach.
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const w = window as unknown as { MUSIC_DEBUG?: Record<string, unknown> };
+      if (w.MUSIC_DEBUG) w.MUSIC_DEBUG.armSongAnalysisCancel = songAnalysisOrchestratorRef.current.armSongAnalysisCancel;
+    }
+  });
+
   // §8, §19, §21, §22, §26 — the real render action: decode (or reuse the
   // cached decode) → extract/process/encode → validate the header → decode
   // the produced WAV back and compare (never claim success from a written
@@ -1655,6 +1792,29 @@ export default function App() {
       if (result.ok) rendered++; else failed++;
     }
     return { rendered, failed };
+  }
+
+  // 0716B_MUSIC_RadioLoop_Library_Foundation — same "resolve source track →
+  // decode (or reuse cached decode) → resolve active revision bounds"
+  // shape as handleRenderLoop above; the actual promotion pipeline
+  // (eligibility → staging → lossless render → encode → server-side
+  // validate/finalize/manifest) lives in radioPromotionOrchestrator.ts.
+  // Promotion state is intentionally NOT persisted into PlayProject — the
+  // on-disk package + local-manifest.json are the durable source of truth
+  // (doctrine §4); this handler's result is transient, session-scoped UI
+  // feedback only.
+  async function handlePromoteToRadio(
+    loopId: string,
+    formInput: RadioPromotionFormInput,
+    onProgress?: (phase: RadioPromotionPhase) => void,
+  ): Promise<PromoteLoopToRadioResult> {
+    const loop = loopsRef.current.find((l) => l.id === loopId);
+    if (!loop) return { ok: false, issues: [{ code: "RADIO_ELIGIBILITY_LOOP_MISSING", message: "Loop not found", severity: "error" }] };
+    const track = libraryTracksRef.current.find((t) => t.trackId === loop.sourceTrackId);
+    if (!track) return { ok: false, issues: [{ code: "RADIO_ELIGIBILITY_SOURCE_TRACK_MISSING", message: "Source track not found", severity: "error" }] };
+    const buffer = await getDecodedSourceBufferForRender(track);
+    if (!buffer) return { ok: false, issues: [{ code: "RADIO_ELIGIBILITY_SOURCE_UNREADABLE", message: "Could not decode source audio", severity: "error" }] };
+    return promoteLoopToRadio({ loop, track, revisions: loopRevisionsRef.current, sourceBuffer: buffer, formInput, onProgress });
   }
 
   function handleUpsertAudioExperiment(record: AudioExperimentRecord) {
@@ -4758,9 +4918,45 @@ export default function App() {
     const loadedLoopRevisions = p.loopRevisions ?? [];
     loopRevisionsRef.current = loadedLoopRevisions;
     setLoopRevisions(loadedLoopRevisions);
+    const loadedSongAnalyses = p.songAnalyses ?? [];
+    songAnalysesRef.current = loadedSongAnalyses;
+    setSongAnalyses(loadedSongAnalyses);
     const loadedLoopBinViewState = p.loopBinViewState ?? { tab: "approved", filters: {}, sort: "start_time", updatedAt: nowIso() };
     loopBinViewStateRef.current = loadedLoopBinViewState;
     setLoopBinViewState(loadedLoopBinViewState);
+    // 0717D_RADIO_Playlist_Inbox_and_Performance_Foundation — same
+    // mandatory re-seed step, same 0715C bug class: without this, the
+    // authoritative async IndexedDB load could silently revert a
+    // just-created Inbox item or RADIO playlist to the sync-cache snapshot.
+    const loadedRadioInboxItems = p.radioInboxItems ?? [];
+    radioInboxItemsRef.current = loadedRadioInboxItems;
+    setRadioInboxItems(loadedRadioInboxItems);
+    const loadedRadioPlaylists = p.radioPlaylists ?? [];
+    radioPlaylistsRef.current = loadedRadioPlaylists;
+    setRadioPlaylists(loadedRadioPlaylists);
+    // 0718A_MUSIC_RADIO_Clean_Board_and_Explicit_Send_Flows — same re-seed
+    // step, plus a one-time additive, non-destructive backfill so any
+    // pre-receipt-model Inbox item (sent under 0717D's now-removed picker)
+    // gets a real receipt instead of silently vanishing from the dashboard.
+    const loadedRadioBanks = p.radioBanks ?? [];
+    radioBanksRef.current = loadedRadioBanks;
+    setRadioBanks(loadedRadioBanks);
+    const loadedRadioDashboardReceipts = migrateLegacyInboxItemsToReceipts(loadedRadioInboxItems, p.radioDashboardReceipts ?? []);
+    radioDashboardReceiptsRef.current = loadedRadioDashboardReceipts;
+    setRadioDashboardReceipts(loadedRadioDashboardReceipts);
+    // 0718B_RADIO_Web_Publication_Asset_Export_Bridge — same re-seed step.
+    const loadedRadioWebExports = p.radioWebExports ?? [];
+    radioWebExportsRef.current = loadedRadioWebExports;
+    setRadioWebExports(loadedRadioWebExports);
+    // 0721_MUSIC_RADIO_Sectional_Loopchain_Player — same re-seed step.
+    loopchainDraftRef.current = p.loopchainDraft;
+    setLoopchainDraft(p.loopchainDraft);
+    const loadedLoopchainSectionAcceptances = p.loopchainSectionAcceptances ?? [];
+    loopchainSectionAcceptancesRef.current = loadedLoopchainSectionAcceptances;
+    setLoopchainSectionAcceptances(loadedLoopchainSectionAcceptances);
+    const loadedLoopchainObservations = p.loopchainObservations ?? [];
+    loopchainObservationsRef.current = loadedLoopchainObservations;
+    setLoopchainObservations(loadedLoopchainObservations);
   }
 
   // ── Export / Import (0623B) ──────────────────────────────────────────────
@@ -5103,6 +5299,49 @@ export default function App() {
     onRelease: () => {},
   });
 
+  // 0717A §8.4 — a genuinely SEPARATE audition engine, instantiated once
+  // here for the same "survive navigation" reason as loopAudition above,
+  // but deliberately NOT wired through handleBeforeLoopPreview or any
+  // other MUSIC-transport chokepoint (see radioLoopAudition.ts's own doc
+  // comment and radioLoopAudition.isolation.test.ts).
+  const radioLoopAudition = useRadioLoopAudition();
+
+  // 0717A — lightweight nav badge count. The workspace itself fetches the
+  // full row set on open; this is only for the sidebar's number badge.
+  // 0717B — extracted into a named function so a promotion started from
+  // Sectional Looper (which never mounts RadioLoopsWorkspace) can also
+  // refresh it; still called once on mount exactly as before.
+  const [radioLoopCount, setRadioLoopCount] = useState(0);
+  function refreshRadioLoopCount() {
+    fetch("/radio-library-index")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((json: { entries?: unknown[] } | null) => { if (json?.entries) setRadioLoopCount(json.entries.length); })
+      .catch(() => {});
+  }
+  useEffect(() => {
+    refreshRadioLoopCount();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 0717B §9 — "Open RadioLoops" navigation target from the Sectional
+  // Looper bridge's completion state. Never depends on a filesystem path.
+  // 0717D — RadioLoopsWorkspace is no longer a top-level destination.
+  // 0718A — this now opens the RADIO Dashboard, which auto-opens the
+  // "Published Loop Packages" escape-hatch panel whenever focusRadioLoopId
+  // is set.
+  const [focusRadioLoopId, setFocusRadioLoopId] = useState<string | undefined>(undefined);
+  function openRadioLoops(radioLoopId?: string) {
+    setFocusRadioLoopId(radioLoopId);
+    setViewMode("radio");
+  }
+
+  // 0718A_MUSIC_RADIO_Clean_Board_and_Explicit_Send_Flows §12 — after a
+  // successful first send or confirmed update-send, land on the RADIO
+  // Dashboard (never a deep-linked playlist/bank editor) so the new/
+  // refreshed grouped-receipt card is visible.
+  const [focusRadioPlaylistId, setFocusRadioPlaylistId] = useState<string | undefined>(undefined);
+  const [focusRadioBankId, setFocusRadioBankId] = useState<string | undefined>(undefined);
+
   function handleStop() {
     const audio = audioRef.current;
     if (audio) { audio.pause(); audio.currentTime = 0; }
@@ -5370,6 +5609,278 @@ export default function App() {
     downloadStateAsJson(current, "Current");
   }
 
+  // 0717D_RADIO_Playlist_Inbox_and_Performance_Foundation — Inbox/Playlist
+  // handlers, mirroring the exact songAnalyses upsert/patch shape above.
+  // Returns the resolved item (new or reused) so callers needing it
+  // regardless of `created` — e.g. 0718A's individual-send handlers below,
+  // which must add/reactivate a dashboard receipt even when the item
+  // already existed — can act on it without re-resolving.
+  function handleAddInboxItem(kind: RadioAssetKind, sourceRef: RadioInboxSourceRef): RadioInboxItem {
+    const { item, created } = resolveOrCreateInboxItem(radioInboxItemsRef.current, kind, sourceRef);
+    if (created) {
+      const next = [...radioInboxItemsRef.current, item];
+      radioInboxItemsRef.current = next;
+      setRadioInboxItems(next);
+      savePlayProject(makeProj(playlistsRef.current));
+    }
+    return item;
+  }
+
+  function handleUpdateRadioInboxItem(id: string, patch: Partial<RadioInboxItem>) {
+    const next = radioInboxItemsRef.current.map((i) => (i.id === id ? { ...i, ...patch, updatedAt: nowIso() } : i));
+    radioInboxItemsRef.current = next;
+    setRadioInboxItems(next);
+    savePlayProject(makeProj(playlistsRef.current));
+  }
+
+  function handleUpdateRadioPlaylist(id: string, patch: Partial<RadioPlaylist>) {
+    const next = radioPlaylistsRef.current.map((p) => (p.id === id ? { ...p, ...patch, updatedAt: nowIso() } : p));
+    radioPlaylistsRef.current = next;
+    setRadioPlaylists(next);
+    savePlayProject(makeProj(playlistsRef.current));
+  }
+
+  // 0718A_MUSIC_RADIO_Clean_Board_and_Explicit_Send_Flows §4/§8 — mirrors
+  // handleUpdateRadioPlaylist exactly.
+  function handleUpdateRadioBank(id: string, patch: Partial<RadioBank>) {
+    const next = radioBanksRef.current.map((b) => (b.id === id ? { ...b, ...patch, updatedAt: nowIso() } : b));
+    radioBanksRef.current = next;
+    setRadioBanks(next);
+    savePlayProject(makeProj(playlistsRef.current));
+  }
+
+  function handleDismissRadioDashboardReceipt(receiptId: string) {
+    const next = dismissReceipt(radioDashboardReceiptsRef.current, receiptId);
+    radioDashboardReceiptsRef.current = next;
+    setRadioDashboardReceipts(next);
+    savePlayProject(makeProj(playlistsRef.current));
+  }
+
+  // 0718B_RADIO_Web_Publication_Asset_Export_Bridge — append-only history;
+  // called ONLY with an already-validated RadioWebExportRecord (built by
+  // radioWebBundleExportOrchestrator.ts's buildExportRecord after the
+  // server confirms the bundle self-validated ok).
+  function handleExportWebBundle(record: RadioWebExportRecord) {
+    const next = [...radioWebExportsRef.current, record];
+    radioWebExportsRef.current = next;
+    setRadioWebExports(next);
+    savePlayProject(makeProj(playlistsRef.current));
+  }
+
+  // 0721_MUSIC_RADIO_Sectional_Loopchain_Player — thin persistence wrappers,
+  // same shape as every handler above. The player itself never touches
+  // playProject state directly.
+  function handleUpdateLoopchainDraft(next: LoopchainDraft) {
+    loopchainDraftRef.current = next;
+    setLoopchainDraft(next);
+    savePlayProject(makeProj(playlistsRef.current));
+  }
+
+  function handleAcceptLoopchainSection(acceptance: RadioLoopchainSectionAcceptance) {
+    const next = [...loopchainSectionAcceptancesRef.current, acceptance];
+    loopchainSectionAcceptancesRef.current = next;
+    setLoopchainSectionAcceptances(next);
+    savePlayProject(makeProj(playlistsRef.current));
+  }
+
+  function handleRecordLoopchainObservation(observation: LoopchainObservation) {
+    const next = [...loopchainObservationsRef.current, observation];
+    loopchainObservationsRef.current = next;
+    setLoopchainObservations(next);
+    savePlayProject(makeProj(playlistsRef.current));
+  }
+
+  function handleOpenLoopchainPlayer(candidateSourceTrackIds: string[]) {
+    setLoopchainCandidateSourceTrackIds(candidateSourceTrackIds);
+    setViewMode("radio_loopchain_player");
+  }
+
+  // §6.3 — create-or-update a draft RADIO playlist. sendPlaylistToRadio
+  // (pure) already computes the full merged Inbox array and the correct
+  // playlist record (including the PUBLISHED-is-immutable new-draft
+  // branch); this is a thin persistence wrapper, same shape as every other
+  // handler above.
+  function handleSendPlaylistToRadio(musicPlaylistId: string) {
+    const musicPlaylist = playlistsRef.current.find((p) => p.playlistId === musicPlaylistId);
+    if (!musicPlaylist) return;
+    const existing = radioPlaylistsRef.current
+      .filter((rp) => rp.sourceMusicPlaylistId === musicPlaylistId && rp.state !== "RETIRED")
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0] ?? null;
+    const result = sendPlaylistToRadio(musicPlaylist, existing, radioInboxItemsRef.current, libraryTracksRef.current);
+
+    radioInboxItemsRef.current = result.inboxItems;
+    setRadioInboxItems(result.inboxItems);
+    const nextPlaylists = existing && result.radioPlaylist.id === existing.id
+      ? radioPlaylistsRef.current.map((rp) => (rp.id === result.radioPlaylist.id ? result.radioPlaylist : rp))
+      : [...radioPlaylistsRef.current, result.radioPlaylist];
+    radioPlaylistsRef.current = nextPlaylists;
+    setRadioPlaylists(nextPlaylists);
+    // 0718A §7 — a playlist send creates/reactivates exactly ONE receipt
+    // for the playlist itself (never one per member), and only when the
+    // sync actually changed something — an unchanged re-send stays a true
+    // no-op, touching no receipt at all.
+    if (result.changed) {
+      const nextReceipts = addOrReactivateReceipt(radioDashboardReceiptsRef.current, "playlist", result.radioPlaylist.id, nowIso());
+      radioDashboardReceiptsRef.current = nextReceipts;
+      setRadioDashboardReceipts(nextReceipts);
+    }
+    savePlayProject(makeProj(playlistsRef.current));
+  }
+
+  // 0718A §4 — mirrors handleSendPlaylistToRadio exactly for banks.
+  function handleSendBankToRadio(musicBankId: string) {
+    const musicBank = playlistsRef.current.find((p) => p.playlistId === musicBankId);
+    if (!musicBank) return;
+    const existing = radioBanksRef.current.find((rb) => rb.sourceMusicBankId === musicBankId) ?? null;
+    const result = sendBankToRadio(musicBank, existing, radioInboxItemsRef.current, libraryTracksRef.current);
+
+    radioInboxItemsRef.current = result.inboxItems;
+    setRadioInboxItems(result.inboxItems);
+    const nextBanks = existing
+      ? radioBanksRef.current.map((rb) => (rb.id === result.radioBank.id ? result.radioBank : rb))
+      : [...radioBanksRef.current, result.radioBank];
+    radioBanksRef.current = nextBanks;
+    setRadioBanks(nextBanks);
+    if (result.changed) {
+      const nextReceipts = addOrReactivateReceipt(radioDashboardReceiptsRef.current, "bank", result.radioBank.id, nowIso());
+      radioDashboardReceiptsRef.current = nextReceipts;
+      setRadioDashboardReceipts(nextReceipts);
+    }
+    savePlayProject(makeProj(playlistsRef.current));
+  }
+
+  // 0718A §3/§12 — compare-before-send UX, relocated from RadioPlaylistsView
+  // to MUSIC's own playlist card/detail click handlers. Unchanged re-sends
+  // are a silent no-op (brief flash only, no dialog, no navigation);
+  // changed re-sends require the explicit compare-and-confirm dialog; a
+  // first send goes straight through and lands on the RADIO Dashboard.
+  const [pendingRadioSend, setPendingRadioSend] = useState<
+    | { kind: "playlist"; musicId: string; existingTitle: string; diff: RadioPlaylistUpdateDiff }
+    | { kind: "bank"; musicId: string; existingTitle: string; diff: RadioBankUpdateDiff }
+    | null
+  >(null);
+
+  function handleSendPlaylistToRadioClick(musicPlaylistId: string) {
+    const musicPlaylist = playlistsRef.current.find((p) => p.playlistId === musicPlaylistId);
+    if (!musicPlaylist) return;
+    const existing = radioPlaylistsRef.current
+      .filter((rp) => rp.sourceMusicPlaylistId === musicPlaylistId && rp.state !== "RETIRED")
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0] ?? null;
+    if (!existing) {
+      handleSendPlaylistToRadio(musicPlaylistId);
+      setFocusRadioPlaylistId(musicPlaylistId);
+      setViewMode("radio");
+      return;
+    }
+    const diff = compareMusicPlaylistToRadioPlaylist(musicPlaylist, existing, radioInboxItemsRef.current);
+    if (!diff.orderChanged && !diff.membershipChanged) {
+      handleSendPlaylistToRadio(musicPlaylistId);
+      showFlashMsg("Already up to date in RADIO");
+      return;
+    }
+    setPendingRadioSend({ kind: "playlist", musicId: musicPlaylistId, existingTitle: existing.title, diff });
+  }
+
+  function handleSendBankToRadioClick(musicBankId: string) {
+    const musicBank = playlistsRef.current.find((p) => p.playlistId === musicBankId);
+    if (!musicBank) return;
+    const existing = radioBanksRef.current.find((rb) => rb.sourceMusicBankId === musicBankId) ?? null;
+    if (!existing) {
+      handleSendBankToRadio(musicBankId);
+      setFocusRadioBankId(musicBankId);
+      setViewMode("radio");
+      return;
+    }
+    const diff = compareMusicBankToRadioBank(musicBank, existing, radioInboxItemsRef.current);
+    if (!diff.orderChanged && !diff.membershipChanged) {
+      handleSendBankToRadio(musicBankId);
+      showFlashMsg("Already up to date in RADIO");
+      return;
+    }
+    setPendingRadioSend({ kind: "bank", musicId: musicBankId, existingTitle: existing.title, diff });
+  }
+
+  function handleConfirmPendingRadioSend() {
+    if (!pendingRadioSend) return;
+    if (pendingRadioSend.kind === "playlist") {
+      handleSendPlaylistToRadio(pendingRadioSend.musicId);
+      setFocusRadioPlaylistId(pendingRadioSend.musicId);
+    } else {
+      handleSendBankToRadio(pendingRadioSend.musicId);
+      setFocusRadioBankId(pendingRadioSend.musicId);
+    }
+    setPendingRadioSend(null);
+    setViewMode("radio");
+  }
+
+  // 0718A §5/§13 — individual-asset sends reuse resolveOrCreateInboxItem
+  // directly (not handleAddInboxItem, which historically returned early on
+  // `created: false` — the receipt must still be added/reactivated on a
+  // repeat direct send even when the underlying Inbox item already
+  // existed, e.g. because it was first received only as a playlist/bank
+  // member). addAssetReceipt is idempotent, so this never duplicates.
+  function handleSendTrackToRadio(trackId: string) {
+    const track = libraryTracksRef.current.find((t) => t.trackId === trackId);
+    if (!track) return;
+    const kind: RadioAssetKind = track.sourceOwner === "reference" ? "sound" : "track";
+    const fingerprint = computeSourceFingerprint(track.audioRelPath ?? track.filePath, track.durationSeconds);
+    const sourceRef: RadioInboxSourceRef = kind === "sound"
+      ? { sourceSoundId: trackId, sourceFingerprint: fingerprint }
+      : { sourceTrackId: trackId, sourceFingerprint: fingerprint };
+    const item = handleAddInboxItem(kind, sourceRef);
+    const nextReceipts = addAssetReceipt(radioDashboardReceiptsRef.current, item.id);
+    radioDashboardReceiptsRef.current = nextReceipts;
+    setRadioDashboardReceipts(nextReceipts);
+    savePlayProject(makeProj(playlistsRef.current));
+    showFlashMsg("Sent to RADIO");
+  }
+
+  function handleSendLoopToRadio(loopId: string) {
+    const loop = loopsRef.current.find((l) => l.id === loopId);
+    if (!loop) return;
+    const sourceTrack = libraryTracksRef.current.find((t) => t.trackId === loop.sourceTrackId);
+    const fingerprint = loop.sourceFingerprint ?? computeSourceFingerprint(sourceTrack?.audioRelPath ?? sourceTrack?.filePath, sourceTrack?.durationSeconds ?? 0);
+    const item = handleAddInboxItem("loop", { sourceTrackId: loop.sourceTrackId, sourceLoopId: loop.id, sourceFingerprint: fingerprint });
+    const nextReceipts = addAssetReceipt(radioDashboardReceiptsRef.current, item.id);
+    radioDashboardReceiptsRef.current = nextReceipts;
+    setRadioDashboardReceipts(nextReceipts);
+    savePlayProject(makeProj(playlistsRef.current));
+    showFlashMsg("Sent to RADIO");
+  }
+
+  // The RADIO multi-track prep workspace mounts the exact same
+  // SectionalLooperWorkspace component the standalone page below uses, per
+  // expanded row — built once here and reused by both call sites so they
+  // can never drift apart.
+  const radioLooperShared: RadioLooperSharedProps = {
+    libraryTracks,
+    resolveTrackUrl: getTrackPlayUrl,
+    onSaveLoop: handleSaveLoop,
+    onBeforeLoopPreview: handleBeforeLoopPreview,
+    onRenderLoop: handleRenderLoop,
+    getLoopRenderRecord,
+    loops,
+    loopAudition,
+    loopWorkspaceDrafts,
+    onSaveDraftSelection: handleSaveDraftSelection,
+    onClearDraftSelection: handleClearDraftSelection,
+    loopRevisions,
+    onSaveLoopRevision: handleSaveLoopRevision,
+    onMakeActiveRevision: handleMakeActiveRevision,
+    loopBinViewState,
+    onSaveLoopBinViewState: handleSaveLoopBinViewState,
+    onPromoteToRadio: handlePromoteToRadio,
+    onUpdateLoop: handleUpdateLoop,
+    onOpenRadioLoops: openRadioLoops,
+    refreshRadioLoopCount,
+    songAnalyses,
+    onUpdateSongAnalysis: handleUpdateSongAnalysis,
+    ensureSongAnalysisReady,
+    cancelSongAnalysis,
+    recomputeSongAnalysisStatus,
+    songAnalysisProgress,
+  };
+
   return (
     <div className="app">
       {startupRecovery !== null && (
@@ -5553,6 +6064,8 @@ export default function App() {
           artistCount={17}
           onImportAudioClick={() => setShowImportAudioModal(true)}
           loopCount={loops.length}
+          radioPlaylistCount={radioPlaylists.length}
+          radioBankCount={radioBanks.length}
         />
 
         {/* Right column — playlist header, flow curve, and all workspace content */}
@@ -5632,6 +6145,7 @@ export default function App() {
               showOptionsPopup={showOptionsPopup}
               onOpenOptionsPopup={() => setShowOptionsPopup(true)}
               onCloseOptionsPopup={() => setShowOptionsPopup(false)}
+              onSendToRadio={() => handleSendPlaylistToRadioClick(activePlaylist.playlistId)}
             />
           )}
           <div className={`workspace-main${viewMode === "playlist" && activePlaylist?.playlistKind !== "reference_overlay" ? " workspace-main--builder" : ""}${viewMode === "playlist" && Boolean(activePlaylist?.acceptedPathOptionId) && (activePlaylist?.slots.filter(s => s.assignedTrackId).length ?? 0) > 0 ? " workspace-main--accepted" : ""}`}>
@@ -5862,6 +6376,16 @@ export default function App() {
               onMakeActiveRevision={handleMakeActiveRevision}
               loopBinViewState={loopBinViewState}
               onSaveLoopBinViewState={handleSaveLoopBinViewState}
+              onPromoteToRadio={handlePromoteToRadio}
+              onUpdateLoop={handleUpdateLoop}
+              onOpenRadioLoops={openRadioLoops}
+              refreshRadioLoopCount={refreshRadioLoopCount}
+              songAnalyses={songAnalyses}
+              onUpdateSongAnalysis={handleUpdateSongAnalysis}
+              ensureSongAnalysisReady={ensureSongAnalysisReady}
+              cancelSongAnalysis={cancelSongAnalysis}
+              recomputeSongAnalysisStatus={recomputeSongAnalysisStatus}
+              songAnalysisProgress={songAnalysisProgress}
             />
           ) : viewMode === "loop_library" ? (
             <LoopLibraryView
@@ -5877,6 +6401,68 @@ export default function App() {
               onRenderLoop={handleRenderLoop}
               onRenderAllApproved={handleRenderAllApproved}
               loopRevisions={loopRevisions}
+              onPromoteToRadio={handlePromoteToRadio}
+              onSendLoopToRadio={handleSendLoopToRadio}
+            />
+          ) : viewMode === "radio" ? (
+            <RadioDashboardView
+              key={focusRadioLoopId ?? focusRadioPlaylistId ?? focusRadioBankId ?? "radio-default"}
+              radioInboxItems={radioInboxItems}
+              radioPlaylists={radioPlaylists}
+              radioBanks={radioBanks}
+              radioDashboardReceipts={radioDashboardReceipts}
+              libraryTracks={libraryTracks}
+              loops={loops}
+              publishedLoopPackageCount={radioLoopCount}
+              onOpenPlaylists={() => setViewMode("radio_playlists_grid")}
+              onOpenBanks={() => setViewMode("radio_banks_grid")}
+              onDismissReceipt={handleDismissRadioDashboardReceipt}
+              onOpenSourceLoop={(trackId) => { handleSelectLooperSourceTrack(trackId); setViewMode("sectional_looper"); }}
+              audition={radioLoopAudition}
+              focusRadioLoopId={focusRadioLoopId}
+            />
+          ) : viewMode === "radio_playlists_grid" ? (
+            <RadioPlaylistsView
+              radioPlaylists={radioPlaylists}
+              radioInboxItems={radioInboxItems}
+              libraryTracks={libraryTracks}
+              songAnalyses={songAnalyses}
+              radioWebExports={radioWebExports}
+              onUpdateRadioPlaylist={handleUpdateRadioPlaylist}
+              onUpdateRadioInboxItem={handleUpdateRadioInboxItem}
+              onExportWebBundle={handleExportWebBundle}
+              looperShared={radioLooperShared}
+              onOpenLoopchainPlayer={handleOpenLoopchainPlayer}
+            />
+          ) : viewMode === "radio_loopchain_player" ? (
+            <RadioLoopchainPlayer
+              candidateSourceTrackIds={loopchainCandidateSourceTrackIds}
+              libraryTracks={libraryTracks}
+              songAnalyses={songAnalyses}
+              draft={loopchainDraft}
+              onUpdateDraft={handleUpdateLoopchainDraft}
+              sectionAcceptances={loopchainSectionAcceptances}
+              onAcceptSection={handleAcceptLoopchainSection}
+              observations={loopchainObservations}
+              onRecordObservation={handleRecordLoopchainObservation}
+              getDecodedSourceBufferForRender={getDecodedSourceBufferForRender}
+              onBack={() => setViewMode("radio_playlists_grid")}
+            />
+          ) : viewMode === "radio_banks_grid" ? (
+            <RadioBanksView
+              radioBanks={radioBanks}
+              radioInboxItems={radioInboxItems}
+              libraryTracks={libraryTracks}
+              onUpdateRadioBank={handleUpdateRadioBank}
+            />
+          ) : viewMode === "collections_overview" ? (
+            <CollectionsOverview
+              crateCount={crates.length}
+              playlistCount={playlists.filter((pl) => pl.playlistKind !== "reference_overlay").length}
+              bankCount={playlists.filter((pl) => pl.playlistKind === "reference_overlay").length}
+              onViewCrates={() => setViewMode("crates_grid")}
+              onViewPlaylists={() => setViewMode("playlists_grid")}
+              onViewBanks={() => setViewMode("sampler_banks_grid")}
             />
           ) : viewMode === "playlists_grid" ? (
             <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
@@ -5894,6 +6480,7 @@ export default function App() {
                 onDuplicate={handleDuplicatePlaylist}
                 onDelete={handleDeletePlaylist}
                 onCreate={handleCreatePlaylist}
+                onSendToRadio={handleSendPlaylistToRadioClick}
               />
             </div>
           ) : viewMode === "sampler_banks_grid" ? (
@@ -5906,6 +6493,7 @@ export default function App() {
               onDelete={handleDeletePlaylist}
               onCreate={handleCreateSamplerBank}
               onRename={handleRenameBank}
+              onSendToRadio={handleSendBankToRadioClick}
             />
           ) : viewMode === "playlist" && activePlaylist?.playlistKind === "reference_overlay" ? (
             <SamplerBankView
@@ -5920,6 +6508,7 @@ export default function App() {
                 handleDeletePlaylist(activePlaylist.playlistId);
                 setViewMode("sampler_banks_grid");
               }}
+              onSendToRadio={handleSendBankToRadioClick}
             />
           ) : (
           <MainTrackWindow
@@ -6002,6 +6591,7 @@ export default function App() {
             onBulkCreatePlaylistFromTracks={handleBulkCreatePlaylistFromTracks}
             cratePoolTracks={cratePoolTracks}
             isAcceptedMode={Boolean(activePlaylist?.acceptedPathOptionId) && (activePlaylist?.slots.filter(s => s.assignedTrackId).length ?? 0) > 0}
+            onSendTrackToRadio={handleSendTrackToRadio}
           />
           )}
           {viewMode === "playlist" && (
@@ -6140,6 +6730,21 @@ export default function App() {
         </div>
         )}
       </div>
+
+      {/* 0718A_MUSIC_RADIO_Clean_Board_and_Explicit_Send_Flows §3/§4/§12 —
+          explicit update-comparison, shared verbatim between playlist and
+          bank sends. Confirming re-syncs via handleConfirmPendingRadioSend;
+          dismissing leaves the RADIO record untouched. */}
+      {pendingRadioSend && (
+        <RadioPlaylistUpdateCompareDialog
+          diff={pendingRadioSend.diff}
+          radioPlaylistTitle={pendingRadioSend.existingTitle}
+          libraryTracks={libraryTracks}
+          kindLabel={pendingRadioSend.kind}
+          onConfirm={handleConfirmPendingRadioSend}
+          onCancel={() => setPendingRadioSend(null)}
+        />
+      )}
 
       {/* Export report modal */}
       {exportReport && (

@@ -254,6 +254,35 @@ export type PlayProject = {
   loopRevisions?: import("./loopTypes").LoopRevision[];
   loopBinViewState?: import("./loopTypes").LoopBinViewState;
   loopRevisionsMigrationVersion?: number;
+  // 0717C_MUSIC_Complete_Song_Intelligence_and_Section_Map — one
+  // CompleteSongAnalysis per source track that has ever been analyzed,
+  // project-level for the same reason as `loops`/`loopRevisions` above.
+  songAnalyses?: import("./songAnalysisTypes").CompleteSongAnalysis[];
+  // 0717D_RADIO_Playlist_Inbox_and_Performance_Foundation — RADIO Inbox
+  // (staged candidate material) and RADIO Playlists (the ordered,
+  // lockable, versioned preparation/publication unit), client-local and
+  // project-level for the same reason as `loops`/`songAnalyses` above.
+  radioInboxItems?: import("./radioInboxTypes").RadioInboxItem[];
+  radioPlaylists?: import("./radioPlaylistTypes").RadioPlaylist[];
+  // 0718A_MUSIC_RADIO_Clean_Board_and_Explicit_Send_Flows — RADIO Banks
+  // (received performance kits) and the persisted dashboard receipt log
+  // that drives RADIO Dashboard visibility, project-level for the same
+  // reason as radioInboxItems/radioPlaylists above.
+  radioBanks?: import("./radioBankTypes").RadioBank[];
+  radioDashboardReceipts?: import("./radioDashboardReceiptTypes").RadioDashboardReceipt[];
+  // 0718B_RADIO_Web_Publication_Asset_Export_Bridge — validated web-bundle
+  // export history. Only a fully validated bundle produces a record;
+  // EXPORTED display state derives from these, never from playlist state.
+  radioWebExports?: import("./radioWebBundleTypes").RadioWebExportRecord[];
+  // 0721_MUSIC_RADIO_Sectional_Loopchain_Player — a listening instrument,
+  // not a publishing feature. One working chain draft at a time
+  // (project-level, same reason as songAnalyses/radioPlaylists above);
+  // region-bound loop acceptances and the local observation log persist
+  // independently of the draft itself so history survives a chain being
+  // cleared or rebuilt.
+  loopchainDraft?: import("./radioLoopchainTypes").LoopchainDraft;
+  loopchainSectionAcceptances?: import("./radioLoopchainTypes").RadioLoopchainSectionAcceptance[];
+  loopchainObservations?: import("./radioLoopchainTypes").LoopchainObservation[];
   createdAt: string;
   updatedAt: string;
 };

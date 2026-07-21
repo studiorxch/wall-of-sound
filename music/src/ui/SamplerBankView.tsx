@@ -19,9 +19,12 @@ type Props = {
   onGoHome?: () => void;
   onNewBank?: () => void;
   onDeleteBank?: () => void;
+  // 0718A_MUSIC_RADIO_Clean_Board_and_Explicit_Send_Flows §4 — explicit
+  // send affordance, MUSIC-side; never auto-publishes.
+  onSendToRadio?: (playlistId: string) => void;
 };
 
-export function SamplerBankView({ bank, libraryTracks, onLoadInSampler, onAddReferenceTracksToBank, referenceTrackCount, onGoHome, onNewBank, onDeleteBank }: Props) {
+export function SamplerBankView({ bank, libraryTracks, onLoadInSampler, onAddReferenceTracksToBank, referenceTrackCount, onGoHome, onNewBank, onDeleteBank, onSendToRadio }: Props) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const tracksById = new Map(libraryTracks.map((t) => [t.trackId, t]));
 
@@ -69,6 +72,15 @@ export function SamplerBankView({ bank, libraryTracks, onLoadInSampler, onAddRef
               title={`Add ${addableRefTracks.length} Sounds tracks not yet in this bank`}
             >
               + Add {addableRefTracks.length} Sounds Track{addableRefTracks.length !== 1 ? "s" : ""}
+            </button>
+          )}
+          {onSendToRadio && (
+            <button
+              className="sbv-btn"
+              onClick={() => onSendToRadio(bank.playlistId)}
+              title="Send this bank to RADIO"
+            >
+              ◎ Send → RADIO
             </button>
           )}
           {onDeleteBank && (

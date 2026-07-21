@@ -1,0 +1,41 @@
+{
+  "schemaVersion": "1.0.0",
+  "radioLoopId": "rloop_000001",
+  "packageVersion": 4,
+  "status": "RETIRED",
+  "source": {
+    "trackId": "ref_mrldlwme_m530",
+    "loopId": "loop_verify_0716b"
+  },
+  "audio": {
+    "primary": {
+      "codec": "opus",
+      "container": "ogg",
+      "mimeType": "audio/ogg; codecs=opus",
+      "relativePath": "core.opus",
+      "bitrateKbps": 128,
+      "channels": 2,
+      "durationSeconds": 1.8065
+    },
+    "variants": []
+  },
+  "musical": {},
+  "arrangement": {
+    "roles": [
+      "foundation",
+      "detail",
+      "event"
+    ],
+    "familyIds": [
+      "hypnotic-focus-01"
+    ]
+  },
+  "approval": {
+    "publicUseApproved": true,
+    "approvedAt": "2026-07-17T04:20:36.497Z"
+  },
+  "retirement": {
+    "reason": "Superseded by future hypnotic-focus family expansion; live-verification retirement test.",
+    "retiredAt": "2026-07-17T04:25:24.560Z"
+  }
+}

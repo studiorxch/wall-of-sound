@@ -78,17 +78,29 @@ import { SourceLineageSummary } from "./sectionalLooper/SourceLineageSummary";
 import { RevisionList } from "./sectionalLooper/RevisionList";
 import { ActivateRevisionConfirm } from "./sectionalLooper/ActivateRevisionConfirm";
 import { evaluateRegionEligibility, recommendDefaultBand, type RegionEligibility } from "../logic/loops/regionEligibility";
-import { recommendForRegion, type LengthPreference, type AutoRecommendationResult } from "../logic/loops/autoRecommendation";
+import { type LengthPreference } from "../logic/loops/autoRecommendation";
 import { validateStemAlignment } from "../logic/loops/stemAlignmentValidation";
 import { RegionStrip, type RegionUserState } from "./sectionalLooper/RegionStrip";
 import { LengthControl } from "./sectionalLooper/LengthControl";
 import { AlignmentControl, type AlignmentMode } from "./sectionalLooper/AlignmentControl";
-import { DurationTargetControl, type DurationTarget } from "./sectionalLooper/DurationTargetControl";
 import { DurationDisplay } from "./sectionalLooper/DurationDisplay";
 import { MainActionBar, type MainActionPreviewStatus } from "./sectionalLooper/MainActionBar";
 import { AdvancedCandidatesPanel } from "./sectionalLooper/AdvancedCandidatesPanel";
 import { AdvancedDrawer } from "./sectionalLooper/AdvancedDrawer";
 import { PlayheadMarker } from "./sectionalLooper/PlayheadMarker";
+import { PromoteToRadioDialog, type PromoteToRadioSongIntelligence } from "./radio/PromoteToRadioDialog";
+import type { RadioPromotionFormInput } from "../data/radioLoopTypes";
+import type { PromoteLoopToRadioResult, RadioPromotionPhase } from "../logic/radio/radioPromotionOrchestrator";
+import type {
+  SectionalRadioBridgeIssue, SectionalRadioBridgeState, SectionalRadioSourceResolution,
+} from "../data/sectionalRadioBridgeTypes";
+import { buildSectionalRadioPromotionSnapshot } from "../logic/radio/sectionalRadioSnapshotBuilder";
+import { resolveSectionalRadioSourceLoopAsset } from "../logic/radio/sectionalRadioLoopResolver";
+import { runSectionalRadioBridgePromotion } from "../logic/radio/sectionalRadioBridgeOrchestrator";
+import { SectionMap, type SectionMapDisplaySection } from "./sectionalLooper/SectionMap";
+import type { CompleteSongAnalysis, NumericProfile, SongStructuralType } from "../data/songAnalysisTypes";
+import { resolveActiveSongSection, createSongSectionRevision } from "../logic/songAnalysis/songSectionRevisions";
+import type { ChunkedDspProgress } from "../logic/dspFeatureExtraction";
 
 // §32/§33 — the legacy full candidate card-wall grid must not be reachable
 // in normal user mode. This constant defaults closed and is never
@@ -126,6 +138,21 @@ function fmtTime(seconds: number): string {
   return `${m}:${s}`;
 }
 
+// 0717C_MUSIC_Complete_Song_Intelligence_and_Section_Map §9 — mirrors
+// songRoleSuggestion.ts's own meanInRange exactly (not imported, since that
+// one is private to that module), used here only to surface an honest
+// "energy: 0.62" style summary in PromoteToRadioDialog's advisory info
+// block — never a fabricated metric.
+function meanProfileInRange(profile: NumericProfile | undefined, startFrame: number, endFrame: number, totalFrames: number): number | undefined {
+  if (!profile || totalFrames <= 0 || profile.sampleCount === 0) return undefined;
+  const startIdx = Math.max(0, Math.floor((startFrame / totalFrames) * profile.sampleCount));
+  const endIdx = Math.min(profile.sampleCount, Math.max(startIdx + 1, Math.floor((endFrame / totalFrames) * profile.sampleCount)));
+  let sum = 0;
+  let count = 0;
+  for (let i = startIdx; i < endIdx; i++) { sum += profile.values[i]; count++; }
+  return count > 0 ? sum / count : undefined;
+}
+
 // 0714S — stable per-candidate id, used to match the lifted loopAudition
 // controller's session back to a specific card in THIS render, since the
 // controller itself has no notion of "index within this page's array."
@@ -133,7 +160,63 @@ function candidateAuditionId(trackId: string, c: LoopCandidate): string {
   return `${trackId}_${c.sectionLabel}_${c.startSeconds.toFixed(3)}_${c.endSeconds.toFixed(3)}`;
 }
 
-type Props = {
+// 0717B_MUSIC_Sectional_Looper_Radio_Export_Bridge (Decision 2) — extracted
+// verbatim from approveSelection()'s own construction logic (0715B §29), as
+// a pure module-level function with no closures over onSaveLoop/
+// setTimelineSelection/draftPersistence. approveSelection() below is now a
+// thin wrapper around this. The RADIO bridge reuses this SAME builder to
+// construct an unsaved preview LoopAsset for the dialog's display, without
+// ever calling onSaveLoop — the mechanism that makes "opening the dialog
+// creates nothing" possible (spec §7.5) without forking PromoteToRadioDialog.
+function buildLoopAssetFromCurrentSelection(
+  track: Track,
+  timelineSelection: TimelineSelection,
+  segments: TrackSegment[],
+  activeGrid: MusicalGrid | null,
+  buffer: AudioBuffer | null,
+): LoopAsset {
+  const { startSeconds: start, endSeconds: end } = timelineSelection;
+  const overlappingSegment = segments.find((s) => timelineSelection.startFrame < s.endFrame && timelineSelection.endFrame > s.startFrame);
+  const gridAlignment = timelineSelection.snapMode === "bar" || timelineSelection.snapMode === "beat" ? 0.8 : 0.3;
+  const tempoStability = track.beatMap?.tempoStabilityScore ?? 0.5;
+  const evidence = buffer
+    ? computeLoopSeamlessnessEvidenceFromBuffer(buffer, start, end, gridAlignment, tempoStability)
+    : { waveformMatch: 0.5, rmsMatch: 0.5, spectralMatch: 0.5, zeroCrossingFit: 0.5, gridAlignment, tempoStability, boundaryTransientPenalty: 0.3 };
+  const result = scoreLoopSeamlessness(evidence, end - start, track.beatMap?.tempoStable ?? false);
+
+  const now = new Date().toISOString();
+  const sectionLabel = overlappingSegment?.displayLabel ?? overlappingSegment?.label ?? "Manual";
+  return {
+    id: genLoopId(),
+    sourceKind: isStemTrack(track) ? "stem" : "track",
+    sourceTrackId: track.trackId,
+    sourceStemId: isStemTrack(track) ? track.trackId : undefined,
+    title: buildLoopFileName({
+      artist: track.artist, trackTitle: track.title, sectionLabel,
+      barCount: undefined, bpm: activeGrid?.bpm ?? track.bpm,
+    }).replace(/\.wav$/, ""),
+    sourceTitle: track.title,
+    sourceArtist: track.artist,
+    sourceFingerprint: track.playbackBounds?.sourceFingerprint,
+    sourceBeatMapDetectorVersion: track.beatMap?.detectorVersion,
+    sourcePlaybackBoundsDetectorVersion: track.playbackBounds?.detectorVersion,
+    startSeconds: start, endSeconds: end, durationSeconds: end - start,
+    bpm: activeGrid?.bpm ?? track.bpm,
+    key: track.camelotKey,
+    boundarySource: "manual",
+    contentClass: "unknown",
+    generationMode: "manual_only",
+    provisional: timelineSelection.snapMode === "off",
+    sectionLabel,
+    seamlessnessScore: result.score,
+    confidence: result.confidence,
+    status: "approved",
+    warnings: result.warnings,
+    createdAt: now, updatedAt: now,
+  };
+}
+
+export type SectionalLooperWorkspaceProps = {
   libraryTracks: Track[];
   sourceTrackId: string | null;
   onSelectSourceTrack: (trackId: string | null) => void;
@@ -171,6 +254,46 @@ type Props = {
   onMakeActiveRevision: (loopId: string, revisionId: string | null) => void;
   loopBinViewState: LoopBinViewState;
   onSaveLoopBinViewState: (next: LoopBinViewState) => void;
+
+  // 0717B_MUSIC_Sectional_Looper_Radio_Export_Bridge — reuses the existing
+  // 0716B promotion orchestrator and the same generic LoopAsset upsert
+  // authority LoopLibraryView already uses for its Archive action (see the
+  // build's plan Decision 3a); never a new mutation path.
+  onPromoteToRadio: (
+    loopId: string,
+    formInput: RadioPromotionFormInput,
+    onProgress?: (phase: RadioPromotionPhase) => void,
+  ) => Promise<PromoteLoopToRadioResult>;
+  onUpdateLoop: (loopId: string, patch: Partial<LoopAsset>) => void;
+  onOpenRadioLoops: (radioLoopId: string) => void;
+  refreshRadioLoopCount: () => void;
+
+  // 0717C_MUSIC_Complete_Song_Intelligence_and_Section_Map — one
+  // CompleteSongAnalysis per source track, App-root state following the
+  // exact loops/loopRevisions pattern above. ensureSongAnalysisReady
+  // implements spec §9's full state table (including the STALE/FAILED
+  // non-auto-reanalyze rule and QUEUED/ANALYZING attach-to-in-flight);
+  // this component never analyzes anything itself.
+  songAnalyses: CompleteSongAnalysis[];
+  onUpdateSongAnalysis: (id: string, patch: Partial<CompleteSongAnalysis>) => void;
+  ensureSongAnalysisReady: (
+    track: Track,
+    existingBuffer: AudioBuffer | null,
+    opts?: { force?: boolean; segments?: TrackSegment[]; trustedBoundsStartFrame?: number; trustedBoundsEndFrame?: number },
+  ) => Promise<CompleteSongAnalysis | null>;
+  cancelSongAnalysis: (trackId: string) => void;
+  recomputeSongAnalysisStatus: (analysisId: string) => void;
+  songAnalysisProgress: Record<string, ChunkedDspProgress>;
+
+  // 0717D_RADIO_Playlist_Inbox_and_Performance_Foundation §10.2 — reuse,
+  // not fork: the RADIO multi-track prep workspace mounts this exact
+  // component per expanded row with a concrete sourceTrackId and
+  // `embedded` set, fully unmounted on collapse. When embedded, the
+  // no-track-selected dropdown screen never applies (RADIO always
+  // supplies a concrete track) and the header's "← Change track" chrome
+  // is replaced by `onCollapse`.
+  embedded?: boolean;
+  onCollapse?: () => void;
 };
 
 export function SectionalLooperWorkspace({
@@ -178,7 +301,11 @@ export function SectionalLooperWorkspace({
   onRenderLoop, getLoopRenderRecord, loops, loopAudition,
   loopWorkspaceDrafts, onSaveDraftSelection, onClearDraftSelection,
   loopRevisions, onSaveLoopRevision, onMakeActiveRevision, loopBinViewState, onSaveLoopBinViewState,
-}: Props) {
+  onPromoteToRadio, onUpdateLoop, onOpenRadioLoops, refreshRadioLoopCount,
+  songAnalyses, onUpdateSongAnalysis, ensureSongAnalysisReady, cancelSongAnalysis,
+  recomputeSongAnalysisStatus, songAnalysisProgress,
+  embedded, onCollapse,
+}: SectionalLooperWorkspaceProps) {
   void onBeforeLoopPreview; // acquisition now happens inside loopAudition.start() via its onAcquire callback
   const audioBufferRef = useRef<AudioBuffer | null>(null);
   const decodeCtxRef = useRef<AudioContext | null>(null);
@@ -201,8 +328,39 @@ export function SectionalLooperWorkspace({
   const [regionState, setRegionState] = useState<Record<string, RegionUserState>>({});
   const [lengthPreference, setLengthPreference] = useState<LengthPreference>("auto");
   const [alignmentMode, setAlignmentMode] = useState<AlignmentMode>("grid");
-  const [durationTarget, setDurationTarget] = useState<DurationTarget>(null);
   const [stemImportError, setStemImportError] = useState<string | null>(null);
+
+  // 0717B_MUSIC_Sectional_Looper_Radio_Export_Bridge — bridge state (plan
+  // Decision 4). radioBridgePreviewLoop non-null is what actually mounts
+  // PromoteToRadioDialog; radioBridgeState tracks the machine for failure/
+  // retry bookkeeping. materializedLoopIdRef guards against a second
+  // LoopAsset mutation on Retry (plan Decision 3).
+  const [radioBridgeState, setRadioBridgeState] = useState<SectionalRadioBridgeState>("idle");
+  const [radioBridgeIssues, setRadioBridgeIssues] = useState<SectionalRadioBridgeIssue[]>([]);
+  const [radioBridgePreviewLoop, setRadioBridgePreviewLoop] = useState<LoopAsset | null>(null);
+  const [radioBridgeResolution, setRadioBridgeResolution] = useState<SectionalRadioSourceResolution | null>(null);
+  const radioBridgeMaterializedLoopIdRef = useRef<string | null>(null);
+
+  // 0717C_MUSIC_Complete_Song_Intelligence_and_Section_Map — Section Map
+  // local state. `draggedSectionBounds` holds live visual feedback during
+  // a boundary drag (mirroring how timelineSelection itself is live-
+  // updated pre-commit); committed as a SongSectionRevision on release,
+  // never mutating the section record directly. `pairSectionId` holds the
+  // first of two sections picked for "Pair as variation."
+  const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
+  const [pairSectionId, setPairSectionId] = useState<string | null>(null);
+  const [draggedSectionBounds, setDraggedSectionBounds] = useState<{ sectionId: string; startFrame: number; endFrame: number } | null>(null);
+  const [songAnalysisIssue, setSongAnalysisIssue] = useState<string | null>(null);
+  const songAnalysisTriggeredForRef = useRef<string | null>(null);
+
+  // 0716A (corrections §2) — waveform view window for zoom/pan. `null` =
+  // Fit Track (the original full-track view). Never a second timing
+  // authority: purely a display window every layer maps x through.
+  const [viewWindow, setViewWindow] = useState<{ start: number; end: number } | null>(null);
+  // Window-resolution peaks recomputed from the already-decoded buffer at
+  // the current zoom (reusing 0714R's computePeaksForRange — no re-decode);
+  // null falls back to the full-track envelope bins.
+  const [windowPeaks, setWindowPeaks] = useState<WaveformPeak[] | null>(null);
 
   // 0714R §15 — selected is distinct from previewing. A playing candidate
   // auto-selects; a selected candidate may not be playing.
@@ -245,7 +403,16 @@ export function SectionalLooperWorkspace({
   // three drag modes. `dragStartFrameRef` is repurposed per mode: for "new"
   // it's the drag anchor frame (unchanged); for "move" it's the pointer's
   // frame-offset from the selection's own start at grab time.
-  const dragModeRef = useRef<"new" | "start" | "end" | "move" | "playhead" | null>(null);
+  // 0717C_MUSIC_Complete_Song_Intelligence_and_Section_Map — "section-
+  // boundary" joins the existing modes for dragging a Section Map band's
+  // edge. dragSectionSelectionRef carries which section+edge; the section
+  // being dragged is looked up LIVE by its stable id on every pointermove
+  // tick (never a stale closure), so its mutable startFrame/endFrame update
+  // every tick without ever touching the section's own id (see
+  // songAnalysisTypes.ts's doc comment on why content-derived ids are
+  // wrong for this record).
+  const dragModeRef = useRef<"new" | "start" | "end" | "move" | "playhead" | "section-boundary" | null>(null);
+  const dragSectionSelectionRef = useRef<{ sectionId: string; edge: "start" | "end" } | null>(null);
   const dragStartFrameRef = useRef<number>(0);
   // Click-vs-drag disambiguation (§"Click-to-Seek"/interaction precedence):
   // a pointerdown always starts as a drag *candidate*; only real movement
@@ -266,6 +433,13 @@ export function SectionalLooperWorkspace({
   const lastAutoPreviewedRegionKeyRef = useRef<string | null>(null);
   // §"Clear Selection" — see the region-sync effect's own comment below.
   const selectionClearedRef = useRef(false);
+  // §"Region Click = Select and Preview" — one-shot: lets an explicit
+  // region click take the selection back over from a Custom (drag)
+  // selection; see the region-sync effect's own comment. The nonce forces
+  // the sync effect to re-run even when the clicked region is the one
+  // already active (its bounds-based deps wouldn't change otherwise).
+  const regionTakeoverRef = useRef(false);
+  const [regionClickNonce, setRegionClickNonce] = useState(0);
   const stackRef = useRef<HTMLDivElement | null>(null);
 
   // 0715C_MUSIC_Loop_Workspace_Editing_And_Revision_Completion — §4-§9
@@ -286,17 +460,33 @@ export function SectionalLooperWorkspace({
   // activation would actually stale an existing render.
   const [pendingActivation, setPendingActivation] = useState<{ loopId: string; revisionId: string | null } | null>(null);
 
-  // 0715E — a Sounds-library ("reference") track is normally excluded from
-  // the dropdown, but a registered stem (derivedKind === "stem" — the ONLY
-  // sanctioned stem test, never parentTrackId presence) is an explicit
-  // exception per §12.
+  // 0716A (corrections §1) — ANY playable local source is eligible,
+  // including the Sounds ("reference") library, which 0715E previously
+  // limited to registered stems only. The looper itself already degrades
+  // honestly without BPM/grid/bounds (provisional regions, Length disabled,
+  // Free alignment, no bars readout), so field recordings and sampler clips
+  // are first-class here now.
   const eligibleTracks = useMemo(
-    () => libraryTracks.filter((t) => !!resolveTrackUrl(t) && (t.sourceOwner !== "reference" || isStemTrack(t))),
+    () => libraryTracks.filter((t) => !!resolveTrackUrl(t)),
     [libraryTracks, resolveTrackUrl],
   );
   const track = sourceTrackId ? libraryTracks.find((t) => t.trackId === sourceTrackId) : undefined;
   const sampleRate = audioBufferRef.current?.sampleRate ?? waveform?.sampleRate ?? 44100;
   const fingerprint = track ? (track.playbackBounds?.sourceFingerprint ?? track.trackId) : "";
+  // 0716A (corrections §1) — Sounds-library ("reference") records carry
+  // durationSeconds: 0 (or scan-era garbage like 0.002) in the curated
+  // index — that index never stored real clip durations. All of this
+  // workspace's interaction math (regions, selection clamps, playhead,
+  // zoom window) collapses at a zero/garbage duration, so a grid-less clip
+  // would be un-usable. The DECODED audio's own duration is authoritative
+  // whenever available (matching 0715F's buffer-first frame math); the
+  // record's value is only a pre-decode placeholder — display-layer only,
+  // never written back to the record.
+  const trackDurationSeconds = track
+    ? (audioBufferRef.current?.duration
+      ?? waveform?.durationSeconds
+      ?? (track.durationSeconds > 0 ? track.durationSeconds : 0))
+    : 0;
 
   // §17 — only the ACTIVE grid revision (last item in this track's list,
   // or the freshly-built detected grid when no manual revision exists yet)
@@ -306,7 +496,7 @@ export function SectionalLooperWorkspace({
     if (!track) return null;
     const latest = revisionsForTrack[revisionsForTrack.length - 1];
     if (latest) return latest.grid;
-    return buildMusicalGridFromBeatMap(track.beatMap, track.bpm, fingerprint, track.durationSeconds, sampleRate);
+    return buildMusicalGridFromBeatMap(track.beatMap, track.bpm, fingerprint, trackDurationSeconds, sampleRate);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [track?.trackId, revisionsForTrack.length, sampleRate]);
   const activeGridRevisionId = revisionsForTrack[revisionsForTrack.length - 1]?.id ?? "detected";
@@ -339,7 +529,7 @@ export function SectionalLooperWorkspace({
   const draftContext: DraftContext | null = track ? {
     sourceTrackId: track.trackId,
     sourceFingerprint: fingerprint,
-    durationSeconds: track.durationSeconds,
+    durationSeconds: trackDurationSeconds,
     gridRevisionId: activeGridRevisionId,
     segmentationRevisionId,
     sampleRate,
@@ -361,14 +551,14 @@ export function SectionalLooperWorkspace({
   // approveCandidate/persisted `loops` — only the CANDIDATE list changes).
   const candidates = useMemo<LoopCandidate[]>(() => {
     if (!track) return [];
-    return generateLoopCandidates(track.beatMap, track.playbackBounds, track.durationSeconds, activeGrid?.bpm ?? track.bpm);
+    return generateLoopCandidates(track.beatMap, track.playbackBounds, trackDurationSeconds, activeGrid?.bpm ?? track.bpm);
   }, [track, activeGrid?.bpm]);
 
   const sections = useMemo(() => groupCandidatesBySection(candidates), [candidates]);
 
   const timelineTransform = useMemo(
-    () => (track ? createTimelineTransform(0, track.durationSeconds * sampleRate, 1000, sampleRate) : null),
-    [track?.trackId, track?.durationSeconds, sampleRate],
+    () => (track ? createTimelineTransform(0, trackDurationSeconds * sampleRate, 1000, sampleRate) : null),
+    [track?.trackId, trackDurationSeconds, sampleRate],
   );
 
   // 0715A §6/§11 — pure DERIVED display data from the SAME grid/segments
@@ -383,7 +573,7 @@ export function SectionalLooperWorkspace({
       ? Math.round(track.playbackBounds.preferredStartSeconds * sampleRate) : undefined;
     const boundsEndFrame = track.playbackBounds?.preferredEndSeconds != null
       ? Math.round(track.playbackBounds.preferredEndSeconds * sampleRate) : undefined;
-    return deriveStructuralSections(segments, boundsStartFrame, boundsEndFrame, 0, Math.round(track.durationSeconds * sampleRate));
+    return deriveStructuralSections(segments, boundsStartFrame, boundsEndFrame, 0, Math.round(trackDurationSeconds * sampleRate));
   }, [track, segments, sampleRate]);
 
   // 0715G §2/§3 — region-first selection model. `regionState` is
@@ -419,43 +609,40 @@ export function SectionalLooperWorkspace({
     () => stableStructuralSections.find((s) => s.id === activeRegionId),
     [stableStructuralSections, activeRegionId],
   );
-  const recommendation = useMemo<AutoRecommendationResult | null>(() => {
-    if (!track || !activeRegion) return null;
-    return recommendForRegion({
-      regionStartSeconds: activeRegion.startFrame / sampleRate,
-      regionEndSeconds: activeRegion.endFrame / sampleRate,
-      sourceDurationSeconds: track.durationSeconds,
-      beatMap: track.beatMap,
-      playbackBounds: track.playbackBounds,
-      trackBpm: activeGrid?.bpm ?? track.bpm,
-      tempoStabilityScore: track.beatMap?.tempoStabilityScore,
-      lengthPreference,
-      durationTargetSeconds: durationTarget ?? undefined,
-    });
-    // `activeRegion` is a fresh object every render whenever this track has
-    // no canonical segments yet (`segments` falls back to a new `[]`
-    // literal, which un-memoizes `structuralSections` upstream) — depend on
-    // its primitive identity/bounds instead of the object reference itself,
-    // or this memo (and the sync effect below, which DOES call setState)
-    // recomputes/fires on every render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [track, activeRegion?.id, activeRegion?.startFrame, activeRegion?.endFrame, sampleRate, activeGrid?.bpm, lengthPreference, durationTarget]);
+  // 0716A (corrections §5) — the default workflow no longer depends on any
+  // hidden recommendation behavior. A region click selects the REGION'S OWN
+  // bounds directly; the Length control then resizes deterministically and
+  // visibly: Auto = the full region, a fixed N = exactly N bars from the
+  // selection's start (bar length derived from the active grid's own
+  // BPM/meter — never recomputed audio analysis). Without a usable grid the
+  // fixed lengths are simply disabled and Auto (full region) is the only
+  // mode — the looper stays fully usable on grid-less sources
+  // (corrections §1). The 0715G recommendation machinery
+  // (autoRecommendation.ts / rankAndLimitCandidates) is untouched in code
+  // and tests, just no longer wired into this default flow.
+  const barSeconds = activeGrid ? (60 / activeGrid.bpm) * activeGrid.meterNumerator : null;
+  const regionDurationSeconds = activeRegion ? (activeRegion.endFrame - activeRegion.startFrame) / sampleRate : 0;
+  const availableLengths = {
+    4: barSeconds != null && regionDurationSeconds >= 4 * barSeconds,
+    8: barSeconds != null && regionDurationSeconds >= 8 * barSeconds,
+    16: barSeconds != null && regionDurationSeconds >= 16 * barSeconds,
+    32: barSeconds != null && regionDurationSeconds >= 32 * barSeconds,
+    64: barSeconds != null && regionDurationSeconds >= 64 * barSeconds,
+  };
 
-  // Keeps `timelineSelection` in sync with the active region's recommended
-  // candidate — but ONLY while the selection is still region-driven
-  // (`source: "region"`). The moment the user drags a boundary or the
-  // waveform themselves, `moveSelectionBoundary`/the drag handlers set a
-  // different `source` and this effect stops touching the selection,
-  // matching the spec's "dragging converts to Custom Selection" rule.
+  // Keeps `timelineSelection` in sync with the active region — but ONLY
+  // while the selection is still region-driven (`source: "region"`). The
+  // moment the user drags a NEW selection on the waveform, its source
+  // becomes "drag" and this effect stops touching it, matching the spec's
+  // "dragging converts to Custom Selection" rule.
   //
-  // Depends on PRIMITIVES derived from activeRegion/recommendation, never
-  // the objects themselves — see the note on the recommendation memo above;
-  // an object-reference dependency here would re-run this effect (and its
-  // setTimelineSelection call, which produces a genuinely new object every
-  // time via createSelection's timestamp) on every single render, an
-  // infinite update loop caught live during verification.
-  const recommendedWinnerKey = recommendation?.winner
-    ? `${recommendation.winner.startSeconds}_${recommendation.winner.endSeconds}` : "none";
+  // Depends on PRIMITIVES derived from activeRegion, never the object
+  // itself — `activeRegion` is a fresh object every render whenever this
+  // track has no canonical segments yet; an object-reference dependency
+  // here would re-run this effect (whose setTimelineSelection produces a
+  // genuinely new object every time via createSelection's timestamp) on
+  // every single render — an infinite update loop caught live during
+  // verification.
   useEffect(() => {
     if (!track || !activeRegion) return;
     // 0716A §"Clear Selection" — "remove the active range" must actually
@@ -466,12 +653,33 @@ export function SectionalLooperWorkspace({
     // a real, live-caught defect (Clear appeared to do nothing at all).
     // Reset by onSelectRegion, so any fresh region click un-clears normally.
     if (selectionClearedRef.current) return;
+    // 0716A §"Region Click = Select and Preview" — a drag converts the
+    // selection to a Custom Selection and this effect stops touching it
+    // (spec's own rule)… but an EXPLICIT region click must always take
+    // back over ("Clicking another region must stop/restart safely and
+    // switch immediately"), even from a custom selection. onSelectRegion
+    // arms this one-shot flag. Read AND cleared HERE in the effect body,
+    // never inside the setTimelineSelection updater — updaters must be
+    // pure; StrictMode double-invokes them, and a flag consumed by the
+    // first invocation made the second (whose result wins) bail out —
+    // live-caught as region chips appearing dead after a manual drag.
+    const takeover = regionTakeoverRef.current;
+    regionTakeoverRef.current = false;
     setTimelineSelection((prev) => {
-      if (prev && prev.source !== "region") return prev;
-      const winner = recommendation?.winner;
-      const startSeconds = winner ? winner.startSeconds : activeRegion.startFrame / sampleRate;
-      const endSeconds = winner ? winner.endSeconds : activeRegion.endFrame / sampleRate;
-      const sourceFrameCount = Math.round(track.durationSeconds * sampleRate);
+      if (prev && prev.source !== "region" && !takeover) return prev;
+      const regionStartSeconds = activeRegion.startFrame / sampleRate;
+      const regionEndSeconds = activeRegion.endFrame / sampleRate;
+      // §"Bar-Length Lock" — "changing length redraws the SAME selection":
+      // a fixed length re-anchors at the current region-sourced selection's
+      // own start (which whole-body drags preserve), falling back to the
+      // region start on a fresh region click/takeover.
+      const anchorStartSeconds = (!takeover && prev && prev.source === "region")
+        ? prev.startSeconds : regionStartSeconds;
+      const startSeconds = lengthPreference === "auto" ? regionStartSeconds : anchorStartSeconds;
+      const endSeconds = lengthPreference === "auto" || barSeconds == null
+        ? regionEndSeconds
+        : startSeconds + lengthPreference * barSeconds;
+      const sourceFrameCount = Math.round(trackDurationSeconds * sampleRate);
       const next = createSelection(
         track.trackId,
         Math.round(startSeconds * sampleRate),
@@ -489,11 +697,13 @@ export function SectionalLooperWorkspace({
       return next;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [track?.trackId, activeRegion?.id, activeRegion?.startFrame, activeRegion?.endFrame, recommendedWinnerKey, sampleRate, snapMode, activeGrid?.trust, activeGrid?.bpm]);
+  }, [track?.trackId, activeRegion?.id, activeRegion?.startFrame, activeRegion?.endFrame, lengthPreference, barSeconds, sampleRate, snapMode, activeGrid?.trust, activeGrid?.bpm, regionClickNonce]);
 
   function onSelectRegion(band: StructuralSectionBand) {
     hasUserSelectedRegionRef.current = true;
     selectionClearedRef.current = false;
+    regionTakeoverRef.current = true;
+    setRegionClickNonce((n) => n + 1);
     setRegionState((prev) => {
       const next: Record<string, RegionUserState> = { ...prev };
       for (const id of Object.keys(next)) {
@@ -548,30 +758,30 @@ export function SectionalLooperWorkspace({
     const seconds = Number(originInput);
     if (!Number.isFinite(seconds) || seconds < 0) { setSegmentError("Origin must be a non-negative number of seconds."); return; }
     setSegmentError(null);
-    pushGridRevision(setManualOrigin(activeGrid, seconds, track.durationSeconds, sampleRate), "manual_origin");
+    pushGridRevision(setManualOrigin(activeGrid, seconds, trackDurationSeconds, sampleRate), "manual_origin");
   }
   function handleNudge(deltaSeconds: number) {
     if (!track || !activeGrid) return;
-    pushGridRevision(nudgeGridOrigin(activeGrid, deltaSeconds, track.durationSeconds, sampleRate), "manual_nudge");
+    pushGridRevision(nudgeGridOrigin(activeGrid, deltaSeconds, trackDurationSeconds, sampleRate), "manual_nudge");
   }
   function handleHalfBpm() {
     if (!track || !activeGrid) return;
-    pushGridRevision(halfBpm(activeGrid, track.durationSeconds, sampleRate), "half_bpm");
+    pushGridRevision(halfBpm(activeGrid, trackDurationSeconds, sampleRate), "half_bpm");
   }
   function handleDoubleBpm() {
     if (!track || !activeGrid) return;
-    pushGridRevision(doubleBpm(activeGrid, track.durationSeconds, sampleRate), "double_bpm");
+    pushGridRevision(doubleBpm(activeGrid, trackDurationSeconds, sampleRate), "double_bpm");
   }
   function handleResetGrid() {
     if (!track) return;
-    const reset = resetToDetectedGrid(track.beatMap, track.bpm, fingerprint, track.durationSeconds, sampleRate);
+    const reset = resetToDetectedGrid(track.beatMap, track.bpm, fingerprint, trackDurationSeconds, sampleRate);
     if (reset) pushGridRevision(reset, "reset_detected");
   }
 
   function handleGenerateEqualSegments() {
     if (!track || !activeGrid) return;
     const windowStart = track.playbackBounds?.preferredStartSeconds ?? 0;
-    const windowEnd = track.playbackBounds?.preferredEndSeconds ?? track.durationSeconds;
+    const windowEnd = track.playbackBounds?.preferredEndSeconds ?? trackDurationSeconds;
     const next = generateEqualSegments(track.trackId, windowStart, windowEnd, activeGrid.bpm, segmentBars, sampleRate)
       .map((s) => ({ ...s, gridRevisionId: activeGridRevisionId }));
     setSegmentsByTrack((prev) => ({ ...prev, [track.trackId]: next }));
@@ -690,7 +900,7 @@ export function SectionalLooperWorkspace({
     const fingerprint = track.playbackBounds?.sourceFingerprint ?? track.trackId;
     const cacheKey = buildWaveformCacheKey(fingerprint, WAVEFORM_GENERATOR_VERSION, FULL_TRACK_BIN_COUNT);
     const cached = getCachedWaveform(cacheKey);
-    if (cached && !isWaveformEnvelopeStale(cached, fingerprint, track.durationSeconds)) {
+    if (cached && !isWaveformEnvelopeStale(cached, fingerprint, trackDurationSeconds)) {
       setWaveform(cached);
     }
 
@@ -700,7 +910,7 @@ export function SectionalLooperWorkspace({
         if (!cancelled && !buffer) setWaveformError("could not decode source audio");
         return;
       }
-      if (!cached || isWaveformEnvelopeStale(cached, fingerprint, track.durationSeconds)) {
+      if (!cached || isWaveformEnvelopeStale(cached, fingerprint, trackDurationSeconds)) {
         const envelope = generateWaveformEnvelope(buffer, track.trackId, fingerprint, FULL_TRACK_BIN_COUNT);
         setCachedWaveform(cacheKey, envelope);
         if (!cancelled) setWaveform(envelope);
@@ -904,16 +1114,84 @@ export function SectionalLooperWorkspace({
     draftPersistence.saveDraft(next);
   }
 
+  // 0716A (corrections §2) — the visible waveform window. null = Fit
+  // Track. Every layer and every pointer→frame conversion maps through the
+  // SAME window, so zoom/pan never introduces a second coordinate system.
+  const viewStartSeconds = viewWindow?.start ?? 0;
+  const viewEndSeconds = viewWindow?.end ?? trackDurationSeconds;
+  const viewWindowDur = Math.max(viewEndSeconds - viewStartSeconds, 0.001);
+  const MIN_ZOOM_WINDOW_SECONDS = 0.5;
+
+  function clampWindow(start: number, end: number): { start: number; end: number } | null {
+    if (!track) return null;
+    const dur = trackDurationSeconds;
+    let w = Math.max(MIN_ZOOM_WINDOW_SECONDS, Math.min(dur, end - start));
+    let s = Math.max(0, Math.min(dur - w, start));
+    if (w >= dur - 0.001) return null; // fully zoomed out = Fit Track
+    return { start: s, end: s + w };
+  }
+
+  function zoomFitTrack() { setViewWindow(null); }
+  function zoomFitSelection() {
+    if (!track || !timelineSelection) return;
+    const pad = Math.max(0.25, timelineSelection.durationSeconds * 0.1);
+    setViewWindow(clampWindow(timelineSelection.startSeconds - pad, timelineSelection.endSeconds + pad));
+  }
+  function zoomBy(factor: number) {
+    if (!track) return;
+    // Functional update: rapid repeated clicks land in one React batch, so
+    // each step must derive from the PREVIOUS step's window, not the
+    // render-time value (live-caught: three quick Zoom Ins applied one).
+    setViewWindow((prev) => {
+      const start = prev?.start ?? 0;
+      const end = prev?.end ?? trackDurationSeconds;
+      const dur = Math.max(end - start, 0.001);
+      const center = playheadSeconds >= start && playheadSeconds <= end
+        ? playheadSeconds : (start + end) / 2;
+      const nextW = dur * factor;
+      return clampWindow(center - nextW / 2, center + nextW / 2);
+    });
+  }
+
+  // Horizontal pan while zoomed — a native (non-passive) wheel listener so
+  // preventDefault actually stops the page from scrolling underneath.
+  useEffect(() => {
+    const el = stackRef.current;
+    if (!el) return;
+    function onWheel(e: WheelEvent) {
+      if (!viewWindow || !track) return;
+      e.preventDefault();
+      const delta = (Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY);
+      const shift = (delta / 500) * viewWindowDur;
+      setViewWindow((prev) => prev ? clampWindow(prev.start + shift, prev.end + shift) : prev);
+    }
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewWindow, track?.trackId, viewWindowDur]);
+
+  // Reset the window when the open track changes.
+  useEffect(() => { setViewWindow(null); }, [track?.trackId]);
+
+  // Window-resolution peaks from the already-decoded buffer (0714R's own
+  // computePeaksForRange — no re-decode, no new analysis). Falls back to
+  // the full-track envelope (null) when zoomed out or not yet decoded.
+  useEffect(() => {
+    if (!viewWindow || !audioBufferRef.current) { setWindowPeaks(null); return; }
+    setWindowPeaks(computePeaksForRange(audioBufferRef.current, viewWindow.start, viewWindow.end, FULL_TRACK_BIN_COUNT));
+  }, [viewWindow]);
+
   // 0715B §8/§9 — direct click-drag range selection on the waveform, plus
   // handle-drag boundary editing. Pointer position -> frame uses the SAME
   // duration-based x=(seconds/duration)*width mapping the waveform overview
-  // and 0715A backdrop already share (no independent coordinate system).
+  // and 0715A backdrop already share (no independent coordinate system) —
+  // 0716A: now through the view window, still the same single mapping.
   function frameFromClientX(clientX: number): number {
     const el = stackRef.current;
     if (!el || !track) return 0;
     const rect = el.getBoundingClientRect();
     const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-    return Math.round(ratio * track.durationSeconds * sampleRate);
+    return Math.round((viewStartSeconds + ratio * viewWindowDur) * sampleRate);
   }
 
   // Captured at drag START, not read back from `timelineSelection` at drag
@@ -922,14 +1200,6 @@ export function SectionalLooperWorkspace({
   // for undo (see the completion plan's undo/redo design notes).
   const dragBeforeSnapshotRef = useRef<{ timelineSelection: TimelineSelection | null; snapMode: TimelineSnapMode } | null>(null);
 
-  // §"Movable Selection Body" — clamp movement to audible-content bounds
-  // when the track has detected/trusted bounds; otherwise fall back to the
-  // full source range (moveSelection's own default).
-  function audibleClampBoundsFrames(t: Track, sr: number): { minFrame: number; maxFrame: number } | undefined {
-    const b = t.playbackBounds;
-    if (!b || b.audibleStartSeconds == null || b.audibleEndSeconds == null) return undefined;
-    return { minFrame: Math.round(b.audibleStartSeconds * sr), maxFrame: Math.round(b.audibleEndSeconds * sr) };
-  }
 
   // 0716A §"Click-to-Seek" — a plain click (no real drag) inside the
   // waveform repositions the playhead without ever touching
@@ -941,7 +1211,7 @@ export function SectionalLooperWorkspace({
   // would unexpectedly make paused audio audible again.
   function seekToSeconds(seconds: number) {
     if (!track) return;
-    const clamped = Math.max(0, Math.min(track.durationSeconds, seconds));
+    const clamped = Math.max(0, Math.min(trackDurationSeconds, seconds));
     setPlayheadSeconds(clamped);
     if (!auditionIsThisTrack || !loopAudition.session || !timelineSelection) return;
     if (clamped < timelineSelection.startSeconds || clamped > timelineSelection.endSeconds) return;
@@ -1005,10 +1275,10 @@ export function SectionalLooperWorkspace({
       if (!mode || !track) return;
       if (Math.abs(e.clientX - dragStartClientXRef.current) > CLICK_DRAG_THRESHOLD_PX) dragMovedRef.current = true;
       const rawFrame = frameFromClientX(e.clientX);
-      const sourceFrames = Math.round(track.durationSeconds * sampleRate);
+      const sourceFrames = Math.round(trackDurationSeconds * sampleRate);
 
       if (mode === "playhead") {
-        setPlayheadSeconds(Math.max(0, Math.min(track.durationSeconds, rawFrame / sampleRate)));
+        setPlayheadSeconds(Math.max(0, Math.min(trackDurationSeconds, rawFrame / sampleRate)));
         return;
       }
 
@@ -1016,6 +1286,26 @@ export function SectionalLooperWorkspace({
       // applied live; zero-crossing's windowed sample scan is NOT run per
       // move (audio=null here) — only at commit, in onUp below.
       const snappedFrame = applySnapWithAudio(rawFrame, effectiveSnapMode, activeGrid, null, subdivisionDivision);
+      // 0717C_MUSIC_Complete_Song_Intelligence_and_Section_Map — section
+      // boundary drag. Returns early so this never falls into the
+      // timelineSelection fallback branch below (mode isn't a valid
+      // moveSelectionBoundary edge value). Live visual feedback only via
+      // draggedSectionBounds; committed as a SongSectionRevision in onUp.
+      if (mode === "section-boundary") {
+        const sel = dragSectionSelectionRef.current;
+        if (!sel) return;
+        const analysis = songAnalyses.find((a) => a.sourceTrackId === track.trackId);
+        const section = analysis?.sections.find((s) => s.id === sel.sectionId);
+        if (!analysis || !section) return;
+        const resolved = resolveActiveSongSection(section, analysis.sectionRevisions);
+        const nextStart = sel.edge === "start" ? snappedFrame : resolved.startFrame;
+        const nextEnd = sel.edge === "end" ? snappedFrame : resolved.endFrame;
+        // Never clamped to audible/silence/recommendation/viewport bounds —
+        // only a positive-duration check, matching the doctrine already
+        // enforced for loop selection throughout this file.
+        if (nextEnd > nextStart) setDraggedSectionBounds({ sectionId: sel.sectionId, startFrame: nextStart, endFrame: nextEnd });
+        return;
+      }
       if (mode === "new") {
         if (!dragMovedRef.current) return; // still just a click candidate — no visual change yet
         const snappedStart = applySnapWithAudio(dragStartFrameRef.current, effectiveSnapMode, activeGrid, null, subdivisionDivision);
@@ -1025,8 +1315,14 @@ export function SectionalLooperWorkspace({
         if (!timelineSelection || !dragMovedRef.current) return;
         const targetStart = snappedFrame - dragStartFrameRef.current;
         const delta = targetStart - timelineSelection.startFrame;
-        const clampBounds = audibleClampBoundsFrames(track, sampleRate);
-        const next = moveSelection(timelineSelection, delta, sourceFrames, sampleRate, effectiveSnapMode, activeGrid, clampBounds);
+        // 0716A hotfix — clampBounds intentionally omitted: moveSelection's
+        // own default is the full [0, sourceFrames] DECODED range. A prior
+        // version clamped to track.playbackBounds.audibleStart/EndSeconds
+        // (fade/silence-detected sub-bounds) — live-caught as movement
+        // silently blocked partway through a 3:40 track once the drag
+        // crossed that detected (and here, over-conservative) boundary.
+        // Detected bounds are display/trim metadata, not a movement limit.
+        const next = moveSelection(timelineSelection, delta, sourceFrames, sampleRate, effectiveSnapMode, activeGrid);
         if (next) setTimelineSelection(next); // live visual feedback only; committed in onUp
       } else if (timelineSelection) {
         const next = moveSelectionBoundary(timelineSelection, mode, snappedFrame, sourceFrames, sampleRate, effectiveSnapMode, null);
@@ -1039,11 +1335,58 @@ export function SectionalLooperWorkspace({
       if (!mode || !track) return;
 
       if (mode === "playhead") {
-        if (playheadWasPlayingRef.current) {
-          loopAudition.seekPausedTo(playheadSeconds);
-          void loopAudition.resume();
-        }
+        // Drop position derived from the RELEASE EVENT itself, never from
+        // the playheadSeconds state (whose effect-closure value can lag the
+        // final pointermove by a render — live-caught: the release resumed
+        // from the grab position instead of the drop position).
+        const dropSeconds = Math.max(0, Math.min(trackDurationSeconds, frameFromClientX(e.clientX) / sampleRate));
+        setPlayheadSeconds(dropSeconds);
+        // Silently reposition the frozen paused point whenever THIS
+        // track's session is paused (seekPausedTo is a status-guarded
+        // no-op otherwise) — so a drag performed while paused also makes
+        // the NEXT resume start from the drop point instead of snapping
+        // back to wherever pause() originally froze.
+        if (auditionIsThisTrack) loopAudition.seekPausedTo(dropSeconds);
+        // "resume after release only when prior state was playing."
+        if (playheadWasPlayingRef.current) void loopAudition.resume();
         playheadWasPlayingRef.current = false;
+        return;
+      }
+
+      if (mode === "section-boundary") {
+        const sel = dragSectionSelectionRef.current;
+        dragSectionSelectionRef.current = null;
+        setDraggedSectionBounds(null);
+        if (sel) {
+          // Recomputed from the RELEASE EVENT itself, never from the
+          // draggedSectionBounds state — same closure-staleness fix
+          // already applied to the playhead drag above.
+          const analysis = songAnalyses.find((a) => a.sourceTrackId === track.trackId);
+          const section = analysis?.sections.find((s) => s.id === sel.sectionId);
+          if (analysis && section) {
+            const resolved = resolveActiveSongSection(section, analysis.sectionRevisions);
+            const releaseFrame = applySnapWithAudio(frameFromClientX(e.clientX), effectiveSnapMode, activeGrid, null, subdivisionDivision);
+            const nextStart = sel.edge === "start" ? releaseFrame : resolved.startFrame;
+            const nextEnd = sel.edge === "end" ? releaseFrame : resolved.endFrame;
+            if (nextEnd > nextStart) {
+              // Carries the rest of the resolved state forward too (see the
+              // handleSectionLabelChange/handleSectionVerifyCycle comment
+              // above) — a boundary drag must not silently revert a prior
+              // relabel/verify edit back to the analyzer-origin section.
+              const revision = createSongSectionRevision(section, {
+                parentRevisionId: section.activeRevisionId,
+                structuralType: resolved.structuralType, displayLabel: resolved.displayLabel,
+                variationGroupId: resolved.variationGroupId, variationOrdinal: resolved.variationOrdinal,
+                verification: resolved.verification,
+                startFrame: nextStart, endFrame: nextEnd,
+              });
+              onUpdateSongAnalysis(analysis.id, {
+                sectionRevisions: [...analysis.sectionRevisions, revision],
+                sections: analysis.sections.map((s) => (s.id === sel.sectionId ? { ...s, activeRevisionId: revision.id } : s)),
+              });
+            }
+          }
+        }
         return;
       }
 
@@ -1055,7 +1398,7 @@ export function SectionalLooperWorkspace({
       }
 
       if (!timelineSelection) return;
-      const sourceFrames = Math.round(track.durationSeconds * sampleRate);
+      const sourceFrames = Math.round(trackDurationSeconds * sampleRate);
       let finalSelection = timelineSelection;
       // §7 — the real windowed zero-crossing search runs exactly once, at
       // commit, never per drag-move. A whole-body move re-snaps as a unit
@@ -1087,7 +1430,13 @@ export function SectionalLooperWorkspace({
       window.removeEventListener("pointerup", onUp);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [track?.trackId, sampleRate, effectiveSnapMode, activeGrid, timelineSelection, subdivisionDivision, playheadSeconds, loopAudition]);
+    // trackDurationSeconds MUST be a dep: for a Sounds clip whose record
+    // carries duration 0, the decoded duration arrives without changing any
+    // other dep (sampleRate stays 44100, audioBufferRef is a ref), so the
+    // onMove/onUp closures kept a frameFromClientX built over a 0.001s
+    // floor window — live-caught as every drag on such a clip producing a
+    // ~50-frame selection at ~0.001s no matter where the pointer went.
+  }, [track?.trackId, trackDurationSeconds, sampleRate, effectiveSnapMode, activeGrid, timelineSelection, subdivisionDivision, playheadSeconds, loopAudition, auditionIsThisTrack, songAnalyses, onUpdateSongAnalysis]);
 
   // §14/§15 — numeric boundary edit commit (validate -> convert to frame ->
   // snap -> update selection -> waveform highlight updates via re-render).
@@ -1099,7 +1448,7 @@ export function SectionalLooperWorkspace({
       return;
     }
     const frame = Math.round(seconds * sampleRate);
-    const sourceFrames = Math.round(track.durationSeconds * sampleRate);
+    const sourceFrames = Math.round(trackDurationSeconds * sampleRate);
     const next = moveSelectionBoundary(timelineSelection, which, frame, sourceFrames, sampleRate, "off", activeGrid);
     if (!next) { setSelectionApproveError("That boundary would invert the selection."); return; }
     setSelectionApproveError(null);
@@ -1118,10 +1467,10 @@ export function SectionalLooperWorkspace({
     snapMode: effectiveSnapMode,
     grid: activeGrid,
     sampleRate,
-    sourceFrameCount: track ? Math.round(track.durationSeconds * sampleRate) : 0,
+    sourceFrameCount: track ? Math.round(trackDurationSeconds * sampleRate) : 0,
     onMoveBoundary: (which, rawNextFrame) => {
       if (!track || !timelineSelection) return;
-      const sourceFrames = Math.round(track.durationSeconds * sampleRate);
+      const sourceFrames = Math.round(trackDurationSeconds * sampleRate);
       const audio = audioBufferRef.current && (effectiveSnapMode === "zero_crossing")
         ? { channelData: channelDataFor(audioBufferRef.current), sampleRate } : null;
       const settledFrame = applySnapWithAudio(rawNextFrame, effectiveSnapMode, activeGrid, audio, subdivisionDivision);
@@ -1175,53 +1524,15 @@ export function SectionalLooperWorkspace({
   // numeric sources all approve through this same path).
   async function approveSelection(): Promise<string | undefined> {
     if (!track || !timelineSelection) return undefined;
-    const { startSeconds: start, endSeconds: end } = timelineSelection;
     const buffer = await ensureDecodedBuffer();
-    const overlappingSegment = segments.find((s) => timelineSelection.startFrame < s.endFrame && timelineSelection.endFrame > s.startFrame);
-    const gridAlignment = timelineSelection.snapMode === "bar" || timelineSelection.snapMode === "beat" ? 0.8 : 0.3;
-    const tempoStability = track.beatMap?.tempoStabilityScore ?? 0.5;
-    const evidence = buffer
-      ? computeLoopSeamlessnessEvidenceFromBuffer(buffer, start, end, gridAlignment, tempoStability)
-      : { waveformMatch: 0.5, rmsMatch: 0.5, spectralMatch: 0.5, zeroCrossingFit: 0.5, gridAlignment, tempoStability, boundaryTransientPenalty: 0.3 };
-    const result = scoreLoopSeamlessness(evidence, end - start, track.beatMap?.tempoStable ?? false);
-
-    const now = new Date().toISOString();
-    const sectionLabel = overlappingSegment?.displayLabel ?? overlappingSegment?.label ?? "Manual";
-    const loop: LoopAsset = {
-      id: genLoopId(),
-      sourceKind: isStemTrack(track) ? "stem" : "track",
-      sourceTrackId: track.trackId,
-      sourceStemId: isStemTrack(track) ? track.trackId : undefined,
-      title: buildLoopFileName({
-        artist: track.artist, trackTitle: track.title, sectionLabel,
-        barCount: undefined, bpm: activeGrid?.bpm ?? track.bpm,
-      }).replace(/\.wav$/, ""),
-      sourceTitle: track.title,
-      sourceArtist: track.artist,
-      sourceFingerprint: track.playbackBounds?.sourceFingerprint,
-      sourceBeatMapDetectorVersion: track.beatMap?.detectorVersion,
-      sourcePlaybackBoundsDetectorVersion: track.playbackBounds?.detectorVersion,
-      startSeconds: start, endSeconds: end, durationSeconds: end - start,
-      bpm: activeGrid?.bpm ?? track.bpm,
-      key: track.camelotKey,
-      boundarySource: "manual",
-      contentClass: "unknown",
-      generationMode: "manual_only",
-      provisional: timelineSelection.snapMode === "off",
-      sectionLabel,
-      seamlessnessScore: result.score,
-      confidence: result.confidence,
-      status: "approved",
-      warnings: result.warnings,
-      createdAt: now, updatedAt: now,
-    };
+    const loop = buildLoopAssetFromCurrentSelection(track, timelineSelection, segments, activeGrid, buffer);
     onSaveLoop(loop);
     // §14 — "approve" is deliberately NOT pushed onto the undo stack (see
     // commitSelectionChange's doc comment / the completion plan's
     // "Undo/redo scope" decision): it writes a brand-new persisted
     // LoopAsset, an external side effect this component doesn't own the
     // clean reverse of.
-    const approved: TimelineSelection = { ...timelineSelection, loopId: loop.id, updatedAt: now };
+    const approved: TimelineSelection = { ...timelineSelection, loopId: loop.id, updatedAt: loop.updatedAt };
     setTimelineSelection(approved);
     draftPersistence.saveDraft(approved);
     return loop.id;
@@ -1259,7 +1570,7 @@ export function SectionalLooperWorkspace({
     const loop = findLoopById(loopId);
     if (!track || !loop) return;
     const bounds = activeBoundsForLoop(loop);
-    const sourceFrames = Math.round(track.durationSeconds * sampleRate);
+    const sourceFrames = Math.round(trackDurationSeconds * sampleRate);
     const sel = createSelection(
       track.trackId, bounds.startFrame, bounds.endFrame, sourceFrames, sampleRate, "approved_loop", "off", activeGrid, { loopId },
     );
@@ -1278,7 +1589,7 @@ export function SectionalLooperWorkspace({
 
   function selectionFromBounds(loopId: string, bounds: { startFrame: number; endFrame: number }) {
     if (!track) return;
-    const sourceFrames = Math.round(track.durationSeconds * sampleRate);
+    const sourceFrames = Math.round(trackDurationSeconds * sampleRate);
     const sel = createSelection(
       track.trackId, bounds.startFrame, bounds.endFrame, sourceFrames, sampleRate, "approved_loop", "off", activeGrid, { loopId },
     );
@@ -1446,7 +1757,34 @@ export function SectionalLooperWorkspace({
   }, [mainPreviewStatus, loopAudition.session?.currentAbsoluteSeconds]);
   useEffect(() => { setPlayheadSeconds(0); }, [track?.trackId]);
 
+  // spec §4.2 item 1 — "opened in Sectional Looper" trigger. Fires once
+  // per track (songAnalysisTriggeredForRef guards StrictMode/re-render
+  // double-invocation), passing audioBufferRef.current AS-IS — this
+  // component never forces a decode for analysis; ensureSongAnalysisReady
+  // resolves it via the App-level canonical decode cache if needed.
+  // Placed BEFORE the `if (!track) return` guard below — every hook in
+  // this component must run unconditionally on every render (Rules of
+  // Hooks); the track-null case is handled inside the effect body, not by
+  // skipping the hook call itself.
+  useEffect(() => {
+    if (!track) return;
+    if (songAnalysisTriggeredForRef.current === track.trackId) return;
+    songAnalysisTriggeredForRef.current = track.trackId;
+    setSongAnalysisIssue(null);
+    void ensureSongAnalysisReady(track, audioBufferRef.current, { segments }).catch((e) => {
+      setSongAnalysisIssue(e instanceof Error ? e.message : "Song analysis failed to start.");
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [track?.trackId]);
+
   if (!track) {
+    // Embedded mode (RADIO's multi-track prep workspace) always supplies a
+    // concrete sourceTrackId — this branch is a defensive fallback only,
+    // never the massive track dropdown, which has no meaning inside a
+    // per-row expanded editor.
+    if (embedded) {
+      return <div className="looper-root looper-root-embedded looper-embedded-empty">Track not found.</div>;
+    }
     return (
       <div className="looper-root">
         <h2 className="looper-title">Sectional Looper</h2>
@@ -1520,6 +1858,134 @@ export function SectionalLooperWorkspace({
     await renderLoopById(timelineSelection.loopId);
   }
 
+  // 0717B_MUSIC_Sectional_Looper_Radio_Export_Bridge §7.2/§7.3/§7.4 — the
+  // RADIO counterpart to exportActiveSelection(). Reuses the EXACT same
+  // pre-check block (bail with no track/selection; bounds moved since the
+  // active revision -> commitSelectionChange, same as WAV) but branches to
+  // snapshot -> resolve -> open dialog instead of render-on-success. Stale
+  // drafts are checked here defensively (plan Decision 6b) even though the
+  // Export menu's RADIO item is already disabled for the same condition.
+  async function handleExportToRadio() {
+    if (!track || !timelineSelection) return;
+    if (draftPersistence.staleDraft) {
+      setRadioBridgeIssues([{ code: "SECTIONAL_RADIO_SELECTION_STALE", message: "Review the current selection before promoting it to RADIO.", severity: "error" }]);
+      return;
+    }
+    const currentLoop = findLoopById(timelineSelection.loopId);
+    if (currentLoop) {
+      const active = activeBoundsForLoop(currentLoop);
+      if (active.startFrame !== timelineSelection.startFrame || active.endFrame !== timelineSelection.endFrame) {
+        commitSelectionChange({ timelineSelection, snapMode }, timelineSelection, "boundary_move");
+        return;
+      }
+    }
+
+    setRadioBridgeIssues([]);
+    setRadioBridgeState("validating_selection");
+    const buffer = await ensureDecodedBuffer();
+    const { snapshot, issues } = buildSectionalRadioPromotionSnapshot({
+      trackId: track.trackId,
+      sourceFingerprint: track.playbackBounds?.sourceFingerprint,
+      startFrame: timelineSelection.startFrame,
+      endFrame: timelineSelection.endFrame,
+      sourceTotalFrames: buffer ? buffer.length : 0,
+      sampleRate,
+      alignmentMode,
+      bpm: activeGrid?.bpm ?? track.bpm,
+      key: track.camelotKey,
+      existingLoopId: timelineSelection.loopId,
+      existingLoop: currentLoop,
+      isSelectionStale: !!draftPersistence.staleDraft,
+      capturedAt: new Date().toISOString(),
+    });
+    if (!snapshot) {
+      setRadioBridgeIssues(issues);
+      setRadioBridgeState("idle");
+      return;
+    }
+
+    setRadioBridgeState("resolving_source_loop");
+    const resolution = resolveSectionalRadioSourceLoopAsset(snapshot, loops, loopRevisions, sampleRate);
+    const previewLoop = resolution.mode === "create_new"
+      ? buildLoopAssetFromCurrentSelection(track, timelineSelection, segments, activeGrid, buffer)
+      : loops.find((l) => l.id === resolution.loopId);
+    if (!previewLoop) {
+      setRadioBridgeIssues([{ code: "SECTIONAL_RADIO_MISSING_LOOP_REFERENCE", message: "The resolved loop could not be found.", severity: "error" }]);
+      setRadioBridgeState("idle");
+      return;
+    }
+
+    // 0717C_MUSIC_Complete_Song_Intelligence_and_Section_Map §9 — the
+    // readiness gate, inserted at the lowest-risk point: the existing
+    // stale-draft check, bounds-drift check, snapshot build, and LoopAsset
+    // resolution above all run completely unchanged first; only now, once
+    // a previewLoop is resolved, does analysis get checked. By this point
+    // ensureDecodedBuffer() has already run once above for the snapshot
+    // build, so audioBufferRef.current is normally already populated and
+    // this exercises the no-decode branch of resolveSongAnalysisInput.
+    setRadioBridgeState("checking_analysis_readiness");
+    const analysis = await ensureSongAnalysisReady(track, audioBufferRef.current, { segments }).catch(() => null);
+    if (!analysis) {
+      setRadioBridgeIssues([{ code: "SECTIONAL_RADIO_ANALYSIS_FAILED", message: "Song analysis failed — Export → RADIO requires analysis to complete first.", severity: "error" }]);
+      setRadioBridgeState("idle");
+      return;
+    }
+    if (analysis.status === "STALE" || analysis.status === "FAILED") {
+      setRadioBridgeIssues([{
+        code: analysis.status === "STALE" ? "SECTIONAL_RADIO_ANALYSIS_STALE" : "SECTIONAL_RADIO_ANALYSIS_FAILED",
+        message: analysis.status === "STALE"
+          ? "Song analysis is stale — reanalyze before promoting to RADIO."
+          : "Song analysis failed — retry analysis before promoting to RADIO.",
+        severity: "error",
+      }]);
+      setRadioBridgeState("idle");
+      return;
+    }
+
+    radioBridgeMaterializedLoopIdRef.current = null;
+    setRadioBridgeResolution(resolution);
+    setRadioBridgePreviewLoop(previewLoop);
+    setRadioBridgeState("awaiting_radio_confirmation");
+  }
+
+  // The onPromote callback given to PromoteToRadioDialog. LoopAsset
+  // creation/approval is deferred to exactly here — the moment the user
+  // clicks "Promote to Radio" inside the dialog, never at menu-select or
+  // dialog-open time (plan Decision 3, spec §7.5). materializedLoopIdRef
+  // guards a Retry from mutating a second time.
+  async function handleSectionalRadioPromote(
+    loopId: string,
+    formInput: RadioPromotionFormInput,
+    onProgress?: (phase: RadioPromotionPhase) => void,
+  ): Promise<PromoteLoopToRadioResult> {
+    if (!radioBridgeResolution) {
+      return { ok: false, issues: [{ code: "SECTIONAL_RADIO_BRIDGE_STATE_LOST", message: "Promotion state was lost — reopen the export menu and try again.", severity: "error" }] };
+    }
+    setRadioBridgeState("promoting");
+    const result = await runSectionalRadioBridgePromotion(
+      {
+        resolution: radioBridgeResolution,
+        previewLoop: radioBridgePreviewLoop,
+        materializedLoopIdRef: radioBridgeMaterializedLoopIdRef,
+        onSaveLoop, onUpdateLoop, onPromoteToRadio,
+      },
+      loopId, formInput, onProgress,
+    );
+    if (result.ok) {
+      setRadioBridgeState("complete");
+      refreshRadioLoopCount();
+    }
+    return result;
+  }
+
+  function closeRadioBridge() {
+    setRadioBridgeState("idle");
+    setRadioBridgeIssues([]);
+    setRadioBridgePreviewLoop(null);
+    setRadioBridgeResolution(null);
+    radioBridgeMaterializedLoopIdRef.current = null;
+  }
+
   function stemContentClass(role: string): LoopContentClass {
     if (role === "drums") return "drums";
     if (role === "bass") return "bass";
@@ -1557,7 +2023,7 @@ export function SectionalLooperWorkspace({
       }
     }
     const alignment = validateStemAlignment(
-      track.trackId, track.durationSeconds,
+      track.trackId, trackDurationSeconds,
       stemBuffers.map(({ track: s, buffer }) => ({
         trackId: s.trackId, parentTrackId: s.parentTrackId, sampleRate: buffer.sampleRate, durationSeconds: buffer.duration,
       })),
@@ -1631,14 +2097,192 @@ export function SectionalLooperWorkspace({
     (s) => timelineSelection!.startFrame < s.endFrame && timelineSelection!.endFrame > s.startFrame,
   ) : undefined;
 
+  // 0717C_MUSIC_Complete_Song_Intelligence_and_Section_Map — Section Map
+  // derived render values. displaySections resolves each SongSection
+  // through its own revision chain (resolveActiveSongSection), overlaying
+  // live drag feedback from draggedSectionBounds when present — mirroring
+  // how timelineSelection itself shows live feedback pre-commit.
+  const currentSongAnalysis = track ? songAnalyses.find((a) => a.sourceTrackId === track.trackId) : undefined;
+  const displaySections: SectionMapDisplaySection[] = currentSongAnalysis
+    ? currentSongAnalysis.sections.map((s) => {
+      const resolved = resolveActiveSongSection(s, currentSongAnalysis.sectionRevisions);
+      const isDragging = draggedSectionBounds?.sectionId === s.id;
+      return {
+        id: s.id,
+        structuralType: resolved.structuralType,
+        displayLabel: resolved.displayLabel,
+        startFrame: isDragging ? draggedSectionBounds.startFrame : resolved.startFrame,
+        endFrame: isDragging ? draggedSectionBounds.endFrame : resolved.endFrame,
+        verification: resolved.verification,
+      };
+    })
+    : [];
+  const selectedSection = currentSongAnalysis?.sections.find((s) => s.id === selectedSectionId);
+  const resolvedSelectedSection = selectedSection ? resolveActiveSongSection(selectedSection, currentSongAnalysis!.sectionRevisions) : undefined;
+
+  // 0717C_MUSIC_Complete_Song_Intelligence_and_Section_Map §9 — advisory
+  // display-only intelligence for PromoteToRadioDialog, derived entirely
+  // from currentSongAnalysis (the same authority the readiness gate in
+  // handleExportToRadio already waited on). Matches the exported loop's
+  // frame range to whichever resolved section contains its midpoint —
+  // never auto-fills the dialog's form fields, purely informational.
+  const radioIntelligenceSection = currentSongAnalysis && radioBridgePreviewLoop
+    ? (() => {
+      const loopStartFrame = Math.round(radioBridgePreviewLoop.startSeconds * currentSongAnalysis.sampleRate);
+      const loopEndFrame = Math.round(radioBridgePreviewLoop.endSeconds * currentSongAnalysis.sampleRate);
+      const loopMidFrame = (loopStartFrame + loopEndFrame) / 2;
+      return currentSongAnalysis.sections
+        .map((s) => resolveActiveSongSection(s, currentSongAnalysis.sectionRevisions))
+        .find((s) => loopMidFrame >= s.startFrame && loopMidFrame < s.endFrame);
+    })()
+    : undefined;
+  const radioSongIntelligence: PromoteToRadioSongIntelligence | undefined = currentSongAnalysis
+    ? {
+      sourceSection: radioIntelligenceSection
+        ? { displayLabel: radioIntelligenceSection.displayLabel, verification: radioIntelligenceSection.verification }
+        : undefined,
+      suggestedRoles: currentSongAnalysis.suggestedRoles,
+      suggestedMoods: currentSongAnalysis.suggestedMoods,
+      technicalSummary: {
+        bpm: currentSongAnalysis.bpm,
+        musicalKey: currentSongAnalysis.musicalKey,
+        energySummary: radioIntelligenceSection
+          ? (() => {
+            const e = meanProfileInRange(currentSongAnalysis.energyProfile, radioIntelligenceSection.startFrame, radioIntelligenceSection.endFrame, currentSongAnalysis.decodedFrameCount);
+            return e != null ? e.toFixed(2) : undefined;
+          })()
+          : undefined,
+      },
+    }
+    : undefined;
+
+  function handleSectionClick(id: string) {
+    setSelectedSectionId((prev) => (prev === id ? prev : id));
+  }
+
+  function handleSectionDoubleClick(id: string) {
+    if (!currentSongAnalysis || !track) return;
+    const section = currentSongAnalysis.sections.find((s) => s.id === id);
+    if (!section) return;
+    const url = resolveTrackUrl(track);
+    if (!url) return;
+    const resolved = resolveActiveSongSection(section, currentSongAnalysis.sectionRevisions);
+    setSelectedSectionId(id);
+    void loopAudition.start({
+      sourceTrackId: track.trackId, sourceTitle: track.title, sourceUrl: url,
+      sourceId: track.trackId, sourceKind: isStemTrack(track) ? "stem" : "track",
+      candidates: [{
+        candidateId: `songsection_${id}`,
+        startSeconds: resolved.startFrame / sampleRate, endSeconds: resolved.endFrame / sampleRate,
+        startFrame: resolved.startFrame, endFrame: resolved.endFrame,
+        sectionLabel: resolved.displayLabel, label: resolved.displayLabel,
+      }],
+      startIndex: 0, previewMode,
+      decodedBuffer: audioBufferRef.current ?? undefined,
+    });
+  }
+
+  function handleSectionBoundaryDown(sectionId: string, edge: "start" | "end", e: React.PointerEvent) {
+    e.stopPropagation();
+    dragModeRef.current = "section-boundary";
+    dragSectionSelectionRef.current = { sectionId, edge };
+    setSelectedSectionId(sectionId);
+  }
+
+  // Every handler below builds its new revision from the CURRENT RESOLVED
+  // state (resolveActiveSongSection), not the raw analyzer-origin section —
+  // resolveActiveSongSection only merges the ONE active revision against
+  // the base section (never a full chain walk), so a revision that carries
+  // only its own single changed field would silently discard every prior
+  // edit's effect (e.g. relabeling a just-verified section would reset its
+  // verification back to "provisional"). Carrying the full resolved state
+  // forward on every edit, with parentRevisionId chained to the previous
+  // active revision, keeps successive edits composing instead of clobbering
+  // each other — mirrors loopRevisions.ts's updateExistingRevision doctrine.
+  function handleSectionLabelChange(structuralType: SongStructuralType) {
+    if (!currentSongAnalysis || !selectedSection || !resolvedSelectedSection) return;
+    const revision = createSongSectionRevision(selectedSection, {
+      parentRevisionId: selectedSection.activeRevisionId,
+      structuralType,
+      displayLabel: resolvedSelectedSection.displayLabel,
+      startFrame: resolvedSelectedSection.startFrame,
+      endFrame: resolvedSelectedSection.endFrame,
+      variationGroupId: resolvedSelectedSection.variationGroupId,
+      variationOrdinal: resolvedSelectedSection.variationOrdinal,
+      verification: resolvedSelectedSection.verification,
+    });
+    onUpdateSongAnalysis(currentSongAnalysis.id, {
+      sectionRevisions: [...currentSongAnalysis.sectionRevisions, revision],
+      sections: currentSongAnalysis.sections.map((s) => (s.id === selectedSection.id ? { ...s, activeRevisionId: revision.id } : s)),
+    });
+  }
+
+  function handleSectionVerifyCycle() {
+    if (!currentSongAnalysis || !selectedSection || !resolvedSelectedSection) return;
+    const next = resolvedSelectedSection.verification === "provisional" ? "reviewed"
+      : resolvedSelectedSection.verification === "reviewed" ? "verified" : "provisional";
+    const revision = createSongSectionRevision(selectedSection, {
+      parentRevisionId: selectedSection.activeRevisionId,
+      structuralType: resolvedSelectedSection.structuralType,
+      displayLabel: resolvedSelectedSection.displayLabel,
+      startFrame: resolvedSelectedSection.startFrame,
+      endFrame: resolvedSelectedSection.endFrame,
+      variationGroupId: resolvedSelectedSection.variationGroupId,
+      variationOrdinal: resolvedSelectedSection.variationOrdinal,
+      verification: next,
+    });
+    onUpdateSongAnalysis(currentSongAnalysis.id, {
+      sectionRevisions: [...currentSongAnalysis.sectionRevisions, revision],
+      sections: currentSongAnalysis.sections.map((s) => (s.id === selectedSection.id ? { ...s, activeRevisionId: revision.id } : s)),
+    });
+    recomputeSongAnalysisStatus(currentSongAnalysis.id);
+  }
+
+  function handlePairAsVariation() {
+    if (!currentSongAnalysis || !selectedSectionId || !pairSectionId || pairSectionId === selectedSectionId) return;
+    const groupId = `variation_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+    const a = currentSongAnalysis.sections.find((s) => s.id === pairSectionId);
+    const b = currentSongAnalysis.sections.find((s) => s.id === selectedSectionId);
+    if (!a || !b) return;
+    const resolvedA = resolveActiveSongSection(a, currentSongAnalysis.sectionRevisions);
+    const resolvedB = resolveActiveSongSection(b, currentSongAnalysis.sectionRevisions);
+    const revA = createSongSectionRevision(a, {
+      parentRevisionId: a.activeRevisionId,
+      structuralType: resolvedA.structuralType, displayLabel: resolvedA.displayLabel,
+      startFrame: resolvedA.startFrame, endFrame: resolvedA.endFrame,
+      verification: resolvedA.verification,
+      variationGroupId: groupId, variationOrdinal: 1,
+    });
+    const revB = createSongSectionRevision(b, {
+      parentRevisionId: b.activeRevisionId,
+      structuralType: resolvedB.structuralType, displayLabel: resolvedB.displayLabel,
+      startFrame: resolvedB.startFrame, endFrame: resolvedB.endFrame,
+      verification: resolvedB.verification,
+      variationGroupId: groupId, variationOrdinal: 2,
+    });
+    onUpdateSongAnalysis(currentSongAnalysis.id, {
+      sectionRevisions: [...currentSongAnalysis.sectionRevisions, revA, revB],
+      sections: currentSongAnalysis.sections.map((s) => {
+        if (s.id === a.id) return { ...s, activeRevisionId: revA.id };
+        if (s.id === b.id) return { ...s, activeRevisionId: revB.id };
+        return s;
+      }),
+    });
+    setPairSectionId(null);
+  }
+
   return (
-    <div className="looper-root">
+    <div className={embedded ? "looper-root looper-root-embedded" : "looper-root"}>
       <div className="looper-header">
-        <button className="looper-back" onClick={() => onSelectSourceTrack(null)}>← Change track</button>
+        {embedded ? (
+          <button className="looper-back" onClick={() => onCollapse?.()}>↑ Collapse</button>
+        ) : (
+          <button className="looper-back" onClick={() => onSelectSourceTrack(null)}>← Change track</button>
+        )}
         <h2 className="looper-title">{track.title}</h2>
         <div className="looper-header-meta">
           <span>{track.artist}</span>
-          <span>{fmtTime(track.durationSeconds)}</span>
+          <span>{fmtTime(trackDurationSeconds)}</span>
           {track.bpm && <span>{track.bpm.toFixed(2)} BPM</span>}
           {track.camelotKey && <span>{track.camelotKey}</span>}
           <span className={track.beatMap ? "looper-trust-ok" : "looper-trust-low"}>
@@ -1653,36 +2297,53 @@ export function SectionalLooperWorkspace({
 
       {decodeError && <div className="looper-warning">{decodeError}</div>}
 
-      {/* 0714R §8 — full-track waveform overview, replacing the plain
-          flex-block timeline strip with a real waveform + overlays.
+      {/* 0716A (corrections §2) — zoom/pan controls for long-form audio.
+          Wheel over the waveform pans horizontally while zoomed. */}
+      <div className="looper-zoom-controls-row">
+        <button onClick={zoomFitTrack} disabled={!viewWindow}>Fit Track</button>
+        <button onClick={zoomFitSelection} disabled={!timelineSelection}>Fit Selection</button>
+        <button onClick={() => zoomBy(0.5)} title="Zoom In">＋</button>
+        <button onClick={() => zoomBy(2)} disabled={!viewWindow} title="Zoom Out">－</button>
+        {viewWindow && <span className="looper-zoom-hint">scroll to pan</span>}
+      </div>
+
+      {/* 0714R §8 — full-track waveform overview.
           0715A — GridBackdropLayer renders BEHIND it as an absolutely-
           positioned, pointer-events:none underlay sharing the exact same
-          x = (seconds/duration) * width mapping (§19), so bar lines,
-          grouping bands, and structural sections stay pixel-aligned with
-          the waveform/candidates rendered on top. */}
+          x mapping (§19) — 0716A: now through the shared view window, with
+          bar/beat lines progressively revealed only at readable zoom.
+          0716A (corrections §4) — the embedded candidate mini-box strip and
+          section ticks are no longer drawn on the default waveform (empty
+          arrays below); candidate machinery lives entirely in Advanced. */}
       <div className="looper-waveform-stack" ref={stackRef} onPointerDown={handleStackPointerDown}>
         {track && (
           <GridBackdropLayer
-            durationSeconds={track.durationSeconds}
+            durationSeconds={trackDurationSeconds}
             sampleRate={sampleRate}
             backdropLevels={gridBackdropLevels}
             groupingEmphasis={groupingEmphasis}
             structuralSections={structuralSections}
             showBackdrop={showGridBackdrop}
             showStructure={showStructureOverlay}
+            viewStartSeconds={viewStartSeconds}
+            viewEndSeconds={viewEndSeconds}
+            beatFrames={activeGrid?.beatFrames}
           />
         )}
         <TrackWaveformOverview
           waveform={waveform}
           waveformError={waveformError}
-          sections={sections.map((s) => ({ label: s.label, start: s.start, end: s.end }))}
-          candidates={candidates}
+          sections={[]}
+          candidates={[]}
           candidateState={candidateVisualState}
           onCandidateSelect={selectCandidate}
           onCandidateHover={setHoveredIndex}
+          viewStartSeconds={viewStartSeconds}
+          viewEndSeconds={viewEndSeconds}
+          windowPeaks={windowPeaks}
         />
         {/* 0715B §8/§9 — direct click-drag range selection, layered above
-            the waveform/candidates so handles remain grabbable.
+            the waveform so handles remain grabbable.
             0716A — the fill rect also becomes a whole-body drag hit target
             (cursor:grab); the actual mode decision happens via natural
             bubbling to the stack's own onPointerDown (handleStackPointerDown
@@ -1691,11 +2352,13 @@ export function SectionalLooperWorkspace({
             body-hit rect's rendering/cursor styling. */}
         {track && (
           <TimelineSelectionOverlay
-            durationSeconds={track.durationSeconds}
+            durationSeconds={trackDurationSeconds}
             sampleRate={sampleRate}
             selection={timelineSelection}
             onHandleDown={handleHandlePointerDown}
             onBodyDown={() => {}}
+            viewStartSeconds={viewStartSeconds}
+            viewEndSeconds={viewEndSeconds}
           />
         )}
         {/* 0716A §"Persistent Playhead" — painted AFTER the selection
@@ -1704,18 +2367,97 @@ export function SectionalLooperWorkspace({
             visually covered by the selection fill. */}
         {track && (
           <PlayheadMarker
-            durationSeconds={track.durationSeconds}
+            durationSeconds={trackDurationSeconds}
             seconds={playheadSeconds}
             onPointerDown={handlePlayheadPointerDown}
+            viewStartSeconds={viewStartSeconds}
+            viewEndSeconds={viewEndSeconds}
           />
         )}
       </div>
 
-      {/* 0715G §2/§3 — region-first default flow: choose a natural region,
-          hear the one recommendation, adjust length/alignment/duration
-          target. This is the entire "default view" the spec asks for; the
-          old candidate table lives on read-only inside Advanced Candidates
-          below. */}
+      {/* 0717C_MUSIC_Complete_Song_Intelligence_and_Section_Map §7.1 — one
+          continuous horizontal Section Map immediately beneath the
+          waveform, its own row (not another absolute overlay inside
+          .looper-waveform-stack), sharing that stack's exact
+          viewStartSeconds/viewEndSeconds window for pixel-exact alignment. */}
+      {track && currentSongAnalysis && displaySections.length > 0 && (
+        <SectionMap
+          sections={displaySections}
+          totalFrames={currentSongAnalysis.decodedFrameCount}
+          sampleRate={currentSongAnalysis.sampleRate}
+          viewStartSeconds={viewStartSeconds}
+          viewEndSeconds={viewEndSeconds}
+          selectedSectionId={selectedSectionId}
+          onSectionClick={handleSectionClick}
+          onSectionDoubleClick={handleSectionDoubleClick}
+          onBoundaryDown={handleSectionBoundaryDown}
+        />
+      )}
+      {track && (
+        <div className="looper-song-analysis-row">
+          {(!currentSongAnalysis || currentSongAnalysis.status === "NOT_ANALYZED") && (
+            <span className="looper-preview-status">
+              {songAnalysisProgress[track.trackId] ? "Preparing…" : "Song analysis not started."}
+            </span>
+          )}
+          {currentSongAnalysis?.status === "ANALYZING" && (
+            <>
+              <span className="looper-preview-status">
+                Analyzing… {songAnalysisProgress[track.trackId]
+                  ? `${songAnalysisProgress[track.trackId].framesProcessed} / ${songAnalysisProgress[track.trackId].totalFrames} frames`
+                  : "starting…"}
+              </span>
+              <button onClick={() => cancelSongAnalysis(track.trackId)}>Cancel</button>
+            </>
+          )}
+          {(currentSongAnalysis?.status === "READY_PROVISIONAL" || currentSongAnalysis?.status === "READY_VERIFIED") && (
+            <span className="looper-preview-status">
+              Song analysis: {currentSongAnalysis.status === "READY_VERIFIED" ? "verified" : "provisional"} ({currentSongAnalysis.sections.length} sections)
+            </span>
+          )}
+          {currentSongAnalysis?.status === "STALE" && <span className="looper-preview-error">Song analysis is stale — reanalyze to refresh.</span>}
+          {currentSongAnalysis?.status === "FAILED" && <span className="looper-preview-error">Song analysis failed.</span>}
+          {songAnalysisIssue && <span className="looper-preview-error">{songAnalysisIssue}</span>}
+          {currentSongAnalysis?.status !== "ANALYZING" && (
+            <button
+              onClick={() => {
+                setSongAnalysisIssue(null);
+                void ensureSongAnalysisReady(track, audioBufferRef.current, { force: true, segments }).catch((e) => {
+                  setSongAnalysisIssue(e instanceof Error ? e.message : "Song analysis failed.");
+                });
+              }}
+            >
+              {currentSongAnalysis ? "Reanalyze" : "Analyze"}
+            </button>
+          )}
+          {selectedSection && resolvedSelectedSection && (
+            <span className="looper-section-controls">
+              <select
+                value={resolvedSelectedSection.structuralType}
+                onChange={(e) => handleSectionLabelChange(e.target.value as SongStructuralType)}
+              >
+                {(["intro", "body", "verse", "chorus", "breakdown", "bridge", "interlude", "outro", "full_composition", "independent", "unknown"] as SongStructuralType[]).map((t) => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
+              <button onClick={handleSectionVerifyCycle}>
+                Mark {resolvedSelectedSection.verification === "provisional" ? "Reviewed" : resolvedSelectedSection.verification === "reviewed" ? "Verified" : "Provisional"}
+              </button>
+              <button onClick={() => setPairSectionId(selectedSectionId)} disabled={pairSectionId === selectedSectionId}>
+                {pairSectionId === selectedSectionId ? "Picked for pairing" : "Pick for pairing"}
+              </button>
+              {pairSectionId && pairSectionId !== selectedSectionId && (
+                <button onClick={handlePairAsVariation}>Pair as variation</button>
+              )}
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* 0716A (corrections §5) — Intro/Body/Outro are DIRECT region-
+          selection buttons: clicking one selects that region's own bounds
+          (and previews it). No recommendation machinery in this flow. */}
       <RegionStrip
         bands={stableStructuralSections}
         eligibility={regionEligibilityResult}
@@ -1723,17 +2465,9 @@ export function SectionalLooperWorkspace({
         activeRegionId={activeRegionId}
         onSelectRegion={onSelectRegion}
       />
-      {activeRegion && (
-        <p className="looper-recommendation-line" aria-live="polite">
-          {recommendation?.winner
-            ? `Recommended: ${recommendation.winner.barCount ? `${recommendation.winner.barCount} bars` : `${recommendation.winner.durationSeconds.toFixed(1)} sec`}`
-            : "No recommendation available for this region/length/duration target."}
-        </p>
-      )}
       <div className="looper-region-controls-row">
-        <LengthControl value={lengthPreference} availableLengths={recommendation?.availableLengths ?? { 4: false, 8: false, 16: false, 32: false, 64: false }} onChange={setLengthPreference} />
+        <LengthControl value={lengthPreference} availableLengths={availableLengths} onChange={setLengthPreference} />
         <AlignmentControl value={alignmentMode} onChange={onChangeAlignment} />
-        <DurationTargetControl value={durationTarget} onChange={setDurationTarget} />
       </div>
 
       {draftPersistence.staleDraft && <DraftRestoreBanner onClear={draftPersistence.clearDraft} />}
@@ -1771,16 +2505,35 @@ export function SectionalLooperWorkspace({
           />
           {selectionApproveError && <div className="looper-preview-error" role="alert">{selectionApproveError}</div>}
           {stemImportError && <div className="looper-preview-error" role="alert">{stemImportError}</div>}
+          {radioBridgeIssues.length > 0 && (
+            <div className="looper-preview-error" role="alert">{radioBridgeIssues.map((i) => i.message).join(" ")}</div>
+          )}
+          {(radioBridgeState === "validating_selection" || radioBridgeState === "resolving_source_loop") && (
+            <div className="looper-preview-status">Preparing RADIO promotion…</div>
+          )}
           <MainActionBar
             previewStatus={mainPreviewStatus}
             onPlayPause={() => void onPlayPause()}
             loopEnabled={loopEnabled}
             onToggleLoop={() => setLoopEnabled((v) => !v)}
-            onExport={() => void exportActiveSelection()}
-            exportDisabled={selectionLoop ? !!renderingByLoopId[selectionLoop.id] : false}
+            onExportWav={() => void exportActiveSelection()}
+            onExportRadio={() => void handleExportToRadio()}
+            wavExportDisabled={selectionLoop ? !!renderingByLoopId[selectionLoop.id] : false}
+            radioExportDisabled={!!draftPersistence.staleDraft}
+            radioExportDisabledReason={draftPersistence.staleDraft ? "Review the current selection before promoting it to RADIO." : undefined}
             onClear={clearSelection}
           />
         </div>
+      )}
+
+      {radioBridgePreviewLoop && (
+        <PromoteToRadioDialog
+          loop={radioBridgePreviewLoop}
+          onPromote={handleSectionalRadioPromote}
+          onClose={closeRadioBridge}
+          onOpenRadioLoops={onOpenRadioLoops}
+          songIntelligence={radioSongIntelligence}
+        />
       )}
 
       {/* 0716A_MUSIC_Direct_Manipulation_Looper_And_Playhead — ONE

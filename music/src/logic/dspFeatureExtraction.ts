@@ -59,88 +59,89 @@ function clamp(v: number, lo = 0, hi = 1): number {
   return Math.max(lo, Math.min(hi, v));
 }
 
-/**
- * Pure computation over an already-decoded AudioAnalysisInput — no fetch, no
- * decode. Shared by extractDspFeatures (below, for back-compat callers that
- * still pass a Track) and analyzeTrackDspFeatures, which decodes once and
- * feeds the same input to this, the BPM detector, and the key detector
- * (0712_MUSIC_BPM_Key_Detection_Engine §5 "decode once per analysis run").
- */
-export function computeDspFeaturesFromInput(
-  input: AudioAnalysisInput,
-  options?: DspExtractionOptions,
-): { audioAnalysis: TrackAudioAnalysis | null; warnings: string[] } {
-  const opts = { ...DEFAULTS, ...options };
-  const warnings: string[] = [];
+// 0717C_MUSIC_Complete_Song_Intelligence_and_Section_Map — per-frame math
+// extracted into its own pure function so the full-track chunked/abortable
+// driver (computeDspFeaturesChunked, below) can reuse the exact same
+// per-frame computation as this synchronous function without duplicating
+// the FFT math. `bassEnergy` is a small additive extension (sum of
+// magnitude bins below 250Hz relative to totalMag) reusing the same
+// mags[]/binHz/totalMag already computed here — no second FFT pass.
+export interface FrameFeatures {
+  rms: number;
+  zcr: number;
+  centroid: number | null;
+  rolloff: number | null;
+  bandwidth: number | null;
+  bassEnergy: number | null;
+}
 
-  const sampleRate = input.sampleRate;
-  const samples = input.mono;
-  const numberOfChannels = input.channels.length;
+const BASS_ENERGY_CUTOFF_HZ = 250;
 
-  const { frameSize, hopSize } = opts;
-  const fftSize = frameSize; // must be power of 2; frameSize default 2048 is fine
+export function computeFrameFeatures(frame: Float32Array, fftSize: number, binHz: number): FrameFeatures {
+  // RMS
+  let sumSq = 0;
+  for (let i = 0; i < frame.length; i++) sumSq += frame[i] * frame[i];
+  const rms = Math.sqrt(sumSq / frame.length);
 
-  const rmsValues: number[] = [];
-  const zcrValues: number[] = [];
-  const centroidValues: number[] = [];
-  const rolloffValues: number[] = [];
-  const bandwidthValues: number[] = [];
+  // ZCR
+  let crossings = 0;
+  for (let i = 1; i < frame.length; i++) {
+    if ((frame[i] >= 0) !== (frame[i - 1] >= 0)) crossings++;
+  }
+  const zcr = crossings / frame.length;
 
-  const binHz = sampleRate / fftSize;
+  // Spectral features via FFT
+  const mags = magnitudeSpectrum(frame, fftSize);
+  const half = mags.length;
 
-  for (let start = 0; start + frameSize <= samples.length; start += hopSize) {
-    const frame = samples.subarray(start, start + frameSize);
-
-    // RMS
-    let sumSq = 0;
-    for (let i = 0; i < frame.length; i++) sumSq += frame[i] * frame[i];
-    const rms = Math.sqrt(sumSq / frame.length);
-    rmsValues.push(rms);
-
-    // ZCR
-    let crossings = 0;
-    for (let i = 1; i < frame.length; i++) {
-      if ((frame[i] >= 0) !== (frame[i - 1] >= 0)) crossings++;
-    }
-    zcrValues.push(crossings / frame.length);
-
-    // Spectral features via FFT
-    const mags = magnitudeSpectrum(frame, fftSize);
-    const half = mags.length;
-
-    let totalMag = 0;
-    let weightedFreqSum = 0;
-    for (let k = 0; k < half; k++) {
-      const freq = k * binHz;
-      totalMag += mags[k];
-      weightedFreqSum += freq * mags[k];
-    }
-
-    if (totalMag > 0) {
-      // Centroid
-      const centroid = weightedFreqSum / totalMag;
-      centroidValues.push(centroid);
-
-      // Rolloff (85% energy)
-      let cum = 0;
-      const threshold = totalMag * 0.85;
-      let rolloff = 0;
-      for (let k = 0; k < half; k++) {
-        cum += mags[k];
-        if (cum >= threshold) { rolloff = k * binHz; break; }
-      }
-      rolloffValues.push(rolloff);
-
-      // Bandwidth
-      let bwSum = 0;
-      for (let k = 0; k < half; k++) {
-        const diff = k * binHz - centroid;
-        bwSum += mags[k] * diff * diff;
-      }
-      bandwidthValues.push(Math.sqrt(bwSum / totalMag));
-    }
+  let totalMag = 0;
+  let weightedFreqSum = 0;
+  let bassMag = 0;
+  for (let k = 0; k < half; k++) {
+    const freq = k * binHz;
+    totalMag += mags[k];
+    weightedFreqSum += freq * mags[k];
+    if (freq < BASS_ENERGY_CUTOFF_HZ) bassMag += mags[k];
   }
 
+  let centroid: number | null = null;
+  let rolloff: number | null = null;
+  let bandwidth: number | null = null;
+  let bassEnergy: number | null = null;
+
+  if (totalMag > 0) {
+    // Centroid
+    centroid = weightedFreqSum / totalMag;
+
+    // Rolloff (85% energy)
+    let cum = 0;
+    const threshold = totalMag * 0.85;
+    rolloff = 0;
+    for (let k = 0; k < half; k++) {
+      cum += mags[k];
+      if (cum >= threshold) { rolloff = k * binHz; break; }
+    }
+
+    // Bandwidth
+    let bwSum = 0;
+    for (let k = 0; k < half; k++) {
+      const diff = k * binHz - centroid;
+      bwSum += mags[k] * diff * diff;
+    }
+    bandwidth = Math.sqrt(bwSum / totalMag);
+
+    bassEnergy = bassMag / totalMag;
+  }
+
+  return { rms, zcr, centroid, rolloff, bandwidth, bassEnergy };
+}
+
+// Pure scalar reduction shared by computeDspFeaturesFromInput (below) and
+// computeDspFeaturesChunked — identical mean-based math either way.
+function reduceFrameSeriesToAudioAnalysis(
+  rmsValues: number[], zcrValues: number[], centroidValues: number[], rolloffValues: number[], bandwidthValues: number[],
+  sampleRate: number, numberOfChannels: number, durationSec: number, warnings: string[],
+): { audioAnalysis: TrackAudioAnalysis | null; warnings: string[] } {
   if (rmsValues.length === 0) {
     warnings.push("no frames extracted — audio may be too short");
     return { audioAnalysis: null, warnings };
@@ -178,7 +179,6 @@ export function computeDspFeaturesFromInput(
       if (delta > adaptiveThreshold) onsetCount++;
     }
   }
-  const durationSec = samples.length / sampleRate;
   const rawOnsetDensity = onsetCount / Math.max(1, durationSec);
   const onsetDensityNorm = clamp(rawOnsetDensity / 10);
 
@@ -217,6 +217,176 @@ export function computeDspFeaturesFromInput(
   );
 
   return { audioAnalysis, warnings: [...warnings, ...(mechCandidates.length ? [`mechanism candidates: ${mechCandidates.join(", ")}`] : [])] };
+}
+
+/**
+ * Pure computation over an already-decoded AudioAnalysisInput — no fetch, no
+ * decode. Shared by extractDspFeatures (below, for back-compat callers that
+ * still pass a Track) and analyzeTrackDspFeatures, which decodes once and
+ * feeds the same input to this, the BPM detector, and the key detector
+ * (0712_MUSIC_BPM_Key_Detection_Engine §5 "decode once per analysis run").
+ *
+ * Unchanged behavior/signature for every existing caller — this is a pure
+ * refactor onto computeFrameFeatures/reduceFrameSeriesToAudioAnalysis
+ * (0717C), done so the new full-track chunked driver below can reuse the
+ * exact same per-frame math without duplicating it. Still synchronous —
+ * existing callers are always capped at maxDurationSec (120s default) by
+ * decodeAudioAnalysisInput before this ever runs, so main-thread blocking
+ * has never been a problem for this call path; 0717C's own full-length,
+ * potentially very long analysis goes through computeDspFeaturesChunked
+ * instead, never through this function.
+ */
+export function computeDspFeaturesFromInput(
+  input: AudioAnalysisInput,
+  options?: DspExtractionOptions,
+): { audioAnalysis: TrackAudioAnalysis | null; warnings: string[] } {
+  const opts = { ...DEFAULTS, ...options };
+  const warnings: string[] = [];
+
+  const sampleRate = input.sampleRate;
+  const samples = input.mono;
+  const numberOfChannels = input.channels.length;
+
+  const { frameSize, hopSize } = opts;
+  const fftSize = frameSize; // must be power of 2; frameSize default 2048 is fine
+  const binHz = sampleRate / fftSize;
+
+  const rmsValues: number[] = [];
+  const zcrValues: number[] = [];
+  const centroidValues: number[] = [];
+  const rolloffValues: number[] = [];
+  const bandwidthValues: number[] = [];
+
+  for (let start = 0; start + frameSize <= samples.length; start += hopSize) {
+    const frame = samples.subarray(start, start + frameSize);
+    const f = computeFrameFeatures(frame, fftSize, binHz);
+    rmsValues.push(f.rms);
+    zcrValues.push(f.zcr);
+    if (f.centroid != null) centroidValues.push(f.centroid);
+    if (f.rolloff != null) rolloffValues.push(f.rolloff);
+    if (f.bandwidth != null) bandwidthValues.push(f.bandwidth);
+  }
+
+  const durationSec = samples.length / sampleRate;
+  return reduceFrameSeriesToAudioAnalysis(rmsValues, zcrValues, centroidValues, rolloffValues, bandwidthValues, sampleRate, numberOfChannels, durationSec, warnings);
+}
+
+// 0717C_MUSIC_Complete_Song_Intelligence_and_Section_Map — the ONLY
+// consumer needed for full-length song analysis. Never converts the
+// existing synchronous computeDspFeaturesFromInput to async and never
+// changes any of ITS existing callers — this is a new, separate function
+// reusing the same per-frame math (computeFrameFeatures) with its own
+// chunked/abortable/progress-reporting control flow, since it's the one
+// call path that may walk many thousands of frames across a long field
+// recording. framesPerChunk=200 is an initial default, not sacred — tune
+// down if live testing shows noticeable input lag during a long analysis.
+export interface RawFrameSeries {
+  rmsValues: number[];
+  zcrValues: number[];
+  centroidValues: number[];
+  rolloffValues: number[];
+  bandwidthValues: number[];
+  bassEnergyValues: number[];
+  // 0717D_RADIO_Playlist_Inbox_and_Performance_Foundation — each frame's own
+  // min/max sample value, gathered inside this SAME chunked/yielding/
+  // abortable loop (the loop already touches every sample of `frame` for
+  // RMS) — never a second full-buffer pass. Reduced into a compact
+  // waveform-overview summary by songWaveformSummary.ts.
+  minValues: number[];
+  maxValues: number[];
+  hopSeconds: number;
+}
+
+export interface ChunkedDspProgress {
+  phase: "profiles";
+  framesProcessed: number;
+  totalFrames: number;
+}
+
+export interface ChunkedDspOptions extends DspExtractionOptions {
+  framesPerChunk?: number;
+  signal?: AbortSignal;
+  onProgress?: (progress: ChunkedDspProgress) => void;
+}
+
+export async function computeDspFeaturesChunked(
+  input: AudioAnalysisInput,
+  options?: ChunkedDspOptions,
+): Promise<{ audioAnalysis: TrackAudioAnalysis | null; warnings: string[]; rawFrameSeries: RawFrameSeries }> {
+  const opts = { ...DEFAULTS, framesPerChunk: 200, ...options };
+  const { frameSize, hopSize, framesPerChunk, signal, onProgress } = opts;
+  const fftSize = frameSize;
+  const sampleRate = input.sampleRate;
+  const samples = input.mono;
+  const numberOfChannels = input.channels.length;
+  const binHz = sampleRate / fftSize;
+  const hopSeconds = hopSize / sampleRate;
+
+  const rmsValues: number[] = [];
+  const zcrValues: number[] = [];
+  const centroidValues: number[] = [];
+  const rolloffValues: number[] = [];
+  const bandwidthValues: number[] = [];
+  const bassEnergyValues: number[] = [];
+  const minValues: number[] = [];
+  const maxValues: number[] = [];
+
+  const totalFrames = samples.length >= frameSize ? Math.floor((samples.length - frameSize) / hopSize) + 1 : 0;
+  let framesProcessed = 0;
+  let sinceYield = 0;
+
+  const checkAbort = () => {
+    if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+  };
+
+  checkAbort();
+  for (let start = 0; start + frameSize <= samples.length; start += hopSize) {
+    const frame = samples.subarray(start, start + frameSize);
+    const f = computeFrameFeatures(frame, fftSize, binHz);
+    rmsValues.push(f.rms);
+    zcrValues.push(f.zcr);
+    if (f.centroid != null) centroidValues.push(f.centroid);
+    if (f.rolloff != null) rolloffValues.push(f.rolloff);
+    if (f.bandwidth != null) bandwidthValues.push(f.bandwidth);
+    if (f.bassEnergy != null) bassEnergyValues.push(f.bassEnergy);
+
+    // Per-frame min/max — a cheap extra reduction over `frame`, already
+    // fully in hand for this iteration; never a separate pass over `samples`.
+    let frameMin = frame[0];
+    let frameMax = frame[0];
+    for (let i = 1; i < frame.length; i++) {
+      const v = frame[i];
+      if (v < frameMin) frameMin = v;
+      if (v > frameMax) frameMax = v;
+    }
+    minValues.push(frameMin);
+    maxValues.push(frameMax);
+
+    framesProcessed++;
+    sinceYield++;
+    if (sinceYield >= framesPerChunk) {
+      sinceYield = 0;
+      onProgress?.({ phase: "profiles", framesProcessed, totalFrames });
+      // Cooperative yield — hands control back to the event loop so audio
+      // playback and UI interaction (drag, click, waveform pan) stay
+      // responsive during a long analysis. No worker, no new dependency —
+      // see 0717C plan's Context for why this codebase has no existing
+      // Worker precedent to build on instead.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      checkAbort(); // stop genuinely mid-loop, not just after the fact
+    }
+  }
+  onProgress?.({ phase: "profiles", framesProcessed, totalFrames });
+
+  const durationSec = samples.length / sampleRate;
+  const warnings: string[] = [];
+  const reduced = reduceFrameSeriesToAudioAnalysis(rmsValues, zcrValues, centroidValues, rolloffValues, bandwidthValues, sampleRate, numberOfChannels, durationSec, warnings);
+
+  return {
+    audioAnalysis: reduced.audioAnalysis,
+    warnings: reduced.warnings,
+    rawFrameSeries: { rmsValues, zcrValues, centroidValues, rolloffValues, bandwidthValues, bassEnergyValues, minValues, maxValues, hopSeconds },
+  };
 }
 
 /**

@@ -115,6 +115,19 @@ export function repairStoredProject(project: PlayProject): PlayProject {
   if (!repaired.loopBinViewState || typeof repaired.loopBinViewState !== "object") {
     repaired.loopBinViewState = { tab: "approved", filters: {}, sort: "start_time", updatedAt: nowIso() };
   }
+  // 0717C_MUSIC_Complete_Song_Intelligence_and_Section_Map
+  if (!Array.isArray(repaired.songAnalyses)) repaired.songAnalyses = [];
+  // 0717D_RADIO_Playlist_Inbox_and_Performance_Foundation
+  if (!Array.isArray(repaired.radioInboxItems)) repaired.radioInboxItems = [];
+  if (!Array.isArray(repaired.radioPlaylists)) repaired.radioPlaylists = [];
+  // 0718A_MUSIC_RADIO_Clean_Board_and_Explicit_Send_Flows
+  if (!Array.isArray(repaired.radioBanks)) repaired.radioBanks = [];
+  if (!Array.isArray(repaired.radioDashboardReceipts)) repaired.radioDashboardReceipts = [];
+  // 0718B_RADIO_Web_Publication_Asset_Export_Bridge
+  if (!Array.isArray(repaired.radioWebExports)) repaired.radioWebExports = [];
+  // 0721_MUSIC_RADIO_Sectional_Loopchain_Player
+  if (!Array.isArray(repaired.loopchainSectionAcceptances)) repaired.loopchainSectionAcceptances = [];
+  if (!Array.isArray(repaired.loopchainObservations)) repaired.loopchainObservations = [];
 
   // Repair activePlaylistId: if missing or pointing at a deleted playlist,
   // fall back to the first playlist rather than discarding the project.

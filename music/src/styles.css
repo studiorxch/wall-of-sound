@@ -1886,6 +1886,39 @@ tr:hover .remove-pl-btn:hover {
   align-items: center;
   justify-content: space-between;
 }
+/* 0718A_MUSIC_RADIO_Clean_Board_and_Explicit_Send_Flows §9 — "Collections"
+   becomes a clickable button (button-reset, since .fm-section-header's own
+   rules above don't clear a <button>'s native border/background/font). */
+.fm-section-header--clickable {
+  width: 100%;
+  background: none;
+  border: none;
+  font: inherit;
+  cursor: pointer;
+}
+.fm-section-header--clickable:hover { color: var(--text); }
+.fm-section-header--clickable.active { color: var(--accent); }
+/* RADIO sub-header, nested inside the Collections .fm-section — visually
+   smaller/indented than .fm-section-header but still a real clickable row. */
+.fm-subsection-header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 6px 10px 6px 18px;
+  font-size: 11px;
+  font-weight: 600;
+  text-align: left;
+  white-space: nowrap;
+}
+.fm-subsection-header:hover { background: var(--surface2); color: var(--text); }
+.fm-subsection-header.active { background: var(--accent-dim); color: var(--accent); }
+/* Playlists/Banks rows nested beneath the RADIO sub-header. */
+.fm-item--nested { padding-left: 30px; }
 .fm-section-action {
   font-size: 10px;
   font-weight: 700;
@@ -11232,22 +11265,34 @@ span.ph-crate-chip-label:hover { color: var(--text-mid, #aaa); }
 .looper-region-chip.is-deprioritized { opacity: 0.6; font-style: italic; }
 .looper-recommendation-line { font-size: 12px; color: var(--text-mid); margin: 0 0 8px; }
 .looper-region-controls-row { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; font-size: 11px; color: var(--text-dim); }
-.looper-length-control, .looper-alignment-control, .looper-duration-target-control { display: flex; align-items: center; gap: 4px; }
-.looper-length-control button, .looper-alignment-control button, .looper-duration-target-control button {
+.looper-length-control, .looper-alignment-control { display: flex; align-items: center; gap: 4px; }
+.looper-length-control button, .looper-alignment-control button {
   padding: 3px 8px; font-size: 10px; border-radius: 4px; border: 1px solid var(--border, #333); background: var(--surface2); color: var(--text-mid); cursor: pointer;
 }
-.looper-length-control button.active, .looper-alignment-control button.active, .looper-duration-target-control button.active {
+.looper-length-control button.active, .looper-alignment-control button.active {
   background: rgba(92,141,232,0.18); border-color: var(--accent, #5c8de8); color: var(--text);
 }
 .looper-length-control button:disabled { opacity: 0.35; cursor: default; }
 .looper-duration-display { font-size: 12px; color: var(--text); font-weight: 600; }
 .looper-main-action-bar { display: flex; gap: 6px; flex-wrap: wrap; }
-.looper-main-action-bar button { padding: 4px 10px; font-size: 11px; border-radius: 4px; border: 1px solid var(--border, #333); background: var(--surface2); color: var(--text-mid); cursor: pointer; }
-.looper-main-action-bar button:disabled { opacity: 0.5; cursor: default; }
+/* 0717B — scoped to DIRECT children only (not `button`, a general
+   descendant selector) so the Export ▾ menu's own popover items
+   (.npw-row-menu-item, nested several levels deep) keep their own dropdown
+   styling instead of inheriting toolbar-button chrome via higher
+   specificity. See .looper-export-menu-trigger below for the trigger's
+   matching-but-non-colliding style. */
+.looper-main-action-bar > button { padding: 4px 10px; font-size: 11px; border-radius: 4px; border: 1px solid var(--border, #333); background: var(--surface2); color: var(--text-mid); cursor: pointer; }
+.looper-main-action-bar > button:disabled { opacity: 0.5; cursor: default; }
 .looper-advanced-candidates { margin: 6px 0 14px; }
 .looper-advanced-candidates-toggle { background: none; border: 1px solid var(--border, #333); color: var(--text-mid); border-radius: 4px; padding: 4px 10px; font-size: 11px; cursor: pointer; }
 .looper-advanced-candidates-body { margin-top: 8px; }
-.looper-main-action-bar button.active { background: rgba(92,141,232,0.18); border-color: var(--accent, #5c8de8); color: var(--text); }
+.looper-main-action-bar > button.active { background: rgba(92,141,232,0.18); border-color: var(--accent, #5c8de8); color: var(--text); }
+.looper-export-menu-trigger {
+  padding: 4px 10px; font-size: 11px; border-radius: 4px;
+  border: 1px solid var(--border, #333); background: var(--surface2); color: var(--text-mid); cursor: pointer;
+}
+.looper-export-menu-trigger:hover { border-color: rgba(255,255,255,0.12); color: var(--text); }
+.looper-export-menu-trigger[aria-expanded="true"] { background: rgba(92,141,232,0.18); border-color: var(--accent, #5c8de8); color: var(--text); }
 
 /* 0716A_MUSIC_Direct_Manipulation_Looper_And_Playhead — persistent
    playhead, whole-selection-body drag hit target, the one collapsed
@@ -11263,6 +11308,12 @@ span.ph-crate-chip-label:hover { color: var(--text-mid, #aaa); }
 .looper-advanced-actions-row { display: flex; gap: 6px; margin-top: 8px; }
 .looper-advanced-actions-row button { padding: 4px 10px; font-size: 11px; border-radius: 4px; border: 1px solid var(--border, #333); background: var(--surface2); color: var(--text-mid); cursor: pointer; }
 .looper-advanced-actions-row button:disabled { opacity: 0.5; cursor: default; }
+/* 0716A corrections — zoom/pan controls + progressive beat lines. */
+.looper-zoom-controls-row { display: flex; align-items: center; gap: 6px; margin: 0 0 6px; font-size: 11px; color: var(--text-dim); }
+.looper-zoom-controls-row button { padding: 3px 10px; font-size: 11px; border-radius: 4px; border: 1px solid var(--border, #333); background: var(--surface2); color: var(--text-mid); cursor: pointer; }
+.looper-zoom-controls-row button:disabled { opacity: 0.4; cursor: default; }
+.looper-zoom-hint { font-size: 10px; color: var(--text-dim); }
+.looper-grid-line-beat { stroke: rgba(255,255,255,0.05); stroke-width: 1; }
 
 /* 0714R — waveform overview, mini waveforms, section/length grouping,
    playhead, and active-candidate visual states. */
@@ -11359,6 +11410,11 @@ span.ph-crate-chip-label:hover { color: var(--text-mid, #aaa); }
 .loop-row-stale { background: rgba(245, 200, 66, 0.08); }
 .loop-row-missing { background: rgba(200, 80, 80, 0.1); }
 .looper-preview-error { color: #e74c3c; font-size: 10px; margin: 4px 0; }
+.looper-preview-status { color: var(--text-dim); font-size: 10px; margin: 4px 0; }
+
+/* 0717B_MUSIC_Sectional_Looper_Radio_Export_Bridge — RadioLoops row
+   focus/scroll-into-view highlight after "Open RadioLoops" navigation. */
+.radio-loop-row--focused { background: rgba(92,141,232,0.16); transition: background 1.5s ease-out; }
 
 /* 0715C_MUSIC_Loop_Workspace_Editing_And_Revision_Completion */
 .looper-snap-toolbar { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-dim); margin: 6px 0; flex-wrap: wrap; }
@@ -11393,3 +11449,301 @@ span.ph-crate-chip-label:hover { color: var(--text-mid, #aaa); }
 .looper-loop-bin-panel .looper-compact-empty { cursor: default; color: var(--text-dim); }
 .looper-loop-bin-panel .looper-compact-row.is-stale { background: rgba(245, 200, 66, 0.08); }
 .looper-loop-bin-panel .looper-compact-row.is-suggestion { color: var(--text-mid); }
+
+/* 0717C_MUSIC_Complete_Song_Intelligence_and_Section_Map §7 — the
+   horizontal, waveform-aligned Section Map (its own row, a sibling AFTER
+   .looper-waveform-stack, not another overlay inside it) plus the song-
+   analysis status row and per-section controls beneath it. Structural
+   color families (§7.2) reuse existing MUSIC tokens by matching hue
+   rather than minting new ones: cyan → --mood-trust (teal-cyan), green →
+   --green, amber → --yellow, violet → --purple, blue → --mood-calm, gray →
+   --text-dim. Verification treatment (§7.3) is never color-only — the
+   text label itself always carries a provisional/✓/✓✓ suffix
+   (SectionMap.tsx); the CSS below only adds the accompanying dashed-vs-
+   solid edge + fill-opacity distinction. */
+.looper-section-map { position: relative; height: 28px; margin-bottom: 10px; border: 1px solid var(--border, #333); border-radius: 6px; overflow: hidden; background: var(--surface2); }
+.looper-section-map-svg { width: 100%; height: 100%; display: block; }
+.looper-section-band { cursor: pointer; stroke-width: 1; }
+.looper-section-band.song-section-cyan { fill: var(--mood-trust); stroke: var(--mood-trust); }
+.looper-section-band.song-section-green { fill: var(--green); stroke: var(--green); }
+.looper-section-band.song-section-amber { fill: var(--yellow); stroke: var(--yellow); }
+.looper-section-band.song-section-violet { fill: var(--purple); stroke: var(--purple); }
+.looper-section-band.song-section-blue { fill: var(--mood-calm); stroke: var(--mood-calm); }
+.looper-section-band.song-section-gray { fill: var(--text-dim); stroke: var(--text-dim); }
+.looper-section-band.is-provisional { fill-opacity: 0.3; stroke-dasharray: 4 3; stroke-width: 1.5; }
+.looper-section-band.is-reviewed { fill-opacity: 0.5; stroke-width: 1; }
+.looper-section-band.is-verified { fill-opacity: 0.75; stroke-width: 1; }
+.looper-section-band.is-selected { stroke: #fff; stroke-width: 2; }
+.looper-section-label { font-size: 8px; fill: var(--text); font-weight: 600; letter-spacing: 0.02em; }
+.looper-section-handle { fill: rgba(255,255,255,0.25); }
+.looper-section-handle:hover { fill: rgba(255,255,255,0.55); }
+
+.looper-song-analysis-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 4px 0 10px; }
+.looper-song-analysis-row > button { padding: 3px 10px; font-size: 11px; border-radius: 4px; border: 1px solid var(--border, #333); background: var(--surface2); color: var(--text-mid); cursor: pointer; }
+.looper-song-analysis-row > button:disabled { opacity: 0.5; cursor: default; }
+.looper-section-controls { display: flex; align-items: center; gap: 6px; }
+.looper-section-controls select { font-size: 10px; background: var(--surface2); color: var(--text-mid); border: 1px solid var(--border, #333); border-radius: 4px; padding: 2px 4px; }
+.looper-section-controls button { padding: 3px 8px; font-size: 10px; border-radius: 4px; border: 1px solid var(--border, #333); background: var(--surface2); color: var(--text-mid); cursor: pointer; }
+.looper-section-controls button:disabled { opacity: 0.5; cursor: default; }
+
+/* 0717D_RADIO_Playlist_Inbox_and_Performance_Foundation — RADIO workspace
+   (Inbox/Playlists/Banks/Publish), the multi-track prep stack, and the
+   embedded-Looper reuse mode. Reuses existing color variables (--text,
+   --text-mid, --text-dim, --border, --surface2, --accent, --accent-dim)
+   and the npw-btn/npw-dialog button system rather than inventing a new
+   visual language. */
+
+.looper-root-embedded { padding: 0; }
+.looper-embedded-empty { padding: 16px; color: var(--text-dim); font-size: 12px; }
+
+.radio-playlists-view h2, .radio-banks-view h2 { margin: 0 0 12px; }
+.radio-link-button { margin-left: auto; background: none; border: none; color: var(--accent); font-size: 12px; cursor: pointer; text-decoration: underline; }
+
+.radio-inbox-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.radio-inbox-table th { text-align: left; padding: 6px 8px; color: var(--text-dim); border-bottom: 1px solid var(--border, #333); text-transform: uppercase; letter-spacing: 0.05em; font-size: 10px; }
+.radio-inbox-table td { padding: 6px 8px; border-bottom: 1px solid var(--border-subtle, #1a1a1a); color: var(--text-mid); }
+.radio-inbox-empty { text-align: center; padding: 20px; color: var(--text-dim); }
+
+.radio-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; }
+.radio-badge-ready { background: rgba(64,217,176,0.15); color: #40d9b0; }
+.radio-badge-analyzing { background: rgba(91,141,239,0.15); color: #5b8def; }
+.radio-badge-unprepared, .radio-badge-needs_review { background: rgba(255,200,90,0.15); color: #e0b04a; }
+.radio-badge-unsupported, .radio-badge-not_yet_packageable { background: rgba(255,255,255,0.08); color: var(--text-dim); }
+.radio-badge-failed { background: rgba(255,120,120,0.15); color: #ff7878; }
+
+.radio-overlay-panel { position: absolute; inset: 0; background: var(--bg, #111); z-index: 20; display: flex; flex-direction: column; }
+.radio-overlay-header { padding: 10px 16px; border-bottom: 1px solid var(--border, #333); flex-shrink: 0; }
+.radio-overlay-close { background: none; border: 1px solid var(--border, #333); color: var(--text-mid); border-radius: 4px; padding: 3px 8px; cursor: pointer; }
+.radio-overlay-body { flex: 1; min-height: 0; overflow: auto; position: relative; }
+
+.radio-dialog-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 50; }
+.radio-dialog { background: var(--bg-panel, #1a1a1e); border: 1px solid var(--border, #333); border-radius: 8px; padding: 20px; max-width: 480px; width: 90%; max-height: 80vh; overflow: auto; }
+.radio-dialog h3 { margin: 0 0 10px; }
+.radio-diff-line { font-size: 12px; color: var(--text-mid); }
+.radio-diff-section { margin: 10px 0; }
+.radio-diff-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-dim); margin-bottom: 4px; }
+.radio-diff-section ul { margin: 0; padding-left: 18px; font-size: 12px; color: var(--text-mid); }
+.radio-diff-note { font-size: 11px; color: var(--text-dim); margin-top: 10px; }
+.radio-dialog-actions { display: flex; gap: 8px; justify-content: flex-end; align-items: center; margin-top: 16px; }
+
+.radio-prep-workspace { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+.radio-prep-header { display: flex; align-items: center; gap: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border, #333); flex-shrink: 0; }
+.radio-prep-header h2 { margin: 0; }
+.radio-prep-header-meta { font-size: 11px; color: var(--text-dim); }
+.radio-prep-progress { display: flex; align-items: center; gap: 10px; padding: 8px 0; font-size: 12px; color: var(--text-mid); }
+.radio-prep-expanded { flex: 1; min-height: 0; overflow: auto; }
+.radio-prep-row-list { flex: 1; }
+
+.radio-prep-row { display: flex; gap: 10px; padding: 10px; border-bottom: 1px solid var(--border-subtle, #1a1a1a); }
+.radio-prep-row-order { width: 24px; flex-shrink: 0; color: var(--text-dim); font-size: 11px; padding-top: 4px; }
+.radio-prep-row-main { flex: 1; min-width: 0; }
+.radio-prep-row-header { display: flex; align-items: center; gap: 8px; }
+.radio-prep-row-title { flex: 1; text-align: left; background: none; border: none; color: var(--text); font-size: 13px; cursor: pointer; padding: 0; }
+.radio-prep-row-title:hover { color: var(--accent); }
+.radio-prep-row-lock { background: none; border: none; cursor: pointer; font-size: 13px; opacity: 0.6; }
+.radio-prep-row-lock.is-locked { opacity: 1; }
+.radio-prep-row-waveform { margin: 4px 0; }
+.radio-prep-row-sectionmap { margin: 2px 0; max-height: 20px; overflow: hidden; }
+.radio-prep-row-meta { display: flex; gap: 10px; flex-wrap: wrap; font-size: 10px; color: var(--text-dim); align-items: center; }
+.radio-prep-row-stems-note { font-style: italic; }
+
+.radio-waveform-summary-preview { width: 100%; display: block; }
+.radio-waveform-summary-polygon { fill: var(--accent); opacity: 0.7; }
+.radio-waveform-summary-queued { display: flex; align-items: center; justify-content: center; color: var(--text-dim); font-size: 11px; background: var(--surface2); border-radius: 4px; }
+
+.radio-publish-preview { margin-top: 14px; }
+.radio-publish-storage { display: flex; gap: 14px; flex-wrap: wrap; font-size: 11px; color: var(--text-mid); padding: 8px 10px; background: var(--surface2); border-radius: 6px; margin-bottom: 14px; align-items: center; }
+.radio-publish-section { margin-bottom: 14px; }
+.radio-publish-section h3 { font-size: 12px; color: var(--text-mid); margin: 0 0 6px; }
+.radio-publish-section ul { margin: 0; padding-left: 18px; font-size: 12px; color: var(--text-mid); }
+.radio-publish-section li { display: flex; align-items: center; gap: 10px; padding: 3px 0; }
+.radio-publish-section li button { padding: 2px 8px; font-size: 10px; border-radius: 4px; border: 1px solid var(--border, #333); background: var(--surface2); color: var(--text-mid); cursor: pointer; }
+
+/* 0718A_MUSIC_RADIO_Clean_Board_and_Explicit_Send_Flows — RADIO Dashboard,
+   received-only card grids, publish-tracking panel, and the Collections
+   overview page. Reuses existing pgc-, radio-, and tb-btn class
+   conventions wherever possible — no broad restyle (spec section 7). */
+
+.radio-dashboard-view { position: relative; height: 100%; overflow: auto; }
+.radio-dashboard-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.radio-dashboard-toolbar h2 { margin: 0; }
+.radio-dashboard-empty { text-align: center; padding: 40px 20px; color: var(--text-dim); font-size: 13px; }
+.radio-dashboard-section { margin-top: 22px; }
+.radio-dashboard-section h3 { font-size: 13px; color: var(--text-mid); margin: 0 0 10px; }
+
+.radio-dashboard-stats, .collections-overview-tiles {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+.radio-stat-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 120px;
+  padding: 12px 16px;
+  background: var(--surface2);
+  border: 1px solid var(--border, #333);
+  border-radius: 8px;
+}
+button.radio-stat-tile { font: inherit; text-align: left; cursor: default; }
+.radio-stat-tile--clickable { cursor: pointer; }
+.radio-stat-tile--clickable:hover { border-color: rgba(210,210,225,0.32); }
+.radio-stat-value { font-size: 22px; font-weight: 700; color: var(--text); }
+.radio-stat-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); }
+
+.radio-alert-banner {
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: rgba(255,120,120,0.12);
+  color: #ff7878;
+  font-size: 12px;
+  margin-bottom: 14px;
+}
+
+.radio-receipt-cards { display: flex; flex-wrap: wrap; gap: 12px; }
+.radio-receipt-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--surface2);
+  border: 1px solid var(--border, #333);
+  border-radius: 8px;
+  min-width: 220px;
+}
+.radio-receipt-card-art {
+  width: 40px;
+  height: 40px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: var(--surface3);
+  color: var(--text-dim);
+}
+.radio-receipt-card-art img { width: 100%; height: 100%; object-fit: cover; }
+.radio-receipt-card-body { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.radio-receipt-card-title { font-size: 12px; color: var(--text); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.radio-receipt-card-meta { font-size: 10px; color: var(--text-dim); }
+.radio-receipt-card-actions { display: flex; gap: 6px; flex-shrink: 0; }
+
+.radio-playlist-grid, .radio-bank-grid { margin-top: 4px; }
+.radio-playlist-card .pgc-badges-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+
+.radio-bank-detail { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+
+.radio-publish-panel { max-width: 560px; }
+.radio-dialog-header-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 4px; }
+.radio-dialog-header-row h3 { margin: 0; }
+.radio-publish-notice {
+  font-size: 11px;
+  color: var(--text-dim);
+  background: var(--surface2);
+  border: 1px solid var(--border, #333);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin: 8px 0;
+}
+
+.collections-overview { padding: 4px; }
+
+/* 0718B_RADIO_Web_Publication_Asset_Export_Bridge — approval/include
+   toggles, per-entry preparation badges, batch-progress rows, the
+   Publication Tracking five-category layout, performance-assets/export-
+   history sections, and the Web Bundle export preflight dialog. Reuses
+   existing radio-badge/radio-dialog/npw-btn/tb-btn conventions. */
+
+.radio-prep-row-include { display: flex; align-items: center; gap: 4px; font-size: 10px; color: var(--text-dim); cursor: pointer; }
+.radio-prep-row-approve {
+  background: var(--surface2);
+  border: 1px solid var(--border, #333);
+  color: var(--text-mid);
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 10px;
+  cursor: pointer;
+}
+.radio-prep-row-approve.is-approved { background: rgba(64,217,176,0.15); color: #40d9b0; border-color: transparent; }
+.radio-prep-row-approve:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.radio-prep-row-web-status { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 10px; }
+.radio-prep-row-version { color: var(--text-dim); }
+.radio-prep-row-reason { color: #ff9a9a; font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 260px; }
+
+.radio-badge-prep-not_approved { background: rgba(255,255,255,0.08); color: var(--text-dim); }
+.radio-badge-prep-needs_preparation { background: rgba(255,200,90,0.15); color: #e0b04a; }
+.radio-badge-prep-preparing { background: rgba(91,141,239,0.15); color: #5b8def; }
+.radio-badge-prep-ready { background: rgba(64,217,176,0.15); color: #40d9b0; }
+.radio-badge-prep-stale { background: rgba(255,200,90,0.15); color: #e0b04a; }
+.radio-badge-prep-failed { background: rgba(255,120,120,0.15); color: #ff7878; }
+.radio-badge-prep-excluded { background: rgba(255,255,255,0.08); color: var(--text-dim); }
+
+.radio-prep-header-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.radio-prep-confirm-inline { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text-mid); }
+
+.radio-publish-performance-assets, .radio-publish-export-history { border-top: 1px solid var(--border-subtle, #1a1a1a); padding-top: 10px; }
+
+.radio-web-export-dialog { max-width: 560px; }
+.radio-web-export-slug { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--text-dim); margin-bottom: 12px; }
+.radio-web-export-slug input { background: var(--surface2); border: 1px solid var(--border, #333); border-radius: 4px; padding: 6px 8px; color: var(--text); font-size: 12px; }
+.radio-web-export-counts { list-style: none; display: flex; gap: 12px; flex-wrap: wrap; margin: 0 0 10px; padding: 0; font-size: 11px; color: var(--text-mid); }
+.radio-web-export-blockers { margin-top: 10px; padding: 8px 10px; background: rgba(255,120,120,0.08); border-radius: 6px; }
+.radio-web-export-blockers h4 { margin: 0 0 6px; font-size: 11px; color: #ff7878; }
+.radio-web-export-blockers ul { margin: 0; padding-left: 18px; font-size: 11px; color: var(--text-mid); }
+.radio-web-export-result code { display: block; font-size: 11px; color: var(--text-dim); background: var(--surface2); padding: 6px 8px; border-radius: 4px; margin: 6px 0; word-break: break-all; }
+
+/* 0721_MUSIC_RADIO_Sectional_Loopchain_Player — quiet by default, per
+   doctrine §6: no package/approval/lock language, no permanent status
+   chrome beyond honest review/loopable/forward_only labels. */
+.radio-loopchain-player { display: flex; flex-direction: column; gap: 14px; height: 100%; padding: 4px 2px; }
+.radio-loopchain-header { display: flex; align-items: center; gap: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border, #333); flex-shrink: 0; }
+.radio-loopchain-title { font-size: 13px; font-weight: 600; color: var(--text); }
+.radio-loopchain-transport { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.radio-loopchain-transport button, .radio-loopchain-back { background: var(--surface2); border: 1px solid var(--border, #333); border-radius: 4px; padding: 5px 10px; color: var(--text); font-size: 11px; cursor: pointer; }
+.radio-loopchain-transport button:disabled { opacity: 0.4; cursor: default; }
+.radio-loopchain-error { font-size: 11px; color: #ff7878; background: rgba(255,120,120,0.08); border-radius: 6px; padding: 6px 10px; }
+.radio-loopchain-playhead { font-size: 11px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.radio-loopchain-empty { font-size: 11px; color: var(--text-dim); padding: 10px; }
+
+.radio-loopchain-body { display: flex; gap: 16px; flex: 1; min-height: 0; }
+.radio-loopchain-picker { width: 280px; flex-shrink: 0; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; }
+.radio-loopchain-picker-tracks { display: flex; flex-wrap: wrap; gap: 6px; }
+.radio-loopchain-picker-tracks button { background: var(--surface2); border: 1px solid var(--border, #333); border-radius: 4px; padding: 4px 8px; color: var(--text-mid); font-size: 11px; cursor: pointer; }
+.radio-loopchain-picker-tracks button.active { color: var(--text); border-color: var(--accent, #5b8def); }
+.radio-loopchain-picker-sections { display: flex; flex-direction: column; gap: 6px; }
+.radio-loopchain-section-row { display: flex; align-items: center; gap: 6px; font-size: 11px; padding: 6px 8px; background: var(--surface1); border-radius: 6px; flex-wrap: wrap; }
+.radio-loopchain-section-label { font-weight: 600; color: var(--text); }
+.radio-loopchain-section-time { color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.radio-loopchain-section-row button { background: var(--surface2); border: 1px solid var(--border, #333); border-radius: 4px; padding: 3px 7px; color: var(--text-mid); font-size: 10px; cursor: pointer; margin-left: auto; }
+.radio-loopchain-section-row button:disabled { opacity: 0.35; cursor: default; }
+
+.radio-loopchain-playability { font-size: 10px; padding: 2px 6px; border-radius: 3px; color: var(--text-dim); background: rgba(255,255,255,0.06); }
+.radio-loopchain-playability-loopable { color: #40d9b0; background: rgba(64,217,176,0.12); }
+.radio-loopchain-playability-review { color: #e0b04a; background: rgba(224,176,74,0.10); }
+.radio-loopchain-playability-forward_only { color: var(--text-dim); background: rgba(255,255,255,0.06); }
+
+.radio-loopchain-strip { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; }
+.radio-loopchain-block { border: 1px solid var(--border, #333); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; background: var(--surface1); }
+.radio-loopchain-block.active { border-color: var(--accent, #5b8def); }
+.radio-loopchain-block-header { display: flex; align-items: baseline; gap: 8px; }
+.radio-loopchain-block-track { font-size: 10px; color: var(--text-dim); }
+.radio-loopchain-block-label { font-size: 12px; font-weight: 600; color: var(--text); }
+.radio-loopchain-block-controls { display: flex; gap: 6px; flex-wrap: wrap; }
+.radio-loopchain-block-controls button { background: var(--surface2); border: 1px solid var(--border, #333); border-radius: 4px; padding: 3px 7px; color: var(--text-mid); font-size: 10px; cursor: pointer; }
+.radio-loopchain-block-controls button:disabled { opacity: 0.35; cursor: default; }
+.radio-loopchain-block-repeat { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text-mid); flex-wrap: wrap; }
+.radio-loopchain-block-repeat label { display: flex; align-items: center; gap: 4px; }
+.radio-loopchain-block-repeat input[type="number"] { width: 64px; background: var(--surface2); border: 1px solid var(--border, #333); border-radius: 4px; padding: 3px 6px; color: var(--text); font-size: 11px; }
+.radio-loopchain-junction { display: flex; align-items: center; gap: 8px; font-size: 10px; color: var(--text-dim); border-top: 1px dashed var(--border-subtle, #1a1a1a); padding-top: 8px; }
+.radio-loopchain-junction input[type="number"] { width: 56px; background: var(--surface2); border: 1px solid var(--border, #333); border-radius: 4px; padding: 3px 6px; color: var(--text); font-size: 11px; }
+.radio-loopchain-junction button { background: var(--surface2); border: 1px solid var(--border, #333); border-radius: 4px; padding: 3px 7px; color: var(--text-mid); font-size: 10px; cursor: pointer; }
+
+.radio-loopchain-observations { font-size: 11px; color: var(--text-dim); flex-shrink: 0; }
+.radio-loopchain-observations summary { cursor: pointer; color: var(--text-mid); }
+.radio-loopchain-observations ul { margin: 6px 0 0; padding-left: 18px; max-height: 160px; overflow-y: auto; }
+.collections-overview h2 { margin: 0 0 14px; }

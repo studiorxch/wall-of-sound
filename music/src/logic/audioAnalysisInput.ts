@@ -61,6 +61,36 @@ export interface DecodeOptions {
   channelMode?: "mono" | "left" | "right";
 }
 
+// 0717C_MUSIC_Complete_Song_Intelligence_and_Section_Map — extracted from
+// decodeAudioAnalysisInput's own mono-mixdown + truncation + per-channel
+// logic, so an ALREADY-decoded AudioBuffer (Sectional Looper's own
+// audioBufferRef.current, or App.tsx's canonical getDecodedSourceBufferForRender
+// cache) can be converted to the same AudioAnalysisInput shape without a
+// second fetch+decode. decodeAudioAnalysisInput below now delegates to
+// this after its own fetch+decodeAudioData step — its own behavior/
+// signature is unchanged for every existing caller.
+export function audioBufferToAnalysisInput(buffer: AudioBuffer, opts: DecodeOptions = {}): AudioAnalysisInput {
+  const { maxDurationSec, channelMode = "mono" } = opts;
+  const sampleRate = buffer.sampleRate;
+  const maxSamples = maxDurationSec != null ? Math.floor(maxDurationSec * sampleRate) : Infinity;
+
+  const monoFull = toMono(buffer, channelMode);
+  const mono = monoFull.length <= maxSamples ? monoFull : monoFull.subarray(0, maxSamples);
+
+  const channels: Float32Array[] = [];
+  for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+    const full = buffer.getChannelData(ch);
+    channels.push(full.length <= maxSamples ? full : full.subarray(0, maxSamples));
+  }
+
+  return {
+    sampleRate,
+    channels,
+    mono,
+    durationSeconds: mono.length / sampleRate,
+  };
+}
+
 /**
  * Fetch + decode a track's audio once. HTTP errors are thrown as
  * `DSP_HTTP_<status>` (unchanged contract from the pre-split
@@ -90,21 +120,5 @@ export async function decodeAudioAnalysisInput(
     throw new Error(`AUDIO_DECODE_FAILED: ${String(e)}`);
   }
 
-  const sampleRate = buffer.sampleRate;
-  const maxSamples = Math.floor(maxDurationSec * sampleRate);
-  const monoFull = toMono(buffer, channelMode);
-  const mono = monoFull.length <= maxSamples ? monoFull : monoFull.subarray(0, maxSamples);
-
-  const channels: Float32Array[] = [];
-  for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
-    const full = buffer.getChannelData(ch);
-    channels.push(full.length <= maxSamples ? full : full.subarray(0, maxSamples));
-  }
-
-  return {
-    sampleRate,
-    channels,
-    mono,
-    durationSeconds: mono.length / sampleRate,
-  };
+  return audioBufferToAnalysisInput(buffer, { maxDurationSec, channelMode });
 }

@@ -1,0 +1,35 @@
+{
+  "schemaVersion": "1.0.0",
+  "radioLoopId": "rloop_000002",
+  "packageVersion": 3,
+  "status": "RADIO_READY",
+  "source": {
+    "trackId": "ext_mr9smtpl_wb0b",
+    "loopId": "loop_mroo8kjl_8w452v"
+  },
+  "audio": {
+    "primary": {
+      "codec": "opus",
+      "container": "ogg",
+      "mimeType": "audio/ogg; codecs=opus",
+      "relativePath": "core.opus",
+      "bitrateKbps": 128,
+      "channels": 2,
+      "durationSeconds": 177.495333
+    },
+    "variants": []
+  },
+  "musical": {
+    "bpm": 123.05,
+    "key": "7A"
+  },
+  "arrangement": {
+    "roles": [
+      "foundation"
+    ]
+  },
+  "approval": {
+    "publicUseApproved": true,
+    "approvedAt": "2026-07-17T20:07:51.437Z"
+  }
+}

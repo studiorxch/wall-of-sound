@@ -19,11 +19,18 @@ interface Props {
   // order, so they keep interaction priority wherever they visually overlap
   // the body, per the spec's own interaction-precedence ordering).
   onBodyDown?: (e: React.PointerEvent) => void;
+  // 0716A (corrections) — view-window mapping for zoom/pan; defaults
+  // preserve the original full-track behavior exactly.
+  viewStartSeconds?: number;
+  viewEndSeconds?: number;
 }
 
-export function TimelineSelectionOverlay({ durationSeconds, selection, onHandleDown, onBodyDown }: Props) {
+export function TimelineSelectionOverlay({ durationSeconds, selection, onHandleDown, onBodyDown, viewStartSeconds, viewEndSeconds }: Props) {
   const duration = Math.max(durationSeconds, 0.001);
-  const xAt = (seconds: number) => (seconds / duration) * VIEW_W;
+  const viewStart = Math.max(0, viewStartSeconds ?? 0);
+  const viewEnd = Math.min(duration, viewEndSeconds ?? duration);
+  const windowDur = Math.max(viewEnd - viewStart, 0.001);
+  const xAt = (seconds: number) => ((seconds - viewStart) / windowDur) * VIEW_W;
 
   if (!selection) return null;
 

@@ -7,10 +7,13 @@ import { useMemo, useRef, useState } from "react";
 import type { Track } from "../data/trackTypes";
 import type { LoopAsset, LoopContentClass, LoopCandidateGenerationMode, LoopPreviewState, LoopRevision } from "../data/loopTypes";
 import type { LoopRenderRecord } from "../data/loopRenderTypes";
+import type { RadioPromotionFormInput } from "../data/radioLoopTypes";
 import { isRenderStale } from "../logic/loops/loopRenderStaleness";
 import { resolveActiveLoopBoundsFrames } from "../logic/loops/loopRevisions";
 import { inferLegacyLoopLength, migrateLegacyLoopGenerationMode } from "../logic/loops/loopCandidateMigration";
 import { defaultContentClassOptions } from "./SectionalLooperWorkspace";
+import { PromoteToRadioDialog } from "./radio/PromoteToRadioDialog";
+import type { PromoteLoopToRadioResult, RadioPromotionPhase } from "../logic/radio/radioPromotionOrchestrator";
 
 const GENERATION_MODE_LABEL: Record<LoopCandidateGenerationMode, string> = {
   trusted_grid: "Trusted", provisional_grid: "Provisional", time_fallback: "Time-based", manual_only: "Manual",
@@ -43,14 +46,22 @@ type Props = {
   // REVISION bounds rather than its frozen original bounds (see
   // effectiveRenderStatus's doc comment).
   loopRevisions: LoopRevision[];
+  // 0716B — RadioLoop Library Foundation. Reuses the same decoded-source-
+  // buffer + revision-bounds resolution App.tsx's onRenderLoop already has.
+  onPromoteToRadio: (loopId: string, formInput: RadioPromotionFormInput, onProgress?: (phase: RadioPromotionPhase) => void) => Promise<PromoteLoopToRadioResult>;
+  // 0718A_MUSIC_RADIO_Clean_Board_and_Explicit_Send_Flows §5 — stages a
+  // RadioInboxItem (never packages); distinct from and coexists
+  // unconditionally alongside the existing "Promote to Radio" above.
+  onSendLoopToRadio?: (loopId: string) => void;
 };
 
 export function LoopLibraryView({
   loops, libraryTracks, resolveTrackUrl, onUpdateLoop, onOpenSourceTrack, onReopenInLooper, onBeforeLoopPreview,
-  onDeleteRenderedFile, loopRenders, onRenderLoop, onRenderAllApproved, loopRevisions,
+  onDeleteRenderedFile, loopRenders, onRenderLoop, onRenderAllApproved, loopRevisions, onPromoteToRadio, onSendLoopToRadio,
 }: Props) {
   const [renderingIds, setRenderingIds] = useState<Set<string>>(new Set());
   const [batchStatus, setBatchStatus] = useState<string | null>(null);
+  const [promoteLoopId, setPromoteLoopId] = useState<string | null>(null);
 
   async function triggerRender(loopId: string) {
     setRenderingIds((s) => new Set(s).add(loopId));
@@ -259,6 +270,14 @@ export function LoopLibraryView({
                   <button disabled={isRendering} onClick={() => triggerRender(loop.id)}>
                     {isRendering ? "Rendering…" : status === "rendered" || status === "stale" ? "Re-render" : "Render"}
                   </button>
+                  <button disabled={loop.status !== "approved"} onClick={() => setPromoteLoopId(loop.id)} title={loop.status !== "approved" ? "Only approved loops can be promoted to Radio" : undefined}>
+                    Promote to Radio
+                  </button>
+                  {onSendLoopToRadio && (
+                    <button onClick={() => onSendLoopToRadio(loop.id)} title="Send this loop to RADIO's Inbox (does not package or publish)">
+                      ◎ Send → RADIO
+                    </button>
+                  )}
                   <button onClick={() => copyPath(loop)} title="Show in Finder is unavailable in this browser-only build; copies the filename instead">Copy path</button>
                   <button onClick={() => onUpdateLoop(loop.id, { status: "archived" })} disabled={loop.status === "archived"}>Archive</button>
                   <button onClick={() => onDeleteRenderedFile(loop.id)} disabled={status !== "rendered" && status !== "stale"} title="Preserves loop metadata; only clears the rendered-file reference">Delete rendered file</button>
@@ -271,6 +290,11 @@ export function LoopLibraryView({
           )}
         </tbody>
       </table>
+      {promoteLoopId && (() => {
+        const loop = loops.find((l) => l.id === promoteLoopId);
+        if (!loop) return null;
+        return <PromoteToRadioDialog loop={loop} onPromote={onPromoteToRadio} onClose={() => setPromoteLoopId(null)} />;
+      })()}
     </div>
   );
 }

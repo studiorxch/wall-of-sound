@@ -15,12 +15,21 @@ interface PlayheadMarkerProps {
   durationSeconds: number;
   seconds: number;
   onPointerDown: (e: React.PointerEvent) => void;
+  // 0716A (corrections) — view-window mapping for zoom/pan. When the
+  // playhead falls outside the visible window it is simply not rendered
+  // (an edge-pinned line would misread as a real position).
+  viewStartSeconds?: number;
+  viewEndSeconds?: number;
 }
 
-export function PlayheadMarker({ durationSeconds, seconds, onPointerDown }: PlayheadMarkerProps) {
+export function PlayheadMarker({ durationSeconds, seconds, onPointerDown, viewStartSeconds, viewEndSeconds }: PlayheadMarkerProps) {
   const duration = Math.max(durationSeconds, 0.001);
+  const viewStart = Math.max(0, viewStartSeconds ?? 0);
+  const viewEnd = Math.min(duration, viewEndSeconds ?? duration);
+  const windowDur = Math.max(viewEnd - viewStart, 0.001);
   const clamped = Math.max(0, Math.min(duration, seconds));
-  const x = (clamped / duration) * VIEW_W;
+  if (clamped < viewStart || clamped > viewEnd) return null;
+  const x = ((clamped - viewStart) / windowDur) * VIEW_W;
 
   return (
     <svg

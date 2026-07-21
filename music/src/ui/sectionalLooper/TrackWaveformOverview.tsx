@@ -2,8 +2,17 @@
 // Renders real min/max peaks as an SVG polygon, with section boundary
 // ticks, candidate region overlays (state-distinguished by more than
 // color — outline weight/fill, per §9/§25), and an absolute-time playhead.
+//
+// 0716A_MUSIC_Direct_Manipulation_Looper_And_Playhead (corrections) — the
+// overview becomes view-window aware for zoom/pan: optional
+// viewStartSeconds/viewEndSeconds map every x through the SAME linear
+// formula, now over the visible window instead of always the full track,
+// and optional windowPeaks (recomputed from the decoded buffer at the
+// current zoom) replace the full-track envelope bins when supplied, so
+// zooming actually reveals detail instead of stretching 768 full-track
+// bins. Defaults preserve the original full-track behavior exactly.
 
-import type { WaveformEnvelope } from "../../data/loopTypes";
+import type { WaveformEnvelope, WaveformPeak } from "../../data/loopTypes";
 import type { LoopCandidate } from "../../logic/loops/loopCandidates";
 
 export type CandidateVisualState =
@@ -29,6 +38,9 @@ interface Props {
   playheadSeconds?: number;
   onCandidateSelect: (index: number) => void;
   onCandidateHover?: (index: number | null) => void;
+  viewStartSeconds?: number;
+  viewEndSeconds?: number;
+  windowPeaks?: WaveformPeak[] | null;
 }
 
 const VIEW_W = 1000;
@@ -37,7 +49,7 @@ const OVERLAY_H = 18;
 
 export function TrackWaveformOverview({
   waveform, waveformError, sections, candidates, candidateState, playheadSeconds,
-  onCandidateSelect, onCandidateHover,
+  onCandidateSelect, onCandidateHover, viewStartSeconds, viewEndSeconds, windowPeaks,
 }: Props) {
   if (waveformError) {
     return (
@@ -55,18 +67,34 @@ export function TrackWaveformOverview({
   }
 
   const duration = Math.max(waveform.durationSeconds, 0.001);
-  const xAt = (seconds: number) => (seconds / duration) * VIEW_W;
+  const viewStart = Math.max(0, viewStartSeconds ?? 0);
+  const viewEnd = Math.min(duration, viewEndSeconds ?? duration);
+  const windowDur = Math.max(viewEnd - viewStart, 0.001);
+  const xAt = (seconds: number) => ((seconds - viewStart) / windowDur) * VIEW_W;
 
   const mid = VIEW_H / 2;
   const scaleY = (VIEW_H / 2) - 2;
-  const step = VIEW_W / waveform.peaks.length;
   const topPoints: string[] = [];
   const bottomPoints: string[] = [];
-  waveform.peaks.forEach((p, i) => {
-    const x = i * step;
-    topPoints.push(`${x.toFixed(2)},${(mid - p.max * scaleY).toFixed(2)}`);
-    bottomPoints.push(`${x.toFixed(2)},${(mid - p.min * scaleY).toFixed(2)}`);
-  });
+  if (windowPeaks && windowPeaks.length > 0) {
+    // Window-resolution peaks span exactly [viewStart, viewEnd].
+    const step = VIEW_W / windowPeaks.length;
+    windowPeaks.forEach((p, i) => {
+      const x = i * step;
+      topPoints.push(`${x.toFixed(2)},${(mid - p.max * scaleY).toFixed(2)}`);
+      bottomPoints.push(`${x.toFixed(2)},${(mid - p.min * scaleY).toFixed(2)}`);
+    });
+  } else {
+    // Full-track envelope bins, mapped through the view window (bins
+    // outside the window simply fall outside the viewBox and are clipped).
+    const binDur = duration / waveform.peaks.length;
+    waveform.peaks.forEach((p, i) => {
+      const x = xAt(i * binDur);
+      if (x < -VIEW_W || x > VIEW_W * 2) return;
+      topPoints.push(`${x.toFixed(2)},${(mid - p.max * scaleY).toFixed(2)}`);
+      bottomPoints.push(`${x.toFixed(2)},${(mid - p.min * scaleY).toFixed(2)}`);
+    });
+  }
   const polygon = [...topPoints, ...bottomPoints.reverse()].join(" ");
 
   return (
@@ -111,7 +139,7 @@ export function TrackWaveformOverview({
           );
         })}
 
-        {playheadSeconds != null && (
+        {playheadSeconds != null && playheadSeconds >= viewStart && playheadSeconds <= viewEnd && (
           <line
             x1={xAt(playheadSeconds)} x2={xAt(playheadSeconds)}
             y1={0} y2={VIEW_H}
@@ -120,7 +148,7 @@ export function TrackWaveformOverview({
         )}
       </svg>
       <div className="looper-waveform-duration-label">
-        0:00 – {formatDuration(duration)}
+        {formatDuration(viewStart)} – {formatDuration(viewEnd)}
       </div>
     </div>
   );

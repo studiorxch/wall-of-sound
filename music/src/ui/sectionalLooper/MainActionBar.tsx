@@ -3,11 +3,16 @@
 //
 // 0716A_MUSIC_Direct_Manipulation_Looper_And_Playhead — collapsed to
 // exactly the spec's own default-layout row: Play/Pause | Loop On/Off |
-// Export WAV | Clear. Mark Heard/Reject/Create Stem Loops (0715G) are not
+// Export | Clear. Mark Heard/Reject/Create Stem Loops (0715G) are not
 // deleted — they moved into the Advanced drawer as plain buttons wired to
 // the same existing handlers, since they're not part of the locked default
-// action row. Export label is always "Export WAV" — no visible disabled
-// FLAC/MP3/All choices (no such encoder is reachable from this app).
+// action row.
+//
+// 0717B_MUSIC_Sectional_Looper_Radio_Export_Bridge — the single "Export
+// WAV" button became an [Export ▾] menu (WAV / RADIO), same toolbar slot,
+// same row height. See ExportMenu.tsx.
+
+import { ExportMenu } from "./ExportMenu";
 
 export type MainActionPreviewStatus = "idle" | "loading" | "playing" | "paused" | "error";
 
@@ -16,16 +21,19 @@ interface MainActionBarProps {
   onPlayPause: () => void;
   loopEnabled: boolean;
   onToggleLoop: () => void;
-  onExport: () => void;
-  exportDisabled?: boolean;
-  exportLabel?: string;
+  onExportWav: () => void;
+  onExportRadio: () => void;
+  wavExportDisabled?: boolean;
+  radioExportDisabled?: boolean;
+  radioExportDisabledReason?: string;
   onClear: () => void;
   clearDisabled?: boolean;
 }
 
 export function MainActionBar({
   previewStatus, onPlayPause, loopEnabled, onToggleLoop,
-  onExport, exportDisabled, exportLabel, onClear, clearDisabled,
+  onExportWav, onExportRadio, wavExportDisabled, radioExportDisabled, radioExportDisabledReason,
+  onClear, clearDisabled,
 }: MainActionBarProps) {
   return (
     <div className="looper-main-action-bar">
@@ -35,7 +43,13 @@ export function MainActionBar({
       <button className={loopEnabled ? "active" : ""} onClick={onToggleLoop} aria-pressed={loopEnabled}>
         {loopEnabled ? "Loop: On" : "Loop: Off"}
       </button>
-      <button disabled={exportDisabled} onClick={onExport}>{exportLabel ?? "Export WAV"}</button>
+      <ExportMenu
+        onSelectWav={onExportWav}
+        onSelectRadio={onExportRadio}
+        wavDisabled={wavExportDisabled}
+        radioDisabled={radioExportDisabled}
+        radioDisabledReason={radioExportDisabledReason}
+      />
       <button disabled={clearDisabled} onClick={onClear}>Clear</button>
     </div>
   );

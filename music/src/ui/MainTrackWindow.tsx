@@ -98,6 +98,9 @@ type Props = {
   onBulkCreatePlaylistFromTracks?: (trackIds: string[]) => void;
   cratePoolTracks?: Track[];
   isAcceptedMode?: boolean;
+  // 0718A_MUSIC_RADIO_Clean_Board_and_Explicit_Send_Flows §5/§13 — Catalog
+  // and Sounds only (never External); scoped per-row inside LibraryRows.
+  onSendTrackToRadio?: (trackId: string) => void;
 };
 
 function fmtDur(s: number | undefined | null) {
@@ -959,7 +962,7 @@ function LibraryRows({
   analyzerJobs, initialSourceOwnerFilter,
   samplerBanks, loadedSamplerBankId, onAddTracksToSamplerBank, onCreateSamplerBankFromTracks, onDeleteFromReference,
   musicPlaylists, onBulkAddTracksToPlaylist, onBulkCreatePlaylistFromTracks,
-  onInspect,
+  onInspect, onSendTrackToRadio,
 }: {
   tracks: Track[];
   excludedTrackIds: Set<string>;
@@ -1013,6 +1016,9 @@ function LibraryRows({
   onBulkAddTracksToPlaylist?: (playlistId: string, trackIds: string[]) => void;
   onBulkCreatePlaylistFromTracks?: (trackIds: string[]) => void;
   onInspect?: (track: Track, filteredList: Track[], index: number) => void;
+  // 0718A_MUSIC_RADIO_Clean_Board_and_Explicit_Send_Flows §5/§13 — Catalog
+  // and Sounds only (never External); scoped per-row below.
+  onSendTrackToRadio?: (trackId: string) => void;
 }) {
   const [ctxMenu, setCtxMenu] = useState<LibraryCtxMenu | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -1024,6 +1030,20 @@ function LibraryRows({
   const [groupNameInput, setGroupNameInput] = useState("");
   const [showGroupInput, setShowGroupInput] = useState(false);
   const [editingTrack, setEditingTrack] = useState<Track | null>(null);
+
+  // Reset the anchor whenever the visible/ordered row set changes shape —
+  // filter, library switch — so a stale anchor from a prior view can't
+  // produce a range spanning rows the user never saw together.
+  //
+  // 0716A live-caught pre-existing defect: this effect used to sit BELOW
+  // the 0-track early return just under here, so the component ran a
+  // different number of hooks depending on whether any tracks were loaded
+  // — React's "rendered more hooks than during the previous render" crash,
+  // triggered on any 0→N library transition (e.g. a fresh profile followed
+  // by Update Library). Hooks must always run before any conditional return.
+  useEffect(() => {
+    setSelectAnchorId(null);
+  }, [catalogFilters, initialSourceOwnerFilter]);
 
   if (tracks.length === 0) return <EmptyMsg text="No tracks loaded. Import a CSV to begin." />;
 
@@ -1111,13 +1131,6 @@ function LibraryRows({
     setSelectAnchorId(id);
     toggleSelect(id);
   }
-
-  // Reset the anchor whenever the visible/ordered row set changes shape —
-  // filter, library switch — so a stale anchor from a prior view can't
-  // produce a range spanning rows the user never saw together.
-  useEffect(() => {
-    setSelectAnchorId(null);
-  }, [catalogFilters, initialSourceOwnerFilter]);
 
   function handleBulkApply(patch: Partial<Track>) {
     if (!onBulkUpdate || selectedIds.size === 0) return;
@@ -1594,6 +1607,9 @@ function LibraryRows({
                     </>
                   )}
                   <button className="tb-btn sm" onClick={() => setEditingTrack(t)} title="Open full editor">Edit</button>
+                  {onSendTrackToRadio && t.sourceOwner !== "external" && (
+                    <button className="tb-btn sm" onClick={() => onSendTrackToRadio(t.trackId)} title="Send this track to RADIO">◎</button>
+                  )}
                   <button className="tb-btn sm remove-btn" onClick={() => onRemove(t.trackId)} title="Remove from library">✕</button>
                 </td>
               </tr>
@@ -1941,6 +1957,7 @@ export function MainTrackWindow({
   musicPlaylists, onBulkAddTracksToPlaylist, onBulkCreatePlaylistFromTracks,
   cratePoolTracks = [],
   isAcceptedMode = false,
+  onSendTrackToRadio,
 }: Props) {
   const [groupViewId, setGroupViewId] = useState<string | null>(null);
   const [crateTab, setCrateTab] = useState<"output" | "pool" | "candidates">("output");
@@ -2127,6 +2144,7 @@ export function MainTrackWindow({
             onBulkAddTracksToPlaylist={onBulkAddTracksToPlaylist}
             onBulkCreatePlaylistFromTracks={onBulkCreatePlaylistFromTracks}
             onInspect={handleInspect}
+            onSendTrackToRadio={onSendTrackToRadio}
           />
         )}
         {mode === "groups" && (
