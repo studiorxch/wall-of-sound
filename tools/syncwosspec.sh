@@ -8,6 +8,10 @@
 # Modes:
 #   once      Run one sync and exit.
 #   --watch  Watch wall-of-sound for changes and auto-sync.
+#
+# Direction rules:
+#   WOS/source, MUSIC/SOURCE, COLORLAB/SOURCE, LIBRARY/MUSIC = local -> Google Drive mirror.
+#   WOS-share/PROMOTER = bidirectional via Unison.
 
 set -euo pipefail
 
@@ -20,6 +24,9 @@ COLORLAB_ROOT="$WOS_ROOT/colorlab"
 LIBRARY_MUSIC_ROOT="$WOS_ROOT/library/music"
 
 GOOGLE_SHARE="/Users/studio/Library/CloudStorage/GoogleDrive-richardjlau@gmail.com/My Drive/chatGPT-share"
+
+PROMOTER_LOCAL_ROOT="$WOS_ROOT/WOS-share/PROMOTER"
+PROMOTER_CLOUD_ROOT="$GOOGLE_SHARE/WOS-share/PROMOTER"
 
 LOG_DIR="$HOME/Library/Logs"
 SYNC_LOG="$LOG_DIR/syncwosspec.log"
@@ -57,6 +64,20 @@ assert_file_exists() {
   fi
 }
 
+assert_fswatch_available() {
+  if ! command -v fswatch >/dev/null 2>&1; then
+    log "fswatch is not installed. Install it with: brew install fswatch"
+    exit 1
+  fi
+}
+
+assert_unison_available() {
+  if ! command -v unison >/dev/null 2>&1; then
+    log "unison is not installed. Install it with: brew install unison"
+    exit 1
+  fi
+}
+
 sync_folder() {
   local source="$1"
   local dest="$2"
@@ -85,6 +106,61 @@ sync_folder() {
     "$source/" "$dest/" >> "$SYNC_LOG" 2>&1
 
   log "Done: $label"
+}
+
+sync_wos_share_mirror() {
+  local source="$1"
+  local dest="$2"
+  local label="$3"
+
+  assert_dir_exists "$source" "$label"
+
+  mkdir -p "$dest"
+
+  log "Syncing $label"
+  log "From: $source"
+  log "To:   $dest"
+
+  rsync -av --delete \
+    --exclude ".DS_Store" \
+    --exclude ".git/" \
+    --exclude "node_modules/" \
+    --exclude ".env" \
+    --exclude ".env.*" \
+    --exclude "*.log" \
+    --exclude "PROMOTER/" \
+    "$source/" "$dest/" >> "$SYNC_LOG" 2>&1
+
+  log "Done: $label"
+}
+
+sync_promoter_bidirectional() {
+  local source="$1"
+  local dest="$2"
+  local label="$3"
+
+  assert_unison_available
+
+  mkdir -p "$source"
+  mkdir -p "$dest"
+
+  log "Bidirectional sync: $label"
+  log "Local: $source"
+  log "Cloud: $dest"
+
+  unison "$source" "$dest" \
+    -auto \
+    -batch \
+    -perms 0 \
+    -ignore "Name .DS_Store" \
+    -ignore "Name .git" \
+    -ignore "Name node_modules" \
+    -ignore "Name .env" \
+    -ignore "Name .env.*" \
+    -ignore "Name *.log" \
+    >> "$SYNC_LOG" 2>&1
+
+  log "Done bidirectional sync: $label"
 }
 
 sync_library_music() {
@@ -191,8 +267,11 @@ run_sync() {
   sync_folder "$WOS_ROOT/data" "$GOOGLE_SHARE/WOS/source/data" "WOS data"
   sync_folder "$WOS_ROOT/studio" "$GOOGLE_SHARE/WOS/source/studio" "WOS studio source"
 
-  # WOS-share syncing
-  sync_folder "$WOS_ROOT/WOS-share" "$GOOGLE_SHARE/WOS-share" "WOS-SHARE"
+  # WOS-share syncing. PROMOTER is excluded because it is bidirectional.
+  sync_wos_share_mirror "$WOS_ROOT/WOS-share" "$GOOGLE_SHARE/WOS-share" "WOS-SHARE"
+
+  # PROMOTER bidirectional syncing
+  sync_promoter_bidirectional "$PROMOTER_LOCAL_ROOT" "$PROMOTER_CLOUD_ROOT" "WOS-share PROMOTER"
 
   # LIBRARY music metadata/context syncing
   sync_library_music "$LIBRARY_MUSIC_ROOT" "$GOOGLE_SHARE/LIBRARY/MUSIC" "Library music"
@@ -246,19 +325,16 @@ run_sync() {
   log "All selected folders synced to Google Drive"
 }
 
-assert_fswatch_available() {
-  if ! command -v fswatch >/dev/null 2>&1; then
-    log "fswatch is not installed. Install it with: brew install fswatch"
-    exit 1
-  fi
-}
-
 watch_sync() {
   assert_fswatch_available
   assert_dir_exists "$WOS_ROOT" "WOS watch root"
 
+  mkdir -p "$PROMOTER_LOCAL_ROOT"
+  mkdir -p "$PROMOTER_CLOUD_ROOT"
+
   log "Starting syncwosspec watcher"
   log "Watching root: $WOS_ROOT"
+  log "Watching cloud PROMOTER: $PROMOTER_CLOUD_ROOT"
   log "Debounce: ${DEBOUNCE_SECONDS}s"
   log "Log file: $SYNC_LOG"
 
@@ -276,7 +352,7 @@ watch_sync() {
     --exclude "/library/music/catalog/audio/" \
     --exclude "/library/music/external/audio/" \
     --exclude "/library/music/reference/audio/" \
-    "$WOS_ROOT" | while read -r event_count; do
+    "$WOS_ROOT" "$PROMOTER_CLOUD_ROOT" | while read -r event_count; do
 
     echo ""
     echo "Change detected: $event_count filesystem event(s)"

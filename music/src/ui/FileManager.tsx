@@ -1,10 +1,14 @@
 import { useState } from "react";
-import { SourceBadge } from "./SourceBadge";
+import { Icon, type IconName } from "./Icon";
 import type { PlaylistRecord } from "../data/playProjectTypes";
 import type { Track, TrackSourceOwner } from "../data/trackTypes";
 import type { MusicSourcePool } from "../data/sourcePoolTypes";
 import { type TrackDragPayload } from "../logic/playlistMembership";
 
+// "loop_library" is retired from the sidebar and never set by any nav
+// row — kept only so App.tsx can recognize and redirect a stray reference
+// to Sounds with the Loops filter selected, rather than the value being an
+// unrecognized string.
 export type ViewMode = "playlist" | "library" | "groups" | "orphans" | "excluded" | "locks" | "playlists_grid" | "sampler_banks_grid" | "crates_grid" | "crate_detail" | "artists" | "mood_signal_audit" | "analyzer_review" | "loop_library" | "sectional_looper" | "radio" | "radio_playlists_grid" | "radio_banks_grid" | "collections_overview" | "radio_loopchain_player";
 
 type Props = {
@@ -31,8 +35,6 @@ type Props = {
   crateCount?: number;
   onViewCrates?: () => void;
   artistCount?: number;
-  onImportAudioClick?: () => void;
-  loopCount?: number;
   // 0718A_MUSIC_RADIO_Clean_Board_and_Explicit_Send_Flows §9 — RADIO is
   // nested BENEATH Collections (Crates/Playlists/Banks/RADIO → Playlists/
   // Banks), never a sibling top-level section. These are RADIO-local
@@ -41,6 +43,30 @@ type Props = {
   radioBankCount?: number;
 };
 
+type NavRowProps = {
+  icon: IconName;
+  label: string;
+  count?: number;
+  active: boolean;
+  nested?: boolean;
+  onClick: () => void;
+};
+
+// 0722_MUSIC_Left_Panel_Visual_Normalization — every destination shares this
+// one row grid (icon | label | count) and one active treatment, so no
+// destination can drift from another in height, alignment, or highlight.
+function NavRow({ icon, label, count, active, nested, onClick }: NavRowProps) {
+  return (
+    <button
+      className={`fm-row${nested ? " fm-row--nested" : ""}${active ? " active" : ""}`}
+      onClick={onClick}
+    >
+      <span className="fm-row-icon"><Icon name={icon} /></span>
+      <span className="fm-row-label">{label}</span>
+      <span className="fm-row-count">{count ?? ""}</span>
+    </button>
+  );
+}
 
 export function FileManager({
   playlists, activePlaylistId: _activePlaylistId, libraryTracks,
@@ -48,12 +74,18 @@ export function FileManager({
   viewMode, sourceOwnerFilter, onSelectPlaylist: _onSelectPlaylist, onViewModeChange, onSourceOwnerFilterChange,
   onCreatePlaylist: _onCreatePlaylist, onDuplicatePlaylist, onDeletePlaylist, onDropTracksOnPlaylist: _onDropTracksOnPlaylist,
   onPlayOnDeckA, onPlayOnDeckB, onCreateSamplerBank: _onCreateSamplerBank,
-  crateCount = 0, onViewCrates, artistCount = 0, onImportAudioClick, loopCount = 0,
+  crateCount = 0, onViewCrates, artistCount = 0,
   radioPlaylistCount = 0, radioBankCount = 0,
 }: Props) {
   const [collapsed, setCollapsed] = useState(false);
   const [ctxMenu, setCtxMenu] = useState<{ playlistId: string; x: number; y: number } | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+
+  const sourceCounts: Record<TrackSourceOwner, number> = { studiorich: 0, external: 0, reference: 0, unknown: 0 };
+  for (const t of libraryTracks) sourceCounts[t.sourceOwner ?? "unknown"]++;
+
+  const musicPlaylistCount = playlists.filter((pl) => pl.playlistKind !== "reference_overlay").length;
+  const bankCount = playlists.filter((pl) => pl.playlistKind === "reference_overlay").length;
 
   return (
     <nav
@@ -65,169 +97,102 @@ export function FileManager({
         onClick={() => setCollapsed((c) => !c)}
         title={collapsed ? "Expand" : "Collapse"}
       >
-        {collapsed ? "›" : "‹"}
+        <Icon name={collapsed ? "chevron_right" : "chevron_left"} />
       </button>
 
       {!collapsed && (
         <div className="fm-body">
-          {/* Libraries */}
-          {(() => {
-            const counts: Record<TrackSourceOwner, number> = { studiorich: 0, external: 0, reference: 0, unknown: 0 };
-            for (const t of libraryTracks) counts[t.sourceOwner ?? "unknown"]++;
-
-            const sourceRows: { owner: TrackSourceOwner; label: string }[] = [
-              { owner: "studiorich", label: "Catalog" },
-              { owner: "external",   label: "External" },
-              { owner: "reference",  label: "Sounds" },
-            ];
-
-            return (
-              <div className="fm-section">
-                <div className="fm-section-header">
-                  <span>Libraries</span>
-                  {onImportAudioClick && (
-                    <button className="fm-section-action" onClick={onImportAudioClick} title="Import audio into Catalog, External, or Sounds">
-                      + Import Audio
-                    </button>
-                  )}
-                </div>
-
-                {sourceRows.map(({ owner, label }) => {
-                  const count = counts[owner];
-                  const isActive = viewMode === "library" && sourceOwnerFilter === owner;
-                  return (
-                    <button
-                      key={owner}
-                      className={`fm-item fm-source-row${isActive ? " active" : ""}`}
-                      onClick={() => {
-                        onViewModeChange("library");
-                        onSourceOwnerFilterChange?.(owner);
-                      }}
-                    >
-                      <SourceBadge source={owner} />
-                      <span className="fm-label">{label}</span>
-                      {count > 0 && <span className="fm-count">{count}</span>}
-                      {count === 0 && <span className="fm-count fm-count-empty">0</span>}
-                    </button>
-                  );
-                })}
-
-                <button
-                  className={`fm-item fm-nav-item${viewMode === "artists" ? " active" : ""}`}
-                  onClick={() => onViewModeChange("artists")}
-                >
-                  <SourceBadge source="ART" />
-                  <span className="fm-label">Artists</span>
-                  {artistCount > 0 && <span className="fm-count">{artistCount}</span>}
-                </button>
-
-                <button
-                  className={`fm-item fm-nav-item${viewMode === "loop_library" ? " active" : ""}`}
-                  onClick={() => onViewModeChange("loop_library")}
-                >
-                  <span className="fm-nav-icon">↻</span>
-                  <span className="fm-label">Loops</span>
-                  {loopCount > 0 && <span className="fm-count">{loopCount}</span>}
-                </button>
-
-                <button
-                  className={`fm-item fm-nav-item${viewMode === "mood_signal_audit" ? " active" : ""}`}
-                  onClick={() => onViewModeChange("mood_signal_audit")}
-                >
-                  <span className="fm-nav-icon" style={{ color: "var(--mood-calm)" }}>◉</span>
-                  <span className="fm-label">Mood Signals</span>
-                </button>
-
-                <button
-                  className={`fm-item fm-nav-item${viewMode === "analyzer_review" ? " active" : ""}`}
-                  onClick={() => onViewModeChange("analyzer_review")}
-                >
-                  <span className="fm-nav-icon" style={{ color: "var(--mood-hypnotic, var(--mood-calm))" }}>⊞</span>
-                  <span className="fm-label">Analyzer Review</span>
-                </button>
-
-              </div>
-            );
-          })()}
-
-          {/* AUDIOLAB / Experiments (§3, §25) */}
+          {/* Plain product label — the StudioRich mark lives in the top
+              bar (TopBar.tsx's .tb-logo); MUSIC sits directly beneath it
+              here as static text only. Never a nav row: no icon, count,
+              active state, hover state, or click handler. */}
+          <div className="fm-brand">MUSIC</div>
           <div className="fm-section">
-            <div className="fm-section-header">AudioLab</div>
-            <button
-              className={`fm-item fm-nav-item${viewMode === "sectional_looper" ? " active" : ""}`}
-              onClick={() => onViewModeChange("sectional_looper")}
-            >
-              <span className="fm-nav-icon">⟲</span>
-              <span className="fm-label">Sectional Looper</span>
-            </button>
+            <div className="fm-section-header">Libraries</div>
+            <NavRow
+              icon="library_music"
+              label="Catalog"
+              count={sourceCounts.studiorich}
+              active={viewMode === "library" && sourceOwnerFilter === "studiorich"}
+              onClick={() => { onViewModeChange("library"); onSourceOwnerFilterChange?.("studiorich"); }}
+            />
+            <NavRow
+              icon="public"
+              label="External"
+              count={sourceCounts.external}
+              active={viewMode === "library" && sourceOwnerFilter === "external"}
+              onClick={() => { onViewModeChange("library"); onSourceOwnerFilterChange?.("external"); }}
+            />
+            <NavRow
+              icon="graphic_eq"
+              label="Sounds"
+              count={sourceCounts.reference}
+              active={viewMode === "library" && sourceOwnerFilter === "reference"}
+              onClick={() => { onViewModeChange("library"); onSourceOwnerFilterChange?.("reference"); }}
+            />
+            <NavRow
+              icon="artist"
+              label="Artists"
+              count={artistCount}
+              active={viewMode === "artists"}
+              onClick={() => onViewModeChange("artists")}
+            />
           </div>
 
-          {/* Collections — category nav (grid pages). 0718A §9 — RADIO is
-              nested BENEATH Collections as a clickable sub-section (not a
-              sibling top-level section): Crates/Playlists/Banks, then a
-              "RADIO" sub-header opening the RADIO Dashboard, with its own
-              nested Playlists/Banks rows. "Collections" itself is now a
-              clickable button opening a small overview page. */}
-          {(() => {
-            const musicCount = playlists.filter((pl) => pl.playlistKind !== "reference_overlay").length;
-            const bankCount = playlists.filter((pl) => pl.playlistKind === "reference_overlay").length;
-            return (
-              <div className="fm-section">
-                <button
-                  className={`fm-section-header fm-section-header--clickable${viewMode === "collections_overview" ? " active" : ""}`}
-                  onClick={() => onViewModeChange("collections_overview")}
-                >
-                  Collections
-                </button>
-                <button
-                  className={`fm-item fm-nav-item${viewMode === "crates_grid" || viewMode === "crate_detail" ? " active" : ""}`}
-                  onClick={() => onViewCrates ? onViewCrates() : onViewModeChange("crates_grid")}
-                >
-                  <span className="fm-nav-icon">◈</span>
-                  <span className="fm-label">Crates</span>
-                  <span className="fm-count">{crateCount}</span>
-                </button>
-                <button
-                  className={`fm-item fm-nav-item${viewMode === "playlists_grid" ? " active" : ""}`}
-                  onClick={() => onViewModeChange("playlists_grid")}
-                >
-                  <span className="fm-nav-icon">♫</span>
-                  <span className="fm-label">Playlists</span>
-                  <span className="fm-count">{musicCount}</span>
-                </button>
-                <button
-                  className={`fm-item fm-nav-item${viewMode === "sampler_banks_grid" ? " active" : ""}`}
-                  onClick={() => onViewModeChange("sampler_banks_grid")}
-                >
-                  <span className="fm-nav-icon">▦</span>
-                  <span className="fm-label">Banks</span>
-                  <span className="fm-count">{bankCount}</span>
-                </button>
+          <div className="fm-section">
+            <div className="fm-section-header">AudioLab</div>
+            <NavRow
+              icon="science"
+              label="Looper"
+              active={viewMode === "sectional_looper"}
+              onClick={() => onViewModeChange("sectional_looper")}
+            />
+          </div>
 
-                <button
-                  className={`fm-subsection-header${viewMode === "radio" ? " active" : ""}`}
-                  onClick={() => onViewModeChange("radio")}
-                >
-                  <span className="fm-nav-icon">◎</span>
-                  <span className="fm-label">RADIO</span>
-                </button>
-                <button
-                  className={`fm-item fm-nav-item fm-item--nested${viewMode === "radio_playlists_grid" ? " active" : ""}`}
-                  onClick={() => onViewModeChange("radio_playlists_grid")}
-                >
-                  <span className="fm-label">Playlists</span>
-                  <span className="fm-count">{radioPlaylistCount}</span>
-                </button>
-                <button
-                  className={`fm-item fm-nav-item fm-item--nested${viewMode === "radio_banks_grid" ? " active" : ""}`}
-                  onClick={() => onViewModeChange("radio_banks_grid")}
-                >
-                  <span className="fm-label">Banks</span>
-                  <span className="fm-count">{radioBankCount}</span>
-                </button>
-              </div>
-            );
-          })()}
+          <div className="fm-section">
+            <div className="fm-section-header">Collections</div>
+            <NavRow
+              icon="inventory_2"
+              label="Crates"
+              count={crateCount}
+              active={viewMode === "crates_grid" || viewMode === "crate_detail"}
+              onClick={() => (onViewCrates ? onViewCrates() : onViewModeChange("crates_grid"))}
+            />
+            <NavRow
+              icon="queue_music"
+              label="Playlists"
+              count={musicPlaylistCount}
+              active={viewMode === "playlists_grid"}
+              onClick={() => onViewModeChange("playlists_grid")}
+            />
+            <NavRow
+              icon="grid_view"
+              label="Banks"
+              count={bankCount}
+              active={viewMode === "sampler_banks_grid"}
+              onClick={() => onViewModeChange("sampler_banks_grid")}
+            />
+          </div>
+
+          <div className="fm-section">
+            <div className="fm-section-header">Radio</div>
+            <NavRow
+              icon="queue_music"
+              label="Playlists"
+              count={radioPlaylistCount}
+              nested
+              active={viewMode === "radio_playlists_grid"}
+              onClick={() => onViewModeChange("radio_playlists_grid")}
+            />
+            <NavRow
+              icon="grid_view"
+              label="Banks"
+              count={radioBankCount}
+              nested
+              active={viewMode === "radio_banks_grid"}
+              onClick={() => onViewModeChange("radio_banks_grid")}
+            />
+          </div>
         </div>
       )}
 

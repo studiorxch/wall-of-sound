@@ -4,8 +4,12 @@ import type { PlayProject } from "../data/playProjectTypes";
 import { parseCsvTracks } from "../data/importCsv";
 import { readPlayProjectExportFile } from "../data/playProjectExport";
 import type { Track } from "../data/trackTypes";
+import { navigationItems } from "./topBarNavigation";
+import type { NavigationLink } from "./topBarNavigation";
+import studioRichLogo from "../assets/studiorich-logo.svg";
 
-export type WorkspaceMode = "flow_curve" | "scheduler" | "broadcast_hud";
+export type { WorkspaceMode } from "./topBarNavigation";
+import type { WorkspaceMode } from "./topBarNavigation";
 
 export type ImportDestination = "library" | "archive" | "playlist" | "group";
 
@@ -132,6 +136,118 @@ function ImportDestinationDialog({
   );
 }
 
+// Studio / Broadcast nav dropdowns (0722_MUSIC_Global_Navigation_Dropdowns).
+// Click-to-open (not hover), so pointer travel between trigger and menu needs
+// no special handling — only toggle, outside click, Escape, and item
+// selection ever close it.
+function NavDropdown({
+  id,
+  label,
+  items,
+  workspaceMode,
+  onWorkspaceModeChange,
+  isOpen,
+  onToggle,
+  onClose,
+}: {
+  id: "studio" | "broadcast";
+  label: string;
+  items: readonly NavigationLink[];
+  workspaceMode: WorkspaceMode;
+  onWorkspaceModeChange: (m: WorkspaceMode) => void;
+  isOpen: boolean;
+  onToggle: () => void;
+  onClose: () => void;
+}) {
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const menuId = `tb-nav-menu-${id}`;
+  const isActive = items.some((link) => link.kind === "internal" && link.mode === workspaceMode);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    menuRef.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
+  }, [isOpen]);
+
+  function handleMenuKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      onClose();
+      triggerRef.current?.focus();
+      return;
+    }
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      const nodes = Array.from(menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? []);
+      if (!nodes.length) return;
+      const currentIndex = nodes.indexOf(document.activeElement as HTMLElement);
+      const nextIndex = e.key === "ArrowDown"
+        ? (currentIndex + 1) % nodes.length
+        : (currentIndex - 1 + nodes.length) % nodes.length;
+      nodes[nextIndex]?.focus();
+    }
+  }
+
+  return (
+    <div
+      className="tb-nav-dropdown"
+      onBlur={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) onClose();
+      }}
+    >
+      <button
+        ref={triggerRef}
+        type="button"
+        className={`tb-mode-btn tb-nav-trigger${isActive ? " active" : ""}`}
+        aria-expanded={isOpen}
+        aria-controls={menuId}
+        onClick={onToggle}
+      >
+        {label}
+        <span className={`tb-nav-chevron${isOpen ? " open" : ""}`} aria-hidden="true">▾</span>
+      </button>
+      {isOpen && (
+        <div
+          ref={menuRef}
+          id={menuId}
+          className="tb-nav-menu"
+          role="menu"
+          aria-label={label}
+          onKeyDown={handleMenuKeyDown}
+        >
+          {items.map((link) =>
+            link.kind === "internal" ? (
+              <button
+                key={link.label}
+                type="button"
+                role="menuitem"
+                className={`tb-nav-menu-item${workspaceMode === link.mode ? " active" : ""}`}
+                title={link.title}
+                onClick={() => {
+                  onWorkspaceModeChange(link.mode);
+                  onClose();
+                }}
+              >
+                {link.label}
+              </button>
+            ) : (
+              <a
+                key={link.label}
+                role="menuitem"
+                className="tb-nav-menu-item"
+                href={link.href}
+                onClick={onClose}
+              >
+                {link.label}
+              </a>
+            ),
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function TopBar({
   onTracksImported,
   onProjectLoaded,
@@ -149,6 +265,8 @@ export function TopBar({
   const jsonRef = useRef<HTMLInputElement>(null);
   const overflowTriggerRef = useRef<HTMLButtonElement>(null);
   const overflowPanelRef = useRef<HTMLDivElement>(null);
+  const navGroupRef = useRef<HTMLDivElement>(null);
+  const [openNavMenu, setOpenNavMenu] = useState<"studio" | "broadcast" | null>(null);
   const [flash, setFlash] = useState("");
   const [pendingImport, setPendingImport] = useState<{
     tracks: Track[];
@@ -262,6 +380,19 @@ export function TopBar({
   const [showProject, setShowProject] = useState(false);
   const [pendingProjectImport, setPendingProjectImport] = useState<PlayProject | null>(null);
 
+  // Clicking anywhere outside the Studio/Broadcast nav group closes whichever
+  // dropdown is open (0722_MUSIC_Global_Navigation_Dropdowns §6).
+  useEffect(() => {
+    if (!openNavMenu) return;
+    function handlePointerDown(e: MouseEvent) {
+      if (navGroupRef.current && !navGroupRef.current.contains(e.target as Node)) {
+        setOpenNavMenu(null);
+      }
+    }
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [openNavMenu]);
+
   // Move focus into the menu when it opens via keyboard (Enter/Space/ArrowDown
   // on the trigger) so Arrow-key navigation has something to start from.
   useEffect(() => {
@@ -346,10 +477,11 @@ export function TopBar({
         </div>
       )}
       <header className="top-bar" onClick={() => setShowProject(false)}>
-        {/* Left: logo */}
+        {/* Left: logo. The MUSIC product label moved to the top of the
+            left-panel sidebar (FileManager.tsx's .fm-brand) — this stays
+            the logo's only appearance anywhere in the nav. */}
         <div className="tb-section tb-identity">
-          <span className="tb-logo">◇</span>
-          <span className="tb-brand">MUSIC</span>
+          <img src={studioRichLogo} alt="StudioRich" className="tb-logo" />
           <input
             ref={csvRef}
             type="file"
@@ -375,28 +507,32 @@ export function TopBar({
               <div className="tb-divider" />
             </>
           )}
-          <div className="tb-mode-switch">
-            <button
-              className={`tb-mode-btn${workspaceMode === "flow_curve" ? " active" : ""}`}
-              onClick={() => onWorkspaceModeChange("flow_curve")}
-              title="Flow-Curve Editor"
-            >
-              Library
-            </button>
-            <button
-              className={`tb-mode-btn${workspaceMode === "scheduler" ? " active" : ""}`}
-              onClick={() => onWorkspaceModeChange("scheduler")}
-              title="Scheduler / TV Guide"
-            >
-              Scheduler
-            </button>
-            <button
-              className={`tb-mode-btn${workspaceMode === "broadcast_hud" ? " active" : ""}`}
-              onClick={() => onWorkspaceModeChange("broadcast_hud")}
-              title="Broadcast HUD Mode"
-            >
-              Broadcast
-            </button>
+          <div className="tb-mode-switch" ref={navGroupRef}>
+            {navigationItems.map((item) =>
+              "children" in item ? (
+                <NavDropdown
+                  key={item.id}
+                  id={item.id}
+                  label={item.label}
+                  items={item.children}
+                  workspaceMode={workspaceMode}
+                  onWorkspaceModeChange={onWorkspaceModeChange}
+                  isOpen={openNavMenu === item.id}
+                  onToggle={() => setOpenNavMenu((cur) => (cur === item.id ? null : item.id))}
+                  onClose={() => setOpenNavMenu(null)}
+                />
+              ) : (
+                <button
+                  key={item.label}
+                  type="button"
+                  className={`tb-mode-btn${workspaceMode === item.mode ? " active" : ""}`}
+                  onClick={() => onWorkspaceModeChange(item.mode)}
+                  title={item.title}
+                >
+                  {item.label}
+                </button>
+              ),
+            )}
           </div>
           <div className="ph-dropdown" onClick={(e) => e.stopPropagation()}>
             <button

@@ -18,6 +18,7 @@
 
 import type { LoopchainBlock, LoopchainJunction } from "../data/radioLoopchainTypes";
 import { expandBlockToOccurrences, LoopchainExpansionError } from "../logic/radio/radioLoopchainExpansion";
+import { chainTimeToOccurrence } from "../logic/radio/radioLoopchainTimeMapping";
 import { gainAtContextTime, makeFadeInEnvelope, makeFadeOutEnvelope } from "./gainEnvelope";
 import type { GainEnvelope } from "./dualDeckTypes";
 
@@ -246,6 +247,19 @@ export class LoopchainPlaybackEngine {
     this.timerId = window.setInterval(() => this.tick(), this.tickIntervalMs);
   }
 
+  // Stops and disconnects every currently active node pair without
+  // touching playing/paused/schedule bookkeeping — the one piece pause(),
+  // stop(), and seek() all need identically (this used to be duplicated
+  // verbatim in pause()/stop()).
+  private stopAllActiveNodes() {
+    for (const nodes of this.activeNodes.values()) {
+      try { nodes.source.stop(); } catch { /* already stopped */ }
+      nodes.source.disconnect();
+      nodes.gain.disconnect();
+    }
+    this.activeNodes = new Map();
+  }
+
   // Freezes the chain-elapsed position and silences every currently active
   // occurrence. Disclosed limitation: any occurrence mid-playback at the
   // moment of pause does NOT resume its own remaining tail on resume() —
@@ -261,12 +275,44 @@ export class LoopchainPlaybackEngine {
       window.clearInterval(this.timerId);
       this.timerId = null;
     }
-    for (const nodes of this.activeNodes.values()) {
-      try { nodes.source.stop(); } catch { /* already stopped */ }
-      nodes.source.disconnect();
-      nodes.gain.disconnect();
+    this.stopAllActiveNodes();
+  }
+
+  // 0722A_RADIOOS_Loopchain_Player_Web_Demo §1.2/§2 (user-confirmed) —
+  // seeking always snaps to the START of the occurrence covering
+  // chainTimeSeconds, never a true mid-occurrence/mid-crossfade resume.
+  // This is required, not just a UX choice: scheduleOccurrence() always
+  // calls source.start(startContextTime, sourceOffsetSeconds,
+  // sourceDurationSeconds) with a FIXED offset/duration — if the effective
+  // chain position were left mid-occurrence, the next tick() would compute
+  // a startContextTime in the past relative to ctx.currentTime, and Web
+  // Audio automation events (gain.gain.setValueAtTime at a past time)
+  // apply instantaneously rather than smoothly, producing exactly the
+  // audible misalignment/click this snap avoids. Returns the actual
+  // snapped chain-time position (or null if unresolvable) so the caller
+  // sets the DISPLAYED playhead to what's really about to play, never the
+  // raw click point.
+  seek(chainTimeSeconds: number): number | null {
+    if (!this.schedule) return null;
+    const clamped = Math.min(Math.max(chainTimeSeconds, 0), this.schedule.totalChainDurationSeconds);
+    const location = chainTimeToOccurrence(this.schedule, clamped);
+    if (!location) {
+      this.stop();
+      return null;
     }
-    this.activeNodes = new Map();
+    const snappedSeconds = location.occurrence.chainStartSeconds;
+
+    this.stopAllActiveNodes();
+    this.scheduledOccurrenceIds = new Set();
+
+    if (this.playing) {
+      this.chainStartContextTime = this.ctx.currentTime - snappedSeconds;
+      this.tick();
+    } else if (this.pausedAtChainElapsedSeconds != null) {
+      this.pausedAtChainElapsedSeconds = snappedSeconds;
+    }
+
+    return snappedSeconds;
   }
 
   resume() {
@@ -285,12 +331,7 @@ export class LoopchainPlaybackEngine {
       window.clearInterval(this.timerId);
       this.timerId = null;
     }
-    for (const nodes of this.activeNodes.values()) {
-      try { nodes.source.stop(); } catch { /* already stopped */ }
-      nodes.source.disconnect();
-      nodes.gain.disconnect();
-    }
-    this.activeNodes = new Map();
+    this.stopAllActiveNodes();
     this.scheduledOccurrenceIds = new Set();
     this.schedule = null;
   }

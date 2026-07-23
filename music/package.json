@@ -12,6 +12,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@material-symbols/svg-400": "^0.45.8",
     "react": "^19.2.6",
     "react-dom": "^19.2.6"
   },

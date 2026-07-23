@@ -199,6 +199,13 @@ export type PlaylistRecord = {
   // inside a playlist, never to the track record). Undefined until
   // "Prepare for Playback" has run at least once.
   playbackPreparation?: import("./playlistTransitionTypes").PlaylistPlaybackPreparation;
+  // 0722D_MUSIC_DJ_Transition_Engine — the richer per-pair transition model
+  // (family, evidence, gain/EQ automation), keyed the same way as
+  // playbackPreparation.transitionPlans (outgoingSlotId/incomingSlotId).
+  // Coexists with playbackPreparation — see djTransitionMode (App.tsx) for
+  // which one actually drives playback. Undefined until the DJ Transition
+  // Engine has resolved at least one pair for this playlist.
+  djTransitionPlans?: import("./djTransitionTypes").DjTransitionPlan[];
 };
 
 export type PlayProject = {
@@ -283,6 +290,17 @@ export type PlayProject = {
   loopchainDraft?: import("./radioLoopchainTypes").LoopchainDraft;
   loopchainSectionAcceptances?: import("./radioLoopchainTypes").RadioLoopchainSectionAcceptance[];
   loopchainObservations?: import("./radioLoopchainTypes").LoopchainObservation[];
+  // 0722A_RADIOOS_Loopchain_Player_Web_Demo §3 — listener-facing Save/Less
+  // like this/Comment, a separate array from the operator-only observation
+  // log above (see loopchainFeedbackTypes.ts's own doc comment for why).
+  loopchainListenerFeedback?: import("./loopchainFeedbackTypes").LoopchainListenerFeedback[];
+  // 0721B_MUSIC_Catalog_Data_Grid_Comments (expanded to the shared Library
+  // data grid) — one preferences record per source-locked library
+  // (Catalog/External/Sounds), independently persisted so a layout change
+  // in one never touches another's. The aggregate "All Tracks" view and
+  // "unknown" review queue are out of scope and keep their existing fixed
+  // table layout.
+  libraryGridPreferences?: import("./libraryGridTypes").LibraryGridPreferencesBySource;
   createdAt: string;
   updatedAt: string;
 };

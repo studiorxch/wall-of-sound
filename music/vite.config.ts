@@ -30,6 +30,18 @@ import { validateWebBundle } from './server/radio/radioWebBundleValidator'
 import { revealDirectoryInFinder } from './server/radio/radioPackageReveal'
 import type { RadioTrackPrepareRequest } from './src/data/radioTrackPackageTypes'
 import type { RadioWebBundleExportRequest } from './src/data/radioWebBundleTypes'
+// 0722C_MUSIC_Production_Stem_Export
+import { reconcileAbandonedStemStaging } from './server/stems/stemStartupReconciliation'
+import { checkStemEngine } from './server/stems/stemEngineCheck'
+import { stemJobRegistry } from './server/stems/stemJobRegistry'
+import { scanStemSetsForTrack, classifyStemSetsForTrack, hasAnyStemSets } from './server/stems/stemSetIndex'
+import { trackStemLibraryRoot, safeStemDirName } from './server/stems/stemFsUtils'
+import { createStagingOperation as createStemStagingOperation, cleanupStagingOperation as cleanupStemStagingOperation, stagingOperationDir as stemStagingOperationDir } from './server/stems/stemStagingFs'
+import { registerExistingStemSet } from './server/stems/stemSalvageOrchestrator'
+import { stageLegacyStemFiles } from './server/stems/stemLegacyMigration'
+import { resolveTrackSourcePath } from './server/stems/stemFsUtils'
+import { sha256File as sha256FileForStems } from './server/radio/radioVersionCloneHelper'
+import type { StemRole } from './src/data/trackStemTypes'
 
 interface RadioStagingCreateBody {
   sourceTrackId?: string
@@ -82,6 +94,36 @@ interface RadioWebBundleRevealBody {
   bundleVersion?: number
 }
 
+// 0722C_MUSIC_Production_Stem_Export
+interface StemExportStartBody {
+  trackId?: string
+  audioRelPath?: string
+}
+interface StemExportCancelBody {
+  jobId?: string
+}
+interface StemSetRevealBody {
+  trackId?: string
+  stemSetId?: string
+}
+interface StemRegisterExistingBody {
+  operationId?: string
+  trackId?: string
+  audioRelPath?: string
+  roleAssignments?: Record<string, string>
+  confirmed?: boolean
+  origin?: 'registered_existing'
+  engineNotes?: string
+}
+interface StemLegacyMigrateBody {
+  trackId?: string
+  audioRelPath?: string
+  legacyAudioRelPaths?: Record<string, string>
+}
+interface StemBadgesBody {
+  tracks?: { trackId?: string; audioRelPath?: string }[]
+}
+
 // Library root: PLAY_LIBRARY_ROOT env var → else <project-root>/library/music
 // Vite cwd is music/, so '../library/music' resolves to the project-root music library.
 const LIBRARY_ROOT = process.env.PLAY_LIBRARY_ROOT
@@ -101,6 +143,11 @@ const RADIO_LIBRARY_ROOT = path.join(LIBRARY_ROOT, 'RadioLoopLibrary')
 // bundles — nothing under either root is ever uploaded or deployed.
 const RADIO_TRACK_LIBRARY_ROOT = path.join(LIBRARY_ROOT, 'RadioTrackLibrary')
 const RADIO_WEB_EXPORT_ROOT = path.join(LIBRARY_ROOT, 'RadioWebExports')
+
+// 0722C_MUSIC_Production_Stem_Export — fourth sibling root, same
+// LIBRARY_ROOT configurability. Holds immutable, versioned, per-track
+// Demucs/salvaged stem sets — never source audio, never a top-level track.
+const TRACK_STEM_LIBRARY_ROOT = trackStemLibraryRoot(LIBRARY_ROOT)
 
 const SUPPORTED_AUDIO = new Set(['.mp3', '.wav', '.aiff', '.aif', '.flac', '.m4a', '.ogg', '.opus'])
 const MIME: Record<string, string> = {
@@ -184,6 +231,14 @@ export default defineConfig({
     {
       name: 'local-media-server',
       configureServer(server) {
+        // 0722C_MUSIC_Production_Stem_Export — reconcile any stem-export
+        // staging left behind by a prior dev-server process (a restart
+        // mid-job) BEFORE any route can be hit. Never promotes anything it
+        // finds; only marks it "interrupted" so the job-status API can
+        // surface it distinctly instead of it looking stuck "processing"
+        // forever or silently vanishing.
+        reconcileAbandonedStemStaging(TRACK_STEM_LIBRARY_ROOT)
+
         // /music-audio/<relPath> — serve audio files from the library root.
         // Track records store audioRelPath = "catalog/audio/foo.flac"; this
         // route resolves it to LIBRARY_ROOT/catalog/audio/foo.flac.
@@ -799,6 +854,291 @@ export default defineConfig({
             const bundleDir = path.join(RADIO_WEB_EXPORT_ROOT, slug, `v${bundleVersion}`)
             const result = await revealDirectoryInFinder(bundleDir)
             radioJson(res, 200, result)
+          }).catch(() => radioJson(res, 400, { ok: false, error: 'invalid_json_body' }))
+        })
+
+        // --- 0722C_MUSIC_Production_Stem_Export routes -------------------
+        // Same guard conventions as the RadioLoop/RadioTrack routes above:
+        // all filesystem access confined to TRACK_STEM_LIBRARY_ROOT/
+        // LIBRARY_ROOT, JSON validated before use, binary uploads streamed
+        // to disk (never buffered whole in memory).
+
+        server.middlewares.use('/stem-engine-status', (_req, res) => {
+          checkStemEngine().then((result) => radioJson(res, 200, result))
+        })
+
+        // POST /stem-export-start — body {trackId, audioRelPath}
+        server.middlewares.use('/stem-export-start', (req, res) => {
+          if (req.method !== 'POST') { radioJson(res, 405, { ok: false, error: 'method_not_allowed' }); return }
+          readJsonBody(req).then(async (rawBody) => {
+            const body = rawBody as StemExportStartBody
+            const trackId = String(body?.trackId ?? '')
+            const audioRelPath = String(body?.audioRelPath ?? '')
+            if (!trackId || !audioRelPath) { radioJson(res, 400, { ok: false, error: 'missing_params' }); return }
+            const sourcePath = resolveTrackSourcePath(LIBRARY_ROOT, audioRelPath)
+            if (!isPathConfinedTo(LIBRARY_ROOT, sourcePath) || !fs.existsSync(sourcePath)) {
+              radioJson(res, 404, { ok: false, error: 'source_not_found' }); return
+            }
+            // Dedupe key uses a cheap raw-file hash, never a full decode —
+            // "the same parent, unchanged since the last request" must not
+            // spawn a second job just to compute a fingerprint.
+            const parentFingerprintHint = sha256FileForStems(sourcePath)
+            const { jobId, focused } = stemJobRegistry.startJob(trackId, audioRelPath, parentFingerprintHint, 'htdemucs', TRACK_STEM_LIBRARY_ROOT, LIBRARY_ROOT)
+            radioJson(res, 200, { ok: true, jobId, focused })
+          }).catch(() => radioJson(res, 400, { ok: false, error: 'invalid_json_body' }))
+        })
+
+        server.middlewares.use('/stem-export-status', (req, res) => {
+          const url = new URL(req.url ?? '/', 'http://localhost')
+          const jobId = url.searchParams.get('jobId') ?? ''
+          const job = jobId ? stemJobRegistry.getStatus(jobId) : null
+          if (!job) { radioJson(res, 404, { ok: false, error: 'job_not_found' }); return }
+          radioJson(res, 200, { ok: true, job })
+        })
+
+        server.middlewares.use('/stem-export-cancel', (req, res) => {
+          if (req.method !== 'POST') { radioJson(res, 405, { ok: false, error: 'method_not_allowed' }); return }
+          readJsonBody(req).then((rawBody) => {
+            const body = rawBody as StemExportCancelBody
+            const jobId = String(body?.jobId ?? '')
+            if (!jobId) { radioJson(res, 400, { ok: false, error: 'missing_params' }); return }
+            const ok = stemJobRegistry.cancelJob(jobId)
+            radioJson(res, 200, { ok })
+          }).catch(() => radioJson(res, 400, { ok: false, error: 'invalid_json_body' }))
+        })
+
+        // GET /stem-sets?trackId=&audioRelPath= — the filesystem-scanned,
+        // live-classified index. Never cached client-side as a persisted
+        // "hasStems" flag; callers re-fetch whenever they need current state.
+        server.middlewares.use('/stem-sets', (req, res) => {
+          const url = new URL(req.url ?? '/', 'http://localhost')
+          const trackId = url.searchParams.get('trackId') ?? ''
+          const audioRelPath = url.searchParams.get('audioRelPath') ?? ''
+          if (!trackId || !audioRelPath) { radioJson(res, 400, { ok: false, error: 'missing_params' }); return }
+          const safeTrackId = safeStemDirName(trackId)
+          const sets = scanStemSetsForTrack(TRACK_STEM_LIBRARY_ROOT, safeTrackId)
+          const sourcePath = resolveTrackSourcePath(LIBRARY_ROOT, audioRelPath)
+          const scratchOpId = `identity-scratch-${randomUUID()}`
+          classifyStemSetsForTrack(sets, {
+            stemLibraryRoot: TRACK_STEM_LIBRARY_ROOT,
+            sourcePath,
+            scratchWavPathFor: (stemSetId) => path.join(stemStagingOperationDir(TRACK_STEM_LIBRARY_ROOT, scratchOpId), `${stemSetId}.wav`),
+          }).then((lifecycles) => {
+            cleanupStemStagingOperation(TRACK_STEM_LIBRARY_ROOT, scratchOpId)
+            radioJson(res, 200, { ok: true, sets, lifecycles: Object.fromEntries(lifecycles) })
+          })
+        })
+
+        // GET /stem-set-asset?trackId=&audioRelPath=&stemSetId=&role= —
+        // ONLY serves when this specific set's LIVE-recomputed lifecycle is
+        // "current" — never "archived" (an archived set may still match a
+        // parent's audio in principle, but this build never feeds one
+        // through synchronized parent-linked playback; archived sets are
+        // Finder-inspectable only). This is the concrete mechanism behind
+        // "revalidate CURRENT before load and before start."
+        server.middlewares.use('/stem-set-asset', (req, res) => {
+          const url = new URL(req.url ?? '/', 'http://localhost')
+          const trackId = url.searchParams.get('trackId') ?? ''
+          const audioRelPath = url.searchParams.get('audioRelPath') ?? ''
+          const stemSetId = url.searchParams.get('stemSetId') ?? ''
+          const role = url.searchParams.get('role') as StemRole | null
+          if (!trackId || !audioRelPath || !stemSetId || !role) { radioJson(res, 400, { ok: false, error: 'missing_params' }); return }
+          const safeTrackId = safeStemDirName(trackId)
+          const sets = scanStemSetsForTrack(TRACK_STEM_LIBRARY_ROOT, safeTrackId)
+          const set = sets.find((s) => s.id === stemSetId)
+          if (!set) { radioJson(res, 404, { ok: false, error: 'stem_set_not_found' }); return }
+          const sourcePath = resolveTrackSourcePath(LIBRARY_ROOT, audioRelPath)
+          const scratchOpId = `identity-scratch-${randomUUID()}`
+          classifyStemSetsForTrack(sets, {
+            stemLibraryRoot: TRACK_STEM_LIBRARY_ROOT,
+            sourcePath,
+            scratchWavPathFor: (id) => path.join(stemStagingOperationDir(TRACK_STEM_LIBRARY_ROOT, scratchOpId), `${id}.wav`),
+          }).then((lifecycles) => {
+            cleanupStemStagingOperation(TRACK_STEM_LIBRARY_ROOT, scratchOpId)
+            const lifecycle = lifecycles.get(stemSetId)
+            if (lifecycle?.lifecycle !== 'current') {
+              radioJson(res, 403, { ok: false, error: 'not_current', lifecycle: lifecycle?.lifecycle ?? 'unknown', reason: lifecycle?.reason })
+              return
+            }
+            const file = set.stems[role]
+            if (!file) { radioJson(res, 404, { ok: false, error: 'role_not_found' }); return }
+            const absPath = path.join(TRACK_STEM_LIBRARY_ROOT, file.relativeArchivePath)
+            if (!isPathConfinedTo(TRACK_STEM_LIBRARY_ROOT, absPath) || !fs.existsSync(absPath)) {
+              radioJson(res, 404, { ok: false, error: 'file_missing' }); return
+            }
+            const stat = fs.statSync(absPath)
+            res.setHeader('Accept-Ranges', 'bytes')
+            res.setHeader('Content-Type', 'audio/wav')
+            res.setHeader('Cache-Control', 'no-cache')
+            res.setHeader('Access-Control-Allow-Origin', '*')
+            if (req.method === 'HEAD') { res.setHeader('Content-Length', stat.size); res.statusCode = 200; res.end(); return }
+            const range = req.headers.range
+            if (range) {
+              const [startStr, endStr] = range.replace(/bytes=/, '').split('-')
+              const start = parseInt(startStr, 10)
+              const end = endStr ? parseInt(endStr, 10) : stat.size - 1
+              res.statusCode = 206
+              res.setHeader('Content-Range', `bytes ${start}-${end}/${stat.size}`)
+              res.setHeader('Content-Length', end - start + 1)
+              fs.createReadStream(absPath, { start, end }).pipe(res)
+            } else {
+              res.statusCode = 200
+              res.setHeader('Content-Length', stat.size)
+              fs.createReadStream(absPath).pipe(res)
+            }
+          })
+        })
+
+        // POST /stem-badges — body {tracks:[{trackId,audioRelPath}]}. Cheap
+        // batch status for the Library grid's "S" badge: skips
+        // classification entirely for tracks with no stem-set directory at
+        // all (the overwhelming majority), and only runs the fast
+        // stat-tier revalidation (never a decode) for tracks that do.
+        server.middlewares.use('/stem-badges', (req, res) => {
+          if (req.method !== 'POST') { radioJson(res, 405, { ok: false, error: 'method_not_allowed' }); return }
+          readJsonBody(req).then(async (rawBody) => {
+            const body = rawBody as StemBadgesBody
+            const tracks = (body?.tracks ?? []).filter((t) => t.trackId && t.audioRelPath) as { trackId: string; audioRelPath: string }[]
+            const badges: Record<string, { lifecycle: string; reason: string } | null> = {}
+            for (const t of tracks) {
+              const safeTrackId = safeStemDirName(t.trackId)
+              if (!hasAnyStemSets(TRACK_STEM_LIBRARY_ROOT, safeTrackId)) { badges[t.trackId] = null; continue }
+              const sets = scanStemSetsForTrack(TRACK_STEM_LIBRARY_ROOT, safeTrackId)
+              const sourcePath = resolveTrackSourcePath(LIBRARY_ROOT, t.audioRelPath)
+              const scratchOpId = `identity-scratch-${randomUUID()}`
+              const lifecycles = await classifyStemSetsForTrack(sets, {
+                stemLibraryRoot: TRACK_STEM_LIBRARY_ROOT,
+                sourcePath,
+                scratchWavPathFor: (id) => path.join(stemStagingOperationDir(TRACK_STEM_LIBRARY_ROOT, scratchOpId), `${id}.wav`),
+              })
+              cleanupStemStagingOperation(TRACK_STEM_LIBRARY_ROOT, scratchOpId)
+              // Prefer reporting "current" if any set is current; otherwise
+              // the newest set's own state (sets is already newest-first).
+              const current = sets.find((s) => lifecycles.get(s.id)?.lifecycle === 'current')
+              const chosen = current ? lifecycles.get(current.id) : (sets[0] ? lifecycles.get(sets[0].id) : undefined)
+              badges[t.trackId] = chosen ?? null
+            }
+            radioJson(res, 200, { ok: true, badges })
+          }).catch(() => radioJson(res, 400, { ok: false, error: 'invalid_json_body' }))
+        })
+
+        // POST /stem-set-reveal — body {trackId, stemSetId}. Any lifecycle
+        // may be revealed in Finder (that's the sanctioned way to inspect
+        // an archived/outdated/orphaned set) — only synchronized playback
+        // is CURRENT-gated.
+        server.middlewares.use('/stem-set-reveal', (req, res) => {
+          if (req.method !== 'POST') { radioJson(res, 405, { ok: false, error: 'method_not_allowed' }); return }
+          readJsonBody(req).then(async (rawBody) => {
+            const body = rawBody as StemSetRevealBody
+            const trackId = String(body?.trackId ?? '')
+            const stemSetId = String(body?.stemSetId ?? '')
+            if (!trackId || !stemSetId) { radioJson(res, 400, { ok: false, error: 'missing_params' }); return }
+            const safeTrackId = safeStemDirName(trackId)
+            const sets = scanStemSetsForTrack(TRACK_STEM_LIBRARY_ROOT, safeTrackId)
+            const set = sets.find((s) => s.id === stemSetId)
+            if (!set) { radioJson(res, 404, { ok: false, error: 'stem_set_not_found' }); return }
+            const dir = path.join(TRACK_STEM_LIBRARY_ROOT, set.archiveDirectory)
+            const result = await revealDirectoryInFinder(dir)
+            radioJson(res, 200, result)
+          }).catch(() => radioJson(res, 400, { ok: false, error: 'invalid_json_body' }))
+        })
+
+        // POST /stem-salvage-stage — creates a fresh staging operation for
+        // "Register Existing Stem Set…" and returns its operationId.
+        server.middlewares.use('/stem-salvage-stage', (_req, res) => {
+          const operationId = randomUUID()
+          createStemStagingOperation(TRACK_STEM_LIBRARY_ROOT, operationId)
+          radioJson(res, 200, { ok: true, operationId })
+        })
+
+        // POST /stem-salvage-upload?operationId=&role=&filename= — the raw
+        // request body IS the file's bytes, streamed directly to disk via
+        // fs.createWriteStream (never buffered whole in application
+        // memory — a real transfer mechanism, not a hand-wave). One call
+        // per file (browser File objects are valid fetch() bodies).
+        server.middlewares.use('/stem-salvage-upload', (req, res) => {
+          if (req.method !== 'POST') { radioJson(res, 405, { ok: false, error: 'method_not_allowed' }); return }
+          const url = new URL(req.url ?? '/', 'http://localhost')
+          const operationId = url.searchParams.get('operationId') ?? ''
+          const role = url.searchParams.get('role') ?? ''
+          const filename = url.searchParams.get('filename') ?? ''
+          if (!operationId || !role || !filename || !stagingOperationExistsForStems(operationId)) {
+            radioJson(res, 400, { ok: false, error: 'missing_or_invalid_params' }); return
+          }
+          const safeName = `${role}-${path.basename(filename)}`
+          const destPath = path.join(stemStagingOperationDir(TRACK_STEM_LIBRARY_ROOT, operationId), safeName)
+          const writeStream = fs.createWriteStream(destPath)
+          let bytesWritten = 0
+          req.on('data', (chunk: Buffer) => { bytesWritten += chunk.length })
+          req.pipe(writeStream)
+          writeStream.on('finish', () => radioJson(res, 200, { ok: true, fileName: safeName, size: bytesWritten }))
+          writeStream.on('error', (e) => radioJson(res, 500, { ok: false, error: String(e) }))
+        })
+
+        function stagingOperationExistsForStems(operationId: string): boolean {
+          return fs.existsSync(stemStagingOperationDir(TRACK_STEM_LIBRARY_ROOT, operationId))
+        }
+
+        // POST /stem-register-existing — validates+promotes the already-
+        // staged files (shared by the salvage dialog and the Legacy Stem
+        // Migration panel).
+        server.middlewares.use('/stem-register-existing', (req, res) => {
+          if (req.method !== 'POST') { radioJson(res, 405, { ok: false, error: 'method_not_allowed' }); return }
+          readJsonBody(req).then(async (rawBody) => {
+            const body = rawBody as StemRegisterExistingBody
+            const operationId = String(body?.operationId ?? '')
+            const trackId = String(body?.trackId ?? '')
+            const audioRelPath = String(body?.audioRelPath ?? '')
+            const roleAssignments = (body?.roleAssignments ?? {}) as Record<StemRole, string>
+            if (!operationId || !trackId || !audioRelPath) { radioJson(res, 400, { ok: false, error: 'missing_params' }); return }
+            const stagingDir = stemStagingOperationDir(TRACK_STEM_LIBRARY_ROOT, operationId)
+            if (!fs.existsSync(stagingDir)) { radioJson(res, 404, { ok: false, error: 'staging_not_found' }); return }
+            const result = await registerExistingStemSet({
+              stemLibraryRoot: TRACK_STEM_LIBRARY_ROOT,
+              musicLibraryRoot: LIBRARY_ROOT,
+              stagingDir,
+              sourceTrackId: trackId,
+              audioRelPath,
+              roleAssignments,
+              confirmed: Boolean(body?.confirmed),
+              origin: 'registered_existing',
+              engineNotes: body?.engineNotes,
+            })
+            if (!result.ok) cleanupStemStagingOperation(TRACK_STEM_LIBRARY_ROOT, operationId)
+            radioJson(res, result.ok ? 200 : 400, result)
+          }).catch(() => radioJson(res, 400, { ok: false, error: 'invalid_json_body' }))
+        })
+
+        // POST /stem-legacy-migrate — copies the 4 already-known legacy
+        // derived-stem audio files (no browser upload needed, they're
+        // already on disk under LIBRARY_ROOT) into staging, then runs the
+        // exact same validate+promote pipeline as manual salvage.
+        server.middlewares.use('/stem-legacy-migrate', (req, res) => {
+          if (req.method !== 'POST') { radioJson(res, 405, { ok: false, error: 'method_not_allowed' }); return }
+          readJsonBody(req).then(async (rawBody) => {
+            const body = rawBody as StemLegacyMigrateBody
+            const trackId = String(body?.trackId ?? '')
+            const audioRelPath = String(body?.audioRelPath ?? '')
+            const legacyAudioRelPaths = (body?.legacyAudioRelPaths ?? {}) as Record<StemRole, string>
+            if (!trackId || !audioRelPath) { radioJson(res, 400, { ok: false, error: 'missing_params' }); return }
+            const operationId = randomUUID()
+            const staged = stageLegacyStemFiles(LIBRARY_ROOT, TRACK_STEM_LIBRARY_ROOT, operationId, legacyAudioRelPaths)
+            if (!staged.ok || !staged.stagingDir || !staged.roleAssignments) {
+              radioJson(res, 400, { ok: false, error: staged.reason ?? 'staging_failed' }); return
+            }
+            const result = await registerExistingStemSet({
+              stemLibraryRoot: TRACK_STEM_LIBRARY_ROOT,
+              musicLibraryRoot: LIBRARY_ROOT,
+              stagingDir: staged.stagingDir,
+              sourceTrackId: trackId,
+              audioRelPath,
+              roleAssignments: staged.roleAssignments,
+              confirmed: true,
+              origin: 'registered_existing',
+              engineNotes: 'legacy_migration',
+            })
+            if (!result.ok) cleanupStemStagingOperation(TRACK_STEM_LIBRARY_ROOT, operationId)
+            radioJson(res, result.ok ? 200 : 400, result)
           }).catch(() => radioJson(res, 400, { ok: false, error: 'invalid_json_body' }))
         })
 

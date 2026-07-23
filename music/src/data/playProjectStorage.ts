@@ -10,6 +10,8 @@ import { isValidScheduleBlock } from "../logic/scheduleResolver";
 import { normalizeTrackMetadata } from "../logic/trackMetadata";
 import { normalizeEnergyEnvelope, defaultEnvelopeForSection } from "../logic/playlistEnergyEnvelope";
 import { migrateApprovedLoopsToRevisionsV1 } from "./migrations/migrateLoopRevisionsV1";
+import { reconcileLibraryGridPreferences } from "../logic/library/libraryColumns";
+import type { LibrarySourceKey } from "./libraryGridTypes";
 
 function makeDefaultSchedule(): ScheduleState {
   const ts = nowIso();
@@ -128,6 +130,30 @@ export function repairStoredProject(project: PlayProject): PlayProject {
   // 0721_MUSIC_RADIO_Sectional_Loopchain_Player
   if (!Array.isArray(repaired.loopchainSectionAcceptances)) repaired.loopchainSectionAcceptances = [];
   if (!Array.isArray(repaired.loopchainObservations)) repaired.loopchainObservations = [];
+  if (!Array.isArray(repaired.loopchainListenerFeedback)) repaired.loopchainListenerFeedback = [];
+  // 0721B_MUSIC_Catalog_Data_Grid_Comments (expanded to the shared Library
+  // data grid) — one-time migration: a project saved by the Catalog-only
+  // 0721B build stored its single record under the old `catalogGridPreferences`
+  // field name. If that field is present and the new per-library map hasn't
+  // captured Catalog's prefs yet, carry it forward as `libraryGridPreferences.studiorich`
+  // rather than silently discarding a real, already-customized layout.
+  const legacyCatalogPrefs = (repaired as unknown as { catalogGridPreferences?: unknown }).catalogGridPreferences;
+  const libraryPrefsSeed = { ...(repaired.libraryGridPreferences ?? {}) };
+  if (legacyCatalogPrefs && !libraryPrefsSeed.studiorich) {
+    libraryPrefsSeed.studiorich = legacyCatalogPrefs as never;
+  }
+  delete (repaired as unknown as { catalogGridPreferences?: unknown }).catalogGridPreferences;
+
+  // Always run every library's record through the reconciler (not just a
+  // presence check), so a corrupt/stale-version record left by a future
+  // format change is defensively normalized rather than merely
+  // defaulted-if-absent — and each library is reconciled against its own
+  // registry defaults, never another library's.
+  const librarySourceKeys: LibrarySourceKey[] = ["studiorich", "external", "reference"];
+  repaired.libraryGridPreferences = {};
+  for (const key of librarySourceKeys) {
+    repaired.libraryGridPreferences[key] = reconcileLibraryGridPreferences(libraryPrefsSeed[key], key);
+  }
 
   // Repair activePlaylistId: if missing or pointing at a deleted playlist,
   // fall back to the first playlist rather than discarding the project.
@@ -158,6 +184,9 @@ export function repairStoredProject(project: PlayProject): PlayProject {
       slots: Array.isArray(pl.slots)
         ? pl.slots.map((s) => ({ ...s, warningMessages: normalizeWarningMessages(s.warningMessages) }))
         : [],
+      // 0722D — spec §5.3: hydrate missing transition collections to an
+      // empty collection without crashing older projects.
+      djTransitionPlans: Array.isArray(pl.djTransitionPlans) ? pl.djTransitionPlans : [],
     };
     // Energy-envelope migration (0712_MUSIC_Playlist_Section_Energy_Envelopes
     // §4.2) — a section saved before this feature existed has no

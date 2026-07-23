@@ -1,0 +1,87 @@
+{
+  "id": "42eb9a16-ea3e-4bb6-bc9e-767ec97b01a7",
+  "sourceTrackId": "ext_mr9smtpl_wb0b",
+  "sourceAudioPathAtCreation": "/Users/studio/Projects/wall-of-sound/library/music/external/audio/VA - Microhouse Essentials (2021)/01. Soulphiction - White Ropes.mp3",
+  "sourceAudioIdentity": {
+    "fingerprint": "a6537a6c4a22e124e7e7fab181da5815a602de4874aff1ae60c048d18a99b39b",
+    "fingerprintAlgorithm": "pcm-sha256",
+    "fingerprintVersion": 1,
+    "sampleRateHz": 44100,
+    "normalizedChannels": 2,
+    "durationFrames": 10374959
+  },
+  "sourceRawFileHashAtCreation": "d44eba8cd4e4eacd87027114aadb3a2dd21dbcfc80532a0fd11a58ce95dc472a",
+  "sourceStatAtCreation": {
+    "sizeBytes": 9638027,
+    "mtimeMs": 1772145506670,
+    "inode": 300610649
+  },
+  "sourceAudioProvenance": {
+    "decoderTool": "ffmpeg",
+    "decoderVersion": "8.0",
+    "computedAt": "2026-07-22T13:47:09.811Z"
+  },
+  "origin": "demucs",
+  "engine": "demucs",
+  "model": "htdemucs",
+  "engineVersion": "4.1.0",
+  "engineDevice": "mps",
+  "manifestVersion": 1,
+  "stems": {
+    "vocals": {
+      "role": "vocals",
+      "relativeArchivePath": "ext_mr9smtpl_wb0b/sets/2026-07-22T134803.370Z_a6537a6c_htdemucs/vocals.wav",
+      "fileName": "vocals.wav",
+      "durationFrames": 10374959,
+      "durationSeconds": 235.25984126984127,
+      "sampleRateHz": 44100,
+      "channels": 2,
+      "bitDepth": 16,
+      "codec": "pcm_s16le",
+      "sizeBytes": 41499880,
+      "contentHash": "137338e9c964fd08f4f821b3783ec6416923797670abf34466e21ed6f9eaad4f"
+    },
+    "drums": {
+      "role": "drums",
+      "relativeArchivePath": "ext_mr9smtpl_wb0b/sets/2026-07-22T134803.370Z_a6537a6c_htdemucs/drums.wav",
+      "fileName": "drums.wav",
+      "durationFrames": 10374959,
+      "durationSeconds": 235.25984126984127,
+      "sampleRateHz": 44100,
+      "channels": 2,
+      "bitDepth": 16,
+      "codec": "pcm_s16le",
+      "sizeBytes": 41499880,
+      "contentHash": "ae6763c823c338231bcd726cd02d5e97eafe92d2235afd11b341bc7624d2b5ef"
+    },
+    "bass": {
+      "role": "bass",
+      "relativeArchivePath": "ext_mr9smtpl_wb0b/sets/2026-07-22T134803.370Z_a6537a6c_htdemucs/bass.wav",
+      "fileName": "bass.wav",
+      "durationFrames": 10374959,
+      "durationSeconds": 235.25984126984127,
+      "sampleRateHz": 44100,
+      "channels": 2,
+      "bitDepth": 16,
+      "codec": "pcm_s16le",
+      "sizeBytes": 41499880,
+      "contentHash": "0a14ae9000d7a3e81982d2bd802252ea6406e15b2867fa229e5fa564783b9211"
+    },
+    "other": {
+      "role": "other",
+      "relativeArchivePath": "ext_mr9smtpl_wb0b/sets/2026-07-22T134803.370Z_a6537a6c_htdemucs/other.wav",
+      "fileName": "other.wav",
+      "durationFrames": 10374959,
+      "durationSeconds": 235.25984126984127,
+      "sampleRateHz": 44100,
+      "channels": 2,
+      "bitDepth": 16,
+      "codec": "pcm_s16le",
+      "sizeBytes": 41499880,
+      "contentHash": "f850bfef0f9e960a1525d8803beed59d32e5671aaa460191a33af79c86083efe"
+    }
+  },
+  "createdAt": "2026-07-22T13:48:03.370Z",
+  "completedAt": "2026-07-22T13:48:03.370Z",
+  "archiveDirectory": "ext_mr9smtpl_wb0b/sets/2026-07-22T134803.370Z_a6537a6c_htdemucs"
+}

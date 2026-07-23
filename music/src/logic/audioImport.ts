@@ -31,6 +31,31 @@ export function pickAudioFiles(): Promise<File[]> {
   });
 }
 
+// 0722C_MUSIC_Production_Stem_Export — folder variant for "Register
+// Existing Stem Set…"'s "choose one folder" option. webkitdirectory
+// returns ordinary browser File objects (not filesystem paths) exactly
+// like pickAudioFiles above; both are safe to reuse as-is.
+export function pickAudioFolder(): Promise<File[]> {
+  return new Promise((resolve) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    (input as HTMLInputElement & { webkitdirectory: boolean }).webkitdirectory = true;
+    input.multiple = true;
+    input.style.display = "none";
+    document.body.appendChild(input);
+    input.addEventListener("change", () => {
+      const files = Array.from(input.files ?? []);
+      document.body.removeChild(input);
+      resolve(files);
+    });
+    input.addEventListener("cancel", () => {
+      document.body.removeChild(input);
+      resolve([]);
+    });
+    input.click();
+  });
+}
+
 // ── Duration extraction via Web Audio API ─────────────────────────────────────
 
 export async function extractDuration(file: File): Promise<number | null> {

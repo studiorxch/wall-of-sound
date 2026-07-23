@@ -16,6 +16,10 @@ import { createIdleDeck, loadDeck, markDeckReady, markDeckPlaying, markDeckPause
 import { buildCrossfadeEnvelopes, buildHardCutEnvelopes, computeTransitionProgress } from "./transitionScheduler";
 import { gainAtContextTime } from "./gainEnvelope";
 import { evaluateAudibleReadiness } from "./handoffReadiness";
+import {
+  createDeckEqChain, spliceDeckEqChainIn, bypassDeckEqChain, scheduleDeckEqAutomation, cancelDeckEqAutomation, teardownDeckEqChain,
+  type DeckEqChainNodes, type EqAutomationEvent,
+} from "./deckEqChain";
 
 // §6 — recommended position-observation window (100-300ms); documented
 // tolerance for this browser environment's timer/AudioContext granularity.
@@ -27,6 +31,12 @@ interface DeckNodes {
   audio: HTMLAudioElement;
   source: MediaElementAudioSourceNode | null;
   gain: GainNode;
+  // DJ Transition Engine (0722D) — lazily created ONLY when an authorized
+  // active DJ plan actually engages EQ (djTransitionPlayback.ts). Legacy,
+  // off, and shadow modes never call any eq* method below, so this stays
+  // null and the gain->destination path is byte-for-byte what it was
+  // before this build — a true absence, not a connected unity-gain chain.
+  eq: DeckEqChainNodes | null;
 }
 
 export type DualDeckEventListener = (decks: Record<"A" | "B", PlaybackDeckState>) => void;
@@ -70,8 +80,8 @@ export class DualDeckPlaybackEngine {
     audioA.crossOrigin = "anonymous";
     audioB.crossOrigin = "anonymous";
     this.nodes = {
-      A: { audio: audioA, source: null, gain: this.silentGainStub() },
-      B: { audio: audioB, source: null, gain: this.silentGainStub() },
+      A: { audio: audioA, source: null, gain: this.silentGainStub(), eq: null },
+      B: { audio: audioB, source: null, gain: this.silentGainStub(), eq: null },
     };
     this.wireEndedListener("A");
     this.wireEndedListener("B");
@@ -238,6 +248,47 @@ export class DualDeckPlaybackEngine {
 
   getCurrentTime(deckId: "A" | "B"): number {
     return this.nodes[deckId].audio.currentTime;
+  }
+
+  // ── DJ Transition Engine (0722D) — EQ splice, engaged ONLY on demand ────
+  // by djTransitionPlayback.ts for an authorized active-mode plan whose
+  // family actually needs EQ automation. Requires ensureContext() to have
+  // already run (a deck must be preloaded/playing before EQ can engage).
+
+  isDeckEqEngaged(deckId: "A" | "B"): boolean {
+    return this.nodes[deckId].eq?.engaged ?? false;
+  }
+
+  engageDeckEq(deckId: "A" | "B"): DeckEqChainNodes {
+    const ctx = this.ensureContext();
+    const n = this.nodes[deckId];
+    if (!n.eq) n.eq = createDeckEqChain(ctx);
+    if (!n.eq.engaged) spliceDeckEqChainIn(n.eq, n.gain, ctx.destination);
+    return n.eq;
+  }
+
+  scheduleDeckEqAutomation(deckId: "A" | "B", events: EqAutomationEvent[]): void {
+    const chain = this.nodes[deckId].eq;
+    if (!chain || !chain.engaged) return;
+    scheduleDeckEqAutomation(chain, events);
+  }
+
+  // True bypass — physically removes the chain from the signal path,
+  // restoring the exact gain->destination connection every other mode uses.
+  bypassDeckEq(deckId: "A" | "B"): void {
+    const ctx = this.ctx;
+    const n = this.nodes[deckId];
+    if (!ctx || !n.eq || !n.eq.engaged) return;
+    cancelDeckEqAutomation(n.eq, ctx.currentTime);
+    bypassDeckEqChain(n.eq, n.gain, ctx.destination);
+  }
+
+  private teardownDeckEqIfAny(deckId: "A" | "B"): void {
+    const ctx = this.ctx;
+    const n = this.nodes[deckId];
+    if (!ctx || !n.eq) return;
+    teardownDeckEqChain(n.eq, n.gain, ctx.destination);
+    n.eq = null;
   }
 
   // §11/§12/§13/§14 — a hard cut has zero overlap. Reachable from BOTH the
@@ -545,6 +596,7 @@ export class DualDeckPlaybackEngine {
   destroy() {
     if (this.activeTransitionRaf != null) cancelAnimationFrame(this.activeTransitionRaf);
     (["A", "B"] as const).forEach((id) => {
+      this.teardownDeckEqIfAny(id);
       const n = this.nodes[id];
       n.audio.pause();
       n.audio.src = "";

@@ -101,6 +101,7 @@ import { SectionMap, type SectionMapDisplaySection } from "./sectionalLooper/Sec
 import type { CompleteSongAnalysis, NumericProfile, SongStructuralType } from "../data/songAnalysisTypes";
 import { resolveActiveSongSection, createSongSectionRevision } from "../logic/songAnalysis/songSectionRevisions";
 import type { ChunkedDspProgress } from "../logic/dspFeatureExtraction";
+import { isMigratedLegacyStem } from "../logic/library/libraryVisibleTracks";
 
 // §32/§33 — the legacy full candidate card-wall grid must not be reachable
 // in normal user mode. This constant defaults closed and is never
@@ -1787,7 +1788,7 @@ export function SectionalLooperWorkspace({
     }
     return (
       <div className="looper-root">
-        <h2 className="looper-title">Sectional Looper</h2>
+        <h2 className="looper-title">Looper</h2>
         <p className="looper-hint">Select an eligible local track to divide it into candidate loops.</p>
         <select
           className="looper-track-select"
@@ -2002,7 +2003,7 @@ export function SectionalLooperWorkspace({
   // stem LoopAsset the SAME startSeconds/endSeconds is exactly correct.
   async function createStemLoops() {
     if (!track || !timelineSelection || isStemTrack(track)) return;
-    const stems = libraryTracks.filter((t) => t.derivedKind === "stem" && t.parentTrackId === track.trackId);
+    const stems = libraryTracks.filter((t) => t.derivedKind === "stem" && t.parentTrackId === track.trackId && !isMigratedLegacyStem(t));
     if (stems.length === 0) return;
     setStemImportError(null);
     const ctx = decodeCtxRef.current
@@ -2070,7 +2071,7 @@ export function SectionalLooperWorkspace({
   }
 
   const registeredStems = track && !isStemTrack(track)
-    ? libraryTracks.filter((t) => t.derivedKind === "stem" && t.parentTrackId === track.trackId)
+    ? libraryTracks.filter((t) => t.derivedKind === "stem" && t.parentTrackId === track.trackId && !isMigratedLegacyStem(t))
     : [];
   // 0715G §5, required correction — never "Create Stems"/"Create full stems
   // first"; this build only ever IMPORTS already-separated files a user

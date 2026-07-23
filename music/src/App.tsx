@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import type { Track, TrackSourceOwner } from "./data/trackTypes";
 import { parseCsvTracks } from "./data/importCsv";
 import type { LibraryScanReport } from "./data/librarySourceTypes";
@@ -65,6 +65,7 @@ import { SamplerBankView } from "./ui/SamplerBankView";
 import { PlaylistsGrid } from "./ui/PlaylistsGrid";
 import { SamplerBanksGrid } from "./ui/SamplerBanksGrid";
 import { FileManager, type ViewMode } from "./ui/FileManager";
+import { SoundsLoopRows } from "./ui/library/SoundsLoopRows";
 import { ArtistLibraryPanel } from "./ui/ArtistLibraryPanel";
 import { PlaylistHeader } from "./ui/PlaylistHeader";
 import { MainTrackWindow } from "./ui/MainTrackWindow";
@@ -87,7 +88,6 @@ import { filterTracksByRecipe } from "./logic/recipeFilter";
 import { resolveCratePool, resolveCrateTracks } from "./logic/resolveCrate";
 import { generateMissingAutoMoodCrates, auditAutoMoodCrates, auditMoodCrateCounts, regenerateMoodCratesFromCurrentTags, type MoodCrateCountMode, type MoodCrateSourceScope } from "./logic/autoMoodCrates";
 import { pickAudioFiles, importAudioFiles, auditAudioAnalysis, reanalyzeTrack, reanalyzeMissing } from "./logic/audioImport";
-import { matchStemRoleFromFileName, buildNewStemTracks, type StemImportEntry, type StemRole } from "./logic/loops/stemRegistration";
 import { buildIntakeItem, isSupportedAudioExtension } from "./logic/importIntake";
 import type { MusicImportIntakeItem } from "./data/importTypes";
 import { ImportIntakePanel } from "./ui/ImportIntakePanel";
@@ -126,6 +126,7 @@ import { RadioDashboardView } from "./ui/radio/RadioDashboardView";
 // 0718B_RADIO_Web_Publication_Asset_Export_Bridge
 import type { RadioWebExportRecord } from "./data/radioWebBundleTypes";
 import type { LoopchainDraft, RadioLoopchainSectionAcceptance, LoopchainObservation } from "./data/radioLoopchainTypes";
+import type { LoopchainListenerFeedback } from "./data/loopchainFeedbackTypes";
 import { RadioPlaylistsView } from "./ui/radio/RadioPlaylistsView";
 import { RadioLoopchainPlayer } from "./ui/radio/RadioLoopchainPlayer";
 import { RadioBanksView } from "./ui/radio/RadioBanksView";
@@ -139,7 +140,9 @@ import { defaultCrateFilters } from "./data/crateTypes";
 import { CratesGrid } from "./ui/CratesGrid";
 import { CrateDetail } from "./ui/CrateDetail";
 import { SectionalLooperWorkspace } from "./ui/SectionalLooperWorkspace";
-import { LoopLibraryView } from "./ui/LoopLibraryView";
+import { StemSublayer } from "./ui/stems/StemSublayer";
+import { LegacyStemMigrationPanel } from "./ui/stems/LegacyStemMigrationPanel";
+import { readDjTransitionMode, writeDjTransitionMode, type DjTransitionMode } from "./logic/djTransitionModeStorage";
 import { MoodSignalAuditView } from "./ui/MoodSignalAuditView";
 import { MoodAnalysisReviewView } from "./ui/MoodAnalysisReviewView";
 import { auditMoodSignals } from "./logic/moodSignalAudit";
@@ -151,6 +154,8 @@ import type { MusicSourcePool } from "./data/sourcePoolTypes";
 import { resolveSchedule, createScheduleBlockFromPlaylist } from "./logic/scheduleResolver";
 import { resolveSmartGridComposition } from "./logic/smartGridResolver";
 import { computeOpenIssueCount } from "./logic/libraryHealth";
+import { computeBatchCommentValue, type BatchCommentMode } from "./logic/library/libraryComments";
+import type { LibraryGridPreferences, LibraryGridPreferencesBySource, LibrarySourceKey } from "./data/libraryGridTypes";
 import type { WorkspaceMode, ImportDestination, PageMenuItem } from "./ui/TopBar";
 import { PlaylistAtmosphereLayer } from "./ui/PlaylistAtmosphereLayer";
 import { usePreparedPlaybackController } from "./audio/usePreparedPlaybackController";
@@ -273,6 +278,16 @@ export default function App() {
   const [libraryTracks, setLibraryTracks] = useState<Track[]>([]);
   const [excludedTrackIds, setExcludedTrackIds] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<ViewMode>("playlist");
+  // 0722C_MUSIC_Production_Stem_Export — which track's stem sublayer is
+  // open. Not the "hasStems" state itself (that's never persisted here —
+  // GET /stem-sets is the live source of truth); this is purely "which
+  // track's badge/button did the operator click," consumed by <StemSublayer>.
+  const [activeStemTrackId, setActiveStemTrackId] = useState<string | null>(null);
+  // Session-only synthetic Track adapter for "Send to Looper" — see
+  // handleOpenStemInLooper. Never written into libraryTracksRef/persisted
+  // state; only appended to the array prop SectionalLooperWorkspace reads.
+  const [ephemeralLooperStemTrack, setEphemeralLooperStemTrack] = useState<Track | null>(null);
+  const [showLegacyStemMigration, setShowLegacyStemMigration] = useState(false);
   // 0716A_MUSIC_Direct_Manipulation_Looper_And_Playhead — the global
   // Spacebar handler below is mounted once ([] deps); this ref lets it read
   // the CURRENT viewMode without resubscribing, so it can defer to the
@@ -284,6 +299,22 @@ export default function App() {
   const viewModeRef = useRef(viewMode);
   useEffect(() => { viewModeRef.current = viewMode; }, [viewMode]);
   const [sourceOwnerFilter, setSourceOwnerFilter] = useState<import("./data/trackTypes").TrackSourceOwner | null>(null);
+  // 0722_MUSIC_Loops_Library_And_Looper_Naming — Sounds' content-type
+  // toggle (Tracks/Loops). Lives in App state (not local to the library
+  // page) so the legacy loop_library redirect effect below can set it.
+  const [soundsShowLoops, setSoundsShowLoops] = useState(false);
+  // The standalone Loop Library destination is retired; "loop_library" has
+  // no nav row that can set it anymore, but this app has no URL router to
+  // intercept an old deep link, so this effect is the safe-redirect
+  // equivalent — any stray "loop_library" viewMode normalizes immediately
+  // to Sounds with the Loops filter on, rather than rendering nothing.
+  useEffect(() => {
+    if (viewMode === "loop_library") {
+      setViewMode("library");
+      setSourceOwnerFilter("reference");
+      setSoundsShowLoops(true);
+    }
+  }, [viewMode]);
   const [showCoveragePanel, setShowCoveragePanel] = useState(false);
   const [externalRepairHistory, setExternalRepairHistory] = useState<import("./logic/externalIdentityRepair").ExternalIdentityRepairRecord[]>(
     () => (loadPlayProject() as any)?.externalIdentityRepairHistory ?? []
@@ -334,6 +365,10 @@ export default function App() {
     () => loadPlayProject()?.loopBinViewState ?? { tab: "approved", filters: {}, sort: "start_time", updatedAt: nowIso() },
   );
   const loopBinViewStateRef = useRef<LoopBinViewState>(loopBinViewState);
+  const [libraryGridPreferences, setLibraryGridPreferences] = useState<LibraryGridPreferencesBySource>(
+    () => loadPlayProject()?.libraryGridPreferences ?? {},
+  );
+  const libraryGridPreferencesRef = useRef<LibraryGridPreferencesBySource>(libraryGridPreferences);
   // Carried through unchanged into every save — this marker only ever
   // advances inside migrateApprovedLoopsToRevisionsV1 at LOAD time, never
   // here, so a save must not silently reset it to undefined.
@@ -371,6 +406,8 @@ export default function App() {
   const loopchainSectionAcceptancesRef = useRef<RadioLoopchainSectionAcceptance[]>([]);
   const [loopchainObservations, setLoopchainObservations] = useState<LoopchainObservation[]>(() => loadPlayProject()?.loopchainObservations ?? []);
   const loopchainObservationsRef = useRef<LoopchainObservation[]>([]);
+  const [loopchainListenerFeedback, setLoopchainListenerFeedback] = useState<LoopchainListenerFeedback[]>(() => loadPlayProject()?.loopchainListenerFeedback ?? []);
+  const loopchainListenerFeedbackRef = useRef<LoopchainListenerFeedback[]>([]);
   // Session-only — which real songs the player was opened with (from
   // RADIO Playlists' currently-bound source tracks); never persisted.
   const [loopchainCandidateSourceTrackIds, setLoopchainCandidateSourceTrackIds] = useState<string[]>([]);
@@ -427,6 +464,17 @@ export default function App() {
   // — off by default (§7: never silently switch all playback to prepared
   // mode). Standard single-track playback via audioRef is untouched.
   const [preparedPlaybackEnabled, setPreparedPlaybackEnabled] = useState(false);
+  // DJ Transition Engine (0722D) — capability gate, persisted (unlike
+  // preparedPlaybackEnabled above), defaulting to "off". "shadow" only
+  // resolves and displays DJ transition plans for comparison; it never
+  // touches playback, scheduling, gain, EQ, transport, or playlist order.
+  // "active" is not reachable from any control in this build yet (task
+  // #43) — see PlaylistPreparationPanel.tsx's mode selector.
+  const [djTransitionMode, setDjTransitionModeState] = useState<DjTransitionMode>(() => readDjTransitionMode());
+  const handleDjTransitionModeChange = useCallback((mode: DjTransitionMode) => {
+    setDjTransitionModeState(mode);
+    writeDjTransitionMode(mode);
+  }, []);
 
   // ── Export / dirty tracking state (0623B) ───────────────────────────────
   const [lastExportedAt, setLastExportedAt] = useState<string | null>(null);
@@ -549,7 +597,9 @@ export default function App() {
   useEffect(() => { loopchainDraftRef.current = loopchainDraft; }, [loopchainDraft]);
   useEffect(() => { loopchainSectionAcceptancesRef.current = loopchainSectionAcceptances; }, [loopchainSectionAcceptances]);
   useEffect(() => { loopchainObservationsRef.current = loopchainObservations; }, [loopchainObservations]);
+  useEffect(() => { loopchainListenerFeedbackRef.current = loopchainListenerFeedback; }, [loopchainListenerFeedback]);
   useEffect(() => { loopBinViewStateRef.current = loopBinViewState; }, [loopBinViewState]);
+  useEffect(() => { libraryGridPreferencesRef.current = libraryGridPreferences; }, [libraryGridPreferences]);
   useEffect(() => { libraryGapsRef.current = libraryGaps; }, [libraryGaps]);
 
   // Sampler bank filesystem sync — write banks.json whenever playlists change (post-hydration).
@@ -618,7 +668,9 @@ export default function App() {
       loopchainDraft: loopchainDraftRef.current,
       loopchainSectionAcceptances: loopchainSectionAcceptancesRef.current.length ? loopchainSectionAcceptancesRef.current : undefined,
       loopchainObservations: loopchainObservationsRef.current.length ? loopchainObservationsRef.current : undefined,
+      loopchainListenerFeedback: loopchainListenerFeedbackRef.current.length ? loopchainListenerFeedbackRef.current : undefined,
       loopBinViewState: loopBinViewStateRef.current,
+      libraryGridPreferences: libraryGridPreferencesRef.current,
       loopRevisionsMigrationVersion: loopRevisionsMigrationVersionRef.current,
       libraryGaps: libraryGapsRef.current.length ? libraryGapsRef.current : undefined,
       metadataImportHistory: metadataImportHistoryRef.current.length ? metadataImportHistoryRef.current : undefined,
@@ -1584,6 +1636,15 @@ export default function App() {
     savePlayProject(makeProj(playlistsRef.current));
   }
 
+  function handleUpdateLibraryGridPreferences(sourceKey: LibrarySourceKey, next: LibraryGridPreferences) {
+    // One map, one key per library — writing Catalog's slice can never
+    // touch External's or Sounds', since this only ever replaces its own key.
+    const nextMap = { ...libraryGridPreferencesRef.current, [sourceKey]: next };
+    libraryGridPreferencesRef.current = nextMap;
+    setLibraryGridPreferences(nextMap);
+    savePlayProject(makeProj(playlistsRef.current));
+  }
+
   // §36 — deleting a rendered file must default to the safest behavior:
   // clear the render record back to "not_rendered" while preserving the
   // LoopAsset's own metadata untouched. Never deletes the source track.
@@ -1852,6 +1913,56 @@ export default function App() {
     });
   }
 
+  // 0722C_MUSIC_Production_Stem_Export — "Send to Looper," real: the
+  // synthetic Track adapter (never in libraryTracksRef/persisted state,
+  // see stemLooperSource.ts) is appended to the PROP array
+  // <SectionalLooperWorkspace> receives via ephemeralLooperStemTrack below
+  // — this is the entire integration point, no changes to that
+  // component's own internals. The persisted AudioExperimentRecord carries
+  // stemSourceRef (the durable { stemSetId, role } reference) alongside
+  // sourceTrackId, which stays the synthetic id purely so the existing
+  // per-track experiment/loop lookups keep working unmodified.
+  function handleOpenStemInLooper(_parentTrack: Track, syntheticTrack: Track, stemSetId: string, role: import("./data/trackStemTypes").StemRole) {
+    setEphemeralLooperStemTrack(syntheticTrack);
+    setLooperSourceTrackId(syntheticTrack.trackId);
+    setActiveStemTrackId(null);
+    setViewMode("sectional_looper");
+    const existing = audioExperimentsRef.current.find(
+      (e) => e.type === "sectional_looper" && e.sourceTrackId === syntheticTrack.trackId,
+    );
+    const now = nowIso();
+    handleUpsertAudioExperiment({
+      id: existing?.id ?? genId("experiment"),
+      type: "sectional_looper",
+      sourceTrackId: syntheticTrack.trackId,
+      sourceFingerprint: stemSetId,
+      status: "review",
+      candidateLoopIds: existing?.candidateLoopIds ?? [],
+      approvedLoopIds: existing?.approvedLoopIds ?? [],
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+      stemSourceRef: { stemSetId, role },
+    });
+  }
+
+  // 0722C_MUSIC_Production_Stem_Export — marks the 4 legacy derived-stem
+  // Track records "migrated" after a successful LegacyStemMigrationPanel
+  // registration. Non-destructive: the records and their audio files stay
+  // on disk exactly as they were; only the migration marker changes, which
+  // is what selectVisibleLibraryTracks uses to hide them everywhere.
+  function handleLegacyStemsMigrated(_parentTrackId: string, migratedChildTrackIds: string[], stemSetId: string) {
+    const now = nowIso();
+    const nextLibrary = libraryTracksRef.current.map((t) =>
+      migratedChildTrackIds.includes(t.trackId)
+        ? { ...t, stemArchiveMigration: { status: "migrated" as const, stemSetId, reviewedAt: now } }
+        : t,
+    );
+    libraryTracksRef.current = nextLibrary;
+    setLibraryTracks(nextLibrary);
+    savePlayProject(makeProj(playlistsRef.current, nextLibrary), { reason: "update_library" });
+    showNotify(`Migrated ${migratedChildTrackIds.length} legacy stem file(s) into the new archive.`);
+  }
+
   function handleGenerateMoodCrates(): { created: number; skipped: number; empty: number } {
     // Count mode: allTags — a track qualifies if the mood appears anywhere in moodTags,
     // not just primary. Balanced excluded: neutral bucket, not a useful crate.
@@ -2055,77 +2166,13 @@ export default function App() {
     }
   }
 
-  // 0715G_MUSIC_Sectional_Looper_Simplification_And_Stem_Ready_Export §5 —
-  // "Import Existing Stems," never "Create Stems": this only registers
-  // already-separated files the user picks (via the same pickAudioFiles/
-  // importAudioFiles upload path "+ Import Audio" uses), tagging each with
-  // derivedKind: "stem"/parentTrackId/stemRole. It deliberately bypasses the
-  // crate-intake review queue (buildIntakeItem/handleCommitImportIntake) —
-  // that pipeline is for end-user library additions (duplicate check, crate
-  // assignment); a derived, parent-linked stem has neither concern and
-  // registers directly, mirroring handleCommitImportIntake's own
-  // direct-append-to-library pattern.
-  async function handleImportStems(parentTrackId: string) {
-    const parentTrack = libraryTracksRef.current.find((t) => t.trackId === parentTrackId);
-    if (!parentTrack) return;
-    const files = await pickAudioFiles();
-    if (files.length === 0) return;
-    const supportedFiles = files.filter((f) => isSupportedAudioExtension(f.name));
-    if (supportedFiles.length === 0) {
-      showNotify("Could not import: no supported audio files found.");
-      return;
-    }
-    const { imported, failed } = await importAudioFiles(supportedFiles, "reference");
-    if (imported.length === 0) {
-      showNotify(failed.length > 0 ? `Import failed for all ${failed.length} file(s).` : "Could not import: no supported audio files found.");
-      return;
-    }
-    const matched: { role: StemRole; importedTrack: Track }[] = [];
-    const unmatched: string[] = [];
-    for (const r of imported) {
-      const nameForMatch = r.track.audioFileName ?? r.track.title ?? "";
-      const role = matchStemRoleFromFileName(nameForMatch);
-      if (!role) { unmatched.push(nameForMatch); continue; }
-      matched.push({ role, importedTrack: r.track });
-    }
-    const entries: StemImportEntry[] = matched.map((m) => ({
-      role: m.role, fileName: m.importedTrack.audioFileName ?? m.importedTrack.title ?? "", filePath: m.importedTrack.audioRelPath ?? "",
-    }));
-    const newStubs = buildNewStemTracks({ libraryTracks: libraryTracksRef.current, parentTrack, entries });
-    // buildNewStemTracks only knows the fixed role/fileName/filePath shape —
-    // merge back the REAL upload metadata (audioRelPath/category/duration)
-    // from importAudioFiles so the registered stem is actually playable via
-    // the same getTrackPlayUrl resolution every other track uses.
-    const roleToImportedTrack = new Map(matched.map((m) => [m.role, m.importedTrack]));
-    const finalStems = newStubs.map((stub) => {
-      const importedTrack = stub.stemRole ? roleToImportedTrack.get(stub.stemRole) : undefined;
-      if (!importedTrack) return stub;
-      return {
-        ...stub,
-        filePath: undefined,
-        audioRelPath: importedTrack.audioRelPath,
-        audioCategory: importedTrack.audioCategory,
-        audioFileName: importedTrack.audioFileName,
-        audioStatus: importedTrack.audioStatus,
-        audioLinked: importedTrack.audioLinked,
-        durationSeconds: importedTrack.durationSeconds,
-      };
-    });
-    if (finalStems.length === 0) {
-      showNotify(unmatched.length > 0
-        ? `Could not match a stem role for: ${unmatched.join(", ")}.`
-        : "All selected stems are already registered for this track.");
-      return;
-    }
-    const nextLibrary = [...libraryTracksRef.current, ...finalStems];
-    libraryTracksRef.current = nextLibrary;
-    setLibraryTracks(nextLibrary);
-    savePlayProject(makeProj(playlistsRef.current, nextLibrary), { reason: "update_library" });
-    showNotify(
-      `Registered ${finalStems.length} stem track(s) for "${parentTrack.title}".`
-      + (unmatched.length > 0 ? ` Could not match role for: ${unmatched.join(", ")}.` : ""),
-    );
-  }
+  // 0722C_MUSIC_Production_Stem_Export — the old "Import Existing Stems"
+  // top-level-track creation path (0715G's handleImportStems) is retired:
+  // MUSIC cannot keep two live definitions of "stem." Existing legacy
+  // derived-stem tracks it already created are handled by
+  // handleOpenLegacyStemMigration below, never by re-adding this entry
+  // point. onExportStems (wired to <TrackInspector> below) opens the new
+  // archive-based stem sublayer instead.
 
   function resolveIntakeItemUrl(item: MusicImportIntakeItem): string | null {
     if (item.track.audioRelPath) return `/music-audio/${item.track.audioRelPath}`;
@@ -2494,13 +2541,21 @@ export default function App() {
     const isMoodAdd = rawPatch["_bulkMoodMode"] === "add";
     const genreMode = rawPatch["_bulkGenreMode"] as "add" | "remove" | "replace" | undefined;
     const incomingGenres = rawPatch["genres"] as string[] | undefined;
-    const { _bulkMoodMode: _ignored, _bulkGenreMode: _ignored2, ...cleanPatch } = rawPatch;
+    const commentsMode = rawPatch["_bulkCommentsMode"] as BatchCommentMode | undefined;
+    const incomingCommentText = rawPatch["notes"] as string | undefined;
+    const { _bulkMoodMode: _ignored, _bulkGenreMode: _ignored2, _bulkCommentsMode: _ignored3, ...cleanPatch } = rawPatch;
     const safePatch = cleanPatch as Partial<Track>;
     const next = libraryTracksRef.current.map((t) => {
       if (!idSet.has(t.trackId)) return t;
       let updated: Track = { ...t, ...safePatch };
       if (isMoodAdd && safePatch.moodTags) {
         updated.moodTags = [...new Set([...(t.moodTags ?? []), ...safePatch.moodTags])];
+      }
+      if (commentsMode) {
+        // Mirrors _bulkGenreMode/_bulkMoodMode: the final notes value is
+        // computed per-track from that track's OWN existing notes, never a
+        // flat overwrite shared across the whole selection.
+        updated = { ...updated, notes: computeBatchCommentValue(commentsMode, incomingCommentText ?? "", t.notes) };
       }
       if (genreMode && incomingGenres) {
         // Genre is stored as `genres` (array, source of truth) plus a `genre`
@@ -3467,6 +3522,16 @@ export default function App() {
   function handlePreparationChange(preparation: import("./data/playProjectTypes").PlaylistRecord["playbackPreparation"]) {
     if (!activePlaylistId) return;
     mutatePLAndSave(activePlaylistId, (p) => ({ ...p, playbackPreparation: preparation, updatedAt: nowIso() }));
+  }
+
+  // DJ Transition Engine (0722D) — persists the shadow/active-mode plan
+  // collection for the active playlist. The ONLY writer of evidenceState:
+  // "approved" is PlaylistPreparationPanel.tsx's explicit "Approve for
+  // Active Execution" action (clean_cut only) — nothing here promotes a
+  // plan's authority on its own.
+  function handleDjTransitionPlansChange(plans: import("./data/djTransitionTypes").DjTransitionPlan[]) {
+    if (!activePlaylistId) return;
+    mutatePLAndSave(activePlaylistId, (p) => ({ ...p, djTransitionPlans: plans, updatedAt: nowIso() }));
   }
 
   function handleFindBestSlot(trackId: string) {
@@ -4924,6 +4989,9 @@ export default function App() {
     const loadedLoopBinViewState = p.loopBinViewState ?? { tab: "approved", filters: {}, sort: "start_time", updatedAt: nowIso() };
     loopBinViewStateRef.current = loadedLoopBinViewState;
     setLoopBinViewState(loadedLoopBinViewState);
+    const loadedLibraryGridPreferences = p.libraryGridPreferences ?? {};
+    libraryGridPreferencesRef.current = loadedLibraryGridPreferences;
+    setLibraryGridPreferences(loadedLibraryGridPreferences);
     // 0717D_RADIO_Playlist_Inbox_and_Performance_Foundation — same
     // mandatory re-seed step, same 0715C bug class: without this, the
     // authoritative async IndexedDB load could silently revert a
@@ -4957,6 +5025,9 @@ export default function App() {
     const loadedLoopchainObservations = p.loopchainObservations ?? [];
     loopchainObservationsRef.current = loadedLoopchainObservations;
     setLoopchainObservations(loadedLoopchainObservations);
+    const loadedLoopchainListenerFeedback = p.loopchainListenerFeedback ?? [];
+    loopchainListenerFeedbackRef.current = loadedLoopchainListenerFeedback;
+    setLoopchainListenerFeedback(loadedLoopchainListenerFeedback);
   }
 
   // ── Export / Import (0623B) ──────────────────────────────────────────────
@@ -5410,6 +5481,9 @@ export default function App() {
     standardPlaybackTimeSeconds: audioTime,
     onHandoffToEngine: () => { audioRef.current?.pause(); },
     onHandoffToStandard: () => { /* standard playback resumes via existing play/pause controls */ },
+    djTransitionMode,
+    djTransitionPlans: playingPlaylist?.djTransitionPlans,
+    songAnalyses,
   });
   const preparedNextPlan = playingPlaylist?.playbackPreparation
     ? findOutgoingPlan(playingPlaylist.playbackPreparation, preparedPlayback.session?.currentSlotId)
@@ -5690,6 +5764,13 @@ export default function App() {
     savePlayProject(makeProj(playlistsRef.current));
   }
 
+  function handleRecordLoopchainFeedback(feedback: LoopchainListenerFeedback) {
+    const next = [...loopchainListenerFeedbackRef.current, feedback];
+    loopchainListenerFeedbackRef.current = next;
+    setLoopchainListenerFeedback(next);
+    savePlayProject(makeProj(playlistsRef.current));
+  }
+
   function handleOpenLoopchainPlayer(candidateSourceTrackIds: string[]) {
     setLoopchainCandidateSourceTrackIds(candidateSourceTrackIds);
     setViewMode("radio_loopchain_player");
@@ -5921,6 +6002,28 @@ export default function App() {
         </div>
       )}
       {notify && <div className="app-notify">{notify}</div>}
+      {showLegacyStemMigration && (
+        <div className="stem-sublayer-overlay">
+          <LegacyStemMigrationPanel
+            libraryTracks={libraryTracks}
+            onMigrated={handleLegacyStemsMigrated}
+            onClose={() => setShowLegacyStemMigration(false)}
+          />
+        </div>
+      )}
+      {activeStemTrackId && (() => {
+        const stemTrack = libraryTracks.find((t) => t.trackId === activeStemTrackId);
+        if (!stemTrack) return null;
+        return (
+          <div className="stem-sublayer-overlay">
+            <StemSublayer
+              track={stemTrack}
+              onClose={() => setActiveStemTrackId(null)}
+              onSendToLooper={handleOpenStemInLooper}
+            />
+          </div>
+        );
+      })()}
       {showNewPlaylistWizard && (
         <NewPlaylistWizard
           defaultTitle={newPlaylistDefaultTitle}
@@ -6049,7 +6152,7 @@ export default function App() {
           sourceOwnerFilter={sourceOwnerFilter}
           onSelectPlaylist={handleSelectPlaylist}
           onViewModeChange={setViewMode}
-          onSourceOwnerFilterChange={setSourceOwnerFilter}
+          onSourceOwnerFilterChange={(owner) => { setSourceOwnerFilter(owner); setSoundsShowLoops(false); }}
           onCreatePlaylist={handleCreatePlaylist}
           onDuplicatePlaylist={handleDuplicatePlaylist}
           onDeletePlaylist={handleDeletePlaylist}
@@ -6062,8 +6165,6 @@ export default function App() {
           crateCount={crates.length}
           onViewCrates={() => setViewMode("crates_grid")}
           artistCount={17}
-          onImportAudioClick={() => setShowImportAudioModal(true)}
-          loopCount={loops.length}
           radioPlaylistCount={radioPlaylists.length}
           radioBankCount={radioBanks.length}
         />
@@ -6110,6 +6211,11 @@ export default function App() {
               onRepairStateChange={handleRepairStateChange}
               onReanalyzePlaylist={handleReanalyzePlaylist}
               onPreparationChange={handlePreparationChange}
+              songAnalyses={songAnalyses}
+              djTransitionMode={djTransitionMode}
+              onDjTransitionModeChange={handleDjTransitionModeChange}
+              onDjTransitionPlansChange={handleDjTransitionPlansChange}
+              djActiveDiagnostics={preparedPlayback.djActiveDiagnostics}
               reanalysisProgress={reanalysisProgress}
               reanalysisRunning={reanalyzingPlaylistId === activePlaylist.playlistId}
               onAddMusic={() => {
@@ -6279,27 +6385,55 @@ export default function App() {
             />
           ))}
 
-          {/* Library page header — visible when a library source is active */}
+          {/* Library page utility bar (Import Audio / Library Health / Update
+              Library) — the library's name and track count are owned
+              entirely by LibraryDataGrid's own header now; this bar never
+              duplicates them, only utility actions unrelated to grid
+              identity. 0722_MUSIC_Left_Panel_Visual_Normalization — Import
+              Audio moved here from the LIBRARIES nav row. */}
           {viewMode === "library" && sourceOwnerFilter && sourceOwnerFilter !== "unknown" && (() => {
             const owner = sourceOwnerFilter;
-            const labels: Record<string, string> = { studiorich: "Catalog", external: "External", reference: "Sounds" };
-            const unitLabel = owner === "reference" ? "clips" : "tracks";
             const sourceTracks = libraryTracks.filter((t) => t.sourceOwner === owner);
-            const count = sourceTracks.length;
             const isUpdating = libraryUpdating === owner;
             const externalOpenIssues = owner === "external"
               ? computeOpenIssueCount(sourceTracks, metadataImportHistory[0]?.unmatchedRows_detail ?? [], ignoredIssueIds, deferredIssueIds)
               : 0;
             return (
               <div className="lib-page-header">
-                <span className="lib-page-title">{labels[owner] ?? owner}</span>
-                <span className="lib-page-count">{count} {unitLabel}</span>
+                <button
+                  className="lib-update-btn"
+                  onClick={() => setShowImportAudioModal(true)}
+                  title="Import audio into Catalog, External, or Sounds"
+                >
+                  + Import Audio
+                </button>
+                {owner === "reference" && (
+                  <div className="lib-content-toggle">
+                    <button
+                      className={`lib-content-toggle-btn${!soundsShowLoops ? " active" : ""}`}
+                      onClick={() => setSoundsShowLoops(false)}
+                    >
+                      Tracks
+                    </button>
+                    <button
+                      className={`lib-content-toggle-btn${soundsShowLoops ? " active" : ""}`}
+                      onClick={() => setSoundsShowLoops(true)}
+                    >
+                      Loops
+                    </button>
+                  </div>
+                )}
                 {owner === "external" && (
                   <button
                     className="lib-update-btn"
                     onClick={() => setShowCoveragePanel(true)}
                   >
                     {externalOpenIssues === 0 ? "Library Health: 0 issues" : `Library Health: ${externalOpenIssues} issue${externalOpenIssues !== 1 ? "s" : ""}`}
+                  </button>
+                )}
+                {owner === "reference" && (
+                  <button className="lib-update-btn" onClick={() => setShowLegacyStemMigration(true)}>
+                    Review Legacy Stems
                   </button>
                 )}
                 <button
@@ -6358,7 +6492,7 @@ export default function App() {
             <ArtistLibraryPanel libraryTracks={libraryTracks} />
           ) : viewMode === "sectional_looper" ? (
             <SectionalLooperWorkspace
-              libraryTracks={libraryTracks}
+              libraryTracks={ephemeralLooperStemTrack ? [...libraryTracks, ephemeralLooperStemTrack] : libraryTracks}
               sourceTrackId={looperSourceTrackId}
               onSelectSourceTrack={handleSelectLooperSourceTrack}
               resolveTrackUrl={getTrackPlayUrl}
@@ -6387,13 +6521,18 @@ export default function App() {
               recomputeSongAnalysisStatus={recomputeSongAnalysisStatus}
               songAnalysisProgress={songAnalysisProgress}
             />
-          ) : viewMode === "loop_library" ? (
-            <LoopLibraryView
+          ) : viewMode === "library" && sourceOwnerFilter === "reference" && soundsShowLoops ? (
+            // 0722_MUSIC_Loops_Library_And_Looper_Naming — saved loops as a
+            // content type within Sounds, replacing the retired standalone
+            // Loop Library page. Same view mode/source filter as ordinary
+            // Sounds (viewMode "library" + sourceOwnerFilter "reference"),
+            // so the sidebar's Sounds row is active either way.
+            <SoundsLoopRows
               loops={loops}
               libraryTracks={libraryTracks}
               resolveTrackUrl={getTrackPlayUrl}
               onUpdateLoop={handleUpdateLoop}
-              onOpenSourceTrack={(trackId) => { setViewMode("library"); void trackId; }}
+              onOpenSourceTrack={(trackId) => { setSoundsShowLoops(false); void trackId; }}
               onReopenInLooper={(trackId) => { handleSelectLooperSourceTrack(trackId); setViewMode("sectional_looper"); }}
               onBeforeLoopPreview={handleBeforeLoopPreview}
               onDeleteRenderedFile={handleDeleteLoopRenderedFile}
@@ -6445,6 +6584,8 @@ export default function App() {
               onAcceptSection={handleAcceptLoopchainSection}
               observations={loopchainObservations}
               onRecordObservation={handleRecordLoopchainObservation}
+              listenerFeedback={loopchainListenerFeedback}
+              onRecordListenerFeedback={handleRecordLoopchainFeedback}
               getDecodedSourceBufferForRender={getDecodedSourceBufferForRender}
               onBack={() => setViewMode("radio_playlists_grid")}
             />
@@ -6563,7 +6704,8 @@ export default function App() {
             onRestoreSuggestionsFromMechanical={handleRestoreSuggestionsFromMechanical}
             onClearSuggestedMoods={handleClearSuggestedMoods}
             onCreateLoops={(trackId) => { handleSelectLooperSourceTrack(trackId); setViewMode("sectional_looper"); }}
-            onImportStems={handleImportStems}
+            onExportStems={(trackId) => setActiveStemTrackId(trackId)}
+            onOpenStems={(trackId) => setActiveStemTrackId(trackId)}
             onAuditionTrack={handleAuditionTrack}
             onAuditionAndAdd={handleAuditionAndAdd}
             auditionTrackId={auditionTrackId}
@@ -6592,6 +6734,8 @@ export default function App() {
             cratePoolTracks={cratePoolTracks}
             isAcceptedMode={Boolean(activePlaylist?.acceptedPathOptionId) && (activePlaylist?.slots.filter(s => s.assignedTrackId).length ?? 0) > 0}
             onSendTrackToRadio={handleSendTrackToRadio}
+            libraryGridPreferences={libraryGridPreferences}
+            onUpdateLibraryGridPreferences={handleUpdateLibraryGridPreferences}
           />
           )}
           {viewMode === "playlist" && (

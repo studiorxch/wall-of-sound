@@ -14,6 +14,11 @@ export type LibraryTrackFilters = {
   hasUnknownMetadata?: boolean;
   audioLinked?: boolean;
   noCover?: boolean;
+  // 0721B_MUSIC_Catalog_Data_Grid_Comments — mirrors the hasMood tri-state
+  // pattern exactly. `notes` is the reused canonical private-comment field
+  // (see catalogComments.ts doc comment for why this build reuses `notes`
+  // rather than adding a new, confusingly-similar `comments` field).
+  hasComments?: "any" | "has" | "none";
 };
 
 export function isFiltersEmpty(f: LibraryTrackFilters): boolean {
@@ -28,7 +33,8 @@ export function isFiltersEmpty(f: LibraryTrackFilters): boolean {
     !f.hasMoodSuggestions &&
     (!f.archiveStatus || f.archiveStatus === "any") &&
     !f.hasUnknownMetadata &&
-    !f.noCover
+    !f.noCover &&
+    (!f.hasComments || f.hasComments === "any")
   );
 }
 
@@ -48,7 +54,7 @@ export function filterTracksByLibraryFilters(
     // Search — matches title, artist, album, grouping, genre, moodTags
     if (searchLower) {
       const hay = [
-        t.title, t.artist, t.albumTitle ?? "", t.grouping ?? "",
+        t.title, t.artist, t.albumTitle ?? "", t.grouping ?? "", t.notes ?? "",
         ...normalizeTrackGenreTokens(t), ...(t.moodTags ?? []),
       ].join(" ").toLowerCase();
       if (!hay.includes(searchLower)) return false;
@@ -99,6 +105,12 @@ export function filterTracksByLibraryFilters(
     if (filters.audioLinked === false && t.audioLinked) return false;
     // no cover filter
     if (filters.noCover && t.coverImagePath) return false;
+    // has comments filter (notes field — see catalogComments.ts)
+    if (filters.hasComments === "has") {
+      if (!t.notes || t.notes.trim().length === 0) return false;
+    } else if (filters.hasComments === "none") {
+      if (t.notes && t.notes.trim().length > 0) return false;
+    }
     return true;
   });
 }

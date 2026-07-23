@@ -101,9 +101,13 @@ body {
   min-width: 0;
   flex-shrink: 1;
 }
+/* Real StudioRich mark — fixed square box, aspect ratio preserved by
+   construction (equal width/height, source viewBox is itself square).
+   Never recolored: an <img> reference can't pick up currentColor. */
 .tb-logo {
-  font-size: 16px;
-  color: var(--text-mid);
+  width: 20px;
+  height: 20px;
+  display: block;
   flex-shrink: 0;
 }
 .tb-title {
@@ -255,99 +259,6 @@ body {
   flex: 1;
   min-height: 0;
   overflow: hidden;
-}
-
-/* ── Left Drawer ── */
-.left-drawer {
-  display: flex;
-  flex-direction: column;
-  width: 160px;
-  min-width: 160px;
-  flex-shrink: 0;
-  background: var(--surface);
-  border-right: 1px solid var(--border);
-  transition:
-    width 0.15s,
-    min-width 0.15s;
-  overflow: hidden;
-}
-.left-drawer.collapsed {
-  width: 36px;
-  min-width: 36px;
-}
-
-.drawer-toggle {
-  background: transparent;
-  border: none;
-  border-bottom: 1px solid var(--border);
-  color: var(--text-dim);
-  cursor: pointer;
-  padding: 6px;
-  font-size: 14px;
-  text-align: right;
-  width: 100%;
-  flex-shrink: 0;
-}
-.drawer-toggle:hover {
-  color: var(--text);
-  background: var(--surface2);
-}
-
-.drawer-nav {
-  list-style: none;
-  padding: 4px 0;
-}
-.drawer-nav li {
-  display: block;
-}
-.drawer-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  background: transparent;
-  border: none;
-  color: var(--text-dim);
-  cursor: pointer;
-  padding: 7px 10px;
-  font-size: 12px;
-  text-align: left;
-  white-space: nowrap;
-  transition:
-    background 0.1s,
-    color 0.1s;
-}
-.drawer-item:hover {
-  background: var(--surface2);
-  color: var(--text);
-}
-.drawer-item.active {
-  background: rgba(210,210,225,0.08);
-  color: var(--text);
-}
-.drawer-icon {
-  font-size: 13px;
-  flex-shrink: 0;
-  min-width: 16px;
-  text-align: center;
-}
-.drawer-label {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.drawer-count {
-  font-size: 10px;
-  background: var(--surface3);
-  color: var(--text-dim);
-  border-radius: 8px;
-  padding: 1px 5px;
-  min-width: 18px;
-  text-align: center;
-}
-.drawer-count.warn {
-  background: rgba(245, 200, 66, 0.15);
-  color: var(--yellow);
 }
 
 /* ── Workspace main ── */
@@ -1658,13 +1569,6 @@ tr:hover .remove-pl-btn:hover {
   color: var(--accent);
 }
 
-/* ── TopBar brand ── */
-.tb-brand {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--text);
-  letter-spacing: 0.5px;
-}
 .tb-mode-tag {
   font-size: 10px;
   color: var(--accent);
@@ -1678,7 +1582,16 @@ tr:hover .remove-pl-btn:hover {
   display: flex;
   border: 1px solid var(--border2);
   border-radius: 5px;
-  overflow: hidden;
+  /* was overflow: hidden — switched to visible so the Studio/Broadcast
+     dropdown menus (position: absolute) aren't clipped by the pill's
+     rounded-corner mask. Corner radius is restored on the end buttons below. */
+  overflow: visible;
+}
+.tb-mode-switch > :first-child .tb-mode-btn {
+  border-radius: 4px 0 0 4px;
+}
+.tb-mode-switch > :last-child .tb-mode-btn {
+  border-radius: 0 4px 4px 0;
 }
 .tb-mode-btn {
   background: transparent;
@@ -1696,6 +1609,77 @@ tr:hover .remove-pl-btn:hover {
   color: var(--text-mid);
 }
 .tb-mode-btn.active {
+  background: var(--accent-dim);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* ── Studio / Broadcast nav dropdowns (0722_MUSIC_Global_Navigation_Dropdowns) ── */
+.tb-nav-dropdown {
+  position: relative;
+  display: flex;
+}
+.tb-nav-trigger {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.tb-nav-chevron {
+  font-size: 8px;
+  color: var(--text-dim);
+  transition: transform 0.1s;
+}
+.tb-nav-trigger.active .tb-nav-chevron {
+  color: var(--accent);
+}
+.tb-nav-chevron.open {
+  transform: rotate(180deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .tb-nav-chevron {
+    transition: none;
+  }
+}
+.tb-nav-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 500;
+  min-width: 160px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  border-radius: 6px;
+  padding: 4px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+.tb-nav-menu-item {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  text-align: left;
+  text-decoration: none;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: var(--text-mid);
+  font-size: 11px;
+  padding: 6px 8px;
+  cursor: pointer;
+}
+.tb-nav-menu-item:hover {
+  background: var(--surface3);
+  color: var(--text);
+}
+.tb-nav-menu-item:focus-visible {
+  background: var(--surface3);
+  color: var(--text);
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.tb-nav-menu-item.active {
   background: var(--accent-dim);
   color: var(--accent);
   font-weight: 600;
@@ -1827,7 +1811,19 @@ tr:hover .remove-pl-btn:hover {
   flex-wrap: wrap;
 }
 
-/* ── File Manager (left panel, replaces LeftDrawer) ── */
+/* ── File Manager (left panel) ── */
+.icon {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+.icon svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
 .file-manager {
   display: flex;
   flex-direction: column;
@@ -1848,14 +1844,15 @@ tr:hover .remove-pl-btn:hover {
 }
 
 .fm-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
   background: transparent;
   border: none;
   border-bottom: 1px solid var(--border);
   color: var(--text-dim);
   cursor: pointer;
-  padding: 6px;
-  font-size: 14px;
-  text-align: right;
+  padding: 6px 8px;
   width: 100%;
   flex-shrink: 0;
 }
@@ -1864,17 +1861,42 @@ tr:hover .remove-pl-btn:hover {
   background: var(--surface2);
 }
 
+/* Inner navigation panel — the wrapper around the entire section list
+   (brand compartment + Libraries/AudioLab/Collections/Radio). Padding
+   goes here, once, never on individual rows: every row is 100% width of
+   this single inset container, so the hover/active highlight stays the
+   same width on every row instead of drifting per-row. */
 .fm-body {
   display: flex;
   flex-direction: column;
   overflow-y: auto;
   flex: 1;
-  padding: 4px 0;
+  padding: 15px;
+  box-sizing: border-box;
+}
+
+/* MUSIC — a plain product label directly beneath the StudioRich mark
+   (TopBar.tsx's .tb-logo, the mark's only appearance in the nav). Visually
+   subordinate to the logo, but deliberately distinct from
+   .fm-section-header: not uppercase-transformed, wider letter-spacing, a
+   bottom rule to read as a fixed masthead rather than a collapsible
+   section. Never a nav row — no icon, count, active/hover state, or
+   click handler. */
+.fm-brand {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-mid);
+  letter-spacing: 2px;
+  padding-bottom: 12px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--border);
 }
 
 .fm-section {
   margin-bottom: 4px;
 }
+/* LIBRARIES / AUDIOLAB / COLLECTIONS / RADIO — one shared label component.
+   Labels only: never clickable, never active. */
 .fm-section-header {
   font-size: 10px;
   font-weight: 700;
@@ -1882,60 +1904,14 @@ tr:hover .remove-pl-btn:hover {
   text-transform: uppercase;
   letter-spacing: 0.6px;
   padding: 10px 10px 4px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  line-height: 1.4;
 }
-/* 0718A_MUSIC_RADIO_Clean_Board_and_Explicit_Send_Flows §9 — "Collections"
-   becomes a clickable button (button-reset, since .fm-section-header's own
-   rules above don't clear a <button>'s native border/background/font). */
-.fm-section-header--clickable {
-  width: 100%;
-  background: none;
-  border: none;
-  font: inherit;
-  cursor: pointer;
-}
-.fm-section-header--clickable:hover { color: var(--text); }
-.fm-section-header--clickable.active { color: var(--accent); }
-/* RADIO sub-header, nested inside the Collections .fm-section — visually
-   smaller/indented than .fm-section-header but still a real clickable row. */
-.fm-subsection-header {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  width: 100%;
-  background: transparent;
-  border: none;
-  color: var(--text-dim);
-  cursor: pointer;
-  padding: 6px 10px 6px 18px;
-  font-size: 11px;
-  font-weight: 600;
-  text-align: left;
-  white-space: nowrap;
-}
-.fm-subsection-header:hover { background: var(--surface2); color: var(--text); }
-.fm-subsection-header.active { background: var(--accent-dim); color: var(--accent); }
-/* Playlists/Banks rows nested beneath the RADIO sub-header. */
-.fm-item--nested { padding-left: 30px; }
-.fm-section-action {
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: none;
-  letter-spacing: normal;
-  color: var(--accent, #5b8def);
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 2px 4px;
-}
-.fm-section-action:hover { color: var(--text-bright, #fff); }
 
-.fm-item {
+/* Every destination row shares this grid: icon | label | count. */
+.fm-row {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   width: 100%;
   background: transparent;
   border: none;
@@ -1949,111 +1925,45 @@ tr:hover .remove-pl-btn:hover {
     background 0.1s,
     color 0.1s;
 }
-.fm-item:hover:not(:disabled) {
+.fm-row:hover:not(:disabled) {
   background: var(--surface2);
   color: var(--text);
 }
-.fm-item.active {
+.fm-row.active {
   background: var(--accent-dim);
   color: var(--accent);
 }
-.fm-item:disabled {
+.fm-row:disabled {
   opacity: 0.35;
   cursor: default;
 }
-.fm-item-dim {
-  opacity: 0.45;
+/* RADIO's Playlists/Banks — one nesting increment under the RADIO label. */
+.fm-row--nested {
+  padding-left: 28px;
 }
-
-.fm-icon {
-  font-size: 12px;
+.fm-row-icon {
   flex-shrink: 0;
-  min-width: 14px;
-  text-align: center;
-}
-.fm-icon-plus {
-  font-size: 16px;
-  color: var(--accent);
-}
-.fm-label {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-size: 13px;
-}
-.fm-count {
-  font-size: 10px;
-  background: var(--surface3);
-  color: var(--text-dim);
-  border-radius: 8px;
-  padding: 1px 5px;
-  min-width: 18px;
-  text-align: center;
-  flex-shrink: 0;
-}
-.fm-count-warn {
-  background: rgba(245, 200, 66, 0.15);
-  color: var(--yellow);
-}
-
-/* Playlist rows */
-.fm-pl-item {
-  padding: 6px 8px;
-  align-items: center;
-  gap: 8px;
-}
-.fm-pl-meta {
+  width: 16px;
   display: flex;
-  flex-direction: column;
-  gap: 1px;
-  flex: 1;
-  min-width: 0;
+  align-items: center;
+  justify-content: center;
 }
-.fm-pl-title {
-  font-size: 13px;
-  color: var(--text-mid);
+.fm-row-label {
+  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: 12px;
 }
-.fm-pl-item.active .fm-pl-title {
-  color: var(--accent);
-}
-.fm-pl-count-badge {
+/* Fixed-width column so rows with and without a count stay aligned. */
+.fm-row-count {
   font-size: 10px;
-  background: var(--surface3);
   color: var(--text-dim);
-  border-radius: 8px;
-  padding: 1px 6px;
-  min-width: 20px;
-  text-align: center;
+  min-width: 18px;
+  text-align: right;
   flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
 }
-
-.fm-ctx-btn {
-  background: transparent;
-  border: none;
-  color: var(--text-dim);
-  cursor: pointer;
-  padding: 0 3px;
-  font-size: 14px;
-  opacity: 0;
-  transition: opacity 0.1s;
-  line-height: 1;
-  flex-shrink: 0;
-}
-.fm-pl-item:hover .fm-ctx-btn {
-  opacity: 0.6;
-}
-.fm-pl-item:hover .fm-ctx-btn:hover {
-  opacity: 1;
-}
-
-.fm-create-btn {
-  color: var(--accent);
-}
-.fm-create-btn:hover {
-  background: var(--accent-dim);
+.fm-row.active .fm-row-count {
   color: var(--accent);
 }
 
@@ -2069,48 +1979,6 @@ tr:hover .remove-pl-btn:hover {
 /* ── Drag/drop visuals ───────────────────────────────────────────────────── */
 tr.is-dragging {
   opacity: 0.4;
-}
-.fm-pl-item.is-drop-target {
-  border: 1px solid var(--accent) !important;
-  background: var(--accent-dim) !important;
-  color: var(--accent);
-}
-
-/* ── Playlist cover thumbnail — FileManager ──────────────────────────────── */
-.fm-pl-cover {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.03em;
-  color: rgba(255, 255, 255, 0.85);
-  flex-shrink: 0;
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 4px;
-  margin-top: 0;
-  overflow: hidden;
-}
-.fm-pl-cover-img {
-  width: 32px;
-  height: 32px;
-  object-fit: cover;
-  border-radius: 4px;
-  flex-shrink: 0;
-  display: block;
-}
-.fm-pl-date {
-  font-size: 9px;
-  color: var(--text-dim);
-  opacity: 0.7;
-}
-.fm-pl-item {
-  border-left: 2px solid transparent;
-  transition: border-left-color 0.15s;
-}
-.fm-pl-item.active {
-  border-left-color: var(--accent);
 }
 
 /* ── Playlist Header cover ───────────────────────────────────────────────── */
@@ -3623,24 +3491,6 @@ tr.row-empty-slot td {
   padding: 3px 6px; width: 100%;
 }
 
-/* 0624A — FileManager playlist role badges */
-.fm-pl-role-badge {
-  display: inline-block; font-size: 8px; font-weight: 700; letter-spacing: 0.07em;
-  text-transform: uppercase; border-radius: 3px; padding: 0 4px; margin-left: 5px;
-  vertical-align: middle; line-height: 14px;
-}
-.fm-pl-role-badge--template { background: rgba(100,160,255,0.2); color: #7ab3ff; }
-.fm-pl-role-badge--generated { background: rgba(160,100,255,0.2); color: #c09aff; }
-
-/* 0624A — source pool items in FileManager */
-.fm-pool-item { opacity: 0.85; }
-.fm-icon-pool { color: var(--accent); font-size: 13px; }
-
-/* 0624B — library groups compact row */
-.fm-library-groups { opacity: 0.7; cursor: default; pointer-events: none; }
-.fm-item-action { opacity: 0.6; font-style: italic; }
-.fm-item-action:hover { opacity: 1; font-style: normal; }
-
 /* 0624C — mood chips; 0701H — single-line, no-wrap */
 .mood-chips { display: inline-flex; flex-wrap: nowrap; overflow: hidden; gap: 3px; vertical-align: middle; max-width: 100%; }
 .mood-chip {
@@ -3706,6 +3556,7 @@ tr.row-empty-slot td {
 .track-row--playing .col-play-btn { border-color: var(--accent, #5b9cf6); color: var(--accent, #5b9cf6); }
 .play-btn--playing { border-color: var(--accent, #5b9cf6) !important; color: var(--accent, #5b9cf6) !important; }
 .row-selected { background: rgba(100,160,255,0.08) !important; }
+.row-focused td:first-child { box-shadow: inset 2px 0 0 var(--accent, #5b9cf6); }
 /* Source badges — quiet structural labels, no color dominance */
 .warn-badge.badge-teal,
 .warn-badge.badge-ext,
@@ -5124,62 +4975,6 @@ body.broadcast-clean-capture .app {
   font-size: 9px; color: rgba(122,170,255,0.6); margin-left: 2px;
 }
 
-/* 0701A — Source-separated library rows */
-.fm-source-row { gap: 6px; }
-.fm-source-badge {
-  font-size: 9px; font-weight: 700; letter-spacing: 0.04em;
-  border: 1px solid; border-radius: 3px;
-  padding: 1px 4px; flex-shrink: 0;
-}
-.fm-source-studiorich { background: rgba(255,255,255,0.045); color: rgba(240,240,248,0.72); border-color: rgba(255,255,255,0.10); }
-.fm-source-external   { background: rgba(255,255,255,0.045); color: rgba(240,240,248,0.72); border-color: rgba(255,255,255,0.10); }
-.fm-source-reference  { background: rgba(255,255,255,0.045); color: rgba(240,240,248,0.72); border-color: rgba(255,255,255,0.10); }
-.fm-source-unknown    { background: rgba(255,255,255,0.03);  color: rgba(240,240,248,0.45); border-color: rgba(255,255,255,0.07); }
-.fm-source-all .fm-icon { font-size: 10px; color: var(--text-dim); }
-.fm-count-empty { opacity: 0.35; }
-
-/* Source row menu (0701E) */
-.fm-source-wrap {
-  position: relative;
-  display: flex; align-items: stretch;
-}
-.fm-source-wrap .fm-item { flex: 1; min-width: 0; }
-.fm-source-menu-wrap { position: relative; flex-shrink: 0; }
-.fm-source-menu-btn {
-  display: flex; align-items: center; justify-content: center;
-  width: 22px; height: 100%;
-  background: none; border: none; border-left: 1px solid var(--border-subtle, rgba(255,255,255,0.06));
-  color: var(--text-dim); cursor: pointer; font-size: 13px;
-  opacity: 0; transition: opacity 0.1s;
-  padding: 0;
-}
-.fm-source-wrap:hover .fm-source-menu-btn,
-.fm-source-menu-btn.active { opacity: 1; }
-.fm-source-menu-btn:hover { background: rgba(255,255,255,0.06); color: var(--text); }
-.fm-source-dropdown {
-  position: fixed; z-index: 1000;
-  background: var(--surface-mid, #1e2028); border: 1px solid var(--border, rgba(255,255,255,0.1));
-  border-radius: 5px; box-shadow: 0 6px 20px rgba(0,0,0,0.5);
-  min-width: 240px; max-width: 340px; padding: 4px;
-  display: flex; flex-direction: column; gap: 1px;
-}
-.fm-source-action {
-  background: none; border: none; border-radius: 3px;
-  padding: 6px 10px; text-align: left; cursor: pointer;
-  font-size: 11px; color: var(--text); width: 100%;
-  white-space: normal; word-break: break-word;
-}
-.fm-source-action:hover:not(:disabled) { background: rgba(255,255,255,0.07); }
-.fm-source-action:disabled { opacity: 0.4; cursor: not-allowed; }
-.fm-source-sep { height: 1px; background: rgba(255,255,255,0.06); margin: 3px 6px; }
-.fm-source-action-highlight {
-  color: var(--accent, #5b9cf6) !important;
-  font-weight: 600;
-}
-.fm-create-from-catalog .fm-icon { color: var(--accent, #5b9cf6); }
-.fm-create-from-catalog { opacity: 0.8; }
-.fm-create-from-catalog:hover { opacity: 1; }
-
 /* Audition button states */
 .tb-btn.tb-btn-playing { color: var(--accent, #5b9cf6); background: rgba(91,156,246,0.12); }
 .tb-btn.tb-btn-dim { opacity: 0.35; }
@@ -6125,24 +5920,6 @@ body.broadcast-clean-capture .app {
 .sbv-status-ok { color: var(--green, #4caf7d); font-size: 11px; }
 .sbv-status-miss { color: var(--text-dim, #666); font-size: 10px; }
 
-/* ── Collections left rail nav items ── */
-.fm-nav-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 6px 10px;
-  border: none;
-  background: none;
-  cursor: pointer;
-  color: var(--text-mid, #aaa);
-  font-size: 12px;
-  text-align: left;
-}
-.fm-nav-item:hover { background: var(--surface2, #1a1a1a); color: var(--text, #e0e0e0); }
-.fm-nav-item.active { background: var(--surface2, #1a1a1a); color: var(--text, #e0e0e0); font-weight: 600; }
-.fm-nav-icon { font-size: 11px; width: 16px; text-align: center; flex-shrink: 0; color: var(--text-dim, #888); }
-
 /* ── Collection Grid Page root ── */
 /* Library page header */
 .lib-page-header {
@@ -6180,6 +5957,30 @@ body.broadcast-clean-capture .app {
   cursor: not-allowed;
 }
 .lib-update-btn:not(:disabled):hover { opacity: 0.85; }
+
+/* Sounds content-type toggle (Tracks/Loops) — 0722_MUSIC_Loops_Library_And_
+   Looper_Naming. Same neutral active treatment as the sidebar's own rows
+   (accent-dim background, accent foreground), never a second accent-filled
+   CTA competing with Import Audio. */
+.lib-content-toggle {
+  display: flex;
+  gap: 2px;
+  background: var(--surface3);
+  border-radius: 4px;
+  padding: 2px;
+}
+.lib-content-toggle-btn {
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  background: none;
+  border: none;
+  border-radius: 3px;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.lib-content-toggle-btn:hover { color: var(--text); }
+.lib-content-toggle-btn.active { background: var(--accent-dim); color: var(--accent); }
 
 .pg-root {
   display: flex;
@@ -9980,9 +9781,6 @@ span.ph-crate-chip-label:hover { color: var(--text-mid, #aaa); }
   padding: 2px 0;
 }
 
-/* ── Artist Library sidebar badge ───────────────────────────────────────── */
-.fm-source-artists { background: rgba(80,180,255,0.15); color: #50b4ff; border-color: rgba(80,180,255,0.3); }
-
 /* ── Artist Library Panel ───────────────────────────────────────────────── */
 .artist-library-panel {
   display: flex;
@@ -11169,6 +10967,21 @@ span.ph-crate-chip-label:hover { color: var(--text-mid, #aaa); }
 .ptp-row-detail { padding: 6px 10px 10px; font-size: 11px; color: var(--text-dim); border-top: 1px solid rgba(255,255,255,0.06); display: flex; flex-direction: column; gap: 2px; }
 .ptp-warnings { color: var(--yellow, #f5c842); }
 
+/* ── DJ Transition Engine — shadow-mode checkpoint (0722D) ────────────────── */
+.ptp-dj-section { margin-top: 18px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.08); }
+.ptp-dj-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ptp-dj-title { font-size: 12px; font-weight: 600; color: var(--text); text-transform: uppercase; letter-spacing: 0.04em; }
+.ptp-dj-mode-toggle { display: flex; gap: 2px; background: rgba(255,255,255,0.05); border-radius: 6px; padding: 2px; }
+.ptp-dj-mode-btn { font-size: 11px; padding: 3px 10px; border-radius: 4px; border: none; background: transparent; color: var(--text-dim); cursor: pointer; }
+.ptp-dj-mode-btn--active { background: var(--accent, #6a5cff); color: #fff; }
+.ptp-dj-hint { margin-top: 8px; font-size: 11px; color: var(--text-dim); }
+.ptp-dj-list { margin-top: 10px; }
+.ptp-dj-row .ptp-row-main { flex-wrap: wrap; }
+.ptp-dj-detail > div { margin-bottom: 2px; }
+.ptp-dj-approve-btn { margin-top: 8px; }
+.ptp-dj-approved-note { margin-top: 6px; color: var(--green, #4caf7d); }
+.ptp-dj-live { margin-top: 8px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.06); color: var(--text-mid); }
+
 /* ── Sectional Looper and Loop Library ───────────────────────────────────── */
 .looper-root { padding: 16px 20px; overflow-y: auto; height: 100%; }
 .looper-title { margin: 0 0 4px; font-size: 18px; }
@@ -11746,4 +11559,264 @@ button.radio-stat-tile { font: inherit; text-align: left; cursor: default; }
 .radio-loopchain-observations { font-size: 11px; color: var(--text-dim); flex-shrink: 0; }
 .radio-loopchain-observations summary { cursor: pointer; color: var(--text-mid); }
 .radio-loopchain-observations ul { margin: 6px 0 0; padding-left: 18px; max-height: 160px; overflow-y: auto; }
+
+/* ── 0722A_RADIOOS_Loopchain_Player_Web_Demo — followable player ── */
+
+.radio-loopchain-warning-banner { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 11px; color: #e0b04a; background: rgba(224,176,74,0.10); border: 1px solid rgba(224,176,74,0.25); border-radius: 6px; padding: 8px 10px; }
+.radio-loopchain-warning-banner button { margin-left: auto; background: var(--surface2); border: 1px solid var(--border, #333); border-radius: 4px; padding: 3px 8px; color: var(--text-mid); font-size: 10px; cursor: pointer; }
+
+.radio-loopchain-now-playing { display: flex; flex-direction: column; gap: 3px; padding: 8px 10px; background: var(--surface1); border-radius: 8px; flex-shrink: 0; }
+.radio-loopchain-now-playing-idle { font-size: 11px; color: var(--text-dim); }
+.radio-loopchain-now-playing-main { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.radio-loopchain-now-playing-title { font-size: 14px; font-weight: 700; color: var(--text); }
+.radio-loopchain-now-playing-artist { font-size: 11px; color: var(--text-mid); }
+.radio-loopchain-now-playing-role { font-size: 11px; color: var(--accent, #5b9cf6); }
+.radio-loopchain-now-playing-repeat { font-size: 10px; color: var(--text-dim); }
+.radio-loopchain-now-playing-time { font-size: 11px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.radio-loopchain-now-playing-next { font-size: 11px; color: var(--text-mid); }
+
+/* Whole-chain overview waveform — Canvas-only, cached; the playhead is a
+   separate DOM/CSS overlay moved via rAF, never redrawn with the canvas. */
+.loopchain-overview-waveform { position: relative; width: 100%; height: 72px; border-radius: 8px; overflow: hidden; background: var(--surface1); cursor: pointer; flex-shrink: 0; touch-action: none; }
+.loopchain-overview-canvas { display: block; width: 100%; height: 100%; }
+.loopchain-overview-playhead { position: absolute; top: 0; left: 0; width: 2px; height: 100%; background: #fff; box-shadow: 0 0 4px rgba(255,255,255,0.8); pointer-events: none; will-change: transform; }
+.loopchain-overview-drag-label { position: absolute; top: -22px; transform: translateX(-50%); background: var(--surface2); border: 1px solid var(--border, #333); border-radius: 4px; padding: 2px 6px; font-size: 10px; color: var(--text); white-space: nowrap; pointer-events: none; }
+
+/* Feedback bar — Save / Less like this / Comment; replaces star ratings
+   inside this player specifically. */
+.radio-loopchain-feedback-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 11px; flex-shrink: 0; }
+.radio-loopchain-feedback-bar > button { background: var(--surface2); border: 1px solid var(--border, #333); border-radius: 4px; padding: 4px 9px; color: var(--text-mid); font-size: 11px; cursor: pointer; }
+.radio-loopchain-feedback-bar > button.active { color: #f6716b; border-color: #f6716b; }
+.radio-loopchain-feedback-less-like { display: flex; align-items: center; gap: 5px; color: var(--text-dim); }
+.radio-loopchain-feedback-less-like button { background: var(--surface2); border: 1px solid var(--border, #333); border-radius: 4px; padding: 3px 7px; color: var(--text-mid); font-size: 10px; cursor: pointer; }
+.radio-loopchain-feedback-comment { display: flex; align-items: center; gap: 5px; margin-left: auto; }
+.radio-loopchain-feedback-comment input { background: var(--surface2); border: 1px solid var(--border, #333); border-radius: 4px; padding: 4px 8px; color: var(--text); font-size: 11px; width: 180px; }
+.radio-loopchain-feedback-comment button { background: var(--surface2); border: 1px solid var(--border, #333); border-radius: 4px; padding: 4px 8px; color: var(--text-mid); font-size: 10px; cursor: pointer; }
+.radio-loopchain-feedback-notice { color: #40d9b0; font-size: 10px; }
+
+/* Transition detail — one centralized panel for the selected junction. */
+.loopchain-transition-detail { display: flex; flex-direction: column; gap: 6px; padding: 10px; background: var(--surface1); border-radius: 8px; flex-shrink: 0; }
+.loopchain-transition-detail-header { display: flex; align-items: center; gap: 10px; font-size: 11px; }
+.loopchain-transition-source { color: var(--text-mid); }
+.loopchain-transition-source--in { margin-left: auto; }
+.loopchain-transition-alignment { font-size: 10px; padding: 2px 7px; border-radius: 3px; }
+.loopchain-transition-alignment--bar_aligned { color: #40d9b0; background: rgba(64,217,176,0.12); }
+.loopchain-transition-alignment--time_aligned { color: var(--text-dim); background: rgba(255,255,255,0.06); }
+.loopchain-transition-alignment--manual_override { color: #e0b04a; background: rgba(224,176,74,0.10); }
+.loopchain-transition-canvas-wrap { width: 100%; height: 96px; border-radius: 6px; overflow: hidden; }
+.loopchain-transition-canvas { display: block; width: 100%; height: 100%; }
+.loopchain-transition-reason { font-size: 10px; color: var(--text-dim); }
+
+/* Per-block repeat controls — Low/Medium/High, advanced exact-count
+   disclosure, and the fixed non-editable 1x shown for intro/outro. */
+.radio-loopchain-block-repeat--fixed { font-size: 11px; color: var(--text-dim); font-style: italic; }
+.radio-loopchain-block-repeat button { background: var(--surface2); border: 1px solid var(--border, #333); border-radius: 4px; padding: 3px 8px; color: var(--text-mid); font-size: 10px; cursor: pointer; }
+.radio-loopchain-block-repeat button.active { color: var(--text); border-color: var(--accent, #5b8def); }
+.radio-loopchain-block-repeat-exact { font-size: 10px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.radio-loopchain-block-repeat-advanced { display: flex; align-items: center; gap: 6px; }
+.radio-loopchain-junction-duration { font-variant-numeric: tabular-nums; }
+.radio-loopchain-junction select { background: var(--surface2); border: 1px solid var(--border, #333); border-radius: 4px; padding: 3px 6px; color: var(--text); font-size: 10px; }
+
 .collections-overview h2 { margin: 0 0 14px; }
+
+/* ── 0721B_MUSIC_Catalog_Data_Grid_Comments — Catalog data grid ── */
+.cat-page-header { padding: 2px 2px 10px; }
+.cat-page-header-top { display: flex; align-items: center; gap: 8px; }
+.cat-section-label { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; color: var(--text-dim); }
+.cat-source-badge { font-size: 9px; font-weight: 700; letter-spacing: 0.04em; padding: 1px 6px; border-radius: 3px; }
+.cat-source-badge--studiorich { color: var(--source-cat); background: rgba(64, 217, 176, 0.12); border: 1px solid rgba(64, 217, 176, 0.3); }
+.cat-page-title { font-size: 18px; font-weight: 600; color: var(--text); margin-top: 2px; }
+.cat-page-status { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+.cat-status-sel { color: var(--accent); }
+
+.cat-filter-section { display: flex; flex-direction: column; gap: 6px; padding: 0 2px 10px; }
+.cat-filter-section-label { display: flex; align-items: center; font-size: 10px; font-weight: 600; letter-spacing: 0.06em; color: var(--text-dim); }
+.cat-filter-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.cat-filter-search, .cat-filter-sel {
+  background: var(--surface2); border: 1px solid var(--border2); border-radius: 4px;
+  padding: 4px 8px; color: var(--text); font-size: 12px;
+}
+.cat-filter-search { flex: 1; min-width: 140px; }
+.cat-clear-btn {
+  background: none; border: none; color: var(--text-dim); font-size: 11px; cursor: pointer; padding: 0 4px;
+}
+.cat-clear-btn:hover { color: var(--text); }
+
+.cat-tracks-label { font-size: 10px; font-weight: 600; letter-spacing: 0.06em; color: var(--text-dim); padding: 4px 2px; }
+.cat-grid-scroll { flex: 1; overflow: auto; outline: none; }
+.cat-data-grid { table-layout: fixed; }
+.cat-col-select { width: 28px; }
+.cat-col-index { width: 32px; }
+.cat-col-actions { width: 128px; }
+
+.cat-col-frozen { position: sticky; z-index: 2; background: var(--surface); }
+.cat-col-frozen--select { left: 0; }
+.cat-col-frozen--title { left: 28px; }
+td.cat-col-frozen { z-index: 1; }
+.mtw-table tr:hover td.cat-col-frozen { background: var(--surface2); }
+
+.cat-col-header-label { display: inline-flex; align-items: center; gap: 4px; cursor: default; }
+.cat-col-sortable { cursor: pointer; }
+.cat-col-sortable:hover { color: var(--text); }
+.cat-sort-priority {
+  font-size: 9px; color: var(--text-dim); background: var(--surface3); border-radius: 2px; padding: 0 3px;
+}
+.cat-sort-dir { font-size: 9px; color: var(--accent); }
+.cat-col-resize-handle {
+  position: absolute; top: 0; right: -3px; bottom: 0; width: 6px; cursor: col-resize; z-index: 3;
+}
+.cat-col-resize-handle:hover { background: rgba(255,255,255,0.08); }
+
+.cat-keyboard-hint { font-size: 10px; color: var(--text-dim); padding: 6px 2px 0; }
+
+/* ── Consolidated action bar (§9) ── */
+.cat-action-bar {
+  position: sticky; bottom: 0; z-index: 4;
+  background: var(--surface2); border: 1px solid var(--border2); border-radius: 6px;
+  padding: 8px 10px; margin-top: 8px; display: flex; flex-direction: column; gap: 6px;
+}
+.cat-action-bar-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.cat-action-bar-row--more { border-top: 1px solid var(--border); padding-top: 6px; }
+.cat-action-bar-notice { font-size: 11px; color: var(--text-mid); }
+.cat-group-input-row { display: flex; align-items: center; gap: 6px; }
+
+/* ── Columns panel ── */
+.cat-columns-panel { width: 380px; padding: 14px 16px; }
+.cat-columns-panel h3 { margin: 0 0 10px; font-size: 14px; color: var(--text); }
+.cat-columns-panel-actions { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+.cat-columns-density { display: flex; gap: 10px; font-size: 11px; color: var(--text-mid); margin-left: auto; }
+.cat-columns-density label { display: flex; align-items: center; gap: 4px; }
+.cat-columns-list { list-style: none; margin: 0; padding: 0; max-height: 320px; overflow-y: auto; }
+.cat-columns-list-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 5px 2px; border-bottom: 1px solid var(--border);
+  font-size: 12px; color: var(--text);
+}
+.cat-columns-list-row label { display: flex; align-items: center; gap: 6px; }
+.cat-columns-reorder { display: flex; gap: 2px; }
+
+/* ── Comments cell (§8.2) ── */
+.cat-comments-preview {
+  position: relative; cursor: pointer; color: var(--text-mid); font-size: 12px;
+  max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.cat-comments-preview:hover { color: var(--text); }
+.cat-comments-tooltip {
+  position: absolute; top: 100%; left: 0; z-index: 10; margin-top: 4px;
+  background: var(--surface3); border: 1px solid var(--border2); border-radius: 4px;
+  padding: 8px 10px; font-size: 12px; color: var(--text); white-space: pre-wrap;
+  max-width: 320px; box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+}
+.cat-comments-editor { display: flex; flex-direction: column; gap: 4px; min-width: 220px; }
+.cat-comments-textarea {
+  background: var(--surface2); border: 1px solid var(--border2); border-radius: 4px;
+  color: var(--text); font-size: 12px; padding: 6px 8px; min-height: 60px; resize: vertical;
+  font-family: inherit;
+}
+.cat-comments-editor-actions { display: flex; gap: 6px; justify-content: flex-end; }
+
+/* ── Batch comments dialog ── */
+.cat-batch-comments-dialog { width: 480px; padding: 16px 18px; }
+.cat-batch-comments-dialog h3 { margin: 0 0 12px; font-size: 14px; color: var(--text); }
+.cat-batch-comments-modes { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; font-size: 12px; color: var(--text); }
+.cat-batch-comments-modes label { display: flex; align-items: center; gap: 6px; }
+.cat-batch-comments-textarea {
+  width: 100%; box-sizing: border-box; background: var(--surface2); border: 1px solid var(--border2);
+  border-radius: 4px; color: var(--text); font-size: 12px; padding: 8px; min-height: 80px; resize: vertical;
+  font-family: inherit;
+}
+.cat-batch-comments-preview { font-size: 11px; color: var(--text-dim); margin-top: 10px; }
+.cat-batch-comments-sample { margin-top: 6px; display: flex; flex-direction: column; gap: 4px; }
+.cat-batch-comments-sample .dim { color: var(--text-dim); }
+.cat-batch-comments-confirm {
+  margin-top: 10px; padding: 8px 10px; border-radius: 4px; font-size: 12px;
+  background: rgba(255, 69, 69, 0.1); border: 1px solid rgba(255, 69, 69, 0.3); color: var(--text);
+}
+.cat-batch-comments-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+
+/* ── Remove confirm dialog ── */
+.cat-remove-confirm-dialog { width: 420px; padding: 16px 18px; }
+.cat-remove-confirm-dialog h3 { margin: 0 0 10px; font-size: 14px; color: var(--text); }
+.cat-remove-confirm-dialog p { font-size: 12px; color: var(--text-mid); line-height: 1.5; margin: 0; }
+
+/* ── 0722C_MUSIC_Production_Stem_Export ── */
+
+.cat-select-all-btn {
+  background: none; border: 1px solid var(--border2); border-radius: 3px; color: var(--text-mid);
+  width: 18px; height: 18px; font-size: 11px; line-height: 1; cursor: pointer; padding: 0;
+}
+.cat-select-all-btn[aria-pressed="true"] { color: var(--accent, #5b9cf6); border-color: var(--accent, #5b9cf6); }
+.cat-filter-checkbox { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--text-mid); white-space: nowrap; }
+
+/* Library row "S" badge — only "current" is prominent/solid; every other
+   state reads as visibly secondary so it never implies playable current
+   stems (color is never the only signal — label text differs per state too). */
+.library-stem-badge-empty { display: inline-block; width: 20px; height: 20px; }
+.library-stem-badge {
+  width: 20px; height: 20px; border-radius: 4px; font-size: 11px; font-weight: 600;
+  border: 1px solid var(--border2); background: var(--surface2); color: var(--text-dim); cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; padding: 0;
+}
+.library-stem-badge--current { background: var(--accent, #5b9cf6); border-color: var(--accent, #5b9cf6); color: #fff; font-weight: 700; }
+.library-stem-badge--processing { background: var(--surface3); border-color: var(--accent, #5b9cf6); color: var(--accent, #5b9cf6); animation: stem-badge-pulse 1.4s ease-in-out infinite; }
+.library-stem-badge--warning { background: rgba(246, 184, 91, 0.15); border-color: #f6b85b; color: #f6b85b; }
+.library-stem-badge--broken { background: rgba(255, 90, 90, 0.12); border-color: #ff5a5a; color: #ff5a5a; }
+.library-stem-badge--muted { background: var(--surface2); border-color: var(--border2); color: var(--text-dim); opacity: 0.7; }
+@keyframes stem-badge-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+/* Overlay panels (StemSublayer / LegacyStemMigrationPanel / salvage dialog) */
+.stem-sublayer-overlay {
+  position: fixed; top: 0; right: 0; bottom: 0; width: 420px; max-width: 100vw;
+  background: var(--surface1, #16181d); border-left: 1px solid var(--border2);
+  box-shadow: -8px 0 24px rgba(0,0,0,0.4); z-index: 400; overflow-y: auto; padding: 16px;
+}
+
+.stem-sublayer { display: flex; flex-direction: column; gap: 12px; }
+.stem-sublayer-header { display: flex; align-items: center; justify-content: space-between; }
+.stem-sublayer-title { font-size: 14px; font-weight: 600; color: var(--text); }
+.stem-sublayer-error { font-size: 12px; color: #ff5a5a; background: rgba(255,90,90,0.1); border: 1px solid rgba(255,90,90,0.3); border-radius: 4px; padding: 6px 8px; }
+.stem-sublayer-status { font-size: 12px; color: var(--text-mid); display: flex; flex-direction: column; gap: 8px; }
+.stem-sublayer-job { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: var(--text-mid); }
+
+.stem-sublayer-transport { display: flex; align-items: center; gap: 10px; }
+.stem-sublayer-progress-track { flex: 1; height: 4px; background: var(--surface2); border-radius: 2px; overflow: hidden; cursor: pointer; }
+.stem-sublayer-progress-fill { width: 100%; height: 100%; background: var(--accent, #5b9cf6); transform: scaleX(0); transform-origin: left; }
+.stem-sublayer-duration { font-size: 11px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+
+.stem-role-list { display: flex; flex-direction: column; gap: 6px; }
+.stem-role-row { display: grid; grid-template-columns: 60px 1fr auto auto; align-items: center; gap: 8px; font-size: 12px; }
+.stem-role-label { color: var(--text); font-weight: 600; }
+.stem-role-meta { color: var(--text-dim); font-size: 11px; }
+.stem-role-btn { background: var(--surface2); border: 1px solid var(--border2); border-radius: 3px; color: var(--text-mid); font-size: 11px; padding: 3px 8px; cursor: pointer; }
+.stem-role-btn--active.stem-role-btn--mute { background: rgba(255,90,90,0.15); border-color: #ff5a5a; color: #ff5a5a; }
+.stem-role-btn--active.stem-role-btn--solo { background: rgba(246,184,91,0.15); border-color: #f6b85b; color: #f6b85b; }
+
+.stem-sublayer-actions { display: flex; flex-direction: column; gap: 8px; padding-top: 8px; border-top: 1px solid var(--border2); }
+.stem-sublayer-downstream { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px; }
+.stem-sublayer-downstream-label { color: var(--text-dim); }
+
+.stem-sublayer-history { display: flex; flex-direction: column; gap: 6px; padding-top: 8px; border-top: 1px solid var(--border2); }
+.stem-sublayer-history-title { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.04em; }
+.stem-sublayer-history-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 11px; color: var(--text-mid); }
+
+/* Salvage dialog */
+.stem-salvage-dialog { display: flex; flex-direction: column; gap: 12px; }
+.stem-salvage-dialog-header { display: flex; align-items: center; justify-content: space-between; font-size: 14px; font-weight: 600; color: var(--text); }
+.stem-salvage-dialog-pickers { display: flex; gap: 8px; }
+.stem-salvage-dialog-roles { display: flex; flex-direction: column; gap: 6px; }
+.stem-salvage-role-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; }
+.stem-salvage-dialog-error { font-size: 12px; color: #ff5a5a; }
+.stem-salvage-dialog-confirm { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-mid); }
+
+/* Legacy Stem Migration panel */
+.legacy-stem-migration-panel { display: flex; flex-direction: column; gap: 12px; }
+.legacy-stem-migration-header { display: flex; align-items: center; justify-content: space-between; font-size: 14px; font-weight: 600; color: var(--text); }
+.legacy-stem-migration-empty { font-size: 12px; color: var(--text-dim); }
+.legacy-stem-migration-row { display: flex; align-items: center; gap: 8px; font-size: 12px; flex-wrap: wrap; padding: 6px 0; border-bottom: 1px solid var(--border2); }
+.legacy-stem-migration-title { color: var(--text); }
+.legacy-stem-migration-roles { color: var(--text-dim); font-size: 11px; }
+.legacy-stem-migration-error { color: #ff5a5a; font-size: 11px; }
+.legacy-stem-badge {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.04em; color: #f6b85b;
+  background: rgba(246,184,91,0.15); border: 1px solid #f6b85b; border-radius: 3px; padding: 2px 5px;
+}

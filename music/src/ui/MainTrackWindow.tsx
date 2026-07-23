@@ -17,6 +17,9 @@ import { buildTrackReadiness, ESTIMATED_DURATION_FALLBACK } from "../logic/metad
 import { useState, useEffect, useRef, Fragment } from "react";
 import { SourceBadge } from "./SourceBadge";
 import { MoodChipsRow } from "./MoodChip";
+import type { LibraryGridPreferences, LibraryGridPreferencesBySource, LibrarySourceKey } from "../data/libraryGridTypes";
+import { LibraryDataGrid } from "./library/LibraryDataGrid";
+import { defaultLibraryGridPreferences } from "../logic/library/libraryColumns";
 
 type Props = {
   mode: ViewMode;
@@ -70,7 +73,8 @@ type Props = {
   onRestoreSuggestionsFromMechanical?: (trackId: string) => void;
   onClearSuggestedMoods?: (trackId: string) => void;
   onCreateLoops?: (trackId: string) => void;
-  onImportStems?: (trackId: string) => void;
+  onExportStems?: (trackId: string) => void;
+  onOpenStems?: (trackId: string) => void;
   onAuditionTrack?: (trackId: string) => void;
   onAuditionAndAdd?: (trackId: string) => void;
   auditionTrackId?: string | null;
@@ -101,6 +105,12 @@ type Props = {
   // 0718A_MUSIC_RADIO_Clean_Board_and_Explicit_Send_Flows §5/§13 — Catalog
   // and Sounds only (never External); scoped per-row inside LibraryRows.
   onSendTrackToRadio?: (trackId: string) => void;
+  // 0721B_MUSIC_Catalog_Data_Grid_Comments (expanded to a shared Library
+  // grid) — one map, independently persisted per library; LibraryRows
+  // resolves its own source's slice and re-wraps the setter with that
+  // source key before handing it to LibraryDataGrid.
+  libraryGridPreferences?: LibraryGridPreferencesBySource;
+  onUpdateLibraryGridPreferences?: (sourceKey: LibrarySourceKey, next: LibraryGridPreferences) => void;
 };
 
 function fmtDur(s: number | undefined | null) {
@@ -725,7 +735,12 @@ function PlaylistRows({
 // ── Library rows ──────────────────────────────────────────────────────────────
 
 
-function BulkEditBar({
+// Raw multi-field bulk editor (Title/Artist/Genre/Mood/Grouping/Rating/
+// Owner) for the legacy aggregate "All Tracks" table only — Catalog,
+// External, and Sounds moved to the shared LibraryDataGrid/LibraryActionBar,
+// which replaced this with Mood Suggestions/Archive-status/Comments/Group
+// actions (the same trade-off already accepted for Catalog in 0721B).
+export function BulkEditBar({
   selectedIds, onApply, onClear,
 }: {
   selectedIds: Set<string>;
@@ -892,64 +907,6 @@ function SuggestedChips({ tags }: { tags: string[] }) {
   return <MoodChipsRow tags={tags} suggested={true} />;
 }
 
-function BankAddButton({
-  trackId, banks, loadedBankId, onAdd, onCreateNew,
-}: {
-  trackId: string;
-  banks: PlaylistRecord[];
-  loadedBankId: string | null | undefined;
-  onAdd: (bankId: string, trackIds: string[]) => void;
-  onCreateNew: (title: string, trackIds: string[]) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [newName, setNewName] = useState("");
-  const [showNew, setShowNew] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  useClickOutside(ref, () => { setOpen(false); setShowNew(false); setNewName(""); });
-
-  function submitNew() {
-    const title = newName.trim() || "New Bank";
-    onCreateNew(title, [trackId]);
-    setOpen(false); setShowNew(false); setNewName("");
-  }
-
-  return (
-    <div ref={ref} style={{ position: "relative", display: "inline-block" }}>
-      <button className="tb-btn sm" title="Add to Sampler Bank" onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}>+</button>
-      {open && (
-        <div className="ctx-menu" style={{ top: "100%", left: 0, zIndex: 200, minWidth: 160 }} onClick={(e) => e.stopPropagation()}>
-          {banks.length > 0 ? (
-            banks.map((b) => (
-              <button key={b.playlistId} className="ctx-item" onClick={() => { onAdd(b.playlistId, [trackId]); setOpen(false); }}>
-                {b.playlistId === loadedBankId ? "● " : ""}{b.title}
-              </button>
-            ))
-          ) : (
-            <div className="ctx-item" style={{ opacity: 0.5, cursor: "default" }}>No banks yet</div>
-          )}
-          <div className="ctx-sep" />
-          {showNew ? (
-            <span className="cat-group-input-row" style={{ padding: "4px 8px" }}>
-              <input
-                className="cat-filter-search"
-                style={{ width: 100, fontSize: 11 }}
-                placeholder="Bank name…"
-                value={newName}
-                autoFocus
-                onChange={(e) => setNewName(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") submitNew(); if (e.key === "Escape") { setShowNew(false); setNewName(""); } }}
-              />
-              <button className="tb-btn sm" onClick={submitNew}>+</button>
-            </span>
-          ) : (
-            <button className="ctx-item" onClick={() => setShowNew(true)}>New Bank…</button>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
 function LibraryRows({
   tracks, excludedTrackIds, lockedTrackIds, playbackErrors, trackPlaybackIssues, exportReport, selectedSlotIndex,
   onExclude, onRestore, onRemove, onRateTrack,
@@ -963,6 +920,8 @@ function LibraryRows({
   samplerBanks, loadedSamplerBankId, onAddTracksToSamplerBank, onCreateSamplerBankFromTracks, onDeleteFromReference,
   musicPlaylists, onBulkAddTracksToPlaylist, onBulkCreatePlaylistFromTracks,
   onInspect, onSendTrackToRadio,
+  libraryGridPreferences, onUpdateLibraryGridPreferences,
+  onOpenStems,
 }: {
   tracks: Track[];
   excludedTrackIds: Set<string>;
@@ -994,7 +953,8 @@ function LibraryRows({
   onRestoreSuggestionsFromMechanical?: (trackId: string) => void;
   onClearSuggestedMoods?: (trackId: string) => void;
   onCreateLoops?: (trackId: string) => void;
-  onImportStems?: (trackId: string) => void;
+  onExportStems?: (trackId: string) => void;
+  onOpenStems?: (trackId: string) => void;
   onAuditionTrack?: (trackId: string) => void;
   onAuditionAndAdd?: (trackId: string) => void;
   auditionTrackId?: string | null;
@@ -1019,13 +979,12 @@ function LibraryRows({
   // 0718A_MUSIC_RADIO_Clean_Board_and_Explicit_Send_Flows §5/§13 — Catalog
   // and Sounds only (never External); scoped per-row below.
   onSendTrackToRadio?: (trackId: string) => void;
+  libraryGridPreferences?: LibraryGridPreferencesBySource;
+  onUpdateLibraryGridPreferences?: (sourceKey: LibrarySourceKey, next: LibraryGridPreferences) => void;
 }) {
   const [ctxMenu, setCtxMenu] = useState<LibraryCtxMenu | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectAnchorId, setSelectAnchorId] = useState<string | null>(null);
-  const [refBankCreateName, setRefBankCreateName] = useState("");
-  const [refShowBankCreate, setRefShowBankCreate] = useState(false);
-  const [refDeleteConfirm, setRefDeleteConfirm] = useState(false);
   const [catalogFilters, setCatalogFilters] = useState<LibraryTrackFilters>({});
   const [groupNameInput, setGroupNameInput] = useState("");
   const [showGroupInput, setShowGroupInput] = useState(false);
@@ -1052,6 +1011,69 @@ function LibraryRows({
   const sourceScopedTracks = initialSourceOwnerFilter
     ? tracks.filter((t) => t.sourceOwner === initialSourceOwnerFilter)
     : tracks;
+
+  // 0721B_MUSIC_Catalog_Data_Grid_Comments, expanded — the shared Library
+  // grid now serves all three real per-library pages (Catalog, External,
+  // Sounds) identically; only the aggregate "All Tracks"/unknown view keeps
+  // this file's legacy table below (see libraryGridTypes.ts's LibrarySourceKey
+  // doc comment — that view is explicitly out of scope for this grid).
+  if (initialSourceOwnerFilter === "studiorich" || initialSourceOwnerFilter === "external" || initialSourceOwnerFilter === "reference") {
+    const sourceKey: LibrarySourceKey = initialSourceOwnerFilter;
+    const isReference = sourceKey === "reference";
+    const libraryLabel = sourceKey === "studiorich" ? "Catalog" : sourceKey === "external" ? "External" : "Sounds";
+    const unitLabel = isReference ? "clips" : "tracks";
+    return (
+      <LibraryDataGrid
+        sourceKey={sourceKey}
+        libraryLabel={libraryLabel}
+        unitLabel={unitLabel}
+        tracks={sourceScopedTracks}
+        excludedTrackIds={excludedTrackIds}
+        lockedTrackIds={lockedTrackIds}
+        playbackErrors={playbackErrors}
+        trackPlaybackIssues={trackPlaybackIssues}
+        exportReport={exportReport}
+        onExclude={onExclude}
+        onRestore={onRestore}
+        // Sounds' removal must also rewrite its on-disk reference index
+        // (onDeleteFromReference, bulk); Catalog/External use the plain
+        // per-track remove looped across the selection.
+        onRemoveTracks={isReference ? (ids) => onDeleteFromReference?.(ids) : (ids) => ids.forEach(onRemove)}
+        onRateTrack={onRateTrack}
+        onAuditionTrack={onAuditionTrack}
+        auditionTrackId={auditionTrackId}
+        playbackStatus={playbackStatus}
+        onPauseTrack={onPauseTrack}
+        onResumeTrack={onResumeTrack}
+        onBulkUpdate={onBulkUpdate}
+        onCreateLibraryGroup={onCreateLibraryGroup}
+        onGenerateMoodSuggestions={onGenerateMoodSuggestions}
+        onApplyMoodSuggestions={onApplyMoodSuggestions}
+        onBulkSetArchiveStatus={onBulkSetArchiveStatus}
+        onAnalyzeSelected={_onAnalyzeSelected}
+        onReanalyze={onReanalyze}
+        // Sounds/reference clips never enter music playlists — playlist
+        // actions are Catalog/External only.
+        musicPlaylists={isReference ? undefined : musicPlaylists}
+        onBulkAddTracksToPlaylist={isReference ? undefined : onBulkAddTracksToPlaylist}
+        onBulkCreatePlaylistFromTracks={isReference ? undefined : onBulkCreatePlaylistFromTracks}
+        // Bank actions are Sounds-only.
+        samplerBanks={isReference ? samplerBanks : undefined}
+        loadedSamplerBankId={isReference ? loadedSamplerBankId : undefined}
+        onAddTracksToSamplerBank={isReference ? onAddTracksToSamplerBank : undefined}
+        onCreateSamplerBankFromTracks={isReference ? onCreateSamplerBankFromTracks : undefined}
+        onSendTrackToRadio={onSendTrackToRadio}
+        onRecheckPlaybackIssue={onRecheckPlaybackIssue}
+        onClearPlaybackIssue={onClearPlaybackIssue}
+        onBulkRecheckCodecIssues={onBulkRecheckCodecIssues}
+        bulkRechecking={bulkRechecking}
+        onInspect={onInspect ?? (() => {})}
+        libraryGridPreferences={libraryGridPreferences?.[sourceKey] ?? defaultLibraryGridPreferences(sourceKey)}
+        onUpdateLibraryGridPreferences={(next) => onUpdateLibraryGridPreferences?.(sourceKey, next)}
+        onOpenStems={onOpenStems}
+      />
+    );
+  }
 
   // User filters applied on top of source-scoped tracks only.
   const filtered = filterTracksByLibraryFilters(sourceScopedTracks, catalogFilters);
@@ -1246,88 +1268,22 @@ function LibraryRows({
             <option value="yes">Playable only</option>
             <option value="no">Missing audio</option>
           </select>
-          {initialSourceOwnerFilter !== "reference" && (
-            <button
-              className={`cat-filter-toggle${catalogFilters.noCover ? " cat-filter-toggle--on" : ""}`}
-              onClick={() => setCatalogFilter("noCover", catalogFilters.noCover ? undefined : true)}
-              title="Show only tracks missing a cover image"
-            >No Cover</button>
-          )}
+          <button
+            className={`cat-filter-toggle${catalogFilters.noCover ? " cat-filter-toggle--on" : ""}`}
+            onClick={() => setCatalogFilter("noCover", catalogFilters.noCover ? undefined : true)}
+            title="Show only tracks missing a cover image"
+          >No Cover</button>
         </div>
       </div>
 
       <div className={selectedIds.size > 0 ? "bulk-bar-stack" : undefined}>
-      {selectedIds.size > 0 && initialSourceOwnerFilter === "reference" ? (
-        <div className="bulk-bar ref-bulk-bar">
-          <div className="bulk-bar-header">
-            <span className="bulk-bar-count">{selectedIds.size} selected</span>
-            <button className="tb-btn sm" onClick={handleSelectFiltered} title="Add all visible tracks to selection">+ All visible</button>
-            <span className="bulk-bar-sep" />
-            {onAddTracksToSamplerBank && (samplerBanks?.length ?? 0) > 0 && (
-              <select
-                className="cat-filter-sel"
-                defaultValue=""
-                onChange={(e) => {
-                  if (e.target.value) { onAddTracksToSamplerBank(e.target.value, [...selectedIds]); e.target.value = ""; }
-                }}
-                title="Add selected to bank"
-              >
-                <option value="">Add to Bank…</option>
-                {(samplerBanks ?? []).map((b) => (
-                  <option key={b.playlistId} value={b.playlistId}>{b.playlistId === loadedSamplerBankId ? "● " : ""}{b.title}</option>
-                ))}
-              </select>
-            )}
-            {onCreateSamplerBankFromTracks && (
-              refShowBankCreate ? (
-                <span className="cat-group-input-row">
-                  <input
-                    className="cat-filter-search"
-                    placeholder="Bank name…"
-                    value={refBankCreateName}
-                    autoFocus
-                    onChange={(e) => setRefBankCreateName(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        onCreateSamplerBankFromTracks(refBankCreateName.trim() || "New Bank", [...selectedIds]);
-                        setRefBankCreateName(""); setRefShowBankCreate(false);
-                      }
-                      if (e.key === "Escape") { setRefShowBankCreate(false); setRefBankCreateName(""); }
-                    }}
-                  />
-                  <button className="tb-btn sm" onClick={() => {
-                    onCreateSamplerBankFromTracks(refBankCreateName.trim() || "New Bank", [...selectedIds]);
-                    setRefBankCreateName(""); setRefShowBankCreate(false);
-                  }}>Create</button>
-                  <button className="tb-btn sm" onClick={() => { setRefShowBankCreate(false); setRefBankCreateName(""); }}>Cancel</button>
-                </span>
-              ) : (
-                <button className="tb-btn sm" onClick={() => setRefShowBankCreate(true)}>New Bank</button>
-              )
-            )}
-            <span className="bulk-bar-sep" />
-            {onDeleteFromReference && (
-              refDeleteConfirm ? (
-                <span className="cat-group-input-row">
-                  <span style={{ fontSize: 11, color: "var(--warn-text, #f87171)" }}>Remove {selectedIds.size} clip{selectedIds.size !== 1 ? "s" : ""} from Sounds?</span>
-                  <button className="tb-btn sm remove-btn" onClick={() => {
-                    onDeleteFromReference([...selectedIds]);
-                    clearSelection();
-                    setRefDeleteConfirm(false);
-                  }}>Remove</button>
-                  <button className="tb-btn sm" onClick={() => setRefDeleteConfirm(false)}>Cancel</button>
-                </span>
-              ) : (
-                <button className="tb-btn sm remove-btn" onClick={() => setRefDeleteConfirm(true)}>Delete from Sounds</button>
-              )
-            )}
-            <span className="bulk-bar-sep" />
-            <button className="tb-btn sm" onClick={() => clearSelection()}>Clear</button>
-          </div>
-        </div>
-      ) : (
         <>
-          {(onBulkAddTracksToPlaylist || onBulkCreatePlaylistFromTracks) && initialSourceOwnerFilter !== "reference" && (selectedIds.size > 0 || filtered.length > 0) && (
+          {/* This legacy table now serves only the aggregate "All Tracks"
+              view (Catalog/External/Sounds moved to the shared
+              LibraryDataGrid) — the reference/Sounds-specific bulk bar
+              (bank add/create, guarded delete-from-Sounds) that used to
+              branch here is now unreachable and was removed. */}
+          {(onBulkAddTracksToPlaylist || onBulkCreatePlaylistFromTracks) && (selectedIds.size > 0 || filtered.length > 0) && (
             <div className="bulk-bar music-bulk-bar">
               <div className="bulk-bar-header">
                 {selectedIds.size > 0 ? (
@@ -1446,7 +1402,6 @@ function LibraryRows({
             </div>
           )}
         </>
-      )}
       </div>
 
       {/* Tracks section label */}
@@ -1532,15 +1487,6 @@ function LibraryRows({
                       >{isRowPlaying ? "⏸" : "▶"}</button>
                     );
                   })()}
-                  {initialSourceOwnerFilter === "reference" && onAddTracksToSamplerBank && onCreateSamplerBankFromTracks ? (
-                    <BankAddButton
-                      trackId={t.trackId}
-                      banks={samplerBanks ?? []}
-                      loadedBankId={loadedSamplerBankId}
-                      onAdd={onAddTracksToSamplerBank}
-                      onCreateNew={onCreateSamplerBankFromTracks}
-                    />
-                  ) : null}
                   <span className="playlist-row-title" onClick={(e) => { e.stopPropagation(); onInspect ? onInspect(t, filtered, idx) : setEditingTrack(t); }}>
                     {t.title}
                   </span>
@@ -1946,7 +1892,7 @@ export function MainTrackWindow({
   onAddToPlaylistEnd, onInsertAfterSlot, onReplaceSlot, onFindBestSlot, onRemoveRepeats, onRunExportHealth,
   activePlaylistId, onFillGap, onDeleteGap, onClearPlaybackIssue, onRecheckPlaybackIssue, onBulkRecheckCodecIssues, bulkRechecking, onBulkUpdate, onCreateLibraryGroup,
   onGenerateMoodSuggestions, onApplyMoodSuggestions,
-  onRestoreSuggestionsFromImport, onRestoreSuggestionsFromMechanical, onClearSuggestedMoods, onCreateLoops, onImportStems,
+  onRestoreSuggestionsFromImport, onRestoreSuggestionsFromMechanical, onClearSuggestedMoods, onCreateLoops, onExportStems, onOpenStems,
   onAuditionTrack, onAuditionAndAdd, auditionTrackId,
   playbackStatus, onPauseTrack, onResumeTrack,
   onBulkSetArchiveStatus,
@@ -1958,6 +1904,8 @@ export function MainTrackWindow({
   cratePoolTracks = [],
   isAcceptedMode = false,
   onSendTrackToRadio,
+  libraryGridPreferences,
+  onUpdateLibraryGridPreferences,
 }: Props) {
   const [groupViewId, setGroupViewId] = useState<string | null>(null);
   const [crateTab, setCrateTab] = useState<"output" | "pool" | "candidates">("output");
@@ -2025,7 +1973,7 @@ export function MainTrackWindow({
           onRestoreSuggestionsFromMechanical={onRestoreSuggestionsFromMechanical}
           onClearSuggestedMoods={onClearSuggestedMoods}
           onCreateLoops={onCreateLoops}
-          onImportStems={onImportStems}
+          onExportStems={onExportStems}
         />
       )}
       <div className="mtw-fade-wrap">
@@ -2124,6 +2072,7 @@ export function MainTrackWindow({
             onClearSuggestedMoods={onClearSuggestedMoods}
             onAuditionTrack={onAuditionTrack}
             onAuditionAndAdd={onAuditionAndAdd}
+            onOpenStems={onOpenStems}
             auditionTrackId={auditionTrackId}
             playbackStatus={playbackStatus}
             onPauseTrack={onPauseTrack}
@@ -2145,6 +2094,8 @@ export function MainTrackWindow({
             onBulkCreatePlaylistFromTracks={onBulkCreatePlaylistFromTracks}
             onInspect={handleInspect}
             onSendTrackToRadio={onSendTrackToRadio}
+            libraryGridPreferences={libraryGridPreferences}
+            onUpdateLibraryGridPreferences={onUpdateLibraryGridPreferences}
           />
         )}
         {mode === "groups" && (

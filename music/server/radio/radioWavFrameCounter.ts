@@ -24,6 +24,12 @@ export interface WavStreamInfo {
   sampleRate: number | null;
   bitsPerSample: number | null;
   dataSize: number | null;
+  // Absolute byte offset of the `data` chunk's PAYLOAD (not the chunk
+  // header) within the file — 0722C_MUSIC_Production_Stem_Export uses this
+  // to hash exactly the PCM sample bytes (via a byte-range read) without a
+  // second ffmpeg decode pass. Additive field; existing callers that only
+  // read frameCount/etc. are unaffected.
+  dataOffset: number | null;
   frameCount: number | null;
   error?: string;
 }
@@ -31,7 +37,7 @@ export interface WavStreamInfo {
 const WAVE_FORMAT_EXTENSIBLE = 0xfffe;
 
 function invalid(error: string): WavStreamInfo {
-  return { valid: false, formatTag: null, numChannels: null, sampleRate: null, bitsPerSample: null, dataSize: null, frameCount: null, error };
+  return { valid: false, formatTag: null, numChannels: null, sampleRate: null, bitsPerSample: null, dataSize: null, dataOffset: null, frameCount: null, error };
 }
 
 // Pure over a Buffer — exported for direct unit testing against real
@@ -47,6 +53,7 @@ export function readWavStreamInfo(buf: Buffer): WavStreamInfo {
   let sampleRate: number | null = null;
   let bitsPerSample: number | null = null;
   let dataSize: number | null = null;
+  let dataOffset: number | null = null;
 
   let offset = 12;
   while (offset + 8 <= buf.length) {
@@ -69,6 +76,7 @@ export function readWavStreamInfo(buf: Buffer): WavStreamInfo {
       // The declared data size; for a well-formed file this is the PCM
       // payload length. Clamp to what is physically present.
       dataSize = Math.min(chunkSize, buf.length - chunkStart);
+      dataOffset = chunkStart;
       // data is by convention the last chunk we need — keep walking anyway
       // in case of trailing metadata, but nothing after this changes state.
     }
@@ -80,14 +88,14 @@ export function readWavStreamInfo(buf: Buffer): WavStreamInfo {
   if (formatTag == null || numChannels == null || sampleRate == null || bitsPerSample == null) {
     return invalid("missing fmt chunk");
   }
-  if (dataSize == null) return invalid("missing data chunk");
+  if (dataSize == null || dataOffset == null) return invalid("missing data chunk");
   if (numChannels <= 0 || sampleRate <= 0 || bitsPerSample <= 0 || bitsPerSample % 8 !== 0) {
     return invalid(`implausible fmt values (channels=${numChannels}, rate=${sampleRate}, bits=${bitsPerSample})`);
   }
 
   const blockAlign = numChannels * (bitsPerSample / 8);
   const frameCount = Math.floor(dataSize / blockAlign);
-  return { valid: true, formatTag, numChannels, sampleRate, bitsPerSample, dataSize, frameCount };
+  return { valid: true, formatTag, numChannels, sampleRate, bitsPerSample, dataSize, dataOffset, frameCount };
 }
 
 export function readWavStreamInfoFromFile(filePath: string): WavStreamInfo {

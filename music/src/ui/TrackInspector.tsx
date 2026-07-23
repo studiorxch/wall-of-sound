@@ -19,7 +19,7 @@ type Props = {
   onRestoreSuggestionsFromMechanical?: (trackId: string) => void;
   onClearSuggestedMoods?: (trackId: string) => void;
   onCreateLoops?: (trackId: string) => void;
-  onImportStems?: (trackId: string) => void;
+  onExportStems?: (trackId: string) => void;
 };
 
 const OWNER_OPTIONS: { value: TrackSourceOwner; label: string }[] = [
@@ -208,7 +208,7 @@ export function TrackInspector({
   onRestoreSuggestionsFromMechanical,
   onClearSuggestedMoods,
   onCreateLoops,
-  onImportStems,
+  onExportStems,
 }: Props) {
   const form = useTrackForm(track);
   const [imgFailed, setImgFailed] = useState(false);
@@ -563,17 +563,20 @@ export function TrackInspector({
             </button>
           )}
           {onCreateLoops && (
-            <button className="tb-btn" onClick={() => onCreateLoops(track.trackId)} title="Open in AUDIOLAB / Sectional Looper">
+            <button className="tb-btn" onClick={() => onCreateLoops(track.trackId)} title="Open in AUDIOLAB / Looper">
               Create Loops
             </button>
           )}
-          {/* 0715G_MUSIC_Sectional_Looper_Simplification_And_Stem_Ready_Export
-              §5 — "Import," never "Create Stems": this only registers
-              already-separated files the user picks; it does not run Demucs
-              itself. Not shown on a stem track (it has no stems of its own). */}
-          {onImportStems && track.derivedKind !== "stem" && (
-            <button className="tb-btn" onClick={() => onImportStems(track.trackId)} title="Register already-separated Demucs stem files (drums/bass/vocals/other) for this track">
-              Import Existing Stems
+          {/* 0722C_MUSIC_Production_Stem_Export — the old top-level-track
+              "Import Existing Stems" button (0715G) is retired here: MUSIC
+              cannot keep two live definitions of "stem." Existing legacy
+              derived-stem tracks are handled by the Legacy Stem Migration
+              panel (Library Actions), not this button. Not shown on a
+              legacy derived-stem track (it has no stems of its own) or once
+              this track has already been through migration. */}
+          {onExportStems && track.derivedKind !== "stem" && (
+            <button className="tb-btn" onClick={() => onExportStems(track.trackId)} title="Run local Demucs separation and archive vocals/drums/bass/other as a versioned child of this exact track">
+              Export Stems
             </button>
           )}
         </div>

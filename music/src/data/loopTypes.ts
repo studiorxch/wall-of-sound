@@ -176,6 +176,19 @@ export interface AudioExperimentRecord {
 
   createdAt: string;
   updatedAt: string;
+
+  // 0722C_MUSIC_Production_Stem_Export — set only when this experiment's
+  // actual audio is one archived stem of `sourceTrackId` (the parent song),
+  // not the parent's full mix. `sourceTrackId` always stays the real parent
+  // track id (so every existing tracksById.get(sourceTrackId) display path
+  // keeps working); this field is the ONLY thing persisted for the stem
+  // reference — never a synthetic Track record. On load, resolve it through
+  // the authoritative stem archive (GET /stem-sets) and its current
+  // lifecycle gate — never trust a stale cached URL — before rebuilding the
+  // session-only ephemeral audio-source adapter the Looper's decode path
+  // needs (logic/stems/stemLooperSource.ts). A lifecycle other than
+  // "current" means this reference can no longer be loaded for playback.
+  stemSourceRef?: import("./trackStemTypes").StemSourceReference;
 }
 
 // §28 — future dual-deck-mixer contract. Not wired into any playback

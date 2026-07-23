@@ -158,6 +158,14 @@ type Props = {
   reanalysisProgress?: PlaylistReanalysisProgress | null;
   reanalysisRunning?: boolean;
   onPreparationChange?: (preparation: import("../data/playProjectTypes").PlaylistRecord["playbackPreparation"]) => void;
+  // DJ Transition Engine (0722D) — shadow-mode diagnostics only at this
+  // checkpoint. songAnalyses is project-level state (already resolved,
+  // synchronous) threaded down purely for evidence assembly.
+  songAnalyses?: import("../data/songAnalysisTypes").CompleteSongAnalysis[];
+  djTransitionMode?: import("../logic/djTransitionModeStorage").DjTransitionMode;
+  onDjTransitionModeChange?: (mode: import("../logic/djTransitionModeStorage").DjTransitionMode) => void;
+  onDjTransitionPlansChange?: (plans: import("../data/djTransitionTypes").DjTransitionPlan[]) => void;
+  djActiveDiagnostics?: import("../audio/usePreparedPlaybackController").DjActiveExecutionDiagnostics | null;
   // 0718A_MUSIC_RADIO_Clean_Board_and_Explicit_Send_Flows §3 — explicit
   // send affordance, MUSIC-side; never auto-publishes.
   onSendToRadio?: () => void;
@@ -325,6 +333,11 @@ export function PlaylistHeader({
   reanalysisProgress = null,
   reanalysisRunning = false,
   onPreparationChange,
+  songAnalyses = [],
+  djTransitionMode = "off",
+  onDjTransitionModeChange,
+  onDjTransitionPlansChange,
+  djActiveDiagnostics = null,
   onSendToRadio,
 }: Props) {
   // Accepted playlist read mode (0705K)
@@ -1372,6 +1385,11 @@ export function PlaylistHeader({
           playlist={playlist}
           libraryTracks={libraryTracks}
           onPreparationChange={(preparation) => onPreparationChange?.(preparation)}
+          songAnalyses={songAnalyses}
+          djTransitionMode={djTransitionMode}
+          onDjTransitionModeChange={onDjTransitionModeChange}
+          onDjTransitionPlansChange={onDjTransitionPlansChange}
+          djActiveDiagnostics={djActiveDiagnostics}
           onClose={() => setShowPreparationPanel(false)}
         />
       )}

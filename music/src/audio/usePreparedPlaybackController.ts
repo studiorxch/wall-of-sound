@@ -17,12 +17,25 @@ import type {
   PlaybackAuthority, PlaybackAuthorityState, PlaybackAuthorityEvent,
   TransitionSchedulingMetric, DualDeckLifecycleMetrics,
   PreparedPlaybackHandoffPhase, PreparedPlaybackRuntimeFallback,
+  HardCutExecutionResult,
 } from "./dualDeckTypes";
 import { DualDeckPlaybackEngine } from "./DualDeckPlaybackEngine";
 import { evaluatePreparedPlaybackEligibility, resolveExecutionSyncMode, decideRuntimeTransitionPolicy } from "./transitionFallback";
 import { shouldPreloadNextTrack, DEFAULT_PRELOAD_LEAD_SECONDS } from "./transitionScheduler";
 import { buildInitialSession, findOutgoingPlan, derivePreparedProgress } from "./preparedPlaybackSession";
 import { buildAuthorityState, decideSkipNext, resolvePreviousSlot, isLastAssignedSlot } from "./playbackAuthority";
+// DJ Transition Engine (0722D) — active-mode adapter wiring. This hook is
+// the ONE place a transition actually executes against the engine, so the
+// authority gate is evaluated here, synchronously, immediately before the
+// existing legacy transition logic — never a second scheduler/transport.
+import type { DjTransitionMode } from "../logic/djTransitionModeStorage";
+import type { DjTransitionPlan } from "../data/djTransitionTypes";
+import type { CompleteSongAnalysis } from "../data/songAnalysisTypes";
+import { assembleDjTransitionTrackEvidence } from "../logic/djTransitionEvidence";
+import { selectDjTransitionRegions } from "../logic/djTransitionRegions";
+import { sourceFingerprintFor, analysisRevisionMarkerFor } from "../logic/djTransitionShadowResolve";
+import { evaluateDjTransitionAuthority, type DjTransitionAuthorityGateName } from "../logic/djTransitionAuthorityGate";
+import { compileDjTransition, executeCompiledDjTransition, type DjTransitionExecutionStrategy } from "./djTransitionPlayback";
 
 const MAX_EVENT_LOG = 20;
 // §6 — recommended position-observation window (100-300ms).
@@ -56,6 +69,28 @@ export interface PreparedPlaybackControllerParams {
   standardPlaybackTimeSeconds: number;
   onHandoffToEngine: () => void;
   onHandoffToStandard: () => void;
+  // DJ Transition Engine (0722D) — off by default; "shadow" never reaches
+  // this hook's execution path at all (only the diagnostic panel resolves
+  // in shadow mode). Only "active" is ever evaluated here.
+  djTransitionMode?: DjTransitionMode;
+  djTransitionPlans?: DjTransitionPlan[];
+  songAnalyses?: CompleteSongAnalysis[];
+}
+
+// §8 diagnostics — distinguishes resolution/authorization/compilation/
+// scheduling/execution explicitly rather than collapsing them into one
+// "did it work" boolean, per this checkpoint's own reporting requirement.
+export interface DjActiveExecutionDiagnostics {
+  legacyTransitionId: string;
+  djPlanId: string | null;
+  authorized: boolean;
+  gate: DjTransitionAuthorityGateName;
+  reason: string;
+  compiledStrategy: DjTransitionExecutionStrategy | null;
+  executed: boolean;
+  executionFailureReason: string | null;
+  legacyExecutedInstead: boolean;
+  recordedAt: string;
 }
 
 export interface PreparedPlaybackControllerResult {
@@ -75,6 +110,11 @@ export interface PreparedPlaybackControllerResult {
   authorityEvents: PlaybackAuthorityEvent[];
   jitterMetrics: TransitionSchedulingMetric[];
   lifecycleMetrics: DualDeckLifecycleMetrics | null;
+  // DJ Transition Engine (0722D) — the most recent authorization/
+  // compilation/execution outcome for whichever adjacency was last
+  // evaluated. Null until the first transition is attempted under
+  // djTransitionMode==="active".
+  djActiveDiagnostics: DjActiveExecutionDiagnostics | null;
   // §20 — transport command router. No-ops when authority is still
   // "standard_player" — the caller's existing standard controls remain
   // authoritative in that case (never command both systems at once).
@@ -98,6 +138,7 @@ export function usePreparedPlaybackController(params: PreparedPlaybackController
   const {
     enabled, playlistId, slots, tracksById, preparation, resolveTrackUrl, blockedTrackIds, startAtSlotId,
     standardPlaybackTimeSeconds, onHandoffToEngine, onHandoffToStandard,
+    djTransitionMode = "off", djTransitionPlans = [], songAnalyses = [],
   } = params;
   const handoffTimeRef = useRef(standardPlaybackTimeSeconds);
   handoffTimeRef.current = standardPlaybackTimeSeconds;
@@ -106,6 +147,7 @@ export function usePreparedPlaybackController(params: PreparedPlaybackController
   const preloadedForRef = useRef<string | null>(null);
   const transitionRunningForRef = useRef<string | null>(null);
   const completedTrackIdsRef = useRef<string[]>([]);
+  const [djActiveDiagnostics, setDjActiveDiagnostics] = useState<DjActiveExecutionDiagnostics | null>(null);
 
   const [session, setSession] = useState<PlaylistPlaybackSession | null>(null);
   const [decks, setDecks] = useState<Record<"A" | "B", PlaybackDeckState> | null>(null);
@@ -191,6 +233,20 @@ export function usePreparedPlaybackController(params: PreparedPlaybackController
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled]);
+
+  // DJ Transition Engine (0722D) §7 mode safety — switching active->shadow
+  // or active->off must restore the normal (bypassed) engine path
+  // immediately, not just stop attempting new DJ executions on the next
+  // tick. Clean Cut never engages the EQ chain, so in practice this is a
+  // defensive no-op today, but it's the correct, explicit mechanism for
+  // when a future family does use it.
+  useEffect(() => {
+    if (djTransitionMode === "active") return;
+    const engine = engineRef.current;
+    if (!engine) return;
+    engine.bypassDeckEq("A");
+    engine.bypassDeckEq("B");
+  }, [djTransitionMode]);
 
   // §27 — session is rebuilt from the playlist + preparation record, never
   // persisted or restored from a serialized runtime snapshot. §7/§17 — the
@@ -310,6 +366,101 @@ export function usePreparedPlaybackController(params: PreparedPlaybackController
       setTick((t) => t + 1);
     }
 
+    // §16 — shared by the legacy hard-cut path and the DJ Transition Engine
+    // active-mode path: one retry of playDeck() before giving up, exactly
+    // as originally written for legacy hard cuts. Reused rather than
+    // duplicated so both paths share identical, already-proven recovery
+    // semantics.
+    async function runHardCutWithRetry(
+      transitionId: string, activeDeckId: "A" | "B", incomingDeckId: "A" | "B", trigger: "scheduled" | "media_ended",
+    ): Promise<HardCutExecutionResult> {
+      let result = await eng.executeHardCut(transitionId, activeDeckId, incomingDeckId, trigger);
+      if (!result.executed && result.reason === "incoming_not_ready") {
+        try { await eng.playDeck(incomingDeckId); } catch { /* handled by the retry result below */ }
+        result = await eng.executeHardCut(transitionId, activeDeckId, incomingDeckId, trigger);
+      }
+      return result;
+    }
+
+    // Same retry shape as runHardCutWithRetry, but routed through the
+    // djTransitionPlayback.ts adapter (compile -> execute) rather than
+    // calling eng.executeHardCut directly, so the adapter's own explicit
+    // EQ-bypass defense-in-depth (§2) actually runs on every DJ attempt.
+    async function runDjHardCutWithRetry(
+      compiled: import("./djTransitionPlayback").CompiledDjTransitionExecution,
+      activeDeckId: "A" | "B", incomingDeckId: "A" | "B", trigger: "scheduled" | "media_ended",
+    ): Promise<HardCutExecutionResult> {
+      let outcome = await executeCompiledDjTransition(eng, compiled, activeDeckId, incomingDeckId, trigger);
+      if (!outcome.executed && outcome.reason === "incoming_not_ready") {
+        try { await eng.playDeck(incomingDeckId); } catch { /* handled by the retry result below */ }
+        outcome = await executeCompiledDjTransition(eng, compiled, activeDeckId, incomingDeckId, trigger);
+      }
+      return { executed: outcome.executed, reason: outcome.reason as HardCutExecutionResult["reason"] };
+    }
+
+    // DJ Transition Engine (0722D) §3 — the full authority gate evaluated
+    // synchronously, immediately before any engine mutation. Re-derives
+    // evidence/regions from CURRENTLY in-memory track data (no I/O — stem
+    // availability is intentionally passed as {} here, since the only
+    // family this build can execute, clean_cut, never depends on stems;
+    // see djTransitionAuthorityGate.ts's own header comment for why a
+    // synchronous re-check is correct here rather than a fresh async
+    // resolution).
+    function evaluateDjAuthorizationForLegacyPlan(legacyPlan: PlaylistTransitionPlan, activeDeckId: "A" | "B", incomingDeckId: "A" | "B") {
+      const outgoingTrack = tracksById.get(legacyPlan.fromTrackId);
+      const incomingTrack = tracksById.get(legacyPlan.toTrackId);
+      const djPlan = djTransitionPlans.find((p) => p.outgoingSlotId === legacyPlan.fromSlotId && p.incomingSlotId === legacyPlan.toSlotId);
+
+      if (!outgoingTrack || !incomingTrack) {
+        return {
+          authorization: { authorized: false, gate: "no_plan_for_pair" as const, reason: "Missing track data for this adjacency." },
+          djPlan, compiled: null,
+        };
+      }
+
+      const outgoingSongAnalysis = songAnalyses.find((a) => a.sourceTrackId === outgoingTrack.trackId);
+      const incomingSongAnalysis = songAnalyses.find((a) => a.sourceTrackId === incomingTrack.trackId);
+
+      const outgoingEvidence = assembleDjTransitionTrackEvidence({
+        track: outgoingTrack, beatMap: outgoingTrack.beatMap, playbackBounds: outgoingTrack.playbackBounds,
+        songAnalysis: outgoingSongAnalysis, currentStemRoleAvailability: {},
+        sourceFingerprint: sourceFingerprintFor(outgoingTrack, outgoingSongAnalysis),
+      });
+      const incomingEvidence = assembleDjTransitionTrackEvidence({
+        track: incomingTrack, beatMap: incomingTrack.beatMap, playbackBounds: incomingTrack.playbackBounds,
+        songAnalysis: incomingSongAnalysis, currentStemRoleAvailability: {},
+        sourceFingerprint: sourceFingerprintFor(incomingTrack, incomingSongAnalysis),
+      });
+      const outgoingRegionsNow = selectDjTransitionRegions({ side: "outgoing", evidence: outgoingEvidence, playbackBounds: outgoingTrack.playbackBounds });
+      const incomingRegionsNow = selectDjTransitionRegions({ side: "incoming", evidence: incomingEvidence, playbackBounds: incomingTrack.playbackBounds });
+
+      const deckStates = eng.getState();
+      // Deck-specific readiness is decided INSIDE evaluateDjTransitionAuthority
+      // via two distinct predicates (isOutgoingDeckReadyForCleanCut /
+      // isIncomingDeckReadyToStart) — this call site only supplies the raw
+      // current state strings, never a pre-collapsed boolean, so the gate
+      // itself stays the one place that decides what "ready" means for
+      // each side.
+      const outgoingDeckState = deckStates[activeDeckId].state;
+      const incomingDeckState = deckStates[incomingDeckId].state;
+
+      const authorization = evaluateDjTransitionAuthority({
+        djTransitionMode, plan: djPlan,
+        currentOutgoingTrackId: outgoingTrack.trackId, currentIncomingTrackId: incomingTrack.trackId,
+        currentOutgoingSourceFingerprint: sourceFingerprintFor(outgoingTrack, outgoingSongAnalysis),
+        currentIncomingSourceFingerprint: sourceFingerprintFor(incomingTrack, incomingSongAnalysis),
+        currentAnalysisRevisionKey: `${analysisRevisionMarkerFor(outgoingTrack)}::${analysisRevisionMarkerFor(incomingTrack)}`,
+        outgoingRegionsNow, incomingRegionsNow,
+        // clean_cut, the only supported family, never touches stems — always
+        // false is the honest value for this family, not a guess.
+        activeStemSetLostCurrency: false,
+        outgoingDeckState, incomingDeckState,
+      });
+
+      const compiled = authorization.authorized && djPlan ? compileDjTransition(djPlan) : null;
+      return { authorization, djPlan, compiled };
+    }
+
     // §17/§18 — the ONE place plan.status is read at runtime and turned into
     // a policy decision (needs_review → conservative hard cut; blocked →
     // hard cut if the incoming track is playable, otherwise explicit stop).
@@ -317,7 +468,13 @@ export function usePreparedPlaybackController(params: PreparedPlaybackController
     // function called with trigger="scheduled") and the media `ended` event
     // (called with trigger="media_ended" from the engine-lifecycle effect's
     // subscription) — both share the engine's promotion idempotence guard.
-    function runTransitionForPlan(plan: PlaylistTransitionPlan, trigger: "scheduled" | "media_ended") {
+    // The existing, UNMODIFIED legacy transition logic (only the hard_cut
+    // branch now calls the shared runHardCutWithRetry helper instead of
+    // inlining its own copy — identical behavior, no duplication). This is
+    // exactly what ran before this build whenever djTransitionMode is not
+    // "active", and exactly what the DJ path falls back to on a pre-
+    // control-transfer failure (§4).
+    function runLegacyTransition(plan: PlaylistTransitionPlan, trigger: "scheduled" | "media_ended") {
       if (transitionRunningForRef.current === plan.transitionId) return;
       const session = sessionRef.current;
       if (!session) return;
@@ -356,12 +513,7 @@ export function usePreparedPlaybackController(params: PreparedPlaybackController
 
       if (policy.mode === "hard_cut") {
         void (async () => {
-          let result = await eng.executeHardCut(plan.transitionId, activeDeckId, incomingDeckId, trigger);
-          if (!result.executed && result.reason === "incoming_not_ready") {
-            // §16 — retry incoming play once before falling back further.
-            try { await eng.playDeck(incomingDeckId); } catch { /* handled by the retry result below */ }
-            result = await eng.executeHardCut(plan.transitionId, activeDeckId, incomingDeckId, trigger);
-          }
+          const result = await runHardCutWithRetry(plan.transitionId, activeDeckId, incomingDeckId, trigger);
           if (result.executed) {
             promoteAfterTransition(plan, activeDeckId, incomingDeckId);
             return;
@@ -395,6 +547,97 @@ export function usePreparedPlaybackController(params: PreparedPlaybackController
         setSession((s) => (s ? { ...s, status: "error", fallbackReason: "transition_execution_failed", runtimeFallback: "stopped" } : s));
         onHandoffToStandard();
       });
+    }
+
+    // §17/§18 — the ONE place plan.status is read at runtime and turned into
+    // a policy decision (needs_review → conservative hard cut; blocked →
+    // hard cut if the incoming track is playable, otherwise explicit stop).
+    // §11-§14 — hard cut is reachable from BOTH the scheduled tick (this
+    // function called with trigger="scheduled") and the media `ended` event
+    // (called with trigger="media_ended" from the engine-lifecycle effect's
+    // subscription) — both share the engine's promotion idempotence guard.
+    //
+    // DJ Transition Engine (0722D) — this is the public entry point both
+    // triggers actually call. It evaluates DJ authorization FIRST, fully
+    // synchronously and without touching the engine; only once authorized
+    // AND compiled does it ever call into the engine via the DJ path.
+    // Everything else — unauthorized, uncompilable, wrong mode — falls
+    // straight through to runLegacyTransition, unchanged.
+    function runTransitionForPlan(plan: PlaylistTransitionPlan, trigger: "scheduled" | "media_ended") {
+      if (transitionRunningForRef.current === plan.transitionId) return;
+      const session = sessionRef.current;
+      if (!session) return;
+      const activeDeckId = session.activeDeckId;
+      const incomingDeckId = session.incomingDeckId;
+
+      const { authorization, djPlan, compiled } = evaluateDjAuthorizationForLegacyPlan(plan, activeDeckId, incomingDeckId);
+
+      function recordDjDiagnostics(patch: Partial<DjActiveExecutionDiagnostics>) {
+        setDjActiveDiagnostics({
+          legacyTransitionId: plan.transitionId,
+          djPlanId: djPlan?.id ?? null,
+          authorized: authorization.authorized,
+          gate: authorization.gate,
+          reason: authorization.reason,
+          compiledStrategy: compiled && compiled.compiled ? compiled.strategy : null,
+          executed: false,
+          executionFailureReason: null,
+          legacyExecutedInstead: false,
+          recordedAt: new Date().toISOString(),
+          ...patch,
+        });
+      }
+
+      if (authorization.authorized && compiled && compiled.compiled) {
+        const djPlanId = compiled.djPlanId;
+        transitionRunningForRef.current = plan.transitionId;
+        setSession((s) => (s ? { ...s, status: "transitioning", activeTransitionId: djPlanId, runtimeFallback: undefined } : s));
+        recordDjDiagnostics({});
+        void (async () => {
+          const result = await runDjHardCutWithRetry(compiled, activeDeckId, incomingDeckId, trigger);
+          if (result.executed) {
+            recordDjDiagnostics({ executed: true });
+            promoteAfterTransition(plan, activeDeckId, incomingDeckId);
+            return;
+          }
+          if (result.reason === "already_promoted") {
+            transitionRunningForRef.current = null;
+            recordDjDiagnostics({ executed: true, executionFailureReason: "already_promoted" });
+            return;
+          }
+          if (result.reason === "incoming_not_ready") {
+            // §4 atomic fallback, pre-control-transfer case: the readiness
+            // check is the very first thing executeHardCut does, before any
+            // gain/pause mutation — nothing was touched. Safe to cancel the
+            // DJ attempt cleanly and run the existing legacy transition,
+            // completely unchanged.
+            recordDjDiagnostics({ executed: false, executionFailureReason: "incoming_not_ready", legacyExecutedInstead: true });
+            transitionRunningForRef.current = null;
+            runLegacyTransition(plan, trigger);
+            return;
+          }
+          // §4 atomic fallback, post-control-transfer case (incoming_play_
+          // failed, or an unexpected rejection): the outgoing deck has
+          // already been silenced and paused by executeHardCut before this
+          // reason is ever returned. Blindly replaying the legacy schedule
+          // here — which might resolve to a multi-second crossfade
+          // expecting the outgoing deck to still be audibly playing — would
+          // not be a safe recovery. The deterministic, engine-state-aware
+          // recovery is the same terminal action the legacy hard-cut path
+          // already takes at its own worst case: stop everything and hand
+          // control back to the standard player.
+          recordDjDiagnostics({ executed: false, executionFailureReason: result.reason ?? "unknown", legacyExecutedInstead: false });
+          eng.stopAll();
+          setAuthority("standard_player");
+          emitEvent({ type: "authority_released", from: "dual_deck_engine", reason: "dj_transition_failed" });
+          setSession((s) => (s ? { ...s, status: "error", fallbackReason: "dj_transition_failed", runtimeFallback: "stopped" } : s));
+          onHandoffToStandard();
+        })();
+        return;
+      }
+
+      recordDjDiagnostics({ legacyExecutedInstead: true });
+      runLegacyTransition(plan, trigger);
     }
 
     executeTransitionRef.current = runTransitionForPlan;
@@ -511,7 +754,7 @@ export function usePreparedPlaybackController(params: PreparedPlaybackController
 
     return () => window.clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, slots, tracksById, preparation, blockedTrackIds, resolveTrackUrl, slotsById]);
+  }, [enabled, slots, tracksById, preparation, blockedTrackIds, resolveTrackUrl, slotsById, djTransitionMode, djTransitionPlans, songAnalyses]);
 
   const progress = useMemo(() => {
     if (!enabled || !session || !playlistId) return null;
@@ -651,6 +894,7 @@ export function usePreparedPlaybackController(params: PreparedPlaybackController
     authority, authorityState, authorityEvents,
     jitterMetrics: engineRef.current?.getJitterMetrics() ?? [],
     lifecycleMetrics: engineRef.current?.getLifecycleMetrics() ?? null,
+    djActiveDiagnostics,
     pause, resume, seek, skipNext, skipPrevious, stop,
     armMidTransitionPause,
   };

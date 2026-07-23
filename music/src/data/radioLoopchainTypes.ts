@@ -19,6 +19,13 @@ export interface LoopchainBlock {
   sectionId: string;
   repeatMode: LoopchainRepeatMode;
   crossfadeDurationSeconds: number;
+  // §2.2 — absent means "custom" (repeatMode was hand-edited via the
+  // advanced disclosure, or this is an intro/outro block, which never has
+  // a preference at all). Purely a UI label; resolveRepeatPreference()
+  // recomputes what repeatMode SHOULD be for a given role+preference, and
+  // the interface layer compares against the stored repeatMode at render
+  // time rather than trusting this field blindly.
+  repeatPreference?: LoopchainRepeatPreference;
 }
 
 // §6 — first-class, independently identified and adjustable. Keyed by the
@@ -30,6 +37,12 @@ export interface LoopchainJunction {
   crossfadeDurationSeconds: number;
   auditionPreRollSeconds?: number;
   auditionPostRollSeconds?: number;
+  // §2.3 — persisted author intent for the hybrid transition resolver.
+  // Absent means {kind:"auto"} — backward compatible with every junction
+  // saved before this field existed. The RESOLVED decision (bar vs seconds,
+  // actual duration, confidence) is never stored here or anywhere else —
+  // see LoopchainTransitionRequest's own doc comment above.
+  transitionRequest?: LoopchainTransitionRequest;
 }
 
 export interface LoopchainDraft {
@@ -40,6 +53,48 @@ export interface LoopchainDraft {
   defaultCrossfadeDurationSeconds: number;
   createdAt: string;
   updatedAt: string;
+}
+
+// 0722A_RADIOOS_Loopchain_Player_Web_Demo §2.3/§1.3 — hybrid bar-vs-seconds
+// transition timing. `LoopchainTransitionRequest` is the ONLY part of this
+// that's ever persisted (on LoopchainJunction below) — pure author intent,
+// same as every other field on LoopchainDraft. The resolved decision
+// (radioLoopchainTransitionResolver.ts's `LoopchainResolvedTransitionDecision`)
+// is deliberately NOT declared as a persisted field anywhere — it is always
+// derived fresh from the request plus each side's live beat-grid trust,
+// playback bounds, and resolved section bounds, so it can never go stale.
+export type LoopchainTransitionRequest =
+  | { kind: "auto" }
+  | { kind: "bars"; bars: 1 | 2 | 4 | 8 }
+  | { kind: "seconds"; seconds: 2 | 4 | 8 | 12 };
+
+// What was ACTUALLY achieved, never what was requested. An untrusted grid
+// can never resolve to "bar_aligned" — see radioLoopchainTransitionResolver.ts.
+export type LoopchainTransitionAlignment = "bar_aligned" | "time_aligned" | "manual_override";
+
+// §2.2 — the simplified taste control. Never applicable to an intro/outro
+// block, which has no editable repeat state at all (see
+// radioLoopchainEditor.ts's structuralType-aware guards).
+export type LoopchainRepeatPreference = "low" | "medium" | "high";
+
+// DERIVED playback state, built by radioLoopchainTransitionResolver.ts's
+// resolveTransitionTiming(). Declared here (alongside the request type it
+// resolves) purely as a shared shape for the resolver's return value,
+// player session state, and a point-in-time snapshot inside
+// LoopchainListenerFeedback — it is NEVER itself a field on LoopchainDraft/
+// LoopchainJunction/anything persisted as canonical chain state. Recompute
+// via useMemo on every render keyed off the request plus both tracks' live
+// beatMap/playbackBounds/resolved section bounds, so it can never go stale.
+export interface LoopchainResolvedTransitionDecision {
+  junctionId: string;
+  request: LoopchainTransitionRequest;
+  alignment: LoopchainTransitionAlignment;
+  computedDurationSeconds: number;
+  // Only ever non-zero when the grid is actually trusted — never a
+  // consolation score for an untrusted seconds fallback.
+  confidence: number;
+  reason: string;
+  resolvedAt: string;
 }
 
 // §4 — region-bound acceptance identity. Never keyed by sectionId alone:

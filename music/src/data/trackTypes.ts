@@ -302,4 +302,18 @@ export type Track = {
   derivedKind?: "stem";
   parentTrackId?: string;
   stemRole?: "vocals" | "drums" | "bass" | "other";
+  // 0722C_MUSIC_Production_Stem_Export — migration bookkeeping ONLY for the
+  // legacy `derivedKind:"stem"` top-level-track system above. Does not
+  // redefine "is this a stem" (still `derivedKind` alone). "migrated" means
+  // this legacy derived-stem track has been registered into the new
+  // TrackStemSet archive and must be filtered out of every top-level Library
+  // view (grid, counts, search, playlists, Looper lookup, grouped actions —
+  // see logic/library/libraryVisibleTracks.ts). "needs_review"/"rejected"
+  // leave the track fully visible, unmodified, pending an explicit operator
+  // decision in the Legacy Stem Migration panel — never silently hidden.
+  stemArchiveMigration?: {
+    status: "migrated" | "needs_review" | "rejected";
+    stemSetId?: string;
+    reviewedAt?: string;
+  };
 };
