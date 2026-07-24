@@ -86,3 +86,7 @@ audiolab/output/**
 !audiolab/output/analysis-csv/.gitkeep
 !audiolab/output/reports/.gitkeep
 audiolab/.venv/
+
+
+
+studiorich-orbital/node_mobules
