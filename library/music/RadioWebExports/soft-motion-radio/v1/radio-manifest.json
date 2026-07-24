@@ -1,0 +1,253 @@
+{
+  "schemaVersion": "1.0.0",
+  "stationId": "radplaylist_mrpzn8z9_x51i6d",
+  "bundleVersion": 1,
+  "title": "Soft Motion Radio",
+  "artworkUrl": "artwork/cover.jpeg",
+  "entries": [
+    {
+      "radioTrackId": "rtrack_000019",
+      "packageVersion": 1,
+      "audioUrl": "audio/rtrack_000019-v1.opus",
+      "durationSeconds": 106.63997916666666,
+      "byteSize": 2152787,
+      "sha256": "6cbde8063f02ac01d2c72a00b2b610211ba4177fa26927087c2bcd2b81ed8086",
+      "title": "Above the Loop",
+      "artist": "StudioRich",
+      "bpm": 90,
+      "key": "7B",
+      "moods": [
+        "Calm",
+        "Intimate",
+        "Weightless"
+      ],
+      "genres": [
+        "cinematic",
+        "jungle",
+        "lo-fi"
+      ]
+    },
+    {
+      "radioTrackId": "rtrack_000020",
+      "packageVersion": 1,
+      "audioUrl": "audio/rtrack_000020-v1.opus",
+      "durationSeconds": 92.91997916666666,
+      "byteSize": 1875769,
+      "sha256": "95a64ecf0505e6702a74fb81dd26c43335346cf0d0710f08697551fb1e6bf10b",
+      "title": "Driveway Fadeout",
+      "artist": "StudioRich",
+      "bpm": 83,
+      "key": "6B",
+      "moods": [
+        "Calm",
+        "Intimate",
+        "Weightless"
+      ],
+      "genres": [
+        "electronic",
+        "glitch",
+        "lo-fi"
+      ]
+    },
+    {
+      "radioTrackId": "rtrack_000021",
+      "packageVersion": 1,
+      "audioUrl": "audio/rtrack_000021-v1.opus",
+      "durationSeconds": 103.99997916666666,
+      "byteSize": 2099465,
+      "sha256": "672cb338d8edb5b681b1dd59b9a65505e9b5cde45c22ed0f65d4d248538135bb",
+      "title": "Window Fade",
+      "artist": "StudioRich",
+      "bpm": 85,
+      "key": "6B",
+      "moods": [
+        "Calm",
+        "Weightless",
+        "Intimate"
+      ],
+      "genres": [
+        "chill",
+        "cinematic",
+        "lo-fi"
+      ]
+    },
+    {
+      "radioTrackId": "rtrack_000022",
+      "packageVersion": 1,
+      "audioUrl": "audio/rtrack_000022-v1.opus",
+      "durationSeconds": 187.07997916666667,
+      "byteSize": 3775744,
+      "sha256": "6be029c0d2730b1a0c9df4fa189dd904f506b11ed20e0154917043859c716c13",
+      "title": "Replay Her Name S1",
+      "artist": "StudioRich",
+      "bpm": 90,
+      "key": "5B",
+      "moods": [
+        "Weightless",
+        "Calm",
+        "Intimate"
+      ],
+      "genres": [
+        "ambient",
+        "electronic"
+      ]
+    },
+    {
+      "radioTrackId": "rtrack_000023",
+      "packageVersion": 1,
+      "audioUrl": "audio/rtrack_000023-v1.opus",
+      "durationSeconds": 158.47997916666668,
+      "byteSize": 3198647,
+      "sha256": "177038fbf3c3a5824792fee18369e466ff9104e2e91a36a7017414e87a15ae65",
+      "title": "Midnight Court",
+      "artist": "StudioRich",
+      "bpm": 90,
+      "key": "5B",
+      "moods": [
+        "Calm",
+        "Intimate",
+        "Subdued"
+      ],
+      "genres": [
+        "chillout",
+        "jazztronica",
+        "lo-fi hip hop"
+      ]
+    },
+    {
+      "radioTrackId": "rtrack_000024",
+      "packageVersion": 1,
+      "audioUrl": "audio/rtrack_000024-v1.opus",
+      "durationSeconds": 214.91997916666668,
+      "byteSize": 4337842,
+      "sha256": "3cef4fb2ffeb9b58b206029873c17f813226951193e9d08883d7edc4a226e418",
+      "title": "Crush.exe S1",
+      "artist": "StudioRich",
+      "bpm": 90,
+      "key": "5B",
+      "moods": [
+        "Calm",
+        "Peaceful",
+        "Intimate"
+      ],
+      "genres": [
+        "electronic",
+        "glitch",
+        "jungle"
+      ]
+    },
+    {
+      "radioTrackId": "rtrack_000025",
+      "packageVersion": 1,
+      "audioUrl": "audio/rtrack_000025-v1.opus",
+      "durationSeconds": 173.55997916666666,
+      "byteSize": 3503169,
+      "sha256": "e711b82198cb18c716701a9c6cf254307be6c6f7f83cc38b6ca1aeebf591a684",
+      "title": "Sweatshirt Blur",
+      "artist": "StudioRich",
+      "bpm": 89,
+      "key": "6B",
+      "moods": [
+        "Chill",
+        "Hypnotic",
+        "Hopeful"
+      ],
+      "genres": [
+        "r&b",
+        "trap"
+      ]
+    },
+    {
+      "radioTrackId": "rtrack_000026",
+      "packageVersion": 1,
+      "audioUrl": "audio/rtrack_000026-v1.opus",
+      "durationSeconds": 102.03997916666667,
+      "byteSize": 2059921,
+      "sha256": "dd4597cfbda34da5ac80a7a69af7e8c5dcce05b384deb20c6c10a17b5f126f3e",
+      "title": "Ambient Rewind Blue Mix",
+      "artist": "StudioRich",
+      "bpm": 87,
+      "key": "6B",
+      "moods": [
+        "Calm",
+        "Intimate",
+        "Chill"
+      ],
+      "genres": [
+        "ambient",
+        "instrumental",
+        "lo-fi"
+      ]
+    },
+    {
+      "radioTrackId": "rtrack_000027",
+      "packageVersion": 1,
+      "audioUrl": "audio/rtrack_000027-v1.opus",
+      "durationSeconds": 140.67997916666667,
+      "byteSize": 2839538,
+      "sha256": "7adf474d3daf46eb240ae2b5e4632ba54b4e7cf0c469b2db340e473b84919134",
+      "title": "Skylight Bloom",
+      "artist": "StudioRich",
+      "bpm": 89,
+      "key": "6B",
+      "moods": [
+        "Calm",
+        "Intimate",
+        "Weightless"
+      ],
+      "genres": [
+        "electronic",
+        "jungle",
+        "lo-fi"
+      ]
+    },
+    {
+      "radioTrackId": "rtrack_000028",
+      "packageVersion": 1,
+      "audioUrl": "audio/rtrack_000028-v1.opus",
+      "durationSeconds": 92.91997916666666,
+      "byteSize": 1875758,
+      "sha256": "f99e5a3bdef461a3a13ed5586ed8469ef723f4c5abdad2811524ba3475d745aa",
+      "title": "Driveway Fadeout S01",
+      "artist": "StudioRich",
+      "bpm": 83,
+      "key": "6B",
+      "moods": [
+        "Calm",
+        "Intimate",
+        "Weightless"
+      ],
+      "genres": [
+        "electronic",
+        "glitch",
+        "lo-fi"
+      ]
+    },
+    {
+      "radioTrackId": "rtrack_000029",
+      "packageVersion": 1,
+      "audioUrl": "audio/rtrack_000029-v1.opus",
+      "durationSeconds": 173.39997916666667,
+      "byteSize": 3499921,
+      "sha256": "e3280c4e9536a7396d9603d1c15994e2abfc65b206d1b2a7c686967fbd2cffb9",
+      "title": "Soul Trace",
+      "artist": "StudioRich",
+      "bpm": 85,
+      "key": "6B",
+      "moods": [
+        "Calm",
+        "Peaceful",
+        "Weightless"
+      ],
+      "genres": [
+        "jungle",
+        "lo-fi",
+        "soul"
+      ]
+    }
+  ],
+  "totalDurationSeconds": 1546.6397708333334,
+  "totalByteSize": 31225526,
+  "createdAt": "2026-07-23T05:42:56.730Z",
+  "performanceAssets": []
+}

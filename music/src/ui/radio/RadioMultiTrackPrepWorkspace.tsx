@@ -331,6 +331,7 @@ export function RadioMultiTrackPrepWorkspace({
           allRadioPlaylists={allRadioPlaylists}
           radioInboxItems={radioInboxItems}
           libraryTracks={libraryTracks}
+          songAnalyses={songAnalyses}
           loops={looperShared.loops}
           preparationStateByEntryId={preparationStateByEntryId}
           radioWebExports={radioWebExports}

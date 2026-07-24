@@ -1,0 +1,74 @@
+{
+  "schemaVersion": "1.0.0",
+  "contentSignature": "d2a9d745948941166157981991bee5a66756b1882b9f693acc98f8fef742e11f",
+  "files": {
+    "audio/rtrack_000004-v1.opus": {
+      "sha256": "081a38dc022111547bdcdc27982d88fdf82b5ab86c49954c71d666a579be8925",
+      "byteSize": 1475677
+    },
+    "audio/rtrack_000005-v1.opus": {
+      "sha256": "968784dd4d096f91218c166de970f7158e9e5850fa44db299d9cc7d3c4763e84",
+      "byteSize": 2905976
+    },
+    "audio/rtrack_000006-v1.opus": {
+      "sha256": "0fa4b438051a039b096ef02ea88f154d9a3cfad967f105638655ff11a51edcfd",
+      "byteSize": 3227862
+    },
+    "audio/rtrack_000007-v1.opus": {
+      "sha256": "ba34ae6a56ef3d983ae63d433d1d9cff03fa90740c93970d829736e62e793346",
+      "byteSize": 2241062
+    },
+    "audio/rtrack_000008-v1.opus": {
+      "sha256": "551488163d51b9b22146d95c7b8e5dac2ebf76405bfc9cff7e0e40c4a2dbc986",
+      "byteSize": 2638361
+    },
+    "audio/rtrack_000009-v1.opus": {
+      "sha256": "ff7b95d2e5c558284e4e2ba8949c109c929cb9cbe025d38b423d4e3b5b4b6d21",
+      "byteSize": 2717488
+    },
+    "audio/rtrack_000010-v1.opus": {
+      "sha256": "94668375bbf82980c32127024393e82ef7a0ed6ab32a61bfb9e80e43aa42bc6f",
+      "byteSize": 2169811
+    },
+    "audio/rtrack_000011-v1.opus": {
+      "sha256": "a16afcb7e68bfb4b76a70dfeb06439146d028edf4a4f397c8ff2a0ad30c7c5c4",
+      "byteSize": 2583266
+    },
+    "audio/rtrack_000012-v1.opus": {
+      "sha256": "eb4f6e2eacc87415c617f3a04a5bef59912334fb431443e56b8bdf36652876e0",
+      "byteSize": 2587532
+    },
+    "audio/rtrack_000013-v1.opus": {
+      "sha256": "c83c5d0fe6bddbd3ae4784a4bb44a98d80e9803f6da6fdf564dfb8d22829931f",
+      "byteSize": 2776495
+    },
+    "audio/rtrack_000014-v1.opus": {
+      "sha256": "a2903fdde5f99867f3dd003aa1b137e94cd8ded4972fec09e928dd9f062ab1d9",
+      "byteSize": 2921339
+    },
+    "audio/rtrack_000015-v1.opus": {
+      "sha256": "86206d7af4357345d9608811fa09fa7dc45a75f0cb081068c3540cf6a2cf83f9",
+      "byteSize": 3396510
+    },
+    "audio/rtrack_000016-v1.opus": {
+      "sha256": "89b1a6bf88a9c1ea859c21d57fcc6321cdbac34c2b308c2339aa24e3e76b6df0",
+      "byteSize": 2724073
+    },
+    "audio/rtrack_000017-v1.opus": {
+      "sha256": "9aaaced82e46e587423b3e01a686bf19ecbd0b3232023ff40d62e83a9aa81c4c",
+      "byteSize": 1581970
+    },
+    "audio/rtrack_000018-v1.opus": {
+      "sha256": "89d199a11976126cac4cde31b6d413bc22119b443161f2aebf552b60242c341c",
+      "byteSize": 2878153
+    },
+    "radio-manifest.json": {
+      "sha256": "aa96fe8c39272ef0b58a245655d58b2c4d5750226ff6656b70dc8e18be5406f1",
+      "byteSize": 8486
+    },
+    "playlist.json": {
+      "sha256": "bc604fd9b8056bf38c52439efc78f322dc5a127cec321ddc4856dd61884a22ab",
+      "byteSize": 11094
+    }
+  }
+}

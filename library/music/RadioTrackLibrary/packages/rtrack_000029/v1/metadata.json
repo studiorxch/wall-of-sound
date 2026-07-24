@@ -1,0 +1,87 @@
+{
+  "schemaVersion": "1.0.0",
+  "radioTrackId": "rtrack_000029",
+  "packageVersion": 1,
+  "status": "RADIO_READY",
+  "source": {
+    "trackId": "track_x3x89n3c",
+    "audioRelPath": "catalog/audio/soul_trace.flac"
+  },
+  "sourceAssetHash": "c27def609263533ef2c62ef60ae980edbc8561aaa469b6afa73d87fa27bc3233",
+  "audio": {
+    "primary": {
+      "codec": "opus",
+      "container": "ogg",
+      "mimeType": "audio/ogg; codecs=opus",
+      "relativePath": "audio.opus",
+      "bitrateKbps": 160,
+      "vbrMode": "constrained",
+      "channels": 2,
+      "sampleRate": 48000,
+      "durationSeconds": 173.39997916666667,
+      "decodedFrameCount48k": 8323199,
+      "byteSize": 3499921,
+      "sha256": "e3280c4e9536a7396d9603d1c15994e2abfc65b206d1b2a7c686967fbd2cffb9"
+    }
+  },
+  "display": {
+    "title": "Soul Trace",
+    "artist": "StudioRich"
+  },
+  "musical": {
+    "bpm": 85,
+    "key": "6B",
+    "moods": [
+      "Calm",
+      "Peaceful",
+      "Weightless"
+    ],
+    "genres": [
+      "jungle",
+      "lo-fi",
+      "soul"
+    ]
+  },
+  "songIntelligence": {
+    "revision": "2026-07-18T06:31:31.787Z",
+    "analyzerVersion": "song-analyzer-v1.1.0",
+    "configurationVersion": "song-analysis-config-v1.0.0",
+    "status": "READY_PROVISIONAL",
+    "sections": [
+      {
+        "label": "Intro",
+        "structuralType": "intro",
+        "startSeconds": 0,
+        "endSeconds": 17.34,
+        "verified": false
+      },
+      {
+        "label": "Body",
+        "structuralType": "body",
+        "startSeconds": 17.34,
+        "endSeconds": 147.38997732426304,
+        "verified": false
+      },
+      {
+        "label": "Outro",
+        "structuralType": "outro",
+        "startSeconds": 147.38997732426304,
+        "endSeconds": 173.39997732426303,
+        "verified": false
+      }
+    ]
+  },
+  "approval": {
+    "approved": true,
+    "approvedAt": "2026-07-23T04:55:26.014Z",
+    "sourceAssetHash": "c27def609263533ef2c62ef60ae980edbc8561aaa469b6afa73d87fa27bc3233",
+    "songIntelligenceRevision": "2026-07-18T06:31:31.787Z"
+  },
+  "verification": {
+    "probeOk": true,
+    "decodeVerifyOk": true,
+    "deltaFrames": 0,
+    "verifiedAt": "2026-07-23T05:42:49.079Z"
+  },
+  "createdAt": "2026-07-23T05:42:49.079Z"
+}

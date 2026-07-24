@@ -1,0 +1,87 @@
+{
+  "schemaVersion": "1.0.0",
+  "radioTrackId": "rtrack_000024",
+  "packageVersion": 1,
+  "status": "RADIO_READY",
+  "source": {
+    "trackId": "track_r4pyj1jy",
+    "audioRelPath": "catalog/audio/crush.exe_s01.flac"
+  },
+  "sourceAssetHash": "bf8fb73e9f963738e70053dc51fb1c765704e32de83a4e0664c48992f21921ae",
+  "audio": {
+    "primary": {
+      "codec": "opus",
+      "container": "ogg",
+      "mimeType": "audio/ogg; codecs=opus",
+      "relativePath": "audio.opus",
+      "bitrateKbps": 160,
+      "vbrMode": "constrained",
+      "channels": 2,
+      "sampleRate": 48000,
+      "durationSeconds": 214.91997916666668,
+      "decodedFrameCount48k": 10316159,
+      "byteSize": 4337842,
+      "sha256": "3cef4fb2ffeb9b58b206029873c17f813226951193e9d08883d7edc4a226e418"
+    }
+  },
+  "display": {
+    "title": "Crush.exe S1",
+    "artist": "StudioRich"
+  },
+  "musical": {
+    "bpm": 90,
+    "key": "5B",
+    "moods": [
+      "Calm",
+      "Peaceful",
+      "Intimate"
+    ],
+    "genres": [
+      "electronic",
+      "glitch",
+      "jungle"
+    ]
+  },
+  "songIntelligence": {
+    "revision": "2026-07-18T06:31:25.064Z",
+    "analyzerVersion": "song-analyzer-v1.1.0",
+    "configurationVersion": "song-analysis-config-v1.0.0",
+    "status": "READY_PROVISIONAL",
+    "sections": [
+      {
+        "label": "Intro",
+        "structuralType": "intro",
+        "startSeconds": 0,
+        "endSeconds": 21.491995464852607,
+        "verified": false
+      },
+      {
+        "label": "Body",
+        "structuralType": "body",
+        "startSeconds": 21.491995464852607,
+        "endSeconds": 182.68197278911563,
+        "verified": false
+      },
+      {
+        "label": "Outro",
+        "structuralType": "outro",
+        "startSeconds": 182.68197278911563,
+        "endSeconds": 214.91997732426304,
+        "verified": false
+      }
+    ]
+  },
+  "approval": {
+    "approved": true,
+    "approvedAt": "2026-07-23T04:55:25.757Z",
+    "sourceAssetHash": "bf8fb73e9f963738e70053dc51fb1c765704e32de83a4e0664c48992f21921ae",
+    "songIntelligenceRevision": "2026-07-18T06:31:25.064Z"
+  },
+  "verification": {
+    "probeOk": true,
+    "decodeVerifyOk": true,
+    "deltaFrames": 0,
+    "verifiedAt": "2026-07-23T05:42:39.138Z"
+  },
+  "createdAt": "2026-07-23T05:42:39.138Z"
+}

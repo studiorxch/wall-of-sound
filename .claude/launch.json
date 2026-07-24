@@ -34,6 +34,13 @@
       "cwd": "/Users/studio/Projects/wall-of-sound/music",
       "port": 5173,
       "autoPort": true
+    },
+    {
+      "name": "studiorich-orbital",
+      "runtimeExecutable": "/Users/studio/.nvm/versions/node/v22.23.1/bin/node",
+      "runtimeArgs": ["node_modules/vite/bin/vite.js", "--port", "5180"],
+      "cwd": "/Users/studio/Projects/wall-of-sound/studiorich-orbital",
+      "port": 5180
     }
   ]
 }

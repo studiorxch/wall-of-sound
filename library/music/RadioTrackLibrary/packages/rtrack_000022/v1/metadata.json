@@ -1,0 +1,86 @@
+{
+  "schemaVersion": "1.0.0",
+  "radioTrackId": "rtrack_000022",
+  "packageVersion": 1,
+  "status": "RADIO_READY",
+  "source": {
+    "trackId": "track_lobabe7s",
+    "audioRelPath": "catalog/audio/replay_her_name_s01.flac"
+  },
+  "sourceAssetHash": "66427540ccf06cd5850e20aac48e4950e57e87384a6c3e1a4ba5d7c125c0ef65",
+  "audio": {
+    "primary": {
+      "codec": "opus",
+      "container": "ogg",
+      "mimeType": "audio/ogg; codecs=opus",
+      "relativePath": "audio.opus",
+      "bitrateKbps": 160,
+      "vbrMode": "constrained",
+      "channels": 2,
+      "sampleRate": 48000,
+      "durationSeconds": 187.07997916666667,
+      "decodedFrameCount48k": 8979839,
+      "byteSize": 3775744,
+      "sha256": "6be029c0d2730b1a0c9df4fa189dd904f506b11ed20e0154917043859c716c13"
+    }
+  },
+  "display": {
+    "title": "Replay Her Name S1",
+    "artist": "StudioRich"
+  },
+  "musical": {
+    "bpm": 90,
+    "key": "5B",
+    "moods": [
+      "Weightless",
+      "Calm",
+      "Intimate"
+    ],
+    "genres": [
+      "ambient",
+      "electronic"
+    ]
+  },
+  "songIntelligence": {
+    "revision": "2026-07-18T06:31:21.851Z",
+    "analyzerVersion": "song-analyzer-v1.1.0",
+    "configurationVersion": "song-analysis-config-v1.0.0",
+    "status": "READY_PROVISIONAL",
+    "sections": [
+      {
+        "label": "Intro",
+        "structuralType": "intro",
+        "startSeconds": 0,
+        "endSeconds": 18.708004535147392,
+        "verified": false
+      },
+      {
+        "label": "Body",
+        "structuralType": "body",
+        "startSeconds": 18.708004535147392,
+        "endSeconds": 159.01798185941044,
+        "verified": false
+      },
+      {
+        "label": "Outro",
+        "structuralType": "outro",
+        "startSeconds": 159.01798185941044,
+        "endSeconds": 187.07997732426304,
+        "verified": false
+      }
+    ]
+  },
+  "approval": {
+    "approved": true,
+    "approvedAt": "2026-07-23T04:55:25.651Z",
+    "sourceAssetHash": "66427540ccf06cd5850e20aac48e4950e57e87384a6c3e1a4ba5d7c125c0ef65",
+    "songIntelligenceRevision": "2026-07-18T06:31:21.851Z"
+  },
+  "verification": {
+    "probeOk": true,
+    "decodeVerifyOk": true,
+    "deltaFrames": 0,
+    "verifiedAt": "2026-07-23T05:42:33.911Z"
+  },
+  "createdAt": "2026-07-23T05:42:33.911Z"
+}

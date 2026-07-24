@@ -1,0 +1,381 @@
+{
+  "schemaVersion": "1.0.0",
+  "stationId": "radplaylist_mrpzn8z9_x51i6d",
+  "bundleVersion": 1,
+  "entries": [
+    {
+      "radioTrackId": "rtrack_000019",
+      "packageVersion": 1,
+      "title": "Above the Loop",
+      "artist": "StudioRich",
+      "durationSeconds": 106.63997916666666,
+      "songIntelligence": {
+        "revision": "2026-07-18T06:31:18.797Z",
+        "status": "READY_PROVISIONAL",
+        "sections": [
+          {
+            "label": "Intro",
+            "structuralType": "intro",
+            "startSeconds": 0,
+            "endSeconds": 10.663990929705216,
+            "verified": false
+          },
+          {
+            "label": "Body",
+            "structuralType": "body",
+            "startSeconds": 10.663990929705216,
+            "endSeconds": 90.64399092970521,
+            "verified": false
+          },
+          {
+            "label": "Outro",
+            "structuralType": "outro",
+            "startSeconds": 90.64399092970521,
+            "endSeconds": 106.63997732426304,
+            "verified": false
+          }
+        ]
+      }
+    },
+    {
+      "radioTrackId": "rtrack_000020",
+      "packageVersion": 1,
+      "title": "Driveway Fadeout",
+      "artist": "StudioRich",
+      "durationSeconds": 92.91997916666666,
+      "songIntelligence": {
+        "revision": "2026-07-18T06:31:19.720Z",
+        "status": "READY_PROVISIONAL",
+        "sections": [
+          {
+            "label": "Intro",
+            "structuralType": "intro",
+            "startSeconds": 0,
+            "endSeconds": 9.291995464852608,
+            "verified": false
+          },
+          {
+            "label": "Body",
+            "structuralType": "body",
+            "startSeconds": 9.291995464852608,
+            "endSeconds": 78.98197278911564,
+            "verified": false
+          },
+          {
+            "label": "Outro",
+            "structuralType": "outro",
+            "startSeconds": 78.98197278911564,
+            "endSeconds": 92.91997732426304,
+            "verified": false
+          }
+        ]
+      }
+    },
+    {
+      "radioTrackId": "rtrack_000021",
+      "packageVersion": 1,
+      "title": "Window Fade",
+      "artist": "StudioRich",
+      "durationSeconds": 103.99997916666666,
+      "songIntelligence": {
+        "revision": "2026-07-18T06:31:20.607Z",
+        "status": "READY_PROVISIONAL",
+        "sections": [
+          {
+            "label": "Intro",
+            "structuralType": "intro",
+            "startSeconds": 0,
+            "endSeconds": 10.4,
+            "verified": false
+          },
+          {
+            "label": "Body",
+            "structuralType": "body",
+            "startSeconds": 10.4,
+            "endSeconds": 88.39997732426303,
+            "verified": false
+          },
+          {
+            "label": "Outro",
+            "structuralType": "outro",
+            "startSeconds": 88.39997732426303,
+            "endSeconds": 103.99997732426304,
+            "verified": false
+          }
+        ]
+      }
+    },
+    {
+      "radioTrackId": "rtrack_000022",
+      "packageVersion": 1,
+      "title": "Replay Her Name S1",
+      "artist": "StudioRich",
+      "durationSeconds": 187.07997916666667,
+      "songIntelligence": {
+        "revision": "2026-07-18T06:31:21.851Z",
+        "status": "READY_PROVISIONAL",
+        "sections": [
+          {
+            "label": "Intro",
+            "structuralType": "intro",
+            "startSeconds": 0,
+            "endSeconds": 18.708004535147392,
+            "verified": false
+          },
+          {
+            "label": "Body",
+            "structuralType": "body",
+            "startSeconds": 18.708004535147392,
+            "endSeconds": 159.01798185941044,
+            "verified": false
+          },
+          {
+            "label": "Outro",
+            "structuralType": "outro",
+            "startSeconds": 159.01798185941044,
+            "endSeconds": 187.07997732426304,
+            "verified": false
+          }
+        ]
+      }
+    },
+    {
+      "radioTrackId": "rtrack_000023",
+      "packageVersion": 1,
+      "title": "Midnight Court",
+      "artist": "StudioRich",
+      "durationSeconds": 158.47997916666668,
+      "songIntelligence": {
+        "revision": "2026-07-18T06:31:23.403Z",
+        "status": "READY_PROVISIONAL",
+        "sections": [
+          {
+            "label": "Intro",
+            "structuralType": "intro",
+            "startSeconds": 0,
+            "endSeconds": 15.848004535147393,
+            "verified": false
+          },
+          {
+            "label": "Body",
+            "structuralType": "body",
+            "startSeconds": 15.848004535147393,
+            "endSeconds": 134.70798185941044,
+            "verified": false
+          },
+          {
+            "label": "Outro",
+            "structuralType": "outro",
+            "startSeconds": 134.70798185941044,
+            "endSeconds": 158.47997732426305,
+            "verified": false
+          }
+        ]
+      }
+    },
+    {
+      "radioTrackId": "rtrack_000024",
+      "packageVersion": 1,
+      "title": "Crush.exe S1",
+      "artist": "StudioRich",
+      "durationSeconds": 214.91997916666668,
+      "songIntelligence": {
+        "revision": "2026-07-18T06:31:25.064Z",
+        "status": "READY_PROVISIONAL",
+        "sections": [
+          {
+            "label": "Intro",
+            "structuralType": "intro",
+            "startSeconds": 0,
+            "endSeconds": 21.491995464852607,
+            "verified": false
+          },
+          {
+            "label": "Body",
+            "structuralType": "body",
+            "startSeconds": 21.491995464852607,
+            "endSeconds": 182.68197278911563,
+            "verified": false
+          },
+          {
+            "label": "Outro",
+            "structuralType": "outro",
+            "startSeconds": 182.68197278911563,
+            "endSeconds": 214.91997732426304,
+            "verified": false
+          }
+        ]
+      }
+    },
+    {
+      "radioTrackId": "rtrack_000025",
+      "packageVersion": 1,
+      "title": "Sweatshirt Blur",
+      "artist": "StudioRich",
+      "durationSeconds": 173.55997916666666,
+      "songIntelligence": {
+        "revision": "2026-07-18T06:31:26.870Z",
+        "status": "READY_PROVISIONAL",
+        "sections": [
+          {
+            "label": "Intro",
+            "structuralType": "intro",
+            "startSeconds": 0,
+            "endSeconds": 17.356009070294785,
+            "verified": false
+          },
+          {
+            "label": "Body",
+            "structuralType": "body",
+            "startSeconds": 17.356009070294785,
+            "endSeconds": 147.52598639455783,
+            "verified": false
+          },
+          {
+            "label": "Outro",
+            "structuralType": "outro",
+            "startSeconds": 147.52598639455783,
+            "endSeconds": 173.55997732426303,
+            "verified": false
+          }
+        ]
+      }
+    },
+    {
+      "radioTrackId": "rtrack_000026",
+      "packageVersion": 1,
+      "title": "Ambient Rewind Blue Mix",
+      "artist": "StudioRich",
+      "durationSeconds": 102.03997916666667,
+      "songIntelligence": {
+        "revision": "2026-07-18T06:31:28.333Z",
+        "status": "READY_PROVISIONAL",
+        "sections": [
+          {
+            "label": "Intro",
+            "structuralType": "intro",
+            "startSeconds": 0,
+            "endSeconds": 10.203990929705215,
+            "verified": false
+          },
+          {
+            "label": "Body",
+            "structuralType": "body",
+            "startSeconds": 10.203990929705215,
+            "endSeconds": 86.73399092970521,
+            "verified": false
+          },
+          {
+            "label": "Outro",
+            "structuralType": "outro",
+            "startSeconds": 86.73399092970521,
+            "endSeconds": 102.03997732426303,
+            "verified": false
+          }
+        ]
+      }
+    },
+    {
+      "radioTrackId": "rtrack_000027",
+      "packageVersion": 1,
+      "title": "Skylight Bloom",
+      "artist": "StudioRich",
+      "durationSeconds": 140.67997916666667,
+      "songIntelligence": {
+        "revision": "2026-07-18T06:31:29.404Z",
+        "status": "READY_PROVISIONAL",
+        "sections": [
+          {
+            "label": "Intro",
+            "structuralType": "intro",
+            "startSeconds": 0,
+            "endSeconds": 14.068004535147391,
+            "verified": false
+          },
+          {
+            "label": "Body",
+            "structuralType": "body",
+            "startSeconds": 14.068004535147391,
+            "endSeconds": 119.57798185941043,
+            "verified": false
+          },
+          {
+            "label": "Outro",
+            "structuralType": "outro",
+            "startSeconds": 119.57798185941043,
+            "endSeconds": 140.67997732426304,
+            "verified": false
+          }
+        ]
+      }
+    },
+    {
+      "radioTrackId": "rtrack_000028",
+      "packageVersion": 1,
+      "title": "Driveway Fadeout S01",
+      "artist": "StudioRich",
+      "durationSeconds": 92.91997916666666,
+      "songIntelligence": {
+        "revision": "2026-07-18T06:31:30.584Z",
+        "status": "READY_PROVISIONAL",
+        "sections": [
+          {
+            "label": "Intro",
+            "structuralType": "intro",
+            "startSeconds": 0,
+            "endSeconds": 9.291995464852608,
+            "verified": false
+          },
+          {
+            "label": "Body",
+            "structuralType": "body",
+            "startSeconds": 9.291995464852608,
+            "endSeconds": 78.98197278911564,
+            "verified": false
+          },
+          {
+            "label": "Outro",
+            "structuralType": "outro",
+            "startSeconds": 78.98197278911564,
+            "endSeconds": 92.91997732426304,
+            "verified": false
+          }
+        ]
+      }
+    },
+    {
+      "radioTrackId": "rtrack_000029",
+      "packageVersion": 1,
+      "title": "Soul Trace",
+      "artist": "StudioRich",
+      "durationSeconds": 173.39997916666667,
+      "songIntelligence": {
+        "revision": "2026-07-18T06:31:31.787Z",
+        "status": "READY_PROVISIONAL",
+        "sections": [
+          {
+            "label": "Intro",
+            "structuralType": "intro",
+            "startSeconds": 0,
+            "endSeconds": 17.34,
+            "verified": false
+          },
+          {
+            "label": "Body",
+            "structuralType": "body",
+            "startSeconds": 17.34,
+            "endSeconds": 147.38997732426304,
+            "verified": false
+          },
+          {
+            "label": "Outro",
+            "structuralType": "outro",
+            "startSeconds": 147.38997732426304,
+            "endSeconds": 173.39997732426303,
+            "verified": false
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,60 @@
+{
+  "schemaVersion": "1.0.0",
+  "radioTrackId": "rtrack_000014",
+  "packageVersion": 1,
+  "status": "RADIO_READY",
+  "source": {
+    "trackId": "track_lo24si4n",
+    "audioRelPath": "catalog/audio/soul_trace_s01.flac"
+  },
+  "sourceAssetHash": "d282e7ccf950c9fcacd096052a75359542b43a287d3c072647e91898122e98ce",
+  "audio": {
+    "primary": {
+      "codec": "opus",
+      "container": "ogg",
+      "mimeType": "audio/ogg; codecs=opus",
+      "relativePath": "audio.opus",
+      "bitrateKbps": 160,
+      "vbrMode": "constrained",
+      "channels": 2,
+      "sampleRate": 48000,
+      "durationSeconds": 144.71997916666666,
+      "decodedFrameCount48k": 6946559,
+      "byteSize": 2921339,
+      "sha256": "a2903fdde5f99867f3dd003aa1b137e94cd8ded4972fec09e928dd9f062ab1d9"
+    }
+  },
+  "display": {
+    "title": "Soul Trace S01",
+    "artist": "StudioRich"
+  },
+  "musical": {
+    "bpm": 84,
+    "key": "3A",
+    "moods": [
+      "Somber",
+      "Subdued",
+      "Melancholy"
+    ],
+    "genres": [
+      "jungle",
+      "lo-fi",
+      "soul"
+    ]
+  },
+  "songIntelligence": {
+    "sections": []
+  },
+  "approval": {
+    "approved": true,
+    "approvedAt": "2026-07-23T05:40:53.779Z",
+    "sourceAssetHash": "d282e7ccf950c9fcacd096052a75359542b43a287d3c072647e91898122e98ce"
+  },
+  "verification": {
+    "probeOk": true,
+    "decodeVerifyOk": true,
+    "deltaFrames": 0,
+    "verifiedAt": "2026-07-23T05:41:16.505Z"
+  },
+  "createdAt": "2026-07-23T05:41:16.505Z"
+}

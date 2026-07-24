@@ -1,0 +1,86 @@
+{
+  "schemaVersion": "1.0.0",
+  "radioTrackId": "rtrack_000025",
+  "packageVersion": 1,
+  "status": "RADIO_READY",
+  "source": {
+    "trackId": "track_1v4c4mv5",
+    "audioRelPath": "catalog/audio/sweatshirt_blur.flac"
+  },
+  "sourceAssetHash": "4e5159c37f1da572c8702ae4772d635bfd6d3be301ac2899509581d3b59f6752",
+  "audio": {
+    "primary": {
+      "codec": "opus",
+      "container": "ogg",
+      "mimeType": "audio/ogg; codecs=opus",
+      "relativePath": "audio.opus",
+      "bitrateKbps": 160,
+      "vbrMode": "constrained",
+      "channels": 2,
+      "sampleRate": 48000,
+      "durationSeconds": 173.55997916666666,
+      "decodedFrameCount48k": 8330879,
+      "byteSize": 3503169,
+      "sha256": "e711b82198cb18c716701a9c6cf254307be6c6f7f83cc38b6ca1aeebf591a684"
+    }
+  },
+  "display": {
+    "title": "Sweatshirt Blur",
+    "artist": "StudioRich"
+  },
+  "musical": {
+    "bpm": 89,
+    "key": "6B",
+    "moods": [
+      "Chill",
+      "Hypnotic",
+      "Hopeful"
+    ],
+    "genres": [
+      "r&b",
+      "trap"
+    ]
+  },
+  "songIntelligence": {
+    "revision": "2026-07-18T06:31:26.870Z",
+    "analyzerVersion": "song-analyzer-v1.1.0",
+    "configurationVersion": "song-analysis-config-v1.0.0",
+    "status": "READY_PROVISIONAL",
+    "sections": [
+      {
+        "label": "Intro",
+        "structuralType": "intro",
+        "startSeconds": 0,
+        "endSeconds": 17.356009070294785,
+        "verified": false
+      },
+      {
+        "label": "Body",
+        "structuralType": "body",
+        "startSeconds": 17.356009070294785,
+        "endSeconds": 147.52598639455783,
+        "verified": false
+      },
+      {
+        "label": "Outro",
+        "structuralType": "outro",
+        "startSeconds": 147.52598639455783,
+        "endSeconds": 173.55997732426303,
+        "verified": false
+      }
+    ]
+  },
+  "approval": {
+    "approved": true,
+    "approvedAt": "2026-07-23T04:55:25.827Z",
+    "sourceAssetHash": "4e5159c37f1da572c8702ae4772d635bfd6d3be301ac2899509581d3b59f6752",
+    "songIntelligenceRevision": "2026-07-18T06:31:26.870Z"
+  },
+  "verification": {
+    "probeOk": true,
+    "decodeVerifyOk": true,
+    "deltaFrames": 0,
+    "verifiedAt": "2026-07-23T05:42:41.682Z"
+  },
+  "createdAt": "2026-07-23T05:42:41.682Z"
+}

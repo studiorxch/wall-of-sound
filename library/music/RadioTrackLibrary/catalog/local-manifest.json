@@ -1,0 +1,325 @@
+{
+  "schemaVersion": "1.0.0",
+  "generatedAt": "2026-07-23T05:42:49.079Z",
+  "entries": [
+    {
+      "radioTrackId": "rtrack_000001",
+      "packageVersion": 1,
+      "status": "RADIO_READY",
+      "source": {
+        "trackId": "ext_mr9smtpl_wb0b",
+        "audioRelPath": "external/audio/VA - Microhouse Essentials (2021)/01. Soulphiction - White Ropes.mp3"
+      },
+      "sourceAssetHash": "d44eba8cd4e4eacd87027114aadb3a2dd21dbcfc80532a0fd11a58ce95dc472a",
+      "relativePackagePath": "packages/rtrack_000001/v1"
+    },
+    {
+      "radioTrackId": "rtrack_000002",
+      "packageVersion": 1,
+      "status": "RADIO_READY",
+      "source": {
+        "trackId": "ext_mr9smtpl_agtt",
+        "audioRelPath": "external/audio/VA - Microhouse Essentials (2021)/02. Isolée - Beau Mot Plage.mp3"
+      },
+      "sourceAssetHash": "9fa1470d3f3424606641d7f2c96f1ce192bd1c4eba1e9639b863313ab679132a",
+      "relativePackagePath": "packages/rtrack_000002/v1"
+    },
+    {
+      "radioTrackId": "rtrack_000003",
+      "packageVersion": 1,
+      "status": "RADIO_READY",
+      "source": {
+        "trackId": "ext_mr9smtpl_e4g9",
+        "audioRelPath": "external/audio/VA - Microhouse Essentials (2021)/09. Matias Aguayo - Minimal.mp3"
+      },
+      "sourceAssetHash": "56c3fbbed9567c0ca3a5799f0a6d1b8e42175d74d806f6b65d4448f1fb420fd2",
+      "relativePackagePath": "packages/rtrack_000003/v1"
+    },
+    {
+      "radioTrackId": "rtrack_000004",
+      "packageVersion": 1,
+      "status": "RADIO_READY",
+      "source": {
+        "trackId": "track_b8gjqz62",
+        "audioRelPath": "catalog/audio/hold_the_shape_s01.flac"
+      },
+      "sourceAssetHash": "7f699f86ae61f9f3f985d2d7bbe511a56f0288adbd9ccce16f61a9698e53a748",
+      "relativePackagePath": "packages/rtrack_000004/v1"
+    },
+    {
+      "radioTrackId": "rtrack_000005",
+      "packageVersion": 1,
+      "status": "RADIO_READY",
+      "source": {
+        "trackId": "track_8c3io06h",
+        "audioRelPath": "catalog/audio/lo_pulse.flac"
+      },
+      "sourceAssetHash": "cabce17516db8b34da1cdb6eb8589bfc16103962b6dd101b2f5a201ad0b4414c",
+      "relativePackagePath": "packages/rtrack_000005/v1"
+    },
+    {
+      "radioTrackId": "rtrack_000006",
+      "packageVersion": 1,
+      "status": "RADIO_READY",
+      "source": {
+        "trackId": "track_96r4pyym",
+        "audioRelPath": "catalog/audio/pulse_in_the_haze_s01.flac"
+      },
+      "sourceAssetHash": "3f445bca030536019d96975f59497aefc09ea6e65796eb5951a6ea2267ab269e",
+      "relativePackagePath": "packages/rtrack_000006/v1"
+    },
+    {
+      "radioTrackId": "rtrack_000007",
+      "packageVersion": 1,
+      "status": "RADIO_READY",
+      "source": {
+        "trackId": "track_h4coo7qi",
+        "audioRelPath": "catalog/audio/raincurve.flac"
+      },
+      "sourceAssetHash": "5c8031802af5a2252b4e8277039e0ec286eb547141c55bdc10d4e0dfd3aaba43",
+      "relativePackagePath": "packages/rtrack_000007/v1"
+    },
+    {
+      "radioTrackId": "rtrack_000008",
+      "packageVersion": 1,
+      "status": "RADIO_READY",
+      "source": {
+        "trackId": "track_jzcw4r91",
+        "audioRelPath": "catalog/audio/twilight_vibration.flac"
+      },
+      "sourceAssetHash": "8627f8b73e337a315614d341dbf2799fb8752a57c47d029132b6cfb960f615d2",
+      "relativePackagePath": "packages/rtrack_000008/v1"
+    },
+    {
+      "radioTrackId": "rtrack_000009",
+      "packageVersion": 1,
+      "status": "RADIO_READY",
+      "source": {
+        "trackId": "track_p2ofwxb9",
+        "audioRelPath": "catalog/audio/the_way_the_air_moves.flac"
+      },
+      "sourceAssetHash": "9f83611b9f328379a8e5fa5e6f8101505d691af3e88491415e046d4edf27ed52",
+      "relativePackagePath": "packages/rtrack_000009/v1"
+    },
+    {
+      "radioTrackId": "rtrack_000010",
+      "packageVersion": 1,
+      "status": "RADIO_READY",
+      "source": {
+        "trackId": "track_7fxzhnzq",
+        "audioRelPath": "catalog/audio/cloud_rust.flac"
+      },
+      "sourceAssetHash": "a34b3151aeff22e8a0cfbb34dfef51d257017f4f72aaf6da190d87e94779f47c",
+      "relativePackagePath": "packages/rtrack_000010/v1"
+    },
+    {
+      "radioTrackId": "rtrack_000011",
+      "packageVersion": 1,
+      "status": "RADIO_READY",
+      "source": {
+        "trackId": "track_soc6igd6",
+        "audioRelPath": "catalog/audio/ember_channel.flac"
+      },
+      "sourceAssetHash": "a15ab69c4f606bbdb82d16bb51f94040b8613632d4c6fb82e63f6d1d2df6c48c",
+      "relativePackagePath": "packages/rtrack_000011/v1"
+    },
+    {
+      "radioTrackId": "rtrack_000012",
+      "packageVersion": 1,
+      "status": "RADIO_READY",
+      "source": {
+        "trackId": "track_yz4cfq0i",
+        "audioRelPath": "catalog/audio/neon_with_teeth_s01.flac"
+      },
+      "sourceAssetHash": "88be2b8578f8436fa2d106e2d39a200c53d22c9d41fc8b4eba130b55983e6e62",
+      "relativePackagePath": "packages/rtrack_000012/v1"
+    },
+    {
+      "radioTrackId": "rtrack_000013",
+      "packageVersion": 1,
+      "status": "RADIO_READY",
+      "source": {
+        "trackId": "track_37j0ehum",
+        "audioRelPath": "catalog/audio/blurred_signal_s01.flac"
+      },
+      "sourceAssetHash": "ec0877b8969c50dbb9e24f89b9e81764ef1f436479dae236d1b50543376d106f",
+      "relativePackagePath": "packages/rtrack_000013/v1"
+    },
+    {
+      "radioTrackId": "rtrack_000014",
+      "packageVersion": 1,
+      "status": "RADIO_READY",
+      "source": {
+        "trackId": "track_lo24si4n",
+        "audioRelPath": "catalog/audio/soul_trace_s01.flac"
+      },
+      "sourceAssetHash": "d282e7ccf950c9fcacd096052a75359542b43a287d3c072647e91898122e98ce",
+      "relativePackagePath": "packages/rtrack_000014/v1"
+    },
+    {
+      "radioTrackId": "rtrack_000015",
+      "packageVersion": 1,
+      "status": "RADIO_READY",
+      "source": {
+        "trackId": "track_v99cp8xa",
+        "audioRelPath": "catalog/audio/cryloop.exe_s01.flac"
+      },
+      "sourceAssetHash": "e7fc5bab02af7fafcc0b41820262e4b6216deb7b88d38b83d29b5b955f0b2098",
+      "relativePackagePath": "packages/rtrack_000015/v1"
+    },
+    {
+      "radioTrackId": "rtrack_000016",
+      "packageVersion": 1,
+      "status": "RADIO_READY",
+      "source": {
+        "trackId": "track_83vvynfe",
+        "audioRelPath": "catalog/audio/silent_altitude.flac"
+      },
+      "sourceAssetHash": "44095d98fc4f016ab409dcba067bd4859b16bb82cf7ac6a574cc7373558b43a2",
+      "relativePackagePath": "packages/rtrack_000016/v1"
+    },
+    {
+      "radioTrackId": "rtrack_000017",
+      "packageVersion": 1,
+      "status": "RADIO_READY",
+      "source": {
+        "trackId": "track_rxnwfeim",
+        "audioRelPath": "catalog/audio/silent_altitude_s01.flac"
+      },
+      "sourceAssetHash": "61b63ef26f263c18b3c4cc0e488626fde824a42ad51d0b8f52ca8a978898f173",
+      "relativePackagePath": "packages/rtrack_000017/v1"
+    },
+    {
+      "radioTrackId": "rtrack_000018",
+      "packageVersion": 1,
+      "status": "RADIO_READY",
+      "source": {
+        "trackId": "track_ulz2g71m",
+        "audioRelPath": "catalog/audio/radiant_brake_s01.flac"
+      },
+      "sourceAssetHash": "d836f49ba4ff1840ba974ca2730d6ddcd636787c287a39bcfbb6bee8f114b1a2",
+      "relativePackagePath": "packages/rtrack_000018/v1"
+    },
+    {
+      "radioTrackId": "rtrack_000019",
+      "packageVersion": 1,
+      "status": "RADIO_READY",
+      "source": {
+        "trackId": "track_m11c8blx",
+        "audioRelPath": "catalog/audio/above_the_loop.flac"
+      },
+      "sourceAssetHash": "0327f26d0e6864e5b416003fcebc7ba86157e54ca8a6ebe5c9b6aef597536339",
+      "relativePackagePath": "packages/rtrack_000019/v1"
+    },
+    {
+      "radioTrackId": "rtrack_000020",
+      "packageVersion": 1,
+      "status": "RADIO_READY",
+      "source": {
+        "trackId": "track_mtu6yw5p",
+        "audioRelPath": "catalog/audio/driveway_fadeout.flac"
+      },
+      "sourceAssetHash": "bcca3faf6c75cdc6a8695d4356ffbdc4ec6cd47416f861bb88e4edbcf7a51583",
+      "relativePackagePath": "packages/rtrack_000020/v1"
+    },
+    {
+      "radioTrackId": "rtrack_000021",
+      "packageVersion": 1,
+      "status": "RADIO_READY",
+      "source": {
+        "trackId": "track_mjvk93x4",
+        "audioRelPath": "catalog/audio/window_fade.flac"
+      },
+      "sourceAssetHash": "cf86bb4adb1205a8948d1f19d375b013e51e69ca9748556994f3a135ad8537e9",
+      "relativePackagePath": "packages/rtrack_000021/v1"
+    },
+    {
+      "radioTrackId": "rtrack_000022",
+      "packageVersion": 1,
+      "status": "RADIO_READY",
+      "source": {
+        "trackId": "track_lobabe7s",
+        "audioRelPath": "catalog/audio/replay_her_name_s01.flac"
+      },
+      "sourceAssetHash": "66427540ccf06cd5850e20aac48e4950e57e87384a6c3e1a4ba5d7c125c0ef65",
+      "relativePackagePath": "packages/rtrack_000022/v1"
+    },
+    {
+      "radioTrackId": "rtrack_000023",
+      "packageVersion": 1,
+      "status": "RADIO_READY",
+      "source": {
+        "trackId": "track_rsr39e35",
+        "audioRelPath": "catalog/audio/midnight_court.flac"
+      },
+      "sourceAssetHash": "60140e8b6094e77ee8335b8ccce0d4d8f6c1d75e2cf978d31d47240363a42e18",
+      "relativePackagePath": "packages/rtrack_000023/v1"
+    },
+    {
+      "radioTrackId": "rtrack_000024",
+      "packageVersion": 1,
+      "status": "RADIO_READY",
+      "source": {
+        "trackId": "track_r4pyj1jy",
+        "audioRelPath": "catalog/audio/crush.exe_s01.flac"
+      },
+      "sourceAssetHash": "bf8fb73e9f963738e70053dc51fb1c765704e32de83a4e0664c48992f21921ae",
+      "relativePackagePath": "packages/rtrack_000024/v1"
+    },
+    {
+      "radioTrackId": "rtrack_000025",
+      "packageVersion": 1,
+      "status": "RADIO_READY",
+      "source": {
+        "trackId": "track_1v4c4mv5",
+        "audioRelPath": "catalog/audio/sweatshirt_blur.flac"
+      },
+      "sourceAssetHash": "4e5159c37f1da572c8702ae4772d635bfd6d3be301ac2899509581d3b59f6752",
+      "relativePackagePath": "packages/rtrack_000025/v1"
+    },
+    {
+      "radioTrackId": "rtrack_000026",
+      "packageVersion": 1,
+      "status": "RADIO_READY",
+      "source": {
+        "trackId": "track_xkc2736m",
+        "audioRelPath": "catalog/audio/ambient_rewind_blue_mix.flac"
+      },
+      "sourceAssetHash": "caad78db36a5c0c849d9f26a1f8cba200c357523637efd25cae397984eb6a719",
+      "relativePackagePath": "packages/rtrack_000026/v1"
+    },
+    {
+      "radioTrackId": "rtrack_000027",
+      "packageVersion": 1,
+      "status": "RADIO_READY",
+      "source": {
+        "trackId": "track_15szhq0l",
+        "audioRelPath": "catalog/audio/skylight_bloom.flac"
+      },
+      "sourceAssetHash": "a2ed2a661060e5607a3f682eb32cb2d44ce1df3049b9579087c5adcb3c38fd25",
+      "relativePackagePath": "packages/rtrack_000027/v1"
+    },
+    {
+      "radioTrackId": "rtrack_000028",
+      "packageVersion": 1,
+      "status": "RADIO_READY",
+      "source": {
+        "trackId": "track_ovmpc3ti",
+        "audioRelPath": "catalog/audio/driveway_fadeout_s01.flac"
+      },
+      "sourceAssetHash": "413b1077dc1a08d86ab1a6b09f4498e87b5d0947d162759b11ac52db74f9ed15",
+      "relativePackagePath": "packages/rtrack_000028/v1"
+    },
+    {
+      "radioTrackId": "rtrack_000029",
+      "packageVersion": 1,
+      "status": "RADIO_READY",
+      "source": {
+        "trackId": "track_x3x89n3c",
+        "audioRelPath": "catalog/audio/soul_trace.flac"
+      },
+      "sourceAssetHash": "c27def609263533ef2c62ef60ae980edbc8561aaa469b6afa73d87fa27bc3233",
+      "relativePackagePath": "packages/rtrack_000029/v1"
+    }
+  ]
+}

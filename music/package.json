@@ -9,7 +9,8 @@
     "typecheck": "tsc --build tsconfig.json",
     "lint": "eslint .",
     "test": "vitest run",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "publish:sites": "node scripts/publish-radio-to-sites.mjs"
   },
   "dependencies": {
     "@material-symbols/svg-400": "^0.45.8",

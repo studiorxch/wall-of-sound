@@ -1,0 +1,60 @@
+{
+  "schemaVersion": "1.0.0",
+  "radioTrackId": "rtrack_000018",
+  "packageVersion": 1,
+  "status": "RADIO_READY",
+  "source": {
+    "trackId": "track_ulz2g71m",
+    "audioRelPath": "catalog/audio/radiant_brake_s01.flac"
+  },
+  "sourceAssetHash": "d836f49ba4ff1840ba974ca2730d6ddcd636787c287a39bcfbb6bee8f114b1a2",
+  "audio": {
+    "primary": {
+      "codec": "opus",
+      "container": "ogg",
+      "mimeType": "audio/ogg; codecs=opus",
+      "relativePath": "audio.opus",
+      "bitrateKbps": 160,
+      "vbrMode": "constrained",
+      "channels": 2,
+      "sampleRate": 48000,
+      "durationSeconds": 142.59997916666666,
+      "decodedFrameCount48k": 6844799,
+      "byteSize": 2878153,
+      "sha256": "89d199a11976126cac4cde31b6d413bc22119b443161f2aebf552b60242c341c"
+    }
+  },
+  "display": {
+    "title": "Radiant Brake S01",
+    "artist": "StudioRich"
+  },
+  "musical": {
+    "bpm": 77,
+    "key": "1A",
+    "moods": [
+      "Somber",
+      "Subdued",
+      "Melancholy"
+    ],
+    "genres": [
+      "cinematic",
+      "jungle",
+      "lo-fi"
+    ]
+  },
+  "songIntelligence": {
+    "sections": []
+  },
+  "approval": {
+    "approved": true,
+    "approvedAt": "2026-07-23T05:40:53.960Z",
+    "sourceAssetHash": "d836f49ba4ff1840ba974ca2730d6ddcd636787c287a39bcfbb6bee8f114b1a2"
+  },
+  "verification": {
+    "probeOk": true,
+    "decodeVerifyOk": true,
+    "deltaFrames": 0,
+    "verifiedAt": "2026-07-23T05:41:24.599Z"
+  },
+  "createdAt": "2026-07-23T05:41:24.599Z"
+}

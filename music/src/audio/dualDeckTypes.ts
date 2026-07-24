@@ -302,6 +302,20 @@ export interface DeckAudioGraphState {
   masterConnected: boolean;
 }
 
+// Raw <audio>-element diagnostic snapshot — see
+// DualDeckPlaybackEngine.getDeckDiagnostics(). Additive read-only surface,
+// never used to drive playback logic itself (that stays EngineAudibleReadiness's job).
+export interface DeckDiagnosticsSnapshot {
+  readyState: number;
+  networkState: number;
+  currentSrc: string;
+  paused: boolean;
+  ended: boolean;
+  mediaError: string | null;
+  gain: number;
+  contextState: AudioContextState | "closed";
+}
+
 // §11/§12 — hard-cut runtime contract: zero overlap, reachable from both the
 // scheduled (tick-based) path and the media `ended` event, sharing one
 // idempotent executor (§13, §14).

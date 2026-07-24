@@ -1,0 +1,87 @@
+{
+  "schemaVersion": "1.0.0",
+  "radioTrackId": "rtrack_000011",
+  "packageVersion": 1,
+  "status": "RADIO_READY",
+  "source": {
+    "trackId": "track_soc6igd6",
+    "audioRelPath": "catalog/audio/ember_channel.flac"
+  },
+  "sourceAssetHash": "a15ab69c4f606bbdb82d16bb51f94040b8613632d4c6fb82e63f6d1d2df6c48c",
+  "audio": {
+    "primary": {
+      "codec": "opus",
+      "container": "ogg",
+      "mimeType": "audio/ogg; codecs=opus",
+      "relativePath": "audio.opus",
+      "bitrateKbps": 160,
+      "vbrMode": "constrained",
+      "channels": 2,
+      "sampleRate": 48000,
+      "durationSeconds": 127.95997916666667,
+      "decodedFrameCount48k": 6142079,
+      "byteSize": 2583266,
+      "sha256": "a16afcb7e68bfb4b76a70dfeb06439146d028edf4a4f397c8ff2a0ad30c7c5c4"
+    }
+  },
+  "display": {
+    "title": "Ember Channel",
+    "artist": "StudioRich"
+  },
+  "musical": {
+    "bpm": 90,
+    "key": "2B",
+    "moods": [
+      "Calm",
+      "Intimate",
+      "Peaceful"
+    ],
+    "genres": [
+      "ambient",
+      "jungle",
+      "lo-fi"
+    ]
+  },
+  "songIntelligence": {
+    "revision": "2026-07-23T05:40:51.311Z",
+    "analyzerVersion": "song-analyzer-v1.1.0",
+    "configurationVersion": "song-analysis-config-v1.0.0",
+    "status": "READY_PROVISIONAL",
+    "sections": [
+      {
+        "label": "Intro",
+        "structuralType": "intro",
+        "startSeconds": 0,
+        "endSeconds": 12.796009070294785,
+        "verified": false
+      },
+      {
+        "label": "Body",
+        "structuralType": "body",
+        "startSeconds": 12.796009070294785,
+        "endSeconds": 108.76598639455783,
+        "verified": false
+      },
+      {
+        "label": "Outro",
+        "structuralType": "outro",
+        "startSeconds": 108.76598639455783,
+        "endSeconds": 127.95997732426304,
+        "verified": false
+      }
+    ]
+  },
+  "approval": {
+    "approved": true,
+    "approvedAt": "2026-07-23T05:40:53.578Z",
+    "sourceAssetHash": "a15ab69c4f606bbdb82d16bb51f94040b8613632d4c6fb82e63f6d1d2df6c48c",
+    "songIntelligenceRevision": "2026-07-23T05:40:51.311Z"
+  },
+  "verification": {
+    "probeOk": true,
+    "decodeVerifyOk": true,
+    "deltaFrames": 0,
+    "verifiedAt": "2026-07-23T05:41:10.899Z"
+  },
+  "createdAt": "2026-07-23T05:41:10.899Z"
+}

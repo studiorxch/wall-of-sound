@@ -1,0 +1,86 @@
+{
+  "schemaVersion": "1.0.0",
+  "radioTrackId": "rtrack_000013",
+  "packageVersion": 1,
+  "status": "RADIO_READY",
+  "source": {
+    "trackId": "track_37j0ehum",
+    "audioRelPath": "catalog/audio/blurred_signal_s01.flac"
+  },
+  "sourceAssetHash": "ec0877b8969c50dbb9e24f89b9e81764ef1f436479dae236d1b50543376d106f",
+  "audio": {
+    "primary": {
+      "codec": "opus",
+      "container": "ogg",
+      "mimeType": "audio/ogg; codecs=opus",
+      "relativePath": "audio.opus",
+      "bitrateKbps": 160,
+      "vbrMode": "constrained",
+      "channels": 2,
+      "sampleRate": 48000,
+      "durationSeconds": 137.55997916666666,
+      "decodedFrameCount48k": 6602879,
+      "byteSize": 2776495,
+      "sha256": "c83c5d0fe6bddbd3ae4784a4bb44a98d80e9803f6da6fdf564dfb8d22829931f"
+    }
+  },
+  "display": {
+    "title": "Blurred Signal S01",
+    "artist": "StudioRich"
+  },
+  "musical": {
+    "bpm": 85,
+    "key": "3A",
+    "moods": [
+      "Subdued",
+      "Melancholy",
+      "Somber"
+    ],
+    "genres": [
+      "jungle",
+      "lo-fi",
+      "nostalgic"
+    ]
+  },
+  "songIntelligence": {
+    "revision": "2026-07-23T05:40:54.360Z",
+    "analyzerVersion": "song-analyzer-v1.1.0",
+    "configurationVersion": "song-analysis-config-v1.0.0",
+    "status": "READY_PROVISIONAL",
+    "sections": [
+      {
+        "label": "Intro",
+        "structuralType": "intro",
+        "startSeconds": 0,
+        "endSeconds": 13.756009070294784,
+        "verified": false
+      },
+      {
+        "label": "Body",
+        "structuralType": "body",
+        "startSeconds": 13.756009070294784,
+        "endSeconds": 116.92598639455782,
+        "verified": false
+      },
+      {
+        "label": "Outro",
+        "structuralType": "outro",
+        "startSeconds": 116.92598639455782,
+        "endSeconds": 137.55997732426303,
+        "verified": false
+      }
+    ]
+  },
+  "approval": {
+    "approved": true,
+    "approvedAt": "2026-07-23T05:40:53.730Z",
+    "sourceAssetHash": "ec0877b8969c50dbb9e24f89b9e81764ef1f436479dae236d1b50543376d106f"
+  },
+  "verification": {
+    "probeOk": true,
+    "decodeVerifyOk": true,
+    "deltaFrames": 0,
+    "verifiedAt": "2026-07-23T05:41:14.526Z"
+  },
+  "createdAt": "2026-07-23T05:41:14.526Z"
+}

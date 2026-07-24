@@ -1,0 +1,79 @@
+{
+  "schemaVersion": "1.0.0",
+  "radioTrackId": "rtrack_000001",
+  "packageVersion": 1,
+  "status": "RADIO_READY",
+  "source": {
+    "trackId": "ext_mr9smtpl_wb0b",
+    "audioRelPath": "external/audio/VA - Microhouse Essentials (2021)/01. Soulphiction - White Ropes.mp3"
+  },
+  "sourceAssetHash": "d44eba8cd4e4eacd87027114aadb3a2dd21dbcfc80532a0fd11a58ce95dc472a",
+  "audio": {
+    "primary": {
+      "codec": "opus",
+      "container": "ogg",
+      "mimeType": "audio/ogg; codecs=opus",
+      "relativePath": "audio.opus",
+      "bitrateKbps": 160,
+      "vbrMode": "constrained",
+      "channels": 2,
+      "sampleRate": 48000,
+      "durationSeconds": 235.25984126984127,
+      "decodedFrameCount48k": 11292473,
+      "byteSize": 4696495,
+      "sha256": "30caeffc2934be81fc89e68d571438d8e75cf5e61305c777326716ff756d9dc8"
+    }
+  },
+  "display": {
+    "title": "White Ropes",
+    "artist": "Soulphiction"
+  },
+  "musical": {
+    "bpm": 123.05,
+    "key": "9A",
+    "moods": [],
+    "genres": []
+  },
+  "songIntelligence": {
+    "revision": "2026-07-23T04:12:16.372Z",
+    "analyzerVersion": "song-analyzer-v1.1.0",
+    "configurationVersion": "song-analysis-config-v1.0.0",
+    "status": "STALE",
+    "sections": [
+      {
+        "label": "Intro",
+        "structuralType": "intro",
+        "startSeconds": 0,
+        "endSeconds": 23.525986394557822,
+        "verified": false
+      },
+      {
+        "label": "Body",
+        "structuralType": "body",
+        "startSeconds": 23.525986394557822,
+        "endSeconds": 199.97086167800452,
+        "verified": false
+      },
+      {
+        "label": "Outro",
+        "structuralType": "outro",
+        "startSeconds": 199.97086167800452,
+        "endSeconds": 235.25984126984127,
+        "verified": false
+      }
+    ]
+  },
+  "approval": {
+    "approved": true,
+    "approvedAt": "2026-07-23T04:12:58.989Z",
+    "sourceAssetHash": "d44eba8cd4e4eacd87027114aadb3a2dd21dbcfc80532a0fd11a58ce95dc472a",
+    "songIntelligenceRevision": "2026-07-23T04:12:16.372Z"
+  },
+  "verification": {
+    "probeOk": true,
+    "decodeVerifyOk": true,
+    "deltaFrames": 1,
+    "verifiedAt": "2026-07-23T04:13:45.248Z"
+  },
+  "createdAt": "2026-07-23T04:13:45.248Z"
+}

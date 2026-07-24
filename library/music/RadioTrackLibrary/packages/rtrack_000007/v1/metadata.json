@@ -1,0 +1,87 @@
+{
+  "schemaVersion": "1.0.0",
+  "radioTrackId": "rtrack_000007",
+  "packageVersion": 1,
+  "status": "RADIO_READY",
+  "source": {
+    "trackId": "track_h4coo7qi",
+    "audioRelPath": "catalog/audio/raincurve.flac"
+  },
+  "sourceAssetHash": "5c8031802af5a2252b4e8277039e0ec286eb547141c55bdc10d4e0dfd3aaba43",
+  "audio": {
+    "primary": {
+      "codec": "opus",
+      "container": "ogg",
+      "mimeType": "audio/ogg; codecs=opus",
+      "relativePath": "audio.opus",
+      "bitrateKbps": 160,
+      "vbrMode": "constrained",
+      "channels": 2,
+      "sampleRate": 48000,
+      "durationSeconds": 112.27997916666666,
+      "decodedFrameCount48k": 5389439,
+      "byteSize": 2241062,
+      "sha256": "ba34ae6a56ef3d983ae63d433d1d9cff03fa90740c93970d829736e62e793346"
+    }
+  },
+  "display": {
+    "title": "Raincurve",
+    "artist": "StudioRich"
+  },
+  "musical": {
+    "bpm": 87,
+    "key": "11B",
+    "moods": [
+      "Calm",
+      "Peaceful",
+      "Subdued"
+    ],
+    "genres": [
+      "dream pop",
+      "jungle",
+      "lo-fi"
+    ]
+  },
+  "songIntelligence": {
+    "revision": "2026-07-23T05:40:46.476Z",
+    "analyzerVersion": "song-analyzer-v1.1.0",
+    "configurationVersion": "song-analysis-config-v1.0.0",
+    "status": "READY_PROVISIONAL",
+    "sections": [
+      {
+        "label": "Intro",
+        "structuralType": "intro",
+        "startSeconds": 0,
+        "endSeconds": 11.228004535147392,
+        "verified": false
+      },
+      {
+        "label": "Body",
+        "structuralType": "body",
+        "startSeconds": 11.228004535147392,
+        "endSeconds": 95.43798185941043,
+        "verified": false
+      },
+      {
+        "label": "Outro",
+        "structuralType": "outro",
+        "startSeconds": 95.43798185941043,
+        "endSeconds": 112.27997732426304,
+        "verified": false
+      }
+    ]
+  },
+  "approval": {
+    "approved": true,
+    "approvedAt": "2026-07-23T05:40:53.206Z",
+    "sourceAssetHash": "5c8031802af5a2252b4e8277039e0ec286eb547141c55bdc10d4e0dfd3aaba43",
+    "songIntelligenceRevision": "2026-07-23T05:40:46.476Z"
+  },
+  "verification": {
+    "probeOk": true,
+    "decodeVerifyOk": true,
+    "deltaFrames": 0,
+    "verifiedAt": "2026-07-23T05:41:03.733Z"
+  },
+  "createdAt": "2026-07-23T05:41:03.733Z"
+}

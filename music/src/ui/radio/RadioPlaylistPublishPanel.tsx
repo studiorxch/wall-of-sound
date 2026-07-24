@@ -22,8 +22,9 @@
 // Web Bundle export flow must always say "Does not upload or deploy."
 // (see RadioWebExportPreflightDialog.tsx).
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Track } from "../../data/trackTypes";
+import type { CompleteSongAnalysis } from "../../data/songAnalysisTypes";
 import type { LoopAsset } from "../../data/loopTypes";
 import type { RadioInboxItem } from "../../data/radioInboxTypes";
 import type { RadioPlaylist, RadioEntryPreparationState } from "../../data/radioPlaylistTypes";
@@ -33,8 +34,18 @@ import type { PromoteLoopToRadioResult, RadioPromotionPhase } from "../../logic/
 import { buildPublishPreview } from "../../logic/radio/radioPublishPreview";
 import { estimateInboxItemBytes, summarizePlaylistStorage } from "../../logic/radio/radioStorageEstimate";
 import { computePublishPatch, computeUnpublishPatch, radioPlaylistStateLabel } from "../../logic/radio/radioPlaylistPublicationState";
+import {
+  runOnePublishViaFetch, PUBLISH_FAILURE_LABEL,
+  type PublishStage, type PublishEntryFailure,
+} from "../../logic/radio/radioOnePublishOrchestrator";
 import { PromoteToRadioDialog } from "./PromoteToRadioDialog";
 import { RadioWebExportPreflightDialog } from "./RadioWebExportPreflightDialog";
+
+const PUBLISH_STAGE_LABEL: Record<PublishStage, string> = {
+  validating: "Validating audio",
+  preparing: "Preparing audio",
+  exporting: "Exporting web version",
+};
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -45,6 +56,7 @@ interface Props {
   allRadioPlaylists: RadioPlaylist[];
   radioInboxItems: RadioInboxItem[];
   libraryTracks: Track[];
+  songAnalyses: CompleteSongAnalysis[];
   loops: LoopAsset[];
   preparationStateByEntryId: Map<string, RadioEntryPreparationState>;
   radioWebExports: RadioWebExportRecord[];
@@ -67,13 +79,48 @@ function derivedLifecycleLabel(preview: ReturnType<typeof buildPublishPreview>, 
 }
 
 export function RadioPlaylistPublishPanel({
-  radioPlaylist, allRadioPlaylists, radioInboxItems, libraryTracks, loops,
+  radioPlaylist, allRadioPlaylists, radioInboxItems, libraryTracks, songAnalyses, loops,
   preparationStateByEntryId, radioWebExports,
   onUpdateRadioPlaylist, onUpdateRadioInboxItem, onPromoteToRadio, onExportedWebBundle, onClose,
 }: Props) {
   const [promotingLoop, setPromotingLoop] = useState<LoopAsset | null>(null);
   const [confirmingMark, setConfirmingMark] = useState(false);
   const [showExportDialog, setShowExportDialog] = useState(false);
+
+  // 0723_RADIO_One_Action_Publish — the single Publish action's own state.
+  const [publishStage, setPublishStage] = useState<PublishStage | null>(null);
+  const [publishFailures, setPublishFailures] = useState<PublishEntryFailure[]>([]);
+
+  // Same pattern as RadioMultiTrackPrepWorkspace's radioPlaylistRef —
+  // onEntryPatch fires repeatedly across awaited network calls within one
+  // Publish run; reading the closed-over `radioPlaylist` prop directly
+  // there would silently stomp an earlier entry's patch with a stale
+  // entries array once React re-renders between them.
+  const radioPlaylistRef = useRef(radioPlaylist);
+  useEffect(() => { radioPlaylistRef.current = radioPlaylist; }, [radioPlaylist]);
+
+  async function handlePublish() {
+    setPublishFailures([]);
+    setPublishStage("validating");
+    try {
+      const result = await runOnePublishViaFetch(
+        { playlist: radioPlaylistRef.current, inboxItems: radioInboxItems, tracks: libraryTracks, analyses: songAnalyses, allPlaylists: allRadioPlaylists },
+        {
+          onProgress: (stage) => setPublishStage(stage),
+          onEntryPatch: (entryId, patch) => {
+            const nextEntries = radioPlaylistRef.current.entries.map((e) => (e.id === entryId ? { ...e, ...patch } : e));
+            radioPlaylistRef.current = { ...radioPlaylistRef.current, entries: nextEntries };
+            onUpdateRadioPlaylist(radioPlaylistRef.current.id, { entries: nextEntries });
+          },
+        },
+      );
+      if (result.exportRecord) onExportedWebBundle(result.exportRecord);
+      if (result.playlistPatch) onUpdateRadioPlaylist(radioPlaylistRef.current.id, result.playlistPatch);
+      setPublishFailures(result.failures);
+    } finally {
+      setPublishStage(null);
+    }
+  }
 
   const preview = buildPublishPreview(radioPlaylist, radioInboxItems, preparationStateByEntryId);
   const entries = radioPlaylist.entries.slice().sort((a, b) => a.order - b.order);
@@ -172,15 +219,47 @@ export function RadioPlaylistPublishPanel({
         </div>
 
         <p className="radio-publish-notice">
-          Web playlist delivery isn't connected yet — these actions only update RADIO's internal tracking, not any live public site.
+          Publishing exports a local, self-contained web bundle. It does not upload, host, or deploy anything.
         </p>
 
-        <p className="radio-diff-note">
-          Current state: <strong>{radioPlaylistStateLabel(radioPlaylist.state)}</strong>
-          {" · "}Web bundle lifecycle: <strong>{derivedLifecycleLabel(preview, latestExport, hasPreparing)}</strong>
-        </p>
+        <div className="radio-publish-primary">
+          {publishStage ? (
+            <>
+              <button className="npw-btn npw-btn--primary" disabled>Publishing…</button>
+              <span className="radio-diff-note">{PUBLISH_STAGE_LABEL[publishStage]}</span>
+            </>
+          ) : latestExport ? (
+            <>
+              <a className="npw-btn npw-btn--primary" href={`/radio-player.html?slug=${encodeURIComponent(latestExport.slug)}&v=${latestExport.bundleVersion}`} target="_blank" rel="noreferrer">
+                Play Preview
+              </a>
+              <button className="npw-btn npw-btn--ghost" onClick={handlePublish}>Update Published Version</button>
+            </>
+          ) : (
+            <button className="npw-btn npw-btn--primary" onClick={handlePublish}>Publish</button>
+          )}
+        </div>
 
-        <div className="radio-publish-preview">
+        {publishFailures.length > 0 && (
+          <div className="radio-publish-failures">
+            <h4>Publish couldn't complete ({publishFailures.length})</h4>
+            <ul>
+              {publishFailures.map((f, i) => (
+                <li key={i}>{f.title && f.entryId ? `"${f.title}" — ` : ""}{PUBLISH_FAILURE_LABEL[f.category]}{f.message ? ` — ${f.message}` : ""}</li>
+              ))}
+            </ul>
+            <button className="npw-btn npw-btn--primary" onClick={handlePublish}>Retry Publish</button>
+          </div>
+        )}
+
+        <details className="radio-publish-preview">
+          <summary>Diagnostics — approval, preparation, and manual export controls</summary>
+
+          <p className="radio-diff-note">
+            Current state: <strong>{radioPlaylistStateLabel(radioPlaylist.state)}</strong>
+            {" · "}Web bundle lifecycle: <strong>{derivedLifecycleLabel(preview, latestExport, hasPreparing)}</strong>
+          </p>
+
           <div className="radio-publish-storage">
             <span>Estimated size: {(storageSummary.totalBytes / 1024 / 1024).toFixed(1)} MB</span>
             <span>Budget: {(storageSummary.budgetBytes / 1024 / 1024 / 1024).toFixed(1)} GB</span>
@@ -237,7 +316,7 @@ export function RadioPlaylistPublishPanel({
               </>
             )}
           </div>
-        </div>
+        </details>
 
         {showExportDialog && (
           <RadioWebExportPreflightDialog

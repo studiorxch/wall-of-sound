@@ -1,0 +1,62 @@
+{
+  "schemaVersion": "1.0.0",
+  "contentSignature": "ae74629ae69bfd302f5266d4ee4c07920c19352166290bd5093811ba7db6853d",
+  "files": {
+    "audio/rtrack_000019-v1.opus": {
+      "sha256": "6cbde8063f02ac01d2c72a00b2b610211ba4177fa26927087c2bcd2b81ed8086",
+      "byteSize": 2152787
+    },
+    "audio/rtrack_000020-v1.opus": {
+      "sha256": "95a64ecf0505e6702a74fb81dd26c43335346cf0d0710f08697551fb1e6bf10b",
+      "byteSize": 1875769
+    },
+    "audio/rtrack_000021-v1.opus": {
+      "sha256": "672cb338d8edb5b681b1dd59b9a65505e9b5cde45c22ed0f65d4d248538135bb",
+      "byteSize": 2099465
+    },
+    "audio/rtrack_000022-v1.opus": {
+      "sha256": "6be029c0d2730b1a0c9df4fa189dd904f506b11ed20e0154917043859c716c13",
+      "byteSize": 3775744
+    },
+    "audio/rtrack_000023-v1.opus": {
+      "sha256": "177038fbf3c3a5824792fee18369e466ff9104e2e91a36a7017414e87a15ae65",
+      "byteSize": 3198647
+    },
+    "audio/rtrack_000024-v1.opus": {
+      "sha256": "3cef4fb2ffeb9b58b206029873c17f813226951193e9d08883d7edc4a226e418",
+      "byteSize": 4337842
+    },
+    "audio/rtrack_000025-v1.opus": {
+      "sha256": "e711b82198cb18c716701a9c6cf254307be6c6f7f83cc38b6ca1aeebf591a684",
+      "byteSize": 3503169
+    },
+    "audio/rtrack_000026-v1.opus": {
+      "sha256": "dd4597cfbda34da5ac80a7a69af7e8c5dcce05b384deb20c6c10a17b5f126f3e",
+      "byteSize": 2059921
+    },
+    "audio/rtrack_000027-v1.opus": {
+      "sha256": "7adf474d3daf46eb240ae2b5e4632ba54b4e7cf0c469b2db340e473b84919134",
+      "byteSize": 2839538
+    },
+    "audio/rtrack_000028-v1.opus": {
+      "sha256": "f99e5a3bdef461a3a13ed5586ed8469ef723f4c5abdad2811524ba3475d745aa",
+      "byteSize": 1875758
+    },
+    "audio/rtrack_000029-v1.opus": {
+      "sha256": "e3280c4e9536a7396d9603d1c15994e2abfc65b206d1b2a7c686967fbd2cffb9",
+      "byteSize": 3499921
+    },
+    "artwork/cover.jpeg": {
+      "sha256": "249f9bb31451427475d4063619adb6fdaadb8c5a2cc5632403258e8a81247bb0",
+      "byteSize": 6965
+    },
+    "radio-manifest.json": {
+      "sha256": "e5ea21b0bc61a03e6af110f77afed80a9ff327161d7f7382deeda0bd48ae6d27",
+      "byteSize": 6323
+    },
+    "playlist.json": {
+      "sha256": "7cc3ee56defbca83a2edabcc505589507711983c385fc69d6babc93ddc04b0f3",
+      "byteSize": 10794
+    }
+  }
+}

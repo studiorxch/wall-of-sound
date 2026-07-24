@@ -1,0 +1,52 @@
+{
+  "schemaVersion": "1.0.0",
+  "radioTrackId": "rtrack_000003",
+  "packageVersion": 1,
+  "status": "RADIO_READY",
+  "source": {
+    "trackId": "ext_mr9smtpl_e4g9",
+    "audioRelPath": "external/audio/VA - Microhouse Essentials (2021)/09. Matias Aguayo - Minimal.mp3"
+  },
+  "sourceAssetHash": "56c3fbbed9567c0ca3a5799f0a6d1b8e42175d74d806f6b65d4448f1fb420fd2",
+  "audio": {
+    "primary": {
+      "codec": "opus",
+      "container": "ogg",
+      "mimeType": "audio/ogg; codecs=opus",
+      "relativePath": "audio.opus",
+      "bitrateKbps": 160,
+      "vbrMode": "constrained",
+      "channels": 2,
+      "sampleRate": 48000,
+      "durationSeconds": 393.5618820861678,
+      "decodedFrameCount48k": 18890971,
+      "byteSize": 7943510,
+      "sha256": "dc47c76d9ec9bd248f2f605dd95c932a511ff69ac9787765d272031d32b8ee6c"
+    }
+  },
+  "display": {
+    "title": "Minimal",
+    "artist": "Matias Aguayo"
+  },
+  "musical": {
+    "bpm": 129.2,
+    "key": "1A",
+    "moods": [],
+    "genres": []
+  },
+  "songIntelligence": {
+    "sections": []
+  },
+  "approval": {
+    "approved": true,
+    "approvedAt": "2026-07-23T04:19:25.812Z",
+    "sourceAssetHash": "56c3fbbed9567c0ca3a5799f0a6d1b8e42175d74d806f6b65d4448f1fb420fd2"
+  },
+  "verification": {
+    "probeOk": true,
+    "decodeVerifyOk": true,
+    "deltaFrames": 1,
+    "verifiedAt": "2026-07-23T04:19:55.091Z"
+  },
+  "createdAt": "2026-07-23T04:19:55.091Z"
+}

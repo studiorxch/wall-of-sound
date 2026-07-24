@@ -1,0 +1,26 @@
+{
+  "schemaVersion": "1.0.0",
+  "contentSignature": "01951e15e55ec0430654f268bcc0d05fc215dc40a91212865eb14077ae6ac59f",
+  "files": {
+    "audio/rtrack_000001-v1.opus": {
+      "sha256": "30caeffc2934be81fc89e68d571438d8e75cf5e61305c777326716ff756d9dc8",
+      "byteSize": 4696495
+    },
+    "audio/rtrack_000002-v1.opus": {
+      "sha256": "e7d075d1cbd0679d0f5376cc04884ef93eb6ce6a74295188ebe84aab836661f2",
+      "byteSize": 8033447
+    },
+    "audio/rtrack_000003-v1.opus": {
+      "sha256": "dc47c76d9ec9bd248f2f605dd95c932a511ff69ac9787765d272031d32b8ee6c",
+      "byteSize": 7943510
+    },
+    "radio-manifest.json": {
+      "sha256": "7cabc542c05c31ba54114b619256c5391c3f01dd6852d8127cdfb990e5b074de",
+      "byteSize": 1554
+    },
+    "playlist.json": {
+      "sha256": "096b8becf286fbb736576164babc6e28ce59c98ce5e15a027fd09bffe35c20a8",
+      "byteSize": 2277
+    }
+  }
+}

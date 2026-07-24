@@ -321,6 +321,89 @@ export default defineConfig({
           }
         })
 
+        // RADIO Web Playback Vertical Slice — /radio-web-export/<slug>/v<N>/<...>
+        // Static, path-confined serving of an already-exported, immutable
+        // Web Bundle (radioWebBundleWriter.ts's own output under
+        // RADIO_WEB_EXPORT_ROOT). This is the one missing connection
+        // between "Export Web Bundle" and any page that wants to actually
+        // play a published RADIO station: the export route only ever wrote
+        // to local disk; nothing served those files over HTTP before this.
+        // Same traversal/confinement/Range handling as /music-audio above,
+        // extended with JSON for the manifest/playlist/checksums files.
+        server.middlewares.use('/radio-web-export', (req: IncomingMessage, res: ServerResponse) => {
+          const method = req.method
+          const rawPath = (req.url ?? '/').replace(/^\/radio-web-export/, '') || '/'
+          const pathOnly = rawPath.split('?')[0]
+          const decoded = decodeURIComponent(pathOnly).replace(/^\/+/, '')
+
+          if (decoded.split('/').some((seg) => seg === '..' || seg === '.')) {
+            res.statusCode = 403
+            res.setHeader('Content-Type', 'text/plain')
+            res.end('Forbidden')
+            return
+          }
+
+          const resolved = path.join(RADIO_WEB_EXPORT_ROOT, decoded)
+          if (!resolved.startsWith(RADIO_WEB_EXPORT_ROOT + path.sep) && resolved !== RADIO_WEB_EXPORT_ROOT) {
+            res.statusCode = 403
+            res.setHeader('Content-Type', 'text/plain')
+            res.end('Forbidden')
+            return
+          }
+
+          const ext = path.extname(resolved).toLowerCase()
+          const webMime: Record<string, string> = { ...MIME, '.json': 'application/json' }
+          if (!webMime[ext]) {
+            mediaError(res, 415, 'UNSUPPORTED_EXT', `Unsupported extension: ${ext}`)
+            return
+          }
+
+          if (!fs.existsSync(resolved)) {
+            mediaError(res, 404, 'FILE_MISSING', `File not found: ${resolved}`)
+            return
+          }
+
+          let stat: fs.Stats
+          try { stat = fs.statSync(resolved) } catch {
+            mediaError(res, 500, 'STAT_ERROR', `Cannot stat: ${resolved}`); return
+          }
+          if (!stat.isFile()) {
+            mediaError(res, 400, 'NOT_A_FILE', `Not a file: ${resolved}`); return
+          }
+
+          res.setHeader('Accept-Ranges', 'bytes')
+          res.setHeader('Content-Type', webMime[ext])
+          res.setHeader('Cache-Control', 'no-cache')
+          res.setHeader('Access-Control-Allow-Origin', '*')
+
+          if (method === 'HEAD') {
+            res.setHeader('Content-Length', stat.size)
+            res.statusCode = 200
+            res.end()
+            return
+          }
+
+          const range = req.headers.range
+          if (range) {
+            const [startStr, endStr] = range.replace(/bytes=/, '').split('-')
+            const start = parseInt(startStr, 10)
+            const end = endStr ? parseInt(endStr, 10) : stat.size - 1
+            const chunkSize = end - start + 1
+            res.statusCode = 206
+            res.setHeader('Content-Range', `bytes ${start}-${end}/${stat.size}`)
+            res.setHeader('Content-Length', chunkSize)
+            const stream = fs.createReadStream(resolved, { start, end })
+            stream.on('error', () => mediaError(res, 500, 'STREAM_ERROR', 'Stream error'))
+            stream.pipe(res)
+          } else {
+            res.statusCode = 200
+            res.setHeader('Content-Length', stat.size)
+            const stream = fs.createReadStream(resolved)
+            stream.on('error', () => mediaError(res, 500, 'STREAM_ERROR', 'Stream error'))
+            stream.pipe(res)
+          }
+        })
+
         // /library-root — returns the resolved LIBRARY_ROOT path for debugging
         server.middlewares.use('/library-root', (_req, res) => {
           res.statusCode = 200
@@ -1220,4 +1303,16 @@ export default defineConfig({
       },
     },
   ],
+  build: {
+    rollupOptions: {
+      // RADIO Web Playback Vertical Slice — a second, standalone HTML
+      // entry point alongside the main MUSIC app. Vite only builds
+      // index.html by default; this adds radio-player.html so `npm run
+      // build` emits a self-contained, deployable public player bundle.
+      input: {
+        main: path.resolve(__dirname, 'index.html'),
+        radioPlayer: path.resolve(__dirname, 'radio-player.html'),
+      },
+    },
+  },
 })

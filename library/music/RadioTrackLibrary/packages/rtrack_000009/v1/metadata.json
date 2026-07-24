@@ -1,0 +1,87 @@
+{
+  "schemaVersion": "1.0.0",
+  "radioTrackId": "rtrack_000009",
+  "packageVersion": 1,
+  "status": "RADIO_READY",
+  "source": {
+    "trackId": "track_p2ofwxb9",
+    "audioRelPath": "catalog/audio/the_way_the_air_moves.flac"
+  },
+  "sourceAssetHash": "9f83611b9f328379a8e5fa5e6f8101505d691af3e88491415e046d4edf27ed52",
+  "audio": {
+    "primary": {
+      "codec": "opus",
+      "container": "ogg",
+      "mimeType": "audio/ogg; codecs=opus",
+      "relativePath": "audio.opus",
+      "bitrateKbps": 160,
+      "vbrMode": "constrained",
+      "channels": 2,
+      "sampleRate": 48000,
+      "durationSeconds": 134.63997916666668,
+      "decodedFrameCount48k": 6462719,
+      "byteSize": 2717488,
+      "sha256": "ff7b95d2e5c558284e4e2ba8949c109c929cb9cbe025d38b423d4e3b5b4b6d21"
+    }
+  },
+  "display": {
+    "title": "The Way the Air Moves",
+    "artist": "StudioRich"
+  },
+  "musical": {
+    "bpm": 88,
+    "key": "2B",
+    "moods": [
+      "Calm",
+      "Intimate",
+      "Peaceful"
+    ],
+    "genres": [
+      "ambient",
+      "jungle",
+      "lo-fi"
+    ]
+  },
+  "songIntelligence": {
+    "revision": "2026-07-23T05:40:48.971Z",
+    "analyzerVersion": "song-analyzer-v1.1.0",
+    "configurationVersion": "song-analysis-config-v1.0.0",
+    "status": "READY_PROVISIONAL",
+    "sections": [
+      {
+        "label": "Intro",
+        "structuralType": "intro",
+        "startSeconds": 0,
+        "endSeconds": 13.463990929705215,
+        "verified": false
+      },
+      {
+        "label": "Body",
+        "structuralType": "body",
+        "startSeconds": 13.463990929705215,
+        "endSeconds": 114.44399092970522,
+        "verified": false
+      },
+      {
+        "label": "Outro",
+        "structuralType": "outro",
+        "startSeconds": 114.44399092970522,
+        "endSeconds": 134.63997732426304,
+        "verified": false
+      }
+    ]
+  },
+  "approval": {
+    "approved": true,
+    "approvedAt": "2026-07-23T05:40:53.391Z",
+    "sourceAssetHash": "9f83611b9f328379a8e5fa5e6f8101505d691af3e88491415e046d4edf27ed52",
+    "songIntelligenceRevision": "2026-07-23T05:40:48.971Z"
+  },
+  "verification": {
+    "probeOk": true,
+    "decodeVerifyOk": true,
+    "deltaFrames": 0,
+    "verifiedAt": "2026-07-23T05:41:07.499Z"
+  },
+  "createdAt": "2026-07-23T05:41:07.499Z"
+}

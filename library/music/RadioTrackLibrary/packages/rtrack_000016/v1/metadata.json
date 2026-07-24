@@ -1,0 +1,60 @@
+{
+  "schemaVersion": "1.0.0",
+  "radioTrackId": "rtrack_000016",
+  "packageVersion": 1,
+  "status": "RADIO_READY",
+  "source": {
+    "trackId": "track_83vvynfe",
+    "audioRelPath": "catalog/audio/silent_altitude.flac"
+  },
+  "sourceAssetHash": "44095d98fc4f016ab409dcba067bd4859b16bb82cf7ac6a574cc7373558b43a2",
+  "audio": {
+    "primary": {
+      "codec": "opus",
+      "container": "ogg",
+      "mimeType": "audio/ogg; codecs=opus",
+      "relativePath": "audio.opus",
+      "bitrateKbps": 160,
+      "vbrMode": "constrained",
+      "channels": 2,
+      "sampleRate": 48000,
+      "durationSeconds": 134.95997916666667,
+      "decodedFrameCount48k": 6478079,
+      "byteSize": 2724073,
+      "sha256": "89b1a6bf88a9c1ea859c21d57fcc6321cdbac34c2b308c2339aa24e3e76b6df0"
+    }
+  },
+  "display": {
+    "title": "Silent Altitude",
+    "artist": "StudioRich"
+  },
+  "musical": {
+    "bpm": 80,
+    "key": "9A",
+    "moods": [
+      "Subdued",
+      "Somber",
+      "Melancholy"
+    ],
+    "genres": [
+      "electronica",
+      "jungle",
+      "lo-fi"
+    ]
+  },
+  "songIntelligence": {
+    "sections": []
+  },
+  "approval": {
+    "approved": true,
+    "approvedAt": "2026-07-23T05:40:53.872Z",
+    "sourceAssetHash": "44095d98fc4f016ab409dcba067bd4859b16bb82cf7ac6a574cc7373558b43a2"
+  },
+  "verification": {
+    "probeOk": true,
+    "decodeVerifyOk": true,
+    "deltaFrames": 0,
+    "verifiedAt": "2026-07-23T05:41:20.909Z"
+  },
+  "createdAt": "2026-07-23T05:41:20.909Z"
+}

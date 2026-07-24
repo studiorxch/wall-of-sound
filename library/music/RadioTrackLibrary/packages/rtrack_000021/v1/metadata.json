@@ -1,0 +1,87 @@
+{
+  "schemaVersion": "1.0.0",
+  "radioTrackId": "rtrack_000021",
+  "packageVersion": 1,
+  "status": "RADIO_READY",
+  "source": {
+    "trackId": "track_mjvk93x4",
+    "audioRelPath": "catalog/audio/window_fade.flac"
+  },
+  "sourceAssetHash": "cf86bb4adb1205a8948d1f19d375b013e51e69ca9748556994f3a135ad8537e9",
+  "audio": {
+    "primary": {
+      "codec": "opus",
+      "container": "ogg",
+      "mimeType": "audio/ogg; codecs=opus",
+      "relativePath": "audio.opus",
+      "bitrateKbps": 160,
+      "vbrMode": "constrained",
+      "channels": 2,
+      "sampleRate": 48000,
+      "durationSeconds": 103.99997916666666,
+      "decodedFrameCount48k": 4991999,
+      "byteSize": 2099465,
+      "sha256": "672cb338d8edb5b681b1dd59b9a65505e9b5cde45c22ed0f65d4d248538135bb"
+    }
+  },
+  "display": {
+    "title": "Window Fade",
+    "artist": "StudioRich"
+  },
+  "musical": {
+    "bpm": 85,
+    "key": "6B",
+    "moods": [
+      "Calm",
+      "Weightless",
+      "Intimate"
+    ],
+    "genres": [
+      "chill",
+      "cinematic",
+      "lo-fi"
+    ]
+  },
+  "songIntelligence": {
+    "revision": "2026-07-18T06:31:20.607Z",
+    "analyzerVersion": "song-analyzer-v1.1.0",
+    "configurationVersion": "song-analysis-config-v1.0.0",
+    "status": "READY_PROVISIONAL",
+    "sections": [
+      {
+        "label": "Intro",
+        "structuralType": "intro",
+        "startSeconds": 0,
+        "endSeconds": 10.4,
+        "verified": false
+      },
+      {
+        "label": "Body",
+        "structuralType": "body",
+        "startSeconds": 10.4,
+        "endSeconds": 88.39997732426303,
+        "verified": false
+      },
+      {
+        "label": "Outro",
+        "structuralType": "outro",
+        "startSeconds": 88.39997732426303,
+        "endSeconds": 103.99997732426304,
+        "verified": false
+      }
+    ]
+  },
+  "approval": {
+    "approved": true,
+    "approvedAt": "2026-07-23T04:55:25.603Z",
+    "sourceAssetHash": "cf86bb4adb1205a8948d1f19d375b013e51e69ca9748556994f3a135ad8537e9",
+    "songIntelligenceRevision": "2026-07-18T06:31:20.607Z"
+  },
+  "verification": {
+    "probeOk": true,
+    "decodeVerifyOk": true,
+    "deltaFrames": 0,
+    "verifiedAt": "2026-07-23T05:42:31.221Z"
+  },
+  "createdAt": "2026-07-23T05:42:31.221Z"
+}

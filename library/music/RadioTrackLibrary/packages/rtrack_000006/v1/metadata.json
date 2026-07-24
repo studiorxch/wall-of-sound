@@ -1,0 +1,87 @@
+{
+  "schemaVersion": "1.0.0",
+  "radioTrackId": "rtrack_000006",
+  "packageVersion": 1,
+  "status": "RADIO_READY",
+  "source": {
+    "trackId": "track_96r4pyym",
+    "audioRelPath": "catalog/audio/pulse_in_the_haze_s01.flac"
+  },
+  "sourceAssetHash": "3f445bca030536019d96975f59497aefc09ea6e65796eb5951a6ea2267ab269e",
+  "audio": {
+    "primary": {
+      "codec": "opus",
+      "container": "ogg",
+      "mimeType": "audio/ogg; codecs=opus",
+      "relativePath": "audio.opus",
+      "bitrateKbps": 160,
+      "vbrMode": "constrained",
+      "channels": 2,
+      "sampleRate": 48000,
+      "durationSeconds": 159.91997916666668,
+      "decodedFrameCount48k": 7676159,
+      "byteSize": 3227862,
+      "sha256": "0fa4b438051a039b096ef02ea88f154d9a3cfad967f105638655ff11a51edcfd"
+    }
+  },
+  "display": {
+    "title": "Pulse in the Haze S01",
+    "artist": "StudioRich"
+  },
+  "musical": {
+    "bpm": 84,
+    "key": "12B",
+    "moods": [
+      "Calm",
+      "Intimate",
+      "Peaceful"
+    ],
+    "genres": [
+      "ambient",
+      "jungle",
+      "lo-fi"
+    ]
+  },
+  "songIntelligence": {
+    "revision": "2026-07-23T05:40:45.082Z",
+    "analyzerVersion": "song-analyzer-v1.1.0",
+    "configurationVersion": "song-analysis-config-v1.0.0",
+    "status": "READY_PROVISIONAL",
+    "sections": [
+      {
+        "label": "Intro",
+        "structuralType": "intro",
+        "startSeconds": 0,
+        "endSeconds": 15.991995464852607,
+        "verified": false
+      },
+      {
+        "label": "Body",
+        "structuralType": "body",
+        "startSeconds": 15.991995464852607,
+        "endSeconds": 135.93197278911563,
+        "verified": false
+      },
+      {
+        "label": "Outro",
+        "structuralType": "outro",
+        "startSeconds": 135.93197278911563,
+        "endSeconds": 159.91997732426304,
+        "verified": false
+      }
+    ]
+  },
+  "approval": {
+    "approved": true,
+    "approvedAt": "2026-07-23T05:40:53.117Z",
+    "sourceAssetHash": "3f445bca030536019d96975f59497aefc09ea6e65796eb5951a6ea2267ab269e",
+    "songIntelligenceRevision": "2026-07-23T05:40:45.082Z"
+  },
+  "verification": {
+    "probeOk": true,
+    "decodeVerifyOk": true,
+    "deltaFrames": 0,
+    "verifiedAt": "2026-07-23T05:41:02.009Z"
+  },
+  "createdAt": "2026-07-23T05:41:02.009Z"
+}

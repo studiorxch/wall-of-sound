@@ -1,0 +1,86 @@
+{
+  "schemaVersion": "1.0.0",
+  "radioTrackId": "rtrack_000012",
+  "packageVersion": 1,
+  "status": "RADIO_READY",
+  "source": {
+    "trackId": "track_yz4cfq0i",
+    "audioRelPath": "catalog/audio/neon_with_teeth_s01.flac"
+  },
+  "sourceAssetHash": "88be2b8578f8436fa2d106e2d39a200c53d22c9d41fc8b4eba130b55983e6e62",
+  "audio": {
+    "primary": {
+      "codec": "opus",
+      "container": "ogg",
+      "mimeType": "audio/ogg; codecs=opus",
+      "relativePath": "audio.opus",
+      "bitrateKbps": 160,
+      "vbrMode": "constrained",
+      "channels": 2,
+      "sampleRate": 48000,
+      "durationSeconds": 128.19997916666668,
+      "decodedFrameCount48k": 6153599,
+      "byteSize": 2587532,
+      "sha256": "eb4f6e2eacc87415c617f3a04a5bef59912334fb431443e56b8bdf36652876e0"
+    }
+  },
+  "display": {
+    "title": "Neon With Teeth S01",
+    "artist": "StudioRich"
+  },
+  "musical": {
+    "bpm": 87,
+    "key": "2A",
+    "moods": [
+      "Somber",
+      "Subdued",
+      "Melancholy"
+    ],
+    "genres": [
+      "ambient",
+      "jungle",
+      "lo-fi"
+    ]
+  },
+  "songIntelligence": {
+    "revision": "2026-07-23T05:40:52.574Z",
+    "analyzerVersion": "song-analyzer-v1.1.0",
+    "configurationVersion": "song-analysis-config-v1.0.0",
+    "status": "READY_PROVISIONAL",
+    "sections": [
+      {
+        "label": "Intro",
+        "structuralType": "intro",
+        "startSeconds": 0,
+        "endSeconds": 12.82,
+        "verified": false
+      },
+      {
+        "label": "Body",
+        "structuralType": "body",
+        "startSeconds": 12.82,
+        "endSeconds": 108.96997732426304,
+        "verified": false
+      },
+      {
+        "label": "Outro",
+        "structuralType": "outro",
+        "startSeconds": 108.96997732426304,
+        "endSeconds": 128.19997732426305,
+        "verified": false
+      }
+    ]
+  },
+  "approval": {
+    "approved": true,
+    "approvedAt": "2026-07-23T05:40:53.684Z",
+    "sourceAssetHash": "88be2b8578f8436fa2d106e2d39a200c53d22c9d41fc8b4eba130b55983e6e62"
+  },
+  "verification": {
+    "probeOk": true,
+    "decodeVerifyOk": true,
+    "deltaFrames": 0,
+    "verifiedAt": "2026-07-23T05:41:12.680Z"
+  },
+  "createdAt": "2026-07-23T05:41:12.680Z"
+}

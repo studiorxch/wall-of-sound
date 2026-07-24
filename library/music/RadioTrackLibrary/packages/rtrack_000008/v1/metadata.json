@@ -1,0 +1,87 @@
+{
+  "schemaVersion": "1.0.0",
+  "radioTrackId": "rtrack_000008",
+  "packageVersion": 1,
+  "status": "RADIO_READY",
+  "source": {
+    "trackId": "track_jzcw4r91",
+    "audioRelPath": "catalog/audio/twilight_vibration.flac"
+  },
+  "sourceAssetHash": "8627f8b73e337a315614d341dbf2799fb8752a57c47d029132b6cfb960f615d2",
+  "audio": {
+    "primary": {
+      "codec": "opus",
+      "container": "ogg",
+      "mimeType": "audio/ogg; codecs=opus",
+      "relativePath": "audio.opus",
+      "bitrateKbps": 160,
+      "vbrMode": "constrained",
+      "channels": 2,
+      "sampleRate": 48000,
+      "durationSeconds": 130.71997916666666,
+      "decodedFrameCount48k": 6274559,
+      "byteSize": 2638361,
+      "sha256": "551488163d51b9b22146d95c7b8e5dac2ebf76405bfc9cff7e0e40c4a2dbc986"
+    }
+  },
+  "display": {
+    "title": "Twilight Vibration",
+    "artist": "StudioRich"
+  },
+  "musical": {
+    "bpm": 87,
+    "key": "10B",
+    "moods": [
+      "Calm",
+      "Peaceful",
+      "Intimate"
+    ],
+    "genres": [
+      "electronic",
+      "jungle",
+      "lo-fi"
+    ]
+  },
+  "songIntelligence": {
+    "revision": "2026-07-23T05:40:47.677Z",
+    "analyzerVersion": "song-analyzer-v1.1.0",
+    "configurationVersion": "song-analysis-config-v1.0.0",
+    "status": "READY_PROVISIONAL",
+    "sections": [
+      {
+        "label": "Intro",
+        "structuralType": "intro",
+        "startSeconds": 0,
+        "endSeconds": 13.071995464852607,
+        "verified": false
+      },
+      {
+        "label": "Body",
+        "structuralType": "body",
+        "startSeconds": 13.071995464852607,
+        "endSeconds": 111.11197278911564,
+        "verified": false
+      },
+      {
+        "label": "Outro",
+        "structuralType": "outro",
+        "startSeconds": 111.11197278911564,
+        "endSeconds": 130.71997732426303,
+        "verified": false
+      }
+    ]
+  },
+  "approval": {
+    "approved": true,
+    "approvedAt": "2026-07-23T05:40:53.302Z",
+    "sourceAssetHash": "8627f8b73e337a315614d341dbf2799fb8752a57c47d029132b6cfb960f615d2",
+    "songIntelligenceRevision": "2026-07-23T05:40:47.677Z"
+  },
+  "verification": {
+    "probeOk": true,
+    "decodeVerifyOk": true,
+    "deltaFrames": 0,
+    "verifiedAt": "2026-07-23T05:41:05.630Z"
+  },
+  "createdAt": "2026-07-23T05:41:05.630Z"
+}

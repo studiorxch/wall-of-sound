@@ -1,0 +1,60 @@
+{
+  "schemaVersion": "1.0.0",
+  "radioTrackId": "rtrack_000015",
+  "packageVersion": 1,
+  "status": "RADIO_READY",
+  "source": {
+    "trackId": "track_v99cp8xa",
+    "audioRelPath": "catalog/audio/cryloop.exe_s01.flac"
+  },
+  "sourceAssetHash": "e7fc5bab02af7fafcc0b41820262e4b6216deb7b88d38b83d29b5b955f0b2098",
+  "audio": {
+    "primary": {
+      "codec": "opus",
+      "container": "ogg",
+      "mimeType": "audio/ogg; codecs=opus",
+      "relativePath": "audio.opus",
+      "bitrateKbps": 160,
+      "vbrMode": "constrained",
+      "channels": 2,
+      "sampleRate": 48000,
+      "durationSeconds": 168.27997916666666,
+      "decodedFrameCount48k": 8077439,
+      "byteSize": 3396510,
+      "sha256": "86206d7af4357345d9608811fa09fa7dc45a75f0cb081068c3540cf6a2cf83f9"
+    }
+  },
+  "display": {
+    "title": "Cryloop.exe S01",
+    "artist": "StudioRich"
+  },
+  "musical": {
+    "bpm": 83,
+    "key": "6A",
+    "moods": [
+      "Somber",
+      "Subdued",
+      "Melancholy"
+    ],
+    "genres": [
+      "experimental",
+      "jungle",
+      "lo-fi"
+    ]
+  },
+  "songIntelligence": {
+    "sections": []
+  },
+  "approval": {
+    "approved": true,
+    "approvedAt": "2026-07-23T05:40:53.826Z",
+    "sourceAssetHash": "e7fc5bab02af7fafcc0b41820262e4b6216deb7b88d38b83d29b5b955f0b2098"
+  },
+  "verification": {
+    "probeOk": true,
+    "decodeVerifyOk": true,
+    "deltaFrames": 0,
+    "verifiedAt": "2026-07-23T05:41:18.814Z"
+  },
+  "createdAt": "2026-07-23T05:41:18.814Z"
+}

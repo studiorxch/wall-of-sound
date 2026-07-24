@@ -10,7 +10,7 @@ import type { PlaylistTransitionPlan } from "../data/playlistTransitionTypes";
 import type {
   PlaybackDeckState, TransitionCancellationReason, PausedTransitionSnapshot,
   TransitionSchedulingMetric, DualDeckLifecycleMetrics, GainEnvelope,
-  DeckAudioGraphState, EngineAudibleReadiness, HardCutExecutionResult,
+  DeckAudioGraphState, EngineAudibleReadiness, HardCutExecutionResult, DeckDiagnosticsSnapshot,
 } from "./dualDeckTypes";
 import { createIdleDeck, loadDeck, markDeckReady, markDeckPlaying, markDeckPaused, markDeckEnded, markDeckError, resetDeckToIdle, setDeckGain } from "./deckTransport";
 import { buildCrossfadeEnvelopes, buildHardCutEnvelopes, computeTransitionProgress } from "./transitionScheduler";
@@ -146,6 +146,25 @@ export class DualDeckPlaybackEngine {
 
   getState(): Record<"A" | "B", PlaybackDeckState> {
     return this.states;
+  }
+
+  // Raw diagnostic snapshot of one deck's underlying <audio> element —
+  // additive, read-only, no behavior change. Exists so a caller diagnosing
+  // a "looks like it's playing but produces no sound" defect can inspect
+  // readyState/networkState/currentSrc/paused/ended/error directly instead
+  // of guessing from PlaybackDeckState alone (which never exposes these).
+  getDeckDiagnostics(deckId: "A" | "B"): DeckDiagnosticsSnapshot {
+    const n = this.nodes[deckId];
+    return {
+      readyState: n.audio.readyState,
+      networkState: n.audio.networkState,
+      currentSrc: n.audio.currentSrc,
+      paused: n.audio.paused,
+      ended: n.audio.ended,
+      mediaError: n.audio.error ? `${n.audio.error.code}: ${n.audio.error.message}` : null,
+      gain: n.gain.gain.value,
+      contextState: this.getContextState(),
+    };
   }
 
   private setState(deckId: "A" | "B", next: PlaybackDeckState) {

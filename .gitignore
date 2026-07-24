@@ -49,6 +49,11 @@ music/node_modules/
 colorlab/.claude
 colorlab/node_modules/
 
+# studiorich-orbital is its own separate git repository (Sites-deployed
+# project, pushed independently to the ChatGPT Sites project) — exclude it
+# here so it is never accidentally swept into this repo's history.
+studiorich-orbital/
+
 # Sound
 sound/data/sources/*
 sound/data/slices/*

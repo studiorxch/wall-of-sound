@@ -1,0 +1,87 @@
+{
+  "schemaVersion": "1.0.0",
+  "radioTrackId": "rtrack_000010",
+  "packageVersion": 1,
+  "status": "RADIO_READY",
+  "source": {
+    "trackId": "track_7fxzhnzq",
+    "audioRelPath": "catalog/audio/cloud_rust.flac"
+  },
+  "sourceAssetHash": "a34b3151aeff22e8a0cfbb34dfef51d257017f4f72aaf6da190d87e94779f47c",
+  "audio": {
+    "primary": {
+      "codec": "opus",
+      "container": "ogg",
+      "mimeType": "audio/ogg; codecs=opus",
+      "relativePath": "audio.opus",
+      "bitrateKbps": 160,
+      "vbrMode": "constrained",
+      "channels": 2,
+      "sampleRate": 48000,
+      "durationSeconds": 107.47997916666667,
+      "decodedFrameCount48k": 5159039,
+      "byteSize": 2169811,
+      "sha256": "94668375bbf82980c32127024393e82ef7a0ed6ab32a61bfb9e80e43aa42bc6f"
+    }
+  },
+  "display": {
+    "title": "Cloud Rust",
+    "artist": "StudioRich"
+  },
+  "musical": {
+    "bpm": 90,
+    "key": "2B",
+    "moods": [
+      "Calm",
+      "Intimate",
+      "Peaceful"
+    ],
+    "genres": [
+      "ambient",
+      "jungle",
+      "lo-fi"
+    ]
+  },
+  "songIntelligence": {
+    "revision": "2026-07-23T05:40:50.175Z",
+    "analyzerVersion": "song-analyzer-v1.1.0",
+    "configurationVersion": "song-analysis-config-v1.0.0",
+    "status": "READY_PROVISIONAL",
+    "sections": [
+      {
+        "label": "Intro",
+        "structuralType": "intro",
+        "startSeconds": 0,
+        "endSeconds": 10.748004535147393,
+        "verified": false
+      },
+      {
+        "label": "Body",
+        "structuralType": "body",
+        "startSeconds": 10.748004535147393,
+        "endSeconds": 91.35798185941043,
+        "verified": false
+      },
+      {
+        "label": "Outro",
+        "structuralType": "outro",
+        "startSeconds": 91.35798185941043,
+        "endSeconds": 107.47997732426303,
+        "verified": false
+      }
+    ]
+  },
+  "approval": {
+    "approved": true,
+    "approvedAt": "2026-07-23T05:40:53.478Z",
+    "sourceAssetHash": "a34b3151aeff22e8a0cfbb34dfef51d257017f4f72aaf6da190d87e94779f47c",
+    "songIntelligenceRevision": "2026-07-23T05:40:50.175Z"
+  },
+  "verification": {
+    "probeOk": true,
+    "decodeVerifyOk": true,
+    "deltaFrames": 0,
+    "verifiedAt": "2026-07-23T05:41:09.080Z"
+  },
+  "createdAt": "2026-07-23T05:41:09.080Z"
+}

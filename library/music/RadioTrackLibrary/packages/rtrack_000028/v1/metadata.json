@@ -1,0 +1,87 @@
+{
+  "schemaVersion": "1.0.0",
+  "radioTrackId": "rtrack_000028",
+  "packageVersion": 1,
+  "status": "RADIO_READY",
+  "source": {
+    "trackId": "track_ovmpc3ti",
+    "audioRelPath": "catalog/audio/driveway_fadeout_s01.flac"
+  },
+  "sourceAssetHash": "413b1077dc1a08d86ab1a6b09f4498e87b5d0947d162759b11ac52db74f9ed15",
+  "audio": {
+    "primary": {
+      "codec": "opus",
+      "container": "ogg",
+      "mimeType": "audio/ogg; codecs=opus",
+      "relativePath": "audio.opus",
+      "bitrateKbps": 160,
+      "vbrMode": "constrained",
+      "channels": 2,
+      "sampleRate": 48000,
+      "durationSeconds": 92.91997916666666,
+      "decodedFrameCount48k": 4460159,
+      "byteSize": 1875758,
+      "sha256": "f99e5a3bdef461a3a13ed5586ed8469ef723f4c5abdad2811524ba3475d745aa"
+    }
+  },
+  "display": {
+    "title": "Driveway Fadeout S01",
+    "artist": "StudioRich"
+  },
+  "musical": {
+    "bpm": 83,
+    "key": "6B",
+    "moods": [
+      "Calm",
+      "Intimate",
+      "Weightless"
+    ],
+    "genres": [
+      "electronic",
+      "glitch",
+      "lo-fi"
+    ]
+  },
+  "songIntelligence": {
+    "revision": "2026-07-18T06:31:30.584Z",
+    "analyzerVersion": "song-analyzer-v1.1.0",
+    "configurationVersion": "song-analysis-config-v1.0.0",
+    "status": "READY_PROVISIONAL",
+    "sections": [
+      {
+        "label": "Intro",
+        "structuralType": "intro",
+        "startSeconds": 0,
+        "endSeconds": 9.291995464852608,
+        "verified": false
+      },
+      {
+        "label": "Body",
+        "structuralType": "body",
+        "startSeconds": 9.291995464852608,
+        "endSeconds": 78.98197278911564,
+        "verified": false
+      },
+      {
+        "label": "Outro",
+        "structuralType": "outro",
+        "startSeconds": 78.98197278911564,
+        "endSeconds": 92.91997732426304,
+        "verified": false
+      }
+    ]
+  },
+  "approval": {
+    "approved": true,
+    "approvedAt": "2026-07-23T04:55:25.958Z",
+    "sourceAssetHash": "413b1077dc1a08d86ab1a6b09f4498e87b5d0947d162759b11ac52db74f9ed15",
+    "songIntelligenceRevision": "2026-07-18T06:31:30.584Z"
+  },
+  "verification": {
+    "probeOk": true,
+    "decodeVerifyOk": true,
+    "deltaFrames": 0,
+    "verifiedAt": "2026-07-23T05:42:46.793Z"
+  },
+  "createdAt": "2026-07-23T05:42:46.793Z"
+}

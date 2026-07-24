@@ -1,0 +1,85 @@
+{
+  "schemaVersion": "1.0.0",
+  "stationId": "radplaylist_mrvstonc_6ba2q5",
+  "bundleVersion": 1,
+  "entries": [
+    {
+      "radioTrackId": "rtrack_000001",
+      "packageVersion": 1,
+      "title": "White Ropes",
+      "artist": "Soulphiction",
+      "durationSeconds": 235.25984126984127,
+      "songIntelligence": {
+        "revision": "2026-07-23T04:12:16.372Z",
+        "status": "STALE",
+        "sections": [
+          {
+            "label": "Intro",
+            "structuralType": "intro",
+            "startSeconds": 0,
+            "endSeconds": 23.525986394557822,
+            "verified": false
+          },
+          {
+            "label": "Body",
+            "structuralType": "body",
+            "startSeconds": 23.525986394557822,
+            "endSeconds": 199.97086167800452,
+            "verified": false
+          },
+          {
+            "label": "Outro",
+            "structuralType": "outro",
+            "startSeconds": 199.97086167800452,
+            "endSeconds": 235.25984126984127,
+            "verified": false
+          }
+        ]
+      }
+    },
+    {
+      "radioTrackId": "rtrack_000002",
+      "packageVersion": 1,
+      "title": "Beau Mot Plage",
+      "artist": "Isolée",
+      "durationSeconds": 398.0026984126984,
+      "songIntelligence": {
+        "revision": "2026-07-23T04:12:16.376Z",
+        "status": "STALE",
+        "sections": [
+          {
+            "label": "Intro",
+            "structuralType": "intro",
+            "startSeconds": 0,
+            "endSeconds": 39.80027210884354,
+            "verified": false
+          },
+          {
+            "label": "Body",
+            "structuralType": "body",
+            "startSeconds": 39.80027210884354,
+            "endSeconds": 338.3022902494331,
+            "verified": false
+          },
+          {
+            "label": "Outro",
+            "structuralType": "outro",
+            "startSeconds": 338.3022902494331,
+            "endSeconds": 398.0026984126984,
+            "verified": false
+          }
+        ]
+      }
+    },
+    {
+      "radioTrackId": "rtrack_000003",
+      "packageVersion": 1,
+      "title": "Minimal",
+      "artist": "Matias Aguayo",
+      "durationSeconds": 393.5618820861678,
+      "songIntelligence": {
+        "sections": []
+      }
+    }
+  ]
+}

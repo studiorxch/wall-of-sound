@@ -1,0 +1,87 @@
+{
+  "schemaVersion": "1.0.0",
+  "radioTrackId": "rtrack_000026",
+  "packageVersion": 1,
+  "status": "RADIO_READY",
+  "source": {
+    "trackId": "track_xkc2736m",
+    "audioRelPath": "catalog/audio/ambient_rewind_blue_mix.flac"
+  },
+  "sourceAssetHash": "caad78db36a5c0c849d9f26a1f8cba200c357523637efd25cae397984eb6a719",
+  "audio": {
+    "primary": {
+      "codec": "opus",
+      "container": "ogg",
+      "mimeType": "audio/ogg; codecs=opus",
+      "relativePath": "audio.opus",
+      "bitrateKbps": 160,
+      "vbrMode": "constrained",
+      "channels": 2,
+      "sampleRate": 48000,
+      "durationSeconds": 102.03997916666667,
+      "decodedFrameCount48k": 4897919,
+      "byteSize": 2059921,
+      "sha256": "dd4597cfbda34da5ac80a7a69af7e8c5dcce05b384deb20c6c10a17b5f126f3e"
+    }
+  },
+  "display": {
+    "title": "Ambient Rewind Blue Mix",
+    "artist": "StudioRich"
+  },
+  "musical": {
+    "bpm": 87,
+    "key": "6B",
+    "moods": [
+      "Calm",
+      "Intimate",
+      "Chill"
+    ],
+    "genres": [
+      "ambient",
+      "instrumental",
+      "lo-fi"
+    ]
+  },
+  "songIntelligence": {
+    "revision": "2026-07-18T06:31:28.333Z",
+    "analyzerVersion": "song-analyzer-v1.1.0",
+    "configurationVersion": "song-analysis-config-v1.0.0",
+    "status": "READY_PROVISIONAL",
+    "sections": [
+      {
+        "label": "Intro",
+        "structuralType": "intro",
+        "startSeconds": 0,
+        "endSeconds": 10.203990929705215,
+        "verified": false
+      },
+      {
+        "label": "Body",
+        "structuralType": "body",
+        "startSeconds": 10.203990929705215,
+        "endSeconds": 86.73399092970521,
+        "verified": false
+      },
+      {
+        "label": "Outro",
+        "structuralType": "outro",
+        "startSeconds": 86.73399092970521,
+        "endSeconds": 102.03997732426303,
+        "verified": false
+      }
+    ]
+  },
+  "approval": {
+    "approved": true,
+    "approvedAt": "2026-07-23T04:55:25.870Z",
+    "sourceAssetHash": "caad78db36a5c0c849d9f26a1f8cba200c357523637efd25cae397984eb6a719",
+    "songIntelligenceRevision": "2026-07-18T06:31:28.333Z"
+  },
+  "verification": {
+    "probeOk": true,
+    "decodeVerifyOk": true,
+    "deltaFrames": 0,
+    "verifiedAt": "2026-07-23T05:42:43.271Z"
+  },
+  "createdAt": "2026-07-23T05:42:43.271Z"
+}

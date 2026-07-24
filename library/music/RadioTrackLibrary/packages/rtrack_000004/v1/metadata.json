@@ -1,0 +1,86 @@
+{
+  "schemaVersion": "1.0.0",
+  "radioTrackId": "rtrack_000004",
+  "packageVersion": 1,
+  "status": "RADIO_READY",
+  "source": {
+    "trackId": "track_b8gjqz62",
+    "audioRelPath": "catalog/audio/hold_the_shape_s01.flac"
+  },
+  "sourceAssetHash": "7f699f86ae61f9f3f985d2d7bbe511a56f0288adbd9ccce16f61a9698e53a748",
+  "audio": {
+    "primary": {
+      "codec": "opus",
+      "container": "ogg",
+      "mimeType": "audio/ogg; codecs=opus",
+      "relativePath": "audio.opus",
+      "bitrateKbps": 160,
+      "vbrMode": "constrained",
+      "channels": 2,
+      "sampleRate": 48000,
+      "durationSeconds": 73.07997916666666,
+      "decodedFrameCount48k": 3507839,
+      "byteSize": 1475677,
+      "sha256": "081a38dc022111547bdcdc27982d88fdf82b5ab86c49954c71d666a579be8925"
+    }
+  },
+  "display": {
+    "title": "Hold The Shape S1",
+    "artist": "StudioRich"
+  },
+  "musical": {
+    "bpm": 150,
+    "key": "12B",
+    "moods": [
+      "Weightless",
+      "Intimate",
+      "Calm"
+    ],
+    "genres": [
+      "ambient",
+      "jungle"
+    ]
+  },
+  "songIntelligence": {
+    "revision": "2026-07-23T05:40:42.701Z",
+    "analyzerVersion": "song-analyzer-v1.1.0",
+    "configurationVersion": "song-analysis-config-v1.0.0",
+    "status": "READY_PROVISIONAL",
+    "sections": [
+      {
+        "label": "Intro",
+        "structuralType": "intro",
+        "startSeconds": 0,
+        "endSeconds": 7.308004535147393,
+        "verified": false
+      },
+      {
+        "label": "Body",
+        "structuralType": "body",
+        "startSeconds": 7.308004535147393,
+        "endSeconds": 62.11798185941043,
+        "verified": false
+      },
+      {
+        "label": "Outro",
+        "structuralType": "outro",
+        "startSeconds": 62.11798185941043,
+        "endSeconds": 73.07997732426304,
+        "verified": false
+      }
+    ]
+  },
+  "approval": {
+    "approved": true,
+    "approvedAt": "2026-07-23T05:40:52.932Z",
+    "sourceAssetHash": "7f699f86ae61f9f3f985d2d7bbe511a56f0288adbd9ccce16f61a9698e53a748",
+    "songIntelligenceRevision": "2026-07-23T05:40:42.701Z"
+  },
+  "verification": {
+    "probeOk": true,
+    "decodeVerifyOk": true,
+    "deltaFrames": 0,
+    "verifiedAt": "2026-07-23T05:40:57.473Z"
+  },
+  "createdAt": "2026-07-23T05:40:57.473Z"
+}

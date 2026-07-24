@@ -120,6 +120,7 @@ export function RadioPlaylistsView({
           allRadioPlaylists={radioPlaylists}
           radioInboxItems={radioInboxItems}
           libraryTracks={libraryTracks}
+          songAnalyses={songAnalyses}
           loops={looperShared.loops}
           preparationStateByEntryId={NO_LIVE_PREPARATION_STATES}
           radioWebExports={radioWebExports}

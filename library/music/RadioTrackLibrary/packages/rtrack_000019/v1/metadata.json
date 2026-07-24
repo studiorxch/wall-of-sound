@@ -1,0 +1,87 @@
+{
+  "schemaVersion": "1.0.0",
+  "radioTrackId": "rtrack_000019",
+  "packageVersion": 1,
+  "status": "RADIO_READY",
+  "source": {
+    "trackId": "track_m11c8blx",
+    "audioRelPath": "catalog/audio/above_the_loop.flac"
+  },
+  "sourceAssetHash": "0327f26d0e6864e5b416003fcebc7ba86157e54ca8a6ebe5c9b6aef597536339",
+  "audio": {
+    "primary": {
+      "codec": "opus",
+      "container": "ogg",
+      "mimeType": "audio/ogg; codecs=opus",
+      "relativePath": "audio.opus",
+      "bitrateKbps": 160,
+      "vbrMode": "constrained",
+      "channels": 2,
+      "sampleRate": 48000,
+      "durationSeconds": 106.63997916666666,
+      "decodedFrameCount48k": 5118719,
+      "byteSize": 2152787,
+      "sha256": "6cbde8063f02ac01d2c72a00b2b610211ba4177fa26927087c2bcd2b81ed8086"
+    }
+  },
+  "display": {
+    "title": "Above the Loop",
+    "artist": "StudioRich"
+  },
+  "musical": {
+    "bpm": 90,
+    "key": "7B",
+    "moods": [
+      "Calm",
+      "Intimate",
+      "Weightless"
+    ],
+    "genres": [
+      "cinematic",
+      "jungle",
+      "lo-fi"
+    ]
+  },
+  "songIntelligence": {
+    "revision": "2026-07-18T06:31:18.797Z",
+    "analyzerVersion": "song-analyzer-v1.1.0",
+    "configurationVersion": "song-analysis-config-v1.0.0",
+    "status": "READY_PROVISIONAL",
+    "sections": [
+      {
+        "label": "Intro",
+        "structuralType": "intro",
+        "startSeconds": 0,
+        "endSeconds": 10.663990929705216,
+        "verified": false
+      },
+      {
+        "label": "Body",
+        "structuralType": "body",
+        "startSeconds": 10.663990929705216,
+        "endSeconds": 90.64399092970521,
+        "verified": false
+      },
+      {
+        "label": "Outro",
+        "structuralType": "outro",
+        "startSeconds": 90.64399092970521,
+        "endSeconds": 106.63997732426304,
+        "verified": false
+      }
+    ]
+  },
+  "approval": {
+    "approved": true,
+    "approvedAt": "2026-07-23T04:55:25.516Z",
+    "sourceAssetHash": "0327f26d0e6864e5b416003fcebc7ba86157e54ca8a6ebe5c9b6aef597536339",
+    "songIntelligenceRevision": "2026-07-18T06:31:18.797Z"
+  },
+  "verification": {
+    "probeOk": true,
+    "decodeVerifyOk": true,
+    "deltaFrames": 0,
+    "verifiedAt": "2026-07-23T05:42:28.110Z"
+  },
+  "createdAt": "2026-07-23T05:42:28.110Z"
+}

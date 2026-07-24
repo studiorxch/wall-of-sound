@@ -1,0 +1,87 @@
+{
+  "schemaVersion": "1.0.0",
+  "radioTrackId": "rtrack_000023",
+  "packageVersion": 1,
+  "status": "RADIO_READY",
+  "source": {
+    "trackId": "track_rsr39e35",
+    "audioRelPath": "catalog/audio/midnight_court.flac"
+  },
+  "sourceAssetHash": "60140e8b6094e77ee8335b8ccce0d4d8f6c1d75e2cf978d31d47240363a42e18",
+  "audio": {
+    "primary": {
+      "codec": "opus",
+      "container": "ogg",
+      "mimeType": "audio/ogg; codecs=opus",
+      "relativePath": "audio.opus",
+      "bitrateKbps": 160,
+      "vbrMode": "constrained",
+      "channels": 2,
+      "sampleRate": 48000,
+      "durationSeconds": 158.47997916666668,
+      "decodedFrameCount48k": 7607039,
+      "byteSize": 3198647,
+      "sha256": "177038fbf3c3a5824792fee18369e466ff9104e2e91a36a7017414e87a15ae65"
+    }
+  },
+  "display": {
+    "title": "Midnight Court",
+    "artist": "StudioRich"
+  },
+  "musical": {
+    "bpm": 90,
+    "key": "5B",
+    "moods": [
+      "Calm",
+      "Intimate",
+      "Subdued"
+    ],
+    "genres": [
+      "chillout",
+      "jazztronica",
+      "lo-fi hip hop"
+    ]
+  },
+  "songIntelligence": {
+    "revision": "2026-07-18T06:31:23.403Z",
+    "analyzerVersion": "song-analyzer-v1.1.0",
+    "configurationVersion": "song-analysis-config-v1.0.0",
+    "status": "READY_PROVISIONAL",
+    "sections": [
+      {
+        "label": "Intro",
+        "structuralType": "intro",
+        "startSeconds": 0,
+        "endSeconds": 15.848004535147393,
+        "verified": false
+      },
+      {
+        "label": "Body",
+        "structuralType": "body",
+        "startSeconds": 15.848004535147393,
+        "endSeconds": 134.70798185941044,
+        "verified": false
+      },
+      {
+        "label": "Outro",
+        "structuralType": "outro",
+        "startSeconds": 134.70798185941044,
+        "endSeconds": 158.47997732426305,
+        "verified": false
+      }
+    ]
+  },
+  "approval": {
+    "approved": true,
+    "approvedAt": "2026-07-23T04:55:25.705Z",
+    "sourceAssetHash": "60140e8b6094e77ee8335b8ccce0d4d8f6c1d75e2cf978d31d47240363a42e18",
+    "songIntelligenceRevision": "2026-07-18T06:31:23.403Z"
+  },
+  "verification": {
+    "probeOk": true,
+    "decodeVerifyOk": true,
+    "deltaFrames": 0,
+    "verifiedAt": "2026-07-23T05:42:36.160Z"
+  },
+  "createdAt": "2026-07-23T05:42:36.160Z"
+}

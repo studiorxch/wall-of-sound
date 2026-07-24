@@ -1,0 +1,54 @@
+{
+  "schemaVersion": "1.0.0",
+  "stationId": "radplaylist_mrvstonc_6ba2q5",
+  "bundleVersion": 1,
+  "title": "New Playlist",
+  "entries": [
+    {
+      "radioTrackId": "rtrack_000001",
+      "packageVersion": 1,
+      "audioUrl": "audio/rtrack_000001-v1.opus",
+      "durationSeconds": 235.25984126984127,
+      "byteSize": 4696495,
+      "sha256": "30caeffc2934be81fc89e68d571438d8e75cf5e61305c777326716ff756d9dc8",
+      "title": "White Ropes",
+      "artist": "Soulphiction",
+      "bpm": 123.05,
+      "key": "9A",
+      "moods": [],
+      "genres": []
+    },
+    {
+      "radioTrackId": "rtrack_000002",
+      "packageVersion": 1,
+      "audioUrl": "audio/rtrack_000002-v1.opus",
+      "durationSeconds": 398.0026984126984,
+      "byteSize": 8033447,
+      "sha256": "e7d075d1cbd0679d0f5376cc04884ef93eb6ce6a74295188ebe84aab836661f2",
+      "title": "Beau Mot Plage",
+      "artist": "Isolée",
+      "bpm": 129.2,
+      "key": "10A",
+      "moods": [],
+      "genres": []
+    },
+    {
+      "radioTrackId": "rtrack_000003",
+      "packageVersion": 1,
+      "audioUrl": "audio/rtrack_000003-v1.opus",
+      "durationSeconds": 393.5618820861678,
+      "byteSize": 7943510,
+      "sha256": "dc47c76d9ec9bd248f2f605dd95c932a511ff69ac9787765d272031d32b8ee6c",
+      "title": "Minimal",
+      "artist": "Matias Aguayo",
+      "bpm": 129.2,
+      "key": "1A",
+      "moods": [],
+      "genres": []
+    }
+  ],
+  "totalDurationSeconds": 1026.8244217687075,
+  "totalByteSize": 20673452,
+  "createdAt": "2026-07-23T04:21:37.775Z",
+  "performanceAssets": []
+}

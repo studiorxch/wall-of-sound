@@ -1,0 +1,397 @@
+{
+  "schemaVersion": "1.0.0",
+  "stationId": "radplaylist_mrx31rqr_rncvic",
+  "bundleVersion": 1,
+  "entries": [
+    {
+      "radioTrackId": "rtrack_000004",
+      "packageVersion": 1,
+      "title": "Hold The Shape S1",
+      "artist": "StudioRich",
+      "durationSeconds": 73.07997916666666,
+      "songIntelligence": {
+        "revision": "2026-07-23T05:40:42.701Z",
+        "status": "READY_PROVISIONAL",
+        "sections": [
+          {
+            "label": "Intro",
+            "structuralType": "intro",
+            "startSeconds": 0,
+            "endSeconds": 7.308004535147393,
+            "verified": false
+          },
+          {
+            "label": "Body",
+            "structuralType": "body",
+            "startSeconds": 7.308004535147393,
+            "endSeconds": 62.11798185941043,
+            "verified": false
+          },
+          {
+            "label": "Outro",
+            "structuralType": "outro",
+            "startSeconds": 62.11798185941043,
+            "endSeconds": 73.07997732426304,
+            "verified": false
+          }
+        ]
+      }
+    },
+    {
+      "radioTrackId": "rtrack_000005",
+      "packageVersion": 1,
+      "title": "Lo Pulse",
+      "artist": "StudioRich",
+      "durationSeconds": 143.95997916666667,
+      "songIntelligence": {
+        "revision": "2026-07-23T05:40:43.677Z",
+        "status": "READY_PROVISIONAL",
+        "sections": [
+          {
+            "label": "Intro",
+            "structuralType": "intro",
+            "startSeconds": 0,
+            "endSeconds": 14.396009070294784,
+            "verified": false
+          },
+          {
+            "label": "Body",
+            "structuralType": "body",
+            "startSeconds": 14.396009070294784,
+            "endSeconds": 122.36598639455782,
+            "verified": false
+          },
+          {
+            "label": "Outro",
+            "structuralType": "outro",
+            "startSeconds": 122.36598639455782,
+            "endSeconds": 143.95997732426304,
+            "verified": false
+          }
+        ]
+      }
+    },
+    {
+      "radioTrackId": "rtrack_000006",
+      "packageVersion": 1,
+      "title": "Pulse in the Haze S01",
+      "artist": "StudioRich",
+      "durationSeconds": 159.91997916666668,
+      "songIntelligence": {
+        "revision": "2026-07-23T05:40:45.082Z",
+        "status": "READY_PROVISIONAL",
+        "sections": [
+          {
+            "label": "Intro",
+            "structuralType": "intro",
+            "startSeconds": 0,
+            "endSeconds": 15.991995464852607,
+            "verified": false
+          },
+          {
+            "label": "Body",
+            "structuralType": "body",
+            "startSeconds": 15.991995464852607,
+            "endSeconds": 135.93197278911563,
+            "verified": false
+          },
+          {
+            "label": "Outro",
+            "structuralType": "outro",
+            "startSeconds": 135.93197278911563,
+            "endSeconds": 159.91997732426304,
+            "verified": false
+          }
+        ]
+      }
+    },
+    {
+      "radioTrackId": "rtrack_000007",
+      "packageVersion": 1,
+      "title": "Raincurve",
+      "artist": "StudioRich",
+      "durationSeconds": 112.27997916666666,
+      "songIntelligence": {
+        "revision": "2026-07-23T05:40:46.476Z",
+        "status": "READY_PROVISIONAL",
+        "sections": [
+          {
+            "label": "Intro",
+            "structuralType": "intro",
+            "startSeconds": 0,
+            "endSeconds": 11.228004535147392,
+            "verified": false
+          },
+          {
+            "label": "Body",
+            "structuralType": "body",
+            "startSeconds": 11.228004535147392,
+            "endSeconds": 95.43798185941043,
+            "verified": false
+          },
+          {
+            "label": "Outro",
+            "structuralType": "outro",
+            "startSeconds": 95.43798185941043,
+            "endSeconds": 112.27997732426304,
+            "verified": false
+          }
+        ]
+      }
+    },
+    {
+      "radioTrackId": "rtrack_000008",
+      "packageVersion": 1,
+      "title": "Twilight Vibration",
+      "artist": "StudioRich",
+      "durationSeconds": 130.71997916666666,
+      "songIntelligence": {
+        "revision": "2026-07-23T05:40:47.677Z",
+        "status": "READY_PROVISIONAL",
+        "sections": [
+          {
+            "label": "Intro",
+            "structuralType": "intro",
+            "startSeconds": 0,
+            "endSeconds": 13.071995464852607,
+            "verified": false
+          },
+          {
+            "label": "Body",
+            "structuralType": "body",
+            "startSeconds": 13.071995464852607,
+            "endSeconds": 111.11197278911564,
+            "verified": false
+          },
+          {
+            "label": "Outro",
+            "structuralType": "outro",
+            "startSeconds": 111.11197278911564,
+            "endSeconds": 130.71997732426303,
+            "verified": false
+          }
+        ]
+      }
+    },
+    {
+      "radioTrackId": "rtrack_000009",
+      "packageVersion": 1,
+      "title": "The Way the Air Moves",
+      "artist": "StudioRich",
+      "durationSeconds": 134.63997916666668,
+      "songIntelligence": {
+        "revision": "2026-07-23T05:40:48.971Z",
+        "status": "READY_PROVISIONAL",
+        "sections": [
+          {
+            "label": "Intro",
+            "structuralType": "intro",
+            "startSeconds": 0,
+            "endSeconds": 13.463990929705215,
+            "verified": false
+          },
+          {
+            "label": "Body",
+            "structuralType": "body",
+            "startSeconds": 13.463990929705215,
+            "endSeconds": 114.44399092970522,
+            "verified": false
+          },
+          {
+            "label": "Outro",
+            "structuralType": "outro",
+            "startSeconds": 114.44399092970522,
+            "endSeconds": 134.63997732426304,
+            "verified": false
+          }
+        ]
+      }
+    },
+    {
+      "radioTrackId": "rtrack_000010",
+      "packageVersion": 1,
+      "title": "Cloud Rust",
+      "artist": "StudioRich",
+      "durationSeconds": 107.47997916666667,
+      "songIntelligence": {
+        "revision": "2026-07-23T05:40:50.175Z",
+        "status": "READY_PROVISIONAL",
+        "sections": [
+          {
+            "label": "Intro",
+            "structuralType": "intro",
+            "startSeconds": 0,
+            "endSeconds": 10.748004535147393,
+            "verified": false
+          },
+          {
+            "label": "Body",
+            "structuralType": "body",
+            "startSeconds": 10.748004535147393,
+            "endSeconds": 91.35798185941043,
+            "verified": false
+          },
+          {
+            "label": "Outro",
+            "structuralType": "outro",
+            "startSeconds": 91.35798185941043,
+            "endSeconds": 107.47997732426303,
+            "verified": false
+          }
+        ]
+      }
+    },
+    {
+      "radioTrackId": "rtrack_000011",
+      "packageVersion": 1,
+      "title": "Ember Channel",
+      "artist": "StudioRich",
+      "durationSeconds": 127.95997916666667,
+      "songIntelligence": {
+        "revision": "2026-07-23T05:40:51.311Z",
+        "status": "READY_PROVISIONAL",
+        "sections": [
+          {
+            "label": "Intro",
+            "structuralType": "intro",
+            "startSeconds": 0,
+            "endSeconds": 12.796009070294785,
+            "verified": false
+          },
+          {
+            "label": "Body",
+            "structuralType": "body",
+            "startSeconds": 12.796009070294785,
+            "endSeconds": 108.76598639455783,
+            "verified": false
+          },
+          {
+            "label": "Outro",
+            "structuralType": "outro",
+            "startSeconds": 108.76598639455783,
+            "endSeconds": 127.95997732426304,
+            "verified": false
+          }
+        ]
+      }
+    },
+    {
+      "radioTrackId": "rtrack_000012",
+      "packageVersion": 1,
+      "title": "Neon With Teeth S01",
+      "artist": "StudioRich",
+      "durationSeconds": 128.19997916666668,
+      "songIntelligence": {
+        "revision": "2026-07-23T05:40:52.574Z",
+        "status": "READY_PROVISIONAL",
+        "sections": [
+          {
+            "label": "Intro",
+            "structuralType": "intro",
+            "startSeconds": 0,
+            "endSeconds": 12.82,
+            "verified": false
+          },
+          {
+            "label": "Body",
+            "structuralType": "body",
+            "startSeconds": 12.82,
+            "endSeconds": 108.96997732426304,
+            "verified": false
+          },
+          {
+            "label": "Outro",
+            "structuralType": "outro",
+            "startSeconds": 108.96997732426304,
+            "endSeconds": 128.19997732426305,
+            "verified": false
+          }
+        ]
+      }
+    },
+    {
+      "radioTrackId": "rtrack_000013",
+      "packageVersion": 1,
+      "title": "Blurred Signal S01",
+      "artist": "StudioRich",
+      "durationSeconds": 137.55997916666666,
+      "songIntelligence": {
+        "revision": "2026-07-23T05:40:54.360Z",
+        "status": "READY_PROVISIONAL",
+        "sections": [
+          {
+            "label": "Intro",
+            "structuralType": "intro",
+            "startSeconds": 0,
+            "endSeconds": 13.756009070294784,
+            "verified": false
+          },
+          {
+            "label": "Body",
+            "structuralType": "body",
+            "startSeconds": 13.756009070294784,
+            "endSeconds": 116.92598639455782,
+            "verified": false
+          },
+          {
+            "label": "Outro",
+            "structuralType": "outro",
+            "startSeconds": 116.92598639455782,
+            "endSeconds": 137.55997732426303,
+            "verified": false
+          }
+        ]
+      }
+    },
+    {
+      "radioTrackId": "rtrack_000014",
+      "packageVersion": 1,
+      "title": "Soul Trace S01",
+      "artist": "StudioRich",
+      "durationSeconds": 144.71997916666666,
+      "songIntelligence": {
+        "sections": []
+      }
+    },
+    {
+      "radioTrackId": "rtrack_000015",
+      "packageVersion": 1,
+      "title": "Cryloop.exe S01",
+      "artist": "StudioRich",
+      "durationSeconds": 168.27997916666666,
+      "songIntelligence": {
+        "sections": []
+      }
+    },
+    {
+      "radioTrackId": "rtrack_000016",
+      "packageVersion": 1,
+      "title": "Silent Altitude",
+      "artist": "StudioRich",
+      "durationSeconds": 134.95997916666667,
+      "songIntelligence": {
+        "sections": []
+      }
+    },
+    {
+      "radioTrackId": "rtrack_000017",
+      "packageVersion": 1,
+      "title": "Silent Altitude S01",
+      "artist": "StudioRich",
+      "durationSeconds": 78.35997916666666,
+      "songIntelligence": {
+        "sections": []
+      }
+    },
+    {
+      "radioTrackId": "rtrack_000018",
+      "packageVersion": 1,
+      "title": "Radiant Brake S01",
+      "artist": "StudioRich",
+      "durationSeconds": 142.59997916666666,
+      "songIntelligence": {
+        "sections": []
+      }
+    }
+  ]
+}

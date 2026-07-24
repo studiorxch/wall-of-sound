@@ -1,0 +1,79 @@
+{
+  "schemaVersion": "1.0.0",
+  "radioTrackId": "rtrack_000002",
+  "packageVersion": 1,
+  "status": "RADIO_READY",
+  "source": {
+    "trackId": "ext_mr9smtpl_agtt",
+    "audioRelPath": "external/audio/VA - Microhouse Essentials (2021)/02. Isolée - Beau Mot Plage.mp3"
+  },
+  "sourceAssetHash": "9fa1470d3f3424606641d7f2c96f1ce192bd1c4eba1e9639b863313ab679132a",
+  "audio": {
+    "primary": {
+      "codec": "opus",
+      "container": "ogg",
+      "mimeType": "audio/ogg; codecs=opus",
+      "relativePath": "audio.opus",
+      "bitrateKbps": 160,
+      "vbrMode": "constrained",
+      "channels": 2,
+      "sampleRate": 48000,
+      "durationSeconds": 398.0026984126984,
+      "decodedFrameCount48k": 19104130,
+      "byteSize": 8033447,
+      "sha256": "e7d075d1cbd0679d0f5376cc04884ef93eb6ce6a74295188ebe84aab836661f2"
+    }
+  },
+  "display": {
+    "title": "Beau Mot Plage",
+    "artist": "Isolée"
+  },
+  "musical": {
+    "bpm": 129.2,
+    "key": "10A",
+    "moods": [],
+    "genres": []
+  },
+  "songIntelligence": {
+    "revision": "2026-07-23T04:12:16.376Z",
+    "analyzerVersion": "song-analyzer-v1.1.0",
+    "configurationVersion": "song-analysis-config-v1.0.0",
+    "status": "STALE",
+    "sections": [
+      {
+        "label": "Intro",
+        "structuralType": "intro",
+        "startSeconds": 0,
+        "endSeconds": 39.80027210884354,
+        "verified": false
+      },
+      {
+        "label": "Body",
+        "structuralType": "body",
+        "startSeconds": 39.80027210884354,
+        "endSeconds": 338.3022902494331,
+        "verified": false
+      },
+      {
+        "label": "Outro",
+        "structuralType": "outro",
+        "startSeconds": 338.3022902494331,
+        "endSeconds": 398.0026984126984,
+        "verified": false
+      }
+    ]
+  },
+  "approval": {
+    "approved": true,
+    "approvedAt": "2026-07-23T04:12:59.015Z",
+    "sourceAssetHash": "9fa1470d3f3424606641d7f2c96f1ce192bd1c4eba1e9639b863313ab679132a",
+    "songIntelligenceRevision": "2026-07-23T04:12:16.376Z"
+  },
+  "verification": {
+    "probeOk": true,
+    "decodeVerifyOk": true,
+    "deltaFrames": 0,
+    "verifiedAt": "2026-07-23T04:13:51.156Z"
+  },
+  "createdAt": "2026-07-23T04:13:51.156Z"
+}

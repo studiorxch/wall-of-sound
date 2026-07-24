@@ -1,0 +1,87 @@
+{
+  "schemaVersion": "1.0.0",
+  "radioTrackId": "rtrack_000027",
+  "packageVersion": 1,
+  "status": "RADIO_READY",
+  "source": {
+    "trackId": "track_15szhq0l",
+    "audioRelPath": "catalog/audio/skylight_bloom.flac"
+  },
+  "sourceAssetHash": "a2ed2a661060e5607a3f682eb32cb2d44ce1df3049b9579087c5adcb3c38fd25",
+  "audio": {
+    "primary": {
+      "codec": "opus",
+      "container": "ogg",
+      "mimeType": "audio/ogg; codecs=opus",
+      "relativePath": "audio.opus",
+      "bitrateKbps": 160,
+      "vbrMode": "constrained",
+      "channels": 2,
+      "sampleRate": 48000,
+      "durationSeconds": 140.67997916666667,
+      "decodedFrameCount48k": 6752639,
+      "byteSize": 2839538,
+      "sha256": "7adf474d3daf46eb240ae2b5e4632ba54b4e7cf0c469b2db340e473b84919134"
+    }
+  },
+  "display": {
+    "title": "Skylight Bloom",
+    "artist": "StudioRich"
+  },
+  "musical": {
+    "bpm": 89,
+    "key": "6B",
+    "moods": [
+      "Calm",
+      "Intimate",
+      "Weightless"
+    ],
+    "genres": [
+      "electronic",
+      "jungle",
+      "lo-fi"
+    ]
+  },
+  "songIntelligence": {
+    "revision": "2026-07-18T06:31:29.404Z",
+    "analyzerVersion": "song-analyzer-v1.1.0",
+    "configurationVersion": "song-analysis-config-v1.0.0",
+    "status": "READY_PROVISIONAL",
+    "sections": [
+      {
+        "label": "Intro",
+        "structuralType": "intro",
+        "startSeconds": 0,
+        "endSeconds": 14.068004535147391,
+        "verified": false
+      },
+      {
+        "label": "Body",
+        "structuralType": "body",
+        "startSeconds": 14.068004535147391,
+        "endSeconds": 119.57798185941043,
+        "verified": false
+      },
+      {
+        "label": "Outro",
+        "structuralType": "outro",
+        "startSeconds": 119.57798185941043,
+        "endSeconds": 140.67997732426304,
+        "verified": false
+      }
+    ]
+  },
+  "approval": {
+    "approved": true,
+    "approvedAt": "2026-07-23T04:55:25.917Z",
+    "sourceAssetHash": "a2ed2a661060e5607a3f682eb32cb2d44ce1df3049b9579087c5adcb3c38fd25",
+    "songIntelligenceRevision": "2026-07-18T06:31:29.404Z"
+  },
+  "verification": {
+    "probeOk": true,
+    "decodeVerifyOk": true,
+    "deltaFrames": 0,
+    "verifiedAt": "2026-07-23T05:42:45.220Z"
+  },
+  "createdAt": "2026-07-23T05:42:45.220Z"
+}
