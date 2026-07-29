@@ -1,7 +1,12 @@
 // Map-region feed config (0623A — direct WOS iframe path).
 // Single source of truth for the WOS local URL and feed source.
-
-export const DEFAULT_WOS_LOCAL_URL = "http://localhost:5500";
+//
+// 0729_STUDIORICH_Navigation_Consolidation — same-origin path through the
+// /wall-app proxy (vite.config.ts), not the standalone :5500 server.
+// Absolute (not relative) because broadcastRouteSource.ts's toEmbedUrl()
+// calls `new URL(base)`, which requires an absolute URL. localhost:5176 is
+// the canonical MUSIC entry point.
+export const DEFAULT_WOS_LOCAL_URL = "http://localhost:5176/wall-app/";
 
 export type MapRegionFeedSource =
   | "wos_iframe"  // real WOS local surface via iframe

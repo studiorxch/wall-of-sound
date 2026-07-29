@@ -150,7 +150,7 @@ function NavDropdown({
   onToggle,
   onClose,
 }: {
-  id: "studio" | "broadcast";
+  id: "studio" | "library" | "broadcast";
   label: string;
   items: readonly NavigationLink[];
   workspaceMode: WorkspaceMode;
@@ -236,6 +236,9 @@ function NavDropdown({
                 role="menuitem"
                 className="tb-nav-menu-item"
                 href={link.href}
+                title={link.title}
+                target={link.newTab ? "_blank" : undefined}
+                rel={link.newTab ? "noopener" : undefined}
                 onClick={onClose}
               >
                 {link.label}
@@ -266,7 +269,7 @@ export function TopBar({
   const overflowTriggerRef = useRef<HTMLButtonElement>(null);
   const overflowPanelRef = useRef<HTMLDivElement>(null);
   const navGroupRef = useRef<HTMLDivElement>(null);
-  const [openNavMenu, setOpenNavMenu] = useState<"studio" | "broadcast" | null>(null);
+  const [openNavMenu, setOpenNavMenu] = useState<"studio" | "library" | "broadcast" | null>(null);
   const [flash, setFlash] = useState("");
   const [pendingImport, setPendingImport] = useState<{
     tracks: Track[];
@@ -508,31 +511,19 @@ export function TopBar({
             </>
           )}
           <div className="tb-mode-switch" ref={navGroupRef}>
-            {navigationItems.map((item) =>
-              "children" in item ? (
-                <NavDropdown
-                  key={item.id}
-                  id={item.id}
-                  label={item.label}
-                  items={item.children}
-                  workspaceMode={workspaceMode}
-                  onWorkspaceModeChange={onWorkspaceModeChange}
-                  isOpen={openNavMenu === item.id}
-                  onToggle={() => setOpenNavMenu((cur) => (cur === item.id ? null : item.id))}
-                  onClose={() => setOpenNavMenu(null)}
-                />
-              ) : (
-                <button
-                  key={item.label}
-                  type="button"
-                  className={`tb-mode-btn${workspaceMode === item.mode ? " active" : ""}`}
-                  onClick={() => onWorkspaceModeChange(item.mode)}
-                  title={item.title}
-                >
-                  {item.label}
-                </button>
-              ),
-            )}
+            {navigationItems.map((item) => (
+              <NavDropdown
+                key={item.id}
+                id={item.id}
+                label={item.label}
+                items={item.children}
+                workspaceMode={workspaceMode}
+                onWorkspaceModeChange={onWorkspaceModeChange}
+                isOpen={openNavMenu === item.id}
+                onToggle={() => setOpenNavMenu((cur) => (cur === item.id ? null : item.id))}
+                onClose={() => setOpenNavMenu(null)}
+              />
+            ))}
           </div>
           <div className="ph-dropdown" onClick={(e) => e.stopPropagation()}>
             <button
