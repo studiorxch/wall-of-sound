@@ -72,20 +72,19 @@ export function MapsPaletteDetail({ paletteId, onBack, onOpenPalette }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  if (!palette) {
-    return (
-      <div className="pg-empty">
-        <div className="pg-empty-msg">Palette not found, or palette data is still loading.</div>
-        <button className="tb-btn" onClick={onBack}>← Palettes</button>
-      </div>
-    );
-  }
-
-  const isDefault = palette.id === wallPaletteBridge.DEFAULT_PALETTE_ID;
-  const isActive = palette.id === activeId;
-  const isPreviewing = palette.id === previewId;
+  const isDefault = palette?.id === wallPaletteBridge.DEFAULT_PALETTE_ID;
+  const isActive = palette?.id === activeId;
+  const isPreviewing = palette?.id === previewId;
   const groups = groupRegistry(registry);
 
+  // The preview area below must always mount (and keep its ref attached)
+  // regardless of whether `palette` has resolved yet — it's what triggers
+  // dockPreviewMap()/ensurePreviewMap(), which is in turn what makes the
+  // authority initialize and `palette` resolve in the first place. Gating
+  // this whole return on `palette` (an earlier version did) created a
+  // deadlock on a direct/reloaded detail URL: the ref never attached, so
+  // the map never initialized, so the palette never loaded, so the ref
+  // stayed unmounted forever.
   return (
     <div className="md-root">
       <CollectionDetailBar
@@ -93,53 +92,60 @@ export function MapsPaletteDetail({ paletteId, onBack, onOpenPalette }: Props) {
         onBackToCollection={onBack}
         createLabel="Duplicate"
         onCreate={() => {
+          if (!palette) return;
           const result = wallPaletteBridge.duplicatePalette(palette.id);
           if (result.ok) onOpenPalette(result.data.id);
         }}
       />
 
-      <div className="md-header">
-        {renameDraft != null ? (
-          <input
-            className="cat-filter-search"
-            style={{ fontSize: 18, width: 260 }}
-            value={renameDraft}
-            autoFocus
-            onChange={(e) => setRenameDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") { wallPaletteBridge.renamePalette(palette.id, renameDraft); setRenameDraft(null); }
-              if (e.key === "Escape") setRenameDraft(null);
-            }}
-            onBlur={() => setRenameDraft(null)}
-          />
-        ) : (
-          <h2
-            className="md-title"
-            onClick={() => !isDefault && setRenameDraft(palette.title)}
-            title={isDefault ? "Default's title is protected" : "Click to rename"}
-          >
-            {isActive && <span className="mg-star" title="Active">★</span>} {palette.title}
-          </h2>
-        )}
-        <div className="md-state">
-          {isActive && !isPreviewing && <span className="md-state-badge md-state-badge--active">Active</span>}
-          {isPreviewing && <span className="md-state-badge md-state-badge--preview">Previewing</span>}
-        </div>
-        <div className="md-actions">
-          {isPreviewing ? (
-            <button className="tb-btn" onClick={() => wallPaletteBridge.endPreview()}>End Preview</button>
+      {palette ? (
+        <div className="md-header">
+          {renameDraft != null ? (
+            <input
+              className="cat-filter-search"
+              style={{ fontSize: 18, width: 260 }}
+              value={renameDraft}
+              autoFocus
+              onChange={(e) => setRenameDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") { wallPaletteBridge.renamePalette(palette.id, renameDraft); setRenameDraft(null); }
+                if (e.key === "Escape") setRenameDraft(null);
+              }}
+              onBlur={() => setRenameDraft(null)}
+            />
           ) : (
-            <button className="tb-btn" onClick={() => wallPaletteBridge.previewPalette(palette.id)}>Preview</button>
+            <h2
+              className="md-title"
+              onClick={() => !isDefault && setRenameDraft(palette.title)}
+              title={isDefault ? "Default's title is protected" : "Click to rename"}
+            >
+              {isActive && <span className="mg-star" title="Active">★</span>} {palette.title}
+            </h2>
           )}
-          <button
-            className="tb-btn"
-            disabled={isActive}
-            onClick={() => wallPaletteBridge.activatePalette(palette.id)}
-          >
-            Activate
-          </button>
+          <div className="md-state">
+            {isActive && !isPreviewing && <span className="md-state-badge md-state-badge--active">Active</span>}
+            {isPreviewing && <span className="md-state-badge md-state-badge--preview">Previewing</span>}
+          </div>
+          <div className="md-actions">
+            {isPreviewing ? (
+              <button className="tb-btn" onClick={() => wallPaletteBridge.endPreview()}>End Preview</button>
+            ) : (
+              <button className="tb-btn" onClick={() => wallPaletteBridge.previewPalette(palette.id)}>Preview</button>
+            )}
+            <button
+              className="tb-btn"
+              disabled={isActive}
+              onClick={() => wallPaletteBridge.activatePalette(palette.id)}
+            >
+              Activate
+            </button>
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="md-header">
+          <span className="md-title">Loading palette data…</span>
+        </div>
+      )}
 
       <div className="md-preview-area" ref={previewContainerRef}>
         {!previewMapReady && (
@@ -147,35 +153,37 @@ export function MapsPaletteDetail({ paletteId, onBack, onOpenPalette }: Props) {
         )}
       </div>
 
-      <div className="md-property-groups">
-        {groups.map(([group, records]) => (
-          <div key={group} className="md-property-group">
-            <div className="md-property-group-label">{group}</div>
-            <div className="md-property-list">
-              {records.map((rec) => {
-                const value = palette.values[rec.id] ?? "";
-                const editing = editingPropId === rec.id;
-                return (
-                  <div key={rec.id} className="md-property-row">
-                    <span className="md-property-label">{rec.label}</span>
-                    <span className="md-property-swatch-wrap">
-                      <input
-                        type="color"
-                        className="md-property-swatch"
-                        value={/^#[0-9a-fA-F]{6}$/.test(value) ? value : "#000000"}
-                        onFocus={() => setEditingPropId(rec.id)}
-                        onBlur={() => setEditingPropId(null)}
-                        onChange={(e) => wallPaletteBridge.setPropertyValue(palette.id, rec.id, e.target.value)}
-                      />
-                      {editing && <span className="md-property-hex">{value}</span>}
-                    </span>
-                  </div>
-                );
-              })}
+      {palette && (
+        <div className="md-property-groups">
+          {groups.map(([group, records]) => (
+            <div key={group} className="md-property-group">
+              <div className="md-property-group-label">{group}</div>
+              <div className="md-property-list">
+                {records.map((rec) => {
+                  const value = palette.values[rec.id] ?? "";
+                  const editing = editingPropId === rec.id;
+                  return (
+                    <div key={rec.id} className="md-property-row">
+                      <span className="md-property-label">{rec.label}</span>
+                      <span className="md-property-swatch-wrap">
+                        <input
+                          type="color"
+                          className="md-property-swatch"
+                          value={/^#[0-9a-fA-F]{6}$/.test(value) ? value : "#000000"}
+                          onFocus={() => setEditingPropId(rec.id)}
+                          onBlur={() => setEditingPropId(null)}
+                          onChange={(e) => wallPaletteBridge.setPropertyValue(palette.id, rec.id, e.target.value)}
+                        />
+                        {editing && <span className="md-property-hex">{value}</span>}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
