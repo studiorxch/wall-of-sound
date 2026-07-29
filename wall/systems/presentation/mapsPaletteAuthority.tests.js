@@ -206,6 +206,22 @@
     results.push(_assert('active/preview state unchanged after diagnostic sequence',
       authority.getActiveId() === savedActive && authority.getPreviewId() == null));
 
+    // ── Episode 2 seed data (0729C) ─────────────────────────────────────────
+    // Non-destructive: exercises SBE.MapsPaletteSeeds directly rather than
+    // clearing real localStorage (which would wipe an actual user's saved
+    // palettes if this ever runs on a live profile).
+    if (SBE.MapsPaletteSeeds) {
+      var seed = SBE.MapsPaletteSeeds.buildEpisode2Seed(registry);
+      var seedKeys = Object.keys(seed.values);
+      results.push(_assert('Episode 2 seed produces the exact current schema',
+        seedKeys.length === ids.length && ids.every(function (id) { return id in seed.values; })));
+      results.push(_assert('Episode 2 seed is titled "Episode 2"', seed.title === 'Episode 2'));
+      results.push(_assert('Episode 2 seed values are valid color strings',
+        seedKeys.every(function (id) { return /^#|^rgba?\(/i.test(String(seed.values[id])); })));
+    } else {
+      results.push(_assert('SBE.MapsPaletteSeeds is loaded', false));
+    }
+
     // ── Cleanup test fixtures ──────────────────────────────────────────────
     authority.__test.removePalette(created.id);
     authority.__test.removePalette(duplicated.id);

@@ -39,6 +39,8 @@
   var STORAGE_RECORDS_KEY = 'wos:mapsPalette:records';
   var STORAGE_ACTIVE_KEY  = 'wos:mapsPalette:activeId';
   var STORAGE_SCHEMA_KEY  = 'wos:mapsPalette:schemaVersion';
+  var STORAGE_SEEDED_KEY  = 'wos:mapsPalette:seeded';
+  var EPISODE_2_SEED_ID   = 'episode-2';
   var SCHEMA_VERSION      = 1;
   var DEFAULT_PALETTE_ID  = 'default';
   var DIAGNOSTIC_ID       = '__diagnostic__';
@@ -156,6 +158,25 @@
       if (id === DEFAULT_PALETTE_ID) return;
       _palettes[id] = _migrateAgainst(stored[id], defaultPalette);
     });
+
+    // Durable one-time seed: a fresh browser profile (never seeded before, no
+    // saved palettes yet) receives Episode 2 as a real, persisted palette —
+    // not something that only ever existed via manual console authoring.
+    // Colors come from SBE.MapsPaletteSeeds (data, not UI code) and are
+    // computed against THIS live registry, so schema always matches exactly.
+    var alreadySeeded = false;
+    try { alreadySeeded = !!global.localStorage.getItem(STORAGE_SEEDED_KEY); } catch (e) {}
+    if (!alreadySeeded && Object.keys(stored).length === 0 && SBE.MapsPaletteSeeds) {
+      try {
+        var seed = SBE.MapsPaletteSeeds.buildEpisode2Seed(_registryRecords);
+        var now = Date.now();
+        _palettes[EPISODE_2_SEED_ID] = {
+          id: EPISODE_2_SEED_ID, title: seed.title, values: seed.values,
+          createdAt: now, updatedAt: now,
+        };
+        try { global.localStorage.setItem(STORAGE_SEEDED_KEY, '1'); } catch (e2) {}
+      } catch (e) { console.warn('[MapsPaletteAuthority] Episode 2 seed failed:', e && e.message || e); }
+    }
 
     _activeId = _loadActiveId();
     if (!_palettes[_activeId]) _activeId = DEFAULT_PALETTE_ID;

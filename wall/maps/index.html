@@ -21,7 +21,12 @@
     <header class="maps-topbar">
       <div class="maps-brand">WOS</div>
       <nav class="maps-nav">
-        <a class="maps-nav-item" href="../../music/">MUSIC</a>
+        <!-- MUSIC is a separate Vite dev server, not a static folder under this
+             origin — a relative path here can never resolve. Points at its
+             configured dev port (.claude/launch.json "music", port 5173,
+             autoPort may shift it); opens in a new tab so a wrong guess never
+             breaks the MAPS session. -->
+        <a class="maps-nav-item" href="http://localhost:5173/" target="_blank" rel="noopener">MUSIC</a>
         <span class="maps-nav-item maps-nav-item--active">MAPS</span>
         <a class="maps-nav-item" href="../index.html">Broadcast</a>
       </nav>
@@ -46,6 +51,7 @@
   <!-- ── Shared MAPS palette backend (same modules the live Broadcast map uses) ── -->
   <script src="../systems/presentation/mapsPaletteRegistry.js"></script>
   <script src="../systems/presentation/mapsPaletteApplyAdapters.js"></script>
+  <script src="../systems/presentation/mapsPaletteSeeds.js"></script>
   <script src="../systems/presentation/mapsPaletteAuthority.js"></script>
   <script src="../systems/presentation/mapsPaletteAuthority.tests.js"></script>
 
