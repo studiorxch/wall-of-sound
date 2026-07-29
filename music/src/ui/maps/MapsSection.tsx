@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { MapsSidebar } from "./MapsSidebar";
 import { MapsPalettesGrid } from "./MapsPalettesGrid";
 import { MapsPaletteDetail } from "./MapsPaletteDetail";
 import { parseMapsHash, writeMapsHash } from "../../maps/mapsHash";
@@ -23,15 +24,23 @@ export function MapsSection() {
     return () => window.removeEventListener("hashchange", onHashChange);
   }, []);
 
-  if (selectedId) {
-    return (
-      <MapsPaletteDetail
-        key={selectedId}
-        paletteId={selectedId}
-        onBack={() => setSelectedId(null)}
-        onOpenPalette={(id) => setSelectedId(id)}
-      />
-    );
-  }
-  return <MapsPalettesGrid onOpen={(id) => setSelectedId(id)} />;
+  return (
+    <>
+      <MapsSidebar onSelectPalettes={() => setSelectedId(null)} />
+      <div className="workspace-right">
+        <div className="workspace-main">
+          {selectedId ? (
+            <MapsPaletteDetail
+              key={selectedId}
+              paletteId={selectedId}
+              onBack={() => setSelectedId(null)}
+              onOpenPalette={(id) => setSelectedId(id)}
+            />
+          ) : (
+            <MapsPalettesGrid onOpen={(id) => setSelectedId(id)} />
+          )}
+        </div>
+      </div>
+    </>
+  );
 }

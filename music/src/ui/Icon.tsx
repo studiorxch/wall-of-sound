@@ -9,6 +9,7 @@ import inventory2Raw from "@material-symbols/svg-400/outlined/inventory_2.svg?ra
 import queueMusicRaw from "@material-symbols/svg-400/outlined/queue_music.svg?raw";
 import gridViewRaw from "@material-symbols/svg-400/outlined/grid_view.svg?raw";
 import uploadRaw from "@material-symbols/svg-400/outlined/upload.svg?raw";
+import paletteRaw from "@material-symbols/svg-400/outlined/palette.svg?raw";
 
 export type IconName =
   | "chevron_left"
@@ -21,7 +22,8 @@ export type IconName =
   | "inventory_2"
   | "queue_music"
   | "grid_view"
-  | "upload";
+  | "upload"
+  | "palette";
 
 // Material Symbols Outlined ships with no explicit fill, which defaults to
 // black — force currentColor so every icon inherits its row's foreground.
@@ -41,6 +43,7 @@ const ICONS: Record<IconName, string> = {
   queue_music: currentColor(queueMusicRaw),
   grid_view: currentColor(gridViewRaw),
   upload: currentColor(uploadRaw),
+  palette: currentColor(paletteRaw),
 };
 
 type IconProps = {
