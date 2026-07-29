@@ -179,10 +179,16 @@
     contentEl.appendChild(deferredWrap);
   }
 
-  // Title is editable inline for every palette, including Default — Default
-  // is a real, named, inspectable palette, not locked infrastructure.
+  // Title is editable inline for every palette except Default — Default's
+  // swatches stay editable (0729A), but its title is protected (0729B §9) so
+  // it stays identifiable as the canonical baseline.
   function _buildTitle(authority, palette, onRenamed) {
     var h2 = _el('h2', 'md-title', palette.title);
+    if (palette.id === authority.DEFAULT_PALETTE_ID) {
+      h2.title = 'Default — protected, cannot be renamed';
+      h2.style.cursor = 'default';
+      return h2;
+    }
     h2.title = 'Click to rename';
     h2.addEventListener('click', function () {
       var input = doc.createElement('input');

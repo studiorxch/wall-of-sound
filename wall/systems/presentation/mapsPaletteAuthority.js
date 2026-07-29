@@ -227,7 +227,11 @@
     return { ok: true };
   }
 
+  // Default's title is protected (0729B §9) — swatch values remain editable
+  // (0729A direction), but Default must stay identifiable as the canonical
+  // baseline across sessions and screenshots, so renaming it is blocked.
   function renamePalette(id, title) {
+    if (id === DEFAULT_PALETTE_ID) return { ok: false, reason: 'default_protected' };
     var p = _palettes[id];
     if (!p) return { ok: false, reason: 'not_found' };
     var trimmed = (title || '').trim();

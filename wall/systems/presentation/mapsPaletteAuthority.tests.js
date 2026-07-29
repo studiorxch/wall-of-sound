@@ -95,6 +95,40 @@
     var missingInDefault = ids.filter(function (id) { return !(id in def.values); });
     results.push(_assert('Default contains every wired property', missingInDefault.length === 0, { missing: missingInDefault }));
 
+    // ── Default protection (0729B §9) ───────────────────────────────────────
+    var defaultTitleBefore = def.title;
+    var renameResult = authority.renamePalette(authority.DEFAULT_PALETTE_ID, '__should_not_apply__');
+    results.push(_assert('renaming Default is rejected', renameResult.ok === false && renameResult.reason === 'default_protected'));
+    results.push(_assert('Default title is unchanged after a rejected rename',
+      authority.getPalette(authority.DEFAULT_PALETTE_ID).title === defaultTitleBefore));
+
+    var ep2Probe = authority.duplicatePalette(authority.DEFAULT_PALETTE_ID);
+    var ep2ProbeIds = Object.keys(ep2Probe.values);
+    results.push(_assert('duplicating Default produces the exact same property-id set (not a superset/subset)',
+      ep2ProbeIds.length === ids.length && ids.every(function (id) { return ep2ProbeIds.indexOf(id) !== -1; })));
+    results.push(_assert('duplicate\'s initial values exactly match Default before any edit',
+      ids.every(function (id) { return String(ep2Probe.values[id]) === String(def.values[id]); })));
+
+    if (ids.length) {
+      var probeId = ids[0];
+      var defaultValueBefore = authority.getPalette(authority.DEFAULT_PALETTE_ID).values[probeId];
+      authority.setPropertyValue(ep2Probe.id, probeId, '#123456');
+      results.push(_assert('editing the duplicate does not mutate Default (deep-copy independence)',
+        authority.getPalette(authority.DEFAULT_PALETTE_ID).values[probeId] === defaultValueBefore));
+    }
+    authority.__test.removePalette(ep2Probe.id);
+
+    var activeBeforeAvailabilityCheck = authority.getActiveId();
+    var otherProbe = authority.createPalette('__test_default_availability__');
+    authority.activatePalette(otherProbe.id);
+    results.push(_assert('Default remains listed and available while another palette is active',
+      !!authority.getPalette(authority.DEFAULT_PALETTE_ID)));
+    authority.activatePalette(authority.DEFAULT_PALETTE_ID);
+    results.push(_assert('Default can be reactivated at any time',
+      authority.getActiveId() === authority.DEFAULT_PALETTE_ID));
+    authority.__test.removePalette(otherProbe.id);
+    authority.activatePalette(activeBeforeAvailabilityCheck); // restore whatever was actually active before this test ran
+
     // ── CRUD / schema completeness ─────────────────────────────────────────
     var created = authority.createPalette('__test_create__');
     var createdKeys = Object.keys(created.values);

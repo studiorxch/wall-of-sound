@@ -45,6 +45,19 @@
     return e;
   }
 
+  // Tears down a stuck/incomplete map instance so a genuinely new Map() gets
+  // created on the next _ensurePreviewMap() call. Without this, retrying
+  // after a stalled style load just re-awaits the SAME stuck instance —
+  // clicking Retry must actually retry, not just wait longer on the same one.
+  function _discardStuckMap() {
+    if (_map) { try { _map.remove(); } catch (e) {} }
+    _map = null;
+    _ready = false;
+    if (_offscreenHolder && _offscreenHolder.parentNode) _offscreenHolder.parentNode.removeChild(_offscreenHolder);
+    _offscreenHolder = null;
+    _mapEl = null;
+  }
+
   // ── Shared preview map lifecycle ──────────────────────────────────────────
   function _ensurePreviewMap(onReady) {
     if (_ready) { onReady(_map); return; }
@@ -271,7 +284,7 @@
       var msg = _el('div', 'maps-error');
       msg.appendChild(_el('div', null, 'Preview map is taking longer than expected'));
       var retryBtn = _el('button', 'maps-error-retry', 'Retry');
-      retryBtn.addEventListener('click', function () { enter(contentEl); });
+      retryBtn.addEventListener('click', function () { _discardStuckMap(); enter(contentEl); });
       msg.appendChild(retryBtn);
       contentEl.appendChild(msg);
     }, MAP_LOAD_TIMEOUT_MS);
@@ -292,6 +305,7 @@
     enter: enter,
     dockPreviewMap: dockPreviewMap,
     undockPreviewMap: undockPreviewMap,
+    retry: function () { _discardStuckMap(); if (_contentEl) enter(_contentEl); },
   };
 
   console.log('[WOSMapsGallery] loaded');
