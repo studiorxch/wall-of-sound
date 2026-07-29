@@ -9,14 +9,13 @@
   <link href="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css" rel="stylesheet" />
 </head>
 <body>
-  <!-- ── MAPS — the active MAPS product, built directly on the wall/ runtime.
-       This is NOT the Studio shell (studio/ is a deprecated legacy tool and
-       must not host new MAPS work) and does not create a second map runtime —
-       it reuses the same SBE.MapsPaletteAuthority/Registry/ApplyAdapters that
-       drive the live Broadcast map, via one lightweight preview instance.
-       Structure follows MUSIC's Library page: shared top nav, a MAPS-only
-       sidebar, and a full-width content column — no Library/Stage/Inspector
-       three-column shell. ── -->
+  <!-- ── DEPRECATED (0729_STUDIORICH_Centralized_Library_MAPS_Integration) —
+       this standalone page is a frozen temporary proof and migration source.
+       The MAPS palette interface now lives inside the centralized Library
+       application (music/ dev server → top-nav "MAPS"), which reaches the
+       same wall/ palette authority through the /wall-app same-origin proxy.
+       Do not add product features here. Backend modules under
+       wall/systems/presentation/ remain active and owned by wall/. ── -->
   <div class="maps-shell">
     <header class="maps-topbar">
       <div class="maps-brand">WOS</div>

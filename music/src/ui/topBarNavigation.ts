@@ -1,7 +1,7 @@
 // Global nav data (0722_MUSIC_Global_Navigation_Dropdowns): Studio ▾ / Library / Broadcast ▾.
 // Single source of truth so desktop and any future responsive renderer stay in sync.
 
-export type WorkspaceMode = "flow_curve" | "scheduler" | "broadcast_hud";
+export type WorkspaceMode = "flow_curve" | "scheduler" | "broadcast_hud" | "maps";
 
 export type NavigationLink =
   | { label: string; kind: "internal"; mode: WorkspaceMode; title?: string }
@@ -21,6 +21,12 @@ export const navigationItems: readonly NavigationItem[] = [
     ],
   },
   { label: "Library", kind: "internal", mode: "flow_curve", title: "Flow-Curve Editor", top: true },
+  // 0729_STUDIORICH_Centralized_Library_MAPS_Integration — the MAPS palette
+  // domain, distinct from the pre-existing "Broadcast ▾ Maps" item below
+  // (that one is unrelated: an internal broadcast_hud live-HUD view, not
+  // palette authoring). This is its own top-level item so the two never
+  // collide or read as duplicates.
+  { label: "MAPS", kind: "internal", mode: "maps", title: "MAPS Palette Library", top: true },
   {
     label: "Broadcast",
     id: "broadcast",

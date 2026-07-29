@@ -8,6 +8,17 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- Wall's real MAPS palette authority — the exact same files the live
+         Broadcast runtime uses, reached through the /wall-app proxy
+         (vite.config.ts server.proxy) so this origin and Wall's origin share
+         one localStorage. Plain global scripts, not ES modules, loaded
+         before the React bundle so window.SBE is populated first;
+         music/src/maps/wallPaletteBridge.ts wraps window.SBE.MapsPaletteAuthority.
+         Nothing here is a second map runtime or a second palette authority. -->
+    <script src="/wall-app/systems/presentation/mapsPaletteRegistry.js"></script>
+    <script src="/wall-app/systems/presentation/mapsPaletteApplyAdapters.js"></script>
+    <script src="/wall-app/systems/presentation/mapsPaletteSeeds.js"></script>
+    <script src="/wall-app/systems/presentation/mapsPaletteAuthority.js"></script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

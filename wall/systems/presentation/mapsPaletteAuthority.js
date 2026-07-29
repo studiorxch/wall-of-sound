@@ -50,6 +50,19 @@
   var _palettes         = {};
   var _activeId         = DEFAULT_PALETTE_ID;
   var _previewId        = null;
+  var _listeners        = [];
+
+  // In-tab reactivity: the existing 'storage' listener above only fires in
+  // OTHER tabs/windows, never the one that made the change — a caller in this
+  // same document (e.g. a React bridge) has no way to know state changed.
+  // This is a plain synchronous notify, not a new authority: it does not
+  // store, serialize, or gate anything; it only tells already-subscribed
+  // callers to re-read via the existing getters/listPalettes/getPalette.
+  function _notify() {
+    _listeners.slice().forEach(function (fn) {
+      try { fn(); } catch (e) { console.warn('[MapsPaletteAuthority] subscriber threw:', e && e.message || e); }
+    });
+  }
 
   function _genId() {
     return 'palette-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7);
@@ -133,12 +146,14 @@
       _previewId = null;
       _applyValues(_palettes[id].values);
       console.log('[MapsPaletteAuthority] cross-tab active palette →', id);
+      _notify();
     } else if (e.key === STORAGE_RECORDS_KEY) {
       var records = _loadRecords();
       Object.keys(records).forEach(function (pid) {
         if (pid === DEFAULT_PALETTE_ID) return;
         _palettes[pid] = _migrateAgainst(records[pid], _palettes[DEFAULT_PALETTE_ID]);
       });
+      _notify();
     }
   }
 
@@ -216,6 +231,7 @@
     var p = { id: id, title: title || 'New Palette', values: Object.assign({}, base.values), createdAt: now, updatedAt: now };
     _palettes[id] = p;
     _saveRecords();
+    _notify();
     return p;
   }
 
@@ -227,6 +243,7 @@
     var p = { id: id, title: src.title + ' Copy', values: Object.assign({}, src.values), createdAt: now, updatedAt: now };
     _palettes[id] = p;
     _saveRecords();
+    _notify();
     return p;
   }
 
@@ -245,6 +262,7 @@
     if (paletteId === _previewId || (paletteId === _activeId && _previewId == null)) {
       _applyValues(p.values);
     }
+    _notify();
     return { ok: true };
   }
 
@@ -260,6 +278,7 @@
     p.title = trimmed;
     p.updatedAt = Date.now();
     _saveRecords();
+    _notify();
     return { ok: true };
   }
 
@@ -271,6 +290,7 @@
     _previewId = null;
     _saveActiveId(id);
     _applyValues(p.values);
+    _notify();
     return { ok: true };
   }
 
@@ -279,6 +299,7 @@
     if (!p) return { ok: false, reason: 'not_found' };
     _previewId = id;
     _applyValues(p.values);
+    _notify();
     return { ok: true };
   }
 
@@ -287,6 +308,7 @@
     _previewId = null;
     var active = _palettes[_activeId];
     if (active) _applyValues(active.values);
+    _notify();
     return { ok: true };
   }
 
@@ -514,6 +536,17 @@
     endPreview: endPreview,
     getActiveId: getActiveId,
     getPreviewId: getPreviewId,
+    // Same-tab reactivity for non-vanilla-JS consumers (e.g. a React bridge):
+    // fires after any local mutation or cross-tab 'storage' sync. Returns an
+    // unsubscribe function. Purely a notification side-channel — callers
+    // re-read state via the getters above; nothing is passed to fn().
+    subscribe: function (fn) {
+      _listeners.push(fn);
+      return function unsubscribe() {
+        var i = _listeners.indexOf(fn);
+        if (i >= 0) _listeners.splice(i, 1);
+      };
+    },
     buildDiagnosticPalette: buildDiagnosticPalette,
     runDiagnosticSequence: runDiagnosticSequence,
     reconcileDiagnosticCoverage: reconcileDiagnosticCoverage,

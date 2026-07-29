@@ -226,6 +226,23 @@ export default defineConfig({
     // Exposed to browser code as a global constant — use __LIBRARY_ROOT__ in src/
     __LIBRARY_ROOT__: JSON.stringify(LIBRARY_ROOT),
   },
+  server: {
+    proxy: {
+      // 0729_STUDIORICH_Centralized_Library_MAPS_Integration — proxies to
+      // Wall's own dev server (.claude/launch.json 'wall-of-sound', port
+      // 5500) so pages under /wall-app/* are same-origin with MUSIC. This is
+      // what lets the centralized Library's palette bridge and Wall's real
+      // Broadcast runtime share one localStorage — no code duplication, no
+      // second authority, nothing under wall/ is modified. A production
+      // deployment needs an equivalent same-origin reverse-proxy rule
+      // wherever this app and wall/ are actually hosted.
+      '/wall-app': {
+        target: process.env.WALL_ORIGIN || 'http://localhost:5500',
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/wall-app/, ''),
+      },
+    },
+  },
   plugins: [
     react(),
     {

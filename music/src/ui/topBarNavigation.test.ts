@@ -8,8 +8,14 @@ import { navigationItems } from "./topBarNavigation";
 // verification instead (open/close, outside click, Escape, ARIA state).
 
 describe("topBarNavigation — global nav data", () => {
-  it("top-level order is Studio, Library, Broadcast", () => {
-    expect(navigationItems.map((item) => item.label)).toEqual(["Studio", "Library", "Broadcast"]);
+  it("top-level order is Studio, Library, MAPS, Broadcast", () => {
+    expect(navigationItems.map((item) => item.label)).toEqual(["Studio", "Library", "MAPS", "Broadcast"]);
+  });
+
+  it("MAPS is its own top-level item, distinct from Broadcast's Maps", () => {
+    const maps = navigationItems.find((item) => item.label === "MAPS");
+    expect(maps && "kind" in maps && maps.kind === "internal" ? maps.mode : null).toBe("maps");
+    expect(maps && "children" in maps).toBe(false);
   });
 
   it("Studio contains Scheduler followed by Promoter", () => {

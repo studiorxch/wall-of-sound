@@ -148,6 +148,7 @@ import { MoodAnalysisReviewView } from "./ui/MoodAnalysisReviewView";
 import { auditMoodSignals } from "./logic/moodSignalAudit";
 import { buildMoodAnalysisReviewRow, getMoodAnalysisReviewRows, getMoodCalibrationSummary, snapshotMoodCalibration, compareMoodCalibrationSnapshots } from "./logic/moodAnalysisReview";
 import { SchedulerGuideView } from "./ui/SchedulerGuideView";
+import { MapsSection } from "./ui/maps/MapsSection";
 import type { ScheduleState, ScheduleBlock, ScheduleBlockRole, ScheduleDisplayMode } from "./data/scheduleTypes";
 import type { BroadcastEvent } from "./data/eventTypes";
 import type { MusicSourcePool } from "./data/sourcePoolTypes";
@@ -325,7 +326,19 @@ export default function App() {
   const [deferredIssueIds, setDeferredIssueIds] = useState<string[]>(
     () => (loadPlayProject() as any)?.deferredIssueIds ?? []
   );
-  const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>("flow_curve");
+  // Reload-safe MAPS routes (spec 0729_STUDIORICH §15.4): MUSIC otherwise has
+  // no URL sync at all, but a direct reload of a #maps/... URL must restore
+  // the MAPS workspace rather than resetting to the default Library view.
+  const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>(
+    () => (window.location.hash.startsWith("#maps") ? "maps" : "flow_curve")
+  );
+  useEffect(() => {
+    // Leaving MAPS clears its hash so reloading a later, unrelated view
+    // never gets pulled back into MAPS by a stale #maps/... URL.
+    if (workspaceMode !== "maps" && window.location.hash.startsWith("#maps")) {
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    }
+  }, [workspaceMode]);
   // ── Broadcast HUD operator state (lifted so controls live in the top row) ──
   const [hudSecondaryMode, setHudSecondaryMode] = useState<BroadcastSecondaryMode>("none");
   const [hudPinned, setHudPinned] = useState(false);
@@ -6136,6 +6149,13 @@ export default function App() {
           onAddEvent={handleAddBroadcastEvent}
           onSelectPlaylist={setActivePlaylistId}
         />
+      )}
+
+      {/* MAPS Palette Library (0729_STUDIORICH_Centralized_Library_MAPS_Integration) */}
+      {workspaceMode === "maps" && (
+        <div className="workspace">
+          <MapsSection />
+        </div>
       )}
 
       {/* Rows 2+3 — Two-column layout: left nav + right workspace (flow_curve only) */}

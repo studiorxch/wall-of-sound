@@ -222,6 +222,19 @@
       results.push(_assert('SBE.MapsPaletteSeeds is loaded', false));
     }
 
+    // ── Same-tab subscribe/notify (0729D — centralized Library bridge) ──────
+    var notifyCount = 0;
+    var unsubscribe = authority.subscribe(function () { notifyCount += 1; });
+    authority.activatePalette(duplicated.id);
+    results.push(_assert('subscribe() fires on activatePalette()', notifyCount === 1));
+    authority.previewPalette(created.id);
+    results.push(_assert('subscribe() fires on previewPalette()', notifyCount === 2));
+    authority.endPreview();
+    results.push(_assert('subscribe() fires on endPreview()', notifyCount === 3));
+    unsubscribe();
+    authority.activatePalette(savedActive);
+    results.push(_assert('unsubscribe() stops further notifications', notifyCount === 3));
+
     // ── Cleanup test fixtures ──────────────────────────────────────────────
     authority.__test.removePalette(created.id);
     authority.__test.removePalette(duplicated.id);
