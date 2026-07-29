@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MAPS — Wall of Sound</title>
+  <link rel="stylesheet" href="./mapsStyles.css" />
+  <link href="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css" rel="stylesheet" />
+</head>
+<body>
+  <!-- ── MAPS — the active MAPS product, built directly on the wall/ runtime.
+       This is NOT the Studio shell (studio/ is a deprecated legacy tool and
+       must not host new MAPS work) and does not create a second map runtime —
+       it reuses the same SBE.MapsPaletteAuthority/Registry/ApplyAdapters that
+       drive the live Broadcast map, via one lightweight preview instance.
+       Structure follows MUSIC's Library page: shared top nav, a MAPS-only
+       sidebar, and a full-width content column — no Library/Stage/Inspector
+       three-column shell. ── -->
+  <div class="maps-shell">
+    <header class="maps-topbar">
+      <div class="maps-brand">WOS</div>
+      <nav class="maps-nav">
+        <a class="maps-nav-item" href="../../music/">MUSIC</a>
+        <span class="maps-nav-item maps-nav-item--active">MAPS</span>
+        <a class="maps-nav-item" href="../index.html">Broadcast</a>
+      </nav>
+    </header>
+
+    <div class="maps-body">
+      <aside class="maps-sidebar">
+        <div class="maps-sidebar-group">
+          <div class="maps-sidebar-label">MAPS</div>
+          <a class="maps-sidebar-item maps-sidebar-item--active" href="#/palettes">Palettes</a>
+        </div>
+      </aside>
+
+      <main class="maps-content" id="maps-content"><!-- populated by mapsShell.js --></main>
+    </div>
+  </div>
+
+  <!-- ── Mapbox GL JS — one lightweight preview instance for palette thumbnails/detail ── -->
+  <script src="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js"></script>
+  <script src="../mapbox-env.js" onerror="console.warn('[MAPS] Mapbox token missing — copy wall/mapbox-env.template.js → wall/mapbox-env.js and fill token')"></script>
+
+  <!-- ── Shared MAPS palette backend (same modules the live Broadcast map uses) ── -->
+  <script src="../systems/presentation/mapsPaletteRegistry.js"></script>
+  <script src="../systems/presentation/mapsPaletteApplyAdapters.js"></script>
+  <script src="../systems/presentation/mapsPaletteAuthority.js"></script>
+  <script src="../systems/presentation/mapsPaletteAuthority.tests.js"></script>
+
+  <!-- ── MAPS UI (built fresh — does not reuse studio/'s shell/CSS/components) ── -->
+  <script src="./paletteDetail.js"></script>
+  <script src="./palettesGallery.js"></script>
+  <script src="./mapsShell.js"></script>
+</body>
+</html>
