@@ -38,6 +38,27 @@
   var _hidden    = false;
   var _lastScale = -1;
 
+  // ── Palette-editable colors (0729A_MAPS_Palette_Audit_Default_Wiring) ─────
+  // DOM/SVG marker path only — see MapsPaletteRegistry notes on the
+  // world-space mesh path, which resolves color elsewhere (deferred).
+  var _colors = {
+    body:       '#c8352e',
+    roof:       '#a02820',
+    windshield: '#c8e8ff',
+    rearGlass:  '#9ab8d0',
+    chevron:    '#ffd34d',
+    headlight:  '#fffbe0',
+  };
+
+  function getColors() {
+    return Object.assign({}, _colors);
+  }
+
+  function setColors(partial) {
+    Object.assign(_colors, partial || {});
+    if (_wrapEl) _wrapEl.innerHTML = _carSVG();
+  }
+
   // GLB model state (only used when USE_HERO_MODEL = true)
   var _modelLayer  = null;
   var _modelLoaded = false;
@@ -69,28 +90,28 @@
 
       // ── Chassis body ───────────────────────────────────────────────────────
       '<rect x="3" y="4" width="34" height="20" rx="5"',
-      '      fill="#c8352e" stroke="rgba(0,0,0,0.40)" stroke-width="1"/>',
+      '      fill="' + _colors.body + '" stroke="rgba(0,0,0,0.40)" stroke-width="1"/>',
 
       // ── Roof/cab panel (centre of car) ─────────────────────────────────────
       '<rect x="9" y="8" width="22" height="12" rx="3"',
-      '      fill="#a02820"/>',
+      '      fill="' + _colors.roof + '"/>',
 
       // ── Windshield — front (top edge of car = heading direction) ──────────
       '<rect x="11" y="5.5" width="18" height="5" rx="2"',
-      '      fill="#c8e8ff" opacity="0.85"/>',
+      '      fill="' + _colors.windshield + '" opacity="0.85"/>',
 
       // ── Rear glass (thin strip at bottom) ─────────────────────────────────
       '<rect x="12" y="17.5" width="16" height="3.5" rx="1.5"',
-      '      fill="#9ab8d0" opacity="0.70"/>',
+      '      fill="' + _colors.rearGlass + '" opacity="0.70"/>',
 
       // ── Heading cue — yellow chevron at the nose ──────────────────────────
       // Points UP (north) — the runtime's setRotation() aligns it to heading.
       '<polygon points="20,0 15,5 25,5"',
-      '         fill="#ffd34d" stroke="rgba(0,0,0,0.25)" stroke-width="0.5"/>',
+      '         fill="' + _colors.chevron + '" stroke="rgba(0,0,0,0.25)" stroke-width="0.5"/>',
 
       // ── Headlights ────────────────────────────────────────────────────────
-      '<circle cx="12" cy="5" r="1.5" fill="#fffbe0"/>',
-      '<circle cx="28" cy="5" r="1.5" fill="#fffbe0"/>',
+      '<circle cx="12" cy="5" r="1.5" fill="' + _colors.headlight + '"/>',
+      '<circle cx="28" cy="5" r="1.5" fill="' + _colors.headlight + '"/>',
 
       '</svg>',
     ].join('');
@@ -476,6 +497,8 @@
     getVisualState:             getVisualState,
     setWorldPayloadTraceEnabled: setWorldPayloadTraceEnabled,
     getWorldPayloadTraceState:   getWorldPayloadTraceState,
+    getColors:                  getColors,
+    setColors:                  setColors,
   });
 
   console.log('[HeroVehicleRenderer] v' + VERSION + ' loaded');

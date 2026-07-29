@@ -15,6 +15,13 @@
   var _nextRouteId    = 1;
   var _nextWaypointId = 1;
 
+  // ── Palette-editable default color (0729A_MAPS_Palette_Audit_Default_Wiring) ──
+  // Governs the color assigned to NEWLY created routes only — existing routes
+  // keep their own stored per-route color (route.style.color).
+  var _defaultRouteColor = '#4a9eff';
+  function getDefaultColor() { return _defaultRouteColor; }
+  function setDefaultColor(hex) { if (hex) _defaultRouteColor = hex; }
+
   // ── Haversine distance (meters) ────────────────────────────────────────────
   function _haversine(lon1, lat1, lon2, lat2) {
     var R  = 6371000;
@@ -46,7 +53,7 @@
       name:      name || "Route " + (_nextRouteId++),
       visible:   true,
       locked:    false,
-      color:     "#4a9eff",
+      color:     _defaultRouteColor,
       waypoints: [],
       metrics: {
         distanceKm:       0,
@@ -55,7 +62,7 @@
         waypointCount:    0,
       },
       style: {
-        color:   "#4a9eff",
+        color:   _defaultRouteColor,
         width:   3,
         opacity: 0.9,
       },
@@ -610,6 +617,10 @@
     },
   });
 
-  SBE.RoutePlannerRuntime = { createInstance: createInstance };
+  SBE.RoutePlannerRuntime = {
+    createInstance: createInstance,
+    getDefaultColor: getDefaultColor,
+    setDefaultColor: setDefaultColor,
+  };
 
 })(window);

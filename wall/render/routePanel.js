@@ -4,6 +4,15 @@
 
   var _container = null;
 
+  // ── Palette-editable color (0729A_MAPS_Palette_Audit_Default_Wiring) ─────
+  var _visibleColor = "#3dd8c5";
+  function getVisibleColor() { return _visibleColor; }
+  function setVisibleColor(hex) {
+    if (!hex) return;
+    _visibleColor = hex;
+    render();
+  }
+
   // ── Geocoding ──────────────────────────────────────────────────────────────
   function _geocode(query) {
     var token = global.mapboxgl && global.mapboxgl.accessToken;
@@ -63,7 +72,7 @@
 
       var dot = document.createElement("span");
       dot.className = "route-dot";
-      dot.style.background = route.visible ? "#3dd8c5" : "rgba(255,255,255,0.2)";
+      dot.style.background = route.visible ? _visibleColor : "rgba(255,255,255,0.2)";
 
       var nameEl = document.createElement("span");
       nameEl.className = "route-item-name";
@@ -338,6 +347,11 @@
     }
   }
 
-  SBE.RoutePanel = { init: init, render: render };
+  SBE.RoutePanel = {
+    init: init,
+    render: render,
+    getVisibleColor: getVisibleColor,
+    setVisibleColor: setVisibleColor,
+  };
 
 })(window);

@@ -26,8 +26,48 @@
   //   Matches existing monospace HUD — uppercase labels, tight tracking,
   //   muted palette. No color that fights the map.
 
+  // ── Palette-editable colors (0729A_MAPS_Palette_Audit_Default_Wiring) ─────
+  // Exposed as CSS custom properties so palette activation is a plain
+  // setProperty() call — no stylesheet rewrite/reinjection needed.
+  var _DEFAULT_COLORS = {
+    live:    "rgba(120,220,120,0.70)",
+    stale:   "rgba(220,180,80,0.60)",
+    offline: "rgba(255,255,255,0.15)",
+    text:    "rgba(255,255,255,0.45)",
+  };
+
+  function getColors() {
+    var root = global.document.documentElement;
+    var cs   = global.getComputedStyle ? global.getComputedStyle(root) : null;
+    function read(varName, fallback) {
+      var v = cs ? cs.getPropertyValue(varName).trim() : "";
+      return v || fallback;
+    }
+    return {
+      live:    read("--wt-hud-live",    _DEFAULT_COLORS.live),
+      stale:   read("--wt-hud-stale",   _DEFAULT_COLORS.stale),
+      offline: read("--wt-hud-offline", _DEFAULT_COLORS.offline),
+      text:    read("--wt-hud-text",    _DEFAULT_COLORS.text),
+    };
+  }
+
+  function setColors(partial) {
+    var root = global.document.documentElement;
+    var next = Object.assign({}, partial || {});
+    if (next.live)    root.style.setProperty("--wt-hud-live",    next.live);
+    if (next.stale)   root.style.setProperty("--wt-hud-stale",   next.stale);
+    if (next.offline) root.style.setProperty("--wt-hud-offline", next.offline);
+    if (next.text)    root.style.setProperty("--wt-hud-text",    next.text);
+  }
+
   // ── CSS injection ─────────────────────────────────────────────────────────
   var _CSS = [
+    ":root {",
+    "  --wt-hud-live: " + _DEFAULT_COLORS.live + ";",
+    "  --wt-hud-stale: " + _DEFAULT_COLORS.stale + ";",
+    "  --wt-hud-offline: " + _DEFAULT_COLORS.offline + ";",
+    "  --wt-hud-text: " + _DEFAULT_COLORS.text + ";",
+    "}",
     ".wt-reality {",
     "  margin-top: 6px;",
     "  padding-top: 5px;",
@@ -41,7 +81,7 @@
     "  gap: 10px;",
     "  font-size: 9px;",
     "  letter-spacing: 0.08em;",
-    "  color: rgba(255,255,255,0.45);",
+    "  color: var(--wt-hud-text);",
     "  text-transform: uppercase;",
     "  font-family: inherit;",
     "}",
@@ -67,9 +107,9 @@
     "  background: rgba(255,255,255,0.20);",
     "  transition: background 1.2s ease;",
     "}",
-    ".wt-reality-dot.live   { background: rgba(120,220,120,0.70); }",
-    ".wt-reality-dot.stale  { background: rgba(220,180,80,0.60); }",
-    ".wt-reality-dot.offline{ background: rgba(255,255,255,0.15); }",
+    ".wt-reality-dot.live   { background: var(--wt-hud-live); }",
+    ".wt-reality-dot.stale  { background: var(--wt-hud-stale); }",
+    ".wt-reality-dot.offline{ background: var(--wt-hud-offline); }",
   ].join("\n");
 
   function _injectCSS() {
@@ -185,6 +225,6 @@
     console.log("[EnvironmentalTelemetryHUD] initialized v1.0.0 — subscribed to reality truth pipeline");
   }
 
-  SBE.EnvironmentalTelemetryHUD = { init: init };
+  SBE.EnvironmentalTelemetryHUD = { init: init, getColors: getColors, setColors: setColors };
 
 })(window);

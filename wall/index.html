@@ -2568,6 +2568,13 @@
 
     <script src="./systems/routeInputSystem.js"></script>
     <script src="./render/routePanel.js"></script>
+    <!-- ── MAPS Palette System (0729A) — AFTER heroVehicleRenderer/routePlannerRuntime/
+         routePanel/mapboxOperatorRenderer/environmentalTelemetryHUD, BEFORE anything
+         that would otherwise apply a hardcoded fallback color to those modules. ── -->
+    <script src="./systems/presentation/mapsPaletteRegistry.js"></script>
+    <script src="./systems/presentation/mapsPaletteApplyAdapters.js"></script>
+    <script src="./systems/presentation/mapsPaletteAuthority.js"></script>
+    <script src="./systems/presentation/mapsPaletteAuthority.tests.js"></script>
     <script src="./ui/routeControls.js"></script>
     <script src="./render/zonesPanel.js"></script>
 

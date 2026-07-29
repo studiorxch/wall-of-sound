@@ -9,6 +9,14 @@
   //
   // All positions are CSS-pixel coordinates from mbr.project().
 
+  // ── Palette-editable colors (0729A_MAPS_Palette_Audit_Default_Wiring) ─────
+  var _colors = {
+    routeLine: "#4a9eff",
+    selection: "#ffffff",
+  };
+  function getColors() { return Object.assign({}, _colors); }
+  function setColors(partial) { Object.assign(_colors, partial || {}); }
+
   function render(ctx, options, interaction) {
     if (!ctx) return;
     var mbr = SBE.MapboxViewportRuntime;
@@ -33,7 +41,7 @@
         return mbr.project([c.longitude, c.latitude]);
       });
       ctx.save();
-      ctx.strokeStyle = "#4a9eff";
+      ctx.strokeStyle = _colors.routeLine;
       ctx.lineWidth   = 3;
       ctx.lineJoin    = "round";
       ctx.lineCap     = "round";
@@ -42,7 +50,7 @@
       pts.forEach(function (p, i) { i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y); });
       ctx.stroke();
       // Origin dot
-      ctx.fillStyle = "#4a9eff";
+      ctx.fillStyle = _colors.routeLine;
       ctx.beginPath();
       ctx.arc(pts[0].x, pts[0].y, 5, 0, Math.PI * 2);
       ctx.fill();
@@ -159,7 +167,7 @@
 
         // Selection ring
         if (isSelected || isDragged) {
-          ctx.strokeStyle = "#fff";
+          ctx.strokeStyle = _colors.selection;
           ctx.lineWidth   = 2.5;
           ctx.globalAlpha = 0.9;
           ctx.beginPath();
@@ -168,11 +176,11 @@
         }
 
         // Handle fill
-        ctx.fillStyle   = isDragged  ? "#ffffff"
-                        : isSelected ? "#ffffff"
+        ctx.fillStyle   = isDragged  ? _colors.selection
+                        : isSelected ? _colors.selection
                         : isActive   ? route.style.color
                         : "rgba(255,255,255,0.2)";
-        ctx.strokeStyle = isEndpoint ? "#fff" : "rgba(255,255,255,0.55)";
+        ctx.strokeStyle = isEndpoint ? _colors.selection : "rgba(255,255,255,0.55)";
         ctx.lineWidth   = isEndpoint ? 2 : 1.5;
         ctx.globalAlpha = isActive ? 1 : 0.4;
         ctx.beginPath();
@@ -212,7 +220,7 @@
         var ip = ix.insertionPreview;
         ctx.save();
         ctx.strokeStyle = route.style.color;
-        ctx.fillStyle   = "#fff";
+        ctx.fillStyle   = _colors.selection;
         ctx.lineWidth   = 1.5;
         ctx.globalAlpha = 0.75;
         ctx.setLineDash([3, 3]);
@@ -264,6 +272,10 @@
     // No empty-state guidance — routes come from the Routes panel form.
   }
 
-  SBE.MapboxOperatorRenderer = { render: render };
+  SBE.MapboxOperatorRenderer = {
+    render: render,
+    getColors: getColors,
+    setColors: setColors,
+  };
 
 })(window);
