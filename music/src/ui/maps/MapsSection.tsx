@@ -26,7 +26,7 @@ export function MapsSection() {
 
   return (
     <>
-      <MapsSidebar onSelectPalettes={() => setSelectedId(null)} />
+      <MapsSidebar onSelectGeographic={() => setSelectedId(null)} />
       <div className="workspace-right">
         <div className="workspace-main">
           {selectedId ? (

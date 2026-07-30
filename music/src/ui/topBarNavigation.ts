@@ -41,7 +41,7 @@ export const navigationItems: readonly NavigationItem[] = [
     id: "library",
     children: [
       { label: "MUSIC", kind: "internal", mode: "flow_curve", title: "Flow-Curve Editor" },
-      { label: "MAPS", kind: "internal", mode: "maps", title: "MAPS Palette Library" },
+      { label: "MAPS", kind: "internal", mode: "maps", title: "MAPS Geographic Library" },
     ],
   },
   {

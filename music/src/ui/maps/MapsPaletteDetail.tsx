@@ -88,7 +88,7 @@ export function MapsPaletteDetail({ paletteId, onBack, onOpenPalette }: Props) {
   return (
     <div className="md-root">
       <CollectionDetailBar
-        collectionLabel="Palettes"
+        collectionLabel="Geographic"
         onBackToCollection={onBack}
         createLabel="Duplicate"
         onCreate={() => {
@@ -143,7 +143,7 @@ export function MapsPaletteDetail({ paletteId, onBack, onOpenPalette }: Props) {
         </div>
       ) : (
         <div className="md-header">
-          <span className="md-title">Loading palette data…</span>
+          <span className="md-title">Loading Geographic Style…</span>
         </div>
       )}
 

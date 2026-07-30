@@ -7,21 +7,28 @@ import { ensurePreviewMap } from "../../maps/wallMapPreview";
 // .fm-* classes verbatim (0722_MUSIC_Left_Panel_Visual_Normalization) so
 // width, spacing, typography, selected-row treatment, collapse behavior, and
 // divider structure match exactly, rather than a parallel implementation
-// that could drift. Only real, current content: one Collections section
-// with the one real destination (Palettes). No placeholder sections.
+// that could drift.
+//
+// 0729_MAPS_Geographic_Library_Migration — "Palettes"/"Collections" renamed
+// to "Geographic"/"Libraries": Default and Episode 2 are Geographic Style
+// records now, not palettes-as-a-collection. Same underlying records/IDs/
+// data — Wall's mapsPaletteAuthority.js etc. are untouched; this is a
+// user-facing terminology change only. Only real, current content: one
+// Libraries section with the one real destination (Geographic). No
+// placeholder sections.
 
 type Props = {
-  onSelectPalettes: () => void;
+  onSelectGeographic: () => void;
 };
 
-function readPaletteCount(): number {
+function readGeographicCount(): number {
   const list = wallPaletteBridge.listPalettes();
   return list.ok ? list.data.length : 0;
 }
 
-export function MapsSidebar({ onSelectPalettes }: Props) {
+export function MapsSidebar({ onSelectGeographic }: Props) {
   const [collapsed, setCollapsed] = useState(false);
-  const [paletteCount, setPaletteCount] = useState(readPaletteCount);
+  const [geographicCount, setGeographicCount] = useState(readGeographicCount);
 
   useEffect(() => {
     // authority.init() itself doesn't call subscribe()'s notify — only later
@@ -30,8 +37,8 @@ export function MapsSidebar({ onSelectPalettes }: Props) {
     // initial (possibly zero, if the map hadn't finished loading yet) value
     // forever. ensurePreviewMap's ready callback is what actually signals
     // "the authority just initialized," same trigger MapsPalettesGrid uses.
-    if (!wallPaletteBridge.isAuthorityInitialized()) ensurePreviewMap(() => setPaletteCount(readPaletteCount()));
-    const unsubscribe = wallPaletteBridge.subscribe(() => setPaletteCount(readPaletteCount()));
+    if (!wallPaletteBridge.isAuthorityInitialized()) ensurePreviewMap(() => setGeographicCount(readGeographicCount()));
+    const unsubscribe = wallPaletteBridge.subscribe(() => setGeographicCount(readGeographicCount()));
     return unsubscribe;
   }, []);
 
@@ -49,11 +56,11 @@ export function MapsSidebar({ onSelectPalettes }: Props) {
         <div className="fm-body">
           <div className="fm-brand">MAPS</div>
           <div className="fm-section">
-            <div className="fm-section-header">Collections</div>
-            <button className="fm-row active" onClick={onSelectPalettes}>
-              <span className="fm-row-icon"><Icon name="palette" /></span>
-              <span className="fm-row-label">Palettes</span>
-              <span className="fm-row-count">{paletteCount}</span>
+            <div className="fm-section-header">Libraries</div>
+            <button className="fm-row active" onClick={onSelectGeographic}>
+              <span className="fm-row-icon"><Icon name="map" /></span>
+              <span className="fm-row-label">Geographic</span>
+              <span className="fm-row-count">{geographicCount}</span>
             </button>
           </div>
         </div>

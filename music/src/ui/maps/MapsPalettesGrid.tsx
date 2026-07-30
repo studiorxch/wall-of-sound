@@ -93,21 +93,21 @@ export function MapsPalettesGrid({ onOpen }: Props) {
   if (loadState === "authority_unavailable") {
     return (
       <div className="pg-empty">
-        <div className="pg-empty-msg">MAPS palette authority is unavailable — Wall's runtime could not be reached.</div>
+        <div className="pg-empty-msg">MAPS Geographic library is unavailable — Wall's runtime could not be reached.</div>
       </div>
     );
   }
   if (loadState === "preview_loading") {
     return (
       <div className="pg-empty">
-        <div className="pg-empty-msg">Loading palette data…</div>
+        <div className="pg-empty-msg">Loading Geographic Style data…</div>
       </div>
     );
   }
   if (loadState === "preview_unavailable") {
     return (
       <div className="pg-empty">
-        <div className="pg-empty-msg">Map preview is temporarily unavailable. Palette data will appear once the connection to Wall's map succeeds.</div>
+        <div className="pg-empty-msg">Map preview is temporarily unavailable. Geographic Style data will appear once the connection to Wall's map succeeds.</div>
       </div>
     );
   }
@@ -116,13 +116,13 @@ export function MapsPalettesGrid({ onOpen }: Props) {
     <CollectionGrid
       items={palettes}
       itemId={(p) => p.id}
-      title="Palettes"
-      createLabel="+ New Palette"
+      title="Geographic"
+      createLabel="+ New Geographic Style"
       onCreate={() => {
         const result = wallPaletteBridge.duplicatePalette(wallPaletteBridge.DEFAULT_PALETTE_ID);
         if (result.ok) onOpen(result.data.id);
       }}
-      emptyMessage="No palettes yet."
+      emptyMessage="No Geographic Styles yet."
       onDelete={() => { /* delete/archive intentionally not built — never requested */ }}
       onDuplicate={(id) => {
         const result = wallPaletteBridge.duplicatePalette(id);
