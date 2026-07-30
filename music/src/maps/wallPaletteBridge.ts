@@ -26,6 +26,11 @@ export type RegistryRecord = {
   label: string;
   group: string;
   source: string;
+  // Always present on every real record (confirmed against the live
+  // registry) — declared explicitly so consumers like geographicTargets.ts
+  // don't have to work through `unknown` from the index signature below.
+  sourceObject: string;
+  sourceProperty: string;
   currentValue: string;
   [key: string]: unknown;
 };

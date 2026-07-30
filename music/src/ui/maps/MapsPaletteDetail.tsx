@@ -3,22 +3,13 @@ import { CollectionDetailBar } from "../CollectionDetailBar";
 import * as wallPaletteBridge from "../../maps/wallPaletteBridge";
 import type { PaletteRecord, RegistryRecord } from "../../maps/wallPaletteBridge";
 import { dockPreviewMap, undockPreviewMap, getPreviewState, subscribePreviewState } from "../../maps/wallMapPreview";
+import { MapsGeographicCatalog } from "./MapsGeographicCatalog";
 
 type Props = {
   paletteId: string;
   onBack: () => void;
   onOpenPalette: (paletteId: string) => void;
 };
-
-function groupRegistry(registry: RegistryRecord[]): Array<[string, RegistryRecord[]]> {
-  const order: string[] = [];
-  const byGroup: Record<string, RegistryRecord[]> = {};
-  for (const rec of registry) {
-    if (!byGroup[rec.group]) { byGroup[rec.group] = []; order.push(rec.group); }
-    byGroup[rec.group].push(rec);
-  }
-  return order.map((g) => [g, byGroup[g]]);
-}
 
 type Snapshot = {
   palette: PaletteRecord | null;
@@ -49,7 +40,6 @@ export function MapsPaletteDetail({ paletteId, onBack, onOpenPalette }: Props) {
   const [{ palette, registry, activeId, previewId, previewMapReady }, setSnapshot] = useState<Snapshot>(
     () => readSnapshot(paletteId)
   );
-  const [editingPropId, setEditingPropId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState<string | null>(null);
 
   function refresh() {
@@ -75,7 +65,6 @@ export function MapsPaletteDetail({ paletteId, onBack, onOpenPalette }: Props) {
   const isDefault = palette?.id === wallPaletteBridge.DEFAULT_PALETTE_ID;
   const isActive = palette?.id === activeId;
   const isPreviewing = palette?.id === previewId;
-  const groups = groupRegistry(registry);
 
   // The preview area below must always mount (and keep its ref attached)
   // regardless of whether `palette` has resolved yet — it's what triggers
@@ -154,35 +143,12 @@ export function MapsPaletteDetail({ paletteId, onBack, onOpenPalette }: Props) {
       </div>
 
       {palette && (
-        <div className="md-property-groups">
-          {groups.map(([group, records]) => (
-            <div key={group} className="md-property-group">
-              <div className="md-property-group-label">{group}</div>
-              <div className="md-property-list">
-                {records.map((rec) => {
-                  const value = palette.values[rec.id] ?? "";
-                  const editing = editingPropId === rec.id;
-                  return (
-                    <div key={rec.id} className="md-property-row">
-                      <span className="md-property-label">{rec.label}</span>
-                      <span className="md-property-swatch-wrap">
-                        <input
-                          type="color"
-                          className="md-property-swatch"
-                          value={/^#[0-9a-fA-F]{6}$/.test(value) ? value : "#000000"}
-                          onFocus={() => setEditingPropId(rec.id)}
-                          onBlur={() => setEditingPropId(null)}
-                          onChange={(e) => wallPaletteBridge.setPropertyValue(palette.id, rec.id, e.target.value)}
-                        />
-                        {editing && <span className="md-property-hex">{value}</span>}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-        </div>
+        <MapsGeographicCatalog
+          paletteId={palette.id}
+          registry={registry}
+          values={palette.values}
+          isDefault={isDefault}
+        />
       )}
     </div>
   );

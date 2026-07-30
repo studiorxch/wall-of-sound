@@ -6197,29 +6197,71 @@ body.broadcast-clean-capture .app {
   color: var(--text-dim, #888);
 }
 
-.md-property-groups { padding: 8px 16px 24px; }
-.md-property-group { margin-top: 18px; }
-.md-property-group-label {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-dim, #888);
-  margin-bottom: 6px;
-}
-.md-property-list { display: flex; flex-direction: column; gap: 2px; }
-.md-property-row {
+/* ── Geographic target catalog (0729_MAPS_Geographic_Catalog_Dual_View) ──
+   Grid|Rows dual view over one Geographic Style's consolidated targets.
+   Toolbar/dock reuse .cat-filter-search/.cat-filter-sel/.cat-action-bar
+   (MUSIC Catalog conventions) verbatim; card/row shells are new (.geo-*)
+   since CollectionGrid/LibraryDataGrid don't have a multi-select-over-
+   arbitrary-fields precedent to reuse. */
+.geo-catalog { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+
+.geo-toolbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 6px 4px;
-  border-radius: 4px;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border, #333);
+  flex-shrink: 0;
 }
-.md-property-row:hover { background: var(--surface2, #1a1a1a); }
-.md-property-label { font-size: 12px; color: var(--text-mid, #aaa); }
-.md-property-swatch-wrap { display: flex; align-items: center; gap: 8px; }
-.md-property-swatch {
+.geo-toolbar-spacer { flex: 1; }
+.geo-toolbar-status { font-size: 11px; color: var(--text-dim, #888); white-space: nowrap; }
+
+.geo-view-toggle { display: flex; border: 1px solid var(--border, #444); border-radius: 4px; overflow: hidden; }
+.geo-view-btn {
+  padding: 5px 10px;
+  font-size: 11px;
+  background: var(--surface2, #1a1a1a);
+  border: none;
+  color: var(--text-mid, #aaa);
+  cursor: pointer;
+}
+.geo-view-btn.active { background: var(--accent-dim, #22222e); color: var(--text, #e0e0e0); }
+.geo-view-btn:not(:last-child) { border-right: 1px solid var(--border, #444); }
+
+.geo-badge {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 1px 5px;
+  border-radius: 3px;
+  margin-left: 6px;
+  white-space: nowrap;
+}
+.geo-badge--expression { background: color-mix(in srgb, var(--yellow, #f5c842) 18%, transparent); color: var(--yellow, #f5c842); }
+.geo-badge--customized { background: color-mix(in srgb, var(--accent, #5c8de8) 18%, transparent); color: var(--accent, #5c8de8); }
+
+/* ── target editor (shared "active record" panel, Grid and Rows alike) ── */
+.geo-target-editor {
+  margin: 10px 16px;
+  padding: 12px;
+  border: 1px solid var(--border, #333);
+  border-radius: 6px;
+  background: var(--surface2, #161616);
+  flex-shrink: 0;
+}
+.geo-target-editor-header { display: flex; align-items: center; gap: 8px; }
+.geo-target-editor-name { font-size: 13px; font-weight: 600; color: var(--text, #e0e0e0); }
+.geo-target-editor-category { font-size: 10px; color: var(--text-dim, #888); }
+.geo-target-editor-fields { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.geo-target-editor-field { display: flex; align-items: center; gap: 10px; }
+.geo-target-editor-field-label { font-size: 12px; color: var(--text-mid, #aaa); width: 70px; flex-shrink: 0; }
+.geo-hex-expression-note { font-size: 10px; color: var(--yellow, #f5c842); }
+
+/* ── HEX-first color field ── */
+.geo-hex-field { display: inline-flex; align-items: center; gap: 6px; }
+.geo-hex-swatch {
   width: 22px;
   height: 22px;
   padding: 0;
@@ -6228,7 +6270,108 @@ body.broadcast-clean-capture .app {
   background: none;
   cursor: pointer;
 }
-.md-property-hex { font-size: 11px; font-family: monospace; color: var(--text-dim, #888); }
+.geo-hex-input {
+  width: 84px;
+  padding: 4px 6px;
+  font-size: 12px;
+  font-family: monospace;
+  text-transform: uppercase;
+  background: var(--surface3, #222);
+  border: 1px solid var(--border, #444);
+  border-radius: 4px;
+  color: var(--text, #e0e0e0);
+}
+.geo-hex-input--invalid { border-color: var(--red, #ff4545); }
+.geo-hex-eyedropper {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  background: var(--surface3, #222);
+  border: 1px solid var(--border, #444);
+  border-radius: 4px;
+  color: var(--text-mid, #aaa);
+  cursor: pointer;
+}
+.geo-hex-opacity { font-size: 10px; color: var(--text-dim, #888); }
+
+/* ── Grid view ── */
+.geo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+  padding: 12px 16px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+.geo-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  /* Explicit, not auto-sized via the parent grid's implicit row tracks —
+     a .geo-card is itself a flex container, and letting CSS Grid's
+     grid-auto-rows:auto measure a nested flex container's intrinsic
+     height produced a confirmed-live under-measurement (row tracks came
+     out shorter than this card's own children need), silently clipping
+     the name/category text via overflow:hidden below. A fixed height
+     removes that ambiguity entirely. */
+  height: 116px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--surface2, #161616);
+  border: 1px solid var(--border, #333);
+  cursor: pointer;
+  transition: border-color 0.12s;
+}
+.geo-card:hover { border-color: rgba(210,210,225,0.32); }
+.geo-card--selected { border-color: var(--accent, #5c8de8); }
+.geo-card--focused { border-color: var(--accent, #5c8de8); box-shadow: 0 0 0 1px var(--accent, #5c8de8); }
+.geo-card-check { position: absolute; top: 6px; left: 6px; z-index: 1; }
+.geo-card-swatches {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  /* Fixed height, not aspect-ratio — aspect-ratio here fought with the
+     parent .geo-grid's implicit row auto-sizing (a real, confirmed bug:
+     the grid computed row tracks too short for this card's actual content,
+     silently clipping the name/category text below via .geo-card's
+     overflow:hidden). A fixed height sidesteps that layout ambiguity. */
+  height: 64px;
+  flex-shrink: 0;
+  background: var(--surface3, #222);
+}
+.geo-card-swatch { display: block; }
+.geo-card-info { display: flex; flex-direction: column; gap: 2px; padding: 7px 8px 8px; }
+.geo-card-name { font-size: 12px; font-weight: 600; color: var(--text, #e0e0e0); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.geo-card-meta { font-size: 10px; color: var(--text-dim, #888); display: flex; align-items: center; }
+
+/* ── Rows view ── */
+.geo-rows-scroll { flex: 1; min-height: 0; overflow: auto; }
+.geo-rows-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.geo-rows-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--surface, #111217);
+  text-align: left;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim, #888);
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border, #333);
+  white-space: nowrap;
+}
+.geo-row-col-check { width: 32px; }
+.geo-row { cursor: pointer; }
+.geo-row:hover td { background: var(--surface2, #1a1a1a); }
+.geo-row--selected td { background: color-mix(in srgb, var(--accent, #5c8de8) 10%, transparent); }
+.geo-row--focused td { box-shadow: inset 0 0 0 1px var(--accent, #5c8de8); }
+.geo-rows-table td { padding: 6px 10px; border-bottom: 1px solid var(--border2, #222); color: var(--text-mid, #aaa); white-space: nowrap; }
+.geo-row-name { color: var(--text, #e0e0e0); font-weight: 600; }
+.geo-row-swatch-cell { display: inline-flex; align-items: center; gap: 6px; }
+.geo-row-swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border, #444); display: inline-block; }
+.geo-row-hex { font-family: monospace; font-size: 11px; }
+.geo-row-cell-empty { color: var(--text-dim, #555); }
 
 /* empty state */
 .pg-empty {

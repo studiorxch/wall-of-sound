@@ -29,6 +29,9 @@ type MapboxMap = {
   remove: () => void;
   resize: () => void;
   getCanvas: () => HTMLCanvasElement;
+  getLayer: (id: string) => unknown;
+  getLayoutProperty: (id: string, prop: string) => unknown;
+  getPaintProperty: (id: string, prop: string) => unknown;
 };
 
 type ReadyState = "idle" | "loading" | "ready" | "unavailable";
@@ -206,4 +209,29 @@ export function undockPreviewMap(): void {
 
 export function invalidateThumbnail(paletteId: string): void {
   delete _thumbCache[paletteId];
+}
+
+// Real, live-read visibility for a Mapbox layer — 'visible' unless the
+// style explicitly sets 'none' (Mapbox's own default when unset is
+// 'visible'). Read-only: there is no write path from the palette system,
+// so this is display/filtering data only, never presented as editable.
+export function getLayerVisibility(layerId: string): "visible" | "none" | undefined {
+  if (!_map || _state !== "ready") return undefined;
+  if (!_map.getLayer(layerId)) return undefined;
+  const layout = _map.getLayoutProperty(layerId, "visibility");
+  return layout === "none" ? "none" : "visible";
+}
+
+// Same real-but-read-only principle as getLayerVisibility above — opacity
+// and pattern are genuine live Mapbox paint properties, just not wired for
+// editing through the palette system yet.
+export function getLayerPaintInfo(layerId: string, layerType: string | undefined): { opacity?: unknown; pattern?: unknown } {
+  if (!_map || _state !== "ready" || !layerType) return {};
+  if (!_map.getLayer(layerId)) return {};
+  const opacityProp = layerType === "fill" ? "fill-opacity" : layerType === "line" ? "line-opacity" : layerType === "circle" ? "circle-opacity" : layerType === "symbol" ? "icon-opacity" : undefined;
+  const patternProp = layerType === "fill" ? "fill-pattern" : layerType === "line" ? "line-pattern" : undefined;
+  return {
+    opacity: opacityProp ? _map.getPaintProperty(layerId, opacityProp) : undefined,
+    pattern: patternProp ? _map.getPaintProperty(layerId, patternProp) : undefined,
+  };
 }

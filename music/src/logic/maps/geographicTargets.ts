@@ -1,0 +1,173 @@
+// ── geographicTargets ─────────────────────────────────────────────────────────
+// 0729_MAPS_Geographic_Catalog_Dual_View
+//
+// Pure, testable consolidation logic: groups the flat registry (one row per
+// Mapbox paint property, e.g. "national-park.fill-color" and
+// "national-park.fill-outline-color" as two separate records) into one
+// GeographicTarget per real object — "National Park" with Fill/Outline
+// sub-fields — matching the spec's product model. Route/Vehicle/HUD each
+// consolidate into a single target the same way, since their sub-properties
+// are all facets of one conceptual object, not independent records.
+//
+// Reads only what the existing registry/bridge already expose — no new Wall
+// authority capability, no fabricated fields. "Customized" is computed by
+// comparing each field's current value against Default's value for the same
+// property id — real, derived data, not invented.
+
+import type { RegistryRecord } from "../../maps/wallPaletteBridge";
+
+export type GeographicColorField = {
+  propId: string;
+  roleLabel: string;
+  value: string;
+  isExpression: boolean;
+};
+
+export type GeographicLayerType = "fill" | "line" | "circle" | "symbol" | "background" | undefined;
+
+export type GeographicTarget = {
+  targetId: string;
+  name: string;
+  category: string;
+  sourceType: "mapbox-style" | "route" | "vehicle" | "hud";
+  layerType: GeographicLayerType;
+  colorFields: GeographicColorField[];
+  hasExpression: boolean;
+  isCustomized: boolean;
+};
+
+function isExpressionValue(value: unknown): boolean {
+  return typeof value !== "string";
+}
+
+const FILL_SUFFIX_ROLE: Record<string, string> = {
+  "fill-color": "Fill",
+  "fill-outline-color": "Outline",
+  "line-color": "Color",
+  "circle-color": "Fill",
+  "circle-stroke-color": "Stroke",
+  "text-color": "Text",
+  "text-halo-color": "Halo",
+  "icon-color": "Icon",
+  "background-color": "Color",
+};
+
+function inferLayerType(sourceProperty: string): GeographicLayerType {
+  if (sourceProperty.startsWith("fill-")) return "fill";
+  if (sourceProperty.startsWith("line-")) return "line";
+  if (sourceProperty.startsWith("circle-")) return "circle";
+  if (sourceProperty.startsWith("text-") || sourceProperty === "icon-color") return "symbol";
+  if (sourceProperty === "background-color") return "background";
+  return undefined;
+}
+
+function titleCase(s: string): string {
+  return s.replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()).trim();
+}
+
+export function buildGeographicTargets(
+  registry: RegistryRecord[],
+  currentValues: Record<string, string>,
+  defaultValues: Record<string, string> | null,
+): GeographicTarget[] {
+  const mapboxByObject = new Map<string, RegistryRecord[]>();
+  const bySource: Record<"route" | "vehicle" | "hud", RegistryRecord[]> = { route: [], vehicle: [], hud: [] };
+
+  for (const rec of registry) {
+    if (rec.source === "mapbox-style") {
+      const key = rec.sourceObject ?? rec.id;
+      if (!mapboxByObject.has(key)) mapboxByObject.set(key, []);
+      mapboxByObject.get(key)!.push(rec);
+    } else if (rec.source === "route" || rec.source === "vehicle" || rec.source === "hud") {
+      bySource[rec.source].push(rec);
+    }
+  }
+
+  const targets: GeographicTarget[] = [];
+
+  function fieldsFor(records: RegistryRecord[], roleFor: (rec: RegistryRecord) => string): GeographicColorField[] {
+    return records.map((rec) => {
+      // currentValues is typed Record<string,string>, but a property whose
+      // Mapbox paint value is an expression (e.g. hillshade's zoom-stop
+      // match array) genuinely carries a non-string array/object at
+      // runtime — never coerce it to a string here, or the real
+      // "Expression" warning (below) silently disappears.
+      const raw = Object.prototype.hasOwnProperty.call(currentValues, rec.id) ? currentValues[rec.id] : rec.currentValue;
+      const value = raw as unknown as string;
+      return { propId: rec.id, roleLabel: roleFor(rec), value, isExpression: isExpressionValue(value) };
+    });
+  }
+
+  for (const [layerId, records] of mapboxByObject) {
+    const colorFields = fieldsFor(records, (rec) => FILL_SUFFIX_ROLE[rec.sourceProperty] ?? titleCase(rec.sourceProperty));
+    const hasExpression = colorFields.some((f) => f.isExpression);
+    const isCustomized = defaultValues != null && colorFields.some((f) => defaultValues[f.propId] !== f.value);
+    targets.push({
+      targetId: `mapbox:${layerId}`,
+      name: titleCase(layerId),
+      category: records[0].group,
+      sourceType: "mapbox-style",
+      layerType: inferLayerType(records[0].sourceProperty),
+      colorFields,
+      hasExpression,
+      isCustomized,
+    });
+  }
+
+  if (bySource.route.length) {
+    const colorFields = fieldsFor(bySource.route, (rec) => rec.label);
+    targets.push({
+      targetId: "route",
+      name: "Route",
+      category: bySource.route[0].group,
+      sourceType: "route",
+      layerType: undefined,
+      colorFields,
+      hasExpression: colorFields.some((f) => f.isExpression),
+      isCustomized: defaultValues != null && colorFields.some((f) => defaultValues[f.propId] !== f.value),
+    });
+  }
+
+  if (bySource.vehicle.length) {
+    const colorFields = fieldsFor(bySource.vehicle, (rec) => titleCase(rec.sourceProperty));
+    targets.push({
+      targetId: "vehicle",
+      name: "Hero Vehicle",
+      category: bySource.vehicle[0].group,
+      sourceType: "vehicle",
+      layerType: undefined,
+      colorFields,
+      hasExpression: colorFields.some((f) => f.isExpression),
+      isCustomized: defaultValues != null && colorFields.some((f) => defaultValues[f.propId] !== f.value),
+    });
+  }
+
+  if (bySource.hud.length) {
+    const colorFields = fieldsFor(bySource.hud, (rec) => titleCase(rec.sourceProperty));
+    targets.push({
+      targetId: "hud",
+      name: "HUD",
+      category: bySource.hud[0].group,
+      sourceType: "hud",
+      layerType: undefined,
+      colorFields,
+      hasExpression: colorFields.some((f) => f.isExpression),
+      isCustomized: defaultValues != null && colorFields.some((f) => defaultValues[f.propId] !== f.value),
+    });
+  }
+
+  return targets;
+}
+
+export const GEOGRAPHIC_CATEGORY_ORDER = [
+  "Water", "Land", "Roads", "Labels", "Boundaries", "Base Map", "Route", "Vehicles", "HUD",
+];
+
+export function sortTargetsByCategory(targets: GeographicTarget[]): GeographicTarget[] {
+  return [...targets].sort((a, b) => {
+    const ai = GEOGRAPHIC_CATEGORY_ORDER.indexOf(a.category);
+    const bi = GEOGRAPHIC_CATEGORY_ORDER.indexOf(b.category);
+    if (ai !== bi) return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+    return a.name.localeCompare(b.name);
+  });
+}
