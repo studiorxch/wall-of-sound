@@ -171,7 +171,13 @@ export function detectBpm(input: AudioAnalysisInput): BpmDetectionResult {
   while (bpmRaw < 40) bpmRaw *= 2;
   while (bpmRaw > 240) bpmRaw /= 2;
 
-  let bpm: number | undefined = isValidBpm(bpmRaw) ? +bpmRaw.toFixed(2) : undefined;
+  // candidateBpm is the range-valid detected value BEFORE the confidence
+  // gate below — preserved unconditionally as review-only evidence. `bpm`
+  // (canonical-eligible) starts identical but is zeroed by that gate; only
+  // an out-of-range candidate (never a low-confidence one) leaves both null,
+  // since there's genuinely nothing to review in that case.
+  const candidateBpm: number | undefined = isValidBpm(bpmRaw) ? +bpmRaw.toFixed(2) : undefined;
+  let bpm: number | undefined = candidateBpm;
   if (bpm == null) warningCodes.push("BPM_OUT_OF_RANGE");
 
   if (metricalConfidence < 1 - AMBIGUITY_MARGIN && family.length > 1) {
@@ -192,6 +198,7 @@ export function detectBpm(input: AudioAnalysisInput): BpmDetectionResult {
 
   return {
     bpm,
+    candidateBpm,
     confidence: confidenceDetail.overallConfidence,
     confidenceDetail,
     halfTimeCandidate,

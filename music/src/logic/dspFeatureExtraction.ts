@@ -12,6 +12,8 @@ import { detectBpm, BPM_DETECTOR_VERSION } from "./bpmDetection";
 import { detectKey, KEY_DETECTOR_VERSION } from "./keyDetection";
 import { computeTrackBeatMap } from "./beatMap/computeTrackBeatMap";
 import { computeTrackPlaybackBounds } from "./playbackBounds/computeTrackPlaybackBounds";
+import { normalizeTrackGenreTokens } from "./genreTaxonomy";
+import { classifyTempoFamily, type TempoFamilyReview } from "./library/bpmTempoFamilyReview";
 
 // ── Options ───────────────────────────────────────────────────────────────────
 
@@ -469,6 +471,124 @@ export function isBpmKeyTrustedComplete(track: Track): boolean {
   return isBpmTrustedForAnalysis(track) && isKeyTrustedForAnalysis(track);
 }
 
+// 0728B_MUSIC_Catalog_Selection_Actions §Review BPM & Key, extended by
+// 0728D_MUSIC_Catalog_Header_And_BPM_Candidate_Review — single source for
+// both the Catalog table's BPM/Key cell (§0727A) and the review dialog, so
+// the two never disagree. CRITICAL: `estimate` is set ONLY from the
+// detector's own persisted candidate (`audioAnalysis.bpmCandidate` /
+// `.keyCandidateCamelot`, preserved unconditionally in dspFeatureExtraction.ts
+// regardless of the confidence gate — see bpmDetection.ts/keyDetection.ts) —
+// never derived/reconstructed from confidence sub-scores. halfTime/
+// doubleTime are likewise read only from their own already-persisted fields.
+export type BpmKeyFieldState =
+  | "resolved"              // trusted/canonical value present
+  | "never_analyzed"        // audioAnalysis has never been computed
+  | "pending"                // analysisStatus queued/analyzing
+  | "failed"                 // analysisStatus failed
+  | "no_confident_result"    // analyzed; detector retained no candidate at all
+  | "low_confidence_estimate"; // a real persisted (non-canonical) candidate exists
+
+export interface BpmFieldReview {
+  state: BpmKeyFieldState;
+  canonicalBpm: number | null;
+  estimatedBpm: number | null;
+  halfTimeBpm: number | null;
+  doubleTimeBpm: number | null;
+  confidence: number | null;
+  reason: string | null;
+  // 0728F_MUSIC_BPM_Tempo_Family_Review — a review-only heuristic, computed
+  // from whichever value is currently under review (canonicalBpm when
+  // resolved, otherwise estimatedBpm). Never populated for a track whose
+  // BPM is already trusted (manual/embedded_metadata/csv_metadata) — an
+  // already human-vetted value is never re-flagged regardless of its
+  // number. See bpmTempoFamilyReview.ts.
+  tempoFamily: TempoFamilyReview;
+}
+
+export interface KeyFieldReview {
+  state: BpmKeyFieldState;
+  canonicalKey: string | null;
+  estimatedKey: string | null;
+  confidence: number | null;
+  reason: string | null;
+}
+
+export function reviewBpmField(track: Track): BpmFieldReview {
+  const aa = track.audioAnalysis;
+  const genre = normalizeTrackGenreTokens(track)[0] ?? null;
+  const noConcern: TempoFamilyReview = { concern: "none", candidateBpm: null, genre, genrePlausibility: classifyTempoFamily(null, genre).genrePlausibility };
+  if (isValidBpm(track.bpm)) {
+    // An already-trusted value (manual/embedded_metadata/csv_metadata) is
+    // never re-flagged as suspicious, regardless of its number — the same
+    // trust boundary §18 already gives it against re-detection.
+    const trusted = classifyBpmTrust(track) === "trusted";
+    return {
+      state: "resolved", canonicalBpm: track.bpm!, estimatedBpm: null,
+      halfTimeBpm: null, doubleTimeBpm: null, confidence: aa?.bpmConfidence ?? null, reason: null,
+      tempoFamily: trusted ? noConcern : classifyTempoFamily(track.bpm!, genre),
+    };
+  }
+  if (track.analysisStatus === "failed") {
+    return { state: "failed", canonicalBpm: null, estimatedBpm: null, halfTimeBpm: null, doubleTimeBpm: null, confidence: null, reason: "Analysis failed.", tempoFamily: noConcern };
+  }
+  if (track.analysisStatus === "queued" || track.analysisStatus === "analyzing") {
+    return { state: "pending", canonicalBpm: null, estimatedBpm: null, halfTimeBpm: null, doubleTimeBpm: null, confidence: null, reason: "Analysis pending.", tempoFamily: noConcern };
+  }
+  if (!aa) {
+    return { state: "never_analyzed", canonicalBpm: null, estimatedBpm: null, halfTimeBpm: null, doubleTimeBpm: null, confidence: null, reason: "Never analyzed.", tempoFamily: noConcern };
+  }
+  const lowConfidence = aa.bpmWarningCodes?.some((c) => c === "BPM_DETECTION_LOW_CONFIDENCE" || c === "BPM_OUT_OF_RANGE") ?? false;
+  if (isValidBpm(aa.bpmCandidate)) {
+    return {
+      state: "low_confidence_estimate", canonicalBpm: null, estimatedBpm: aa.bpmCandidate!,
+      halfTimeBpm: isValidBpm(aa.halfTimeCandidate) ? aa.halfTimeCandidate! : null,
+      doubleTimeBpm: isValidBpm(aa.doubleTimeCandidate) ? aa.doubleTimeCandidate! : null,
+      confidence: aa.bpmConfidence ?? null,
+      reason: lowConfidence ? "Low-confidence BPM result." : "Detected, not yet promoted.",
+      tempoFamily: classifyTempoFamily(aa.bpmCandidate!, genre),
+    };
+  }
+  if (lowConfidence) {
+    return { state: "no_confident_result", canonicalBpm: null, estimatedBpm: null, halfTimeBpm: null, doubleTimeBpm: null, confidence: aa.bpmConfidence ?? null, reason: "Analyzed — no confident BPM result.", tempoFamily: noConcern };
+  }
+  return { state: "never_analyzed", canonicalBpm: null, estimatedBpm: null, halfTimeBpm: null, doubleTimeBpm: null, confidence: null, reason: "Never analyzed.", tempoFamily: noConcern };
+}
+
+export function reviewKeyField(track: Track): KeyFieldReview {
+  const aa = track.audioAnalysis;
+  if (isValidCamelotKey(track.camelotKey)) {
+    return { state: "resolved", canonicalKey: track.camelotKey!, estimatedKey: null, confidence: aa?.keyConfidence ?? null, reason: null };
+  }
+  if (track.analysisStatus === "failed") {
+    return { state: "failed", canonicalKey: null, estimatedKey: null, confidence: null, reason: "Analysis failed." };
+  }
+  if (track.analysisStatus === "queued" || track.analysisStatus === "analyzing") {
+    return { state: "pending", canonicalKey: null, estimatedKey: null, confidence: null, reason: "Analysis pending." };
+  }
+  if (!aa) {
+    return { state: "never_analyzed", canonicalKey: null, estimatedKey: null, confidence: null, reason: "Never analyzed." };
+  }
+  const lowConfidence = aa.keyWarningCodes?.includes("KEY_DETECTION_LOW_CONFIDENCE") ?? false;
+  if (isValidCamelotKey(aa.keyCandidateCamelot)) {
+    return {
+      state: "low_confidence_estimate", canonicalKey: null, estimatedKey: aa.keyCandidateCamelot!,
+      confidence: aa.keyConfidence ?? null,
+      reason: lowConfidence ? "Low-confidence key result." : "Detected, not yet promoted.",
+    };
+  }
+  if (lowConfidence) {
+    return { state: "no_confident_result", canonicalKey: null, estimatedKey: null, confidence: aa.keyConfidence ?? null, reason: "Analyzed — no confident key result." };
+  }
+  return { state: "never_analyzed", canonicalKey: null, estimatedKey: null, confidence: null, reason: "Never analyzed." };
+}
+
+/** Whole-track gate for the Review BPM & Key surface — either field unresolved. */
+export function needsBpmKeyReview(track: Track): boolean {
+  const bpmReview = reviewBpmField(track);
+  const bpmNeedsReview = bpmReview.state !== "resolved" || bpmReview.tempoFamily.concern !== "none";
+  return bpmNeedsReview || reviewKeyField(track).state !== "resolved";
+}
+
 export async function analyzeTrackDspFeatures(
   track: Track,
   options?: AnalyzeTrackDspOptions,
@@ -532,6 +652,9 @@ export async function analyzeTrackDspFeatures(
     keyDetectorVersion: KEY_DETECTOR_VERSION,
     ...(bpmDiagnosticsUpdate && {
       actualBpm: bpmResult.bpm,
+      // 0728D — always the raw candidate, independent of the confidence
+      // gate that governs actualBpm above; review-only, never canonical.
+      bpmCandidate: bpmResult.candidateBpm,
       bpmConfidence: bpmResult.confidenceDetail.overallConfidence,
       bpmConfidenceDetail: bpmResult.confidenceDetail,
       halfTimeCandidate: bpmResult.halfTimeCandidate,
@@ -544,6 +667,11 @@ export async function analyzeTrackDspFeatures(
       tonic: keyResult.tonic,
       mode: keyResult.mode,
       camelot: keyResult.camelotKey,
+      // 0728D — always the winning candidate, independent of the confidence
+      // gate governing tonic/mode/camelot above; review-only, never canonical.
+      keyCandidateTonic: keyResult.candidateTonic,
+      keyCandidateMode: keyResult.candidateMode,
+      keyCandidateCamelot: keyResult.candidateCamelotKey,
       keyConfidence: keyResult.confidenceDetail.overallConfidence,
       keyConfidenceDetail: keyResult.confidenceDetail,
       alternateKeyCandidates: keyResult.alternateCandidates.length ? keyResult.alternateCandidates : undefined,

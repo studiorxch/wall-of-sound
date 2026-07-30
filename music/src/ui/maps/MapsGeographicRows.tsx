@@ -57,8 +57,15 @@ export function MapsGeographicRows({ targets, selectedIds, focusedTargetId, onTo
           {targets.map((t) => {
             const selected = selectedIds.has(t.targetId);
             const focused = focusedTargetId === t.targetId;
-            const primary = t.colorFields[0];
-            const secondary = t.colorFields.find((f, i) => i > 0 && /Outline|Stroke|Halo/.test(f.roleLabel));
+            const colorOnly = t.colorFields.filter((f) => f.valueKind === "color");
+            const primary = colorOnly[0];
+            const secondary = colorOnly.find((f, i) => i > 0 && /Outline|Stroke|Halo/.test(f.roleLabel));
+            // Prefer the genuinely editable registry opacity field (this
+            // build's new line-opacity/fill-opacity wiring) over the older
+            // read-only live-paint sample — same layer, two sources, and the
+            // editable one is the one a user's edit actually lands in.
+            const opacityField = t.colorFields.find((f) => f.valueKind === "opacity");
+            const opacityDisplay = opacityField ? `${Math.round(parseFloat(opacityField.value) * 100)}%` : formatOpacity(t.opacity);
             return (
               <tr
                 key={t.targetId}
@@ -74,7 +81,7 @@ export function MapsGeographicRows({ targets, selectedIds, focusedTargetId, onTo
                 <td>{swatchCell(primary)}</td>
                 <td>{swatchCell(secondary)}</td>
                 <td>{formatPattern(t.pattern)}</td>
-                <td>{formatOpacity(t.opacity)}</td>
+                <td>{opacityDisplay}</td>
                 <td>{t.visibility ?? "—"}</td>
                 <td>
                   {t.hasExpression && <span className="geo-badge geo-badge--expression">Expression</span>}

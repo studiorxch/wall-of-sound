@@ -49,6 +49,13 @@ export function trackMatchesCrate(t: Track, crateValue: string): boolean {
   // Genre
   if ((t.genre ?? "").toLowerCase() === v) return true;
   if ((t.genres ?? []).some((g) => g.toLowerCase() === v)) return true;
+  // 0728G_MUSIC_Fast_Breaks_Identification — a CONFIRMED genre family (e.g.
+  // "fast_breaks") is eligible as a crate value too, so playlist arc
+  // sections can request family-based pools even for tracks whose raw
+  // genre/genres text never literally says so (§10 required immediate use:
+  // "Playlist eligibility filtering"). Only "confirmed" counts — a merely
+  // "suggested" candidate is never trusted as real filter data.
+  if (t.genreClassification?.reviewStatus === "confirmed" && (t.genreClassification.primaryGenreFamily ?? "").toLowerCase() === v) return true;
 
   return false;
 }

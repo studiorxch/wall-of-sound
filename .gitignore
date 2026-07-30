@@ -48,6 +48,8 @@ music/.vscode
 music/node_modules/
 colorlab/.claude
 colorlab/node_modules/
+studiorich-orbital/node_mobules
+
 
 # studiorich-orbital is its own separate git repository (Sites-deployed
 # project, pushed independently to the ChatGPT Sites project) — exclude it
@@ -89,4 +91,4 @@ audiolab/.venv/
 
 
 
-studiorich-orbital/node_mobules
+

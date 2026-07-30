@@ -22,6 +22,7 @@ import { sha256File } from "./radioVersionCloneHelper";
 import { withRadioIdLock } from "./radioIdAssigner";
 import { trackPackageVersionDir } from "./radioTrackPackageWriter";
 import { validateWebBundle } from "./radioWebBundleValidator";
+import { resolveTransitionHintForAdjacency } from "../../src/logic/radio/radioWebTransitionHint";
 import type { RadioTrackPackageManifest } from "../../src/data/radioTrackPackageTypes";
 import {
   RADIO_WEB_BUNDLE_SCHEMA_VERSION,
@@ -154,7 +155,8 @@ export async function exportWebBundle(params: ExportWebBundleParams): Promise<Ra
     const files: Record<string, { sha256: string; byteSize: number }> = {};
     const manifestEntries: RadioWebManifestEntry[] = [];
 
-    for (const entry of resolved) {
+    for (let i = 0; i < resolved.length; i += 1) {
+      const entry = resolved[i];
       const dest = path.join(stagingDir, entry.bundleAudioRelPath);
       fs.copyFileSync(entry.packageAudioPath, dest);
       // Re-verify the COPY byte-for-byte against the package manifest.
@@ -163,6 +165,35 @@ export async function exportWebBundle(params: ExportWebBundleParams): Promise<Ra
         throw new Error(`copy verification failed for ${entry.bundleAudioRelPath}`);
       }
       files[entry.bundleAudioRelPath] = { sha256: copiedSha, byteSize: fs.statSync(dest).size };
+
+      // RADIO / DJ Mode Dock (0724C) — a hint is only ever produced when the
+      // caller supplied a real DjTransitionPlan for this exact adjacency AND
+      // it passes the real active-mode authority gate. No existing caller
+      // does this today (see radioWebTransitionHint.ts's header), so
+      // transitionFromPrevious is null on every real export until a future
+      // build bridges RadioPlaylist entries back to PlaylistRecord slots.
+      let transitionFromPrevious = null as RadioWebManifestEntry["transitionFromPrevious"];
+      const requestEntry = request.entries[i];
+      if (i > 0 && request.djTransitionMode === "active" && requestEntry?.djTransitionPlan) {
+        const previous = resolved[i - 1];
+        transitionFromPrevious = resolveTransitionHintForAdjacency({
+          djTransitionMode: request.djTransitionMode,
+          plan: requestEntry.djTransitionPlan,
+          currentOutgoingTrackId: previous.metadata.source.trackId,
+          currentIncomingTrackId: entry.metadata.source.trackId,
+          currentOutgoingSourceFingerprint: previous.metadata.sourceAssetHash,
+          currentIncomingSourceFingerprint: entry.metadata.sourceAssetHash,
+          currentAnalysisRevisionKey: `${previous.metadata.songIntelligence.revision ?? ""}::${entry.metadata.songIntelligence.revision ?? ""}`,
+          // Conservative stand-in: no region-candidate resolution is run at
+          // publish time yet, so any region-bound plan safely fails
+          // regions_invalid rather than risk a fabricated authorization. A
+          // pure-seconds plan (regionId: null on both cues) is unaffected.
+          outgoingRegionsNow: [],
+          incomingRegionsNow: [],
+          activeStemSetLostCurrency: false,
+        });
+      }
+
       manifestEntries.push({
         radioTrackId: entry.radioTrackId,
         packageVersion: entry.packageVersion,
@@ -176,6 +207,7 @@ export async function exportWebBundle(params: ExportWebBundleParams): Promise<Ra
         key: entry.metadata.musical.key,
         moods: entry.metadata.musical.moods,
         genres: entry.metadata.musical.genres,
+        transitionFromPrevious,
       });
     }
 

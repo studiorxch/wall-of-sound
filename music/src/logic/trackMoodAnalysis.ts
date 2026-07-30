@@ -51,7 +51,7 @@ export function summarizeAnalysisWarnings(warnings: string[]): Record<string, nu
 
 // ── Single track ──────────────────────────────────────────────────────────────
 
-function needsAnalysis(track: Track, force = false): boolean {
+export function needsAnalysis(track: Track, force = false): boolean {
   if (force) return true;
   const moods = track.moodTags ?? [];
   const scores = track.moodScores;

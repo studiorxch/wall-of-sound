@@ -17,16 +17,27 @@
   var VERSION = '1.0.0';
 
   // ── Mapbox style paint properties ─────────────────────────────────────────
+  // Palette values are always stored as strings (PaletteRecord.values is
+  // Record<string,string>) — opacity properties need the numeric form
+  // Mapbox's setPaintProperty actually expects; color properties pass the
+  // string straight through unchanged, same as before this build.
   function _applyMapboxStyle(record, value, map) {
     if (!map || typeof map.setPaintProperty !== 'function') return;
     if (!map.getLayer(record.sourceObject)) return; // layer not present on this map/style — skip, no throw
-    map.setPaintProperty(record.sourceObject, record.sourceProperty, value);
+    var applied = value;
+    if (record.valueKind === 'opacity') {
+      var n = parseFloat(value);
+      if (isNaN(n)) return;
+      applied = Math.max(0, Math.min(1, n));
+    }
+    map.setPaintProperty(record.sourceObject, record.sourceProperty, applied);
   }
 
   function _readMapboxStyle(record, map) {
     if (!map || typeof map.getPaintProperty !== 'function') return undefined;
     if (!map.getLayer(record.sourceObject)) return undefined;
-    return map.getPaintProperty(record.sourceObject, record.sourceProperty);
+    var value = map.getPaintProperty(record.sourceObject, record.sourceProperty);
+    return record.valueKind === 'opacity' && typeof value === 'number' ? String(value) : value;
   }
 
   // ── Route (mapboxOperatorRenderer.js / routePlannerRuntime.js / routePanel.js) ──
@@ -89,6 +100,29 @@
     return hud.getColors()[record.sourceProperty];
   }
 
+  // ── Runtime overlay toggles (atmosphereComposite.js, etc.) ────────────────
+  // Not a Mapbox property or a color renderer — a whole canvas
+  // compositor's on/off state. init()/destroy() are the module's only real
+  // toggle; "enabled" has no public getter, so read live from the DOM node
+  // init() itself guards on (same check the module uses internally).
+  function _applyOverlay(record, value) {
+    if (record.sourceObject === 'AtmosphereComposite') {
+      var ac = SBE.AtmosphereComposite;
+      if (!ac) return;
+      var wantEnabled = value === 'true' || value === true;
+      var isEnabled = typeof document !== 'undefined' && !!document.getElementById('atmosphere-composite');
+      if (wantEnabled && !isEnabled && ac.init) ac.init();
+      if (!wantEnabled && isEnabled && ac.destroy) ac.destroy();
+    }
+  }
+
+  function _readOverlay(record) {
+    if (record.sourceObject === 'AtmosphereComposite') {
+      return (typeof document !== 'undefined' && !!document.getElementById('atmosphere-composite')) ? 'true' : 'false';
+    }
+    return undefined;
+  }
+
   // ── Dispatch ───────────────────────────────────────────────────────────────
   function apply(record, value, map) {
     if (value === undefined || value === null) return;
@@ -97,6 +131,7 @@
       case 'route':        return _applyRoute(record, value);
       case 'vehicle':      return _applyVehicle(record, value);
       case 'hud':          return _applyHud(record, value);
+      case 'overlay':      return _applyOverlay(record, value);
       default:
         console.warn('[MapsPaletteApplyAdapters] unknown source for apply:', record.source, record.id);
     }
@@ -108,6 +143,7 @@
       case 'route':        return _readRoute(record);
       case 'vehicle':      return _readVehicle(record);
       case 'hud':          return _readHud(record);
+      case 'overlay':      return _readOverlay(record);
       default:             return undefined;
     }
   }

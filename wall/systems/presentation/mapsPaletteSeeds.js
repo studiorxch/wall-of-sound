@@ -103,9 +103,22 @@
 
   // Returns { title, values } for every record in the given registry —
   // always exact schema coverage, whatever the registry's current size/ids are.
+  //
+  // episode2ColorFor() only makes sense for actual color records — it
+  // pattern-matches group/label to a hex value. Opacity (0729_MAPS_Visual_
+  // Property_Authority_Audit) and boolean records aren't colors at all;
+  // running them through it produced a hex string in a numeric/boolean slot
+  // (e.g. opacity "0.6" became "#241a15"). Neither has an Episode 2 creative
+  // direction defined, so both pass through the record's own live-discovered
+  // currentValue — the same neutral-fallback principle _migrateAgainst()
+  // already uses for palettes that predate a property.
   function buildEpisode2Seed(registry) {
     var values = {};
-    registry.forEach(function (r) { values[r.id] = episode2ColorFor(r); });
+    registry.forEach(function (r) {
+      values[r.id] = (r.valueKind === 'opacity' || r.valueKind === 'boolean')
+        ? r.currentValue
+        : episode2ColorFor(r);
+    });
     return { title: 'Episode 2', values: values };
   }
 

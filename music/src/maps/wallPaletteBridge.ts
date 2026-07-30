@@ -32,6 +32,10 @@ export type RegistryRecord = {
   sourceObject: string;
   sourceProperty: string;
   currentValue: string;
+  // "opacity"/"boolean" added by 0729_MAPS_Visual_Property_Authority_Audit —
+  // still just a string in the palette's values dict either way (numeric
+  // "0.55" or "true"/"false"), never a second value type.
+  valueKind: "solid" | "expression" | "derived" | "opacity" | "boolean";
   [key: string]: unknown;
 };
 

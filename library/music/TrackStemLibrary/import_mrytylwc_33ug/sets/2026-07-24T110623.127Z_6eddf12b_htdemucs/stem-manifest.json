@@ -1,0 +1,87 @@
+{
+  "id": "cc61e2f6-980f-4c91-bf40-b7ada5e4620f",
+  "sourceTrackId": "import_mrytylwc_33ug",
+  "sourceAudioPathAtCreation": "catalog/audio/Nice and Warm (hypnotic edit).wav",
+  "sourceAudioIdentity": {
+    "fingerprint": "6eddf12b0cbe0d36b7a816e9955411f110e2be8756394fa0dd9b97d763421b8b",
+    "fingerprintAlgorithm": "pcm-sha256",
+    "fingerprintVersion": 1,
+    "sampleRateHz": 44100,
+    "normalizedChannels": 2,
+    "durationFrames": 9763740
+  },
+  "sourceRawFileHashAtCreation": "7d2a8bcdff93a48fabe82d33452c75472f4944e734c8bc8030ddad2effb1b99a",
+  "sourceStatAtCreation": {
+    "sizeBytes": 42508972,
+    "mtimeMs": 1784890905854.9111,
+    "inode": 309863817
+  },
+  "sourceAudioProvenance": {
+    "decoderTool": "ffmpeg",
+    "decoderVersion": "8.0",
+    "computedAt": "2026-07-24T11:04:55.816Z"
+  },
+  "origin": "demucs",
+  "engine": "demucs",
+  "model": "htdemucs",
+  "engineVersion": "4.1.0",
+  "engineDevice": "mps",
+  "manifestVersion": 1,
+  "stems": {
+    "vocals": {
+      "role": "vocals",
+      "relativeArchivePath": "import_mrytylwc_33ug/sets/2026-07-24T110623.127Z_6eddf12b_htdemucs/vocals.wav",
+      "fileName": "vocals.wav",
+      "durationFrames": 9763740,
+      "durationSeconds": 221.4,
+      "sampleRateHz": 44100,
+      "channels": 2,
+      "bitDepth": 16,
+      "codec": "pcm_s16le",
+      "sizeBytes": 39055004,
+      "contentHash": "bee3787a35f9da22c30071b09c9c0f7336869a390b487ce292ab37f8a16f5793"
+    },
+    "drums": {
+      "role": "drums",
+      "relativeArchivePath": "import_mrytylwc_33ug/sets/2026-07-24T110623.127Z_6eddf12b_htdemucs/drums.wav",
+      "fileName": "drums.wav",
+      "durationFrames": 9763740,
+      "durationSeconds": 221.4,
+      "sampleRateHz": 44100,
+      "channels": 2,
+      "bitDepth": 16,
+      "codec": "pcm_s16le",
+      "sizeBytes": 39055004,
+      "contentHash": "1a91bc228fed595f7bf563d1ad78fe937a9ce928b1b56e0f4c6a6a36ea658012"
+    },
+    "bass": {
+      "role": "bass",
+      "relativeArchivePath": "import_mrytylwc_33ug/sets/2026-07-24T110623.127Z_6eddf12b_htdemucs/bass.wav",
+      "fileName": "bass.wav",
+      "durationFrames": 9763740,
+      "durationSeconds": 221.4,
+      "sampleRateHz": 44100,
+      "channels": 2,
+      "bitDepth": 16,
+      "codec": "pcm_s16le",
+      "sizeBytes": 39055004,
+      "contentHash": "35e5a88816e9f88833f45842d967809afe286570db572d61d3a915e52b8ab695"
+    },
+    "other": {
+      "role": "other",
+      "relativeArchivePath": "import_mrytylwc_33ug/sets/2026-07-24T110623.127Z_6eddf12b_htdemucs/other.wav",
+      "fileName": "other.wav",
+      "durationFrames": 9763740,
+      "durationSeconds": 221.4,
+      "sampleRateHz": 44100,
+      "channels": 2,
+      "bitDepth": 16,
+      "codec": "pcm_s16le",
+      "sizeBytes": 39055004,
+      "contentHash": "c2c2cae71ec2c620a2af7976f8d28320c5942323faf25681c7d4e9c40c6b7109"
+    }
+  },
+  "createdAt": "2026-07-24T11:06:23.127Z",
+  "completedAt": "2026-07-24T11:06:23.127Z",
+  "archiveDirectory": "import_mrytylwc_33ug/sets/2026-07-24T110623.127Z_6eddf12b_htdemucs"
+}

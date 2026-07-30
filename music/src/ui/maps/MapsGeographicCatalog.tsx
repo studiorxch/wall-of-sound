@@ -7,6 +7,7 @@ import { buildGeographicTargets, sortTargetsByCategory, type GeographicTarget } 
 import { MapsGeographicGrid } from "./MapsGeographicGrid";
 import { MapsGeographicRows } from "./MapsGeographicRows";
 import { GeographicHexColorField } from "./GeographicHexColorField";
+import { GeographicFieldEditor } from "./GeographicFieldEditor";
 
 // 0729_MAPS_Geographic_Catalog_Dual_View — replaces the old flat
 // .md-property-groups list with a scalable Grid|Rows catalog over
@@ -106,15 +107,26 @@ export function MapsGeographicCatalog({ paletteId, registry, values, isDefault }
     wallPaletteBridge.setPropertyValue(paletteId, propId, hex);
   }
 
-  // "Assign Color" applies to each selected target's PRIMARY field (Fill
-  // for fill/circle layers, Color for line/background, the first field for
-  // route/vehicle/HUD) — the one color a user means by "recolor this."
-  // Secondary fields (Outline, Stroke, …) are untouched; edit those from
-  // the target's own detail editor.
+  // "Assign Color" applies to each selected target's PRIMARY color field
+  // (Fill for fill/circle layers, Color for line/background, the first
+  // field for route/vehicle/HUD) — the one color a user means by "recolor
+  // this." Secondary fields (Outline, Stroke, …) are untouched; edit those
+  // from the target's own detail editor.
   function bulkAssignColor(hex: string) {
     for (const t of selectedTargets) {
-      const primary = t.colorFields[0];
+      const primary = t.colorFields.find((f) => f.valueKind === "color");
       if (primary) setField(primary.propId, hex);
+    }
+  }
+
+  // "Assign Opacity" — real, backed by the same setPropertyValue path,
+  // applied to each selected target's opacity field (skips targets that
+  // don't have one, per "disable/skip incompatible rows, never silently").
+  const targetsWithOpacity = selectedTargets.filter((t) => t.colorFields.some((f) => f.valueKind === "opacity"));
+  function bulkAssignOpacity(value: string) {
+    for (const t of selectedTargets) {
+      const field = t.colorFields.find((f) => f.valueKind === "opacity");
+      if (field) setField(field.propId, value);
     }
   }
 
@@ -141,7 +153,11 @@ export function MapsGeographicCatalog({ paletteId, registry, values, isDefault }
         >
           Reset to Default
         </button>
-        <button className="tb-btn sm" disabled title="Opacity has no editable path yet — Wall's palette authority only wires color properties">Assign Opacity</button>
+        {targetsWithOpacity.length > 0 ? (
+          <BulkOpacityAction onAssign={bulkAssignOpacity} />
+        ) : (
+          <button className="tb-btn sm" disabled title="None of the selected targets have an editable opacity property">Assign Opacity</button>
+        )}
         <button className="tb-btn sm" disabled title="Visibility has no editable path yet — Wall's palette authority only wires color properties">Toggle Visibility</button>
         <span className="bulk-bar-sep" />
         <button className="tb-btn sm" onClick={() => setSelectedIds(new Set())}>Clear</button>
@@ -204,7 +220,7 @@ export function MapsGeographicCatalog({ paletteId, registry, values, isDefault }
                 {f.isExpression ? (
                   <span className="geo-hex-expression-note" title="This property is a Mapbox expression (zoom stops, gradient, etc.) — editing here replaces it with a single flat color.">Expression value — edit will flatten it</span>
                 ) : null}
-                <GeographicHexColorField value={f.value} onChange={(hex) => setField(f.propId, hex)} />
+                <GeographicFieldEditor field={f} onChange={(v) => setField(f.propId, v)} />
               </div>
             ))}
           </div>
@@ -245,6 +261,30 @@ function BulkColorAction({ onAssign }: { onAssign: (hex: string) => void }) {
     <span className="cat-group-input-row">
       <GeographicHexColorField value={hex} onChange={setHex} />
       <button className="tb-btn sm" onClick={() => { onAssign(hex); setOpen(false); }}>Apply</button>
+      <button className="tb-btn sm" onClick={() => setOpen(false)}>Cancel</button>
+    </span>
+  );
+}
+
+function BulkOpacityAction({ onAssign }: { onAssign: (value: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [value, setValue] = useState(1);
+  if (!open) {
+    return <button className="tb-btn sm" onClick={() => setOpen(true)}>Assign Opacity…</button>;
+  }
+  return (
+    <span className="cat-group-input-row">
+      <input
+        type="range"
+        min={0}
+        max={1}
+        step={0.05}
+        value={value}
+        onChange={(e) => setValue(parseFloat(e.target.value))}
+        className="geo-opacity-slider"
+      />
+      <span className="geo-opacity-value">{Math.round(value * 100)}%</span>
+      <button className="tb-btn sm" onClick={() => { onAssign(String(value)); setOpen(false); }}>Apply</button>
       <button className="tb-btn sm" onClick={() => setOpen(false)}>Cancel</button>
     </span>
   );

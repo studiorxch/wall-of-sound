@@ -29,6 +29,41 @@ export type TrackArchiveStatus =
   | "needs_review"  // needs metadata/audio/mood attention
   | "rejected";     // keep but avoid programming
 
+// 0728G_MUSIC_Fast_Breaks_Identification — a normalized genre-FAMILY concept,
+// distinct from mood (an ambient-sounding track can still be rhythmically a
+// fast_breaks track) and distinct from the raw genre/genres string fields
+// above, which stay untouched. Only "fast_breaks" is actively derived by this
+// build's classifier; the remaining members exist so a manual/imported family
+// can be recorded without inventing a second enum later.
+export type GenreFamily =
+  | "fast_breaks"
+  | "ambient"
+  | "house"
+  | "hip_hop"
+  | "lofi_downtempo"
+  | "electronic"
+  | "experimental"
+  | "cinematic"
+  | "unknown";
+
+// "confirmed"/"rejected"/"deferred" are persisted decisions (unlike the
+// BPM/Key review dialog's dialog-session-only "Leave unresolved" Set) — a
+// rejected suggestion must not resurface until the evidence that produced it
+// actually changes (see reviewGenreFamilyField's evidence-signature check in
+// genreFamilyClassification.ts).
+export type GenreFamilyReviewStatus = "confirmed" | "suggested" | "rejected" | "deferred" | "unreviewed";
+
+export interface TrackGenreClassification {
+  primaryGenreFamily: GenreFamily | null;
+  detailedGenres: readonly string[];
+  blendTraits: readonly string[];
+  source: "manual" | "imported" | "derived" | null;
+  confidence: number | null;
+  reason: string | null;
+  reviewedAt: string | null;
+  reviewStatus: GenreFamilyReviewStatus;
+}
+
 export type TrackAudioAnalysis = {
   actualBpm?: number;
   bpmConfidence?: number;
@@ -40,6 +75,16 @@ export type TrackAudioAnalysis = {
   // above, which hold the accepted values themselves.
   tonic?: string;
   mode?: "major" | "minor";
+  // 0728D_MUSIC_Catalog_Header_And_BPM_Candidate_Review — the detector's own
+  // best candidate, preserved as REVIEW-ONLY evidence even when the
+  // confidence gate withheld it from actualBpm/actualKey/camelot/tonic/mode
+  // above. Never itself canonical, never auto-promoted — Review BPM & Key's
+  // "Use <value>" actions are the only path from here into Track.bpm/
+  // camelotKey, and only via the existing manual-source precedence write.
+  bpmCandidate?: number;
+  keyCandidateTonic?: string;
+  keyCandidateMode?: "major" | "minor";
+  keyCandidateCamelot?: string;
   halfTimeCandidate?: number;
   doubleTimeCandidate?: number;
   beatPeriodSeconds?: number;
@@ -316,4 +361,9 @@ export type Track = {
     stemSetId?: string;
     reviewedAt?: string;
   };
+  // 0728G_MUSIC_Fast_Breaks_Identification — never populated by any detector
+  // or analyzer pass; only ever written by an explicit user decision in the
+  // Review Genre Family dialog (or, in principle, a future trusted import
+  // path). Absent entirely = "unreviewed", not "not fast_breaks".
+  genreClassification?: TrackGenreClassification;
 };

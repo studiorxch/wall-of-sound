@@ -21,6 +21,7 @@ PROJECTS_ROOT="/Users/studio/Projects"
 WOS_ROOT="$PROJECTS_ROOT/wall-of-sound"
 MUSIC_ROOT="$WOS_ROOT/music"
 COLORLAB_ROOT="$WOS_ROOT/colorlab"
+ORBITAL_ROOT="$WOS_ROOT/studiorich-orbital"
 LIBRARY_MUSIC_ROOT="$WOS_ROOT/library/music"
 
 GOOGLE_SHARE="/Users/studio/Library/CloudStorage/GoogleDrive-richardjlau@gmail.com/My Drive/chatGPT-share"
@@ -138,6 +139,7 @@ sync_promoter_bidirectional() {
   local source="$1"
   local dest="$2"
   local label="$3"
+  local unison_status
 
   assert_unison_available
 
@@ -148,6 +150,7 @@ sync_promoter_bidirectional() {
   log "Local: $source"
   log "Cloud: $dest"
 
+  set +e
   unison "$source" "$dest" \
     -auto \
     -batch \
@@ -159,8 +162,14 @@ sync_promoter_bidirectional() {
     -ignore "Name .env.*" \
     -ignore "Name *.log" \
     >> "$SYNC_LOG" 2>&1
+  unison_status=$?
+  set -e
 
-  log "Done bidirectional sync: $label"
+  if [[ "$unison_status" -eq 0 ]]; then
+    log "Done bidirectional sync: $label"
+  else
+    log "Unison completed with warnings/conflicts for $label. Continuing sync. Exit code: $unison_status"
+  fi
 }
 
 sync_library_music() {
@@ -259,6 +268,7 @@ run_sync() {
   assert_dir_exists "$WOS_ROOT" "WOS root"
   assert_dir_exists "$MUSIC_ROOT" "MUSIC root"
   assert_dir_exists "$COLORLAB_ROOT" "ColorLab root"
+  assert_dir_exists "$ORBITAL_ROOT" "StudioRich Orbital root"
   assert_dir_exists "$LIBRARY_MUSIC_ROOT" "Library music root"
 
   # WOS source syncing
@@ -321,6 +331,40 @@ run_sync() {
     "$GOOGLE_SHARE/COLORLAB/SOURCE" \
     "ColorLab source files" \
     "${colorlab_files[@]}"
+
+
+ # STUDIORICH ORBITAL source syncing
+sync_folder "$ORBITAL_ROOT/app" "$GOOGLE_SHARE/STUDIORICH-ORBITAL/SOURCE/app" "StudioRich Orbital app"
+sync_folder "$ORBITAL_ROOT/db" "$GOOGLE_SHARE/STUDIORICH-ORBITAL/SOURCE/db" "StudioRich Orbital db"
+sync_folder "$ORBITAL_ROOT/drizzle" "$GOOGLE_SHARE/STUDIORICH-ORBITAL/SOURCE/drizzle" "StudioRich Orbital drizzle"
+sync_folder "$ORBITAL_ROOT/examples" "$GOOGLE_SHARE/STUDIORICH-ORBITAL/SOURCE/examples" "StudioRich Orbital examples"
+sync_folder "$ORBITAL_ROOT/public" "$GOOGLE_SHARE/STUDIORICH-ORBITAL/SOURCE/public" "StudioRich Orbital public assets"
+sync_folder "$ORBITAL_ROOT/scripts" "$GOOGLE_SHARE/STUDIORICH-ORBITAL/SOURCE/scripts" "StudioRich Orbital scripts"
+sync_folder "$ORBITAL_ROOT/tests" "$GOOGLE_SHARE/STUDIORICH-ORBITAL/SOURCE/tests" "StudioRich Orbital tests"
+sync_folder "$ORBITAL_ROOT/worker" "$GOOGLE_SHARE/STUDIORICH-ORBITAL/SOURCE/worker" "StudioRich Orbital worker"
+
+local orbital_files=(
+  ".gitignore"
+  ".npmrc"
+  ".nvmrc"
+  "drizzle.config.ts"
+  "eslint.config.mjs"
+  "next.config.ts"
+  "package.json"
+  "package-lock.json"
+  "postcss.config.mjs"
+  "README.md"
+  "tsconfig.json"
+  "vite.config.ts"
+)
+
+  sync_file_list \
+    "$ORBITAL_ROOT" \
+    "$GOOGLE_SHARE/STUDIORICH-ORBITAL/SOURCE" \
+    "StudioRich Orbital source files" \
+    "${orbital_files[@]}"
+
+
 
   log "All selected folders synced to Google Drive"
 }

@@ -153,6 +153,17 @@
         if (pid === DEFAULT_PALETTE_ID) return;
         _palettes[pid] = _migrateAgainst(records[pid], _palettes[DEFAULT_PALETTE_ID]);
       });
+      // A property edit (not an activate/preview switch) on the palette this
+      // tab is currently showing must still repaint this tab's own map —
+      // same condition setPropertyValue() uses locally. Without this, only
+      // switching which palette is active re-applies; editing a value on the
+      // palette that's ALREADY active/previewed here silently no-ops until
+      // the next activate, even though the edit is visible in the Library
+      // that made it.
+      var liveId = _previewId != null ? _previewId : _activeId;
+      if (Object.prototype.hasOwnProperty.call(records, liveId) && _palettes[liveId]) {
+        _applyValues(_palettes[liveId].values);
+      }
       _notify();
     }
   }

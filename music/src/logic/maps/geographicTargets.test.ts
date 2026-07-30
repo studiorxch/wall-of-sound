@@ -10,6 +10,7 @@ function rec(
     sourceObject: "",
     sourceProperty: "",
     currentValue: "#000000",
+    valueKind: "solid",
     ...partial,
   } as RegistryRecord;
 }
@@ -75,6 +76,32 @@ describe("buildGeographicTargets", () => {
     const registry = [rec({ id: "mapbox.landuse.fill-color", group: "Land", source: "mapbox-style", sourceObject: "landuse", sourceProperty: "fill-color" })];
     const targets = buildGeographicTargets(registry, { "mapbox.landuse.fill-color": "#161b1d" }, null);
     expect(targets[0].isCustomized).toBe(false);
+  });
+
+  it("consolidates a pattern-bearing layer's color + opacity into one target, tagging the opacity field's valueKind", () => {
+    const registry = [
+      rec({ id: "mapbox.road-street-navigation.line-color", group: "Roads", source: "mapbox-style", sourceObject: "road-street-navigation", sourceProperty: "line-color" }),
+      rec({ id: "mapbox-opacity.road-street-navigation.line-opacity", group: "Roads", source: "mapbox-style", sourceObject: "road-street-navigation", sourceProperty: "line-opacity", valueKind: "opacity" }),
+    ];
+    const values = { "mapbox.road-street-navigation.line-color": "#2fb4e4", "mapbox-opacity.road-street-navigation.line-opacity": "0.55" };
+    const targets = buildGeographicTargets(registry, values, null);
+    expect(targets).toHaveLength(1);
+    expect(targets[0].colorFields.map((f) => f.roleLabel)).toEqual(["Color", "Opacity"]);
+    expect(targets[0].colorFields[1].valueKind).toBe("opacity");
+    expect(targets[0].colorFields[1].value).toBe("0.55");
+    expect(targets[0].colorFields[0].valueKind).toBe("color");
+  });
+
+  it("builds one target per overlay object, tagging its field as boolean", () => {
+    const registry = [
+      rec({ id: "overlay.atmosphere-composite.enabled", group: "Overlay", source: "overlay", sourceObject: "AtmosphereComposite", sourceProperty: "enabled", label: "Atmosphere Composite", valueKind: "boolean" }),
+    ];
+    const targets = buildGeographicTargets(registry, { "overlay.atmosphere-composite.enabled": "true" }, null);
+    expect(targets).toHaveLength(1);
+    expect(targets[0].sourceType).toBe("overlay");
+    expect(targets[0].name).toBe("Atmosphere Composite");
+    expect(targets[0].colorFields[0].valueKind).toBe("boolean");
+    expect(targets[0].colorFields[0].value).toBe("true");
   });
 });
 

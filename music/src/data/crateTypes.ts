@@ -5,6 +5,11 @@ export type CrateFilters = {
   moodTags: string[];
   groupings: string[];
   genres: string[];
+  // 0728G_MUSIC_Fast_Breaks_Identification — matches Track.genreClassification.
+  // primaryGenreFamily, but ONLY when reviewStatus is "confirmed" (see
+  // resolveCrate.ts) — a "suggested" candidate is never trusted as real
+  // filter data. Optional so existing persisted crates need no migration.
+  genreFamilies?: string[];
   minRating?: number;
   playableOnly?: boolean;
   matchMode: CrateMatchMode;

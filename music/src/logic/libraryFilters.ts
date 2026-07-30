@@ -68,10 +68,16 @@ export function filterTracksByLibraryFilters(
     if (groupingLower) {
       if ((t.grouping ?? "").toLowerCase() !== groupingLower) return false;
     }
-    // Genre — matches an exact normalized canonical Genre-index token
+    // Genre — matches an exact normalized canonical Genre-index token, OR
+    // (0728G_MUSIC_Fast_Breaks_Identification) a CONFIRMED genre family — a
+    // merely "suggested" candidate is never trusted as real filter data.
+    // This lets "fast_breaks" work as a Catalog filter value even for a
+    // track whose raw genre text doesn't literally say so.
     if (genreLower) {
       const trackGenres = normalizeTrackGenreIndexTokens(t);
-      if (!trackGenres.some((g) => g === genreLower)) return false;
+      const familyMatch = t.genreClassification?.reviewStatus === "confirmed"
+        && (t.genreClassification.primaryGenreFamily ?? "").toLowerCase() === genreLower;
+      if (!trackGenres.some((g) => g === genreLower) && !familyMatch) return false;
     }
     // Source owner
     if (ownerFilter) {

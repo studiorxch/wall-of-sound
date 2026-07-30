@@ -22,12 +22,20 @@ export type IntakeItemStatus =
   | "pending"
   | "scanning"
   | "ready"
-  | "warning"
+  | "needs_review"
+  | "duplicate"
   | "blocked"
-  | "committed"
-  | "skipped";
+  | "committed";
 
 export type IntakeDuplicateStatus = "exact_duplicate" | "possible_duplicate" | "not_duplicate";
+
+// 0728_MUSIC_Import_Intake_Simplification — the user's own explicit decision
+// on a "duplicate"-classified row. "import_separately" is the one thing that
+// can override an otherwise-excluded duplicate back into an importable
+// status (see resolveIntakeStatus in importIntake.ts); "keep_existing" is
+// purely a UI acknowledgment — a duplicate row is already excluded from
+// "Import All Ready" without it.
+export type IntakeDuplicateResolution = "keep_existing" | "import_separately";
 
 export type MusicImportIntakeItem = {
   id: string;
@@ -47,9 +55,15 @@ export type MusicImportIntakeItem = {
   playbackIssue?: TrackPlaybackIssue;
   duplicateStatus: IntakeDuplicateStatus;
   duplicateOfTrackId?: string;
-  assignedCrateIds: string[];
+  duplicateResolution?: IntakeDuplicateResolution;
   warnings: string[];
   errors: string[];
+  // The library snapshot detectDuplicate was originally run against, carried
+  // on the item (not a new App.tsx prop) so an in-panel title/artist edit
+  // can rerun the SAME resolver without a second detection path or any
+  // change to how the panel is invoked. One shared array reference across
+  // every item in a batch — not a per-item copy.
+  existingTracks: import("./trackTypes").Track[];
   // Carries the actual Track object built by importAudioFiles() so commit
   // doesn't have to re-derive it — the intake item is a review wrapper
   // around an already-uploaded, already-normalized Track.

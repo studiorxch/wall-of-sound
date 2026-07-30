@@ -25,6 +25,12 @@ export interface BpmDetectionConfidence {
 
 export interface BpmDetectionResult {
   bpm?: number;
+  // 0728D_MUSIC_Catalog_Header_And_BPM_Candidate_Review — the detector's own
+  // best candidate BEFORE the confidence gate below decides whether `bpm`
+  // (the canonical-eligible field) gets to hold it. Populated whenever the
+  // detector found ANY range-valid periodicity, even one confidence rejects
+  // — review-only evidence, never itself written to Track.bpm.
+  candidateBpm?: number;
   /** @deprecated use confidence.overallConfidence — kept for back-compat call sites. */
   confidence: number;
   confidenceDetail: BpmDetectionConfidence;
@@ -61,6 +67,14 @@ export interface KeyDetectionResult {
   tonic?: string;
   mode?: "major" | "minor";
   camelotKey?: string;
+  // 0728D_MUSIC_Catalog_Header_And_BPM_Candidate_Review — the detector's own
+  // best-scoring candidate BEFORE the confidence gate decides whether
+  // tonic/mode/camelotKey above get to hold it. Populated whenever chroma
+  // extraction found ANY candidate, even one confidence rejects —
+  // review-only evidence, never itself written to Track.camelotKey.
+  candidateTonic?: string;
+  candidateMode?: "major" | "minor";
+  candidateCamelotKey?: string;
   /** @deprecated use confidence.overallConfidence — kept for back-compat call sites. */
   confidence: number;
   confidenceDetail: KeyDetectionConfidence;

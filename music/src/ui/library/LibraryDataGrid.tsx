@@ -22,9 +22,15 @@
 // on it.
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { Track, TrackRating, TrackArchiveStatus } from "../../data/trackTypes";
 import type { PlaylistRecord, TrackPlaybackIssue } from "../../data/playProjectTypes";
+import type { CrateRecord } from "../../data/crateTypes";
+import type { RadioInboxItem } from "../../data/radioInboxTypes";
+import type { RadioPlaylist } from "../../data/radioPlaylistTypes";
+import type { RadioBank } from "../../data/radioBankTypes";
 import type { ExportHealthReport } from "../../logic/exportHealth";
+import { findTrackReferences } from "../../logic/library/trackReferenceReport";
 import type { LibraryGridPreferences, LibraryColumnId, LibrarySourceKey } from "../../data/libraryGridTypes";
 import { filterTracksByLibraryFilters, buildFilterOptions, type LibraryTrackFilters } from "../../logic/libraryFilters";
 import { normalizeTrackGenreTokens } from "../../logic/genreTaxonomy";
@@ -47,6 +53,7 @@ import { LibraryColumnsPanel } from "./LibraryColumnsPanel";
 import { LibraryRemoveConfirmDialog } from "./LibraryRemoveConfirmDialog";
 import { LibraryCommentsCell } from "./LibraryCommentsCell";
 import { LibraryStemBadge, type StemBadgeState } from "./libraryStemBadge";
+import { reviewBpmField, reviewKeyField } from "../../logic/dspFeatureExtraction";
 import { selectVisibleLibraryTracks } from "../../logic/library/libraryVisibleTracks";
 import { resolveTrackAudioIdentifier } from "../../logic/stems/stemClient";
 
@@ -118,6 +125,7 @@ interface Props {
   onBulkSetArchiveStatus?: (trackIds: string[], status: TrackArchiveStatus) => void;
   onAnalyzeSelected?: (trackIds: string[]) => void;
   onReanalyze?: (trackIds: string[]) => void;
+  onAnalyzeMissing?: (trackIds: string[]) => void;
   musicPlaylists?: PlaylistRecord[];
   onBulkAddTracksToPlaylist?: (playlistId: string, trackIds: string[]) => void;
   onBulkCreatePlaylistFromTracks?: (trackIds: string[]) => void;
@@ -135,6 +143,12 @@ interface Props {
   onUpdateLibraryGridPreferences: (next: LibraryGridPreferences) => void;
   // 0722C_MUSIC_Production_Stem_Export
   onOpenStems?: (trackId: string) => void;
+  // 0728E_MUSIC_Catalog_Single_Track_Remove — read-only, for the single-
+  // track removal confirmation's reference report only; never mutated here.
+  crates?: CrateRecord[];
+  radioInboxItems?: RadioInboxItem[];
+  radioPlaylists?: RadioPlaylist[];
+  radioBanks?: RadioBank[];
 }
 
 export function LibraryDataGrid(props: Props) {
@@ -142,12 +156,13 @@ export function LibraryDataGrid(props: Props) {
     sourceKey, libraryLabel, unitLabel, tracks, excludedTrackIds, lockedTrackIds, playbackErrors, trackPlaybackIssues, exportReport,
     onExclude, onRestore, onRemoveTracks, onRateTrack, onAuditionTrack, auditionTrackId, playbackStatus,
     onPauseTrack, onResumeTrack, onBulkUpdate, onCreateLibraryGroup, onGenerateMoodSuggestions, onApplyMoodSuggestions,
-    onBulkSetArchiveStatus, onAnalyzeSelected, onReanalyze,
+    onBulkSetArchiveStatus, onAnalyzeSelected, onReanalyze, onAnalyzeMissing,
     musicPlaylists, onBulkAddTracksToPlaylist, onBulkCreatePlaylistFromTracks,
     samplerBanks, loadedSamplerBankId, onAddTracksToSamplerBank, onCreateSamplerBankFromTracks,
     onSendTrackToRadio, onRecheckPlaybackIssue, onClearPlaybackIssue, onBulkRecheckCodecIssues, bulkRechecking,
     onInspect, onOpenStems,
     libraryGridPreferences: prefs, onUpdateLibraryGridPreferences: updatePrefs,
+    crates, radioInboxItems, radioPlaylists, radioBanks,
   } = props;
 
   // 0722C_MUSIC_Production_Stem_Export — a migrated legacy derived-stem
@@ -157,8 +172,37 @@ export function LibraryDataGrid(props: Props) {
 
   const [filters, setFilters] = useState<LibraryTrackFilters>({});
   const [selection, setSelection] = useState<LibrarySelectionState>(emptyLibrarySelectionState());
+  // 0728C_MUSIC_Selection_Dock_Positioning — LibraryActionBar renders into
+  // this stable App-shell sibling (looked up post-mount, not during render,
+  // so it's never queried before React has committed it) instead of inline
+  // inside this scrolling grid, so the bar stays visible regardless of
+  // Catalog scroll position/length. Falls back to the old inline render if
+  // the anchor is ever absent — defensive, not the expected path.
+  const [selectionDockAnchor, setSelectionDockAnchor] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    setSelectionDockAnchor(document.getElementById("selection-dock-root"));
+  }, []);
   const [showColumnsPanel, setShowColumnsPanel] = useState(false);
   const [removeConfirmIds, setRemoveConfirmIds] = useState<string[] | null>(null);
+  // 0728E_MUSIC_Catalog_Single_Track_Remove — one row's ••• menu open at a
+  // time; mirrors LibraryActionBar's own outside-click/Escape pattern.
+  const [openRowMenuId, setOpenRowMenuId] = useState<string | null>(null);
+  const rowMenuRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!openRowMenuId) return;
+    function handle(e: MouseEvent) {
+      if (rowMenuRef.current && !rowMenuRef.current.contains(e.target as Node)) setOpenRowMenuId(null);
+    }
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpenRowMenuId(null);
+    }
+    document.addEventListener("mousedown", handle);
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("mousedown", handle);
+      document.removeEventListener("keydown", handleKey);
+    };
+  }, [openRowMenuId]);
   const [editingCommentTrackId, setEditingCommentTrackId] = useState<string | null>(null);
   const [stemBadges, setStemBadges] = useState<Record<string, StemBadgeState>>({});
   // "Has Stems" filter — CURRENT sets only, never outdated/orphaned/
@@ -361,13 +405,25 @@ export function LibraryDataGrid(props: Props) {
     ? `${filtered.length} of ${visibleTracks.length} ${unitLabel}`
     : `${visibleTracks.length} ${unitLabel}`;
 
+  // 0728E_MUSIC_Catalog_Single_Track_Remove — computed only while the
+  // dialog is open and only for the exactly-one-track case, regardless of
+  // whether that single id arrived via a row's own Remove action, the
+  // Delete/Backspace shortcut, or a 1-track bulk selection; N>1 stays the
+  // existing bare count message, unchanged.
+  const singleRemoveTrack = removeConfirmIds?.length === 1 ? tracksById.get(removeConfirmIds[0]) : undefined;
+  const singleRemoveReferences = singleRemoveTrack
+    ? findTrackReferences(singleRemoveTrack.trackId, { crates, libraryTracks: tracks, musicPlaylists, radioInboxItems, radioPlaylists, radioBanks })
+    : undefined;
+
   return (
-    <div>
+    <div className="cat-grid-page-root">
       {removeConfirmIds && (
         <LibraryRemoveConfirmDialog
           count={removeConfirmIds.length}
           libraryLabel={libraryLabel}
           unitLabel={unitLabel}
+          trackTitle={singleRemoveTrack?.title}
+          references={singleRemoveReferences}
           onConfirm={() => {
             onRemoveTracks(removeConfirmIds);
             setRemoveConfirmIds(null);
@@ -439,33 +495,43 @@ export function LibraryDataGrid(props: Props) {
         </div>
       </div>
 
-      {selection.selectedIds.size > 0 && (
-        <LibraryActionBar
-          selectedTracks={selectedTracks}
-          trackPlaybackIssues={trackPlaybackIssues}
-          onClear={handleClearSelection}
-          onBulkUpdate={onBulkUpdate}
-          onCreateLibraryGroup={onCreateLibraryGroup}
-          onGenerateMoodSuggestions={onGenerateMoodSuggestions}
-          onApplyMoodSuggestions={onApplyMoodSuggestions}
-          onBulkSetArchiveStatus={onBulkSetArchiveStatus}
-          onAnalyzeSelected={onAnalyzeSelected}
-          onReanalyze={onReanalyze}
-          musicPlaylists={musicPlaylists}
-          onBulkAddTracksToPlaylist={onBulkAddTracksToPlaylist}
-          onBulkCreatePlaylistFromTracks={onBulkCreatePlaylistFromTracks}
-          samplerBanks={samplerBanks}
-          loadedSamplerBankId={loadedSamplerBankId}
-          onAddTracksToSamplerBank={onAddTracksToSamplerBank}
-          onCreateSamplerBankFromTracks={onCreateSamplerBankFromTracks}
-          onSendTrackToRadio={onSendTrackToRadio}
-          onBulkRecheckCodecIssues={onBulkRecheckCodecIssues}
-          bulkRechecking={bulkRechecking}
-          onExportPrivateMetadata={handleExportPrivateMetadata}
-          removeLabel={`Remove from ${libraryLabel}…`}
-          onRequestRemove={() => setRemoveConfirmIds([...selection.selectedIds])}
-        />
-      )}
+      {selection.selectedIds.size > 0 && (() => {
+        const bar = (
+          <LibraryActionBar
+            selectedTracks={selectedTracks}
+            trackPlaybackIssues={trackPlaybackIssues}
+            onClear={handleClearSelection}
+            onBulkUpdate={onBulkUpdate}
+            onCreateLibraryGroup={onCreateLibraryGroup}
+            onGenerateMoodSuggestions={onGenerateMoodSuggestions}
+            onApplyMoodSuggestions={onApplyMoodSuggestions}
+            onBulkSetArchiveStatus={onBulkSetArchiveStatus}
+            onAnalyzeSelected={onAnalyzeSelected}
+            onReanalyze={onReanalyze}
+            onAnalyzeMissing={onAnalyzeMissing}
+            musicPlaylists={musicPlaylists}
+            onBulkAddTracksToPlaylist={onBulkAddTracksToPlaylist}
+            onBulkCreatePlaylistFromTracks={onBulkCreatePlaylistFromTracks}
+            samplerBanks={samplerBanks}
+            loadedSamplerBankId={loadedSamplerBankId}
+            onAddTracksToSamplerBank={onAddTracksToSamplerBank}
+            onCreateSamplerBankFromTracks={onCreateSamplerBankFromTracks}
+            onSendTrackToRadio={onSendTrackToRadio}
+            onBulkRecheckCodecIssues={onBulkRecheckCodecIssues}
+            bulkRechecking={bulkRechecking}
+            onExportPrivateMetadata={handleExportPrivateMetadata}
+            removeLabel={`Remove from ${libraryLabel}…`}
+            onRequestRemove={() => setRemoveConfirmIds([...selection.selectedIds])}
+            showGenreFamilyReview={sourceKey === "studiorich"}
+            onAuditionTrack={onAuditionTrack}
+            auditionTrackId={auditionTrackId}
+            playbackStatus={playbackStatus}
+            onPauseTrack={onPauseTrack}
+            onResumeTrack={onResumeTrack}
+          />
+        );
+        return selectionDockAnchor ? createPortal(bar, selectionDockAnchor) : bar;
+      })()}
 
       <div className="cat-tracks-label">TRACKS</div>
       <div
@@ -487,7 +553,7 @@ export function LibraryDataGrid(props: Props) {
           </colgroup>
           <thead>
             <tr>
-              <th className="col-check cat-col-frozen cat-col-frozen--select">
+              <th className="col-check cat-col-frozen cat-col-frozen--select cat-col-header">
                 {/* 0722C_MUSIC_Production_Stem_Export — the former header
                     checkbox is replaced by this "S" badge column header;
                     row/shift/alt-click selection never depended on the
@@ -514,7 +580,7 @@ export function LibraryDataGrid(props: Props) {
                 return (
                   <th
                     key={id}
-                    className={isFrozenTitle ? "cat-col-frozen cat-col-frozen--title" : undefined}
+                    className={isFrozenTitle ? "cat-col-frozen cat-col-frozen--title cat-col-header" : "cat-col-header"}
                     aria-sort={singleSort?.columnId === id ? (singleSort.direction === "asc" ? "ascending" : "descending") : undefined}
                   >
                     <span
@@ -545,7 +611,7 @@ export function LibraryDataGrid(props: Props) {
                   </th>
                 );
               })}
-              <th>Actions</th>
+              <th className="cat-col-header">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -589,9 +655,31 @@ export function LibraryDataGrid(props: Props) {
                     </td>
                   ))}
                   <td className="col-actions" onClick={(e) => e.stopPropagation()}>
-                    {excluded
-                      ? <button className="tb-btn sm" onClick={() => onRestore(t.trackId)}>Restore</button>
-                      : <button className="tb-btn sm" onClick={() => onExclude(t.trackId)}>Excl.</button>}
+                    {/* 0728E_MUSIC_Catalog_Single_Track_Remove — one
+                        compact ••• menu replaces the old lone Excl./Restore
+                        button, rather than adding a second permanent
+                        control. Exclude/Restore stays exactly one click
+                        (same handlers as before); Remove routes through the
+                        SAME removeConfirmIds state + LibraryRemoveConfirmDialog
+                        + onRemoveTracks the selection dock's bulk "Remove
+                        from…" action already uses — no second deletion
+                        path. */}
+                    <div className="cat-row-menu-wrap" ref={openRowMenuId === t.trackId ? rowMenuRef : undefined} style={{ position: "relative", display: "inline-block" }}>
+                      <button
+                        className="tb-btn sm"
+                        onClick={() => setOpenRowMenuId((v) => (v === t.trackId ? null : t.trackId))}
+                        aria-haspopup="true"
+                        aria-expanded={openRowMenuId === t.trackId}
+                      >•••</button>
+                      {openRowMenuId === t.trackId && (
+                        <div className="cat-row-menu">
+                          {excluded
+                            ? <button className="tb-btn sm" onClick={() => { onRestore(t.trackId); setOpenRowMenuId(null); }}>Restore</button>
+                            : <button className="tb-btn sm" onClick={() => { onExclude(t.trackId); setOpenRowMenuId(null); }}>Exclude from analysis</button>}
+                          <button className="tb-btn sm remove-btn" onClick={() => { setRemoveConfirmIds([t.trackId]); setOpenRowMenuId(null); }}>Remove from {libraryLabel}…</button>
+                        </div>
+                      )}
+                    </div>
                     {playbackErrors.has(t.trackId) && (
                       <>
                         {onRecheckPlaybackIssue && <button className="tb-btn sm" onClick={() => onRecheckPlaybackIssue(t.trackId)} title="Re-validate this file">Recheck</button>}
@@ -669,8 +757,22 @@ function renderLibraryCell(
       : <span className="dim">—</span>;
     case "grouping": return t.grouping || <span className="dim">—</span>;
     case "genre": return normalizeTrackGenreTokens(t)[0] || <span className="dim">—</span>;
-    case "bpm": return t.bpm && t.bpm > 0 ? t.bpm : "—";
-    case "key": return t.camelotKey ?? "—";
+    case "bpm": {
+      // 0727A/0728B — single shared classification (reviewBpmField) also
+      // used by the Review BPM & Key dialog, so the two never disagree.
+      const review = reviewBpmField(t);
+      if (review.state === "resolved") return review.canonicalBpm;
+      return review.state === "no_confident_result" || review.state === "low_confidence_estimate"
+        ? <>— <span className="est-tag" title={review.reason ?? undefined}>?</span></>
+        : "—";
+    }
+    case "key": {
+      const review = reviewKeyField(t);
+      if (review.state === "resolved") return review.canonicalKey;
+      return review.state === "no_confident_result" || review.state === "low_confidence_estimate"
+        ? <>— <span className="est-tag" title={review.reason ?? undefined}>?</span></>
+        : "—";
+    }
     case "energy": return (
       <>{formatNumber(t.energy, 2, "—")}{t.energySource === "estimated" && <span className="est-tag" title="Estimated">~</span>}</>
     );

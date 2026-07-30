@@ -9,6 +9,12 @@
 // consolidate into a single target the same way, since their sub-properties
 // are all facets of one conceptual object, not independent records.
 //
+// 0729_MAPS_Visual_Property_Authority_Audit extended this to a fourth source
+// type, "overlay" (runtime canvas on/off toggles like AtmosphereComposite —
+// not a Mapbox paint property at all), and to non-color field kinds
+// (opacity, boolean) alongside the original color fields — see
+// GeographicField.valueKind.
+//
 // Reads only what the existing registry/bridge already expose — no new Wall
 // authority capability, no fabricated fields. "Customized" is computed by
 // comparing each field's current value against Default's value for the same
@@ -16,11 +22,14 @@
 
 import type { RegistryRecord } from "../../maps/wallPaletteBridge";
 
-export type GeographicColorField = {
+export type GeographicFieldKind = "color" | "opacity" | "boolean";
+
+export type GeographicField = {
   propId: string;
   roleLabel: string;
   value: string;
   isExpression: boolean;
+  valueKind: GeographicFieldKind;
 };
 
 export type GeographicLayerType = "fill" | "line" | "circle" | "symbol" | "background" | undefined;
@@ -29,9 +38,9 @@ export type GeographicTarget = {
   targetId: string;
   name: string;
   category: string;
-  sourceType: "mapbox-style" | "route" | "vehicle" | "hud";
+  sourceType: "mapbox-style" | "route" | "vehicle" | "hud" | "overlay";
   layerType: GeographicLayerType;
-  colorFields: GeographicColorField[];
+  colorFields: GeographicField[];
   hasExpression: boolean;
   isCustomized: boolean;
 };
@@ -40,12 +49,21 @@ function isExpressionValue(value: unknown): boolean {
   return typeof value !== "string";
 }
 
+function toFieldKind(registryValueKind: RegistryRecord["valueKind"]): GeographicFieldKind {
+  if (registryValueKind === "opacity") return "opacity";
+  if (registryValueKind === "boolean") return "boolean";
+  return "color";
+}
+
 const FILL_SUFFIX_ROLE: Record<string, string> = {
   "fill-color": "Fill",
   "fill-outline-color": "Outline",
+  "fill-opacity": "Opacity",
   "line-color": "Color",
+  "line-opacity": "Opacity",
   "circle-color": "Fill",
   "circle-stroke-color": "Stroke",
+  "circle-opacity": "Opacity",
   "text-color": "Text",
   "text-halo-color": "Halo",
   "icon-color": "Icon",
@@ -65,27 +83,37 @@ function titleCase(s: string): string {
   return s.replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()).trim();
 }
 
+// "AtmosphereComposite" -> "Atmosphere Composite" — overlay sourceObjects
+// are PascalCase module names (SBE.AtmosphereComposite), not hyphenated
+// layer ids, so titleCase() alone (which only splits on -/_) leaves them
+// unchanged; this inserts the missing word boundaries first.
+function pascalToTitleCase(s: string): string {
+  return titleCase(s.replace(/([a-z0-9])([A-Z])/g, "$1 $2"));
+}
+
 export function buildGeographicTargets(
   registry: RegistryRecord[],
   currentValues: Record<string, string>,
   defaultValues: Record<string, string> | null,
 ): GeographicTarget[] {
   const mapboxByObject = new Map<string, RegistryRecord[]>();
-  const bySource: Record<"route" | "vehicle" | "hud", RegistryRecord[]> = { route: [], vehicle: [], hud: [] };
+  const bySource: Record<"route" | "vehicle" | "hud" | "overlay", RegistryRecord[]> = {
+    route: [], vehicle: [], hud: [], overlay: [],
+  };
 
   for (const rec of registry) {
     if (rec.source === "mapbox-style") {
       const key = rec.sourceObject ?? rec.id;
       if (!mapboxByObject.has(key)) mapboxByObject.set(key, []);
       mapboxByObject.get(key)!.push(rec);
-    } else if (rec.source === "route" || rec.source === "vehicle" || rec.source === "hud") {
+    } else if (rec.source === "route" || rec.source === "vehicle" || rec.source === "hud" || rec.source === "overlay") {
       bySource[rec.source].push(rec);
     }
   }
 
   const targets: GeographicTarget[] = [];
 
-  function fieldsFor(records: RegistryRecord[], roleFor: (rec: RegistryRecord) => string): GeographicColorField[] {
+  function fieldsFor(records: RegistryRecord[], roleFor: (rec: RegistryRecord) => string): GeographicField[] {
     return records.map((rec) => {
       // currentValues is typed Record<string,string>, but a property whose
       // Mapbox paint value is an expression (e.g. hillshade's zoom-stop
@@ -94,7 +122,13 @@ export function buildGeographicTargets(
       // "Expression" warning (below) silently disappears.
       const raw = Object.prototype.hasOwnProperty.call(currentValues, rec.id) ? currentValues[rec.id] : rec.currentValue;
       const value = raw as unknown as string;
-      return { propId: rec.id, roleLabel: roleFor(rec), value, isExpression: isExpressionValue(value) };
+      return {
+        propId: rec.id,
+        roleLabel: roleFor(rec),
+        value,
+        isExpression: isExpressionValue(value),
+        valueKind: toFieldKind(rec.valueKind),
+      };
     });
   }
 
@@ -156,11 +190,34 @@ export function buildGeographicTargets(
     });
   }
 
+  // One target per overlay object (currently just AtmosphereComposite) —
+  // grouped by sourceObject like mapbox layers, since a future second
+  // overlay toggle shouldn't collapse into the same target.
+  const overlayByObject = new Map<string, RegistryRecord[]>();
+  for (const rec of bySource.overlay) {
+    const key = rec.sourceObject ?? rec.id;
+    if (!overlayByObject.has(key)) overlayByObject.set(key, []);
+    overlayByObject.get(key)!.push(rec);
+  }
+  for (const [objectId, records] of overlayByObject) {
+    const colorFields = fieldsFor(records, (rec) => titleCase(rec.sourceProperty));
+    targets.push({
+      targetId: `overlay:${objectId}`,
+      name: pascalToTitleCase(objectId),
+      category: records[0].group,
+      sourceType: "overlay",
+      layerType: undefined,
+      colorFields,
+      hasExpression: false,
+      isCustomized: defaultValues != null && colorFields.some((f) => defaultValues[f.propId] !== f.value),
+    });
+  }
+
   return targets;
 }
 
 export const GEOGRAPHIC_CATEGORY_ORDER = [
-  "Water", "Land", "Roads", "Labels", "Boundaries", "Base Map", "Route", "Vehicles", "HUD",
+  "Water", "Land", "Roads", "Labels", "Boundaries", "Base Map", "Route", "Vehicles", "HUD", "Overlay",
 ];
 
 export function sortTargetsByCategory(targets: GeographicTarget[]): GeographicTarget[] {

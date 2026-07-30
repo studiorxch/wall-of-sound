@@ -15,6 +15,11 @@
          before the React bundle so window.SBE is populated first;
          music/src/maps/wallPaletteBridge.ts wraps window.SBE.MapsPaletteAuthority.
          Nothing here is a second map runtime or a second palette authority. -->
+    <!-- AtmosphereComposite itself — mapsPaletteRegistry.js only discovers
+         the runtime overlay toggle when window.SBE.AtmosphereComposite is
+         present (see _discoverOverlays()). It defines functions only; it
+         does nothing until this page's own overlay toggle calls init(). -->
+    <script src="/wall-app/render/atmosphereComposite.js"></script>
     <script src="/wall-app/systems/presentation/mapsPaletteRegistry.js"></script>
     <script src="/wall-app/systems/presentation/mapsPaletteApplyAdapters.js"></script>
     <script src="/wall-app/systems/presentation/mapsPaletteSeeds.js"></script>

@@ -32,7 +32,7 @@ export function MapsGeographicGrid({ targets, selectedIds, focusedTargetId, onTo
               <input type="checkbox" checked={selected} onChange={() => onToggleSelect(t.targetId)} />
             </label>
             <div className="geo-card-swatches">
-              {t.colorFields.map((f) => (
+              {t.colorFields.filter((f) => f.valueKind === "color").map((f) => (
                 <span
                   key={f.propId}
                   className="geo-card-swatch"

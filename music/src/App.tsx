@@ -94,7 +94,7 @@ import { ImportIntakePanel } from "./ui/ImportIntakePanel";
 import { ImportAudioModal } from "./ui/ImportAudioModal";
 import { installMoodAnalyzerDebug } from "./logic/MoodAnalyzer";
 import { trackToAudioFeatures, auditTrackAnalysisFields } from "./logic/audioFeatureAdapter";
-import { analyzeTrackMood, analyzeAllMissingMoods } from "./logic/trackMoodAnalysis";
+import { analyzeTrackMood, analyzeAllMissingMoods, needsAnalysis as needsMoodAnalysis } from "./logic/trackMoodAnalysis";
 import { extractDspFeatures, analyzeTrackDspFeatures, analyzeMissingDspFeatures, auditDspAudioSources, requiresCanonicalAnalysis, type AnalyzeMissingDspDebugArg } from "./logic/dspFeatureExtraction";
 import { reanalyzeEntirePlaylist } from "./logic/playlistRepair/reanalyzePlaylist";
 import { buildDiagnostic, diagnoseFixture, summarizeCalibration, buildCalibrationReportMarkdown } from "./logic/beatMap/calibration/calibrationReport";
@@ -165,6 +165,7 @@ import { findOutgoingPlan } from "./audio/preparedPlaybackSession";
 import { useLoopAuditionController } from "./audio/useLoopAuditionController";
 import { LoopAuditionBar } from "./ui/player/LoopAuditionBar";
 import { buildSurfaceSnapshot } from "./audio/playbackAuthority";
+import { buildNowPlayingSnapshot, publishNowPlayingSnapshot } from "./runtime/nowPlayingBroadcastBridge";
 import "./styles.css";
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -2218,8 +2219,16 @@ export default function App() {
       .filter((t) => t.sourceOwner === "studiorich" || t.sourceOwner === "external")
       .map((t) => t.trackId);
     if (analyzableIds.length > 0) {
+      // Sequence: import commit → canonical DSP analysis → mechanical
+      // analysis. Mechanical role tagging (runMechanicalAnalysis) was never
+      // wired into this auto-analysis hook — newly imported tracks got BPM/
+      // key/energy/mood automatically but mechanicalMoodTags stayed empty
+      // until a manual "Analyze"/"Reanalyze" click. It's a synchronous,
+      // no-decode catalog-signal scorer (no separate loading state needed),
+      // so it runs once DSP finishes for these same tracks.
       void runCanonicalDspAnalysis(analyzableIds).then(({ completed, failed }) => {
         showNotify(`Import analysis complete — ${completed} ready, ${failed} failed.`);
+        runMechanicalAnalysis(analyzableIds);
       });
     }
   }
@@ -2551,7 +2560,9 @@ export default function App() {
   function handleBulkUpdateTracks(trackIds: string[], patch: Partial<Track>) {
     const idSet = new Set(trackIds);
     const rawPatch = patch as Record<string, unknown>;
-    const isMoodAdd = rawPatch["_bulkMoodMode"] === "add";
+    const moodMode = rawPatch["_bulkMoodMode"] as "add" | "remove" | undefined;
+    const isMoodAdd = moodMode === "add";
+    const isMoodRemove = moodMode === "remove";
     const genreMode = rawPatch["_bulkGenreMode"] as "add" | "remove" | "replace" | undefined;
     const incomingGenres = rawPatch["genres"] as string[] | undefined;
     const commentsMode = rawPatch["_bulkCommentsMode"] as BatchCommentMode | undefined;
@@ -2563,6 +2574,12 @@ export default function App() {
       let updated: Track = { ...t, ...safePatch };
       if (isMoodAdd && safePatch.moodTags) {
         updated.moodTags = [...new Set([...(t.moodTags ?? []), ...safePatch.moodTags])];
+      }
+      if (isMoodRemove && safePatch.moodTags) {
+        // Mirrors the genre-remove branch below: per-track filter against
+        // THAT track's own existing moodTags, never a flat overwrite.
+        const removeSet = new Set(safePatch.moodTags.map((m) => m.toLowerCase()));
+        updated.moodTags = (t.moodTags ?? []).filter((m) => !removeSet.has(m.toLowerCase()));
       }
       if (commentsMode) {
         // Mirrors _bulkGenreMode/_bulkMoodMode: the final notes value is
@@ -2642,8 +2659,72 @@ export default function App() {
     runMechanicalAnalysis(libraryTracksRef.current.map((t) => t.trackId));
   }
 
-  function handleReanalyze(trackIds: string[]) {
+  // "Reanalyze Selected" — reuses the two existing full-track analyzers
+  // verbatim (runCanonicalDspAnalysis: BPM/key/energy/mood/beat map/playback
+  // bounds; runMechanicalAnalysis: structural role tags), run in the same
+  // sequence as import-commit auto-analysis below. No new analyzer, no
+  // separate BPM-only/key-only action. Manual bpm/key values are protected
+  // by analyzeTrackDspFeatures' own existing bpmSource/keySource trust
+  // gate (classifyBpmTrust/classifyKeyTrust in dspFeatureExtraction.ts) —
+  // unchanged here.
+  async function handleReanalyze(trackIds: string[]) {
+    await runCanonicalDspAnalysis(trackIds);
     runMechanicalAnalysis(trackIds);
+  }
+
+  // 0728B_MUSIC_Catalog_Selection_Actions §Analyze Missing — unlike
+  // handleReanalyze (which unconditionally reruns both analyzers), this
+  // splits the selection across the THREE existing, independently-owned
+  // analyzer boundaries and only calls each with the subset it actually
+  // needs — no new analyzer, no blind full rerun:
+  //   - requiresCanonicalAnalysis(t): the same predicate "Analyze All
+  //     Missing"/the import-commit hook already use for DSP/bpm/key/energy
+  //     staleness, failure, and never-analyzed detection.
+  //   - needsMoodAnalysis(t) (trackMoodAnalysis.ts's own completeness rule,
+  //     exported unchanged) for a track whose DSP is ALREADY fine but whose
+  //     moods aren't — routed through the SAME analyzeTrackMood the
+  //     Analyzer Review surface's handleAnalyzerReviewBatchMood already
+  //     uses, not through the DSP pipeline (which would needlessly redecode
+  //     audio and touch bpm/key/energy for a mood-only gap).
+  //   - t.mechanicalAnalysisStatus == null: mechanicalMoodTags.length === 0
+  //     is NOT used here — analyzeMechanicalMoods (mechanicalMoodAnalyzer.ts)
+  //     can legitimately complete with zero confident roles, and only ever
+  //     stamps mechanicalAnalysisStatus ("partial"|"analyzed") once it has
+  //     actually run; the field's absence is the one reliable "never
+  //     attempted" signal the current data model provides. There is no
+  //     revision/version stamp for mechanical analysis, so a "stale mechanical
+  //     result" case cannot be detected with today's schema — disclosed
+  //     limitation, not fabricated staleness.
+  // Sequenced (mood, then await DSP, then mechanical) rather than fired
+  // together, so a track needing more than one analyzer never has one
+  // batch's stale in-memory read clobber another's just-written result.
+  async function handleAnalyzeMissingSelected(trackIds: string[]) {
+    const idSet = new Set(trackIds);
+    const tracks = libraryTracksRef.current.filter((t) => idSet.has(t.trackId));
+
+    const dspIds = tracks.filter((t) => requiresCanonicalAnalysis(t)).map((t) => t.trackId);
+    const dspIdSet = new Set(dspIds);
+    const moodOnlyIds = tracks
+      .filter((t) => !dspIdSet.has(t.trackId) && needsMoodAnalysis(t))
+      .map((t) => t.trackId);
+    const mechanicalIds = tracks.filter((t) => t.mechanicalAnalysisStatus == null).map((t) => t.trackId);
+
+    if (moodOnlyIds.length > 0) {
+      const moodIdSet = new Set(moodOnlyIds);
+      const next = libraryTracksRef.current.map((t) => (
+        moodIdSet.has(t.trackId) ? analyzeTrackMood(t, { force: false }).track : t
+      ));
+      libraryTracksRef.current = next;
+      setLibraryTracks(next);
+      savePlayProject(makeProj(playlistsRef.current, next));
+    }
+
+    if (dspIds.length > 0) await runCanonicalDspAnalysis(dspIds);
+    if (mechanicalIds.length > 0) runMechanicalAnalysis(mechanicalIds);
+
+    if (dspIds.length === 0 && moodOnlyIds.length === 0 && mechanicalIds.length === 0) {
+      showNotify("Nothing missing — selection already analyzed.");
+    }
   }
 
   function handleAnalyzeSource(owner: TrackSourceOwner) {
@@ -5548,6 +5629,26 @@ export default function App() {
     ? (tbm.get(playbackSurface.activeTrackId) ?? currentTrack)
     : currentTrack;
 
+  // HUD Recovery Addendum (0729C v1.1) — mirrors the same shared surface
+  // this component already treats as the one source of truth (see the
+  // comment above playbackSurface) to a same-origin channel canonical LIVE
+  // MAP can read, so its Now Playing HUD never drifts from what's actually
+  // playing. Runs regardless of workspaceMode — LIVE MAP is its own browser
+  // tab, not a view inside this app, so it must keep receiving updates no
+  // matter what's on screen here.
+  useEffect(() => {
+    publishNowPlayingSnapshot(
+      buildNowPlayingSnapshot(
+        effectiveCurrentTrack,
+        transportPositionSeconds,
+        transportDurationSeconds,
+        transportStatus === "playing",
+        transportStatus === "paused",
+        playbackSurface,
+      ),
+    );
+  }, [effectiveCurrentTrack, transportPositionSeconds, transportDurationSeconds, transportStatus, playbackSurface]);
+
   const playProject: PlayProject = makeProj(playlists, libraryTracks, excludedTrackIds, activePlaylistId);
   const isProjectDirty = exportedProjectHash !== null && stableProjectHash(playProject) !== exportedProjectHash;
 
@@ -6737,6 +6838,7 @@ export default function App() {
             onAnalyzeSelected={handleAnalyzeSelected}
             onAnalyzeLibrary={handleAnalyzeLibrary}
             onReanalyze={handleReanalyze}
+            onAnalyzeMissing={handleAnalyzeMissingSelected}
             analyzerJobs={analyzerJobs}
             sourcePools={sourcePools}
             onRenameSourcePool={handleRenameSourcePool}
@@ -6756,6 +6858,10 @@ export default function App() {
             onSendTrackToRadio={handleSendTrackToRadio}
             libraryGridPreferences={libraryGridPreferences}
             onUpdateLibraryGridPreferences={handleUpdateLibraryGridPreferences}
+            crates={crates}
+            radioInboxItems={radioInboxItems}
+            radioPlaylists={radioPlaylists}
+            radioBanks={radioBanks}
           />
           )}
           {viewMode === "playlist" && (
@@ -6806,6 +6912,16 @@ export default function App() {
           )}
         </div>{/* end workspace-right */}
       </div>}
+
+      {/* 0728C_MUSIC_Selection_Dock_Positioning — a stable sibling between the
+          scrolling .workspace above and the persistent transport below.
+          LibraryDataGrid.tsx portals its existing, unmodified
+          LibraryActionBar in here (via document.getElementById) instead of
+          rendering it inline inside the scrolling grid — no selection state,
+          bulk-edit logic, or analyzer behavior moved or changed, only WHERE
+          the same component's DOM lands. Empty (zero height) whenever no
+          selection is active. */}
+      <div id="selection-dock-root" className="selection-dock-root" />
 
       {/* Player + Sampler — always mounted so audio survives workspace navigation.
           Hidden (not unmounted) in broadcast_hud so audio keeps playing. */}

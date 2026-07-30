@@ -6259,6 +6259,12 @@ body.broadcast-clean-capture .app {
 .geo-target-editor-field-label { font-size: 12px; color: var(--text-mid, #aaa); width: 70px; flex-shrink: 0; }
 .geo-hex-expression-note { font-size: 10px; color: var(--yellow, #f5c842); }
 
+/* ── opacity / boolean field editors (mapsPaletteAuthority-wired) ── */
+.geo-opacity-field { display: inline-flex; align-items: center; gap: 8px; }
+.geo-opacity-slider { width: 120px; accent-color: var(--accent, #5c8de8); }
+.geo-opacity-value { font-size: 12px; color: var(--text-mid, #aaa); width: 34px; text-align: right; font-variant-numeric: tabular-nums; }
+.geo-bool-field { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-mid, #aaa); cursor: pointer; }
+
 /* ── HEX-first color field ── */
 .geo-hex-field { display: inline-flex; align-items: center; gap: 6px; }
 .geo-hex-swatch {
@@ -11874,7 +11880,23 @@ button.radio-stat-tile { font: inherit; text-align: left; cursor: default; }
 .cat-clear-btn:hover { color: var(--text); }
 
 .cat-tracks-label { font-size: 10px; font-weight: 600; letter-spacing: 0.06em; color: var(--text-dim); padding: 4px 2px; }
-.cat-grid-scroll { flex: 1; overflow: auto; outline: none; }
+/* 0728D_MUSIC_Catalog_Header_And_BPM_Candidate_Review — LibraryDataGrid's
+   root was a bare, unbounded <div> inside .mtw-scroll (MainTrackWindow.tsx's
+   real vertical scroller), so .cat-grid-scroll below it grew to its full
+   content height instead of being constrained — nothing ever actually
+   overflowed it, so its own `overflow-y` never engaged, and NO amount of
+   `position: sticky` on its children could freeze against a scroll that
+   wasn't happening at that level. (A same-element `overflow-x: auto` +
+   `overflow-y: visible` split does NOT work as a fix either — the CSS
+   Overflow spec forces a "visible" value to compute as "auto" the instant
+   its OTHER axis isn't visible, so that combination silently keeps
+   capturing position:sticky's containing block regardless.) The real fix:
+   bound this root to the space .mtw-scroll actually gives it, so
+   .cat-grid-scroll's own flex:1 can genuinely constrain and scroll HERE —
+   .mtw-scroll then simply has nothing left to scroll, no double-scrollbar,
+   no MainTrackWindow.tsx change needed. */
+.cat-grid-page-root { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.cat-grid-scroll { flex: 1; min-height: 0; overflow: auto; outline: none; }
 .cat-data-grid { table-layout: fixed; }
 .cat-col-select { width: 28px; }
 .cat-col-index { width: 32px; }
@@ -11885,6 +11907,15 @@ button.radio-stat-tile { font: inherit; text-align: left; cursor: default; }
 .cat-col-frozen--title { left: 28px; }
 td.cat-col-frozen { z-index: 1; }
 .mtw-table tr:hover td.cat-col-frozen { background: var(--surface2); }
+
+/* Vertical header freeze — now correctly sticks to .cat-grid-scroll itself,
+   which .cat-grid-page-root above makes the genuine, bounded, vertically-
+   scrolling ancestor. Opaque background per requirement; z-index above both
+   scrolling rows (unset/0) and the left-frozen body cells (td.cat-col-frozen,
+   z-index 1), so the header never gets a see-through/overlap artifact where
+   a frozen body column scrolls underneath it. Column widths/definitions are
+   untouched — this only adds stickiness to the existing <th> cells. */
+.cat-col-header { position: sticky; top: 0; z-index: 3; background: var(--surface); }
 
 .cat-col-header-label { display: inline-flex; align-items: center; gap: 4px; cursor: default; }
 .cat-col-sortable { cursor: pointer; }
@@ -11900,12 +11931,20 @@ td.cat-col-frozen { z-index: 1; }
 
 .cat-keyboard-hint { font-size: 10px; color: var(--text-dim); padding: 6px 2px 0; }
 
-/* ── Consolidated action bar (§9) ── */
+/* ── Consolidated action bar (§9) ──
+   0728C_MUSIC_Selection_Dock_Positioning — this bar now renders (via a
+   portal, see LibraryDataGrid.tsx) inside #selection-dock-root, a stable
+   App-shell sibling between the scrolling library workspace and the
+   persistent transport — never inside the scrolling grid itself, so
+   `position: sticky` is neither needed nor used here; the app shell's own
+   normal flex flow is what keeps it in place regardless of Catalog scroll/
+   length/filters. */
 .cat-action-bar {
-  position: sticky; bottom: 0; z-index: 4;
+  position: relative; z-index: 4;
   background: var(--surface2); border: 1px solid var(--border2); border-radius: 6px;
-  padding: 8px 10px; margin-top: 8px; display: flex; flex-direction: column; gap: 6px;
+  padding: 8px 10px; margin: 0 10px 8px; display: flex; flex-direction: column; gap: 6px;
 }
+.selection-dock-root { flex-shrink: 0; }
 .cat-action-bar-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .cat-action-bar-row--more { border-top: 1px solid var(--border); padding-top: 6px; }
 .cat-action-bar-notice { font-size: 11px; color: var(--text-mid); }
@@ -11965,10 +12004,42 @@ td.cat-col-frozen { z-index: 1; }
 }
 .cat-batch-comments-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
 
+/* ── Review BPM & Key / Review Genre Family dialogs (0729A_MUSIC_Review_Dialog_Simplification) ──
+   Wider, compact table layout: no paragraph blocks in the default row —
+   technical detail sits behind a small <details> disclosure per cell. */
+.cat-review-table-dialog { width: 760px; max-width: 94vw; padding: 16px 18px; }
+.cat-review-table-dialog h3 { margin: 0 0 12px; font-size: 14px; color: var(--text); }
+.cat-review-evidence-line { display: block; font-size: 12px; color: var(--text); }
+.cat-review-conflict { color: var(--red, #c77); }
+.cat-review-state-label { color: var(--text-dim); font-size: 12px; margin-right: 6px; }
+.cat-review-candidates { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+.cat-review-yesno { display: flex; gap: 4px; }
+.cat-review-details { margin-top: 3px; font-size: 10px; color: var(--text-dim); }
+.cat-review-details summary { cursor: pointer; user-select: none; list-style: none; }
+.cat-review-details summary::-webkit-details-marker { display: none; }
+.cat-review-details summary::before { content: "▸ "; }
+.cat-review-details[open] summary::before { content: "▾ "; }
+.cat-review-details-body { margin-top: 4px; padding-left: 10px; display: flex; flex-direction: column; gap: 2px; line-height: 1.4; }
+
 /* ── Remove confirm dialog ── */
 .cat-remove-confirm-dialog { width: 420px; padding: 16px 18px; }
 .cat-remove-confirm-dialog h3 { margin: 0 0 10px; font-size: 14px; color: var(--text); }
 .cat-remove-confirm-dialog p { font-size: 12px; color: var(--text-mid); line-height: 1.5; margin: 0; }
+/* 0728E_MUSIC_Catalog_Single_Track_Remove — reference report, single-track path only */
+.cat-remove-confirm-refs { margin-top: 10px; font-size: 12px; color: var(--text-mid); line-height: 1.5; }
+.cat-remove-confirm-refs p { margin: 0 0 4px; }
+.cat-remove-confirm-refs ul { margin: 0; padding-left: 18px; }
+.cat-remove-confirm-refs li { margin: 2px 0; }
+
+/* 0728E_MUSIC_Catalog_Single_Track_Remove — per-row ••• menu, replaces the
+   old lone Excl. button; opens downward since rows sit inside a scrolling
+   grid, not pinned to the viewport bottom like the selection dock's menu. */
+.cat-row-menu {
+  position: absolute; top: 100%; right: 0; margin-top: 4px; z-index: 6;
+  background: var(--surface2); border: 1px solid var(--border2); border-radius: 6px;
+  padding: 6px; display: flex; flex-direction: column; gap: 4px; min-width: 170px;
+  white-space: nowrap;
+}
 
 /* ── 0722C_MUSIC_Production_Stem_Export ── */
 

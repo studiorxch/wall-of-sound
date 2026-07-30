@@ -7,6 +7,10 @@ import type { TrackSlot, OrphanTrack, TrackLock, TrackLockType } from "../data/p
 import { normalizeWarningMessages } from "../data/playlistTypes";
 import type { Track, TrackRating, TrackSourceOwner } from "../data/trackTypes";
 import type { PlaylistRecord, TrackPlaybackIssue } from "../data/playProjectTypes";
+import type { CrateRecord } from "../data/crateTypes";
+import type { RadioInboxItem } from "../data/radioInboxTypes";
+import type { RadioPlaylist } from "../data/radioPlaylistTypes";
+import type { RadioBank } from "../data/radioBankTypes";
 import { parseDelimitedTags } from "../logic/trackMetadata";
 import { filterTracksByLibraryFilters, buildFilterOptions, type LibraryTrackFilters } from "../logic/libraryFilters";
 import { normalizeTrackGenreTokens } from "../logic/genreTaxonomy";
@@ -86,6 +90,7 @@ type Props = {
   onAnalyzeSelected?: (trackIds: string[]) => void;
   onAnalyzeLibrary?: () => void;
   onReanalyze?: (trackIds: string[]) => void;
+  onAnalyzeMissing?: (trackIds: string[]) => void;
   analyzerJobs?: Map<string, AnalyzerJobStatus>;
   sourcePools?: MusicSourcePool[];
   onRenameSourcePool?: (id: string, name: string) => void;
@@ -111,6 +116,13 @@ type Props = {
   // source key before handing it to LibraryDataGrid.
   libraryGridPreferences?: LibraryGridPreferencesBySource;
   onUpdateLibraryGridPreferences?: (sourceKey: LibrarySourceKey, next: LibraryGridPreferences) => void;
+  // 0728E_MUSIC_Catalog_Single_Track_Remove — read-only, threaded straight
+  // through to LibraryDataGrid for the single-track removal confirmation's
+  // reference report only.
+  crates?: CrateRecord[];
+  radioInboxItems?: RadioInboxItem[];
+  radioPlaylists?: RadioPlaylist[];
+  radioBanks?: RadioBank[];
 };
 
 function fmtDur(s: number | undefined | null) {
@@ -915,13 +927,14 @@ function LibraryRows({
   onRestoreSuggestionsFromImport, onRestoreSuggestionsFromMechanical, onClearSuggestedMoods,
   onAuditionTrack, onAuditionAndAdd: _onAuditionAndAdd, auditionTrackId,
   playbackStatus, onPauseTrack, onResumeTrack,
-  onBulkSetArchiveStatus, onAnalyzeTrack, onAnalyzeSelected: _onAnalyzeSelected, onAnalyzeLibrary: _onAnalyzeLibrary, onReanalyze,
+  onBulkSetArchiveStatus, onAnalyzeTrack, onAnalyzeSelected: _onAnalyzeSelected, onAnalyzeLibrary: _onAnalyzeLibrary, onReanalyze, onAnalyzeMissing,
   analyzerJobs, initialSourceOwnerFilter,
   samplerBanks, loadedSamplerBankId, onAddTracksToSamplerBank, onCreateSamplerBankFromTracks, onDeleteFromReference,
   musicPlaylists, onBulkAddTracksToPlaylist, onBulkCreatePlaylistFromTracks,
   onInspect, onSendTrackToRadio,
   libraryGridPreferences, onUpdateLibraryGridPreferences,
   onOpenStems,
+  crates, radioInboxItems, radioPlaylists, radioBanks,
 }: {
   tracks: Track[];
   excludedTrackIds: Set<string>;
@@ -966,6 +979,7 @@ function LibraryRows({
   onAnalyzeSelected?: (trackIds: string[]) => void;
   onAnalyzeLibrary?: () => void;
   onReanalyze?: (trackIds: string[]) => void;
+  onAnalyzeMissing?: (trackIds: string[]) => void;
   analyzerJobs?: Map<string, AnalyzerJobStatus>;
   samplerBanks?: PlaylistRecord[];
   loadedSamplerBankId?: string | null;
@@ -981,6 +995,13 @@ function LibraryRows({
   onSendTrackToRadio?: (trackId: string) => void;
   libraryGridPreferences?: LibraryGridPreferencesBySource;
   onUpdateLibraryGridPreferences?: (sourceKey: LibrarySourceKey, next: LibraryGridPreferences) => void;
+  // 0728E_MUSIC_Catalog_Single_Track_Remove — read-only, threaded straight
+  // through to LibraryDataGrid for the single-track removal confirmation's
+  // reference report only.
+  crates?: CrateRecord[];
+  radioInboxItems?: RadioInboxItem[];
+  radioPlaylists?: RadioPlaylist[];
+  radioBanks?: RadioBank[];
 }) {
   const [ctxMenu, setCtxMenu] = useState<LibraryCtxMenu | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -1052,6 +1073,7 @@ function LibraryRows({
         onBulkSetArchiveStatus={onBulkSetArchiveStatus}
         onAnalyzeSelected={_onAnalyzeSelected}
         onReanalyze={onReanalyze}
+        onAnalyzeMissing={onAnalyzeMissing}
         // Sounds/reference clips never enter music playlists — playlist
         // actions are Catalog/External only.
         musicPlaylists={isReference ? undefined : musicPlaylists}
@@ -1071,6 +1093,10 @@ function LibraryRows({
         libraryGridPreferences={libraryGridPreferences?.[sourceKey] ?? defaultLibraryGridPreferences(sourceKey)}
         onUpdateLibraryGridPreferences={(next) => onUpdateLibraryGridPreferences?.(sourceKey, next)}
         onOpenStems={onOpenStems}
+        crates={crates}
+        radioInboxItems={radioInboxItems}
+        radioPlaylists={radioPlaylists}
+        radioBanks={radioBanks}
       />
     );
   }
@@ -1896,7 +1922,7 @@ export function MainTrackWindow({
   onAuditionTrack, onAuditionAndAdd, auditionTrackId,
   playbackStatus, onPauseTrack, onResumeTrack,
   onBulkSetArchiveStatus,
-  onAnalyzeTrack, onAnalyzeSelected, onAnalyzeLibrary, onReanalyze, analyzerJobs,
+  onAnalyzeTrack, onAnalyzeSelected, onAnalyzeLibrary, onReanalyze, onAnalyzeMissing, analyzerJobs,
   sourcePools, onRenameSourcePool, onRemoveSourcePool, onCleanEmptyGroups,
   sourceOwnerFilter,
   samplerBanks, loadedSamplerBankId, onAddTracksToSamplerBank, onCreateSamplerBankFromTracks, onDeleteFromReference,
@@ -1906,6 +1932,7 @@ export function MainTrackWindow({
   onSendTrackToRadio,
   libraryGridPreferences,
   onUpdateLibraryGridPreferences,
+  crates, radioInboxItems, radioPlaylists, radioBanks,
 }: Props) {
   const [groupViewId, setGroupViewId] = useState<string | null>(null);
   const [crateTab, setCrateTab] = useState<"output" | "pool" | "candidates">("output");
@@ -2082,6 +2109,7 @@ export function MainTrackWindow({
             onAnalyzeSelected={onAnalyzeSelected}
             onAnalyzeLibrary={onAnalyzeLibrary}
             onReanalyze={onReanalyze}
+            onAnalyzeMissing={onAnalyzeMissing}
             analyzerJobs={analyzerJobs}
             initialSourceOwnerFilter={sourceOwnerFilter}
             samplerBanks={samplerBanks}
@@ -2096,6 +2124,10 @@ export function MainTrackWindow({
             onSendTrackToRadio={onSendTrackToRadio}
             libraryGridPreferences={libraryGridPreferences}
             onUpdateLibraryGridPreferences={onUpdateLibraryGridPreferences}
+            crates={crates}
+            radioInboxItems={radioInboxItems}
+            radioPlaylists={radioPlaylists}
+            radioBanks={radioBanks}
           />
         )}
         {mode === "groups" && (

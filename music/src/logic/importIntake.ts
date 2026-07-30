@@ -5,9 +5,8 @@
 // crate-ready commit instead of dropping straight into the active library.
 
 import type { Track } from "../data/trackTypes";
-import type { CrateRecord } from "../data/crateTypes";
 import type { ImportResult } from "./audioImport";
-import type { MusicImportIntakeItem, IntakeDuplicateStatus } from "../data/importTypes";
+import type { MusicImportIntakeItem, IntakeDuplicateStatus, IntakeItemStatus } from "../data/importTypes";
 import { SUPPORTED_AUDIO_EXTENSIONS } from "../data/importTypes";
 
 // ── Filename identity parsing ────────────────────────────────────────────────
@@ -83,14 +82,38 @@ function genId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
 }
 
+// Whether identifying metadata is complete enough to skip review — evaluated
+// identically at construction and after every edit (reresolveIntakeItem), so
+// a Catalog import that already has both fields (title from the filename,
+// artist from the StudioRich default below) goes straight to Ready, and a
+// non-Catalog import with a genuinely blank artist clears to Ready the
+// moment the user fills it in, rather than staying stuck on whatever the
+// ORIGINAL raw filename parse happened to produce.
+function identityWarnings(metadata: { title?: string; artist?: string }): string[] {
+  if (!metadata.title?.trim() || !metadata.artist?.trim()) {
+    return ["Missing artist/title metadata — review before import."];
+  }
+  return [];
+}
+
 /** Wraps an already-uploaded ImportResult (from audioImport.ts) as a review-queue item. */
 export function buildIntakeItem(result: ImportResult, existingTracks: Track[]): MusicImportIntakeItem {
-  const { track } = result;
+  let { track } = result;
   const parsed = parseIdentityFromFilename(track.audioFileName ?? track.title ?? "");
-  const warnings: string[] = [];
-  if (!parsed.confident) {
-    warnings.push(`Low-confidence filename parse — missing artist/title metadata. Review before commit.`);
+  if (!track.title?.trim() && parsed.title) track = { ...track, title: parsed.title };
+  if (!track.artist?.trim() && parsed.artist) track = { ...track, artist: parsed.artist };
+
+  // 0728_MUSIC_Import_Intake_Simplification §Catalog-aware artist default —
+  // offered only, never forced: only fills a genuinely blank artist, on
+  // Catalog destinations only, and is still a plain editable field afterward.
+  // Applied BEFORE identityWarnings so a Catalog import that now has a
+  // complete title+artist (default included) reads Ready, not a stale
+  // Needs Review left over from before the default was applied.
+  if (track.sourceOwner === "studiorich" && !track.artist?.trim()) {
+    track = { ...track, artist: "StudioRich" };
   }
+
+  const warnings = identityWarnings({ title: track.title, artist: track.artist });
 
   const dup = detectDuplicate(
     {
@@ -102,8 +125,6 @@ export function buildIntakeItem(result: ImportResult, existingTracks: Track[]): 
     },
     existingTracks,
   );
-  if (dup.status === "exact_duplicate") warnings.push("Exact duplicate of an existing track.");
-  else if (dup.status === "possible_duplicate") warnings.push("Possible duplicate — matches an existing track's artist/title.");
 
   return {
     id: genId("intake"),
@@ -121,44 +142,65 @@ export function buildIntakeItem(result: ImportResult, existingTracks: Track[]): 
     },
     duplicateStatus: dup.status,
     duplicateOfTrackId: dup.duplicateOfTrackId,
-    assignedCrateIds: [],
     warnings,
     errors: [],
+    existingTracks,
     track,
   };
 }
 
+// Human-readable reason for the item's current non-ready state — the one
+// place this text is composed, so the table row and any future surface stay
+// in sync with resolveIntakeStatus's own classification.
+export function intakeStatusReason(item: MusicImportIntakeItem): string | null {
+  if (item.playbackIssue?.status === "unplayable") {
+    return item.playbackIssue.message ? `${item.playbackIssue.code ?? "Unplayable"}: ${item.playbackIssue.message}` : "File failed the playability scan.";
+  }
+  if (item.duplicateStatus === "exact_duplicate") return "Exact duplicate of an existing track.";
+  if (item.duplicateStatus === "possible_duplicate") return "Possible duplicate — matches an existing track's artist/title.";
+  if (item.warnings.length > 0) return item.warnings[0];
+  return null;
+}
+
 /** Resolves the item's committable status once its playback scan result is known. */
-export function resolveIntakeStatus(item: MusicImportIntakeItem): MusicImportIntakeItem["status"] {
+export function resolveIntakeStatus(item: MusicImportIntakeItem): IntakeItemStatus {
   if (item.playbackIssue?.status === "unplayable") return "blocked";
-  if (item.duplicateStatus === "exact_duplicate") return "warning";
-  if (item.warnings.length > 0) return "warning";
+  const isDuplicate = item.duplicateStatus === "exact_duplicate" || item.duplicateStatus === "possible_duplicate";
+  if (isDuplicate && item.duplicateResolution !== "import_separately") return "duplicate";
+  if (item.warnings.length > 0) return "needs_review";
   return "ready";
 }
 
-// ── Crate assignment ─────────────────────────────────────────────────────────
-//
-// CrateRecord is filter-based (CrateFilters.groupings), not membership-based —
-// there is no explicit track-id list to append to. Assignment therefore tags
-// the track's single `grouping` field with a shared value and registers that
-// same value into every selected crate's filters.groupings, so the crate's
-// existing query mechanism picks the track up. Assigning to N crates at once
-// means the same tag is added to all N crates' groupings lists.
-
-export function assignTracksToCrates(
-  tracks: Track[],
-  crates: CrateRecord[],
-): { tracks: Track[]; crates: CrateRecord[] } {
-  if (crates.length === 0 || tracks.length === 0) return { tracks, crates };
-  const tag = crates.length === 1 ? crates[0].name : `intake:${genId("batch")}`;
-
-  const updatedTracks = tracks.map((t) => ({ ...t, grouping: tag }));
-  const crateIds = new Set(crates.map((c) => c.id));
-  const updatedCrates = crates.map((c) => {
-    if (!crateIds.has(c.id)) return c;
-    if (c.filters.groupings.includes(tag)) return c;
-    return { ...c, filters: { ...c.filters, groupings: [...c.filters.groupings, tag] } };
-  });
-
-  return { tracks: updatedTracks, crates: updatedCrates };
+// Reruns duplicate detection (the SAME detectDuplicate resolver, never a
+// second detection path) AND the identity-completeness check against an
+// item's own existingTracks snapshot after a title/artist edit, then
+// recomputes its status from those fresh results — never leaves the prior
+// status/duplicate result stale against edited metadata.
+// Exact-duplicate matching is sourcePath/fileName+duration based, so it is
+// unaffected by a text edit and will only ever clear via an explicit
+// duplicateResolution; possible-duplicate matching IS title/artist based and
+// clears automatically the moment the edited text no longer matches; a
+// low-confidence-parse Needs Review clears the moment both fields are filled.
+export function reresolveIntakeItem(item: MusicImportIntakeItem): MusicImportIntakeItem {
+  const dup = detectDuplicate(
+    {
+      fileName: item.fileName,
+      sourcePath: item.sourcePath,
+      title: item.metadata.title,
+      artist: item.metadata.artist,
+      durationSeconds: item.metadata.durationSeconds,
+    },
+    item.existingTracks,
+  );
+  const updated: MusicImportIntakeItem = {
+    ...item,
+    duplicateStatus: dup.status,
+    duplicateOfTrackId: dup.duplicateOfTrackId,
+    // A resolution only means something while there's still something to
+    // resolve — once the match itself clears, drop it rather than carry a
+    // stale decision forward if a later edit reintroduces a match.
+    duplicateResolution: dup.status === "not_duplicate" ? undefined : item.duplicateResolution,
+    warnings: identityWarnings(item.metadata),
+  };
+  return { ...updated, status: resolveIntakeStatus(updated) };
 }

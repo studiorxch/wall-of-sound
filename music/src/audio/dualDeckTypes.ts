@@ -313,7 +313,12 @@ export interface DeckDiagnosticsSnapshot {
   ended: boolean;
   mediaError: string | null;
   gain: number;
-  contextState: AudioContextState | "closed";
+  // Equivalent to the DOM lib's AudioContextState, spelled out as a literal
+  // union instead of referencing that type directly: this file is also
+  // imported (via DeckPlaybackState) from server/radio/ Node-only code (see
+  // djTransitionAuthorityGate.ts -> radioWebTransitionHint.ts), which has no
+  // "DOM" lib and cannot resolve AudioContextState.
+  contextState: "suspended" | "running" | "closed" | "interrupted";
 }
 
 // §11/§12 — hard-cut runtime contract: zero overlap, reachable from both the

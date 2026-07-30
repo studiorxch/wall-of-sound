@@ -10,6 +10,17 @@ import type { RadioTrackId, RadioTrackSectionSnapshot } from "./radioTrackPackag
 
 export const RADIO_WEB_BUNDLE_SCHEMA_VERSION = "1.0.0";
 
+// RADIO / DJ Mode Dock (0724B RADIO numbering; MUSIC build 0724C) — the
+// only publicly authorized transition today. Deliberately a closed shape
+// (not `TransitionFamily`/`TransitionStrategy` at large): a future family
+// reaching active-mode authority in the in-app engine must NOT automatically
+// become executable in the public listener — that requires its own,
+// deliberate extension of this type plus real Sites-side execution support.
+export interface RadioWebTransitionHint {
+  family: "clean_cut";
+  strategy: "clean_cut_hard_cut";
+}
+
 // One ordered enabled entry in radio-manifest.json. Every URL is a
 // relative POSIX path inside the bundle — never absolute, never file://,
 // never a MUSIC library path (enforced by writer AND validator).
@@ -26,6 +37,14 @@ export interface RadioWebManifestEntry {
   key?: string;
   moods?: string[];
   genres?: string[];
+  // The transition INTO this entry from the previous one, if MUSIC's real
+  // active-mode authority gate (djTransitionAuthorityGate.ts, via
+  // radioWebTransitionHint.ts) approved one at publish time. Absent/null on
+  // every entry today — no existing code path connects a RadioPlaylist's
+  // entries back to a DjTransitionPlan's playlist-slot addressing (see
+  // 0724C's completion report) — but the writer honors this field exactly
+  // when a caller does supply one, and never fabricates it otherwise.
+  transitionFromPrevious?: RadioWebTransitionHint | null;
 }
 
 // The static website entry point (radio-manifest.json).
@@ -99,7 +118,19 @@ export interface RadioWebBundleExportRequest {
   entries: Array<{
     radioTrackId: RadioTrackId;
     packageVersion: number;
+    // Optional, real DjTransitionPlan for the handoff INTO this entry from
+    // the previous one, when a caller has one to offer (see
+    // radioWebTransitionHint.ts). No existing caller supplies this today —
+    // RadioPlaylist has no bridge back to a PlaylistRecord's slot-addressed
+    // DjTransitionPlans (see 0724C's completion report) — but the writer
+    // still validates it through the real active-mode authority gate before
+    // it can ever appear in the exported manifest; unlike the rest of this
+    // request, this is genuinely client-sourced (transition intelligence
+    // has no server-side immutable source to re-derive it from), so it is
+    // gated rather than re-derived.
+    djTransitionPlan?: import("./djTransitionTypes").DjTransitionPlan;
   }>;
+  djTransitionMode?: "off" | "shadow" | "active";
   // Data-URL artwork only (no network fetch exists server-side); omitted
   // when the playlist has none or it is URL-sourced.
   artworkDataUrl?: string;

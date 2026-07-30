@@ -220,9 +220,21 @@ export function detectKey(input: AudioAnalysisInput): KeyDetectionResult {
     overallConfidence: +overallConfidence.toFixed(3),
   };
 
+  // candidateTonic/candidateMode/candidateCamelotKey preserve the winning
+  // (best-scoring) candidate as review-only evidence regardless of the
+  // confidence gate below — `best` was already fully computed above; the
+  // gate only decides whether tonic/mode/camelotKey (canonical-eligible)
+  // get to hold it too.
+  const candidateCamelotKeyRaw = noteModeToCamelot(best.tonic, best.mode) ?? undefined;
+  const candidateTonic = NOTE_NAMES[best.tonic];
+  const candidateMode = best.mode;
+
   if (overallConfidence < OVERALL_CONFIDENCE_THRESHOLD) {
     warningCodes.push("KEY_DETECTION_LOW_CONFIDENCE");
     return {
+      candidateTonic,
+      candidateMode,
+      candidateCamelotKey: candidateCamelotKeyRaw,
       confidence: confidenceDetail.overallConfidence,
       confidenceDetail,
       source: "detected",
@@ -232,12 +244,13 @@ export function detectKey(input: AudioAnalysisInput): KeyDetectionResult {
     };
   }
 
-  const camelotKey = noteModeToCamelot(best.tonic, best.mode);
-
   return {
-    tonic: NOTE_NAMES[best.tonic],
-    mode: best.mode,
-    camelotKey: camelotKey ?? undefined,
+    tonic: candidateTonic,
+    mode: candidateMode,
+    camelotKey: candidateCamelotKeyRaw,
+    candidateTonic,
+    candidateMode,
+    candidateCamelotKey: candidateCamelotKeyRaw,
     confidence: confidenceDetail.overallConfidence,
     confidenceDetail,
     source: "detected",
