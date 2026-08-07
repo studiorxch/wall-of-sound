@@ -32,6 +32,12 @@ import {
   type DjTransitionShadowPair,
   type DjTransitionShadowResolution,
 } from "../../logic/djTransitionShadowResolve";
+import {
+  PREPARATION_RUNTIME_REVALIDATION_REASON,
+  canApproveTransitionProposal,
+  transitionPlanUsesPreparation,
+  type PreparationBridgeFailureReason,
+} from "../../logic/djTransitionPreparationBridge";
 
 interface Props {
   playlist: PlaylistRecord;
@@ -94,6 +100,15 @@ const AUTHORITY_GATE_LABEL: Record<string, string> = {
   authorized: "Authorized",
 };
 
+const PREPARATION_FALLBACK_LABEL: Record<PreparationBridgeFailureReason, string> = {
+  missing_analysis: "song analysis missing",
+  wrong_source_identity: "track/source identity mismatch",
+  missing_preparation: "preparation missing",
+  preparation_not_approved: "preparation is not current and approved",
+  approval_basis_mismatch: "approval basis changed",
+  invalid_preparation: "preparation is incomplete or incompatible",
+};
+
 type ShadowEntryState =
   | { status: "loading" }
   | { status: "done"; resolution: DjTransitionShadowResolution }
@@ -137,7 +152,9 @@ export function PlaylistPreparationPanel({
     });
 
     pairs.forEach((pair) => {
-      resolveDjTransitionPairShadow(pair, playlist.playlistId, songAnalysesByTrackId)
+      const existingManualPlan = (playlist.djTransitionPlans ?? []).find((plan) =>
+        plan.outgoingSlotId === pair.outgoingSlot.slotId && plan.incomingSlotId === pair.incomingSlot.slotId && plan.origin === "manual");
+      resolveDjTransitionPairShadow(pair, playlist.playlistId, songAnalysesByTrackId, existingManualPlan)
         .then((resolution) => {
           if (requestIdRef.current !== thisRequestId) return; // a newer request superseded this one
           setDjResults((prev) => ({ ...prev, [pair.pairKey]: { status: "done", resolution } }));
@@ -148,7 +165,7 @@ export function PlaylistPreparationPanel({
         });
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- re-resolve on playlist slot/track/mode changes; songAnalysesByTrackId is derived fresh each render from stable `songAnalyses`.
-  }, [djEngineActive, playlist.playlistId, playlist.slots, libraryTracks]);
+  }, [djEngineActive, playlist.playlistId, playlist.slots, playlist.djTransitionPlans, libraryTracks, songAnalyses]);
 
   function approveForActiveExecution(pair: DjTransitionShadowPair, resolvedPlan: DjTransitionPlan) {
     if (!onDjTransitionPlansChange) return;
@@ -328,10 +345,16 @@ function DjPairRow({
     );
   }
 
-  const { result, evidence, outgoingRegions, incomingRegions } = entry.resolution;
+  const { result, evidence, outgoingRegions, incomingRegions, preparationBridge } = entry.resolution;
   const plan = result.recommended;
   const legacyStrategy = legacyPrepExists ? (legacyPlan ? `${MODE_LABEL[legacyPlan.syncMode]} · ${legacyPlan.transitionDurationSeconds.toFixed(1)}s` : "No legacy plan for this pair") : "Not prepared";
   const isSupportedFamily = SUPPORTED_ACTIVE_TRANSITION_FAMILIES.has(plan.family);
+  const preparationDerived = transitionPlanUsesPreparation(plan);
+  const proposalApprovable = canApproveTransitionProposal(plan, isSupportedFamily);
+  const outgoingLineage = plan.outgoingCue.preparationLineage;
+  const incomingLineage = plan.incomingCue.preparationLineage;
+  const outgoingPreparation = preparationBridge.outgoing.available ? preparationBridge.outgoing.candidates.MIX_OUT : null;
+  const incomingPreparation = preparationBridge.incoming.available ? preparationBridge.incoming.candidates.MAIN_ENTRY : null;
 
   return (
     <div className="ptp-row ptp-dj-row">
@@ -351,6 +374,27 @@ function DjPairRow({
             in={plan.incomingCue.regionId ?? "none"} ({incomingRegions.find((r) => r.regionId === plan.incomingCue.regionId)?.role ?? "n/a"})
           </div>
           <div>
+            <strong>Cue sources:</strong> outgoing {outgoingLineage ? `approved preparation · ${outgoingLineage.role}` : "region-derived planning"} ·
+            incoming {incomingLineage ? `approved preparation · ${incomingLineage.role}` : "region-derived planning"}
+          </div>
+          {preparationDerived && outgoingLineage && incomingLineage && (
+            <div>
+              <strong>Preparation lineage:</strong> current · out {outgoingLineage.preparationId}/{outgoingLineage.cueId}/{outgoingLineage.basisGridRevisionId} ·
+              in {incomingLineage.preparationId}/{incomingLineage.cueId}/{incomingLineage.basisGridRevisionId}
+            </div>
+          )}
+          <div>
+            <strong>Phrase alignment:</strong> out {outgoingPreparation?.alignedGroupings.length ? outgoingPreparation.alignedGroupings.join("/") : "none"} bars ·
+            in {incomingPreparation?.alignedGroupings.length ? incomingPreparation.alignedGroupings.join("/") : "none"} bars ·
+            common runway {preparationBridge.commonRunwayBars ? `${preparationBridge.commonRunwayBars} bars` : "none"}
+          </div>
+          {!preparationBridge.cleanCutAvailable && (
+            <div className="ptp-dj-hint">
+              Preparation fallback: region-derived planning unchanged · outgoing {preparationBridge.outgoing.available ? "current" : PREPARATION_FALLBACK_LABEL[preparationBridge.outgoing.reason]} ·
+              incoming {preparationBridge.incoming.available ? "current" : PREPARATION_FALLBACK_LABEL[preparationBridge.incoming.reason]}.
+            </div>
+          )}
+          <div>
             <strong>Tempo / key:</strong> pulse ratio {plan.pulseRatio ?? "unknown"} · adjustment {plan.tempoAdjustmentPercentA}% / {plan.tempoAdjustmentPercentB}% ·
             key {evidence.outgoing.key.value ?? "unknown"} → {evidence.incoming.key.value ?? "unknown"}
           </div>
@@ -368,10 +412,13 @@ function DjPairRow({
           {plan.warnings.length > 0 && <div className="ptp-warnings"><strong>Warnings:</strong> {plan.warnings.join(", ")}</div>}
           {plan.explanation.length > 0 && <div>{plan.explanation.join(" ")}</div>}
 
-          {canApprove && isSupportedFamily && !approvedPlan && (
+          {canApprove && proposalApprovable && !approvedPlan && (
             <button className="tb-btn ptp-dj-approve-btn" onClick={(e) => { e.stopPropagation(); onApprove(plan); }}>
               Approve for Active Execution
             </button>
+          )}
+          {canApprove && isSupportedFamily && preparationDerived && !approvedPlan && (
+            <div className="ptp-dj-hint">{PREPARATION_RUNTIME_REVALIDATION_REASON}</div>
           )}
           {approvedPlan && <div className="ptp-dj-approved-note">Approved {approvedPlan.approvedAt} — eligible for active-mode execution while current.</div>}
           {canApprove && !isSupportedFamily && (

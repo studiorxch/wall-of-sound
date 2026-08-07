@@ -6,6 +6,7 @@ import type { DjTransitionPlan, TransitionEvidenceValue } from "../data/djTransi
 import type { DjTransitionTrackEvidence, DjTransitionPairEvidence } from "./djTransitionEvidence";
 import type { TransitionRegionCandidate } from "./djTransitionRegions";
 import { resolveDjTransition } from "./djTransitionResolver";
+import type { PairPreparationBridgeResult, PreparationCueCandidate } from "./djTransitionPreparationBridge";
 
 let idCounter = 0;
 function nextId() {
@@ -89,6 +90,31 @@ function baseInput(overrides: Partial<Parameters<typeof resolveDjTransition>[0]>
     nowIso: "2026-07-22T00:00:00Z",
     idFactory: nextId,
     ...overrides,
+  };
+}
+
+function preparationBridge(): PairPreparationBridgeResult {
+  const candidate = (role: "FULL_ENTRY" | "SHORT_ENTRY" | "MAIN_ENTRY" | "MIX_OUT", seconds: number, side: "a" | "b"): PreparationCueCandidate => ({
+    role, seconds, frame: seconds * 1000, barIndex: 8, runwayBars: 32, alignedGroupings: [32, 16, 8, 4],
+    transitionCue: {
+      seconds, beatIndex: 32, barIndex: 8, phraseIndex: null, regionId: null, manuallyAdjusted: false,
+      preparationLineage: {
+        preparationId: `prep-${side}`, preparationRevisionKey: `revision-${side}`,
+        cueId: `cue-${side}-${role}`, role, basisGridRevisionId: `grid-${side}`,
+      },
+    },
+  });
+  return {
+    outgoing: { available: true, preparationId: "prep-a", preparationRevisionKey: "revision-a", activeGridRevisionId: "grid-a", candidates: {
+      FULL_ENTRY: candidate("FULL_ENTRY", 0, "a"), SHORT_ENTRY: candidate("SHORT_ENTRY", 4, "a"),
+      MAIN_ENTRY: candidate("MAIN_ENTRY", 8, "a"), MIX_OUT: candidate("MIX_OUT", 210, "a"),
+    } },
+    incoming: { available: true, preparationId: "prep-b", preparationRevisionKey: "revision-b", activeGridRevisionId: "grid-b", candidates: {
+      FULL_ENTRY: candidate("FULL_ENTRY", 0, "b"), SHORT_ENTRY: candidate("SHORT_ENTRY", 4, "b"),
+      MAIN_ENTRY: candidate("MAIN_ENTRY", 8, "b"), MIX_OUT: candidate("MIX_OUT", 210, "b"),
+    } },
+    cleanCutAvailable: true,
+    commonRunwayBars: 32,
   };
 }
 
@@ -221,6 +247,44 @@ describe("resolveDjTransition", () => {
     const result = resolveDjTransition(baseInput({ evidence: { outgoing: outgoingEvidence, incoming: incomingEvidence } }));
     expect(result.recommended.family).toBe("clean_cut");
     expect(result.recommended.doNotLayer).toBe(true);
+  });
+
+  it("uses approved preparation MIX_OUT and MAIN_ENTRY for a clean-cut proposal", () => {
+    const outgoingEvidence = makeTrackEvidence({ trackId: "track-a", sourceFingerprint: "fp-a", beatTrusted: true, bpm: ev(120) });
+    const incomingEvidence = makeTrackEvidence({ trackId: "track-b", sourceFingerprint: "fp-b", beatTrusted: true, bpm: ev(80) });
+    const result = resolveDjTransition(baseInput({
+      evidence: { outgoing: outgoingEvidence, incoming: incomingEvidence },
+      preparationBridge: preparationBridge(),
+    }));
+    expect(result.recommended.family).toBe("clean_cut");
+    expect(result.recommended.outgoingCue.seconds).toBe(210);
+    expect(result.recommended.outgoingCue.preparationLineage?.role).toBe("MIX_OUT");
+    expect(result.recommended.incomingCue.seconds).toBe(8);
+    expect(result.recommended.incomingCue.preparationLineage?.role).toBe("MAIN_ENTRY");
+  });
+
+  it("leaves region-derived clean-cut cues unchanged when the preparation pair is unavailable", () => {
+    const outgoingEvidence = makeTrackEvidence({ trackId: "track-a", sourceFingerprint: "fp-a", beatTrusted: true, bpm: ev(120) });
+    const incomingEvidence = makeTrackEvidence({ trackId: "track-b", sourceFingerprint: "fp-b", beatTrusted: true, bpm: ev(80) });
+    const withoutPreparation = resolveDjTransition(baseInput({ evidence: { outgoing: outgoingEvidence, incoming: incomingEvidence } }));
+    const failedBridge: PairPreparationBridgeResult = {
+      outgoing: { available: false, reason: "missing_preparation" }, incoming: { available: false, reason: "missing_preparation" },
+      cleanCutAvailable: false, commonRunwayBars: null,
+    };
+    const withFailedPreparation = resolveDjTransition(baseInput({ evidence: { outgoing: outgoingEvidence, incoming: incomingEvidence }, preparationBridge: failedBridge }));
+    expect(withFailedPreparation.recommended.outgoingCue).toEqual(withoutPreparation.recommended.outgoingCue);
+    expect(withFailedPreparation.recommended.incomingCue).toEqual(withoutPreparation.recommended.incomingCue);
+  });
+
+  it("does not alter a non-clean-cut recommendation with preparation cues", () => {
+    const f = trustedRhythmicPairFixture();
+    const result = resolveDjTransition(baseInput({
+      evidence: { outgoing: f.outgoingEvidence, incoming: f.incomingEvidence },
+      outgoingRegions: [f.outgoingRegion], incomingRegions: [f.incomingRegion], preparationBridge: preparationBridge(),
+    }));
+    expect(result.recommended.family).toBe("phrase_eq_blend");
+    expect(result.recommended.outgoingCue.preparationLineage).toBeUndefined();
+    expect(result.recommended.incomingCue.preparationLineage).toBeUndefined();
   });
 
   it("12. an approved, non-stale manual plan wins outright", () => {

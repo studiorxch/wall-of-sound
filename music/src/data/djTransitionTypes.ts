@@ -13,6 +13,7 @@
 // allowed to actually drive playback in "active" mode.
 
 import type { StemRole } from "./trackStemTypes";
+import type { DjPreparationCueRole } from "./djTrackPreparationTypes";
 
 export type TransitionTimeBasis = "phrase" | "bar" | "beat" | "seconds";
 
@@ -59,6 +60,13 @@ export interface TransitionCue {
   phraseIndex: number | null;
   regionId: string | null;
   manuallyAdjusted: boolean;
+  preparationLineage?: {
+    preparationId: string;
+    preparationRevisionKey: string;
+    cueId: string;
+    role: DjPreparationCueRole;
+    basisGridRevisionId: string;
+  };
 }
 
 export interface EqPoint {

@@ -106,6 +106,8 @@ describe("resolveDjTransitionPairShadow", () => {
     const resolution = await resolveDjTransitionPairShadow(pairs[0], "pl-1", new Map());
     expect(resolution.pairKey).toBe("s1__s2");
     expect(resolution.result.recommended.family).not.toBe("stem_assisted_transition");
+    expect(resolution.preparationBridge.cleanCutAvailable).toBe(false);
+    expect(resolution.preparationBridge.outgoing).toEqual({ available: false, reason: "missing_analysis" });
   });
 
   it("fails closed (no stem evidence) when the stem-set fetch itself throws", async () => {

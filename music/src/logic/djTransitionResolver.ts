@@ -23,6 +23,7 @@ import { DJ_TRANSITION_TRUST_POLICY } from "./djTransitionEvidence";
 import type { TransitionRegionCandidate } from "./djTransitionRegions";
 import { computeBpmTransitionDistance } from "./playlistSequencing/bpmTransition";
 import { buildDjTransitionAutomationDefaults } from "./djTransitionAutomationDefaults";
+import type { PairPreparationBridgeResult } from "./djTransitionPreparationBridge";
 
 const COLLISION_THRESHOLD = 0.65;
 
@@ -36,6 +37,7 @@ export interface ResolveDjTransitionInput {
   outgoingRegions: TransitionRegionCandidate[];
   incomingRegions: TransitionRegionCandidate[];
   analysisRevisionKey: string;
+  preparationBridge?: PairPreparationBridgeResult;
   intent?: "continuity" | "lift" | "release" | "reset" | "disruption";
   existingManualPlan?: DjTransitionPlan;
   existingManualPlanIsStale?: boolean;
@@ -86,7 +88,7 @@ function makeCue(seconds: number, regionId: string): TransitionCue {
 export function resolveDjTransition(input: ResolveDjTransitionInput): ResolveDjTransitionResult {
   const {
     playlistId, outgoingSlot, incomingSlot, outgoingTrack, incomingTrack, evidence,
-    outgoingRegions, incomingRegions, analysisRevisionKey, intent,
+    outgoingRegions, incomingRegions, analysisRevisionKey, preparationBridge, intent,
     existingManualPlan, existingManualPlanIsStale, stemTransportImplemented, nowIso, idFactory,
   } = input;
 
@@ -250,8 +252,16 @@ export function resolveDjTransition(input: ResolveDjTransitionInput): ResolveDjT
   const bassTransferProgress = family === "phrase_eq_blend" || family === "short_rhythmic_blend" ? 0.5 : null;
   const automation = buildDjTransitionAutomationDefaults({ family, bassTransferProgress });
 
-  const outgoingCue = makeCue(clampToRegion(outgoingRegion.endSeconds - overlapSeconds, outgoingRegion), outgoingRegion.regionId);
-  const incomingCue = makeCue(clampToRegion(incomingRegion.startSeconds, incomingRegion), incomingRegion.regionId);
+  const preparationCleanCutCues = cleanCutCuesFromPreparation(preparationBridge);
+  const outgoingCue = family === "clean_cut" && preparationCleanCutCues
+    ? preparationCleanCutCues.outgoing
+    : makeCue(clampToRegion(outgoingRegion.endSeconds - overlapSeconds, outgoingRegion), outgoingRegion.regionId);
+  const incomingCue = family === "clean_cut" && preparationCleanCutCues
+    ? preparationCleanCutCues.incoming
+    : makeCue(clampToRegion(incomingRegion.startSeconds, incomingRegion), incomingRegion.regionId);
+  if (family === "clean_cut" && preparationCleanCutCues) {
+    explanation.push("Approved track preparation supplied outgoing MIX_OUT and incoming MAIN_ENTRY proposal cues. Runtime preparation revalidation is not yet connected.");
+  }
 
   const recommended = buildPlan({
     playlistId, outgoingSlot, incomingSlot, outgoingTrack, incomingTrack, analysisRevisionKey, nowIso, idFactory,
@@ -270,7 +280,8 @@ export function resolveDjTransition(input: ResolveDjTransitionInput): ResolveDjT
       buildPlan({
         playlistId, outgoingSlot, incomingSlot, outgoingTrack, incomingTrack, analysisRevisionKey, nowIso, idFactory,
         family: "clean_cut", trust: "manually_authored", timeBasis: "seconds",
-        outgoingCue: makeCue(outgoingRegion.endSeconds, outgoingRegion.regionId), incomingCue: makeCue(incomingRegion.startSeconds, incomingRegion.regionId),
+        outgoingCue: preparationCleanCutCues?.outgoing ?? makeCue(outgoingRegion.endSeconds, outgoingRegion.regionId),
+        incomingCue: preparationCleanCutCues?.incoming ?? makeCue(incomingRegion.startSeconds, incomingRegion.regionId),
         overlapBars: null, overlapSeconds: 0.5, tempoAdjustmentPercentA: 0, tempoAdjustmentPercentB: 0, pulseRatio: null,
         doNotLayer: true, warnings: [], explanation: ["Alternative: an instant handoff with no overlap."],
         automation: buildDjTransitionAutomationDefaults({ family: "clean_cut", bassTransferProgress: null }),
@@ -281,6 +292,14 @@ export function resolveDjTransition(input: ResolveDjTransitionInput): ResolveDjT
   }
 
   return { recommended, alternatives, rejectedCandidates };
+}
+
+function cleanCutCuesFromPreparation(preparationBridge: PairPreparationBridgeResult | undefined): { outgoing: TransitionCue; incoming: TransitionCue } | null {
+  if (!preparationBridge?.cleanCutAvailable || !preparationBridge.outgoing.available || !preparationBridge.incoming.available) return null;
+  return {
+    outgoing: preparationBridge.outgoing.candidates.MIX_OUT.transitionCue,
+    incoming: preparationBridge.incoming.candidates.MAIN_ENTRY.transitionCue,
+  };
 }
 
 function outgoing(evidence: DjTransitionPairEvidence): DjTransitionTrackEvidence {

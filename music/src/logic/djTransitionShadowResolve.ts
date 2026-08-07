@@ -21,6 +21,9 @@ import { assembleDjTransitionPairEvidence, type DjTransitionEvidenceTrackInput }
 import { selectDjTransitionRegions } from "./djTransitionRegions";
 import { resolveDjTransition, type ResolveDjTransitionResult } from "./djTransitionResolver";
 import { fetchStemSets, resolveTrackAudioIdentifier } from "./stems/stemClient";
+import { bridgeApprovedPreparationPair, type PairPreparationBridgeResult } from "./djTransitionPreparationBridge";
+import { isDjTransitionPlanStale } from "./djTransitionStaleness";
+import type { DjTransitionPlan } from "../data/djTransitionTypes";
 
 export interface DjTransitionShadowPair {
   pairKey: string;
@@ -108,6 +111,7 @@ export interface DjTransitionShadowResolution {
   evidence: ReturnType<typeof assembleDjTransitionPairEvidence>;
   outgoingRegions: ReturnType<typeof selectDjTransitionRegions>;
   incomingRegions: ReturnType<typeof selectDjTransitionRegions>;
+  preparationBridge: PairPreparationBridgeResult;
 }
 
 // The single async entry point. Fetches stem availability for both tracks
@@ -119,6 +123,7 @@ export async function resolveDjTransitionPairShadow(
   pair: DjTransitionShadowPair,
   playlistId: string,
   songAnalysesByTrackId: Map<string, CompleteSongAnalysis>,
+  existingManualPlan?: DjTransitionPlan,
 ): Promise<DjTransitionShadowResolution> {
   const [outgoingStemRoles, incomingStemRoles] = await Promise.all([
     resolveCurrentStemRoles(pair.outgoingTrack),
@@ -137,6 +142,31 @@ export async function resolveDjTransitionPairShadow(
   const incomingRegions = selectDjTransitionRegions({ side: "incoming", evidence: evidence.incoming, playbackBounds: pair.incomingTrack.playbackBounds });
 
   const analysisRevisionKey = `${analysisRevisionMarkerFor(pair.outgoingTrack)}::${analysisRevisionMarkerFor(pair.incomingTrack)}`;
+  const preparationBridge = bridgeApprovedPreparationPair(
+    pair.outgoingTrack,
+    outgoingSongAnalysis,
+    pair.incomingTrack,
+    incomingSongAnalysis,
+  );
+  const exactExistingPlan = existingManualPlan &&
+    existingManualPlan.playlistId === playlistId &&
+    existingManualPlan.outgoingSlotId === pair.outgoingSlot.slotId &&
+    existingManualPlan.incomingSlotId === pair.incomingSlot.slotId &&
+    existingManualPlan.origin === "manual"
+    ? existingManualPlan
+    : undefined;
+  const existingManualPlanIsStale = exactExistingPlan ? isDjTransitionPlanStale({
+    plan: exactExistingPlan,
+    currentOutgoingTrackId: pair.outgoingTrack.trackId,
+    currentIncomingTrackId: pair.incomingTrack.trackId,
+    currentOutgoingSourceFingerprint: sourceFingerprintFor(pair.outgoingTrack, outgoingSongAnalysis),
+    currentIncomingSourceFingerprint: sourceFingerprintFor(pair.incomingTrack, incomingSongAnalysis),
+    currentAnalysisRevisionKey: analysisRevisionKey,
+    selectedRegionsStillExist:
+      (exactExistingPlan.outgoingCue.regionId == null || outgoingRegions.some((region) => region.regionId === exactExistingPlan.outgoingCue.regionId)) &&
+      (exactExistingPlan.incomingCue.regionId == null || incomingRegions.some((region) => region.regionId === exactExistingPlan.incomingCue.regionId)),
+    activeStemSetLostCurrency: exactExistingPlan.family === "stem_assisted_transition",
+  }) : undefined;
 
   const result = resolveDjTransition({
     playlistId,
@@ -148,14 +178,15 @@ export async function resolveDjTransitionPairShadow(
     outgoingRegions,
     incomingRegions,
     analysisRevisionKey,
-    // No DjTransitionPlan is ever persisted in shadow mode (no editor/save
-    // path exists yet at this checkpoint) — always resolve fresh.
-    existingManualPlan: undefined,
-    existingManualPlanIsStale: undefined,
+    preparationBridge,
+    // Preserve the resolver's canonical precedence: an exact, current,
+    // approved manual adjacency plan wins before any automatic candidate.
+    existingManualPlan: exactExistingPlan,
+    existingManualPlanIsStale,
     stemTransportImplemented: false,
     nowIso: new Date().toISOString(),
     idFactory: nextShadowId,
   });
 
-  return { pairKey: pair.pairKey, result, evidence, outgoingRegions, incomingRegions };
+  return { pairKey: pair.pairKey, result, evidence, outgoingRegions, incomingRegions, preparationBridge };
 }
