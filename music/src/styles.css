@@ -12482,7 +12482,7 @@ td.cat-col-frozen { z-index: 1; }
   background: rgba(246,184,91,0.15); border: 1px solid #f6b85b; border-radius: 3px; padding: 2px 5px;
 }
 
-/* Perform is an observational surface over the existing prepared-playback runtime. */
+/* Perform projects the existing prepared-playback runtime and its guarded gain commands. */
 .perform-workspace {
   --perform-ink: #e9e5da; --perform-muted: #9e9a90; --perform-line: rgba(233,229,218,.16);
   --perform-cyan: #53d8cf; --perform-amber: #f2b84b; --perform-red: #ff6b5f;
@@ -12519,6 +12519,13 @@ td.cat-col-frozen { z-index: 1; }
 .perform-deck__truth span, .perform-deck__cues span { display: block; color: var(--perform-muted); font-size: 9px; letter-spacing: .08em; text-transform: uppercase; }
 .perform-deck__truth strong, .perform-deck__truth small { display: block; margin-top: 3px; }
 .perform-deck__truth small { color: var(--perform-muted); }
+.perform-level, .perform-fader { display: grid; gap: 7px; margin-top: 14px; color: var(--perform-muted); font-size: 9px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+.perform-level input, .perform-fader input { width: 100%; accent-color: var(--perform-cyan); cursor: ew-resize; }
+.perform-level input:disabled, .perform-fader input:disabled { cursor: not-allowed; opacity: .38; }
+.perform-fader { margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--perform-line); }
+.perform-fader input { accent-color: var(--perform-amber); }
+.perform-fader strong { color: var(--perform-ink); font-size: 12px; letter-spacing: .03em; }
+.perform-fader small { color: var(--perform-muted); font-size: 9px; font-weight: 400; letter-spacing: 0; line-height: 1.4; text-transform: none; }
 .perform-deck__cues { align-items: flex-start; margin-top: 12px; font-size: 11px; }
 .perform-deck__cues > div { flex: 1; }
 .perform-deck__cues strong { display: block; margin-top: 4px; font-weight: 500; }

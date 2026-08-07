@@ -1,4 +1,6 @@
 import type { DualDeckPerformMonitor, PerformDeckMonitor } from "../../logic/perform/dualDeckPerformMonitor";
+import { gainsForPerformanceFader, performanceFaderPositionForGains } from "../../logic/perform/performanceGainControl";
+import type { ManualDeckGainWriteResult } from "../../logic/perform/performanceGainControl";
 import { PerformDeckWaveform } from "./PerformDeckWaveform";
 
 function formatTime(seconds: number): string {
@@ -10,7 +12,16 @@ function gainDb(gain: number): string {
   return gain <= 0 ? "-inf dB" : `${(20 * Math.log10(gain)).toFixed(1)} dB`;
 }
 
-function DeckPanel({ deck }: { deck: PerformDeckMonitor }) {
+function deckCanAcceptLevel(deck: PerformDeckMonitor): boolean {
+  return Boolean(deck.state.trackId) && ["ready", "playing", "paused"].includes(deck.state.state);
+}
+
+function DeckPanel({ deck, manualGainEnabled, onSetDeckLevel }: {
+  deck: PerformDeckMonitor;
+  manualGainEnabled: boolean;
+  onSetDeckLevel: (deckId: "A" | "B", gain: number) => ManualDeckGainWriteResult;
+}) {
+  const levelEnabled = manualGainEnabled && deckCanAcceptLevel(deck);
   return (
     <section className={`perform-deck perform-deck--${deck.state.role}`} aria-label={`Deck ${deck.deckId}`}>
       <header className="perform-deck__header">
@@ -28,6 +39,19 @@ function DeckPanel({ deck }: { deck: PerformDeckMonitor }) {
         <div><span>Bar grid</span><strong>{deck.timing.bars ? "Trusted" : "Unavailable"}</strong></div>
         <div><span>Phrase grid</span><strong>{deck.timing.phrases ? "Trusted inferred" : "Unavailable"}</strong></div>
       </div>
+      <label className="perform-level">
+        <span>Deck {deck.deckId} LEVEL</span>
+        <input
+          aria-label={`Deck ${deck.deckId} level`}
+          type="range"
+          min="0"
+          max="1"
+          step="0.01"
+          value={deck.state.gain}
+          disabled={!levelEnabled}
+          onChange={(event) => onSetDeckLevel(deck.deckId, Number(event.currentTarget.value))}
+        />
+      </label>
       <div className="perform-deck__cues">
         <div><span>Generic cues</span><strong>{deck.genericCues.length ? deck.genericCues.map((cue) => cue.label ?? formatTime(cue.timeSeconds)).join(" · ") : "None"}</strong></div>
         <div><span>DJ transition cue</span><strong>{deck.transitionCue ? `${formatTime(deck.transitionCue.seconds)}${deck.transitionCue.manuallyAdjusted ? " · manual" : ""}` : "None"}</strong></div>
@@ -37,12 +61,21 @@ function DeckPanel({ deck }: { deck: PerformDeckMonitor }) {
   );
 }
 
-export function DualDeckPerformWorkspace({ monitor }: { monitor: DualDeckPerformMonitor }) {
+export interface DualDeckPerformWorkspaceProps {
+  monitor: DualDeckPerformMonitor;
+  manualGainEnabled: boolean;
+  onSetDeckLevel: (deckId: "A" | "B", gain: number) => ManualDeckGainWriteResult;
+  onSetDeckLevels: (gains: Record<"A" | "B", number>) => ManualDeckGainWriteResult;
+}
+
+export function DualDeckPerformWorkspace({ monitor, manualGainEnabled, onSetDeckLevel, onSetDeckLevels }: DualDeckPerformWorkspaceProps) {
   const { transition } = monitor;
+  const faderPosition = performanceFaderPositionForGains(monitor.decks.A.state.gain, monitor.decks.B.state.gain);
+  const faderEnabled = manualGainEnabled && deckCanAcceptLevel(monitor.decks.A) && deckCanAcceptLevel(monitor.decks.B);
   return (
     <main className="perform-workspace">
-      <div className="perform-title"><span className="perform-eyebrow">MUSIC / Perform</span><h1>Dual-deck transition monitor</h1><p>Read-only view of the current prepared-playback runtime.</p></div>
-      <DeckPanel deck={monitor.decks.A} />
+      <div className="perform-title"><span className="perform-eyebrow">MUSIC / Perform</span><h1>Dual-deck transition monitor</h1><p>Live channel levels over the current prepared-playback runtime.</p></div>
+      <DeckPanel deck={monitor.decks.A} manualGainEnabled={manualGainEnabled} onSetDeckLevel={onSetDeckLevel} />
       <section className="perform-transition" aria-label="Transition status">
         <span className="perform-eyebrow">Transition status</span>
         <strong className="perform-transition__family">{transition.plan?.family.replace(/_/g, " ") ?? "No exact live plan"}</strong>
@@ -55,8 +88,23 @@ export function DualDeckPerformWorkspace({ monitor }: { monitor: DualDeckPerform
           <span>Last actual path</span><strong>{transition.actualExecution.replace(/_/g, " ")}{transition.actualExecutionAdjacency ? ` · ${transition.actualExecutionAdjacency}` : ""}</strong>
           <span>Fallback reason</span><strong>{transition.actualExecutionReason ?? "None"}</strong>
         </div>
+        <label className="perform-fader">
+          <span>Performance fader</span>
+          <input
+            aria-label="Performance fader"
+            type="range"
+            min="0"
+            max="1"
+            step="0.01"
+            value={faderPosition}
+            disabled={!faderEnabled}
+            onChange={(event) => onSetDeckLevels(gainsForPerformanceFader(Number(event.currentTarget.value)))}
+          />
+          <strong>A {Math.round(monitor.decks.A.state.gain * 100)}% · B {Math.round(monitor.decks.B.state.gain * 100)}%</strong>
+          <small>{faderEnabled ? "Equal-power macro over both channel levels" : "Unavailable until both decks are loaded and transition execution is idle"}</small>
+        </label>
       </section>
-      <DeckPanel deck={monitor.decks.B} />
+      <DeckPanel deck={monitor.decks.B} manualGainEnabled={manualGainEnabled} onSetDeckLevel={onSetDeckLevel} />
       <div className="perform-legend"><span className="is-playhead">Playhead</span><span className="is-transition">DJ transition cue</span><span className="is-generic">Generic cue</span><span className="is-region">Selected region</span></div>
     </main>
   );

@@ -36,6 +36,11 @@ import { selectDjTransitionRegions } from "../logic/djTransitionRegions";
 import { sourceFingerprintFor, analysisRevisionMarkerFor } from "../logic/djTransitionShadowResolve";
 import { evaluateDjTransitionAuthority, type DjTransitionAuthorityGateName } from "../logic/djTransitionAuthorityGate";
 import { compileDjTransition, executeCompiledDjTransition, type DjTransitionExecutionStrategy } from "./djTransitionPlayback";
+import {
+  authorizeManualDeckGainWrite,
+  clampPerformanceGain,
+  type ManualDeckGainWriteResult,
+} from "../logic/perform/performanceGainControl";
 
 const MAX_EVENT_LOG = 20;
 // §6 — recommended position-observation window (100-300ms).
@@ -124,6 +129,8 @@ export interface PreparedPlaybackControllerResult {
   skipNext: () => Promise<void>;
   skipPrevious: () => Promise<void>;
   stop: () => void;
+  setDeckLevel: (deckId: "A" | "B", gain: number) => ManualDeckGainWriteResult;
+  setDeckLevels: (gains: Record<"A" | "B", number>) => ManualDeckGainWriteResult;
   // Dual-Deck Control Edge-Case Verification — deterministic mid-transition
   // pause trigger (§ Next Recommended Step in the 0714I report). Six live
   // attempts to catch a real ~4s crossfade via real-time polling proved
@@ -888,6 +895,34 @@ export function usePreparedPlaybackController(params: PreparedPlaybackController
     midTransitionPauseArmedAtRef.current = Math.max(0, Math.min(1, atProgressFraction));
   }
 
+  function authorizeManualGainWrite(deckIds: readonly ("A" | "B")[]): ManualDeckGainWriteResult {
+    return authorizeManualDeckGainWrite({
+      authority: authorityRef.current,
+      sessionStatus: sessionRef.current?.status ?? null,
+      transitionClaimed: transitionRunningForRef.current !== null,
+      decks: decksRef.current,
+    }, deckIds);
+  }
+
+  function setDeckLevel(deckId: "A" | "B", gain: number): ManualDeckGainWriteResult {
+    const authorization = authorizeManualGainWrite([deckId]);
+    if (!authorization.accepted) return authorization;
+    const engine = engineRef.current;
+    if (!engine) return { accepted: false, reason: "wrong_authority" };
+    engine.setDeckGainValue(deckId, clampPerformanceGain(gain));
+    return { accepted: true };
+  }
+
+  function setDeckLevels(gains: Record<"A" | "B", number>): ManualDeckGainWriteResult {
+    const authorization = authorizeManualGainWrite(["A", "B"]);
+    if (!authorization.accepted) return authorization;
+    const engine = engineRef.current;
+    if (!engine) return { accepted: false, reason: "wrong_authority" };
+    engine.setDeckGainValue("A", clampPerformanceGain(gains.A));
+    engine.setDeckGainValue("B", clampPerformanceGain(gains.B));
+    return { accepted: true };
+  }
+
   return {
     session, decks, progress, fallbackReason: session?.fallbackReason,
     handoffPhase, handoffFailureReason, runtimeFallback: session?.runtimeFallback,
@@ -895,7 +930,7 @@ export function usePreparedPlaybackController(params: PreparedPlaybackController
     jitterMetrics: engineRef.current?.getJitterMetrics() ?? [],
     lifecycleMetrics: engineRef.current?.getLifecycleMetrics() ?? null,
     djActiveDiagnostics,
-    pause, resume, seek, skipNext, skipPrevious, stop,
+    pause, resume, seek, skipNext, skipPrevious, stop, setDeckLevel, setDeckLevels,
     armMidTransitionPause,
   };
 }

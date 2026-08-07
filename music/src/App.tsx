@@ -176,6 +176,7 @@ import { PlaylistAtmosphereLayer } from "./ui/PlaylistAtmosphereLayer";
 import { usePreparedPlaybackController } from "./audio/usePreparedPlaybackController";
 import { PreparedPlaybackStatus } from "./ui/player/PreparedPlaybackStatus";
 import { buildDualDeckPerformMonitor } from "./logic/perform/dualDeckPerformMonitor";
+import { clampPerformanceGain, gainsForPerformanceFader, performanceFaderPositionForGains } from "./logic/perform/performanceGainControl";
 import { DualDeckPerformWorkspace } from "./ui/perform/DualDeckPerformWorkspace";
 import { findOutgoingPlan } from "./audio/preparedPlaybackSession";
 import { useLoopAuditionController } from "./audio/useLoopAuditionController";
@@ -575,6 +576,8 @@ export default function App() {
   const nextActionRef = useRef<() => void>(() => {});
   const prevActionRef = useRef<() => void>(() => {});
   const removeSelectedRef = useRef<() => void>(() => {});
+  const performanceFaderActionRef = useRef<(position: number) => void>(() => {});
+  const performanceFaderPositionRef = useRef(0.5);
   // §18/§19 — authority-aware, not just the standard player's playbackStatus.
   const transportIsPlayingRef = useRef(false);
 
@@ -5448,6 +5451,9 @@ export default function App() {
     stopActionRef.current = routedStop;
     nextActionRef.current = routedNext;
     prevActionRef.current = routedPrevious;
+    performanceFaderActionRef.current = (position) => {
+      preparedPlayback.setDeckLevels(gainsForPerformanceFader(position));
+    };
     transportIsPlayingRef.current = transportStatus === "playing";
     // Dual-Deck Control Edge-Case Verification — deterministic mid-transition
     // pause trigger, exposed for live verification only (see completion
@@ -5475,6 +5481,19 @@ export default function App() {
     function handleKey(e: KeyboardEvent) {
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if (viewModeRef.current === "perform") {
+        let faderPosition: number | null = null;
+        if (e.key === "1") faderPosition = 0;
+        else if (e.key === "2") faderPosition = 0.5;
+        else if (e.key === "3") faderPosition = 1;
+        else if (e.shiftKey && e.key === "ArrowLeft") faderPosition = performanceFaderPositionRef.current - 0.02;
+        else if (e.shiftKey && e.key === "ArrowRight") faderPosition = performanceFaderPositionRef.current + 0.02;
+        if (faderPosition !== null) {
+          e.preventDefault();
+          performanceFaderActionRef.current(clampPerformanceGain(faderPosition));
+          return;
+        }
+      }
       if (e.key === " ") {
         if (viewModeRef.current === "sectional_looper") return; // looper owns Space while open
         e.preventDefault();
@@ -5784,6 +5803,13 @@ export default function App() {
     runtimeFallback: preparedPlayback.runtimeFallback,
     fallbackReason: preparedPlayback.fallbackReason,
   }), [playingPlaylist, preparedPlayback.decks, preparedPlayback.session, preparedPlayback.djActiveDiagnostics, preparedPlayback.runtimeFallback, preparedPlayback.fallbackReason, tbm, songAnalyses, djTransitionMode]);
+  performanceFaderPositionRef.current = performanceFaderPositionForGains(
+    performMonitor.decks.A.state.gain,
+    performMonitor.decks.B.state.gain,
+  );
+  const performManualGainEnabled = preparedPlayback.authority === "dual_deck_engine"
+    && preparedPlayback.session != null
+    && preparedPlayback.session.status !== "transitioning";
   // §9/§17 — row highlighting must follow the engine's active slot after
   // handoff, not the standard player's currentSlotIdx (which the engine
   // advances independently and never writes back to).
@@ -6764,7 +6790,12 @@ export default function App() {
               onImportAudio={handleImportAudio}
             />
           ) : viewMode === "perform" ? (
-            <DualDeckPerformWorkspace monitor={performMonitor} />
+            <DualDeckPerformWorkspace
+              monitor={performMonitor}
+              manualGainEnabled={performManualGainEnabled}
+              onSetDeckLevel={preparedPlayback.setDeckLevel}
+              onSetDeckLevels={preparedPlayback.setDeckLevels}
+            />
           ) : viewMode === "analyzer_review" ? (
             <MoodAnalysisReviewView
               tracks={libraryTracks}
