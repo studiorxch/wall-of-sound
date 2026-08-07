@@ -21,6 +21,7 @@ import { resolveSongAnalysisInput } from "./resolveSongAnalysisInput";
 import { analyzeCompleteSong } from "./completeSongAnalyzer";
 import { resolveActiveSongSection } from "./songSectionRevisions";
 import type { ChunkedDspProgress } from "../dspFeatureExtraction";
+import { markDjTrackPreparationStale } from "../edit/djTrackPreparation";
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -134,8 +135,17 @@ export function createSongAnalysisOrchestrator(deps: SongAnalysisOrchestratorDep
           },
         });
 
-        deps.saveSongAnalysis(existing ? { ...analysis, id: existing.id, sectionRevisions: existing.sectionRevisions } : analysis);
-        return analysis;
+        const preserved = existing
+          ? {
+              ...analysis,
+              id: existing.id,
+              sectionRevisions: existing.sectionRevisions,
+              djPreparation: existing.djPreparation,
+            }
+          : analysis;
+        const next = existing?.djPreparation ? markDjTrackPreparationStale(preserved, nowIso()) : preserved;
+        deps.saveSongAnalysis(next);
+        return next;
       } catch (e) {
         if (e instanceof DOMException && e.name === "AbortError") {
           // An explicit cancel is not a failure — return to NOT_ANALYZED,

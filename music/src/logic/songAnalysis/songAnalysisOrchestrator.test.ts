@@ -112,6 +112,44 @@ describe("ensureSongAnalysisReady — full lifecycle", () => {
     expect(h.updateSongAnalysis).toHaveBeenCalledWith(first!.id, { status: "STALE" });
     expect(h.getDecodedSourceBufferForRender).not.toHaveBeenCalled();
   });
+
+  it("preserves DJ preparation through forced reanalysis and marks it stale", async () => {
+    const first = await makeHarness().orchestrator.ensureSongAnalysisReady(track(), null, { segments: [] });
+    const prepared: CompleteSongAnalysis = {
+      ...first!,
+      djPreparation: {
+        id: "prep-1",
+        sourceTrackId: "track_1",
+        status: "approved",
+        gridRevisions: [{
+          id: "grid-1",
+          reason: "manual_origin",
+          createdAt: "t1",
+          grid: {
+            bpm: 120, meterNumerator: 4, meterDenominator: 4,
+            originSeconds: 0, originFrame: 0, originSource: "manual", trust: "manual", confidence: 1,
+            beatFrames: [0, 100], barFrames: [0], sourceFingerprint: first!.sourceMediaFingerprint, updatedAt: "t1",
+          },
+        }],
+        activeGridRevisionId: "grid-1",
+        phraseGrid: {
+          basisGridRevisionId: "grid-1", originBarIndex: 0, enabledGroupings: [4], boundaries: [], updatedAt: "t1",
+        },
+        cues: {},
+        createdAt: "t1",
+        updatedAt: "t1",
+      },
+    };
+    const h = makeHarness([prepared]);
+    const result = await h.orchestrator.ensureSongAnalysisReady(track(), null, { force: true, segments: [] });
+    expect(result?.djPreparation?.status).toBe("stale");
+    expect(result?.djPreparation?.gridRevisions).toEqual(prepared.djPreparation?.gridRevisions);
+    expect(result?.djPreparation?.phraseGrid).toEqual(prepared.djPreparation?.phraseGrid);
+    expect(h.saveSongAnalysis).toHaveBeenCalledWith(expect.objectContaining({
+      id: prepared.id,
+      djPreparation: expect.objectContaining({ status: "stale", activeGridRevisionId: "grid-1" }),
+    }));
+  });
 });
 
 describe("ensureSongAnalysisReady — dedup / attach-to-in-flight", () => {

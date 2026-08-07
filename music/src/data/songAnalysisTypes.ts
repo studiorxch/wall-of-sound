@@ -183,6 +183,12 @@ export interface CompleteSongAnalysis {
   // rows, and any future consumer.
   waveformSummary?: SongWaveformSummary;
 
+  // Track-owned DJ preparation. Optional so pre-C1 projects load unchanged.
+  // Detector evidence remains on Track.beatMap; this record stores only
+  // reviewed manual-grid revisions, phrase review, semantic cues, and the
+  // approval snapshot that makes their currency testable.
+  djPreparation?: import("./djTrackPreparationTypes").DjTrackPreparation;
+
   createdAt: string;
   updatedAt: string;
   verifiedAt?: string;

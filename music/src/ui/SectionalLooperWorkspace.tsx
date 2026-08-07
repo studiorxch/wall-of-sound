@@ -100,6 +100,7 @@ import { runSectionalRadioBridgePromotion } from "../logic/radio/sectionalRadioB
 import { SectionMap, type SectionMapDisplaySection } from "./sectionalLooper/SectionMap";
 import type { CompleteSongAnalysis, NumericProfile, SongStructuralType } from "../data/songAnalysisTypes";
 import { resolveActiveSongSection, createSongSectionRevision } from "../logic/songAnalysis/songSectionRevisions";
+import { appendPreparationGridRevision, resolveActivePreparationGrid } from "../logic/edit/djTrackPreparation";
 import type { ChunkedDspProgress } from "../logic/dspFeatureExtraction";
 import { isMigratedLegacyStem } from "../logic/library/libraryVisibleTracks";
 
@@ -374,13 +375,10 @@ export function SectionalLooperWorkspace({
   const [waveformError, setWaveformError] = useState<string | null>(null);
   const [candidatePeaks, setCandidatePeaks] = useState<Record<number, WaveformPeak[]>>({});
 
-  // 0714T_MUSIC_Musical_Grid_Editor_And_Segment_Timeline — editor-surface
-  // completion of 0714S's foundations. Grid revisions and segments are kept
-  // per-track, session-local (not yet wired into PlayProject persistence —
-  // see completion report §"Deferred"). Only the ACTIVE revision drives
-  // ruler marks, segment generation, and candidate regeneration (§17/§36).
+  // Grid revisions now live in CompleteSongAnalysis.djPreparation. The
+  // Looper keeps no parallel revision authority; only transient segments
+  // remain local to this workspace.
   const [zoomLevel, setZoomLevel] = useState<TimelineZoomLevel>("bars");
-  const [gridRevisions, setGridRevisions] = useState<Record<string, MusicalGridRevision[]>>({});
   const [segmentsByTrack, setSegmentsByTrack] = useState<Record<string, TrackSegment[]>>({});
   const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(null);
   const [hoveredSegmentId, setHoveredSegmentId] = useState<string | null>(null);
@@ -472,6 +470,7 @@ export function SectionalLooperWorkspace({
     [libraryTracks, resolveTrackUrl],
   );
   const track = sourceTrackId ? libraryTracks.find((t) => t.trackId === sourceTrackId) : undefined;
+  const currentSongAnalysis = track ? songAnalyses.find((a) => a.sourceTrackId === track.trackId) : undefined;
   const sampleRate = audioBufferRef.current?.sampleRate ?? waveform?.sampleRate ?? 44100;
   const fingerprint = track ? (track.playbackBounds?.sourceFingerprint ?? track.trackId) : "";
   // 0716A (corrections §1) — Sounds-library ("reference") records carry
@@ -492,15 +491,13 @@ export function SectionalLooperWorkspace({
   // §17 — only the ACTIVE grid revision (last item in this track's list,
   // or the freshly-built detected grid when no manual revision exists yet)
   // drives ruler marks, segmentation, and candidate regeneration below.
-  const revisionsForTrack = track ? (gridRevisions[track.trackId] ?? []) : [];
   const activeGrid: MusicalGrid | null = useMemo(() => {
     if (!track) return null;
-    const latest = revisionsForTrack[revisionsForTrack.length - 1];
-    if (latest) return latest.grid;
-    return buildMusicalGridFromBeatMap(track.beatMap, track.bpm, fingerprint, trackDurationSeconds, sampleRate);
+    const detected = buildMusicalGridFromBeatMap(track.beatMap, track.bpm, fingerprint, trackDurationSeconds, sampleRate);
+    return resolveActivePreparationGrid(currentSongAnalysis?.djPreparation, detected)?.grid ?? null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [track?.trackId, revisionsForTrack.length, sampleRate]);
-  const activeGridRevisionId = revisionsForTrack[revisionsForTrack.length - 1]?.id ?? "detected";
+  }, [track?.trackId, currentSongAnalysis?.djPreparation, sampleRate, trackDurationSeconds]);
+  const activeGridRevisionId = currentSongAnalysis?.djPreparation?.activeGridRevisionId ?? "detected";
 
   const segments = track ? (segmentsByTrack[track.trackId] ?? []) : [];
   // §36 — a synthetic segmentation revision id, stable for as long as this
@@ -747,11 +744,20 @@ export function SectionalLooperWorkspace({
   }
 
   function pushGridRevision(nextGrid: MusicalGrid, reason: MusicalGridRevision["reason"]) {
-    if (!track) return;
-    const revision: MusicalGridRevision = {
-      id: genRevisionId(), grid: nextGrid, revisionOf: activeGridRevisionId, reason, createdAt: new Date().toISOString(),
-    };
-    setGridRevisions((prev) => ({ ...prev, [track.trackId]: [...(prev[track.trackId] ?? []), revision] }));
+    if (!track || !currentSongAnalysis) {
+      setSegmentError("Analyze this track before saving musical-grid corrections.");
+      return;
+    }
+    const now = new Date().toISOString();
+    const next = appendPreparationGridRevision(
+      currentSongAnalysis,
+      nextGrid,
+      reason,
+      genRevisionId(),
+      currentSongAnalysis.djPreparation?.id ?? `djprep_${track.trackId}`,
+      now,
+    );
+    onUpdateSongAnalysis(currentSongAnalysis.id, { djPreparation: next.djPreparation });
   }
 
   function handleSetOrigin() {
@@ -2103,7 +2109,6 @@ export function SectionalLooperWorkspace({
   // through its own revision chain (resolveActiveSongSection), overlaying
   // live drag feedback from draggedSectionBounds when present — mirroring
   // how timelineSelection itself shows live feedback pre-commit.
-  const currentSongAnalysis = track ? songAnalyses.find((a) => a.sourceTrackId === track.trackId) : undefined;
   const displaySections: SectionMapDisplaySection[] = currentSongAnalysis
     ? currentSongAnalysis.sections.map((s) => {
       const resolved = resolveActiveSongSection(s, currentSongAnalysis.sectionRevisions);
