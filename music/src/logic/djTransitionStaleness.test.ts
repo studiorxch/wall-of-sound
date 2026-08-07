@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { DjTransitionPlan } from "../data/djTransitionTypes";
-import { isDjTransitionPlanStale } from "./djTransitionStaleness";
+import { evaluateDjTransitionPlanStaleness, isDjTransitionPlanStale } from "./djTransitionStaleness";
 
 function makePlan(overrides: Partial<DjTransitionPlan> = {}): DjTransitionPlan {
   return {
@@ -75,5 +75,15 @@ describe("isDjTransitionPlanStale", () => {
     // this function actually checks is unchanged.
     const plan = makePlan({ explanation: ["operator note added"] });
     expect(isDjTransitionPlanStale(baseInput({ plan }))).toBe(false);
+  });
+
+  it("reports preparation as an additional staleness dimension without changing lineage-free plans", () => {
+    const plan = makePlan({ outgoingCue: { ...makePlan().outgoingCue, preparationLineage: {
+      preparationId: "prep-a", preparationRevisionKey: "rev-a", cueId: "cue-a", role: "MIX_OUT", basisGridRevisionId: "grid-a",
+    } } });
+    expect(evaluateDjTransitionPlanStaleness(baseInput({ plan }))).toEqual({
+      stale: true, dimension: "preparation", reason: "Current preparation lineage was not supplied.",
+    });
+    expect(evaluateDjTransitionPlanStaleness(baseInput()).dimension).toBe(null);
   });
 });

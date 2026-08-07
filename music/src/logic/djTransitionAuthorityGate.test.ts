@@ -97,6 +97,20 @@ describe("evaluateDjTransitionAuthority", () => {
     expect(evaluateDjTransitionAuthority(baseContext({ currentAnalysisRevisionKey: "rev-2" })).gate).toBe("stale");
   });
 
+  it("reports preparation lineage failures through their specific authority gate", () => {
+    const preparedPlan = makePlan({
+      outgoingCue: { ...makePlan().outgoingCue, preparationLineage: {
+        preparationId: "prep-a", preparationRevisionKey: "rev-a", cueId: "cue-a", role: "MIX_OUT", basisGridRevisionId: "grid-a",
+      } },
+      incomingCue: { ...makePlan().incomingCue, preparationLineage: {
+        preparationId: "prep-b", preparationRevisionKey: "rev-b", cueId: "cue-b", role: "MAIN_ENTRY", basisGridRevisionId: "grid-b",
+      } },
+    });
+    const result = evaluateDjTransitionAuthority(baseContext({ plan: preparedPlan }));
+    expect(result.gate).toBe("preparation_lineage_invalid");
+    expect(result.reason).toBe("Current preparation lineage was not supplied.");
+  });
+
   it("rejects when a selected region no longer exists for the current source audio", () => {
     const result = evaluateDjTransitionAuthority(baseContext({ outgoingRegionsNow: [makeRegion("some-other-region")] }));
     expect(["stale", "regions_invalid"]).toContain(result.gate);

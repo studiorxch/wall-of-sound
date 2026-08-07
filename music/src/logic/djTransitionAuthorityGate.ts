@@ -16,7 +16,8 @@
 
 import type { DjTransitionPlan, TransitionFamily } from "../data/djTransitionTypes";
 import type { DeckPlaybackState } from "../audio/dualDeckTypes";
-import { isDjTransitionPlanStale } from "./djTransitionStaleness";
+import { evaluateDjTransitionPlanStaleness } from "./djTransitionStaleness";
+import type { TransitionPreparationLineageValidation } from "./djTransitionPreparationLineage";
 import type { TransitionRegionCandidate } from "./djTransitionRegions";
 
 // §5 — initial executable scope. Only a family the engine can ACTUALLY run
@@ -57,6 +58,7 @@ export type DjTransitionAuthorityGateName =
   | "no_plan_for_pair"
   | "not_approved"
   | "stale"
+  | "preparation_lineage_invalid"
   | "unsupported_family"
   | "regions_invalid"
   | "outgoing_deck_not_ready"
@@ -77,6 +79,7 @@ export interface DjTransitionAuthorityContext {
   outgoingRegionsNow: TransitionRegionCandidate[];
   incomingRegionsNow: TransitionRegionCandidate[];
   activeStemSetLostCurrency: boolean;
+  preparationLineageValidation?: TransitionPreparationLineageValidation;
   outgoingDeckState: DeckPlaybackState;
   incomingDeckState: DeckPlaybackState;
 }
@@ -113,7 +116,7 @@ export function evaluateDjTransitionAuthority(ctx: DjTransitionAuthorityContext)
   const selectedRegionsStillExist =
     regionStillExists(plan.outgoingCue.regionId, ctx.outgoingRegionsNow) && regionStillExists(plan.incomingCue.regionId, ctx.incomingRegionsNow);
 
-  const stale = isDjTransitionPlanStale({
+  const staleness = evaluateDjTransitionPlanStaleness({
     plan,
     currentOutgoingTrackId: ctx.currentOutgoingTrackId,
     currentIncomingTrackId: ctx.currentIncomingTrackId,
@@ -122,9 +125,13 @@ export function evaluateDjTransitionAuthority(ctx: DjTransitionAuthorityContext)
     currentAnalysisRevisionKey: ctx.currentAnalysisRevisionKey,
     selectedRegionsStillExist,
     activeStemSetLostCurrency: ctx.activeStemSetLostCurrency,
+    preparationLineageValidation: ctx.preparationLineageValidation,
   });
-  if (stale) {
-    return { authorized: false, gate: "stale", reason: "Plan is stale relative to current track/source/analysis/region state." };
+  if (staleness.stale) {
+    if (staleness.dimension === "preparation") {
+      return { authorized: false, gate: "preparation_lineage_invalid", reason: staleness.reason! };
+    }
+    return { authorized: false, gate: "stale", reason: staleness.reason ?? "Plan is stale relative to current track/source/analysis/region state." };
   }
 
   if (!selectedRegionsStillExist) {

@@ -14,10 +14,12 @@ import {
 } from "./edit/djTrackPreparation";
 import {
   bridgeApprovedPreparationPair,
+  approveTransitionProposal,
   canApproveTransitionProposal,
   resolveApprovedTrackPreparation,
   transitionPlanUsesPreparation,
 } from "./djTransitionPreparationBridge";
+import { resolveTransitionPreparationLineageContext } from "./djTransitionPreparationLineage";
 
 const NOW = "2026-08-07T12:00:00.000Z";
 
@@ -96,7 +98,8 @@ function planWithPreparation(lineage = true): DjTransitionPlan {
     incomingSourceFingerprint: "source-b", analysisRevisionKey: "revision", family: "clean_cut",
     trust: "manually_authored", timeBasis: "seconds",
     outgoingCue: { seconds: 1, beatIndex: null, barIndex: null, phraseIndex: null, regionId: null, manuallyAdjusted: false, preparationLineage },
-    incomingCue: { seconds: 0, beatIndex: null, barIndex: null, phraseIndex: null, regionId: null, manuallyAdjusted: false },
+    incomingCue: { seconds: 0, beatIndex: null, barIndex: null, phraseIndex: null, regionId: null, manuallyAdjusted: false,
+      preparationLineage: lineage ? { ...preparationLineage!, preparationId: "prep-b", cueId: "cue-b-MAIN_ENTRY", role: "MAIN_ENTRY", basisGridRevisionId: "grid-b" } : undefined },
     overlapBars: null, overlapSeconds: .5, tempoAdjustmentPercentA: 0, tempoAdjustmentPercentB: 0, pulseRatio: null,
     automation: { outgoingGain: [], incomingGain: [], outgoingEq: [], incomingEq: [], bassTransferProgress: null },
     doNotLayer: true, warnings: [], explanation: [], origin: "automatic", evidenceState: "proposed", rehearsals: [],
@@ -172,6 +175,44 @@ describe("DJ transition preparation bridge", () => {
     expect(transitionPlanUsesPreparation(planWithPreparation())).toBe(true);
     expect(transitionPlanUsesPreparation(planWithPreparation(false))).toBe(false);
     expect(canApproveTransitionProposal(planWithPreparation(), true)).toBe(false);
+    const validLineage = { usesPreparation: true, valid: true, failure: null, side: null, reason: null } as const;
+    expect(canApproveTransitionProposal(planWithPreparation(), true, validLineage)).toBe(true);
+    expect(approveTransitionProposal(planWithPreparation(), true, validLineage, NOW)?.evidenceState).toBe("approved");
+    expect(approveTransitionProposal(planWithPreparation(), true, { ...validLineage, valid: false, failure: "preparation_stale", reason: "DJ track preparation is stale." }, NOW)).toBeNull();
     expect(canApproveTransitionProposal(planWithPreparation(false), true)).toBe(true);
+  });
+
+  it("canonically revalidates an approved preparation pair and reports later preparation state changes", () => {
+    const outgoing = completePreparation("a", "source-a");
+    const incoming = completePreparation("b", "source-b");
+    const bridge = bridgeApprovedPreparationPair(outgoing.track, outgoing.analysis, incoming.track, incoming.analysis);
+    expect(bridge.outgoing.available && bridge.incoming.available).toBe(true);
+    if (!bridge.outgoing.available || !bridge.incoming.available) return;
+    const candidatePlan = {
+      ...planWithPreparation(false),
+      outgoingTrackId: "a", incomingTrackId: "b", outgoingSourceFingerprint: "source-a", incomingSourceFingerprint: "source-b",
+      outgoingCue: bridge.outgoing.candidates.MIX_OUT.transitionCue,
+      incomingCue: bridge.incoming.candidates.MAIN_ENTRY.transitionCue,
+    };
+    expect(resolveTransitionPreparationLineageContext(
+      candidatePlan, outgoing.track, outgoing.analysis, incoming.track, incoming.analysis,
+    ).validation).toMatchObject({ usesPreparation: true, valid: true });
+
+    for (const status of ["draft", "reviewed", "stale"] as const) {
+      const changedAnalysis = { ...incoming.analysis, djPreparation: { ...incoming.analysis.djPreparation!, status } };
+      const validation = resolveTransitionPreparationLineageContext(
+        candidatePlan, outgoing.track, outgoing.analysis, incoming.track, changedAnalysis,
+      ).validation;
+      expect(validation).toMatchObject({
+        valid: false,
+        failure: status === "stale" ? "preparation_stale" : "preparation_not_approved",
+        side: "incoming",
+      });
+    }
+
+    const changedAnalysisIdentity = { ...incoming.analysis, id: "replacement-analysis" };
+    expect(resolveTransitionPreparationLineageContext(
+      candidatePlan, outgoing.track, outgoing.analysis, incoming.track, changedAnalysisIdentity,
+    ).validation).toMatchObject({ valid: false, failure: "source_analysis_mismatch", side: "incoming" });
   });
 });

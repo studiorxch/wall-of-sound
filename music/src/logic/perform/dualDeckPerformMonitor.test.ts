@@ -152,6 +152,23 @@ describe("buildDualDeckPerformMonitor", () => {
     expect(buildDualDeckPerformMonitor(input({ playlist: unsupportedPlaylist })).transition.authority?.gate).toBe("unsupported_family");
   });
 
+  it("reports the canonical preparation-lineage failure without a Perform-specific check", () => {
+    const base = input();
+    const preparedPlan = plan({
+      outgoingCue: { ...plan().outgoingCue, preparationLineage: {
+        preparationId: "prep-a", preparationRevisionKey: "rev-a", cueId: "cue-a", role: "MIX_OUT", basisGridRevisionId: "grid-a",
+      } },
+      incomingCue: { ...plan().incomingCue, preparationLineage: {
+        preparationId: "prep-b", preparationRevisionKey: "rev-b", cueId: "cue-b", role: "MAIN_ENTRY", basisGridRevisionId: "grid-b",
+      } },
+    });
+    const result = buildDualDeckPerformMonitor(input({ playlist: { ...base.playlist!, djTransitionPlans: [preparedPlan] } }));
+    expect(result.transition.stale).toBe(true);
+    expect(result.transition.authority).toMatchObject({
+      gate: "preparation_lineage_invalid", reason: "DJ track preparation is missing.",
+    });
+  });
+
   it("shows active execution only from matching real diagnostics and preserves exact legacy fallback reason", () => {
     const diagnostics = {
       legacyTransitionId: "slot-a__slot-b", djPlanId: "dj-1", authorized: true, gate: "authorized", reason: "All authority conditions passed.",

@@ -8,6 +8,7 @@ import { assembleDjTransitionTrackEvidence } from "../djTransitionEvidence";
 import { selectDjTransitionRegions } from "../djTransitionRegions";
 import { analysisRevisionMarkerFor, sourceFingerprintFor } from "../djTransitionShadowResolve";
 import { resolveTransitionHintForAdjacency } from "./radioWebTransitionHint";
+import { resolveTransitionPreparationLineageContext } from "../djTransitionPreparationLineage";
 
 export interface RadioExportReadyEntry {
   entryId: string;
@@ -108,6 +109,14 @@ export function resolveRadioExportDjTransitions(
       sourceFingerprint: sourceFingerprintFor(incomingTrack, incomingSongAnalysis),
     });
 
+    const djTransitionPlan = matchingPlans[0];
+    const preparationLineage = resolveTransitionPreparationLineageContext(
+      djTransitionPlan,
+      outgoingTrack,
+      outgoingSongAnalysis,
+      incomingTrack,
+      incomingSongAnalysis,
+    );
     const djTransitionContext = {
       currentOutgoingTrackId: outgoingTrack.trackId,
       currentIncomingTrackId: incomingTrack.trackId,
@@ -117,9 +126,9 @@ export function resolveRadioExportDjTransitions(
       outgoingRegionsNow: selectDjTransitionRegions({ side: "outgoing", evidence: outgoingEvidence, playbackBounds: outgoingTrack.playbackBounds }),
       incomingRegionsNow: selectDjTransitionRegions({ side: "incoming", evidence: incomingEvidence, playbackBounds: incomingTrack.playbackBounds }),
       activeStemSetLostCurrency: false,
+      ...(preparationLineage.validation.usesPreparation ? { preparationLineageContext: preparationLineage.context } : {}),
     } satisfies RadioExportResolvedTransition["djTransitionContext"];
 
-    const djTransitionPlan = matchingPlans[0];
     const authorizedHint = resolveTransitionHintForAdjacency({
       djTransitionMode: "active",
       plan: djTransitionPlan,

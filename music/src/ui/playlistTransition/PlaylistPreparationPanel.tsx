@@ -33,11 +33,12 @@ import {
   type DjTransitionShadowResolution,
 } from "../../logic/djTransitionShadowResolve";
 import {
-  PREPARATION_RUNTIME_REVALIDATION_REASON,
+  approveTransitionProposal,
   canApproveTransitionProposal,
   transitionPlanUsesPreparation,
   type PreparationBridgeFailureReason,
 } from "../../logic/djTransitionPreparationBridge";
+import { resolveTransitionPreparationLineageContext } from "../../logic/djTransitionPreparationLineage";
 
 interface Props {
   playlist: PlaylistRecord;
@@ -93,6 +94,7 @@ const AUTHORITY_GATE_LABEL: Record<string, string> = {
   no_plan_for_pair: "No approved plan for this pair",
   not_approved: "Plan not approved",
   stale: "Plan is stale",
+  preparation_lineage_invalid: "Preparation lineage invalid",
   unsupported_family: "Family not implemented",
   regions_invalid: "Selected region no longer valid",
   outgoing_deck_not_ready: "Outgoing deck not ready",
@@ -170,7 +172,20 @@ export function PlaylistPreparationPanel({
   function approveForActiveExecution(pair: DjTransitionShadowPair, resolvedPlan: DjTransitionPlan) {
     if (!onDjTransitionPlansChange) return;
     const now = nowIso();
-    const approved: DjTransitionPlan = { ...resolvedPlan, origin: "manual", evidenceState: "approved", approvedAt: now, updatedAt: now };
+    const lineage = resolveTransitionPreparationLineageContext(
+      resolvedPlan,
+      pair.outgoingTrack,
+      songAnalysesByTrackId.get(pair.outgoingTrack.trackId),
+      pair.incomingTrack,
+      songAnalysesByTrackId.get(pair.incomingTrack.trackId),
+    );
+    const approved = approveTransitionProposal(
+      resolvedPlan,
+      SUPPORTED_ACTIVE_TRANSITION_FAMILIES.has(resolvedPlan.family),
+      lineage.validation,
+      now,
+    );
+    if (!approved) return;
     const existing = playlist.djTransitionPlans ?? [];
     const next = existing.filter((p) => !(p.outgoingSlotId === pair.outgoingSlot.slotId && p.incomingSlotId === pair.incomingSlot.slotId));
     onDjTransitionPlansChange([...next, approved]);
@@ -345,12 +360,12 @@ function DjPairRow({
     );
   }
 
-  const { result, evidence, outgoingRegions, incomingRegions, preparationBridge } = entry.resolution;
+  const { result, evidence, outgoingRegions, incomingRegions, preparationBridge, preparationLineageValidation } = entry.resolution;
   const plan = result.recommended;
   const legacyStrategy = legacyPrepExists ? (legacyPlan ? `${MODE_LABEL[legacyPlan.syncMode]} · ${legacyPlan.transitionDurationSeconds.toFixed(1)}s` : "No legacy plan for this pair") : "Not prepared";
   const isSupportedFamily = SUPPORTED_ACTIVE_TRANSITION_FAMILIES.has(plan.family);
   const preparationDerived = transitionPlanUsesPreparation(plan);
-  const proposalApprovable = canApproveTransitionProposal(plan, isSupportedFamily);
+  const proposalApprovable = canApproveTransitionProposal(plan, isSupportedFamily, preparationLineageValidation);
   const outgoingLineage = plan.outgoingCue.preparationLineage;
   const incomingLineage = plan.incomingCue.preparationLineage;
   const outgoingPreparation = preparationBridge.outgoing.available ? preparationBridge.outgoing.candidates.MIX_OUT : null;
@@ -417,8 +432,8 @@ function DjPairRow({
               Approve for Active Execution
             </button>
           )}
-          {canApprove && isSupportedFamily && preparationDerived && !approvedPlan && (
-            <div className="ptp-dj-hint">{PREPARATION_RUNTIME_REVALIDATION_REASON}</div>
+          {canApprove && isSupportedFamily && preparationDerived && !proposalApprovable && !approvedPlan && (
+            <div className="ptp-dj-hint">{preparationLineageValidation.reason}</div>
           )}
           {approvedPlan && <div className="ptp-dj-approved-note">Approved {approvedPlan.approvedAt} — eligible for active-mode execution while current.</div>}
           {canApprove && !isSupportedFamily && (

@@ -53,6 +53,14 @@ export interface TransitionEvidenceValue<T> {
   analyzedAt: string | null;
 }
 
+export interface TransitionPreparationCueReference {
+  preparationId: string;
+  preparationRevisionKey: string;
+  cueId: string;
+  role: DjPreparationCueRole;
+  basisGridRevisionId: string;
+}
+
 export interface TransitionCue {
   seconds: number;
   beatIndex: number | null;
@@ -60,13 +68,7 @@ export interface TransitionCue {
   phraseIndex: number | null;
   regionId: string | null;
   manuallyAdjusted: boolean;
-  preparationLineage?: {
-    preparationId: string;
-    preparationRevisionKey: string;
-    cueId: string;
-    role: DjPreparationCueRole;
-    basisGridRevisionId: string;
-  };
+  preparationLineage?: TransitionPreparationCueReference;
 }
 
 export interface EqPoint {

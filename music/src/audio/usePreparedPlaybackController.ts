@@ -35,6 +35,7 @@ import { assembleDjTransitionTrackEvidence } from "../logic/djTransitionEvidence
 import { selectDjTransitionRegions } from "../logic/djTransitionRegions";
 import { sourceFingerprintFor, analysisRevisionMarkerFor } from "../logic/djTransitionShadowResolve";
 import { evaluateDjTransitionAuthority, type DjTransitionAuthorityGateName } from "../logic/djTransitionAuthorityGate";
+import { resolveTransitionPreparationLineageContext } from "../logic/djTransitionPreparationLineage";
 import { compileDjTransition, executeCompiledDjTransition, type DjTransitionExecutionStrategy } from "./djTransitionPlayback";
 import {
   authorizeManualDeckGainWrite,
@@ -440,6 +441,9 @@ export function usePreparedPlaybackController(params: PreparedPlaybackController
       });
       const outgoingRegionsNow = selectDjTransitionRegions({ side: "outgoing", evidence: outgoingEvidence, playbackBounds: outgoingTrack.playbackBounds });
       const incomingRegionsNow = selectDjTransitionRegions({ side: "incoming", evidence: incomingEvidence, playbackBounds: incomingTrack.playbackBounds });
+      const preparationLineage = djPlan
+        ? resolveTransitionPreparationLineageContext(djPlan, outgoingTrack, outgoingSongAnalysis, incomingTrack, incomingSongAnalysis)
+        : undefined;
 
       const deckStates = eng.getState();
       // Deck-specific readiness is decided INSIDE evaluateDjTransitionAuthority
@@ -461,6 +465,7 @@ export function usePreparedPlaybackController(params: PreparedPlaybackController
         // clean_cut, the only supported family, never touches stems — always
         // false is the honest value for this family, not a guess.
         activeStemSetLostCurrency: false,
+        preparationLineageValidation: preparationLineage?.validation,
         outgoingDeckState, incomingDeckState,
       });
 

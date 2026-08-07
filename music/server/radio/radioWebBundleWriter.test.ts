@@ -13,6 +13,7 @@ import { exportWebBundle, computeContentSignature, listBundleVersions } from "./
 import { encodePcmWav } from "../../src/logic/loops/wavEncoder";
 import type { RadioTrackPrepareRequest } from "../../src/data/radioTrackPackageTypes";
 import type { RadioWebBundleExportRequest } from "../../src/data/radioWebBundleTypes";
+import type { DjTransitionPlan } from "../../src/data/djTransitionTypes";
 
 const FFMPEG_TIMEOUT = 30_000;
 
@@ -85,6 +86,37 @@ async function makeExportRequest(): Promise<RadioWebBundleExportRequest> {
   };
 }
 
+function preparationTransitionPayload(): {
+  plan: DjTransitionPlan;
+  context: NonNullable<RadioWebBundleExportRequest["entries"][number]["djTransitionContext"]>;
+} {
+  const outgoingLineage = { preparationId: "prep-a", preparationRevisionKey: "prep-rev-a", cueId: "cue-a", role: "MIX_OUT" as const, basisGridRevisionId: "grid-a" };
+  const incomingLineage = { preparationId: "prep-b", preparationRevisionKey: "prep-rev-b", cueId: "cue-b", role: "MAIN_ENTRY" as const, basisGridRevisionId: "grid-b" };
+  const plan: DjTransitionPlan = {
+    id: "dj-plan", playlistId: "playlist", outgoingSlotId: "slot-a", incomingSlotId: "slot-b",
+    outgoingTrackId: "track_a", incomingTrackId: "track_b", outgoingSourceFingerprint: "hash-a", incomingSourceFingerprint: "hash-b",
+    analysisRevisionKey: "analysis-rev", family: "clean_cut", trust: "manually_authored", timeBasis: "seconds",
+    outgoingCue: { seconds: 12.8, beatIndex: null, barIndex: 32, phraseIndex: null, regionId: null, manuallyAdjusted: false, preparationLineage: outgoingLineage },
+    incomingCue: { seconds: 6.4, beatIndex: null, barIndex: 16, phraseIndex: null, regionId: null, manuallyAdjusted: false, preparationLineage: incomingLineage },
+    overlapBars: null, overlapSeconds: 0, tempoAdjustmentPercentA: 0, tempoAdjustmentPercentB: 0, pulseRatio: null,
+    automation: { outgoingGain: [], incomingGain: [], outgoingEq: [], incomingEq: [], bassTransferProgress: null },
+    doNotLayer: true, warnings: [], explanation: [], origin: "manual", evidenceState: "approved", rehearsals: [], listeningContext: null,
+    activeStemSetId: null, activeStemRoles: [], approvedAt: "2026-08-07T00:00:00Z", createdAt: "2026-08-07T00:00:00Z", updatedAt: "2026-08-07T00:00:00Z",
+  };
+  return {
+    plan,
+    context: {
+      currentOutgoingTrackId: "track_a", currentIncomingTrackId: "track_b",
+      currentOutgoingSourceFingerprint: "hash-a", currentIncomingSourceFingerprint: "hash-b",
+      currentAnalysisRevisionKey: "analysis-rev", outgoingRegionsNow: [], incomingRegionsNow: [], activeStemSetLostCurrency: false,
+      preparationLineageContext: {
+        outgoing: { ...outgoingLineage, sourceTrackId: "track_a", sourceAnalysisId: "analysis-a", sourceMediaFingerprint: "hash-a", cueFrame: 12_800, sampleRate: 1_000, projectedCueSeconds: 12.8 },
+        incoming: { ...incomingLineage, sourceTrackId: "track_b", sourceAnalysisId: "analysis-b", sourceMediaFingerprint: "hash-b", cueFrame: 6_400, sampleRate: 1_000, projectedCueSeconds: 6.4 },
+      },
+    },
+  };
+}
+
 describe("exportWebBundle", () => {
   it("exports a validated, self-contained, order-preserving v1 bundle", async () => {
     const request = await makeExportRequest();
@@ -116,6 +148,30 @@ describe("exportWebBundle", () => {
     const walk = (d: string) => { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, e.name); if (e.isDirectory()) walk(p); else allNames.push(e.name); } };
     walk(bundleDir);
     expect(allNames).not.toContain("source-reference.json");
+  }, FFMPEG_TIMEOUT);
+
+  it("writes a valid preparation-lineage hint and omits it when server-side lineage comparison fails", async () => {
+    const request = await makeExportRequest();
+    const payload = preparationTransitionPayload();
+    request.djTransitionMode = "active";
+    request.entries[1] = { ...request.entries[1], djTransitionPlan: payload.plan, djTransitionContext: payload.context };
+    const valid = await exportWebBundle({ webExportRoot: webRoot, trackLibraryRoot: trackLib, request });
+    expect(valid.ok).toBe(true);
+    const validManifest = JSON.parse(fs.readFileSync(path.join(webRoot, "test-station", "v1", "radio-manifest.json"), "utf-8"));
+    expect(validManifest.entries[1].transitionFromPrevious).toEqual({ family: "clean_cut", strategy: "clean_cut_hard_cut" });
+
+    const invalidContext = {
+      ...payload.context,
+      preparationLineageContext: {
+        ...payload.context.preparationLineageContext!,
+        incoming: { ...payload.context.preparationLineageContext!.incoming!, cueId: "changed" },
+      },
+    };
+    request.entries[1] = { ...request.entries[1], djTransitionContext: invalidContext };
+    const invalid = await exportWebBundle({ webExportRoot: webRoot, trackLibraryRoot: trackLib, request: { ...request, force: true } });
+    expect(invalid.ok).toBe(true);
+    const invalidManifest = JSON.parse(fs.readFileSync(path.join(webRoot, "test-station", "v2", "radio-manifest.json"), "utf-8"));
+    expect(invalidManifest.entries[1].transitionFromPrevious).toBeNull();
   }, FFMPEG_TIMEOUT);
 
   it("detects an unchanged re-export and requires explicit force", async () => {

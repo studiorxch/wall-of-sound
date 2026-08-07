@@ -144,6 +144,10 @@ export interface RadioWebBundleExportRequest {
       outgoingRegionsNow: import("../logic/djTransitionRegions").TransitionRegionCandidate[];
       incomingRegionsNow: import("../logic/djTransitionRegions").TransitionRegionCandidate[];
       activeStemSetLostCurrency: boolean;
+      // Request-local canonical MUSIC preparation snapshots. These are
+      // compared again by the shared lineage validator at publish time and
+      // are never stored in the RADIO project or manifest.
+      preparationLineageContext?: import("../logic/djTransitionPreparationLineage").TransitionPreparationLineageContext;
     };
   }>;
   djTransitionMode?: "off" | "shadow" | "active";

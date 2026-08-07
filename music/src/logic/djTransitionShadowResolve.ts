@@ -24,6 +24,11 @@ import { fetchStemSets, resolveTrackAudioIdentifier } from "./stems/stemClient";
 import { bridgeApprovedPreparationPair, type PairPreparationBridgeResult } from "./djTransitionPreparationBridge";
 import { isDjTransitionPlanStale } from "./djTransitionStaleness";
 import type { DjTransitionPlan } from "../data/djTransitionTypes";
+import {
+  resolveTransitionPreparationLineageContext,
+  type TransitionPreparationLineageContext,
+  type TransitionPreparationLineageValidation,
+} from "./djTransitionPreparationLineage";
 
 export interface DjTransitionShadowPair {
   pairKey: string;
@@ -112,6 +117,8 @@ export interface DjTransitionShadowResolution {
   outgoingRegions: ReturnType<typeof selectDjTransitionRegions>;
   incomingRegions: ReturnType<typeof selectDjTransitionRegions>;
   preparationBridge: PairPreparationBridgeResult;
+  preparationLineageContext: TransitionPreparationLineageContext;
+  preparationLineageValidation: TransitionPreparationLineageValidation;
 }
 
 // The single async entry point. Fetches stem availability for both tracks
@@ -155,6 +162,9 @@ export async function resolveDjTransitionPairShadow(
     existingManualPlan.origin === "manual"
     ? existingManualPlan
     : undefined;
+  const existingLineage = exactExistingPlan
+    ? resolveTransitionPreparationLineageContext(exactExistingPlan, pair.outgoingTrack, outgoingSongAnalysis, pair.incomingTrack, incomingSongAnalysis)
+    : undefined;
   const existingManualPlanIsStale = exactExistingPlan ? isDjTransitionPlanStale({
     plan: exactExistingPlan,
     currentOutgoingTrackId: pair.outgoingTrack.trackId,
@@ -166,6 +176,7 @@ export async function resolveDjTransitionPairShadow(
       (exactExistingPlan.outgoingCue.regionId == null || outgoingRegions.some((region) => region.regionId === exactExistingPlan.outgoingCue.regionId)) &&
       (exactExistingPlan.incomingCue.regionId == null || incomingRegions.some((region) => region.regionId === exactExistingPlan.incomingCue.regionId)),
     activeStemSetLostCurrency: exactExistingPlan.family === "stem_assisted_transition",
+    preparationLineageValidation: existingLineage?.validation,
   }) : undefined;
 
   const result = resolveDjTransition({
@@ -188,5 +199,21 @@ export async function resolveDjTransitionPairShadow(
     idFactory: nextShadowId,
   });
 
-  return { pairKey: pair.pairKey, result, evidence, outgoingRegions, incomingRegions, preparationBridge };
+  const proposalLineage = resolveTransitionPreparationLineageContext(
+    result.recommended,
+    pair.outgoingTrack,
+    outgoingSongAnalysis,
+    pair.incomingTrack,
+    incomingSongAnalysis,
+  );
+  return {
+    pairKey: pair.pairKey,
+    result,
+    evidence,
+    outgoingRegions,
+    incomingRegions,
+    preparationBridge,
+    preparationLineageContext: proposalLineage.context,
+    preparationLineageValidation: proposalLineage.validation,
+  };
 }

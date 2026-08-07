@@ -60,6 +60,20 @@ function makeContext(overrides: Partial<TransitionHintResolutionContext> = {}): 
   };
 }
 
+function preparedPlanAndContext() {
+  const outgoingLineage = { preparationId: "prep-a", preparationRevisionKey: "prep-rev-a", cueId: "cue-a", role: "MIX_OUT" as const, basisGridRevisionId: "grid-a" };
+  const incomingLineage = { preparationId: "prep-b", preparationRevisionKey: "prep-rev-b", cueId: "cue-b", role: "MAIN_ENTRY" as const, basisGridRevisionId: "grid-b" };
+  const plan = makePlan({
+    outgoingCue: { ...makeCue(null), seconds: 12.8, preparationLineage: outgoingLineage },
+    incomingCue: { ...makeCue(null), seconds: 6.4, preparationLineage: incomingLineage },
+  });
+  const preparationLineageContext = {
+    outgoing: { ...outgoingLineage, sourceTrackId: "track_a", sourceAnalysisId: "analysis-a", sourceMediaFingerprint: "hash_a", cueFrame: 12_800, sampleRate: 1_000, projectedCueSeconds: 12.8 },
+    incoming: { ...incomingLineage, sourceTrackId: "track_b", sourceAnalysisId: "analysis-b", sourceMediaFingerprint: "hash_b", cueFrame: 6_400, sampleRate: 1_000, projectedCueSeconds: 6.4 },
+  };
+  return { plan, preparationLineageContext };
+}
+
 describe("resolveTransitionHintForAdjacency", () => {
   it("returns the clean_cut hint for a fully valid, approved, non-stale plan", () => {
     expect(resolveTransitionHintForAdjacency(makeContext())).toEqual({ family: "clean_cut", strategy: "clean_cut_hard_cut" });
@@ -108,5 +122,15 @@ describe("resolveTransitionHintForAdjacency", () => {
       family: "clean_cut",
       strategy: "clean_cut_hard_cut",
     });
+  });
+
+  it("exports a valid preparation-lineage hint and omits missing or mismatched lineage", () => {
+    const prepared = preparedPlanAndContext();
+    expect(resolveTransitionHintForAdjacency(makeContext(prepared))).toEqual({ family: "clean_cut", strategy: "clean_cut_hard_cut" });
+    expect(resolveTransitionHintForAdjacency(makeContext({ plan: prepared.plan }))).toBeNull();
+    expect(resolveTransitionHintForAdjacency(makeContext({
+      ...prepared,
+      preparationLineageContext: { ...prepared.preparationLineageContext, incoming: { ...prepared.preparationLineageContext.incoming, cueId: "changed" } },
+    }))).toBeNull();
   });
 });

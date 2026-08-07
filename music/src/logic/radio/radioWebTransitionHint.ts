@@ -18,6 +18,10 @@ import { evaluateDjTransitionAuthority } from "../djTransitionAuthorityGate";
 import type { DjTransitionPlan } from "../../data/djTransitionTypes";
 import type { TransitionRegionCandidate } from "../djTransitionRegions";
 import type { RadioWebTransitionHint } from "../../data/radioWebBundleTypes";
+import {
+  validateTransitionPreparationLineage,
+  type TransitionPreparationLineageContext,
+} from "../djTransitionPreparationLineage";
 
 export interface TransitionHintResolutionContext {
   djTransitionMode: "off" | "shadow" | "active";
@@ -34,9 +38,13 @@ export interface TransitionHintResolutionContext {
   outgoingRegionsNow: TransitionRegionCandidate[];
   incomingRegionsNow: TransitionRegionCandidate[];
   activeStemSetLostCurrency: boolean;
+  preparationLineageContext?: TransitionPreparationLineageContext;
 }
 
 export function resolveTransitionHintForAdjacency(context: TransitionHintResolutionContext): RadioWebTransitionHint | null {
+  const preparationLineageValidation = context.plan
+    ? validateTransitionPreparationLineage(context.plan, context.preparationLineageContext)
+    : undefined;
   const result = evaluateDjTransitionAuthority({
     djTransitionMode: context.djTransitionMode,
     plan: context.plan,
@@ -48,6 +56,7 @@ export function resolveTransitionHintForAdjacency(context: TransitionHintResolut
     outgoingRegionsNow: context.outgoingRegionsNow,
     incomingRegionsNow: context.incomingRegionsNow,
     activeStemSetLostCurrency: context.activeStemSetLostCurrency,
+    preparationLineageValidation,
     // Publish-time has no live decks. These two states are the neutral,
     // always-passing values for isOutgoingDeckReadyForCleanCut /
     // isIncomingDeckReadyToStart — real playback readiness is re-verified

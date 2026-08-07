@@ -11,6 +11,7 @@ import { assembleDjTransitionTrackEvidence, type TransitionSectionEvidence } fro
 import { selectDjTransitionRegions, type TransitionRegionCandidate } from "../djTransitionRegions";
 import { isDjTransitionPlanStale } from "../djTransitionStaleness";
 import { analysisRevisionMarkerFor, sourceFingerprintFor } from "../djTransitionShadowResolve";
+import { resolveTransitionPreparationLineageContext } from "../djTransitionPreparationLineage";
 
 export interface PerformTimingOverlay {
   beats: number[] | null;
@@ -176,6 +177,9 @@ export function buildDualDeckPerformMonitor(input: BuildDualDeckPerformMonitorIn
     (plan!.outgoingCue.regionId == null || outgoing.regions.some((region) => region.regionId === plan!.outgoingCue.regionId)) &&
     (plan!.incomingCue.regionId == null || incoming.regions.some((region) => region.regionId === plan!.incomingCue.regionId));
   const revisionKey = `${analysisRevisionMarkerFor(outgoingTrack)}::${analysisRevisionMarkerFor(incomingTrack)}`;
+  const preparationLineage = plan
+    ? resolveTransitionPreparationLineageContext(plan, outgoingTrack, outgoingAnalysis, incomingTrack, incomingAnalysis)
+    : undefined;
   const stale = plan ? isDjTransitionPlanStale({
     plan,
     currentOutgoingTrackId: outgoingTrack.trackId,
@@ -185,6 +189,7 @@ export function buildDualDeckPerformMonitor(input: BuildDualDeckPerformMonitorIn
     currentAnalysisRevisionKey: revisionKey,
     selectedRegionsStillExist,
     activeStemSetLostCurrency: false,
+    preparationLineageValidation: preparationLineage?.validation,
   }) : null;
   const authority = evaluateDjTransitionAuthority({
     djTransitionMode: input.djTransitionMode,
@@ -197,6 +202,7 @@ export function buildDualDeckPerformMonitor(input: BuildDualDeckPerformMonitorIn
     outgoingRegionsNow: outgoing.regions,
     incomingRegionsNow: incoming.regions,
     activeStemSetLostCurrency: false,
+    preparationLineageValidation: preparationLineage?.validation,
     outgoingDeckState: outgoingState!.state,
     incomingDeckState: incomingState!.state,
   });

@@ -2,6 +2,7 @@ import type { CompleteSongAnalysis } from "../data/songAnalysisTypes";
 import type { Track } from "../data/trackTypes";
 import type { DjPhraseBars, DjPreparationCueRole } from "../data/djTrackPreparationTypes";
 import type { DjTransitionPlan, TransitionCue } from "../data/djTransitionTypes";
+import type { TransitionPreparationLineageValidation } from "./djTransitionPreparationLineage";
 import {
   DJ_PREPARATION_CUE_ORDER,
   buildDjPreparationBasis,
@@ -47,14 +48,29 @@ export interface PairPreparationBridgeResult {
   commonRunwayBars: DjPhraseBars | null;
 }
 
-export const PREPARATION_RUNTIME_REVALIDATION_REASON = "Runtime preparation revalidation not yet connected.";
-
 export function transitionPlanUsesPreparation(plan: DjTransitionPlan): boolean {
   return Boolean(plan.outgoingCue.preparationLineage || plan.incomingCue.preparationLineage);
 }
 
-export function canApproveTransitionProposal(plan: DjTransitionPlan, familySupported: boolean): boolean {
-  return familySupported && !transitionPlanUsesPreparation(plan);
+export function canApproveTransitionProposal(
+  plan: DjTransitionPlan,
+  familySupported: boolean,
+  preparationLineageValidation?: TransitionPreparationLineageValidation,
+): boolean {
+  if (!familySupported) return false;
+  if (!transitionPlanUsesPreparation(plan)) return true;
+  if (!plan.outgoingCue.preparationLineage || !plan.incomingCue.preparationLineage) return false;
+  return preparationLineageValidation?.valid === true && preparationLineageValidation.usesPreparation;
+}
+
+export function approveTransitionProposal(
+  plan: DjTransitionPlan,
+  familySupported: boolean,
+  preparationLineageValidation: TransitionPreparationLineageValidation | undefined,
+  now: string,
+): DjTransitionPlan | null {
+  if (!canApproveTransitionProposal(plan, familySupported, preparationLineageValidation)) return null;
+  return { ...plan, origin: "manual", evidenceState: "approved", approvedAt: now, updatedAt: now };
 }
 
 function detectedGridTimestamp(analysis: CompleteSongAnalysis): string {

@@ -4,6 +4,10 @@
 // edits (title/artist/artwork/tags), per the spec's explicit instruction.
 
 import type { DjTransitionPlan } from "../data/djTransitionTypes";
+import type { TransitionPreparationLineageValidation } from "./djTransitionPreparationLineage";
+
+export type DjTransitionStalenessDimension = "track" | "source" | "analysis" | "region" | "stem" | "preparation" | null;
+export interface DjTransitionStalenessResult { stale: boolean; dimension: DjTransitionStalenessDimension; reason: string | null }
 
 export interface DjTransitionStalenessInput {
   plan: DjTransitionPlan;
@@ -23,31 +27,42 @@ export interface DjTransitionStalenessInput {
   // via the same /stem-sets check the evidence layer uses. Always false
   // for non-stem-assisted families.
   activeStemSetLostCurrency: boolean;
+  preparationLineageValidation?: TransitionPreparationLineageValidation;
 }
 
-export function isDjTransitionPlanStale(input: DjTransitionStalenessInput): boolean {
+export function evaluateDjTransitionPlanStaleness(input: DjTransitionStalenessInput): DjTransitionStalenessResult {
   const { plan, currentOutgoingTrackId, currentIncomingTrackId, currentOutgoingSourceFingerprint, currentIncomingSourceFingerprint, currentAnalysisRevisionKey, selectedRegionsStillExist, activeStemSetLostCurrency } = input;
 
   // Either slot points to a different track.
-  if (currentOutgoingTrackId !== plan.outgoingTrackId) return true;
-  if (currentIncomingTrackId !== plan.incomingTrackId) return true;
+  if (currentOutgoingTrackId !== plan.outgoingTrackId || currentIncomingTrackId !== plan.incomingTrackId) return { stale: true, dimension: "track", reason: "Plan track identity no longer matches this adjacency." };
 
   // Either decoded source identity changes. An empty stored/current
   // fingerprint means "identity unknown" and fails closed (treated as
   // changed) rather than silently assumed unchanged.
-  if (!plan.outgoingSourceFingerprint || !currentOutgoingSourceFingerprint || plan.outgoingSourceFingerprint !== currentOutgoingSourceFingerprint) return true;
-  if (!plan.incomingSourceFingerprint || !currentIncomingSourceFingerprint || plan.incomingSourceFingerprint !== currentIncomingSourceFingerprint) return true;
+  if (!plan.outgoingSourceFingerprint || !currentOutgoingSourceFingerprint || plan.outgoingSourceFingerprint !== currentOutgoingSourceFingerprint ||
+      !plan.incomingSourceFingerprint || !currentIncomingSourceFingerprint || plan.incomingSourceFingerprint !== currentIncomingSourceFingerprint) {
+    return { stale: true, dimension: "source", reason: "Plan source identity no longer matches current audio." };
+  }
 
   // The relevant beat/downbeat/phrase grid revision changed (folded into
   // the single analysisRevisionKey, same pattern as
   // PlaylistPlaybackPreparation.sourceTrackRevisionMap).
-  if (!plan.analysisRevisionKey || plan.analysisRevisionKey !== currentAnalysisRevisionKey) return true;
+  if (!plan.analysisRevisionKey || plan.analysisRevisionKey !== currentAnalysisRevisionKey) return { stale: true, dimension: "analysis", reason: "Plan analysis revision no longer matches current analysis." };
+
+  const usesPreparation = Boolean(plan.outgoingCue.preparationLineage || plan.incomingCue.preparationLineage);
+  if (usesPreparation && (!input.preparationLineageValidation || !input.preparationLineageValidation.valid)) {
+    return { stale: true, dimension: "preparation", reason: input.preparationLineageValidation?.reason ?? "Current preparation lineage was not supplied." };
+  }
 
   // The selected candidate region disappeared or changed materially.
-  if (!selectedRegionsStillExist) return true;
+  if (!selectedRegionsStillExist) return { stale: true, dimension: "region", reason: "One or both selected transition regions no longer exist." };
 
   // An active stem-assisted plan lost its exact current stem set.
-  if (plan.family === "stem_assisted_transition" && activeStemSetLostCurrency) return true;
+  if (plan.family === "stem_assisted_transition" && activeStemSetLostCurrency) return { stale: true, dimension: "stem", reason: "The active stem set is no longer current." };
 
-  return false;
+  return { stale: false, dimension: null, reason: null };
+}
+
+export function isDjTransitionPlanStale(input: DjTransitionStalenessInput): boolean {
+  return evaluateDjTransitionPlanStaleness(input).stale;
 }
