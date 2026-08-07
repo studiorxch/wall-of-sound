@@ -346,7 +346,7 @@ export interface MusicalGridRevision {
   id: string;
   grid: MusicalGrid;
   revisionOf?: string; // id of the prior revision this one supersedes
-  reason: "detected" | "manual_origin" | "manual_nudge" | "half_bpm" | "double_bpm" | "reset_detected";
+  reason: "detected" | "manual_origin" | "manual_nudge" | "manual_bpm" | "half_bpm" | "double_bpm" | "reset_detected";
   createdAt: string;
 }
 

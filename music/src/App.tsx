@@ -178,6 +178,7 @@ import { PreparedPlaybackStatus } from "./ui/player/PreparedPlaybackStatus";
 import { buildDualDeckPerformMonitor } from "./logic/perform/dualDeckPerformMonitor";
 import { clampPerformanceGain, gainsForPerformanceFader, performanceFaderPositionForGains } from "./logic/perform/performanceGainControl";
 import { DualDeckPerformWorkspace } from "./ui/perform/DualDeckPerformWorkspace";
+import { DjTrackEditWorkspace } from "./ui/edit/DjTrackEditWorkspace";
 import { findOutgoingPlan } from "./audio/preparedPlaybackSession";
 import { useLoopAuditionController } from "./audio/useLoopAuditionController";
 import { LoopAuditionBar } from "./ui/player/LoopAuditionBar";
@@ -385,6 +386,7 @@ export default function App() {
   );
   const audioExperimentsRef = useRef<AudioExperimentRecord[]>([]);
   const [looperSourceTrackId, setLooperSourceTrackId] = useState<string | null>(null);
+  const [editSourceTrackId, setEditSourceTrackId] = useState<string | null>(null);
   const [loopRenders, setLoopRenders] = useState<LoopRenderRecord[]>(() => loadPlayProject()?.loopRenders ?? []);
   const loopRendersRef = useRef<LoopRenderRecord[]>([]);
   // 0715C_MUSIC_Loop_Workspace_Editing_And_Revision_Completion — draft
@@ -6788,6 +6790,14 @@ export default function App() {
               onPromoteSuggested={handlePromoteSuggested}
               onAssignMechanism={handleAssignMechanism}
               onImportAudio={handleImportAudio}
+            />
+          ) : viewMode === "edit" ? (
+            <DjTrackEditWorkspace
+              libraryTracks={libraryTracks}
+              sourceTrackId={editSourceTrackId}
+              onSelectSourceTrack={setEditSourceTrackId}
+              songAnalyses={songAnalyses}
+              onUpdateSongAnalysis={handleUpdateSongAnalysis}
             />
           ) : viewMode === "perform" ? (
             <DualDeckPerformWorkspace

@@ -163,6 +163,42 @@ export function setPreparationCue(
   return { ...analysis, djPreparation: { ...preparation, cues: { ...preparation.cues, [cue.role]: cue } } };
 }
 
+export function buildDjPreparationCue(
+  role: DjPreparationCueRole,
+  requestedFrame: number,
+  analysis: CompleteSongAnalysis,
+  activeGrid: ActivePreparationGrid,
+  id: string,
+  now: string,
+): DjPreparationCue {
+  const frame = Math.max(0, Math.min(Math.max(0, analysis.decodedFrameCount - 1), Math.round(requestedFrame)));
+  const lastAtOrBefore = (frames: number[]) => {
+    let result: number | undefined;
+    for (let index = 0; index < frames.length; index++) {
+      if (frames[index] > frame) break;
+      result = index;
+    }
+    return result;
+  };
+  const barIndex = lastAtOrBefore(activeGrid.grid.barFrames);
+  const phraseBoundaryBarIndex = analysis.djPreparation?.phraseGrid?.boundaries
+    .filter((boundary) => boundary.barIndex <= (barIndex ?? -1))
+    .at(-1)?.barIndex;
+  return {
+    id,
+    role,
+    frame,
+    basisGridRevisionId: activeGrid.revisionId,
+    beatIndex: lastAtOrBefore(activeGrid.grid.beatFrames),
+    barIndex,
+    phraseBoundaryBarIndex,
+    origin: "manual",
+    provenance: "manually_confirmed",
+    confidence: 1,
+    updatedAt: now,
+  };
+}
+
 function beatMapRevisionKey(track: Track): string {
   const map = track.beatMap;
   return [
