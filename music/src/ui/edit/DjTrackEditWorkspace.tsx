@@ -3,6 +3,7 @@ import type { CompleteSongAnalysis } from "../../data/songAnalysisTypes";
 import type { Track } from "../../data/trackTypes";
 import type { DjPreparationCueRole } from "../../data/djTrackPreparationTypes";
 import { DJ_PREPARATION_FAILURE_LABELS, buildDjEditWorkspaceModel } from "../../logic/edit/djEditWorkspace";
+import { resolveCanonicalBarAlignment, resolveCanonicalBarTarget, type CanonicalBarMove } from "../../logic/edit/canonicalBarCueAuthoring";
 import {
   DJ_PHRASE_GROUPINGS,
   DJ_PREPARATION_CUE_ORDER,
@@ -72,6 +73,19 @@ function DjTrackEditor({ libraryTracks, selectedId, track, analysis, onSelectSou
     persist(setPreparationCue(analysis, cue, analysis.djPreparation?.id ?? id("djprep"), nowIso()));
     setMessage(`${role} set at ${(cue.frame / analysis.sampleRate).toFixed(3)}s.`);
   };
+  const snapCueToBar = (role: DjPreparationCueRole, move: CanonicalBarMove) => {
+    if (!analysis || !model.activeGrid) return;
+    const existingCue = analysis.djPreparation?.cues[role];
+    const target = resolveCanonicalBarTarget(existingCue?.frame ?? cursorFrame, model.activeGrid.grid, move);
+    if (!target) {
+      setMessage(`No ${move} canonical bar is available for ${role}.`);
+      return;
+    }
+    const cue = buildDjPreparationCue(role, target.frame, analysis, model.activeGrid, id("djcue"), nowIso());
+    persist(setPreparationCue(analysis, cue, analysis.djPreparation?.id ?? id("djprep"), nowIso()));
+    setCursorFrame(target.frame);
+    setMessage(`${role} moved to exact canonical bar ${target.barIndex} at frame ${target.frame}. Phrase alignment remains separately reviewed.`);
+  };
   const failure = model.validation.valid ? null : DJ_PREPARATION_FAILURE_LABELS[model.validation.reason];
 
   return (
@@ -124,7 +138,19 @@ function DjTrackEditor({ libraryTracks, selectedId, track, analysis, onSelectSou
             <section className="dj-edit-panel"><h2>DJ Preparation Cues</h2><p className="dj-edit-provenance">Frame-authoritative, track-level preparation truth. Click the timeline, then set each role.</p>
               <div className="dj-edit-cue-list">{DJ_PREPARATION_CUE_ORDER.map((role) => {
                 const cue = analysis.djPreparation?.cues[role];
-                return <div key={role}><strong>{role}</strong><span>{cue ? `${(cue.frame / analysis.sampleRate).toFixed(3)}s / frame ${cue.frame}` : "Not set"}</span><button disabled={!model.activeGrid} onClick={() => setCueAtCursor(role)}>{cue ? "Move to cursor" : "Set at cursor"}</button></div>;
+                const alignment = cue ? resolveCanonicalBarAlignment(cue.frame, model.activeGrid?.grid ?? null, model.phraseGrid?.boundaries ?? []) : null;
+                return <div key={role} className="dj-edit-cue-row"><strong>{role}</strong><span className="dj-edit-cue-detail">{cue ? <>
+                  <span>{(cue.frame / analysis.sampleRate).toFixed(3)}s / frame {cue.frame}</span>
+                  <span className={alignment ? "is-aligned" : "is-off-grid"}>{alignment ? `Bar ${alignment.barIndex} · Exact bar boundary` : "Off canonical bar grid"}</span>
+                  {alignment && <span>{alignment.phraseBoundaries.length
+                    ? alignment.phraseBoundaries.map((boundary) => `${boundary.groupingBars}-bar phrase: ${boundary.provenance === "manually_confirmed" ? "manually confirmed" : "inferred"}`).join(" · ")
+                    : "No phrase boundary at this bar"}</span>}
+                </> : "Not set"}</span><div className="dj-edit-cue-actions">
+                  <button disabled={!model.activeGrid} onClick={() => setCueAtCursor(role)}>{cue ? "Move to cursor" : "Set at cursor"}</button>
+                  <button disabled={!model.activeGrid || !resolveCanonicalBarTarget(cue?.frame ?? cursorFrame, model.activeGrid?.grid ?? null, "previous")} onClick={() => snapCueToBar(role, "previous")}>Previous Bar</button>
+                  <button disabled={!model.activeGrid} onClick={() => snapCueToBar(role, "nearest")}>Nearest Bar</button>
+                  <button disabled={!model.activeGrid || !resolveCanonicalBarTarget(cue?.frame ?? cursorFrame, model.activeGrid?.grid ?? null, "next")} onClick={() => snapCueToBar(role, "next")}>Next Bar</button>
+                </div></div>;
               })}</div>
               <div className="dj-edit-generic-cues"><h3>Generic Track Cues</h3><p>Separate library markers, not semantic DJ preparation cues.</p>{(track.cuePoints ?? []).length ? <ul>{track.cuePoints!.map((cue) => <li key={cue.id}>{cue.label || "Cue"} / {cue.timeSeconds.toFixed(3)}s</li>)}</ul> : <p>None</p>}</div>
             </section>
