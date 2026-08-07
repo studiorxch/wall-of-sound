@@ -6197,6 +6197,314 @@ body.broadcast-clean-capture .app {
   color: var(--text-dim, #888);
 }
 
+/* ── Itinerary editor (0729E_MAPS_Itinerary_Collections_Foundation) ──
+   Two-column layout per the approved mockup: fixed-width left column (title,
+   + Add Destination, ordered stop list, footer hint) + the entire right side
+   reserved for the shared preview map (numbered pins + selected route lines,
+   static — no animation/cinematic chrome). */
+.itin-editor-root { display: flex; flex-direction: row; flex: 1; min-height: 0; overflow: hidden; }
+.itin-editor-left {
+  display: flex;
+  flex-direction: column;
+  width: 360px;
+  min-width: 300px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border, #333);
+  overflow-y: auto;
+}
+.itin-editor-right {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  background: var(--surface3, #222);
+  overflow: hidden;
+}
+.itin-editor-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border, #333);
+  flex-shrink: 0;
+}
+.itin-editor-title { font-size: 16px; font-weight: 600; color: var(--text, #e0e0e0); cursor: pointer; margin: 0; flex: 1; }
+.itin-editor-footer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  font-size: 11px;
+  color: var(--text-dim, #888);
+  border-top: 1px solid var(--border, #333);
+  flex-shrink: 0;
+}
+.itin-editor-footer-note { color: var(--text-dim, #888); }
+
+/* ── Itinerary run controls (0730D) ─────────────────────────────────────── */
+.itin-run-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border, #333);
+  flex-shrink: 0;
+}
+.itin-run-status { display: flex; align-items: center; gap: 8px; }
+.itin-run-badge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--accent, #5c8de8) 18%, transparent);
+  color: var(--accent, #5c8de8);
+}
+.itin-run-badge--paused { background: color-mix(in srgb, var(--yellow, #f5c842) 18%, transparent); color: var(--yellow, #f5c842); }
+.itin-run-badge--completed { background: color-mix(in srgb, var(--green, #4caf7d) 18%, transparent); color: var(--green, #4caf7d); }
+.itin-run-badge--error { background: color-mix(in srgb, var(--danger, #e05a4a) 18%, transparent); color: var(--danger, #e05a4a); }
+.itin-run-stage { font-size: 11px; color: var(--text-dim, #888); }
+.itin-run-telemetry { display: flex; gap: 14px; font-size: 11px; color: var(--text-mid, #aaa); }
+.itin-run-error { font-size: 11px; color: var(--danger, #e05a4a); }
+.itin-run-stale { font-size: 11px; color: var(--yellow, #f5c842); }
+.itin-run-actions { display: flex; gap: 6px; }
+
+/* ── Run presentation controls: speed + hero height (0730E) ─────────────── */
+.itin-run-pre-start { display: flex; flex-direction: column; gap: 8px; }
+.itin-run-presentation { display: flex; flex-direction: column; gap: 6px; }
+.itin-run-presentation-row { display: flex; align-items: center; gap: 8px; }
+.itin-run-presentation-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-dim, #888);
+  min-width: 62px;
+}
+.itin-run-rate-presets { display: flex; gap: 4px; }
+.itin-run-rate-btn {
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 3px;
+  border: 1px solid var(--border, #333);
+  background: transparent;
+  color: var(--text-mid, #aaa);
+  cursor: pointer;
+}
+.itin-run-rate-btn--active {
+  background: color-mix(in srgb, var(--accent, #5c8de8) 18%, transparent);
+  border-color: var(--accent, #5c8de8);
+  color: var(--accent, #5c8de8);
+}
+.itin-run-altitude-slider { flex: 1; }
+.itin-run-altitude-value { font-size: 11px; color: var(--text-mid, #aaa); min-width: 34px; text-align: right; }
+
+/* ── Follow Hero toggle (0730F) ──────────────────────────────────────────── */
+.itin-run-toggle-btn--active {
+  background: color-mix(in srgb, var(--green, #4caf7d) 18%, transparent);
+  border-color: var(--green, #4caf7d);
+  color: var(--green, #4caf7d);
+}
+
+/* ── Presentation warning banner (0805A) — launch errors + Orb-unavailable ── */
+.itin-run-warning {
+  font-size: 11px;
+  padding: 6px 10px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--yellow, #f5c842) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--yellow, #f5c842) 40%, transparent);
+  color: var(--yellow, #f5c842);
+  line-height: 1.4;
+}
+
+/* ── Race Course library (0805C) ─────────────────────────────────────────── */
+.race-course-created-banner {
+  color: var(--green, #4caf7d);
+  background: color-mix(in srgb, var(--green, #4caf7d) 14%, transparent);
+  border-color: color-mix(in srgb, var(--green, #4caf7d) 40%, transparent);
+  margin: 0 16px 8px;
+}
+.race-course-warning { margin: 0 0 8px; }
+
+.race-course-meta {
+  font-size: 11px;
+  color: var(--text-dim, #888);
+  line-height: 1.4;
+}
+
+.race-course-active-badge {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--green, #4caf7d);
+}
+
+.race-course-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.race-course-stat-row {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--text-mid, #aaa);
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border, #2a2a2a);
+}
+
+.race-course-source-ref {
+  font-size: 11px;
+  color: var(--text-dim, #888);
+  padding: 0 16px 8px;
+}
+
+.race-course-field-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  font-size: 12px;
+  color: var(--text-mid, #aaa);
+}
+.race-course-field-row input {
+  width: 80px;
+}
+
+.race-course-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim, #888);
+  padding: 10px 16px 4px;
+}
+
+.race-course-list {
+  display: flex;
+  flex-direction: column;
+  padding: 0 16px;
+}
+.race-course-list-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text-mid, #aaa);
+  padding: 4px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--border, #2a2a2a) 60%, transparent);
+}
+
+.race-course-continuity-report {
+  margin: 0 0 8px;
+  padding: 8px 16px;
+  background: color-mix(in srgb, var(--yellow, #f5c842) 8%, transparent);
+}
+.race-course-discontinuity-row {
+  font-size: 11px;
+  color: var(--yellow, #f5c842);
+  line-height: 1.5;
+}
+
+/* ── Race Lane, nested inside Race Course detail (0805D) ─────────────────── */
+.race-lane-empty {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px 16px;
+}
+
+.race-lane-draft-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 16px;
+  padding: 8px 16px;
+}
+.race-lane-draft-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-dim, #888);
+}
+.race-lane-draft-grid input {
+  font-size: 12px;
+  color: var(--text-mid, #aaa);
+}
+
+.itin-stop-list { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+
+.itin-stop-row {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border, #2a2a2a);
+  cursor: grab;
+}
+.itin-stop-row--dragging { opacity: 0.4; }
+.itin-stop-row--connected::after {
+  content: "";
+  position: absolute;
+  left: 26px;
+  top: 38px;
+  bottom: -1px;
+  width: 0;
+  border-left: 2px dotted var(--border, #444);
+}
+.itin-stop-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--surface3, #2a2a2a);
+  color: var(--text, #e0e0e0);
+  font-size: 11px;
+  font-weight: 600;
+  flex-shrink: 0;
+  z-index: 1;
+}
+.itin-stop-body { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
+.itin-stop-name { font-size: 13px; color: var(--text, #e0e0e0); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.itin-stop-leg { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-dim, #888); }
+.itin-stop-leg .icon { width: 14px; height: 14px; }
+.itin-stop-leg-pending { font-style: italic; }
+
+.itin-stop-menu { position: relative; flex-shrink: 0; }
+.itin-stop-menu-btn {
+  background: none;
+  border: none;
+  color: var(--text-dim, #888);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+}
+.itin-stop-menu-btn:hover { background: var(--surface3, #2a2a2a); color: var(--text, #e0e0e0); }
+.itin-stop-menu-popover {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  z-index: 20;
+  min-width: 160px;
+  background: var(--surface2, #1a1a1a);
+  border: 1px solid var(--border, #333);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  padding: 4px;
+}
+.itin-stop-menu-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.03em; color: var(--text-dim, #888); padding: 6px 10px 2px; }
+.ctx-item--active { color: var(--accent, #5c8de8); }
+
+/* ── Mode-picker honesty (0805A) — visible explanatory text, not just a
+   grayed-out/tooltip-only affordance (.ctx-item-disabled alone doesn't show
+   text; modeled on the Overlays .geo-badge "Read-only + explanatory copy"
+   pattern instead). ─────────────────────────────────────────────────────── */
+.itin-mode-disabled { display: flex; align-items: flex-start; gap: 8px; cursor: default; }
+.itin-mode-label-col { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; }
+.itin-mode-disabled-reason { font-size: 10px; color: var(--text-dim, #888); font-style: italic; }
+
 /* ── Geographic target catalog (0729_MAPS_Geographic_Catalog_Dual_View) ──
    Grid|Rows dual view over one Geographic Style's consolidated targets.
    Toolbar/dock reuse .cat-filter-search/.cat-filter-sel/.cat-action-bar
@@ -6241,6 +6549,7 @@ body.broadcast-clean-capture .app {
 }
 .geo-badge--expression { background: color-mix(in srgb, var(--yellow, #f5c842) 18%, transparent); color: var(--yellow, #f5c842); }
 .geo-badge--customized { background: color-mix(in srgb, var(--accent, #5c8de8) 18%, transparent); color: var(--accent, #5c8de8); }
+.geo-badge--active { background: color-mix(in srgb, var(--green, #4caf7d) 18%, transparent); color: var(--green, #4caf7d); }
 
 /* ── target editor (shared "active record" panel, Grid and Rows alike) ── */
 .geo-target-editor {
@@ -6258,6 +6567,31 @@ body.broadcast-clean-capture .app {
 .geo-target-editor-field { display: flex; align-items: center; gap: 10px; }
 .geo-target-editor-field-label { font-size: 12px; color: var(--text-mid, #aaa); width: 70px; flex-shrink: 0; }
 .geo-hex-expression-note { font-size: 10px; color: var(--yellow, #f5c842); }
+
+/* ── Orb editor — split layout, per the approved mockup (0730C) ────────── */
+.orb-editor-body { display: flex; gap: 16px; margin-top: 10px; align-items: flex-start; }
+.orb-editor-fields { flex: 1 1 auto; min-width: 0; margin-top: 0; }
+.orb-preview-panel {
+  position: relative;
+  flex: 0 0 220px;
+  width: 220px;
+  height: 220px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #0a0a0d;
+  border: 1px solid var(--border, #333);
+}
+.orb-preview-canvas { width: 100%; height: 100%; }
+.orb-preview-status {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: var(--text-dim, #888);
+  pointer-events: none;
+}
 
 /* ── opacity / boolean field editors (mapsPaletteAuthority-wired) ── */
 .geo-opacity-field { display: inline-flex; align-items: center; gap: 8px; }
@@ -7647,6 +7981,30 @@ body.broadcast-clean-capture .app {
 .cd-taxonomy-panel .cd-filter-row {
   padding: 5px 0;
   border-top: 1px solid rgba(110, 116, 150, 0.1);
+}
+
+/* 0804_MUSIC_Crate_BPM_Group_Filters — BPM range + Group include/exclude */
+.cd-bpm-group-panel { border-top: 1px solid rgba(110, 116, 150, 0.18); padding-top: 4px; }
+.cd-filter-row--section-label {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.07em;
+  text-transform: uppercase; color: var(--text-dim, #666);
+  padding: 8px 0 2px; border-top: none !important;
+}
+.cd-filter-row--bpm { align-items: center; }
+.cd-filter-row--group-mode { align-items: center; }
+.cd-bpm-input {
+  width: 64px; padding: 4px 6px; font-size: 12px; border-radius: 4px;
+  background: var(--surface2); border: 1px solid var(--border);
+  color: var(--text); outline: none;
+}
+.cd-bpm-input:focus { border-color: rgba(210,210,225,0.30); }
+.cd-bpm-dash { color: var(--text-dim, #666); font-size: 12px; padding-top: 5px; }
+.cd-bpm-unresolved-toggle { margin-left: 6px; }
+.cd-bpm-summary, .cd-filter-preview {
+  font-size: 11px; color: var(--text-dim, #666); padding: 0 0 4px;
+}
+.cd-filter-error {
+  font-size: 11px; color: #e74c3c; padding: 2px 0 4px;
 }
 
 /* Track list */
@@ -12020,6 +12378,7 @@ td.cat-col-frozen { z-index: 1; }
 .cat-review-details summary::before { content: "▸ "; }
 .cat-review-details[open] summary::before { content: "▾ "; }
 .cat-review-details-body { margin-top: 4px; padding-left: 10px; display: flex; flex-direction: column; gap: 2px; line-height: 1.4; }
+.cat-review-error { color: var(--red, #c77); font-size: 10px; margin-top: 3px; }
 
 /* ── Remove confirm dialog ── */
 .cat-remove-confirm-dialog { width: 420px; padding: 16px 18px; }

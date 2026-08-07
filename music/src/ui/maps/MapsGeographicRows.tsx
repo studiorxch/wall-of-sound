@@ -84,9 +84,11 @@ export function MapsGeographicRows({ targets, selectedIds, focusedTargetId, onTo
                 <td>{opacityDisplay}</td>
                 <td>{t.visibility ?? "—"}</td>
                 <td>
+                  {t.editable === false && <span className="geo-badge">Read-only</span>}
                   {t.hasExpression && <span className="geo-badge geo-badge--expression">Expression</span>}
                   {t.isCustomized && <span className="geo-badge geo-badge--customized">Customized</span>}
-                  {!t.hasExpression && !t.isCustomized && <span className="geo-row-cell-empty">—</span>}
+                  {t.isActive && <span className="geo-badge geo-badge--active">Active</span>}
+                  {t.editable !== false && !t.hasExpression && !t.isCustomized && !t.isActive && <span className="geo-row-cell-empty">—</span>}
                 </td>
               </tr>
             );

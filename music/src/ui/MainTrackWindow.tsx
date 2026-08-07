@@ -77,6 +77,7 @@ type Props = {
   onRestoreSuggestionsFromMechanical?: (trackId: string) => void;
   onClearSuggestedMoods?: (trackId: string) => void;
   onCreateLoops?: (trackId: string) => void;
+  onOpenInGlyph?: (trackId: string) => void;
   onExportStems?: (trackId: string) => void;
   onOpenStems?: (trackId: string) => void;
   onAuditionTrack?: (trackId: string) => void;
@@ -966,6 +967,7 @@ function LibraryRows({
   onRestoreSuggestionsFromMechanical?: (trackId: string) => void;
   onClearSuggestedMoods?: (trackId: string) => void;
   onCreateLoops?: (trackId: string) => void;
+  onOpenInGlyph?: (trackId: string) => void;
   onExportStems?: (trackId: string) => void;
   onOpenStems?: (trackId: string) => void;
   onAuditionTrack?: (trackId: string) => void;
@@ -1918,7 +1920,7 @@ export function MainTrackWindow({
   onAddToPlaylistEnd, onInsertAfterSlot, onReplaceSlot, onFindBestSlot, onRemoveRepeats, onRunExportHealth,
   activePlaylistId, onFillGap, onDeleteGap, onClearPlaybackIssue, onRecheckPlaybackIssue, onBulkRecheckCodecIssues, bulkRechecking, onBulkUpdate, onCreateLibraryGroup,
   onGenerateMoodSuggestions, onApplyMoodSuggestions,
-  onRestoreSuggestionsFromImport, onRestoreSuggestionsFromMechanical, onClearSuggestedMoods, onCreateLoops, onExportStems, onOpenStems,
+  onRestoreSuggestionsFromImport, onRestoreSuggestionsFromMechanical, onClearSuggestedMoods, onCreateLoops, onOpenInGlyph, onExportStems, onOpenStems,
   onAuditionTrack, onAuditionAndAdd, auditionTrackId,
   playbackStatus, onPauseTrack, onResumeTrack,
   onBulkSetArchiveStatus,
@@ -2000,6 +2002,7 @@ export function MainTrackWindow({
           onRestoreSuggestionsFromMechanical={onRestoreSuggestionsFromMechanical}
           onClearSuggestedMoods={onClearSuggestedMoods}
           onCreateLoops={onCreateLoops}
+          onOpenInGlyph={onOpenInGlyph}
           onExportStems={onExportStems}
         />
       )}

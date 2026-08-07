@@ -47,6 +47,37 @@ export function GeographicFieldEditor({ field, onChange }: Props) {
     );
   }
 
+  if (field.valueKind === "number") {
+    const range = field.numberRange ?? { min: 0, max: 1, step: 0.01 };
+    const n = parseFloat(field.value);
+    const safe = isNaN(n) ? range.min : Math.max(range.min, Math.min(range.max, n));
+    return (
+      <span className="geo-opacity-field">
+        <input
+          type="range"
+          min={range.min}
+          max={range.max}
+          step={range.step}
+          value={safe}
+          onChange={(e) => onChange(e.target.value)}
+          className="geo-opacity-slider"
+        />
+        <span className="geo-opacity-value">{safe}</span>
+      </span>
+    );
+  }
+
+  if (field.valueKind === "select") {
+    const options = field.selectOptions ?? [];
+    return (
+      <select className="cat-filter-search" value={field.value} onChange={(e) => onChange(e.target.value)}>
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
+      </select>
+    );
+  }
+
   // Color kind, including expression values — the caller shows a separate
   // warning note for those (editing here still works, it just flattens
   // whatever zoom-stop/branch expression was there, same as before this

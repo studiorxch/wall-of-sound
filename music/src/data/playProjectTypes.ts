@@ -301,6 +301,24 @@ export type PlayProject = {
   // "unknown" review queue are out of scope and keep their existing fixed
   // table layout.
   libraryGridPreferences?: import("./libraryGridTypes").LibraryGridPreferencesBySource;
+  // Glyph Audio (0804A_GLYPH_AUDIO_First_Slice) — MUSIC AudioLab workspace
+  // beside Looper. Project-level for the same reason as loops/songAnalyses
+  // above: a composition's lineage points back to a track by trackId, not
+  // the other way around. glyphAnalyses is a shared, deduplicated pool
+  // (one MusicalAnalysisDocument per analyzed source, referenced by id);
+  // glyphCompositions never embeds a full analysis document, only an
+  // analysisId (docs/glyph-audio/14_GLYPH_AUDIO_Approved_Decisions.md,
+  // items 6-7). Reproducibility of a saved composition is guaranteed by the
+  // immutable mappingPresetSnapshot/grammarSnapshot/layoutPresetSnapshot it
+  // carries, not by these shared preset/grammar/layout arrays staying
+  // unchanged (item 5).
+  glyphAnalyses?: import("./glyphAudioTypes").MusicalAnalysisDocument[];
+  glyphCompositions?: import("./glyphCompositionTypes").GlyphComposition[];
+  glyphMappingPresets?: import("./glyphMappingTypes").MappingPreset[];
+  glyphGrammars?: import("./glyphGrammarTypes").GlyphGrammar[];
+  glyphLayoutPresets?: import("./glyphLayoutTypes").ManuscriptLayoutPreset[];
+  glyphRenderProfiles?: import("./glyphCompositionTypes").RenderProfile[];
+  glyphExportRecords?: import("./glyphCompositionTypes").ExportRecord[];
   createdAt: string;
   updatedAt: string;
 };

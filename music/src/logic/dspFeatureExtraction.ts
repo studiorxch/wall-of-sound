@@ -589,6 +589,63 @@ export function needsBpmKeyReview(track: Track): boolean {
   return bpmNeedsReview || reviewKeyField(track).state !== "resolved";
 }
 
+// 0804_MUSIC_BPM_Authority_Repair §5.1 — single authoritative-BPM selector.
+// Reuses reviewBpmField's own "resolved" gate rather than duplicating it: a
+// value only ever becomes resolved by being promoted onto track.bpm itself
+// (manual accept, trusted CSV/embedded import, or a detector-promoted
+// value carrying bpmSource:"detected") — matching the required precedence
+// manual/accepted > CSV/imported trusted value > DSP preferred candidate >
+// unresolved, since all three tiers already collapse to "a valid value
+// sits on track.bpm" and only their bpmSource differs. An un-promoted
+// review-only candidate (audioAnalysis.bpmCandidate) is deliberately never
+// treated as authoritative here — DSP analysis produces candidates, only
+// user acceptance (or a trusted import) commits one as canonical.
+export function resolveAuthoritativeBpm(track: Track): number | null {
+  const review = reviewBpmField(track);
+  return review.state === "resolved" ? review.canonicalBpm : null;
+}
+
+// 0804_MUSIC_BPM_Authority_Repair §5.3 — tri-state review status. Folds
+// pending/failed analysis into "needs_review" (neither authoritative nor
+// never-attempted). An analyzed track that produced no retained candidate
+// ("no_confident_result") is deliberately NOT "not_analyzed" — analysis
+// genuinely ran, it simply kept nothing; see reviewBpmField's own state
+// machine, whose "never_analyzed" state is the only true not_analyzed case.
+export type BpmReviewStatus = "resolved" | "needs_review" | "not_analyzed";
+export function getBpmReviewStatus(track: Track): BpmReviewStatus {
+  const review = reviewBpmField(track);
+  if (review.state === "resolved" && review.tempoFamily.concern === "none") return "resolved";
+  if (review.state === "never_analyzed") return "not_analyzed";
+  return "needs_review";
+}
+
+// 0804_MUSIC_BPM_Authority_Repair §7 — no centralized BPM precision policy
+// existed; every call site rounded independently (bpmDetection.ts,
+// bpmTempoFamilyReview.ts, and genreFamilyClassification.ts all already
+// use 2 decimals). This makes that existing de facto convention the one
+// policy the accept path normalizes through, rather than inventing a new
+// precision.
+export const BPM_PRECISION_DECIMALS = 2;
+export function normalizeBpmPrecision(value: number): number {
+  return +value.toFixed(BPM_PRECISION_DECIMALS);
+}
+
+// 0804_MUSIC_BPM_Authority_Repair §5.2 — the validation gate that was
+// missing between "candidate value offered as a one-click button" and
+// "value written as authoritative metadata": neither
+// LibraryBpmKeyReviewDialog's acceptBpmValue nor App.tsx's
+// handleBulkUpdateTracks validated a clicked value before persisting it.
+// Returns null (reject) for non-finite/zero/negative/out-of-range input;
+// otherwise the exact patch to persist through the existing onBulkUpdate
+// canonical path. Performs no I/O itself, per "do not write directly from
+// the component to IndexedDB" — the caller still owns the actual write.
+export function buildAcceptedBpmPatch(candidateBpm: number): Partial<Track> | null {
+  if (typeof candidateBpm !== "number" || !Number.isFinite(candidateBpm) || candidateBpm <= 0) return null;
+  const normalized = normalizeBpmPrecision(candidateBpm);
+  if (!isValidBpm(normalized)) return null;
+  return { bpm: normalized, bpmSource: "manual" };
+}
+
 export async function analyzeTrackDspFeatures(
   track: Track,
   options?: AnalyzeTrackDspOptions,

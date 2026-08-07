@@ -25,6 +25,14 @@ import { evaluateSlotWarnings } from "./logic/warningEngine";
 import { savePlayProject, loadPlayProject, loadPlayProjectAsync, repairStoredProject } from "./data/playProjectStorage";
 import { downloadPlayProjectExport, stableProjectHash } from "./data/playProjectExport";
 import { installMusicDebug } from "./logic/musicAutosave";
+// 0805F required correction — these two stores are otherwise only reachable
+// from MapsRaceCourseDetail.tsx, which doesn't mount until a user actually
+// navigates into a specific Race Course's detail view. Their module-top-level
+// hydrate() (and, for competitors, its Orb-catalog reconciliation) must run
+// at real MUSIC startup regardless of navigation — this import's only job is
+// forcing that module evaluation. Nothing here is otherwise used by App.tsx.
+import "./maps/gameFormatStore";
+import "./maps/competitorProfileStore";
 import {
   assessStartupRecovery,
   loadLkgState,
@@ -83,7 +91,7 @@ import { buildNowNextQueueState } from "./logic/nowNextQueue";
 import { getSourceComposition, SourceCompositionBadges } from "./ui/SourceBadge";
 import { filterTracksForPlaylist, isTrackEligibleForPlaylist, sourceGroupIdFor } from "./logic/sourceEligibility";
 import { partitionEligibleTracks, describeSkipReport, getTrackEligibility, isTrackPlaybackEligible, gatePlaylistCandidates, describeInsufficientCandidates, finalizeGeneratedPlaylistSlots, type CandidateGateResult } from "./logic/trackEligibility";
-import { excludePendingImports, isPendingImportAnalysis } from "./logic/audioReadiness";
+import { isPendingImportAnalysis } from "./logic/audioReadiness";
 import { filterTracksByRecipe } from "./logic/recipeFilter";
 import { resolveCratePool, resolveCrateTracks } from "./logic/resolveCrate";
 import { generateMissingAutoMoodCrates, auditAutoMoodCrates, auditMoodCrateCounts, regenerateMoodCratesFromCurrentTags, type MoodCrateCountMode, type MoodCrateSourceScope } from "./logic/autoMoodCrates";
@@ -140,6 +148,12 @@ import { defaultCrateFilters } from "./data/crateTypes";
 import { CratesGrid } from "./ui/CratesGrid";
 import { CrateDetail } from "./ui/CrateDetail";
 import { SectionalLooperWorkspace } from "./ui/SectionalLooperWorkspace";
+import { GlyphWorkspace, type SaveGlyphCompositionPayload } from "./ui/glyph/GlyphWorkspace";
+import type { MusicalAnalysisDocument } from "./data/glyphAudioTypes";
+import type { MappingPreset } from "./data/glyphMappingTypes";
+import type { GlyphGrammar } from "./data/glyphGrammarTypes";
+import type { ManuscriptLayoutPreset } from "./data/glyphLayoutTypes";
+import type { GlyphComposition, ExportRecord as GlyphExportRecord } from "./data/glyphCompositionTypes";
 import { StemSublayer } from "./ui/stems/StemSublayer";
 import { LegacyStemMigrationPanel } from "./ui/stems/LegacyStemMigrationPanel";
 import { readDjTransitionMode, writeDjTransitionMode, type DjTransitionMode } from "./logic/djTransitionModeStorage";
@@ -339,6 +353,11 @@ export default function App() {
     if (workspaceMode !== "maps" && window.location.hash.startsWith("#maps")) {
       window.history.replaceState(null, "", window.location.pathname + window.location.search);
     }
+    // Coarse MUSIC/MAPS tab title — MapsSection.tsx refines this further
+    // (library/course-name suffix) while workspaceMode stays "maps"; it only
+    // ever fires on ITS OWN state changes, never re-triggered by this effect,
+    // so the two never fight over document.title.
+    document.title = workspaceMode === "maps" ? "MAPS" : "MUSIC";
   }, [workspaceMode]);
   // ── Broadcast HUD operator state (lifted so controls live in the top row) ──
   const [hudSecondaryMode, setHudSecondaryMode] = useState<BroadcastSecondaryMode>("none");
@@ -392,6 +411,25 @@ export default function App() {
   // reason as loops/loopRevisions above.
   const [songAnalyses, setSongAnalyses] = useState<CompleteSongAnalysis[]>(() => loadPlayProject()?.songAnalyses ?? []);
   const songAnalysesRef = useRef<CompleteSongAnalysis[]>([]);
+  // Glyph Audio (0804A_GLYPH_AUDIO_First_Slice) — MUSIC AudioLab workspace
+  // beside Looper. Project-level for the same reason as loops/songAnalyses
+  // above: a GlyphComposition's lineage points back to a track by
+  // GlyphSourceRef.trackId, not the other way around. glyphSourceTrackId is
+  // UI-local navigation state (which track Glyph currently has open),
+  // mirroring looperSourceTrackId — never persisted itself.
+  const [glyphSourceTrackId, setGlyphSourceTrackId] = useState<string | null>(null);
+  const [glyphAnalyses, setGlyphAnalyses] = useState<MusicalAnalysisDocument[]>(() => loadPlayProject()?.glyphAnalyses ?? []);
+  const glyphAnalysesRef = useRef<MusicalAnalysisDocument[]>([]);
+  const [glyphCompositions, setGlyphCompositions] = useState<GlyphComposition[]>(() => loadPlayProject()?.glyphCompositions ?? []);
+  const glyphCompositionsRef = useRef<GlyphComposition[]>([]);
+  const [glyphMappingPresets, setGlyphMappingPresets] = useState<MappingPreset[]>(() => loadPlayProject()?.glyphMappingPresets ?? []);
+  const glyphMappingPresetsRef = useRef<MappingPreset[]>([]);
+  const [glyphGrammars, setGlyphGrammars] = useState<GlyphGrammar[]>(() => loadPlayProject()?.glyphGrammars ?? []);
+  const glyphGrammarsRef = useRef<GlyphGrammar[]>([]);
+  const [glyphLayoutPresets, setGlyphLayoutPresets] = useState<ManuscriptLayoutPreset[]>(() => loadPlayProject()?.glyphLayoutPresets ?? []);
+  const glyphLayoutPresetsRef = useRef<ManuscriptLayoutPreset[]>([]);
+  const [glyphExportRecords, setGlyphExportRecords] = useState<GlyphExportRecord[]>(() => loadPlayProject()?.glyphExportRecords ?? []);
+  const glyphExportRecordsRef = useRef<GlyphExportRecord[]>([]);
   // 0717D_RADIO_Playlist_Inbox_and_Performance_Foundation — RADIO Inbox
   // items and RADIO Playlists, client-local, project-level for the same
   // reason as loops/songAnalyses above.
@@ -584,6 +622,25 @@ export default function App() {
   useEffect(() => { libraryTracksRef.current = libraryTracks; }, [libraryTracks]);
   useEffect(() => { excludedTrackIdsRef.current = excludedTrackIds; }, [excludedTrackIds]);
   useEffect(() => { playlistsRef.current = playlists; }, [playlists]);
+  // 0805E_RACETRACK — a slim, read-only playlist catalog mirror for
+  // wall/'s RACETRACK Selection scene, which has no playlist authority of
+  // its own (MUSIC remains playlist authority per plan review). Never the
+  // full PlaylistRecord — just enough to browse/select by reference.
+  // RACETRACK never writes back to this key.
+  useEffect(() => {
+    const catalog = playlists.map((p) => ({
+      playlistId: p.playlistId,
+      title: p.title,
+      trackCount: p.slots.filter((s) => !!s.assignedTrackId).length,
+      targetDurationMinutes: p.targetDurationMinutes,
+      moodTags: p.mood?.tags ?? [],
+    }));
+    try {
+      localStorage.setItem("wos:musicPlaylists:catalog", JSON.stringify(catalog));
+    } catch {
+      /* best-effort mirror — not load-bearing for MUSIC's own state */
+    }
+  }, [playlists]);
   useEffect(() => {
     trackPlaybackIssuesRef.current = trackPlaybackIssues;
     // Do not autosave before hydration — otherwise the default boot state
@@ -603,6 +660,12 @@ export default function App() {
   useEffect(() => { loopWorkspaceDraftsRef.current = loopWorkspaceDrafts; }, [loopWorkspaceDrafts]);
   useEffect(() => { loopRevisionsRef.current = loopRevisions; }, [loopRevisions]);
   useEffect(() => { songAnalysesRef.current = songAnalyses; }, [songAnalyses]);
+  useEffect(() => { glyphAnalysesRef.current = glyphAnalyses; }, [glyphAnalyses]);
+  useEffect(() => { glyphCompositionsRef.current = glyphCompositions; }, [glyphCompositions]);
+  useEffect(() => { glyphMappingPresetsRef.current = glyphMappingPresets; }, [glyphMappingPresets]);
+  useEffect(() => { glyphGrammarsRef.current = glyphGrammars; }, [glyphGrammars]);
+  useEffect(() => { glyphLayoutPresetsRef.current = glyphLayoutPresets; }, [glyphLayoutPresets]);
+  useEffect(() => { glyphExportRecordsRef.current = glyphExportRecords; }, [glyphExportRecords]);
   useEffect(() => { radioInboxItemsRef.current = radioInboxItems; }, [radioInboxItems]);
   useEffect(() => { radioPlaylistsRef.current = radioPlaylists; }, [radioPlaylists]);
   useEffect(() => { radioBanksRef.current = radioBanks; }, [radioBanks]);
@@ -674,6 +737,12 @@ export default function App() {
       loopWorkspaceDrafts: loopWorkspaceDraftsRef.current.length ? loopWorkspaceDraftsRef.current : undefined,
       loopRevisions: loopRevisionsRef.current.length ? loopRevisionsRef.current : undefined,
       songAnalyses: songAnalysesRef.current.length ? songAnalysesRef.current : undefined,
+      glyphAnalyses: glyphAnalysesRef.current.length ? glyphAnalysesRef.current : undefined,
+      glyphCompositions: glyphCompositionsRef.current.length ? glyphCompositionsRef.current : undefined,
+      glyphMappingPresets: glyphMappingPresetsRef.current.length ? glyphMappingPresetsRef.current : undefined,
+      glyphGrammars: glyphGrammarsRef.current.length ? glyphGrammarsRef.current : undefined,
+      glyphLayoutPresets: glyphLayoutPresetsRef.current.length ? glyphLayoutPresetsRef.current : undefined,
+      glyphExportRecords: glyphExportRecordsRef.current.length ? glyphExportRecordsRef.current : undefined,
       radioInboxItems: radioInboxItemsRef.current.length ? radioInboxItemsRef.current : undefined,
       radioPlaylists: radioPlaylistsRef.current.length ? radioPlaylistsRef.current : undefined,
       radioBanks: radioBanksRef.current.length ? radioBanksRef.current : undefined,
@@ -765,10 +834,14 @@ export default function App() {
         }
         // Pre-generation codec gate (0709): blocked tracks never reach the
         // curve assigner — they cannot occupy or reserve a slot.
-        // Readiness gate (0712): imported-but-not-yet-analyzed tracks aren't
-        // automatic-generation candidates yet (manual add still allows them,
-        // with a warning — see handleDropTracksOnPlaylist).
-        const gate = gatePlaylistCandidates(excludePendingImports(rawCandidates), {
+        // 0804_MUSIC_Playlist_Eligibility_Repair: pending-import-analysis
+        // tracks are no longer excluded here — that pool-thinning pre-filter
+        // (0712's excludePendingImports) silently emptied most of a
+        // mostly-unanalyzed real catalog with zero accounting, which was
+        // the actual root cause of "0 eligible" playlist generation.
+        // Pending analysis is a warning, not a hard rejection — see
+        // audioReadiness.ts's countPendingImportAnalysis.
+        const gate = gatePlaylistCandidates(rawCandidates, {
           mode: "casual",
           playbackIssues: trackPlaybackIssuesRef.current,
           excludedTrackIds: excl,
@@ -885,8 +958,10 @@ export default function App() {
       }
       // Pre-generation codec gate (0709): candidates are gated BEFORE curve
       // fitting/slot assignment — blocked tracks never reserve a slot.
-      // Readiness gate (0712): excludes imported-but-not-yet-analyzed tracks.
-      const gate = gatePlaylistCandidates(excludePendingImports(rawCandidates), {
+      // 0804_MUSIC_Playlist_Eligibility_Repair: pending-import-analysis is a
+      // warning, not a hard exclusion here — see App.tsx's other two
+      // gatePlaylistCandidates call sites for the full rationale.
+      const gate = gatePlaylistCandidates(rawCandidates, {
         mode: "casual",
         playbackIssues: trackPlaybackIssuesRef.current,
         excludedTrackIds: excl,
@@ -971,8 +1046,10 @@ export default function App() {
     // Pre-generation codec gate (0709): the pool passed to the generator
     // contains only playback-eligible tracks — metadata/usage stats still
     // read from the full cratePoolTracks so crate reporting stays accurate.
-    // Readiness gate (0712): excludes imported-but-not-yet-analyzed tracks.
-    const gate = gatePlaylistCandidates(excludePendingImports(cratePoolTracks), {
+    // 0804_MUSIC_Playlist_Eligibility_Repair: pending-import-analysis is a
+    // warning, not a hard exclusion here — see App.tsx's other two
+    // gatePlaylistCandidates call sites for the full rationale.
+    const gate = gatePlaylistCandidates(cratePoolTracks, {
       mode: "casual",
       playbackIssues: trackPlaybackIssuesRef.current,
       excludedTrackIds: excl,
@@ -1735,6 +1812,60 @@ export default function App() {
     const next = songAnalysesRef.current.map((a) => (a.id === id ? { ...a, ...patch, updatedAt: nowIso() } : a));
     songAnalysesRef.current = next;
     setSongAnalyses(next);
+    savePlayProject(makeProj(playlistsRef.current));
+  }
+
+  function handleSelectGlyphSourceTrack(trackId: string | null) {
+    setGlyphSourceTrackId(trackId);
+  }
+
+  function handleSaveGlyphComposition(payload: SaveGlyphCompositionPayload) {
+    const analysesNext = glyphAnalysesRef.current.some((a) => a.id === payload.analysis.id)
+      ? glyphAnalysesRef.current.map((a) => (a.id === payload.analysis.id ? payload.analysis : a))
+      : [...glyphAnalysesRef.current, payload.analysis];
+    glyphAnalysesRef.current = analysesNext;
+    setGlyphAnalyses(analysesNext);
+
+    if (payload.mappingPreset) {
+      const preset = payload.mappingPreset;
+      const next = glyphMappingPresetsRef.current.some((p) => p.id === preset.id)
+        ? glyphMappingPresetsRef.current.map((p) => (p.id === preset.id ? preset : p))
+        : [...glyphMappingPresetsRef.current, preset];
+      glyphMappingPresetsRef.current = next;
+      setGlyphMappingPresets(next);
+    }
+
+    if (payload.grammar) {
+      const grammar = payload.grammar;
+      const next = glyphGrammarsRef.current.some((g) => g.id === grammar.id)
+        ? glyphGrammarsRef.current.map((g) => (g.id === grammar.id ? grammar : g))
+        : [...glyphGrammarsRef.current, grammar];
+      glyphGrammarsRef.current = next;
+      setGlyphGrammars(next);
+    }
+
+    if (payload.layoutPreset) {
+      const layoutPreset = payload.layoutPreset;
+      const next = glyphLayoutPresetsRef.current.some((l) => l.id === layoutPreset.id)
+        ? glyphLayoutPresetsRef.current.map((l) => (l.id === layoutPreset.id ? layoutPreset : l))
+        : [...glyphLayoutPresetsRef.current, layoutPreset];
+      glyphLayoutPresetsRef.current = next;
+      setGlyphLayoutPresets(next);
+    }
+
+    const compositionsNext = glyphCompositionsRef.current.some((c) => c.id === payload.composition.id)
+      ? glyphCompositionsRef.current.map((c) => (c.id === payload.composition.id ? payload.composition : c))
+      : [...glyphCompositionsRef.current, payload.composition];
+    glyphCompositionsRef.current = compositionsNext;
+    setGlyphCompositions(compositionsNext);
+
+    savePlayProject(makeProj(playlistsRef.current));
+  }
+
+  function handleRecordGlyphExport(record: GlyphExportRecord) {
+    const next = [...glyphExportRecordsRef.current, record];
+    glyphExportRecordsRef.current = next;
+    setGlyphExportRecords(next);
     savePlayProject(makeProj(playlistsRef.current));
   }
 
@@ -5080,6 +5211,28 @@ export default function App() {
     const loadedSongAnalyses = p.songAnalyses ?? [];
     songAnalysesRef.current = loadedSongAnalyses;
     setSongAnalyses(loadedSongAnalyses);
+    // Glyph Audio (0804A) — same mandatory re-seed-at-authoritative-load
+    // step as songAnalyses/loopWorkspaceDrafts above (0715D bug class):
+    // without this, the async IndexedDB load could silently revert a
+    // just-saved GlyphComposition to the sync-cache snapshot.
+    const loadedGlyphAnalyses = p.glyphAnalyses ?? [];
+    glyphAnalysesRef.current = loadedGlyphAnalyses;
+    setGlyphAnalyses(loadedGlyphAnalyses);
+    const loadedGlyphCompositions = p.glyphCompositions ?? [];
+    glyphCompositionsRef.current = loadedGlyphCompositions;
+    setGlyphCompositions(loadedGlyphCompositions);
+    const loadedGlyphMappingPresets = p.glyphMappingPresets ?? [];
+    glyphMappingPresetsRef.current = loadedGlyphMappingPresets;
+    setGlyphMappingPresets(loadedGlyphMappingPresets);
+    const loadedGlyphGrammars = p.glyphGrammars ?? [];
+    glyphGrammarsRef.current = loadedGlyphGrammars;
+    setGlyphGrammars(loadedGlyphGrammars);
+    const loadedGlyphLayoutPresets = p.glyphLayoutPresets ?? [];
+    glyphLayoutPresetsRef.current = loadedGlyphLayoutPresets;
+    setGlyphLayoutPresets(loadedGlyphLayoutPresets);
+    const loadedGlyphExportRecords = p.glyphExportRecords ?? [];
+    glyphExportRecordsRef.current = loadedGlyphExportRecords;
+    setGlyphExportRecords(loadedGlyphExportRecords);
     const loadedLoopBinViewState = p.loopBinViewState ?? { tab: "approved", filters: {}, sort: "start_time", updatedAt: nowIso() };
     loopBinViewStateRef.current = loadedLoopBinViewState;
     setLoopBinViewState(loadedLoopBinViewState);
@@ -6642,6 +6795,23 @@ export default function App() {
               recomputeSongAnalysisStatus={recomputeSongAnalysisStatus}
               songAnalysisProgress={songAnalysisProgress}
             />
+          ) : viewMode === "glyph_audio" ? (
+            <GlyphWorkspace
+              libraryTracks={libraryTracks}
+              sourceTrackId={glyphSourceTrackId}
+              resolveTrackUrl={getTrackPlayUrl}
+              onAuditionTrack={handleAuditionTrack}
+              auditionTrackId={auditionTrackId}
+              playbackStatus={playbackStatus}
+              onPauseTrack={handlePause}
+              onResumeTrack={handlePlay}
+              currentTimeSeconds={audioTime}
+              glyphMappingPresets={glyphMappingPresets}
+              glyphGrammars={glyphGrammars}
+              glyphLayoutPresets={glyphLayoutPresets}
+              onSaveGlyphComposition={handleSaveGlyphComposition}
+              onRecordGlyphExport={handleRecordGlyphExport}
+            />
           ) : viewMode === "library" && sourceOwnerFilter === "reference" && soundsShowLoops ? (
             // 0722_MUSIC_Loops_Library_And_Looper_Naming — saved loops as a
             // content type within Sounds, replacing the retired standalone
@@ -6825,6 +6995,7 @@ export default function App() {
             onRestoreSuggestionsFromMechanical={handleRestoreSuggestionsFromMechanical}
             onClearSuggestedMoods={handleClearSuggestedMoods}
             onCreateLoops={(trackId) => { handleSelectLooperSourceTrack(trackId); setViewMode("sectional_looper"); }}
+            onOpenInGlyph={(trackId) => { handleSelectGlyphSourceTrack(trackId); setViewMode("glyph_audio"); }}
             onExportStems={(trackId) => setActiveStemTrackId(trackId)}
             onOpenStems={(trackId) => setActiveStemTrackId(trackId)}
             onAuditionTrack={handleAuditionTrack}

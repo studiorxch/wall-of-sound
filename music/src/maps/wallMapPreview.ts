@@ -6,15 +6,15 @@
 // _ensurePreviewMap/dock/undock/retry pattern (that file is the migration
 // reference this build is required to preserve, §4). This is NOT a second
 // map runtime: it reads the same WOS style and the same
-// window.SBE.MapsPaletteAuthority/Registry that drive the live Broadcast
-// map, and there is exactly one instance shared by every card thumbnail and
-// the detail view's live preview — never one map per card.
+// window.SBE.MapsGeographicStyleAuthority/Registry that drive the live
+// Broadcast map, and there is exactly one instance shared by every card
+// thumbnail and the detail view's live preview — never one map per card.
 //
 // Mapbox GL JS/CSS and the access token are loaded lazily, from Wall's own
 // files via the /wall-app proxy (vite.config.ts) — nothing is duplicated or
 // re-hosted; MUSIC's core app never depends on any of this being present.
 
-import { ensureInitialized } from "./wallPaletteBridge";
+import { ensureInitialized } from "./wallGeographicStyleBridge";
 
 const WOS_STYLE = "mapbox://styles/studiorich/cm3goyx23003901qkb60ff29p";
 const PREVIEW_CENTER: [number, number] = [-74.0165, 40.7015];
@@ -32,6 +32,12 @@ type MapboxMap = {
   getLayer: (id: string) => unknown;
   getLayoutProperty: (id: string, prop: string) => unknown;
   getPaintProperty: (id: string, prop: string) => unknown;
+  getSource: (id: string) => { setData: (data: unknown) => void } | undefined;
+  addSource: (id: string, source: unknown) => void;
+  addLayer: (layer: unknown, beforeId?: string) => void;
+  removeLayer: (id: string) => void;
+  removeSource: (id: string) => void;
+  fitBounds: (bounds: [[number, number], [number, number]], options?: Record<string, unknown>) => void;
 };
 
 type ReadyState = "idle" | "loading" | "ready" | "unavailable";
@@ -234,4 +240,214 @@ export function getLayerPaintInfo(layerId: string, layerType: string | undefined
     opacity: opacityProp ? _map.getPaintProperty(layerId, opacityProp) : undefined,
     pattern: patternProp ? _map.getPaintProperty(layerId, patternProp) : undefined,
   };
+}
+
+// ── Itinerary overlay (0729E) ─────────────────────────────────────────────────
+// Strictly static: numbered stop pins + the selected route's geometry as a
+// plain GeoJSON LineString. No animation beyond one instant (non-animated)
+// fitBounds when the stop list changes, no vehicle/playhead rendering, no
+// route-alternative cards, no cinematic presentation. Since this is the ONE
+// shared preview map instance (also used by Geographic/Vehicles/Overlays),
+// clearItineraryOverlay() must be called on the editor's unmount so these
+// layers never linger into an unrelated detail view.
+
+const PINS_SOURCE_ID = "itinerary-stops";
+const PINS_CIRCLE_LAYER_ID = "itinerary-stops-circle";
+const PINS_LABEL_LAYER_ID = "itinerary-stops-label";
+const ROUTE_SOURCE_ID = "itinerary-route";
+const ROUTE_LAYER_ID = "itinerary-route-line";
+
+export type ItineraryPin = { id: string; longitude: number; latitude: number; label: string };
+
+function pinsGeoJSON(pins: ItineraryPin[]) {
+  return {
+    type: "FeatureCollection",
+    features: pins.map((p) => ({
+      type: "Feature",
+      geometry: { type: "Point", coordinates: [p.longitude, p.latitude] },
+      properties: { label: p.label },
+    })),
+  };
+}
+
+export function setItineraryPins(pins: ItineraryPin[]): void {
+  if (!_map || _state !== "ready") return;
+  const data = pinsGeoJSON(pins);
+  const existing = _map.getSource(PINS_SOURCE_ID);
+  if (existing) {
+    existing.setData(data);
+  } else {
+    _map.addSource(PINS_SOURCE_ID, { type: "geojson", data });
+    _map.addLayer({
+      id: PINS_CIRCLE_LAYER_ID,
+      type: "circle",
+      source: PINS_SOURCE_ID,
+      paint: { "circle-radius": 10, "circle-color": "#ff6a3d", "circle-stroke-width": 2, "circle-stroke-color": "#ffffff" },
+    });
+    _map.addLayer({
+      id: PINS_LABEL_LAYER_ID,
+      type: "symbol",
+      source: PINS_SOURCE_ID,
+      layout: { "text-field": ["get", "label"], "text-size": 11, "text-allow-overlap": true },
+      paint: { "text-color": "#ffffff" },
+    });
+  }
+
+  if (pins.length > 0) {
+    let minLng = pins[0].longitude, maxLng = pins[0].longitude;
+    let minLat = pins[0].latitude, maxLat = pins[0].latitude;
+    for (const p of pins) {
+      minLng = Math.min(minLng, p.longitude); maxLng = Math.max(maxLng, p.longitude);
+      minLat = Math.min(minLat, p.latitude); maxLat = Math.max(maxLat, p.latitude);
+    }
+    try {
+      _map.fitBounds([[minLng, minLat], [maxLng, maxLat]], { padding: 48, animate: false, maxZoom: 14 });
+    } catch { /* fitBounds on a degenerate (single-point) bounds box is non-fatal */ }
+  }
+}
+
+// One LineString per stage's SELECTED route (a real itinerary may have
+// several legs) — never a synthetic single line spanning stages that were
+// never actually routed together. An empty array clears the layer's data
+// without removing it.
+export function setItineraryRouteLines(geometries: Array<{ type: "LineString"; coordinates: [number, number][] }>): void {
+  if (!_map || _state !== "ready") return;
+  const data = {
+    type: "FeatureCollection",
+    features: geometries.map((g) => ({ type: "Feature", properties: {}, geometry: g })),
+  };
+  const existing = _map.getSource(ROUTE_SOURCE_ID);
+  if (existing) {
+    existing.setData(data);
+  } else {
+    _map.addSource(ROUTE_SOURCE_ID, { type: "geojson", data });
+    // Insert below the pins circle layer (if it already exists) so pins
+    // always render on top of the route line, regardless of add order.
+    const beforeId = _map.getLayer(PINS_CIRCLE_LAYER_ID) ? PINS_CIRCLE_LAYER_ID : undefined;
+    _map.addLayer({
+      id: ROUTE_LAYER_ID,
+      type: "line",
+      source: ROUTE_SOURCE_ID,
+      layout: { "line-cap": "round", "line-join": "round" },
+      paint: { "line-color": "#ff6a3d", "line-width": 3 },
+    }, beforeId);
+  }
+}
+
+export function clearItineraryOverlay(): void {
+  if (!_map || _state !== "ready") return;
+  for (const layerId of [PINS_CIRCLE_LAYER_ID, PINS_LABEL_LAYER_ID, ROUTE_LAYER_ID]) {
+    if (_map.getLayer(layerId)) { try { _map.removeLayer(layerId); } catch { /* already gone */ } }
+  }
+  for (const sourceId of [PINS_SOURCE_ID, ROUTE_SOURCE_ID]) {
+    if (_map.getSource(sourceId)) { try { _map.removeSource(sourceId); } catch { /* already gone */ } }
+  }
+}
+
+// ── Race Lane overlay (0805D) ─────────────────────────────────────────────────
+// Own source/layer ids (race-lane-*) — deliberately separate from the
+// itinerary-* overlay above so the two overlay kinds can never collide.
+// Rendered ADDITIVELY on top of the course's own start/checkpoints/finish/
+// centerline overlay (MapsRaceCourseDetail.tsx keeps that effect running
+// unchanged) — the lane's own smoothed geometry becomes the visually
+// dominant layer without requiring a second map runtime or a hard swap.
+//
+// Callers MUST feed the DECIMATED preview point set from
+// raceLanePreviewGeometry.ts — never the full-resolution stored
+// sampledCenterline (raceLaneTypes.ts) — this module has no opinion on that,
+// it only draws whatever GeoJSON it is given.
+//
+// Preview modes (decided by the caller, not here):
+//   invisible -> pins only, empty lines/trackPolygon
+//   guide     -> centerline + lane-divider lines + start-grid/finish pins, no track fill
+//   track     -> same as guide, PLUS a real translucent filled polygon band
+
+const LANE_PINS_SOURCE_ID = "race-lane-markers";
+const LANE_PINS_CIRCLE_LAYER_ID = "race-lane-markers-circle";
+const LANE_PINS_LABEL_LAYER_ID = "race-lane-markers-label";
+const LANE_LINES_SOURCE_ID = "race-lane-lines";
+const LANE_LINES_LAYER_ID = "race-lane-lines-line";
+const LANE_TRACK_SOURCE_ID = "race-lane-track";
+const LANE_TRACK_FILL_LAYER_ID = "race-lane-track-fill";
+
+export type RaceLaneOverlayLine = { type: "LineString"; coordinates: [number, number][] };
+export type RaceLaneOverlayPolygon = { type: "Polygon"; coordinates: [number, number][][] } | null;
+
+export interface RaceLaneOverlayInput {
+  pins: ItineraryPin[];
+  lines: RaceLaneOverlayLine[];
+  trackPolygon: RaceLaneOverlayPolygon;
+}
+
+export function setRaceLaneOverlay({ pins, lines, trackPolygon }: RaceLaneOverlayInput): void {
+  if (!_map || _state !== "ready") return;
+
+  const pinsData = pinsGeoJSON(pins);
+  const existingPins = _map.getSource(LANE_PINS_SOURCE_ID);
+  if (existingPins) {
+    existingPins.setData(pinsData);
+  } else {
+    _map.addSource(LANE_PINS_SOURCE_ID, { type: "geojson", data: pinsData });
+    _map.addLayer({
+      id: LANE_PINS_CIRCLE_LAYER_ID,
+      type: "circle",
+      source: LANE_PINS_SOURCE_ID,
+      paint: { "circle-radius": 7, "circle-color": "#3d8bff", "circle-stroke-width": 2, "circle-stroke-color": "#ffffff" },
+    });
+    _map.addLayer({
+      id: LANE_PINS_LABEL_LAYER_ID,
+      type: "symbol",
+      source: LANE_PINS_SOURCE_ID,
+      layout: { "text-field": ["get", "label"], "text-size": 10, "text-allow-overlap": true, "text-offset": [0, 1.2] },
+      paint: { "text-color": "#3d8bff" },
+    });
+  }
+
+  const linesData = {
+    type: "FeatureCollection",
+    features: lines.map((g) => ({ type: "Feature", properties: {}, geometry: g })),
+  };
+  const existingLines = _map.getSource(LANE_LINES_SOURCE_ID);
+  if (existingLines) {
+    existingLines.setData(linesData);
+  } else {
+    _map.addSource(LANE_LINES_SOURCE_ID, { type: "geojson", data: linesData });
+    _map.addLayer({
+      id: LANE_LINES_LAYER_ID,
+      type: "line",
+      source: LANE_LINES_SOURCE_ID,
+      layout: { "line-cap": "round", "line-join": "round" },
+      paint: { "line-color": "#3d8bff", "line-width": 1.5 },
+    });
+  }
+
+  const trackData = {
+    type: "FeatureCollection",
+    features: trackPolygon ? [{ type: "Feature", properties: {}, geometry: trackPolygon }] : [],
+  };
+  const existingTrack = _map.getSource(LANE_TRACK_SOURCE_ID);
+  if (existingTrack) {
+    existingTrack.setData(trackData);
+  } else {
+    _map.addSource(LANE_TRACK_SOURCE_ID, { type: "geojson", data: trackData });
+    // Inserted below the lines layer (if present) so the fill never obscures
+    // the divider lines / centerline drawn on top of it.
+    const beforeId = _map.getLayer(LANE_LINES_LAYER_ID) ? LANE_LINES_LAYER_ID : undefined;
+    _map.addLayer({
+      id: LANE_TRACK_FILL_LAYER_ID,
+      type: "fill",
+      source: LANE_TRACK_SOURCE_ID,
+      paint: { "fill-color": "#3d8bff", "fill-opacity": 0.22 },
+    }, beforeId);
+  }
+}
+
+export function clearRaceLaneOverlay(): void {
+  if (!_map || _state !== "ready") return;
+  for (const layerId of [LANE_PINS_CIRCLE_LAYER_ID, LANE_PINS_LABEL_LAYER_ID, LANE_LINES_LAYER_ID, LANE_TRACK_FILL_LAYER_ID]) {
+    if (_map.getLayer(layerId)) { try { _map.removeLayer(layerId); } catch { /* already gone */ } }
+  }
+  for (const sourceId of [LANE_PINS_SOURCE_ID, LANE_LINES_SOURCE_ID, LANE_TRACK_SOURCE_ID]) {
+    if (_map.getSource(sourceId)) { try { _map.removeSource(sourceId); } catch { /* already gone */ } }
+  }
 }

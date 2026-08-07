@@ -34,6 +34,16 @@ export type PlaylistShapeSection = {
   crateWeights: SectionCrateWeight[];
   locked?: boolean;
   energyEnvelope: PlaylistSectionEnergyEnvelope;
+  // 0804_MUSIC_Playlist_Eligibility_Repair §8 test #16 "exact role
+  // requirements still work when explicitly configured" — opt-in only, no
+  // default value, no dedicated wizard UI control (this shape config
+  // deliberately exposes no per-section mood/role controls — see the header
+  // comment above). When set and non-empty, a section (currently only "intro"
+  // reads this) becomes a genuine HARD filter: only candidates carrying at
+  // least one of these roles are considered at all. When unset (the default
+  // for every section today), the section instead uses a soft preference
+  // fallback ladder — see playlistShapeBuilder.ts's INTRO_ROLE_PREFERENCE_TIERS.
+  requiredMechanicalRoles?: import("./trackTypes").MechanicalMoodTag[];
 };
 
 export type PlaylistShapeConfig = {

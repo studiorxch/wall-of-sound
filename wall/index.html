@@ -5,7 +5,7 @@
     <link rel="apple-touch-icon" href="./favicon.png" />
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Wall of Sound</title>
+    <title>LIVE MAP</title>
     <link rel="stylesheet" href="./styles.css" />
     <link rel="stylesheet" href="./workspace.css" />
     <link
@@ -2007,16 +2007,27 @@
     <!-- Status text (hidden) -->
     <p class="font-status hidden" id="text-font-status">No font loaded.</p>
 
-    <!-- Shortcuts overlay -->
-    <div id="shortcut-hud" class="shortcut-hud hidden">
+    <!-- Shortcuts overlay (0805B — content now rendered from
+         SBE.KeyboardShortcutRegistry.list() in main.js's toggleShortcuts(),
+         not hard-coded here; role/aria wired for real dialog semantics) -->
+    <div id="shortcut-hud" class="shortcut-hud hidden" role="dialog" aria-modal="true" aria-labelledby="shortcut-hud-title" aria-hidden="true">
       <div class="shortcut-card">
-        <p><strong>Shortcuts</strong></p>
-        <p>V Select · D Draw · S Shape · T Text · B Ball</p>
-        <p>Cmd+D Duplicate · Delete Remove · Cmd+Z Undo</p>
-        <p>Tab Presentation · ? Shortcuts</p>
+        <p id="shortcut-hud-title"><strong>Keyboard Shortcuts</strong></p>
+        <div id="shortcut-hud-body"></div>
         <button id="close-shortcuts">Close</button>
       </div>
     </div>
+
+    <!-- 0805B — small persistent "?" control (spec §7: clicking OR pressing
+         ? both open help). Not tagged data-watch-hide — stays reachable even
+         while body.presentation has hidden the rest of the interface. -->
+    <button id="keyboard-help-btn" class="keyboard-help-btn" type="button" title="Keyboard shortcuts" aria-label="Open keyboard shortcuts">?</button>
+
+    <!-- 0805E — RACETRACK Attract/Selection/Lobby mount point. Empty by
+         default; populated only by racetrackSelectionScene.js, and only
+         while body.racetrack-presentation is active (see styles.css) — a
+         plain reload without ?mode=racetrack never activates it. -->
+    <div id="racetrack-overlay" class="racetrack-overlay"></div>
 
     <!-- Drop Zone Overlay -->
     <div id="drop-overlay" class="hidden">
@@ -2388,6 +2399,12 @@
     <!-- ── Now Playing HUD — read-only, mirrors MUSIC's playbackAuthority via
          localStorage (0729C v1.1 HUD Recovery Addendum) ─────────────────────── -->
     <script src="./systems/presentation/nowPlayingHud.js"></script>
+    <!-- ── MAPS Overlays Library (0729D) — AFTER atmosphereComposite.js,
+         environmentalTelemetryHUD.js, traversalHUD.js, nowPlayingHud.js, its
+         4 real records' sources. No map dependency, self-inits immediately. ── -->
+    <script src="./systems/presentation/overlayStyleRegistry.js"></script>
+    <script src="./systems/presentation/overlayStyleApplyAdapters.js"></script>
+    <script src="./systems/presentation/overlayStyleAuthority.js"></script>
     <!-- ── Snapshot runtime — S / Shift+S PNG capture (0628E, 0629A) ──────── -->
     <script src="./systems/presentation/wosSnapshotRuntime.js"></script>
     <!-- ── Boot runtime — ?mode=flight&destination=Miami URL preset (0629A) ── -->
@@ -2485,6 +2502,15 @@
     <script src="./systems/feeds/citibikeStationVisualProfile.js"></script>
     <!-- ── World-Space Vehicle Layer (0531J) ─────────────────────────────────── -->
     <script src="./systems/render/worldSpaceVehicleLayer.js"></script>
+    <!-- ── MAPS Orb Profile Renderer (0730C) — a wholly separate Mapbox custom
+         layer/THREE.WebGLRenderer from WorldSpaceVehicleLayer above (Orb
+         archetypes need Points/LineSegments/dynamic topology WSL's near-static
+         vehicle-mesh cache wasn't built for). orbObjectFactory.js is the ONE
+         shared archetype builder — also loaded (via /wall-app proxy) by
+         MUSIC's editor preview, so archetype construction exists in exactly
+         one place. ── -->
+    <script src="./systems/presentation/orbObjectFactory.js"></script>
+    <script src="./systems/render/orbProfileRenderer.js"></script>
     <!-- ── Organic Building Surface Pattern Runtime (0612T) ──────────────────── -->
     <script src="./systems/presentation/organicBuildingSurfacePatternRuntime.js"></script>
     <!-- ── All Visible Building Surface Texture Runtime (0612U) ─────────────── -->
@@ -2571,14 +2597,140 @@
 
     <script src="./systems/routeInputSystem.js"></script>
     <script src="./render/routePanel.js"></script>
-    <!-- ── MAPS Palette System (0729A) — AFTER heroVehicleRenderer/routePlannerRuntime/
+    <!-- ── MAPS Vehicles Library (0729D) — AFTER heroVehicleRenderer.js, its one
+         real record's source. No map dependency, so it self-inits immediately. ── -->
+    <script src="./systems/presentation/vehicleStyleRegistry.js"></script>
+    <script src="./systems/presentation/vehicleStyleApplyAdapters.js"></script>
+    <script src="./systems/presentation/vehicleStyleAuthority.js"></script>
+    <!-- ── MAPS Orbs Library (0730C) — record-centered authority (mirrors
+         MapsGeographicStyleAuthority's CRUD/Active/Preview shape, not
+         VehicleStyleAuthority's flat values-blob). init(map) requires the
+         live map, so it self-inits via the same MapboxViewportRuntime
+         onStyleLoad hook Geographic Styles uses (see bottom of
+         orbProfileAuthority.js), not immediately like Vehicles. AFTER
+         orbObjectFactory.js/orbProfileRenderer.js above. ── -->
+    <script src="./systems/presentation/orbProfileRegistry.js"></script>
+    <script src="./systems/presentation/orbProfileApplyAdapters.js"></script>
+    <script src="./systems/presentation/orbProfileSeeds.js"></script>
+    <script src="./systems/presentation/orbProfileAuthority.js"></script>
+    <script src="./systems/presentation/orbProfileAuthority.tests.js"></script>
+    <!-- ── MAPS Itinerary Runner (0730D) — executes ONLY here, on canonical
+         LIVE MAP; deliberately NOT loaded in music/index.html (MUSIC has no
+         real map/HeroVehicleRuntime/OrbProfileRenderer to run against — it
+         only sends commands and reads snapshots via wallItineraryRunBridge.ts's
+         wos:itineraryRun:* localStorage channel). AFTER heroVehicleRuntime.js/
+         heroVehicleRenderer.js/viewportLocationAuthority.js above. ── -->
+    <script src="./systems/runtime/itineraryRouteSampler.js"></script>
+    <script src="./systems/runtime/itineraryRunController.js"></script>
+    <!-- ── 0805B — KeyboardShortcutRegistry: canonical dispatcher for LIVE MAP
+         presentation/runtime shortcuts (Tab/?/F/L/0/Esc) only, NOT a claim to
+         own every global keyboard listener in this codebase (main.js's own
+         GlyphLab keydown handler and wosSnapshotRuntime.js's debug S/Shift+S
+         both remain separate, unmigrated, on purpose). Must load BEFORE
+         itineraryRunAuthority.js, which registers its F/L/0/Esc shortcuts
+         into it at this file's own load time. ── -->
+    <script src="./systems/runtime/keyboardShortcutRegistry.js"></script>
+    <script src="./systems/runtime/keyboardShortcutRegistry.tests.js"></script>
+    <script src="./systems/runtime/itineraryRunAuthority.js"></script>
+    <script src="./systems/runtime/itineraryRunAuthority.tests.js"></script>
+    <!-- ── 0805B — ItineraryPresentationSurface: toggles body.itinerary-presentation
+         from the live run snapshot. Must load AFTER itineraryRunAuthority.js
+         (it calls that module's subscribe()/getSnapshot()). ── -->
+    <script src="./systems/presentation/itineraryPresentationSurface.js"></script>
+    <!-- ── 0805E — RACETRACK Wall Mode. RACETRACK-scoped only (no generic
+         pluggable mode registry, no RADIO stub — see the build's own plan
+         review). racetrackCoursePackageRuntime.js has no hard dependency on
+         Orb scripts but is grouped here for load-order clarity;
+         racetrackSessionRuntime.js requires OrbProfileAuthority (above),
+         racetrackCoursePackageRuntime.js, racetrackReadiness.js, and
+         (0805G) racetrackSessionSnapshotStorage.js to already be loaded;
+         racetrackPresentationSurface.js requires racetrackSessionRuntime.js;
+         (0805H) racetrackPresentationKit.js requires OrbProfileAuthority,
+         OrbObjectFactory, racetrackCoursePackageRuntime.js, and
+         racetrackSessionRuntime.js (its roster primitive calls runtime
+         actions directly); racetrackSelectionScene.js (the actual scene
+         composition/event-wiring layer) loads LAST, after all of the above
+         plus orbObjectFactory.js (already loaded far above) — it depends on
+         racetrackPresentationKit.js for its DOM-building primitives. ── -->
+    <script src="./systems/presentation/racetrackCoursePackageRuntime.js"></script>
+    <script src="./systems/presentation/racetrackReadiness.js"></script>
+    <!-- ── 0805G — RacetrackSessionSnapshotStorage: durable same-origin
+         persistence for the frozen Lobby snapshot. Must load BEFORE
+         racetrackSessionRuntime.js (which calls its save/load/clear API on
+         Enter Lobby and on boot). ── -->
+    <script src="./systems/presentation/racetrackSessionSnapshotStorage.js"></script>
+    <script src="./systems/presentation/racetrackSessionRuntime.js"></script>
+    <script src="./systems/presentation/racetrackSessionRuntime.tests.js"></script>
+    <script src="./systems/presentation/racetrackPresentationSurface.js"></script>
+    <!-- ── 0805H — RacetrackPresentationKit: the 7 reusable DOM-building
+         primitives (Orb stage, route presentation, selector, roster,
+         playlist control, Lobby summary, HUD label). Must load BEFORE
+         racetrackSelectionScene.js, which composes them. ── -->
+    <script src="./systems/presentation/racetrackPresentationKit.js"></script>
+    <!-- ── 0806C — RACETRACK Multi-Racer Runtime Foundation. Dependency
+         order: racetrackRaceCourseSampler.js/racetrackRaceSimulation.js/
+         racetrackRaceRanking.js/racetrackRaceResults.js are pure, no hard
+         deps on each other; racetrackRaceScene.js needs THREE,
+         OrbObjectFactory (both already loaded above),
+         racetrackRaceCourseSampler.js, and racetrackRaceRanking.js;
+         racetrackRaceRuntime.js needs racetrackReadiness.js,
+         racetrackSessionRuntime.js (both above), and
+         racetrackRaceSimulation.js/racetrackRaceRanking.js/
+         racetrackRaceResults.js. racetrackSelectionScene.js (below) is the
+         DOM-mounting authority for countdown/running/results — it calls
+         SBE.RacetrackRaceScene.mount() and SBE.RacetrackRaceRuntime.*
+         directly, so both must be loaded before it. ── -->
+    <script src="./systems/presentation/racetrackRaceCourseSampler.js"></script>
+    <script src="./systems/presentation/racetrackRaceCourseSampler.tests.js"></script>
+    <script src="./systems/presentation/racetrackRaceSimulation.js"></script>
+    <script src="./systems/presentation/racetrackRaceSimulation.tests.js"></script>
+    <script src="./systems/presentation/racetrackRaceRanking.js"></script>
+    <script src="./systems/presentation/racetrackRaceRanking.tests.js"></script>
+    <script src="./systems/presentation/racetrackRaceResults.js"></script>
+    <script src="./systems/presentation/racetrackRaceResults.tests.js"></script>
+    <script src="./systems/presentation/racetrackRaceScene.js"></script>
+    <script src="./systems/presentation/racetrackRaceRuntime.js"></script>
+    <script src="./systems/presentation/racetrackRaceRuntime.tests.js"></script>
+    <script src="./systems/presentation/racetrackSelectionScene.js"></script>
+    <!-- ── 0806A — racetrackSelectionScene.tests.js: same unconditional
+         test-harness load convention already used by every other
+         `.tests.js` file in this list (orbProfileAuthority.tests.js,
+         keyboardShortcutRegistry.tests.js, itineraryRunAuthority.tests.js,
+         racetrackSessionRuntime.tests.js above, mapsGeographicStyleAuthority.
+         tests.js below) — loads as inert code, registers under
+         _wos.debug.racetrackSelectionScene, never auto-runs. ── -->
+    <script src="./systems/presentation/racetrackSelectionScene.tests.js"></script>
+    <!-- ── 0805E — RACETRACK boot entry. wall/ has no client-side router
+         (confirmed: none exists anywhere in this codebase) — a `?mode=
+         racetrack` query param, checked once here, is the closest honest
+         equivalent to "/racetrack" without inventing one. A plain reload
+         without the param never activates RACETRACK; canonical LIVE MAP's
+         existing behavior is completely unaffected. ── -->
+    <script>
+      (function () {
+        try {
+          var params = new URLSearchParams(window.location.search);
+          if (params.get('mode') !== 'racetrack') return;
+          if (window.SBE && window.SBE.RacetrackPresentationSurface) {
+            window.SBE.RacetrackPresentationSurface.activate();
+          }
+          if (window.SBE && window.SBE.RacetrackSelectionScene) {
+            window.SBE.RacetrackSelectionScene.mount();
+          }
+        } catch (e) {
+          console.warn('[RACETRACK boot] failed:', e && e.message || e);
+        }
+      })();
+    </script>
+    <!-- ── MAPS Geographic Style System (0729A; renamed from "Palette" by 0729D's
+         terminology-migration gate) — AFTER heroVehicleRenderer/routePlannerRuntime/
          routePanel/mapboxOperatorRenderer/environmentalTelemetryHUD, BEFORE anything
          that would otherwise apply a hardcoded fallback color to those modules. ── -->
-    <script src="./systems/presentation/mapsPaletteRegistry.js"></script>
-    <script src="./systems/presentation/mapsPaletteApplyAdapters.js"></script>
-    <script src="./systems/presentation/mapsPaletteSeeds.js"></script>
-    <script src="./systems/presentation/mapsPaletteAuthority.js"></script>
-    <script src="./systems/presentation/mapsPaletteAuthority.tests.js"></script>
+    <script src="./systems/presentation/mapsGeographicStyleRegistry.js"></script>
+    <script src="./systems/presentation/mapsGeographicStyleApplyAdapters.js"></script>
+    <script src="./systems/presentation/mapsGeographicStyleSeeds.js"></script>
+    <script src="./systems/presentation/mapsGeographicStyleAuthority.js"></script>
+    <script src="./systems/presentation/mapsGeographicStyleAuthority.tests.js"></script>
     <script src="./ui/routeControls.js"></script>
     <script src="./render/zonesPanel.js"></script>
 

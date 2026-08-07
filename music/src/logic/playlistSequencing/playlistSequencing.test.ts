@@ -146,6 +146,41 @@ describe("computeTransitionScore", () => {
     const allOnes = computeTransitionScore({ energyFit: 1, bpmFit: 1, keyFit: 1, moodContinuity: 1, variety: 1, profile: peak });
     expect(allOnes.total).toBeCloseTo(1);
   });
+
+  // 0804_MUSIC_Playlist_Eligibility_Repair — direct instruction: "missing
+  // BPM/key/mood: omit ... scoring" rather than defaulting to a neutral
+  // filler that still counted at full weight. A null input must be OMITTED
+  // (its weight redistributed to the remaining present dimensions), not
+  // merely scored as if it were a middling 0.5 fit.
+  describe("omission semantics for missing BPM/key/mood (0804_MUSIC_Playlist_Eligibility_Repair)", () => {
+    it("a null bpmFit contributes nothing and its weight share goes to key/mood/variety, not to a neutral 0.5", () => {
+      const withNeutralHalf = computeTransitionScore({ energyFit: 1, bpmFit: 0.5, keyFit: 1, moodContinuity: 1, variety: 1 });
+      const withOmitted = computeTransitionScore({ energyFit: 1, bpmFit: null, keyFit: 1, moodContinuity: 1, variety: 1 });
+      // Omitting entirely (and redistributing) scores strictly higher than
+      // treating the missing value as a middling 0.5 at full weight, since
+      // the other (perfect) dimensions absorb its full weight share.
+      expect(withOmitted.total).toBeGreaterThan(withNeutralHalf.total);
+      expect(withOmitted.total).toBeCloseTo(1); // energy(1) + key/mood/variety all perfect + bpm omitted = 1
+    });
+
+    it("weights still sum to 1 (renormalized) when every non-energy dimension is omitted", () => {
+      const allOmitted = computeTransitionScore({ energyFit: 1, bpmFit: null, keyFit: null, moodContinuity: null, variety: 1 });
+      // Only energy + variety remain; both perfect (1) => total must still reach 1.
+      expect(allOmitted.total).toBeCloseTo(1);
+    });
+
+    it("a plain number (not null) behaves exactly as before — existing callers (e.g. the read-only Playlist Analyzer) are unaffected", () => {
+      const allOnes = computeTransitionScore({ energyFit: 1, bpmFit: 1, keyFit: 1, moodContinuity: 1, variety: 1 });
+      expect(allOnes.total).toBeCloseTo(1);
+    });
+
+    it("the returned bpmFit/keyFit/moodContinuity echo a 0.5 display value when omitted, for existing diagnostic consumers", () => {
+      const result = computeTransitionScore({ energyFit: 1, bpmFit: null, keyFit: null, moodContinuity: null, variety: 1 });
+      expect(result.bpmFit).toBe(0.5);
+      expect(result.keyFit).toBe(0.5);
+      expect(result.moodContinuity).toBe(0.5);
+    });
+  });
 });
 
 // ── Transition warnings ─────────────────────────────────────────────────────

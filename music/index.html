@@ -8,22 +8,59 @@
   </head>
   <body>
     <div id="root"></div>
-    <!-- Wall's real MAPS palette authority — the exact same files the live
-         Broadcast runtime uses, reached through the /wall-app proxy
+    <!-- Wall's real MAPS Geographic Style authority (renamed from "palette"
+         by 0729D's terminology-migration gate) — the exact same files the
+         live Broadcast runtime uses, reached through the /wall-app proxy
          (vite.config.ts server.proxy) so this origin and Wall's origin share
          one localStorage. Plain global scripts, not ES modules, loaded
          before the React bundle so window.SBE is populated first;
-         music/src/maps/wallPaletteBridge.ts wraps window.SBE.MapsPaletteAuthority.
-         Nothing here is a second map runtime or a second palette authority. -->
-    <!-- AtmosphereComposite itself — mapsPaletteRegistry.js only discovers
-         the runtime overlay toggle when window.SBE.AtmosphereComposite is
-         present (see _discoverOverlays()). It defines functions only; it
-         does nothing until this page's own overlay toggle calls init(). -->
+         music/src/maps/wallGeographicStyleBridge.ts wraps
+         window.SBE.MapsGeographicStyleAuthority. Nothing here is a second
+         map runtime or a second style authority. -->
+    <!-- AtmosphereComposite itself — overlayStyleRegistry.js discovers the
+         runtime overlay toggle when window.SBE.AtmosphereComposite is present.
+         It defines functions only; it does nothing until this page's own
+         overlay toggle calls init(). -->
     <script src="/wall-app/render/atmosphereComposite.js"></script>
-    <script src="/wall-app/systems/presentation/mapsPaletteRegistry.js"></script>
-    <script src="/wall-app/systems/presentation/mapsPaletteApplyAdapters.js"></script>
-    <script src="/wall-app/systems/presentation/mapsPaletteSeeds.js"></script>
-    <script src="/wall-app/systems/presentation/mapsPaletteAuthority.js"></script>
+    <!-- HeroVehicleRenderer itself — the Vehicles library's one real record
+         (Hero Car) reads/writes its colors via getColors()/setColors(). Like
+         AtmosphereComposite above, it defines functions only here: nothing
+         calls start(), so no marker/DOM/map dependency is exercised in this
+         document — it is a real, dormant color source, not a second runtime. -->
+    <script src="/wall-app/systems/render/heroVehicleRenderer.js"></script>
+    <script src="/wall-app/systems/presentation/vehicleStyleRegistry.js"></script>
+    <script src="/wall-app/systems/presentation/vehicleStyleApplyAdapters.js"></script>
+    <script src="/wall-app/systems/presentation/vehicleStyleAuthority.js"></script>
+    <!-- MAPS Orbs Library (0730C) — the record CRUD/Active/Preview authority
+         only. orbObjectFactory.js (the shared Three.js archetype builder) and
+         orbProfileRenderer.js (the Mapbox custom layer) are NOT loaded here —
+         MUSIC has no canonical live map for Orbs to render onto; the editor's
+         live preview lazy-loads orbObjectFactory.js on demand instead (see
+         orbPreviewRuntime.ts), the same way wallMapPreview.ts already
+         lazy-loads mapbox-env.js. OrbProfileAuthority's data hydration is
+         map-independent (self-inits immediately, like Vehicles above) so the
+         catalog works here with zero live-map dependency. -->
+    <script src="/wall-app/systems/presentation/orbProfileRegistry.js"></script>
+    <script src="/wall-app/systems/presentation/orbProfileApplyAdapters.js"></script>
+    <script src="/wall-app/systems/presentation/orbProfileSeeds.js"></script>
+    <script src="/wall-app/systems/presentation/orbProfileAuthority.js"></script>
+    <!-- EnvironmentalTelemetryHUD itself — same dormant-until-called shape as
+         AtmosphereComposite/HeroVehicleRenderer above (defines getColors()/
+         setColors() only; init() is never called here). traversalHUD.js and
+         nowPlayingHud.js are deliberately NOT loaded in this document — both
+         self-initialize on DOMContentLoaded and inject a live DOM HUD panel,
+         which would run a second copy of a live overlay inside the Library
+         UI. Their Overlay records (Flight Data HUD, Now Playing HUD) are
+         real and editable: false either way, so this only affects whether
+         they're DISCOVERABLE from this document — see overlayStyleRegistry.js. -->
+    <script src="/wall-app/render/environmentalTelemetryHUD.js"></script>
+    <script src="/wall-app/systems/presentation/overlayStyleRegistry.js"></script>
+    <script src="/wall-app/systems/presentation/overlayStyleApplyAdapters.js"></script>
+    <script src="/wall-app/systems/presentation/overlayStyleAuthority.js"></script>
+    <script src="/wall-app/systems/presentation/mapsGeographicStyleRegistry.js"></script>
+    <script src="/wall-app/systems/presentation/mapsGeographicStyleApplyAdapters.js"></script>
+    <script src="/wall-app/systems/presentation/mapsGeographicStyleSeeds.js"></script>
+    <script src="/wall-app/systems/presentation/mapsGeographicStyleAuthority.js"></script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

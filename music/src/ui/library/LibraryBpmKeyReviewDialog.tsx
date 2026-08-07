@@ -13,9 +13,9 @@
 // existing onAnalyzeMissing path the selection dock's own "Analyze Missing"
 // button already calls, scoped to just that one track — no new analyzer.
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Track } from "../../data/trackTypes";
-import { reviewBpmField, reviewKeyField, needsBpmKeyReview } from "../../logic/dspFeatureExtraction";
+import { reviewBpmField, reviewKeyField, needsBpmKeyReview, buildAcceptedBpmPatch } from "../../logic/dspFeatureExtraction";
 import { LibraryReviewRowPlayButton } from "./LibraryReviewRowPlayButton";
 
 interface Props {
@@ -52,6 +52,40 @@ export function LibraryBpmKeyReviewDialog({
 }: Props) {
   const tracks = selectedTracks.filter(needsBpmKeyReview);
 
+  // 0804_MUSIC_BPM_Authority_Repair §6.2 — "if no unresolved rows remain,
+  // close the dialog" after a successful commit (never on an already-empty
+  // initial open, which keeps showing the "nothing to review" message as
+  // before). Tracked via a ref rather than a dep-array effect so this only
+  // fires on the >0 -> 0 transition, not on every render.
+  const prevTrackCountRef = useRef(tracks.length);
+  useEffect(() => {
+    if (prevTrackCountRef.current > 0 && tracks.length === 0) onClose();
+    prevTrackCountRef.current = tracks.length;
+  });
+
+  // §6.1 "disable duplicate commits while persistence is pending" / §8
+  // "duplicate rapid clicks". onBulkUpdate is synchronous today, but two
+  // native click events can still both fire before React removes a
+  // resolved row from `tracks` on the next render — these guard against
+  // that window. Self-pruning (no manual delete): once a track leaves
+  // `tracks` (resolved, deselected, or removed), its guard entry is
+  // dropped here rather than needing an explicit clear after each write.
+  const pendingBpmRef = useRef<Set<string>>(new Set());
+  const pendingKeyRef = useRef<Set<string>>(new Set());
+  for (const id of Array.from(pendingBpmRef.current)) {
+    if (!tracks.some((t) => t.trackId === id)) pendingBpmRef.current.delete(id);
+  }
+  for (const id of Array.from(pendingKeyRef.current)) {
+    if (!tracks.some((t) => t.trackId === id)) pendingKeyRef.current.delete(id);
+  }
+
+  // §6.2 "surface a concise inline error if persistence fails" — the only
+  // failure reachable from this dialog is a rejected invalid candidate
+  // (buildAcceptedBpmPatch returning null); real candidate buttons are
+  // always built from already-validated review fields, so this is a
+  // defensive path, not one reachable through normal use.
+  const [bpmErrorByTrack, setBpmErrorByTrack] = useState<Record<string, string>>({});
+
   // Closing the dialog cleanly returns control to the existing transport —
   // pause (not destroy) playback only if the track currently auditioning
   // belongs to THIS dialog's own selection, so a track a person started
@@ -74,10 +108,29 @@ export function LibraryBpmKeyReviewDialog({
   // derivative — writes through the SAME manual-source path; the half/
   // double-time numbers are derived mathematically from the persisted
   // candidate (never a second detector estimate), per reviewBpmField.
+  // buildAcceptedBpmPatch (0804_MUSIC_BPM_Authority_Repair) is the single
+  // validation+precision gate a clicked value must pass before it can ever
+  // become bpmSource:"manual" — rejecting it here means the invalid value
+  // never reaches onBulkUpdate/persistence at all.
   function acceptBpmValue(trackId: string, value: number) {
-    onBulkUpdate([trackId], { bpm: value, bpmSource: "manual" });
+    if (pendingBpmRef.current.has(trackId)) return;
+    const patch = buildAcceptedBpmPatch(value);
+    if (!patch) {
+      setBpmErrorByTrack((prev) => ({ ...prev, [trackId]: "Invalid BPM value — not saved." }));
+      return;
+    }
+    if (bpmErrorByTrack[trackId]) {
+      setBpmErrorByTrack((prev) => {
+        const { [trackId]: _removed, ...rest } = prev;
+        return rest;
+      });
+    }
+    pendingBpmRef.current.add(trackId);
+    onBulkUpdate([trackId], patch);
   }
   function acceptKeyValue(trackId: string, camelotKey: string) {
+    if (pendingKeyRef.current.has(trackId)) return;
+    pendingKeyRef.current.add(trackId);
     onBulkUpdate([trackId], { camelotKey: camelotKey as Track["camelotKey"], keySource: "manual" });
   }
 
@@ -130,6 +183,9 @@ export function LibraryBpmKeyReviewDialog({
                         ) : bpmCandidates.length > 0 ? (
                           <>
                             <CandidateButtons values={bpmCandidates} onPick={(v) => acceptBpmValue(t.trackId, v)} />
+                            {bpmErrorByTrack[t.trackId] && (
+                              <div className="cat-review-error">{bpmErrorByTrack[t.trackId]}</div>
+                            )}
                             <details className="cat-review-details">
                               <summary>details</summary>
                               <div className="cat-review-details-body">

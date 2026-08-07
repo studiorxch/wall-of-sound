@@ -1792,7 +1792,11 @@
   function _applyTransform(mesh, v, resolved) {
     var THREE = global.THREE;
     if (!global.mapboxgl || !global.mapboxgl.MercatorCoordinate || !THREE) return;
-    var coord = global.mapboxgl.MercatorCoordinate.fromLngLat([v.lng, v.lat], ALTITUDE_M);
+    // 0730E — v.altitudeMeters (presentation-only, e.g. Itinerary Runner's
+    // hero-altitude control) adds on top of the fixed anti-z-fighting lift;
+    // never affects footprint/scale/heading, only this Z translation.
+    var altitudeM = ALTITUDE_M + (typeof v.altitudeMeters === 'number' ? v.altitudeMeters : 0);
+    var coord = global.mapboxgl.MercatorCoordinate.fromLngLat([v.lng, v.lat], altitudeM);
 
     // meterInMercatorCoordinateUnits() converts 1 real-world metre → Mercator units.
     // When a resolved LOD scale is supplied, it already folds in _shapeScale; the

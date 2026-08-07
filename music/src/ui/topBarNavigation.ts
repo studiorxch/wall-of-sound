@@ -17,9 +17,17 @@
 
 export type WorkspaceMode = "flow_curve" | "scheduler" | "broadcast_hud" | "maps";
 
+export type NavigationAction = "openRacetrack";
+
 export type NavigationLink =
   | { label: string; kind: "internal"; mode: WorkspaceMode; title?: string }
-  | { label: string; kind: "external"; href: string; title?: string; newTab?: boolean };
+  | { label: string; kind: "external"; href: string; title?: string; newTab?: boolean }
+  // 0805F — for links that trigger a real cross-context bridge call (e.g.
+  // named-window open/focus) rather than either an in-app mode switch or a
+  // plain anchor navigation. Kept as a plain string tag (never a live
+  // function reference) so this file stays pure data; TopBar.tsx maps
+  // `action` to the real handler.
+  | { label: string; kind: "action"; action: NavigationAction; title?: string };
 
 export type NavigationItem = {
   label: string;
@@ -53,6 +61,12 @@ export const navigationItems: readonly NavigationItem[] = [
       // localhost:5176 is the canonical MUSIC entry point; opens in a new
       // tab so the Library session stays open alongside it.
       { label: "LIVE MAP", kind: "external", href: "http://localhost:5176/wall-app/", title: "Wall — live Broadcast presentation", newTab: true },
+      // 0805F — RACETRACK is a mode on the SAME wall/ runtime, not a
+      // separate page, so it can't be a plain href like the entries above
+      // (a generic `target="_blank"` anchor opens a NEW tab every click,
+      // never reusing one). Dispatches to wallRacetrackBridge.ts's
+      // openOrFocusRacetrack(), which reuses LIVE MAP's own named window.
+      { label: "RACETRACK", kind: "action", action: "openRacetrack", title: "Racetrack — cached course presentation" },
     ],
   },
 ] as const;

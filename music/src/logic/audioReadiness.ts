@@ -57,21 +57,30 @@ export function computeAudioReadiness(track: Track, ctx: TrackEligibilityContext
 /**
  * True for a track that entered the library through the import pipeline
  * (audioImport.ts stamps analysisSources: ["import"]) and hasn't finished
- * required analysis yet. This is the narrow, import-scoped signal used to
- * gate automatic playlist generation — it deliberately does NOT apply to the
- * user's whole pre-existing library, only to material this build's import
- * path actually introduced.
+ * canonical mood/DSP analysis yet. This is the narrow, import-scoped signal
+ * used to WARN about automatic playlist generation candidates — it
+ * deliberately does NOT apply to the user's whole pre-existing library, only
+ * to material this build's import path actually introduced.
  */
 export function isPendingImportAnalysis(track: Track): boolean {
   return !!track.analysisSources?.includes("import") && track.analysisStatus !== "analyzed";
 }
 
 /**
- * Filters out imported-but-not-yet-ready tracks from an automatic-generation
- * candidate pool. Call this before gatePlaylistCandidates() at generation
- * call sites — NOT at manual add-to-playlist paths, which should warn rather
- * than silently exclude (spec §Operational Eligibility: "Yes with warning").
+ * 0804_MUSIC_Playlist_Eligibility_Repair — pending canonical mood/DSP
+ * analysis is never a hard playlist-generation rejection (confirmed
+ * decision: these are still valid, playable catalog entries with incomplete
+ * enrichment, not ineligible ones). The prior excludePendingImports()
+ * pool-thinning filter that used to run BEFORE gatePlaylistCandidates() at
+ * every generation call site is removed — silently shrinking the pool with
+ * no accounting was the actual root cause of playlist generation reporting
+ * "0 eligible" against a mostly-unanalyzed real catalog. Callers should
+ * instead surface this count as an unresolved-metadata WARNING (e.g. into
+ * PlaylistEligibilityAudit.unresolvedMetadataWarnings, trackEligibility.ts)
+ * and let section scoring degrade gracefully for missing energy/BPM/key/
+ * mood/role, exactly as it already does for any other track with
+ * incomplete metadata.
  */
-export function excludePendingImports(tracks: Track[]): Track[] {
-  return tracks.filter((t) => !isPendingImportAnalysis(t));
+export function countPendingImportAnalysis(tracks: Track[]): number {
+  return tracks.filter(isPendingImportAnalysis).length;
 }

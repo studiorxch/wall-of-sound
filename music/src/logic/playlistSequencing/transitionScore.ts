@@ -32,9 +32,18 @@ export interface PlaylistTransitionScore {
 
 export interface TransitionScoreInput {
   energyFit: number;
-  bpmFit: number;
-  keyFit: number;
-  moodContinuity: number;
+  // 0804_MUSIC_Playlist_Eligibility_Repair — `null` means "not applicable
+  // for this pair" (untrusted/missing BPM, key, or mood on either side).
+  // A null input is OMITTED from the weighted total entirely rather than
+  // defaulted to a neutral filler that still counted at full weight — its
+  // weight share is redistributed across whichever inputs ARE present, per
+  // direct instruction ("missing BPM: omit BPM scoring", etc.). Existing
+  // callers that always have a value (e.g. the read-only Playlist Analyzer
+  // Review, which already resolves its own neutral fallback before calling
+  // this) are unaffected — passing a plain number behaves exactly as before.
+  bpmFit: number | null;
+  keyFit: number | null;
+  moodContinuity: number | null;
   variety: number;
   weights?: TransitionScoreWeights;
   profile?: SectionSequencingProfile;
@@ -46,7 +55,10 @@ export interface TransitionScoreInput {
  * compatibility flatten the playlist's intended energy arc") — only the
  * BPM/key/mood/variety share is redistributed by the section's multipliers,
  * then rescaled so the whole set still sums to 1. Energy's own weight is
- * fixed at its configured value regardless of section.
+ * fixed at its configured value regardless of section. A null bpmFit/keyFit/
+ * moodContinuity additionally drops that dimension's weight to 0 before this
+ * same rescale, so the remaining present dimensions still sum to `remainder`
+ * — omission, not a neutral filler at full weight.
  */
 export function computeTransitionScore(input: TransitionScoreInput): PlaylistTransitionScore {
   const w = input.weights ?? DEFAULT_TRANSITION_WEIGHTS;
@@ -55,9 +67,9 @@ export function computeTransitionScore(input: TransitionScoreInput): PlaylistTra
 
   const energyW = w.energy;
   const remainder = Math.max(0, 1 - energyW);
-  const rawBpm = w.bpm * bpmMultiplier;
-  const rawKey = w.key * keyMultiplier;
-  const rawMood = w.mood;
+  const rawBpm = input.bpmFit != null ? w.bpm * bpmMultiplier : 0;
+  const rawKey = input.keyFit != null ? w.key * keyMultiplier : 0;
+  const rawMood = input.moodContinuity != null ? w.mood : 0;
   const rawVariety = w.variety;
   const rawSum = rawBpm + rawKey + rawMood + rawVariety;
   const scale = rawSum > 0 ? remainder / rawSum : 0;
@@ -69,16 +81,16 @@ export function computeTransitionScore(input: TransitionScoreInput): PlaylistTra
 
   const total =
     input.energyFit * energyW +
-    input.bpmFit * bpmW +
-    input.keyFit * keyW +
-    input.moodContinuity * moodW +
+    (input.bpmFit ?? 0) * bpmW +
+    (input.keyFit ?? 0) * keyW +
+    (input.moodContinuity ?? 0) * moodW +
     input.variety * varietyW;
 
   return {
     energyFit: input.energyFit,
-    bpmFit: input.bpmFit,
-    keyFit: input.keyFit,
-    moodContinuity: input.moodContinuity,
+    bpmFit: input.bpmFit ?? 0.5,
+    keyFit: input.keyFit ?? 0.5,
+    moodContinuity: input.moodContinuity ?? 0.5,
     variety: input.variety,
     total,
   };

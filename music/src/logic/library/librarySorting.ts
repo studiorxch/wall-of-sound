@@ -7,6 +7,7 @@
 import type { Track } from "../../data/trackTypes";
 import type { LibraryColumnId, LibrarySortKey } from "../../data/libraryGridTypes";
 import { normalizeTrackGenreTokens } from "../genreTaxonomy";
+import { resolveAuthoritativeBpm } from "../dspFeatureExtraction";
 
 // Mood/Suggested/Mechanical are intentionally absent — tag-list cells have
 // no single canonical ordering value.
@@ -18,7 +19,7 @@ function getSortValue(track: Track, columnId: LibraryColumnId): string | number 
     case "genre": return normalizeTrackGenreTokens(track)[0] || null;
     case "key": return track.camelotKey || null;
     case "status": return track.archiveStatus ?? "library";
-    case "bpm": return typeof track.bpm === "number" ? track.bpm : null;
+    case "bpm": return resolveAuthoritativeBpm(track);
     case "energy": return typeof track.energy === "number" ? track.energy : null;
     case "duration": return typeof track.durationSeconds === "number" ? track.durationSeconds : null;
     case "rating": return track.rating ?? 0;

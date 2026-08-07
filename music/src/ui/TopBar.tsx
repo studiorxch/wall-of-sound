@@ -5,8 +5,16 @@ import { parseCsvTracks } from "../data/importCsv";
 import { readPlayProjectExportFile } from "../data/playProjectExport";
 import type { Track } from "../data/trackTypes";
 import { navigationItems } from "./topBarNavigation";
-import type { NavigationLink } from "./topBarNavigation";
+import type { NavigationLink, NavigationAction } from "./topBarNavigation";
 import studioRichLogo from "../assets/studiorich-logo.svg";
+import { openOrFocusRacetrack } from "../maps/wallRacetrackBridge";
+
+// 0805F — the only real action link today; a lookup rather than a switch so
+// a future second action doesn't need a new branch shape in the render code
+// below, just a new entry here.
+const NAVIGATION_ACTIONS: Record<NavigationAction, () => void> = {
+  openRacetrack: () => { openOrFocusRacetrack(); },
+};
 
 export type { WorkspaceMode } from "./topBarNavigation";
 import type { WorkspaceMode } from "./topBarNavigation";
@@ -225,6 +233,20 @@ function NavDropdown({
                 title={link.title}
                 onClick={() => {
                   onWorkspaceModeChange(link.mode);
+                  onClose();
+                }}
+              >
+                {link.label}
+              </button>
+            ) : link.kind === "action" ? (
+              <button
+                key={link.label}
+                type="button"
+                role="menuitem"
+                className="tb-nav-menu-item"
+                title={link.title}
+                onClick={() => {
+                  NAVIGATION_ACTIONS[link.action]();
                   onClose();
                 }}
               >

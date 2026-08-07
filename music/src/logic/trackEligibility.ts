@@ -21,6 +21,7 @@ import type { Track } from "../data/trackTypes";
 import type { TrackPlaybackIssue } from "../data/playProjectTypes";
 import type { TrackSlot } from "../data/playlistTypes";
 import { findPlaylistDuplicates, getTrackDuplicateKey } from "../lib/playlistDuplicateGuard";
+import { resolveAuthoritativeBpm } from "./dspFeatureExtraction";
 
 export type TrackExclusionReason =
   | "codec"
@@ -191,6 +192,79 @@ export function gatePlaylistCandidates<TTrack extends Track>(
   };
 }
 
+// ── Eligibility audit (0804_MUSIC_Playlist_Eligibility_Repair §6/§7) ─────────
+//
+// The generator must either create a valid playlist or explain, quantitatively
+// and completely, why it cannot. gatePlaylistCandidates already partitions
+// eligible/rejected with per-reason counts (above); this section adds the
+// full reconciliation the spec requires: every considered track accounted
+// for, unique-vs-overlapping rejection counts kept honest, and a per-section
+// candidate count so a caller never has to guess why a section came up
+// empty. Reuses the EXISTING TrackExclusionReason axis as the hard-rejection
+// taxonomy rather than the spec's own broader HardRejectionCode list — this
+// codebase has no real, currently-detectable signal for "retired", "rights
+// blocked", or "corrupt/invalid track record" (no such field exists on
+// Track anywhere), so no rejection code is invented for something that
+// cannot actually be evaluated; codec/missing_audio/explicit_exclusion/
+// unplayable are the full set of hard-eligibility conditions this app can
+// genuinely detect today.
+export type PlaylistEligibilityAudit = {
+  considered: number;
+  hardEligible: number;
+  /** Unique tracks rejected for at least one reason — never a sum of `rejectionCounts`, which can overlap. */
+  hardRejectedUnique: number;
+  rejectionCounts: EligibilitySkipReport;
+  /** How many rejected tracks carried more than one simultaneous reason — the overlap `rejectionCounts` summed would otherwise hide. */
+  multiReasonRejectedCount: number;
+  unresolvedMetadataWarnings: Record<string, number>;
+  sectionCandidateCounts: Record<string, number>;
+};
+
+/**
+ * Builds the full eligibility audit for one generation attempt. `gate` is
+ * gatePlaylistCandidates's own result (so this never re-derives hard
+ * eligibility, only reconciles/reports on it); `metadataWarningCounts` is
+ * supplied by the caller (e.g. computed via audioReadiness.ts's
+ * isPendingImportAnalysis, plus any missing-BPM/key/mood counts) rather than
+ * imported here, to avoid a trackEligibility.ts <-> audioReadiness.ts import
+ * cycle (audioReadiness.ts already depends on this file). `sectionCandidateCounts`
+ * is supplied by the caller once section/crate resolution has happened
+ * (playlistShapeBuilder.ts), since this module has no crate-resolution
+ * knowledge of its own.
+ */
+export function buildPlaylistEligibilityAudit<TTrack extends Track>(params: {
+  consideredCount: number;
+  gate: CandidateGateResult<TTrack>;
+  metadataWarningCounts?: Record<string, number>;
+  sectionCandidateCounts?: Record<string, number>;
+}): PlaylistEligibilityAudit {
+  const { consideredCount, gate } = params;
+  // rejectedByReason's counts can overlap (one track failing both codec AND
+  // explicit_exclusion is counted in both buckets) — comparing their sum
+  // against the unique rejected-track count reconstructs how many tracks
+  // carried more than one reason, without re-deriving per-track reasons
+  // (which would need the original eligibility context this function
+  // doesn't have — gate already did that derivation once, correctly).
+  const reasonTotal = Object.values(gate.rejectedByReason).reduce((a: number, b: number) => a + b, 0);
+  const multiReasonRejectedCount = Math.max(0, reasonTotal - gate.rejectedTracks.length);
+
+  // unverified is CandidateGateResult's own scan-mode field, not a hard
+  // rejection reason (its own doc: "always [] until a scan system exists") —
+  // excluded from the audit's rejectionCounts, which is EligibilitySkipReport-shaped.
+  const { unverified: _unverified, ...hardReasonCounts } = gate.rejectedByReason;
+  void _unverified;
+
+  return {
+    considered: consideredCount,
+    hardEligible: gate.eligibleTracks.length,
+    hardRejectedUnique: gate.rejectedTracks.length,
+    rejectionCounts: hardReasonCounts,
+    multiReasonRejectedCount,
+    unresolvedMetadataWarnings: params.metadataWarningCounts ?? {},
+    sectionCandidateCounts: params.sectionCandidateCounts ?? {},
+  };
+}
+
 /**
  * "Not enough eligible tracks" warning — call after gating when the eligible
  * pool can't cover the requested target count. Returns null when sufficient.
@@ -312,7 +386,7 @@ export function backfillGeneratedSlots(params: {
       ...slot,
       assignedTrackId: replacement.trackId,
       targetEnergy: track.energy ?? slot.targetEnergy,
-      targetBpm: track.bpm ?? slot.targetBpm,
+      targetBpm: resolveAuthoritativeBpm(track) ?? slot.targetBpm,
     };
   });
 

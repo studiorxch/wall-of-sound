@@ -971,7 +971,814 @@ body.presentation .watch-hide {
   display: none !important;
 }
 
+/* ── ITINERARY PRESENTATION MODE (0805B) ──────────
+   Driven by ItineraryPresentationSurface.js from live run state (not a
+   manual toggle like body.presentation/Tab above, and orthogonal to it —
+   both classes can be present at once). Hides the legacy Drive/Flight/Walk/
+   Bike/Transit/Orbital nav deck (#wos-nav), the left rail (including the
+   Studio launcher, already nested inside it), the launcher rail, and native
+   Mapbox controls while an itinerary is starting/running/paused/completed —
+   modeled directly on the existing .wos-obs rule shape above. Deliberately
+   does NOT hide #wos-hud (compact itinerary telemetry/camera-state row),
+   #wos-now-playing, the map canvas, or the keyboard-help control — same
+   "keep HUD visible" precedent as .wos-obs. */
+body.itinerary-presentation #wos-nav,
+body.itinerary-presentation #left-rail,
+body.itinerary-presentation #launcher-rail,
+body.itinerary-presentation .mapboxgl-ctrl-top-left,
+body.itinerary-presentation .mapboxgl-ctrl-top-right,
+body.itinerary-presentation .mapboxgl-ctrl-bottom-left,
+body.itinerary-presentation .mapboxgl-ctrl-bottom-right,
+body.itinerary-presentation .mapboxgl-ctrl-group {
+  display: none !important;
+}
+
+/* ── 0805E — RACETRACK presentation surface (overhauled 0805H, 0806A) ──────
+   Same hide-list as body.itinerary-presentation above, applied while
+   RACETRACK is open (?mode=racetrack). #racetrack-overlay itself is shown
+   only in this state — see its own rule below. UNLIKE itinerary-presentation,
+   RACETRACK also hides #wos-hud/#wos-now-playing — both carry z-index:950,
+   above .racetrack-overlay's z-index:200, so without this they visually leak
+   over RACETRACK's full-screen presentation (a real, confirmed bug fixed in
+   0805H). Do NOT copy this addition into the itinerary-presentation block
+   above — that mode deliberately keeps those two visible, a separate,
+   intentional precedent.
+   0806A — also hides #marine-overlay-canvas (the maritime/AIS vessel system's
+   dedicated 2D canvas, z-index:999998 — see marineOverlayCanvasRuntime.js),
+   the same shape of leak as #wos-hud above. This is a pure display:none scope
+   — the maritime runtime itself (harbor geometry, AIS ingest, ecology, wake
+   signatures, etc.) is NOT touched, paused, or reinitialized; its render loop
+   keeps ticking underneath, just not painted while RACETRACK is open. The
+   canvas reappears automatically the instant this body class is ever absent
+   — no explicit "on exit" code needed, since this is a plain CSS rule keyed
+   off the class, not a JS lifecycle hook.
+   0806B — #marine-overlay-canvas alone did NOT fully hide the vessel
+   graphics: a repo audit found AT LEAST FIVE separate canvas-creating
+   maritime/ambient-traffic systems parented into .canvas-area (marine,
+   harbor geometry x2, harbor sector debug, maritime occupancy), plus
+   worldSpaceVehicleLayer.js, which can draw vehicle meshes DIRECTLY into
+   the shared Mapbox GL canvas (#engine-canvas) — content baked into that
+   shared context cannot be hidden by targeting any single separate canvas
+   element at all. .canvas-area (wall/index.html, opens well before
+   #racetrack-overlay is declared and closes long before it too — confirmed
+   NOT an ancestor of #racetrack-overlay) is the actual common parent of
+   EVERY one of these render paths. Hiding it in full is the only fix
+   guaranteed to work regardless of which specific system paints what, and
+   is exactly as safe/reversible as the single-element hides above — same
+   pure CSS mechanism, same "runtime keeps ticking, just not painted"
+   property, same automatic restoration. The individual #marine-overlay-
+   canvas rule stays (harmless, self-documenting, free insurance). */
+body.racetrack-presentation #wos-nav,
+body.racetrack-presentation #left-rail,
+body.racetrack-presentation #launcher-rail,
+body.racetrack-presentation #wos-hud,
+body.racetrack-presentation #wos-now-playing,
+body.racetrack-presentation #marine-overlay-canvas,
+body.racetrack-presentation .canvas-area,
+body.racetrack-presentation .mapboxgl-ctrl-top-left,
+body.racetrack-presentation .mapboxgl-ctrl-top-right,
+body.racetrack-presentation .mapboxgl-ctrl-bottom-left,
+body.racetrack-presentation .mapboxgl-ctrl-bottom-right,
+body.racetrack-presentation .mapboxgl-ctrl-group {
+  display: none !important;
+}
+
+/* ── Design tokens — scoped to .racetrack-overlay only, never :root.
+   RACETRACK's premium dark/orange aesthetic is deliberately separate from
+   WALL's global chrome tokens (--accent: teal) so nothing bleeds into
+   canonical LIVE MAP. ── */
+.racetrack-overlay {
+  --rt-bg: #0a0a0d;
+  --rt-bg-elevated: rgba(255, 255, 255, 0.03);
+  --rt-hairline: rgba(255, 255, 255, 0.08);
+  --rt-text: #f2f2f2;
+  --rt-text-dim: rgba(242, 242, 242, 0.55);
+  --rt-text-faint: rgba(242, 242, 242, 0.35);
+  --rt-accent: #ff6a3d;
+  --rt-accent-soft: rgba(255, 106, 61, 0.18);
+  --rt-start: #4caf7d;
+  --rt-radius-sm: 3px;
+  --rt-radius-md: 8px;
+  --rt-space-xs: 6px;
+  --rt-space-sm: 12px;
+  --rt-space-md: 24px;
+  --rt-space-lg: 48px;
+  --rt-orb-size: clamp(320px, 40vh, 560px);
+  --rt-label-size: 11px;
+  --rt-label-tracking: 0.14em;
+
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: var(--rt-bg);
+  color: var(--rt-text);
+  font-family: inherit;
+  overflow: auto;
+}
+body.racetrack-presentation .racetrack-overlay {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Shared HUD label — small-caps AR/HUD-style caption ── */
+.racetrack-hud-label {
+  display: block;
+  font-size: var(--rt-label-size);
+  letter-spacing: var(--rt-label-tracking);
+  text-transform: uppercase;
+  color: var(--rt-text-faint);
+}
+.racetrack-hud-label--faint { opacity: 0.6; }
+
+/* ── Identity strip — minimal top corners, no chrome ── */
+.racetrack-identity-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--rt-space-md) clamp(20px, 5vw, 64px) 0;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--rt-text-faint);
+}
+.racetrack-identity-strip-title {
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--rt-text-faint);
+  text-align: center;
+  margin-bottom: var(--rt-space-sm);
+}
+
+/* ── Attract — sparse, cinematic ── */
+.racetrack-attract {
+  flex: 1;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  cursor: pointer;
+  overflow: hidden;
+}
+.racetrack-attract-ambient {
+  position: absolute;
+  inset: -20%;
+  background: radial-gradient(circle at 50% 55%, var(--rt-accent-soft), transparent 60%);
+  opacity: 0.5;
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .racetrack-attract-ambient {
+    animation: racetrack-ambient-drift 14s ease-in-out infinite;
+  }
+}
+@keyframes racetrack-ambient-drift {
+  0%, 100% { transform: scale(1) translate(0, 0); opacity: 0.35; }
+  50% { transform: scale(1.15) translate(2%, -2%); opacity: 0.55; }
+}
+.racetrack-attract-title {
+  position: relative;
+  font-size: 48px;
+  font-weight: 300;
+  letter-spacing: 0.2em;
+  color: var(--rt-text);
+}
+.racetrack-attract-subtitle {
+  position: relative;
+  font-size: 13px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--rt-text-dim);
+}
+
+/* ── Selection — the primary deliverable ── */
+.racetrack-selection {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  gap: var(--rt-space-md);
+}
+
+/* Dominant stage: featured Orb (left) + floating route (right) — desktop-wide */
+.racetrack-stage {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1.15fr 1fr;
+  align-items: center;
+  gap: var(--rt-space-lg);
+  padding: 0 clamp(20px, 5vw, 64px);
+  min-height: 0;
+}
+.racetrack-orb-column,
+.racetrack-route-column {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--rt-space-sm);
+  min-width: 0;
+  overflow: visible; /* 0806A — defense-in-depth: no ancestor here should ever crop the Orb */
+}
+
+/* ── Orb plinth — no card chrome, generous empty space ── */
+.racetrack-orb-plinth {
+  position: relative;
+  width: var(--rt-orb-size);
+  height: var(--rt-orb-size);
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  overflow: visible; /* 0806A — see .racetrack-orb-column comment above */
+}
+.racetrack-orb-canvas {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  overflow: visible; /* 0806A — see .racetrack-orb-column comment above */
+}
+.racetrack-orb-plinth::after {
+  content: '';
+  position: absolute;
+  bottom: 4%;
+  left: 50%;
+  width: 55%;
+  height: 10%;
+  transform: translateX(-50%);
+  background: radial-gradient(ellipse at center, rgba(255, 255, 255, 0.14), transparent 70%);
+  filter: blur(6px);
+  pointer-events: none;
+}
+.racetrack-orb-caption {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.racetrack-orb-name {
+  font-size: 24px;
+  font-weight: 500;
+  margin-top: 2px;
+}
+.racetrack-orb-team {
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--rt-text-dim);
+}
+
+/* ── Generic selector (prev/next pager) ── */
+.racetrack-selector {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--rt-space-sm);
+}
+.racetrack-selector-btn {
+  background: transparent;
+  border: 1px solid var(--rt-hairline);
+  color: var(--rt-text);
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  flex: none;
+}
+.racetrack-selector-btn:disabled { opacity: 0.3; cursor: default; }
+.racetrack-selector-btn:focus-visible { outline: 1px solid var(--rt-accent); outline-offset: 2px; }
+.racetrack-selector-mid { text-align: center; min-width: 96px; }
+.racetrack-selector-value {
+  font-size: 13px;
+  color: var(--rt-text);
+  margin-top: 2px;
+}
+
+/* ── Route zone — thin hairline, no boxed card ── */
+.racetrack-route-zone {
+  width: 100%;
+  padding-top: var(--rt-space-sm);
+  border-top: 1px solid var(--rt-hairline);
+  display: flex;
+  flex-direction: column;
+  gap: var(--rt-space-xs);
+}
+.racetrack-route-title {
+  font-size: 18px;
+  font-weight: 300;
+}
+.racetrack-route-svg-wrap { position: relative; }
+.racetrack-route-svg {
+  width: 100%;
+  height: clamp(140px, 22vh, 220px);
+  display: block;
+}
+.racetrack-route-path {
+  fill: none;
+  stroke: var(--rt-accent);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.racetrack-route-dot { fill: #ffffff; }
+.racetrack-route-dot--start { fill: var(--rt-start); }
+.racetrack-route-dot--finish { fill: var(--rt-accent); }
+.racetrack-route-callout {
+  position: absolute;
+  font-size: 10px;
+}
+.racetrack-route-callout--start { top: 4px; left: 8px; }
+.racetrack-route-callout--finish { bottom: 4px; right: 8px; text-align: right; }
+.racetrack-route-callout-value {
+  font-size: 12px;
+  color: var(--rt-text-dim);
+  margin-top: 1px;
+}
+.racetrack-route-stats {
+  display: flex;
+  gap: 16px;
+  font-size: 12px;
+  color: var(--rt-text-dim);
+}
+
+/* 0806B — split out of .racetrack-route-zone so the course selector can sit
+   between the two in DOM order (see racetrackPresentationKit.js's
+   RacetrackRouteVisual/RacetrackRouteMeta split). No border-top of its own
+   — .racetrack-route-zone already carries the one divider at the top of
+   the whole route section; this is just the stats/warning continuation. */
+.racetrack-route-meta {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--rt-space-xs);
+}
+
+.racetrack-game-objective {
+  font-size: 12px;
+  color: var(--rt-text-dim);
+  line-height: 1.4;
+  margin-top: 4px;
+}
+
+/* ── Bottom bar — 4 hairline-divided segments ── */
+.racetrack-bottom-bar {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr 1fr auto;
+  align-items: center;
+  gap: var(--rt-space-md);
+  padding: var(--rt-space-sm) clamp(20px, 5vw, 64px) var(--rt-space-md);
+  border-top: 1px solid var(--rt-hairline);
+}
+.racetrack-bottom-bar-segment {
+  min-width: 0;
+  border-left: 1px solid var(--rt-hairline);
+  padding-left: var(--rt-space-md);
+}
+.racetrack-bottom-bar-segment:first-child { border-left: none; padding-left: 0; }
+.racetrack-bottom-bar-segment--enter {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+/* ── Roster — compact strip + lightweight add picker ── */
+.racetrack-roster { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.racetrack-roster-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.racetrack-roster-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--rt-bg-elevated);
+  border: 1px solid var(--rt-hairline);
+  border-radius: 999px;
+  padding: 3px 8px 3px 4px;
+}
+.racetrack-roster-chip--static { padding-right: 10px; }
+.racetrack-roster-swatch {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  flex: none;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.2);
+}
+.racetrack-roster-chip-text {
+  font-size: 11px;
+  color: var(--rt-text-dim);
+  white-space: nowrap;
+}
+.racetrack-roster-remove {
+  background: transparent;
+  border: none;
+  color: var(--rt-text-faint);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 0;
+}
+.racetrack-roster-add-trigger {
+  background: transparent;
+  border: 1px dashed var(--rt-hairline);
+  color: var(--rt-text-dim);
+  border-radius: 50%;
+  width: 22px;
+  height: 22px;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  flex: none;
+}
+
+.racetrack-roster-picker {
+  position: fixed;
+  inset: 0;
+  z-index: 260;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.6);
+}
+.racetrack-roster-picker-card {
+  width: min(88vw, 340px);
+  max-height: 70vh;
+  overflow: auto;
+  display: grid;
+  gap: 10px;
+  padding: 18px;
+  border-radius: var(--rt-radius-md);
+  border: 1px solid var(--rt-hairline);
+  background: #101013;
+  color: var(--rt-text);
+}
+.racetrack-roster-picker-list { display: flex; flex-direction: column; gap: 4px; }
+.racetrack-roster-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  border: none;
+  border-radius: var(--rt-radius-sm);
+  padding: 8px;
+  color: var(--rt-text);
+  text-align: left;
+  cursor: pointer;
+  font-size: 13px;
+}
+.racetrack-roster-picker-row:hover,
+.racetrack-roster-picker-row:focus-visible {
+  background: var(--rt-bg-elevated);
+  outline: none;
+}
+.racetrack-roster-picker-name { flex: 1; }
+
+/* ── Playlist control ── */
+.racetrack-playlist-control { display: flex; flex-direction: column; gap: 4px; }
+.racetrack-playlist-meta {
+  text-align: center;
+  font-size: 11px;
+  color: var(--rt-text-faint);
+}
+
+/* ── Enter Lobby — visible, restrained, not a giant arcade CTA ── */
+.racetrack-enter-btn {
+  background: var(--rt-accent);
+  color: #0a0a0d;
+  border: none;
+  border-radius: var(--rt-radius-sm);
+  padding: 10px 28px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 600;
+  cursor: pointer;
+}
+.racetrack-enter-btn:disabled {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--rt-text-faint);
+  cursor: default;
+}
+.racetrack-readiness-note {
+  font-size: 11px;
+  color: rgba(255, 106, 61, 0.85);
+  text-transform: capitalize;
+  text-align: right;
+  max-width: 220px;
+}
+
+.racetrack-empty-note {
+  font-size: 12px;
+  color: var(--rt-text-faint);
+}
+
+/* ── Lobby — composed pre-event summary, not centered text-only ── */
+.racetrack-lobby {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--rt-space-md);
+  padding: var(--rt-space-lg) clamp(20px, 6vw, 96px);
+  overflow: auto;
+}
+.racetrack-lobby-summary {
+  width: min(560px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: var(--rt-space-sm);
+}
+.racetrack-hud-zone {
+  border-top: 1px solid var(--rt-hairline);
+  padding-top: var(--rt-space-xs);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.racetrack-lobby-value { font-size: 15px; font-weight: 400; }
+.racetrack-lobby-meta {
+  text-align: center;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--rt-text-faint);
+}
+.racetrack-lobby-back {
+  margin-top: var(--rt-space-sm);
+  background: transparent;
+  border: 1px solid var(--rt-hairline);
+  color: var(--rt-text-dim);
+  border-radius: var(--rt-radius-sm);
+  padding: 8px 20px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.racetrack-lobby-back:hover { color: var(--rt-text); border-color: var(--rt-text-dim); }
+
+/* ── 0806C — Lobby actions row (Begin Race + Back to Selection) ── */
+.racetrack-lobby-actions {
+  margin-top: var(--rt-space-sm);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.racetrack-lobby-begin-btn {
+  background: var(--rt-accent);
+  color: #0a0a0d;
+  border: none;
+  border-radius: var(--rt-radius-sm);
+  padding: 10px 28px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 600;
+  cursor: pointer;
+}
+.racetrack-lobby-begin-btn:disabled {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--rt-text-faint);
+  cursor: default;
+}
+
+/* ── 0806C — Countdown: plain DOM "get ready" screen, no WebGL. Precedes
+   the shared race scene entirely — first mount of the race flow. ── */
+.racetrack-countdown {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--rt-space-md);
+  padding: var(--rt-space-lg);
+}
+.racetrack-countdown-digit {
+  font-size: clamp(64px, 14vw, 140px);
+  font-weight: 300;
+  letter-spacing: 0.02em;
+  color: var(--rt-text);
+  line-height: 1;
+}
+.racetrack-cancel-race-btn {
+  background: transparent;
+  border: 1px solid var(--rt-hairline);
+  color: var(--rt-text-dim);
+  border-radius: var(--rt-radius-sm);
+  padding: 8px 20px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.racetrack-cancel-race-btn:hover { color: var(--rt-text); border-color: var(--rt-text-dim); }
+
+/* ── 0806C — the ONE shared multi-racer scene: mounted once for `running`,
+   kept alive (canvas + leaderboard uninterrupted) through `finish` — the
+   winner overlay is the only thing layered on top at that edge. ── */
+.racetrack-race-scene {
+  position: relative;
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+.racetrack-race-scene-canvas {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+.racetrack-race-leaderboard {
+  position: absolute;
+  top: var(--rt-space-md);
+  right: var(--rt-space-md);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 160px;
+  background: rgba(10, 10, 13, 0.55);
+  border: 1px solid var(--rt-hairline);
+  border-radius: var(--rt-radius-sm);
+  padding: 10px 12px;
+}
+.racetrack-race-leaderboard-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--rt-text-dim);
+}
+.racetrack-race-leaderboard-row--finished { color: var(--rt-accent); }
+.racetrack-race-leaderboard-rank { width: 18px; text-align: right; color: var(--rt-text-faint); }
+.racetrack-race-leaderboard-name { flex: 1; }
+
+/* Plain-DOM Winner Moment overlay — layered over the STILL-RENDERING race
+   scene at the moment the first racer crosses (0806C decision #8). Zero
+   celebration effects this build; reserved for the next presentation
+   build. */
+.racetrack-race-winner-overlay {
+  position: absolute;
+  left: 50%;
+  top: var(--rt-space-lg);
+  transform: translateX(-50%) translateY(-8px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 14px 28px;
+  background: rgba(10, 10, 13, 0.72);
+  border: 1px solid var(--rt-hairline);
+  border-radius: var(--rt-radius-sm);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 200ms ease, transform 200ms ease;
+}
+.racetrack-race-winner-overlay--visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+.racetrack-race-winner-name { font-size: 20px; font-weight: 500; color: var(--rt-text); }
+.racetrack-race-winner-team { font-size: 11px; color: var(--rt-text-faint); }
+
+/* ── 0806C — Results: plain-DOM leaderboard + Reset, mounted fresh only
+   once the shared race scene is finally disposed at grace-period expiry. ── */
+.racetrack-results {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--rt-space-md);
+  padding: var(--rt-space-lg);
+  overflow: auto;
+}
+.racetrack-results-table {
+  width: min(420px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.racetrack-results-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--rt-hairline);
+  border-radius: var(--rt-radius-sm);
+  font-size: 13px;
+}
+.racetrack-results-row--finished { color: var(--rt-text); }
+.racetrack-results-row--dnf { color: var(--rt-text-faint); }
+.racetrack-results-placement { width: 24px; text-align: right; font-weight: 600; }
+.racetrack-results-name { flex: 1; }
+.racetrack-results-status { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; }
+
+/* ── Responsive breakpoints (rewritten 0806B) ──
+   Desktop-wide (≥1280px): the ORIGINAL, unchanged wide composition — the
+   .racetrack-route-column order: overrides just below restore today's exact
+   visual order (route visual, then metadata/warnings, then the course
+   selector) despite the route column's DOM order now being visual→selector
+   →meta (required for the stacked flow below) — order: is a normal-flow
+   flex property, not absolute positioning, and changes paint sequence only,
+   never sizing/spacing, so this is pixel-identical to pre-0806B.
+   Below 1280px (0806B): 0806A's attempt kept .racetrack-stage as a CSS Grid
+   with align-items:center inside a flex:1 parent — centering + forced
+   height-sharing fighting the Orb's fixed --rt-orb-size is exactly what
+   produced the reported overlap, not just wrong order. This build stops
+   fighting grid/flex sizing tricks below 1280px and switches every relevant
+   container to real block/flex-column document flow instead, with natural
+   per-child height and a scrolling parent — the DOM order emitted by
+   racetrackSelectionScene.js (orb stage+identity+selector, route visual,
+   course selector, route metadata+warnings, game mode, competitors,
+   playlist, enter lobby) becomes the literal on-screen order, satisfying
+   the required stacked sequence with zero extra CSS reordering needed. */
+@media (min-width: 1280px) {
+  .racetrack-route-column > .racetrack-route-zone { order: 1; }
+  .racetrack-route-column > .racetrack-route-meta { order: 2; }
+  .racetrack-route-column > .racetrack-selector { order: 3; }
+}
+@media (max-width: 1279.98px) {
+  .racetrack-selection {
+    display: block;
+    overflow-y: auto;
+    padding: var(--rt-space-md) clamp(16px, 4vw, 40px) var(--rt-space-lg);
+  }
+  .racetrack-identity-strip { padding: 0 0 var(--rt-space-sm); }
+  .racetrack-stage { display: block; }
+  .racetrack-orb-column,
+  .racetrack-route-column {
+    width: 100%;
+    max-width: 480px;
+    margin: 0 auto var(--rt-space-lg);
+  }
+  .racetrack-orb-plinth {
+    --rt-orb-size: clamp(260px, 42vw, 400px);
+    margin: 0 auto;
+  }
+  /* Required min-height so the route section can't collapse to near-
+     nothing next to the Orb — satisfies "route zone gets a defined
+     minimum height." */
+  .racetrack-route-zone { min-height: 220px; }
+  .racetrack-bottom-bar {
+    display: flex;
+    flex-direction: column;
+    padding: var(--rt-space-md) clamp(16px, 4vw, 40px);
+  }
+  .racetrack-bottom-bar-segment {
+    width: 100%;
+    border-left: none;
+    padding-left: 0;
+    border-top: 1px solid var(--rt-hairline);
+    padding-top: var(--rt-space-sm);
+    padding-bottom: var(--rt-space-sm);
+  }
+  .racetrack-bottom-bar-segment:first-child { border-top: none; padding-top: 0; }
+  .racetrack-bottom-bar-segment--enter { align-items: center; }
+  .racetrack-readiness-note { text-align: center; max-width: none; }
+}
+@media (max-width: 1023.98px) {
+  /* Same stacked-flow model as the 1279.98px block above (nothing
+     structural changes here) — just a further Orb-size step-down for the
+     narrowest/tall windows. */
+  .racetrack-orb-plinth { --rt-orb-size: clamp(220px, 55vw, 340px); }
+}
+
 /* ── SHORTCUTS OVERLAY ──────────────────────────── */
+
+/* 0805B — small persistent "?" control. Deliberately NOT targeted by any
+   body.presentation/body.itinerary-presentation hide rule (no .watch-hide,
+   not #wos-nav/#left-rail/#launcher-rail) — stays visible and clickable even
+   with the rest of the interface hidden, matching #wos-hud's own precedent. */
+.keyboard-help-btn {
+  position: fixed;
+  right: 14px;
+  bottom: 14px;
+  z-index: 110;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid var(--panel-border);
+  background: var(--panel);
+  color: var(--text-dim);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.keyboard-help-btn:hover {
+  color: var(--text-mid, #ccc);
+  border-color: var(--text-dim);
+}
 
 .shortcut-hud {
   position: fixed;
@@ -996,6 +1803,31 @@ body.presentation .watch-hide {
   color: var(--text-dim);
   line-height: 1.5;
 }
+
+/* 0805B — registry-rendered shortcut groups/rows (#shortcut-hud-body) */
+.shortcut-group-title {
+  margin: 6px 0 2px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.shortcut-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+.shortcut-row .shortcut-key {
+  flex: 0 0 auto;
+  min-width: 44px;
+  font-family: "SF Mono", "Fira Code", monospace;
+  color: var(--text-mid, #ccc);
+}
+.shortcut-row .shortcut-label { flex: 1 1 auto; }
 
 /* ── CANVAS TEXT INPUT ──────────────────────────── */
 

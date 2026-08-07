@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { buildGeographicTargets, sortTargetsByCategory } from "./geographicTargets";
-import type { RegistryRecord } from "../../maps/wallPaletteBridge";
+import type { RegistryRecord } from "../../maps/wallGeographicStyleBridge";
 
 function rec(
   partial: Partial<Omit<RegistryRecord, "currentValue">> & Pick<RegistryRecord, "id" | "group" | "source"> & { currentValue?: unknown },

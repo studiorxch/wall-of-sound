@@ -418,6 +418,60 @@
     };
   }
 
+  // ── Itinerary run telemetry: run snapshot → HUD descriptor (0730D) ────────────
+  // Reuses the 'drive' layout wholesale (traversing a route with progress/
+  // distance/time is the same shape of information regardless of whether
+  // HeroVehicleRuntime or the Itinerary Runner is the position source) — no
+  // new HUD module, per the spec's explicit "do not create a duplicate."
+  function _gatherItinerary(snapshot, nav, map) {
+    var zoom = null, pitch = null, bearing = null;
+    if (map) {
+      try { zoom    = Math.round(map.getZoom()    * 10) / 10; } catch (e) {}
+      try { pitch   = Math.round(map.getPitch()   * 10) / 10; } catch (e) {}
+      try { bearing = Math.round(((map.getBearing() % 360) + 360) % 360); } catch (e) {}
+    }
+    var distKm = (snapshot.distanceRemainingMeters != null)
+      ? Math.round(snapshot.distanceRemainingMeters) / 1000
+      : null;
+    var stageLabel = (snapshot.stageCount > 0)
+      ? ('Stage ' + (snapshot.stageIndex + 1) + ' of ' + snapshot.stageCount)
+      : null;
+
+    return {
+      active:    true,
+      mode:      'drive',
+      transport: 'drive',
+      toLabel:   stageLabel,
+      progress:  Math.round((snapshot.itineraryProgress01 || 0) * 100),
+      realMs:    snapshot.elapsedSeconds != null ? snapshot.elapsedSeconds * 1000 : null,
+      simMs:     null,
+      remainMs:  snapshot.estimatedRemainingSeconds != null ? snapshot.estimatedRemainingSeconds * 1000 : null,
+      durMs:     null,
+      speedMult: 1,
+      tripPhase: snapshot.status,
+      distKm:    distKm,
+      zoom:      zoom,
+      pitch:     pitch,
+      bearing:   bearing,
+      actorType:           'itinerary_run',
+      povType:             'drone_follow',
+      actorAltitudeFt:     null,
+      altitudeStepFt:      null,
+      altitudeStepLabel:   null,
+      povAltitudeOffsetFt: 0,
+      routeSource:         'itinerary',
+      routeLabel:          'itinerary',
+      stale:               snapshot.status === 'paused',
+      cameraStuck:         false,
+      cameraOwner:         'itineraryRunController',
+      moveMode:            'continuous',
+      // 0805A — small, non-obtrusive camera-state indicator (not a takeover
+      // HUD): FOLLOW while the damped camera-follow loop is active, FREE
+      // otherwise (manual interaction, or never enabled).
+      followState:         snapshot.followHeroEnabled ? 'FOLLOW' : 'FREE',
+    };
+  }
+
   // ── Data collection ───────────────────────────────────────────────────────────
 
   function _gather() {
@@ -432,6 +486,14 @@
 
     if (hvActive) {
       return _gatherDrive(hvState, nav, map);
+    }
+
+    // ── Itinerary run (0730D) — checked next, before the flight fallback ─────
+    var ira = global.SBE && SBE.ItineraryRunAuthority;
+    var iraSnapshot = ira && typeof ira.getSnapshot === 'function' ? ira.getSnapshot() : null;
+    var iraActive = !!(iraSnapshot && (iraSnapshot.status === 'running' || iraSnapshot.status === 'paused' || iraSnapshot.status === 'completed'));
+    if (iraActive) {
+      return _gatherItinerary(iraSnapshot, nav, map);
     }
 
     // ── Flight path ───────────────────────────────────────────────────────────
@@ -674,6 +736,10 @@
     if (isDrive) {
       if (d.distKm   != null) html += _trow('Dist',    _fmtKm(d.distKm));
       if (d.realMs   != null) html += _trow('Elapsed', _fmtDuration(d.realMs));
+      // 0805B — relabeled "Follow" -> "Camera" (spec §8's compact camera-state
+      // display: "CAMERA  FREE"/"CAMERA  FOLLOW"); same field, same values,
+      // no new indicator component.
+      if (d.actorType === 'itinerary_run' && d.followState) html += _trow('Camera', d.followState);
     } else {
       if (d.remainMs != null) html += _trow('Remain',  _fmtDuration(d.remainMs), true);
       if (d.distKm   != null) html += _trow('Dist',    _fmtKm(d.distKm));
@@ -761,6 +827,19 @@
     if (rt && typeof rt.getState === 'function') {
       var s = rt.getState();
       if (s.active && !_visible) show();
+    }
+    // 0805B — this watcher predates the Itinerary Runner and was never
+    // extended to it, so the HUD (this build's "compact itinerary
+    // telemetry"/camera-state surface) never auto-appeared for an itinerary
+    // run unless something else had already called show() at some point
+    // (e.g. a prior Regional Flight trip, or a manual _wos.debug.hud.toggle())
+    // — a real gap caught by live-verifying 0805B's "telemetry remains
+    // visible" acceptance criterion against a genuinely fresh page load.
+    var ira = global.SBE && SBE.ItineraryRunAuthority;
+    if (ira && typeof ira.getSnapshot === 'function') {
+      var iraSnap = ira.getSnapshot();
+      var iraActive = !!(iraSnap && (iraSnap.status === 'starting' || iraSnap.status === 'running' || iraSnap.status === 'paused' || iraSnap.status === 'completed'));
+      if (iraActive && !_visible) show();
     }
     global.setTimeout(_autoWatch, 1500);
   }

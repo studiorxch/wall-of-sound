@@ -1,12 +1,12 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import type { Track } from "../data/trackTypes";
-import type { CrateRecord, CrateFilters, CrateMatchMode } from "../data/crateTypes";
-import { resolveCrateTracks } from "../logic/resolveCrate";
+import type { CrateRecord, CrateFilters, CrateMatchMode, CrateBpmFilter, CrateGroupMode } from "../data/crateTypes";
+import { resolveCrateTracks, validateCrateFilters, computeCrateFilterPreview } from "../logic/resolveCrate";
+import { normalizeBpmPrecision } from "../logic/dspFeatureExtraction";
 import {
   buildTaxonomyCounts,
   filterTaxonomyCounts,
-  normalizeTaxonomyValues,
 } from "../logic/taxonomyCounts";
 import type { TaxonomySortMode } from "../logic/taxonomyCounts";
 import { buildFilterOptions } from "../logic/libraryFilters";
@@ -414,43 +414,92 @@ export function CrateDetail({ crate, libraryTracks, onChange, onDelete, onGoHome
     [basePool, crate.filters.genres, genreSortMode],
   );
 
-  // Phase 3: apply taxonomy filters to base pool
-  const visibleTracks = useMemo(() => {
-    const { moodTags, genres, groupings, matchMode } = crate.filters;
-    const hasMood = moodTags.length > 0;
-    const hasGenre = genres.length > 0;
-    const hasGroup = groupings.length > 0;
-    if (!hasMood && !hasGenre && !hasGroup) return basePool;
-
-    const moodSet = new Set(moodTags.map((m) => m.toLowerCase()));
-    const genreSet = new Set(genres.map((g) => g.toLowerCase()));
-
-    return basePool.filter((t) => {
-      const trackMoods = normalizeTaxonomyValues(t, "mood").map((v) => v.toLowerCase());
-      const trackGenres = normalizeTaxonomyValues(t, "genre").map((v) => v.toLowerCase());
-
-      if (matchMode === "any_signal") {
-        return (
-          (hasMood && trackMoods.some((m) => moodSet.has(m))) ||
-          (hasGroup && groupings.includes(t.grouping ?? "")) ||
-          (hasGenre && trackGenres.some((g) => genreSet.has(g)))
-        );
-      }
-      if (hasMood && !trackMoods.some((m) => moodSet.has(m))) return false;
-      if (hasGroup && !groupings.includes(t.grouping ?? "")) return false;
-      if (hasGenre && !trackGenres.some((g) => genreSet.has(g))) return false;
-      return true;
-    });
-  }, [basePool, crate.filters.moodTags, crate.filters.genres, crate.filters.groupings, crate.filters.matchMode]);
+  // 0804_MUSIC_Crate_BPM_Group_Filters — Phase 3 now calls the ONE canonical
+  // matcher (resolveCrateTracks) instead of re-implementing mood/genre/
+  // grouping/matchMode logic a second time locally. This was a real,
+  // pre-existing divergence risk (the prior local copy had already silently
+  // missed the genreFamilies filter added in a previous build) — calling
+  // the canonical function here means the live preview can never disagree
+  // with what the playlist generator actually resolves, for any filter
+  // category, present or future. Directly required by this build's own
+  // "do not embed filter logic directly in React components" instruction.
+  const resolved = useMemo(() => resolveCrateTracks(crate, libraryTracks), [crate, libraryTracks]);
+  const visibleTracks = resolved.tracks;
 
   const totalDur = visibleTracks.reduce((s, t) => s + (t.durationSeconds ?? 0), 0);
   const countByCat = visibleTracks.filter((t) => t.sourceOwner === "studiorich").length;
   const countByExt = visibleTracks.filter((t) => t.sourceOwner === "external").length;
   const hasSignalFilters = crate.filters.moodTags.length > 0 || crate.filters.groupings.length > 0 || crate.filters.genres.length > 0;
 
-  // Keep resolveCrateTracks for external consumers (playlist acceptance) — not used for display
-  const _ = useMemo(() => resolveCrateTracks(crate, libraryTracks), [crate, libraryTracks]);
-  void _;
+  // §9 "Preview" staged deltas — computed from current library state, no
+  // Save required (there is no Save step in this component at all; every
+  // edit already autosaves via patch()/onChange immediately).
+  const filterPreview = useMemo(() => computeCrateFilterPreview(crate, libraryTracks), [crate, libraryTracks]);
+  const bpmFilter = crate.filters.bpm;
+  const groupFilter = crate.filters.groups;
+  const bpmActive = bpmFilter != null && (bpmFilter.minimum != null || bpmFilter.maximum != null);
+  const groupActive = groupFilter != null && groupFilter.mode !== "any";
+
+  const [bpmMinInput, setBpmMinInput] = useState(bpmFilter?.minimum != null ? String(bpmFilter.minimum) : "");
+  const [bpmMaxInput, setBpmMaxInput] = useState(bpmFilter?.maximum != null ? String(bpmFilter.maximum) : "");
+  const [bpmError, setBpmError] = useState<string | null>(null);
+  // Local draft state resyncs when switching to a different crate (or on an
+  // external update to this crate's own bpm filter) — never mid-typing on
+  // the SAME crate, which is what lets a rejected edit stay visible with its
+  // error message instead of silently snapping back to the last-committed value.
+  useEffect(() => {
+    setBpmMinInput(bpmFilter?.minimum != null ? String(bpmFilter.minimum) : "");
+    setBpmMaxInput(bpmFilter?.maximum != null ? String(bpmFilter.maximum) : "");
+    setBpmError(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [crate.id]);
+
+  function commitBpmFilter(next: CrateBpmFilter) {
+    const validation = validateCrateFilters({ ...crate.filters, bpm: next });
+    const bpmMsg = validation.errors.find((e) => e.toLowerCase().includes("bpm"));
+    if (bpmMsg) { setBpmError(bpmMsg); return; }
+    setBpmError(null);
+    patchFilters({ bpm: next });
+  }
+  function parseBpmInput(raw: string): number | null {
+    if (raw.trim() === "") return null;
+    const n = Number(raw);
+    return Number.isFinite(n) ? normalizeBpmPrecision(n) : NaN;
+  }
+  function onBpmMinBlur() {
+    const parsed = parseBpmInput(bpmMinInput);
+    if (Number.isNaN(parsed)) { setBpmError("Minimum BPM must be a number."); return; }
+    commitBpmFilter({ minimum: parsed, maximum: bpmFilter?.maximum ?? null, includeUnresolved: bpmFilter?.includeUnresolved ?? true });
+  }
+  function onBpmMaxBlur() {
+    const parsed = parseBpmInput(bpmMaxInput);
+    if (Number.isNaN(parsed)) { setBpmError("Maximum BPM must be a number."); return; }
+    commitBpmFilter({ minimum: bpmFilter?.minimum ?? null, maximum: parsed, includeUnresolved: bpmFilter?.includeUnresolved ?? true });
+  }
+  function toggleBpmIncludeUnresolved() {
+    commitBpmFilter({ minimum: bpmFilter?.minimum ?? null, maximum: bpmFilter?.maximum ?? null, includeUnresolved: !(bpmFilter?.includeUnresolved ?? true) });
+  }
+  function clearBpmFilter() {
+    setBpmMinInput(""); setBpmMaxInput(""); setBpmError(null);
+    patchFilters({ bpm: undefined });
+  }
+
+  function setGroupMode(mode: CrateGroupMode) {
+    // §9 "preserve selected Groups when toggling between Include and
+    // Exclude during the editing session" — groupIds carries over; only
+    // "Any" clears matching (persisted representation normalizes to an
+    // empty list, per §9's own wording, without discarding the prior
+    // selection from THIS session's local state — re-selecting Include/
+    // Exclude after Any starts from empty, matching "may normalize to an
+    // empty list").
+    patchFilters({ groups: { mode, groupIds: mode === "any" ? [] : (groupFilter?.groupIds ?? []) } });
+  }
+  function setGroupIds(groupIds: string[]) {
+    patchFilters({ groups: { mode: groupFilter?.mode ?? "any", groupIds } });
+  }
+  const groupValidationError = groupFilter && groupFilter.mode !== "any" && groupFilter.groupIds.length === 0
+    ? `Group ${groupFilter.mode} mode requires at least one selected Group — no Group filtering is applied until one is chosen.`
+    : null;
 
   return (
     <div className="cd-root">
@@ -586,7 +635,7 @@ export function CrateDetail({ crate, libraryTracks, onChange, onDelete, onGoHome
             onClear={() => patchFilters({ genres: [] })}
           />
           <MultiSelectFilter
-            label="Group"
+            label="Grouping"
             options={filterOpts.groupings}
             selected={crate.filters.groupings}
             onChange={(v) => patchFilters({ groupings: v })}
@@ -604,6 +653,87 @@ export function CrateDetail({ crate, libraryTracks, onChange, onDelete, onGoHome
                   </button>
                 ))}
               </div>
+            </div>
+          )}
+        </div>
+
+        {/* 0804_MUSIC_Crate_BPM_Group_Filters — BPM range + Group include/
+            exclude. Unconditionally ANDed against everything above,
+            regardless of Match mode (§7) — a separate section, not folded
+            into the taxonomy panel above, to make that distinction visible.
+            "Grouping" above (existing, unchanged) still participates in
+            Match mode's own OR-together-then-AND logic; "Group" here is new. */}
+        <div className="cd-taxonomy-panel cd-bpm-group-panel">
+          <div className="cd-filter-row cd-filter-row--section-label">BPM &amp; Group Filters</div>
+
+          <div className="cd-filter-row cd-filter-row--bpm">
+            <span className="cd-filter-label">BPM</span>
+            <input
+              className="cd-bpm-input"
+              type="number" step="0.01" placeholder="Min"
+              value={bpmMinInput}
+              onChange={(e) => setBpmMinInput(e.target.value)}
+              onBlur={onBpmMinBlur}
+              onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+            />
+            <span className="cd-bpm-dash">–</span>
+            <input
+              className="cd-bpm-input"
+              type="number" step="0.01" placeholder="Max"
+              value={bpmMaxInput}
+              onChange={(e) => setBpmMaxInput(e.target.value)}
+              onBlur={onBpmMaxBlur}
+              onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+            />
+            {bpmActive && (
+              <label className="cd-toggle-label cd-bpm-unresolved-toggle">
+                <input type="checkbox" checked={bpmFilter?.includeUnresolved ?? true} onChange={toggleBpmIncludeUnresolved} />
+                <span>Include unresolved</span>
+              </label>
+            )}
+            {(bpmActive || bpmError) && (
+              <button className="cd-filter-clear" onClick={clearBpmFilter}>Clear</button>
+            )}
+          </div>
+          {bpmActive && !bpmError && (
+            <div className="cd-filter-row cd-bpm-summary">
+              {bpmFilter?.minimum != null && bpmFilter?.maximum != null
+                ? `${bpmFilter.minimum}–${bpmFilter.maximum} BPM`
+                : bpmFilter?.minimum != null
+                  ? `≥ ${bpmFilter.minimum} BPM`
+                  : `≤ ${bpmFilter?.maximum} BPM`}
+              {" · "}{bpmFilter?.includeUnresolved ? "Unresolved included" : "Unresolved excluded"}
+            </div>
+          )}
+          {bpmError && <div className="cd-filter-error">{bpmError}</div>}
+
+          <div className="cd-filter-row cd-filter-row--group-mode">
+            <span className="cd-filter-label">Group mode</span>
+            <div className="cd-source-chips">
+              {(["any", "include", "exclude"] as CrateGroupMode[]).map((m) => (
+                <button key={m}
+                  className={`cd-source-chip${(groupFilter?.mode ?? "any") === m ? " active" : ""}`}
+                  onClick={() => setGroupMode(m)}>
+                  {m === "any" ? "Any" : m === "include" ? "Include selected" : "Exclude selected"}
+                </button>
+              ))}
+            </div>
+          </div>
+          {groupActive && (
+            <MultiSelectFilter
+              label="Group"
+              options={filterOpts.groupings}
+              selected={groupFilter?.groupIds ?? []}
+              onChange={setGroupIds}
+            />
+          )}
+          {groupValidationError && <div className="cd-filter-error">{groupValidationError}</div>}
+
+          {(bpmActive || groupActive) && (
+            <div className="cd-filter-row cd-filter-preview">
+              {filterPreview.totalConsidered} total
+              {bpmActive && ` · ${filterPreview.passBpm} pass BPM`}
+              {groupActive && ` · ${filterPreview.passBpmAndGroup} pass BPM + Group`}
             </div>
           )}
         </div>

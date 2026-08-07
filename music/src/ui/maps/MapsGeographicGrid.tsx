@@ -32,21 +32,27 @@ export function MapsGeographicGrid({ targets, selectedIds, focusedTargetId, onTo
               <input type="checkbox" checked={selected} onChange={() => onToggleSelect(t.targetId)} />
             </label>
             <div className="geo-card-swatches">
-              {t.colorFields.filter((f) => f.valueKind === "color").map((f) => (
-                <span
-                  key={f.propId}
-                  className="geo-card-swatch"
-                  style={{ background: f.isExpression ? undefined : f.value }}
-                  title={`${f.roleLabel}${f.isExpression ? " (expression)" : ": " + f.value}`}
-                />
-              ))}
+              {t.editable === false ? (
+                <span className="pgc-art-initials">—</span>
+              ) : (
+                t.colorFields.filter((f) => f.valueKind === "color").map((f) => (
+                  <span
+                    key={f.propId}
+                    className="geo-card-swatch"
+                    style={{ background: f.isExpression ? undefined : f.value }}
+                    title={`${f.roleLabel}${f.isExpression ? " (expression)" : ": " + f.value}`}
+                  />
+                ))
+              )}
             </div>
             <div className="geo-card-info">
               <span className="geo-card-name">{t.name}</span>
               <span className="geo-card-meta">
                 {t.category}
+                {t.editable === false && <span className="geo-badge">Read-only</span>}
                 {t.hasExpression && <span className="geo-badge geo-badge--expression">Expression</span>}
                 {t.isCustomized && <span className="geo-badge geo-badge--customized">Customized</span>}
+                {t.isActive && <span className="geo-badge geo-badge--active">Active</span>}
               </span>
             </div>
           </div>

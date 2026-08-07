@@ -13,6 +13,7 @@ import type { PlaylistRecord } from "../../data/playProjectTypes";
 import type { RadioInboxItem } from "../../data/radioInboxTypes";
 import type { RadioPlaylist } from "../../data/radioPlaylistTypes";
 import type { RadioBank } from "../../data/radioBankTypes";
+import type { GlyphComposition } from "../../data/glyphCompositionTypes";
 import { resolveCrateTracks } from "../resolveCrate";
 
 export interface TrackReferenceMatch {
@@ -25,6 +26,11 @@ export interface TrackReferenceReport {
   playlists: TrackReferenceMatch[];
   radioPlaylists: TrackReferenceMatch[];
   radioBanks: TrackReferenceMatch[];
+  // Glyph Audio (0804A) — a saved GlyphComposition references a source
+  // track by GlyphSourceRef.trackId (never a duplicated audio copy — see
+  // glyphCompositionTypes.ts), so it belongs in the same removal-dependency
+  // report every other track-referencing domain already appears in.
+  glyphCompositions: TrackReferenceMatch[];
 }
 
 export interface FindTrackReferencesInput {
@@ -34,6 +40,7 @@ export interface FindTrackReferencesInput {
   radioInboxItems?: RadioInboxItem[];
   radioPlaylists?: RadioPlaylist[];
   radioBanks?: RadioBank[];
+  glyphCompositions?: GlyphComposition[];
 }
 
 export function findTrackReferences(trackId: string, input: FindTrackReferencesInput): TrackReferenceReport {
@@ -63,10 +70,15 @@ export function findTrackReferences(trackId: string, input: FindTrackReferencesI
     .filter((rb) => radioBankIds.has(rb.id))
     .map((rb) => ({ id: rb.id, label: rb.title }));
 
-  return { crates, playlists, radioPlaylists, radioBanks };
+  const glyphCompositions = (input.glyphCompositions ?? [])
+    .filter((gc) => gc.source.kind === "library_track" && gc.source.trackId === trackId)
+    .map((gc) => ({ id: gc.id, label: gc.name }));
+
+  return { crates, playlists, radioPlaylists, radioBanks, glyphCompositions };
 }
 
 export function isEmptyTrackReferenceReport(report: TrackReferenceReport): boolean {
   return report.crates.length === 0 && report.playlists.length === 0
-    && report.radioPlaylists.length === 0 && report.radioBanks.length === 0;
+    && report.radioPlaylists.length === 0 && report.radioBanks.length === 0
+    && report.glyphCompositions.length === 0;
 }

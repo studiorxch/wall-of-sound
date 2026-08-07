@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import * as wallPaletteBridge from "../../maps/wallPaletteBridge";
-import type { RegistryRecord } from "../../maps/wallPaletteBridge";
+import * as wallGeographicStyleBridge from "../../maps/wallGeographicStyleBridge";
+import type { RegistryRecord } from "../../maps/wallGeographicStyleBridge";
 import { getLayerVisibility, getLayerPaintInfo } from "../../maps/wallMapPreview";
 import { buildGeographicTargets, sortTargetsByCategory, type GeographicTarget } from "../../logic/maps/geographicTargets";
 import { MapsGeographicGrid } from "./MapsGeographicGrid";
@@ -13,7 +13,7 @@ import { GeographicFieldEditor } from "./GeographicFieldEditor";
 // .md-property-groups list with a scalable Grid|Rows catalog over
 // consolidated Geographic targets for ONE Geographic Style (the style-level
 // header/breadcrumb/Preview/Activate/Duplicate actions above this component,
-// in MapsPaletteDetail.tsx, are unchanged). Owns every piece of shared
+// in MapsGeographicStyleDetail.tsx, are unchanged). Owns every piece of shared
 // view-state (search/filter/sort/selection/view mode/focused target) so
 // switching Grid<->Rows never reloads data or clears anything.
 
@@ -30,13 +30,13 @@ export type TargetWithVisibility = GeographicTarget & {
 };
 
 type Props = {
-  paletteId: string;
+  styleId: string;
   registry: RegistryRecord[];
   values: Record<string, string>;
   isDefault: boolean;
 };
 
-export function MapsGeographicCatalog({ paletteId, registry, values, isDefault }: Props) {
+export function MapsGeographicCatalog({ styleId, registry, values, isDefault }: Props) {
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     try { return localStorage.getItem(VIEW_MODE_STORAGE_KEY) === "rows" ? "rows" : "grid"; } catch { return "grid"; }
   });
@@ -59,7 +59,7 @@ export function MapsGeographicCatalog({ paletteId, registry, values, isDefault }
 
   const defaultValues = isDefault
     ? null
-    : (() => { const d = wallPaletteBridge.getPalette(wallPaletteBridge.DEFAULT_PALETTE_ID); return d.ok ? d.data.values : null; })();
+    : (() => { const d = wallGeographicStyleBridge.getGeographicStyle(wallGeographicStyleBridge.DEFAULT_GEOGRAPHIC_STYLE_ID); return d.ok ? d.data.values : null; })();
 
   const allTargets: TargetWithVisibility[] = useMemo(() => {
     const built = sortTargetsByCategory(buildGeographicTargets(registry, values, defaultValues));
@@ -104,7 +104,7 @@ export function MapsGeographicCatalog({ paletteId, registry, values, isDefault }
   }
 
   function setField(propId: string, hex: string) {
-    wallPaletteBridge.setPropertyValue(paletteId, propId, hex);
+    wallGeographicStyleBridge.setPropertyValue(styleId, propId, hex);
   }
 
   // "Assign Color" applies to each selected target's PRIMARY color field
@@ -158,7 +158,7 @@ export function MapsGeographicCatalog({ paletteId, registry, values, isDefault }
         ) : (
           <button className="tb-btn sm" disabled title="None of the selected targets have an editable opacity property">Assign Opacity</button>
         )}
-        <button className="tb-btn sm" disabled title="Visibility has no editable path yet — Wall's palette authority only wires color properties">Toggle Visibility</button>
+        <button className="tb-btn sm" disabled title="Visibility has no editable path yet — Wall's Geographic Style authority only wires color properties">Toggle Visibility</button>
         <span className="bulk-bar-sep" />
         <button className="tb-btn sm" onClick={() => setSelectedIds(new Set())}>Clear</button>
       </div>

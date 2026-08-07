@@ -17603,16 +17603,9 @@
             syncUI();
             return;
           }
-          if (event.key === "Tab") {
-            event.preventDefault();
-            togglePresentationMode();
-            return;
-          }
-          if (event.key === "?") {
-            event.preventDefault();
-            toggleShortcuts();
-            return;
-          }
+          // Tab/? — migrated to SBE.KeyboardShortcutRegistry (0805B); see
+          // the register() calls near toggleShortcuts()/togglePresentationMode()
+          // below. No longer handled inline here.
 
           if (event.key.toLowerCase() === "v") {
             state.tool = "select";
@@ -19591,323 +19584,15 @@
         wire("debug-info", "info");
       })();
 
-      if (!window._wosKeyboardBound) {
-        global.addEventListener("keydown", async function onKeyDown(event) {
-          heldKeys.add(event.key.toLowerCase());
-          if (event.key === "Shift") input.shift = true;
-
-          if (textEditor && event.key === "Escape") {
-            event.preventDefault();
-            removeCanvasTextInput(false);
-            return;
-          }
-
-          // ── Label editing mode — captures all keys ────────────────────────
-          if (state.textEditing && state.activeLabelId) {
-            var _editLabel = getLabelById(state.activeLabelId);
-            if (_editLabel) {
-              event.preventDefault();
-              if (event.key === "Escape") {
-                // Cancel — remove empty label, deselect
-                if (!_editLabel.text) removeLabel(_editLabel.id);
-                state.textEditing = false;
-                state.activeLabelId = null;
-              } else if (event.key === "Backspace") {
-                _editLabel.text = _editLabel.text.slice(0, -1);
-              } else if (event.key === "Enter") {
-                if (event.shiftKey) {
-                  // Shift+Enter — commit
-                  if (!_editLabel.text) removeLabel(_editLabel.id);
-                  state.textEditing = false;
-                  state.activeLabelId = null;
-                } else {
-                  _editLabel.text += "\n";
-                }
-              } else if (event.key.length === 1) {
-                _editLabel.text += event.key;
-              }
-              renderFrame();
-              return; // block all other shortcuts while editing
-            }
-          }
-          // ── End label editing ─────────────────────────────────────────────
-
-          if (isTypingTarget()) {
-            return;
-          }
-
-          // ── Shortcut suspension — takesFocus drawers (e.g. GlyphLab) ─────────
-          if (window._wos && window._wos._shortcutsSuspended) {
-            return;
-          }
-
-          console.log("[KEYDOWN TRACE]", {
-            key: event.key,
-            code: event.code,
-            meta: event.metaKey,
-            ctrl: event.ctrlKey,
-            shift: event.shiftKey,
-            activeElement:
-              document.activeElement && document.activeElement.tagName
-                ? document.activeElement.tagName.toLowerCase()
-                : null,
-          });
-
-          if (event.key === "Delete" || event.key === "Backspace") {
-            event.preventDefault();
-            event.stopPropagation();
-            console.log("[DELETE KEY] before", window._wos.debugSelection());
-            var _delResult = deleteSelectedObject();
-            console.log("[DELETE KEY] result", _delResult);
-            console.log("[DELETE KEY] after", window._wos.debugSelection());
-            return;
-          }
-
-          if (
-            event.key &&
-            event.key.toLowerCase() === "d" &&
-            (event.metaKey || event.ctrlKey)
-          ) {
-            event.preventDefault();
-            event.stopPropagation();
-            console.log("[DUPLICATE KEY] before", window._wos.debugSelection());
-            var _dupResult = await duplicateSelectedObject();
-            console.log("[DUPLICATE KEY] result", _dupResult);
-            console.log("[DUPLICATE KEY] after", window._wos.debugSelection());
-            return;
-          }
-
-          if (event.key === " ") {
-            // In geo/navigate mode spacebar is reserved for viewport pan — not transport
-            if (
-              SBE.Workspace &&
-              SBE.Workspace.isGeographicMode &&
-              SBE.Workspace.isGeographicMode() &&
-              SBE.Workspace.getInteractionMode &&
-              SBE.Workspace.getInteractionMode() === "navigate"
-            ) return;
-            event.preventDefault();
-            togglePlayback();
-            syncUI();
-            return;
-          }
-
-          if (event.key === "Tab") {
-            event.preventDefault();
-            togglePresentationMode();
-            return;
-          }
-
-          if (event.key === "?") {
-            event.preventDefault();
-            toggleShortcuts();
-            return;
-          }
-
-          if (event.key.toLowerCase() === "v") {
-            state.tool = "select";
-            syncUI();
-            return;
-          }
-          if (event.key.toLowerCase() === "d") {
-            // D key activates mop (primary drawing tool) — Cmd+D handled above
-            state.tool = "pen";
-            syncUI();
-            return;
-          }
-          if (
-            event.key.toLowerCase() === "s" &&
-            !(event.metaKey || event.ctrlKey)
-          ) {
-            state.tool = "shape";
-            syncUI();
-            updatePanels(state.tool);
-            return;
-          }
-          if (event.key.toLowerCase() === "t") {
-            state.tool = "text";
-            syncUI();
-            updatePanels(state.tool);
-            return;
-          }
-          if (event.key.toLowerCase() === "b") {
-            state.tool = "ball";
-            syncUI();
-            return;
-          }
-          if (event.key.toLowerCase() === "m") {
-            state.tool = "pen";
-            syncUI();
-            return;
-          }
-          if (event.key.toLowerCase() === "p") {
-            state.tool = "pen";
-            syncUI();
-            return;
-          }
-          // Ctrl/Cmd+Shift+G — ungroup
-          if (
-            event.key.toLowerCase() === "g" &&
-            (event.metaKey || event.ctrlKey) &&
-            event.shiftKey
-          ) {
-            event.preventDefault();
-            ungroupSelected();
-            return;
-          }
-
-          // Ctrl/Cmd+G — group selected strokes
-          if (
-            event.key.toLowerCase() === "g" &&
-            (event.metaKey || event.ctrlKey)
-          ) {
-            event.preventDefault();
-            var strokeEntries = state.multiSelection.filter(function (e) {
-              return e.type === "stroke";
-            });
-            if (strokeEntries.length > 1) {
-              var ids = strokeEntries.map(function (e) {
-                return e.id;
-              });
-              var grp = createGroup(ids);
-              if (grp) {
-                state.multiSelection = [{ type: "group", id: grp.id }];
-                syncLegacySelection();
-                syncSelectionPanel();
-                renderFrame();
-              }
-            }
-            return;
-          }
-          // G — toggle grid
-          if (
-            event.key.toLowerCase() === "g" &&
-            !(event.metaKey || event.ctrlKey)
-          ) {
-            state.grid.enabled = !state.grid.enabled;
-            renderFrame();
-            return;
-          }
-          // K — save selected stroke as shape
-          if (
-            event.key.toLowerCase() === "k" &&
-            !(event.metaKey || event.ctrlKey)
-          ) {
-            saveSelectedShape();
-            syncShapeLibraryTab(true);
-            return;
-          }
-
-          // Pen tool keyboard controls (shape + line modes)
-          if (state.tool === "pen" && state.penTool.isDrawing) {
-            // Escape — cancel in-progress stroke
-            if (event.key === "Escape") {
-              state.penTool.currentStroke = null;
-              state.penTool.isDrawing = false;
-              state.penTool.previewPoint = null;
-              renderFrame();
-              return;
-            }
-            // Enter — commit (shape = open path, line = finalize)
-            if (event.key === "Enter") {
-              event.preventDefault();
-              if (state.penTool.mode === "shape") commitShapeStroke(false);
-              else if (
-                state.penTool.mode === "line" &&
-                state.penTool.currentStroke
-              ) {
-                var cs = state.penTool.currentStroke;
-                if (state.penTool.previewPoint && cs.points.length > 0) {
-                  commitLineStroke(cs.points[0], state.penTool.previewPoint);
-                }
-              }
-              return;
-            }
-            // Backspace — remove last placed point (shape only)
-            if (
-              event.key === "Backspace" &&
-              state.penTool.mode === "shape" &&
-              state.penTool.currentStroke
-            ) {
-              event.preventDefault();
-              var cs = state.penTool.currentStroke;
-              if (cs.points.length > 1) {
-                cs.points.pop();
-              } else {
-                state.penTool.currentStroke = null;
-                state.penTool.isDrawing = false;
-              }
-              renderFrame();
-              return;
-            }
-          }
-
-          // L key — line tool disabled, mop is primary drawing system
-          // if (event.key.toLowerCase() === "l") { ... }
-
-          // Line tool length input
-          if (state.tool === "line" && state.lineTool.step === 1) {
-            if (!isNaN(event.key) && event.key !== " ") {
-              event.preventDefault();
-              state.lineTool.isTyping = true;
-              state.lineTool.lengthInput += event.key;
-              renderFrame();
-              return;
-            }
-            if (event.key === ".") {
-              event.preventDefault();
-              state.lineTool.lengthInput += ".";
-              renderFrame();
-              return;
-            }
-            if (event.key === "Backspace") {
-              event.preventDefault();
-              state.lineTool.lengthInput = state.lineTool.lengthInput.slice(
-                0,
-                -1,
-              );
-              if (!state.lineTool.lengthInput) state.lineTool.isTyping = false;
-              renderFrame();
-              return;
-            }
-            if (event.key === "Enter" && state.lineTool.previewEnd) {
-              event.preventDefault();
-              finalizeLineTool(state.lineTool.previewEnd);
-              return;
-            }
-            if (event.key === "Escape") {
-              event.preventDefault();
-              state.lineTool.step = 0;
-              state.lineTool.startPoint = null;
-              state.lineTool.previewEnd = null;
-              state.lineTool.lengthInput = "";
-              state.lineTool.isTyping = false;
-              renderFrame();
-              return;
-            }
-          }
-
-          const modifier = event.metaKey || event.ctrlKey;
-          if (!modifier) {
-            return;
-          }
-
-          if (event.key.toLowerCase() === "z") {
-            event.preventDefault();
-            await undo();
-          }
-
-          if (event.key.toLowerCase() === "a") {
-            event.preventDefault();
-            selectAllObjects();
-          }
-        });
-
-        global.addEventListener("keyup", function onKeyUp(event) {
-          heldKeys.delete(event.key.toLowerCase());
-          if (event.key === "Shift") input.shift = false;
-        });
-      } // end if (!window._wosKeyboardBound)
+      // 0805B — removed a confirmed-dead duplicate global keydown/keyup
+      // binding that used to live here (near-identical copy of
+      // bindGlobalKeyboardShortcuts()'s own listener, including Tab/?/V/D/S/
+      // T/B/Delete/Cmd+D/etc.). It was gated by
+      // `if (!window._wosKeyboardBound)`, but bindGlobalKeyboardShortcuts()
+      // (called at this file's own init, before bindControls()) always sets
+      // that flag true first — so this block's addEventListener call never
+      // executed, ever. Verified by call order, not assumption; zero
+      // behavior change from removing it.
     }
 
     function selectAllObjects() {
@@ -26366,11 +26051,140 @@
       renderFrame();
     }
 
-    function toggleShortcuts(force) {
-      state.ui.shortcutsVisible =
-        typeof force === "boolean" ? force : !state.ui.shortcutsVisible;
-      controls.syncShortcutVisibility(state.ui.shortcutsVisible);
+    // 0805B — remembers where focus was before the help popup opened, so it
+    // can be restored on close (accessibility requirement — focus must not
+    // simply vanish into the body).
+    var _shortcutHudReturnFocus = null;
+
+    // Renders #shortcut-hud-body from SBE.KeyboardShortcutRegistry.list(),
+    // grouped by `group` — replaces the old hard-coded <p> lines. Rebuilt
+    // every time the popup opens, so it can never drift from what's actually
+    // registered. Debug-only/non-userFacing entries are excluded by list()
+    // itself (it only ever returns userFacing, currently-enabled shortcuts).
+    function _renderShortcutHelp() {
+      var body = document.getElementById("shortcut-hud-body");
+      if (!body) return;
+      var registry = window.SBE && SBE.KeyboardShortcutRegistry;
+      if (!registry) {
+        body.innerHTML = "";
+        return;
+      }
+      var entries = registry.list();
+      var byGroup = {};
+      var order = [];
+      entries.forEach(function (s) {
+        if (!byGroup[s.group]) {
+          byGroup[s.group] = [];
+          order.push(s.group);
+        }
+        byGroup[s.group].push(s);
+      });
+      var html = "";
+      order.forEach(function (group) {
+        html += '<div class="shortcut-group-title">' + group + "</div>";
+        byGroup[group].forEach(function (s) {
+          var keyLabel = s.keys
+            .filter(function (k) { return k.length <= 6; }) // skip verbose codes like "Digit0" in display
+            .map(function (k) { return k === " " ? "Space" : k; })
+            .join(" / ");
+          html +=
+            '<div class="shortcut-row"><span class="shortcut-key">' +
+            keyLabel +
+            '</span><span class="shortcut-label">' +
+            s.label +
+            "</span></div>";
+        });
+      });
+      // Tab and ? are themselves registered shortcuts (see
+      // _registerInterfaceShortcuts below) — already rendered by the
+      // grouped loop above under "Interface". Do not re-list them here;
+      // an earlier version of this function did, producing a duplicated
+      // "Interface" section, caught by live testing.
+      html += '<p style="margin-top:6px;font-style:italic;">Number keys 1–9 are reserved for future camera rigs.</p>';
+      body.innerHTML = html;
     }
+
+    function toggleShortcuts(force) {
+      var next =
+        typeof force === "boolean" ? force : !state.ui.shortcutsVisible;
+      state.ui.shortcutsVisible = next;
+      controls.syncShortcutVisibility(next);
+
+      var hud = controls.elements.shortcutHud;
+      if (next) {
+        _renderShortcutHelp();
+        if (hud) hud.setAttribute("aria-hidden", "false");
+        _shortcutHudReturnFocus = document.activeElement;
+        var closeBtn = controls.elements.closeShortcuts;
+        if (closeBtn && typeof closeBtn.focus === "function") closeBtn.focus();
+      } else {
+        if (hud) hud.setAttribute("aria-hidden", "true");
+        if (
+          _shortcutHudReturnFocus &&
+          typeof _shortcutHudReturnFocus.focus === "function" &&
+          document.contains(_shortcutHudReturnFocus)
+        ) {
+          _shortcutHudReturnFocus.focus();
+        }
+        _shortcutHudReturnFocus = null;
+      }
+    }
+
+    // Outside-click (on the overlay backdrop, not the card itself) closes the
+    // popup — consistent with the overlay's own centered-card visual shape.
+    (function _bindShortcutHudOutsideClick() {
+      var hud = controls.elements.shortcutHud;
+      if (!hud) return;
+      hud.addEventListener("click", function (e) {
+        if (e.target === hud) toggleShortcuts(false);
+      });
+    })();
+
+    // 0805B — the small persistent "?" control (spec §7's "clicking ?" path;
+    // "pressing ?" is handled by the registered "open-keyboard-help"
+    // shortcut below). Not tagged data-watch-hide, so it stays visible/
+    // clickable even while body.presentation has hidden the rest of the UI.
+    (function _bindKeyboardHelpButton() {
+      var btn = controls.elements.keyboardHelpBtn;
+      if (!btn) return;
+      btn.addEventListener("click", function () { toggleShortcuts(true); });
+    })();
+
+    // 0805B — register LIVE MAP's Interface-group presentation shortcuts
+    // (Tab, ?, and help-popup Escape-to-close) into the canonical registry.
+    // These replace the old inline Tab/? checks that lived directly inside
+    // bindGlobalKeyboardShortcuts() below — same functions called
+    // (togglePresentationMode/toggleShortcuts), only the binding site moves.
+    (function _registerInterfaceShortcuts() {
+      var registry = window.SBE && SBE.KeyboardShortcutRegistry;
+      if (!registry) return;
+      registry.register({
+        id: "tab-toggle-presentation", keys: ["Tab"], label: "Hide/show interface",
+        description: "Toggle canonical LIVE MAP's interface visibility.",
+        group: "Interface", context: "global", userFacing: true,
+        respectsInteractiveFocus: true, // let normal Tab focus-nav proceed on buttons/links/[tabindex] — spec §6
+        enabled: function () { return true; },
+        handler: function (e) { e.preventDefault(); togglePresentationMode(); },
+      });
+      registry.register({
+        id: "open-keyboard-help", keys: ["?"], label: "Open keyboard controls",
+        description: "Show the keyboard shortcuts help popup.",
+        group: "Interface", context: "global", userFacing: true,
+        enabled: function () { return true; },
+        handler: function (e) { e.preventDefault(); toggleShortcuts(true); },
+      });
+      // isModal — while the help popup is open, this claims Escape
+      // exclusively (see keyboardShortcutRegistry.js's handleKeydown), so
+      // itineraryRunAuthority.js's own Escape (camera release) does NOT also
+      // fire on the same keypress. Not userFacing: this is implicit "how you
+      // close a popup" behavior, not a shortcut that needs its own listed row.
+      registry.register({
+        id: "close-keyboard-help", keys: ["Escape"], label: "Close keyboard help",
+        group: "Interface", context: "global", userFacing: false, isModal: true,
+        enabled: function () { return !!state.ui.shortcutsVisible; },
+        handler: function (e) { e.preventDefault(); toggleShortcuts(false); },
+      });
+    })();
 
     function normalizeLineObject(line) {
       if (!line.x1 && line.segment) {

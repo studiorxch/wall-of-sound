@@ -5,13 +5,15 @@ import type { TrackSlot } from "../data/playlistTypes";
 import type { TrackPlaybackIssue } from "../data/playProjectTypes";
 import type { PlaylistShapeConfig, PlaylistShapeSection, PlaylistEnergyShape, PlaylistSectionEnergyEnvelope } from "../data/playlistShapeTypes";
 import { resolveCratePool, resolveCrateTracks } from "../logic/resolveCrate";
-import { gatePlaylistCandidates, describeSkipReport, finalizeGeneratedPlaylistSlots } from "../logic/trackEligibility";
-import { excludePendingImports } from "../logic/audioReadiness";
+import { gatePlaylistCandidates, describeSkipReport, finalizeGeneratedPlaylistSlots, buildPlaylistEligibilityAudit, type PlaylistEligibilityAudit } from "../logic/trackEligibility";
+import { countPendingImportAnalysis } from "../logic/audioReadiness";
 import {
   makeDefaultShapeConfig,
   buildShapePlaylist,
   buildSlotsFromShapeResult,
+  derivePlaylistGenerationState,
   type ShapeBuildResult,
+  type PlaylistGenerationState,
 } from "../logic/playlistShapeBuilder";
 import { inferEnergyShape, normalizeEnergyEnvelope, defaultEnvelopeForSection } from "../logic/playlistEnergyEnvelope";
 import { PlaylistShapeSectionRow } from "./playlistShape/PlaylistShapeSectionRow";
@@ -97,10 +99,14 @@ export function NewPlaylistWizard({
   // ── Step 3 (Generate) state ──
   const [generating, setGenerating] = useState(false);
   const [generated, setGenerated] = useState(false);
-  const [gateSkipSummary, setGateSkipSummary] = useState<string | null>(null);
+  // 0804_MUSIC_Playlist_Eligibility_Repair §11 — the full audit is kept
+  // (previously the gate result was discarded after building one terse
+  // string), so the dialog can show a complete, reconciled breakdown instead
+  // of a single pre-formatted line.
+  const [eligibilityAudit, setEligibilityAudit] = useState<PlaylistEligibilityAudit | null>(null);
+  const [generationState, setGenerationState] = useState<PlaylistGenerationState | null>(null);
   const [shapeResult, setShapeResult] = useState<ShapeBuildResult | null>(null);
   const [shapeSlots, setShapeSlots] = useState<TrackSlot[]>([]);
-  const [shapeError, setShapeError] = useState<string | null>(null);
 
   const [step, setStep] = useState<Step>(1);
 
@@ -294,33 +300,51 @@ export function NewPlaylistWizard({
     setGenerated(false);
     setShapeResult(null);
     setShapeSlots([]);
-    setShapeError(null);
+    setEligibilityAudit(null);
+    setGenerationState(null);
 
-    // Pre-generation codec gate (0709 leak audit) — every crate a section
-    // draws from is gated up front; weighting never overrides this.
-    // Readiness gate (0712): excludes imported-but-not-yet-analyzed tracks
-    // from automatic generation (manual add still allows them, with a warning).
-    const gate = gatePlaylistCandidates(excludePendingImports(combinedPoolTracks), {
+    // Pre-generation codec/playback-safety gate (0709 leak audit) — every
+    // crate a section draws from is gated up front; weighting never
+    // overrides this. Playback safety (codec/missing-audio/exclusion) is the
+    // ONLY hard pre-filter here — 0804_MUSIC_Playlist_Eligibility_Repair
+    // removed the prior excludePendingImports() pool-thinning step (pending
+    // canonical mood/DSP analysis is a warning, not a hard rejection; see
+    // audioReadiness.ts's countPendingImportAnalysis doc comment).
+    const gate = gatePlaylistCandidates(combinedPoolTracks, {
       mode: "casual",
       playbackIssues: trackPlaybackIssues,
     }, "new playlist wizard");
-
-    const skipSummary = gate.rejectedTracks.length > 0
-      ? `${gate.eligibleTracks.length} eligible of ${combinedPoolTracks.length} — skipped ${gate.rejectedTracks.length} blocked: ${describeSkipReport(gate.rejectedByReason)}`
-      : null;
 
     setTimeout(() => {
       const result = buildShapePlaylist({
         libraryTracks: gate.eligibleTracks,
         crates,
         shapeConfig,
+        allLibraryTracksForDiagnostics: combinedPoolTracks,
       });
 
+      const audit = buildPlaylistEligibilityAudit({
+        consideredCount: combinedPoolTracks.length,
+        gate,
+        metadataWarningCounts: {
+          pending_import_analysis: countPendingImportAnalysis(combinedPoolTracks),
+        },
+        sectionCandidateCounts: Object.fromEntries(
+          result.sections.map((s) => [s.sectionLabel, s.candidateCount]),
+        ),
+      });
+      setEligibilityAudit(audit);
+      setGenerationState(derivePlaylistGenerationState(result));
+      // Always store the result, including a zero-track ("blocked") one —
+      // §11 requires showing every section's warning, not just the first,
+      // and the render layer needs shapeResult.sections for that regardless
+      // of whether generation succeeded.
+      setShapeResult(result);
+
       if (result.tracks.length === 0) {
-        setShapeError(result.warnings[0] ?? "No tracks could be generated — assign crates to at least one section.");
+        setShapeSlots([]);
         setGenerated(true);
         setGenerating(false);
-        setGateSkipSummary(skipSummary);
         return;
       }
 
@@ -335,11 +359,9 @@ export function NewPlaylistWizard({
       });
       const slots = finalized.slots ?? rawSlots.map((s) => ({ ...s, assignedTrackId: undefined }));
 
-      setShapeResult(result);
       setShapeSlots(slots);
       setGenerated(true);
       setGenerating(false);
-      setGateSkipSummary(skipSummary);
     }, 50);
   }
 
@@ -554,21 +576,64 @@ export function NewPlaylistWizard({
               </div>
             )}
 
-            {gateSkipSummary && (
-              <div className="npw-gate-summary" title="Codec-blocked, missing-audio, and unplayable tracks are never candidates for generated playlists">
-                {gateSkipSummary}
+            {/* 0804_MUSIC_Playlist_Eligibility_Repair §11 — replaces the old
+                single pre-formatted "N eligible of M — skipped..." string
+                (whose denominator/numerator came from two different
+                populations, the actual root cause this build fixed) with
+                the full reconciled audit: every considered track is
+                accounted for, and a details disclosure covers rejection
+                reasons, per-section candidate counts, the Intro fallback
+                level, unresolved-metadata warnings, and whether a partial
+                draft can be saved. */}
+            {eligibilityAudit && (
+              <div className="npw-gate-summary">
+                {eligibilityAudit.considered} considered · {eligibilityAudit.hardEligible} hard-eligible · {eligibilityAudit.hardRejectedUnique} rejected
+                {shapeResult && (() => {
+                  const blocking = shapeResult.sections.find((s) => s.tracks.length === 0);
+                  return blocking ? ` · blocking section: "${blocking.sectionLabel}"` : "";
+                })()}
+                <details className="cat-review-details">
+                  <summary>details</summary>
+                  <div className="cat-review-details-body">
+                    <div>Rejection reasons: {describeSkipReport(eligibilityAudit.rejectionCounts) || "none"}</div>
+                    {eligibilityAudit.multiReasonRejectedCount > 0 && (
+                      <div>{eligibilityAudit.multiReasonRejectedCount} rejected track{eligibilityAudit.multiReasonRejectedCount !== 1 ? "s" : ""} matched more than one reason (not double-counted above).</div>
+                    )}
+                    {Object.entries(eligibilityAudit.unresolvedMetadataWarnings).filter(([, n]) => n > 0).map(([k, n]) => (
+                      <div key={k}>{n} unresolved metadata warning{n !== 1 ? "s" : ""}: {k.replace(/_/g, " ")} (eligible, not excluded)</div>
+                    ))}
+                    {Object.entries(eligibilityAudit.sectionCandidateCounts).map(([label, n]) => (
+                      <div key={label}>{label}: {n} candidate{n !== 1 ? "s" : ""}</div>
+                    ))}
+                    {/* 0804_MUSIC_Crate_BPM_Group_Filters §10 — outside_assigned_crate,
+                        distinct from an unexplained rejection: tracks that passed
+                        every other gate but were excluded by a crate's own BPM/Group
+                        filters specifically. */}
+                    {shapeResult?.sections.filter((s) => s.outsideAssignedCrateCount > 0).map((s) => (
+                      <div key={`oac-${s.sectionId}`}>{s.sectionLabel}: {s.outsideAssignedCrateCount} track{s.outsideAssignedCrateCount !== 1 ? "s" : ""} outside assigned crate's BPM/Group filters</div>
+                    ))}
+                    {shapeResult?.sections.find((s) => s.sectionId === "intro")?.introFallbackLevel != null && (
+                      <div>Intro fallback level used: {shapeResult.sections.find((s) => s.sectionId === "intro")!.introFallbackLevel}</div>
+                    )}
+                    <div>Draft save possible: {generationState !== "blocked" ? "yes" : "no"}</div>
+                  </div>
+                </details>
               </div>
             )}
 
-            {generated && shapeError && (
-              <div className="npw-no-options">{shapeError}</div>
+            {generated && generationState === "blocked" && (
+              <div className="npw-no-options">
+                {shapeResult && shapeResult.warnings.length > 0
+                  ? shapeResult.warnings.map((w, i) => <div key={i}>⚠ {w}</div>)
+                  : <div>No tracks could be generated — assign crates to at least one section.</div>}
+              </div>
             )}
 
-            {generated && !shapeError && shapeResult && (
+            {generated && generationState !== "blocked" && shapeResult && (
               <div className="npw-option-list">
                 <div className="npw-option-card npw-option-card--highlighted">
                   <div className="npw-option-head">
-                    <span className="npw-option-name">Organized arrangement</span>
+                    <span className="npw-option-name">Organized arrangement{generationState === "partial" ? " (partial)" : ""}</span>
                     <span className="npw-option-score">{shapeSlots.filter((s) => s.assignedTrackId).length} tracks</span>
                   </div>
                   <div className="npw-shape-preview">
@@ -594,7 +659,7 @@ export function NewPlaylistWizard({
             <div className="npw-actions">
               <button
                 className="npw-btn npw-btn--ghost"
-                onClick={() => { setStep(2); setGenerated(false); setShapeResult(null); setShapeSlots([]); setShapeError(null); }}
+                onClick={() => { setStep(2); setGenerated(false); setShapeResult(null); setShapeSlots([]); setEligibilityAudit(null); setGenerationState(null); }}
               >
                 ← Back to Shape
               </button>
@@ -603,9 +668,12 @@ export function NewPlaylistWizard({
                   Regenerate
                 </button>
               )}
-              {generated && (
+              {/* §11/§15 — a zero-output draft must never be saveable as if
+                  it contains a playlist; only offered once generation
+                  produced at least one track (complete or partial). */}
+              {generated && generationState !== "blocked" && (
                 <button className="npw-btn npw-btn--ghost" onClick={handleCreateDraft}>
-                  Save Draft Without Accepting
+                  {generationState === "partial" ? "Save Partial Draft" : "Save Draft Without Accepting"}
                 </button>
               )}
             </div>

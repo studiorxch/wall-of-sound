@@ -8,6 +8,7 @@ import type { TrackSlot } from "../../data/playlistTypes";
 import type { RadioInboxItem } from "../../data/radioInboxTypes";
 import type { RadioPlaylist } from "../../data/radioPlaylistTypes";
 import type { RadioBank } from "../../data/radioBankTypes";
+import type { GlyphComposition } from "../../data/glyphCompositionTypes";
 
 const NOW = "2026-07-28T00:00:00.000Z";
 
@@ -56,6 +57,32 @@ function radioPlaylist(overrides: Partial<RadioPlaylist> & { id: string; title: 
 
 function radioBank(overrides: Partial<RadioBank> & { id: string; title: string }): RadioBank {
   return { entries: [], createdAt: NOW, updatedAt: NOW, ...overrides };
+}
+
+function glyphComposition(overrides: Partial<GlyphComposition> & { id: string; name: string }): GlyphComposition {
+  return {
+    schemaVersion: 1,
+    source: { kind: "library_track", trackId: "t1" },
+    sourceDurationSeconds: 100,
+    analysisId: "a1",
+    mappingPresetId: "p1",
+    mappingPresetSnapshot: {} as GlyphComposition["mappingPresetSnapshot"],
+    grammarId: "g1",
+    grammarSnapshot: {} as GlyphComposition["grammarSnapshot"],
+    connectionGrammarId: "cg1",
+    connectionGrammarSnapshot: {} as GlyphComposition["connectionGrammarSnapshot"],
+    connectionOverrides: [],
+    layoutPresetId: "l1",
+    layoutPresetSnapshot: {} as GlyphComposition["layoutPresetSnapshot"],
+    pulseTruthSnapshot: {} as GlyphComposition["pulseTruthSnapshot"],
+    canvasPresetSnapshot: {} as GlyphComposition["canvasPresetSnapshot"],
+    viewportMode: "fitCanvas",
+    layerVisibility: { pulseManuscript: true, drumEvents: false, clapEvents: false, accentEvents: false, laserLayer: false, sections: true, barPunctuation: true, safeArea: false },
+    seed: 1,
+    cacheKey: "abc123",
+    createdAt: NOW, updatedAt: NOW,
+    ...overrides,
+  };
 }
 
 describe("findTrackReferences — crates", () => {
@@ -117,13 +144,41 @@ describe("findTrackReferences — RADIO (playlists and banks via inbox items)", 
   });
 });
 
+describe("findTrackReferences — Glyph Compositions", () => {
+  it("reports a saved composition whose source.trackId matches (0804A_GLYPH_AUDIO_First_Slice)", () => {
+    const gc1 = glyphComposition({ id: "gc1", name: "Track One — Manuscript", source: { kind: "library_track", trackId: "t1" } });
+    const gc2 = glyphComposition({ id: "gc2", name: "Track Two — Manuscript", source: { kind: "library_track", trackId: "t2" } });
+    const report = findTrackReferences("t1", { glyphCompositions: [gc1, gc2] });
+    expect(report.glyphCompositions).toEqual([{ id: "gc1", label: "Track One — Manuscript" }]);
+  });
+
+  it("does not match a composition built from a local (non-Catalog) import", () => {
+    const gc = glyphComposition({
+      id: "gc1", name: "Imported — Manuscript",
+      source: { kind: "local_import", importId: "imp1", filename: "demo.wav" },
+    });
+    const report = findTrackReferences("t1", { glyphCompositions: [gc] });
+    expect(report.glyphCompositions).toEqual([]);
+  });
+
+  it("reports no compositions when the track appears in none", () => {
+    const gc = glyphComposition({ id: "gc1", name: "Other Track", source: { kind: "library_track", trackId: "t2" } });
+    const report = findTrackReferences("t1", { glyphCompositions: [gc] });
+    expect(report.glyphCompositions).toEqual([]);
+  });
+});
+
 describe("isEmptyTrackReferenceReport", () => {
   it("is true when every category is empty", () => {
-    expect(isEmptyTrackReferenceReport({ crates: [], playlists: [], radioPlaylists: [], radioBanks: [] })).toBe(true);
+    expect(isEmptyTrackReferenceReport({ crates: [], playlists: [], radioPlaylists: [], radioBanks: [], glyphCompositions: [] })).toBe(true);
   });
 
   it("is false when any single category has a match", () => {
-    expect(isEmptyTrackReferenceReport({ crates: [{ id: "c1", label: "X" }], playlists: [], radioPlaylists: [], radioBanks: [] })).toBe(false);
+    expect(isEmptyTrackReferenceReport({ crates: [{ id: "c1", label: "X" }], playlists: [], radioPlaylists: [], radioBanks: [], glyphCompositions: [] })).toBe(false);
+  });
+
+  it("is false when only glyphCompositions has a match", () => {
+    expect(isEmptyTrackReferenceReport({ crates: [], playlists: [], radioPlaylists: [], radioBanks: [], glyphCompositions: [{ id: "gc1", label: "X" }] })).toBe(false);
   });
 
   it("returns a fully empty report when given no data at all (no crash on missing optional inputs)", () => {

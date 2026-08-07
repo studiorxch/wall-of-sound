@@ -9,7 +9,7 @@ import { type TrackDragPayload } from "../logic/playlistMembership";
 // row — kept only so App.tsx can recognize and redirect a stray reference
 // to Sounds with the Loops filter selected, rather than the value being an
 // unrecognized string.
-export type ViewMode = "playlist" | "library" | "groups" | "orphans" | "excluded" | "locks" | "playlists_grid" | "sampler_banks_grid" | "crates_grid" | "crate_detail" | "artists" | "mood_signal_audit" | "analyzer_review" | "loop_library" | "sectional_looper" | "radio" | "radio_playlists_grid" | "radio_banks_grid" | "collections_overview" | "radio_loopchain_player";
+export type ViewMode = "playlist" | "library" | "groups" | "orphans" | "excluded" | "locks" | "playlists_grid" | "sampler_banks_grid" | "crates_grid" | "crate_detail" | "artists" | "mood_signal_audit" | "analyzer_review" | "loop_library" | "sectional_looper" | "glyph_audio" | "radio" | "radio_playlists_grid" | "radio_banks_grid" | "collections_overview" | "radio_loopchain_player";
 
 type Props = {
   playlists: PlaylistRecord[];
@@ -146,6 +146,14 @@ export function FileManager({
               label="Looper"
               active={viewMode === "sectional_looper"}
               onClick={() => onViewModeChange("sectional_looper")}
+            />
+            {/* Glyph Audio (0804A) — reuses an existing icon per approved
+                decision rather than adding a new icon asset. */}
+            <NavRow
+              icon="edit"
+              label="Glyph"
+              active={viewMode === "glyph_audio"}
+              onClick={() => onViewModeChange("glyph_audio")}
             />
           </div>
 

@@ -53,7 +53,7 @@ import { LibraryColumnsPanel } from "./LibraryColumnsPanel";
 import { LibraryRemoveConfirmDialog } from "./LibraryRemoveConfirmDialog";
 import { LibraryCommentsCell } from "./LibraryCommentsCell";
 import { LibraryStemBadge, type StemBadgeState } from "./libraryStemBadge";
-import { reviewBpmField, reviewKeyField } from "../../logic/dspFeatureExtraction";
+import { reviewBpmField, reviewKeyField, resolveAuthoritativeBpm } from "../../logic/dspFeatureExtraction";
 import { selectVisibleLibraryTracks } from "../../logic/library/libraryVisibleTracks";
 import { resolveTrackAudioIdentifier } from "../../logic/stems/stemClient";
 
@@ -381,7 +381,7 @@ export function LibraryDataGrid(props: Props) {
       case "artist": return t.artist ?? "";
       case "grouping": return t.grouping ?? "";
       case "genre": return normalizeTrackGenreTokens(t)[0] ?? "";
-      case "bpm": return t.bpm ? String(t.bpm) : "";
+      case "bpm": { const bpm = resolveAuthoritativeBpm(t); return bpm != null ? String(bpm) : ""; }
       case "key": return t.camelotKey ?? "";
       case "energy": return formatNumber(t.energy, 2, "");
       case "duration": return fmtDur(t.durationSeconds);
@@ -760,8 +760,12 @@ function renderLibraryCell(
     case "bpm": {
       // 0727A/0728B — single shared classification (reviewBpmField) also
       // used by the Review BPM & Key dialog, so the two never disagree.
+      // 0804_MUSIC_BPM_Authority_Repair §6.3 — the resolved numeric value
+      // itself now reads through resolveAuthoritativeBpm (same underlying
+      // value as review.canonicalBpm; now backed by the one named selector
+      // every consumer is meant to share, per §5.1).
       const review = reviewBpmField(t);
-      if (review.state === "resolved") return review.canonicalBpm;
+      if (review.state === "resolved") return resolveAuthoritativeBpm(t);
       return review.state === "no_confident_result" || review.state === "low_confidence_estimate"
         ? <>— <span className="est-tag" title={review.reason ?? undefined}>?</span></>
         : "—";

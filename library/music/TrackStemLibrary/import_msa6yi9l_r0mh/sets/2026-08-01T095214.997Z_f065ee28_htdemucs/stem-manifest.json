@@ -1,0 +1,87 @@
+{
+  "id": "17032f4f-38a9-4429-a8c0-fbd825b8be99",
+  "sourceTrackId": "import_msa6yi9l_r0mh",
+  "sourceAudioPathAtCreation": "catalog/audio/Yo yo.wav",
+  "sourceAudioIdentity": {
+    "fingerprint": "f065ee28dba343f5e588a5025113ebd63e022ffb03f3485838cb4e676c86580e",
+    "fingerprintAlgorithm": "pcm-sha256",
+    "fingerprintVersion": 1,
+    "sampleRateHz": 44100,
+    "normalizedChannels": 2,
+    "durationFrames": 8417808
+  },
+  "sourceRawFileHashAtCreation": "38913acd49a50ea07692454b39a9a9b32e211109e69619a660e968893f3c029c",
+  "sourceStatAtCreation": {
+    "sizeBytes": 36649132,
+    "mtimeMs": 1785577864208.0942,
+    "inode": 312951759
+  },
+  "sourceAudioProvenance": {
+    "decoderTool": "ffmpeg",
+    "decoderVersion": "8.0",
+    "computedAt": "2026-08-01T09:51:29.353Z"
+  },
+  "origin": "demucs",
+  "engine": "demucs",
+  "model": "htdemucs",
+  "engineVersion": "4.1.0",
+  "engineDevice": "mps",
+  "manifestVersion": 1,
+  "stems": {
+    "vocals": {
+      "role": "vocals",
+      "relativeArchivePath": "import_msa6yi9l_r0mh/sets/2026-08-01T095214.997Z_f065ee28_htdemucs/vocals.wav",
+      "fileName": "vocals.wav",
+      "durationFrames": 8417808,
+      "durationSeconds": 190.88,
+      "sampleRateHz": 44100,
+      "channels": 2,
+      "bitDepth": 16,
+      "codec": "pcm_s16le",
+      "sizeBytes": 33671276,
+      "contentHash": "21e59ef16c9f1e3695bdeeb9bc01f3c8d9340ae47b5c080748c1c1506f37627a"
+    },
+    "drums": {
+      "role": "drums",
+      "relativeArchivePath": "import_msa6yi9l_r0mh/sets/2026-08-01T095214.997Z_f065ee28_htdemucs/drums.wav",
+      "fileName": "drums.wav",
+      "durationFrames": 8417808,
+      "durationSeconds": 190.88,
+      "sampleRateHz": 44100,
+      "channels": 2,
+      "bitDepth": 16,
+      "codec": "pcm_s16le",
+      "sizeBytes": 33671276,
+      "contentHash": "3ea3e3d0de00cc27ffa3af598610e22cafc1cb5fd272d628c3ce219d1a52b538"
+    },
+    "bass": {
+      "role": "bass",
+      "relativeArchivePath": "import_msa6yi9l_r0mh/sets/2026-08-01T095214.997Z_f065ee28_htdemucs/bass.wav",
+      "fileName": "bass.wav",
+      "durationFrames": 8417808,
+      "durationSeconds": 190.88,
+      "sampleRateHz": 44100,
+      "channels": 2,
+      "bitDepth": 16,
+      "codec": "pcm_s16le",
+      "sizeBytes": 33671276,
+      "contentHash": "fb18c25f40b3967d21bc6f1ead1e9d0472f327b6bc247f0c1a08a5038c07abb0"
+    },
+    "other": {
+      "role": "other",
+      "relativeArchivePath": "import_msa6yi9l_r0mh/sets/2026-08-01T095214.997Z_f065ee28_htdemucs/other.wav",
+      "fileName": "other.wav",
+      "durationFrames": 8417808,
+      "durationSeconds": 190.88,
+      "sampleRateHz": 44100,
+      "channels": 2,
+      "bitDepth": 16,
+      "codec": "pcm_s16le",
+      "sizeBytes": 33671276,
+      "contentHash": "3cc571c619a5f6ed1c6c2ad2c7ecdd3109fc1a12716ec47ab0ef20b57dd67b83"
+    }
+  },
+  "createdAt": "2026-08-01T09:52:14.997Z",
+  "completedAt": "2026-08-01T09:52:14.998Z",
+  "archiveDirectory": "import_msa6yi9l_r0mh/sets/2026-08-01T095214.997Z_f065ee28_htdemucs"
+}

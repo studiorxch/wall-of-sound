@@ -1,6 +1,7 @@
-// ── HeroVehicleRenderer v1.1.0 ────────────────────────────────────────────────
+// ── HeroVehicleRenderer v1.2.0 ────────────────────────────────────────────────
 // 0530H_WOS_DriveExperiencePolish_v1.0.0
 // Prior: 0530F_WOS_HeroVehicleCameraFollowPrototype_v1.0.0
+// 0805A_MAPS_Itinerary_Presentation_Foundation_Repairs
 // Status: active
 // Classification: render-actor
 //
@@ -10,6 +11,16 @@
 //   - contact shadow instead of floating ellipse
 //   - zoom-aware scale: full at z≥17, medium 15-17, small below z15
 //   - marker scale updated each frame via CSS transform (no DOM rebuild)
+//
+// v1.2.0 (0805A): update(entity, opts) — opts.allowFallback (default true;
+// Drive's existing single-argument calls are unaffected). When explicitly
+// false and the Orb isn't healthy, this renderer no longer falls through to
+// the WorldSpaceVehicleLayer/DOM-marker Hero Car chain — itinerary
+// presentation must never substitute the legacy car for a failed Orb. update()
+// now RETURNS {visible, kind} ('orb'|'hero_car'|'none') so a caller (the
+// Itinerary Runner) can track and surface an explicit "Orb unavailable"
+// warning instead of a silent substitution. start() forwards its own opts
+// through to its internal update() call for the same reason.
 //
 // Authority:
 //   OWNS: the car DOM marker + its visual state
@@ -23,7 +34,7 @@
   'use strict';
 
   var SBE     = (global.SBE = global.SBE || {});
-  var VERSION = '1.1.0';
+  var VERSION = '1.2.0';
 
   // ── Hero model feature flag ───────────────────────────────────────────────────
   // Set USE_HERO_MODEL = true to attempt GLB model loading via Three.js.
@@ -32,15 +43,23 @@
   var USE_HERO_MODEL  = false;
   var HERO_MODEL_PATH = './assets/models/ford_focus_low_poly.glb';
 
-  var _marker    = null;   // mapboxgl.Marker (SVG path)
-  var _wrapEl    = null;   // outer div (scale target)
+  var _marker    = null;   // mapboxgl.Marker (SVG path) — root element, Mapbox-owned transform
+  var _wrapEl    = null;   // marker root — Mapbox rewrites its transform on every setLngLat()/
+                            // setRotation() call; nothing else may touch its style.transform
+  var _liftEl    = null;   // 0730E — inner wrapper nested inside _wrapEl; owns zoom-scale AND
+                            // altitude-lift transforms, so Mapbox's own positioning transform
+                            // on _wrapEl is never fought/overwritten
   var _active    = false;
   var _hidden    = false;
   var _lastScale = -1;
+  var _lastLiftPx = -1;
 
-  // ── Palette-editable colors (0729A_MAPS_Palette_Audit_Default_Wiring) ─────
-  // DOM/SVG marker path only — see MapsPaletteRegistry notes on the
-  // world-space mesh path, which resolves color elsewhere (deferred).
+  var LIFT_PX_PER_METER = 0.6; // approximation: DOM marker has no real Z axis
+
+  // ── Geographic Style-editable colors (0729A_MAPS_Palette_Audit_Default_Wiring) ─────
+  // DOM/SVG marker path only — see MapsGeographicStyleRegistry notes on the
+  // world-space mesh path, which resolves color elsewhere (deferred). Also
+  // migrating to a standalone vehicleStyleRegistry.js in 0729D Phase 2.
   var _colors = {
     body:       '#c8352e',
     roof:       '#a02820',
@@ -56,7 +75,7 @@
 
   function setColors(partial) {
     Object.assign(_colors, partial || {});
-    if (_wrapEl) _wrapEl.innerHTML = _carSVG();
+    if (_liftEl) _liftEl.innerHTML = _carSVG();
   }
 
   // GLB model state (only used when USE_HERO_MODEL = true)
@@ -132,16 +151,28 @@
     }
     if (_marker) return map;
 
+    // _wrapEl is the literal element Mapbox positions (its style.transform is
+    // rewritten wholesale on every setLngLat()/setRotation() call) — it must
+    // carry NO transform of our own, or we fight Mapbox for ownership of it.
     _wrapEl = document.createElement('div');
     _wrapEl.className = 'wos-hero-car';
-    // Anchor point centred; transform-origin for scale is centre of element.
     _wrapEl.style.cssText = [
       'width:40px;height:28px;',
       'will-change:transform;',
       'pointer-events:none;',
+    ].join('');
+
+    // 0730E — _liftEl is OUR presentation layer: zoom-scale and altitude-lift
+    // both apply here, never to _wrapEl. Same 40×28 box, centred inside.
+    _liftEl = document.createElement('div');
+    _liftEl.className = 'wos-hero-car-lift';
+    _liftEl.style.cssText = [
+      'width:40px;height:28px;',
+      'will-change:transform;',
       'transform-origin:50% 50%;',
     ].join('');
-    _wrapEl.innerHTML = _carSVG();
+    _liftEl.innerHTML = _carSVG();
+    _wrapEl.appendChild(_liftEl);
 
     // rotationAlignment:'map' → heading in world-space, not screen-space.
     // Offset anchor to geometric centre of the 40×28 SVG.
@@ -271,7 +302,7 @@
     }, 1500);
   }
 
-  function start(entity) {
+  function start(entity, opts) {
     if (USE_HERO_MODEL && !_modelFailed) {
       var mvr = global.SBE && SBE.MapboxViewportRuntime;
       var map = mvr && typeof mvr.getMap === 'function' ? mvr.getMap() : null;
@@ -310,9 +341,16 @@
     // scanning never runs in the Drive-launch stack.
     _scheduleAmbientTrafficStart('drive_launch');
 
-    update(entity);
+    // 0805B — propagate update()'s real {visible,kind} result (previously
+    // discarded here, forcing callers that need the true initial state —
+    // e.g. itineraryRunController.js's visibleHeroKind/presentationWarning —
+    // to wait for the first RAF tick's separate update() call instead of
+    // reflecting reality on the very first frame). Neither existing caller
+    // (Drive's heroVehicleRuntime.js, the itinerary controller) checks this
+    // return value for a strict `=== true`, so this is backward-compatible.
+    var startResult = update(entity, opts);
     console.log('[HeroVehicleRenderer] v' + VERSION + ' started (model:', USE_HERO_MODEL && !_modelFailed ? 'GLB' : 'SVG', ')');
-    return true;
+    return startResult;
   }
 
   // Hide/show the DOM SVG marker without affecting world-space layer
@@ -326,6 +364,12 @@
   // One-shot: validate registry the first time a hero-live payload lands (0601B)
   var _heroLiveValidated = false;
 
+  // 0730C — tracks whether Orb rendered last frame, so the stale
+  // WorldSpaceVehicleLayer 'hero' mesh is explicitly removed exactly once on
+  // the transition into Orb-active (that mesh is otherwise drawn every frame
+  // regardless of whether upsertVehicle is called again).
+  var _orbActiveLastFrame = false;
+
   // World-payload trace (diagnostic)
   var _worldPayloadTraceEnabled  = false;
   var _lastWorldPayloadTraceAt   = 0;
@@ -335,8 +379,56 @@
   function setWorldPayloadTraceEnabled(on) { _worldPayloadTraceEnabled = !!on; }
   function getWorldPayloadTraceState()     { return { enabled: _worldPayloadTraceEnabled, lastPayload: _lastWorldPayload }; }
 
-  function update(entity) {
-    if (!_active || !entity) return;
+  function update(entity, opts) {
+    if (!_active || !entity) return { visible: false, kind: 'none' };
+    var allowFallback = !opts || opts.allowFallback !== false;
+
+    // ── Orb: preferred hero when active and healthy (0730C) ───────────────────
+    // A new rung PREPENDED above the two existing fallback rungs below — Hero
+    // Car's own world-space-mesh → DOM-marker chain is left completely
+    // untouched, so "Hero Car stays the fallback" is guaranteed by code that
+    // already exists, not reimplemented here.
+    var orb = global.SBE && SBE.OrbProfileRenderer;
+    var orbReady = !!(orb && typeof orb.isRenderReady === 'function' && orb.isRenderReady());
+    if (orbReady) {
+      var orbOk = orb.update(entity);
+      if (orbOk) {
+        if (!_orbActiveLastFrame) {
+          // Transition into Orb-active: hide the stale world-space hero_car
+          // mesh so it doesn't keep rendering at its last position underneath
+          // the Orb.
+          var wslForOrb = global.SBE && SBE.WorldSpaceVehicleLayer;
+          if (wslForOrb && typeof wslForOrb.removeVehicle === 'function') {
+            try { wslForOrb.removeVehicle('hero'); } catch (e) {}
+          }
+          _orbActiveLastFrame = true;
+        }
+        _setDomMarkerHidden(true);
+        return { visible: true, kind: 'orb' };
+      }
+    }
+    if (_orbActiveLastFrame) {
+      // Transition OUT of Orb-active (renderer failed/deactivated this
+      // frame) — fall through below to Hero Car's own rungs as normal; no
+      // extra cleanup needed since upsertVehicle()/the DOM marker path both
+      // re-establish Hero Car's own visual state on the very next call.
+      _orbActiveLastFrame = false;
+    }
+
+    // 0805A — itinerary presentation: no Hero Car substitute for a failed or
+    // unhealthy Orb. Hide/clean up anything that might otherwise linger
+    // visible, and report the real state instead of silently rendering a
+    // different actor. The underlying entity position keeps flowing to
+    // ViewportLocationAuthority independent of this renderer (the caller's
+    // job, not this module's) — only the VISIBLE hero is withheld.
+    if (!allowFallback) {
+      _setDomMarkerHidden(true);
+      var wslNoFallback = global.SBE && SBE.WorldSpaceVehicleLayer;
+      if (wslNoFallback && typeof wslNoFallback.removeVehicle === 'function') {
+        try { wslNoFallback.removeVehicle('hero'); } catch (e) {}
+      }
+      return { visible: false, kind: 'none' };
+    }
 
     // ── World-space layer: continuous per-frame upsert ────────────────────────
     // Called every RAF by HeroVehicleRuntime._frame() → this IS the persistent
@@ -359,6 +451,10 @@
           scale:      1,
           visible:    !_hidden,
           source:     'hero-live',
+          // 0730E — presentation-only; WorldSpaceVehicleLayer adds this on
+          // top of its own fixed anti-z-fighting lift (never touches
+          // footprint/scale/heading).
+          altitudeMeters: entity.altitudeMeters || 0,
         };
 
         // Payload trace: capture before call so failures are inspectable
@@ -404,7 +500,7 @@
           var isCalibrationMode = (shapeMode === 'block' || shapeMode === 'slab' || shapeMode === 'wedge');
           if (!isCalibrationMode) {
             _setDomMarkerHidden(true);
-            return;   // vehicle mode: world-space handles rendering, DOM not needed
+            return { visible: true, kind: 'hero_car' };   // vehicle mode: world-space handles rendering, DOM not needed
           }
           // calibration mode: fall through so DOM marker also updates position below
         }
@@ -429,8 +525,12 @@
     }
 
     // ── DOM SVG marker fallback ───────────────────────────────────────────────
-    if (!_marker) return;
+    if (!_marker) return { visible: false, kind: 'none' };
     if (!_hidden) {
+      // _wrapEl is Mapbox's positioning target — setLngLat()/setRotation()
+      // rewrite its style.transform wholesale. Our own zoom-scale + altitude-
+      // lift transforms apply only to the nested _liftEl (0730E), so the two
+      // never fight over the same style.transform.
       _marker.setLngLat([entity.lng, entity.lat]);
       _marker.setRotation(entity.headingDeg || 0);
 
@@ -439,11 +539,15 @@
       var zoom = null;
       if (map) { try { zoom = map.getZoom(); } catch (e) {} }
       var scale = _zoomScale(zoom);
-      if (scale !== _lastScale) {
+      var altitudeMeters = entity.altitudeMeters || 0;
+      var liftPx = Math.round(altitudeMeters * LIFT_PX_PER_METER * scale);
+      if (_liftEl && (scale !== _lastScale || liftPx !== _lastLiftPx)) {
         _lastScale = scale;
-        _wrapEl.style.transform = 'scale(' + scale + ')';
+        _lastLiftPx = liftPx;
+        _liftEl.style.transform = 'translateY(-' + liftPx + 'px) scale(' + scale + ')';
       }
     }
+    return { visible: !_hidden, kind: 'hero_car' };
   }
 
   function setHidden(hidden) {
@@ -468,14 +572,16 @@
   }
 
   function stop() {
-    _active    = false;
-    _hidden    = false;
-    _lastScale = -1;
+    _active     = false;
+    _hidden     = false;
+    _lastScale  = -1;
+    _lastLiftPx = -1;
     _heroLiveValidated = false;   // re-validate registry on next session (0601B)
     if (_marker) {
       try { _marker.remove(); } catch (e) {}
       _marker = null;
       _wrapEl = null;
+      _liftEl = null;
     }
     // 0602K — stop ambient traffic when Drive ends (removes ambient actors).
     try {

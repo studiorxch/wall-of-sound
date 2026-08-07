@@ -20,9 +20,16 @@
 // comparing each field's current value against Default's value for the same
 // property id — real, derived data, not invented.
 
-import type { RegistryRecord } from "../../maps/wallPaletteBridge";
+import type { RegistryRecord } from "../../maps/wallGeographicStyleBridge";
 
-export type GeographicFieldKind = "color" | "opacity" | "boolean";
+// "number"/"select" added by 0730C (Orb Profiles) — a numeric slider with a
+// caller-supplied range/step (Orb fields span very different scales: opacity
+// 0-1, particle count 50-3000) and a labeled-option dropdown (archetype,
+// binding, contained-object primitive) — neither a color, same rationale as
+// 0729C adding opacity/boolean alongside the original color/expression/derived kinds.
+export type GeographicFieldKind = "color" | "opacity" | "boolean" | "number" | "select";
+
+export type GeographicFieldOption = { value: string; label: string };
 
 export type GeographicField = {
   propId: string;
@@ -30,6 +37,10 @@ export type GeographicField = {
   value: string;
   isExpression: boolean;
   valueKind: GeographicFieldKind;
+  // Only meaningful for valueKind "number" — the field's real, caller-defined range.
+  numberRange?: { min: number; max: number; step: number };
+  // Only meaningful for valueKind "select".
+  selectOptions?: GeographicFieldOption[];
 };
 
 export type GeographicLayerType = "fill" | "line" | "circle" | "symbol" | "background" | undefined;
@@ -43,6 +54,16 @@ export type GeographicTarget = {
   colorFields: GeographicField[];
   hasExpression: boolean;
   isCustomized: boolean;
+  // Omitted/true for every Geographic Style target (all wired properties are
+  // editable). Vehicles/Overlays records set this explicitly false for a
+  // real object with no editable fields today (e.g. Now Playing HUD,
+  // Flight Data HUD) — Grid/Rows show an explicit "Read-only" status for
+  // those instead of a blank/broken editor.
+  editable?: boolean;
+  // Orb Profiles only (0730C) — real, authority-reported active state (the
+  // one profile canonical LIVE MAP is currently rendering as its hero) shown
+  // as a genuine "Active" badge, same pattern as isCustomized above.
+  isActive?: boolean;
 };
 
 function isExpressionValue(value: unknown): boolean {

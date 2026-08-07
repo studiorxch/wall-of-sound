@@ -19,6 +19,7 @@ type Props = {
   onRestoreSuggestionsFromMechanical?: (trackId: string) => void;
   onClearSuggestedMoods?: (trackId: string) => void;
   onCreateLoops?: (trackId: string) => void;
+  onOpenInGlyph?: (trackId: string) => void;
   onExportStems?: (trackId: string) => void;
 };
 
@@ -208,6 +209,7 @@ export function TrackInspector({
   onRestoreSuggestionsFromMechanical,
   onClearSuggestedMoods,
   onCreateLoops,
+  onOpenInGlyph,
   onExportStems,
 }: Props) {
   const form = useTrackForm(track);
@@ -565,6 +567,11 @@ export function TrackInspector({
           {onCreateLoops && (
             <button className="tb-btn" onClick={() => onCreateLoops(track.trackId)} title="Open in AUDIOLAB / Looper">
               Create Loops
+            </button>
+          )}
+          {onOpenInGlyph && (
+            <button className="tb-btn" onClick={() => onOpenInGlyph(track.trackId)} title="Open in AUDIOLAB / Glyph">
+              Open in Glyph
             </button>
           )}
           {/* 0722C_MUSIC_Production_Stem_Export — the old top-level-track

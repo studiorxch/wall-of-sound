@@ -131,6 +131,7 @@
       // Shortcuts
       closeShortcuts: byId("close-shortcuts"),
       shortcutHud: byId("shortcut-hud"),
+      keyboardHelpBtn: byId("keyboard-help-btn"),
 
       // Tabs
       inspectorTabs: Array.from(

@@ -1,6 +1,12 @@
-// ── NowPlayingHud v1.0.0 ───────────────────────────────────────────────────────
+// ── NowPlayingHud v1.1.0 ───────────────────────────────────────────────────────
 // HUD Recovery Addendum (0729C v1.1)
+// 0805B_MAPS_Live_Map_Presentation_Surface_and_Shortcut_Registry
 // Status: active | Classification: observational-telemetry
+//
+// v1.1.0 (0805B): tagged with data-watch-hide so body.presentation's (Tab)
+// universal hide/restore now reaches this element too — previously it lived
+// entirely outside that mechanism (appended straight to document.body, no
+// opt-in), so Tab never hid it, a confirmed gap against this build's spec.
 //
 // Purpose:
 //   Restores the "Now Playing" HUD on canonical LIVE MAP. The prior
@@ -133,6 +139,12 @@
     _el = document.createElement('div');
     _el.id = 'wos-now-playing';
     _el.className = 'np-hidden';
+    // 0805B — opt into body.presentation's (Tab) universal hide/restore so
+    // Now Playing hides consistently with the rest of the interface instead
+    // of staying visible underneath it; a data-* attribute survives this
+    // module's own className reassignments in _render() below, unlike a
+    // plain class would.
+    _el.setAttribute('data-watch-hide', '');
     _el.innerHTML =
       '<div class="np-label"></div>' +
       '<div class="np-title"></div>' +

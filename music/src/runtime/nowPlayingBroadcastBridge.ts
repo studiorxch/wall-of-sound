@@ -3,13 +3,14 @@
 // localhost:5176/wall-app/ or standalone :5500). LIVE MAP opens in its own
 // browser tab (top-nav link, not an iframe), so there is no postMessage
 // channel to it — localStorage + the native 'storage' event is the same
-// same-origin transport wallPaletteBridge.ts/mapsPaletteAuthority.js already
-// use for cross-tab palette sync. This is a mirror, not a second authority:
-// MUSIC's playbackAuthority.ts (buildSurfaceSnapshot) remains the ONE place
-// playback state is computed; this module only serializes that snapshot to
-// a shared channel so wall/'s vanilla-JS runtime can render it. Same reason
-// mapsPaletteAuthority.js persisting to localStorage isn't a "duplicate
-// store" — it's the existing authority's own transport, not a rival one.
+// same-origin transport wallGeographicStyleBridge.ts/mapsGeographicStyleAuthority.js
+// already use for cross-tab Geographic Style sync. This is a mirror, not a
+// second authority: MUSIC's playbackAuthority.ts (buildSurfaceSnapshot)
+// remains the ONE place playback state is computed; this module only
+// serializes that snapshot to a shared channel so wall/'s vanilla-JS runtime
+// can render it. Same reason mapsGeographicStyleAuthority.js persisting to
+// localStorage isn't a "duplicate store" — it's the existing authority's own
+// transport, not a rival one.
 //
 // Same-origin only: this reaches the canonical localhost:5176/wall-app/ tab.
 // It will NOT reach the deprecated standalone localhost:5500 (different
