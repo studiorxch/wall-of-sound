@@ -30,6 +30,7 @@ import type { RadioInboxItem } from "../../data/radioInboxTypes";
 import type { RadioPlaylist, RadioEntryPreparationState } from "../../data/radioPlaylistTypes";
 import type { RadioWebExportRecord } from "../../data/radioWebBundleTypes";
 import type { RadioPromotionFormInput } from "../../data/radioLoopTypes";
+import type { PlaylistRecord } from "../../data/playProjectTypes";
 import type { PromoteLoopToRadioResult, RadioPromotionPhase } from "../../logic/radio/radioPromotionOrchestrator";
 import { buildPublishPreview } from "../../logic/radio/radioPublishPreview";
 import { estimateInboxItemBytes, summarizePlaylistStorage } from "../../logic/radio/radioStorageEstimate";
@@ -57,6 +58,7 @@ interface Props {
   radioInboxItems: RadioInboxItem[];
   libraryTracks: Track[];
   songAnalyses: CompleteSongAnalysis[];
+  sourceMusicPlaylists: PlaylistRecord[];
   loops: LoopAsset[];
   preparationStateByEntryId: Map<string, RadioEntryPreparationState>;
   radioWebExports: RadioWebExportRecord[];
@@ -80,6 +82,7 @@ function derivedLifecycleLabel(preview: ReturnType<typeof buildPublishPreview>, 
 
 export function RadioPlaylistPublishPanel({
   radioPlaylist, allRadioPlaylists, radioInboxItems, libraryTracks, songAnalyses, loops,
+  sourceMusicPlaylists,
   preparationStateByEntryId, radioWebExports,
   onUpdateRadioPlaylist, onUpdateRadioInboxItem, onPromoteToRadio, onExportedWebBundle, onClose,
 }: Props) {
@@ -104,7 +107,14 @@ export function RadioPlaylistPublishPanel({
     setPublishStage("validating");
     try {
       const result = await runOnePublishViaFetch(
-        { playlist: radioPlaylistRef.current, inboxItems: radioInboxItems, tracks: libraryTracks, analyses: songAnalyses, allPlaylists: allRadioPlaylists },
+        {
+          playlist: radioPlaylistRef.current,
+          inboxItems: radioInboxItems,
+          tracks: libraryTracks,
+          analyses: songAnalyses,
+          sourceMusicPlaylists,
+          allPlaylists: allRadioPlaylists,
+        },
         {
           onProgress: (stage) => setPublishStage(stage),
           onEntryPatch: (entryId, patch) => {
@@ -319,14 +329,17 @@ export function RadioPlaylistPublishPanel({
         </details>
 
         {showExportDialog && (
-          <RadioWebExportPreflightDialog
-            radioPlaylist={radioPlaylist}
-            entries={entries}
-            entryTrack={entryTrack}
-            preparationStateByEntryId={preparationStateByEntryId}
-            radioWebExports={radioWebExports}
-            onExported={(record) => { onExportedWebBundle(record); }}
-            onClose={() => setShowExportDialog(false)}
+        <RadioWebExportPreflightDialog
+          radioPlaylist={radioPlaylist}
+          entries={entries}
+          entryTrack={entryTrack}
+          preparationStateByEntryId={preparationStateByEntryId}
+          sourceMusicPlaylists={sourceMusicPlaylists}
+          libraryTracks={libraryTracks}
+          songAnalyses={songAnalyses}
+          radioWebExports={radioWebExports}
+          onExported={(record) => { onExportedWebBundle(record); }}
+          onClose={() => setShowExportDialog(false)}
           />
         )}
 

@@ -8,6 +8,8 @@ import type { Track } from "../../data/trackTypes";
 import type { RadioPlaylist, RadioPlaylistEntry, RadioEntryPreparationState } from "../../data/radioPlaylistTypes";
 import type { RadioTrackPackageManifest } from "../../data/radioTrackPackageTypes";
 import type { RadioWebExportRecord } from "../../data/radioWebBundleTypes";
+import type { PlaylistRecord } from "../../data/playProjectTypes";
+import type { CompleteSongAnalysis } from "../../data/songAnalysisTypes";
 import { buildWebBundlePlan, slugifyStationTitle, buildWebBundleExportRequest, type EntryPlanInput } from "../../logic/radio/radioWebBundlePlan";
 import { runWebBundleExport, exportWebBundleViaFetch } from "../../logic/radio/radioWebBundleExportOrchestrator";
 import { fetchTrackPackageManifest } from "../../logic/radio/radioTrackPreparationOrchestrator";
@@ -23,6 +25,9 @@ interface Props {
   entries: RadioPlaylistEntry[];
   entryTrack: Map<string, Track | undefined>;
   preparationStateByEntryId: Map<string, RadioEntryPreparationState>;
+  sourceMusicPlaylists: PlaylistRecord[];
+  libraryTracks: Track[];
+  songAnalyses: CompleteSongAnalysis[];
   radioWebExports: RadioWebExportRecord[];
   onExported: (record: RadioWebExportRecord) => void;
   onClose: () => void;
@@ -31,7 +36,9 @@ interface Props {
 type Phase = "preflight" | "exporting" | "unchanged" | "result";
 
 export function RadioWebExportPreflightDialog({
-  radioPlaylist, entries, entryTrack, preparationStateByEntryId, radioWebExports, onExported, onClose,
+  radioPlaylist, entries, entryTrack, preparationStateByEntryId,
+  sourceMusicPlaylists, libraryTracks, songAnalyses,
+  radioWebExports, onExported, onClose,
 }: Props) {
   const [manifestsByEntryId, setManifestsByEntryId] = useState<Map<string, RadioTrackPackageManifest>>(new Map());
   const [loadingManifests, setLoadingManifests] = useState(true);
@@ -70,8 +77,12 @@ export function RadioWebExportPreflightDialog({
       state: preparationStateByEntryId.get(entry.id) ?? "NOT_APPROVED",
       packageManifest: manifestsByEntryId.get(entry.id) ?? null,
     }));
-    return buildWebBundlePlan(radioPlaylist, inputs);
-  }, [radioPlaylist, entries, entryTrack, preparationStateByEntryId, manifestsByEntryId]);
+    return buildWebBundlePlan(radioPlaylist, inputs, {
+      sourceMusicPlaylists,
+      libraryTracks,
+      songAnalyses,
+    });
+  }, [radioPlaylist, entries, entryTrack, preparationStateByEntryId, manifestsByEntryId, sourceMusicPlaylists, libraryTracks, songAnalyses]);
 
   const previousVersion = useMemo(() => {
     const versions = radioWebExports.filter((r) => r.radioPlaylistId === radioPlaylist.id).map((r) => r.bundleVersion);

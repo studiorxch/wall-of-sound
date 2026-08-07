@@ -64,7 +64,7 @@ function baseDeps(overrides: Partial<OnePublishDeps> = {}): OnePublishDeps {
 
 function baseCtx(entries: RadioPlaylistEntry[], tracks: Track[], inboxItems: RadioInboxItem[]): OnePublishContext {
   const playlist = makePlaylist(entries);
-  return { playlist, inboxItems, tracks, analyses: [], allPlaylists: [playlist] };
+  return { playlist, inboxItems, tracks, analyses: [], sourceMusicPlaylists: [], allPlaylists: [playlist] };
 }
 
 describe("runOnePublish", () => {

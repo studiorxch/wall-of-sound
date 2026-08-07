@@ -98,6 +98,7 @@ describe("buildWebBundlePlan", () => {
     expect(plan.estimatedAudioBytes).toBe(4_200_000 + 3_000_000);
     expect(plan.estimatedTotalBytes).toBe(plan.estimatedAudioBytes);
     expect(plan.artworkAvailable).toBe(false);
+    expect(plan.readyEntries[0].sourceTrackId).toBe("t1");
   });
 
   it("counts embeddable data-url artwork toward the estimated total, but not http(s)-sourced artwork", () => {
@@ -137,8 +138,21 @@ describe("buildWebBundleExportRequest", () => {
     const request = buildWebBundleExportRequest(plan, "my-mix", undefined, false);
     expect(request).toEqual({
       stationId: "radplaylist_1", title: "My Mix", slug: "my-mix",
-      entries: [{ radioTrackId: "rtrack_000001", packageVersion: 3 }],
-      artworkDataUrl: undefined, force: false,
+      entries: [{ radioTrackId: "rtrack_000001", packageVersion: 3, djTransitionPlan: undefined, djTransitionContext: undefined }],
+      djTransitionMode: undefined,
+      artworkDataUrl: undefined,
+      force: false,
     });
+  });
+
+  it("keeps the request behavior unchanged when no bridged hint exists", () => {
+    const entry = makeEntry({ trackBinding: { radioTrackId: "rtrack_000001", packageVersion: 1, sourceTrackId: "t1", sourceAssetHash: "hash1", packageManifestHash: "mh1", boundAt: "2026-08-07T00:00:00.000Z" } });
+    const plan = buildWebBundlePlan(makePlaylist({ sourceMusicPlaylistId: "music_pl_1" }), [
+      { entry, track: makeTrack(), state: "READY", packageManifest: makeManifest() },
+    ]);
+    const request = buildWebBundleExportRequest(plan, "my-mix", undefined, false);
+    expect(request.entries[0].djTransitionPlan).toBeUndefined();
+    expect(request.entries[0].djTransitionContext).toBeUndefined();
+    expect(request.djTransitionMode).toBeUndefined();
   });
 });

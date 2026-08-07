@@ -174,23 +174,11 @@ export async function exportWebBundle(params: ExportWebBundleParams): Promise<Ra
       // build bridges RadioPlaylist entries back to PlaylistRecord slots.
       let transitionFromPrevious = null as RadioWebManifestEntry["transitionFromPrevious"];
       const requestEntry = request.entries[i];
-      if (i > 0 && request.djTransitionMode === "active" && requestEntry?.djTransitionPlan) {
-        const previous = resolved[i - 1];
+      if (i > 0 && request.djTransitionMode === "active" && requestEntry?.djTransitionPlan && requestEntry.djTransitionContext) {
         transitionFromPrevious = resolveTransitionHintForAdjacency({
           djTransitionMode: request.djTransitionMode,
           plan: requestEntry.djTransitionPlan,
-          currentOutgoingTrackId: previous.metadata.source.trackId,
-          currentIncomingTrackId: entry.metadata.source.trackId,
-          currentOutgoingSourceFingerprint: previous.metadata.sourceAssetHash,
-          currentIncomingSourceFingerprint: entry.metadata.sourceAssetHash,
-          currentAnalysisRevisionKey: `${previous.metadata.songIntelligence.revision ?? ""}::${entry.metadata.songIntelligence.revision ?? ""}`,
-          // Conservative stand-in: no region-candidate resolution is run at
-          // publish time yet, so any region-bound plan safely fails
-          // regions_invalid rather than risk a fabricated authorization. A
-          // pure-seconds plan (regionId: null on both cues) is unaffected.
-          outgoingRegionsNow: [],
-          incomingRegionsNow: [],
-          activeStemSetLostCurrency: false,
+          ...requestEntry.djTransitionContext,
         });
       }
 

@@ -21,6 +21,7 @@ import type { RadioInboxItem } from "../../data/radioInboxTypes";
 import type { RadioPlaylist, RadioPlaylistEntry, RadioTrackPackageBinding } from "../../data/radioPlaylistTypes";
 import type { RadioTrackPrepareResponse, RadioTrackVerifyResult } from "../../data/radioTrackPackageTypes";
 import type { RadioWebExportRecord } from "../../data/radioWebBundleTypes";
+import type { PlaylistRecord } from "../../data/playProjectTypes";
 import { prepareMissingAnalysesForPlaylist, type PlaylistWaveformPreparationProgress } from "../../logic/radio/radioPlaylistWaveformPreparation";
 import { computeVisibleRowRange } from "../../logic/radio/radioRowWindowing";
 import { computeEntryPreparationState, buildApprovalPatch, buildTrackPrepareRequest } from "../../logic/radio/radioEntryPreparation";
@@ -47,6 +48,7 @@ interface Props {
   radioInboxItems: RadioInboxItem[];
   libraryTracks: Track[];
   songAnalyses: CompleteSongAnalysis[];
+  sourceMusicPlaylists: PlaylistRecord[];
   radioWebExports: RadioWebExportRecord[];
   onUpdateRadioPlaylist: (id: string, patch: Partial<RadioPlaylist>) => void;
   onUpdateRadioInboxItem: (id: string, patch: Partial<RadioInboxItem>) => void;
@@ -68,6 +70,7 @@ interface BatchState {
 
 export function RadioMultiTrackPrepWorkspace({
   radioPlaylist, allRadioPlaylists, radioInboxItems, libraryTracks, songAnalyses, radioWebExports,
+  sourceMusicPlaylists,
   onUpdateRadioPlaylist, onUpdateRadioInboxItem, onExportWebBundle, looperShared, onBack, onOpenLoopchainPlayer,
 }: Props) {
   const [expandedEntryId, setExpandedEntryId] = useState<string | null>(null);
@@ -332,6 +335,7 @@ export function RadioMultiTrackPrepWorkspace({
           radioInboxItems={radioInboxItems}
           libraryTracks={libraryTracks}
           songAnalyses={songAnalyses}
+          sourceMusicPlaylists={sourceMusicPlaylists}
           loops={looperShared.loops}
           preparationStateByEntryId={preparationStateByEntryId}
           radioWebExports={radioWebExports}

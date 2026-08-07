@@ -129,6 +129,22 @@ export interface RadioWebBundleExportRequest {
     // has no server-side immutable source to re-derive it from), so it is
     // gated rather than re-derived.
     djTransitionPlan?: import("./djTransitionTypes").DjTransitionPlan;
+    // The exact current-source context the client used when resolving the
+    // plan back to a specific MUSIC slot adjacency. This is additive and
+    // request-local only — never persisted. The server reuses the same
+    // publish-time authority helper with this context rather than
+    // inventing a second gate or approximating current source state from
+    // package metadata alone.
+    djTransitionContext?: {
+      currentOutgoingTrackId: string | null;
+      currentIncomingTrackId: string | null;
+      currentOutgoingSourceFingerprint: string;
+      currentIncomingSourceFingerprint: string;
+      currentAnalysisRevisionKey: string;
+      outgoingRegionsNow: import("../logic/djTransitionRegions").TransitionRegionCandidate[];
+      incomingRegionsNow: import("../logic/djTransitionRegions").TransitionRegionCandidate[];
+      activeStemSetLostCurrency: boolean;
+    };
   }>;
   djTransitionMode?: "off" | "shadow" | "active";
   // Data-URL artwork only (no network fetch exists server-side); omitted

@@ -12,6 +12,7 @@ import type { CompleteSongAnalysis } from "../../data/songAnalysisTypes";
 import type { RadioInboxItem } from "../../data/radioInboxTypes";
 import type { RadioPlaylist, RadioEntryPreparationState } from "../../data/radioPlaylistTypes";
 import type { RadioWebExportRecord } from "../../data/radioWebBundleTypes";
+import type { PlaylistRecord } from "../../data/playProjectTypes";
 import { radioPlaylistStateLabel } from "../../logic/radio/radioPlaylistPublicationState";
 import { buildPublishPreview } from "../../logic/radio/radioPublishPreview";
 import { RadioMultiTrackPrepWorkspace, type RadioLooperSharedProps } from "./RadioMultiTrackPrepWorkspace";
@@ -39,6 +40,7 @@ interface Props {
   radioInboxItems: RadioInboxItem[];
   libraryTracks: Track[];
   songAnalyses: CompleteSongAnalysis[];
+  sourceMusicPlaylists: PlaylistRecord[];
   radioWebExports: RadioWebExportRecord[];
   onUpdateRadioPlaylist: (id: string, patch: Partial<RadioPlaylist>) => void;
   onUpdateRadioInboxItem: (id: string, patch: Partial<RadioInboxItem>) => void;
@@ -48,7 +50,7 @@ interface Props {
 }
 
 export function RadioPlaylistsView({
-  radioPlaylists, radioInboxItems, libraryTracks, songAnalyses, radioWebExports,
+  radioPlaylists, radioInboxItems, libraryTracks, songAnalyses, sourceMusicPlaylists, radioWebExports,
   onUpdateRadioPlaylist, onUpdateRadioInboxItem, onExportWebBundle, looperShared, onOpenLoopchainPlayer,
 }: Props) {
   const [openPlaylistId, setOpenPlaylistId] = useState<string | null>(null);
@@ -63,6 +65,7 @@ export function RadioPlaylistsView({
         radioInboxItems={radioInboxItems}
         libraryTracks={libraryTracks}
         songAnalyses={songAnalyses}
+        sourceMusicPlaylists={sourceMusicPlaylists}
         radioWebExports={radioWebExports}
         onUpdateRadioPlaylist={onUpdateRadioPlaylist}
         onUpdateRadioInboxItem={onUpdateRadioInboxItem}
@@ -121,6 +124,7 @@ export function RadioPlaylistsView({
           radioInboxItems={radioInboxItems}
           libraryTracks={libraryTracks}
           songAnalyses={songAnalyses}
+          sourceMusicPlaylists={sourceMusicPlaylists}
           loops={looperShared.loops}
           preparationStateByEntryId={NO_LIVE_PREPARATION_STATES}
           radioWebExports={radioWebExports}

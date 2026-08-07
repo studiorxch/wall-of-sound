@@ -24,6 +24,7 @@ import type { RadioPlaylist, RadioPlaylistEntry } from "../../data/radioPlaylist
 import type { RadioInboxItem } from "../../data/radioInboxTypes";
 import type { Track } from "../../data/trackTypes";
 import type { CompleteSongAnalysis } from "../../data/songAnalysisTypes";
+import type { PlaylistRecord } from "../../data/playProjectTypes";
 import type { RadioWebExportRecord } from "../../data/radioWebBundleTypes";
 import { computeEntryPreparationState, buildApprovalPatch, buildTrackPrepareRequest } from "./radioEntryPreparation";
 import { fetchSourceAssetHash, prepareTrackViaFetch, fetchTrackPackageManifest } from "./radioTrackPreparationOrchestrator";
@@ -85,6 +86,7 @@ export interface OnePublishContext {
   inboxItems: RadioInboxItem[];
   tracks: Track[];
   analyses: CompleteSongAnalysis[];
+  sourceMusicPlaylists: PlaylistRecord[];
   allPlaylists: RadioPlaylist[];
 }
 
@@ -195,7 +197,11 @@ export async function runOnePublish(ctx: OnePublishContext, deps: OnePublishDeps
   const planInputs: EntryPlanInput[] = readyEntries.map((e) => ({
     entry: e, track: trackFor(e), state: "READY", packageManifest: manifestByEntryId.get(e.id) ?? null,
   }));
-  const plan = buildWebBundlePlan(ctx.playlist, planInputs);
+  const plan = buildWebBundlePlan(ctx.playlist, planInputs, {
+    sourceMusicPlaylists: ctx.sourceMusicPlaylists,
+    libraryTracks: ctx.tracks,
+    songAnalyses: ctx.analyses,
+  });
   if (!plan.canExport) {
     for (const b of plan.blockers) {
       failures.push({ entryId: b.entryId ?? "", title: ctx.playlist.title, category: "export_failed", message: b.message });

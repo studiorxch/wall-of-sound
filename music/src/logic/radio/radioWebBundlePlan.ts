@@ -15,6 +15,9 @@ import type { RadioPlaylist, RadioPlaylistEntry, RadioEntryPreparationState } fr
 import type { RadioTrackId, RadioTrackPackageManifest } from "../../data/radioTrackPackageTypes";
 import type { RadioWebBundleExportRequest } from "../../data/radioWebBundleTypes";
 import type { Track } from "../../data/trackTypes";
+import type { PlaylistRecord } from "../../data/playProjectTypes";
+import type { CompleteSongAnalysis } from "../../data/songAnalysisTypes";
+import { resolveRadioExportDjTransitions } from "./radioDjTransitionBridge";
 
 export interface EntryPlanInput {
   entry: RadioPlaylistEntry;
@@ -30,10 +33,13 @@ export interface RadioWebBundlePlanEntry {
   entryId: string;
   radioTrackId: RadioTrackId;
   packageVersion: number;
+  sourceTrackId: string | null;
   title: string;
   artist: string;
   durationSeconds: number;
   byteSize: number;
+  djTransitionPlan?: NonNullable<RadioWebBundleExportRequest["entries"][number]["djTransitionPlan"]>;
+  djTransitionContext?: NonNullable<RadioWebBundleExportRequest["entries"][number]["djTransitionContext"]>;
 }
 
 export interface RadioWebBundlePlanBlocker {
@@ -68,6 +74,12 @@ export interface RadioWebBundlePlan {
   canExport: boolean;
 }
 
+export interface WebBundleTransitionBridgeInput {
+  sourceMusicPlaylists: PlaylistRecord[];
+  libraryTracks: Track[];
+  songAnalyses: CompleteSongAnalysis[];
+}
+
 const PREPARATION_STATE_LABEL: Record<RadioEntryPreparationState, string> = {
   NOT_APPROVED: "not yet approved",
   NEEDS_PREPARATION: "not yet prepared",
@@ -94,7 +106,11 @@ function estimateDataUrlBytes(dataUrl: string): number {
   return Math.floor((base64.length * 3) / 4);
 }
 
-export function buildWebBundlePlan(playlist: RadioPlaylist, inputs: EntryPlanInput[]): RadioWebBundlePlan {
+export function buildWebBundlePlan(
+  playlist: RadioPlaylist,
+  inputs: EntryPlanInput[],
+  transitionBridge?: WebBundleTransitionBridgeInput,
+): RadioWebBundlePlan {
   const ordered = [...inputs].sort((a, b) => a.entry.order - b.entry.order);
 
   const counts: RadioWebBundlePlanCounts = {
@@ -138,11 +154,28 @@ export function buildWebBundlePlan(playlist: RadioPlaylist, inputs: EntryPlanInp
       entryId: entry.id,
       radioTrackId: entry.trackBinding.radioTrackId,
       packageVersion: entry.trackBinding.packageVersion,
+      sourceTrackId: entry.trackBinding.sourceTrackId ?? null,
       title: packageManifest.display.title,
       artist: packageManifest.display.artist,
       durationSeconds: packageManifest.audio.primary.durationSeconds,
       byteSize: packageManifest.audio.primary.byteSize,
     });
+  }
+
+  if (transitionBridge && readyEntries.length > 1) {
+    const bridgedTransitions = resolveRadioExportDjTransitions(
+      playlist,
+      readyEntries.map((entry) => ({ entryId: entry.entryId, sourceTrackId: entry.sourceTrackId })),
+      transitionBridge.sourceMusicPlaylists,
+      transitionBridge.libraryTracks,
+      transitionBridge.songAnalyses,
+    );
+    for (const entry of readyEntries) {
+      const bridged = bridgedTransitions.get(entry.entryId);
+      if (!bridged) continue;
+      entry.djTransitionPlan = bridged.djTransitionPlan;
+      entry.djTransitionContext = bridged.djTransitionContext;
+    }
   }
 
   const estimatedAudioBytes = readyEntries.reduce((sum, e) => sum + e.byteSize, 0);
@@ -182,7 +215,13 @@ export function buildWebBundleExportRequest(plan: RadioWebBundlePlan, slug: stri
     stationId: plan.stationId,
     title: plan.title,
     slug,
-    entries: plan.readyEntries.map((e) => ({ radioTrackId: e.radioTrackId, packageVersion: e.packageVersion })),
+    entries: plan.readyEntries.map((e) => ({
+      radioTrackId: e.radioTrackId,
+      packageVersion: e.packageVersion,
+      djTransitionPlan: e.djTransitionPlan,
+      djTransitionContext: e.djTransitionContext,
+    })),
+    djTransitionMode: plan.readyEntries.some((entry) => entry.djTransitionPlan && entry.djTransitionContext) ? "active" : undefined,
     artworkDataUrl,
     force,
   };

@@ -6857,6 +6857,7 @@ export default function App() {
               radioInboxItems={radioInboxItems}
               libraryTracks={libraryTracks}
               songAnalyses={songAnalyses}
+              sourceMusicPlaylists={playlists}
               radioWebExports={radioWebExports}
               onUpdateRadioPlaylist={handleUpdateRadioPlaylist}
               onUpdateRadioInboxItem={handleUpdateRadioInboxItem}
