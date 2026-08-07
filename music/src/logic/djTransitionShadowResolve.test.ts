@@ -108,6 +108,7 @@ describe("resolveDjTransitionPairShadow", () => {
     expect(resolution.result.recommended.family).not.toBe("stem_assisted_transition");
     expect(resolution.preparationBridge.cleanCutAvailable).toBe(false);
     expect(resolution.preparationBridge.outgoing).toEqual({ available: false, reason: "missing_analysis" });
+    expect(resolution.existingManualPlanIsStale).toBe(false);
   });
 
   it("fails closed (no stem evidence) when the stem-set fetch itself throws", async () => {
@@ -119,5 +120,24 @@ describe("resolveDjTransitionPairShadow", () => {
     const pairs = computeAdjacentAssignedPairs(playlist, tracksById);
     const resolution = await resolveDjTransitionPairShadow(pairs[0], "pl-1", new Map());
     expect(resolution.result.recommended).toBeDefined();
+  });
+
+  it("reports an approved adjacency plan as stale when canonical resolution replaces it", async () => {
+    const tracksById = new Map([["t1", makeTrack("t1")], ["t2", makeTrack("t2")]]);
+    const playlist = makePlaylist([makeSlot("s1", 0, "t1"), makeSlot("s2", 1, "t2")]);
+    const pair = computeAdjacentAssignedPairs(playlist, tracksById)[0];
+    const initial = await resolveDjTransitionPairShadow(pair, "pl-1", new Map());
+    const staleApproved = {
+      ...initial.result.recommended,
+      origin: "manual" as const,
+      evidenceState: "approved" as const,
+      outgoingSourceFingerprint: "stale-source",
+    };
+
+    const resolution = await resolveDjTransitionPairShadow(pair, "pl-1", new Map(), staleApproved);
+
+    expect(resolution.existingManualPlanId).toBe(staleApproved.id);
+    expect(resolution.existingManualPlanIsStale).toBe(true);
+    expect(resolution.result.recommended.id).not.toBe(staleApproved.id);
   });
 });

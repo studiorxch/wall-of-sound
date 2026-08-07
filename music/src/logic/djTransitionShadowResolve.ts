@@ -119,6 +119,9 @@ export interface DjTransitionShadowResolution {
   preparationBridge: PairPreparationBridgeResult;
   preparationLineageContext: TransitionPreparationLineageContext;
   preparationLineageValidation: TransitionPreparationLineageValidation;
+  existingManualPlanId?: string;
+  existingManualPlanIsStale: boolean;
+  existingManualPlanLineageValidation?: TransitionPreparationLineageValidation;
 }
 
 // The single async entry point. Fetches stem availability for both tracks
@@ -215,5 +218,8 @@ export async function resolveDjTransitionPairShadow(
     preparationBridge,
     preparationLineageContext: proposalLineage.context,
     preparationLineageValidation: proposalLineage.validation,
+    existingManualPlanId: exactExistingPlan?.id,
+    existingManualPlanIsStale: existingManualPlanIsStale ?? false,
+    existingManualPlanLineageValidation: existingLineage?.validation,
   };
 }

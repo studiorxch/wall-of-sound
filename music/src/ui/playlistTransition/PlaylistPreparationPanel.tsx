@@ -370,20 +370,27 @@ function DjPairRow({
   const incomingLineage = plan.incomingCue.preparationLineage;
   const outgoingPreparation = preparationBridge.outgoing.available ? preparationBridge.outgoing.candidates.MIX_OUT : null;
   const incomingPreparation = preparationBridge.incoming.available ? preparationBridge.incoming.candidates.MAIN_ENTRY : null;
+  const currentApprovedPlan = approvedPlan
+    && entry.resolution.existingManualPlanId === approvedPlan.id
+    && !entry.resolution.existingManualPlanIsStale
+    && plan.id === approvedPlan.id
+    ? approvedPlan
+    : null;
+  const currentLiveDiagnostics = currentApprovedPlan ? liveDiagnostics : null;
 
   return (
     <div className="ptp-row ptp-dj-row">
       <div className="ptp-row-main" onClick={onToggle}>
         <span>{pairLabel}</span>
         <span>{FAMILY_LABEL[plan.family]}</span>
-        <span className="ptp-status">{approvedPlan ? "Approved" : TRUST_LABEL[plan.trust]}</span>
+        <span className="ptp-status">{currentApprovedPlan ? "Approved" : TRUST_LABEL[plan.trust]}</span>
       </div>
       {expanded && (
         <div className="ptp-row-detail ptp-dj-detail">
           <div><strong>Pair:</strong> {pair.outgoingTrack.title} ({pair.outgoingSlot.slotId}) → {pair.incomingTrack.title} ({pair.incomingSlot.slotId})</div>
           <div><strong>Legacy strategy:</strong> {legacyStrategy}{legacyPrepExists && legacyPrepStale ? " (stale)" : ""}</div>
           <div><strong>DJ family / technique:</strong> {FAMILY_LABEL[plan.family]} · {plan.timeBasis} basis · {plan.doNotLayer ? "Do Not Layer" : "Layered"}</div>
-          <div><strong>Confidence / authority:</strong> {TRUST_LABEL[plan.trust]} · evidence state: {approvedPlan?.evidenceState ?? plan.evidenceState}</div>
+          <div><strong>Confidence / authority:</strong> {TRUST_LABEL[plan.trust]} · evidence state: {currentApprovedPlan?.evidenceState ?? plan.evidenceState}</div>
           <div>
             <strong>Selected regions:</strong> out={plan.outgoingCue.regionId ?? "none"} ({outgoingRegions.find((r) => r.regionId === plan.outgoingCue.regionId)?.role ?? "n/a"}) ·
             in={plan.incomingCue.regionId ?? "none"} ({incomingRegions.find((r) => r.regionId === plan.incomingCue.regionId)?.role ?? "n/a"})
@@ -427,15 +434,20 @@ function DjPairRow({
           {plan.warnings.length > 0 && <div className="ptp-warnings"><strong>Warnings:</strong> {plan.warnings.join(", ")}</div>}
           {plan.explanation.length > 0 && <div>{plan.explanation.join(" ")}</div>}
 
-          {canApprove && proposalApprovable && !approvedPlan && (
+          {approvedPlan && !currentApprovedPlan && entry.resolution.existingManualPlanLineageValidation?.usesPreparation && !entry.resolution.existingManualPlanLineageValidation.valid && (
+            <div className="ptp-dj-hint">
+              preparation_lineage_invalid — {entry.resolution.existingManualPlanLineageValidation.reason}
+            </div>
+          )}
+          {canApprove && proposalApprovable && !currentApprovedPlan && (
             <button className="tb-btn ptp-dj-approve-btn" onClick={(e) => { e.stopPropagation(); onApprove(plan); }}>
               Approve for Active Execution
             </button>
           )}
-          {canApprove && isSupportedFamily && preparationDerived && !proposalApprovable && !approvedPlan && (
+          {canApprove && isSupportedFamily && preparationDerived && !proposalApprovable && !currentApprovedPlan && (
             <div className="ptp-dj-hint">{preparationLineageValidation.reason}</div>
           )}
-          {approvedPlan && <div className="ptp-dj-approved-note">Approved {approvedPlan.approvedAt} — eligible for active-mode execution while current.</div>}
+          {currentApprovedPlan && <div className="ptp-dj-approved-note">Approved {currentApprovedPlan.approvedAt} — eligible for active-mode execution while current.</div>}
           {canApprove && !isSupportedFamily && (
             <div className="ptp-dj-hint">Family "{FAMILY_LABEL[plan.family]}" has no implemented execution path yet — cannot be approved for active execution.</div>
           )}
@@ -443,13 +455,13 @@ function DjPairRow({
           {djTransitionMode === "active" && (
             <div className="ptp-dj-live">
               <strong>Live authorization:</strong>{" "}
-              {liveDiagnostics ? (
+              {currentLiveDiagnostics ? (
                 <>
-                  {AUTHORITY_GATE_LABEL[liveDiagnostics.gate] ?? liveDiagnostics.gate} — {liveDiagnostics.reason}
-                  {liveDiagnostics.compiledStrategy && <> · compiled: {liveDiagnostics.compiledStrategy}</>}
-                  {liveDiagnostics.executed && <> · executed via DJ path</>}
-                  {liveDiagnostics.executionFailureReason && <> · execution issue: {liveDiagnostics.executionFailureReason}</>}
-                  {liveDiagnostics.legacyExecutedInstead && <> · legacy transition executed instead</>}
+                  {AUTHORITY_GATE_LABEL[currentLiveDiagnostics.gate] ?? currentLiveDiagnostics.gate} — {currentLiveDiagnostics.reason}
+                  {currentLiveDiagnostics.compiledStrategy && <> · compiled: {currentLiveDiagnostics.compiledStrategy}</>}
+                  {currentLiveDiagnostics.executed && <> · executed via DJ path</>}
+                  {currentLiveDiagnostics.executionFailureReason && <> · execution issue: {currentLiveDiagnostics.executionFailureReason}</>}
+                  {currentLiveDiagnostics.legacyExecutedInstead && <> · legacy transition executed instead</>}
                 </>
               ) : (
                 "Not yet evaluated live (playback hasn't reached this pair)."
