@@ -23,6 +23,7 @@ export type TransitionTimeBasis = "phrase" | "bar" | "beat" | "seconds";
 // invent bars. A `0` bpm anywhere in evidence feeding this family means "no
 // useful rhythmic tempo was established," never a literal measurement.
 export type TransitionFamily =
+  | "phrase_level_blend"
   | "phrase_eq_blend"
   | "short_rhythmic_blend"
   | "loop_assisted_handoff"

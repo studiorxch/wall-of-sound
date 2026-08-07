@@ -50,6 +50,33 @@ function context(): TransitionPreparationLineageContext {
   return { outgoing: snapshot("outgoing"), incoming: snapshot("incoming") };
 }
 
+function phrasePlan(): DjTransitionPlan {
+  return {
+    ...plan(),
+    family: "phrase_level_blend",
+    timeBasis: "phrase",
+    overlapBars: 16,
+    overlapSeconds: 6.4,
+    incomingCue: {
+      ...plan().incomingCue,
+      preparationLineage: { ...incomingReference, role: "FULL_ENTRY" },
+    },
+  };
+}
+
+function phraseContext(): TransitionPreparationLineageContext {
+  const current = context();
+  current.outgoing = {
+    ...current.outgoing!, cueBarIndex: 32, manuallyConfirmedGroupings: [32, 16, 8, 4],
+    availableRunwayBars: 32, groupingDurationSeconds: { 16: 6.4 }, availableAudioSeconds: 40,
+  };
+  current.incoming = {
+    ...current.incoming!, role: "FULL_ENTRY", cueBarIndex: 16, manuallyConfirmedGroupings: [16, 8, 4],
+    availableRunwayBars: 48, groupingDurationSeconds: { 16: 5.8 }, availableAudioSeconds: 50,
+  };
+  return current;
+}
+
 describe("transition preparation lineage", () => {
   it("accepts exact MIX_OUT to MAIN_ENTRY lineage", () => {
     expect(validateTransitionPreparationLineage(plan(), context())).toEqual({
@@ -84,5 +111,19 @@ describe("transition preparation lineage", () => {
     const secondsChanged = context();
     secondsChanged.outgoing = { ...secondsChanged.outgoing!, cueFrame: 12_900, projectedCueSeconds: 12.9 };
     expect(validateTransitionPreparationLineage(plan(), secondsChanged)).toMatchObject({ failure: "cue_seconds_mismatch" });
+  });
+
+  it("revalidates phrase roles, manual grouping, runway, source duration, and outgoing-clock duration", () => {
+    expect(validateTransitionPreparationLineage(phrasePlan(), phraseContext())).toMatchObject({ valid: true });
+    const insufficientRunway = phraseContext();
+    insufficientRunway.incoming = { ...insufficientRunway.incoming!, availableRunwayBars: 15 };
+    expect(validateTransitionPreparationLineage(phrasePlan(), insufficientRunway)).toMatchObject({ valid: false, side: "incoming" });
+    const inferredOnly = phraseContext();
+    inferredOnly.outgoing = { ...inferredOnly.outgoing!, manuallyConfirmedGroupings: [8, 4] };
+    expect(validateTransitionPreparationLineage(phrasePlan(), inferredOnly)).toMatchObject({ valid: false, side: "outgoing" });
+    const tooShort = phraseContext();
+    tooShort.incoming = { ...tooShort.incoming!, availableAudioSeconds: 6.3 };
+    expect(validateTransitionPreparationLineage(phrasePlan(), tooShort)).toMatchObject({ valid: false, failure: "preparation_invalid" });
+    expect(validateTransitionPreparationLineage({ ...phrasePlan(), overlapSeconds: 6.5 }, phraseContext())).toMatchObject({ valid: false });
   });
 });

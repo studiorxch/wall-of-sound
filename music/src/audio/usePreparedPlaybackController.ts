@@ -36,7 +36,7 @@ import { selectDjTransitionRegions } from "../logic/djTransitionRegions";
 import { sourceFingerprintFor, analysisRevisionMarkerFor } from "../logic/djTransitionShadowResolve";
 import { evaluateDjTransitionAuthority, type DjTransitionAuthorityGateName } from "../logic/djTransitionAuthorityGate";
 import { resolveTransitionPreparationLineageContext } from "../logic/djTransitionPreparationLineage";
-import { compileDjTransition, executeCompiledDjTransition, type DjTransitionExecutionStrategy } from "./djTransitionPlayback";
+import { compileDjTransition, executeCompiledDjTransition, projectCompiledTransitionOntoLegacyPlan, type DjTransitionExecutionStrategy } from "./djTransitionPlayback";
 import {
   authorizeManualDeckGainWrite,
   clampPerformanceGain,
@@ -409,12 +409,17 @@ export function usePreparedPlaybackController(params: PreparedPlaybackController
     // DJ Transition Engine (0722D) §3 — the full authority gate evaluated
     // synchronously, immediately before any engine mutation. Re-derives
     // evidence/regions from CURRENTLY in-memory track data (no I/O — stem
-    // availability is intentionally passed as {} here, since the only
-    // family this build can execute, clean_cut, never depends on stems;
+    // availability is intentionally passed as {} here, since neither
+    // executable family in this build depends on stems;
     // see djTransitionAuthorityGate.ts's own header comment for why a
     // synchronous re-check is correct here rather than a fresh async
     // resolution).
-    function evaluateDjAuthorizationForLegacyPlan(legacyPlan: PlaylistTransitionPlan, activeDeckId: "A" | "B", incomingDeckId: "A" | "B") {
+    function evaluateDjAuthorizationForLegacyPlan(
+      legacyPlan: PlaylistTransitionPlan,
+      activeDeckId: "A" | "B",
+      incomingDeckId: "A" | "B",
+      readiness: "live" | "schedule" = "live",
+    ) {
       const outgoingTrack = tracksById.get(legacyPlan.fromTrackId);
       const incomingTrack = tracksById.get(legacyPlan.toTrackId);
       const djPlan = djTransitionPlans.find((p) => p.outgoingSlotId === legacyPlan.fromSlotId && p.incomingSlotId === legacyPlan.toSlotId);
@@ -452,8 +457,8 @@ export function usePreparedPlaybackController(params: PreparedPlaybackController
       // current state strings, never a pre-collapsed boolean, so the gate
       // itself stays the one place that decides what "ready" means for
       // each side.
-      const outgoingDeckState = deckStates[activeDeckId].state;
-      const incomingDeckState = deckStates[incomingDeckId].state;
+      const outgoingDeckState = readiness === "schedule" ? "playing" : deckStates[activeDeckId].state;
+      const incomingDeckState = readiness === "schedule" ? "ready" : deckStates[incomingDeckId].state;
 
       const authorization = evaluateDjTransitionAuthority({
         djTransitionMode, plan: djPlan,
@@ -462,8 +467,7 @@ export function usePreparedPlaybackController(params: PreparedPlaybackController
         currentIncomingSourceFingerprint: sourceFingerprintFor(incomingTrack, incomingSongAnalysis),
         currentAnalysisRevisionKey: `${analysisRevisionMarkerFor(outgoingTrack)}::${analysisRevisionMarkerFor(incomingTrack)}`,
         outgoingRegionsNow, incomingRegionsNow,
-        // clean_cut, the only supported family, never touches stems — always
-        // false is the honest value for this family, not a guess.
+        // Neither supported family touches stems, so false is authoritative.
         activeStemSetLostCurrency: false,
         preparationLineageValidation: preparationLineage?.validation,
         outgoingDeckState, incomingDeckState,
@@ -606,6 +610,21 @@ export function usePreparedPlaybackController(params: PreparedPlaybackController
         setSession((s) => (s ? { ...s, status: "transitioning", activeTransitionId: djPlanId, runtimeFallback: undefined } : s));
         recordDjDiagnostics({});
         void (async () => {
+          if (compiled.strategy === "phrase_level_blend_equal_power") {
+            const outcome = await executeCompiledDjTransition(eng, compiled, activeDeckId, incomingDeckId, trigger, plan);
+            if (outcome.executed) {
+              recordDjDiagnostics({ executed: true });
+              promoteAfterTransition(plan, activeDeckId, incomingDeckId);
+              return;
+            }
+            recordDjDiagnostics({ executed: false, executionFailureReason: outcome.reason ?? "unknown", legacyExecutedInstead: false });
+            eng.stopAll();
+            setAuthority("standard_player");
+            emitEvent({ type: "authority_released", from: "dual_deck_engine", reason: "dj_transition_failed" });
+            setSession((s) => (s ? { ...s, status: "error", fallbackReason: "dj_transition_failed", runtimeFallback: "stopped" } : s));
+            onHandoffToStandard();
+            return;
+          }
           const result = await runDjHardCutWithRetry(compiled, activeDeckId, incomingDeckId, trigger);
           if (result.executed) {
             recordDjDiagnostics({ executed: true });
@@ -727,9 +746,13 @@ export function usePreparedPlaybackController(params: PreparedPlaybackController
       const activeDeckId = session.activeDeckId;
       const incomingDeckId = session.incomingDeckId;
       const currentTime = engine.getCurrentTime(activeDeckId);
+      const scheduleResolution = evaluateDjAuthorizationForLegacyPlan(plan, activeDeckId, incomingDeckId, "schedule");
+      const effectivePlan = scheduleResolution.authorization.authorized && scheduleResolution.compiled?.compiled && scheduleResolution.compiled.strategy === "phrase_level_blend_equal_power"
+        ? projectCompiledTransitionOntoLegacyPlan(scheduleResolution.compiled, plan)
+        : plan;
 
       // Preload (§9)
-      if (preloadedForRef.current !== plan.transitionId && shouldPreloadNextTrack(currentTime, plan, DEFAULT_PRELOAD_LEAD_SECONDS)) {
+      if (preloadedForRef.current !== plan.transitionId && shouldPreloadNextTrack(currentTime, effectivePlan, DEFAULT_PRELOAD_LEAD_SECONDS)) {
         const toTrack = tracksById.get(plan.toTrackId);
         const toSlot = slotsById.get(plan.toSlotId);
         const url = toTrack ? resolveTrackUrl(toTrack) : null;
@@ -737,7 +760,7 @@ export function usePreparedPlaybackController(params: PreparedPlaybackController
           preloadedForRef.current = plan.transitionId;
           engine.preload(incomingDeckId, {
             trackId: toTrack.trackId, slotId: toSlot.slotId, sourceUrl: url,
-            cueStartSeconds: plan.incomingCueSeconds,
+            cueStartSeconds: effectivePlan.incomingCueSeconds,
           }).catch(() => {
             setSession((s) => (s ? { ...s, fallbackReason: "source_error" } : s));
           });
@@ -748,10 +771,10 @@ export function usePreparedPlaybackController(params: PreparedPlaybackController
       // path is wired separately (engine-lifecycle effect's onDeckEnded
       // subscription), sharing this SAME runTransitionForPlan function via
       // executeTransitionRef.
-      if (transitionRunningForRef.current !== plan.transitionId && currentTime >= plan.outgoingCueSeconds) {
+      if (transitionRunningForRef.current !== plan.transitionId && currentTime >= effectivePlan.outgoingCueSeconds) {
         runTransitionForPlan(plan, "scheduled");
       } else if (transitionRunningForRef.current === plan.transitionId) {
-        const liveProgress = engine.transitionProgress(activeDeckId, plan);
+        const liveProgress = engine.transitionProgress(activeDeckId, effectivePlan);
         setSession((s) => (s ? { ...s, transitionProgress: liveProgress } : s));
         // Deterministic mid-transition pause trigger — fires from this SAME
         // tick, eliminating the real-time-polling race entirely.

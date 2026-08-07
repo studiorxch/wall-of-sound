@@ -28,6 +28,8 @@ export interface PreparationCueCandidate {
   barIndex: number | null;
   runwayBars: number;
   alignedGroupings: DjPhraseBars[];
+  groupingDurationSeconds?: Partial<Record<DjPhraseBars, number>>;
+  availableAudioSeconds: number;
   transitionCue: TransitionCue;
 }
 
@@ -46,6 +48,14 @@ export interface PairPreparationBridgeResult {
   incoming: TrackPreparationBridgeResult;
   cleanCutAvailable: boolean;
   commonRunwayBars: DjPhraseBars | null;
+  phraseLevelBlend?: PhraseLevelBlendCandidate | null;
+}
+
+export interface PhraseLevelBlendCandidate {
+  outgoing: PreparationCueCandidate;
+  incoming: PreparationCueCandidate;
+  runwayBars: DjPhraseBars;
+  overlapSeconds: number;
 }
 
 export function transitionPlanUsesPreparation(plan: DjTransitionPlan): boolean {
@@ -126,12 +136,18 @@ export function resolveApprovedTrackPreparation(
     }
     cueIds.add(cue.id);
     const barIndex = cue.barIndex ?? lastIndexAtOrBefore(activeGrid.grid.barFrames, cue.frame);
+    const cueIsOnBarBoundary = barIndex != null && activeGrid.grid.barFrames[barIndex] === cue.frame;
     const alignedGroupings = preparation.phraseGrid!.boundaries
-      .filter((boundary) => boundary.barIndex === barIndex && boundary.provenance === "manually_confirmed")
+      .filter((boundary) => cueIsOnBarBoundary && boundary.barIndex === barIndex && boundary.provenance === "manually_confirmed")
       .map((boundary) => boundary.groupingBars)
       .filter((grouping, index, values) => values.indexOf(grouping) === index)
       .sort((a, b) => b - a);
-    const runwayBars = barIndex == null ? 0 : Math.max(0, activeGrid.grid.barFrames.length - barIndex);
+    const runwayBars = barIndex == null ? 0 : Math.max(0, activeGrid.grid.barFrames.length - 1 - barIndex);
+    const groupingDurationSeconds: Partial<Record<DjPhraseBars, number>> = {};
+    for (const grouping of alignedGroupings) {
+      const endFrame = barIndex == null ? undefined : activeGrid.grid.barFrames[barIndex + grouping];
+      if (endFrame != null && endFrame > cue.frame) groupingDurationSeconds[grouping] = (endFrame - cue.frame) / analysis.sampleRate;
+    }
     candidates[role] = {
       role,
       seconds: cue.frame / analysis.sampleRate,
@@ -139,6 +155,8 @@ export function resolveApprovedTrackPreparation(
       barIndex: barIndex ?? null,
       runwayBars,
       alignedGroupings,
+      groupingDurationSeconds,
+      availableAudioSeconds: Math.max(0, (analysis.decodedFrameCount - cue.frame) / analysis.sampleRate),
       transitionCue: {
         seconds: cue.frame / analysis.sampleRate,
         beatIndex: cue.beatIndex ?? null,
@@ -193,5 +211,22 @@ export function bridgeApprovedPreparationPair(
       outgoingCue.runwayBars >= grouping &&
       incomingCue.runwayBars >= grouping) ?? null;
   }
-  return { outgoing, incoming, cleanCutAvailable, commonRunwayBars };
+  let phraseLevelBlend: PhraseLevelBlendCandidate | null = null;
+  if (outgoing.available && incoming.available) {
+    const outgoingCue = outgoing.candidates.MIX_OUT;
+    for (const grouping of [32, 16, 8, 4] as const) {
+      if (!outgoingCue.alignedGroupings.includes(grouping) || outgoingCue.runwayBars < grouping) continue;
+      const overlapSeconds = outgoingCue.groupingDurationSeconds?.[grouping];
+      if (!overlapSeconds || overlapSeconds <= 0) continue;
+      for (const role of ["FULL_ENTRY", "SHORT_ENTRY"] as const) {
+        const incomingCue = incoming.candidates[role];
+        if (!incomingCue.alignedGroupings.includes(grouping) || incomingCue.runwayBars < grouping) continue;
+        if (incomingCue.availableAudioSeconds < overlapSeconds) continue;
+        phraseLevelBlend = { outgoing: outgoingCue, incoming: incomingCue, runwayBars: grouping, overlapSeconds };
+        break;
+      }
+      if (phraseLevelBlend) break;
+    }
+  }
+  return { outgoing, incoming, cleanCutAvailable, commonRunwayBars, phraseLevelBlend };
 }

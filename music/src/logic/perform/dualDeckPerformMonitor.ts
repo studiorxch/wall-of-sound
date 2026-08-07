@@ -4,6 +4,7 @@ import { compileDjTransition, type DjTransitionExecutionStrategy } from "../../a
 import type { CompleteSongAnalysis, SongWaveformSummary } from "../../data/songAnalysisTypes";
 import type { CuePoint, Track } from "../../data/trackTypes";
 import type { DjTransitionPlan, TransitionCue } from "../../data/djTransitionTypes";
+import type { DjPreparationCueRole, DjPhraseBars } from "../../data/djTrackPreparationTypes";
 import type { PlaylistRecord } from "../../data/playProjectTypes";
 import type { DjTransitionMode } from "../djTransitionModeStorage";
 import { evaluateDjTransitionAuthority, type DjTransitionAuthorityResult } from "../djTransitionAuthorityGate";
@@ -37,6 +38,11 @@ export interface PerformTransitionMonitor {
   stale: boolean | null;
   authority: DjTransitionAuthorityResult | null;
   compiledStrategy: DjTransitionExecutionStrategy | null;
+  runwayBars: DjPhraseBars | null;
+  transitionProgress: number | null;
+  remainingBars: number | null;
+  outgoingCueRole: DjPreparationCueRole | null;
+  incomingCueRole: DjPreparationCueRole | null;
   actualExecution: "active" | "legacy_fallback" | "not_executed";
   actualExecutionAdjacency: string | null;
   actualExecutionReason: string | null;
@@ -165,7 +171,11 @@ export function buildDualDeckPerformMonitor(input: BuildDualDeckPerformMonitorIn
   if (!hasExactLiveAdjacency || !outgoing || !incoming) {
     return {
       decks: { A: resolvedA.model, B: resolvedB.model },
-      transition: { adjacency: null, plan: null, stale: null, authority: null, compiledStrategy: null, ...actual },
+      transition: {
+        adjacency: null, plan: null, stale: null, authority: null, compiledStrategy: null,
+        runwayBars: null, transitionProgress: input.session?.transitionProgress ?? null, remainingBars: null,
+        outgoingCueRole: null, incomingCueRole: null, ...actual,
+      },
     };
   }
 
@@ -207,6 +217,8 @@ export function buildDualDeckPerformMonitor(input: BuildDualDeckPerformMonitorIn
     incomingDeckState: incomingState!.state,
   });
   const compilation = plan ? compileDjTransition(plan) : null;
+  const runwayBars = plan?.family === "phrase_level_blend" ? plan.overlapBars as DjPhraseBars : null;
+  const transitionProgress = input.session?.transitionProgress ?? null;
 
   outgoing.model.transitionCue = plan?.outgoingCue ?? null;
   incoming.model.transitionCue = plan?.incomingCue ?? null;
@@ -225,6 +237,11 @@ export function buildDualDeckPerformMonitor(input: BuildDualDeckPerformMonitorIn
       stale,
       authority,
       compiledStrategy: compilation?.compiled ? compilation.strategy : null,
+      runwayBars,
+      transitionProgress,
+      remainingBars: runwayBars != null && transitionProgress != null ? runwayBars * (1 - transitionProgress) : null,
+      outgoingCueRole: plan?.outgoingCue.preparationLineage?.role ?? null,
+      incomingCueRole: plan?.incomingCue.preparationLineage?.role ?? null,
       ...actual,
     },
   };

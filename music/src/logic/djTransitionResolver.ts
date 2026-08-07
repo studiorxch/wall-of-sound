@@ -103,6 +103,50 @@ export function resolveDjTransition(input: ResolveDjTransitionInput): ResolveDjT
     return { recommended: existingManualPlan, alternatives: [], rejectedCandidates: [] };
   }
 
+  const preparedBlend = preparationBridge?.phraseLevelBlend;
+  if (preparedBlend) {
+    const recommended = buildPlan({
+      playlistId, outgoingSlot, incomingSlot, outgoingTrack, incomingTrack, analysisRevisionKey, nowIso, idFactory,
+      family: "phrase_level_blend", trust: "manually_authored", timeBasis: "phrase",
+      outgoingCue: preparedBlend.outgoing.transitionCue,
+      incomingCue: preparedBlend.incoming.transitionCue,
+      overlapBars: preparedBlend.runwayBars,
+      overlapSeconds: preparedBlend.overlapSeconds,
+      tempoAdjustmentPercentA: 0,
+      tempoAdjustmentPercentB: 0,
+      pulseRatio: null,
+      doNotLayer: false,
+      warnings: [],
+      explanation: [
+        `Approved preparation supplied a ${preparedBlend.runwayBars}-bar level-only blend from MIX_OUT to ${preparedBlend.incoming.role}.`,
+        "Both entries are manually confirmed phrase boundaries; the equal-power envelope follows the outgoing grid clock without claiming continuing beat synchronization.",
+      ],
+      automation: buildDjTransitionAutomationDefaults({ family: "phrase_level_blend", bassTransferProgress: null }),
+      evidenceState: "proposed",
+      outgoingSourceFingerprint: outgoing(evidence).sourceFingerprint,
+      incomingSourceFingerprint: incoming(evidence).sourceFingerprint,
+    });
+    const cleanCutCues = cleanCutCuesFromPreparation(preparationBridge)!;
+    const cleanCut = buildPlan({
+      playlistId, outgoingSlot, incomingSlot, outgoingTrack, incomingTrack, analysisRevisionKey, nowIso, idFactory,
+      family: "clean_cut", trust: "manually_authored", timeBasis: "seconds",
+      outgoingCue: cleanCutCues.outgoing,
+      incomingCue: cleanCutCues.incoming,
+      overlapBars: null,
+      overlapSeconds: 0,
+      tempoAdjustmentPercentA: 0,
+      tempoAdjustmentPercentB: 0,
+      pulseRatio: null,
+      doNotLayer: true,
+      warnings: [],
+      explanation: ["Alternative: approved preparation MIX_OUT to MAIN_ENTRY clean cut."],
+      evidenceState: "proposed",
+      outgoingSourceFingerprint: outgoing(evidence).sourceFingerprint,
+      incomingSourceFingerprint: incoming(evidence).sourceFingerprint,
+    });
+    return { recommended, alternatives: [cleanCut], rejectedCandidates };
+  }
+
   // Step 1b — insufficient evidence to resolve anything at all.
   if (outgoing(evidence).durationSeconds.value == null || incoming(evidence).durationSeconds.value == null || outgoingRegions.length === 0 || incomingRegions.length === 0) {
     const plan = buildPlan({

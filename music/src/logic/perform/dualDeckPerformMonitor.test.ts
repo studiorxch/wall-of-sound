@@ -187,4 +187,25 @@ describe("buildDualDeckPerformMonitor", () => {
     expect(runtimeFallback.transition.actualExecution).toBe("legacy_fallback");
     expect(runtimeFallback.transition.actualExecutionReason).toBe("plan_unsynced");
   });
+
+  it("projects phrase blend runway and remaining bars from actual runtime progress", () => {
+    const base = input();
+    const phrase = plan({
+      family: "phrase_level_blend", timeBasis: "phrase", overlapBars: 16, overlapSeconds: 12.8,
+      outgoingCue: { ...plan().outgoingCue, preparationLineage: {
+        preparationId: "prep-a", preparationRevisionKey: "rev-a", cueId: "cue-a", role: "MIX_OUT", basisGridRevisionId: "grid-a",
+      } },
+      incomingCue: { ...plan().incomingCue, preparationLineage: {
+        preparationId: "prep-b", preparationRevisionKey: "rev-b", cueId: "cue-b", role: "FULL_ENTRY", basisGridRevisionId: "grid-b",
+      } },
+    });
+    const session = { ...base.session!, status: "transitioning" as const, transitionProgress: 0.25 };
+    const result = buildDualDeckPerformMonitor(input({ playlist: { ...base.playlist!, djTransitionPlans: [phrase] }, session }));
+    expect(result.transition).toMatchObject({
+      compiledStrategy: "phrase_level_blend_equal_power", runwayBars: 16, transitionProgress: 0.25,
+      remainingBars: 12, outgoingCueRole: "MIX_OUT", incomingCueRole: "FULL_ENTRY",
+    });
+    expect(result.decks.A.state.gain).toBe(0.82);
+    expect(result.decks.B.state.gain).toBe(0);
+  });
 });

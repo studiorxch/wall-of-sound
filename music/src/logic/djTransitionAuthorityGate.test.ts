@@ -125,8 +125,8 @@ describe("evaluateDjTransitionAuthority", () => {
     }
   });
 
-  it("confirms clean_cut is the only family in the supported whitelist at this checkpoint", () => {
-    expect([...SUPPORTED_ACTIVE_TRANSITION_FAMILIES]).toEqual(["clean_cut"]);
+  it("whitelists only clean_cut and phrase_level_blend at this checkpoint", () => {
+    expect([...SUPPORTED_ACTIVE_TRANSITION_FAMILIES]).toEqual(["clean_cut", "phrase_level_blend"]);
   });
 
   describe("deck-specific readiness — outgoing and incoming are NOT the same predicate", () => {
@@ -158,6 +158,12 @@ describe("evaluateDjTransitionAuthority", () => {
       const result = evaluateDjTransitionAuthority(baseContext({ outgoingDeckState: "ended", incomingDeckState: "ready" }));
       expect(result.authorized).toBe(true);
       expect(result.gate).toBe("authorized");
+    });
+
+    it("requires a live outgoing clock for phrase_level_blend", () => {
+      const phrasePlan = makePlan({ family: "phrase_level_blend" });
+      expect(evaluateDjTransitionAuthority(baseContext({ plan: phrasePlan, outgoingDeckState: "playing" })).gate).toBe("authorized");
+      expect(evaluateDjTransitionAuthority(baseContext({ plan: phrasePlan, outgoingDeckState: "ended" })).gate).toBe("outgoing_deck_not_ready");
     });
 
     it("fails with a precise outgoing_deck_not_ready gate — never broadened to also mask an incoming-deck problem", () => {

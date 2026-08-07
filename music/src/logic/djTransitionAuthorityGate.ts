@@ -24,7 +24,7 @@ import type { TransitionRegionCandidate } from "./djTransitionRegions";
 // today belongs here; adding a family to this set without a real compiled
 // execution path in djTransitionPlayback.ts would be exactly the "partial
 // fake wiring" this build must not do.
-export const SUPPORTED_ACTIVE_TRANSITION_FAMILIES: ReadonlySet<TransitionFamily> = new Set(["clean_cut"]);
+export const SUPPORTED_ACTIVE_TRANSITION_FAMILIES: ReadonlySet<TransitionFamily> = new Set(["clean_cut", "phrase_level_blend"]);
 
 // Deck-specific readiness predicates — deliberately NOT a single shared
 // gate. The outgoing and incoming decks have genuinely different
@@ -50,6 +50,10 @@ export function isOutgoingDeckReadyForCleanCut(state: DeckPlaybackState): boolea
 // there is no state other than "ready" or "playing" from which a deck can
 // receive control.
 export function isIncomingDeckReadyToStart(state: DeckPlaybackState): boolean {
+  return state === "ready" || state === "playing";
+}
+
+export function isOutgoingDeckReadyForLevelBlend(state: DeckPlaybackState): boolean {
   return state === "ready" || state === "playing";
 }
 
@@ -144,8 +148,12 @@ export function evaluateDjTransitionAuthority(ctx: DjTransitionAuthorityContext)
 
   // Checked with two distinct predicates, not one shared gate — see the
   // header comment on isOutgoingDeckReadyForCleanCut/isIncomingDeckReadyToStart.
-  if (!isOutgoingDeckReadyForCleanCut(ctx.outgoingDeckState)) {
-    return { authorized: false, gate: "outgoing_deck_not_ready", reason: `Outgoing deck state is "${ctx.outgoingDeckState}" — not ready, playing, or naturally ended.` };
+  const outgoingReady = plan.family === "phrase_level_blend"
+    ? isOutgoingDeckReadyForLevelBlend(ctx.outgoingDeckState)
+    : isOutgoingDeckReadyForCleanCut(ctx.outgoingDeckState);
+  if (!outgoingReady) {
+    const expected = plan.family === "phrase_level_blend" ? "ready or playing" : "ready, playing, or naturally ended";
+    return { authorized: false, gate: "outgoing_deck_not_ready", reason: `Outgoing deck state is "${ctx.outgoingDeckState}" — not ${expected}.` };
   }
   if (!isIncomingDeckReadyToStart(ctx.incomingDeckState)) {
     return {

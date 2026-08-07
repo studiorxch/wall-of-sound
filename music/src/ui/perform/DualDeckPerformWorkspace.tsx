@@ -85,6 +85,10 @@ export function DualDeckPerformWorkspace({ monitor, manualGainEnabled, onSetDeck
           <span>Currency</span><strong>{transition.stale == null ? "Unavailable" : transition.stale ? "Stale" : "Current"}</strong>
           <span>Authority now</span><strong>{transition.authority ? `${transition.authority.gate} · ${transition.authority.reason}` : "Unavailable until both decks form an exact live adjacency"}</strong>
           <span>Compiled strategy</span><strong>{transition.compiledStrategy ?? "None"}</strong>
+          <span>Runway</span><strong>{transition.runwayBars ? `${transition.runwayBars} bars` : "None"}</strong>
+          <span>Cues</span><strong>{transition.outgoingCueRole && transition.incomingCueRole ? `${transition.outgoingCueRole} → ${transition.incomingCueRole}` : "None"}</strong>
+          <span>Progress</span><strong>{transition.transitionProgress == null ? "Not running" : `${Math.round(transition.transitionProgress * 100)}%`}</strong>
+          <span>Remaining</span><strong>{transition.remainingBars == null ? "None" : `${transition.remainingBars.toFixed(1)} bars`}</strong>
           <span>Last actual path</span><strong>{transition.actualExecution.replace(/_/g, " ")}{transition.actualExecutionAdjacency ? ` · ${transition.actualExecutionAdjacency}` : ""}</strong>
           <span>Fallback reason</span><strong>{transition.actualExecutionReason ?? "None"}</strong>
         </div>

@@ -77,6 +77,7 @@ const FAMILY_LABEL: Record<string, string> = {
   stem_assisted_transition: "Stem-Assisted Transition",
   effect_handoff: "Effect Handoff",
   clean_cut: "Clean Cut",
+  phrase_level_blend: "Phrase Level Blend",
   reset_bridge: "Reset / Bridge",
   do_not_place_adjacent: "Do Not Place Adjacent",
   free_time_perceptual_handoff: "Free-Time Perceptual Handoff",
@@ -272,7 +273,7 @@ export function PlaylistPreparationPanel({
 
             {djTransitionMode === "active" && (
               <div className="ptp-dj-hint">
-                Active mode: only an explicitly-approved Clean Cut plan can execute, and only after passing every authority check live. Every other pair falls back to the legacy plan automatically.
+                Active mode: only explicitly-approved Clean Cut and Phrase Level Blend plans can execute, and only after passing every authority check live. Every other pair falls back to the legacy plan automatically.
               </div>
             )}
 
@@ -369,7 +370,10 @@ function DjPairRow({
   const outgoingLineage = plan.outgoingCue.preparationLineage;
   const incomingLineage = plan.incomingCue.preparationLineage;
   const outgoingPreparation = preparationBridge.outgoing.available ? preparationBridge.outgoing.candidates.MIX_OUT : null;
-  const incomingPreparation = preparationBridge.incoming.available ? preparationBridge.incoming.candidates.MAIN_ENTRY : null;
+  const incomingPreparation = preparationBridge.incoming.available
+    ? preparationBridge.incoming.candidates[incomingLineage?.role ?? "MAIN_ENTRY"]
+    : null;
+  const displayedRunway = plan.family === "phrase_level_blend" ? plan.overlapBars : preparationBridge.commonRunwayBars;
   const currentApprovedPlan = approvedPlan
     && entry.resolution.existingManualPlanId === approvedPlan.id
     && !entry.resolution.existingManualPlanIsStale
@@ -408,7 +412,7 @@ function DjPairRow({
           <div>
             <strong>Phrase alignment:</strong> out {outgoingPreparation?.alignedGroupings.length ? outgoingPreparation.alignedGroupings.join("/") : "none"} bars ·
             in {incomingPreparation?.alignedGroupings.length ? incomingPreparation.alignedGroupings.join("/") : "none"} bars ·
-            common runway {preparationBridge.commonRunwayBars ? `${preparationBridge.commonRunwayBars} bars` : "none"}
+            common runway {displayedRunway ? `${displayedRunway} bars` : "none"}
           </div>
           {!preparationBridge.cleanCutAvailable && (
             <div className="ptp-dj-hint">

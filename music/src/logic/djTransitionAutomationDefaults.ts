@@ -62,6 +62,14 @@ export function buildDjTransitionAutomationDefaults(input: BuildAutomationDefaul
   const { family, bassTransferProgress } = input;
 
   switch (family) {
+    case "phrase_level_blend":
+      return {
+        outgoingGain: linearGain(0, FLOOR_DB),
+        incomingGain: linearGain(FLOOR_DB, 0),
+        outgoingEq: [],
+        incomingEq: [],
+        bassTransferProgress: null,
+      };
     case "phrase_eq_blend":
     case "short_rhythmic_blend":
     case "loop_assisted_handoff":

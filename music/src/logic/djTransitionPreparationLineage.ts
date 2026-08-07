@@ -5,6 +5,7 @@ import type {
   TransitionCue,
   TransitionPreparationCueReference,
 } from "../data/djTransitionTypes";
+import type { DjPhraseBars } from "../data/djTrackPreparationTypes";
 import { resolveApprovedTrackPreparation } from "./djTransitionPreparationBridge";
 
 export interface CurrentTransitionPreparationCueSnapshot extends TransitionPreparationCueReference {
@@ -14,6 +15,11 @@ export interface CurrentTransitionPreparationCueSnapshot extends TransitionPrepa
   cueFrame: number;
   sampleRate: number;
   projectedCueSeconds: number;
+  cueBarIndex?: number | null;
+  manuallyConfirmedGroupings?: DjPhraseBars[];
+  availableRunwayBars?: number;
+  groupingDurationSeconds?: Partial<Record<DjPhraseBars, number>>;
+  availableAudioSeconds?: number;
 }
 
 export interface TransitionPreparationLineageContext {
@@ -125,6 +131,11 @@ export function resolveCurrentTransitionPreparationCueSnapshot(
       cueFrame: candidate.frame,
       sampleRate: analysis!.sampleRate,
       projectedCueSeconds: candidate.seconds,
+      cueBarIndex: candidate.barIndex,
+      manuallyConfirmedGroupings: candidate.alignedGroupings,
+      availableRunwayBars: candidate.runwayBars,
+      groupingDurationSeconds: candidate.groupingDurationSeconds ?? {},
+      availableAudioSeconds: candidate.availableAudioSeconds,
     },
     failure: null,
   };
@@ -164,9 +175,24 @@ export function validateTransitionPreparationLineage(
   if (plan.family === "clean_cut" && outgoingReference.role !== "MIX_OUT") return failed("cue_role_mismatch", "outgoing");
   if (plan.family === "clean_cut" && incomingReference.role !== "MAIN_ENTRY") return failed("cue_role_mismatch", "incoming");
   if (!context) return failed("current_lineage_missing");
-  return validateSide("outgoing", plan.outgoingTrackId, plan.outgoingSourceFingerprint, plan.outgoingCue, context.outgoing)
+  const baseValidation = validateSide("outgoing", plan.outgoingTrackId, plan.outgoingSourceFingerprint, plan.outgoingCue, context.outgoing)
     ?? validateSide("incoming", plan.incomingTrackId, plan.incomingSourceFingerprint, plan.incomingCue, context.incoming)
-    ?? { usesPreparation: true, valid: true, failure: null, side: null, reason: null };
+  if (baseValidation) return baseValidation;
+  if (plan.family === "phrase_level_blend") {
+    if (outgoingReference.role !== "MIX_OUT") return failed("cue_role_mismatch", "outgoing");
+    if (incomingReference.role !== "FULL_ENTRY" && incomingReference.role !== "SHORT_ENTRY") return failed("cue_role_mismatch", "incoming");
+    if (plan.overlapBars !== 4 && plan.overlapBars !== 8 && plan.overlapBars !== 16 && plan.overlapBars !== 32) return failed("preparation_invalid");
+    const grouping = plan.overlapBars;
+    const outgoing = context.outgoing!;
+    const incoming = context.incoming!;
+    if (!outgoing.manuallyConfirmedGroupings?.includes(grouping) || (outgoing.availableRunwayBars ?? 0) < grouping) return failed("preparation_invalid", "outgoing");
+    if (!incoming.manuallyConfirmedGroupings?.includes(grouping) || (incoming.availableRunwayBars ?? 0) < grouping) return failed("preparation_invalid", "incoming");
+    const reconstructedDuration = outgoing.groupingDurationSeconds?.[grouping];
+    if (!reconstructedDuration || (incoming.availableAudioSeconds ?? 0) < reconstructedDuration || plan.overlapSeconds !== reconstructedDuration) {
+      return failed("preparation_invalid");
+    }
+  }
+  return { usesPreparation: true, valid: true, failure: null, side: null, reason: null };
 }
 
 export function resolveTransitionPreparationLineageContext(

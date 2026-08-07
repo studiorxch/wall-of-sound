@@ -96,6 +96,7 @@ function baseInput(overrides: Partial<Parameters<typeof resolveDjTransition>[0]>
 function preparationBridge(): PairPreparationBridgeResult {
   const candidate = (role: "FULL_ENTRY" | "SHORT_ENTRY" | "MAIN_ENTRY" | "MIX_OUT", seconds: number, side: "a" | "b"): PreparationCueCandidate => ({
     role, seconds, frame: seconds * 1000, barIndex: 8, runwayBars: 32, alignedGroupings: [32, 16, 8, 4],
+    groupingDurationSeconds: { 32: 16, 16: 8, 8: 4, 4: 2 }, availableAudioSeconds: 120,
     transitionCue: {
       seconds, beatIndex: 32, barIndex: 8, phraseIndex: null, regionId: null, manuallyAdjusted: false,
       preparationLineage: {
@@ -115,6 +116,20 @@ function preparationBridge(): PairPreparationBridgeResult {
     } },
     cleanCutAvailable: true,
     commonRunwayBars: 32,
+  };
+}
+
+function phraseBlendPreparationBridge(): PairPreparationBridgeResult {
+  const bridge = preparationBridge();
+  if (!bridge.outgoing.available || !bridge.incoming.available) return bridge;
+  return {
+    ...bridge,
+    phraseLevelBlend: {
+      outgoing: bridge.outgoing.candidates.MIX_OUT,
+      incoming: bridge.incoming.candidates.FULL_ENTRY,
+      runwayBars: 16,
+      overlapSeconds: 8,
+    },
   };
 }
 
@@ -261,6 +276,21 @@ describe("resolveDjTransition", () => {
     expect(result.recommended.outgoingCue.preparationLineage?.role).toBe("MIX_OUT");
     expect(result.recommended.incomingCue.seconds).toBe(8);
     expect(result.recommended.incomingCue.preparationLineage?.role).toBe("MAIN_ENTRY");
+  });
+
+  it("proposes a phrase level blend from MIX_OUT to FULL_ENTRY with a clean-cut alternative", () => {
+    const result = resolveDjTransition(baseInput({ preparationBridge: phraseBlendPreparationBridge() }));
+    expect(result.recommended).toMatchObject({
+      family: "phrase_level_blend", timeBasis: "phrase", overlapBars: 16, overlapSeconds: 8,
+      outgoingCue: { preparationLineage: { role: "MIX_OUT" } },
+      incomingCue: { preparationLineage: { role: "FULL_ENTRY" } },
+      automation: { outgoingEq: [], incomingEq: [], bassTransferProgress: null },
+    });
+    expect(result.alternatives[0]).toMatchObject({
+      family: "clean_cut",
+      outgoingCue: { preparationLineage: { role: "MIX_OUT" } },
+      incomingCue: { preparationLineage: { role: "MAIN_ENTRY" } },
+    });
   });
 
   it("leaves region-derived clean-cut cues unchanged when the preparation pair is unavailable", () => {

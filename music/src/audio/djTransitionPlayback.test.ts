@@ -1,6 +1,9 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+import type { DualDeckPlaybackEngine } from "./DualDeckPlaybackEngine";
 import type { DjTransitionPlan, TransitionFamily } from "../data/djTransitionTypes";
-import { compileDjTransition } from "./djTransitionPlayback";
+import type { PlaylistTransitionPlan } from "../data/playlistTransitionTypes";
+import { shouldPreloadNextTrack } from "./transitionScheduler";
+import { compileDjTransition, executeCompiledDjTransition, projectCompiledTransitionOntoLegacyPlan } from "./djTransitionPlayback";
 
 function makePlan(overrides: Partial<DjTransitionPlan> = {}): DjTransitionPlan {
   return {
@@ -40,5 +43,56 @@ describe("compileDjTransition", () => {
       expect(result.compiled).toBe(false);
       if (!result.compiled) expect(result.reason).toContain(family);
     }
+  });
+
+  it("compiles phrase_level_blend to the minimal equal-power runtime contract", () => {
+    const result = compileDjTransition(makePlan({
+      family: "phrase_level_blend", timeBasis: "phrase", overlapBars: 16, overlapSeconds: 12.8,
+      outgoingCue: { ...makePlan().outgoingCue, seconds: 120 },
+      incomingCue: { ...makePlan().incomingCue, seconds: 32 },
+    }));
+    expect(result).toEqual({
+      compiled: true, djPlanId: "dj-1", strategy: "phrase_level_blend_equal_power",
+      outgoingCueSeconds: 120, incomingCueSeconds: 32, durationSeconds: 12.8, runwayBars: 16,
+    });
+  });
+
+  it("projects authorized DJ timing onto the existing preload schedule without mutating persistence", () => {
+    const legacyPlan = {
+      transitionId: "legacy", outgoingCueSeconds: 180, incomingCueSeconds: 0, transitionDurationSeconds: 0.5,
+    } as PlaylistTransitionPlan;
+    const compiled = compileDjTransition(makePlan({
+      family: "phrase_level_blend", timeBasis: "phrase", overlapBars: 8, overlapSeconds: 8,
+      outgoingCue: { ...makePlan().outgoingCue, seconds: 120 }, incomingCue: { ...makePlan().incomingCue, seconds: 24 },
+    }));
+    expect(compiled.compiled).toBe(true);
+    if (!compiled.compiled) return;
+    const projected = projectCompiledTransitionOntoLegacyPlan(compiled, legacyPlan);
+    expect(projected).toMatchObject({ transitionId: "dj-1", outgoingCueSeconds: 120, incomingCueSeconds: 24, transitionDurationSeconds: 8 });
+    expect(legacyPlan).toMatchObject({ transitionId: "legacy", outgoingCueSeconds: 180 });
+    expect(shouldPreloadNextTrack(106, projected, 15)).toBe(true);
+    expect(shouldPreloadNextTrack(106, legacyPlan, 15)).toBe(false);
+  });
+
+  it("executes the phrase blend through the existing runTransition primitive", async () => {
+    const runTransition = vi.fn(async () => undefined);
+    const engine = { runTransition } as unknown as DualDeckPlaybackEngine;
+    const legacyPlan = {
+      transitionId: "legacy", outgoingCueSeconds: 180, incomingCueSeconds: 0, transitionDurationSeconds: 0.5,
+    } as PlaylistTransitionPlan;
+    const compiled = compileDjTransition(makePlan({
+      family: "phrase_level_blend", timeBasis: "phrase", overlapBars: 16, overlapSeconds: 12.8,
+      outgoingCue: { ...makePlan().outgoingCue, seconds: 120 }, incomingCue: { ...makePlan().incomingCue, seconds: 32 },
+    }));
+    expect(compiled.compiled).toBe(true);
+    if (!compiled.compiled) return;
+    await expect(executeCompiledDjTransition(engine, compiled, "A", "B", "scheduled", legacyPlan)).resolves.toMatchObject({
+      executed: true, strategy: "phrase_level_blend_equal_power",
+    });
+    expect(runTransition).toHaveBeenCalledOnce();
+    expect(runTransition).toHaveBeenCalledWith(
+      expect.objectContaining({ transitionId: "dj-1", outgoingCueSeconds: 120, incomingCueSeconds: 32, transitionDurationSeconds: 12.8 }),
+      "timed_crossfade", "A", "B",
+    );
   });
 });

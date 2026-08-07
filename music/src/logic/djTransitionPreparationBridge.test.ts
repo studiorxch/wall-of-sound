@@ -40,8 +40,8 @@ function grid(source: string): MusicalGrid {
   return {
     bpm: 120, meterNumerator: 4, meterDenominator: 4, originSeconds: 0, originFrame: 0,
     originSource: "manual", trust: "manual", confidence: 1,
-    beatFrames: Array.from({ length: 256 }, (_, index) => index * 100),
-    barFrames: Array.from({ length: 64 }, (_, index) => index * 400),
+    beatFrames: Array.from({ length: 512 }, (_, index) => index * 100),
+    barFrames: Array.from({ length: 128 }, (_, index) => index * 400),
     sourceFingerprint: source, updatedAt: NOW,
   };
 }
@@ -49,11 +49,11 @@ function grid(source: string): MusicalGrid {
 function baseAnalysis(id: string, source: string): CompleteSongAnalysis {
   return {
     id: `analysis-${id}`, sourceTrackId: id, sourceMediaFingerprint: source,
-    decodedFrameCount: 30_000, sampleRate: 1_000, analyzerVersion: "song-v1", configurationVersion: "config-v1",
+    decodedFrameCount: 60_000, sampleRate: 1_000, analyzerVersion: "song-v1", configurationVersion: "config-v1",
     status: "READY_PROVISIONAL",
     sections: [{
       id: `section-${id}`, sourceTrackId: id, structuralType: "body", displayLabel: "Body",
-      startFrame: 0, endFrame: 30_000, confidence: 1, verification: "reviewed", origin: "analyzer",
+      startFrame: 0, endFrame: 60_000, confidence: 1, verification: "reviewed", origin: "analyzer",
     }],
     sectionRevisions: [], createdAt: NOW, updatedAt: NOW,
   };
@@ -133,6 +133,46 @@ describe("DJ transition preparation bridge", () => {
     expect(result.cleanCutAvailable).toBe(true);
     expect(result.commonRunwayBars).toBe(32);
     expect(result.outgoing.available && result.outgoing.candidates.MIX_OUT.alignedGroupings).toEqual([32, 16, 8, 4]);
+    expect(result.phraseLevelBlend).toMatchObject({ runwayBars: 32, incoming: { role: "FULL_ENTRY" }, overlapSeconds: 12.8 });
+  });
+
+  it("uses FULL_ENTRY before SHORT_ENTRY and never MAIN_ENTRY for a phrase blend", () => {
+    const outgoing = completePreparation("a", "source-a");
+    const incoming = completePreparation("b", "source-b");
+    const full = bridgeApprovedPreparationPair(outgoing.track, outgoing.analysis, incoming.track, incoming.analysis);
+    expect(full.phraseLevelBlend?.incoming.role).toBe("FULL_ENTRY");
+
+    incoming.analysis.djPreparation!.phraseGrid!.boundaries = incoming.analysis.djPreparation!.phraseGrid!.boundaries
+      .filter((boundary) => boundary.barIndex !== 0);
+    const short = bridgeApprovedPreparationPair(outgoing.track, outgoing.analysis, incoming.track, incoming.analysis);
+    expect(short.phraseLevelBlend?.incoming.role).toBe("SHORT_ENTRY");
+    expect(short.phraseLevelBlend?.incoming.role).not.toBe("MAIN_ENTRY");
+  });
+
+  it("selects 32, 16, 8, then 4 deterministically and rejects inferred-only alignment", () => {
+    const outgoing = completePreparation("a", "source-a");
+    const incoming = completePreparation("b", "source-b");
+    for (const expected of [32, 16, 8, 4] as const) {
+      const result = bridgeApprovedPreparationPair(outgoing.track, outgoing.analysis, incoming.track, incoming.analysis);
+      expect(result.phraseLevelBlend?.runwayBars).toBe(expected);
+      outgoing.analysis.djPreparation!.phraseGrid!.boundaries = outgoing.analysis.djPreparation!.phraseGrid!.boundaries
+        .filter((boundary) => boundary.barIndex !== 32 || boundary.groupingBars !== expected);
+    }
+    expect(bridgeApprovedPreparationPair(outgoing.track, outgoing.analysis, incoming.track, incoming.analysis).phraseLevelBlend).toBeNull();
+  });
+
+  it("requires MIX_OUT and sufficient incoming source audio without requiring matched tempos", () => {
+    const outgoing = completePreparation("a", "source-a");
+    const incoming = completePreparation("b", "source-b");
+    incoming.analysis.djPreparation = {
+      ...incoming.analysis.djPreparation!,
+      cues: { ...incoming.analysis.djPreparation!.cues, MIX_OUT: undefined },
+    };
+    expect(bridgeApprovedPreparationPair(outgoing.track, outgoing.analysis, incoming.track, incoming.analysis).phraseLevelBlend).toBeNull();
+
+    const currentIncoming = completePreparation("c", "source-c");
+    const result = resolveApprovedTrackPreparation(currentIncoming.track, currentIncoming.analysis);
+    expect(result.available && result.candidates.FULL_ENTRY.availableAudioSeconds).toBe(60);
   });
 
   it.each(["draft", "reviewed", "stale"] as const)("fails closed for %s preparation", (status) => {
