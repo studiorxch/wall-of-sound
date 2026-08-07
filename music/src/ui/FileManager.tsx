@@ -9,7 +9,7 @@ import { type TrackDragPayload } from "../logic/playlistMembership";
 // row — kept only so App.tsx can recognize and redirect a stray reference
 // to Sounds with the Loops filter selected, rather than the value being an
 // unrecognized string.
-export type ViewMode = "playlist" | "library" | "groups" | "orphans" | "excluded" | "locks" | "playlists_grid" | "sampler_banks_grid" | "crates_grid" | "crate_detail" | "artists" | "mood_signal_audit" | "analyzer_review" | "loop_library" | "sectional_looper" | "glyph_audio" | "radio" | "radio_playlists_grid" | "radio_banks_grid" | "collections_overview" | "radio_loopchain_player";
+export type ViewMode = "playlist" | "library" | "groups" | "orphans" | "excluded" | "locks" | "playlists_grid" | "sampler_banks_grid" | "crates_grid" | "crate_detail" | "artists" | "mood_signal_audit" | "analyzer_review" | "loop_library" | "sectional_looper" | "glyph_audio" | "perform" | "radio" | "radio_playlists_grid" | "radio_banks_grid" | "collections_overview" | "radio_loopchain_player";
 
 type Props = {
   playlists: PlaylistRecord[];
@@ -141,6 +141,12 @@ export function FileManager({
 
           <div className="fm-section">
             <div className="fm-section-header">AudioLab</div>
+            <NavRow
+              icon="graphic_eq"
+              label="Perform"
+              active={viewMode === "perform"}
+              onClick={() => onViewModeChange("perform")}
+            />
             <NavRow
               icon="science"
               label="Looper"

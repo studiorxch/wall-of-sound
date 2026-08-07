@@ -12481,3 +12481,53 @@ td.cat-col-frozen { z-index: 1; }
   font-size: 10px; font-weight: 700; letter-spacing: 0.04em; color: #f6b85b;
   background: rgba(246,184,91,0.15); border: 1px solid #f6b85b; border-radius: 3px; padding: 2px 5px;
 }
+
+/* Perform is an observational surface over the existing prepared-playback runtime. */
+.perform-workspace {
+  --perform-ink: #e9e5da; --perform-muted: #9e9a90; --perform-line: rgba(233,229,218,.16);
+  --perform-cyan: #53d8cf; --perform-amber: #f2b84b; --perform-red: #ff6b5f;
+  min-width: 0; min-height: 100%; padding: 26px; color: var(--perform-ink);
+  background: radial-gradient(circle at 10% 0%, rgba(83,216,207,.12), transparent 34%), radial-gradient(circle at 90% 100%, rgba(242,184,75,.1), transparent 32%), #111614;
+  display: grid; grid-template-columns: minmax(0,1fr) 250px; gap: 18px;
+}
+.perform-title { min-width: 0; grid-column: 1 / -1; border-bottom: 1px solid var(--perform-line); padding-bottom: 14px; }
+.perform-title h1 { margin: 3px 0; font-family: Georgia, serif; font-size: clamp(27px, 2.5vw, 42px); line-height: 1.05; font-weight: 400; overflow-wrap: anywhere; }
+.perform-title p { margin: 0; color: var(--perform-muted); }
+.perform-eyebrow { display: block; color: var(--perform-cyan); font-size: 10px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; }
+.perform-deck { grid-column: 1; border: 1px solid var(--perform-line); background: rgba(15,19,18,.82); padding: 16px; box-shadow: 0 18px 50px rgba(0,0,0,.22); }
+.perform-deck--active { border-left: 3px solid var(--perform-cyan); }
+.perform-deck--incoming { border-left: 3px solid var(--perform-amber); }
+.perform-deck__header, .perform-deck__meta, .perform-deck__truth, .perform-deck__cues { display: flex; align-items: center; gap: 16px; }
+.perform-deck__header { justify-content: space-between; margin-bottom: 8px; }
+.perform-deck__header strong { display: block; margin-top: 3px; font-family: Georgia, serif; font-size: 21px; font-weight: 400; }
+.perform-deck__role { color: var(--perform-muted); text-transform: uppercase; letter-spacing: .08em; font-size: 10px; }
+.perform-deck__meta { color: var(--perform-muted); font-size: 11px; margin-bottom: 10px; }
+.perform-waveform { height: 150px; border: 1px solid var(--perform-line); background: linear-gradient(rgba(255,255,255,.025) 1px, transparent 1px), #090d0c; background-size: 100% 25%; overflow: hidden; }
+.perform-waveform svg { width: 100%; height: 100%; display: block; }
+.perform-waveform--empty { display: grid; place-items: center; color: var(--perform-muted); font-size: 12px; }
+.perform-waveform__peaks { fill: rgba(233,229,218,.28); }
+.perform-waveform__section { fill: rgba(83,216,207,.055); stroke: rgba(83,216,207,.2); }
+.perform-waveform__beat { stroke: rgba(233,229,218,.16); stroke-width: .6; }
+.perform-waveform__bar { stroke: rgba(233,229,218,.3); stroke-width: 1; }
+.perform-waveform__phrase { stroke: rgba(83,216,207,.52); stroke-width: 1.5; }
+.perform-waveform__region { fill: rgba(242,184,75,.1); stroke: var(--perform-amber); stroke-width: 2; }
+.perform-waveform__generic-cue { stroke: #a9a1ff; stroke-width: 2; stroke-dasharray: 4 3; }
+.perform-waveform__transition-cue { stroke: var(--perform-amber); stroke-width: 3; }
+.perform-waveform__playhead { stroke: var(--perform-red); stroke-width: 3; }
+.perform-deck__truth { margin-top: 10px; display: grid; grid-template-columns: repeat(4, 1fr); }
+.perform-deck__truth div { border-left: 1px solid var(--perform-line); padding-left: 9px; }
+.perform-deck__truth span, .perform-deck__cues span { display: block; color: var(--perform-muted); font-size: 9px; letter-spacing: .08em; text-transform: uppercase; }
+.perform-deck__truth strong, .perform-deck__truth small { display: block; margin-top: 3px; }
+.perform-deck__truth small { color: var(--perform-muted); }
+.perform-deck__cues { align-items: flex-start; margin-top: 12px; font-size: 11px; }
+.perform-deck__cues > div { flex: 1; }
+.perform-deck__cues strong { display: block; margin-top: 4px; font-weight: 500; }
+.perform-transition { grid-column: 2; grid-row: 2 / span 3; border: 1px solid var(--perform-line); background: rgba(9,13,12,.88); padding: 16px; }
+.perform-transition__family { display: block; margin: 8px 0 18px; font-family: Georgia, serif; font-size: 25px; text-transform: capitalize; }
+.perform-transition__grid { display: grid; gap: 6px; }
+.perform-transition__grid span { color: var(--perform-muted); margin-top: 8px; font-size: 9px; text-transform: uppercase; letter-spacing: .09em; }
+.perform-transition__grid strong { font-size: 11px; line-height: 1.45; overflow-wrap: anywhere; }
+.perform-legend { grid-column: 1; display: flex; gap: 18px; color: var(--perform-muted); font-size: 10px; }
+.perform-legend span::before { content: ""; display: inline-block; width: 16px; border-top: 2px solid; margin-right: 5px; vertical-align: middle; }
+.perform-legend .is-playhead::before { border-color: var(--perform-red); }.perform-legend .is-transition::before { border-color: var(--perform-amber); }.perform-legend .is-generic::before { border-color: #a9a1ff; }.perform-legend .is-region::before { border-color: var(--perform-amber); border-style: dashed; }
+@media (max-width: 900px) { .perform-workspace { grid-template-columns: 1fr; padding: 14px; }.perform-transition { grid-column: 1; grid-row: auto; }.perform-deck__truth { grid-template-columns: 1fr 1fr; row-gap: 10px; }.perform-deck__cues { flex-direction: column; }.perform-legend { grid-column: 1; flex-wrap: wrap; } }

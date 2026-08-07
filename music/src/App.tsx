@@ -175,6 +175,8 @@ import type { WorkspaceMode, ImportDestination, PageMenuItem } from "./ui/TopBar
 import { PlaylistAtmosphereLayer } from "./ui/PlaylistAtmosphereLayer";
 import { usePreparedPlaybackController } from "./audio/usePreparedPlaybackController";
 import { PreparedPlaybackStatus } from "./ui/player/PreparedPlaybackStatus";
+import { buildDualDeckPerformMonitor } from "./logic/perform/dualDeckPerformMonitor";
+import { DualDeckPerformWorkspace } from "./ui/perform/DualDeckPerformWorkspace";
 import { findOutgoingPlan } from "./audio/preparedPlaybackSession";
 import { useLoopAuditionController } from "./audio/useLoopAuditionController";
 import { LoopAuditionBar } from "./ui/player/LoopAuditionBar";
@@ -5771,6 +5773,17 @@ export default function App() {
   const playbackSurface = preparedPlayback.authorityState
     ? buildSurfaceSnapshot(preparedPlayback.authorityState, preparedPlayback.session, preparedPlayback.decks)
     : null;
+  const performMonitor = useMemo(() => buildDualDeckPerformMonitor({
+    playlist: playingPlaylist,
+    decks: preparedPlayback.decks,
+    session: preparedPlayback.session,
+    tracksById: tbm,
+    songAnalyses,
+    djTransitionMode,
+    djActiveDiagnostics: preparedPlayback.djActiveDiagnostics,
+    runtimeFallback: preparedPlayback.runtimeFallback,
+    fallbackReason: preparedPlayback.fallbackReason,
+  }), [playingPlaylist, preparedPlayback.decks, preparedPlayback.session, preparedPlayback.djActiveDiagnostics, preparedPlayback.runtimeFallback, preparedPlayback.fallbackReason, tbm, songAnalyses, djTransitionMode]);
   // §9/§17 — row highlighting must follow the engine's active slot after
   // handoff, not the standard player's currentSlotIdx (which the engine
   // advances independently and never writes back to).
@@ -6750,6 +6763,8 @@ export default function App() {
               onAssignMechanism={handleAssignMechanism}
               onImportAudio={handleImportAudio}
             />
+          ) : viewMode === "perform" ? (
+            <DualDeckPerformWorkspace monitor={performMonitor} />
           ) : viewMode === "analyzer_review" ? (
             <MoodAnalysisReviewView
               tracks={libraryTracks}
