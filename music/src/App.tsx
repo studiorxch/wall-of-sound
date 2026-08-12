@@ -154,6 +154,27 @@ import type { MappingPreset } from "./data/glyphMappingTypes";
 import type { GlyphGrammar } from "./data/glyphGrammarTypes";
 import type { ManuscriptLayoutPreset } from "./data/glyphLayoutTypes";
 import type { GlyphComposition, ExportRecord as GlyphExportRecord } from "./data/glyphCompositionTypes";
+import { MachineLifeResearchWorkspace } from "./ui/machineLife/MachineLifeResearchWorkspace";
+import { SunoLibraryWorkspace } from "./ui/sunoLibrary/SunoLibraryWorkspace";
+import type { MachineLifeCollection, MachineLifeProxyLibrary, MachineLifeRecordingReview } from "./data/machineLifeTypes";
+import type {
+  SunoLibraryImportPointer,
+  SunoListeningRecord,
+  SunoInterestMarker,
+  SunoListeningStatus,
+  SunoAssetKind,
+  SunoSuggestedUse,
+  SunoLibraryReviewExport,
+} from "./data/sunoLibraryTypes";
+import {
+  setListeningStatus,
+  setAssetKind as setSunoAssetKindPure,
+  toggleSuggestedUse as toggleSunoSuggestedUse,
+  setNotes as setSunoNotesPure,
+  upsertInterestMarker as upsertSunoInterestMarker,
+  removeInterestMarker as removeSunoInterestMarker,
+} from "./logic/sunoLibrary/reviews";
+import { mergeSunoLibraryReviewImport } from "./logic/sunoLibrary/reviewExport";
 import { StemSublayer } from "./ui/stems/StemSublayer";
 import { LegacyStemMigrationPanel } from "./ui/stems/LegacyStemMigrationPanel";
 import { readDjTransitionMode, writeDjTransitionMode, type DjTransitionMode } from "./logic/djTransitionModeStorage";
@@ -435,6 +456,31 @@ export default function App() {
   const glyphLayoutPresetsRef = useRef<ManuscriptLayoutPreset[]>([]);
   const [glyphExportRecords, setGlyphExportRecords] = useState<GlyphExportRecord[]>(() => loadPlayProject()?.glyphExportRecords ?? []);
   const glyphExportRecordsRef = useRef<GlyphExportRecord[]>([]);
+  // Machine Life Research Workspace (0811_MACHINE-LIFE_MUSIC-Research-
+  // Workspace-Handoff_v1.0.0) — bounded research import of the Machine Life
+  // Stage 0 Pre-Life collection. Project-level for the same reason as
+  // loops/songAnalyses/glyphAnalyses above. Three separate arrays mirror the
+  // handoff spec's "immutable imported manifest data vs. editable review
+  // data vs. proxy metadata" separation.
+  const [machineLifeCollections, setMachineLifeCollections] = useState<MachineLifeCollection[]>(() => loadPlayProject()?.machineLifeCollections ?? []);
+  const machineLifeCollectionsRef = useRef<MachineLifeCollection[]>([]);
+  const [machineLifeReviews, setMachineLifeReviews] = useState<MachineLifeRecordingReview[]>(() => loadPlayProject()?.machineLifeReviews ?? []);
+  const machineLifeReviewsRef = useRef<MachineLifeRecordingReview[]>([]);
+  const [machineLifeProxyLibraries, setMachineLifeProxyLibraries] = useState<MachineLifeProxyLibrary[]>(() => loadPlayProject()?.machineLifeProxyLibraries ?? []);
+  const machineLifeProxyLibrariesRef = useRef<MachineLifeProxyLibrary[]>([]);
+  // 0812_MUSIC_Suno-Library-Manifest-Integration_v1.0.0 — same immutable-
+  // vs-editable separation as machineLife* above. sunoLibraryImportPointer
+  // is the small lightweight reference (snapshot id/version/counts only —
+  // the full 8,381-location archive data is rebuilt in memory each session
+  // by the manifest adapter, never persisted here). sunoListeningRecords/
+  // sunoInterestMarkers hold editable review state keyed by
+  // canonicalRecordingId.
+  const [sunoLibraryImportPointer, setSunoLibraryImportPointer] = useState<SunoLibraryImportPointer | undefined>(() => loadPlayProject()?.sunoLibraryImportPointer);
+  const sunoLibraryImportPointerRef = useRef<SunoLibraryImportPointer | undefined>(undefined);
+  const [sunoListeningRecords, setSunoListeningRecords] = useState<SunoListeningRecord[]>(() => loadPlayProject()?.sunoListeningRecords ?? []);
+  const sunoListeningRecordsRef = useRef<SunoListeningRecord[]>([]);
+  const [sunoInterestMarkers, setSunoInterestMarkers] = useState<SunoInterestMarker[]>(() => loadPlayProject()?.sunoInterestMarkers ?? []);
+  const sunoInterestMarkersRef = useRef<SunoInterestMarker[]>([]);
   // 0717D_RADIO_Playlist_Inbox_and_Performance_Foundation — RADIO Inbox
   // items and RADIO Playlists, client-local, project-level for the same
   // reason as loops/songAnalyses above.
@@ -667,6 +713,12 @@ export default function App() {
   useEffect(() => { loopWorkspaceDraftsRef.current = loopWorkspaceDrafts; }, [loopWorkspaceDrafts]);
   useEffect(() => { loopRevisionsRef.current = loopRevisions; }, [loopRevisions]);
   useEffect(() => { songAnalysesRef.current = songAnalyses; }, [songAnalyses]);
+  useEffect(() => { machineLifeCollectionsRef.current = machineLifeCollections; }, [machineLifeCollections]);
+  useEffect(() => { machineLifeReviewsRef.current = machineLifeReviews; }, [machineLifeReviews]);
+  useEffect(() => { machineLifeProxyLibrariesRef.current = machineLifeProxyLibraries; }, [machineLifeProxyLibraries]);
+  useEffect(() => { sunoLibraryImportPointerRef.current = sunoLibraryImportPointer; }, [sunoLibraryImportPointer]);
+  useEffect(() => { sunoListeningRecordsRef.current = sunoListeningRecords; }, [sunoListeningRecords]);
+  useEffect(() => { sunoInterestMarkersRef.current = sunoInterestMarkers; }, [sunoInterestMarkers]);
   useEffect(() => { glyphAnalysesRef.current = glyphAnalyses; }, [glyphAnalyses]);
   useEffect(() => { glyphCompositionsRef.current = glyphCompositions; }, [glyphCompositions]);
   useEffect(() => { glyphMappingPresetsRef.current = glyphMappingPresets; }, [glyphMappingPresets]);
@@ -744,6 +796,12 @@ export default function App() {
       loopWorkspaceDrafts: loopWorkspaceDraftsRef.current.length ? loopWorkspaceDraftsRef.current : undefined,
       loopRevisions: loopRevisionsRef.current.length ? loopRevisionsRef.current : undefined,
       songAnalyses: songAnalysesRef.current.length ? songAnalysesRef.current : undefined,
+      machineLifeCollections: machineLifeCollectionsRef.current.length ? machineLifeCollectionsRef.current : undefined,
+      machineLifeReviews: machineLifeReviewsRef.current.length ? machineLifeReviewsRef.current : undefined,
+      machineLifeProxyLibraries: machineLifeProxyLibrariesRef.current.length ? machineLifeProxyLibrariesRef.current : undefined,
+      sunoLibraryImportPointer: sunoLibraryImportPointerRef.current,
+      sunoListeningRecords: sunoListeningRecordsRef.current.length ? sunoListeningRecordsRef.current : undefined,
+      sunoInterestMarkers: sunoInterestMarkersRef.current.length ? sunoInterestMarkersRef.current : undefined,
       glyphAnalyses: glyphAnalysesRef.current.length ? glyphAnalysesRef.current : undefined,
       glyphCompositions: glyphCompositionsRef.current.length ? glyphCompositionsRef.current : undefined,
       glyphMappingPresets: glyphMappingPresetsRef.current.length ? glyphMappingPresetsRef.current : undefined,
@@ -1819,6 +1877,106 @@ export default function App() {
     const next = songAnalysesRef.current.map((a) => (a.id === id ? { ...a, ...patch, updatedAt: nowIso() } : a));
     songAnalysesRef.current = next;
     setSongAnalyses(next);
+    savePlayProject(makeProj(playlistsRef.current));
+  }
+
+  // Machine Life Research Workspace (0811_MACHINE-LIFE_MUSIC-Research-
+  // Workspace-Handoff_v1.0.0) — same "mutate ref, setState, savePlayProject"
+  // pattern as handleUpdateSongAnalysis/handleSaveGlyphComposition above.
+  function handleCommitMachineLifeCollections(next: MachineLifeCollection[]) {
+    machineLifeCollectionsRef.current = next;
+    setMachineLifeCollections(next);
+    savePlayProject(makeProj(playlistsRef.current));
+  }
+
+  function handleSaveMachineLifeReview(review: MachineLifeRecordingReview) {
+    const exists = machineLifeReviewsRef.current.some((r) => r.recordingId === review.recordingId);
+    const next = exists
+      ? machineLifeReviewsRef.current.map((r) => (r.recordingId === review.recordingId ? review : r))
+      : [...machineLifeReviewsRef.current, review];
+    machineLifeReviewsRef.current = next;
+    setMachineLifeReviews(next);
+    savePlayProject(makeProj(playlistsRef.current));
+  }
+
+  function handleReplaceMachineLifeReviewsForCollection(collectionId: string, reviews: MachineLifeRecordingReview[]) {
+    const collection = machineLifeCollectionsRef.current.find((c) => c.id === collectionId);
+    const recordingIds = new Set(collection?.recordings.map((r) => r.id) ?? []);
+    const outsideCollection = machineLifeReviewsRef.current.filter((r) => !recordingIds.has(r.recordingId));
+    const next = [...outsideCollection, ...reviews];
+    machineLifeReviewsRef.current = next;
+    setMachineLifeReviews(next);
+    savePlayProject(makeProj(playlistsRef.current));
+  }
+
+  function handleCommitMachineLifeProxyLibrary(library: MachineLifeProxyLibrary) {
+    const exists = machineLifeProxyLibrariesRef.current.some((l) => l.collectionId === library.collectionId);
+    const next = exists
+      ? machineLifeProxyLibrariesRef.current.map((l) => (l.collectionId === library.collectionId ? library : l))
+      : [...machineLifeProxyLibrariesRef.current, library];
+    machineLifeProxyLibrariesRef.current = next;
+    setMachineLifeProxyLibraries(next);
+    savePlayProject(makeProj(playlistsRef.current));
+  }
+
+  // Suno Library (0812_MUSIC_Suno-Library-Manifest-Integration_v1.0.0) —
+  // same "mutate ref, setState, savePlayProject" pattern as the Machine
+  // Life handlers above. The actual upsert logic is pure (logic/sunoLibrary
+  // /reviews.ts) — these are thin wrappers wiring it into PlayProject state.
+  function handleCommitSunoLibraryImport(pointer: SunoLibraryImportPointer) {
+    sunoLibraryImportPointerRef.current = pointer;
+    setSunoLibraryImportPointer(pointer);
+    savePlayProject(makeProj(playlistsRef.current));
+  }
+
+  function handleSetSunoListeningStatus(canonicalRecordingId: string, snapshotId: string, status: SunoListeningStatus) {
+    const next = setListeningStatus(sunoListeningRecordsRef.current, canonicalRecordingId, snapshotId, status, nowIso());
+    sunoListeningRecordsRef.current = next;
+    setSunoListeningRecords(next);
+    savePlayProject(makeProj(playlistsRef.current));
+  }
+
+  function handleSetSunoAssetKind(canonicalRecordingId: string, snapshotId: string, assetKind: SunoAssetKind) {
+    const next = setSunoAssetKindPure(sunoListeningRecordsRef.current, canonicalRecordingId, snapshotId, assetKind, nowIso());
+    sunoListeningRecordsRef.current = next;
+    setSunoListeningRecords(next);
+    savePlayProject(makeProj(playlistsRef.current));
+  }
+
+  function handleToggleSunoSuggestedUse(canonicalRecordingId: string, snapshotId: string, use: SunoSuggestedUse) {
+    const next = toggleSunoSuggestedUse(sunoListeningRecordsRef.current, canonicalRecordingId, snapshotId, use, nowIso());
+    sunoListeningRecordsRef.current = next;
+    setSunoListeningRecords(next);
+    savePlayProject(makeProj(playlistsRef.current));
+  }
+
+  function handleSetSunoNotes(canonicalRecordingId: string, snapshotId: string, notes: string) {
+    const next = setSunoNotesPure(sunoListeningRecordsRef.current, canonicalRecordingId, snapshotId, notes, nowIso());
+    sunoListeningRecordsRef.current = next;
+    setSunoListeningRecords(next);
+    savePlayProject(makeProj(playlistsRef.current));
+  }
+
+  function handleUpsertSunoInterestMarker(marker: SunoInterestMarker) {
+    const next = upsertSunoInterestMarker(sunoInterestMarkersRef.current, marker, nowIso());
+    sunoInterestMarkersRef.current = next;
+    setSunoInterestMarkers(next);
+    savePlayProject(makeProj(playlistsRef.current));
+  }
+
+  function handleRemoveSunoInterestMarker(markerId: string) {
+    const next = removeSunoInterestMarker(sunoInterestMarkersRef.current, markerId);
+    sunoInterestMarkersRef.current = next;
+    setSunoInterestMarkers(next);
+    savePlayProject(makeProj(playlistsRef.current));
+  }
+
+  function handleMergeSunoReviewImport(exportData: SunoLibraryReviewExport) {
+    const merged = mergeSunoLibraryReviewImport(sunoListeningRecordsRef.current, sunoInterestMarkersRef.current, exportData);
+    sunoListeningRecordsRef.current = merged.listeningRecords;
+    setSunoListeningRecords(merged.listeningRecords);
+    sunoInterestMarkersRef.current = merged.interestMarkers;
+    setSunoInterestMarkers(merged.interestMarkers);
     savePlayProject(makeProj(playlistsRef.current));
   }
 
@@ -5218,6 +5376,34 @@ export default function App() {
     const loadedSongAnalyses = p.songAnalyses ?? [];
     songAnalysesRef.current = loadedSongAnalyses;
     setSongAnalyses(loadedSongAnalyses);
+    // Machine Life Research Workspace — same mandatory re-seed-at-
+    // authoritative-load step as songAnalyses/glyphAnalyses above (0715D bug
+    // class): without this, the async IndexedDB load could silently revert
+    // a just-imported collection/review/proxy library to the sync-cache
+    // snapshot.
+    const loadedMachineLifeCollections = p.machineLifeCollections ?? [];
+    machineLifeCollectionsRef.current = loadedMachineLifeCollections;
+    setMachineLifeCollections(loadedMachineLifeCollections);
+    const loadedMachineLifeReviews = p.machineLifeReviews ?? [];
+    machineLifeReviewsRef.current = loadedMachineLifeReviews;
+    setMachineLifeReviews(loadedMachineLifeReviews);
+    const loadedMachineLifeProxyLibraries = p.machineLifeProxyLibraries ?? [];
+    machineLifeProxyLibrariesRef.current = loadedMachineLifeProxyLibraries;
+    setMachineLifeProxyLibraries(loadedMachineLifeProxyLibraries);
+    // Suno Library (0812_MUSIC_Suno-Library-Manifest-Integration_v1.0.0) —
+    // same mandatory re-seed-at-authoritative-load step as machineLife*
+    // above (0715D bug class): without this, the async IndexedDB load
+    // could silently revert just-saved reviews/markers to the sync-cache
+    // snapshot.
+    const loadedSunoLibraryImportPointer = p.sunoLibraryImportPointer;
+    sunoLibraryImportPointerRef.current = loadedSunoLibraryImportPointer;
+    setSunoLibraryImportPointer(loadedSunoLibraryImportPointer);
+    const loadedSunoListeningRecords = p.sunoListeningRecords ?? [];
+    sunoListeningRecordsRef.current = loadedSunoListeningRecords;
+    setSunoListeningRecords(loadedSunoListeningRecords);
+    const loadedSunoInterestMarkers = p.sunoInterestMarkers ?? [];
+    sunoInterestMarkersRef.current = loadedSunoInterestMarkers;
+    setSunoInterestMarkers(loadedSunoInterestMarkers);
     // Glyph Audio (0804A) — same mandatory re-seed-at-authoritative-load
     // step as songAnalyses/loopWorkspaceDrafts above (0715D bug class):
     // without this, the async IndexedDB load could silently revert a
@@ -6867,6 +7053,29 @@ export default function App() {
               glyphLayoutPresets={glyphLayoutPresets}
               onSaveGlyphComposition={handleSaveGlyphComposition}
               onRecordGlyphExport={handleRecordGlyphExport}
+            />
+          ) : viewMode === "machine_life_research" ? (
+            <MachineLifeResearchWorkspace
+              collections={machineLifeCollections}
+              reviews={machineLifeReviews}
+              proxyLibraries={machineLifeProxyLibraries}
+              onCommitCollection={handleCommitMachineLifeCollections}
+              onSaveReview={handleSaveMachineLifeReview}
+              onCommitProxyLibrary={handleCommitMachineLifeProxyLibrary}
+              onReplaceReviewsForCollection={handleReplaceMachineLifeReviewsForCollection}
+            />
+          ) : viewMode === "suno_library" ? (
+            <SunoLibraryWorkspace
+              listeningRecords={sunoListeningRecords}
+              interestMarkers={sunoInterestMarkers}
+              onCommitImport={handleCommitSunoLibraryImport}
+              onSetListeningStatus={handleSetSunoListeningStatus}
+              onSetAssetKind={handleSetSunoAssetKind}
+              onToggleSuggestedUse={handleToggleSunoSuggestedUse}
+              onSetNotes={handleSetSunoNotes}
+              onUpsertInterestMarker={handleUpsertSunoInterestMarker}
+              onRemoveInterestMarker={handleRemoveSunoInterestMarker}
+              onMergeReviewImport={handleMergeSunoReviewImport}
             />
           ) : viewMode === "library" && sourceOwnerFilter === "reference" && soundsShowLoops ? (
             // 0722_MUSIC_Loops_Library_And_Looper_Naming — saved loops as a

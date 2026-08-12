@@ -9,6 +9,8 @@ import type { LibraryTrackFilters } from "../logic/libraryFilters";
 import type { PlayColorTheme } from "../logic/colorLab";
 import type { CrateRecord } from "./crateTypes";
 import type { PlaylistPathOption } from "./playlistPathTypes";
+import type { MachineLifeCollection, MachineLifeRecordingReview, MachineLifeProxyLibrary } from "./machineLifeTypes";
+import type { SunoLibraryImportPointer, SunoListeningRecord, SunoInterestMarker } from "./sunoLibraryTypes";
 export type { PlaylistPathOption } from "./playlistPathTypes";
 export type { PlayColorTheme };
 export type { CrateRecord };
@@ -319,6 +321,35 @@ export type PlayProject = {
   glyphLayoutPresets?: import("./glyphLayoutTypes").ManuscriptLayoutPreset[];
   glyphRenderProfiles?: import("./glyphCompositionTypes").RenderProfile[];
   glyphExportRecords?: import("./glyphCompositionTypes").ExportRecord[];
+  // Machine Life Research Workspace (0811_MACHINE-LIFE_MUSIC-Research-
+  // Workspace-Handoff_v1.0.0) — bounded research import of the Machine Life
+  // Stage 0 Pre-Life collection. Project-level for the same reason as
+  // loops/songAnalyses/glyphAnalyses above: a collection's lineage points
+  // back to the WOS Share manifest it was imported from, not the other way
+  // around. machineLifeCollections holds imported, IMMUTABLE manifest data
+  // (never mutated by a review edit); machineLifeReviews holds editable
+  // Pass 1/Pass 2 review state keyed by recordingId, kept structurally
+  // separate per the handoff spec; machineLifeProxyLibraries holds MP3
+  // listening-proxy associations, which are audition-only and never
+  // substitute for canonical WAV identity/checksum.
+  machineLifeCollections?: MachineLifeCollection[];
+  machineLifeReviews?: MachineLifeRecordingReview[];
+  machineLifeProxyLibraries?: MachineLifeProxyLibrary[];
+  // 0812_MUSIC_Suno-Library-Manifest-Integration_v1.0.0. Project-level for
+  // the same reason as machineLife* above: this data's lineage points back
+  // to the WOS Share SUNO_LIBRARY manifest it was imported from. The full
+  // archive-authority data (8,381 encoded locations, canonical recordings,
+  // duplicate relationships) is deliberately NOT persisted here — it is
+  // rebuilt each session from WOS-share by the manifest adapter (spec §8:
+  // "avoid... large duplicate manifest payloads when a stable lightweight
+  // reference suffices"). sunoLibraryImportPointer is that lightweight
+  // reference — snapshot ID/version/counts only, small and stable.
+  // sunoListeningRecords/sunoInterestMarkers hold editable human review
+  // state keyed by canonicalRecordingId, kept structurally separate from
+  // the (unpersisted) immutable archive data, mirroring machineLifeReviews.
+  sunoLibraryImportPointer?: SunoLibraryImportPointer;
+  sunoListeningRecords?: SunoListeningRecord[];
+  sunoInterestMarkers?: SunoInterestMarker[];
   createdAt: string;
   updatedAt: string;
 };

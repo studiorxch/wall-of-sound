@@ -42,6 +42,19 @@ import { stageLegacyStemFiles } from './server/stems/stemLegacyMigration'
 import { resolveTrackSourcePath } from './server/stems/stemFsUtils'
 import { sha256File as sha256FileForStems } from './server/radio/radioVersionCloneHelper'
 import type { StemRole } from './src/data/trackStemTypes'
+// 0812_MUSIC_Suno-Library-Manifest-Integration_v1.0.0 — the server route
+// reuses the exact same pure adapter/resolver the client and its tests use
+// (music/src/logic/sunoLibrary/), so "which recording resolves to which
+// file" can never disagree between what the UI shows and what the server
+// actually serves.
+import { importSunoLibraryManifests } from './src/logic/sunoLibrary/manifestAdapter'
+import {
+  resolvePlaybackLocation,
+  indexEncodedLocationsById,
+  indexCanonicalRecordingsById,
+} from './src/logic/sunoLibrary/canonicalIdentity'
+import type { ManifestSourceTexts } from './src/logic/sunoLibrary/manifestValidation'
+import type { SunoEncodedLocation, SunoCanonicalRecording } from './src/data/sunoLibraryTypes'
 
 interface RadioStagingCreateBody {
   sourceTrackId?: string
@@ -149,6 +162,45 @@ const RADIO_WEB_EXPORT_ROOT = path.join(LIBRARY_ROOT, 'RadioWebExports')
 // Demucs/salvaged stem sets — never source audio, never a top-level track.
 const TRACK_STEM_LIBRARY_ROOT = trackStemLibraryRoot(LIBRARY_ROOT)
 
+// 0811_MACHINE-LIFE_MUSIC-Research-Workspace-Handoff_v1.0.0 — read-only
+// mirror root for the Machine Life Research workspace's manifest+proxy
+// import. NOT under LIBRARY_ROOT (WOS Share is a separate mirror, never a
+// second canonical audio archive); MACHINE_LIFE_MIRROR_ROOT env var override
+// follows the same configurability precedent as PLAY_LIBRARY_ROOT above.
+// Vite cwd is music/, so '../WOS-share/MACHINE_LIFE' resolves to the
+// repo-root WOS Share mirror. Server-resolved only — the browser never holds
+// this absolute path in persisted state (see /machine-life-mirror-root,
+// which returns it for one-time, in-memory use during an import operation
+// only, the same pattern /library-root already uses for LIBRARY_ROOT).
+const MACHINE_LIFE_MIRROR_ROOT = process.env.MACHINE_LIFE_MIRROR_ROOT
+  ? path.resolve(process.env.MACHINE_LIFE_MIRROR_ROOT)
+  : path.resolve(process.cwd(), '../WOS-share/MACHINE_LIFE')
+
+// 0812_MUSIC_Suno-Library-Manifest-Integration_v1.0.0 ------------------------
+// SUNO_ARCHIVE_ROOT is the external, possibly-disconnected archive holding
+// the immutable 00_ACQUISITION/ source (never exposed) and the derived,
+// read-only 01_EXTRACTED_MIRROR/ (the ONLY tree ever served to the
+// browser). Sibling to wall-of-sound under Projects/, not nested inside it
+// — same env-var-override-else-relative-default pattern as
+// MACHINE_LIFE_MIRROR_ROOT above.
+const SUNO_ARCHIVE_ROOT = process.env.SUNO_ARCHIVE_ROOT
+  ? path.resolve(process.env.SUNO_ARCHIVE_ROOT)
+  : path.resolve(process.cwd(), '../../SUNO_ARCHIVE')
+const SUNO_EXTRACTED_MIRROR_ROOT = path.join(SUNO_ARCHIVE_ROOT, '01_EXTRACTED_MIRROR')
+// The lightweight WOS Share authority mirror — five small JSON manifests,
+// never audio. Confined route below only ever serves these five whitelisted
+// filenames, never an arbitrary path.
+const SUNO_LIBRARY_WOS_SHARE_ROOT = process.env.SUNO_LIBRARY_WOS_SHARE_ROOT
+  ? path.resolve(process.env.SUNO_LIBRARY_WOS_SHARE_ROOT)
+  : path.resolve(process.cwd(), '../WOS-share/SUNO_LIBRARY')
+const SUNO_LIBRARY_MANIFEST_NAMES = new Set([
+  'suno-acquisition-snapshot.json',
+  'suno-audio-inventory.json',
+  'suno-duplicate-groups.json',
+  'suno-supplemental-assets.json',
+  'suno-sync-checkpoint.json',
+])
+
 const SUPPORTED_AUDIO = new Set(['.mp3', '.wav', '.aiff', '.aif', '.flac', '.m4a', '.ogg', '.opus'])
 const MIME: Record<string, string> = {
   '.mp3': 'audio/mpeg',
@@ -172,6 +224,44 @@ function mediaError(res: any, status: number, errorType: string, message: string
 function resolveFsPath(p: string): string {
   // Absolute paths used as-is; relative paths resolved from cwd (project root)
   return path.isAbsolute(p) ? p : path.resolve(process.cwd(), p)
+}
+
+// 0812_MUSIC_Suno-Library-Manifest-Integration_v1.0.0 ------------------------
+// Lazily-built, server-lifetime cache of the parsed WOS Share Suno
+// manifests, so /suno-library-audio doesn't re-parse ~29MB of JSON on every
+// request. The manifests are static authority files that only change when a
+// new acquisition build runs (a rare, explicit operator action) — no
+// file-watching invalidation is implemented; restart the dev server after a
+// new snapshot is published. Built once, on first request that needs it.
+interface SunoManifestIndex {
+  snapshotId: string
+  locationsById: Map<string, SunoEncodedLocation>
+  canonicalById: Map<string, SunoCanonicalRecording>
+}
+let sunoManifestIndexCache: SunoManifestIndex | null = null
+
+function loadSunoManifestIndex(): SunoManifestIndex | null {
+  if (sunoManifestIndexCache) return sunoManifestIndexCache
+  const dir = path.join(SUNO_LIBRARY_WOS_SHARE_ROOT, 'MANIFESTS')
+  const readOrNull = (name: string): string | null => {
+    const p = path.join(dir, name)
+    return fs.existsSync(p) ? fs.readFileSync(p, 'utf-8') : null
+  }
+  const sources: ManifestSourceTexts = {
+    acquisitionSnapshot: readOrNull('suno-acquisition-snapshot.json'),
+    audioInventory: readOrNull('suno-audio-inventory.json'),
+    duplicateGroups: readOrNull('suno-duplicate-groups.json'),
+    supplementalAssets: readOrNull('suno-supplemental-assets.json'),
+    syncCheckpoint: readOrNull('suno-sync-checkpoint.json'),
+  }
+  const result = importSunoLibraryManifests(sources)
+  if (result.status === 'BLOCKED') return null
+  sunoManifestIndexCache = {
+    snapshotId: result.snapshot.snapshotId,
+    locationsById: indexEncodedLocationsById(result.encodedLocations),
+    canonicalById: indexCanonicalRecordingsById(result.canonicalRecordings),
+  }
+  return sunoManifestIndexCache
 }
 
 function readJsonBody(req: IncomingMessage): Promise<unknown> {
@@ -427,6 +517,308 @@ export default defineConfig({
           res.setHeader('Content-Type', 'application/json')
           res.setHeader('Access-Control-Allow-Origin', '*')
           res.end(JSON.stringify({ root: LIBRARY_ROOT, exists: fs.existsSync(LIBRARY_ROOT) }))
+        })
+
+        // 0811_MACHINE-LIFE_MUSIC-Research-Workspace-Handoff_v1.0.0 ---------
+        // Read-only routes confined to MACHINE_LIFE_MIRROR_ROOT. Manifest
+        // text and directory listings reuse the existing unconfined
+        // /library-data and /library-ls routes above (no change needed —
+        // both already accept any resolved path); only binary proxy audio
+        // needs a new route, since /music-audio is confined to LIBRARY_ROOT.
+        // GET only; never writes, deletes, or modifies anything under
+        // MACHINE_LIFE_MIRROR_ROOT.
+
+        // GET /machine-life-mirror-root — same "resolved root for one-time
+        // client use, never persisted" pattern as /library-root above.
+        server.middlewares.use('/machine-life-mirror-root', (_req, res) => {
+          res.statusCode = 200
+          res.setHeader('Content-Type', 'application/json')
+          res.setHeader('Access-Control-Allow-Origin', '*')
+          res.end(JSON.stringify({ root: MACHINE_LIFE_MIRROR_ROOT, exists: fs.existsSync(MACHINE_LIFE_MIRROR_ROOT) }))
+        })
+
+        // GET /machine-life-evidence-data?path=<absolute path under MACHINE_LIFE_MIRROR_ROOT>
+        // Serves waveform/spectrogram PNG evidence, confined the same way as
+        // /machine-life-audio-data below. Read-only; no Range support needed
+        // for small evidence images.
+        server.middlewares.use('/machine-life-evidence-data', (req, res) => {
+          const method = (req as any).method as string
+          if (method !== 'GET' && method !== 'HEAD') {
+            res.statusCode = 405; res.end('Method Not Allowed'); return
+          }
+          const url = new URL(req.url ?? '/', 'http://localhost')
+          const requestedPath = url.searchParams.get('path')
+          if (!requestedPath) { res.statusCode = 400; res.end('missing path'); return }
+
+          const resolved = path.resolve(requestedPath)
+          if (!resolved.startsWith(MACHINE_LIFE_MIRROR_ROOT + path.sep) && resolved !== MACHINE_LIFE_MIRROR_ROOT) {
+            res.statusCode = 403
+            res.setHeader('Content-Type', 'text/plain')
+            res.end('Forbidden')
+            return
+          }
+          const ext = path.extname(resolved).toLowerCase()
+          const imageMime: Record<string, string> = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg' }
+          if (!imageMime[ext]) {
+            mediaError(res, 415, 'UNSUPPORTED_EXT', `Unsupported extension: ${ext}`)
+            return
+          }
+          if (!fs.existsSync(resolved) || !fs.statSync(resolved).isFile()) {
+            mediaError(res, 404, 'FILE_MISSING', `File not found: ${resolved}`)
+            return
+          }
+          res.setHeader('Content-Type', imageMime[ext])
+          res.setHeader('Cache-Control', 'no-cache')
+          res.setHeader('Access-Control-Allow-Origin', '*')
+          if (method === 'HEAD') { res.statusCode = 200; res.end(); return }
+          res.statusCode = 200
+          const stream = fs.createReadStream(resolved)
+          stream.on('error', () => mediaError(res, 500, 'STREAM_ERROR', 'Stream error'))
+          stream.pipe(res)
+        })
+
+        // GET /machine-life-audio-data?path=<absolute path under MACHINE_LIFE_MIRROR_ROOT>
+        // Range-aware binary streaming, same Content-Range handling as
+        // /music-audio, confined to MACHINE_LIFE_MIRROR_ROOT instead of
+        // LIBRARY_ROOT. Used only to preview/fetch a Machine Life MP3 proxy
+        // for re-upload through the existing /library-import endpoint.
+        server.middlewares.use('/machine-life-audio-data', (req, res) => {
+          const method = (req as any).method as string
+          if (method !== 'GET' && method !== 'HEAD') {
+            res.statusCode = 405; res.end('Method Not Allowed'); return
+          }
+          const url = new URL(req.url ?? '/', 'http://localhost')
+          const requestedPath = url.searchParams.get('path')
+          if (!requestedPath) { res.statusCode = 400; res.end('missing path'); return }
+
+          const resolved = path.resolve(requestedPath)
+          if (!resolved.startsWith(MACHINE_LIFE_MIRROR_ROOT + path.sep) && resolved !== MACHINE_LIFE_MIRROR_ROOT) {
+            res.statusCode = 403
+            res.setHeader('Content-Type', 'text/plain')
+            res.end('Forbidden')
+            return
+          }
+
+          const ext = path.extname(resolved).toLowerCase()
+          if (!SUPPORTED_AUDIO.has(ext)) {
+            mediaError(res, 415, 'UNSUPPORTED_EXT', `Unsupported extension: ${ext}`)
+            return
+          }
+          if (!fs.existsSync(resolved)) {
+            mediaError(res, 404, 'FILE_MISSING', `File not found: ${resolved}`)
+            return
+          }
+          let stat: fs.Stats
+          try { stat = fs.statSync(resolved) } catch {
+            mediaError(res, 500, 'STAT_ERROR', `Cannot stat: ${resolved}`); return
+          }
+          if (!stat.isFile()) {
+            mediaError(res, 400, 'NOT_A_FILE', `Not a file: ${resolved}`); return
+          }
+
+          const mime = MIME[ext] ?? 'audio/mpeg'
+          res.setHeader('Accept-Ranges', 'bytes')
+          res.setHeader('Content-Type', mime)
+          res.setHeader('Cache-Control', 'no-cache')
+          res.setHeader('Access-Control-Allow-Origin', '*')
+
+          if (method === 'HEAD') {
+            res.setHeader('Content-Length', stat.size)
+            res.statusCode = 200
+            res.end()
+            return
+          }
+
+          const range = (req as any).headers.range as string | undefined
+          if (range) {
+            const [startStr, endStr] = range.replace(/bytes=/, '').split('-')
+            const start = parseInt(startStr, 10)
+            const end = endStr ? parseInt(endStr, 10) : stat.size - 1
+            const chunkSize = end - start + 1
+            res.statusCode = 206
+            res.setHeader('Content-Range', `bytes ${start}-${end}/${stat.size}`)
+            res.setHeader('Content-Length', chunkSize)
+            const stream = fs.createReadStream(resolved, { start, end })
+            stream.on('error', () => mediaError(res, 500, 'STREAM_ERROR', 'Stream error'))
+            stream.pipe(res)
+          } else {
+            res.statusCode = 200
+            res.setHeader('Content-Length', stat.size)
+            const stream = fs.createReadStream(resolved)
+            stream.on('error', () => mediaError(res, 500, 'STREAM_ERROR', 'Stream error'))
+            stream.pipe(res)
+          }
+        })
+
+        // 0812_MUSIC_Suno-Library-Manifest-Integration_v1.0.0 ---------------
+        // Three read-only routes. /suno-library-audio is the security-
+        // sensitive one (spec §9.1): it accepts ONLY an opaque, manifest-
+        // authorized archive asset ID — never a filesystem path from the
+        // browser — and resolves the real file server-side through the same
+        // resolvePlaybackLocation() the client and its tests use. Every
+        // extractedRelativePath this can ever serve already comes from a
+        // SunoEncodedLocation whose path was populated only from
+        // zip-batch-member manifest records rooted under
+        // 01_EXTRACTED_MIRROR/ — there is no code path here that can
+        // construct or resolve to anything under 00_ACQUISITION/.
+
+        // GET /suno-archive-availability — is 01_EXTRACTED_MIRROR/ reachable
+        // right now. Never returns the raw archive root path (unlike
+        // /library-root/ /machine-life-mirror-root's "resolved root for
+        // one-time client use" convention) — the UI only needs online/
+        // offline, not the filesystem location, and the audio route below
+        // never needs the client to know it either.
+        server.middlewares.use('/suno-archive-availability', (_req, res) => {
+          const online = fs.existsSync(SUNO_EXTRACTED_MIRROR_ROOT)
+          res.statusCode = 200
+          res.setHeader('Content-Type', 'application/json')
+          res.setHeader('Access-Control-Allow-Origin', '*')
+          res.end(JSON.stringify({ state: online ? 'online' : 'offline', checkedAt: new Date().toISOString() }))
+        })
+
+        // GET /suno-library-manifest/<name> — streams one of the five
+        // whitelisted WOS Share authority manifests verbatim (never an
+        // arbitrary filename, never anything from REPORTS/ or SPECS/, which
+        // spec §4 explicitly says must not be parsed as application data).
+        server.middlewares.use('/suno-library-manifest', (req: IncomingMessage, res: ServerResponse) => {
+          const method = req.method
+          if (method !== 'GET' && method !== 'HEAD') {
+            res.statusCode = 405; res.end('Method Not Allowed'); return
+          }
+          const rawPath = (req.url ?? '/').replace(/^\/suno-library-manifest/, '') || '/'
+          const name = decodeURIComponent(rawPath.split('?')[0].replace(/^\/+/, ''))
+          if (!SUNO_LIBRARY_MANIFEST_NAMES.has(name)) {
+            res.statusCode = 404
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify({ error: 'unknown_manifest' }))
+            return
+          }
+          const resolved = path.join(SUNO_LIBRARY_WOS_SHARE_ROOT, 'MANIFESTS', name)
+          if (!fs.existsSync(resolved)) {
+            res.statusCode = 404
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify({ error: 'manifest_not_found' }))
+            return
+          }
+          res.statusCode = 200
+          res.setHeader('Content-Type', 'application/json; charset=utf-8')
+          res.setHeader('Access-Control-Allow-Origin', '*')
+          if (method === 'HEAD') { res.end(); return }
+          const stream = fs.createReadStream(resolved)
+          stream.on('error', () => mediaError(res, 500, 'STREAM_ERROR', 'Stream error'))
+          stream.pipe(res)
+        })
+
+        // GET /suno-library-audio/<archiveAssetId> — see route-family
+        // comment above. Range-capable, same streaming shape as
+        // /music-audio, with an added realpath-based symlink-escape guard
+        // that isPathConfinedTo alone does not provide (confirmed during
+        // preflight research: isPathConfinedTo is a plain string-prefix
+        // check with no fs.realpathSync step anywhere in this codebase).
+        server.middlewares.use('/suno-library-audio', (req: IncomingMessage, res: ServerResponse) => {
+          const method = req.method
+          if (method !== 'GET' && method !== 'HEAD') {
+            res.statusCode = 405; res.end('Method Not Allowed'); return
+          }
+
+          const rawPath = (req.url ?? '/').replace(/^\/suno-library-audio/, '') || '/'
+          const requestedId = decodeURIComponent(rawPath.split('?')[0].replace(/^\/+/, ''))
+          // A valid archive asset ID is a single opaque path segment. Any
+          // slash, backslash, or traversal token means this is not an ID at
+          // all — reject outright rather than let it reach path resolution.
+          if (!requestedId || /[\\/]/.test(requestedId) || requestedId === '.' || requestedId === '..') {
+            mediaError(res, 400, 'INVALID_ASSET_ID', 'Invalid archive asset ID')
+            return
+          }
+
+          const index = loadSunoManifestIndex()
+          if (!index) {
+            mediaError(res, 503, 'MANIFEST_UNAVAILABLE', 'Suno library manifest could not be loaded')
+            return
+          }
+
+          const resolution = resolvePlaybackLocation(requestedId, index.locationsById, index.canonicalById)
+          if (resolution.kind === 'unavailable') {
+            mediaError(res, 404, 'ASSET_UNAVAILABLE', 'This recording has no extracted copy available for playback')
+            return
+          }
+
+          const candidate = path.join(SUNO_EXTRACTED_MIRROR_ROOT, resolution.extractedRelativePath)
+          if (!isPathConfinedTo(SUNO_EXTRACTED_MIRROR_ROOT, candidate)) {
+            mediaError(res, 403, 'PATH_OUTSIDE_MIRROR', 'Resolved path is outside the extracted mirror')
+            return
+          }
+
+          let realRoot: string
+          let realCandidate: string
+          try {
+            realRoot = fs.realpathSync(SUNO_EXTRACTED_MIRROR_ROOT)
+            realCandidate = fs.realpathSync(candidate)
+          } catch {
+            mediaError(res, 404, 'FILE_MISSING', `File not found: ${resolution.extractedRelativePath}`)
+            return
+          }
+          if (!isPathConfinedTo(realRoot, realCandidate)) {
+            mediaError(res, 403, 'SYMLINK_ESCAPE', 'Resolved path escapes the extracted mirror via a symlink')
+            return
+          }
+
+          const ext = path.extname(realCandidate).toLowerCase()
+          if (!SUPPORTED_AUDIO.has(ext)) {
+            mediaError(res, 415, 'UNSUPPORTED_EXT', `Unsupported extension: ${ext}`)
+            return
+          }
+
+          let stat: fs.Stats
+          try { stat = fs.statSync(realCandidate) } catch {
+            mediaError(res, 500, 'STAT_ERROR', `Cannot stat: ${resolution.extractedRelativePath}`); return
+          }
+          if (!stat.isFile()) {
+            mediaError(res, 400, 'NOT_A_FILE', `Not a file: ${resolution.extractedRelativePath}`); return
+          }
+
+          const mime = MIME[ext] ?? 'audio/mpeg'
+          res.setHeader('Accept-Ranges', 'bytes')
+          res.setHeader('Content-Type', mime)
+          res.setHeader('Cache-Control', 'no-cache')
+          res.setHeader('Access-Control-Allow-Origin', '*')
+          res.setHeader('Access-Control-Expose-Headers', 'X-Suno-Playback-Fallback, X-Suno-Playback-Fallback-For')
+          if (resolution.kind === 'fallback') {
+            // Discloses substitution in the same response the audio comes
+            // back on, so the UI doesn't need a second round-trip to know
+            // playback used an equivalent encoded location (spec: "The UI
+            // must disclose when playback uses an equivalent encoded
+            // location").
+            res.setHeader('X-Suno-Playback-Fallback', 'true')
+            res.setHeader('X-Suno-Playback-Fallback-For', resolution.requestedArchiveAssetId)
+          }
+
+          if (method === 'HEAD') {
+            res.setHeader('Content-Length', stat.size)
+            res.statusCode = 200
+            res.end()
+            return
+          }
+
+          const range = req.headers.range
+          if (range) {
+            const [startStr, endStr] = range.replace(/bytes=/, '').split('-')
+            const start = parseInt(startStr, 10)
+            const end = endStr ? parseInt(endStr, 10) : stat.size - 1
+            const chunkSize = end - start + 1
+            res.statusCode = 206
+            res.setHeader('Content-Range', `bytes ${start}-${end}/${stat.size}`)
+            res.setHeader('Content-Length', chunkSize)
+            const stream = fs.createReadStream(realCandidate, { start, end })
+            stream.on('error', () => mediaError(res, 500, 'STREAM_ERROR', 'Stream error'))
+            stream.pipe(res)
+          } else {
+            res.statusCode = 200
+            res.setHeader('Content-Length', stat.size)
+            const stream = fs.createReadStream(realCandidate)
+            stream.on('error', () => mediaError(res, 500, 'STREAM_ERROR', 'Stream error'))
+            stream.pipe(res)
+          }
         })
 
         // /library-data?path=... — read a text file (CSV) from the local filesystem

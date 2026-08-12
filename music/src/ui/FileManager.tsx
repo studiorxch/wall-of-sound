@@ -9,7 +9,7 @@ import { type TrackDragPayload } from "../logic/playlistMembership";
 // row — kept only so App.tsx can recognize and redirect a stray reference
 // to Sounds with the Loops filter selected, rather than the value being an
 // unrecognized string.
-export type ViewMode = "playlist" | "library" | "groups" | "orphans" | "excluded" | "locks" | "playlists_grid" | "sampler_banks_grid" | "crates_grid" | "crate_detail" | "artists" | "mood_signal_audit" | "analyzer_review" | "loop_library" | "sectional_looper" | "glyph_audio" | "edit" | "perform" | "radio" | "radio_playlists_grid" | "radio_banks_grid" | "collections_overview" | "radio_loopchain_player";
+export type ViewMode = "playlist" | "library" | "groups" | "orphans" | "excluded" | "locks" | "playlists_grid" | "sampler_banks_grid" | "crates_grid" | "crate_detail" | "artists" | "mood_signal_audit" | "analyzer_review" | "loop_library" | "sectional_looper" | "glyph_audio" | "edit" | "perform" | "radio" | "radio_playlists_grid" | "radio_banks_grid" | "collections_overview" | "radio_loopchain_player" | "machine_life_research" | "suno_library";
 
 type Props = {
   playlists: PlaylistRecord[];
@@ -137,6 +137,17 @@ export function FileManager({
               active={viewMode === "artists"}
               onClick={() => onViewModeChange("artists")}
             />
+            {/* 0812_MUSIC_Suno-Library-Manifest-Integration_v1.0.0 — spec
+                explicitly places Suno under Libraries, not AudioLab (a
+                deliberate divergence from Machine Life's own placement
+                below, which is architecturally the closer precedent but
+                was not the spec's instruction here). */}
+            <NavRow
+              icon="graphic_eq"
+              label="Suno"
+              active={viewMode === "suno_library"}
+              onClick={() => onViewModeChange("suno_library")}
+            />
           </div>
 
           <div className="fm-section">
@@ -166,6 +177,16 @@ export function FileManager({
               label="Glyph"
               active={viewMode === "glyph_audio"}
               onClick={() => onViewModeChange("glyph_audio")}
+            />
+            {/* Machine Life Research (0811_MACHINE-LIFE_MUSIC-Research-
+                Workspace-Handoff_v1.0.0) — bounded research import of the
+                Machine Life Stage 0 Pre-Life collection; reuses an existing
+                icon per the same convention Glyph established above. */}
+            <NavRow
+              icon="layers"
+              label="Machine Life"
+              active={viewMode === "machine_life_research"}
+              onClick={() => onViewModeChange("machine_life_research")}
             />
           </div>
 
