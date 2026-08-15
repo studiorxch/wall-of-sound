@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { act } from "react-dom/test-utils";
 import { createRoot, type Root } from "react-dom/client";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
@@ -92,6 +93,7 @@ describe("MachineLifeGeneratePanel", () => {
             durationSeconds: 10,
             seed: 12345,
             residentId: null,
+            backendId: "facebook/musicgen-small",
             engine: "facebook/musicgen-small",
             canonicalWavFilename: "mlgen_0001.wav",
             canonicalChecksumSha256: "abc",
@@ -101,7 +103,7 @@ describe("MachineLifeGeneratePanel", () => {
       }
       return {
         jobId,
-        status: "processing",
+        status: "generating",
       };
     });
 
@@ -109,11 +111,11 @@ describe("MachineLifeGeneratePanel", () => {
     vi.spyOn(client, "intakeGeneratedAudioProxy").mockResolvedValue({
       proxy: {
         kind: "generation",
-        stem: "fullMix",
-        fileName: "mlgen_0001.wav",
-        audioRelPath: "machine_life/mlgen_0001.wav",
+        stem: "mlgen_0001",
+        proxyFileName: "mlgen_0001.mp3",
+        audioRelPath: "machine-life/generation/mlgen_0001.mp3",
+        importedAt: new Date().toISOString(),
         durationSeconds: 10,
-        createdAt: new Date().toISOString(),
       },
     });
 
@@ -133,7 +135,6 @@ describe("MachineLifeGeneratePanel", () => {
 
     const generateBtn = container!.querySelector(".ml-generate-btn") as HTMLButtonElement;
 
-    let handlePromise: Promise<void> | null = null;
     await act(async () => {
       generateBtn.click();
     });
