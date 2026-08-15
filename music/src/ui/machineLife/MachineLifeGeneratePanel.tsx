@@ -70,7 +70,7 @@ export function MachineLifeGeneratePanel({ latestGeneration, onSaveGeneration }:
 
       let completedJob = false;
       let attempts = 0;
-      const maxAttempts = 120; // 60s timeout at 500ms intervals
+      const maxAttempts = 600; // 300s timeout ceiling at 500ms intervals
 
       while (!completedJob && attempts < maxAttempts) {
         await new Promise((r) => setTimeout(r, 500));
