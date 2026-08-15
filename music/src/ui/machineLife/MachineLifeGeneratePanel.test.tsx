@@ -34,11 +34,27 @@ describe("MachineLifeGeneratePanel configuration and logic", () => {
     const generatingJob: MachineLifeGenerationJob = {
       jobId: "mljob_001",
       status: "generating",
+      request: {
+        prompt: "rhythmic pulse",
+        durationSeconds: 5,
+        seed: 42,
+        residentId: null,
+        backendId: "facebook/musicgen-small",
+      },
+      createdAt: "2025-01-01T00:00:00.000Z",
     };
 
     const completedJob: MachineLifeGenerationJob = {
       jobId: "mljob_001",
       status: "completed",
+      request: {
+        prompt: "rhythmic pulse",
+        durationSeconds: 5,
+        seed: 42,
+        residentId: null,
+        backendId: "facebook/musicgen-small",
+      },
+      createdAt: "2025-01-01T00:00:00.000Z",
       result: {
         id: "mlgen_0001",
         prompt: "rhythmic pulse",
@@ -50,6 +66,9 @@ describe("MachineLifeGeneratePanel configuration and logic", () => {
         canonicalWavFilename: "mlgen_0001.wav",
         canonicalChecksumSha256: "checksum123",
         createdAt: "2025-01-01T00:00:00.000Z",
+        commercialEligibility: false,
+        trainingEligibility: false,
+        researchOnly: true,
       },
     };
 
