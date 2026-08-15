@@ -17,6 +17,8 @@ interface Props {
   onSaveGeneration(generation: MachineLifeGeneratedOutput): void;
 }
 
+export const GENERATION_MAX_ATTEMPTS = 600; // 300s timeout ceiling at 500ms intervals
+
 function randomSeed(): number {
   return Math.floor(Math.random() * 90000) + 10000;
 }
@@ -70,9 +72,8 @@ export function MachineLifeGeneratePanel({ latestGeneration, onSaveGeneration }:
 
       let completedJob = false;
       let attempts = 0;
-      const maxAttempts = 600; // 300s timeout ceiling at 500ms intervals
 
-      while (!completedJob && attempts < maxAttempts) {
+      while (!completedJob && attempts < GENERATION_MAX_ATTEMPTS) {
         await new Promise((r) => setTimeout(r, 500));
         attempts++;
         const job = await pollGenerationJob(jobId);
