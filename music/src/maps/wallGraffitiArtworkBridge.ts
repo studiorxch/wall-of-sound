@@ -13,8 +13,10 @@ import type { SerializedArtworkPayload } from "../graffiti/graffitiTypes";
 import type { Artwork, ArtworkPlacement, PlacementTargetType } from "../data/subwayRollingStockAdminTypes";
 
 type MutationResult<T> = { ok: boolean; reason?: string; data?: T };
+type ArtworkCreatorType = "system" | "user" | "resident" | "invited_artist" | "unknown";
 type ArtworkGlobal = {
-  createArtwork: (input: { creatorType: "system" | "user" | "resident" | "invited_artist" | "unknown"; title?: string; sourceType?: string; sourceRef?: string; metadata?: Record<string, unknown> }) => MutationResult<Artwork>;
+  createArtwork: (input: { creatorType: ArtworkCreatorType; creatorId?: string | null; title?: string; sourceType?: string; sourceRef?: string; metadata?: Record<string, unknown> }) => MutationResult<Artwork>;
+  updateArtworkStatus: (id: string, status: "draft" | "active" | "archived") => MutationResult<Artwork>;
 };
 type PlacementGlobal = {
   createPlacement: (input: { artworkId: string; surfaceId: string; targetType: PlacementTargetType; targetId: string }) => MutationResult<ArtworkPlacement> & { covered?: string | null };
@@ -41,11 +43,18 @@ export function saveDrawingAsArtwork(input: {
   rasterPreviewDataUrl?: string;
   title?: string;
   sourceType: "drawing" | "sticker" | "upload";
+  // 0818_SUBWAY_Resident_Graffiti_Artists — defaults to the human Drawing
+  // App's existing "user" behavior; a Resident create-and-place flow
+  // passes creatorType:"resident" + its own stable sr-resident-* id here,
+  // reusing this exact save path rather than a parallel one (BUILD §8).
+  creatorType?: "system" | "user" | "resident" | "invited_artist" | "unknown";
+  creatorId?: string;
 }): BridgeResult<Artwork> {
   const authority = artworkAuthority();
   if (!authority) return { ok: false, error: "authority_unavailable" };
   const result = authority.createArtwork({
-    creatorType: "user",
+    creatorType: input.creatorType ?? "user",
+    creatorId: input.creatorId,
     title: input.title,
     sourceType: input.sourceType,
     sourceRef: input.rasterPreviewDataUrl,
@@ -82,4 +91,16 @@ export function placeArtworkOnSurface(input: { artworkId: string; surfaceId: str
   const result = authority.createPlacement({ artworkId: input.artworkId, surfaceId: input.surfaceId, targetType: "surface", targetId: input.surfaceId });
   if (!result.ok || !result.data) return { ok: false, error: result.reason ?? "placement_failed" };
   return { ok: true, data: { ...result.data, covered: result.covered ?? null } };
+}
+
+// BUILD §25 — "preserve generated Artwork as draft/unplaced only if current
+// Artwork status model supports it cleanly": it does (Artwork already has a
+// real status field). Used when a Resident's generated artwork saves
+// successfully but no eligible surface exists to place it on.
+export function markArtworkDraft(artworkId: string): BridgeResult<Artwork> {
+  const authority = artworkAuthority();
+  if (!authority) return { ok: false, error: "authority_unavailable" };
+  const result = authority.updateArtworkStatus(artworkId, "draft");
+  if (!result.ok || !result.data) return { ok: false, error: result.reason ?? "update_failed" };
+  return { ok: true, data: result.data };
 }

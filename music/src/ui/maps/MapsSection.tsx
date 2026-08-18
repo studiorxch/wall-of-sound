@@ -13,6 +13,8 @@ import { MapsStationsGrid } from "./MapsStationsGrid";
 import { MapsStationDetail } from "./MapsStationDetail";
 import { MapsRollingStockGrid } from "./MapsRollingStockGrid";
 import { MapsRollingStockDetail } from "./MapsRollingStockDetail";
+import { MapsResidentGraffitiGrid } from "../graffiti/MapsResidentGraffitiGrid";
+import { MapsResidentGraffitiDetail } from "../graffiti/MapsResidentGraffitiDetail";
 import { MapsGraffitiDrawingApp } from "../graffiti/MapsGraffitiDrawingApp";
 import { parseMapsHash, writeMapsHash } from "../../maps/mapsHash";
 import * as itineraryStore from "../../maps/itineraryStore";
@@ -42,6 +44,7 @@ export function MapsSection() {
   const [selectedRaceCourseId, setSelectedRaceCourseId] = useState<string | null>(null);
   const [selectedStationId, setSelectedStationId] = useState<string | null>(null);
   const [selectedTrainId, setSelectedTrainId] = useState<string | null>(null);
+  const [selectedResidentId, setSelectedResidentId] = useState<string | null>(null);
   const [stickerSandboxOpen, setStickerSandboxOpen] = useState(false);
 
   useEffect(() => {
@@ -91,6 +94,8 @@ export function MapsSection() {
       }
     } else if (activeLibrary === "rollingStock") {
       label = selectedTrainId ? `MAPS — ${selectedTrainId}` : "MAPS — Rolling Stock";
+    } else if (activeLibrary === "residents") {
+      label = selectedResidentId ? `MAPS — ${selectedResidentId}` : "MAPS — Graffiti Artists";
     } else if (activeLibrary === "vehicles") {
       label = "MAPS — Vehicles";
     } else if (activeLibrary === "overlays") {
@@ -101,7 +106,7 @@ export function MapsSection() {
       label = "MAPS — Geographic";
     }
     document.title = label;
-  }, [activeLibrary, activeCollection, selectedItineraryId, selectedRaceCourseId, selectedStationId, selectedTrainId, selectedId]);
+  }, [activeLibrary, activeCollection, selectedItineraryId, selectedRaceCourseId, selectedStationId, selectedTrainId, selectedResidentId, selectedId]);
 
   return (
     <>
@@ -161,6 +166,16 @@ export function MapsSection() {
               />
             ) : (
               <MapsRollingStockGrid onOpen={(id) => setSelectedTrainId(id)} onOpenStickerSandbox={() => setStickerSandboxOpen(true)} />
+            )
+          ) : activeLibrary === "residents" ? (
+            selectedResidentId ? (
+              <MapsResidentGraffitiDetail
+                key={selectedResidentId}
+                residentId={selectedResidentId}
+                onBack={() => setSelectedResidentId(null)}
+              />
+            ) : (
+              <MapsResidentGraffitiGrid onOpen={(id) => setSelectedResidentId(id)} />
             )
           ) : selectedId ? (
             <MapsGeographicStyleDetail

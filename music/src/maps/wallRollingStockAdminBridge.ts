@@ -162,6 +162,14 @@ export function listArtworks(): BridgeResult<Artwork[]> {
   return { ok: true, data: a.getAllArtworks() };
 }
 
+export function getArtwork(id: string): BridgeResult<Artwork> {
+  const a = artwork();
+  if (!a) return { ok: false, error: "authority_unavailable" };
+  const found = a.getArtwork(id);
+  if (!found) return { ok: false, error: "not_found" };
+  return { ok: true, data: found };
+}
+
 export function createSeedArtwork(title: string): BridgeResult<Artwork> {
   const a = artwork();
   if (!a) return { ok: false, error: "authority_unavailable" };

@@ -6,6 +6,7 @@ import * as wallOverlayStyleBridge from "../../maps/wallOverlayStyleBridge";
 import * as wallOrbProfileBridge from "../../maps/wallOrbProfileBridge";
 import * as wallStationLibraryBridge from "../../maps/wallStationLibraryBridge";
 import * as wallRollingStockAdminBridge from "../../maps/wallRollingStockAdminBridge";
+import * as wallResidentGraffitiBridge from "../../maps/wallResidentGraffitiBridge";
 import * as itineraryStore from "../../maps/itineraryStore";
 import * as raceCourseStore from "../../maps/raceCourseStore";
 import { ensurePreviewMap } from "../../maps/wallMapPreview";
@@ -40,7 +41,7 @@ import { ensurePreviewMap } from "../../maps/wallMapPreview";
 // activeLibrary/activeCollection are mutually exclusive selection states —
 // only one row is ever highlighted at a time.
 
-export type MapsLibraryKey = "geographic" | "vehicles" | "overlays" | "orbs" | "raceCourses" | "stations" | "rollingStock";
+export type MapsLibraryKey = "geographic" | "vehicles" | "overlays" | "orbs" | "raceCourses" | "stations" | "rollingStock" | "residents";
 export type MapsCollectionKey = "itineraries";
 
 type Props = {
@@ -84,6 +85,11 @@ function readRollingStockCount(): number {
   return list.ok ? list.data.length : 0;
 }
 
+function readResidentCount(): number {
+  const list = wallResidentGraffitiBridge.listResidents();
+  return list.ok ? list.data.length : 0;
+}
+
 export function MapsSidebar({ activeLibrary, onSelectLibrary, activeCollection, onSelectCollection }: Props) {
   const [collapsed, setCollapsed] = useState(false);
   const [geographicCount, setGeographicCount] = useState(readGeographicCount);
@@ -93,6 +99,7 @@ export function MapsSidebar({ activeLibrary, onSelectLibrary, activeCollection, 
   const [raceCourseCount, setRaceCourseCount] = useState(readRaceCourseCount);
   const [stationCount, setStationCount] = useState(readStationCount);
   const [rollingStockCount, setRollingStockCount] = useState(readRollingStockCount);
+  const [residentCount, setResidentCount] = useState(readResidentCount);
   const [itineraryCount, setItineraryCount] = useState(() => itineraryStore.listItineraries().length);
 
   useEffect(() => {
@@ -122,11 +129,16 @@ export function MapsSidebar({ activeLibrary, onSelectLibrary, activeCollection, 
     // itself (opening the library), not here — this just reflects whatever
     // count already exists so the badge stays live once tracking is running.
     const unsubRollingStock = wallRollingStockAdminBridge.subscribe(() => setRollingStockCount(readRollingStockCount()));
+    // Residents seed synchronously (a fixed roster, unlike the live-polled
+    // counts above) — ensureResidentsSeeded() then an immediate re-read is
+    // enough; subscribe still covers later artwork/placement mutations.
+    if (wallResidentGraffitiBridge.isBridgeAvailable()) { wallResidentGraffitiBridge.ensureResidentsSeeded(); setResidentCount(readResidentCount()); }
+    const unsubResidents = wallResidentGraffitiBridge.subscribe(() => setResidentCount(readResidentCount()));
     // itineraryStore hydrates async from IndexedDB — its own subscribe
     // fires once hydration completes, same "count may start at 0 and
     // update shortly after" shape as the wall bridges above.
     const unsubItineraries = itineraryStore.subscribe(() => setItineraryCount(itineraryStore.listItineraries().length));
-    return () => { unsubGeographic(); unsubVehicles(); unsubOverlays(); unsubOrbs(); unsubRaceCourses(); unsubStations(); unsubRollingStock(); unsubItineraries(); };
+    return () => { unsubGeographic(); unsubVehicles(); unsubOverlays(); unsubOrbs(); unsubRaceCourses(); unsubStations(); unsubRollingStock(); unsubResidents(); unsubItineraries(); };
   }, []);
 
   return (
@@ -213,6 +225,17 @@ export function MapsSidebar({ activeLibrary, onSelectLibrary, activeCollection, 
               <span className="fm-row-icon"><Icon name="tram" /></span>
               <span className="fm-row-label">Rolling Stock</span>
               <span className="fm-row-count">{rollingStockCount}</span>
+            </button>
+            {/* 0818_SUBWAY_Resident_Graffiti_Artists — "MAPS → Residents →
+                Graffiti Artists" (BUILD §29). Same dev/admin, always-visible
+                reasoning as Rolling Stock immediately above. */}
+            <button
+              className={`fm-row${activeCollection === null && activeLibrary === "residents" ? " active" : ""}`}
+              onClick={() => onSelectLibrary("residents")}
+            >
+              <span className="fm-row-icon"><Icon name="artist" /></span>
+              <span className="fm-row-label">Graffiti Artists</span>
+              <span className="fm-row-count">{residentCount}</span>
             </button>
           </div>
           <div className="fm-section">

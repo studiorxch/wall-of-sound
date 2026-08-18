@@ -2534,6 +2534,17 @@
     <script src="./systems/transit/subwayArtworkAuthority.tests.js"></script>
     <script src="./systems/transit/subwayArtworkPlacementAuthority.js"></script>
     <script src="./systems/transit/subwayArtworkPlacementAuthority.tests.js"></script>
+    <!-- ── 0818_SUBWAY_Resident_Graffiti_Artists — persistent Resident
+         graffiti-artist identity, reusable style/behavior profiles, and
+         canonical-ID-only eligible-surface resolution. Depends on Rolling
+         Stock (routes/cars), Car Surface (surfaces), and Artwork Placement
+         (occupancy/cover checks) — load after all three. Artwork/stroke
+         GENERATION itself lives on the MUSIC side
+         (music/src/graffiti/residentArtworkGenerator.ts), since it must
+         reuse the existing Drawing App's own Stroke types/brush renderers
+         directly — this file owns identity/style/behavior/history only. ── -->
+    <script src="./systems/transit/subwayResidentGraffitiArtistAuthority.js"></script>
+    <script src="./systems/transit/subwayResidentGraffitiArtistAuthority.tests.js"></script>
     <script src="./systems/transit/mtaSubwayMapFeatures.js"></script>
     <script src="./systems/transit/mtaSubwayMapFeatures.tests.js"></script>
     <!-- ── SUBWAY: Station Library (0818_SUBWAY_Station_Library_Foundation) —

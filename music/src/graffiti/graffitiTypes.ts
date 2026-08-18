@@ -11,10 +11,18 @@
 // (BUILD §6) — pressure/tiltX/tiltY/twist/velocity are all optional and
 // left undefined rather than defaulted to a fake value; brushes fall back
 // to a documented default only at RENDER time, never at capture time.
+//
+// "generated" (0818_SUBWAY_Resident_Graffiti_Artists_v1.0.0 — BUILD §13) is
+// a real, distinct fourth pointerType — never "mouse" — used ONLY by
+// residentArtworkGenerator.ts for Resident-authored points. It exists so a
+// generated stroke's provenance is honestly labeled at the type level
+// (synthetic/generative metadata, never presented as observed human input)
+// rather than overloading "mouse" (which already carries the specific
+// meaning "real device, no pressure hardware" throughout this module).
 
 export type BrushId = "marker" | "fatcap" | "mop";
 
-export type PointerKind = "mouse" | "touch" | "pen";
+export type PointerKind = "mouse" | "touch" | "pen" | "generated";
 
 export interface StrokePoint {
   x: number; // normalized surface-space, 0..1 — never raw browser pixels (BUILD §18)
@@ -73,4 +81,20 @@ export interface SerializedArtworkPayload {
   canvasHeight: number;
   strokes: Stroke[];
   targetMode: DrawingTargetMode;
+}
+
+// 0818_SUBWAY_Resident_Graffiti_Artists_v1.0.0 — BUILD §12. Inspectable,
+// reproducible intermediate step between a Resident's style profile and
+// the structured strokes actually generated from it — never itself the
+// persistent Artwork identity (BUILD §5 "the drawing session is temporary
+// working state").
+export interface ResidentArtworkIntent {
+  residentId: string;
+  styleProfileId: string;
+  toolSequence: BrushId[];
+  palette: string[];
+  strokeCount: number;
+  compositionBounds: { width: number; height: number };
+  seed: number;
+  generatedAt: number;
 }

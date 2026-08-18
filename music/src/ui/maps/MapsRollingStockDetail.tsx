@@ -1,11 +1,26 @@
 import { useEffect, useState } from "react";
 import { CollectionDetailBar } from "../CollectionDetailBar";
 import * as bridge from "../../maps/wallRollingStockAdminBridge";
+import * as residentBridge from "../../maps/wallResidentGraffitiBridge";
 import { MapsGraffitiDrawingApp } from "../graffiti/MapsGraffitiDrawingApp";
 import type {
   LogicalTrain, LogicalConsist, LogicalCar, TrainPositionState, CarSurface, ArtworkPlacement,
 } from "../../data/subwayRollingStockAdminTypes";
 import type { DrawingTargetMode } from "../../graffiti/graffitiTypes";
+
+// BUILD §33 — "Do not hide Resident authorship behind generic artwork
+// labels." Resolves an artworkId's real creatorType/creatorId (via the
+// canonical Artwork Authority) and, when it's Resident-authored, the
+// Resident's real tag — never inferred from the artworkId string itself.
+function describeArtworkAuthor(artworkId: string): string | null {
+  const artResult = bridge.getArtwork(artworkId);
+  if (!artResult.ok) return null;
+  const art = artResult.data;
+  if (art.creatorType !== "resident" || !art.creatorId) return null;
+  const residentResult = residentBridge.getResident(art.creatorId);
+  if (!residentResult.ok) return null;
+  return `${residentResult.data.tagName} (resident)`;
+}
 
 type Props = {
   logicalTrainId: string;
@@ -100,7 +115,9 @@ function CarSurfaceRow({ car, onCreateArtwork }: { car: LogicalCar; onCreateArtw
                 <td className="geo-row-hex">{s.surfaceType}</td>
                 <td>
                   {active ? (
-                    <span title={active.id}>{active.artworkId} <span className="geo-row-cell-empty">(layer {active.layerIndex})</span></span>
+                    <span title={active.id}>
+                      {describeArtworkAuthor(active.artworkId) ?? active.artworkId} <span className="geo-row-cell-empty">(layer {active.layerIndex})</span>
+                    </span>
                   ) : (
                     <span className="geo-row-cell-empty">empty</span>
                   )}
@@ -116,7 +133,7 @@ function CarSurfaceRow({ car, onCreateArtwork }: { car: LogicalCar; onCreateArtw
                     <ul className="station-detail-sibling-list">
                       {history.map((p) => (
                         <li key={p.id}>
-                          {p.artworkId} — {p.placementState} (layer {p.layerIndex}, started {new Date(p.startedAt).toLocaleTimeString()}
+                          {describeArtworkAuthor(p.artworkId) ?? p.artworkId} — {p.placementState} (layer {p.layerIndex}, started {new Date(p.startedAt).toLocaleTimeString()}
                           {p.endedAt ? `, ended ${new Date(p.endedAt).toLocaleTimeString()}` : ""})
                         </li>
                       ))}
