@@ -2464,6 +2464,12 @@
     <script src="./systems/transit/mtaBusFeedConfig.js"></script>
     <script src="./systems/transit/mtaBusFeedSourceInventory.js"></script>
     <script src="./systems/transit/vendor/gtfsRealtimeBindings.js"></script>
+    <!-- ── 0818 — gtfsRealtimeBindings.tests.js: same unconditional test-harness
+         load convention as every other `.tests.js` file in this list — loads as
+         inert code, registers under _wos.debug.gtfsRealtimeBindings, never
+         auto-runs. Covers the v1.1.0 TripUpdate/Alert decode extension added
+         for SUBWAY (see 0818_SUBWAY_Live_Data_Foundation_v1.0.0_BUILD). ── -->
+    <script src="./systems/transit/vendor/gtfsRealtimeBindings.tests.js"></script>
     <script src="./systems/transit/mtaBusRealtimeAdapter.js"></script>
     <script src="./systems/transit/mtaBusActorBridge.js"></script>
     <script src="./systems/transit/busPresentationSelector.js"></script>
@@ -2484,6 +2490,40 @@
     <script src="./systems/transit/transitPresencePass.js"></script>
     <script src="./systems/transit/transitStopDwellCuePass.js"></script>
     <script src="./systems/transit/cruiseMovementField.js"></script>
+    <!-- ── SUBWAY: MTA Subway Live Data Foundation (0818_SUBWAY_Live_Data_
+         Foundation_v1.0.0_BUILD) — current MTA acquisition → collision-safe
+         identity → canonical store → safe polling → GeoJSON features. No API
+         key required (verified live during this build, unlike the bus feed
+         above). Data-layer only here; rendering (mtaSubwayMapLayer.js) loads
+         later, after MapboxViewportRuntime, gated by ?mode=subway. ── -->
+    <script src="./systems/transit/mtaSubwayFeedSourceInventory.js"></script>
+    <script src="./systems/transit/mtaSubwayStaticAdapter.js"></script>
+    <script src="./systems/transit/mtaSubwayStaticAdapter.tests.js"></script>
+    <script src="./systems/transit/mtaSubwayRealtimeAdapter.js"></script>
+    <script src="./systems/transit/mtaSubwayIdentity.js"></script>
+    <script src="./systems/transit/mtaSubwayIdentity.tests.js"></script>
+    <script src="./systems/transit/mtaSubwayTransitStore.js"></script>
+    <script src="./systems/transit/mtaSubwayTransitStore.tests.js"></script>
+    <script src="./systems/transit/mtaSubwayPollingRuntime.js"></script>
+    <script src="./systems/transit/mtaSubwayPollingRuntime.tests.js"></script>
+    <!-- ── 0818_SUBWAY_Full_Live_Map_Integration — semantic route-family +
+         dedicated SUBWAY palette authority. Load BEFORE mtaSubwayMapFeatures.js,
+         which resolves route display color through these. ── -->
+    <script src="./systems/transit/mtaSubwaySemanticFamily.js"></script>
+    <script src="./systems/transit/mtaSubwaySemanticFamily.tests.js"></script>
+    <script src="./systems/transit/mtaSubwayPaletteAuthority.js"></script>
+    <script src="./systems/transit/mtaSubwayPaletteAuthority.tests.js"></script>
+    <script src="./systems/transit/mtaSubwayMapFeatures.js"></script>
+    <script src="./systems/transit/mtaSubwayMapFeatures.tests.js"></script>
+    <!-- ── SUBWAY: Station Library (0818_SUBWAY_Station_Library_Foundation) —
+         the persistent StudioRich place layer sitting between the normalized
+         MTA model above and the map. Depends only on mtaSubwayStaticAdapter.js
+         + mtaSubwayIdentity.js (no realtime/polling dependency — stations are
+         static places, not live vehicle state). Also loaded into music/'s own
+         index.html via the /wall-app proxy (see wallStationLibraryBridge.ts),
+         same convention as orbProfileAuthority.js / mapsGeographicStyleAuthority.js. ── -->
+    <script src="./systems/transit/mtaSubwayStationLibrary.js"></script>
+    <script src="./systems/transit/mtaSubwayStationLibrary.tests.js"></script>
     <script src="./systems/actors/actorIdentityRegistry.js"></script>
     <script src="./systems/actors/actorVisualRegistry.js"></script>
     <script src="./systems/actors/truthActorVisualLODPolicy.js"></script>
@@ -2719,6 +2759,35 @@
           }
         } catch (e) {
           console.warn('[RACETRACK boot] failed:', e && e.message || e);
+        }
+      })();
+    </script>
+    <!-- ── SUBWAY: Mapbox rendering (Interface Layer). Loads after
+         MapboxViewportRuntime (line ~2233) so SBE.MapboxViewportRuntime.getMap()
+         is available once boot activates. ── -->
+    <script src="./systems/presentation/mtaSubwayMapLayer.js"></script>
+    <script src="./systems/presentation/mtaSubwayMapLayer.tests.js"></script>
+    <!-- ── 0818_SUBWAY_Full_Live_Map_Integration — SUBWAY boot entry. Same
+         no-client-router convention as the RACETRACK `?mode=racetrack` boot
+         block immediately above: a `?mode=subway` query param, checked once
+         here, activates the FULL network (every route family, every real
+         Station Library station, live state on every polled line group —
+         see the 0818_SUBWAY_Full_Live_Map_Integration completion report).
+         Unlike RACETRACK, this does not hide chrome or open a separate scene
+         — SUBWAY renders directly onto the canonical live map, since its
+         product role is to become part of the commuter map, not a separate
+         walled mode. A plain reload without the param never fetches or
+         renders anything subway-related. ── -->
+    <script>
+      (function () {
+        try {
+          var params = new URLSearchParams(window.location.search);
+          if (params.get('mode') !== 'subway') return;
+          if (window.SBE && window.SBE.MTASubwayMapLayer) {
+            window.SBE.MTASubwayMapLayer.activate();
+          }
+        } catch (e) {
+          console.warn('[SUBWAY boot] failed:', e && e.message || e);
         }
       })();
     </script>

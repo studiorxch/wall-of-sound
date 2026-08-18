@@ -1,0 +1,116 @@
+
+# 2026-08-15 01:01:07.042773
++y
+
+# 2026-08-15 01:01:39.796682
++n
+
+# 2026-08-15 01:02:04.888631
++Inspect this repository and explain the current Machine Life Phase 4 implementation. Do not modify files. Identify what remains to complete the live end-to-end generation test.
+
+# 2026-08-15 01:03:08.157378
++n
+
+# 2026-08-15 01:03:19.592201
++/exit
+
+# 2026-08-15 01:03:57.119797
++Inspect this repository and explain the current Machine Life Phase 4 implementation. Do not modify files. Identify what remains to complete the live end-to-end generation test.
+
+# 2026-08-15 01:04:57.885319
++/add music/src/data/machineLifeTypes.ts
++/add music/src/data/playProjectTypes.ts
++/add music/src/logic/machineLife/machineLifeGeneratorClient.ts
++/add music/src/logic/machineLife/machineLifeProxyImport.ts
++/add music/src/ui/machineLife/MachineLifeGeneratePanel.tsx
++/add music/src/ui/machineLife/MachineLifeResearchWorkspace.tsx
++/add music/src/App.tsx
++/add music/vite.config.ts
+
+# 2026-08-15 01:05:23.746584
++n
+
+# 2026-08-15 01:06:19.885723
++/ask Inspect the current Machine Life Phase 4 implementation in these files. Do not modify anything. Explain what is already implemented, identify the authority boundaries, and state exactly what remains to complete the live end-to-end generation test.
+
+# 2026-08-15 01:24:30.478835
++aider --model gemini/gemini-3.6-flash --subtree-only
+
+# 2026-08-15 01:25:08.322277
++/exit
+
+# 2026-08-15 01:25:22.862314
++/add music/src/logic/machineLife/machineLifeGeneratorClient.ts music/src/ui/machineLife/MachineLifeGeneratePanel.tsx music/vite.config.ts
+
+# 2026-08-15 01:25:30.353228
++Review these files only. Do not modify anything. Give me the exact steps to run the live Machine Life end-to-end generation test against the external FastAPI generator at /Users/studio/Projects/Machine_Life/generator.
+
+# 2026-08-15 02:28:33.730403
++n
+
+# 2026-08-15 02:28:37.892018
++/exit
+
+# 2026-08-15 02:29:35.688562
++/add music/src/ui/machineLife/MachineLifeGeneratePanel.tsx music/src/logic/machineLife/machineLifeGeneratorClient.ts
+
+# 2026-08-15 02:30:09.168222
++Fix two confirmed live-test defects only.
++
++1. Local-generation timeout: MusicGen-small on this M1 takes approximately 40–90 seconds for a 5-second generation. The current frontend gives up at about 60 seconds even though the backend subsequently completes successfully. Increase the client wait ceiling to 300 seconds while preserving the existing polling approach. A long-running generating backend status must not be treated as a failure before that ceiling.
++
++2. Prompt/error state isolation: A timeout/error message has been observed becoming the next generation request's prompt. Error/status text must never modify or replace the prompt input state. Preserve the user's prompt unchanged on success, timeout, or failure.
++
++Do not change the generator backend, persistence architecture, Stage 0 behavior, eligibility rules, or UI structure.
++
++Also inspect whether the seed submitted by MUSIC actually reaches the backend request unchanged. Do not change seed behavior yet; report what you find.
++
++Add/update targeted tests, then run those tests and npm run build.
+
+# 2026-08-15 02:30:57.584613
++y
+
+# 2026-08-15 02:33:00.680281
++The new MachineLifeGeneratePanel.test.tsx fails because this repo does not have @testing-library/react. Do not add new dependencies. Rewrite the test using only the testing tools already present in this repository, following the style of existing UI tests under music/src/ui/. Preserve coverage for:
++
++polling beyond 60 seconds up to the 300-second ceiling;
++prompt text remaining unchanged after timeout/error.
++
++Do not change production code unless required. Then run the targeted tests and npm run build.
+
+# 2026-08-15 02:36:28.480086
++The new component test fails because Vitest is running in Node and document is undefined. Do not add dependencies. Check which DOM environment is already installed (jsdom or happy-dom) and configure only MachineLifeGeneratePanel.test.tsx to use it via a Vitest environment directive. Do not change production code. Also fix any invalid mocked job status/type values exposed by TypeScript. Then run the targeted tests and npm run build.
+
+# 2026-08-15 02:38:18.455562
++jsdom is not installed in this repo (npm ls jsdom --depth=0 returns empty). Do not add any dependency.
++
++Rewrite MachineLifeGeneratePanel.test.tsx so it runs under the existing Node Vitest environment without DOM rendering. Preserve coverage for:
++
++the generation wait ceiling being 300 seconds instead of 60 seconds;
++prompt/error state isolation.
++
++Prefer extracting a small pure helper or exported constant from MachineLifeGeneratePanel.tsx only if necessary for testability. Do not change the UI structure or behavior.
++
++Keep mocked Machine Life job states/types valid and mirror the real proxy path machine-life/generations/ if referenced.
++
++Then run the targeted tests and npm run build.
+
+# 2026-08-15 02:40:30.456950
++npm run build fails only because MachineLifeGeneratePanel.test.tsx has incomplete typed mock objects.
++
++Fix the test file only. Do not change production code.
++
++For MachineLifeGenerationJob, add the required request and createdAt fields to the generating-job mock.
++For the completed MachineLifeGeneratedOutput, add the required:
++commercialEligibility: false
++trainingEligibility: false
++researchOnly: true
++Keep the mock request consistent with the current Phase 4 contract:
++prompt
++durationSeconds
++seed
++residentId
++backendId
++Do not add dependencies or change UI/runtime behavior.
++
++Then run the targeted Vitest tests and npm run build.

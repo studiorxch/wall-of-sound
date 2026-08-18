@@ -9,9 +9,12 @@ import { MapsItinerariesGrid } from "./MapsItinerariesGrid";
 import { MapsItineraryEditor } from "./MapsItineraryEditor";
 import { MapsRaceCoursesGrid } from "./MapsRaceCoursesGrid";
 import { MapsRaceCourseDetail } from "./MapsRaceCourseDetail";
+import { MapsStationsGrid } from "./MapsStationsGrid";
+import { MapsStationDetail } from "./MapsStationDetail";
 import { parseMapsHash, writeMapsHash } from "../../maps/mapsHash";
 import * as itineraryStore from "../../maps/itineraryStore";
 import * as raceCourseStore from "../../maps/raceCourseStore";
+import * as wallStationLibraryBridge from "../../maps/wallStationLibraryBridge";
 
 // Reload-safe URL for the MAPS domain only — MUSIC itself has no router or
 // URL sync (pure in-memory view state everywhere else); this is a minimal,
@@ -34,6 +37,7 @@ export function MapsSection() {
   const [selectedId, setSelectedId] = useState<string | null>(() => parseMapsHash(window.location.hash).paletteId);
   const [selectedItineraryId, setSelectedItineraryId] = useState<string | null>(null);
   const [selectedRaceCourseId, setSelectedRaceCourseId] = useState<string | null>(null);
+  const [selectedStationId, setSelectedStationId] = useState<string | null>(null);
 
   useEffect(() => {
     writeMapsHash(selectedId);
@@ -73,6 +77,13 @@ export function MapsSection() {
       } else {
         label = "MAPS — Race Courses";
       }
+    } else if (activeLibrary === "stations") {
+      if (selectedStationId) {
+        const s = wallStationLibraryBridge.getStation(selectedStationId);
+        label = s.ok ? `MAPS — ${s.data.operational.displayName ?? "Station"}` : "MAPS — Station";
+      } else {
+        label = "MAPS — Stations";
+      }
     } else if (activeLibrary === "vehicles") {
       label = "MAPS — Vehicles";
     } else if (activeLibrary === "overlays") {
@@ -83,7 +94,7 @@ export function MapsSection() {
       label = "MAPS — Geographic";
     }
     document.title = label;
-  }, [activeLibrary, activeCollection, selectedItineraryId, selectedRaceCourseId, selectedId]);
+  }, [activeLibrary, activeCollection, selectedItineraryId, selectedRaceCourseId, selectedStationId, selectedId]);
 
   return (
     <>
@@ -120,6 +131,17 @@ export function MapsSection() {
               />
             ) : (
               <MapsRaceCoursesGrid onOpen={(id) => setSelectedRaceCourseId(id)} />
+            )
+          ) : activeLibrary === "stations" ? (
+            selectedStationId ? (
+              <MapsStationDetail
+                key={selectedStationId}
+                studioRichStationId={selectedStationId}
+                onBack={() => setSelectedStationId(null)}
+                onOpenStation={(id) => setSelectedStationId(id)}
+              />
+            ) : (
+              <MapsStationsGrid onOpen={(id) => setSelectedStationId(id)} />
             )
           ) : selectedId ? (
             <MapsGeographicStyleDetail

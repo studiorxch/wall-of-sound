@@ -61,6 +61,22 @@
     <script src="/wall-app/systems/presentation/mapsGeographicStyleApplyAdapters.js"></script>
     <script src="/wall-app/systems/presentation/mapsGeographicStyleSeeds.js"></script>
     <script src="/wall-app/systems/presentation/mapsGeographicStyleAuthority.js"></script>
+    <!-- MAPS Stations Library (0818_SUBWAY_Station_Library_Foundation) — the
+         persistent StudioRich place layer for SUBWAY, same real authority the
+         Wall runtime uses, reached through the /wall-app proxy exactly like
+         Geographic/Vehicles/Overlays/Orbs above. Only the static-model chain
+         is loaded here (source inventory → static adapter → identity →
+         station library) — the realtime/polling/live-map chain
+         (mtaSubwayRealtimeAdapter.js, mtaSubwayPollingRuntime.js,
+         mtaSubwayTransitStore.js, mtaSubwayMapFeatures.js,
+         mtaSubwayMapLayer.js) is intentionally NOT loaded here: stations are
+         static places, not live vehicle state, and MUSIC has no canonical
+         live map for LIVE MAP rendering to target (same reasoning as Orbs'
+         orbObjectFactory.js/orbProfileRenderer.js above). -->
+    <script src="/wall-app/systems/transit/mtaSubwayFeedSourceInventory.js"></script>
+    <script src="/wall-app/systems/transit/mtaSubwayStaticAdapter.js"></script>
+    <script src="/wall-app/systems/transit/mtaSubwayIdentity.js"></script>
+    <script src="/wall-app/systems/transit/mtaSubwayStationLibrary.js"></script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

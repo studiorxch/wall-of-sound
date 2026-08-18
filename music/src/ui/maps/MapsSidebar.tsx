@@ -4,6 +4,7 @@ import * as wallGeographicStyleBridge from "../../maps/wallGeographicStyleBridge
 import * as wallVehicleStyleBridge from "../../maps/wallVehicleStyleBridge";
 import * as wallOverlayStyleBridge from "../../maps/wallOverlayStyleBridge";
 import * as wallOrbProfileBridge from "../../maps/wallOrbProfileBridge";
+import * as wallStationLibraryBridge from "../../maps/wallStationLibraryBridge";
 import * as itineraryStore from "../../maps/itineraryStore";
 import * as raceCourseStore from "../../maps/raceCourseStore";
 import { ensurePreviewMap } from "../../maps/wallMapPreview";
@@ -38,7 +39,7 @@ import { ensurePreviewMap } from "../../maps/wallMapPreview";
 // activeLibrary/activeCollection are mutually exclusive selection states —
 // only one row is ever highlighted at a time.
 
-export type MapsLibraryKey = "geographic" | "vehicles" | "overlays" | "orbs" | "raceCourses";
+export type MapsLibraryKey = "geographic" | "vehicles" | "overlays" | "orbs" | "raceCourses" | "stations";
 export type MapsCollectionKey = "itineraries";
 
 type Props = {
@@ -72,6 +73,11 @@ function readRaceCourseCount(): number {
   return raceCourseStore.listRaceCourses().length;
 }
 
+function readStationCount(): number {
+  const list = wallStationLibraryBridge.listStations();
+  return list.ok ? list.data.length : 0;
+}
+
 export function MapsSidebar({ activeLibrary, onSelectLibrary, activeCollection, onSelectCollection }: Props) {
   const [collapsed, setCollapsed] = useState(false);
   const [geographicCount, setGeographicCount] = useState(readGeographicCount);
@@ -79,6 +85,7 @@ export function MapsSidebar({ activeLibrary, onSelectLibrary, activeCollection, 
   const [overlayCount, setOverlayCount] = useState(readOverlayCount);
   const [orbCount, setOrbCount] = useState(readOrbCount);
   const [raceCourseCount, setRaceCourseCount] = useState(readRaceCourseCount);
+  const [stationCount, setStationCount] = useState(readStationCount);
   const [itineraryCount, setItineraryCount] = useState(() => itineraryStore.listItineraries().length);
 
   useEffect(() => {
@@ -99,11 +106,16 @@ export function MapsSidebar({ activeLibrary, onSelectLibrary, activeCollection, 
     // raceCourseStore hydrates async from its own IndexedDB — same
     // "count may start at 0 and update shortly after" shape as itineraries.
     const unsubRaceCourses = raceCourseStore.subscribe(() => setRaceCourseCount(readRaceCourseCount()));
+    // Stations, like Geographic, starts empty until its own async import
+    // completes (static MTA model fetch + link) — same "count may start at 0
+    // and update shortly after" shape.
+    if (wallStationLibraryBridge.isBridgeAvailable()) wallStationLibraryBridge.ensureStationsImported().then(() => setStationCount(readStationCount()));
+    const unsubStations = wallStationLibraryBridge.subscribe(() => setStationCount(readStationCount()));
     // itineraryStore hydrates async from IndexedDB — its own subscribe
     // fires once hydration completes, same "count may start at 0 and
     // update shortly after" shape as the wall bridges above.
     const unsubItineraries = itineraryStore.subscribe(() => setItineraryCount(itineraryStore.listItineraries().length));
-    return () => { unsubGeographic(); unsubVehicles(); unsubOverlays(); unsubOrbs(); unsubRaceCourses(); unsubItineraries(); };
+    return () => { unsubGeographic(); unsubVehicles(); unsubOverlays(); unsubOrbs(); unsubRaceCourses(); unsubStations(); unsubItineraries(); };
   }, []);
 
   return (
@@ -167,6 +179,16 @@ export function MapsSidebar({ activeLibrary, onSelectLibrary, activeCollection, 
                 <span className="fm-row-icon"><Icon name="flag" /></span>
                 <span className="fm-row-label">Race Courses</span>
                 <span className="fm-row-count">{raceCourseCount}</span>
+              </button>
+            )}
+            {stationCount > 0 && (
+              <button
+                className={`fm-row${activeCollection === null && activeLibrary === "stations" ? " active" : ""}`}
+                onClick={() => onSelectLibrary("stations")}
+              >
+                <span className="fm-row-icon"><Icon name="subway" /></span>
+                <span className="fm-row-label">Stations</span>
+                <span className="fm-row-count">{stationCount}</span>
               </button>
             )}
           </div>
