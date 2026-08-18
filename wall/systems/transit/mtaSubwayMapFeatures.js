@@ -37,6 +37,7 @@
   function _stationLibrary() { return SBE.MTASubwayStationLibrary || null; }
   function _semanticFamily() { return SBE.MTASubwaySemanticFamily || null; }
   function _paletteAuthority() { return SBE.MTASubwayPaletteAuthority || null; }
+  function _rollingStock() { return SBE.SubwayLogicalRollingStockAuthority || null; }
 
   // Resolves a route's semantic family + active-palette display color.
   // Never mutates the route ref; a pure lookup. Returns nulls (not a
@@ -146,12 +147,14 @@
     return lib.buildMapFeatureCollection();
   }
 
-  // One call for the 3 required full-network collections (BUILD §12).
+  // One call for the required full-network collections (BUILD §12, extended
+  // by 0818_SUBWAY_Logical_Rolling_Stock_v1.0.0_BUILD §23 with logical_trains).
   function buildFullNetworkFeatureCollections() {
     return {
       routes: buildAllRouteFeatures(),
       stations: buildStationLibraryFeatures(),
       live_operational_state: buildVehiclePresenceFeatures(),
+      logical_trains: buildLogicalTrainFeatures(),
     };
   }
 
@@ -188,6 +191,59 @@
     return { type: 'FeatureCollection', features: features };
   }
 
+  // ── Logical train layer (0818_SUBWAY_Logical_Rolling_Stock_v1.0.0_BUILD §23) ─
+  // Reads SubwayLogicalRollingStockAuthority's already-reconciled, persistent
+  // logical trains + their freshly-computed TrainPositionState — never
+  // recomputes association/position itself (Store Rule equivalent: this file
+  // stays a pure GeoJSON+palette translation layer, never an identity owner).
+  // Only trains with a real plottable position (observed_stop or
+  // inferred_segment) become features — 'unknown' trains have no honest
+  // coordinate to plot, matching the no-fabricated-position rule already
+  // established for buildVehiclePresenceFeatures(). 'stale' trains keep
+  // their last-known coordinate (frozen, not moving) so the interface can
+  // visually distinguish "stopped reporting" from "actively absent".
+  function buildLogicalTrainFeatures() {
+    var rs = _rollingStock(), store = _store();
+    if (!rs || !store) return { type: 'FeatureCollection', features: [] };
+
+    var features = [];
+    rs.getActiveLogicalTrains().forEach(function (train) {
+      var pos = rs.getPositionState(train.id);
+      if (!pos || !pos.position) return; // unknown / no evidence — nothing honest to plot
+
+      var route = store.getRoute(train.routeId);
+      var display = _resolveDisplayColor(route);
+      var consist = rs.getLogicalConsist(train.consistId);
+
+      features.push({
+        type: 'Feature',
+        id: train.id,
+        geometry: { type: 'Point', coordinates: pos.position },
+        properties: {
+          logicalTrainId: train.id,
+          routeId: train.routeId,
+          routeFamily: train.routeFamily,
+          semanticFamily: display.semanticFamily,
+          resolvedColor: display.resolvedColor,
+          activeTripId: train.activeTripId,
+          consistId: train.consistId,
+          logicalCarCount: consist ? consist.configuredCarCount : null,
+          direction: train.direction,
+          lifecycleState: train.lifecycleState,
+          positionTruthState: pos.truthState,   // observed_stop | inferred_segment | stale
+          positionConfidence: pos.confidence,
+          observedStopId: pos.observedStopId,
+          nextStopId: pos.nextStopId,
+          observedTimestamp: pos.observedTimestamp,
+          // Explicit, load-bearing honesty marker — same convention as
+          // buildVehiclePresenceFeatures(); never 'gps'.
+          positionSource: pos.source,
+        },
+      });
+    });
+    return { type: 'FeatureCollection', features: features };
+  }
+
   // Alert-informed station/route ids, for a UI to highlight — not a geometry.
   function getAlertedRouteIds() {
     var store = _store();
@@ -205,6 +261,7 @@
     buildStationLibraryFeatures: buildStationLibraryFeatures,
     buildFullNetworkFeatureCollections: buildFullNetworkFeatureCollections,
     buildVehiclePresenceFeatures: buildVehiclePresenceFeatures,
+    buildLogicalTrainFeatures: buildLogicalTrainFeatures,
     getAlertedRouteIds: getAlertedRouteIds,
   });
 

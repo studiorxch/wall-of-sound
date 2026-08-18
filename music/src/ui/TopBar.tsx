@@ -8,12 +8,13 @@ import { navigationItems } from "./topBarNavigation";
 import type { NavigationLink, NavigationAction } from "./topBarNavigation";
 import studioRichLogo from "../assets/studiorich-logo.svg";
 import { openOrFocusRacetrack } from "../maps/wallRacetrackBridge";
+import { openOrFocusSubway } from "../maps/wallSubwayBridge";
 
-// 0805F — the only real action link today; a lookup rather than a switch so
-// a future second action doesn't need a new branch shape in the render code
-// below, just a new entry here.
+// 0805F — a lookup rather than a switch so a new action doesn't need a new
+// branch shape in the render code below, just a new entry here.
 const NAVIGATION_ACTIONS: Record<NavigationAction, () => void> = {
   openRacetrack: () => { openOrFocusRacetrack(); },
+  openSubway: () => { openOrFocusSubway(); },
 };
 
 export type { WorkspaceMode } from "./topBarNavigation";

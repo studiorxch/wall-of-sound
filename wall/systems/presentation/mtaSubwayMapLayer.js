@@ -1,15 +1,27 @@
-// ── MTASubwayMapLayer v2.0.0 ──────────────────────────────────────────────────
-// 0818_SUBWAY_Full_Live_Map_Integration_v1.0.0_BUILD — Interface Layer §20-24
-// (v1.0.0 was 0818_SUBWAY_Live_Data_Foundation_v1.0.0_BUILD — single-route
-// validation slice only. This build replaces that with the full network.)
+// ── MTASubwayMapLayer v3.0.0 ──────────────────────────────────────────────────
+// 0818_SUBWAY_Logical_Rolling_Stock_v1.0.0_BUILD — Interface Layer §23-27
+// (v2.0.0 was 0818_SUBWAY_Full_Live_Map_Integration_v1.0.0_BUILD — full
+// network rendering without persistent logical rolling stock. v1.0.0 was
+// 0818_SUBWAY_Live_Data_Foundation_v1.0.0_BUILD — single-route slice.)
 // Status: active | Classification: presentation (Mapbox integration)
 //
 // Renders the FULL StudioRich SUBWAY network onto the canonical, already-
 // running Mapbox map (SBE.MapboxViewportRuntime.getMap()): every real route
 // family, every Station Library-backed station, live operational state for
 // every polled line group, station selection resolving to the exact Station
-// Library record, and a visible StudioRich Fashion Subway ⇄ MTA Reference
-// palette switch that never touches transit identity.
+// Library record, a visible StudioRich Fashion Subway ⇄ MTA Reference
+// palette switch that never touches transit identity, and (new in v3.0.0) a
+// live logical-train layer sourced from SubwayLogicalRollingStockAuthority —
+// persistent StudioRich train/consist/car identity, never a raw MTA trip id.
+//
+// ROLLING STOCK RULE (new in v3.0.0): this file never computes trip
+// association or position itself — SubwayLogicalRollingStockAuthority.
+// reconcile() owns that entirely. This file only ever (a) calls reconcile()
+// once per watch tick — the SAME existing 5s timer already used for
+// route/station refresh, never a new per-train timer (BUILD §29) — and (b)
+// reads the already-built logical_trains GeoJSON from
+// SBE.MTASubwayMapFeatures.buildLogicalTrainFeatures(). Train identity is
+// owned by the authority; this file only ever renders and selects it.
 //
 // GEOMETRY AUTHORITY RULE (BUILD §7): this file only ever reads finished
 // GeoJSON from SBE.MTASubwayMapFeatures / SBE.MTASubwayStationLibrary — it
@@ -44,22 +56,29 @@
 (function (global) {
   'use strict';
   var SBE = (global.SBE = global.SBE || {});
-  var VERSION = '2.0.0';
+  var VERSION = '3.0.0';
 
   var STATIONS_SOURCE_ID = 'wos-subway-stations';
   var STATIONS_LAYER_ID = 'wos-subway-stations-layer';
   var STATIONS_LABEL_LAYER_ID = 'wos-subway-stations-label-layer';
   var ROUTE_SOURCE_ID = 'wos-subway-routes';
   var ROUTE_LAYER_ID = 'wos-subway-routes-layer';
-  var VEHICLES_SOURCE_ID = 'wos-subway-vehicle-presence';
-  var VEHICLES_LAYER_ID = 'wos-subway-vehicle-presence-layer';
+  // Logical train layer (v3.0.0) — replaces the plain v2.0.0 "vehicle
+  // presence" dot layer as the visible map marker (Creative Interface
+  // Doctrine: one live-train marker layer, not two overlapping ones).
+  // mtaSubwayMapFeatures.buildVehiclePresenceFeatures() itself is untouched
+  // and still exported/tested — this only changes what the map DRAWS.
+  var TRAINS_SOURCE_ID = 'wos-subway-trains';
+  var TRAINS_LAYER_ID = 'wos-subway-trains-layer';
 
   var LABEL_MIN_ZOOM = 13; // avoid unreadable all-label-on-all-zoom (BUILD §14)
   var SELECTED_STATION_COLOR = '#ff9f1c';
   var DEFAULT_STATION_COLOR = '#ffffff';
+  var SELECTED_TRAIN_STROKE = '#ff9f1c';
 
   var _active = false;
   var _selectedStationId = null; // stlib-* id — the exact Station Library record, never a name
+  var _selectedTrainId = null;   // sr-train-* id — the exact logical train record, never a trip id
   var _lastRenderedRealtimeAt = null;
   var _watchTimer = null;
   var _hud = null; // DOM refs, created lazily
@@ -75,6 +94,7 @@
   function _poll() { return SBE.MTASubwayPollingRuntime || null; }
   function _palette() { return SBE.MTASubwayPaletteAuthority || null; }
   function _inventory() { return SBE.MTASubwayFeedSourceInventory || null; }
+  function _rollingStock() { return SBE.SubwayLogicalRollingStockAuthority || null; }
 
   function _allRealtimeGroupIds() {
     var inv = _inventory();
@@ -136,18 +156,22 @@
         });
       }
 
-      if (!map.getSource(VEHICLES_SOURCE_ID)) {
-        map.addSource(VEHICLES_SOURCE_ID, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      if (!map.getSource(TRAINS_SOURCE_ID)) {
+        map.addSource(TRAINS_SOURCE_ID, { type: 'geojson', data: { type: 'FeatureCollection', features: [] }, promoteId: 'logicalTrainId' });
       }
-      if (!map.getLayer(VEHICLES_LAYER_ID)) {
+      if (!map.getLayer(TRAINS_LAYER_ID)) {
         map.addLayer({
-          id: VEHICLES_LAYER_ID, type: 'circle', source: VEHICLES_SOURCE_ID,
+          id: TRAINS_LAYER_ID, type: 'circle', source: TRAINS_SOURCE_ID,
           paint: {
-            'circle-radius': 6,
+            // Route-family color remains primary identity (BUILD §25) —
+            // observed/inferred/stale is encoded ONLY via secondary
+            // properties (radius/opacity/stroke), never a conflicting hue.
+            'circle-radius': ['case', ['boolean', ['feature-state', 'selected'], false], 8,
+              ['match', ['get', 'positionTruthState'], 'inferred_segment', 5, 'stale', 5, 6]],
             'circle-color': ['coalesce', ['get', 'resolvedColor'], '#ff9f1c'],
-            'circle-stroke-width': 2,
-            'circle-stroke-color': '#ffffff',
-            'circle-opacity': 0.95,
+            'circle-opacity': ['match', ['get', 'positionTruthState'], 'stale', 0.4, 'inferred_segment', 0.85, 0.95],
+            'circle-stroke-width': ['case', ['boolean', ['feature-state', 'selected'], false], 3, 2],
+            'circle-stroke-color': ['case', ['boolean', ['feature-state', 'selected'], false], SELECTED_TRAIN_STROKE, '#ffffff'],
           },
         });
       }
@@ -162,10 +186,10 @@
 
   function removeLayers(map) {
     if (!map) return;
-    [VEHICLES_LAYER_ID, STATIONS_LABEL_LAYER_ID, STATIONS_LAYER_ID, ROUTE_LAYER_ID].forEach(function (id) {
+    [TRAINS_LAYER_ID, STATIONS_LABEL_LAYER_ID, STATIONS_LAYER_ID, ROUTE_LAYER_ID].forEach(function (id) {
       try { if (map.getLayer(id)) map.removeLayer(id); } catch (e) {}
     });
-    [VEHICLES_SOURCE_ID, STATIONS_SOURCE_ID, ROUTE_SOURCE_ID].forEach(function (id) {
+    [TRAINS_SOURCE_ID, STATIONS_SOURCE_ID, ROUTE_SOURCE_ID].forEach(function (id) {
       try { if (map.getSource(id)) map.removeSource(id); } catch (e) {}
     });
   }
@@ -184,6 +208,17 @@
     });
     map.on('mouseenter', STATIONS_LAYER_ID, function () { map.getCanvas().style.cursor = 'pointer'; });
     map.on('mouseleave', STATIONS_LAYER_ID, function () { map.getCanvas().style.cursor = ''; });
+
+    // Train selection (BUILD §26) — Map Feature ID → sr-train-* ID → the
+    // exact logical train record. No trip-id-based or name-based fallback.
+    map.on('click', TRAINS_LAYER_ID, function (e) {
+      var f = e.features && e.features[0];
+      if (!f) return;
+      var trainId = f.properties && f.properties.logicalTrainId;
+      if (trainId) selectTrain(trainId);
+    });
+    map.on('mouseenter', TRAINS_LAYER_ID, function () { map.getCanvas().style.cursor = 'pointer'; });
+    map.on('mouseleave', TRAINS_LAYER_ID, function () { map.getCanvas().style.cursor = ''; });
   }
 
   function selectStation(studioRichStationId) {
@@ -220,21 +255,59 @@
     return lib.getRecord(_selectedStationId);
   }
 
-  // ── refresh() — pure read from the store/library; never fetches ────────────
+  // ── Train selection (BUILD §26-27) ───────────────────────────────────────
+  // Map Feature ID → sr-train-* ID → the exact LogicalTrain record + its
+  // consist + ordered logical car IDs. Never resolves via activeTripId or
+  // any display name.
+  function selectTrain(logicalTrainId) {
+    var map = _map(), rs = _rollingStock();
+    if (!rs) return { ok: false, reason: 'rolling_stock_unavailable' };
+    var inspection = rs.getInspection(logicalTrainId);
+    if (!inspection) return { ok: false, reason: 'not_found' };
+
+    if (map) {
+      try {
+        if (_selectedTrainId) map.setFeatureState({ source: TRAINS_SOURCE_ID, id: _selectedTrainId }, { selected: false });
+        map.setFeatureState({ source: TRAINS_SOURCE_ID, id: logicalTrainId }, { selected: true });
+      } catch (e) {}
+    }
+    _selectedTrainId = logicalTrainId;
+    _renderHudTrainSelection(inspection);
+    return { ok: true, data: inspection };
+  }
+
+  function clearTrainSelection() {
+    var map = _map();
+    if (map && _selectedTrainId) {
+      try { map.setFeatureState({ source: TRAINS_SOURCE_ID, id: _selectedTrainId }, { selected: false }); } catch (e) {}
+    }
+    _selectedTrainId = null;
+    _renderHudTrainSelection(null);
+  }
+
+  function getSelectedTrain() {
+    var rs = _rollingStock();
+    if (!rs || !_selectedTrainId) return null;
+    return rs.getInspection(_selectedTrainId);
+  }
+
+  // ── refresh() — pure read from the store/library/rolling-stock authority;
+  //    never fetches ─────────────────────────────────────────────────────────
   function refresh() {
     var map = _map(), feat = _features();
     if (!map || !feat) return false;
     var stationsSrc = map.getSource(STATIONS_SOURCE_ID);
     var routeSrc = map.getSource(ROUTE_SOURCE_ID);
-    var vehiclesSrc = map.getSource(VEHICLES_SOURCE_ID);
-    if (!stationsSrc || !routeSrc || !vehiclesSrc) return false;
+    var trainsSrc = map.getSource(TRAINS_SOURCE_ID);
+    if (!stationsSrc || !routeSrc || !trainsSrc) return false;
 
     try {
       var full = feat.buildFullNetworkFeatureCollections();
       routeSrc.setData(full.routes);
       stationsSrc.setData(full.stations);
-      vehiclesSrc.setData(full.live_operational_state);
+      trainsSrc.setData(full.logical_trains);
       _renderHudDiagnostics();
+      if (_selectedTrainId) _renderHudTrainSelection(getSelectedTrain());
       return true;
     } catch (e) {
       console.warn('[MTASubwayMapLayer] refresh setData error:', e && e.message || e);
@@ -242,18 +315,23 @@
     }
   }
 
-  // Cheap watch loop — checks the store's own realtimeLastUpdatedAt timestamp
-  // (in-memory read, no network) and only re-renders when it actually changed.
+  // Cheap watch loop (BUILD §29 — the ONE centralized scheduling point, never
+  // a per-train timer). Every tick: reconcile the logical rolling-stock
+  // authority against the store's current realtime state (cheap — a single
+  // pass over the store's own trip/vehicle lists; this is also what ages
+  // temporarily_missing → stale → ended on real wall-clock time even between
+  // realtime polls), then always refresh the visible layers — inexpensive at
+  // full-network scale (~500 stations, ~300 route segments, a few hundred
+  // trains) and necessary since train freshness/staleness visibly changes
+  // between polls, not only when the store's realtimeLastUpdatedAt changes.
   function _watchTick() {
     var store = _store();
     if (!store || !_active) return;
     var diag = store.getDiagnostics();
-    if (diag.realtimeLastUpdatedAt && diag.realtimeLastUpdatedAt !== _lastRenderedRealtimeAt) {
-      _lastRenderedRealtimeAt = diag.realtimeLastUpdatedAt;
-      refresh();
-    } else {
-      _renderHudDiagnostics(); // freshness/staleness can change even without a new update
-    }
+    if (diag.realtimeLastUpdatedAt && diag.realtimeLastUpdatedAt !== _lastRenderedRealtimeAt) _lastRenderedRealtimeAt = diag.realtimeLastUpdatedAt;
+    var rs = _rollingStock();
+    if (rs) rs.reconcile();
+    refresh();
   }
 
   // ── activate/deactivate ──────────────────────────────────────────────────
@@ -299,6 +377,7 @@
     if (_watchTimer) { global.clearInterval(_watchTimer); _watchTimer = null; }
     var map = _map();
     if (map) removeLayers(map);
+    _selectedTrainId = null;
     _removeHud();
     return true;
   }
@@ -315,12 +394,13 @@
     return result;
   }
 
-  // ── Diagnostics (BUILD §24 required snapshot) ────────────────────────────
+  // ── Diagnostics (BUILD §24 / 0818_Logical_Rolling_Stock §35 snapshot) ────
   function getDiagnostics() {
-    var store = _store(), poll = _poll(), inv = _inventory(), lib = _library(), pa = _palette();
+    var store = _store(), poll = _poll(), inv = _inventory(), lib = _library(), pa = _palette(), rs = _rollingStock();
     var storeDiag = store ? store.getDiagnostics() : {};
     var libDiag = lib ? lib.getDiagnostics() : {};
     var pollState = poll ? poll.getState() : {};
+    var rsDiag = rs ? rs.getDiagnostics() : {};
     return {
       version: VERSION,
       active: _active,
@@ -331,8 +411,10 @@
       stationFeatureCount: libDiag.recordCount || 0,
       complexCount: storeDiag.complexCount || 0,
       duplicateNameGroupCount: libDiag.duplicateDisplayNameGroupCount || 0,
-      identityCollisionCount: (storeDiag.identityCollisionCount || 0) + (libDiag.identityCollisionCount || 0), // required invariant: must be 0
+      identityCollisionCount: (storeDiag.identityCollisionCount || 0) + (libDiag.identityCollisionCount || 0) +
+        (rsDiag.logicalTrainIdentityCollisionCount || 0) + (rsDiag.logicalCarIdentityCollisionCount || 0), // required invariant: must be 0
       selectedStationId: _selectedStationId,
+      selectedTrainId: _selectedTrainId,
       activeRealtimeTripCount: storeDiag.tripCount || 0,
       activeRealtimeVehicleCount: storeDiag.vehicleCount || 0,
       alertCount: storeDiag.alertCount || 0,
@@ -346,6 +428,20 @@
       pollCount: pollState.pollCount || 0,
       pollFailureCount: pollState.failureCount || 0,
       pollOverlapSkipCount: pollState.overlapSkipCount || 0,
+      // 0818_SUBWAY_Logical_Rolling_Stock_v1.0.0_BUILD §35 required fields
+      activeLogicalTrainCount: rsDiag.activeLogicalTrainCount || 0,
+      logicalConsistCount: rsDiag.logicalConsistCount || 0,
+      logicalCarCount: rsDiag.logicalCarCount || 0,
+      routePoolCount: rsDiag.routePoolCount || 0,
+      observedStopPositionCount: rsDiag.observedStopPositionCount || 0,
+      inferredSegmentPositionCount: rsDiag.inferredSegmentPositionCount || 0,
+      staleTrainCount: rsDiag.staleTrainCount || 0,
+      unknownPositionTrainCount: rsDiag.unknownPositionTrainCount || 0,
+      unresolvedTripAssociationCount: rsDiag.unresolvedTripAssociationCount || 0,
+      tripReassociationCount: rsDiag.tripReassociationCount || 0,
+      newLogicalTrainsCreated: rsDiag.newLogicalTrainsCreated || 0,
+      logicalTrainsReused: rsDiag.logicalTrainsReused || 0,
+      lastReconcileAt: rsDiag.lastReconcileAt || null,
     };
   }
 
@@ -383,10 +479,16 @@
     selEl.style.cssText = 'margin-top:6px;border-top:1px solid #333;padding-top:6px;';
     root.appendChild(selEl);
 
+    var trainSelEl = global.document.createElement('div');
+    trainSelEl.id = 'wos-subway-hud-train-selection';
+    trainSelEl.style.cssText = 'margin-top:6px;border-top:1px solid #333;padding-top:6px;';
+    root.appendChild(trainSelEl);
+
     global.document.body.appendChild(root);
-    _hud = { root: root, diagEl: diagEl, selEl: selEl };
+    _hud = { root: root, diagEl: diagEl, selEl: selEl, trainSelEl: trainSelEl };
     _renderHudDiagnostics();
     _renderHudSelection(null);
+    _renderHudTrainSelection(null);
   }
 
   function _removeHud() {
@@ -418,11 +520,32 @@
       '<span style="color:#888">' + record.studioRichStationId + ' · stop ' + record.authoritativeLink.gtfsStopId + '</span>';
   }
 
+  // Minimum inspection data required by BUILD §26-27: logical train ID,
+  // route, route family, active MTA trip ID, logical consist ID, logical
+  // car count (+ first/last car id), position truth state, current/last
+  // stop, next stop, freshness. No car-detail editing (§26 explicit).
+  function _renderHudTrainSelection(inspection) {
+    if (!_hud) return;
+    if (!inspection || !inspection.train) { _hud.trainSelEl.innerHTML = '<em style="color:#888">Click a train to select it</em>'; return; }
+    var t = inspection.train, pos = inspection.position, cars = inspection.cars || [];
+    var freshnessMs = pos && pos.observedTimestamp ? (Date.now() - pos.observedTimestamp) : null;
+    var truthColor = { observed_stop: '#7CFF9C', inferred_segment: '#9CC7FF', stale: '#FF9C7C', unknown: '#888' }[pos ? pos.truthState : 'unknown'] || '#888';
+    _hud.trainSelEl.innerHTML =
+      '<strong>' + t.id + '</strong> · ' + (t.routeId || '—').replace('subway:route:', '') + '<br>' +
+      'trip: <span style="color:#888">' + (t.activeTripId ? t.activeTripId.replace('subway:trip:', '') : '—') + '</span> · ' +
+      'consist: <span style="color:#888">' + t.consistId + '</span> (' + cars.length + ' cars)<br>' +
+      'position: <span style="color:' + truthColor + '">' + (pos ? pos.truthState : 'unknown') + '</span>' +
+      (pos && pos.observedStopId ? ' · from ' + pos.observedStopId.replace('subway:stop:', '') : '') +
+      (pos && pos.nextStopId ? ' · to ' + pos.nextStopId.replace('subway:stop:', '') : '') + '<br>' +
+      '<span style="color:#888">freshness: ' + (freshnessMs != null ? Math.round(freshnessMs / 1000) + 's ago' : '—') +
+      ' · cars ' + (cars[0] ? cars[0].id : '—') + '…' + (cars[cars.length - 1] ? cars[cars.length - 1].id : '—') + '</span>';
+  }
+
   SBE.MTASubwayMapLayer = Object.freeze({
     VERSION: VERSION,
     STATIONS_SOURCE_ID: STATIONS_SOURCE_ID,
     ROUTE_SOURCE_ID: ROUTE_SOURCE_ID,
-    VEHICLES_SOURCE_ID: VEHICLES_SOURCE_ID,
+    TRAINS_SOURCE_ID: TRAINS_SOURCE_ID,
     ensureLayers: ensureLayers,
     removeLayers: removeLayers,
     refresh: refresh,
@@ -432,6 +555,9 @@
     selectStation: selectStation,
     clearSelection: clearSelection,
     getSelectedStation: getSelectedStation,
+    selectTrain: selectTrain,
+    clearTrainSelection: clearTrainSelection,
+    getSelectedTrain: getSelectedTrain,
     setPalette: setPalette,
     getDiagnostics: getDiagnostics,
   });
@@ -453,6 +579,9 @@
       selectStation: selectStation,
       clearSelection: clearSelection,
       getSelectedStation: getSelectedStation,
+      selectTrain: selectTrain,
+      clearTrainSelection: clearTrainSelection,
+      getSelectedTrain: getSelectedTrain,
       setPalette: setPalette,
     };
   }

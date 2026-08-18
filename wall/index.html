@@ -2513,6 +2513,15 @@
     <script src="./systems/transit/mtaSubwaySemanticFamily.tests.js"></script>
     <script src="./systems/transit/mtaSubwayPaletteAuthority.js"></script>
     <script src="./systems/transit/mtaSubwayPaletteAuthority.tests.js"></script>
+    <!-- ── 0818_SUBWAY_Logical_Rolling_Stock — persistent StudioRich logical
+         train/consist/car identity + realtime trip association + truth-aware
+         position state. Depends only on MTASubwayTransitStore (reads its
+         canonical trip/vehicle/route/station/shape state) — load after it,
+         before mtaSubwayMapFeatures.js, which reads this authority's
+         already-reconciled state to build the live logical-train GeoJSON
+         layer. Never fetches; never owned by the Mapbox renderer. ── -->
+    <script src="./systems/transit/subwayLogicalRollingStockAuthority.js"></script>
+    <script src="./systems/transit/subwayLogicalRollingStockAuthority.tests.js"></script>
     <script src="./systems/transit/mtaSubwayMapFeatures.js"></script>
     <script src="./systems/transit/mtaSubwayMapFeatures.tests.js"></script>
     <!-- ── SUBWAY: Station Library (0818_SUBWAY_Station_Library_Foundation) —

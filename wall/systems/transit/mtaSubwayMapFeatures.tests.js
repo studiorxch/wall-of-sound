@@ -92,10 +92,21 @@
 
         // §25.14: full-network feature counts collected in one call
         var full = feat.buildFullNetworkFeatureCollections();
-        results.push(_assert('buildFullNetworkFeatureCollections() returns routes/stations/live_operational_state',
-          !!full.routes && !!full.stations && !!full.live_operational_state));
+        results.push(_assert('buildFullNetworkFeatureCollections() returns routes/stations/live_operational_state/logical_trains',
+          !!full.routes && !!full.stations && !!full.live_operational_state && !!full.logical_trains));
         results.push(_assert('full-network routes count matches buildAllRouteFeatures()', full.routes.features.length === allRoutesFc.features.length));
         results.push(_assert('full-network stations count matches the real Station Library size', full.stations.features.length === lib.getAllRecords().length));
+      }
+
+      // ── 0818_SUBWAY_Logical_Rolling_Stock — buildLogicalTrainFeatures() ────
+      var rs = SBE.SubwayLogicalRollingStockAuthority;
+      if (rs) {
+        var trainFc = feat.buildLogicalTrainFeatures();
+        results.push(_assert('buildLogicalTrainFeatures() returns a valid FeatureCollection', trainFc.type === 'FeatureCollection' && Array.isArray(trainFc.features)));
+        results.push(_assert('every logical train feature id is a real sr-train-* id (never a raw MTA trip id)',
+          trainFc.features.every(function (f) { return /^sr-train-\d{6}$/.test(f.id); })));
+        results.push(_assert('every logical train feature carries an explicit positionSource honesty marker (never "gps")',
+          trainFc.features.every(function (f) { return f.properties.positionSource && f.properties.positionSource !== 'gps'; })));
       }
 
       // §25.6: palette-resolved route color changes, routeId never does

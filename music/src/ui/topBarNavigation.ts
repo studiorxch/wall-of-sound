@@ -17,7 +17,7 @@
 
 export type WorkspaceMode = "flow_curve" | "scheduler" | "broadcast_hud" | "maps";
 
-export type NavigationAction = "openRacetrack";
+export type NavigationAction = "openRacetrack" | "openSubway";
 
 export type NavigationLink =
   | { label: string; kind: "internal"; mode: WorkspaceMode; title?: string }
@@ -67,6 +67,12 @@ export const navigationItems: readonly NavigationItem[] = [
       // never reusing one). Dispatches to wallRacetrackBridge.ts's
       // openOrFocusRacetrack(), which reuses LIVE MAP's own named window.
       { label: "RACETRACK", kind: "action", action: "openRacetrack", title: "Racetrack — cached course presentation" },
+      // 0818_SUBWAY_Logical_Rolling_Stock — same reasoning as RACETRACK:
+      // SUBWAY is `?mode=subway` on the SAME wall/ runtime, not a separate
+      // page, so it dispatches through wallSubwayBridge.ts's
+      // openOrFocusSubway(), reusing LIVE MAP's own named window rather than
+      // opening a new tab on every click.
+      { label: "SUBWAY", kind: "action", action: "openSubway", title: "Subway — live logical rolling stock" },
     ],
   },
 ] as const;
