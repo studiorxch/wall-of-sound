@@ -6741,10 +6741,47 @@ body.broadcast-clean-capture .app {
   padding: 2px 0; text-align: left;
 }
 .station-detail-sibling-link:hover { text-decoration: underline; }
+/* Multiple sibling-links inside one table cell (e.g. Rolling Stock's
+   Create Artwork / Place seed artwork / Retire actions) need visible
+   separation — a single global rule since no existing usage puts two
+   adjacent siblings without a wrapping list. */
+.geo-rows-table td .station-detail-sibling-link + .station-detail-sibling-link { margin-left: 10px; }
 .station-detail-notes {
   width: 100%; box-sizing: border-box; background: var(--surface2, #1a1a1a); border: 1px solid var(--border, #333);
   border-radius: 6px; padding: 8px 10px; font-size: 13px; color: var(--text, #e0e0e0); resize: vertical;
   font-family: inherit;
+}
+
+/* ── Graffiti Drawing App (0818_SUBWAY_Artwork_Creation_Drawing_App) ──────── */
+.graffiti-app { max-width: none; padding: 20px 24px 60px; }
+.graffiti-header { display: flex; align-items: baseline; gap: 12px; margin-bottom: 12px; }
+.graffiti-status { font-size: 12px; color: var(--text-mid, #aaa); }
+.graffiti-workspace { display: flex; gap: 24px; flex-wrap: wrap; align-items: flex-start; }
+
+.graffiti-canvas-stack { position: relative; border: 1px solid var(--border, #333); border-radius: 6px; overflow: hidden; touch-action: none; background: #111; }
+.graffiti-canvas-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+.graffiti-canvas-active { cursor: crosshair; }
+
+.graffiti-toolbar { display: flex; flex-direction: column; gap: 16px; min-width: 200px; }
+.graffiti-toolbar-group { display: flex; flex-direction: column; gap: 6px; }
+.graffiti-brush-row, .graffiti-toolbar-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.graffiti-toolbar-actions .station-detail-sibling-link,
+.graffiti-brush-row .station-detail-sibling-link {
+  border: 1px solid var(--border, #333); border-radius: 4px; padding: 4px 10px;
+}
+.graffiti-brush-row .station-detail-sibling-link.active { border-color: var(--accent, #5c8de8); color: var(--accent, #5c8de8); }
+.graffiti-toolbar-actions .station-detail-sibling-link:disabled { opacity: 0.4; cursor: default; text-decoration: none; }
+
+.graffiti-swatch-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.graffiti-swatch {
+  width: 22px; height: 22px; border-radius: 4px; border: 1px solid var(--border, #333); cursor: pointer; padding: 0;
+}
+.graffiti-swatch.active { border-color: var(--accent, #5c8de8); border-width: 2px; }
+.graffiti-import-label { display: inline-block; }
+
+.graffiti-confirm-panel {
+  margin-top: 20px; max-width: 420px; background: var(--surface2, #1a1a1a); border: 1px solid var(--border, #333);
+  border-radius: 6px; padding: 14px 16px;
 }
 
 /* empty state */

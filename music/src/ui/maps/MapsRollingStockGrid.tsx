@@ -4,6 +4,7 @@ import type { LogicalTrain } from "../../data/subwayRollingStockAdminTypes";
 
 type Props = {
   onOpen: (logicalTrainId: string) => void;
+  onOpenStickerSandbox: () => void;
 };
 
 type LoadState = "authority_unavailable" | "loading" | "ready";
@@ -25,7 +26,7 @@ function readSnapshot(): Snapshot {
 // this origin's own poll has resolved. Not a creative-content library like
 // Stations/Orbs: this is diagnostic/dev-oriented, per the governing BUILD's
 // own explicit "may be development/admin-oriented" allowance.
-export function MapsRollingStockGrid({ onOpen }: Props) {
+export function MapsRollingStockGrid({ onOpen, onOpenStickerSandbox }: Props) {
   const [{ loadState, trains }, setState] = useState<Snapshot>(readSnapshot);
   const [query, setQuery] = useState("");
 
@@ -77,6 +78,7 @@ export function MapsRollingStockGrid({ onOpen }: Props) {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
+        <button className="station-detail-sibling-link" onClick={onOpenStickerSandbox}>Sticker Sandbox</button>
       </div>
       {sorted.length === 0 ? (
         <div className="pg-empty"><div className="pg-empty-msg">No active logical trains match your search.</div></div>

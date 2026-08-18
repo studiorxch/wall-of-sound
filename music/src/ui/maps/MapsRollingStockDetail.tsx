@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { CollectionDetailBar } from "../CollectionDetailBar";
 import * as bridge from "../../maps/wallRollingStockAdminBridge";
+import { MapsGraffitiDrawingApp } from "../graffiti/MapsGraffitiDrawingApp";
 import type {
   LogicalTrain, LogicalConsist, LogicalCar, TrainPositionState, CarSurface, ArtworkPlacement,
 } from "../../data/subwayRollingStockAdminTypes";
+import type { DrawingTargetMode } from "../../graffiti/graffitiTypes";
 
 type Props = {
   logicalTrainId: string;
@@ -34,7 +36,7 @@ function readSnapshot(id: string): Snapshot {
 // "Place seed artwork" creates a plainly-labeled DEV_ART_* record and places
 // it, proving the persistence/history chain without pretending to be a real
 // creation tool.
-function CarSurfaceRow({ car }: { car: LogicalCar }) {
+function CarSurfaceRow({ car, onCreateArtwork }: { car: LogicalCar; onCreateArtwork: (mode: DrawingTargetMode) => void }) {
   const [surfaces, setSurfaces] = useState<CarSurface[]>(() => {
     const r = bridge.getSurfacesForCar(car.id);
     return r.ok ? r.data : [];
@@ -122,6 +124,20 @@ function CarSurfaceRow({ car }: { car: LogicalCar }) {
                   )}
                 </td>
                 <td>
+                  {(s.surfaceType === "exterior_side_a" || s.surfaceType === "exterior_side_b") && (
+                    <button
+                      className="station-detail-sibling-link"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onCreateArtwork({
+                          kind: "car_surface", surfaceId: s.id, surfaceType: s.surfaceType,
+                          logicalCarId: car.id, consistId: car.consistId, logicalTrainId: car.logicalTrainId, routeId: car.routeId,
+                        });
+                      }}
+                    >
+                      Create Artwork
+                    </button>
+                  )}
                   <button className="station-detail-sibling-link" onClick={(e) => { e.stopPropagation(); placeSeedArtwork(s.id); }}>
                     {active ? "Cover with seed artwork" : "Place seed artwork"}
                   </button>
@@ -142,6 +158,7 @@ function CarSurfaceRow({ car }: { car: LogicalCar }) {
 
 export function MapsRollingStockDetail({ logicalTrainId, onBack }: Props) {
   const [{ train, consist, cars, position }, setSnapshot] = useState<Snapshot>(() => readSnapshot(logicalTrainId));
+  const [drawingTarget, setDrawingTarget] = useState<DrawingTargetMode | null>(null);
 
   function refresh() {
     setSnapshot(readSnapshot(logicalTrainId));
@@ -153,6 +170,16 @@ export function MapsRollingStockDetail({ logicalTrainId, onBack }: Props) {
     return () => { unsubscribe(); window.clearInterval(interval); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [logicalTrainId]);
+
+  if (drawingTarget) {
+    return (
+      <MapsGraffitiDrawingApp
+        targetMode={drawingTarget}
+        onBack={() => setDrawingTarget(null)}
+        onPlaced={refresh}
+      />
+    );
+  }
 
   if (!train) {
     return (
@@ -185,7 +212,7 @@ export function MapsRollingStockDetail({ logicalTrainId, onBack }: Props) {
 
         <div className="station-detail-section">
           <div className="station-detail-section-label">Cars → Surfaces → Active Placement → History</div>
-          {cars.map((car) => <CarSurfaceRow key={car.id} car={car} />)}
+          {cars.map((car) => <CarSurfaceRow key={car.id} car={car} onCreateArtwork={setDrawingTarget} />)}
         </div>
       </div>
     </div>

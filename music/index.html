@@ -91,6 +91,14 @@
          authority reached through this proxy. mtaSubwayMapFeatures.js/
          mtaSubwayMapLayer.js are still NOT loaded here — no Mapbox rendering
          target exists in MUSIC's page, per the reasoning above. -->
+    <!-- Required by mtaSubwayRealtimeAdapter.js (transit_realtime.FeedMessage
+         protobuf decoder) — omitted here in the prior build by mistake;
+         mtaSubwayRealtimeAdapter.fetchGroup() degrades to a silent
+         'decode_failed' on every call without it, found live during this
+         build's own verification (wall/index.html has always loaded this
+         correctly; only this proxied copy was missing it). Must load BEFORE
+         mtaSubwayRealtimeAdapter.js, matching wall/index.html's own order. -->
+    <script src="/wall-app/systems/transit/vendor/gtfsRealtimeBindings.js"></script>
     <script src="/wall-app/systems/transit/mtaSubwayRealtimeAdapter.js"></script>
     <script src="/wall-app/systems/transit/mtaSubwayTransitStore.js"></script>
     <script src="/wall-app/systems/transit/mtaSubwayPollingRuntime.js"></script>
