@@ -77,6 +77,27 @@
     <script src="/wall-app/systems/transit/mtaSubwayStaticAdapter.js"></script>
     <script src="/wall-app/systems/transit/mtaSubwayIdentity.js"></script>
     <script src="/wall-app/systems/transit/mtaSubwayStationLibrary.js"></script>
+    <!-- 0818_SUBWAY_Car_Surface_Artwork_Placement — MAPS "Rolling Stock" admin
+         inspection (BUILD §24) genuinely needs LIVE logical trains to inspect,
+         unlike the static-only Stations library above, so this chain adds the
+         realtime/polling/rolling-stock/surface/artwork/placement authorities
+         through the same proxy. This runs its OWN independent poll of the
+         public MTA feed while the Rolling Stock admin panel is mounted
+         (started/stopped by MapsRollingStockGrid.tsx) — a second, legitimate
+         consumer of the same public data, not a duplicate of the wall/ tab's
+         own polling; each origin's localStorage-backed rolling-stock/surface/
+         artwork/placement state is independent (browser origin-scoped
+         storage), same structural property already true of every other wall*
+         authority reached through this proxy. mtaSubwayMapFeatures.js/
+         mtaSubwayMapLayer.js are still NOT loaded here — no Mapbox rendering
+         target exists in MUSIC's page, per the reasoning above. -->
+    <script src="/wall-app/systems/transit/mtaSubwayRealtimeAdapter.js"></script>
+    <script src="/wall-app/systems/transit/mtaSubwayTransitStore.js"></script>
+    <script src="/wall-app/systems/transit/mtaSubwayPollingRuntime.js"></script>
+    <script src="/wall-app/systems/transit/subwayLogicalRollingStockAuthority.js"></script>
+    <script src="/wall-app/systems/transit/subwayCarSurfaceAuthority.js"></script>
+    <script src="/wall-app/systems/transit/subwayArtworkAuthority.js"></script>
+    <script src="/wall-app/systems/transit/subwayArtworkPlacementAuthority.js"></script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

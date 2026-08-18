@@ -5,6 +5,7 @@ import * as wallVehicleStyleBridge from "../../maps/wallVehicleStyleBridge";
 import * as wallOverlayStyleBridge from "../../maps/wallOverlayStyleBridge";
 import * as wallOrbProfileBridge from "../../maps/wallOrbProfileBridge";
 import * as wallStationLibraryBridge from "../../maps/wallStationLibraryBridge";
+import * as wallRollingStockAdminBridge from "../../maps/wallRollingStockAdminBridge";
 import * as itineraryStore from "../../maps/itineraryStore";
 import * as raceCourseStore from "../../maps/raceCourseStore";
 import { ensurePreviewMap } from "../../maps/wallMapPreview";
@@ -39,7 +40,7 @@ import { ensurePreviewMap } from "../../maps/wallMapPreview";
 // activeLibrary/activeCollection are mutually exclusive selection states —
 // only one row is ever highlighted at a time.
 
-export type MapsLibraryKey = "geographic" | "vehicles" | "overlays" | "orbs" | "raceCourses" | "stations";
+export type MapsLibraryKey = "geographic" | "vehicles" | "overlays" | "orbs" | "raceCourses" | "stations" | "rollingStock";
 export type MapsCollectionKey = "itineraries";
 
 type Props = {
@@ -78,6 +79,11 @@ function readStationCount(): number {
   return list.ok ? list.data.length : 0;
 }
 
+function readRollingStockCount(): number {
+  const list = wallRollingStockAdminBridge.listActiveTrains();
+  return list.ok ? list.data.length : 0;
+}
+
 export function MapsSidebar({ activeLibrary, onSelectLibrary, activeCollection, onSelectCollection }: Props) {
   const [collapsed, setCollapsed] = useState(false);
   const [geographicCount, setGeographicCount] = useState(readGeographicCount);
@@ -86,6 +92,7 @@ export function MapsSidebar({ activeLibrary, onSelectLibrary, activeCollection, 
   const [orbCount, setOrbCount] = useState(readOrbCount);
   const [raceCourseCount, setRaceCourseCount] = useState(readRaceCourseCount);
   const [stationCount, setStationCount] = useState(readStationCount);
+  const [rollingStockCount, setRollingStockCount] = useState(readRollingStockCount);
   const [itineraryCount, setItineraryCount] = useState(() => itineraryStore.listItineraries().length);
 
   useEffect(() => {
@@ -111,11 +118,15 @@ export function MapsSidebar({ activeLibrary, onSelectLibrary, activeCollection, 
     // and update shortly after" shape.
     if (wallStationLibraryBridge.isBridgeAvailable()) wallStationLibraryBridge.ensureStationsImported().then(() => setStationCount(readStationCount()));
     const unsubStations = wallStationLibraryBridge.subscribe(() => setStationCount(readStationCount()));
+    // Rolling Stock's own live poll is started lazily by MapsRollingStockGrid
+    // itself (opening the library), not here — this just reflects whatever
+    // count already exists so the badge stays live once tracking is running.
+    const unsubRollingStock = wallRollingStockAdminBridge.subscribe(() => setRollingStockCount(readRollingStockCount()));
     // itineraryStore hydrates async from IndexedDB — its own subscribe
     // fires once hydration completes, same "count may start at 0 and
     // update shortly after" shape as the wall bridges above.
     const unsubItineraries = itineraryStore.subscribe(() => setItineraryCount(itineraryStore.listItineraries().length));
-    return () => { unsubGeographic(); unsubVehicles(); unsubOverlays(); unsubOrbs(); unsubRaceCourses(); unsubStations(); unsubItineraries(); };
+    return () => { unsubGeographic(); unsubVehicles(); unsubOverlays(); unsubOrbs(); unsubRaceCourses(); unsubStations(); unsubRollingStock(); unsubItineraries(); };
   }, []);
 
   return (
@@ -191,6 +202,18 @@ export function MapsSidebar({ activeLibrary, onSelectLibrary, activeCollection, 
                 <span className="fm-row-count">{stationCount}</span>
               </button>
             )}
+            {/* 0818_SUBWAY_Car_Surface_Artwork_Placement — dev/admin inspection,
+                always visible (same "no pre-existing object to migrate, the
+                row itself is the entry point" reasoning as Itineraries below)
+                rather than count-gated like the content libraries above. */}
+            <button
+              className={`fm-row${activeCollection === null && activeLibrary === "rollingStock" ? " active" : ""}`}
+              onClick={() => onSelectLibrary("rollingStock")}
+            >
+              <span className="fm-row-icon"><Icon name="tram" /></span>
+              <span className="fm-row-label">Rolling Stock</span>
+              <span className="fm-row-count">{rollingStockCount}</span>
+            </button>
           </div>
           <div className="fm-section">
             <div className="fm-section-header">Collections</div>

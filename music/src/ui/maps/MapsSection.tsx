@@ -11,6 +11,8 @@ import { MapsRaceCoursesGrid } from "./MapsRaceCoursesGrid";
 import { MapsRaceCourseDetail } from "./MapsRaceCourseDetail";
 import { MapsStationsGrid } from "./MapsStationsGrid";
 import { MapsStationDetail } from "./MapsStationDetail";
+import { MapsRollingStockGrid } from "./MapsRollingStockGrid";
+import { MapsRollingStockDetail } from "./MapsRollingStockDetail";
 import { parseMapsHash, writeMapsHash } from "../../maps/mapsHash";
 import * as itineraryStore from "../../maps/itineraryStore";
 import * as raceCourseStore from "../../maps/raceCourseStore";
@@ -38,6 +40,7 @@ export function MapsSection() {
   const [selectedItineraryId, setSelectedItineraryId] = useState<string | null>(null);
   const [selectedRaceCourseId, setSelectedRaceCourseId] = useState<string | null>(null);
   const [selectedStationId, setSelectedStationId] = useState<string | null>(null);
+  const [selectedTrainId, setSelectedTrainId] = useState<string | null>(null);
 
   useEffect(() => {
     writeMapsHash(selectedId);
@@ -84,6 +87,8 @@ export function MapsSection() {
       } else {
         label = "MAPS — Stations";
       }
+    } else if (activeLibrary === "rollingStock") {
+      label = selectedTrainId ? `MAPS — ${selectedTrainId}` : "MAPS — Rolling Stock";
     } else if (activeLibrary === "vehicles") {
       label = "MAPS — Vehicles";
     } else if (activeLibrary === "overlays") {
@@ -94,7 +99,7 @@ export function MapsSection() {
       label = "MAPS — Geographic";
     }
     document.title = label;
-  }, [activeLibrary, activeCollection, selectedItineraryId, selectedRaceCourseId, selectedStationId, selectedId]);
+  }, [activeLibrary, activeCollection, selectedItineraryId, selectedRaceCourseId, selectedStationId, selectedTrainId, selectedId]);
 
   return (
     <>
@@ -142,6 +147,16 @@ export function MapsSection() {
               />
             ) : (
               <MapsStationsGrid onOpen={(id) => setSelectedStationId(id)} />
+            )
+          ) : activeLibrary === "rollingStock" ? (
+            selectedTrainId ? (
+              <MapsRollingStockDetail
+                key={selectedTrainId}
+                logicalTrainId={selectedTrainId}
+                onBack={() => setSelectedTrainId(null)}
+              />
+            ) : (
+              <MapsRollingStockGrid onOpen={(id) => setSelectedTrainId(id)} />
             )
           ) : selectedId ? (
             <MapsGeographicStyleDetail

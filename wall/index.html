@@ -2522,6 +2522,18 @@
          layer. Never fetches; never owned by the Mapbox renderer. ── -->
     <script src="./systems/transit/subwayLogicalRollingStockAuthority.js"></script>
     <script src="./systems/transit/subwayLogicalRollingStockAuthority.tests.js"></script>
+    <!-- ── 0818_SUBWAY_Car_Surface_Artwork_Placement — persistent car-surface
+         identity, artwork records, and append-only artwork placement history.
+         Surfaces depend only on SubwayLogicalRollingStockAuthority; Placement
+         depends on both Artwork and Surface authorities. Independent of
+         mtaSubwayMapFeatures.js — no map feature builder reads these yet
+         (admin/dev inspection only in this build, per BUILD §29). ── -->
+    <script src="./systems/transit/subwayCarSurfaceAuthority.js"></script>
+    <script src="./systems/transit/subwayCarSurfaceAuthority.tests.js"></script>
+    <script src="./systems/transit/subwayArtworkAuthority.js"></script>
+    <script src="./systems/transit/subwayArtworkAuthority.tests.js"></script>
+    <script src="./systems/transit/subwayArtworkPlacementAuthority.js"></script>
+    <script src="./systems/transit/subwayArtworkPlacementAuthority.tests.js"></script>
     <script src="./systems/transit/mtaSubwayMapFeatures.js"></script>
     <script src="./systems/transit/mtaSubwayMapFeatures.tests.js"></script>
     <!-- ── SUBWAY: Station Library (0818_SUBWAY_Station_Library_Foundation) —

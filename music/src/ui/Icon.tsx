@@ -26,6 +26,7 @@ import closeRaw from "@material-symbols/svg-400/outlined/close.svg?raw";
 import blurCircularRaw from "@material-symbols/svg-400/outlined/blur_circular.svg?raw";
 import flagRaw from "@material-symbols/svg-400/outlined/flag.svg?raw";
 import subwayRaw from "@material-symbols/svg-400/outlined/subway.svg?raw";
+import tramRaw from "@material-symbols/svg-400/outlined/tram.svg?raw";
 
 export type IconName =
   | "chevron_left"
@@ -55,7 +56,8 @@ export type IconName =
   | "close"
   | "blur_circular"
   | "flag"
-  | "subway";
+  | "subway"
+  | "tram";
 
 // Material Symbols Outlined ships with no explicit fill, which defaults to
 // black — force currentColor so every icon inherits its row's foreground.
@@ -92,6 +94,7 @@ const ICONS: Record<IconName, string> = {
   blur_circular: currentColor(blurCircularRaw),
   flag: currentColor(flagRaw),
   subway: currentColor(subwayRaw),
+  tram: currentColor(tramRaw),
 };
 
 type IconProps = {
