@@ -240,12 +240,15 @@
     if (!this._createCanvas()) return;
 
     // Register default layer stack — "pure geography" evaluation mode.
-    // CinematicHazeLayer and SignalDriftLayer suspended:
-    //   haze flattens map readability; scanlines fight road typography.
-    //   Re-enable via render profile orchestration when geography is clear.
+    // CinematicHazeLayer, TransitPulseLayer, and SignalDriftLayer suspended:
+    //   haze flattens map readability; scanlines fight road typography;
+    //   TransitPulse's regular pressure-grid sampling reads as a full-screen
+    //   dot/checker texture at typical ambient pressure levels, harming map
+    //   readability the same way. Re-enable via render profile orchestration
+    //   when geography is clear.
     var Overlays = SBE.Overlays || {};
     // if (Overlays.CinematicHazeLayer) this.addLayer(new Overlays.CinematicHazeLayer(), "screen");
-    if (Overlays.TransitPulseLayer)  this.addLayer(new Overlays.TransitPulseLayer(),  "additive");
+    // if (Overlays.TransitPulseLayer)  this.addLayer(new Overlays.TransitPulseLayer(),  "additive");
     if (Overlays.IsolationFadeLayer) this.addLayer(new Overlays.IsolationFadeLayer(), "multiply");
     // if (Overlays.SignalDriftLayer)   this.addLayer(new Overlays.SignalDriftLayer(),    "normal");
 

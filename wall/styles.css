@@ -1043,6 +1043,27 @@ body.racetrack-presentation .mapboxgl-ctrl-group {
   display: none !important;
 }
 
+/* ── 0819_SUBWAY_Public_HUD_Line_Ribbon_v1.0.0_BUILD §10/§13/§20 ──────────
+   Unlike RACETRACK (a separate scene, full chrome hide above), SUBWAY
+   renders directly onto the canonical live map — most chrome stays. Only
+   the DRIVE-mode telemetry HUD (#wos-hud, TraversalHUD), the travel
+   control deck (#wos-nav — Flight/Drive/Walk/Bike/Transit/Orbital + Launch/
+   Cruise; a subway live-map viewer isn't itself a travel-simulation mode)
+   and the legacy canvas record/play transport bar are hidden — the bottom
+   bar becomes the reserved SUBWAY RADIO slot instead (subwayStationHud.js
+   renders that into #subway-radio-slot, a real DOM node this rule leaves
+   visible). The top-right weather HUD (#world-telemetry-hud) stays, minus
+   its humidity/precip/wind row (.wt-reality) — time/temperature/condition
+   remain, per §11's own required minimal weather set. ── */
+body.subway-presentation #wos-hud,
+body.subway-presentation #wos-nav,
+body.subway-presentation .transport-bar {
+  display: none !important;
+}
+body.subway-presentation .wt-reality {
+  display: none !important;
+}
+
 /* ── Design tokens — scoped to .racetrack-overlay only, never :root.
    RACETRACK's premium dark/orange aesthetic is deliberately separate from
    WALL's global chrome tokens (--accent: teal) so nothing bleeds into
@@ -2816,7 +2837,8 @@ body.racetrack-presentation .racetrack-overlay {
    Mapbox (z-index:auto), causing the dot pattern to overlay the map. */
 .wos-embed #stage-grid,
 .wos-obs #stage-grid,
-body.play-controls-hidden #stage-grid {
+body.play-controls-hidden #stage-grid,
+.ws-map-active #stage-grid {
   display: none !important;
 }
 
@@ -5092,3 +5114,471 @@ body.wos-orbital-earth-active .app-body {
 .mapboxgl-ctrl-group button:hover {
   background: rgba(50, 180, 220, 0.05) !important;
 }
+
+/* ── 0819_SUBWAY_Public_HUD_Line_Ribbon_v1.0.0_BUILD — public station HUD,
+   arrival lane, RADIO slot, line ribbon. All hidden by default (only ever
+   shown while body.subway-presentation is active AND a selection exists —
+   see subwayStationHud.js/subwayLineRibbon.js for the show/hide logic);
+   only body.subway-presentation gets these rendered into the layout at
+   all, so they stay fully inert in every other mode. Reuses the app's own
+   existing --panel/--text/--accent tokens rather than inventing a second
+   palette. ── */
+#subway-station-identity,
+#subway-arrival-lane,
+#subway-radio-slot,
+#subway-line-ribbon {
+  display: none;
+}
+body.subway-presentation #subway-station-identity,
+body.subway-presentation #subway-arrival-lane,
+body.subway-presentation #subway-radio-slot,
+body.subway-presentation #subway-line-ribbon {
+  display: block;
+}
+
+.subway-panel-hidden {
+  opacity: 0;
+  transform: translateY(6px);
+  pointer-events: none;
+}
+
+#subway-station-identity {
+  position: fixed;
+  left: 24px;
+  bottom: 24px;
+  z-index: 40;
+  max-width: 360px;
+  padding: 16px 18px;
+  background: rgba(19, 20, 22, 0.88);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  backdrop-filter: blur(6px);
+  transition: opacity 220ms ease, transform 220ms ease;
+  font-family: inherit;
+}
+.subway-station-neighborhood {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+}
+.subway-station-name {
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.15;
+  color: var(--text);
+  margin-bottom: 10px;
+}
+.subway-line-badge-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.subway-line-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 6px;
+  border-radius: 50%;
+  background: #f2f2f2;
+  color: #101112;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  user-select: none;
+}
+.subway-line-badge:hover { background: var(--accent); }
+
+.subway-station-your-trip {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--panel-border);
+}
+.subway-station-your-trip-label {
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 4px;
+}
+.subway-station-your-trip-route { font-size: 14px; font-weight: 600; color: var(--text); }
+.subway-station-your-trip-exit { font-size: 12px; color: var(--text-dim); margin-bottom: 8px; }
+.subway-station-your-trip-candidates-label {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-top: 6px;
+}
+.subway-station-your-trip-candidate {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  margin-top: 6px;
+  padding: 6px 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.subway-station-your-trip-candidate:hover { border-color: var(--accent); }
+.subway-station-your-trip-board {
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--accent);
+  color: #101112;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+.subway-station-your-trip-waiting { font-size: 13px; color: var(--text); margin-top: 6px; }
+.subway-station-your-trip-waiting-sub { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+
+#subway-arrival-lane {
+  position: fixed;
+  right: 24px;
+  top: 96px;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 300px;
+  transition: opacity 220ms ease, transform 220ms ease;
+}
+.subway-arrival-panel {
+  background: rgba(19, 20, 22, 0.88);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  backdrop-filter: blur(6px);
+  font-family: inherit;
+}
+.subway-arrival-panel-heading {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+}
+.subway-arrival-row {
+  display: grid;
+  grid-template-columns: 28px 52px 1fr;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text);
+  padding: 3px 0;
+}
+.subway-arrival-route {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #f2f2f2;
+  color: #101112;
+  font-size: 11px;
+  font-weight: 700;
+}
+.subway-arrival-eta { color: var(--accent); font-weight: 600; }
+.subway-arrival-dest { color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.subway-arrival-row-empty, .subway-arrival-empty { color: var(--text-dim); font-size: 13px; }
+
+#subway-radio-slot {
+  position: fixed;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  z-index: 40;
+  padding: 8px 20px;
+  background: rgba(19, 20, 22, 0.7);
+  border: 1px solid var(--panel-border);
+  border-radius: 999px;
+  font-family: inherit;
+}
+.subway-radio-label {
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  color: var(--text-dim);
+}
+
+#subway-line-ribbon {
+  position: fixed;
+  left: 0;
+  top: 96px;
+  bottom: 96px;
+  z-index: 35;
+  padding: 12px 6px;
+  font-family: inherit;
+  transition: width 180ms ease, background 180ms ease;
+  overflow: hidden;
+}
+.subway-ribbon-collapsed {
+  width: 18px;
+}
+.subway-ribbon-expanded {
+  width: 220px;
+  background: rgba(19, 20, 22, 0.82);
+  border-right: 1px solid var(--panel-border);
+  backdrop-filter: blur(6px);
+  overflow-y: auto;
+}
+.subway-ribbon-spine {
+  width: 2px;
+  height: 100%;
+  margin: 0 auto;
+  background: var(--panel-border);
+}
+.subway-ribbon-heading {
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  padding: 4px 10px 10px;
+}
+.subway-ribbon-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 10px;
+  font-size: 13px;
+  color: var(--text);
+  white-space: nowrap;
+}
+.subway-ribbon-row-current { color: var(--accent); font-weight: 600; }
+.subway-ribbon-row-current em { font-style: normal; font-size: 10px; letter-spacing: 0.08em; opacity: 0.8; margin-left: 4px; }
+.subway-ribbon-marker { width: 12px; text-align: center; color: var(--text-dim); }
+.subway-ribbon-row-current .subway-ribbon-marker { color: var(--accent); }
+.subway-ribbon-connector { text-align: center; color: var(--panel-border); font-size: 11px; }
+.subway-ribbon-row-empty { color: var(--text-dim); font-style: italic; }
+
+/* Sunroof Camera Ride Test (0819) — compact ride instrument + entry/exit
+   controls. See subwayCameraSunroof.js / subwayLineRibbon.js. */
+.subway-ribbon-ride-compact {
+  width: 168px;
+  background: rgba(19, 20, 22, 0.82);
+  border-right: 1px solid var(--panel-border);
+  backdrop-filter: blur(6px);
+}
+.subway-ribbon-sunroof-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  margin: 2px 10px 10px;
+  border-radius: 50%;
+  background: #f2f2f2;
+  color: #101112;
+  font-size: 13px;
+  font-weight: 700;
+}
+.subway-ribbon-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.subway-ribbon-heading-label { flex: 1; }
+.subway-ribbon-sunroof-toggle,
+.subway-ribbon-sunroof-minimize,
+.subway-ribbon-sunroof-exit {
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  background: transparent;
+  border: 1px solid var(--panel-border);
+  border-radius: 4px;
+  padding: 3px 7px;
+  cursor: pointer;
+}
+.subway-ribbon-sunroof-toggle:hover,
+.subway-ribbon-sunroof-minimize:hover,
+.subway-ribbon-sunroof-exit:hover { color: var(--text); border-color: var(--accent); }
+.subway-ribbon-sunroof-controls { display: flex; gap: 6px; flex-shrink: 0; }
+.subway-ribbon-ride-compact .subway-ribbon-sunroof-exit {
+  display: block;
+  margin: 12px 10px 0;
+  width: calc(100% - 20px);
+  text-align: center;
+}
+
+/* ── 0819_SUBWAY_Itinerary_Execution_Map_Authoring — minimal ride HUD.
+   Quiet by default: the module only ever sets display:block on its own
+   root once a real ride is active (status !== "idle") — see
+   subwayItineraryRideHud.js. Not a redesign of the existing station HUD/
+   line ribbon; a separate, small, dismissible panel. ── */
+.subway-ride-hud {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 45;
+  width: 260px;
+  padding: 12px 14px;
+  background: rgba(19, 20, 22, 0.92);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  backdrop-filter: blur(6px);
+  font-family: inherit;
+  color: var(--text);
+}
+.subway-ride-hud-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.subway-ride-hud-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 50%;
+  background: #f2f2f2;
+  color: #101112;
+  font-size: 12px;
+  font-weight: 700;
+}
+.subway-ride-hud-status {
+  flex: 1;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.subway-ride-hud-close {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+.subway-ride-hud-close:hover { color: var(--text); }
+.subway-ride-hud-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  padding: 2px 0;
+}
+.subway-ride-hud-label {
+  color: var(--text-dim);
+  letter-spacing: 0.06em;
+  font-size: 10px;
+  align-self: center;
+}
+.subway-ride-hud-candidates-label {
+  margin-top: 10px;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.subway-ride-hud-candidates-label--none { color: #e0a04a; }
+.subway-ride-hud-explain {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.subway-ride-hud-candidate {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  width: 100%;
+  margin-top: 6px;
+  padding: 6px 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+  gap: 4px 8px;
+}
+.subway-ride-hud-candidate:hover { border-color: var(--accent); }
+.subway-ride-hud-candidate-route { font-weight: 700; }
+.subway-ride-hud-candidate-dest {
+  flex: 1;
+  min-width: 100%;
+  color: var(--text-dim);
+  font-size: 11px;
+}
+.subway-ride-hud-eta { color: var(--accent); font-weight: 600; }
+.subway-ride-hud-board-label {
+  margin-left: auto;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--accent);
+  color: #101112;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+.subway-ride-hud-map-match {
+  margin-top: 10px;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+}
+.subway-ride-hud-map-match--mismatch { border-color: var(--panel-border); }
+.subway-ride-hud-map-match--mismatch .subway-ride-hud-map-match-label { color: #e0a04a; margin-bottom: 0; }
+.subway-ride-hud-map-match-label {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 6px;
+}
+.subway-ride-hud-board-btn {
+  display: block;
+  width: 100%;
+  padding: 7px 8px;
+  background: var(--accent);
+  border: none;
+  border-radius: 6px;
+  color: #101112;
+  font-size: 12px;
+  font-weight: 700;
+  font-family: inherit;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+.subway-ride-hud-board-btn:hover { filter: brightness(1.08); }
+.subway-ride-hud-boarded-banner {
+  margin-bottom: 8px;
+  padding: 6px 8px;
+  background: rgba(90, 200, 120, 0.15);
+  border: 1px solid #5ac878;
+  border-radius: 6px;
+  color: #5ac878;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-align: center;
+}
+.subway-ride-hud-warning {
+  margin-top: 8px;
+  font-size: 11px;
+  color: #e0a04a;
+}
+.subway-ride-hud-done { justify-content: center; margin-top: 10px; }
+.subway-ride-hud-exit { justify-content: center; margin-top: 10px; color: #e0a04a; border-color: #e0a04a; }
