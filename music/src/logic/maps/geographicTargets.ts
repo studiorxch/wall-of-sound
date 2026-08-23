@@ -49,7 +49,7 @@ export type GeographicTarget = {
   targetId: string;
   name: string;
   category: string;
-  sourceType: "mapbox-style" | "route" | "vehicle" | "hud" | "overlay";
+  sourceType: "mapbox-style" | "mapbox-building" | "route" | "vehicle" | "hud" | "overlay";
   layerType: GeographicLayerType;
   colorFields: GeographicField[];
   hasExpression: boolean;
@@ -73,6 +73,8 @@ function isExpressionValue(value: unknown): boolean {
 function toFieldKind(registryValueKind: RegistryRecord["valueKind"]): GeographicFieldKind {
   if (registryValueKind === "opacity") return "opacity";
   if (registryValueKind === "boolean") return "boolean";
+  if (registryValueKind === "number") return "number";
+  if (registryValueKind === "select") return "select";
   return "color";
 }
 
@@ -89,6 +91,13 @@ const FILL_SUFFIX_ROLE: Record<string, string> = {
   "text-halo-color": "Halo",
   "icon-color": "Icon",
   "background-color": "Color",
+  "fill-extrusion-color": "Fill",
+  "fill-extrusion-opacity": "Opacity",
+  visibility: "Visible",
+  "height-scale": "Height Scale",
+  minzoom: "Min Zoom",
+  maxzoom: "Max Zoom",
+  "density-mode": "Density",
 };
 
 function inferLayerType(sourceProperty: string): GeographicLayerType {
@@ -123,7 +132,7 @@ export function buildGeographicTargets(
   };
 
   for (const rec of registry) {
-    if (rec.source === "mapbox-style") {
+    if (rec.source === "mapbox-style" || rec.source === "mapbox-building") {
       const key = rec.sourceObject ?? rec.id;
       if (!mapboxByObject.has(key)) mapboxByObject.set(key, []);
       mapboxByObject.get(key)!.push(rec);
@@ -149,6 +158,8 @@ export function buildGeographicTargets(
         value,
         isExpression: isExpressionValue(value),
         valueKind: toFieldKind(rec.valueKind),
+        numberRange: rec.numberRange,
+        selectOptions: rec.selectOptions,
       };
     });
   }
@@ -159,9 +170,9 @@ export function buildGeographicTargets(
     const isCustomized = defaultValues != null && colorFields.some((f) => defaultValues[f.propId] !== f.value);
     targets.push({
       targetId: `mapbox:${layerId}`,
-      name: titleCase(layerId),
+      name: layerId === "__maps_3d_buildings__" ? "3D Buildings" : titleCase(layerId),
       category: records[0].group,
-      sourceType: "mapbox-style",
+      sourceType: records[0].source,
       layerType: inferLayerType(records[0].sourceProperty),
       colorFields,
       hasExpression,
@@ -238,7 +249,7 @@ export function buildGeographicTargets(
 }
 
 export const GEOGRAPHIC_CATEGORY_ORDER = [
-  "Water", "Land", "Roads", "Labels", "Boundaries", "Base Map", "Route", "Vehicles", "HUD", "Overlay",
+  "Water", "Land", "Buildings", "Roads", "Labels", "Boundaries", "Base Map", "Route", "Vehicles", "HUD", "Overlay",
 ];
 
 export function sortTargetsByCategory(targets: GeographicTarget[]): GeographicTarget[] {

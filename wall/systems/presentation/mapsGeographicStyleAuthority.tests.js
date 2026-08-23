@@ -41,18 +41,34 @@
       { id: 'road-primary',     type: 'line',           paint: { 'line-color': '#4a5866' } },
       { id: 'place-label',      type: 'symbol',         paint: { 'text-color': '#cfe9f6', 'text-halo-color': '#000000' } },
       { id: 'admin-boundary',   type: 'line',           paint: { 'line-color': '#5c6b78' } },
-      // Deliberately included to verify buildings are excluded from the wired
-      // base-map set (per the per-building-authoring-authority exclusion).
-      { id: 'building-3d',      type: 'fill-extrusion', paint: { 'fill-extrusion-color': '#8899aa' } },
+      { id: 'building-3d',      type: 'fill-extrusion', paint: { 'fill-extrusion-color': '#8899aa', 'fill-extrusion-opacity': 0.85 }, layout: { visibility: 'visible' }, minzoom: 15, maxzoom: 22, filter: ['==', ['get', 'extrude'], 'true'] },
     ];
     var paintStore = {};
+    var layoutStore = {};
+    var zoomRangeStore = {};
+    var filterStore = {};
     layers.forEach(function (l) { paintStore[l.id] = Object.assign({}, l.paint); });
+    layers.forEach(function (l) { layoutStore[l.id] = Object.assign({ visibility: 'visible' }, l.layout || {}); });
+    layers.forEach(function (l) { zoomRangeStore[l.id] = { minzoom: typeof l.minzoom === 'number' ? l.minzoom : 0, maxzoom: typeof l.maxzoom === 'number' ? l.maxzoom : 24 }; });
+    layers.forEach(function (l) { filterStore[l.id] = l.filter; });
     var zoom = 12.8;
 
     return {
       __mock: true,
       getStyle: function () {
-        return { layers: layers.map(function (l) { return { id: l.id, type: l.type, paint: paintStore[l.id] }; }) };
+        return {
+          layers: layers.map(function (l) {
+            return {
+              id: l.id,
+              type: l.type,
+              paint: paintStore[l.id],
+              layout: layoutStore[l.id],
+              minzoom: zoomRangeStore[l.id].minzoom,
+              maxzoom: zoomRangeStore[l.id].maxzoom,
+              filter: filterStore[l.id],
+            };
+          })
+        };
       },
       getLayer: function (id) { return layers.some(function (l) { return l.id === id; }) ? { id: id } : undefined; },
       setPaintProperty: function (id, prop, value) {
@@ -62,8 +78,134 @@
       getPaintProperty: function (id, prop) {
         return paintStore[id] ? paintStore[id][prop] : undefined;
       },
+      setLayoutProperty: function (id, prop, value) {
+        if (!layoutStore[id]) return;
+        layoutStore[id][prop] = value;
+      },
+      getLayoutProperty: function (id, prop) {
+        return layoutStore[id] ? layoutStore[id][prop] : undefined;
+      },
+      setLayerZoomRange: function (id, min, max) {
+        if (!zoomRangeStore[id]) return;
+        zoomRangeStore[id] = { minzoom: min, maxzoom: max };
+      },
+      setFilter: function (id, value) {
+        if (!(id in filterStore)) return;
+        filterStore[id] = value;
+      },
       getZoom: function () { return zoom; },
     };
+  }
+
+  function createImportedStyleMockMap() {
+    var importedLayers = [
+      {
+        id: '3d-building',
+        type: 'fill-extrusion',
+        source: 'composite',
+        'source-layer': 'building',
+        paint: { 'fill-extrusion-color': '#778899', 'fill-extrusion-opacity': 0.9 },
+        layout: { visibility: 'visible' },
+        minzoom: 15,
+        maxzoom: 22,
+        filter: ['==', ['get', 'extrude'], 'true'],
+      },
+      {
+        id: '2d-building-outline',
+        type: 'line',
+        source: 'composite',
+        'source-layer': 'building',
+        paint: { 'line-color': '#334455' },
+        minzoom: 15,
+        maxzoom: 22,
+      },
+    ];
+    var paintStore = {};
+    var layoutStore = {};
+    var zoomRangeStore = {};
+    var filterStore = {};
+    var configStore = {
+      colorBuildings: 'hsl(307, 91%, 72%)',
+    };
+    importedLayers.forEach(function (l) { paintStore[l.id] = Object.assign({}, l.paint); });
+    importedLayers.forEach(function (l) { layoutStore[l.id] = Object.assign({ visibility: 'visible' }, l.layout || {}); });
+    importedLayers.forEach(function (l) { zoomRangeStore[l.id] = { minzoom: typeof l.minzoom === 'number' ? l.minzoom : 0, maxzoom: typeof l.maxzoom === 'number' ? l.maxzoom : 24 }; });
+    importedLayers.forEach(function (l) { filterStore[l.id] = l.filter; });
+
+    function _layerSnapshot(layer) {
+      return {
+        id: layer.id,
+        type: layer.type,
+        source: layer.source,
+        'source-layer': layer['source-layer'],
+        paint: paintStore[layer.id],
+        layout: layoutStore[layer.id],
+        minzoom: zoomRangeStore[layer.id].minzoom,
+        maxzoom: zoomRangeStore[layer.id].maxzoom,
+        filter: filterStore[layer.id],
+      };
+    }
+
+    return {
+      __mock: true,
+      getStyle: function () {
+        return {
+          layers: [
+            { id: 'water', type: 'fill', paint: { 'fill-color': '#0e3a52' } },
+            { id: 'land', type: 'fill', paint: { 'fill-color': '#12161c' } },
+          ],
+          imports: [
+            { id: 'basemap', config: Object.assign({}, configStore), data: { layers: importedLayers.map(_layerSnapshot) } },
+          ],
+        };
+      },
+      getLayer: function (id) { return importedLayers.some(function (l) { return l.id === id; }) ? { id: id } : undefined; },
+      setPaintProperty: function (id, prop, value) {
+        if (!paintStore[id]) return;
+        paintStore[id][prop] = value;
+      },
+      getPaintProperty: function (id, prop) {
+        return paintStore[id] ? paintStore[id][prop] : undefined;
+      },
+      setLayoutProperty: function (id, prop, value) {
+        if (!layoutStore[id]) return;
+        layoutStore[id][prop] = value;
+      },
+      getLayoutProperty: function (id, prop) {
+        return layoutStore[id] ? layoutStore[id][prop] : undefined;
+      },
+      setLayerZoomRange: function (id, min, max) {
+        if (!zoomRangeStore[id]) return;
+        zoomRangeStore[id] = { minzoom: min, maxzoom: max };
+      },
+      setFilter: function (id, value) {
+        if (!(id in filterStore)) return;
+        filterStore[id] = value;
+      },
+      setConfigProperty: function (importId, key, value) {
+        if (importId !== 'basemap') return;
+        configStore[key] = value;
+      },
+      getConfigProperty: function (importId, key) {
+        if (importId !== 'basemap') return undefined;
+        return configStore[key];
+      },
+      getZoom: function () { return 12.8; },
+    };
+  }
+
+  function _findBuildingLayerInStyle(style, id) {
+    var topLevel = ((style && style.layers) || []).filter(function (l) { return l.id === id; })[0];
+    if (topLevel) return topLevel;
+    var imports = (style && style.imports) || [];
+    for (var ii = 0; ii < imports.length; ii++) {
+      var layers = imports[ii] && imports[ii].data && Array.isArray(imports[ii].data.layers)
+        ? imports[ii].data.layers : [];
+      for (var li = 0; li < layers.length; li++) {
+        if (layers[li] && layers[li].id === id) return layers[li];
+      }
+    }
+    return null;
   }
 
   // run(map) — map is optional. Pass nothing to test against whatever the
@@ -92,6 +234,14 @@
     results.push(_assert('registry has at least one wired property', registry.length > 0, { count: registry.length }));
     results.push(_assert('every record has a label and group',
       registry.every(function (r) { return !!r.label && !!r.group; })));
+    results.push(_assert('registry exposes 3D building controls through Geographic Styles',
+      ids.indexOf('mapbox-buildings.3d.visibility') !== -1 &&
+      ids.indexOf('mapbox-buildings.3d.color') !== -1 &&
+      ids.indexOf('mapbox-buildings.3d.opacity') !== -1 &&
+      ids.indexOf('mapbox-buildings.3d.height-scale') !== -1 &&
+      ids.indexOf('mapbox-buildings.3d.minzoom') !== -1 &&
+      ids.indexOf('mapbox-buildings.3d.maxzoom') !== -1 &&
+      ids.indexOf('mapbox-buildings.3d.density-mode') !== -1));
 
     // ── Default coverage ───────────────────────────────────────────────────
     var def = authority.getGeographicStyle(authority.DEFAULT_GEOGRAPHIC_STYLE_ID);
@@ -171,6 +321,39 @@
     results.push(_assert('endPreview() clears the preview id', authority.getPreviewId() == null));
     results.push(_assert('endPreview() restores the active style', authority.getActiveId() === savedActive));
 
+    // ── 3D building controls — explicit Geographic Style wiring ───────────
+    authority.setPropertyValue(created.id, 'mapbox-buildings.3d.visibility', 'false');
+    authority.setPropertyValue(created.id, 'mapbox-buildings.3d.color', '#123456');
+    authority.setPropertyValue(created.id, 'mapbox-buildings.3d.opacity', '0.35');
+    authority.setPropertyValue(created.id, 'mapbox-buildings.3d.height-scale', '1.5');
+    authority.setPropertyValue(created.id, 'mapbox-buildings.3d.minzoom', '13');
+    authority.setPropertyValue(created.id, 'mapbox-buildings.3d.maxzoom', '19');
+    authority.setPropertyValue(created.id, 'mapbox-buildings.3d.density-mode', 'EDITORIAL');
+    authority.activateGeographicStyle(created.id);
+    var buildingMap = authority.__test.getMap();
+    var buildingLayer = buildingMap && buildingMap.getStyle
+      ? _findBuildingLayerInStyle(buildingMap.getStyle(), 'building-3d') ||
+        _findBuildingLayerInStyle(buildingMap.getStyle(), '3d-building')
+      : null;
+    results.push(_assert('building visibility applies through the Geographic Style adapter',
+      !!buildingLayer && buildingLayer.layout && buildingLayer.layout.visibility === 'none'));
+    results.push(_assert('building color applies through the Geographic Style adapter',
+      !!buildingLayer && buildingLayer.paint && buildingLayer.paint['fill-extrusion-color'] === '#123456'));
+    results.push(_assert('building opacity applies through the Geographic Style adapter',
+      !!buildingLayer && buildingLayer.paint && buildingLayer.paint['fill-extrusion-opacity'] === 0.35));
+    results.push(_assert('building zoom range applies through the Geographic Style adapter',
+      !!buildingLayer && buildingLayer.minzoom === 13 && buildingLayer.maxzoom === 19));
+    results.push(_assert('building density mode applies through the Geographic Style adapter',
+      !!buildingLayer && JSON.stringify(buildingLayer.filter) === JSON.stringify(['all', ['==', ['get', 'extrude'], 'true'], ['>=', ['coalesce', ['to-number', ['get', 'height']], 0], 60]])));
+    results.push(_assert('building height scale applies an expression-based extrusion height',
+      !!buildingLayer && Array.isArray(buildingLayer.paint['fill-extrusion-height']) &&
+      JSON.stringify(buildingLayer.paint['fill-extrusion-height']) === JSON.stringify(['*', ['coalesce', ['to-number', ['get', 'height']], 0], 1.5]) &&
+      JSON.stringify(buildingLayer.paint['fill-extrusion-base']) === JSON.stringify(['*', ['coalesce', ['to-number', ['get', 'min_height']], 0], 1.5])));
+    if (typeof buildingMap.getConfigProperty === 'function') {
+      results.push(_assert('import-driven building color also applies through the Standard config path',
+        buildingMap.getConfigProperty('basemap', 'colorBuildings') === 'rgba(18, 52, 86, 0.35)'));
+    }
+
     // ── Reload simulation: preview must not survive, active must persist ──
     // Re-runs init() against the same live map — exercises the exact code path
     // a real page reload takes (fresh in-memory state, storage re-read).
@@ -182,6 +365,11 @@
       authority.getActiveId() === savedActive));
     results.push(_assert('reload clears preview state entirely',
       authority.getPreviewId() == null));
+
+    authority.setPropertyValue(authority.DEFAULT_GEOGRAPHIC_STYLE_ID, 'mapbox-buildings.3d.color', '#fedcba');
+    authority.init(mapRef);
+    results.push(_assert('reload preserves editable Default values from storage',
+      authority.getGeographicStyle(authority.DEFAULT_GEOGRAPHIC_STYLE_ID).values['mapbox-buildings.3d.color'] === '#fedcba'));
 
     // ── Schema migration ────────────────────────────────────────────────────
     var incompleteStored = { id: '__test_migrate__', title: 'Incomplete', values: {}, createdAt: 0, updatedAt: 0 };
@@ -219,8 +407,16 @@
       results.push(_assert('Episode 2 seed produces the exact current schema',
         seedKeys.length === ids.length && ids.every(function (id) { return id in seed.values; })));
       results.push(_assert('Episode 2 seed is titled "Episode 2"', seed.title === 'Episode 2'));
-      results.push(_assert('Episode 2 seed values are valid color strings',
-        seedKeys.every(function (id) { return /^#|^rgba?\(/i.test(String(seed.values[id])); })));
+      results.push(_assert('Episode 2 seed values remain type-valid for every registry record',
+        registry.every(function (r) {
+          var value = seed.values[r.id];
+          if (r.valueKind === 'boolean') return value === 'true' || value === 'false';
+          if (r.valueKind === 'opacity' || r.valueKind === 'number') return !isNaN(parseFloat(String(value)));
+          if (r.valueKind === 'select') {
+            return !r.selectOptions || r.selectOptions.some(function (opt) { return opt.value === value; });
+          }
+          return /^#|^rgba?\(/i.test(String(value));
+        })));
     } else {
       results.push(_assert('SBE.MapsGeographicStyleSeeds is loaded', false));
     }
@@ -252,7 +448,11 @@
     return summary;
   }
 
-  SBE.MapsGeographicStyleAuthorityTests = { run: run, createMockMap: createMockMap };
+  SBE.MapsGeographicStyleAuthorityTests = {
+    run: run,
+    createMockMap: createMockMap,
+    createImportedStyleMockMap: createImportedStyleMockMap,
+  };
 
   // Temporary compat alias (0729D terminology migration) — remove once
   // nothing references the old name. New code must use MapsGeographicStyleAuthorityTests.

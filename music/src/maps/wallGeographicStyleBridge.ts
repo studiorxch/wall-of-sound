@@ -27,7 +27,7 @@ export type RegistryRecord = {
   id: string;
   label: string;
   group: string;
-  source: string;
+  source: "mapbox-style" | "mapbox-building" | "route" | "vehicle" | "hud" | "overlay";
   // Always present on every real record (confirmed against the live
   // registry) — declared explicitly so consumers like geographicTargets.ts
   // don't have to work through `unknown` from the index signature below.
@@ -37,7 +37,9 @@ export type RegistryRecord = {
   // "opacity"/"boolean" added by 0729_MAPS_Visual_Property_Authority_Audit —
   // still just a string in the style's values dict either way (numeric
   // "0.55" or "true"/"false"), never a second value type.
-  valueKind: "solid" | "expression" | "derived" | "opacity" | "boolean";
+  valueKind: "solid" | "expression" | "derived" | "opacity" | "boolean" | "number" | "select";
+  numberRange?: { min: number; max: number; step: number };
+  selectOptions?: Array<{ value: string; label: string }>;
   [key: string]: unknown;
 };
 
@@ -46,6 +48,7 @@ type MutationResult = { ok: boolean; reason?: string; noop?: boolean };
 type MapsGeographicStyleAuthorityGlobal = {
   VERSION: string;
   init: (map: unknown) => { ok: boolean; wiredCount?: number; activeId?: string };
+  refreshRegistry?: (map?: unknown) => { ok: boolean; wiredCount?: number; activeId?: string };
   isInitialized: () => boolean;
   getRegistry: () => RegistryRecord[];
   listGeographicStyles: () => GeographicStyleRecord[];
@@ -104,11 +107,28 @@ export function ensureInitialized(map: unknown): BridgeResult<{ wiredCount: numb
   const a = authority();
   if (!a) return { ok: false, error: "authority_unavailable" };
   if (a.isInitialized()) {
+    if (map != null) {
+      const hasBuildingControls = a.getRegistry().some((record) => record.source === "mapbox-building");
+      if (!hasBuildingControls && typeof a.refreshRegistry === "function") {
+        const refreshed = a.refreshRegistry(map);
+        if (!refreshed.ok) return { ok: false, error: "authority_refresh_failed" };
+        return { ok: true, data: { wiredCount: refreshed.wiredCount ?? a.getRegistry().length, activeId: refreshed.activeId ?? a.getActiveId() } };
+      }
+    }
     return { ok: true, data: { wiredCount: a.getRegistry().length, activeId: a.getActiveId() } };
   }
   const result = a.init(map);
   if (!result.ok) return { ok: false, error: "authority_init_failed" };
   return { ok: true, data: { wiredCount: result.wiredCount ?? 0, activeId: result.activeId ?? a.getActiveId() } };
+}
+
+export function refreshRegistry(map?: unknown): BridgeResult<{ wiredCount: number; activeId: string }> {
+  const a = authority();
+  if (!a) return { ok: false, error: "authority_unavailable" };
+  if (typeof a.refreshRegistry !== "function") return { ok: false, error: "authority_refresh_unavailable" };
+  const result = a.refreshRegistry(map);
+  if (!result.ok) return { ok: false, error: "authority_refresh_failed" };
+  return { ok: true, data: { wiredCount: result.wiredCount ?? a.getRegistry().length, activeId: result.activeId ?? a.getActiveId() } };
 }
 
 export function listGeographicStyles(): BridgeResult<GeographicStyleRecord[]> {

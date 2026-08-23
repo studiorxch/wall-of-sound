@@ -218,6 +218,82 @@
     return (mvr && typeof mvr.getMap === 'function') ? mvr.getMap() : null;
   }
 
+  function _clamp(n, min, max) {
+    return Math.max(min, Math.min(max, n));
+  }
+
+  function _readActiveBuildingStyleValues() {
+    var authority = global.SBE && SBE.MapsGeographicStyleAuthority;
+    if (!authority || typeof authority.getGeographicStyle !== 'function') return null;
+
+    var liveId = null;
+    try {
+      if (typeof authority.getPreviewId === 'function') liveId = authority.getPreviewId();
+      if (liveId == null && typeof authority.getActiveId === 'function') liveId = authority.getActiveId();
+      if (!liveId) return null;
+      var style = authority.getGeographicStyle(liveId);
+      return style && style.values ? style.values : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function _readGlobalPresentation() {
+    var values = _readActiveBuildingStyleValues() || {};
+    var opacity = parseFloat(values['mapbox-buildings.3d.opacity']);
+    var minzoom = parseFloat(values['mapbox-buildings.3d.minzoom']);
+    var maxzoom = parseFloat(values['mapbox-buildings.3d.maxzoom']);
+    var scale = parseFloat(values['mapbox-buildings.3d.height-scale']);
+
+    return {
+      visible: values['mapbox-buildings.3d.visibility'] !== 'false',
+      color: (typeof values['mapbox-buildings.3d.color'] === 'string' && values['mapbox-buildings.3d.color'])
+        ? values['mapbox-buildings.3d.color']
+        : null,
+      opacity: isNaN(opacity) ? LAYER_OPACITY : _clamp(opacity, 0, 1),
+      minzoom: isNaN(minzoom) ? 0 : _clamp(minzoom, 0, 24),
+      maxzoom: isNaN(maxzoom) ? 24 : _clamp(maxzoom, 0, 24),
+      heightScale: isNaN(scale) ? 1 : _clamp(scale, 0, 2),
+    };
+  }
+
+  function _buildReplacementColorExpr(presentation) {
+    if (presentation && presentation.color) return presentation.color;
+    return ['coalesce', ['get', 'materialColor'], ['get', 'color']];
+  }
+
+  function _buildReplacementHeightExpr(presentation) {
+    if (!presentation || presentation.heightScale === 1) return ['get', 'height'];
+    return ['*', ['coalesce', ['get', 'height'], 0], presentation.heightScale];
+  }
+
+  function _buildReplacementBaseExpr(presentation) {
+    if (!presentation || presentation.heightScale === 1) return ['get', 'base'];
+    return ['*', ['coalesce', ['get', 'base'], 0], presentation.heightScale];
+  }
+
+  function _applyGlobalPresentation(map) {
+    if (!map) return false;
+    try {
+      if (!map.getLayer(LAYER_ID)) return false;
+    } catch (e) {
+      return false;
+    }
+
+    var presentation = _readGlobalPresentation();
+    var minzoom = presentation.minzoom;
+    var maxzoom = presentation.maxzoom;
+    if (minzoom > maxzoom) maxzoom = minzoom;
+
+    try { map.setLayoutProperty(LAYER_ID, 'visibility', presentation.visible ? 'visible' : 'none'); } catch (e) {}
+    try { map.setPaintProperty(LAYER_ID, 'fill-extrusion-color', _buildReplacementColorExpr(presentation)); } catch (e) {}
+    try { map.setPaintProperty(LAYER_ID, 'fill-extrusion-opacity', presentation.opacity); } catch (e) {}
+    try { map.setPaintProperty(LAYER_ID, 'fill-extrusion-height', _buildReplacementHeightExpr(presentation)); } catch (e) {}
+    try { map.setPaintProperty(LAYER_ID, 'fill-extrusion-base', _buildReplacementBaseExpr(presentation)); } catch (e) {}
+    try { map.setLayerZoomRange(LAYER_ID, minzoom, maxzoom); } catch (e) {}
+    return true;
+  }
+
   function _archetypeCfg(archetype) {
     return ARCHETYPE_CFG[archetype] || ARCHETYPE_CFG['custom-placeholder'];
   }
@@ -739,17 +815,22 @@
   }
 
   function _addLayer(map) {
+    var presentation = _readGlobalPresentation();
     try {
       map.addLayer({
         id:     LAYER_ID,
         type:   'fill-extrusion',
         source: SOURCE_ID,
+        minzoom: presentation.minzoom,
+        maxzoom: presentation.maxzoom,
+        layout: {
+          visibility: presentation.visible ? 'visible' : 'none',
+        },
         paint: {
-          // materialColor takes priority; archetype color is the safe fallback.
-          'fill-extrusion-color':   ['coalesce', ['get', 'materialColor'], ['get', 'color']],
-          'fill-extrusion-height':  ['get', 'height'],
-          'fill-extrusion-base':    ['get', 'base'],
-          'fill-extrusion-opacity': LAYER_OPACITY,  // 0.96 — solid world object
+          'fill-extrusion-color':   _buildReplacementColorExpr(presentation),
+          'fill-extrusion-height':  _buildReplacementHeightExpr(presentation),
+          'fill-extrusion-base':    _buildReplacementBaseExpr(presentation),
+          'fill-extrusion-opacity': presentation.opacity,
         },
       });
       console.log('[BuildingReplacementRuntime] layer added:', LAYER_ID);
@@ -772,31 +853,7 @@
       if (layers[i].id === LAYER_ID) { layer = layers[i]; break; }
     }
     if (!layer) { _addLayer(map); return; }
-
-    var paint = layer.paint || {};
-
-    // Upgrade base: scalar/absent → expression
-    var baseExpr = paint['fill-extrusion-base'];
-    if (!Array.isArray(baseExpr)) {
-      try { map.setPaintProperty(LAYER_ID, 'fill-extrusion-base', ['get', 'base']); } catch (e) {}
-    }
-
-    // Upgrade color: plain ['get','color'] → coalesce(materialColor, color)
-    var colorExpr = paint['fill-extrusion-color'];
-    var needsColorUpgrade = !colorExpr ||
-      (Array.isArray(colorExpr) && colorExpr[0] === 'get' && colorExpr[1] === 'color');
-    if (needsColorUpgrade) {
-      try {
-        map.setPaintProperty(LAYER_ID, 'fill-extrusion-color',
-          ['coalesce', ['get', 'materialColor'], ['get', 'color']]);
-      } catch (e) {}
-    }
-
-    // Upgrade opacity: raise to solid if below threshold
-    var opacityVal = paint['fill-extrusion-opacity'];
-    if (typeof opacityVal !== 'number' || opacityVal < 0.90) {
-      try { map.setPaintProperty(LAYER_ID, 'fill-extrusion-opacity', LAYER_OPACITY); } catch (e) {}
-    }
+    _applyGlobalPresentation(map);
   }
 
   // ── Manifest loading ──────────────────────────────────────────────────────────
@@ -1301,6 +1358,7 @@
     var ok = _loadManifest();
     if (!ok) return;
     _sync(map);
+    _applyGlobalPresentation(map);
   }
 
   // ── Cross-tab sync ────────────────────────────────────────────────────────────
@@ -1674,8 +1732,17 @@
     var map = _getMap();
     var ok  = _loadManifest();
     if (!ok) { console.warn('[BuildingReplacementRuntime] reload: manifest load failed'); return status(); }
-    if (map) _sync(map);
+    if (map) {
+      _sync(map);
+      _applyGlobalPresentation(map);
+    }
     return status();
+  }
+
+  function syncGeographicStylePresentation() {
+    var map = _getMap();
+    if (!map) return { ok: false, reason: 'map_not_available' };
+    return { ok: _applyGlobalPresentation(map) };
   }
 
   function clear() {
@@ -2100,6 +2167,7 @@
   }
 
   function status() {
+    var presentation = _readGlobalPresentation();
     var snap = {
       actorCount:             _stats.actorCount,
       activeReplacements:     _stats.activeReplacements,
@@ -2111,6 +2179,15 @@
       fallbackCount:          _stats.fallbackCount,
       lastSpawn:              _stats.lastSpawn,
       lastError:              _stats.lastError,
+      geographicPresentation: {
+        visible: presentation.visible,
+        color: presentation.color,
+        opacity: presentation.opacity,
+        minzoom: presentation.minzoom,
+        maxzoom: presentation.maxzoom,
+        heightScale: presentation.heightScale,
+        detailEnabled: presentation.detailEnabled,
+      },
     };
     console.log('[BuildingReplacementRuntime] status:', JSON.stringify(snap, null, 2));
     return snap;
@@ -2311,6 +2388,7 @@
     VERSION:            VERSION,
     init:               init,
     reload:             reload,
+    syncGeographicStylePresentation: syncGeographicStylePresentation,
     clear:              clear,
     list:               list,
     status:             status,

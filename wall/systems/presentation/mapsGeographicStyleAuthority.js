@@ -105,7 +105,6 @@
     try {
       var toStore = {};
       Object.keys(_styles).forEach(function (id) {
-        if (id === DEFAULT_GEOGRAPHIC_STYLE_ID) return; // Default is never serialized — always regenerated live
         toStore[id] = _styles[id];
       });
       global.localStorage.setItem(STORAGE_RECORDS_KEY, JSON.stringify(toStore));
@@ -146,6 +145,43 @@
     return { id: DEFAULT_GEOGRAPHIC_STYLE_ID, title: 'Default', values: values, createdAt: now, updatedAt: now };
   }
 
+  function _refreshRegistryFromMap(map, notify) {
+    if (map) _map = map;
+    var registry = SBE.MapsGeographicStyleRegistry;
+    if (!registry) {
+      console.error('[MapsGeographicStyleAuthority] MapsGeographicStyleRegistry not loaded');
+      return { ok: false, reason: 'registry_unavailable' };
+    }
+    if (!_map) return { ok: false, reason: 'map_unavailable' };
+
+    var nextRegistry = registry.buildRegistry(_map);
+    var previousRegistry = _registryRecords;
+    _registryRecords = nextRegistry;
+    var liveDefaultStyle = _buildDefaultStyle();
+    _registryRecords = previousRegistry;
+
+    var previousStyles = _styles || {};
+    var previousDefault = previousStyles[DEFAULT_GEOGRAPHIC_STYLE_ID] || liveDefaultStyle;
+    var nextDefault = _migrateAgainst(previousDefault, liveDefaultStyle);
+    var nextStyles = {};
+    nextStyles[DEFAULT_GEOGRAPHIC_STYLE_ID] = nextDefault;
+
+    Object.keys(previousStyles).forEach(function (id) {
+      if (id === DEFAULT_GEOGRAPHIC_STYLE_ID) return;
+      nextStyles[id] = _migrateAgainst(previousStyles[id], nextDefault);
+    });
+
+    _registryRecords = nextRegistry;
+    _styles = nextStyles;
+    if (!_styles[_activeId]) _activeId = DEFAULT_GEOGRAPHIC_STYLE_ID;
+    if (_previewId != null && !_styles[_previewId]) _previewId = null;
+
+    var liveId = _previewId != null ? _previewId : _activeId;
+    if (_styles[liveId]) _applyValues(_styles[liveId].values);
+    if (notify !== false) _notify();
+    return { ok: true, wiredCount: _registryRecords.length, activeId: _activeId };
+  }
+
   // ── Apply ──────────────────────────────────────────────────────────────────
   function _applyValues(values) {
     var adapters = SBE.MapsGeographicStyleApplyAdapters;
@@ -155,6 +191,10 @@
       try { adapters.apply(r, values[r.id], _map); }
       catch (e) { console.warn('[MapsGeographicStyleAuthority] apply failed for', r.id, ':', e && e.message || e); }
     });
+    if (typeof adapters.syncLiveBuildingPresentationFromAuthority === 'function') {
+      try { adapters.syncLiveBuildingPresentationFromAuthority(_map); }
+      catch (e2) { console.warn('[MapsGeographicStyleAuthority] live building sync failed:', e2 && e2.message || e2); }
+    }
   }
 
   // ── Cross-tab sync ─────────────────────────────────────────────────────────
@@ -211,7 +251,6 @@
 
     var stored = _loadRecords();
     Object.keys(stored).forEach(function (id) {
-      if (id === DEFAULT_GEOGRAPHIC_STYLE_ID) return;
       _styles[id] = _migrateAgainst(stored[id], defaultStyle);
     });
 
@@ -251,6 +290,11 @@
 
     console.log('[MapsGeographicStyleAuthority] init — ' + _registryRecords.length + ' wired properties, active:', _activeId);
     return { ok: true, wiredCount: _registryRecords.length, activeId: _activeId };
+  }
+
+  function refreshRegistry(map) {
+    if (!_registryRecords) return init(map || _map);
+    return _refreshRegistryFromMap(map, true);
   }
 
   function isInitialized() { return !!_registryRecords; }
@@ -374,7 +418,16 @@
   function buildDiagnosticPalette() {
     var values = {};
     _registryRecords.forEach(function (r) {
-      values[r.id] = DIAGNOSTIC_GROUP_COLORS[r.group] || '#ff2bd6';
+      if (r.valueKind === 'boolean') values[r.id] = 'false';
+      else if (r.valueKind === 'opacity') values[r.id] = '0.2';
+      else if (r.valueKind === 'number') {
+        var range = r.numberRange || { min: 0, max: 1 };
+        values[r.id] = String((range.min + range.max) / 2);
+      } else if (r.valueKind === 'select') {
+        values[r.id] = (r.selectOptions && r.selectOptions[0] && r.selectOptions[0].value) || r.currentValue;
+      } else {
+        values[r.id] = DIAGNOSTIC_GROUP_COLORS[r.group] || '#ff2bd6';
+      }
     });
     return { id: DIAGNOSTIC_ID, title: 'Diagnostic Wiring Style', values: values, diagnostic: true };
   }
@@ -569,6 +622,7 @@
     isInitialized: isInitialized,
     getRegistry: getRegistry,
     getDeferredAudit: getDeferredAudit,
+    refreshRegistry: refreshRegistry,
     listGeographicStyles: listGeographicStyles,
     getGeographicStyle: getGeographicStyle,
     createGeographicStyle: createGeographicStyle,
@@ -628,8 +682,14 @@
     var mvr = global.SBE && global.SBE.MapboxViewportRuntime;
     if (mvr && typeof mvr.onStyleLoad === 'function') {
       mvr.onStyleLoad(function () { init(mvr.getMap()); });
-    } else if (mvr && typeof mvr.onReady === 'function') {
-      mvr.onReady(function () { init(mvr.getMap()); });
+    }
+    if (mvr && typeof mvr.onReady === 'function') {
+      mvr.onReady(function () {
+        var map = mvr.getMap();
+        if (!map) return;
+        if (_registryRecords) refreshRegistry(map);
+        else init(map);
+      });
     }
   })();
 

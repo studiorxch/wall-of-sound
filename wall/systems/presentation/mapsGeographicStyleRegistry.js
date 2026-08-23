@@ -6,11 +6,10 @@
 // Builds the Phase 1 property registry for the MAPS Geographic Style system.
 //
 // Scope (Phase 1 — narrow, per 0729A build direction):
-//   WIRED   — hosted Mapbox base-map layers (discovered live via map.getStyle(),
-//             excluding building/fill-extrusion layers, which stay with the
-//             existing per-building authoring authority), and the route
-//             line/marker colors in mapboxOperatorRenderer/routePlannerRuntime/
-//             routePanel.
+//   WIRED   — hosted Mapbox base-map layers (discovered live via map.getStyle()),
+//             one explicit 3D-building control surface over the hosted style's
+//             fill-extrusion layers, and the route line/marker colors in
+//             mapboxOperatorRenderer/routePlannerRuntime/routePanel.
 //   DEFERRED / VESTIGIAL — everything else this audit found (actors, vessels,
 //             aircraft, traffic, orbital-mode-only rendering, broader atmosphere,
 //             sky shader, general application UI, per-building overrides, the
@@ -24,8 +23,9 @@
 //   remote Mapbox Studio style, not addImage()'d locally, so pattern CHOICE
 //   stays out of scope, opacity doesn't). Everything else this audit found
 //   (OverlayRuntime's transit/isolation canvas layers, building illustration/
-//   material/surface-texture patterns, the dormant harbor-geometry debug
-//   renderer, and hardcoded cyan/teal literals outside this registry) is
+//   material/surface-texture patterns beyond the hosted style's single 3D
+//   building control surface, the dormant harbor-geometry debug renderer, and
+//   hardcoded cyan/teal literals outside this registry) is
 //   cataloged honestly in getDeferredAudit() below, not wired — see the
 //   audit report for the full inventory and why.
 //
@@ -52,7 +52,7 @@
   var VERSION = '1.0.0';
 
   /**
-   * @typedef {"mapbox-style"|"route"|"vehicle"|"hud"|"overlay"} GeographicStylePropertySource
+   * @typedef {"mapbox-style"|"mapbox-building"|"route"|"vehicle"|"hud"|"overlay"} GeographicStylePropertySource
    *
    * @typedef {Object} GeographicStylePropertyRecord
    * @property {string} id                stable, deterministic id
@@ -63,7 +63,9 @@
    * @property {string} [sourceObject]    layer id / object key, if applicable
    * @property {string} sourceProperty    property name within sourceObject
    * @property {*} currentValue           current value at audit/apply time
-   * @property {"solid"|"expression"|"derived"|"opacity"|"boolean"} valueKind
+   * @property {"solid"|"expression"|"derived"|"opacity"|"boolean"|"number"|"select"} valueKind
+   * @property {{min:number,max:number,step:number}} [numberRange]
+   * @property {{value:string,label:string}[]} [selectOptions]
    * @property {string|null} displayColor a representative solid hex/rgba for swatch display
    * @property {boolean} editable
    * @property {boolean} transitionable   can be live-applied without reload
@@ -80,13 +82,24 @@
     'symbol':     ['text-color', 'text-halo-color', 'icon-color'],
     'background': ['background-color'],
   };
-  // fill-extrusion intentionally excluded — see _isBuildingLayer / deferred audit.
+  // fill-extrusion intentionally excluded from generic base-map discovery —
+  // buildings are added below as one explicit 3D-building target so the
+  // MAPS Library can control them without colliding with per-building authoring.
 
   function _isBuildingLayer(layer) {
     if (layer.type === 'fill-extrusion') return true;
     if (/building/i.test(layer.id || '')) return true;
     if (/building/i.test(layer['source-layer'] || '')) return true;
     return false;
+  }
+
+  function _isControllableBuildingLayer(layer) {
+    if (!layer || layer.type !== 'fill-extrusion') return false;
+    var id = String(layer.id || '');
+    var sourceLayer = String(layer['source-layer'] || '');
+    if (/^indoor-/i.test(id)) return false;
+    if (sourceLayer.toLowerCase() === 'building') return true;
+    return /(^|-)building($|-)/i.test(id);
   }
 
   function _classifyGroup(layer) {
@@ -278,6 +291,179 @@
     return records;
   }
 
+  function _collectBuildingLayers(style) {
+    var seen = {};
+    var out = [];
+
+    function pushLayer(layer, origin) {
+      if (!layer || !layer.id || !_isControllableBuildingLayer(layer) || seen[layer.id]) return;
+      seen[layer.id] = true;
+      layer.__mapsDiscoveryOrigin = origin;
+      out.push(layer);
+    }
+
+    ((style && style.layers) || []).forEach(function (layer) {
+      pushLayer(layer, 'top-level');
+    });
+
+    ((style && style.imports) || []).forEach(function (imp) {
+      var importLayers = imp && imp.data && Array.isArray(imp.data.layers)
+        ? imp.data.layers : [];
+      importLayers.forEach(function (layer) {
+        pushLayer(layer, 'import:' + ((imp && imp.id) || 'unknown'));
+      });
+    });
+
+    return out;
+  }
+
+  function _discoverBuildings(map) {
+    if (!map || typeof map.getStyle !== 'function') return [];
+    var style;
+    try { style = map.getStyle(); } catch (e) { return []; }
+    var buildingLayers = _collectBuildingLayers(style);
+    if (!buildingLayers.length) return [];
+    var first = buildingLayers[0];
+    var color = (first.paint && first.paint['fill-extrusion-color']) || '#8899aa';
+    var opacity = (first.paint && typeof first.paint['fill-extrusion-opacity'] === 'number')
+      ? String(first.paint['fill-extrusion-opacity']) : '1';
+    var minzoom = String(typeof first.minzoom === 'number' ? first.minzoom : 0);
+    var maxzoom = String(typeof first.maxzoom === 'number' ? first.maxzoom : 24);
+    var origin = first.__mapsDiscoveryOrigin || 'top-level';
+    var sourceLocation = origin === 'top-level'
+      ? 'hosted Mapbox style fill-extrusion layers — discovered live via map.getStyle().layers'
+      : 'hosted Mapbox Standard imported building layers — discovered live via map.getStyle().imports[].data.layers';
+    var originNote = origin === 'top-level'
+      ? 'Discovered from the active style\'s top-level layer list.'
+      : 'Discovered from imported style data (' + origin + '), not duplicated host layers.';
+
+    return [
+      {
+        id: 'mapbox-buildings.3d.visibility',
+        label: '3D Buildings — Visible',
+        group: 'Buildings',
+        source: 'mapbox-building',
+        sourceLocation: sourceLocation,
+        sourceObject: '__maps_3d_buildings__',
+        sourceProperty: 'visibility',
+        currentValue: 'true',
+        valueKind: 'boolean',
+        displayColor: null,
+        editable: true,
+        transitionable: true,
+        status: 'wired',
+        ownerModule: 'mapbox-style:building-fill-extrusion',
+        notes: 'Applies layout visibility across every discovered 3D building layer. ' + originNote,
+      },
+      {
+        id: 'mapbox-buildings.3d.color',
+        label: '3D Buildings — Fill',
+        group: 'Buildings',
+        source: 'mapbox-building',
+        sourceLocation: sourceLocation,
+        sourceObject: '__maps_3d_buildings__',
+        sourceProperty: 'fill-extrusion-color',
+        currentValue: color,
+        valueKind: _valueKind(color),
+        displayColor: _representativeColor(color),
+        editable: true,
+        transitionable: true,
+        status: 'wired',
+        ownerModule: 'mapbox-style:building-fill-extrusion',
+      },
+      {
+        id: 'mapbox-buildings.3d.opacity',
+        label: '3D Buildings — Opacity',
+        group: 'Buildings',
+        source: 'mapbox-building',
+        sourceLocation: sourceLocation,
+        sourceObject: '__maps_3d_buildings__',
+        sourceProperty: 'fill-extrusion-opacity',
+        currentValue: opacity,
+        valueKind: 'opacity',
+        displayColor: null,
+        editable: true,
+        transitionable: true,
+        status: 'wired',
+        ownerModule: 'mapbox-style:building-fill-extrusion',
+      },
+      {
+        id: 'mapbox-buildings.3d.height-scale',
+        label: '3D Buildings — Height Scale',
+        group: 'Buildings',
+        source: 'mapbox-building',
+        sourceLocation: sourceLocation,
+        sourceObject: '__maps_3d_buildings__',
+        sourceProperty: 'height-scale',
+        currentValue: '1',
+        valueKind: 'number',
+        numberRange: { min: 0, max: 2, step: 0.05 },
+        displayColor: null,
+        editable: true,
+        transitionable: true,
+        status: 'wired',
+        ownerModule: 'mapbox-style:building-fill-extrusion',
+        notes: 'Scales both height and min_height from the source tiles; 1 preserves native dimensions.',
+      },
+      {
+        id: 'mapbox-buildings.3d.minzoom',
+        label: '3D Buildings — Min Zoom',
+        group: 'Buildings',
+        source: 'mapbox-building',
+        sourceLocation: sourceLocation,
+        sourceObject: '__maps_3d_buildings__',
+        sourceProperty: 'minzoom',
+        currentValue: minzoom,
+        valueKind: 'number',
+        numberRange: { min: 0, max: 24, step: 0.25 },
+        displayColor: null,
+        editable: true,
+        transitionable: true,
+        status: 'wired',
+        ownerModule: 'mapbox-style:building-fill-extrusion',
+      },
+      {
+        id: 'mapbox-buildings.3d.maxzoom',
+        label: '3D Buildings — Max Zoom',
+        group: 'Buildings',
+        source: 'mapbox-building',
+        sourceLocation: sourceLocation,
+        sourceObject: '__maps_3d_buildings__',
+        sourceProperty: 'maxzoom',
+        currentValue: maxzoom,
+        valueKind: 'number',
+        numberRange: { min: 0, max: 24, step: 0.25 },
+        displayColor: null,
+        editable: true,
+        transitionable: true,
+        status: 'wired',
+        ownerModule: 'mapbox-style:building-fill-extrusion',
+      },
+      {
+        id: 'mapbox-buildings.3d.density-mode',
+        label: '3D Buildings — Density Mode',
+        group: 'Buildings',
+        source: 'mapbox-building',
+        sourceLocation: sourceLocation,
+        sourceObject: '__maps_3d_buildings__',
+        sourceProperty: 'density-mode',
+        currentValue: 'FULL',
+        valueKind: 'select',
+        selectOptions: [
+          { value: 'FULL', label: 'Full' },
+          { value: 'CONTEXTUAL', label: 'Contextual' },
+          { value: 'EDITORIAL', label: 'Editorial' }
+        ],
+        displayColor: null,
+        editable: true,
+        transitionable: true,
+        status: 'wired',
+        ownerModule: 'mapbox-style:building-fill-extrusion',
+        notes: 'Uses only reliable height-driven tile metadata: FULL = all extruded buildings, CONTEXTUAL = height >= 20m, EDITORIAL = height >= 60m.',
+      }
+    ];
+  }
+
   // ── Deferred / vestigial audit (Phase 1 — read-only, no setters added) ────
   // Counts are approximate where noted — these systems are intentionally not
   // re-enumerated exhaustively since they are not wired in this build.
@@ -388,8 +574,8 @@
         approxPropertyCount: null,
         notes: 'Content-authoring feature (individually authored per-building colors), not a global ' +
                'theme property — a palette system overwriting it would destroy authored content. The ' +
-               'base building fill-extrusion paint is likewise excluded from base-map discovery to avoid ' +
-               'this authority and the palette system fighting over the same paint property.',
+               'hosted style\'s shared 3D building appearance is now wired above as explicit Geographic ' +
+               'Style properties; only per-building authored overrides remain deferred here.',
       },
       // ── 0729_MAPS_Visual_Property_Authority_Audit additions ─────────────────
       {
@@ -411,9 +597,10 @@
         group: 'Deferred — Overlays', status: 'deferred',
         ownerModule: 'wall/systems/presentation/buildingIllustrationPass.js + buildingMaterialIllustrationRuntime.js + allVisibleBuildingSurfaceTextureRuntime.js',
         approxPropertyCount: 3,
-        notes: 'The only map.addImage()/fill-pattern generators in this codebase (canvas-drawn speckle/' +
-               'grain/surface textures on building fills) — all three ship with _enabled=false and require ' +
-               'an explicit wos.debug.*.enable() call; none run in the canonical default LIVE MAP.',
+        notes: 'The remaining experimental building-pattern families live here. BuildingIllustrationPass ' +
+               'and BuildingMaterialIllustrationRuntime still require explicit wos.debug.*.enable() calls; ' +
+               'the legacy all-visible surface-texture runtime is now retired from the product path and ' +
+               'kept only as a cleanup/debug stub that clears old fill-extrusion-pattern state.',
       },
       {
         id: 'audit.overlay.harbor-geometry-debug', label: 'Harbor Geometry Runtime Renderer (debug canvas)',
@@ -453,6 +640,7 @@
   function buildRegistry(map) {
     return [].concat(
       _discoverBaseMap(map),
+      _discoverBuildings(map),
       _discoverPatternOpacity(map),
       _discoverRoute()
     );

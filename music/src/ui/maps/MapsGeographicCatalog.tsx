@@ -64,6 +64,15 @@ export function MapsGeographicCatalog({ styleId, registry, values, isDefault }: 
   const allTargets: TargetWithVisibility[] = useMemo(() => {
     const built = sortTargetsByCategory(buildGeographicTargets(registry, values, defaultValues));
     return built.map((t) => {
+      if (t.sourceType === "mapbox-building") {
+        const visibilityField = t.colorFields.find((f) => f.valueKind === "boolean");
+        const opacityField = t.colorFields.find((f) => f.valueKind === "opacity");
+        return {
+          ...t,
+          visibility: visibilityField?.value === "false" ? "none" : "visible",
+          opacity: opacityField ? parseFloat(opacityField.value) : undefined,
+        };
+      }
       if (t.sourceType !== "mapbox-style") return t;
       const layerId = t.targetId.replace(/^mapbox:/, "");
       const paintInfo = getLayerPaintInfo(layerId, t.layerType);

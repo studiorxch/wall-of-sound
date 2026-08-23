@@ -202,6 +202,91 @@
     return (mvr && typeof mvr.getMap === 'function') ? mvr.getMap() : null;
   }
 
+  function _clamp(n, min, max) {
+    return Math.max(min, Math.min(max, n));
+  }
+
+  function _readActiveBuildingStyleValues() {
+    var authority = global.SBE && SBE.MapsGeographicStyleAuthority;
+    if (!authority || typeof authority.getGeographicStyle !== 'function') return null;
+
+    var liveId = null;
+    try {
+      if (typeof authority.getPreviewId === 'function') liveId = authority.getPreviewId();
+      if (liveId == null && typeof authority.getActiveId === 'function') liveId = authority.getActiveId();
+      if (!liveId) return null;
+      var style = authority.getGeographicStyle(liveId);
+      return style && style.values ? style.values : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function _buildingDensityFilter(mode) {
+    var base = ['==', ['get', 'extrude'], 'true'];
+    if (mode === 'CONTEXTUAL') {
+      return ['all', base, ['>=', ['coalesce', ['to-number', ['get', 'height']], 0], 20]];
+    }
+    if (mode === 'EDITORIAL') {
+      return ['all', base, ['>=', ['coalesce', ['to-number', ['get', 'height']], 0], 60]];
+    }
+    return base;
+  }
+
+  function _hostLayerPresentation(values) {
+    var out = {
+      visibility: 'visible',
+      color: '#d8dee8',
+      opacity: 1,
+      minzoom: 13,
+      maxzoom: 24,
+      filter: null,
+      height: ['interpolate', ['linear'], ['zoom'], 13, 0, 13.5, ['get', 'height']],
+      base: ['case', ['has', 'min_height'], ['get', 'min_height'], 0],
+    };
+    if (!values) return out;
+
+    if (values['mapbox-buildings.3d.visibility'] === 'false') out.visibility = 'none';
+    if (typeof values['mapbox-buildings.3d.color'] === 'string' && values['mapbox-buildings.3d.color']) {
+      out.color = values['mapbox-buildings.3d.color'];
+    }
+
+    var opacity = parseFloat(values['mapbox-buildings.3d.opacity']);
+    if (!isNaN(opacity)) out.opacity = _clamp(opacity, 0, 1);
+
+    var minzoom = parseFloat(values['mapbox-buildings.3d.minzoom']);
+    if (!isNaN(minzoom)) out.minzoom = _clamp(minzoom, 0, 24);
+
+    var maxzoom = parseFloat(values['mapbox-buildings.3d.maxzoom']);
+    if (!isNaN(maxzoom)) out.maxzoom = _clamp(maxzoom, out.minzoom, 24);
+
+    out.filter = _buildingDensityFilter(values['mapbox-buildings.3d.density-mode']);
+
+    var scale = parseFloat(values['mapbox-buildings.3d.height-scale']);
+    if (!isNaN(scale)) {
+      scale = _clamp(scale, 0, 2);
+      out.height = ['*', ['coalesce', ['to-number', ['get', 'height']], 0], scale];
+      out.base = ['*', ['coalesce', ['to-number', ['get', 'min_height']], 0], scale];
+    }
+
+    return out;
+  }
+
+  function _applyHostLayerPresentation(map, layerId) {
+    if (!map || !layerId) return;
+    var values = _readActiveBuildingStyleValues();
+    if (!values) return;
+    var presentation = _hostLayerPresentation(values);
+
+    try { map.setLayoutProperty(layerId, 'visibility', presentation.visibility); } catch (e) {}
+    try { map.setPaintProperty(layerId, 'fill-extrusion-color', presentation.color); } catch (e) {}
+    try { map.setPaintProperty(layerId, 'fill-extrusion-opacity', presentation.opacity); } catch (e) {}
+    try { map.setPaintProperty(layerId, 'fill-extrusion-height', presentation.height); } catch (e) {}
+    try { map.setPaintProperty(layerId, 'fill-extrusion-base', presentation.base); } catch (e) {}
+    try { map.setLayerZoomRange(layerId, presentation.minzoom, presentation.maxzoom); } catch (e) {}
+    try { map.setFilter(layerId, presentation.filter); } catch (e) {}
+  }
+
   // ── Manifest loading ──────────────────────────────────────────────────────────
 
   function _loadManifest() {
@@ -1136,6 +1221,7 @@
           result.sourceOrigin = 'host';
         }
       }
+      _applyHostLayerPresentation(map, WOS_HOST_BUILDING_LAYER_ID);
     } else {
       // Resolve source
       var srcInfo = _discoverHostSource(map);
@@ -1177,18 +1263,25 @@
         }
       }
 
+      var presentation = _hostLayerPresentation(_readActiveBuildingStyleValues());
+
       // Build layer definition per spec §5
       var layerDef = {
         id:             WOS_HOST_BUILDING_LAYER_ID,
         type:           'fill-extrusion',
         source:         srcInfo.sourceId,
         'source-layer': srcInfo.sourceLayer,
-        minzoom:        13,
+        minzoom:        presentation.minzoom,
+        maxzoom:        presentation.maxzoom,
+        layout: {
+          visibility: presentation.visibility,
+        },
+        filter:         presentation.filter,
         paint: {
-          'fill-extrusion-color':   '#d8dee8',
-          'fill-extrusion-height':  ['interpolate', ['linear'], ['zoom'], 13, 0, 13.5, ['get', 'height']],
-          'fill-extrusion-base':    ['case', ['has', 'min_height'], ['get', 'min_height'], 0],
-          'fill-extrusion-opacity': 1,
+          'fill-extrusion-color':   presentation.color,
+          'fill-extrusion-height':  presentation.height,
+          'fill-extrusion-base':    presentation.base,
+          'fill-extrusion-opacity': presentation.opacity,
         },
       };
 

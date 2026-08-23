@@ -14,7 +14,7 @@
 // files via the /wall-app proxy (vite.config.ts) — nothing is duplicated or
 // re-hosted; MUSIC's core app never depends on any of this being present.
 
-import { ensureInitialized } from "./wallGeographicStyleBridge";
+import * as wallGeographicStyleBridge from "./wallGeographicStyleBridge";
 
 const WOS_STYLE = "mapbox://styles/studiorich/cm3goyx23003901qkb60ff29p";
 const PREVIEW_CENTER: [number, number] = [-74.0165, 40.7015];
@@ -23,9 +23,12 @@ const PREVIEW_BEARING = -12;
 const PREVIEW_PITCH = 30;
 const MAP_LOAD_TIMEOUT_MS = 15000;
 
+type MapMouseEvent = { lngLat: { lng: number; lat: number } };
+
 type MapboxMap = {
   on: (event: string, fn: (e?: unknown) => void) => void;
   once: (event: string, fn: (e?: unknown) => void) => void;
+  off: (event: string, fn: (e?: unknown) => void) => void;
   remove: () => void;
   resize: () => void;
   getCanvas: () => HTMLCanvasElement;
@@ -48,8 +51,37 @@ let _offscreenHolder: HTMLDivElement | null = null;
 let _pendingReady: Array<(map: MapboxMap | null) => void> = [];
 let _state: ReadyState = "idle";
 let _runtimeLoadPromise: Promise<boolean> | null = null;
+let _authorityMapBound = false;
+let _buildingDiscoveryScheduled = false;
 const _thumbCache: Record<string, string> = {};
 const _stateListeners: Array<(s: ReadyState) => void> = [];
+
+function _hasBuildingControls(): boolean {
+  const registry = wallGeographicStyleBridge.getRegistry();
+  return registry.ok && registry.data.some((record) => record.source === "mapbox-building");
+}
+
+function _bindAuthorityToPreviewMap(map: MapboxMap) {
+  if (_authorityMapBound && _map === map) return;
+  _authorityMapBound = true;
+  wallGeographicStyleBridge.ensureInitialized(map);
+}
+
+function _scheduleBuildingDiscovery(map: MapboxMap) {
+  if (_buildingDiscoveryScheduled) return;
+  if (_hasBuildingControls()) return;
+  _buildingDiscoveryScheduled = true;
+  map.once("idle", () => {
+    _buildingDiscoveryScheduled = false;
+    if (_map !== map) return;
+    if (_hasBuildingControls()) return;
+    // One best-effort refresh against a real preview map instance after the
+    // preview style has gone fully idle. This keeps Library reads synchronous
+    // and avoids polling while still giving imported/late style layers time
+    // to exist before 3D building discovery runs.
+    wallGeographicStyleBridge.refreshRegistry(map);
+  });
+}
 
 function _setState(next: ReadyState) {
   _state = next;
@@ -119,6 +151,8 @@ function _flushReady(map: MapboxMap | null) {
 export function discardStuckPreviewMap(): void {
   if (_map) { try { _map.remove(); } catch { /* already gone */ } }
   _map = null;
+  _authorityMapBound = false;
+  _buildingDiscoveryScheduled = false;
   if (_offscreenHolder?.parentNode) _offscreenHolder.parentNode.removeChild(_offscreenHolder);
   _offscreenHolder = null;
   _mapEl = null;
@@ -190,10 +224,13 @@ export function ensurePreviewMap(onReady: (map: MapboxMap | null) => void): void
     // need tiles to have arrived.
     _map.once("style.load", () => {
       if (timedOut) return;
+      const readyMap = _map;
+      if (!readyMap) return;
       window.clearTimeout(timeout);
-      ensureInitialized(_map);
+      _bindAuthorityToPreviewMap(readyMap);
+      _scheduleBuildingDiscovery(readyMap);
       _setState("ready");
-      _flushReady(_map);
+      _flushReady(readyMap);
     });
   })();
 }
@@ -342,6 +379,42 @@ export function clearItineraryOverlay(): void {
   for (const sourceId of [PINS_SOURCE_ID, ROUTE_SOURCE_ID]) {
     if (_map.getSource(sourceId)) { try { _map.removeSource(sourceId); } catch { /* already gone */ } }
   }
+}
+
+// ── Map-click point picking (0819_SUBWAY_Itinerary_Execution_Map_Authoring) ──
+// One-shot: the next real click on this shared preview map resolves with its
+// real lng/lat, then the listener detaches itself — never left armed after
+// use. Only one picker can be active at a time (starting a new one cancels
+// any prior armed picker) so a stale "Pick on Map" flow from an abandoned
+// dialog can never fire into a different, later interaction.
+let _activePicker: ((e?: unknown) => void) | null = null;
+
+export function pickPointOnMap(): Promise<{ longitude: number; latitude: number } | null> {
+  return new Promise((resolve) => {
+    if (!_map || _state !== "ready") { resolve(null); return; }
+    if (_activePicker) { try { _map.off("click", _activePicker); } catch { /* already gone */ } }
+    const canvas = _map.getCanvas();
+    const prevCursor = canvas.style.cursor;
+    canvas.style.cursor = "crosshair";
+    const handler = (e?: unknown) => {
+      canvas.style.cursor = prevCursor;
+      _activePicker = null;
+      const evt = e as MapMouseEvent | undefined;
+      if (!evt || !evt.lngLat) { resolve(null); return; }
+      resolve({ longitude: evt.lngLat.lng, latitude: evt.lngLat.lat });
+    };
+    _activePicker = handler;
+    _map.once("click", handler);
+  });
+}
+
+export function cancelPickPointOnMap(): void {
+  if (!_map || !_activePicker) return;
+  try {
+    _map.off("click", _activePicker);
+    _map.getCanvas().style.cursor = "";
+  } catch { /* already gone */ }
+  _activePicker = null;
 }
 
 // ── Race Lane overlay (0805D) ─────────────────────────────────────────────────

@@ -103,6 +103,43 @@ describe("buildGeographicTargets", () => {
     expect(targets[0].colorFields[0].valueKind).toBe("boolean");
     expect(targets[0].colorFields[0].value).toBe("true");
   });
+
+  it("preserves building number/select controls when a dedicated 3D-building target is present", () => {
+    const registry = [
+      rec({
+        id: "mapbox-buildings.3d.height-scale",
+        group: "Buildings",
+        source: "mapbox-building",
+        sourceObject: "__maps_3d_buildings__",
+        sourceProperty: "height-scale",
+        valueKind: "number",
+        numberRange: { min: 0, max: 2, step: 0.05 },
+      }),
+      rec({
+        id: "mapbox-buildings.3d.density-mode",
+        group: "Buildings",
+        source: "mapbox-building",
+        sourceObject: "__maps_3d_buildings__",
+        sourceProperty: "density-mode",
+        valueKind: "select",
+        selectOptions: [{ value: "FULL", label: "Full" }, { value: "CONTEXTUAL", label: "Contextual" }],
+      }),
+    ];
+    const targets = buildGeographicTargets(registry, {
+      "mapbox-buildings.3d.height-scale": "0.8",
+      "mapbox-buildings.3d.density-mode": "CONTEXTUAL",
+    }, null);
+    expect(targets).toHaveLength(1);
+    expect(targets[0].name).toBe("3D Buildings");
+    expect(targets[0].sourceType).toBe("mapbox-building");
+    expect(targets[0].colorFields[0].valueKind).toBe("number");
+    expect(targets[0].colorFields[0].numberRange).toEqual({ min: 0, max: 2, step: 0.05 });
+    expect(targets[0].colorFields[1].valueKind).toBe("select");
+    expect(targets[0].colorFields[1].selectOptions).toEqual([
+      { value: "FULL", label: "Full" },
+      { value: "CONTEXTUAL", label: "Contextual" },
+    ]);
+  });
 });
 
 describe("sortTargetsByCategory", () => {

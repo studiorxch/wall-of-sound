@@ -1,9 +1,9 @@
 // allVisibleBuildingSurfaceTextureRuntime.js
 // 0612U_WOS_AllVisibleBuildingSurfaceTextureRuntime_v1.0.0
 //
-// Applies organic surface texture to ALL visible buildings (host + WOS replacement)
-// via fill-extrusion-pattern overlay layers. Auto-enables on map ready.
-// Strategy: Path A — Mapbox fill-extrusion-pattern on composite/building source.
+// Retired product-path runtime. It now exists only to clear any legacy
+// fill-extrusion-pattern state from host/WOS building layers without ever
+// reapplying a procedural surface treatment.
 
 (function () {
   'use strict';
@@ -23,9 +23,24 @@
   var _styleListener  = null;
   var _originalPaint  = {}; // { layerId: { color, opacity } } — for disable() restore
 
-  // ── Material profiles ────────────────────────────────────────────────────────
-  // 6 families — each must read as distinct on wall and roof faces.
-  // Patch contrast target: ≥60 RGB units vs base. Line is dark ink.
+  function _ensureStyleListener(map) {
+    if (!map || _styleListener || typeof map.on !== 'function') return;
+    _styleListener = function () {
+      setTimeout(function () {
+        if (_enabled) _addLayers(map);
+      }, 300);
+    };
+    map.on('style.load', _styleListener);
+  }
+
+  function _removeStyleListener(map) {
+    if (!map || !_styleListener || typeof map.off !== 'function') return;
+    try { map.off('style.load', _styleListener); } catch (e) {}
+    _styleListener = null;
+  }
+
+  // Legacy material profiles are intentionally retained only for debug/API
+  // compatibility. The runtime no longer generates or applies surface images.
 
   var Profiles = Object.freeze({
     warmConcrete:    { base:[218,200,170,255], patch:[138,102, 54,255], line:[ 58, 38, 12,230], grain:[192,155,108,255] },
@@ -55,9 +70,7 @@
     };
   }
 
-  // ── Pattern generation ───────────────────────────────────────────────────────
-  // Generates a tileable Voronoi patch texture as ImageData.
-  // Toroidal distance ensures seamless tiling at all four edges.
+  // ── Legacy pattern generation (unused in product path) ──────────────────────
 
   function _generatePattern(profileId, intensity) {
     var profile  = Profiles[profileId] || Profiles.warmConcrete;
@@ -228,71 +241,8 @@
   }
 
   function _addLayers(map) {
-    // Generate and register sprite image
-    var pat    = _generatePattern(_profileId, _intensity);
-    var imgObj = { width: pat.width, height: pat.height, data: pat.data };
-    try { if (map.hasImage(IMAGE_ID)) map.removeImage(IMAGE_ID); } catch (e) {}
-    map.addImage(IMAGE_ID, imgObj, { pixelRatio: 1, sdf: false });
-
-    // ── Apply pattern directly to discovered host building layers ─────────────
-    // Direct setPaintProperty avoids z-fighting between overlapping fill-extrusions.
-    var hostLayers = _discoverHostLayers(map);
-    hostLayers.forEach(function (layerId) {
-      try {
-        var origColor   = map.getPaintProperty(layerId, 'fill-extrusion-color');
-        var origOpacity = map.getPaintProperty(layerId, 'fill-extrusion-opacity');
-        _originalPaint[layerId] = { color: origColor, opacity: origOpacity };
-        map.setPaintProperty(layerId, 'fill-extrusion-pattern', IMAGE_ID);
-        console.log('[AllVisibleBuildingSurfaceTextureRuntime] pattern → ' + layerId);
-      } catch (e) {
-        console.warn('[AllVisibleBuildingSurfaceTextureRuntime] setPaintProperty(' + layerId + ') failed:', e.message || e);
-      }
-    });
-
-    // ── Fallback overlay: buildings not covered by any discovered host layer ──
-    // Only added if no host layer covers composite/building source.
-    var compositeHostFound = hostLayers.length > 0;
-    if (!compositeHostFound && !map.getLayer(LAYER_HOST)) {
-      try {
-        map.addLayer({
-          id:             LAYER_HOST,
-          type:           'fill-extrusion',
-          source:         'composite',
-          'source-layer': 'building',
-          filter:         ['>', ['coalesce', ['get', 'height'], 0], 0],
-          paint: {
-            'fill-extrusion-pattern': IMAGE_ID,
-            'fill-extrusion-opacity': _intensity === 2 ? 0.84 : 0.76,
-            'fill-extrusion-height':  ['coalesce', ['get', 'height'], ['get', 'render_height'], 10],
-            'fill-extrusion-base':    ['coalesce', ['get', 'min_height'], ['get', 'render_min_height'], 0],
-          }
-        });
-      } catch (e) {
-        _lastError = 'fallback addLayer: ' + (e.message || String(e));
-        console.error('[AllVisibleBuildingSurfaceTextureRuntime] fallback layer error:', e);
-      }
-    }
-
-    // ── WOS replacement overlay ───────────────────────────────────────────────
-    if (_hasWOSSource(map) && !map.getLayer(LAYER_WOS)) {
-      try {
-        map.addLayer({
-          id:     LAYER_WOS,
-          type:   'fill-extrusion',
-          source: SOURCE_WOS,
-          paint: {
-            'fill-extrusion-pattern': IMAGE_ID,
-            'fill-extrusion-opacity': _intensity === 2 ? 0.84 : 0.76,
-            'fill-extrusion-height':  ['get', 'height'],
-            'fill-extrusion-base':    ['coalesce', ['get', 'base'], 0],
-          }
-        });
-      } catch (e) {
-        console.warn('[AllVisibleBuildingSurfaceTextureRuntime] WOS overlay error:', e);
-      }
-    }
-
-    _enabled = true;
+    _removeLayers(map);
+    _enabled = false;
     if (map.triggerRepaint) map.triggerRepaint();
     _updateReport(map);
   }
@@ -314,20 +264,21 @@
       version:                       VERSION,
       enabled:                       _enabled,
       autoEnabled:                   _autoEnabled,
-      hostBuildingTextureSupported:  true,
-      hostBuildingTextureStrategy:   'mapbox-layer',
+      hostBuildingTextureSupported:  false,
+      hostBuildingTextureStrategy:   'retired-cleanup-only',
       visibleHostBuildingLayers:     hostLayers,
       directPaintLayers:             Object.keys(_originalPaint),
-      texturedHostBuildingCount:     (directPaintApplied || hostAdded) ? 'all-composite-buildings' : 0,
+      texturedHostBuildingCount:     0,
       replacementBuildingCount:      hasWOSSrc ? 'source-present' : 0,
-      texturedReplacementBuildingCount: wosAdded ? 'all-wos-buildings' : 0,
+      texturedReplacementBuildingCount: 0,
       wallSupported:                 true,
       studioSupported:               true,
-      largeHostBuildingsChanged:     directPaintApplied || hostAdded,
+      largeHostBuildingsChanged:     false,
       consoleCommandRequired:        false,
       profileId:                     _profileId,
       intensity:                     _intensity,
       lastError:                     _lastError,
+      retired:                       true,
     };
   }
 
@@ -336,15 +287,20 @@
   function enable() {
     var map = _getMap();
     if (!map) { console.warn('[AllVisibleBuildingSurfaceTextureRuntime] map not available'); return; }
-    if (!map.isStyleLoaded()) { map.once('style.load', function () { _addLayers(map); }); return; }
-    _removeLayers(map);
-    _addLayers(map);
+    _autoEnabled = false;
+    if (!map.isStyleLoaded()) {
+      map.once('style.load', function () { disable(); });
+      return;
+    }
+    disable();
   }
 
   function disable() {
     _enabled = false;
     var map = _getMap();
     if (!map) return;
+    _autoEnabled = false;
+    _removeStyleListener(map);
     _removeLayers(map);
     _updateReport(map);
     if (map.triggerRepaint) map.triggerRepaint();
@@ -353,8 +309,7 @@
   function refresh() {
     var map = _getMap();
     if (!map || !map.isStyleLoaded()) return;
-    _removeLayers(map);
-    _addLayers(map);
+    disable();
   }
 
   function setIntensity(val) {
@@ -379,64 +334,11 @@
     }
     return _report || {
       ok:     false,
-      reason: 'FAIL_HOST_BUILDING_TEXTURE_NOT_SUPPORTED',
+      reason: 'RETIRED_SURFACE_TEXTURE_RUNTIME',
       enabled: false,
       lastError: _lastError,
+      retired: true,
     };
-  }
-
-  // ── Auto-enable ──────────────────────────────────────────────────────────────
-
-  function _doAutoEnable(map) {
-    try {
-      _addLayers(map);
-      _autoEnabled = true;
-      _updateReport(map); // refresh after setting _autoEnabled
-      // Re-apply after style switch
-      _styleListener = function () {
-        setTimeout(function () {
-          if (_enabled) _addLayers(map);
-        }, 300);
-      };
-      map.on('style.load', _styleListener);
-    } catch (err) {
-      _lastError = err.message || String(err);
-      _report = {
-        ok:        false,
-        reason:    'FAIL_HOST_BUILDING_TEXTURE_NOT_SUPPORTED',
-        lastError: _lastError,
-      };
-      console.error('[AllVisibleBuildingSurfaceTextureRuntime] auto-enable failed:', err);
-    }
-  }
-
-  function _autoEnable() {
-    var mvr = window.SBE && window.SBE.MapboxViewportRuntime;
-    if (mvr && typeof mvr.onReady === 'function') {
-      // onReady fires after style + tiles are loaded — safe to add layers immediately.
-      // If already ready, onReady calls fn() synchronously.
-      mvr.onReady(function () {
-        var map = _getMap();
-        if (map) {
-          _doAutoEnable(map);
-        } else {
-          // Shouldn't happen, but fall back to poll
-          setTimeout(function () {
-            var m = _getMap();
-            if (m) _doAutoEnable(m);
-          }, 200);
-        }
-      });
-      return;
-    }
-    // Studio / no-MVR fallback: poll until map is available and style is loaded
-    var map = _getMap();
-    if (!map) { setTimeout(_autoEnable, 400); return; }
-    if (map.isStyleLoaded()) {
-      _doAutoEnable(map);
-    } else {
-      map.once('style.load', function () { _doAutoEnable(map); });
-    }
   }
 
   // ── Namespace ────────────────────────────────────────────────────────────────
@@ -469,8 +371,5 @@
   } else {
     _wireDebug(); // Studio / no-MVR fallback
   }
-
-  // Kick off
-  _autoEnable();
 
 })();
