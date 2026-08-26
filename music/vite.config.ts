@@ -55,6 +55,16 @@ import {
 } from './src/logic/sunoLibrary/canonicalIdentity'
 import type { ManifestSourceTexts } from './src/logic/sunoLibrary/manifestValidation'
 import type { SunoEncodedLocation, SunoCanonicalRecording } from './src/data/sunoLibraryTypes'
+// 0812D_MUSIC_Autosave-Integrity-Repair_v1.0.0 — the /sampler-banks-write
+// route reuses the exact same pure stale/destructive-write decision the
+// client and its tests use, so the server's final authority check can
+// never drift out of sync with what the client believes it's protecting
+// against. Imported from the dedicated, dependency-free guard module (not
+// samplerBankPersistence.ts directly) — that module also exports
+// PlaylistRecord-based client logic which transitively reaches DOM-only
+// code (colorLab.ts via playProjectTypes.ts), which this Node-context
+// config must never pull in.
+import { evaluateServerSideBankWrite } from './src/logic/samplerBankServerWriteGuard'
 
 interface RadioStagingCreateBody {
   sourceTrackId?: string
@@ -924,6 +934,95 @@ export default defineConfig({
             } catch (e) {
               res.statusCode = 500
               res.end(JSON.stringify({ ok: false, error: String(e) }))
+            }
+          })
+        })
+
+        // 0812D_MUSIC_Autosave-Integrity-Repair_v1.0.0 — dedicated,
+        // validated write route for the one shared filesystem authority
+        // file that /library-write's generic "write any JSON to any path"
+        // contract cannot safely protect: library/music/sampler-banks/
+        // banks.json is a single, absolute-path file every browser
+        // session/tab shares (unlike IndexedDB, which is naturally
+        // per-origin/per-profile) — so an unrelated, unhydrated, or
+        // deliberately-non-persisting session could previously overwrite
+        // it with empty content via the generic route with zero
+        // resistance. This route is the server-side half of that repair:
+        // final-authority validation (matches the client's own
+        // evaluateSamplerBankWrite gate — see samplerBankPersistence.ts —
+        // so a client bug can never bypass it) plus an atomic
+        // temp-file-and-rename write, never a direct in-place overwrite.
+        server.middlewares.use('/sampler-banks-write', (req: IncomingMessage, res: ServerResponse) => {
+          if (req.method !== 'POST') {
+            res.statusCode = 405; res.end(JSON.stringify({ ok: false, error: 'Method Not Allowed' })); return
+          }
+          res.setHeader('Content-Type', 'application/json')
+          res.setHeader('Access-Control-Allow-Origin', '*')
+          const banksPath = path.join(LIBRARY_ROOT, 'sampler-banks', 'banks.json')
+          const chunks: Buffer[] = []
+          req.on('data', (chunk: Buffer) => chunks.push(chunk))
+          req.on('end', () => {
+            let payload: { banks?: unknown; expectedPriorCount?: unknown; deletionAuthorized?: unknown }
+            try {
+              payload = JSON.parse(Buffer.concat(chunks).toString('utf-8'))
+            } catch {
+              res.statusCode = 400
+              res.end(JSON.stringify({ ok: false, error: 'Request body is not valid JSON', reason: 'invalid-request' }))
+              return
+            }
+            const { banks, expectedPriorCount, deletionAuthorized } = payload
+            if (!Array.isArray(banks) || typeof expectedPriorCount !== 'number' || typeof deletionAuthorized !== 'boolean') {
+              res.statusCode = 400
+              res.end(JSON.stringify({ ok: false, error: 'Expected { banks: array, expectedPriorCount: number, deletionAuthorized: boolean }', reason: 'invalid-request' }))
+              return
+            }
+
+            // Determine what is actually on disk right now — never trust the
+            // client's belief alone (that belief is exactly what a stale or
+            // unrelated session gets wrong).
+            let currentOnDiskCount: number
+            if (!fs.existsSync(banksPath)) {
+              currentOnDiskCount = 0
+            } else {
+              try {
+                const raw = fs.readFileSync(banksPath, 'utf-8')
+                const parsed = JSON.parse(raw)
+                if (!Array.isArray(parsed)) throw new Error('on-disk banks.json is not an array')
+                currentOnDiskCount = parsed.length
+              } catch (e) {
+                // Explicit error instead of destructive fallback (spec §Logic
+                // layer item 8): if the on-disk file itself can't be read as
+                // a valid array, refuse to write over it blindly rather than
+                // guessing its count.
+                res.statusCode = 500
+                res.end(JSON.stringify({ ok: false, error: `Existing banks.json is unreadable/corrupt: ${String(e)}`, reason: 'unreadable-authority' }))
+                return
+              }
+            }
+
+            const decision = evaluateServerSideBankWrite(currentOnDiskCount, expectedPriorCount, banks.length, deletionAuthorized)
+            if (!decision.accept) {
+              res.statusCode = 409
+              res.end(JSON.stringify({ ok: false, error: `Write rejected: ${decision.reason}`, reason: decision.reason }))
+              return
+            }
+
+            try {
+              const dir = path.dirname(banksPath)
+              fs.mkdirSync(dir, { recursive: true })
+              // Atomic temp-write-and-replace (spec §Logic layer item 4): a
+              // crash or interruption mid-write leaves the temp file, never
+              // a truncated/corrupt banks.json — fs.renameSync is atomic on
+              // the same filesystem, which the temp file always is (same
+              // parent directory).
+              const tmpPath = path.join(dir, `.banks.json.tmp-${randomUUID()}`)
+              fs.writeFileSync(tmpPath, JSON.stringify(banks), 'utf-8')
+              fs.renameSync(tmpPath, banksPath)
+              res.statusCode = 200
+              res.end(JSON.stringify({ ok: true, count: banks.length }))
+            } catch (e) {
+              res.statusCode = 500
+              res.end(JSON.stringify({ ok: false, error: String(e), reason: 'write-failed' }))
             }
           })
         })

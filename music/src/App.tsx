@@ -175,6 +175,20 @@ import {
   removeInterestMarker as removeSunoInterestMarker,
 } from "./logic/sunoLibrary/reviews";
 import { mergeSunoLibraryReviewImport } from "./logic/sunoLibrary/reviewExport";
+// 0812D_MUSIC_Autosave-Integrity-Repair_v1.0.0 — closes the gap that let
+// unhydrated/empty/temporary-session state overwrite the shared, absolute-
+// path library/music/sampler-banks/banks.json. See samplerBankPersistence.ts
+// for the full root-cause explanation.
+import type { SamplerBankPersistenceState } from "./data/samplerBankPersistenceTypes";
+import {
+  applySamplerBankFilesystemHydration,
+  applySamplerBankWriteResult,
+  applySamplerBankWriteSkip,
+  authorizeSamplerBankDeletion,
+  createInitialSamplerBankPersistenceState,
+  evaluateSamplerBankWrite,
+  suspendSamplerBankPersistence,
+} from "./logic/samplerBankPersistence";
 import { StemSublayer } from "./ui/stems/StemSublayer";
 import { LegacyStemMigrationPanel } from "./ui/stems/LegacyStemMigrationPanel";
 import { readDjTransitionMode, writeDjTransitionMode, type DjTransitionMode } from "./logic/djTransitionModeStorage";
@@ -533,6 +547,16 @@ export default function App() {
   // Hydration guard: autosave must not run until the saved project has been
   // loaded, or the default boot state overwrites valid saved data on mount.
   const [hasHydratedProject, setHasHydratedProject] = useState(false);
+  // 0812D — separate from hasHydratedProject: tracks whether the
+  // filesystem-authoritative sampler-bank set (banks.json) has actually
+  // been read this session, plus the destructive-write guard state. See
+  // samplerBankPersistence.ts. Ref mirrors state for synchronous reads
+  // inside the write effect/handlers, matching every other ref-synced
+  // piece of state in this file.
+  const [samplerBankPersistence, setSamplerBankPersistence] = useState<SamplerBankPersistenceState>(
+    createInitialSamplerBankPersistenceState,
+  );
+  const samplerBankPersistenceRef = useRef<SamplerBankPersistenceState>(samplerBankPersistence);
   const [startupRecovery, setStartupRecovery] = useState<StartupRecoveryAssessment | null>(null);
   // Data Management → Backups & Recovery (0712_MUSIC_Recovery_Screen_Removal
   // §2.4) — user-initiated only, never an automatic startup modal.
@@ -737,17 +761,54 @@ export default function App() {
   useEffect(() => { loopBinViewStateRef.current = loopBinViewState; }, [loopBinViewState]);
   useEffect(() => { libraryGridPreferencesRef.current = libraryGridPreferences; }, [libraryGridPreferences]);
   useEffect(() => { libraryGapsRef.current = libraryGaps; }, [libraryGaps]);
+  useEffect(() => { samplerBankPersistenceRef.current = samplerBankPersistence; }, [samplerBankPersistence]);
 
-  // Sampler bank filesystem sync — write banks.json whenever playlists change (post-hydration).
+  // Sampler bank filesystem sync — write banks.json whenever playlists
+  // change, post-hydration. 0812D_MUSIC_Autosave-Integrity-Repair_v1.0.0:
+  // previously fired the moment the generic hasHydratedProject flag went
+  // true, with no awareness that the filesystem-authoritative bank set is
+  // read and merged by a SEPARATE, later, async step (below), and no
+  // awareness of a deliberately-non-persisting temporary session — either
+  // gap let an incomplete or empty in-memory snapshot overwrite the real,
+  // shared banks.json. evaluateSamplerBankWrite is the single decision
+  // point that closes both, plus a destructive empty-over-nonempty guard.
+  // Reads samplerBankPersistenceRef (not the samplerBankPersistence state
+  // itself) and is deliberately NOT a dependency of this effect — the
+  // effect also writes back to that state on completion, and including it
+  // as a dependency would create a self-retriggering write loop.
   useEffect(() => {
-    if (!hasHydratedProject) return;
+    const decision = evaluateSamplerBankWrite(samplerBankPersistenceRef.current, hasHydratedProject, playlists);
+    if (decision.action === "skip") {
+      if (decision.reason === "destructive-empty-overwrite") {
+        console.warn(
+          "[MUSIC] Blocked sampler-bank filesystem write: would replace a known-nonempty bank set with zero banks, and no deletion was authorized.",
+        );
+      }
+      return;
+    }
     const banks = playlists.filter((p) => p.playlistKind === "reference_overlay");
-    const banksPath = `${__LIBRARY_ROOT__}/sampler-banks/banks.json`;
-    fetch(`/library-write?path=${encodeURIComponent(banksPath)}`, {
+    fetch("/sampler-banks-write", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(banks),
-    }).catch(() => {});
+      body: JSON.stringify({
+        banks,
+        expectedPriorCount: decision.expectedPriorCount,
+        deletionAuthorized: decision.deletionAuthorized,
+      }),
+    })
+      .then(async (res) => {
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}) as { reason?: string });
+          console.warn(`[MUSIC] Sampler-bank filesystem write rejected (${res.status}): ${body.reason ?? "unknown"}`);
+          setSamplerBankPersistence((s) => applySamplerBankWriteSkip(s));
+          return;
+        }
+        setSamplerBankPersistence((s) => applySamplerBankWriteResult(s, banks));
+      })
+      .catch((e) => {
+        console.warn("[MUSIC] Sampler-bank filesystem write failed:", e);
+        setSamplerBankPersistence((s) => applySamplerBankWriteSkip(s));
+      });
   }, [playlists, hasHydratedProject]);
   // Keep playback refs in sync (0622A): playingSlotsRef tracks the PLAYING
   // playlist's current slots regardless of which playlist is being edited.
@@ -1375,6 +1436,18 @@ export default function App() {
   function handleDeletePlaylist(id: string) {
     if (playlists.length <= 1) return;
     const next = playlists.filter((p) => p.playlistId !== id);
+    // 0812D — this is a generic playlist-delete handler that also covers
+    // sampler banks. If this specific deletion reduces the bank set to
+    // zero, it's a real, explicit human action — authorize the sampler-
+    // bank filesystem write-guard's one-time empty-overwrite escape hatch
+    // BEFORE setPlaylists below, so the write effect (which reads this via
+    // a ref kept in sync by a same-render-cycle effect declared earlier in
+    // this component) sees it as authorized rather than destructive.
+    const prevBankCount = playlists.filter((p) => p.playlistKind === "reference_overlay").length;
+    const nextBankCount = next.filter((p) => p.playlistKind === "reference_overlay").length;
+    if (prevBankCount > 0 && nextBankCount === 0) {
+      setSamplerBankPersistence((s) => authorizeSamplerBankDeletion(s));
+    }
     // Case 3 (0622A): deleting the PLAYING playlist stops + clears playback,
     // regardless of which playlist is selected in the editor.
     if (playingPlaylistIdRef.current === id) {
@@ -5291,15 +5364,25 @@ export default function App() {
 
     // Sampler bank persistence: hydrate from filesystem index.
       // Banks file is the source of truth — merge any banks not already in IDB.
+      // 0812D — also establishes the filesystem-hydration baseline the
+      // sampler-bank write-guard (samplerBankPersistence.ts) requires
+      // before any write to banks.json is permitted: a successful read, a
+      // confirmed-absent file (resp not ok), and a genuine read error are
+      // ALL treated as "hydration complete" — there is now a definite
+      // answer to "what's really on disk" in every case, so the write
+      // effect can never be left waiting forever.
       const banksPath = `${__LIBRARY_ROOT__}/sampler-banks/banks.json`;
       try {
         const resp = await fetch(`/library-data?path=${encodeURIComponent(banksPath)}`);
         if (resp.ok) {
-          const fsbanks: PlaylistRecord[] = JSON.parse(await resp.text());
-          if (Array.isArray(fsbanks) && fsbanks.length > 0) {
+          const fsbanks: unknown = JSON.parse(await resp.text());
+          const fsbanksArray: PlaylistRecord[] = Array.isArray(fsbanks) ? fsbanks : [];
+          const onDiskBanks = fsbanksArray.filter((b) => b.playlistKind === "reference_overlay");
+          setSamplerBankPersistence((s) => applySamplerBankFilesystemHydration(s, onDiskBanks));
+          if (fsbanksArray.length > 0) {
             setPlaylists((prev) => {
               const existingIds = new Set(prev.map((p) => p.playlistId));
-              const incoming = fsbanks.filter(
+              const incoming = fsbanksArray.filter(
                 (b) => b.playlistKind === "reference_overlay" && !existingIds.has(b.playlistId),
               );
               if (incoming.length === 0) return prev;
@@ -5310,9 +5393,16 @@ export default function App() {
               return next;
             });
           }
+        } else {
+          // No banks.json yet (e.g. first run) — confirmed-absent still
+          // counts as hydrated, with an empty known-good baseline.
+          setSamplerBankPersistence((s) => applySamplerBankFilesystemHydration(s, []));
         }
       } catch {
-        // Banks file absent — skip silently
+        // Banks file absent or unreadable — skip silently, but still mark
+        // hydration complete so a real subsequent user action is never
+        // blocked forever waiting on a read that will never resolve.
+        setSamplerBankPersistence((s) => applySamplerBankFilesystemHydration(s, []));
       }
     })();
   }, []);
@@ -6134,10 +6224,19 @@ export default function App() {
   // distinct from the removed "Start Blank" action, which immediately wrote
   // an empty state to storage (spec §2.6: creating/replacing a library is a
   // library-management action, not a recovery action).
+  //
+  // 0812D — "without persisting anything" previously held for IndexedDB
+  // only. hasHydratedProject flipping true here (with playlists still at
+  // its bank-less default) also fired the sampler-bank filesystem-sync
+  // effect, which had no concept of a non-persisting session and would
+  // POST that empty default straight over the real, shared banks.json.
+  // suspendSamplerBankPersistence makes the promise this comment already
+  // made actually hold for the filesystem too.
   function handleOpenEmptyTemporarySession() {
     setStartupRecovery(null);
     hydrationReadyRef.current = true;
     setHasHydratedProject(true);
+    setSamplerBankPersistence((s) => suspendSamplerBankPersistence(s));
   }
 
   // ── Data Management → Backups & Recovery (user-initiated only) ───────────
