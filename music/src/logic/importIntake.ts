@@ -8,6 +8,8 @@ import type { Track } from "../data/trackTypes";
 import type { ImportResult } from "./audioImport";
 import type { MusicImportIntakeItem, IntakeDuplicateStatus, IntakeItemStatus } from "../data/importTypes";
 import { SUPPORTED_AUDIO_EXTENSIONS } from "../data/importTypes";
+import type { AssetReconciliationClass } from "../data/trackAssetTypes";
+import { classifyIncomingAsset, formatFromExtension } from "./trackAssetReconciliation";
 
 // ── Filename identity parsing ────────────────────────────────────────────────
 
@@ -76,6 +78,46 @@ export function detectDuplicate(
   return { status: "not_duplicate" };
 }
 
+// 0813_MUSIC_P0_Clean_Library_Foundation StepB — maps the 4-class
+// reconciliation result onto the legacy 3-value IntakeDuplicateStatus so
+// existing status-color/simple consumers keep working unchanged: both
+// same_recording_different_format and related_version count as
+// "possible_duplicate" (neither is certain enough to exclude by default,
+// per "do not automatically merge uncertain matches" — the specific class
+// still drives the richer messaging/resolution options in the UI layer).
+function legacyStatusForClass(cls: AssetReconciliationClass): IntakeDuplicateStatus {
+  switch (cls) {
+    case "exact_asset_duplicate": return "exact_duplicate";
+    case "same_recording_different_format":
+    case "related_version": return "possible_duplicate";
+    case "distinct_recording": return "not_duplicate";
+  }
+}
+
+/**
+ * The real classification path — content-checksum-first, then title/artist/
+ * duration evidence — used by buildIntakeItem/reresolveIntakeItem. detectDuplicate
+ * above stays in place unmodified (nothing else in the codebase calls it directly
+ * besides this file, confirmed), but this is what actually drives intake behavior now.
+ */
+export function classifyIntakeCandidate(
+  track: Track,
+  existingTracks: Track[],
+): ReturnType<typeof classifyIncomingAsset> {
+  const primaryAsset = track.assets?.[0];
+  return classifyIncomingAsset(
+    {
+      fileName: track.audioFileName ?? "",
+      format: primaryAsset?.format ?? formatFromExtension(track.audioFileName ?? ""),
+      checksum: primaryAsset?.checksum ?? null,
+      durationSeconds: track.durationSeconds ?? null,
+      title: track.title ?? "",
+      artist: track.artist,
+    },
+    existingTracks,
+  );
+}
+
 // ── Intake item construction ─────────────────────────────────────────────────
 
 function genId(prefix: string): string {
@@ -115,16 +157,7 @@ export function buildIntakeItem(result: ImportResult, existingTracks: Track[]): 
 
   const warnings = identityWarnings({ title: track.title, artist: track.artist });
 
-  const dup = detectDuplicate(
-    {
-      fileName: track.audioFileName ?? "",
-      sourcePath: track.audioRelPath ?? "",
-      title: track.title,
-      artist: track.artist,
-      durationSeconds: track.durationSeconds,
-    },
-    existingTracks,
-  );
+  const reconciliation = classifyIntakeCandidate(track, existingTracks);
 
   return {
     id: genId("intake"),
@@ -140,8 +173,10 @@ export function buildIntakeItem(result: ImportResult, existingTracks: Track[]): 
       bpm: track.bpm,
       energy: track.energy,
     },
-    duplicateStatus: dup.status,
-    duplicateOfTrackId: dup.duplicateOfTrackId,
+    duplicateStatus: legacyStatusForClass(reconciliation.classification),
+    duplicateOfTrackId: reconciliation.matchedTrackId ?? undefined,
+    reconciliationClass: reconciliation.classification,
+    reconciliationEvidence: reconciliation.evidence,
     warnings,
     errors: [],
     existingTracks,
@@ -156,6 +191,16 @@ export function intakeStatusReason(item: MusicImportIntakeItem): string | null {
   if (item.playbackIssue?.status === "unplayable") {
     return item.playbackIssue.message ? `${item.playbackIssue.code ?? "Unplayable"}: ${item.playbackIssue.message}` : "File failed the playability scan.";
   }
+  switch (item.reconciliationClass) {
+    case "exact_asset_duplicate":
+      return "Exact duplicate — identical file content already in the library.";
+    case "same_recording_different_format":
+      return "Same recording, different format — matches an existing track's title/artist/duration, different file type.";
+    case "related_version":
+      return "Possibly a related version (edit/master/alternate render) of an existing track — not a confident match.";
+    default:
+      break;
+  }
   if (item.duplicateStatus === "exact_duplicate") return "Exact duplicate of an existing track.";
   if (item.duplicateStatus === "possible_duplicate") return "Possible duplicate — matches an existing track's artist/title.";
   if (item.warnings.length > 0) return item.warnings[0];
@@ -166,40 +211,35 @@ export function intakeStatusReason(item: MusicImportIntakeItem): string | null {
 export function resolveIntakeStatus(item: MusicImportIntakeItem): IntakeItemStatus {
   if (item.playbackIssue?.status === "unplayable") return "blocked";
   const isDuplicate = item.duplicateStatus === "exact_duplicate" || item.duplicateStatus === "possible_duplicate";
-  if (isDuplicate && item.duplicateResolution !== "import_separately") return "duplicate";
+  const resolved = item.duplicateResolution === "import_separately" || item.duplicateResolution === "attach_as_asset";
+  if (isDuplicate && !resolved) return "duplicate";
   if (item.warnings.length > 0) return "needs_review";
   return "ready";
 }
 
-// Reruns duplicate detection (the SAME detectDuplicate resolver, never a
-// second detection path) AND the identity-completeness check against an
-// item's own existingTracks snapshot after a title/artist edit, then
-// recomputes its status from those fresh results — never leaves the prior
-// status/duplicate result stale against edited metadata.
-// Exact-duplicate matching is sourcePath/fileName+duration based, so it is
-// unaffected by a text edit and will only ever clear via an explicit
-// duplicateResolution; possible-duplicate matching IS title/artist based and
-// clears automatically the moment the edited text no longer matches; a
-// low-confidence-parse Needs Review clears the moment both fields are filled.
+// Reruns the SAME classifyIntakeCandidate resolver used at construction
+// (never a second detection path) AND the identity-completeness check
+// against an item's own existingTracks snapshot after a title/artist edit,
+// then recomputes its status from those fresh results — never leaves the
+// prior status/duplicate result stale against edited metadata.
+// Exact-duplicate matching is checksum/sourcePath/fileName+duration based,
+// so it is unaffected by a text edit and will only ever clear via an
+// explicit duplicateResolution; same-recording/related-version matching IS
+// title/artist based and clears automatically the moment the edited text no
+// longer matches; a low-confidence-parse Needs Review clears the moment
+// both fields are filled.
 export function reresolveIntakeItem(item: MusicImportIntakeItem): MusicImportIntakeItem {
-  const dup = detectDuplicate(
-    {
-      fileName: item.fileName,
-      sourcePath: item.sourcePath,
-      title: item.metadata.title,
-      artist: item.metadata.artist,
-      durationSeconds: item.metadata.durationSeconds,
-    },
-    item.existingTracks,
-  );
+  const reconciliation = classifyIntakeCandidate(item.track, item.existingTracks);
   const updated: MusicImportIntakeItem = {
     ...item,
-    duplicateStatus: dup.status,
-    duplicateOfTrackId: dup.duplicateOfTrackId,
+    duplicateStatus: legacyStatusForClass(reconciliation.classification),
+    duplicateOfTrackId: reconciliation.matchedTrackId ?? undefined,
+    reconciliationClass: reconciliation.classification,
+    reconciliationEvidence: reconciliation.evidence,
     // A resolution only means something while there's still something to
     // resolve — once the match itself clears, drop it rather than carry a
     // stale decision forward if a later edit reintroduces a match.
-    duplicateResolution: dup.status === "not_duplicate" ? undefined : item.duplicateResolution,
+    duplicateResolution: reconciliation.classification === "distinct_recording" ? undefined : item.duplicateResolution,
     warnings: identityWarnings(item.metadata),
   };
   return { ...updated, status: resolveIntakeStatus(updated) };

@@ -301,6 +301,14 @@ export type Track = {
   audioLinked?: boolean;
   audioMissing?: boolean;
   audioLastScannedAt?: string;
+  // Multi-format physical assets (0813_MUSIC_P0_Clean_Library_Foundation
+  // StepB) — additive alongside the fields above, which keep meaning the
+  // currently-linked/playable file exactly as before. Optional/absent for
+  // any track imported before this field existed; see
+  // trackAssetReconciliation.ts's getTrackAssets() for the fallback that
+  // synthesizes an equivalent single-asset view from the legacy fields so
+  // format-availability queries work uniformly across old and new data.
+  assets?: import("./trackAssetTypes").TrackAsset[];
   objectUrl?: string;           // ephemeral blob URL — session-only, not persisted
   // Preserved import mood tags (0701G) — set once at CSV import, read-only reference
   importedMoodTags?: string[];

@@ -197,7 +197,9 @@ export function ImportIntakePanel({ initialItems, crates, resolveItemUrl, onComm
                         {STATUS_LABEL[it.status]}
                         {reason && (
                           <span style={{ display: "block", opacity: 0.7, fontSize: "0.85em", fontWeight: "normal" }}>
-                            {reason}{it.duplicateResolution === "import_separately" ? " — importing separately." : ""}
+                            {reason}
+                            {it.duplicateResolution === "import_separately" ? " — importing separately." : ""}
+                            {it.duplicateResolution === "attach_as_asset" ? " — attaching as an additional format." : ""}
                           </span>
                         )}
                         {it.status === "duplicate" && (
@@ -208,6 +210,24 @@ export function ImportIntakePanel({ initialItems, crates, resolveItemUrl, onComm
                               onClick={() => setDuplicateResolution(it.id, "keep_existing")}
                             >Keep Existing</button>
                             {" "}
+                            {/* 0813_MUSIC_P0_Clean_Library_Foundation StepB —
+                                only offered for the two classes with a real
+                                matched track to attach to; never for an exact
+                                duplicate (nothing new to add) and never
+                                automatic — this is the human's explicit
+                                confirmation that classifyIncomingAsset's
+                                match is correct. */}
+                            {(it.reconciliationClass === "same_recording_different_format" || it.reconciliationClass === "related_version") && (
+                              <>
+                                <button
+                                  type="button"
+                                  className={`npw-btn npw-btn--small ${it.duplicateResolution === "attach_as_asset" ? "npw-btn--primary" : "npw-btn--ghost"}`}
+                                  onClick={() => setDuplicateResolution(it.id, "attach_as_asset")}
+                                  title="Add this file as another format on the matched existing track, instead of creating a new one"
+                                >Attach as Additional Format</button>
+                                {" "}
+                              </>
+                            )}
                             <button
                               type="button"
                               className={`npw-btn npw-btn--small ${it.duplicateResolution === "import_separately" ? "npw-btn--primary" : "npw-btn--ghost"}`}

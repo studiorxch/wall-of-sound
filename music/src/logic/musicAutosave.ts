@@ -22,6 +22,7 @@ import type { PlayProject } from "../data/playProjectTypes";
 import { summarizeMusicState, type MusicStateSummary } from "./musicStateSummary";
 import { auditAudioPaths, migratePortableAudioPaths } from "./migratePortableAudioPaths";
 import { classifyAudioPath } from "./audioPathResolver";
+import { filterTracksByFormat, getTrackFormats } from "./trackAssetReconciliation";
 import {
   isMusicStateValid,
   isMusicStateHealthy,
@@ -454,6 +455,11 @@ export interface MusicDebugAPI {
   migratePortableAudioPathsApply(opts?: { confirm: boolean }): import("./migratePortableAudioPaths").PortableAudioPathMigrationResult | null;
   findAbsoluteAudioPaths(): Array<{ trackId: string; title: string; path: string }>;
   findUnresolvedAudioPaths(): Array<{ trackId: string; title: string; status: string }>;
+  // MUSIC P0 Clean Library Foundation — Step B: "which Catalog tracks have
+  // a WAV/FLAC/MP3 available" made queryable now, ahead of a real grid
+  // column (Step E's job, not this one — see the approved P0 plan).
+  tracksWithFormat(format: import("../data/trackAssetTypes").TrackAssetFormat): Array<{ trackId: string; title: string; sourceOwner: string }>;
+  formatAvailabilitySummary(): Record<string, number>;
 }
 
 export function installMusicDebug(
@@ -593,6 +599,24 @@ export function installMusicDebug(
           title: t.title,
           status: (t as unknown as { audioStatus?: string }).audioStatus ?? "unknown",
         }));
+    },
+
+    tracksWithFormat(format) {
+      const project = getProject?.() ?? _currentStateCache;
+      if (!project) return [];
+      return filterTracksByFormat(project.libraryTracks, format).map((t) => ({
+        trackId: t.trackId, title: t.title, sourceOwner: t.sourceOwner ?? "unknown",
+      }));
+    },
+
+    formatAvailabilitySummary() {
+      const project = getProject?.() ?? _currentStateCache;
+      if (!project) return {};
+      const counts: Record<string, number> = {};
+      for (const t of project.libraryTracks) {
+        for (const fmt of getTrackFormats(t)) counts[fmt] = (counts[fmt] ?? 0) + 1;
+      }
+      return counts;
     },
   };
 

@@ -3,8 +3,11 @@
 // and TrackRecord creation. Server-side copy via /library-import endpoint.
 
 import type { Track, TrackSourceOwner } from "../data/trackTypes";
+import type { TrackAsset } from "../data/trackAssetTypes";
 import { suggestMoodsAndClusters } from "./moodSuggestionEngine";
 import { SUPPORTED_AUDIO_EXTENSIONS } from "../data/importTypes";
+import { computeSha256Hex } from "./audioChecksum";
+import { formatFromExtension } from "./trackAssetReconciliation";
 
 // ── File picker ───────────────────────────────────────────────────────────────
 
@@ -70,6 +73,41 @@ export async function extractDuration(file: File): Promise<number | null> {
   }
 }
 
+// MUSIC P0 Clean Library Foundation — Step B: a separate function, not a
+// change to extractDuration's signature above — extractDuration is also
+// used by machineLifeProxyImport.ts (out of P0 scope), so it stays exactly
+// as-is. Reads the file's bytes ONCE (a File's arrayBuffer() is otherwise
+// idempotent, but AudioContext.decodeAudioData detaches/consumes whatever
+// ArrayBuffer it's given, so decode gets its own copy via slice(0) rather
+// than a second file read) and derives both the duration and the SHA-256
+// checksum from that single read — the checksum is what makes exact-
+// duplicate detection content-based instead of filename-based (catches a
+// renamed re-download the old filename+duration check would miss).
+export async function extractAudioFingerprint(
+  file: File,
+): Promise<{ durationSeconds: number | null; checksum: string | null }> {
+  let checksum: string | null = null;
+  let durationSeconds: number | null = null;
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    checksum = await computeSha256Hex(arrayBuffer);
+    try {
+      const ctx = new AudioContext();
+      const decoded = await ctx.decodeAudioData(arrayBuffer.slice(0));
+      ctx.close();
+      durationSeconds = decoded.duration;
+    } catch {
+      durationSeconds = null;
+    }
+  } catch {
+    // Checksum computation failed (e.g. crypto.subtle unavailable) — fall
+    // back to duration-only via the existing, separate extractDuration path
+    // so import never hard-fails just because hashing wasn't possible.
+    durationSeconds = await extractDuration(file);
+  }
+  return { durationSeconds, checksum };
+}
+
 // ── Heuristic mood inference from filename ─────────────────────────────────────
 
 function inferMoodsFromFilename(name: string): string[] {
@@ -105,6 +143,8 @@ export interface ImportResult {
   track: Track;
   existed: boolean;
   relPath: string;
+  /** MUSIC P0 Step B: true when the server had to rename this file on disk to avoid a filename collision — see /library-import's fix. */
+  renamedToAvoidCollision: boolean;
 }
 
 export interface ImportBatchResult {
@@ -148,10 +188,18 @@ export async function importAudioFiles(
         failed.push({ name: file.name, error: err.error ?? "upload failed" });
         continue;
       }
-      const { relPath, existed } = await res.json() as { relPath: string; existed: boolean; ok: boolean };
+      // MUSIC P0 Step B: the server now never silently overwrites a same-
+      // filename collision — it renames on disk instead and reports the
+      // real relPath/filename actually used, plus whether that happened
+      // (renamedToAvoidCollision). Use the returned relPath/filename as the
+      // source of truth from here on, not the originally-requested file.name.
+      const { relPath, existed, renamedToAvoidCollision } =
+        await res.json() as { relPath: string; existed: boolean; renamedToAvoidCollision: boolean; ok: boolean };
+      const actualFileName = relPath.split("/").pop() ?? file.name;
 
-      // 2. Extract duration
-      const duration = await extractDuration(file);
+      // 2. Extract duration + content checksum from one read of the file's bytes.
+      const { durationSeconds: duration, checksum } = await extractAudioFingerprint(file);
+      const format = formatFromExtension(actualFileName);
 
       // 3. Heuristic mood suggestions
       const filenameMoods = inferMoodsFromFilename(file.name);
@@ -167,8 +215,20 @@ export async function importAudioFiles(
 
       // 4. Build TrackRecord stub
       const now = new Date().toISOString();
+      const trackId = genId("import");
+      const primaryAsset: TrackAsset = {
+        assetId: `primary:${trackId}`,
+        format,
+        fileName: actualFileName,
+        filePath: relPath,
+        checksum,
+        durationSeconds: duration ?? undefined,
+        sourceOwner: destination,
+        addedAt: now,
+        isPrimary: true,
+      };
       const track: Track = {
-        trackId: genId("import"),
+        trackId,
         title: stripExt(file.name),
         artist: "",
         durationSeconds: duration ?? 0,
@@ -177,9 +237,11 @@ export async function importAudioFiles(
         sourceOwner: destination,
         audioRelPath: relPath,
         audioCategory,
-        audioFileName: file.name,
+        audioFileName: actualFileName,
         audioStatus: "linked",
         audioLinked: true,
+        fileExtension: format,
+        assets: [primaryAsset],
         analysisStatus: "review_needed",
         analysisSources: ["import"],
         analysisUpdatedAt: now,
@@ -190,7 +252,7 @@ export async function importAudioFiles(
         updatedAt: now,
       } as Track & { createdAt: string; updatedAt: string };
 
-      imported.push({ track, existed, relPath });
+      imported.push({ track, existed, relPath, renamedToAvoidCollision });
     } catch (e) {
       failed.push({ name: file.name, error: String(e) });
     }

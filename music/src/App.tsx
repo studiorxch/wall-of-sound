@@ -97,6 +97,7 @@ import { resolveCratePool, resolveCrateTracks } from "./logic/resolveCrate";
 import { generateMissingAutoMoodCrates, auditAutoMoodCrates, auditMoodCrateCounts, regenerateMoodCratesFromCurrentTags, type MoodCrateCountMode, type MoodCrateSourceScope } from "./logic/autoMoodCrates";
 import { pickAudioFiles, importAudioFiles, auditAudioAnalysis, reanalyzeTrack, reanalyzeMissing } from "./logic/audioImport";
 import { buildIntakeItem, isSupportedAudioExtension } from "./logic/importIntake";
+import { attachAssetToTrack } from "./logic/trackAssetReconciliation";
 import type { MusicImportIntakeItem } from "./data/importTypes";
 import { ImportIntakePanel } from "./ui/ImportIntakePanel";
 import { ImportAudioModal } from "./ui/ImportAudioModal";
@@ -2569,15 +2570,31 @@ export default function App() {
     skippedCount: number;
     blockedCount: number;
   }) {
-    const newTracks = result.committedItems.map((it) => it.track);
-    const nextLibrary = [...libraryTracksRef.current, ...newTracks];
+    // MUSIC P0 Clean Library Foundation — Step B: an item resolved
+    // "attach_as_asset" (an explicit human confirmation, never automatic —
+    // see ImportIntakePanel's "Attach as Additional Format" button) merges
+    // into its matched existing track's `assets` instead of becoming a new,
+    // independent Track. Everything else commits exactly as before.
+    const attachItems = result.committedItems.filter(
+      (it) => it.duplicateResolution === "attach_as_asset" && it.duplicateOfTrackId,
+    );
+    const newTrackItems = result.committedItems.filter((it) => !attachItems.includes(it));
+    const newTracks = newTrackItems.map((it) => it.track);
+
+    let nextLibrary = [...libraryTracksRef.current, ...newTracks];
+    for (const it of attachItems) {
+      const incomingAsset = it.track.assets?.[0];
+      if (!incomingAsset) continue;
+      nextLibrary = attachAssetToTrack(nextLibrary, it.duplicateOfTrackId as string, { ...incomingAsset, isPrimary: false });
+    }
+
     libraryTracksRef.current = nextLibrary;
     setLibraryTracks(nextLibrary);
     cratesRef.current = result.updatedCrates;
     setCrates(result.updatedCrates);
     savePlayProject(makeProj(playlistsRef.current, nextLibrary), { reason: "update_library" });
     showNotify(
-      `Import complete. Committed ${newTracks.length}. Skipped ${result.skippedCount}. Blocked ${result.blockedCount}.`,
+      `Import complete. Committed ${newTracks.length}${attachItems.length > 0 ? ` (+${attachItems.length} attached as additional formats)` : ""}. Skipped ${result.skippedCount}. Blocked ${result.blockedCount}.`,
     );
 
     // Auto-analysis (0712_MUSIC_Catalog_Analysis_Orchestration §9): Catalog

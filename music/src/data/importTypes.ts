@@ -5,6 +5,7 @@
 // drag-drop import exists yet, so none is invented here).
 
 import type { TrackPlaybackIssue } from "./playProjectTypes";
+import type { AssetReconciliationClass, AssetReconciliationEvidence, SunoCanonicalEvidenceMatch } from "./trackAssetTypes";
 
 export const SUPPORTED_AUDIO_EXTENSIONS = [
   ".flac",
@@ -35,7 +36,14 @@ export type IntakeDuplicateStatus = "exact_duplicate" | "possible_duplicate" | "
 // status (see resolveIntakeStatus in importIntake.ts); "keep_existing" is
 // purely a UI acknowledgment — a duplicate row is already excluded from
 // "Import All Ready" without it.
-export type IntakeDuplicateResolution = "keep_existing" | "import_separately";
+//
+// "attach_as_asset" (0813_MUSIC_P0_Clean_Library_Foundation StepB) — the
+// human's explicit confirmation that an incoming file is a different-format
+// (or related-version) copy of an existing track's recording, and should be
+// added to that track's `assets` instead of becoming a new, independent
+// Track. Only ever set by an explicit click — classifyIncomingAsset never
+// sets it, it only classifies and surfaces the evidence for a person to act on.
+export type IntakeDuplicateResolution = "keep_existing" | "import_separately" | "attach_as_asset";
 
 export type MusicImportIntakeItem = {
   id: string;
@@ -56,6 +64,16 @@ export type MusicImportIntakeItem = {
   duplicateStatus: IntakeDuplicateStatus;
   duplicateOfTrackId?: string;
   duplicateResolution?: IntakeDuplicateResolution;
+  // 0813_MUSIC_P0_Clean_Library_Foundation StepB — the full 4-class
+  // identity result from classifyIncomingAsset, alongside the coarser
+  // legacy duplicateStatus (kept for existing consumers). duplicateOfTrackId
+  // above doubles as this result's matchedTrackId for every non-distinct class.
+  reconciliationClass?: AssetReconciliationClass;
+  reconciliationEvidence?: AssetReconciliationEvidence;
+  // Read-only, informational Suno evidence hint (see
+  // trackAssetReconciliation.ts's findMatchingSunoCanonicalRecording) — never
+  // required, never resolved to a Track, purely surfaced for the human.
+  sunoEvidenceMatch?: SunoCanonicalEvidenceMatch | null;
   warnings: string[];
   errors: string[];
   // The library snapshot detectDuplicate was originally run against, carried

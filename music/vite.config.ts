@@ -1127,17 +1127,39 @@ export default defineConfig({
           if (!destDir.startsWith(LIBRARY_ROOT)) {
             res.statusCode = 403; res.end('{"ok":false,"error":"forbidden path"}'); return
           }
-          const destFile = path.join(destDir, safeName)
-          const existed = fs.existsSync(destFile)
+          // 0813_MUSIC_P0_Clean_Library_Foundation — the `existed` signal
+          // used to be computed and then discarded: a same-filename upload
+          // silently overwrote whatever physical file was already there,
+          // before the app-level Track duplicate check even ran. A
+          // filename collision is no longer treated as identity — that's
+          // classifyIncomingAsset's job, working from content (checksum)
+          // and metadata, not the accident of what name a download used.
+          // This route's only job is guaranteeing the physical byte data
+          // is never destroyed: on a collision, write to a disambiguated
+          // filename instead and report the real name actually used.
+          const existed = fs.existsSync(path.join(destDir, safeName))
+          let finalName = safeName
+          if (existed) {
+            const ext = path.extname(safeName)
+            const base = safeName.slice(0, -ext.length || undefined)
+            let n = 1
+            do {
+              finalName = `${base} (dup-${n})${ext}`
+              n++
+            } while (fs.existsSync(path.join(destDir, finalName)) && n < 1000)
+          }
+          const destFile = path.join(destDir, finalName)
           const chunks: Buffer[] = []
           req.on('data', (chunk: Buffer) => chunks.push(chunk))
           req.on('end', () => {
             try {
               fs.mkdirSync(destDir, { recursive: true })
               fs.writeFileSync(destFile, Buffer.concat(chunks))
-              const relPath = path.join(dest, safeName).replace(/\\/g, '/')
+              const relPath = path.join(dest, finalName).replace(/\\/g, '/')
               res.statusCode = 200
-              res.end(JSON.stringify({ ok: true, relPath, existed, size: Buffer.concat(chunks).length }))
+              res.end(JSON.stringify({
+                ok: true, relPath, existed, renamedToAvoidCollision: existed, size: Buffer.concat(chunks).length,
+              }))
             } catch (e) {
               res.statusCode = 500
               res.end(JSON.stringify({ ok: false, error: String(e) }))
