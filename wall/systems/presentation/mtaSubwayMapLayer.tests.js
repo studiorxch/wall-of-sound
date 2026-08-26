@@ -95,6 +95,55 @@
         layer.clearSelection();
       }
 
+      // ── v4.0.0 (0818_SUBWAY_Live_Train_Visualization_v1.0.0_BUILD §17, §32
+      //    #9, #12) — train-follow foundation + diagnostics field. Runs
+      //    whether or not a real Mapbox map is present (followTrain()/
+      //    unfollowTrain() are map-optional, same convention as selection). ──
+      var rs = SBE.SubwayLogicalRollingStockAuthority;
+      if (rs) {
+        var anyTrain = rs.getAllLogicalTrains()[0];
+        if (anyTrain) {
+          var followResult = layer.followTrain(anyTrain.id);
+          results.push(_assert('followTrain() with a real logical train id succeeds', followResult.ok === true));
+          results.push(_assert('getFollowedTrainId() reflects the exact followed train', layer.getFollowedTrainId() === anyTrain.id));
+          results.push(_assert('diagnostics.followedTrainId reflects the followed train', layer.getDiagnostics().followedTrainId === anyTrain.id));
+          layer.unfollowTrain();
+          results.push(_assert('unfollowTrain() clears the followed train', layer.getFollowedTrainId() === null));
+        } else {
+          results.push(_assert('train-follow foundation (SKIPPED — no active logical train in this test context)', true));
+        }
+        var badFollow = layer.followTrain('sr-train-999999');
+        results.push(_assert('followTrain() with an invalid id fails explicitly, never silently follows nothing', badFollow.ok === false && badFollow.reason === 'not_found'));
+      }
+
+      // ── v5.0.0 (0818_SUBWAY_Train_Rendering_Palette_Library_v1.0.0_BUILD
+      //    §26-30, §35) — diagnostics field + lane-offset scaling. Map-optional,
+      //    same convention as the rest of this file. ──────────────────────────
+      var diag = layer.getDiagnostics();
+      results.push(_assert('diagnostics.trainBodyByMotionPhase is present (BUILD §17-24 motion-phase breakdown)', typeof diag.trainBodyByMotionPhase === 'object' && diag.trainBodyByMotionPhase !== null));
+      results.push(_assert('§35.3 Official MTA Reference is the active default palette', diag.activeSubwayPalette === 'mta_reference'));
+      var offFar = layer.__laneOffsetPxForZoom(10);
+      var offClose = layer.__laneOffsetPxForZoom(18);
+      results.push(_assert('§33.6 lane offset scales with zoom (larger, more separable at closer zoom)', offClose > offFar, [offFar, offClose]));
+
+      // ── "SUBWAY Train Contrast / LOD Fix" — zoom-based grey->route color
+      //    blend + casing layer. Map-optional pure-function checks. ─────────
+      results.push(_assert('LOD blend is fully neutral (0) at/below the FAR/MID boundary', layer.__routeColorBlendFactor(10) === 0 && layer.__routeColorBlendFactor(12) === 0));
+      results.push(_assert('LOD blend is fully route-colored (1) at/above the CLOSE threshold', layer.__routeColorBlendFactor(16) === 1 && layer.__routeColorBlendFactor(20) === 1));
+      var midBlend = layer.__routeColorBlendFactor(14);
+      results.push(_assert('LOD blend is a partial, continuous value strictly between 0 and 1 mid-way through the NEAR range (never a hard switch)', midBlend > 0 && midBlend < 1, midBlend));
+      var blendMono = true, prevBlend = -1;
+      for (var z = 10; z <= 18; z += 0.5) { var b = layer.__routeColorBlendFactor(z); if (b < prevBlend - 1e-9) blendMono = false; prevBlend = b; }
+      results.push(_assert('LOD blend factor is monotonic across the full zoom range (no jumps backward)', blendMono));
+
+      results.push(_assert('__blendHexColors(a,b,0) returns color A exactly (fully neutral)', layer.__blendHexColors('#C9CDD3', '#D82233', 0) === '#C9CDD3'));
+      results.push(_assert('__blendHexColors(a,b,1) returns color B exactly (fully route-colored)', layer.__blendHexColors('#C9CDD3', '#D82233', 1) === '#D82233'));
+      var midColor = layer.__blendHexColors('#000000', '#FFFFFF', 0.5);
+      results.push(_assert('__blendHexColors(a,b,0.5) returns a real midpoint blend (black/white -> mid grey)', midColor === '#808080', midColor));
+
+      var diagCasing = layer.getDiagnostics();
+      results.push(_assert('activeSubwayPalette still resolves after LOD fix (palette wiring intact)', typeof diagCasing.activeSubwayPalette === 'string'));
+
       var failed = results.filter(function (r) { return !r.pass; });
       var summary = { ok: failed.length === 0, total: results.length, failed: failed.length, results: results };
       console.log('[MTASubwayMapLayerTests] ' + (summary.ok ? 'PASS' : 'FAIL') + ' — ' + (results.length - failed.length) + '/' + results.length);

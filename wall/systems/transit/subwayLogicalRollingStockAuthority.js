@@ -71,6 +71,47 @@
   var MAX_ASSOCIATION_HISTORY = 20;
   var SHAPE_MATCH_THRESHOLD_DEG = 0.02; // ~2km-scale sanity check, not a distance display value
 
+  // ── Retention bound (0820_MAPS_Itinerary_Execution_Lifecycle_Storage) ──────
+  // This file persists every logical train/consist/car it ever mints — none
+  // were ever removed. Confirmed root cause of a real production quota
+  // failure: continuous 5s reconcile() cycles running for 6+ days against
+  // live MTA realtime data, each cycle that can't reuse an idle train in its
+  // route pool minting a brand new train + consist + up to 11 cars, forever.
+  // The shared origin's localStorage quota was exhausted, which silently
+  // failed OTHER writes at the same origin too (the itinerary command
+  // channel) — a completely unrelated system was blocked by this one's
+  // unbounded growth. PRUNE_IDLE_AFTER_MS is deliberately far beyond
+  // ENDED_AFTER_MS (5min) — that window is for reassociation *eligibility*,
+  // this one is for "will this ever plausibly be reused or looked at again."
+  // A generous 24h means no in-progress UI session (a Sunroof ride, an
+  // itinerary leg) can ever have its train vanish out from under it; nothing
+  // legitimate needs a fully-idle train's identity to survive a full day
+  // unused. MAX_PERSISTED_TRAINS is a hard backstop independent of age, in
+  // case churn is high enough that age-based pruning alone isn't sufficient
+  // within one save cycle.
+  var PRUNE_IDLE_AFTER_MS = 24 * 60 * 60 * 1000;
+  var MAX_PERSISTED_TRAINS = 2000;
+  // Progressive boot-recovery targets (0820_MAPS_Itinerary_Execution_Lifecycle_Storage_Migration)
+  // — a real production capture showed a 5,124,922-byte write STILL being
+  // attempted after the pruning fix shipped. Root cause: age-based pruning
+  // (24h idle) only removes trains that stop being reused; a real MTA feed
+  // can keep reassociating trains indefinitely, so updatedAt never ages out
+  // even though the DISTINCT-ever-created count is enormous. The 2000-train
+  // hard cap was never actually reached in that scenario either, because
+  // this recalibration hadn't been measured yet: this file's own real-usage
+  // measurement (see the completion report) put per-train footprint
+  // (including its own cars) at roughly 5.3KB — 2000 trains alone could be
+  // ~10MB, larger than realistic total origin quota. These targets instead
+  // define a hard, unconditional ceiling applied once at boot for anyone
+  // already carrying oversized state: try normal pruning first: if the
+  // result still won't save, progressively keep only the N most-recently-
+  // updated IDLE trains (active trains are NEVER dropped, at any step) at
+  // shrinking N, and only wipe everything as the absolute last resort if
+  // even zero idle trains retained still can't fit — guaranteeing the
+  // origin's quota is freed rather than permanently blocking every other
+  // write sharing it, which is what was actually observed in production.
+  var RECOVERY_KEEP_STEPS = [500, 200, 75, 25, 0];
+
   // No per-route/fleet overrides authored yet — see file header. Keyable by
   // either exact routeId ("subway:route:G") or routeFamily ("g").
   var CAR_COUNT_RULES = {};
@@ -96,6 +137,13 @@
     tripReassociationCount: 0,
     unresolvedTripAssociationCount: 0,
     lastReconcileAt: null,
+    lastPruneAt: null,
+    lastPruneRemovedTrains: 0,
+    lastPruneRemovedAssociations: 0,
+    lastSaveOk: null,
+    lastSaveError: null,
+    lastSaveBytes: null,
+    lastBootRecovery: null,
   };
 
   function _notify() { _listeners.forEach(function (fn) { try { fn(); } catch (e) {} }); }
@@ -110,20 +158,40 @@
 
   function _save() {
     var ls = _ls(); if (!ls) return false;
+    var json = JSON.stringify({
+      version: VERSION,
+      nextTrainCounter: _nextTrainCounter,
+      nextConsistCounter: _nextConsistCounter,
+      nextCarCounter: _nextCarCounter,
+      trains: _trains,
+      consists: _consists,
+      cars: _cars,
+      tripAssociations: _tripAssociations,
+      routePools: _routePools,
+    });
     try {
-      ls.setItem(STORAGE_KEY, JSON.stringify({
-        version: VERSION,
-        nextTrainCounter: _nextTrainCounter,
-        nextConsistCounter: _nextConsistCounter,
-        nextCarCounter: _nextCarCounter,
-        trains: _trains,
-        consists: _consists,
-        cars: _cars,
-        tripAssociations: _tripAssociations,
-        routePools: _routePools,
-      }));
+      ls.setItem(STORAGE_KEY, json);
+      _diag.lastSaveOk = true;
+      _diag.lastSaveError = null;
+      _diag.lastSaveBytes = json.length;
       return true;
-    } catch (e) { console.warn('[SubwayLogicalRollingStockAuthority] save failed:', e && e.message || e); return false; }
+    } catch (e) {
+      // 0820_MAPS_Itinerary_Execution_Lifecycle_Storage — a real production
+      // failure here (QuotaExceededError, this key alone growing unbounded
+      // over 6+ days) silently blocked an entirely unrelated system: the
+      // itinerary command channel shares this same origin's quota, and its
+      // own write wraps a try/catch that discarded the exception with no
+      // trace. Naming the error explicitly (not just its message) makes a
+      // quota failure here unmistakable instead of looking like any other
+      // storage error — pruning (_pruneStaleRollingStock, called from
+      // reconcile() before this function) is the actual fix; this is the
+      // visibility that made the root cause provable in the first place.
+      var isQuotaError = !!(e && (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED'));
+      _diag.lastSaveOk = false;
+      _diag.lastSaveError = { name: e && e.name, message: (e && e.message) || String(e), isQuotaError: isQuotaError, attemptedBytes: json.length };
+      console.warn('[SubwayLogicalRollingStockAuthority] save failed' + (isQuotaError ? ' (QUOTA EXCEEDED)' : '') + ':', e && e.message || e, '— attempted', json.length, 'bytes');
+      return false;
+    }
   }
 
   function _load() {
@@ -142,6 +210,7 @@
       _nextTrainCounter = (parsed && parsed.nextTrainCounter) || 1;
       _nextConsistCounter = (parsed && parsed.nextConsistCounter) || 1;
       _nextCarCounter = (parsed && parsed.nextCarCounter) || 1;
+      _recoverFromOversizedBootState(raw.length);
       return true;
     } catch (e) {
       console.warn('[SubwayLogicalRollingStockAuthority] load failed (starting empty):', e && e.message || e);
@@ -190,6 +259,142 @@
     _routePools[routeId] = _routePools[routeId] || [];
     _routePools[routeId].push(trainId);
     return _trains[trainId];
+  }
+
+  // Inverse of _createLogicalTrain — removes a train and everything it
+  // exclusively owns (its consist, that consist's cars, its route-pool
+  // entry, its cached position). Never called on a train with an
+  // activeTripId — only ever on ones already idle long enough that nothing
+  // legitimate could still be depending on their identity.
+  function _removeLogicalTrain(trainId) {
+    var train = _trains[trainId];
+    if (!train) return;
+    var consist = _consists[train.consistId];
+    if (consist) {
+      (consist.carIds || []).forEach(function (carId) { delete _cars[carId]; });
+      delete _consists[train.consistId];
+    }
+    var pool = _routePools[train.routeId];
+    if (pool) {
+      var idx = pool.indexOf(trainId);
+      if (idx >= 0) pool.splice(idx, 1);
+    }
+    delete _trains[trainId];
+    delete _positions[trainId];
+  }
+
+  // Bounds long-run persisted growth — called once per reconcile(), before
+  // _save(). Two passes: age-based (an idle train untouched for
+  // PRUNE_IDLE_AFTER_MS is unlikely to ever be reassociated or displayed
+  // again — see the constant's own header comment for why 24h is safe), then
+  // a hard-count backstop (oldest-idle-first) in case churn outpaces
+  // age-based eviction within a single cycle. Never touches a train with an
+  // activeTripId, regardless of age or count pressure. Orphaned trip
+  // associations (pointing at a train pruned by either pass, or by an
+  // earlier version of this file that never pruned at all) are swept in the
+  // same pass — a real, expected case for anyone upgrading from unbounded
+  // growth, not a hypothetical.
+  function _pruneStaleRollingStock(now) {
+    var removedTrains = 0;
+    Object.keys(_trains).forEach(function (id) {
+      var t = _trains[id];
+      if (!t.activeTripId && t.lifecycleState === 'ended' && (now - t.updatedAt) > PRUNE_IDLE_AFTER_MS) {
+        _removeLogicalTrain(id);
+        removedTrains++;
+      }
+    });
+    var effectiveMax = _maxPersistedTrainsOverride != null ? _maxPersistedTrainsOverride : MAX_PERSISTED_TRAINS;
+    var remainingIds = Object.keys(_trains);
+    if (remainingIds.length > effectiveMax) {
+      var idleOldestFirst = remainingIds
+        .map(function (id) { return _trains[id]; })
+        .filter(function (t) { return !t.activeTripId; })
+        .sort(function (a, b) { return a.updatedAt - b.updatedAt; });
+      var overBy = remainingIds.length - effectiveMax;
+      for (var i = 0; i < overBy && i < idleOldestFirst.length; i++) {
+        _removeLogicalTrain(idleOldestFirst[i].id);
+        removedTrains++;
+      }
+    }
+    var removedAssociations = 0;
+    Object.keys(_tripAssociations).forEach(function (rawTripId) {
+      var assoc = _tripAssociations[rawTripId];
+      if (!assoc || !_trains[assoc.logicalTrainId]) {
+        delete _tripAssociations[rawTripId];
+        removedAssociations++;
+      }
+    });
+    if (removedTrains > 0 || removedAssociations > 0) {
+      _diag.lastPruneAt = now;
+      _diag.lastPruneRemovedTrains = removedTrains;
+      _diag.lastPruneRemovedAssociations = removedAssociations;
+    }
+    return { removedTrains: removedTrains, removedAssociations: removedAssociations };
+  }
+
+  // Discards every idle (non-active) train NOT among the `keepCount` most
+  // recently updated, regardless of age — used only by boot recovery below,
+  // when ordinary age-based pruning has already run and the state still
+  // won't fit. Active trains are never touched at any keepCount, including 0.
+  function _shrinkToMostRecentIdle(keepCount) {
+    var idleOldestFirst = Object.keys(_trains)
+      .map(function (id) { return _trains[id]; })
+      .filter(function (t) { return !t.activeTripId; })
+      .sort(function (a, b) { return a.updatedAt - b.updatedAt; }); // oldest first
+    var toRemove = keepCount >= idleOldestFirst.length ? [] : idleOldestFirst.slice(0, idleOldestFirst.length - keepCount);
+    toRemove.forEach(function (t) { _removeLogicalTrain(t.id); });
+    Object.keys(_tripAssociations).forEach(function (rawTripId) {
+      var assoc = _tripAssociations[rawTripId];
+      if (!assoc || !_trains[assoc.logicalTrainId]) delete _tripAssociations[rawTripId];
+    });
+    return toRemove.length;
+  }
+
+  // ── One-time boot recovery for ALREADY-oversized existing state ──────────
+  // (0820_MAPS_Itinerary_Execution_Lifecycle_Storage_Migration) — ordinary
+  // pruning only prevents FUTURE growth; it does nothing for a user who
+  // already has multiple megabytes persisted from before this fix shipped,
+  // and — confirmed by a real production capture — age-based pruning alone
+  // can fail to shrink a real feed's state enough on its own, because
+  // trains that keep getting legitimately reused never age out even though
+  // the distinct-ever-created count driving the byte size is enormous. This
+  // runs once, only when existing data is actually loaded (never on a fresh
+  // empty start), and only needs to do real work if a save genuinely still
+  // fails afterward — most callers will find ordinary pruning was already
+  // enough and this is a no-op past the first save attempt.
+  function _recoverFromOversizedBootState(rawByteLength) {
+    var now = Date.now();
+    var before = { trains: Object.keys(_trains).length, bytes: rawByteLength };
+    _pruneStaleRollingStock(now);
+    if (_save()) {
+      _diag.lastBootRecovery = { at: now, neededAggressiveShrink: false, before: before, afterTrains: Object.keys(_trains).length, afterBytes: _diag.lastSaveBytes };
+      return;
+    }
+    var steps = _recoveryKeepStepsOverride || RECOVERY_KEEP_STEPS;
+    for (var i = 0; i < steps.length; i++) {
+      _shrinkToMostRecentIdle(steps[i]);
+      if (_save()) {
+        _diag.lastBootRecovery = { at: now, neededAggressiveShrink: true, keptIdleCount: steps[i], before: before, afterTrains: Object.keys(_trains).length, afterBytes: _diag.lastSaveBytes };
+        console.warn('[SubwayLogicalRollingStockAuthority] boot recovery: existing state was still too large after normal pruning — shrunk to ' +
+          steps[i] + ' most-recent idle trains (plus all active ones) to fit. Was ' + before.trains + ' trains / ' + rawByteLength + ' bytes.');
+        return;
+      }
+    }
+    // Absolute last resort: even zero retained idle trains (only active ones
+    // survive _shrinkToMostRecentIdle(0)) still doesn't fit — the active
+    // fleet alone exceeds available quota. Wiping is a genuine data loss for
+    // idle/historical tracking, but the alternative (leaving the origin
+    // permanently over quota, silently blocking every other system sharing
+    // it — which is the actual production symptom this migration exists to
+    // end) is worse. Active trains are derived, regenerable MTA truth, not
+    // user-authored content — safe to sacrifice for system health.
+    var hadActive = Object.keys(_trains).filter(function (id) { return !!_trains[id].activeTripId; }).length;
+    _trains = {}; _consists = {}; _cars = {}; _tripAssociations = {}; _routePools = {}; _positions = {};
+    var ls = _ls();
+    if (ls) { try { ls.removeItem(STORAGE_KEY); } catch (e) {} }
+    _diag.lastBootRecovery = { at: now, neededAggressiveShrink: true, keptIdleCount: 0, wipedActiveTrainsToo: hadActive, before: before, afterTrains: 0, afterBytes: 0 };
+    console.warn('[SubwayLogicalRollingStockAuthority] boot recovery: state could not be shrunk to fit even with only active trains retained (' +
+      hadActive + ' active) — wiped entirely to free the shared origin\'s quota. All logical trains will be re-created fresh on next reconcile.');
   }
 
   function _pushHistory(train, assocEvent) {
@@ -448,6 +653,19 @@
     });
 
     _diag.lastReconcileAt = now;
+    var pruneResult = _pruneStaleRollingStock(now);
+    // Surfaces (SubwayCarSurfaceAuthority) are minted 1:1 derived from
+    // logical cars — when pruning here removes cars, their surfaces become
+    // orphaned. Only worth the scan when something was actually pruned.
+    // Optional/defensive: this file has no compile-time dependency on
+    // car-surface authority, matching every other cross-authority reference
+    // in this codebase (SBE.X && SBE.X.method(...)).
+    if (pruneResult.removedTrains > 0) {
+      var carSurfaces = global.SBE && SBE.SubwayCarSurfaceAuthority;
+      if (carSurfaces && typeof carSurfaces.pruneOrphanedSurfaces === 'function') {
+        try { carSurfaces.pruneOrphanedSurfaces(); } catch (e) {}
+      }
+    }
     _save();
     _notify();
     return {
@@ -456,6 +674,8 @@
       logicalTrainCount: Object.keys(_trains).length,
       newLogicalTrainsCreated: _diag.newLogicalTrainsCreated,
       logicalTrainsReused: _diag.logicalTrainsReused,
+      prunedTrains: pruneResult.removedTrains,
+      prunedAssociations: pruneResult.removedAssociations,
     };
   }
 
@@ -526,6 +746,13 @@
       logicalCarIdentityCollisionCount: carCollisions,     // required invariant: must be 0
       lastRealtimeUpdate: (_store() && _store().getDiagnostics().realtimeLastUpdatedAt) || null,
       lastReconcileAt: _diag.lastReconcileAt,
+      lastPruneAt: _diag.lastPruneAt,
+      lastPruneRemovedTrains: _diag.lastPruneRemovedTrains,
+      lastPruneRemovedAssociations: _diag.lastPruneRemovedAssociations,
+      lastSaveOk: _diag.lastSaveOk,
+      lastSaveError: _diag.lastSaveError,
+      lastSaveBytes: _diag.lastSaveBytes,
+      lastBootRecovery: _diag.lastBootRecovery,
     };
   }
 
@@ -533,11 +760,33 @@
   function __resetForTests() {
     _trains = {}; _consists = {}; _cars = {}; _tripAssociations = {}; _routePools = {}; _positions = {}; _shapeIndexCache = {};
     _nextTrainCounter = 1; _nextConsistCounter = 1; _nextCarCounter = 1; _loaded = true;
-    _diag = { newLogicalTrainsCreated: 0, logicalTrainsReused: 0, tripReassociationCount: 0, unresolvedTripAssociationCount: 0, lastReconcileAt: null };
+    _diag = {
+      newLogicalTrainsCreated: 0, logicalTrainsReused: 0, tripReassociationCount: 0, unresolvedTripAssociationCount: 0,
+      lastReconcileAt: null, lastPruneAt: null, lastPruneRemovedTrains: 0, lastPruneRemovedAssociations: 0,
+      lastSaveOk: null, lastSaveError: null, lastSaveBytes: null, lastBootRecovery: null,
+    };
+    _maxPersistedTrainsOverride = null;
+    _recoveryKeepStepsOverride = null;
     var ls = _ls(); if (ls) { try { ls.removeItem(STORAGE_KEY); } catch (e) {} }
   }
   function __setCarCountRuleForTests(key, count) { CAR_COUNT_RULES[key] = count; }
   function __clearCarCountRulesForTests() { Object.keys(CAR_COUNT_RULES).forEach(function (k) { delete CAR_COUNT_RULES[k]; }); }
+  // Retention-bound test hooks (0820_MAPS_Itinerary_Execution_Lifecycle_Storage).
+  function __pruneForTests(now) { return _pruneStaleRollingStock(now != null ? now : Date.now()); }
+  var _maxPersistedTrainsOverride = null;
+  function __setMaxPersistedTrainsForTests(n) { _maxPersistedTrainsOverride = n; }
+  function __restoreMaxPersistedTrainsForTests() { _maxPersistedTrainsOverride = null; }
+  function __forceTrainAgeForTests(trainId, updatedAt, lifecycleState) {
+    var t = _trains[trainId];
+    if (!t) return false;
+    t.updatedAt = updatedAt;
+    if (lifecycleState) t.lifecycleState = lifecycleState;
+    return true;
+  }
+  var _recoveryKeepStepsOverride = null;
+  function __setRecoveryKeepStepsForTests(steps) { _recoveryKeepStepsOverride = steps; }
+  function __restoreRecoveryKeepStepsForTests() { _recoveryKeepStepsOverride = null; }
+  function __triggerBootRecoveryForTests(rawByteLength) { _recoverFromOversizedBootState(rawByteLength != null ? rawByteLength : 0); }
 
   SBE.SubwayLogicalRollingStockAuthority = Object.freeze({
     VERSION: VERSION,
@@ -559,9 +808,18 @@
     getInspection: getInspection,
     getDiagnostics: getDiagnostics,
     subscribe: subscribe,
+    PRUNE_IDLE_AFTER_MS: PRUNE_IDLE_AFTER_MS,
+    MAX_PERSISTED_TRAINS: MAX_PERSISTED_TRAINS,
     __resetForTests: __resetForTests,
     __setCarCountRuleForTests: __setCarCountRuleForTests,
     __clearCarCountRulesForTests: __clearCarCountRulesForTests,
+    __pruneForTests: __pruneForTests,
+    __forceTrainAgeForTests: __forceTrainAgeForTests,
+    __setMaxPersistedTrainsForTests: __setMaxPersistedTrainsForTests,
+    __restoreMaxPersistedTrainsForTests: __restoreMaxPersistedTrainsForTests,
+    __setRecoveryKeepStepsForTests: __setRecoveryKeepStepsForTests,
+    __restoreRecoveryKeepStepsForTests: __restoreRecoveryKeepStepsForTests,
+    __triggerBootRecoveryForTests: __triggerBootRecoveryForTests,
   });
 
   console.log('[SubwayLogicalRollingStockAuthority] v' + VERSION + ' loaded (persistent — call .reconcile() to associate/update)');

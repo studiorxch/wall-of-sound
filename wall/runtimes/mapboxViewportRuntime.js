@@ -71,6 +71,21 @@
       attributionControl: false,
       prefetchZoomDelta: 2,    // pre-fetch adjacent zoom levels for smoother tile transitions
       preserveDrawingBuffer: true,  // required for toDataURL() snapshots (WebGL clears buffer each frame by default)
+      // Mercator, not the Mapbox Standard style's own naturalEarth default —
+      // required globally, not just for SUBWAY: Mapbox GL JS v3.3.0 excludes
+      // every type:'custom' layer from render() under a non-Mercator
+      // projection (confirmed live, 0825_MAPS_Ep2_3D_Train_Actor_Foundation).
+      // At least 8 other custom-layer systems in this codebase share this
+      // same dependency (threeSkyLayer, wallRuntimeGlbRenderLayer,
+      // orbProfileRenderer, worldSpaceVehicleLayer, heroVehicleRenderer,
+      // organicBuildingSurfacePatternRuntime, plus debug harnesses) — this is
+      // an app-wide default, not a Subway-specific carve-out. Set here for
+      // immediate, race-free correctness on the very first frame; also
+      // re-asserted in the style.load handler below since map.setStyle() can
+      // silently reset it (Orbital Earth mode's own 'globe' view is the one
+      // intentional exception, and it already saves/restores its own prior
+      // projection independently on enter/exit — unaffected by this default).
+      projection: "mercator",
     });
 
     // style.load — fires after the style JSON is applied, before tile decode.
@@ -81,6 +96,27 @@
       // layer (e.g. a purple haze on the presentation style). WOS uses ThreeSkyLayer
       // for sky above the horizon and PredictiveTilePreloadRuntime for traversal haze.
       try { if (_map.setFog) _map.setFog(null); } catch (e) {}
+
+      // Re-assert Mercator on every style reload (setStyle() can silently
+      // reset projection to the new style's own default — ~13 call sites
+      // across this codebase call setStyle(), this one chokepoint covers all
+      // of them). Read-then-write, not unconditional, so a style that's
+      // already Mercator (the overwhelming common case after the first
+      // reload) never churns setProjection() again. setProjection() is a
+      // lightweight runtime property change — it does not itself trigger
+      // another style.load, so this cannot recurse. Skipped while Orbital
+      // Earth mode owns the map (its own 'globe' view is the one intentional
+      // exception; it manages its own enter/exit projection independently).
+      try {
+        var orbitalActive = SBE.OrbitalEarthMode && typeof SBE.OrbitalEarthMode.isActive === 'function' &&
+          SBE.OrbitalEarthMode.isActive();
+        if (!orbitalActive && _map.getProjection && _map.setProjection) {
+          var currentProjection = _map.getProjection();
+          if (!currentProjection || currentProjection.name !== 'mercator') {
+            _map.setProjection('mercator');
+          }
+        }
+      } catch (e) {}
 
       if (_styleLoaded) return; // guard re-entrant style switches
       _styleLoaded = true;

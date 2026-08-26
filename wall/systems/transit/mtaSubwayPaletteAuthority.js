@@ -1,5 +1,26 @@
-// ── MTASubwayPaletteAuthority v1.0.0 ──────────────────────────────────────────
+// ── MTASubwayPaletteAuthority v2.1.0 ──────────────────────────────────────────
 // 0818_SUBWAY_Full_Live_Map_Integration_v1.0.0_BUILD — Data Layer §9
+// Extended by 0818_SUBWAY_Train_Rendering_Palette_Library_v1.0.0_BUILD §7-9:
+// each palette now also carries structured, non-route-color presentation
+// tokens (station fill/stroke/selected, train presentation, route line width
+// baseline) beyond the existing per-family route/train color resolution —
+// moved OUT of hardcoded constants in mtaSubwayMapLayer.js so palette data
+// stays centralized (BUILD §7: "rather than hardcoding train/station colors
+// inside rendering code"). The existing route-family color resolution
+// (colors/resolveFamilyColor/resolveFamilyEntry) is completely unchanged —
+// this only ADDS the `train`/`station` sections and flips DEFAULT_PALETTE_ID
+// to mta_reference (BUILD §8: "Official MTA Reference ... as the active
+// default for this build").
+//
+// Extended again by the "SUBWAY Train Contrast / LOD Fix" patch: `train`
+// tokens changed from a plain white outline to a distance-aware visual
+// hierarchy (BUILD doctrine: "Official MTA route colors = infrastructure
+// identity, neutral grey = distant rolling stock, proximity = progressively
+// restores route color") — `neutralBody`/`casing` replace the flat
+// `outline`, `selectedBody`/`selectedCasing` replace `selectedOutline`. The
+// zoom-based grey→route blend math itself lives in mtaSubwayMapLayer.js
+// (a rendering/LOD concern); this authority only owns the reusable color
+// VALUES the blend interpolates between.
 // Status: active | Classification: runtime-authority (persistent — localStorage)
 //
 // A dedicated SUBWAY palette authority — NOT an extension of
@@ -26,9 +47,37 @@
 (function (global) {
   'use strict';
   var SBE = (global.SBE = global.SBE || {});
-  var VERSION = '1.0.0';
+  var VERSION = '2.1.0';
 
   var STORAGE_KEY = 'wos:subwayPalette:activeId';
+
+  // Non-route-color structured presentation tokens (BUILD §7's own
+  // conceptual SubwayPalette shape: station.fill/stroke/selected, train
+  // presentation). Both seed palettes currently share the same neutral
+  // station/train chrome — only the route-family hues differ between them;
+  // a future palette (Night/Monochrome/Broadcast, per the Data Architecture
+  // doc §2.E) can diverge these independently since they're already a
+  // distinct, per-palette field.
+  var NEUTRAL_STATION = Object.freeze({
+    fill: '#ffffff', stroke: '#111111', selected: '#ff9f1c',
+  });
+  // Train Contrast / LOD Fix — a train's BODY color is never a flat
+  // constant; mtaSubwayMapLayer.js blends between `neutralBody` (distant)
+  // and the route's own resolved color (close) based on zoom, using these
+  // as the two blend endpoints. `casing`/`selectedCasing` are flat (no
+  // blend) — the casing's job is to stay a constant, reliable outline no
+  // matter what the inner body color is doing, which is what keeps a
+  // close-zoom, fully route-colored train visually distinct from the route
+  // line beneath it. Selection is signaled primarily by `selectedCasing`
+  // (a bright outline, zoom-independent) rather than by body hue alone, per
+  // the patch's own "do not rely purely on route color for selection" rule.
+  var NEUTRAL_TRAIN = Object.freeze({
+    neutralBody: '#C9CDD3',    // light steel grey — legible over every real MTA route hue
+    casing: '#181B1F',         // dark charcoal — the primary distant-zoom contrast mechanism
+    selectedBody: '#FF9F1C',   // reuses this app's existing "selected" accent (stations/HUD)
+    selectedCasing: '#FFFFFF', // bright white outer ring — obvious regardless of zoom or body color
+    staleOpacity: 0.4, unknownOpacity: 0.15,
+  });
 
   // StudioRich Fashion Subway — per 0818_SUBWAY_Current_State_v1.0.0.md §9.
   var FASHION_SUBWAY = Object.freeze({
@@ -46,6 +95,8 @@
       teal_family: Object.freeze({ hex: '#43B3AE', name: 'Patina', mood: 'Reflective, oceanic, ambient travel' }),
       gray_family: Object.freeze({ hex: '#5A5A5A', name: 'Steel', mood: 'Neutral base, interline connective tissue' }),
     }),
+    station: NEUTRAL_STATION,
+    train: NEUTRAL_TRAIN,
   });
 
   // Official MTA Reference — the real, current route_color values verified
@@ -67,10 +118,15 @@
       gray_family: Object.freeze({ hex: '#7C858C', name: 'MTA Gray', mood: null }),
       teal_family: Object.freeze({ hex: '#08179C', name: 'MTA Navy (SIR)', mood: null }),
     }),
+    station: NEUTRAL_STATION,
+    train: NEUTRAL_TRAIN,
   });
 
   var PALETTES = Object.freeze({ fashion_subway: FASHION_SUBWAY, mta_reference: MTA_REFERENCE });
-  var DEFAULT_PALETTE_ID = 'fashion_subway';
+  // 0818_SUBWAY_Train_Rendering_Palette_Library_v1.0.0_BUILD §8: "Set
+  // official_mta_reference as the active default for this build." Was
+  // fashion_subway (Full Live Map / Live Train Visualization builds).
+  var DEFAULT_PALETTE_ID = 'mta_reference';
 
   var _activeId = DEFAULT_PALETTE_ID;
   var _listeners = [];
@@ -122,6 +178,12 @@
     return palette.colors[familyId] || null;
   }
 
+  // Structured, non-route-color presentation tokens (BUILD §7). Pure
+  // lookups through the active palette, same as resolveFamilyColor — never
+  // touch route/station/train identity.
+  function resolveStationTokens() { _load(); var p = PALETTES[_activeId]; return p ? p.station : null; }
+  function resolveTrainTokens() { _load(); var p = PALETTES[_activeId]; return p ? p.train : null; }
+
   SBE.MTASubwayPaletteAuthority = Object.freeze({
     VERSION: VERSION,
     DEFAULT_PALETTE_ID: DEFAULT_PALETTE_ID,
@@ -132,8 +194,10 @@
     setActivePalette: setActivePalette,
     resolveFamilyColor: resolveFamilyColor,
     resolveFamilyEntry: resolveFamilyEntry,
+    resolveStationTokens: resolveStationTokens,
+    resolveTrainTokens: resolveTrainTokens,
     subscribe: subscribe,
   });
 
-  console.log('[MTASubwayPaletteAuthority] v' + VERSION + ' loaded — 2 palettes (fashion_subway default)');
+  console.log('[MTASubwayPaletteAuthority] v' + VERSION + ' loaded — 2 palettes (mta_reference default, LOD train tokens)');
 })(window);

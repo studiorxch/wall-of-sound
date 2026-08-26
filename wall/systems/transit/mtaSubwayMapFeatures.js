@@ -31,13 +31,81 @@
 (function (global) {
   'use strict';
   var SBE = (global.SBE = global.SBE || {});
-  var VERSION = '1.0.0';
+  var VERSION = '2.0.0'; // +buildTrainBodyFeatures/buildTrainCarSectionFeatures — 0818_SUBWAY_Train_Rendering_Palette_Library_v1.0.0_BUILD
 
   function _store() { return SBE.MTASubwayTransitStore || null; }
   function _stationLibrary() { return SBE.MTASubwayStationLibrary || null; }
   function _semanticFamily() { return SBE.MTASubwaySemanticFamily || null; }
   function _paletteAuthority() { return SBE.MTASubwayPaletteAuthority || null; }
   function _rollingStock() { return SBE.SubwayLogicalRollingStockAuthority || null; }
+  function _trainVisualState() { return SBE.SubwayTrainVisualState || null; }
+  function _motionModel() { return SBE.SubwayTrainMotionModel || null; }
+
+  // ── Directional lane side (Check N-Line Direction/Lane Behavior Against
+  //    Working Train Motion) — real forward-travel-derived, never a fixed
+  //    NORTH/SOUTH->side guess. ────────────────────────────────────────────
+  //
+  // ROOT CAUSE (found live, quantified before any code change): the prior
+  // implementation applied a FIXED sign per real NYCT direction
+  // (directionLaneKey 'A'->+1, 'B'->-1) straight into Mapbox's line-offset.
+  // But line-offset is relative to a LineString FEATURE's own vertex order
+  // (confirmed empirically live, via a controlled test line — Mapbox's real
+  // convention is POSITIVE = RIGHT / NEGATIVE = LEFT of the geometry's own
+  // low-index-to-high-index direction, not an absolute compass frame). A
+  // train's body polyline (SubwayTrainMotionModel._walkBodyPolyline) always
+  // walks a shape's points in increasing-index order regardless of which
+  // way the train is actually travelling along it — so a train whose real
+  // travel runs toward DECREASING shape index is drawn with its own
+  // geometry "backwards" relative to its real motion, and a fixed sign
+  // keyed only on NORTH/SOUTH has no way to know that.
+  //
+  // Live-verified against the N route's real, live-fetched shape
+  // (N..S20R — the only shape any real N train ever resolves to, since
+  // MTASubwayTransitStore.getRoute('subway:route:N').shapeIds lists it
+  // first and it comprehensively covers every real N station with a
+  // distance-0 match): every real station's matched index increases
+  // strictly monotonically from Astoria-Ditmars Blvd (idx 0) to Coney
+  // Island-Stillwell Av (idx 957) — i.e. NORTH is always decreasing-index,
+  // SOUTH is always increasing-index, GLOBALLY consistent on this shape.
+  // Combined with the corrected Mapbox sign convention, this means the old
+  // fixed A=+1/B=-1 code put BOTH real directions on their real LEFT-hand
+  // side of travel, not their right — a uniform inversion, not a random
+  // per-train flip (a user watching any single train would see it "on the
+  // wrong side," exactly as reported).
+  //
+  // Fix: derive the sign from THIS train's own real forward direction,
+  // computed fresh per train/per call — never a route-level or
+  // direction-level cached assumption, so a genuine future mid-route
+  // shape-orientation anomaly (a different shape, a reversed section) is
+  // handled correctly too, not just today's live data.
+  function _travelRightSign(store, motion, nextStopId) {
+    var seg = motion.shapeSegment;
+    if (!seg || !seg.points || seg.points.length < 2) return null;
+    if (seg.toIdx !== seg.fromIdx) {
+      // Moving: the resolved segment's own index order directly encodes
+      // real travel direction (fromIdx = departed/current, toIdx = target).
+      // Matches the geometry's own low->high order -> right (+1, per the
+      // empirically-confirmed Mapbox convention above); reversed -> left (-1).
+      return seg.toIdx > seg.fromIdx ? 1 : -1;
+    }
+    // Dwelling (fromIdx === toIdx): no directional signal from the segment
+    // alone. Derive a real forward tangent from the train's own current
+    // position toward its real next stop (both real, already-known
+    // values — never a guess), compared against the shape's own local
+    // tangent at this index via a plain dot product (only the SIGN of the
+    // dot product matters — same general direction vs. opposite).
+    if (!nextStopId || !motion.bodyCenter) return null;
+    var nextStation = store.getStation(nextStopId);
+    if (!nextStation) return null;
+    var idx = seg.fromIdx;
+    var i0 = Math.max(0, idx - 1), i1 = Math.min(seg.points.length - 1, idx + 1);
+    if (i0 === i1) return null;
+    var geomDLat = seg.points[i1][0] - seg.points[i0][0], geomDLon = seg.points[i1][1] - seg.points[i0][1];
+    var travelDLon = nextStation.longitude - motion.bodyCenter[0], travelDLat = nextStation.latitude - motion.bodyCenter[1];
+    var dot = geomDLat * travelDLat + geomDLon * travelDLon;
+    if (dot === 0) return null;
+    return dot > 0 ? 1 : -1;
+  }
 
   // Resolves a route's semantic family + active-palette display color.
   // Never mutates the route ref; a pure lookup. Returns nulls (not a
@@ -206,6 +274,8 @@
     var rs = _rollingStock(), store = _store();
     if (!rs || !store) return { type: 'FeatureCollection', features: [] };
 
+    var visual = _trainVisualState();
+
     var features = [];
     rs.getActiveLogicalTrains().forEach(function (train) {
       var pos = rs.getPositionState(train.id);
@@ -214,6 +284,11 @@
       var route = store.getRoute(train.routeId);
       var display = _resolveDisplayColor(route);
       var consist = rs.getLogicalConsist(train.consistId);
+      // Bearing/headsign (0818_SUBWAY_Live_Train_Visualization_v1.0.0_BUILD
+      // §9/§21) — a pure derivation, never recomputed here; null (never
+      // fabricated) when SubwayTrainVisualState isn't loaded or evidence is
+      // insufficient.
+      var vs = visual ? visual.buildVisualState(train.id) : null;
 
       features.push({
         type: 'Feature',
@@ -238,8 +313,199 @@
           // Explicit, load-bearing honesty marker — same convention as
           // buildVehiclePresenceFeatures(); never 'gps'.
           positionSource: pos.source,
+          // 0818_SUBWAY_Live_Train_Visualization_v1.0.0_BUILD §9/§13/§21
+          geometryBearing: vs ? vs.geometryBearing : null, // degrees, 0=north — null when unresolvable, never guessed
+          headsign: vs ? vs.headsign : null, // real last-stop station name — null when unresolvable, never fabricated
         },
       });
+    });
+    return { type: 'FeatureCollection', features: features };
+  }
+
+  // Real geographic destination-point formula (standard spherical
+  // approximation — accurate enough at "a few dozen meters" scale, which is
+  // all this is ever used for). Given a real [lon,lat] origin, a real
+  // bearing in degrees, and a distance in meters, returns the real
+  // [lon,lat] point that bearing/distance away. Used only to draw a short
+  // directional "nose" line off an already-real, already-computed train
+  // position — never a substitute for the rolling-stock authority's own
+  // position/bearing evidence.
+  var EARTH_RADIUS_M = 6371000;
+  function _destinationPoint(lon, lat, bearingDeg, distanceM) {
+    var bearingRad = (bearingDeg * Math.PI) / 180;
+    var latRad = (lat * Math.PI) / 180, lonRad = (lon * Math.PI) / 180;
+    var angularDist = distanceM / EARTH_RADIUS_M;
+    var lat2 = Math.asin(Math.sin(latRad) * Math.cos(angularDist) + Math.cos(latRad) * Math.sin(angularDist) * Math.cos(bearingRad));
+    var lon2 = lonRad + Math.atan2(
+      Math.sin(bearingRad) * Math.sin(angularDist) * Math.cos(latRad),
+      Math.cos(angularDist) - Math.sin(latRad) * Math.sin(lat2)
+    );
+    return [(lon2 * 180) / Math.PI, (lat2 * 180) / Math.PI];
+  }
+
+  // Directional "nose" line features (0818_SUBWAY_Live_Train_Visualization_
+  // v1.0.0_BUILD §13 — "directional nose" is one of the BUILD's own named
+  // acceptable representations). A short real LineString from each train's
+  // real position toward its real resolved bearing — rendered as a 'line'
+  // layer rather than an icon/symbol (this codebase's pre-existing
+  // navigationSymbolSuppressor.js and, separately, this session's own live
+  // verification of Mapbox symbol-layer placement in this environment, both
+  // made icon/symbol-based direction cues unreliable here — a plain colored
+  // line segment sidesteps both, and satisfies the BUILD's own listed
+  // alternative). Only trains with a real resolved geometryBearing get a
+  // line — never a fabricated default heading.
+  var HEADING_NOSE_LENGTH_M = 45;
+  function buildTrainHeadingFeatures() {
+    var trainFc = buildLogicalTrainFeatures();
+    var features = [];
+    trainFc.features.forEach(function (f) {
+      var bearing = f.properties.geometryBearing;
+      if (bearing == null) return;
+      var origin = f.geometry.coordinates;
+      var tip = _destinationPoint(origin[0], origin[1], bearing, HEADING_NOSE_LENGTH_M);
+      features.push({
+        type: 'Feature',
+        id: f.properties.logicalTrainId,
+        geometry: { type: 'LineString', coordinates: [origin, tip] },
+        properties: {
+          logicalTrainId: f.properties.logicalTrainId,
+          routeId: f.properties.routeId,
+          resolvedColor: f.properties.resolvedColor,
+          geometryBearing: bearing,
+        },
+      });
+    });
+    return { type: 'FeatureCollection', features: features };
+  }
+
+  // ── Train body layer (0818_SUBWAY_Train_Rendering_Palette_Library_v1.0.0_
+  // BUILD §10-16, §26-28) — replaces the point-like logical-train marker as
+  // the map's PRIMARY live-train representation with an elongated mono-line
+  // body sitting on real, canonical route-shape geometry (walked by
+  // SubwayTrainMotionModel — never a straight-line chord that could leave
+  // the shape on a tight curve; see that module's header). This function
+  // stays a pure GeoJSON translator: all physics (shape-segment resolution,
+  // eased motion progress, direction-lane key, real-world body length) is
+  // computed by SubwayTrainMotionModel and merely read here — same Geometry
+  // Authority Rule mtaSubwayMapLayer.js documents for this whole file.
+  //
+  // `opts.zoomLevel` (a plain number — this module stays Mapbox-independent)
+  // drives the zoom-dependent MINIMUM readable body length (BUILD §11);
+  // defaults to a NEAR-ish zoom so pure/test callers get a valid non-empty
+  // body without needing a real map. `buildLogicalTrainFeatures()`/
+  // `buildTrainHeadingFeatures()` above are UNCHANGED and still exported —
+  // this is an additive replacement of what the map actually RENDERS, not a
+  // removal of the prior build's pure builders.
+  var DEFAULT_ZOOM_FOR_PURE_CALLS = 14;
+  function buildTrainBodyFeatures(opts) {
+    var rs = _rollingStock(), mm = _motionModel();
+    if (!rs || !mm) return { type: 'FeatureCollection', features: [] };
+    var zoomLevel = (opts && typeof opts.zoomLevel === 'number') ? opts.zoomLevel : DEFAULT_ZOOM_FOR_PURE_CALLS;
+
+    var store = _store();
+    var features = [];
+    rs.getActiveLogicalTrains().forEach(function (train) {
+      var motion = mm.buildMotionState(train.id);
+      if (!motion || !motion.bodyPolyline || motion.bodyPolyline.length < 2) return; // no honest geometry to plot (unknown / unresolvable shape)
+
+      var pos = rs.getPositionState(train.id);
+      var travelRightSign = _travelRightSign(store, motion, pos ? pos.nextStopId : null);
+
+      var route = _store().getRoute(train.routeId);
+      var display = _resolveDisplayColor(route);
+      var latForScale = motion.bodyCenter ? motion.bodyCenter[1] : motion.bodyPolyline[0][1];
+      var renderLength = mm.renderLengthMeters(motion.physicalLengthMeters, zoomLevel, latForScale);
+      // The walked polyline already carries physicalLengthMeters worth of
+      // real geometry; if the zoom-driven minimum readable length is LONGER
+      // than the physical length (FAR/CITY zoom — BUILD §12), re-walk a
+      // longer real sub-polyline from the same center/segment rather than
+      // stretching the existing points synthetically.
+      var bodyPoints = motion.bodyPolyline;
+      if (renderLength > motion.physicalLengthMeters + 1 && motion.shapeSegment) {
+        bodyPoints = mm.__walkBodyPolyline(motion.shapeSegment.points,
+          motion.shapeSegment.fromIdx + (motion.segmentProgressEased != null ? motion.segmentProgressEased : 0) * (motion.shapeSegment.toIdx - motion.shapeSegment.fromIdx),
+          renderLength / 2);
+      }
+      if (bodyPoints.length < 2) return;
+
+      features.push({
+        type: 'Feature',
+        id: train.id,
+        geometry: { type: 'LineString', coordinates: bodyPoints },
+        properties: {
+          logicalTrainId: train.id,
+          routeId: train.routeId,
+          routeFamily: train.routeFamily,
+          semanticFamily: display.semanticFamily,
+          resolvedColor: display.resolvedColor,
+          activeTripId: train.activeTripId,
+          consistId: train.consistId,
+          direction: train.direction,
+          directionLaneKey: motion.directionLaneKey, // 'A' | 'B' | null — BUILD §14
+          travelRightSign: travelRightSign, // 1 | -1 | null — real forward-travel-derived lane side (see _travelRightSign header)
+          lifecycleState: train.lifecycleState,
+          positionTruthState: motion.positionState, // observed_stop | inferred_segment | stale
+          motionPhase: motion.motionPhase,           // dwell | accelerating | cruising | decelerating | frozen
+          configuredCarCount: motion.configuredCarCount,
+          renderLengthMeters: renderLength,
+          evidenceTier: motion.evidenceTier || null, // A|B|C|D — Continuous Motion Fix fallback hierarchy, diagnostic only
+          segmentProgressRaw: motion.segmentProgressRaw != null ? motion.segmentProgressRaw : null,
+        },
+      });
+    });
+    return { type: 'FeatureCollection', features: features };
+  }
+
+  // Close-zoom car-section detail (BUILD §13) — subtle perpendicular tick
+  // marks along an already-built train body, evenly spaced by real car
+  // length. Secondary detail only: never a separate train identity (no
+  // `id` collision risk — these features are keyed by a composite id and
+  // carry the SAME logicalTrainId as their parent body), never rendered
+  // below `closeZoomThreshold`.
+  var CAR_SECTION_TICK_HALF_WIDTH_M = 2.2;
+  function buildTrainCarSectionFeatures(opts) {
+    var mm = _motionModel();
+    if (!mm) return { type: 'FeatureCollection', features: [] };
+    var zoomLevel = (opts && typeof opts.zoomLevel === 'number') ? opts.zoomLevel : DEFAULT_ZOOM_FOR_PURE_CALLS;
+    var closeZoomThreshold = (opts && typeof opts.closeZoomThreshold === 'number') ? opts.closeZoomThreshold : 16;
+    if (zoomLevel < closeZoomThreshold) return { type: 'FeatureCollection', features: [] };
+
+    var bodyFc = buildTrainBodyFeatures(opts);
+    var features = [];
+    bodyFc.features.forEach(function (bodyFeature) {
+      var coords = bodyFeature.geometry.coordinates;
+      var carCount = bodyFeature.properties.configuredCarCount || 10;
+      if (coords.length < 2 || carCount < 2) return;
+
+      // Real cumulative arc length along the already-real body polyline.
+      var cum = [0];
+      for (var i = 1; i < coords.length; i++) cum.push(cum[i - 1] + mm.__haversineMeters(coords[i - 1], coords[i]));
+      var totalLen = cum[cum.length - 1];
+      if (totalLen <= 0) return;
+
+      for (var carIdx = 1; carIdx < carCount; carIdx++) { // N-1 internal divisions for N cars
+        var targetDist = (carIdx / carCount) * totalLen;
+        var segIdx = 0;
+        while (segIdx < cum.length - 1 && cum[segIdx + 1] < targetDist) segIdx++;
+        var segStart = coords[segIdx], segEnd = coords[Math.min(segIdx + 1, coords.length - 1)];
+        var segLen = cum[Math.min(segIdx + 1, cum.length - 1)] - cum[segIdx];
+        var t = segLen > 0 ? (targetDist - cum[segIdx]) / segLen : 0;
+        var tickCenter = [segStart[0] + (segEnd[0] - segStart[0]) * t, segStart[1] + (segEnd[1] - segStart[1]) * t];
+        var dx = segEnd[0] - segStart[0], dy = segEnd[1] - segStart[1];
+        var tangentBearingDeg = (Math.atan2(dx, dy) * 180) / Math.PI; // atan2(east,north) -> compass bearing
+        var perpBearing = tangentBearingDeg + 90;
+        var tickA = _destinationPoint(tickCenter[0], tickCenter[1], perpBearing, CAR_SECTION_TICK_HALF_WIDTH_M);
+        var tickB = _destinationPoint(tickCenter[0], tickCenter[1], perpBearing + 180, CAR_SECTION_TICK_HALF_WIDTH_M);
+        features.push({
+          type: 'Feature',
+          id: bodyFeature.properties.logicalTrainId + ':car-section:' + carIdx,
+          geometry: { type: 'LineString', coordinates: [tickA, tickB] },
+          properties: {
+            logicalTrainId: bodyFeature.properties.logicalTrainId, // same train — never an independent identity
+            resolvedColor: bodyFeature.properties.resolvedColor,
+          },
+        });
+      }
     });
     return { type: 'FeatureCollection', features: features };
   }
@@ -262,6 +528,11 @@
     buildFullNetworkFeatureCollections: buildFullNetworkFeatureCollections,
     buildVehiclePresenceFeatures: buildVehiclePresenceFeatures,
     buildLogicalTrainFeatures: buildLogicalTrainFeatures,
+    buildTrainHeadingFeatures: buildTrainHeadingFeatures,
+    buildTrainBodyFeatures: buildTrainBodyFeatures,
+    buildTrainCarSectionFeatures: buildTrainCarSectionFeatures,
+    __destinationPoint: _destinationPoint,
+    __travelRightSign: _travelRightSign,
     getAlertedRouteIds: getAlertedRouteIds,
   });
 

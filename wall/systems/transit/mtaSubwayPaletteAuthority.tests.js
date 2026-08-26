@@ -23,7 +23,11 @@
 
     try {
       results.push(_assert('exactly 2 palettes exist', pa.listPalettes().length === 2, pa.listPalettes().map(function (p) { return p.id; })));
-      results.push(_assert('default palette is fashion_subway', pa.DEFAULT_PALETTE_ID === 'fashion_subway'));
+      // 0818_SUBWAY_Train_Rendering_Palette_Library_v1.0.0_BUILD §8/§35.3:
+      // Official MTA Reference is now the active default (was fashion_subway).
+      results.push(_assert('default palette is mta_reference (Official MTA Reference)', pa.DEFAULT_PALETTE_ID === 'mta_reference'));
+      results.push(_assert('"Official MTA Reference" palette exists', pa.getPalette('mta_reference') && pa.getPalette('mta_reference').label === 'Official MTA Reference'));
+      results.push(_assert('"StudioRich Fashion Subway" palette exists', pa.getPalette('fashion_subway') && pa.getPalette('fashion_subway').label === 'StudioRich Fashion Subway'));
 
       // ── §25.4: StudioRich Fashion palette resolution ────────────────────
       var ok = pa.setActivePalette('fashion_subway');
@@ -55,6 +59,19 @@
 
       results.push(_assert('unknown palette id is rejected, not silently defaulted', pa.setActivePalette('does_not_exist').ok === false));
       results.push(_assert('active palette id persists correctly through get/set cycle', pa.getActivePaletteId() === 'mta_reference'));
+
+      // ── 0818_SUBWAY_Train_Rendering_Palette_Library_v1.0.0_BUILD §7/§35 —
+      //    structured non-route-color presentation tokens ──────────────────
+      var stationTokens = pa.resolveStationTokens();
+      results.push(_assert('station style resolves through active palette', !!stationTokens && /^#[0-9A-Fa-f]{6}$/.test(stationTokens.fill) && /^#[0-9A-Fa-f]{6}$/.test(stationTokens.stroke) && /^#[0-9A-Fa-f]{6}$/.test(stationTokens.selected)));
+      var trainTokens = pa.resolveTrainTokens();
+      results.push(_assert('train LOD color tokens resolve through active palette (neutralBody/casing/selectedBody/selectedCasing)',
+        !!trainTokens && /^#[0-9A-Fa-f]{6}$/.test(trainTokens.neutralBody) && /^#[0-9A-Fa-f]{6}$/.test(trainTokens.casing) &&
+        /^#[0-9A-Fa-f]{6}$/.test(trainTokens.selectedBody) && /^#[0-9A-Fa-f]{6}$/.test(trainTokens.selectedCasing)));
+      results.push(_assert('train opacity tokens resolve through active palette', typeof trainTokens.staleOpacity === 'number' && typeof trainTokens.unknownOpacity === 'number'));
+      results.push(_assert('unknownOpacity is lower than staleOpacity (progressively less confident)', trainTokens.unknownOpacity < trainTokens.staleOpacity));
+      results.push(_assert('casing is a distinct color from neutralBody (Train Contrast/LOD Fix — casing must not blend into the body)', trainTokens.casing !== trainTokens.neutralBody));
+      results.push(_assert('selectedCasing is a distinct color from casing (selection must remain visible regardless of zoom)', trainTokens.selectedCasing !== trainTokens.casing));
 
       var failed = results.filter(function (r) { return !r.pass; });
       var summary = { ok: failed.length === 0, total: results.length, failed: failed.length, results: results };

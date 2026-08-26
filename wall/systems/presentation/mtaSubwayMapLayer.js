@@ -1,7 +1,35 @@
-// ── MTASubwayMapLayer v3.0.0 ──────────────────────────────────────────────────
-// 0818_SUBWAY_Logical_Rolling_Stock_v1.0.0_BUILD — Interface Layer §23-27
-// (v2.0.0 was 0818_SUBWAY_Full_Live_Map_Integration_v1.0.0_BUILD — full
-// network rendering without persistent logical rolling stock. v1.0.0 was
+// ── MTASubwayMapLayer v5.2.0 ──────────────────────────────────────────────────
+// "SUBWAY Continuous Train Motion Fix" patch (v5.2.0) — the render loop
+// itself was never the bug (this file's `_renderTrainBodies()` already
+// re-derived every train's position fresh on every call); the ROOT CAUSE
+// lived in subwayTrainMotionModel.js (see that file's own header) and is
+// fixed there. This file's only two changes: (1) the animation loop is now
+// a single shared `requestAnimationFrame`, internally throttled to
+// ANIM_STEP_MS, instead of `setInterval` — the preferred architecture the
+// patch specifies, and (2) ANIM_STEP_MS was tuned down from 500ms to 120ms,
+// live-verified necessary once trains actually advance every call — at
+// 500ms, real continuous motion still looked visibly steppy.
+//
+// "SUBWAY Train Contrast / LOD Fix" patch (v5.1.0) on top of
+// 0818_SUBWAY_Train_Rendering_Palette_Library_v1.0.0_BUILD (v5.0.0) —
+// train bodies were rendering in the SAME hue as the route line beneath
+// them, making them nearly invisible at normal zoom. Fixed with a
+// zoom-based visual hierarchy: neutral grey body at FAR/MID zoom (legible
+// over every real MTA route color), a flat dark-charcoal CASING layer
+// underneath that never blends (the primary contrast mechanism at every
+// zoom), and a smooth continuous blend toward the route's own color as the
+// camera approaches CLOSE zoom. Selection is now signaled primarily by a
+// bright casing color (zoom-independent), not by body hue. See
+// `_routeColorBlendFactor`/`_blendHexColors`/`TRAIN_CASING_LAYER_ID` below.
+// Canonical geometry walking, reconciliation, stale/unknown handling, lane
+// offsets, and car-section ticks are UNCHANGED by either patch.
+//
+// §26-30 (v4.0.0 was 0818_SUBWAY_Live_Train_Visualization_v1.0.0_BUILD —
+// point-marker trains + directional heading line. v3.0.0 was
+// 0818_SUBWAY_Logical_Rolling_Stock_v1.0.0_BUILD — persistent logical
+// train/consist/car identity + truth-aware position. v2.0.0 was
+// 0818_SUBWAY_Full_Live_Map_Integration_v1.0.0_BUILD — full network
+// rendering without persistent logical rolling stock. v1.0.0 was
 // 0818_SUBWAY_Live_Data_Foundation_v1.0.0_BUILD — single-route slice.)
 // Status: active | Classification: presentation (Mapbox integration)
 //
@@ -9,19 +37,60 @@
 // running Mapbox map (SBE.MapboxViewportRuntime.getMap()): every real route
 // family, every Station Library-backed station, live operational state for
 // every polled line group, station selection resolving to the exact Station
-// Library record, a visible StudioRich Fashion Subway ⇄ MTA Reference
-// palette switch that never touches transit identity, and (new in v3.0.0) a
-// live logical-train layer sourced from SubwayLogicalRollingStockAuthority —
-// persistent StudioRich train/consist/car identity, never a raw MTA trip id.
+// Library record with live arrival intelligence, palette switches that never
+// touch transit identity, and a live train BODY layer sourced from
+// SubwayLogicalRollingStockAuthority + SubwayTrainMotionModel — persistent
+// StudioRich train/consist/car identity, never a raw MTA trip id.
 //
-// ROLLING STOCK RULE (new in v3.0.0): this file never computes trip
+// ── NEW IN v5.0.0 (Train Rendering + Palette Library) ────────────────────────
+//   - Trains render as an elongated mono-line BODY (SubwayTrainMotionModel.
+//     buildMotionState() + MTASubwayMapFeatures.buildTrainBodyFeatures()) —
+//     REPLACES v4.0.0's point-marker circle + separate directional heading
+//     line entirely (BUILD §10: "not [dot], and not [separate capsules]").
+//     The body IS a real, arc-length-walked sub-polyline of the train's own
+//     canonical route shape, so it can never leave route geometry regardless
+//     of curve tightness — no chord approximation. Orientation, motion, and
+//     lane offset now communicate direction; the old standalone heading-line
+//     layer (and navigationSymbolSuppressor.js workaround) is no longer
+//     needed since there is no separate symbol/line to suppress.
+//   - Opposing trains separate into two virtual screen-space lanes via
+//     Mapbox's `line-offset` paint property (BUILD §14-16) — canonical route
+//     geometry is never duplicated or altered; the offset is a per-feature
+//     `laneOffsetPx` property computed fresh each animation tick from the
+//     CURRENT map zoom (sidesteps any zoom-expression composition risk,
+//     same lesson learned fixing the v4.0.0 circle-radius expression bug).
+//   - Continuous ETA-informed motion (BUILD §17-23): SubwayTrainMotionModel.
+//     buildMotionState() derives a time-varying, accel/cruise/decel-eased
+//     segment progress directly from real trip.stopTimes arrival/departure
+//     evidence and the CURRENT wall-clock time on every call — replaces
+//     v4.0.0's prevById/targetFc snapshot-lerp entirely. The animation timer
+//     (ANIM_STEP_MS, unchanged cadence) now just re-invokes the motion
+//     model + feature builder each tick rather than manually lerping two
+//     captured points; the 5s reconcile tick still owns canonical evidence
+//     (unchanged "motion clock vs polling clock" separation, BUILD §17).
+//   - Close-zoom car-section detail (BUILD §13) — a second thin line layer,
+//     only populated/rendered at CLOSE_ZOOM_THRESHOLD and above.
+//   - SUBWAY Palette Library now also carries structured station/train
+//     presentation tokens (BUILD §7-9), applied via `_applyPaletteStyling()`
+//     on layer creation and on every palette switch — Official MTA
+//     Reference is now the active DEFAULT palette (BUILD §8).
+//   - Train-follow foundation (unchanged since v4.0.0) — followTrain(id)/
+//     unfollowTrain(), gently re-centering the camera once per watch tick.
+//   - Station selection's HUD panel still renders live arrival intelligence
+//     — unchanged since v4.0.0 (BUILD §25 of the prior build; untouched by
+//     this one).
+//
+// ROLLING STOCK RULE (unchanged since v3.0.0): this file never computes trip
 // association or position itself — SubwayLogicalRollingStockAuthority.
-// reconcile() owns that entirely. This file only ever (a) calls reconcile()
-// once per watch tick — the SAME existing 5s timer already used for
-// route/station refresh, never a new per-train timer (BUILD §29) — and (b)
-// reads the already-built logical_trains GeoJSON from
-// SBE.MTASubwayMapFeatures.buildLogicalTrainFeatures(). Train identity is
-// owned by the authority; this file only ever renders and selects it.
+// reconcile() owns that entirely, and SubwayTrainMotionModel only ever
+// DERIVES rendering physics from the authority's already-computed evidence
+// (BUILD §5: "do not create a visual train ID independent from
+// logicalTrainId"). This file only ever (a) calls reconcile() once per
+// watch tick — the SAME existing 5s timer already used for route/station
+// refresh, never a new per-train timer (BUILD §29) — and (b) reads the
+// already-built GeoJSON from SBE.MTASubwayMapFeatures.buildTrainBodyFeatures().
+// Train identity is owned by the authority; this file only ever renders and
+// selects it.
 //
 // GEOMETRY AUTHORITY RULE (BUILD §7): this file only ever reads finished
 // GeoJSON from SBE.MTASubwayMapFeatures / SBE.MTASubwayStationLibrary — it
@@ -56,31 +125,61 @@
 (function (global) {
   'use strict';
   var SBE = (global.SBE = global.SBE || {});
-  var VERSION = '3.0.0';
+  var VERSION = '5.2.0';
 
   var STATIONS_SOURCE_ID = 'wos-subway-stations';
   var STATIONS_LAYER_ID = 'wos-subway-stations-layer';
   var STATIONS_LABEL_LAYER_ID = 'wos-subway-stations-label-layer';
   var ROUTE_SOURCE_ID = 'wos-subway-routes';
   var ROUTE_LAYER_ID = 'wos-subway-routes-layer';
-  // Logical train layer (v3.0.0) — replaces the plain v2.0.0 "vehicle
-  // presence" dot layer as the visible map marker (Creative Interface
-  // Doctrine: one live-train marker layer, not two overlapping ones).
-  // mtaSubwayMapFeatures.buildVehiclePresenceFeatures() itself is untouched
-  // and still exported/tested — this only changes what the map DRAWS.
+  // Train BODY layer (v5.0.0, BUILD §10-16, §26-28) — an elongated mono-line
+  // LineString per train (SubwayTrainMotionModel + MTASubwayMapFeatures.
+  // buildTrainBodyFeatures()), replacing v4.0.0's point-marker circle. One
+  // visible live-train layer, not two overlapping ones (Creative Interface
+  // Doctrine) — the old separate directional-heading-line layer is retired;
+  // the body's own real orientation + motion + lane offset communicate
+  // direction now (BUILD §25).
   var TRAINS_SOURCE_ID = 'wos-subway-trains';
   var TRAINS_LAYER_ID = 'wos-subway-trains-layer';
+  // Train casing layer (Train Contrast / LOD Fix) — a wider, dark line
+  // reading the SAME source/geometry as TRAINS_LAYER_ID, added to the map
+  // BEFORE it so it renders underneath. This is what keeps a train visible
+  // over its own route line at every zoom, independent of whatever the
+  // inner body's zoom-blended color is currently doing (see
+  // _routeColorBlendFactor below). Not a second train — same id, same lane
+  // offset, same truth-state opacity; purely a contrast halo.
+  var TRAIN_CASING_LAYER_ID = 'wos-subway-trains-casing-layer';
+  // Close-zoom car-section detail (v5.0.0, BUILD §13) — subtle secondary
+  // tick marks, only populated/visible at CLOSE_ZOOM_THRESHOLD and above.
+  var CAR_SECTIONS_SOURCE_ID = 'wos-subway-trains-car-sections';
+  var CAR_SECTIONS_LAYER_ID = 'wos-subway-trains-car-sections-layer';
 
-  var LABEL_MIN_ZOOM = 13; // avoid unreadable all-label-on-all-zoom (BUILD §14)
-  var SELECTED_STATION_COLOR = '#ff9f1c';
-  var DEFAULT_STATION_COLOR = '#ffffff';
-  var SELECTED_TRAIN_STROKE = '#ff9f1c';
+  var LABEL_MIN_ZOOM = 13; // avoid unreadable all-label-on-all-zoom (BUILD §14, prior build)
+  var MID_ZOOM_THRESHOLD = 12; // BUILD §12 MID/BOROUGH — longer body, clear lane separation
+  var CLOSE_ZOOM_THRESHOLD = 16; // BUILD §13 — car-section divisions appear only this close
+  var SELECTED_STATION_COLOR = '#ff9f1c'; // HUD-only fallback; live paint sources from the palette (station.selected)
+  var DEFAULT_STATION_COLOR = '#ffffff';  // HUD-only fallback; live paint sources from the palette (station.fill)
+
+  // Client-side render/motion cadence — a single shared
+  // requestAnimationFrame loop (Continuous Motion Fix §10's preferred
+  // architecture), internally throttled to ANIM_STEP_MS so setData() isn't
+  // called at literal 60fps on a several-hundred-feature source (still not
+  // a real Mapbox performance budget at full-network scale) while remaining
+  // visibly continuous — tuned down from the prior 500ms (which, combined
+  // with the ROOT CAUSE fix in subwayTrainMotionModel.js making trains
+  // ACTUALLY advance every call now, looked visibly steppy at half a
+  // second per step) to 120ms (~8 renders/sec), live-verified smooth
+  // without measurable interaction degradation (see completion report §20).
+  var ANIM_STEP_MS = 120;
 
   var _active = false;
   var _selectedStationId = null; // stlib-* id — the exact Station Library record, never a name
   var _selectedTrainId = null;   // sr-train-* id — the exact logical train record, never a trip id
+  var _followedTrainId = null;   // sr-train-* id — train-follow foundation (BUILD §17, prior build)
   var _lastRenderedRealtimeAt = null;
   var _watchTimer = null;
+  var _animFrameId = null;       // requestAnimationFrame handle — one shared loop, never a timer per train
+  var _lastAnimRenderAt = 0;
   var _hud = null; // DOM refs, created lazily
   var _interactionBound = false;
 
@@ -95,6 +194,62 @@
   function _palette() { return SBE.MTASubwayPaletteAuthority || null; }
   function _inventory() { return SBE.MTASubwayFeedSourceInventory || null; }
   function _rollingStock() { return SBE.SubwayLogicalRollingStockAuthority || null; }
+  function _trainVisualState() { return SBE.SubwayTrainVisualState || null; }
+  function _arrivalIntelligence() { return SBE.SubwayArrivalIntelligence || null; }
+  function _motionModel() { return SBE.SubwayTrainMotionModel || null; }
+
+  // Lane-offset pixel range (BUILD §14-16) — a small, zoom-scaled
+  // screen-space offset applied via Mapbox's own `line-offset` paint
+  // property (BUILD §15: "prefer that over altering canonical coordinates").
+  // Computed into a per-feature `laneOffsetPx` property each animation tick
+  // from the CURRENT zoom (never a zoom-expression composed with `match`,
+  // sidestepping the exact class of Mapbox expression bug fixed in the
+  // prior build) — canonical geometry and station positions are never
+  // touched by this.
+  var LANE_OFFSET_MIN_PX = 1.5;
+  var LANE_OFFSET_MAX_PX = 6;
+  var LANE_OFFSET_MIN_ZOOM = 10;
+  var LANE_OFFSET_MAX_ZOOM = 18;
+  function _laneOffsetPxForZoom(zoom) {
+    var t = Math.max(0, Math.min(1, (zoom - LANE_OFFSET_MIN_ZOOM) / (LANE_OFFSET_MAX_ZOOM - LANE_OFFSET_MIN_ZOOM)));
+    return LANE_OFFSET_MIN_PX + t * (LANE_OFFSET_MAX_PX - LANE_OFFSET_MIN_PX);
+  }
+
+  // ── Train body color LOD (Train Contrast / LOD Fix) ──────────────────────
+  // "Official MTA route colors = infrastructure identity, neutral grey =
+  // distant rolling stock, proximity = progressively restores route color."
+  // Reuses the SAME zoom regime constants the renderer already defines
+  // (MID_ZOOM_THRESHOLD / CLOSE_ZOOM_THRESHOLD) rather than inventing new
+  // arbitrary thresholds — FAR (<MID) stays fully neutral, CLOSE (>=CLOSE)
+  // is fully route-colored, with a smooth continuous ramp between (never a
+  // hard palette switch). The casing layer (always a flat dark/bright
+  // color, never blended) is the PRIMARY contrast mechanism throughout this
+  // range — the body blend is a secondary refinement, not the only thing
+  // keeping a train visible.
+  function _routeColorBlendFactor(zoom) {
+    var t = (zoom - MID_ZOOM_THRESHOLD) / (CLOSE_ZOOM_THRESHOLD - MID_ZOOM_THRESHOLD);
+    return Math.max(0, Math.min(1, t));
+  }
+
+  function _hexToRgb(hex) {
+    var h = hex.replace('#', '');
+    if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+    return { r: parseInt(h.slice(0, 2), 16), g: parseInt(h.slice(2, 4), 16), b: parseInt(h.slice(4, 6), 16) };
+  }
+  function _toHex2(n) { var s = Math.max(0, Math.min(255, Math.round(n))).toString(16); return s.length === 1 ? '0' + s : s; }
+  // Real linear RGB interpolation between two hex colors — computed in JS
+  // (never a composed Mapbox `interpolate`+`get` color expression) so the
+  // result can be attached as a plain per-feature property and read via a
+  // simple `['get', ...]` in paint, the same proven-safe pattern this build
+  // series already uses for laneOffsetPx (sidesteps any Mapbox
+  // expression-composition risk entirely — see file header).
+  function _blendHexColors(hexA, hexB, t) {
+    var clamped = Math.max(0, Math.min(1, t));
+    if (clamped <= 0) return hexA;
+    if (clamped >= 1) return hexB;
+    var a = _hexToRgb(hexA), b = _hexToRgb(hexB);
+    return '#' + _toHex2(a.r + (b.r - a.r) * clamped) + _toHex2(a.g + (b.g - a.g) * clamped) + _toHex2(a.b + (b.b - a.b) * clamped);
+  }
 
   function _allRealtimeGroupIds() {
     var inv = _inventory();
@@ -156,26 +311,98 @@
         });
       }
 
+      // Train BODY + CASING layers (v5.0.0, BUILD §10-16, §26-28; casing
+      // added by the Train Contrast / LOD Fix) — a mono-line LineString per
+      // train (real, arc-length-walked sub-polyline of the train's own
+      // canonical route shape — see SubwayTrainMotionModel and
+      // MTASubwayMapFeatures.buildTrainBodyFeatures()). Replaces v4.0.0's
+      // point-marker circle + separate heading line entirely.
       if (!map.getSource(TRAINS_SOURCE_ID)) {
         map.addSource(TRAINS_SOURCE_ID, { type: 'geojson', data: { type: 'FeatureCollection', features: [] }, promoteId: 'logicalTrainId' });
       }
+      // Casing added FIRST (renders underneath) — same source/geometry/lane
+      // offset as the body layer added right after it. A wider, flat-colored
+      // (never zoom-blended) outline that keeps a train visible over its own
+      // route line regardless of what the inner body's LOD blend is doing.
+      if (!map.getLayer(TRAIN_CASING_LAYER_ID)) {
+        map.addLayer({
+          id: TRAIN_CASING_LAYER_ID, type: 'line', source: TRAINS_SOURCE_ID,
+          layout: { 'line-cap': 'round', 'line-join': 'round' },
+          paint: {
+            // Flat dark charcoal (or bright white when selected) — never
+            // blended toward route color. Overwritten by
+            // _applyPaletteStyling() from the active palette's train tokens
+            // the moment this layer is created; literal fallbacks below
+            // only matter for the brief window before that first call runs.
+            'line-color': ['case', ['boolean', ['feature-state', 'selected'], false], '#FFFFFF', '#181B1F'],
+            // Slightly wider than the body layer at every zoom/selection
+            // stop (same proven-safe zoom-top-level-input pattern).
+            'line-width': ['interpolate', ['linear'], ['zoom'],
+              10, ['case', ['boolean', ['feature-state', 'selected'], false], 5, 3],
+              14, ['case', ['boolean', ['feature-state', 'selected'], false], 8.5, 5],
+              18, ['case', ['boolean', ['feature-state', 'selected'], false], 13.5, 8.5]],
+            'line-opacity': ['case',
+              ['boolean', ['feature-state', 'selected'], false], 1.0,
+              ['match', ['get', 'positionTruthState'], 'stale', 0.4, 0.95]],
+            'line-offset': ['coalesce', ['get', 'laneOffsetPx'], 0],
+          },
+        });
+      }
       if (!map.getLayer(TRAINS_LAYER_ID)) {
         map.addLayer({
-          id: TRAINS_LAYER_ID, type: 'circle', source: TRAINS_SOURCE_ID,
+          id: TRAINS_LAYER_ID, type: 'line', source: TRAINS_SOURCE_ID,
+          layout: { 'line-cap': 'round', 'line-join': 'round' }, // BUILD §10 — rounded ends, stays monolithic
           paint: {
-            // Route-family color remains primary identity (BUILD §25) —
-            // observed/inferred/stale is encoded ONLY via secondary
-            // properties (radius/opacity/stroke), never a conflicting hue.
-            'circle-radius': ['case', ['boolean', ['feature-state', 'selected'], false], 8,
-              ['match', ['get', 'positionTruthState'], 'inferred_segment', 5, 'stale', 5, 6]],
-            'circle-color': ['coalesce', ['get', 'resolvedColor'], '#ff9f1c'],
-            'circle-opacity': ['match', ['get', 'positionTruthState'], 'stale', 0.4, 'inferred_segment', 0.85, 0.95],
-            'circle-stroke-width': ['case', ['boolean', ['feature-state', 'selected'], false], 3, 2],
-            'circle-stroke-color': ['case', ['boolean', ['feature-state', 'selected'], false], SELECTED_TRAIN_STROKE, '#ffffff'],
+            // Train Contrast / LOD Fix: body color is a per-feature
+            // PRECOMPUTED blend (neutral grey at FAR zoom -> real route
+            // color at CLOSE zoom, see _renderTrainBodies()/
+            // _routeColorBlendFactor()) — never the raw route color alone
+            // (that was the original bug: same-hue trains vanishing into
+            // their own route line). Truth-state/selection are encoded via
+            // width/opacity, never a conflicting hue.
+            'line-color': ['coalesce', ['get', 'renderBodyColor'], '#C9CDD3'],
+            // Zoom-aware width (BUILD §12): same proven-safe pattern as the
+            // prior build's circle-radius fix — ["zoom"] stays the direct
+            // top-level input; the selection bump is nested inside each
+            // stop's own OUTPUT, never wrapping zoom itself.
+            'line-width': ['interpolate', ['linear'], ['zoom'],
+              10, ['case', ['boolean', ['feature-state', 'selected'], false], 3, 1.6],
+              14, ['case', ['boolean', ['feature-state', 'selected'], false], 6, 3.2],
+              18, ['case', ['boolean', ['feature-state', 'selected'], false], 10, 5.5]],
+            // Truth-state opacity — default numbers here are overwritten by
+            // _applyPaletteStyling() from the active palette's train tokens
+            // (BUILD §7) the moment this layer is created; the literal
+            // values below only matter for the brief window before that
+            // first call runs.
+            'line-opacity': ['case',
+              ['boolean', ['feature-state', 'selected'], false], 1.0,
+              ['match', ['get', 'positionTruthState'], 'stale', 0.4, 0.95]],
+            // Virtual directional lane (BUILD §14-16) — a per-feature pixel
+            // offset computed fresh each animation tick from the current
+            // zoom; canonical geometry/station positions are never touched.
+            'line-offset': ['coalesce', ['get', 'laneOffsetPx'], 0],
           },
         });
       }
 
+      // Close-zoom car-section detail (v5.0.0, BUILD §13) — subtle,
+      // secondary, only populated above CLOSE_ZOOM_THRESHOLD.
+      if (!map.getSource(CAR_SECTIONS_SOURCE_ID)) {
+        map.addSource(CAR_SECTIONS_SOURCE_ID, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      }
+      if (!map.getLayer(CAR_SECTIONS_LAYER_ID)) {
+        map.addLayer({
+          id: CAR_SECTIONS_LAYER_ID, type: 'line', source: CAR_SECTIONS_SOURCE_ID,
+          layout: { 'line-cap': 'butt' },
+          paint: {
+            'line-color': ['coalesce', ['get', 'resolvedColor'], '#ffffff'],
+            'line-width': 1.5,
+            'line-opacity': 0.65,
+          },
+        });
+      }
+
+      _applyPaletteStyling(map);
       _ensureInteraction(map);
       return true;
     } catch (e) {
@@ -186,10 +413,10 @@
 
   function removeLayers(map) {
     if (!map) return;
-    [TRAINS_LAYER_ID, STATIONS_LABEL_LAYER_ID, STATIONS_LAYER_ID, ROUTE_LAYER_ID].forEach(function (id) {
+    [CAR_SECTIONS_LAYER_ID, TRAINS_LAYER_ID, TRAIN_CASING_LAYER_ID, STATIONS_LABEL_LAYER_ID, STATIONS_LAYER_ID, ROUTE_LAYER_ID].forEach(function (id) {
       try { if (map.getLayer(id)) map.removeLayer(id); } catch (e) {}
     });
-    [TRAINS_SOURCE_ID, STATIONS_SOURCE_ID, ROUTE_SOURCE_ID].forEach(function (id) {
+    [CAR_SECTIONS_SOURCE_ID, TRAINS_SOURCE_ID, STATIONS_SOURCE_ID, ROUTE_SOURCE_ID].forEach(function (id) {
       try { if (map.getSource(id)) map.removeSource(id); } catch (e) {}
     });
   }
@@ -234,7 +461,9 @@
       } catch (e) {}
     }
     _selectedStationId = studioRichStationId;
-    _renderHudSelection(record);
+    _renderHudSelection(record); // debug-gated corner panel — see _renderHudSelection
+    var publicHud = SBE.SubwayStationHud;
+    if (publicHud) publicHud.show(studioRichStationId); // BUILD §6/§12 public station identity + arrivals
     return { ok: true, data: record };
   }
 
@@ -245,6 +474,8 @@
     }
     _selectedStationId = null;
     _renderHudSelection(null);
+    var publicHud = SBE.SubwayStationHud;
+    if (publicHud) publicHud.hide();
   }
 
   // The exact record the selection resolved to — proves the full chain
@@ -272,7 +503,9 @@
       } catch (e) {}
     }
     _selectedTrainId = logicalTrainId;
-    _renderHudTrainSelection(inspection);
+    _renderHudTrainSelection(inspection); // debug-gated corner panel — see _renderHudTrainSelection
+    var ribbon = SBE.SubwayLineRibbon;
+    if (ribbon) ribbon.showRideMode(logicalTrainId); // BUILD §19 Ride Mode foundation
     return { ok: true, data: inspection };
   }
 
@@ -283,6 +516,8 @@
     }
     _selectedTrainId = null;
     _renderHudTrainSelection(null);
+    var ribbon = SBE.SubwayLineRibbon;
+    if (ribbon) ribbon.collapse();
   }
 
   function getSelectedTrain() {
@@ -293,6 +528,9 @@
 
   // ── refresh() — pure read from the store/library/rolling-stock authority;
   //    never fetches ─────────────────────────────────────────────────────────
+  // Stations/routes apply immediately (they don't move between ticks); train
+  // bodies are painted via _renderTrainBodies(), the SAME function the
+  // animation timer calls every ANIM_STEP_MS (§17).
   function refresh() {
     var map = _map(), feat = _features();
     if (!map || !feat) return false;
@@ -305,14 +543,130 @@
       var full = feat.buildFullNetworkFeatureCollections();
       routeSrc.setData(full.routes);
       stationsSrc.setData(full.stations);
-      trainsSrc.setData(full.logical_trains);
+      _renderTrainBodies(); // paint immediately rather than waiting up to ANIM_STEP_MS
       _renderHudDiagnostics();
       if (_selectedTrainId) _renderHudTrainSelection(getSelectedTrain());
+      if (_selectedStationId) _renderHudSelection(getSelectedStation());
+      if (_followedTrainId) _followCamera();
       return true;
     } catch (e) {
       console.warn('[MTASubwayMapLayer] refresh setData error:', e && e.message || e);
       return false;
     }
+  }
+
+  // ── Train body rendering (v5.0.0, BUILD §17-23, §26-28) ──────────────────
+  // SubwayTrainMotionModel.buildMotionState() is a pure function of the
+  // rolling-stock authority's evidence + the CURRENT wall-clock time — every
+  // call (whether from refresh()'s 5s reconcile tick or the ANIM_STEP_MS
+  // timer below) recomputes a fresh, continuously-advancing eased position
+  // directly from real trip.stopTimes timing evidence. This REPLACES
+  // v4.0.0's manual prevById/targetFc snapshot-lerp entirely — there is no
+  // separate "animation target" state to track any more; the motion model
+  // itself is the single source of continuous truth, and this function is
+  // called at BOTH cadences without needing to know which one triggered it
+  // (BUILD §17 "motion clock vs polling clock" separation is preserved by
+  // WHERE reconcile() is called — the 5s watch tick, unchanged — not by
+  // anything in this rendering function).
+  function _renderTrainBodies() {
+    var map = _map(), feat = _features();
+    var trainsSrc = map ? map.getSource(TRAINS_SOURCE_ID) : null;
+    var carSrc = map ? map.getSource(CAR_SECTIONS_SOURCE_ID) : null;
+    if (!map || !feat || !trainsSrc) return;
+
+    var zoom = map.getZoom();
+    var bodyFc = feat.buildTrainBodyFeatures({ zoomLevel: zoom });
+    var offsetPx = _laneOffsetPxForZoom(zoom);
+    // Train Contrast / LOD Fix: precompute each train's blended body color
+    // here (real JS RGB interpolation, not a composed Mapbox expression —
+    // see _blendHexColors()'s header) from the active palette's neutral/
+    // selected body tokens and the route's own resolved color, using the
+    // CURRENT zoom's blend factor. Selection is read from the plain
+    // `_selectedTrainId` this module already tracks (the same variable the
+    // Mapbox feature-state selection calls use) — no new selection
+    // mechanism, just a second consumer of the existing one.
+    var pa = _palette();
+    var trainTokens = pa ? pa.resolveTrainTokens() : null;
+    var blendT = _routeColorBlendFactor(zoom);
+    var withOffset = {
+      type: 'FeatureCollection',
+      features: bodyFc.features.map(function (f) {
+        // N-Line Direction/Lane Fix — travelRightSign (MTASubwayMapFeatures'
+        // real forward-travel-derived sign, see its own header) is used
+        // whenever it resolved; directionLaneKey is now only a last-resort
+        // fallback for the rare case neither a moving segment nor a
+        // resolvable next-stop tangent was available (see
+        // _travelRightSign's own dwell branch) — never the primary signal,
+        // since a fixed NORTH/SOUTH->side mapping was proven live to put
+        // trains on their real LEFT-hand side of travel instead of their
+        // right on the N route's actual shape.
+        var sign = f.properties.travelRightSign != null ? f.properties.travelRightSign
+          : (f.properties.directionLaneKey === 'A' ? -1 : (f.properties.directionLaneKey === 'B' ? 1 : 0));
+        var selected = f.properties.logicalTrainId === _selectedTrainId;
+        var baseBody = trainTokens ? (selected ? trainTokens.selectedBody : trainTokens.neutralBody) : (selected ? '#FF9F1C' : '#C9CDD3');
+        var routeColor = f.properties.resolvedColor || baseBody;
+        var renderBodyColor = _blendHexColors(baseBody, routeColor, blendT);
+        return Object.assign({}, f, { properties: Object.assign({}, f.properties, { laneOffsetPx: sign * offsetPx, renderBodyColor: renderBodyColor }) });
+      }),
+    };
+    try { trainsSrc.setData(withOffset); } catch (e) {}
+
+    if (carSrc) {
+      // BUILD §13/§43 — populated only at CLOSE zoom, cleared cleanly
+      // (empty FeatureCollection) below it so sections disappear on zoom-out.
+      var carFc = zoom >= CLOSE_ZOOM_THRESHOLD
+        ? feat.buildTrainCarSectionFeatures({ zoomLevel: zoom, closeZoomThreshold: CLOSE_ZOOM_THRESHOLD })
+        : { type: 'FeatureCollection', features: [] };
+      try { carSrc.setData(carFc); } catch (e) {}
+    }
+  }
+
+  // One shared requestAnimationFrame loop (Continuous Motion Fix §10) —
+  // never a timer per train, never a network call or storage write inside
+  // the loop. Internally throttled to ANIM_STEP_MS via a timestamp check so
+  // Mapbox setData() runs at a tuned cadence, not literal per-frame.
+  function _animFrame(ts) {
+    if (!_active) { _animFrameId = null; return; }
+    if (ts - _lastAnimRenderAt >= ANIM_STEP_MS) {
+      _lastAnimRenderAt = ts;
+      _renderTrainBodies();
+    }
+    _animFrameId = global.requestAnimationFrame(_animFrame);
+  }
+  function _startAnimationTimer() {
+    if (_animFrameId) return;
+    _lastAnimRenderAt = 0;
+    _animFrameId = global.requestAnimationFrame(_animFrame);
+  }
+  function _stopAnimationTimer() {
+    if (_animFrameId) { global.cancelAnimationFrame(_animFrameId); _animFrameId = null; }
+  }
+
+  // ── Train-follow foundation (v4.0.0, BUILD §17) ──────────────────────────
+  // Gentle re-centering once per watch tick (never per animation frame —
+  // this is a foundation for a future camera, not a cinematic system).
+  function followTrain(logicalTrainId) {
+    var rs = _rollingStock();
+    if (!rs || !rs.getLogicalTrain(logicalTrainId)) return { ok: false, reason: 'not_found' };
+    _followedTrainId = logicalTrainId;
+    _followCamera();
+    return { ok: true };
+  }
+  function unfollowTrain() { _followedTrainId = null; return { ok: true }; }
+  function getFollowedTrainId() { return _followedTrainId; }
+
+  function _followCamera() {
+    // Sunroof Camera Ride Test (0819) — an explicit, narrow ownership guard:
+    // this coarse 5s/800ms foundation must never fight the Sunroof
+    // controller's own continuous per-frame camera updates while it's
+    // attached to a train. See subwayCameraSunroof.js's file header for the
+    // full camera-ownership investigation.
+    if (global.SBE && SBE.SunroofCameraController && SBE.SunroofCameraController.isActive()) return;
+    var map = _map(), rs = _rollingStock();
+    if (!map || !rs || !_followedTrainId) return;
+    var pos = rs.getPositionState(_followedTrainId);
+    if (!pos || !pos.position) return;
+    try { map.easeTo({ center: pos.position, duration: 800 }); } catch (e) {}
   }
 
   // Cheap watch loop (BUILD §29 — the ONE centralized scheduling point, never
@@ -331,6 +685,18 @@
     if (diag.realtimeLastUpdatedAt && diag.realtimeLastUpdatedAt !== _lastRenderedRealtimeAt) _lastRenderedRealtimeAt = diag.realtimeLastUpdatedAt;
     var rs = _rollingStock();
     if (rs) rs.reconcile();
+    // Self-healing (found live during the v4.0.0 build's own verification):
+    // _bootMapWork()'s one-time ensureLayers() call can partially fail if it
+    // runs before Mapbox's style is FULLY settled ("Style is not done
+    // loading") — everything created before the failure point stays, but a
+    // source/layer added later in the function can be silently skipped
+    // forever since ensureLayers was never called again. Every
+    // ensureLayers() block is already idempotent (`if
+    // (!map.getSource/getLayer(id))`), so re-running it here on the SAME
+    // existing 5s timer (no new timer, BUILD §29) is cheap and simply
+    // finishes any layer creation the first attempt didn't complete.
+    var map = _map();
+    if (map) ensureLayers(map);
     refresh();
   }
 
@@ -366,6 +732,7 @@
 
     _ensureHud();
     if (!_watchTimer) _watchTimer = global.setInterval(_watchTick, 5000);
+    _startAnimationTimer();
     console.log('[MTASubwayMapLayer] activated — full network, groups', JSON.stringify(groupIds));
     return true;
   }
@@ -375,21 +742,62 @@
     var poll = _poll();
     if (poll) poll.stop();
     if (_watchTimer) { global.clearInterval(_watchTimer); _watchTimer = null; }
+    _stopAnimationTimer();
     var map = _map();
     if (map) removeLayers(map);
     _selectedTrainId = null;
+    _followedTrainId = null;
     _removeHud();
     return true;
   }
 
   function isActive() { return _active; }
 
-  // ── Palette switching (BUILD §21) — visible, admin-facing control ────────
+  // ── Palette-driven paint (v5.0.0, BUILD §7-9, §18-21) ────────────────────
+  // Station fill/stroke/selected and train stale-opacity live in the
+  // palette registry now, not hardcoded module constants. Applied once at
+  // layer creation and again on every palette switch — never touches
+  // route/station/train IDENTITY (setPaintProperty only ever changes a
+  // paint value, never a feature id/property).
+  function _applyPaletteStyling(map) {
+    var pa = _palette();
+    if (!pa || !map) return;
+    var station = pa.resolveStationTokens();
+    var train = pa.resolveTrainTokens();
+    try {
+      if (station && map.getLayer(STATIONS_LAYER_ID)) {
+        map.setPaintProperty(STATIONS_LAYER_ID, 'circle-color',
+          ['case', ['boolean', ['feature-state', 'selected'], false], station.selected, station.fill]);
+        map.setPaintProperty(STATIONS_LAYER_ID, 'circle-stroke-color', station.stroke);
+      }
+      if (train && map.getLayer(TRAINS_LAYER_ID)) {
+        map.setPaintProperty(TRAINS_LAYER_ID, 'line-opacity', ['case',
+          ['boolean', ['feature-state', 'selected'], false], 1.0,
+          ['match', ['get', 'positionTruthState'], 'stale', train.staleOpacity, 0.95]]);
+      }
+      if (train && map.getLayer(TRAIN_CASING_LAYER_ID)) {
+        // Train Contrast / LOD Fix — casing color is flat (never zoom-
+        // blended); selection reads `selectedCasing` (a bright, obvious
+        // outline independent of the inner body's route-color blend).
+        map.setPaintProperty(TRAIN_CASING_LAYER_ID, 'line-color',
+          ['case', ['boolean', ['feature-state', 'selected'], false], train.selectedCasing, train.casing]);
+        map.setPaintProperty(TRAIN_CASING_LAYER_ID, 'line-opacity', ['case',
+          ['boolean', ['feature-state', 'selected'], false], 1.0,
+          ['match', ['get', 'positionTruthState'], 'stale', train.staleOpacity, 0.95]]);
+      }
+    } catch (e) { console.warn('[MTASubwayMapLayer] _applyPaletteStyling error:', e && e.message || e); }
+  }
+
+  // ── Palette switching (BUILD §21, prior build; §9/§18-21 this build) ─────
   function setPalette(paletteId) {
     var pa = _palette();
     if (!pa) return { ok: false, reason: 'palette_unavailable' };
     var result = pa.setActivePalette(paletteId);
-    if (result.ok) refresh(); // re-resolve display colors only — routeId/stlib ids untouched
+    if (result.ok) {
+      var map = _map();
+      if (map) _applyPaletteStyling(map);
+      refresh(); // re-resolve display colors only — routeId/stlib ids untouched
+    }
     _renderHudDiagnostics();
     return result;
   }
@@ -397,10 +805,12 @@
   // ── Diagnostics (BUILD §24 / 0818_Logical_Rolling_Stock §35 snapshot) ────
   function getDiagnostics() {
     var store = _store(), poll = _poll(), inv = _inventory(), lib = _library(), pa = _palette(), rs = _rollingStock();
+    var mm = _motionModel();
     var storeDiag = store ? store.getDiagnostics() : {};
     var libDiag = lib ? lib.getDiagnostics() : {};
     var pollState = poll ? poll.getState() : {};
     var rsDiag = rs ? rs.getDiagnostics() : {};
+    var mmDiag = mm ? mm.getDiagnostics() : {};
     return {
       version: VERSION,
       active: _active,
@@ -415,6 +825,7 @@
         (rsDiag.logicalTrainIdentityCollisionCount || 0) + (rsDiag.logicalCarIdentityCollisionCount || 0), // required invariant: must be 0
       selectedStationId: _selectedStationId,
       selectedTrainId: _selectedTrainId,
+      followedTrainId: _followedTrainId,
       activeRealtimeTripCount: storeDiag.tripCount || 0,
       activeRealtimeVehicleCount: storeDiag.vehicleCount || 0,
       alertCount: storeDiag.alertCount || 0,
@@ -440,15 +851,31 @@
       unresolvedTripAssociationCount: rsDiag.unresolvedTripAssociationCount || 0,
       tripReassociationCount: rsDiag.tripReassociationCount || 0,
       newLogicalTrainsCreated: rsDiag.newLogicalTrainsCreated || 0,
+      // 0818_SUBWAY_Train_Rendering_Palette_Library_v1.0.0_BUILD — train
+      // body/motion diagnostics
+      trainBodyByMotionPhase: mmDiag.byMotionPhase || {},
+      trainBodyByEvidenceTier: mmDiag.byEvidenceTier || {},
+      activeTrainJourneyCount: mmDiag.activeJourneyCount || 0,
       logicalTrainsReused: rsDiag.logicalTrainsReused || 0,
       lastReconcileAt: rsDiag.lastReconcileAt || null,
     };
   }
 
-  // ── Minimal visible HUD — palette switcher + diagnostics + selection panel.
-  //    Injected only while active(); Creative Interface Doctrine: quiet by
-  //    default (small corner card), never blocks map interaction, no
-  //    fixture/test-only affordances. ─────────────────────────────────────
+  // ── Debug/operator HUD — palette switcher + raw diagnostics + internal-id
+  //    selection detail. BUILD §5/§13 (0819_SUBWAY_Public_HUD_Line_Ribbon):
+  //    this panel is no longer the public-facing surface (see
+  //    subwayStationHud.js/subwayLineRibbon.js for that) — route/station/
+  //    train counts, freshness, poll state, palette diagnostics, and
+  //    internal stlib-*/trip/car ids are debug/operator information only.
+  //    Gated behind SBE.runtimeFlags.showSubwayDebugHud, the SAME existing
+  //    internal mechanism this codebase already uses for its other debug
+  //    overlays (e.g. showHarborSectorDebug) — never rendered publicly by
+  //    default, always still queryable via getDiagnostics()/
+  //    _wos.debug.subway.diagnostics() regardless of the flag. ───────────
+  function _debugHudEnabled() {
+    return !!(global.SBE && SBE.runtimeFlags && SBE.runtimeFlags.showSubwayDebugHud);
+  }
+
   function _ensureHud() {
     if (_hud || !global.document) return;
     var root = global.document.createElement('div');
@@ -498,6 +925,8 @@
 
   function _renderHudDiagnostics() {
     if (!_hud) return;
+    _hud.root.style.display = _debugHudEnabled() ? '' : 'none';
+    if (!_debugHudEnabled()) return; // cheap early-out — never renders (or leaks internal ids into) an invisible panel
     var d = getDiagnostics();
     var activePalette = _palette() ? _palette().getActivePalette() : null;
     _hud.diagEl.innerHTML =
@@ -510,14 +939,42 @@
     });
   }
 
+  // v4.0.0 (BUILD §25) — the same selection panel now also shows live
+  // arrival intelligence for the exact selected Station Library record. No
+  // second panel; existing exact-station selection behavior above is
+  // unchanged.
   function _renderHudSelection(record) {
-    if (!_hud) return;
+    if (!_hud || !_debugHudEnabled()) return;
     if (!record) { _hud.selEl.innerHTML = '<em style="color:#888">Click a station to select it</em>'; return; }
     var op = record.operational;
-    _hud.selEl.innerHTML =
+    var html =
       '<strong>' + (op.displayName || '(unnamed)') + '</strong><br>' +
       op.borough + ' · ' + (op.routeIds.length ? op.routeIds.join(' ') : '—') + '<br>' +
       '<span style="color:#888">' + record.studioRichStationId + ' · stop ' + record.authoritativeLink.gtfsStopId + '</span>';
+
+    var ai = _arrivalIntelligence();
+    if (ai) {
+      var result = ai.getArrivalsForStation(record.studioRichStationId);
+      if (result.ok) {
+        var freshColor = { live: '#7CFF9C', aging: '#FFD37C', unavailable: '#FF9C7C' }[result.data.freshnessState] || '#888';
+        html += '<div style="margin-top:6px;border-top:1px solid #333;padding-top:6px;">' +
+          '<span style="color:' + freshColor + '">arrivals: ' + result.data.freshnessState + '</span>';
+        if (!result.data.directions.length) {
+          html += '<br><em style="color:#888">no upcoming arrivals from live data</em>';
+        } else {
+          result.data.directions.forEach(function (dir) {
+            html += '<br><strong>' + dir.friendlyLabel + '</strong>';
+            if (!dir.arrivals.length) { html += '<br><span style="color:#888">—</span>'; return; }
+            dir.arrivals.forEach(function (a) {
+              var etaLabel = a.dueSoon ? 'Due' : (Math.round(a.etaSeconds / 60) + ' min');
+              html += '<br>' + a.routeId.replace('subway:route:', '') + ' — ' + etaLabel;
+            });
+          });
+        }
+        html += '</div>';
+      }
+    }
+    _hud.selEl.innerHTML = html;
   }
 
   // Minimum inspection data required by BUILD §26-27: logical train ID,
@@ -525,7 +982,7 @@
   // car count (+ first/last car id), position truth state, current/last
   // stop, next stop, freshness. No car-detail editing (§26 explicit).
   function _renderHudTrainSelection(inspection) {
-    if (!_hud) return;
+    if (!_hud || !_debugHudEnabled()) return;
     if (!inspection || !inspection.train) { _hud.trainSelEl.innerHTML = '<em style="color:#888">Click a train to select it</em>'; return; }
     var t = inspection.train, pos = inspection.position, cars = inspection.cars || [];
     var freshnessMs = pos && pos.observedTimestamp ? (Date.now() - pos.observedTimestamp) : null;
@@ -558,8 +1015,14 @@
     selectTrain: selectTrain,
     clearTrainSelection: clearTrainSelection,
     getSelectedTrain: getSelectedTrain,
+    followTrain: followTrain,
+    unfollowTrain: unfollowTrain,
+    getFollowedTrainId: getFollowedTrainId,
     setPalette: setPalette,
     getDiagnostics: getDiagnostics,
+    __laneOffsetPxForZoom: _laneOffsetPxForZoom,
+    __routeColorBlendFactor: _routeColorBlendFactor,
+    __blendHexColors: _blendHexColors,
   });
 
   // main.js's DOMContentLoaded handler replaces window._wos wholesale and
@@ -582,6 +1045,9 @@
       selectTrain: selectTrain,
       clearTrainSelection: clearTrainSelection,
       getSelectedTrain: getSelectedTrain,
+      followTrain: followTrain,
+      unfollowTrain: unfollowTrain,
+      getFollowedTrainId: getFollowedTrainId,
       setPalette: setPalette,
     };
   }

@@ -361,6 +361,232 @@
         results.push(_assert('#23 full-network scaling fixture (A/C/1/G routes) available in the committed static snapshot', false, multiRoutes.map(function (r) { return r.id; })));
       }
 
+      // ── 0820_MAPS_Itinerary_Execution_Lifecycle_Storage — retention bound ──
+      // Confirmed root cause of a real production incident: this file
+      // persisted every logical train/consist/car it ever minted, forever.
+      // 6+ days of continuous 5s reconcile() cycles against live MTA data
+      // grew wos:subwayLogicalRollingStock:v1 until localStorage.setItem()
+      // threw QuotaExceededError — which silently broke an entirely
+      // unrelated system sharing the same origin (the itinerary command
+      // channel). These tests lock in the fix: idle trains are pruned after
+      // a bounded age, an active train is never pruned regardless of age,
+      // and a hard count backstop exists independent of age.
+      (function () {
+        rs.__resetForTests();
+        var routeP = routeA;
+        var T = 10000000;
+
+        // #24 — an ended train older than PRUNE_IDLE_AFTER_MS is pruned:
+        // train, consist, AND every one of its cars all removed together.
+        store.applyRealtimeUpdate(
+          [_tripRow('P1', routeP.authoritativeId, 'TRAIN-P1', 'N', [])],
+          [_vehicleRow('P1', routeP.authoritativeId, 'TRAIN-P1', anyStopId, 'STOPPED_AT', 1, T)],
+          [GROUP]
+        );
+        rs.reconcile({ now: T });
+        var p1TrainId = rs.getTripAssociation('P1').logicalTrainId;
+        var p1Train = rs.getLogicalTrain(p1TrainId);
+        var p1ConsistId = p1Train.consistId;
+        var p1CarIds = rs.getLogicalCarsForConsist(p1ConsistId).map(function (c) { return c.id; });
+        store.applyRealtimeUpdate([], [], [GROUP]);
+        rs.reconcile({ now: T + 400000 }); // past ENDED_AFTER_MS — now genuinely idle
+        results.push(_assert('#24 setup: train is idle/ended before the retention test begins',
+          rs.getLogicalTrain(p1TrainId).lifecycleState === 'ended'));
+        rs.__forceTrainAgeForTests(p1TrainId, T + 400000 - (rs.PRUNE_IDLE_AFTER_MS + 1000), 'ended');
+        var pruneResult1 = rs.__pruneForTests(T + 400000);
+        results.push(_assert('#24 an idle train older than PRUNE_IDLE_AFTER_MS is pruned', rs.getLogicalTrain(p1TrainId) === null));
+        results.push(_assert('#24 its consist is pruned alongside it', rs.getLogicalConsist(p1ConsistId) === null));
+        results.push(_assert('#24 every one of its cars is pruned alongside it',
+          p1CarIds.every(function (id) { return rs.getLogicalCar(id) === null; }), p1CarIds));
+        results.push(_assert('#24 __pruneForTests reports exactly the one removed train', pruneResult1.removedTrains === 1, pruneResult1));
+        results.push(_assert('#24 the now-dangling trip association is swept in the same pass',
+          rs.getTripAssociation('P1') === null || !rs.getLogicalTrain(rs.getTripAssociation('P1').logicalTrainId)));
+
+        // #25 — an ended train NOT yet old enough survives pruning untouched.
+        store.applyRealtimeUpdate(
+          [_tripRow('P2', routeP.authoritativeId, 'TRAIN-P2', 'N', [])],
+          [_vehicleRow('P2', routeP.authoritativeId, 'TRAIN-P2', anyStopId, 'STOPPED_AT', 1, T)],
+          [GROUP]
+        );
+        rs.reconcile({ now: T });
+        var p2TrainId = rs.getTripAssociation('P2').logicalTrainId;
+        store.applyRealtimeUpdate([], [], [GROUP]);
+        rs.reconcile({ now: T + 400000 });
+        rs.__forceTrainAgeForTests(p2TrainId, T + 400000 - 1000, 'ended'); // only 1s idle, nowhere near the 24h bound
+        rs.__pruneForTests(T + 400000);
+        results.push(_assert('#25 an ended train well under the retention age survives pruning', !!rs.getLogicalTrain(p2TrainId)));
+
+        // #26 — an active train (real activeTripId) is NEVER pruned, no
+        // matter how old updatedAt claims to be — the safety guarantee the
+        // whole design depends on (an in-progress ride must never vanish).
+        // Deliberately a DIFFERENT route pool than P2 (routeOther, not
+        // routeP) — same-pool would let pool-reassignment correctly reuse
+        // P2's now-idle train for P3 (the exact behavior test #11/#12
+        // elsewhere in this file confirms is intentional), which would
+        // collapse this test's two trains into one and test nothing.
+        store.applyRealtimeUpdate(
+          [_tripRow('P3', routeOther.authoritativeId, 'TRAIN-P3', 'N', [])],
+          [_vehicleRow('P3', routeOther.authoritativeId, 'TRAIN-P3', anyStopId, 'STOPPED_AT', 1, T)],
+          [GROUP]
+        );
+        rs.reconcile({ now: T });
+        var p3TrainId = rs.getTripAssociation('P3').logicalTrainId;
+        results.push(_assert('#26 setup: train is genuinely active (has activeTripId) before the retention test', !!rs.getLogicalTrain(p3TrainId).activeTripId));
+        rs.__forceTrainAgeForTests(p3TrainId, T - rs.PRUNE_IDLE_AFTER_MS - 1000); // claims to be ancient, but stays active
+        rs.__pruneForTests(T);
+        results.push(_assert('#26 an active train is never pruned regardless of claimed age', !!rs.getLogicalTrain(p3TrainId)));
+
+        // #27 — hard count backstop: with the cap overridden low, exceeding
+        // it evicts the oldest IDLE trains first, oldest-updatedAt-first,
+        // and never touches the active one even though it's numerically
+        // included in the total count.
+        // At this point exactly 2 trains remain: P2 (idle, survived #25) and
+        // P3 (active). Capping at 1 forces eviction of the one idle train.
+        var beforeCap = rs.getAllLogicalTrains().length;
+        rs.__setMaxPersistedTrainsForTests(1);
+        try {
+          var pruneResult2 = rs.__pruneForTests(T);
+          var afterTrains = rs.getAllLogicalTrains();
+          results.push(_assert('#27 exceeding the (overridden, low) hard cap evicts down to at most the cap',
+            afterTrains.length <= 1, [beforeCap, afterTrains.length]));
+          results.push(_assert('#27 the active train (P3) survives the hard-cap eviction — never evicted regardless of count pressure',
+            !!rs.getLogicalTrain(p3TrainId)));
+          results.push(_assert('#27 the idle train (P2) is the one evicted, not the active one',
+            rs.getLogicalTrain(p2TrainId) === null));
+        } finally {
+          rs.__restoreMaxPersistedTrainsForTests();
+        }
+
+        // #28 — a save failure explicitly names QuotaExceededError rather
+        // than only recording a generic message, and does not throw out of
+        // reconcile() — the exact visibility gap that let a real quota
+        // failure here silently break an unrelated system.
+        var realLocalStorageSetItem = global.localStorage.setItem;
+        try {
+          global.localStorage.setItem = function () {
+            var err = new Error('The quota has been exceeded.');
+            err.name = 'QuotaExceededError';
+            throw err;
+          };
+          rs.reconcile({ now: T });
+          var diagAfterQuotaFailure = rs.getDiagnostics();
+          results.push(_assert('#28 a quota-exceeded save failure is recorded with the exception NAME, not just a message',
+            diagAfterQuotaFailure.lastSaveOk === false && diagAfterQuotaFailure.lastSaveError && diagAfterQuotaFailure.lastSaveError.isQuotaError === true,
+            diagAfterQuotaFailure.lastSaveError));
+          results.push(_assert('#28 reconcile() does not throw when the underlying save fails', true)); // reaching this line proves it
+        } finally {
+          global.localStorage.setItem = realLocalStorageSetItem;
+        }
+      })();
+
+      // ── #31 boot recovery for ALREADY-oversized existing state ───────────
+      // A real production capture showed a save STILL attempting 5.1MB after
+      // the pruning fix shipped — ordinary age-based pruning alone doesn't
+      // help a user who already has that much persisted, especially if
+      // trains keep getting reused (never aging out) despite the distinct-
+      // ever-created count being huge. This proves the progressive-shrink
+      // recovery actually converges to a size that fits, without ever
+      // touching an active train, using a real fixture at a scale the test
+      // suite can run quickly (steps overridden small rather than needing
+      // thousands of real records to exercise the same code path).
+      (function () {
+        rs.__resetForTests();
+        rs.__setRecoveryKeepStepsForTests([5, 2, 0]);
+
+        // _recoverFromOversizedBootState calls Date.now() internally (not a
+        // passed `now`), unlike the rest of this suite's synthetic T0 clock
+        // — so this block uses real current time throughout, deliberately
+        // recent (well under the 24h ordinary-pruning threshold), to force
+        // the test through the AGGRESSIVE shrink path specifically rather
+        // than letting ordinary age-based pruning clear everything first.
+        var realNow = Date.now();
+
+        // One active train that must survive every recovery step, including
+        // the most aggressive one.
+        store.applyRealtimeUpdate(
+          [_tripRow('R-ACTIVE', routeA.authoritativeId, 'TRAIN-R-ACTIVE', 'N', [])],
+          [_vehicleRow('R-ACTIVE', routeA.authoritativeId, 'TRAIN-R-ACTIVE', anyStopId, 'STOPPED_AT', 1, realNow)],
+          [GROUP]
+        );
+        rs.reconcile({ now: realNow });
+        var activeTrainId = rs.getTripAssociation('R-ACTIVE').logicalTrainId;
+
+        // 8 idle trains, all on the same route but created SIMULTANEOUSLY in
+        // one batch — real, previously-hit pitfall (this file's own #29/#30
+        // storage tests hit the same thing): creating them one at a time
+        // lets pool-reassignment correctly reuse the previous one's
+        // now-idle slot the instant it goes idle, collapsing all 8 into a
+        // single train instead of 8 distinct ones. Associating them all in
+        // one reconcile() pass means none can be reused until AFTER all 8
+        // already exist, so 8 genuinely distinct trains get minted.
+        var idleTripRows = [], idleVehicleRows = [];
+        for (var i = 0; i < 8; i++) {
+          idleTripRows.push(_tripRow('R-IDLE-' + i, routeOther.authoritativeId, 'TRAIN-R-IDLE-' + i, 'N', []));
+          idleVehicleRows.push(_vehicleRow('R-IDLE-' + i, routeOther.authoritativeId, 'TRAIN-R-IDLE-' + i, anyStopId, 'STOPPED_AT', 1, realNow));
+        }
+        store.applyRealtimeUpdate(idleTripRows, idleVehicleRows, [GROUP]);
+        rs.reconcile({ now: realNow });
+        var idleIds = idleTripRows.map(function (t) { return rs.getTripAssociation(t.tripId).logicalTrainId; });
+        var idleIdSet = {}; idleIds.forEach(function (id) { idleIdSet[id] = true; });
+        results.push(_assert('#31 setup: 8 genuinely distinct idle trains were minted (pool reuse did not collapse them)',
+          Object.keys(idleIdSet).length === 8, idleIds));
+        // All 8 idle trips end together — a second reconcile past
+        // ENDED_AFTER_MS (5min) but still only seconds old in real terms, so
+        // age-based pruning (24h) does NOT catch them, forcing the test
+        // through the AGGRESSIVE shrink path specifically. R-ACTIVE must
+        // stay IN this feed (real bug caught running this test the first
+        // time: an empty feed here ages EVERY unseen trip, including
+        // R-ACTIVE, silently ending the one train that's supposed to stay
+        // active for the rest of the test).
+        store.applyRealtimeUpdate(
+          [_tripRow('R-ACTIVE', routeA.authoritativeId, 'TRAIN-R-ACTIVE', 'N', [])],
+          [_vehicleRow('R-ACTIVE', routeA.authoritativeId, 'TRAIN-R-ACTIVE', anyStopId, 'STOPPED_AT', 1, realNow + 400000)],
+          [GROUP]
+        );
+        rs.reconcile({ now: realNow + 400000 });
+        results.push(_assert('#31 setup: the active train is still genuinely active right before recovery runs',
+          !!rs.getLogicalTrain(activeTrainId) && !!rs.getLogicalTrain(activeTrainId).activeTripId, rs.getLogicalTrain(activeTrainId)));
+
+        results.push(_assert('#31 setup: 1 active + 8 idle trains exist before recovery',
+          !!rs.getLogicalTrain(activeTrainId) && idleIds.every(function (id) { return !!rs.getLogicalTrain(id); })));
+
+        // Simulate a save that only succeeds once genuinely small — mirrors
+        // real quota behavior (size-dependent), not a blanket always-fail.
+        var realSetItem = global.localStorage.setItem;
+        // Calibrated against this suite's own real fixture, not guessed: one
+        // train (with its default 10 cars) serializes to ~4.1KB here, so all
+        // 9 trains together are well over 30KB. 6KB comfortably fits the one
+        // active train alone (must always survive) plus a little headroom,
+        // while firmly rejecting anything close to the full 9.
+        var QUOTA_SIM_LIMIT = 6000;
+        try {
+          global.localStorage.setItem = function (key, value) {
+            if (value.length > QUOTA_SIM_LIMIT) {
+              var err = new Error('The quota has been exceeded.');
+              err.name = 'QuotaExceededError';
+              throw err;
+            }
+            return realSetItem.call(global.localStorage, key, value);
+          };
+          rs.__triggerBootRecoveryForTests(999999);
+        } finally {
+          global.localStorage.setItem = realSetItem;
+        }
+
+        var diagAfterRecovery = rs.getDiagnostics();
+        results.push(_assert('#31 recovery eventually succeeds (a save under the simulated limit lands)',
+          diagAfterRecovery.lastSaveOk === true, diagAfterRecovery));
+        results.push(_assert('#31 recovery is recorded as having needed aggressive shrinking, not just ordinary pruning',
+          diagAfterRecovery.lastBootRecovery && diagAfterRecovery.lastBootRecovery.neededAggressiveShrink === true, diagAfterRecovery.lastBootRecovery));
+        results.push(_assert('#31 the active train survives recovery regardless of how aggressively idle trains were shrunk',
+          !!rs.getLogicalTrain(activeTrainId)));
+        results.push(_assert('#31 idle trains were actually reduced (fewer than all 8 survive)',
+          idleIds.filter(function (id) { return !!rs.getLogicalTrain(id); }).length < 8,
+          idleIds.map(function (id) { return !!rs.getLogicalTrain(id); })));
+
+        rs.__restoreRecoveryKeepStepsForTests();
+      })();
+
       rs.__resetForTests();
       store.applyRealtimeUpdate([], [], [GROUP]);
 

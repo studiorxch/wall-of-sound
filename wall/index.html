@@ -2411,8 +2411,24 @@
     <script src="./systems/presentation/wosChannelBootRuntime.js"></script>
     <!-- ── Three.js (0531J) — required by WorldSpaceVehicleLayer ───────────── -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
-    <!-- ── GLTFLoader (0618A) — non-ESM build, sets THREE.GLTFLoader ────────── -->
-    <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/loaders/GLTFLoader.js"></script>
+    <!-- ── GLTFLoader (0618A, repaired 0825) — the non-ESM
+         examples/js/loaders/GLTFLoader.js build this used to load no longer
+         exists in three@0.160.0 (three.js removed the legacy UMD examples/js
+         builds; confirmed 404 live, 2026-08-25 — this was silently breaking
+         EVERY GLB load path in wall/, including wallRuntimeGlbRenderLayer.js's
+         ford_focus_low_poly.glb, not just new work). Fixed with an ES-module
+         import shim that still attaches THREE.GLTFLoader onto the SAME
+         window.THREE the rest of the app already uses (three@0.160.0's own
+         module build, not a second unrelated copy) — every existing
+         `THREE.GLTFLoader` call site keeps working unchanged. ── -->
+    <script type="importmap">
+      { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+    </script>
+    <script type="module">
+      import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/GLTFLoader.js';
+      window.THREE.GLTFLoader = GLTFLoader;
+      window.dispatchEvent(new Event('wos:gltfloader-ready'));
+    </script>
     <!-- ── 0625E: ThreeSkyLayer — Mapbox custom layer atmospheric sky shader ── -->
     <script src="./threeSkyLayer.js"></script>
     <!-- ── 0626: WOS Runtime stabilisation — must load before Orbital ───────── -->
@@ -2499,6 +2515,16 @@
     <script src="./systems/transit/mtaSubwayFeedSourceInventory.js"></script>
     <script src="./systems/transit/mtaSubwayStaticAdapter.js"></script>
     <script src="./systems/transit/mtaSubwayStaticAdapter.tests.js"></script>
+    <!-- ── Subway Track Structure Authority (2026-08-26 investigation) —
+         infrastructure TRUTH only: classifies a shape-segment/position as
+         underground/elevated/at_grade/open_cut/embankment/unknown from a
+         real, offline-joined snapshot of the official NYC Subway Lines
+         ROW_TYPE dataset. classifyPosition() reads MTASubwayStaticAdapter's
+         already-loaded shapes (loaded just above), never a second fetch of
+         them. Load-only — deliberately NOT wired into altitude, 3D
+         visibility/LOD, motion, itinerary, Sunroof, or audio yet. ── -->
+    <script src="./systems/transit/subwayTrackStructureAuthority.js"></script>
+    <script src="./systems/transit/subwayTrackStructureAuthority.tests.js"></script>
     <script src="./systems/transit/mtaSubwayRealtimeAdapter.js"></script>
     <script src="./systems/transit/mtaSubwayIdentity.js"></script>
     <script src="./systems/transit/mtaSubwayIdentity.tests.js"></script>
@@ -2545,6 +2571,33 @@
          directly — this file owns identity/style/behavior/history only. ── -->
     <script src="./systems/transit/subwayResidentGraffitiArtistAuthority.js"></script>
     <script src="./systems/transit/subwayResidentGraffitiArtistAuthority.tests.js"></script>
+    <!-- ── 0818_SUBWAY_Live_Train_Visualization — pure derivation layers.
+         SubwayTrainVisualState must load BEFORE mtaSubwayMapFeatures.js
+         (which calls it for bearing/headsign on train features).
+         SubwayArrivalIntelligence reads MTASubwayTransitStore/
+         MTASubwayStationLibrary/SubwayLogicalRollingStockAuthority/
+         MTASubwayPollingRuntime only at CALL time, not load time — any
+         position after those existing scripts is safe; placed here to keep
+         every SUBWAY-transit-layer script grouped together. ── -->
+    <script src="./systems/transit/subwayTrainVisualState.js"></script>
+    <script src="./systems/transit/subwayTrainVisualState.tests.js"></script>
+    <script src="./systems/transit/subwayArrivalIntelligence.js"></script>
+    <script src="./systems/transit/subwayArrivalIntelligence.tests.js"></script>
+    <!-- ── 0819_SUBWAY_Itinerary_Recovery_Transit_Foundation — pure read-only
+         leg resolver for the mode-independent Itinerary spine. Reads
+         MTASubwayTransitStore/MTASubwayStationLibrary/
+         SubwayLogicalRollingStockAuthority/SubwayArrivalIntelligence only at
+         CALL time, so placement only needs to be after those scripts, which
+         it already is here. ── -->
+    <script src="./systems/transit/subwayItineraryLegResolver.js"></script>
+    <script src="./systems/transit/subwayItineraryLegResolver.tests.js"></script>
+    <!-- ── 0818_SUBWAY_Train_Rendering_Palette_Library — SubwayTrainMotionModel
+         is a pure derivation on top of SubwayLogicalRollingStockAuthority +
+         SubwayTrainVisualState (bearing/directionId) — must load AFTER both,
+         and BEFORE mtaSubwayMapFeatures.js (which calls it to build the
+         train BODY GeoJSON layer, replacing the old point-marker path). ── -->
+    <script src="./systems/transit/subwayTrainMotionModel.js"></script>
+    <script src="./systems/transit/subwayTrainMotionModel.tests.js"></script>
     <script src="./systems/transit/mtaSubwayMapFeatures.js"></script>
     <script src="./systems/transit/mtaSubwayMapFeatures.tests.js"></script>
     <!-- ── SUBWAY: Station Library (0818_SUBWAY_Station_Library_Foundation) —
@@ -2799,6 +2852,62 @@
          is available once boot activates. ── -->
     <script src="./systems/presentation/mtaSubwayMapLayer.js"></script>
     <script src="./systems/presentation/mtaSubwayMapLayer.tests.js"></script>
+    <!-- ── 0819_SUBWAY_Public_HUD_Line_Ribbon_v1.0.0_BUILD — public-facing
+         HUD surface (station identity/arrivals, line ribbon) + the
+         subway-presentation body-class toggle. All three reference
+         MTASubwayMapLayer/MTASubwayStationLibrary/SubwayArrivalIntelligence/
+         SubwayTrainMotionModel only at CALL time (inside function bodies),
+         never at module load time, so exact ordering relative to those
+         doesn't matter here — placed right after mtaSubwayMapLayer.js to
+         keep every SUBWAY presentation-layer script grouped together. ── -->
+    <script src="./systems/presentation/subwayPresentationSurface.js"></script>
+    <script src="./systems/presentation/subwayStationHud.js"></script>
+    <script src="./systems/presentation/subwayLineRibbon.js"></script>
+    <script src="./systems/presentation/subwayPresentationSurface.tests.js"></script>
+    <script src="./systems/presentation/subwayStationHud.tests.js"></script>
+    <script src="./systems/presentation/subwayLineRibbon.tests.js"></script>
+    <!-- ── 0819_SUBWAY_Sunroof_Camera_Ride_Test_v1.0.0_BUILD — experimental
+         camera-follow mode. Reads SubwayTrainMotionModel/MapboxViewportRuntime
+         /MTASubwayMapLayer/SubwayLineRibbon only at call time; placed after
+         all four so no load-order fragility either way. ── -->
+    <script src="./systems/presentation/subwayCameraSunroof.js"></script>
+    <script src="./systems/presentation/subwayCameraSunroof.tests.js"></script>
+    <!-- ── 0825_MAPS_Ep2_3D_Train_Actor_Foundation — presentation-only 3D
+         actor, dev-flag gated (OFF by default). Read-only against
+         MTASubwayMapLayer/SubwayTrainMotionModel/
+         SubwayLogicalRollingStockAuthority/SunroofCameraController (all
+         loaded above) only at call/tick time; placed after Sunroof, before
+         the itinerary-ride block, since it has no relationship to itinerary
+         state.
+         0825_WOS_Global_3D_Train_Visibility_LOD — adds Subway3DVisibilityPolicy,
+         the pure/deterministic multi-train visibility decision module the
+         actor layer now calls every tick. Loaded before the actor layer
+         since it's a dependency, though the actor only reads it at tick
+         time (not at load time). ── -->
+    <script src="./systems/transit/subwayTrainCarVisualAdapter.js"></script>
+    <script src="./systems/transit/subwayTrainCarVisualAdapter.tests.js"></script>
+    <script src="./systems/presentation/subway3DVisibilityPolicy.js"></script>
+    <script src="./systems/presentation/subway3DVisibilityPolicy.tests.js"></script>
+    <script src="./systems/presentation/subway3DTrainActorLayer.js"></script>
+    <script src="./systems/presentation/subway3DTrainActorLayer.tests.js"></script>
+    <!-- ── 0819_SUBWAY_Itinerary_Execution_Map_Authoring — the execution half
+         of the SUBWAY itinerary story (resolution was the prior checkpoint).
+         SubwayItineraryRideAuthority reads SubwayItineraryLegResolver/
+         SubwayLogicalRollingStockAuthority/SunroofCameraController only at
+         call time; placed after Sunroof (just above) so no load-order
+         fragility either way. RideHud loads after the authority it renders. ── -->
+    <script src="./systems/transit/subwayItineraryRideAuthority.js"></script>
+    <script src="./systems/transit/subwayItineraryRideAuthority.tests.js"></script>
+    <script src="./systems/presentation/subwayItineraryRideHud.js"></script>
+    <script src="./systems/presentation/subwayItineraryRideHud.tests.js"></script>
+    <!-- ── 0820_SUBWAY_Post_Launch_Execution_Investigation — TEMPORARY
+         diagnostic HUD for the reported post-launch execution stall. Reads
+         the (also temporary) getDiagnostics() this build added to
+         ItineraryRunController/ItineraryRunAuthority/
+         SubwayItineraryRideAuthority, all three already loaded above.
+         Remove this script tag (and the getDiagnostics() blocks in those
+         three files) once the stall is root-caused. ── -->
+    <script src="./systems/presentation/itineraryExecutionDiagnosticsHud.js"></script>
     <!-- ── 0818_SUBWAY_Full_Live_Map_Integration — SUBWAY boot entry. Same
          no-client-router convention as the RACETRACK `?mode=racetrack` boot
          block immediately above: a `?mode=subway` query param, checked once
