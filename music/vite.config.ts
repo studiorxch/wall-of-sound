@@ -1027,6 +1027,86 @@ export default defineConfig({
           })
         })
 
+        // 0813_MUSIC_P0_Clean_Library_Foundation — dedicated, validated
+        // write route for library.index.json (external/reference), the
+        // other shared filesystem-authority file /library-write's generic
+        // "write any JSON to any path" contract couldn't safely protect.
+        // Same pattern as /sampler-banks-write above: final-authority
+        // revalidation against what's actually on disk (never trusts the
+        // client's belief alone — that's exactly what a bad scan path or a
+        // second concurrent tab gets wrong) via the same domain-agnostic
+        // evaluateServerSideBankWrite count check, plus an atomic
+        // temp-file-and-rename write, never a direct in-place overwrite.
+        server.middlewares.use('/library-index-write', (req: IncomingMessage, res: ServerResponse) => {
+          if (req.method !== 'POST') {
+            res.statusCode = 405; res.end(JSON.stringify({ ok: false, error: 'Method Not Allowed' })); return
+          }
+          res.setHeader('Content-Type', 'application/json')
+          res.setHeader('Access-Control-Allow-Origin', '*')
+          const url = new URL(req.url ?? '/', 'http://localhost')
+          const owner = url.searchParams.get('owner')
+          if (owner !== 'external' && owner !== 'reference') {
+            res.statusCode = 400
+            res.end(JSON.stringify({ ok: false, error: 'owner must be "external" or "reference"', reason: 'invalid-request' }))
+            return
+          }
+          const indexPath = path.join(LIBRARY_ROOT, owner, 'library.index.json')
+          const chunks: Buffer[] = []
+          req.on('data', (chunk: Buffer) => chunks.push(chunk))
+          req.on('end', () => {
+            let payload: { tracks?: unknown; expectedPriorCount?: unknown; deletionAuthorized?: unknown }
+            try {
+              payload = JSON.parse(Buffer.concat(chunks).toString('utf-8'))
+            } catch {
+              res.statusCode = 400
+              res.end(JSON.stringify({ ok: false, error: 'Request body is not valid JSON', reason: 'invalid-request' }))
+              return
+            }
+            const { tracks, expectedPriorCount, deletionAuthorized } = payload
+            if (!Array.isArray(tracks) || typeof expectedPriorCount !== 'number' || typeof deletionAuthorized !== 'boolean') {
+              res.statusCode = 400
+              res.end(JSON.stringify({ ok: false, error: 'Expected { tracks: array, expectedPriorCount: number, deletionAuthorized: boolean }', reason: 'invalid-request' }))
+              return
+            }
+
+            let currentOnDiskCount: number
+            if (!fs.existsSync(indexPath)) {
+              currentOnDiskCount = 0
+            } else {
+              try {
+                const raw = fs.readFileSync(indexPath, 'utf-8')
+                const parsed = JSON.parse(raw)
+                if (!Array.isArray(parsed)) throw new Error('on-disk index is not an array')
+                currentOnDiskCount = parsed.length
+              } catch (e) {
+                res.statusCode = 500
+                res.end(JSON.stringify({ ok: false, error: `Existing ${owner}/library.index.json is unreadable/corrupt: ${String(e)}`, reason: 'unreadable-authority' }))
+                return
+              }
+            }
+
+            const decision = evaluateServerSideBankWrite(currentOnDiskCount, expectedPriorCount, tracks.length, deletionAuthorized)
+            if (!decision.accept) {
+              res.statusCode = 409
+              res.end(JSON.stringify({ ok: false, error: `Write rejected: ${decision.reason}`, reason: decision.reason }))
+              return
+            }
+
+            try {
+              const dir = path.dirname(indexPath)
+              fs.mkdirSync(dir, { recursive: true })
+              const tmpPath = path.join(dir, `.library.index.json.tmp-${randomUUID()}`)
+              fs.writeFileSync(tmpPath, JSON.stringify(tracks), 'utf-8')
+              fs.renameSync(tmpPath, indexPath)
+              res.statusCode = 200
+              res.end(JSON.stringify({ ok: true, count: tracks.length }))
+            } catch (e) {
+              res.statusCode = 500
+              res.end(JSON.stringify({ ok: false, error: String(e), reason: 'write-failed' }))
+            }
+          })
+        })
+
         // /library-import?filename=<name>&dest=catalog/audio — copy uploaded binary to LIBRARY_ROOT/dest/filename
         server.middlewares.use('/library-import', (req, res) => {
           if ((req as any).method !== 'POST') {

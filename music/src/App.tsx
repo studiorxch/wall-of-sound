@@ -3134,6 +3134,10 @@ export default function App() {
     const paths = LIBRARY_PATHS[owner as keyof typeof LIBRARY_PATHS];
     const defaults = SOURCE_DEFAULTS[owner];
     let current = libraryTracksRef.current;
+    // MUSIC P0 Clean Library Foundation — Step A: captured before `current`
+    // is mutated below, so the disk-index write's destructive-guard has a
+    // true "before" count to compare against, not the already-updated one.
+    const priorOwnerTrackCount = current.filter((t) => t.sourceOwner === owner).length;
     let csvAdded = 0, csvUpdated = 0, audioScanned = 0, audioAdded = 0, audioLinked = 0;
     const now = nowIso();
     const label = defaults.sourceLibrary;
@@ -3261,22 +3265,38 @@ export default function App() {
     const cacheSaved = savePlayProject(makeProj(playlistsRef.current, current), { reason: "update_library" });
     setLibraryUpdating(null);
 
-    // Write compact index file for external/reference (source of truth on disk).
+    // Write compact index file for external/reference (source of truth on
+    // disk). MUSIC P0 Clean Library Foundation — Step A: routed through the
+    // dedicated atomic /library-index-write route (temp-file + rename,
+    // server-revalidated against what's actually on disk) instead of the
+    // generic, unguarded /library-write — mirrors the exact fix already
+    // proven for sampler-banks.json (0812D). A rescan is never itself
+    // authorized to empty a previously-nonempty index — if a scan finds
+    // zero files where there were 10+ before, that's far more likely a bad
+    // path/unmounted volume than an intentional deletion, so it's blocked
+    // and surfaced as a warning rather than silently accepted.
     let diskIndexOk: boolean | null = null; // null = not applicable (studiorich)
     if (owner === "external" || owner === "reference") {
       const ownerTracks = current.filter((t) => t.sourceOwner === owner);
-      const indexPath = `${__LIBRARY_ROOT__}/${owner}/library.index.json`;
       const indexData = JSON.stringify(
         ownerTracks.map(({ objectUrl: _u, ...t }) => t),
       );
       try {
-        const wr = await fetch(`/library-write?path=${encodeURIComponent(indexPath)}`, {
+        const wr = await fetch(`/library-index-write?owner=${owner}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: indexData,
+          body: JSON.stringify({
+            tracks: JSON.parse(indexData),
+            expectedPriorCount: priorOwnerTrackCount,
+            deletionAuthorized: false,
+          }),
         });
         diskIndexOk = wr.ok;
-        if (!wr.ok) console.warn(`[UpdateLibrary] index write HTTP ${wr.status}`);
+        if (!wr.ok) {
+          const body = await wr.json().catch(() => ({}) as { reason?: string });
+          console.warn(`[UpdateLibrary] index write rejected (${wr.status}): ${body.reason ?? "unknown"}`);
+          warnings.push(`Disk index write rejected: ${body.reason ?? `HTTP ${wr.status}`}`);
+        }
       } catch (e) {
         diskIndexOk = false;
         console.warn(`[UpdateLibrary] index write failed:`, e);
@@ -3453,17 +3473,25 @@ export default function App() {
 
   function handleDeleteFromReference(trackIds: string[]) {
     const idSet = new Set(trackIds);
+    const prevRefCount = libraryTracksRef.current.filter((t) => t.sourceOwner === "reference").length;
     const next = libraryTracksRef.current.filter((t) => !idSet.has(t.trackId));
     libraryTracksRef.current = next;
     setLibraryTracks(next);
     savePlayProject(makeProj(playlistsRef.current, next));
-    // Rewrite reference index so the deletions survive refresh
+    // Rewrite reference index so the deletions survive refresh. Routed
+    // through the atomic /library-index-write route (Step A) — an explicit,
+    // deliberate per-track deletion is always authorized to empty the
+    // index if that's genuinely where it lands, unlike a rescan's implicit
+    // write above, which never is.
     const refTracks = next.filter((t) => t.sourceOwner === "reference");
-    const indexPath = `${__LIBRARY_ROOT__}/reference/library.index.json`;
-    fetch(`/library-write?path=${encodeURIComponent(indexPath)}`, {
+    fetch(`/library-index-write?owner=reference`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(refTracks.map(({ objectUrl: _u, ...t }) => t)),
+      body: JSON.stringify({
+        tracks: refTracks.map(({ objectUrl: _u, ...t }) => t),
+        expectedPriorCount: prevRefCount,
+        deletionAuthorized: true,
+      }),
     }).catch(() => {});
   }
 

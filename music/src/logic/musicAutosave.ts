@@ -126,6 +126,28 @@ const STORAGE_VERSION = "idb-v1";
 
 let _currentStateCache: PlayProject | null = null;
 
+// MUSIC P0 Clean Library Foundation — Step A. Serializes every IDB write
+// behind one promise chain so writes always land in the exact order their
+// calls happened, regardless of how long any individual write (especially
+// a checkpoint-carrying one) takes. Previously, two rapid saveMusicState
+// calls could race: a slower earlier "risky" save (which does checkpoint
+// work before writing `current`) could finish its write AFTER a faster,
+// later ordinary save — silently regressing the persisted `current` record
+// back to the earlier call's (now stale) state, even though the in-memory
+// cache stayed correct. Chaining onto this queue means a later call's
+// async work cannot even begin until an earlier call's has fully finished,
+// so the persisted order always matches the call order.
+let _writeQueue: Promise<void> = Promise.resolve();
+
+// Checkpoint throttle — extends real rollback protection to ordinary
+// (non-"risky") saves, not just the 9 named risky reasons, without
+// checkpoint-storming on rapid successive edits (there is no debounce
+// upstream of saveMusicState). A risky save always checkpoints regardless
+// of the throttle, preserving prior guarantees exactly; an ordinary save
+// checkpoints only if the last checkpoint (of any kind) is old enough.
+let _lastCheckpointAt = 0;
+const CHECKPOINT_THROTTLE_MS = 3000;
+
 /** Called by loadPlayProject (sync) and loadPlayProjectAsync to prime the cache. */
 export function primeStateCache(state: PlayProject | null): void {
   _currentStateCache = state;
@@ -342,13 +364,15 @@ export function saveMusicState(
   // Update in-memory cache immediately (sync — guard checks will see this)
   _currentStateCache = stateToWrite;
 
-  // Fire-and-forget IDB write
-  const shouldCheckpoint = (isRiskyReason(reason) || !!risky) && !!prevState;
-  void (async () => {
+  // Serialized IDB write — queued, not fire-and-forget (see _writeQueue comment above).
+  const isThrottleExpired = Date.now() - _lastCheckpointAt > CHECKPOINT_THROTTLE_MS;
+  const shouldCheckpoint = (isRiskyReason(reason) || !!risky || isThrottleExpired) && !!prevState;
+  _writeQueue = _writeQueue.then(async () => {
     try {
       let checkpointId: string | undefined;
       if (shouldCheckpoint && prevState) {
         checkpointId = await saveCheckpoint(reason, prevState, summaryBefore!);
+        _lastCheckpointAt = Date.now();
         await deleteOldCheckpoints(MAX_CHECKPOINTS);
         updateCheckpointManifest(checkpointId, reason, summaryBefore!);
       }
@@ -374,7 +398,7 @@ export function saveMusicState(
     } catch (e) {
       console.error("[MUSIC] IDB write failed:", e);
     }
-  })();
+  });
 
   return { ok: true, blocked: false, summaryBefore: summaryBefore ?? undefined, summaryAfter };
 }

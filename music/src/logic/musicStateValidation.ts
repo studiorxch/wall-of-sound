@@ -15,6 +15,23 @@ export function isMusicStateValid(value: unknown): value is PlayProject {
   return true;
 }
 
+// Per-sourceOwner collapse check (0813_MUSIC_P0_Clean_Library_Foundation).
+// The aggregate-only trackCount check below can miss a library-specific
+// wipe entirely: if External is the numerically smaller library, a bug
+// that zeroes it out 100% while Catalog stays untouched can easily stay
+// under the aggregate 80% floor, since Catalog's larger count masks the
+// ratio. Checked independently per library so no single library's loss
+// can hide behind another library's size.
+function hasPerSourceCollapse(
+  prevSum: ReturnType<typeof summarizeMusicState>,
+  nextSum: ReturnType<typeof summarizeMusicState>,
+): boolean {
+  if (prevSum.externalTrackCount >= 10 && nextSum.externalTrackCount < prevSum.externalTrackCount * 0.8) return true;
+  if (prevSum.studioTrackCount >= 10 && nextSum.studioTrackCount < prevSum.studioTrackCount * 0.8) return true;
+  if (prevSum.referenceTrackCount >= 10 && nextSum.referenceTrackCount < prevSum.referenceTrackCount * 0.8) return true;
+  return false;
+}
+
 export function isMusicStateHealthy(
   next: PlayProject,
   prev?: PlayProject | null,
@@ -25,6 +42,7 @@ export function isMusicStateHealthy(
   if (prev) {
     const prevSum = summarizeMusicState(prev);
     if (prevSum.trackCount >= 10 && nextSum.trackCount < prevSum.trackCount * 0.8) return false;
+    if (hasPerSourceCollapse(prevSum, nextSum)) return false;
     if (prevSum.nonDefaultPlaylistCount > 0 && nextSum.emptyDefaultOnlyPlaylist) return false;
     if (prevSum.crateCount > 0 && nextSum.crateCount === 0) return false;
     if (prevSum.samplerBankCount > 0 && nextSum.samplerBankCount === 0) return false;
@@ -44,6 +62,10 @@ export function checkDestructiveSave(
   const nextCrates = next.crates ?? [];
   const prevTracks = prev.libraryTracks ?? [];
   const nextTracks = next.libraryTracks ?? [];
+
+  if (hasPerSourceCollapse(summarizeMusicState(prev), summarizeMusicState(next))) {
+    return { blocked: true, blockReason: "source_library_collapse" };
+  }
 
   const prevUser = prevPlaylists.filter((pl) => pl.playlistKind !== "reference_overlay");
   const nextUser = nextPlaylists.filter((pl) => pl.playlistKind !== "reference_overlay");
