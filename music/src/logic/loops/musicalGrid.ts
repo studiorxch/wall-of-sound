@@ -168,7 +168,7 @@ export function resetToDetectedGrid(
 
 // §6 — derives ruler marks from the grid's OWN frame arrays (never from
 // rounded display seconds). `zoomLevel` controls density: overview shows
-// sparse bars only, fine shows every beat.
+// sparse bars only, fine shows every beat plus subdivisions.
 export function buildGridMarks(
   grid: MusicalGrid, sampleRate: number, zoomLevel: "overview" | "bars" | "beats" | "subdivisions" | "fine",
 ): MusicalGridMarkOut[] {
@@ -186,7 +186,30 @@ export function buildGridMarks(
       marks.push({ frame, seconds: frameToSeconds(frame, sampleRate), bar, beat, kind: "beat", label: `${bar}.${beat}` });
     });
   }
+  if (zoomLevel === "fine") {
+    buildSubdivisionFrames(grid).forEach((frame) => {
+      marks.push({ frame, seconds: frameToSeconds(frame, sampleRate), bar: 0, beat: 0, kind: "subdivision" });
+    });
+  }
   return marks.sort((a, b) => a.frame - b.frame);
+}
+
+// Ableton-legible ruler pass — 16th-note subdivision frames, purely
+// interpolated between the grid's own existing consecutive beatFrames
+// (never a new timing authority, never re-deriving BPM/origin). Ticks only
+// — subdivisions are never labeled (§ adaptive labeling: a "bar.beat.sub"
+// string at 16th-note density would be unreadable, not adaptive).
+export function buildSubdivisionFrames(grid: MusicalGrid): number[] {
+  const frames: number[] = [];
+  const SUBDIVISIONS_PER_BEAT = 4;
+  for (let i = 0; i < grid.beatFrames.length - 1; i++) {
+    const start = grid.beatFrames[i];
+    const span = grid.beatFrames[i + 1] - start;
+    for (let s = 1; s < SUBDIVISIONS_PER_BEAT; s++) {
+      frames.push(Math.round(start + (span * s) / SUBDIVISIONS_PER_BEAT));
+    }
+  }
+  return frames;
 }
 
 type MusicalGridMarkOut = {

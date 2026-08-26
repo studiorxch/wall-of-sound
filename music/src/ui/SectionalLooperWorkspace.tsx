@@ -52,6 +52,7 @@ import { GridBackdropLayer } from "./sectionalLooper/GridBackdropLayer";
 import { createTimelineTransform } from "./sectionalLooper/timelineTransform";
 import {
   buildMusicalGridFromBeatMap, setManualOrigin, nudgeGridOrigin, halfBpm, doubleBpm, resetToDetectedGrid,
+  buildSubdivisionFrames,
 } from "../logic/loops/musicalGrid";
 import { generateEqualSegments } from "../logic/loops/loopSegmentation";
 import { splitSegmentAtFrame, mergeAdjacentSegments, moveSharedBoundary } from "../logic/loops/segmentEditing";
@@ -563,6 +564,14 @@ export function SectionalLooperWorkspace({
   // already computed above; never a second timing authority.
   const gridBackdropLevels = useMemo(
     () => (activeGrid && activeGrid.barFrames.length > 1 ? buildGridBackdropBands(activeGrid.barFrames) : null),
+    [activeGrid],
+  );
+  // Ableton-legible ruler pass — same subdivision frames the docked ruler
+  // computes, reused here so the backdrop's faint subdivision lines share
+  // one derivation (never a second timing authority) and stay pixel-exact
+  // with the ruler's own ticks.
+  const subdivisionFrames = useMemo(
+    () => (activeGrid ? buildSubdivisionFrames(activeGrid) : []),
     [activeGrid],
   );
   const structuralSections = useMemo(() => {
@@ -2313,6 +2322,25 @@ export function SectionalLooperWorkspace({
         {viewWindow && <span className="looper-zoom-hint">scroll to pan</span>}
       </div>
 
+      {/* Ableton-legible ruler pass — docked directly above the waveform
+          stack, sharing the exact same live viewStartSeconds/viewEndSeconds
+          window as every layer below it (never the track's full duration —
+          that mismatch, while this rendered from the Advanced drawer's own
+          full-track timelineTransform, was the root cause of the ruler never
+          matching what was actually zoomed in below it). */}
+      {track && (
+        <MusicalRuler
+          grid={activeGrid}
+          sampleRate={sampleRate}
+          zoomLevel={zoomLevel}
+          durationSeconds={trackDurationSeconds}
+          viewStartSeconds={viewStartSeconds}
+          viewEndSeconds={viewEndSeconds}
+          playheadSeconds={playheadSeconds}
+          onPlayheadPointerDown={handlePlayheadPointerDown}
+        />
+      )}
+
       {/* 0714R §8 — full-track waveform overview.
           0715A — GridBackdropLayer renders BEHIND it as an absolutely-
           positioned, pointer-events:none underlay sharing the exact same
@@ -2334,6 +2362,7 @@ export function SectionalLooperWorkspace({
             viewStartSeconds={viewStartSeconds}
             viewEndSeconds={viewEndSeconds}
             beatFrames={activeGrid?.beatFrames}
+            subdivisionFrames={subdivisionFrames}
           />
         )}
         <TrackWaveformOverview
@@ -2598,9 +2627,6 @@ export function SectionalLooperWorkspace({
             Structure Overlay
           </label>
         </div>
-        {timelineTransform && (
-          <MusicalRuler grid={activeGrid} sampleRate={sampleRate} zoomLevel={zoomLevel} transform={timelineTransform} />
-        )}
 
         {timelineSelection && track && (
           <div className="looper-selection-inspector" role="region" aria-label="Selection detail">

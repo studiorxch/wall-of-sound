@@ -2,6 +2,12 @@
 // handles, rendered above the waveform (§8, §9). Shares the waveform
 // overview's own x = (seconds/duration) * width mapping (§19-style
 // alignment, matching the 0715A GridBackdropLayer convention).
+//
+// Ableton-legible ruler pass — handles are visually a top-anchored bracket
+// + a thin full-height hairline instead of a solid full-height bar. The
+// invisible hit-target rect underneath is UNCHANGED (same HANDLE_W, same
+// position) so drag behavior/selection semantics are byte-identical; only
+// the decorative paint on top of it changed.
 
 import type { TimelineSelection } from "../../data/loopTypes";
 
@@ -55,24 +61,29 @@ export function TimelineSelectionOverlay({ durationSeconds, selection, onHandleD
           aria-label={`Move selection: ${selection.startSeconds.toFixed(3)} to ${selection.endSeconds.toFixed(3)} seconds`}
         />
       )}
-      <rect
-        x={x1 - HANDLE_W / 2} y={0} width={HANDLE_W} height={VIEW_H}
-        className="looper-selection-handle"
-        style={{ cursor: "ew-resize" }}
-        onPointerDown={(e) => onHandleDown("start", e)}
-        role="slider"
-        aria-label={`Selection start: ${selection.startSeconds.toFixed(3)} seconds`}
-        aria-valuenow={selection.startSeconds}
-      />
-      <rect
-        x={x2 - HANDLE_W / 2} y={0} width={HANDLE_W} height={VIEW_H}
-        className="looper-selection-handle"
-        style={{ cursor: "ew-resize" }}
-        onPointerDown={(e) => onHandleDown("end", e)}
-        role="slider"
-        aria-label={`Selection end: ${selection.endSeconds.toFixed(3)} seconds`}
-        aria-valuenow={selection.endSeconds}
-      />
+      {([
+        { x: x1, which: "start" as const, dir: 1, label: `Selection start: ${selection.startSeconds.toFixed(3)} seconds`, value: selection.startSeconds },
+        { x: x2, which: "end" as const, dir: -1, label: `Selection end: ${selection.endSeconds.toFixed(3)} seconds`, value: selection.endSeconds },
+      ]).map((h) => (
+        <g key={h.which}>
+          <line x1={h.x} x2={h.x} y1={0} y2={VIEW_H} className="looper-selection-hairline" />
+          <path
+            d={`M ${h.x} 0 L ${h.x} 10 L ${h.x + h.dir * 9} 10 L ${h.x + h.dir * 9} 6 L ${h.x + h.dir * 4} 6 L ${h.x + h.dir * 4} 0 Z`}
+            className="looper-selection-bracket"
+          />
+          {/* Invisible hit target — same width/position as before this pass;
+              drag behavior/hit area is unchanged. */}
+          <rect
+            x={h.x - HANDLE_W / 2} y={0} width={HANDLE_W} height={VIEW_H}
+            className="looper-selection-handle"
+            style={{ cursor: "ew-resize" }}
+            onPointerDown={(e) => onHandleDown(h.which, e)}
+            role="slider"
+            aria-label={h.label}
+            aria-valuenow={h.value}
+          />
+        </g>
+      ))}
     </svg>
   );
 }
