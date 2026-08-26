@@ -897,17 +897,33 @@ export default function App() {
     };
   }
 
+  // MUSIC P0 Clean Library Foundation — Step E2
+  // (0826E_MUSIC_P0_Playlist_Empty_State_Persistence): this is the single
+  // shared chokepoint every playlist mutation in the app saves through
+  // (39 call sites). It used to ignore savePlayProject's return value
+  // entirely — a blocked save (Step A's destructive-save guard) left the
+  // optimistic setPlaylists update in place with no indication anything
+  // had failed, so the UI displayed a change that was never actually
+  // persisted. Now the optimistic update is only kept if the save was
+  // genuinely accepted; a blocked save reverts to the prior playlists
+  // array (so the screen never shows unpersisted state) and surfaces an
+  // explicit failure notice instead of staying silent.
   function mutatePLAndSave(
     plId: string,
     fn: (pl: PlaylistRecord) => PlaylistRecord,
     lib?: Track[],
     excl?: Set<string>,
   ) {
+    let blocked = false;
     setPlaylists((prev) => {
       const next = prev.map((p) => (p.playlistId === plId ? fn(p) : p));
-      savePlayProject(makeProj(next, lib, excl));
+      const ok = savePlayProject(makeProj(next, lib, excl));
+      if (!ok) { blocked = true; return prev; }
       return next;
     });
+    if (blocked) {
+      showNotify("Change not saved — blocked by a safety check. Nothing was changed.");
+    }
   }
 
   // ── Slot helpers ─────────────────────────────────────────────────────────
@@ -1472,8 +1488,29 @@ export default function App() {
       slotsRef.current = next[0]?.slots ?? [];
       setSelectedSlotIdx(null);
     }
-    setPlaylists(next);
-    savePlayProject(makeProj(next, undefined, undefined, newActiveId));
+    // MUSIC P0 Clean Library Foundation — Step E2
+    // (0826E_MUSIC_P0_Playlist_Empty_State_Persistence). Deleting a
+    // playlist ENTITY (as opposed to just emptying one) is genuinely
+    // still a case the default_overwrite guard should protect against
+    // by default — losing the user's last non-default playlist to an
+    // accidental delete is real loss. But by the time this function
+    // runs, the caller has already shown a real "Delete Playlist?"
+    // confirmation dialog and the user has explicitly confirmed — that
+    // IS the explicit confirmed-user pathway, so this save is marked
+    // accordingly. This was previously a silent-failure bug of its own,
+    // live-reproduced while validating the track-removal fix above: the
+    // UI showed the playlist gone, but the unchecked savePlayProject
+    // call had been silently blocked, and the playlist reappeared on
+    // the next reload with no error ever shown.
+    let deleteBlocked = false;
+    setPlaylists((prev) => {
+      const ok = savePlayProject(makeProj(next, undefined, undefined, newActiveId), { confirmedByUser: true });
+      if (!ok) { deleteBlocked = true; return prev; }
+      return next;
+    });
+    if (deleteBlocked) {
+      showNotify("Delete failed — a safety check blocked it. The playlist was not deleted.");
+    }
   }
 
   // ── Scheduler (0621G) ─────────────────────────────────────────────────────

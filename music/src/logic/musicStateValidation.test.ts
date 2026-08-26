@@ -83,3 +83,83 @@ describe("checkDestructiveSave / isMusicStateHealthy — per-source collapse gua
     expect(checkDestructiveSave(null, next)).toEqual({ blocked: false });
   });
 });
+
+// MUSIC P0 Clean Library Foundation — Step E2
+// (0826E_MUSIC_P0_Playlist_Empty_State_Persistence). Reproduces the exact
+// live-found bug: removing the last track from a user's own only playlist
+// (which happens to be titled "My Mix", the seeded default) was
+// indistinguishable from real playlist history vanishing, because the old
+// check only asked "did nonDefaultPlaylistCount drop to zero" — which was
+// also true for this completely ordinary, reversible edit. No test file
+// previously existed for this specific branch of the guard.
+
+type PlaylistShape = { playlistId: string; title: string; slots: unknown[]; playlistKind?: string };
+
+function projectWithPlaylists(playlists: PlaylistShape[]): PlayProject {
+  return {
+    schemaVersion: "play-project-v2",
+    libraryTracks: [],
+    playlists,
+    crates: [],
+  } as unknown as PlayProject;
+}
+
+const track1 = { slotId: "s1", assignedTrackId: "t1" };
+const track2 = { slotId: "s2", assignedTrackId: "t2" };
+
+describe("checkDestructiveSave / isMusicStateHealthy — default_overwrite guard (Step E2)", () => {
+  it("REGRESSION: does not block emptying a user's own only playlist (My Mix) via ordinary track removal", () => {
+    const prev = projectWithPlaylists([{ playlistId: "pl1", title: "My Mix", slots: [track1] }]);
+    const next = projectWithPlaylists([{ playlistId: "pl1", title: "My Mix", slots: [] }]);
+    expect(checkDestructiveSave(prev, next)).toEqual({ blocked: false });
+    // isMusicStateHealthy has its own, unrelated "zero tracks anywhere" floor
+    // (nextSum.trackCount === 0 → false) — give both states a real library
+    // so only the default_overwrite branch under test is exercised.
+    const withTracks = (p: PlayProject) => ({ ...p, libraryTracks: CATALOG_TRACKS });
+    expect(isMusicStateHealthy(withTracks(next), withTracks(prev))).toBe(true);
+  });
+
+  it("still blocks a genuine multi-playlist collapse down to just the empty default", () => {
+    const prev = projectWithPlaylists([
+      { playlistId: "pl1", title: "My Mix", slots: [] },
+      { playlistId: "pl2", title: "Party Mix", slots: [track1, track2] },
+    ]);
+    const next = projectWithPlaylists([{ playlistId: "pl1", title: "My Mix", slots: [] }]); // Party Mix vanished entirely
+    expect(checkDestructiveSave(prev, next)).toEqual({ blocked: true, blockReason: "default_overwrite" });
+  });
+
+  it("still blocks when the user's only OTHER (non-default) playlist is emptied down to nothing but the default", () => {
+    const prev = projectWithPlaylists([
+      { playlistId: "pl1", title: "My Mix", slots: [] },
+      { playlistId: "pl2", title: "Road Trip", slots: [track1] },
+    ]);
+    const next = projectWithPlaylists([{ playlistId: "pl1", title: "My Mix", slots: [] }]);
+    expect(checkDestructiveSave(prev, next).blocked).toBe(true);
+  });
+
+  it("allows creating the seeded default playlist for the first time (no prior playlists)", () => {
+    const prev = projectWithPlaylists([]);
+    const next = projectWithPlaylists([{ playlistId: "pl1", title: "My Mix", slots: [] }]);
+    expect(checkDestructiveSave(prev, next)).toEqual({ blocked: false });
+  });
+
+  it("does not block when My Mix was already empty and stays empty (no-op save)", () => {
+    const prev = projectWithPlaylists([{ playlistId: "pl1", title: "My Mix", slots: [] }]);
+    const next = projectWithPlaylists([{ playlistId: "pl1", title: "My Mix", slots: [] }]);
+    expect(checkDestructiveSave(prev, next)).toEqual({ blocked: false });
+  });
+
+  it("does not treat sampler-bank playlists (reference_overlay) as real playlists for this check", () => {
+    const prev = projectWithPlaylists([
+      { playlistId: "pl1", title: "My Mix", slots: [track1] },
+      { playlistId: "bank1", title: "Some Bank", slots: [track1, track2], playlistKind: "reference_overlay" },
+    ]);
+    const next = projectWithPlaylists([
+      { playlistId: "pl1", title: "My Mix", slots: [] },
+      { playlistId: "bank1", title: "Some Bank", slots: [track1, track2], playlistKind: "reference_overlay" },
+    ]);
+    // The bank is untouched and isn't a "user" playlist — this is still
+    // just "my only real playlist went to zero tracks", not blocked.
+    expect(checkDestructiveSave(prev, next)).toEqual({ blocked: false });
+  });
+});

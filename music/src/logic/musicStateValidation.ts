@@ -43,7 +43,7 @@ export function isMusicStateHealthy(
     const prevSum = summarizeMusicState(prev);
     if (prevSum.trackCount >= 10 && nextSum.trackCount < prevSum.trackCount * 0.8) return false;
     if (hasPerSourceCollapse(prevSum, nextSum)) return false;
-    if (prevSum.nonDefaultPlaylistCount > 0 && nextSum.emptyDefaultOnlyPlaylist) return false;
+    if (prevSum.hasOtherRealPlaylistThanDefault && nextSum.emptyDefaultOnlyPlaylist) return false;
     if (prevSum.crateCount > 0 && nextSum.crateCount === 0) return false;
     if (prevSum.samplerBankCount > 0 && nextSum.samplerBankCount === 0) return false;
   }
@@ -63,7 +63,10 @@ export function checkDestructiveSave(
   const prevTracks = prev.libraryTracks ?? [];
   const nextTracks = next.libraryTracks ?? [];
 
-  if (hasPerSourceCollapse(summarizeMusicState(prev), summarizeMusicState(next))) {
+  const prevSum = summarizeMusicState(prev);
+  const nextSum = summarizeMusicState(next);
+
+  if (hasPerSourceCollapse(prevSum, nextSum)) {
     return { blocked: true, blockReason: "source_library_collapse" };
   }
 
@@ -72,10 +75,23 @@ export function checkDestructiveSave(
   const prevBanks = prevPlaylists.filter((pl) => pl.playlistKind === "reference_overlay");
   const nextBanks = nextPlaylists.filter((pl) => pl.playlistKind === "reference_overlay");
 
-  const isDefaultOnly = (pls: typeof nextUser) =>
-    pls.length === 1 && pls[0].title === "My Mix" && (pls[0].slots?.length ?? 0) === 0;
-
-  if (prevUser.length > 0 && !isDefaultOnly(prevUser) && isDefaultOnly(nextUser)) {
+  // MUSIC P0 Clean Library Foundation — Step E2
+  // (0826E_MUSIC_P0_Playlist_Empty_State_Persistence). Was:
+  // `prevUser.length > 0 && !isDefaultOnly(prevUser) && isDefaultOnly(nextUser)`
+  // — which blocked whenever the PREVIOUS user-playlist set merely wasn't
+  // "just an empty My Mix", even when "My Mix" (with tracks) was the
+  // ONLY playlist that had ever existed. That made a completely ordinary,
+  // reversible edit — a user removing the last track from their own only
+  // playlist — indistinguishable from real playlist history vanishing,
+  // live-reproduced during Step E cleanup: the UI showed the playlist as
+  // emptied (optimistic state), the save was silently rejected, and the
+  // track reappeared on the next reload with no error ever shown.
+  // hasOtherRealPlaylistThanDefault is the precise signal instead: it's
+  // only true when some OTHER real playlist existed besides "My Mix"
+  // itself, which is the actual condition worth protecting against.
+  // Genuine multi-playlist collapse remains fully blocked; a user's only
+  // playlist going to zero tracks via direct removal no longer is.
+  if (prevSum.hasOtherRealPlaylistThanDefault && nextSum.emptyDefaultOnlyPlaylist) {
     return { blocked: true, blockReason: "default_overwrite" };
   }
   if (prevCrates.length > 0 && nextCrates.length === 0) {

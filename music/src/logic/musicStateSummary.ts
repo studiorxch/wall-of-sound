@@ -14,6 +14,16 @@ export interface MusicStateSummary {
   analyzedTrackCount: number;
   playableTrackCount: number;
   emptyDefaultOnlyPlaylist: boolean;
+  // MUSIC P0 Clean Library Foundation — Step E2
+  // (0826E_MUSIC_P0_Playlist_Empty_State_Persistence): true only when a
+  // REAL playlist other than the seeded "My Mix" default exists — the
+  // correct signal for "the user has built up other playlist content."
+  // Deliberately distinct from nonDefaultPlaylistCount (below), which
+  // counts "My Mix" itself as non-default while it happens to be
+  // non-empty — that made emptying your own only playlist look identical
+  // to real playlist history disappearing, since both collapsed
+  // nonDefaultPlaylistCount to 0.
+  hasOtherRealPlaylistThanDefault: boolean;
   lastSaveReason?: MusicSaveReason;
   lastSavedAt?: string;
 }
@@ -34,6 +44,7 @@ export function summarizeMusicState(state: PlayProject): MusicStateSummary {
     userPlaylists.length === 1 &&
     userPlaylists[0].title === "My Mix" &&
     (userPlaylists[0].slots?.length ?? 0) === 0;
+  const hasOtherRealPlaylistThanDefault = userPlaylists.some((pl) => pl.title !== "My Mix");
 
   const meta = state as unknown as StoredMeta;
 
@@ -54,6 +65,7 @@ export function summarizeMusicState(state: PlayProject): MusicStateSummary {
       (t) => t.sourceOwner !== "reference" && (t.audioLinked || !!t.objectUrl),
     ).length,
     emptyDefaultOnlyPlaylist,
+    hasOtherRealPlaylistThanDefault,
     lastSaveReason: meta.lastSaveReason,
     lastSavedAt: meta.lastSavedAt,
   };
