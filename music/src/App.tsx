@@ -102,6 +102,7 @@ import type { MusicImportIntakeItem } from "./data/importTypes";
 import type { TrackAsset } from "./data/trackAssetTypes";
 import type { FileHealthStatus } from "./data/fileHealthTypes";
 import { probeAudioPlayability } from "./logic/audioPlaybackProbe";
+import { findTracksMissingFromSaved } from "./logic/externalIndexRecovery";
 import { ImportIntakePanel } from "./ui/ImportIntakePanel";
 import { ImportAudioModal } from "./ui/ImportAudioModal";
 import { installMoodAnalyzerDebug } from "./logic/MoodAnalyzer";
@@ -3202,10 +3203,6 @@ export default function App() {
     const paths = LIBRARY_PATHS[owner as keyof typeof LIBRARY_PATHS];
     const defaults = SOURCE_DEFAULTS[owner];
     let current = libraryTracksRef.current;
-    // MUSIC P0 Clean Library Foundation — Step A: captured before `current`
-    // is mutated below, so the disk-index write's destructive-guard has a
-    // true "before" count to compare against, not the already-updated one.
-    const priorOwnerTrackCount = current.filter((t) => t.sourceOwner === owner).length;
     let csvAdded = 0, csvUpdated = 0, audioScanned = 0, audioAdded = 0, audioLinked = 0;
     const now = nowIso();
     const label = defaults.sourceLibrary;
@@ -3328,48 +3325,91 @@ export default function App() {
       warnings.push(`Audio scan failed: ${(e as Error).message}`);
     }
 
-    libraryTracksRef.current = current;
-    setLibraryTracks(current);
-    const cacheSaved = savePlayProject(makeProj(playlistsRef.current, current), { reason: "update_library" });
-    setLibraryUpdating(null);
-
-    // Write compact index file for external/reference (source of truth on
-    // disk). MUSIC P0 Clean Library Foundation — Step A: routed through the
-    // dedicated atomic /library-index-write route (temp-file + rename,
-    // server-revalidated against what's actually on disk) instead of the
-    // generic, unguarded /library-write — mirrors the exact fix already
-    // proven for sampler-banks.json (0812D). A rescan is never itself
-    // authorized to empty a previously-nonempty index — if a scan finds
-    // zero files where there were 10+ before, that's far more likely a bad
-    // path/unmounted volume than an intentional deletion, so it's blocked
-    // and surfaced as a warning rather than silently accepted.
+    // MUSIC P0 Clean Library Foundation — Step C2 (0826C_MUSIC_P0_External
+    // Update_Library_Durability): the disk-index write now happens FIRST,
+    // gated on a freshly-read on-disk count, and the accepted-state commit
+    // (React state + IndexedDB) only happens if that write succeeded (or is
+    // not applicable, i.e. studiorich, which has no disk index). Previously
+    // the accepted-state commit happened unconditionally, then the disk
+    // write was attempted as a separate step that could fail independently
+    // — a real, live-reproduced bug: the scan's result had already been
+    // accepted into IndexedDB, but a failed/rejected disk write left disk
+    // permanently behind, and the very next reload's index-hydration logic
+    // (see below in the startup effect) trusted the stale disk file over
+    // the newer, correct IndexedDB state and silently reverted real,
+    // accepted data. There is now exactly one outcome for the whole
+    // operation: both the disk representation and the accepted state move
+    // together, or neither does — no partial commit, no silent divergence.
     let diskIndexOk: boolean | null = null; // null = not applicable (studiorich)
     if (owner === "external" || owner === "reference") {
-      const ownerTracks = current.filter((t) => t.sourceOwner === owner);
-      const indexData = JSON.stringify(
-        ownerTracks.map(({ objectUrl: _u, ...t }) => t),
-      );
+      const indexPath = `${__LIBRARY_ROOT__}/${owner}/library.index.json`;
+      let freshOnDiskCount: number | null = null;
       try {
-        const wr = await fetch(`/library-index-write?owner=${owner}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            tracks: JSON.parse(indexData),
-            expectedPriorCount: priorOwnerTrackCount,
-            deletionAuthorized: false,
-          }),
-        });
-        diskIndexOk = wr.ok;
-        if (!wr.ok) {
-          const body = await wr.json().catch(() => ({}) as { reason?: string });
-          console.warn(`[UpdateLibrary] index write rejected (${wr.status}): ${body.reason ?? "unknown"}`);
-          warnings.push(`Disk index write rejected: ${body.reason ?? `HTTP ${wr.status}`}`);
+        // Read the CURRENT on-disk count fresh, right before writing —
+        // not the possibly-stale in-memory `priorOwnerTrackCount` captured
+        // before the scan ran. Without this, once IndexedDB and disk ever
+        // diverged even once (e.g. from a prior failed write, including any
+        // still-lingering effect of the very bug this build fixes), every
+        // future Update Library attempt would keep computing its expected
+        // count from the already-diverged in-memory state and be rejected
+        // forever — a permanent deadlock, not a recoverable failure. The
+        // server (/library-index-write, vite.config.ts) still independently
+        // re-reads disk at write time and is the real authority; this is
+        // purely so the client's own expectation matches reality instead of
+        // manufacturing an avoidable stale-revision rejection.
+        const freshResp = await fetch(`/library-data?path=${encodeURIComponent(indexPath)}`);
+        if (freshResp.ok) {
+          const freshTracks = JSON.parse(await freshResp.text());
+          freshOnDiskCount = Array.isArray(freshTracks) ? freshTracks.length : 0;
+        } else if (freshResp.status === 404) {
+          freshOnDiskCount = 0;
+        } else {
+          throw new Error(`could not read current disk index (HTTP ${freshResp.status})`);
         }
       } catch (e) {
         diskIndexOk = false;
-        console.warn(`[UpdateLibrary] index write failed:`, e);
+        console.warn(`[UpdateLibrary] pre-write disk-index read failed:`, e);
+        warnings.push(`Could not verify current disk index before writing: ${(e as Error).message}`);
+      }
+
+      if (freshOnDiskCount !== null) {
+        const ownerTracks = current.filter((t) => t.sourceOwner === owner);
+        const indexData = JSON.stringify(
+          ownerTracks.map(({ objectUrl: _u, ...t }) => t),
+        );
+        try {
+          const wr = await fetch(`/library-index-write?owner=${owner}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              tracks: JSON.parse(indexData),
+              expectedPriorCount: freshOnDiskCount,
+              deletionAuthorized: false,
+            }),
+          });
+          diskIndexOk = wr.ok;
+          if (!wr.ok) {
+            const body = await wr.json().catch(() => ({}) as { reason?: string });
+            console.warn(`[UpdateLibrary] index write rejected (${wr.status}): ${body.reason ?? "unknown"}`);
+            warnings.push(`Disk index write rejected: ${body.reason ?? `HTTP ${wr.status}`}`);
+          }
+        } catch (e) {
+          diskIndexOk = false;
+          console.warn(`[UpdateLibrary] index write failed:`, e);
+          warnings.push(`Disk index write failed: ${(e as Error).message}`);
+        }
       }
     }
+
+    // Commit gate — one explicit outcome for the whole operation.
+    const committed = diskIndexOk !== false;
+    let cacheSaved: boolean | null = null;
+    if (committed) {
+      libraryTracksRef.current = current;
+      setLibraryTracks(current);
+      cacheSaved = savePlayProject(makeProj(playlistsRef.current, current), { reason: "update_library" });
+    }
+    setLibraryUpdating(null);
 
     // Build notification
     const parts: string[] = [];
@@ -3383,23 +3423,26 @@ export default function App() {
     const summary = parts.length ? parts.join(" · ") : "already up to date";
     const warnStr = warnings.length ? `  ⚠ ${warnings.join("; ")}` : "";
 
-    // Persistence status — differentiate cache failure from real data loss.
-    let persistNote = "";
-    if (!cacheSaved) {
-      if (diskIndexOk === true) {
-        persistNote = "  (cache miss — disk index will restore on refresh)";
-      } else if (diskIndexOk === false) {
-        persistNote = "  ⚠ cache + disk index both failed — changes in memory only";
-      } else {
-        // studiorich: no disk index, but source CSV/audio folder is the recovery path
-        persistNote = "  (cache miss — run Update Library again after refresh to restore)";
-      }
-    } else if (diskIndexOk === false) {
-      persistNote = "  ⚠ disk index write failed — refresh may not restore full count";
+    let msg: string;
+    if (!committed) {
+      // The disk-index write failed or couldn't be verified — nothing was
+      // committed. Previous accepted state (React state, IndexedDB, and the
+      // on-disk index) is untouched; this is a clean, recoverable failure,
+      // not a partial or silent one.
+      msg = `${label}: update FAILED — no changes were made.${warnStr} Fix the issue and run Update Library again.`;
+      console.warn(`[UpdateLibrary] Failed (not committed) — ${msg}`);
+    } else if (!cacheSaved) {
+      // Disk write succeeded (or n/a) but the IndexedDB commit itself was
+      // blocked (e.g. Step A's destructive-save guard) or the cache write
+      // failed. Disk may now be ahead of IndexedDB — safe direction; the
+      // startup disk-index recovery merge can only ever ADD from disk, so
+      // this self-heals on the next reload without risk of discarding data.
+      msg = `${label}: ${summary}${warnStr}  ⚠ change accepted but not cached — will retry syncing on next load.`;
+      console.warn(`[UpdateLibrary] Committed but cache write failed — ${msg}`);
+    } else {
+      msg = `${label}: ${summary}${warnStr}`;
+      console.log(`[UpdateLibrary] Done — ${msg}`);
     }
-
-    const msg = `${label}: ${summary}${warnStr}${persistNote}`;
-    console.log(`[UpdateLibrary] Done — ${msg}`);
 
     showNotify(msg);
   }
@@ -3539,28 +3582,62 @@ export default function App() {
     });
   }
 
-  function handleDeleteFromReference(trackIds: string[]) {
+  // MUSIC P0 Clean Library Foundation — Step C2 (0826C): same transactional
+  // ordering as handleUpdateLibrary, and for the same reason. This used to
+  // commit the deletion to state/IndexedDB first, then fire the disk-index
+  // rewrite as an un-awaited, fire-and-forget request whose result was
+  // never even checked. If that write failed silently, disk would still
+  // list the "deleted" track while IndexedDB didn't — and the startup
+  // disk-index recovery merge (additive-only, see the hydration effect)
+  // would then correctly-by-its-own-rules but wrongly-in-this-case treat
+  // that as "IDB is missing a track disk has" and resurrect it on the next
+  // reload. Writing disk first (fresh-count-gated) and only committing the
+  // deletion if that succeeds closes that hole using the same pattern.
+  async function handleDeleteFromReference(trackIds: string[]) {
     const idSet = new Set(trackIds);
-    const prevRefCount = libraryTracksRef.current.filter((t) => t.sourceOwner === "reference").length;
     const next = libraryTracksRef.current.filter((t) => !idSet.has(t.trackId));
+    const refTracks = next.filter((t) => t.sourceOwner === "reference");
+
+    const indexPath = `${__LIBRARY_ROOT__}/reference/library.index.json`;
+    let diskIndexOk: boolean;
+    try {
+      const freshResp = await fetch(`/library-data?path=${encodeURIComponent(indexPath)}`);
+      let freshOnDiskCount: number;
+      if (freshResp.ok) {
+        const freshTracks = JSON.parse(await freshResp.text());
+        freshOnDiskCount = Array.isArray(freshTracks) ? freshTracks.length : 0;
+      } else if (freshResp.status === 404) {
+        freshOnDiskCount = 0;
+      } else {
+        throw new Error(`could not read current disk index (HTTP ${freshResp.status})`);
+      }
+      const wr = await fetch(`/library-index-write?owner=reference`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tracks: refTracks.map(({ objectUrl: _u, ...t }) => t),
+          expectedPriorCount: freshOnDiskCount,
+          deletionAuthorized: true,
+        }),
+      });
+      diskIndexOk = wr.ok;
+      if (!wr.ok) {
+        const body = await wr.json().catch(() => ({}) as { reason?: string });
+        console.warn(`[DeleteFromReference] index write rejected: ${body.reason ?? `HTTP ${wr.status}`}`);
+      }
+    } catch (e) {
+      diskIndexOk = false;
+      console.warn(`[DeleteFromReference] index write failed:`, e);
+    }
+
+    if (!diskIndexOk) {
+      showNotify("Delete failed — could not update the on-disk index. No changes were made. Try again.");
+      return;
+    }
+
     libraryTracksRef.current = next;
     setLibraryTracks(next);
     savePlayProject(makeProj(playlistsRef.current, next));
-    // Rewrite reference index so the deletions survive refresh. Routed
-    // through the atomic /library-index-write route (Step A) — an explicit,
-    // deliberate per-track deletion is always authorized to empty the
-    // index if that's genuinely where it lands, unlike a rescan's implicit
-    // write above, which never is.
-    const refTracks = next.filter((t) => t.sourceOwner === "reference");
-    fetch(`/library-index-write?owner=reference`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        tracks: refTracks.map(({ objectUrl: _u, ...t }) => t),
-        expectedPriorCount: prevRefCount,
-        deletionAuthorized: true,
-      }),
-    }).catch(() => {});
   }
 
   function handleCreateSamplerBankFromTracks(title: string, trackIds: string[]) {
@@ -5442,44 +5519,41 @@ export default function App() {
       hydrationReadyRef.current = true;
       setHasHydratedProject(true);
 
-      // Index-wins hydration: for external/reference, if the library.index.json
-      // has MORE tracks than what IDB restored, replace with the index.
-      // This handles: stale/partial saves, first run.
+      // Disk-index recovery merge (MUSIC P0 Clean Library Foundation — Step
+      // C2, 0826C_MUSIC_P0_External_Update_Library_Durability): for
+      // external/reference, backfill any track the on-disk
+      // library.index.json has that IndexedDB is missing — e.g. a fresh/
+      // cleared browser profile, or IDB genuinely lagging a disk write that
+      // hasn't landed yet. This used to be a wholesale "index wins" replace
+      // whenever the counts merely differed in EITHER direction, which
+      // silently discarded any track IDB had that a stale/behind disk index
+      // didn't — the exact mechanism that turned a real, accepted External
+      // library update into permanent data loss on the next reload. It is
+      // now additive-only and never touches a track IDB already has: disk
+      // is a recovery/enrichment source, never an authority that can shrink
+      // or overwrite the accepted state. (The disk index write itself is
+      // now gated to succeed-or-no-op — see handleUpdateLibrary — so a
+      // successful, accepted update can no longer leave disk behind IDB in
+      // the first place; this merge is the remaining, deliberately-safe net
+      // for the cases above.)
       const savedTracks = saved?.libraryTracks ?? [];
       (["external", "reference"] as const).forEach(async (owner) => {
-      const savedCount = savedTracks.filter((t) => t.sourceOwner === owner).length;
       const indexPath = `${__LIBRARY_ROOT__}/${owner}/library.index.json`;
       try {
         const resp = await fetch(`/library-data?path=${encodeURIComponent(indexPath)}`);
         if (!resp.ok) return;
         const tracks: Track[] = JSON.parse(await resp.text());
         if (!Array.isArray(tracks) || tracks.length === 0) return;
-        // Index wins when count differs, filePaths drift, or index has analysis data that saved lacks
-        const savedOwnerTracks = savedTracks.filter((t) => t.sourceOwner === owner);
-        const indexById = new Map(tracks.map((t) => [t.trackId, t]));
-        const pathsDiffer = savedOwnerTracks.some((s) => {
-          const ix = indexById.get(s.trackId);
-          return ix && ix.filePath && s.filePath && ix.filePath !== s.filePath;
-        });
-        const analysisDrifted = savedOwnerTracks.some((s) => {
-          const ix = indexById.get(s.trackId);
-          return ix && ix.analysisStatus === "analyzed" && !s.bpm;
-        });
-        const moodDrifted = savedOwnerTracks.some((s) => {
-          const ix = indexById.get(s.trackId);
-          const ixMood = ix ? ((ix as Record<string, unknown>).suggestedMood as unknown[]) : undefined;
-          const sMood = (s as Record<string, unknown>).suggestedMood as unknown[] | undefined;
-          return ix && Array.isArray(ixMood) && ixMood.length > 0 && (!Array.isArray(sMood) || sMood.length === 0);
-        });
-        if (tracks.length === savedCount && !pathsDiffer && !analysisDrifted && !moodDrifted) return;
-        console.log(`[PLAY] Index wins for ${owner}: count=${tracks.length} vs ${savedCount}, pathsDiffer=${pathsDiffer}, analysisDrifted=${analysisDrifted}, moodDrifted=${moodDrifted}`);
+        const missingFromSaved = findTracksMissingFromSaved(savedTracks, tracks, owner);
+        if (missingFromSaved.length === 0) return; // IDB already has everything disk has — nothing to recover
+        console.log(`[PLAY] Disk-index recovery merge for ${owner}: adding ${missingFromSaved.length} track(s) present on disk but missing from IndexedDB.`);
         // Guard: do not save until hydration refs are synced
         if (!hydrationReadyRef.current) {
-          console.warn(`[PLAY] Index wins fired before hydration ready — skipping save for ${owner}`);
+          console.warn(`[PLAY] Disk-index recovery merge fired before hydration ready — skipping save for ${owner}`);
           return;
         }
         setLibraryTracks((prev) => {
-          const merged = [...prev.filter((t) => t.sourceOwner !== owner), ...tracks];
+          const merged = [...prev, ...missingFromSaved];
           libraryTracksRef.current = merged;
           savePlayProject(makeProj(playlistsRef.current, merged), { reason: "index_wins_hydration" });
           return merged;
