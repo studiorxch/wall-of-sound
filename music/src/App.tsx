@@ -50,7 +50,7 @@ import { getNextPlayableSlot, getPreviousPlayableSlot } from "./logic/playbackQu
 import {
   moveSlotUp, moveSlotDown, reorderPlaylistSlot,
   removeSlotCompact, removeSlotLeaveGap, replaceSlot,
-  insertTrackAfterSlot, appendTrackToPlaylist, reindexPlaylistSlots,
+  insertTrackAfterSlot, reindexPlaylistSlots,
 } from "./logic/manualPlaylistOrder";
 import { validatePlaylistForExport, type ExportHealthReport, formatExportReport } from "./logic/exportHealth";
 import { fillMissingTime } from "./logic/fillMissingTime";
@@ -4078,12 +4078,18 @@ export default function App() {
     return slots.findIndex((s) => s.assignedTrackId === trackId);
   }
 
+  // MUSIC P0 Clean Library Foundation — Step E
+  // (0826D_MUSIC_P0_Track_Actions_Contextual_Menu_Cleanup): this used to be
+  // an independent implementation (playlistSlotOf trackId-only dup check,
+  // no locked-playlist guard, no codec/playback safety, no toast) — a
+  // second, divergent "add to playlist" path alongside the bulk dock's
+  // handleBulkAddTracksToPlaylist/handleDropTracksOnPlaylist. Now a thin
+  // wrapper over that same authoritative path, so the legacy "All Tracks"
+  // table's single-track "+ Add to playlist end" context-menu action gets
+  // the exact same duplicate-safety (trackId AND filePath), locked-playlist
+  // guard, codec-safety, and toast the bulk path already has.
   function handleAddToPlaylistEnd(trackId: string) {
-    const existing = playlistSlotOf(trackId);
-    if (existing >= 0) { showNotify(`Already in playlist: slot #${existing + 1}`); return; }
-    const newSlots = appendTrackToPlaylist(slots, trackId);
-    const tbm = tracksById_live();
-    applyManualSlots(evaluateSlotWarnings({ slots: reindexPlaylistSlots(newSlots, tbm), tracksById: tbm }));
+    handleBulkAddTracksToPlaylist(activePlaylistId, [trackId]);
     setViewMode("playlist");
   }
 

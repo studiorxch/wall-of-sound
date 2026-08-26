@@ -55,6 +55,7 @@ import { LibraryCommentsCell } from "./LibraryCommentsCell";
 import { LibraryStemBadge, type StemBadgeState } from "./libraryStemBadge";
 import { AnalysisStateBadge, FileHealthBadge } from "./libraryStatusBadges";
 import { getAnalysisDisplayState, getAnalysisDisplayLabel } from "../../logic/analysisStatusDisplay";
+// getAnalysisDisplayState is reused below for the row ••• menu's Analyze/Reanalyze label (Step E).
 import { computeTrackOverallFileHealth } from "../../logic/trackFileHealth";
 import { FILE_HEALTH_LABELS } from "../../data/fileHealthTypes";
 import { reviewBpmField, reviewKeyField, resolveAuthoritativeBpm } from "../../logic/dspFeatureExtraction";
@@ -678,7 +679,34 @@ export function LibraryDataGrid(props: Props) {
                         SAME removeConfirmIds state + LibraryRemoveConfirmDialog
                         + onRemoveTracks the selection dock's bulk "Remove
                         from…" action already uses — no second deletion
-                        path. */}
+                        path.
+
+                        MUSIC P0 Clean Library Foundation — Step E
+                        (0826D_MUSIC_P0_Track_Actions_Contextual_Menu_Cleanup):
+                        reordered to Add to Playlist / Edit Metadata /
+                        Analyze / Exclude-Restore / Remove. "Edit Metadata…"
+                        (renamed from Step D's "Edit Note & Labels…") is the
+                        one destination for metadata, notes, labels, AND
+                        per-asset inspection — TrackInspector's Status
+                        section already shows a track's per-format asset
+                        health whenever it carries more than one (Step C).
+                        A separate "Inspect Source Assets" entry pointing at
+                        the exact same panel would be a literal duplicate
+                        action, not a second concern — deliberately not
+                        added. "Link/Attach Related Version" is also
+                        deliberately not added: Step B's attachAssetToTrack
+                        only has one real caller today, the import-intake
+                        "Attach as Additional Format" button, which needs an
+                        incoming file to classify against — there is no
+                        existing "pick a file for an already-libraried
+                        track" entry point to wire this menu item onto, and
+                        building one from scratch is new engineering beyond
+                        this step's action-consolidation scope. Add to
+                        Playlist reuses the exact same onBulkAddTracksToPlaylist
+                        prop the bulk dock uses (one authoritative path, one
+                        duplicate-safety/locked-playlist/codec-safety
+                        implementation — see also handleAddToPlaylistEnd in
+                        App.tsx, unified onto the same underlying function). */}
                     <div className="cat-row-menu-wrap" ref={openRowMenuId === t.trackId ? rowMenuRef : undefined} style={{ position: "relative", display: "inline-block" }}>
                       <button
                         className="tb-btn sm"
@@ -688,15 +716,26 @@ export function LibraryDataGrid(props: Props) {
                       >•••</button>
                       {openRowMenuId === t.trackId && (
                         <div className="cat-row-menu">
+                          {onBulkAddTracksToPlaylist && (musicPlaylists?.length ?? 0) > 0 && (
+                            <select
+                              className="cat-filter-sel"
+                              defaultValue=""
+                              onChange={(e) => { if (e.target.value) { onBulkAddTracksToPlaylist(e.target.value, [t.trackId]); e.target.value = ""; setOpenRowMenuId(null); } }}
+                              title="Add this track to a playlist"
+                            >
+                              <option value="">Add to Playlist…</option>
+                              {musicPlaylists!.map((pl) => <option key={pl.playlistId} value={pl.playlistId}>{pl.title}</option>)}
+                            </select>
+                          )}
+                          <button className="tb-btn sm" onClick={() => { onInspect(t, sorted, idx); setOpenRowMenuId(null); }}>Edit Metadata…</button>
+                          {onReanalyze && (
+                            <button className="tb-btn sm" onClick={() => { onReanalyze([t.trackId]); setOpenRowMenuId(null); }}>
+                              {getAnalysisDisplayState(t) === "not_analyzed" ? "Analyze" : "Reanalyze"}
+                            </button>
+                          )}
                           {excluded
                             ? <button className="tb-btn sm" onClick={() => { onRestore(t.trackId); setOpenRowMenuId(null); }}>Restore</button>
                             : <button className="tb-btn sm" onClick={() => { onExclude(t.trackId); setOpenRowMenuId(null); }}>Exclude from analysis</button>}
-                          {/* MUSIC P0 Clean Library Foundation — Step D. Same
-                              destination as clicking the title (TrackInspector
-                              already has Notes; Labels is added there too) —
-                              a second entry point for discoverability, not a
-                              second editing surface. */}
-                          <button className="tb-btn sm" onClick={() => { onInspect(t, sorted, idx); setOpenRowMenuId(null); }}>Edit Note &amp; Labels…</button>
                           <button className="tb-btn sm remove-btn" onClick={() => { setRemoveConfirmIds([t.trackId]); setOpenRowMenuId(null); }}>Remove from {libraryLabel}…</button>
                         </div>
                       )}

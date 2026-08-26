@@ -157,17 +157,24 @@ export function LibraryActionBar(props: Props) {
                 maxHeight: "70vh", overflowY: "auto",
               }}
             >
+              {/* MUSIC P0 Clean Library Foundation — Step E
+                  (0826D_MUSIC_P0_Track_Actions_Contextual_Menu_Cleanup):
+                  reordered, not restructured — same 5 actions, grouped by
+                  what they DO rather than interleaved: the two actions that
+                  TRIGGER a new analysis run first, then the two dialogs
+                  that REVIEW already-detected values, then the one plain
+                  text edit last. No action added or removed. */}
               {onReanalyze && (
                 <button className="tb-btn sm" onClick={() => { onReanalyze(selectedIds); setShowMenu(false); }}>Reanalyze Selected</button>
+              )}
+              {onAnalyzeSelected && (
+                <button className="tb-btn sm" onClick={() => { onAnalyzeSelected(selectedIds); setShowMenu(false); }}>Analyze (mechanical roles)</button>
               )}
               {onBulkUpdate && (
                 <button className="tb-btn sm" onClick={() => { setShowBpmKeyReview(true); setShowMenu(false); }}>Review BPM &amp; Key…</button>
               )}
               {onBulkUpdate && showGenreFamilyReview && (
                 <button className="tb-btn sm" onClick={() => { setShowGenreFamilyReviewDialog(true); setShowMenu(false); }}>Review Genre Family…</button>
-              )}
-              {onAnalyzeSelected && (
-                <button className="tb-btn sm" onClick={() => { onAnalyzeSelected(selectedIds); setShowMenu(false); }}>Analyze (mechanical roles)</button>
               )}
               {onBulkUpdate && (
                 <button className="tb-btn sm" onClick={() => { setShowBatchComments(true); setShowMenu(false); }}>Edit Comments…</button>
