@@ -983,6 +983,9 @@ function LibraryRows({
   onReanalyze?: (trackIds: string[]) => void;
   onAnalyzeMissing?: (trackIds: string[]) => void;
   analyzerJobs?: Map<string, AnalyzerJobStatus>;
+  // MUSIC P0 Clean Library Foundation — Step C
+  onRecheckFileHealth?: (trackId: string) => void;
+  recheckingFileHealthTrackId?: string | null;
   samplerBanks?: PlaylistRecord[];
   loadedSamplerBankId?: string | null;
   onAddTracksToSamplerBank?: (bankId: string, trackIds: string[]) => void;
@@ -1925,6 +1928,7 @@ export function MainTrackWindow({
   playbackStatus, onPauseTrack, onResumeTrack,
   onBulkSetArchiveStatus,
   onAnalyzeTrack, onAnalyzeSelected, onAnalyzeLibrary, onReanalyze, onAnalyzeMissing, analyzerJobs,
+  onRecheckFileHealth, recheckingFileHealthTrackId,
   sourcePools, onRenameSourcePool, onRemoveSourcePool, onCleanEmptyGroups,
   sourceOwnerFilter,
   samplerBanks, loadedSamplerBankId, onAddTracksToSamplerBank, onCreateSamplerBankFromTracks, onDeleteFromReference,
@@ -2004,6 +2008,9 @@ export function MainTrackWindow({
           onCreateLoops={onCreateLoops}
           onOpenInGlyph={onOpenInGlyph}
           onExportStems={onExportStems}
+          trackPlaybackIssue={trackPlaybackIssues?.[inspectorTrack.trackId]}
+          onRecheckFileHealth={onRecheckFileHealth}
+          recheckingFileHealth={recheckingFileHealthTrackId === inspectorTrack.trackId}
         />
       )}
       <div className="mtw-fade-wrap">

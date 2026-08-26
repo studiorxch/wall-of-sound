@@ -44,6 +44,14 @@ export interface TrackAsset {
   addedAt: string;
   /** Marks the one asset (if any) that mirrors the Track's own legacy single-file fields. */
   isPrimary?: boolean;
+  // MUSIC P0 Clean Library Foundation — Step C: per-asset file health. Absent/
+  // "unknown" until an explicit recheck runs (see App.tsx's
+  // recheckTrackAssetHealth) — never auto-scanned in the background, matching
+  // the existing on-demand recheckTrackPlayback pattern for the legacy
+  // single-file case. Lets one logical recording show "WAV healthy, MP3
+  // missing, FLAC healthy" instead of one collapsed track-level signal.
+  assetStatus?: import("./fileHealthTypes").FileHealthStatus;
+  assetStatusCheckedAt?: string;
 }
 
 // The four identity classes a newly-encountered file can fall into relative

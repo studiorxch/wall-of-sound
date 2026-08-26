@@ -3,6 +3,11 @@ import type { Track, TrackSourceOwner, PlatformUse, AnalysisStatus, AnalyzerJobS
 import { toPortableAudioPath, resolveAudioUrl, type AudioCategory } from "../logic/audioPathResolver";
 import { isBeatMapTrustedForAnalysis } from "../logic/beatMap/beatMapTrust";
 import { isPlaybackBoundsTrusted } from "../logic/playbackBounds/playbackBoundsTrust";
+import type { TrackPlaybackIssue } from "../data/playProjectTypes";
+import { getAnalysisDisplayLabel } from "../logic/analysisStatusDisplay";
+import { computeTrackOverallFileHealth } from "../logic/trackFileHealth";
+import { FILE_HEALTH_LABELS } from "../data/fileHealthTypes";
+import { getTrackAssets } from "../logic/trackAssetReconciliation";
 
 type Props = {
   track: Track;
@@ -21,6 +26,10 @@ type Props = {
   onCreateLoops?: (trackId: string) => void;
   onOpenInGlyph?: (trackId: string) => void;
   onExportStems?: (trackId: string) => void;
+  // MUSIC P0 Clean Library Foundation — Step C
+  trackPlaybackIssue?: TrackPlaybackIssue;
+  onRecheckFileHealth?: (trackId: string) => void;
+  recheckingFileHealth?: boolean;
 };
 
 const OWNER_OPTIONS: { value: TrackSourceOwner; label: string }[] = [
@@ -228,6 +237,9 @@ export function TrackInspector({
   onCreateLoops,
   onOpenInGlyph,
   onExportStems,
+  trackPlaybackIssue,
+  onRecheckFileHealth,
+  recheckingFileHealth,
 }: Props) {
   const form = useTrackForm(track);
   const [imgFailed, setImgFailed] = useState(false);
@@ -427,6 +439,47 @@ export function TrackInspector({
             </select>
           </div>
         </div>
+
+        {/* MUSIC P0 Clean Library Foundation — Step C. Two deliberately
+            separate, read-only signals: analysis state (BPM/key/mood
+            pipeline — editable above via the Analysis dropdown) vs. file
+            health (can the audio actually be played). Never collapsed into
+            one line — a healthy WAV with failed analysis reads as exactly
+            that, not just "failed". Per-asset breakdown only shown when a
+            track actually carries more than one physical format; a
+            single-file track just shows one File line. */}
+        <div className="te-section-label">Status</div>
+        <div className="te-row-group">
+          <div className="te-row te-row-half">
+            <label className="te-label">Analysis</label>
+            <span className="te-value-dim">{getAnalysisDisplayLabel(track)}</span>
+          </div>
+          <div className="te-row te-row-half">
+            <label className="te-label">File</label>
+            <span className="te-value-dim">{FILE_HEALTH_LABELS[computeTrackOverallFileHealth(track, trackPlaybackIssue ? { [track.trackId]: trackPlaybackIssue } : undefined).overall]}</span>
+          </div>
+        </div>
+        {getTrackAssets(track).length > 1 && (
+          <div className="te-row">
+            <label className="te-label">Formats</label>
+            <span className="te-value-dim">
+              {computeTrackOverallFileHealth(track, trackPlaybackIssue ? { [track.trackId]: trackPlaybackIssue } : undefined)
+                .perAsset.map((a) => `${a.format.toUpperCase()}: ${FILE_HEALTH_LABELS[a.status]}`).join(" · ")}
+            </span>
+          </div>
+        )}
+        {onRecheckFileHealth && (
+          <div className="ti-cover-actions">
+            <button
+              className="tb-btn sm"
+              onClick={() => onRecheckFileHealth(track.trackId)}
+              disabled={!!recheckingFileHealth}
+              title="Re-probe this track's audio file(s) for playability"
+            >
+              {recheckingFileHealth ? "Rechecking…" : "Recheck File Health"}
+            </button>
+          </div>
+        )}
 
         {/* Beat Map (0713_MUSIC_Track_Beat_Map_Foundation §21) — compact
             read-only diagnostic, not a grid editor. */}

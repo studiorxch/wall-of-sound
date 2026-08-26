@@ -45,7 +45,11 @@ export const LIBRARY_COLUMN_REGISTRY: LibraryColumnDef[] = [
   { id: "rating", label: "Rating", minWidth: 90, maxWidth: 160, defaultWidth: 110, sortable: true },
   { id: "plays", label: "×", minWidth: 40, maxWidth: 80, defaultWidth: 48, sortable: true },
   { id: "lastPlayed", label: "Last", minWidth: 70, maxWidth: 160, defaultWidth: 90, sortable: true },
-  { id: "status", label: "Status", minWidth: 70, maxWidth: 160, defaultWidth: 90, sortable: true },
+  // MUSIC P0 Clean Library Foundation — Step C widened this column to also
+  // carry analysis-state/file-health badges alongside the pre-existing
+  // archive-status pills (libraryStatusBadges.tsx) — same column, three
+  // independent concerns, each with its own tooltip.
+  { id: "status", label: "Status", minWidth: 70, maxWidth: 200, defaultWidth: 110, sortable: true },
   { id: "comments", label: "Comments", minWidth: 120, maxWidth: 480, defaultWidth: 220, sortable: true },
   // MUSIC P0 Clean Library Foundation — Step D. Read-only compact chip
   // display; editing happens in TrackInspector (see its Labels row), not

@@ -15,6 +15,7 @@ import { requiresCanonicalAnalysis } from "../logic/dspFeatureExtraction";
 
 type DspBatchProgress = {
   missing: number; queued: number; running: number; complete: number; failed: number; remaining: number;
+  total: number; currentTrackTitle?: string;
 };
 
 type Props = {
@@ -546,8 +547,9 @@ export function MoodAnalysisReviewView({
 
       {batchProgress && batchProgress.missing > 0 && (
         <div className="mar-batch-progress">
-          Missing: {batchProgress.missing} · Queued: {batchProgress.queued} · Running: {batchProgress.running} ·
-          {" "}Complete: {batchProgress.complete} · Failed: {batchProgress.failed} · Remaining: {batchProgress.remaining}
+          {batchProgress.currentTrackTitle && <>Analyzing "{batchProgress.currentTrackTitle}" · </>}
+          Complete: {batchProgress.complete}/{batchProgress.total} · Queued: {batchProgress.queued} ·
+          {" "}Running: {batchProgress.running} · Failed: {batchProgress.failed} · Remaining: {batchProgress.remaining}
         </div>
       )}
 

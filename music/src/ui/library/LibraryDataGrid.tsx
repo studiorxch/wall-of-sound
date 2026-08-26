@@ -53,6 +53,10 @@ import { LibraryColumnsPanel } from "./LibraryColumnsPanel";
 import { LibraryRemoveConfirmDialog } from "./LibraryRemoveConfirmDialog";
 import { LibraryCommentsCell } from "./LibraryCommentsCell";
 import { LibraryStemBadge, type StemBadgeState } from "./libraryStemBadge";
+import { AnalysisStateBadge, FileHealthBadge } from "./libraryStatusBadges";
+import { getAnalysisDisplayState, getAnalysisDisplayLabel } from "../../logic/analysisStatusDisplay";
+import { computeTrackOverallFileHealth } from "../../logic/trackFileHealth";
+import { FILE_HEALTH_LABELS } from "../../data/fileHealthTypes";
 import { reviewBpmField, reviewKeyField, resolveAuthoritativeBpm } from "../../logic/dspFeatureExtraction";
 import { selectVisibleLibraryTracks } from "../../logic/library/libraryVisibleTracks";
 import { resolveTrackAudioIdentifier } from "../../logic/stems/stemClient";
@@ -388,7 +392,11 @@ export function LibraryDataGrid(props: Props) {
       case "rating": return String(t.rating ?? 0);
       case "plays": return String(t.playCount ?? 0);
       case "lastPlayed": return fmtLastPlayed(t.lastPlayedAt);
-      case "status": return t.archiveStatus ?? "library";
+      case "status": {
+        const analysisLabel = getAnalysisDisplayLabel(t);
+        const { overall } = computeTrackOverallFileHealth(t);
+        return `${t.archiveStatus ?? "library"} | Analysis: ${analysisLabel} | File: ${FILE_HEALTH_LABELS[overall]}`;
+      }
       case "comments": return truncateCommentPreview(t.notes, 200);
       case "labels": return (t.labels ?? []).join(", ");
       default: return "";
@@ -797,14 +805,29 @@ function renderLibraryCell(
     case "rating": return <StarRating trackId={t.trackId} rating={(t.rating ?? 0) as TrackRating} onChange={ctx.onRateTrack} />;
     case "plays": return (t.playCount ?? 0) > 0 ? <span className="play-count">×{t.playCount}</span> : <span className="play-count dim">—</span>;
     case "lastPlayed": return <span title={t.lastPlayedAt}>{fmtLastPlayed(t.lastPlayedAt)}</span>;
-    case "status": return (
-      <>
-        {(t.archiveStatus ?? "library") === "archive" && <span className="warn-badge badge-archive">ARC</span>}
-        {(t.archiveStatus ?? "library") === "needs_review" && <span className="warn-badge badge-review">REV</span>}
-        {(t.archiveStatus ?? "library") === "rejected" && <span className="warn-badge badge-rejected">REJ</span>}
-        {(t.archiveStatus ?? "library") === "library" && <span className="dim">—</span>}
-      </>
-    );
+    case "status": {
+      // MUSIC P0 Clean Library Foundation — Step C. Analysis state and file
+      // health are added alongside the pre-existing archive-status pills —
+      // three independent concerns sharing one compact column, each with its
+      // own tooltip, never collapsed into a single signal. The dim "—"
+      // fallback only shows when ALL THREE are in their quiet default state.
+      const archive = t.archiveStatus ?? "library";
+      const analysisState = getAnalysisDisplayState(t);
+      const { overall: fileHealth } = computeTrackOverallFileHealth(t, ctx.trackPlaybackIssues);
+      const analysisQuiet = analysisState === "not_analyzed" || analysisState === "ready";
+      const healthQuiet = fileHealth === "healthy" || fileHealth === "unknown";
+      const anyBadge = archive !== "library" || !analysisQuiet || !healthQuiet;
+      return (
+        <>
+          {archive === "archive" && <span className="warn-badge badge-archive">ARC</span>}
+          {archive === "needs_review" && <span className="warn-badge badge-review">REV</span>}
+          {archive === "rejected" && <span className="warn-badge badge-rejected">REJ</span>}
+          <AnalysisStateBadge track={t} />
+          <FileHealthBadge track={t} playbackIssues={ctx.trackPlaybackIssues} />
+          {!anyBadge && <span className="dim">—</span>}
+        </>
+      );
+    }
     case "comments": return (
       <LibraryCommentsCell
         track={t}

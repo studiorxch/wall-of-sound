@@ -97,8 +97,11 @@ import { resolveCratePool, resolveCrateTracks } from "./logic/resolveCrate";
 import { generateMissingAutoMoodCrates, auditAutoMoodCrates, auditMoodCrateCounts, regenerateMoodCratesFromCurrentTags, type MoodCrateCountMode, type MoodCrateSourceScope } from "./logic/autoMoodCrates";
 import { pickAudioFiles, importAudioFiles, auditAudioAnalysis, reanalyzeTrack, reanalyzeMissing } from "./logic/audioImport";
 import { buildIntakeItem, isSupportedAudioExtension } from "./logic/importIntake";
-import { attachAssetToTrack } from "./logic/trackAssetReconciliation";
+import { attachAssetToTrack, getTrackAssets } from "./logic/trackAssetReconciliation";
 import type { MusicImportIntakeItem } from "./data/importTypes";
+import type { TrackAsset } from "./data/trackAssetTypes";
+import type { FileHealthStatus } from "./data/fileHealthTypes";
+import { probeAudioPlayability } from "./logic/audioPlaybackProbe";
 import { ImportIntakePanel } from "./ui/ImportIntakePanel";
 import { ImportAudioModal } from "./ui/ImportAudioModal";
 import { installMoodAnalyzerDebug } from "./logic/MoodAnalyzer";
@@ -2403,6 +2406,10 @@ export default function App() {
   const dspInFlightRef = useRef<Set<string>>(new Set());
   const [dspBatchProgress, setDspBatchProgress] = useState<{
     missing: number; queued: number; running: number; complete: number; failed: number; remaining: number;
+    // Step C (0826B) — "current track" + "total for this run", so a batch's
+    // progress answers queued/current/completed-of-total/failures, not just
+    // aggregate counters.
+    total: number; currentTrackTitle?: string;
   } | null>(null);
 
   async function runCanonicalDspAnalysis(trackIds: string[]): Promise<{ completed: number; failed: number }> {
@@ -2419,17 +2426,61 @@ export default function App() {
       complete: prev?.complete ?? 0,
       failed: prev?.failed ?? 0,
       remaining: (prev?.remaining ?? 0) + pending.length,
+      total: (prev?.total ?? 0) + pending.length,
+      currentTrackTitle: prev?.currentTrackTitle,
     }));
+
+    // Step C (0826B) — stamp the whole pending set "queued" now, persisted
+    // immediately (not just held in memory until the batch finishes). This
+    // is what makes "Queued"/"Analyzing" real, observable, recoverable
+    // states instead of purely in-memory bookkeeping: if the app never came
+    // back to finish this batch, playProjectStorage.ts's repairStoredProject
+    // finds exactly this stamp on the next load and resets it, so a track
+    // can never stay permanently stuck.
+    const queuedAt = nowIso();
+    const withQueued = libraryTracksRef.current.map((t) =>
+      pending.includes(t.trackId) ? { ...t, analysisStatus: "queued" as const, analysisUpdatedAt: queuedAt } : t
+    );
+    libraryTracksRef.current = withQueued;
+    setLibraryTracks(withQueued);
+    savePlayProject(makeProj(playlistsRef.current, withQueued));
 
     for (const id of pending) {
       const track = libraryTracksRef.current.find((t) => t.trackId === id);
       if (!track) { dspInFlightRef.current.delete(id); continue; }
-      setDspBatchProgress((prev) => prev && { ...prev, running: prev.running + 1, queued: Math.max(0, prev.queued - 1) });
 
-      const updated = await analyzeTrackDspFeatures(track);
+      // Mark "analyzing" and persist before the actual (slow) analysis work
+      // starts — the real per-track progress marker, and the exact stamp
+      // interrupted-analysis recovery looks for on the next load.
+      const analyzingTrack = { ...track, analysisStatus: "analyzing" as const, analysisUpdatedAt: nowIso() };
+      const withAnalyzing = libraryTracksRef.current.map((t) => (t.trackId === id ? analyzingTrack : t));
+      libraryTracksRef.current = withAnalyzing;
+      setLibraryTracks(withAnalyzing);
+      savePlayProject(makeProj(playlistsRef.current, withAnalyzing));
+      setDspBatchProgress((prev) => prev && {
+        ...prev, running: prev.running + 1, queued: Math.max(0, prev.queued - 1), currentTrackTitle: analyzingTrack.title,
+      });
+
+      // Step C (0826B) — analyzeTrackDspFeatures deliberately re-throws a
+      // DSP_HTTP_* error instead of catching it internally (see its own
+      // "re-throw for batch classification" comment), but nothing at this,
+      // the actual batch layer, was ever catching it — an unhandled
+      // rejection here would silently abort the whole remaining batch AND
+      // (now that "analyzing" is a real persisted stamp) leave this one
+      // track showing "Analyzing" until the next reload's recovery repair.
+      // One bad file must not take down the rest of the batch or leave a
+      // track stuck mid-session — classify any thrown error as this
+      // track's own failure and keep going.
+      let updated: Track;
+      try {
+        updated = await analyzeTrackDspFeatures(analyzingTrack);
+      } catch (e) {
+        updated = { ...analyzingTrack, analysisStatus: "failed" as const, analysisUpdatedAt: nowIso(), analysisWarnings: [String(e)] };
+      }
       const next = libraryTracksRef.current.map((t) => (t.trackId === id ? updated : t));
       libraryTracksRef.current = next;
       setLibraryTracks(next);
+      savePlayProject(makeProj(playlistsRef.current, next));
 
       const ok = updated.analysisStatus !== "failed";
       if (ok) completed++; else failed++;
@@ -2440,10 +2491,10 @@ export default function App() {
         complete: prev.complete + (ok ? 1 : 0),
         failed: prev.failed + (ok ? 0 : 1),
         remaining: Math.max(0, prev.remaining - 1),
+        currentTrackTitle: undefined,
       });
     }
 
-    savePlayProject(makeProj(playlistsRef.current, libraryTracksRef.current));
     return { completed, failed };
   }
 
@@ -4195,7 +4246,7 @@ export default function App() {
     return null;
   }
 
-  function recheckTrackPlayback(track: Track): Promise<{ trackId: string; cleared: boolean }> {
+  async function recheckTrackPlayback(track: Track): Promise<{ trackId: string; cleared: boolean }> {
     const trackId = track.trackId;
     const url = resolveTrackAudioUrl(track);
     const now = nowIso();
@@ -4212,57 +4263,88 @@ export default function App() {
         trackPlaybackIssuesRef.current = next;
         return next;
       });
-      return Promise.resolve({ trackId, cleared: false });
+      return { trackId, cleared: false };
     }
 
-    return new Promise((resolve) => {
-      const probe = new Audio();
-      let settled = false;
-      const finish = (cleared: boolean, code?: TrackPlaybackIssue["code"], message?: string) => {
-        if (settled) return;
-        settled = true;
-        probe.src = "";
-        if (cleared) {
-          setPlaybackErrors((prev) => { const n = new Map(prev); n.delete(trackId); return n; });
-          setTrackPlaybackIssues((prev) => {
-            const { [trackId]: _, ...rest } = prev;
-            trackPlaybackIssuesRef.current = rest;
-            return rest;
-          });
-        } else {
-          setPlaybackErrors((prev) => new Map(prev).set(trackId, code ?? "ERR"));
-          setTrackPlaybackIssues((prev) => {
-            const existing = prev[trackId];
-            const issue: TrackPlaybackIssue = {
-              status: "unplayable", code: code ?? existing?.code ?? "UNKNOWN",
-              message: message ?? existing?.message,
-              detectedAt: existing?.detectedAt ?? now,
-              firstSeenAt: existing?.firstSeenAt ?? now, lastSeenAt: now, lastCheckedAt: now,
-              sourcePath: url,
-            };
-            const next = { ...prev, [trackId]: issue };
-            trackPlaybackIssuesRef.current = next;
-            return next;
-          });
-        }
-        resolve({ trackId, cleared });
+    // Step C (0826B): the actual probe is shared with recheckTrackAssetHealth
+    // below via probeAudioPlayability — same mechanism, just parameterized.
+    const result = await probeAudioPlayability(url);
+    if (result.playable) {
+      setPlaybackErrors((prev) => { const n = new Map(prev); n.delete(trackId); return n; });
+      setTrackPlaybackIssues((prev) => {
+        const { [trackId]: _, ...rest } = prev;
+        trackPlaybackIssuesRef.current = rest;
+        return rest;
+      });
+      return { trackId, cleared: true };
+    }
+    setPlaybackErrors((prev) => new Map(prev).set(trackId, result.code));
+    setTrackPlaybackIssues((prev) => {
+      const existing = prev[trackId];
+      const issue: TrackPlaybackIssue = {
+        status: "unplayable", code: result.code,
+        message: result.message,
+        detectedAt: existing?.detectedAt ?? now,
+        firstSeenAt: existing?.firstSeenAt ?? now, lastSeenAt: now, lastCheckedAt: now,
+        sourcePath: url,
       };
-
-      probe.addEventListener("canplay", () => finish(true), { once: true });
-      probe.addEventListener("error", () => {
-        const code = probe.error?.code;
-        if (code === MediaError.MEDIA_ERR_DECODE) finish(false, "CODEC", "codec decode failure (recheck)");
-        else if (code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED) finish(false, "CODEC", "format not supported (recheck)");
-        else if (code === MediaError.MEDIA_ERR_NETWORK) finish(false, "NETWORK", "network error (recheck)");
-        else finish(false, "UNKNOWN", "playback recheck failed");
-      }, { once: true });
-      // Bound the probe — a hanging load should not block a bulk recheck forever.
-      setTimeout(() => finish(false, "UNKNOWN", "recheck timed out"), 8000);
-
-      probe.preload = "auto";
-      probe.src = url;
-      probe.load();
+      const next = { ...prev, [trackId]: issue };
+      trackPlaybackIssuesRef.current = next;
+      return next;
     });
+    return { trackId, cleared: false };
+  }
+
+  // Step C (0826B) — per-asset file health for Step B's multi-format model.
+  // Reuses the exact same probe as recheckTrackPlayback; the only new thing
+  // is resolving a URL per-asset instead of per-track, and persisting the
+  // result onto each asset (assetStatus/assetStatusCheckedAt) rather than
+  // into the track-level trackPlaybackIssues map, since a Track can now have
+  // several independently-healthy-or-not physical files. On-demand only —
+  // no background scanning, matching the existing recheck pattern.
+  function resolveAssetAudioUrl(track: Track, asset: TrackAsset): string | null {
+    if (asset.isPrimary && asset.assetId === `primary:${track.trackId}`) return resolveTrackAudioUrl(track);
+    return asset.filePath ? `/music-audio/${asset.filePath}` : null;
+  }
+
+  async function recheckTrackAssetHealth(trackId: string): Promise<void> {
+    const track = libraryTracksRef.current.find((t) => t.trackId === trackId);
+    if (!track) return;
+    const assets = getTrackAssets(track);
+    const nonPrimary = assets.filter((a) => !a.isPrimary);
+
+    // Always refresh the primary/legacy file's health through the existing
+    // mechanism — its result lives in trackPlaybackIssues, not assetStatus.
+    await recheckTrackPlayback(track);
+    if (nonPrimary.length === 0) return; // nothing additional to persist onto `assets`
+
+    const checkedAt = nowIso();
+    const checked: TrackAsset[] = [];
+    for (const asset of nonPrimary) {
+      const url = resolveAssetAudioUrl(track, asset);
+      if (!url) { checked.push({ ...asset, assetStatus: "missing", assetStatusCheckedAt: checkedAt }); continue; }
+      const result = await probeAudioPlayability(url);
+      const status: FileHealthStatus = result.playable
+        ? "healthy"
+        : result.code === "CODEC" ? "codec_blocked"
+        : result.code === "NETWORK" ? "unavailable"
+        : "missing";
+      checked.push({ ...asset, assetStatus: status, assetStatusCheckedAt: checkedAt });
+    }
+    const checkedById = new Map(checked.map((a) => [a.assetId, a]));
+    const nextAssets = assets.map((a) => checkedById.get(a.assetId) ?? a);
+
+    const next = libraryTracksRef.current.map((t) => (t.trackId === trackId ? { ...t, assets: nextAssets } : t));
+    libraryTracksRef.current = next;
+    setLibraryTracks(next);
+    savePlayProject(makeProj(playlistsRef.current, next));
+  }
+
+  const [recheckingFileHealthTrackId, setRecheckingFileHealthTrackId] = useState<string | null>(null);
+
+  function handleRecheckFileHealth(trackId: string) {
+    setRecheckingFileHealthTrackId(trackId);
+    void recheckTrackAssetHealth(trackId).finally(() => setRecheckingFileHealthTrackId(null));
   }
 
   function handleRecheckPlaybackIssue(trackId: string) {
@@ -7421,6 +7503,8 @@ export default function App() {
             onReanalyze={handleReanalyze}
             onAnalyzeMissing={handleAnalyzeMissingSelected}
             analyzerJobs={analyzerJobs}
+            onRecheckFileHealth={handleRecheckFileHealth}
+            recheckingFileHealthTrackId={recheckingFileHealthTrackId}
             sourcePools={sourcePools}
             onRenameSourcePool={handleRenameSourcePool}
             onRemoveSourcePool={handleRemoveSourcePool}

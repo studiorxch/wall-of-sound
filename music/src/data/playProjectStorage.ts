@@ -12,6 +12,7 @@ import { normalizeEnergyEnvelope, defaultEnvelopeForSection } from "../logic/pla
 import { migrateApprovedLoopsToRevisionsV1 } from "./migrations/migrateLoopRevisionsV1";
 import { reconcileLibraryGridPreferences } from "../logic/library/libraryColumns";
 import type { LibrarySourceKey } from "./libraryGridTypes";
+import { isLegalTrackAnalysisStateTransition } from "../logic/trackAnalysisStateMachine";
 
 function makeDefaultSchedule(): ScheduleState {
   const ts = nowIso();
@@ -245,6 +246,7 @@ export function repairStoredProject(project: PlayProject): PlayProject {
     }
   }
   let scopedCount = 0;
+  let staleAnalysisResetCount = 0;
   repaired.libraryTracks = repaired.libraryTracks.map((t) => {
     // Source-group backfill (0621E)
     let track = t;
@@ -268,8 +270,28 @@ export function repairStoredProject(project: PlayProject): PlayProject {
       audioAnalysis: track.audioAnalysis ?? undefined,
       archiveStatus: track.archiveStatus ?? "library",
     };
-    return normalizeTrackMetadata(backfilled);
+    // Step C (0826B) — interrupted-analysis recovery. "queued"/"analyzing"
+    // are transient, in-progress stamps the batch analyzer persists per-track
+    // while it runs (App.tsx's runCanonicalDspAnalysis) so real progress is
+    // observable and recoverable. Nothing tracks "was that batch's process
+    // still actually running" across a reload — the in-flight guard
+    // (dspInFlightRef) is a plain in-memory ref, always empty on load — so
+    // finding either stamp here means the batch that set it never came back
+    // to finish. Reset to "not_analyzed" so the track is safely re-queueable
+    // rather than permanently stuck, exactly the failure this must prevent.
+    let repairedTrack = backfilled;
+    if (
+      (backfilled.analysisStatus === "queued" || backfilled.analysisStatus === "analyzing") &&
+      isLegalTrackAnalysisStateTransition(backfilled.analysisStatus, "not_analyzed")
+    ) {
+      staleAnalysisResetCount++;
+      repairedTrack = { ...backfilled, analysisStatus: "not_analyzed" };
+    }
+    return normalizeTrackMetadata(repairedTrack);
   });
+  if (staleAnalysisResetCount > 0) {
+    console.info(`[PLAY] Reset ${staleAnalysisResetCount} track(s) stuck in queued/analyzing (interrupted analysis recovery).`);
+  }
   if (scopedCount > 0) {
     console.info(`[PLAY] Source-group migration scoped ${scopedCount} track(s) to their playlist.`);
   }

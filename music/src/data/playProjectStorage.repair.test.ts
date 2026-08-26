@@ -14,6 +14,7 @@ import type { RadioInboxItem } from "./radioInboxTypes";
 import type { RadioBank } from "./radioBankTypes";
 import type { RadioDashboardReceipt } from "./radioDashboardReceiptTypes";
 import type { RadioWebExportRecord } from "./radioWebBundleTypes";
+import type { Track } from "./trackTypes";
 
 const NOW = "2026-07-17T00:00:00.000Z";
 
@@ -104,5 +105,58 @@ describe("repairStoredProject — 0718B radioWebExports addition", () => {
     const repaired = repairStoredProject(corrupted);
 
     expect(repaired.radioWebExports).toEqual([]);
+  });
+});
+
+// MUSIC P0 Clean Library Foundation — Step C (0826B): interrupted-analysis
+// recovery. A track left in "queued"/"analyzing" by a batch that never
+// finished (crash/restart/tab close) must load back to "not_analyzed", never
+// stay permanently stuck — since the in-memory in-flight guard
+// (App.tsx's dspInFlightRef) is always empty on a fresh load, ANY track
+// found in one of these two transient states at load time is, by
+// definition, orphaned from a previous session.
+function trackWith(overrides: Partial<Track> & { trackId: string }): Track {
+  return {
+    title: "T", artist: "A", durationSeconds: 100, energy: 0.5, energySource: "manual",
+    sourceOwner: "studiorich",
+    ...overrides,
+  } as Track;
+}
+
+describe("repairStoredProject — Step C interrupted-analysis recovery", () => {
+  it("resets a track stuck in 'queued' back to not_analyzed", () => {
+    const project = minimalProject({ libraryTracks: [trackWith({ trackId: "t1", analysisStatus: "queued" })] });
+    const repaired = repairStoredProject(project);
+    expect(repaired.libraryTracks[0].analysisStatus).toBe("not_analyzed");
+  });
+
+  it("resets a track stuck in 'analyzing' back to not_analyzed", () => {
+    const project = minimalProject({ libraryTracks: [trackWith({ trackId: "t1", analysisStatus: "analyzing" })] });
+    const repaired = repairStoredProject(project);
+    expect(repaired.libraryTracks[0].analysisStatus).toBe("not_analyzed");
+  });
+
+  it("never touches a track already in a terminal analysis state", () => {
+    for (const status of ["not_analyzed", "analyzed", "partial", "stale", "review_needed", "failed"] as const) {
+      const project = minimalProject({ libraryTracks: [trackWith({ trackId: "t1", analysisStatus: status })] });
+      const repaired = repairStoredProject(project);
+      expect(repaired.libraryTracks[0].analysisStatus).toBe(status);
+    }
+  });
+
+  it("does not disturb notes/labels/assets on a recovered track — purely a status reset", () => {
+    const project = minimalProject({
+      libraryTracks: [trackWith({
+        trackId: "t1", analysisStatus: "analyzing",
+        notes: "great track", labels: ["Episode 2"],
+        assets: [{ assetId: "a1", format: "wav", fileName: "t.wav", filePath: "t.wav", checksum: null, sourceOwner: "studiorich", addedAt: "" }],
+      })],
+    });
+    const repaired = repairStoredProject(project);
+    const t = repaired.libraryTracks[0];
+    expect(t.analysisStatus).toBe("not_analyzed");
+    expect(t.notes).toBe("great track");
+    expect(t.labels).toEqual(["Episode 2"]);
+    expect(t.assets).toHaveLength(1);
   });
 });
