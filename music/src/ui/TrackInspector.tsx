@@ -46,6 +46,14 @@ const ANALYSIS_STATUS_OPTIONS: { value: AnalysisStatus; label: string }[] = [
   { value: "failed",       label: "Analysis failed" },
 ];
 
+// `grouping` is typed as `string` on Track, but some runtime records store it
+// as `string[]` (see the same tolerance in libraryFilters.ts's buildFilterOptions).
+// Coerce defensively so the editor never crashes on a track with this shape.
+function groupingToDisplayString(grouping: unknown): string {
+  if (Array.isArray(grouping)) return grouping.join(", ");
+  return (grouping as string | undefined) ?? "";
+}
+
 function ownerToCategory(owner: TrackSourceOwner): AudioCategory {
   if (owner === "reference") return "reference";
   if (owner === "external") return "external";
@@ -79,11 +87,16 @@ function useTrackForm(track: Track) {
   const [albumTitle, setAlbumTitle]         = useState(track.albumTitle ?? "");
   const [albumArtist, setAlbumArtist]       = useState(track.albumArtist ?? "");
   const [genre, setGenre]                   = useState(track.genre ?? "");
-  const [grouping, setGrouping]             = useState(track.grouping ?? "");
+  const [grouping, setGrouping]             = useState(groupingToDisplayString(track.grouping));
   const [year, setYear]                     = useState(String(track.year ?? ""));
   const [composer, setComposer]             = useState(track.composer ?? "");
   const [comment, setComment]               = useState(track.comment ?? "");
   const [notes, setNotes]                   = useState(track.notes ?? "");
+  // MUSIC P0 Clean Library Foundation — Step D. Same comma-separated-text
+  // pattern as moodTagsRaw below — plain strings, no chip-input widget,
+  // deliberately reusing an already-proven pattern in this exact file
+  // rather than inventing a new editing control.
+  const [labelsRaw, setLabelsRaw]           = useState((track.labels ?? []).join(", "));
   const [bpm, setBpm]                       = useState(String(track.bpm ?? ""));
   const [musicalKey, setMusicalKey]         = useState(track.musicalKey ?? "");
   const [camelotKey, setCamelotKey]         = useState<string>(track.camelotKey ?? "");
@@ -107,11 +120,12 @@ function useTrackForm(track: Track) {
     setAlbumTitle(track.albumTitle ?? "");
     setAlbumArtist(track.albumArtist ?? "");
     setGenre(track.genre ?? "");
-    setGrouping(track.grouping ?? "");
+    setGrouping(groupingToDisplayString(track.grouping));
     setYear(String(track.year ?? ""));
     setComposer(track.composer ?? "");
     setComment(track.comment ?? "");
     setNotes(track.notes ?? "");
+    setLabelsRaw((track.labels ?? []).join(", "));
     setBpm(String(track.bpm ?? ""));
     setMusicalKey(track.musicalKey ?? "");
     setCamelotKey(track.camelotKey ?? "");
@@ -142,6 +156,7 @@ function useTrackForm(track: Track) {
       composer: composer.trim() || undefined,
       comment: comment.trim() || undefined,
       notes: notes.trim() || undefined,
+      labels: labelsRaw.trim() ? labelsRaw.split(",").map((l) => l.trim()).filter(Boolean) : undefined,
       bpm: parseFloat(bpm) || track.bpm,
       // 0712_MUSIC_BPM_Key_Detection_Engine §17 — manual correction outranks
       // detected/imported values and must survive reanalysis.
@@ -177,12 +192,14 @@ function useTrackForm(track: Track) {
     grouping !== (track.grouping ?? "") ||
     genre !== (track.genre ?? "") ||
     coverImagePath !== (track.coverImagePath ?? "") ||
-    moodTagsRaw !== (track.moodTags ?? []).join(", ");
+    moodTagsRaw !== (track.moodTags ?? []).join(", ") ||
+    labelsRaw !== (track.labels ?? []).join(", ");
 
   return {
     title, setTitle, artist, setArtist, albumTitle, setAlbumTitle,
     albumArtist, setAlbumArtist, genre, setGenre, grouping, setGrouping,
     year, setYear, composer, setComposer, comment, setComment, notes, setNotes,
+    labelsRaw, setLabelsRaw,
     bpm, setBpm, musicalKey, setMusicalKey, camelotKey, setCamelotKey,
     energy, setEnergy, durationSeconds, setDurationSecs,
     analysisStatus, setAnalysisStatus,
@@ -532,6 +549,21 @@ export function TrackInspector({
               {" "}{o.label}
             </label>
           ))}
+        </div>
+
+        {/* Labels (0813_MUSIC_P0_Clean_Library_Foundation StepD) — plain
+            user text, no taxonomy/color. Same comma-separated pattern as
+            Mood Tags above; deleting from the text list is how a label is
+            removed, no separate remove control needed. */}
+        <div className="te-section-label">Labels</div>
+        <div className="te-row">
+          <label className="te-label">Labels</label>
+          <input
+            className="te-input"
+            value={form.labelsRaw}
+            onChange={(e) => form.setLabelsRaw(e.target.value)}
+            placeholder="Episode 2, Needs Ableton, Strong bassline…"
+          />
         </div>
 
         {/* Notes */}

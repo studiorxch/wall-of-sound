@@ -15,7 +15,7 @@
 export type LibraryColumnId =
   | "title" | "artist" | "mood" | "suggested" | "mechanical" | "grouping" | "genre"
   | "bpm" | "key" | "energy" | "duration" | "rating" | "plays" | "lastPlayed" | "status"
-  | "comments";
+  | "comments" | "labels";
 
 export interface LibraryColumnPreference {
   id: LibraryColumnId;

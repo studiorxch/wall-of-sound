@@ -390,6 +390,7 @@ export function LibraryDataGrid(props: Props) {
       case "lastPlayed": return fmtLastPlayed(t.lastPlayedAt);
       case "status": return t.archiveStatus ?? "library";
       case "comments": return truncateCommentPreview(t.notes, 200);
+      case "labels": return (t.labels ?? []).join(", ");
       default: return "";
     }
   }
@@ -461,7 +462,7 @@ export function LibraryDataGrid(props: Props) {
         <div className="cat-filter-row">
           <input
             className="cat-filter-search"
-            placeholder="Search title, artist, mood, comments…"
+            placeholder="Search title, artist, mood, comments, labels…"
             value={filters.search ?? ""}
             onChange={(e) => setFilter("search", e.target.value || undefined)}
           />
@@ -469,6 +470,12 @@ export function LibraryDataGrid(props: Props) {
             <option value="">Mood: All</option>
             {filterOptions.moods.map((m) => <option key={m} value={m}>{m}</option>)}
           </select>
+          {filterOptions.labels.length > 0 && (
+            <select className="cat-filter-sel" value={filters.labels?.[0] ?? ""} onChange={(e) => setFilter("labels", e.target.value ? [e.target.value] : undefined)}>
+              <option value="">Label: All</option>
+              {filterOptions.labels.map((l) => <option key={l} value={l}>{l}</option>)}
+            </select>
+          )}
           <select className="cat-filter-sel" value={filters.grouping ?? ""} onChange={(e) => setFilter("grouping", e.target.value || undefined)}>
             <option value="">Group: All</option>
             {filterOptions.groupings.map((g) => <option key={g} value={g}>{g}</option>)}
@@ -676,6 +683,12 @@ export function LibraryDataGrid(props: Props) {
                           {excluded
                             ? <button className="tb-btn sm" onClick={() => { onRestore(t.trackId); setOpenRowMenuId(null); }}>Restore</button>
                             : <button className="tb-btn sm" onClick={() => { onExclude(t.trackId); setOpenRowMenuId(null); }}>Exclude from analysis</button>}
+                          {/* MUSIC P0 Clean Library Foundation — Step D. Same
+                              destination as clicking the title (TrackInspector
+                              already has Notes; Labels is added there too) —
+                              a second entry point for discoverability, not a
+                              second editing surface. */}
+                          <button className="tb-btn sm" onClick={() => { onInspect(t, sorted, idx); setOpenRowMenuId(null); }}>Edit Note &amp; Labels…</button>
                           <button className="tb-btn sm remove-btn" onClick={() => { setRemoveConfirmIds([t.trackId]); setOpenRowMenuId(null); }}>Remove from {libraryLabel}…</button>
                         </div>
                       )}
@@ -801,6 +814,22 @@ function renderLibraryCell(
         onCancel={() => ctx.setEditingCommentTrackId(null)}
       />
     );
+    // MUSIC P0 Clean Library Foundation — Step D. Read-only compact display
+    // — editing lives in TrackInspector (row "•••" → Edit Note & Labels…),
+    // not a second inline editor. Nothing shown at all when a track has no
+    // labels, matching the "no permanent clutter" requirement.
+    case "labels": {
+      const labels = t.labels ?? [];
+      if (labels.length === 0) return null;
+      const shown = labels.slice(0, 3);
+      const overflow = labels.length - shown.length;
+      return (
+        <span className="lib-label-chips" title={labels.join(", ")}>
+          {shown.map((l) => <span key={l} className="lib-label-chip">{l}</span>)}
+          {overflow > 0 && <span className="lib-label-chip lib-label-chip--more">+{overflow}</span>}
+        </span>
+      );
+    }
     default: return null;
   }
 }

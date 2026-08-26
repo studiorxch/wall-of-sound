@@ -47,6 +47,12 @@ export const LIBRARY_COLUMN_REGISTRY: LibraryColumnDef[] = [
   { id: "lastPlayed", label: "Last", minWidth: 70, maxWidth: 160, defaultWidth: 90, sortable: true },
   { id: "status", label: "Status", minWidth: 70, maxWidth: 160, defaultWidth: 90, sortable: true },
   { id: "comments", label: "Comments", minWidth: 120, maxWidth: 480, defaultWidth: 220, sortable: true },
+  // MUSIC P0 Clean Library Foundation — Step D. Read-only compact chip
+  // display; editing happens in TrackInspector (see its Labels row), not
+  // inline here — one editing surface, not two. Not sortable, same
+  // reasoning as Mood/Suggested/Mechanical: a list has no single canonical
+  // ordering value.
+  { id: "labels", label: "Labels", minWidth: 90, maxWidth: 280, defaultWidth: 150, sortable: false },
 ];
 
 const REGISTRY_BY_ID = new Map(LIBRARY_COLUMN_REGISTRY.map((c) => [c.id, c]));

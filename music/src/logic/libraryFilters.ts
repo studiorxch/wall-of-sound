@@ -19,6 +19,10 @@ export type LibraryTrackFilters = {
   // (see catalogComments.ts doc comment for why this build reuses `notes`
   // rather than adding a new, confusingly-similar `comments` field).
   hasComments?: "any" | "has" | "none";
+  // MUSIC P0 Clean Library Foundation — Step D. Mirrors moodTags exactly
+  // (any-match against Track.labels) — the smallest possible filter
+  // addition, not a new faceted system.
+  labels?: string[];
 };
 
 export function isFiltersEmpty(f: LibraryTrackFilters): boolean {
@@ -34,7 +38,8 @@ export function isFiltersEmpty(f: LibraryTrackFilters): boolean {
     (!f.archiveStatus || f.archiveStatus === "any") &&
     !f.hasUnknownMetadata &&
     !f.noCover &&
-    (!f.hasComments || f.hasComments === "any")
+    (!f.hasComments || f.hasComments === "any") &&
+    (!f.labels || f.labels.length === 0)
   );
 }
 
@@ -45,6 +50,7 @@ export function filterTracksByLibraryFilters(
   if (isFiltersEmpty(filters)) return tracks;
   const searchLower = filters.search?.toLowerCase().trim();
   const moodSet = filters.moodTags?.length ? new Set(filters.moodTags.map((m) => m.toLowerCase())) : null;
+  const labelSet = filters.labels?.length ? new Set(filters.labels.map((l) => l.toLowerCase())) : null;
   const groupingLower = filters.grouping?.toLowerCase().trim();
   const genreLower = filters.genre?.toLowerCase().trim();
   const ownerFilter = filters.sourceOwner && filters.sourceOwner !== "any" ? filters.sourceOwner : null;
@@ -55,7 +61,7 @@ export function filterTracksByLibraryFilters(
     if (searchLower) {
       const hay = [
         t.title, t.artist, t.albumTitle ?? "", t.grouping ?? "", t.notes ?? "",
-        ...normalizeTrackGenreTokens(t), ...(t.moodTags ?? []),
+        ...normalizeTrackGenreTokens(t), ...(t.moodTags ?? []), ...(t.labels ?? []),
       ].join(" ").toLowerCase();
       if (!hay.includes(searchLower)) return false;
     }
@@ -117,6 +123,11 @@ export function filterTracksByLibraryFilters(
     } else if (filters.hasComments === "none") {
       if (t.notes && t.notes.trim().length > 0) return false;
     }
+    // labels — any match (mirrors moodTags above)
+    if (labelSet) {
+      const trackLabels = (t.labels ?? []).map((l) => l.toLowerCase());
+      if (!trackLabels.some((l) => labelSet.has(l))) return false;
+    }
     return true;
   });
 }
@@ -127,14 +138,17 @@ export function buildFilterOptions(tracks: Track[]): {
   groupings: string[];
   genres: string[];
   owners: TrackSourceOwner[];
+  labels: string[];
 } {
   const moodSet = new Set<string>();
   const groupingSet = new Set<string>();
   const genreSet = new Set<string>();
   const ownerSet = new Set<TrackSourceOwner>();
+  const labelSet = new Set<string>();
 
   for (const t of tracks) {
     (t.moodTags ?? []).forEach((m) => m && moodSet.add(m));
+    (t.labels ?? []).forEach((l) => l && labelSet.add(l));
     // grouping may be stored as string or string[] at runtime — handle both.
     const rawGrouping = t.grouping as unknown;
     if (Array.isArray(rawGrouping)) {
@@ -151,5 +165,6 @@ export function buildFilterOptions(tracks: Track[]): {
     groupings: [...groupingSet].sort(),
     genres: [...genreSet].sort(),
     owners: [...ownerSet].sort() as TrackSourceOwner[],
+    labels: [...labelSet].sort(),
   };
 }

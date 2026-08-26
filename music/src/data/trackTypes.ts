@@ -320,6 +320,12 @@ export type Track = {
   style?: string;
   // Notes
   notes?: string;
+  // MUSIC P0 Clean Library Foundation — Step D. Deliberately minimal:
+  // plain user-created strings, no controlled vocabulary, no color, no
+  // taxonomy. Reuses `notes` for longer observations rather than
+  // introducing a competing free-text field — this is only for short,
+  // repeatable tags ("Episode 2", "Needs Ableton", "Strong bassline").
+  labels?: string[];
   // Audition memory
   rating?: TrackRating;
   playCount?: number;
