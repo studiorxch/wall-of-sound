@@ -104,8 +104,19 @@
     // Surface overlay canvas — drawing layer above route overlays
     _buildSurfaceOverlay(canvasArea);
 
-    // Atmosphere compositor — fullscreen mood layer between Mapbox and canvas stack
-    if (SBE.AtmosphereComposite) SBE.AtmosphereComposite.init();
+    // Atmosphere compositor — fullscreen mood layer between Mapbox and canvas
+    // stack. Respects a persisted MAPS Overlay preference (Atmosphere
+    // Composite's "Enabled" toggle) instead of unconditionally forcing it
+    // on — previously this always initialized regardless of any saved
+    // "off" preference, which is why the toggle could never actually stick
+    // on the live map. Defaults to enabled when no preference has ever been
+    // saved, preserving prior behavior for untouched setups.
+    if (SBE.AtmosphereComposite) {
+      var atmospherePreference = typeof SBE.AtmosphereComposite.readEnabledPreference === "function"
+        ? SBE.AtmosphereComposite.readEnabledPreference()
+        : null;
+      if (atmospherePreference !== false) SBE.AtmosphereComposite.init();
+    }
 
     // World Telemetry HUD — cinematic environmental instrumentation (replaces WorldHUD)
     if (SBE.WorldTelemetryHUD) SBE.WorldTelemetryHUD.init();

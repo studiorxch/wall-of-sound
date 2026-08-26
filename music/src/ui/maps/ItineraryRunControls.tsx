@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import * as wallItineraryRunBridge from "../../maps/wallItineraryRunBridge";
+import * as wallSubwayItineraryRideBridge from "../../maps/wallSubwayItineraryRideBridge";
 import { computeRunReadiness, buildItineraryRunPayload } from "../../logic/maps/itineraryRunReadiness";
 import type { Itinerary } from "../../data/itineraryTypes";
 import type { ItineraryRunSnapshot } from "../../data/itineraryRunTypes";
@@ -47,6 +48,31 @@ const LAUNCH_ERROR_LABELS: Record<"popup_blocked" | "timeout", string> = {
 
 const PRESENTATION_WARNING_LABELS: Record<string, string> = {
   orb_unavailable: "Orb unavailable — traversal continuing without visible hero",
+};
+
+// 0819_SUBWAY_Itinerary_Execution_Map_Authoring — the transit ride path is
+// deliberately a separate branch, never routed through DRIVE's
+// buildItineraryRunPayload()/wallItineraryRunBridge (real-time live-train
+// position is not a pre-fetched static route to sample — see
+// wallSubwayItineraryRideBridge.ts's own header). Detailed CURRENT/NEXT/
+// EXIT/candidate-selection state lives in the wall-side ride HUD (see
+// subwayItineraryRideHud.js) — this control surface stays a compact status
+// + Stop, per "do not redesign the full HUD."
+const TRANSIT_STATUS_LABELS: Record<string, string> = {
+  waiting_to_board: "Waiting to board",
+  riding: "Riding",
+  approaching_exit: "Approaching exit",
+  completed: "Ride complete",
+};
+
+const TRANSIT_UNRESOLVED_RUN_LABELS: Record<string, string> = {
+  authority_unavailable: "Live map data unavailable",
+  no_boarding_station_nearby: "No subway station near this stop — pick another point",
+  no_exit_station_nearby: "No subway station near this destination — pick another point",
+  same_station: "Same station — no subway ride needed",
+  no_direct_route: "No direct line serves both stations",
+  preferred_route_not_direct: "Chosen line doesn't run this leg",
+  unresolvable_geometry: "Couldn't resolve real stop sequence",
 };
 
 function fmtClock(seconds: number | null): string {
@@ -180,6 +206,81 @@ export function ItineraryRunControls({ itinerary, compact }: Props) {
     return () => { unsub(); window.clearInterval(interval); };
   }, []);
 
+  // ── Transit ride path (0819_SUBWAY_Itinerary_Execution_Map_Authoring) ──
+  // "No transfers yet" — an itinerary's relevant leg for this checkpoint is
+  // its first mode:"transit" stage, if any. When present, this entirely
+  // replaces the DRIVE run/readiness/telemetry logic below (which would
+  // otherwise report unsupported_mode and never let the user run anything).
+  const activeTransitStage = itinerary.stages.find((s) => s.mode === "transit") ?? null;
+
+  const [rideSnapshot, setRideSnapshot] = useState(wallSubwayItineraryRideBridge.getSnapshot);
+  const [transitLaunching, setTransitLaunching] = useState(false);
+  const [transitLaunchError, setTransitLaunchError] = useState<"popup_blocked" | "timeout" | null>(null);
+
+  useEffect(() => {
+    function refresh() { setRideSnapshot(wallSubwayItineraryRideBridge.getSnapshot()); }
+    const unsub = wallSubwayItineraryRideBridge.subscribe(refresh);
+    const interval = window.setInterval(refresh, 1000);
+    return () => { unsub(); window.clearInterval(interval); };
+  }, []);
+
+  if (activeTransitStage) {
+    const rideRunningHere = rideSnapshot.itineraryId === itinerary.id && rideSnapshot.status !== "idle";
+
+    if (rideRunningHere) {
+      if (compact) {
+        return <span className="itin-run-badge">{TRANSIT_STATUS_LABELS[rideSnapshot.status] ?? rideSnapshot.status}</span>;
+      }
+      return (
+        <div className="itin-run-controls">
+          <div className="itin-run-status">
+            <span className={`itin-run-badge itin-run-badge--${rideSnapshot.status}`}>
+              {TRANSIT_STATUS_LABELS[rideSnapshot.status] ?? rideSnapshot.status}
+            </span>
+          </div>
+          <div className="itin-run-actions">
+            <button className="tb-btn sm" onClick={() => wallSubwayItineraryRideBridge.stopRide()}>
+              {rideSnapshot.status === "completed" ? "Return to Idle" : "Stop"}
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    async function handleRunTransit() {
+      if (!activeTransitStage!.transitLeg) return;
+      setTransitLaunchError(null);
+      setTransitLaunching(true);
+      const result = await wallSubwayItineraryRideBridge.launchTransitLeg(itinerary.id, activeTransitStage!.id, activeTransitStage!.transitLeg);
+      setTransitLaunching(false);
+      if (!result.ok) setTransitLaunchError(result.reason);
+    }
+
+    const transitReady = !!activeTransitStage.transitLeg;
+    const transitBlockReason = !transitReady
+      ? (activeTransitStage.transitUnresolvedReason ? TRANSIT_UNRESOLVED_RUN_LABELS[activeTransitStage.transitUnresolvedReason] ?? "This leg couldn't be resolved" : "Resolving this leg…")
+      : undefined;
+    const transitRunDisabled = !transitReady || transitLaunching;
+    const transitRunTitle = !transitReady ? transitBlockReason : transitLaunching ? "Opening LIVE MAP…" : undefined;
+
+    if (compact) {
+      return (
+        <button className="pgc-ha-btn" title={transitRunTitle ?? "Run"} disabled={transitRunDisabled} onClick={handleRunTransit}>
+          <Icon name="subway" />
+        </button>
+      );
+    }
+
+    return (
+      <div className="itin-run-pre-start">
+        <PresentationWarningBanner text={transitLaunchError ? LAUNCH_ERROR_LABELS[transitLaunchError] : null} />
+        <button className="tb-btn" disabled={transitRunDisabled} title={transitRunTitle} onClick={handleRunTransit}>
+          {transitLaunching ? "Opening LIVE MAP…" : "Run Itinerary"}
+        </button>
+      </div>
+    );
+  }
+
   const runningHere = snapshot.itineraryId === itinerary.id &&
     (snapshot.status === "running" || snapshot.status === "paused" || snapshot.status === "starting" || snapshot.status === "completed");
 
@@ -250,25 +351,34 @@ export function ItineraryRunControls({ itinerary, compact }: Props) {
   const { ready, reasons } = computeRunReadiness(itinerary, otherRunActive);
   const blockReason = reasons.length ? REASON_LABELS[reasons[0]] ?? "Unable to run" : undefined;
 
-  // 0805A — opens/focuses canonical LIVE MAP and waits for its readiness
-  // handshake BEFORE sending Start; the run itself only ever begins once
-  // LIVE MAP has confirmed it's ready to receive it.
+  // 0819_SUBWAY_Itinerary_Execution_Map_Authoring — Start is now written
+  // FIRST, synchronously, BEFORE openOrFocusLiveMap(). A real, reproduced
+  // race (found while building the analogous SUBWAY ride launch path — see
+  // wallSubwayItineraryRideBridge.ts's own header for the full writeup):
+  // window.open(url, LIVE_MAP_WINDOW_NAME) can end up navigating/reloading
+  // THIS calling tab's own browsing context, which would destroy this async
+  // function before it ever reached an await-then-send-Start step. Writing
+  // Start synchronously up front means it's already durable in localStorage
+  // regardless of what happens to this tab immediately afterward;
+  // itineraryRunAuthority.js's boot-time pending-command check is the other
+  // half of this fix. The readiness wait still runs and still reports a
+  // genuine popup-blocked/timeout failure to the UI — the run itself no
+  // longer depends on this tab surviving to send a second message.
   async function handleRun() {
     const payload = buildItineraryRunPayload(itinerary);
     if (!payload) return;
     setLaunchError(null);
     setLaunching(true);
-    const result = await wallItineraryRunBridge.openOrFocusLiveMap();
-    setLaunching(false);
-    if (!result.ok) {
-      setLaunchError(result.reason);
-      return;
-    }
     setStartedUpdatedAt(itinerary.updatedAt);
     // Follow Hero enabled by default for the automatic launch path — the run
     // itself starts immediately; Locate then Follow engage wall-side, in
     // sequence, once LIVE MAP applies the command (see itineraryRunAuthority.js).
     wallItineraryRunBridge.start(payload, selectedRate, selectedAltitude, selectedLift, true);
+    const result = await wallItineraryRunBridge.openOrFocusLiveMap();
+    setLaunching(false);
+    if (!result.ok) {
+      setLaunchError(result.reason);
+    }
   }
 
   const runDisabled = !ready || launching;

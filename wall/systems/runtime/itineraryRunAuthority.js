@@ -124,6 +124,57 @@
   var _liveMapReady = false;
   var _followEnableTimer = null;
 
+  // TEMPORARY diagnostics (0820_SUBWAY_Post_Launch_Execution_Investigation) —
+  // remove alongside this file's other diag blocks once the reported
+  // post-launch stall is root-caused.
+  var _diagFollowTimerFiredAt = null;
+  var _diagFollowTimerOutcome = null; // null (never fired yet) | 'blocked_not_owner' | 'blocked_runid_mismatch' | 'enabled'
+  var _diagFollowTimerRunIdAtStart = null;
+  var _diagFollowTimerCurrentRunId = null;
+
+  // TEMPORARY diagnostics — boot-time pending-command delivery path. Answers:
+  // did the map's onReady callback register at all (mvr existed at THIS
+  // script's own load time)? Did it fire (map genuinely became ready)? Did
+  // the boot check run, and what did it see in localStorage at that moment?
+  // Did the live cross-tab 'storage' listener ever fire as an alternate path?
+  var _diagOnReadySetupAt = Date.now();
+  var _diagOnReadyRegistered = null; // null (setup IIFE hasn't run yet — impossible after load) | true | false (mvr or mvr.onReady missing at registration time)
+  var _diagOnReadyFiredAt = null;
+  var _diagOnReadyFiredCount = 0;
+  var _diagBootCheckLog = []; // [{at, outcome, commandId, issuedAt, ageMs}]
+  var _diagStorageEventCount = 0;
+  var _diagStorageEventLastAt = null;
+  var _diagStorageEventLastKey = null;
+  var MAX_DIAG_LOG = 20;
+
+  // TEMPORARY diagnostic — the owner lock (_tryAcquireLock) gates whether
+  // _handleStart() ever calls controller.start() at all. If it fails,
+  // _handleStart() returns silently: no error, no publish, no notify, and
+  // this tab's own getSnapshot() (non-owner branch) falls back to whatever
+  // snapshot happens to already be sitting in STORAGE_SNAPSHOT_KEY — which
+  // can be a stale/foreign snapshot from an earlier or different tab's run,
+  // read back and displayed as if it were this tab's own live state, while
+  // ItineraryRunController.getDiagnostics() (this tab's REAL, local
+  // controller) correctly shows frameCount:0 / not running. That combination
+  // — a "running" snapshot with real elapsed/distance values alongside a
+  // controller that never ticked — is exactly the reported symptom. This log
+  // makes a silent lock failure visible instead of indistinguishable from a
+  // legitimate passive-reader tab. Remove alongside this file's other diag
+  // blocks once the stall is root-caused.
+  var _diagLockAcquireLog = []; // [{at, outcome:'acquired'|'blocked_existing_owner', existingOwnerId, existingHeartbeatAgeMs, thisTabId}]
+
+  // TEMPORARY diagnostics (0820_MAPS_Itinerary_Execution_Lifecycle_Repair) —
+  // _handleCommand() is the ONE canonical entry point every command source
+  // (boot recovery, live 'storage' event) funnels through — confirmed by
+  // grep, not assumed: it has exactly two production callers plus the test
+  // hook. These fields make that entry point's own activity directly
+  // provable instead of inferred from downstream effects.
+  var _diagLastConsumedCommandId = null;
+  var _diagLastConsumedCommandAt = null;
+  var _diagLastConsumedCommandType = null;
+  var _diagHandleStartCallCount = 0;
+  var _diagLastHandleStartAt = null;
+
   function _controller() { return global.SBE && SBE.ItineraryRunController; }
 
   function _notify() {
@@ -151,13 +202,75 @@
     if (!lock || !lock.heartbeatAt) return true;
     return (Date.now() - lock.heartbeatAt) > HEARTBEAT_MS * STALE_MULTIPLIER;
   }
+  function _diagLogLockAcquire(outcome, existing) {
+    _diagLockAcquireLog.push({
+      at: Date.now(), outcome: outcome, thisTabId: _tabId,
+      existingOwnerId: existing ? existing.ownerId : null,
+      existingHeartbeatAgeMs: existing && existing.heartbeatAt ? (Date.now() - existing.heartbeatAt) : null,
+    });
+    if (_diagLockAcquireLog.length > MAX_DIAG_LOG) _diagLockAcquireLog.shift();
+  }
+  // 0820_MAPS_Itinerary_Execution_Lifecycle_FocusPriority — a real, confirmed
+  // production case: a fresh command reaches the tab the user is actually
+  // looking at (COMMAND DELIVERY / HANDLE START both correct), but a
+  // DIFFERENT, live, non-stale LIVE MAP tab already holds the lock (some
+  // other open window/tab from earlier testing) and staleness-based
+  // arbitration alone has no way to prefer "the one the user can see" over
+  // "whichever tab happened to grab it first." A focused tab directly
+  // represents what the user is looking at RIGHT NOW — the strongest signal
+  // of intent available without inventing a new addressing/targeting
+  // protocol. A focused tab therefore always wins acquisition, even against
+  // a live non-stale owner. The old owner is never left running
+  // uncoordinated: the self-demoting heartbeat below (already shipped and
+  // tested in the prior checkpoint) discovers the supersession and stops
+  // itself within one heartbeat interval (2s) regardless of why it lost the
+  // lock, so this reuses existing, proven machinery rather than adding a
+  // new mechanism.
+  function _isThisTabFocused() {
+    try { return !!(global.document && typeof global.document.hasFocus === 'function' && global.document.hasFocus()); } catch (e) { return false; }
+  }
   function _tryAcquireLock(itineraryId) {
     var existing = _readOwnerLock();
-    if (existing && existing.ownerId !== _tabId && !_isLockStale(existing)) {
-      return false; // a different, live tab already owns an active run
+    var focused = _isThisTabFocused();
+    var blockedByLiveOwner = existing && existing.ownerId !== _tabId && !_isLockStale(existing);
+    if (blockedByLiveOwner && !focused) {
+      _diagLogLockAcquire('blocked_existing_owner', existing);
+      return false; // a different, live tab already owns an active run, and this tab isn't the one the user is looking at
     }
+    var isFocusOverride = blockedByLiveOwner && focused;
     _writeOwnerLock({ ownerId: _tabId, itineraryId: itineraryId, runId: null, startedAt: new Date().toISOString(), heartbeatAt: Date.now() });
+    // Read-after-write verification (0820_MAPS_Itinerary_Execution_Lifecycle_Ownership)
+    // — localStorage write-then-read-back is the narrowest check available
+    // without a true cross-tab mutex (no navigator.locks usage anywhere in
+    // this codebase to build on, and introducing one is a bigger change
+    // than this checkpoint's scope). This does not fully close the race —
+    // another tab's write can still land between this write and this read —
+    // but it catches the common case directly, and the self-correcting
+    // heartbeat below (_startHeartbeat) is the real backstop: even if this
+    // check passes falsely, a superseded tab discovers it and stops itself
+    // within one heartbeat interval (2s), never running indefinitely as an
+    // uncoordinated second owner — confirmed as a REAL, persistent failure
+    // mode this pass (a genuinely separate second LIVE MAP tab ran its own
+    // full local execution, camera included, for over a minute with zero
+    // self-correction, before this fix).
+    var confirmed = _readOwnerLock();
+    if (!confirmed || confirmed.ownerId !== _tabId) {
+      _diagLogLockAcquire('blocked_lost_race_on_writeback', confirmed);
+      return false;
+    }
+    _diagLogLockAcquire(isFocusOverride ? 'acquired_focus_override' : 'acquired', existing);
     return true;
+  }
+  // Stops this tab's own local execution/camera/publishing WITHOUT touching
+  // the current owner lock (never clears or overwrites another tab's valid
+  // lock) and WITHOUT publishing this tab's now-stopped state to the shared
+  // snapshot key (which would clobber the real owner's live telemetry).
+  // Called only when the heartbeat discovers this tab has been superseded.
+  function _selfDemoteSuperseded() {
+    var controller = _controller();
+    if (controller) { try { controller.stop(); } catch (e) {} }
+    _releaseOwnership();
+    _notify();
   }
   function _releaseOwnership() {
     _isOwner = false;
@@ -177,7 +290,19 @@
       if (lock && lock.ownerId === _tabId) {
         lock.heartbeatAt = Date.now();
         _writeOwnerLock(lock);
+        return;
       }
+      // This tab believed it owned the run, but the stored lock now names
+      // a different owner (or no owner at all) — a real, confirmed failure
+      // mode: the initial acquisition race in _tryAcquireLock() can let two
+      // tabs both briefly believe they've won before one write finally
+      // supersedes the other. Previously this branch did nothing, so the
+      // superseded tab kept running — its own controller, RAF, and camera
+      // loop — indefinitely, with no way to discover it had lost. Self-
+      // demote within one heartbeat interval instead of assuming the lock
+      // stays valid forever once acquired.
+      _diagLogLockAcquire('superseded_self_demoted', lock);
+      _selfDemoteSuperseded();
     }, HEARTBEAT_MS);
   }
   function _stopHeartbeat() {
@@ -239,15 +364,29 @@
   // hero renders from) rather than the raw authoritative position, so the
   // camera never leads the hero. dtOverride is test-only (deterministic
   // convergence testing without depending on real Date.now() deltas).
+  // TEMPORARY diagnostics (0820_SUBWAY_Post_Launch_Execution_Investigation) —
+  // _cameraTick() has five silent early-return gates; any one of them
+  // staying blocked forever would explain a persistent "CAMERA FREE" state
+  // even though the RAF loop calling it is running fine. Recording exactly
+  // which gate last blocked (if any) turns that into evidence instead of a
+  // guess. Remove alongside itineraryRunController.js's matching block once
+  // the stall is root-caused.
+  var _diagCameraTickCount = 0;
+  var _diagCameraLastBlockedReason = null;
+  var _diagCameraLastTickAt = null;
   function _cameraTick(dtOverride) {
-    if (!_isOwner || !_followEnabled) return;
+    _diagCameraTickCount++;
+    _diagCameraLastTickAt = Date.now();
+    if (!_isOwner) { _diagCameraLastBlockedReason = 'not_owner'; return; }
+    if (!_followEnabled) { _diagCameraLastBlockedReason = 'follow_disabled'; return; }
     var controller = _controller();
-    if (!controller || typeof controller.getPresentationEntity !== 'function') return;
+    if (!controller || typeof controller.getPresentationEntity !== 'function') { _diagCameraLastBlockedReason = 'no_controller'; return; }
     var target = controller.getPresentationEntity();
-    if (!target || target.lng == null || target.lat == null) return;
+    if (!target || target.lng == null || target.lat == null) { _diagCameraLastBlockedReason = 'no_presentation_entity'; return; }
     var mvr = global.SBE && SBE.MapboxViewportRuntime;
     var map = mvr && typeof mvr.getMap === 'function' ? mvr.getMap() : null;
-    if (!map || typeof map.setCenter !== 'function') return;
+    if (!map || typeof map.setCenter !== 'function') { _diagCameraLastBlockedReason = 'no_map'; return; }
+    _diagCameraLastBlockedReason = null; // this tick genuinely reached setCenter() below
     _ensureMapInteractionListeners(map);
 
     var dt;
@@ -349,6 +488,8 @@
 
   // ── Command handling (from MUSIC, via 'storage' events) ───────────────────
   function _handleStart(payload, speedMultiplier, heroAltitudeMeters, heroVisualLiftPixels, initialFollowEnabled) {
+    _diagHandleStartCallCount++;
+    _diagLastHandleStartAt = Date.now();
     var controller = _controller();
     if (!controller) return;
     if (!_tryAcquireLock(payload.itineraryId)) {
@@ -383,11 +524,22 @@
       var runIdAtStart = result.runId;
       _followEnableTimer = global.setTimeout(function () {
         _followEnableTimer = null;
+        _diagFollowTimerFiredAt = Date.now();
         // Guard: only apply if this exact run is still the one executing
         // (not stopped/restarted in the interim).
-        if (!_isOwner) return;
+        if (!_isOwner) { _diagFollowTimerOutcome = 'blocked_not_owner'; return; }
         var current = _controllerSnapshotOrNull();
-        if (!current || current.runId !== runIdAtStart) return;
+        if (!current || current.runId !== runIdAtStart) {
+          // TEMPORARY diagnostic (0820_SUBWAY_Post_Launch_Execution_Investigation)
+          // — a real candidate for a permanently-FREE camera: if this guard
+          // trips, _followEnabled is NEVER set true and nothing else ever
+          // retries it. Remove alongside this file's other diag blocks.
+          _diagFollowTimerOutcome = 'blocked_runid_mismatch';
+          _diagFollowTimerRunIdAtStart = runIdAtStart;
+          _diagFollowTimerCurrentRunId = current ? current.runId : null;
+          return;
+        }
+        _diagFollowTimerOutcome = 'enabled';
         _followEnabled = true;
         _snapCameraToTargetNow();
         _publishSnapshot(current);
@@ -399,9 +551,22 @@
     _notify();
   }
 
+  // De-duped by commandId — a command can legitimately be observed twice
+  // (once via the boot-time pending-command check below, once via a live
+  // 'storage' event that still fires shortly after) and must only ever
+  // apply once. Same fix as subwayItineraryRideAuthority.js's own
+  // _handleCommand — see that file's header for the full race writeup this
+  // addresses (window.open() can end up navigating/reloading the CALLING
+  // tab, not only a genuinely separate LIVE MAP tab).
+  var _lastAppliedCommandId = null;
   function _handleCommand(cmd) {
     var controller = _controller();
-    if (!controller || !cmd || !cmd.type) return;
+    if (!controller || !cmd || !cmd.type || !cmd.commandId) return;
+    if (cmd.commandId === _lastAppliedCommandId) return;
+    _lastAppliedCommandId = cmd.commandId;
+    _diagLastConsumedCommandId = cmd.commandId;
+    _diagLastConsumedCommandAt = Date.now();
+    _diagLastConsumedCommandType = cmd.type;
     if (cmd.type === 'start') {
       _handleStart(cmd.payload, cmd.speedMultiplier, cmd.heroAltitudeMeters, cmd.heroVisualLiftPixels, cmd.initialFollowEnabled);
       return;
@@ -434,10 +599,51 @@
   }
 
   function _onStorageEvent(e) {
+    _diagStorageEventCount++;
+    _diagStorageEventLastAt = Date.now();
+    _diagStorageEventLastKey = e.key;
     if (e.key !== STORAGE_COMMAND_KEY || !e.newValue) return;
     var cmd;
     try { cmd = JSON.parse(e.newValue); } catch (err) { return; }
     _handleCommand(cmd);
+  }
+
+  // ── Boot-time pending-command check — a real, reproduced race: a
+  // launching MUSIC tab now writes STORAGE_COMMAND_KEY THEN opens/focuses
+  // LIVE MAP (see wallItineraryRunBridge.ts's handleRun() callers); if that
+  // same named window.open() call ends up navigating/reloading the MUSIC
+  // tab's OWN browsing context (confirmed reproducible), MUSIC's own JS
+  // never runs any code after the write — but the write itself already
+  // landed in localStorage before that happened. A 'storage' event alone
+  // would never fire for it (that event only ever fires in OTHER tabs, and
+  // only for a write that happens AFTER this tab's listener attaches) — so
+  // LIVE MAP must also explicitly check the CURRENT stored command value
+  // once at load, mirroring _respondToLiveMapRequest()'s own pattern for
+  // the same class of race. Only a FRESH command is consumed — never
+  // replays a stale command left over from a much earlier session. ──
+  var PENDING_COMMAND_MAX_AGE_MS = 30000;
+  function _diagLogBootCheck(outcome, cmd, ageMs) {
+    _diagBootCheckLog.push({
+      at: Date.now(), outcome: outcome,
+      commandId: cmd && cmd.commandId || null,
+      issuedAt: cmd && cmd.issuedAt || null,
+      ageMs: ageMs != null ? ageMs : null,
+    });
+    if (_diagBootCheckLog.length > MAX_DIAG_LOG) _diagBootCheckLog.shift();
+  }
+  function _checkPendingCommandOnBoot() {
+    try {
+      var raw = global.localStorage.getItem(STORAGE_COMMAND_KEY);
+      if (!raw) { _diagLogBootCheck('no_raw_value', null, null); return; }
+      var cmd = JSON.parse(raw);
+      if (!cmd || !cmd.issuedAt) { _diagLogBootCheck('malformed', cmd, null); return; }
+      var ageMs = Date.now() - new Date(cmd.issuedAt).getTime();
+      if (ageMs < 0 || ageMs > PENDING_COMMAND_MAX_AGE_MS) { _diagLogBootCheck('stale_or_skewed', cmd, ageMs); return; } // stale or clock-skewed — never replay
+      _diagLogBootCheck('consumed', cmd, ageMs);
+      _handleCommand(cmd);
+    } catch (e) {
+      _diagLogBootCheck('threw:' + ((e && e.message) || String(e)), null, null);
+    }
   }
 
   // ── Launch readiness handshake (0805A) ─────────────────────────────────────
@@ -464,12 +670,21 @@
   (function _setupLiveMapReadiness() {
     var mvr = global.SBE && SBE.MapboxViewportRuntime;
     if (mvr && typeof mvr.onReady === 'function') {
+      _diagOnReadyRegistered = true;
       try {
         mvr.onReady(function () {
+          _diagOnReadyFiredAt = Date.now();
+          _diagOnReadyFiredCount++;
           _liveMapReady = true;
           _respondToLiveMapRequest();
+          // Only once the map is genuinely ready — matches the exact
+          // sequencing MUSIC's own wait-for-ready gate already relies on
+          // (see this fix's header comment above _checkPendingCommandOnBoot).
+          _checkPendingCommandOnBoot();
         });
       } catch (e) {}
+    } else {
+      _diagOnReadyRegistered = false; // mvr or mvr.onReady did not exist at THIS script's own load time
     }
     try { global.addEventListener('storage', _onLiveMapRequestStorageEvent); } catch (e) {}
   })();
@@ -560,8 +775,77 @@
     });
   } catch (e) {}
 
+  // TEMPORARY (0820_SUBWAY_Post_Launch_Execution_Investigation) — real,
+  // read-only proof of camera-follow loop/timer health. Remove alongside
+  // this file's other diag blocks and itineraryRunController.js's matching
+  // block once the stall is root-caused.
+  // TEMPORARY diagnostic (0820_MAPS_Itinerary_Execution_Lifecycle_Ownership) —
+  // reads the CURRENT owner lock live, independent of this tab's own history
+  // — answers "who owns it right now" even when this tab never attempted
+  // acquisition at all (handleStartCallCount:0), which the prior pass's
+  // lockAcquireLog could not: that log only records THIS tab's own attempts,
+  // and is empty by construction when this tab never tried.
+  function _diagCurrentOwnerLockInfo() {
+    var lock = _readOwnerLock();
+    if (!lock) return { present: false };
+    return {
+      present: true,
+      ownerTabId: lock.ownerId,
+      isThisTab: lock.ownerId === _tabId,
+      itineraryId: lock.itineraryId,
+      runId: lock.runId,
+      startedAt: lock.startedAt,
+      heartbeatAt: lock.heartbeatAt,
+      heartbeatAgeMs: lock.heartbeatAt ? (Date.now() - lock.heartbeatAt) : null,
+      isStale: _isLockStale(lock),
+    };
+  }
+
+  function getDiagnostics() {
+    return {
+      isOwner: _isOwner,
+      currentOwnerLock: _diagCurrentOwnerLockInfo(),
+      followEnabled: _followEnabled,
+      cameraRafIdActive: _cameraRafId != null,
+      cameraTickCount: _diagCameraTickCount,
+      cameraLastTickAt: _diagCameraLastTickAt,
+      msSinceLastCameraTick: _diagCameraLastTickAt != null ? (Date.now() - _diagCameraLastTickAt) : null,
+      cameraLastBlockedReason: _diagCameraLastBlockedReason,
+      followEnableTimerPending: _followEnableTimer != null,
+      followEnableTimerFiredAt: _diagFollowTimerFiredAt,
+      followEnableTimerOutcome: _diagFollowTimerOutcome,
+      followEnableTimerRunIdAtStart: _diagFollowTimerRunIdAtStart,
+      followEnableTimerCurrentRunId: _diagFollowTimerCurrentRunId,
+      liveMapReady: _liveMapReady,
+      onReadySetupAt: _diagOnReadySetupAt,
+      onReadyRegistered: _diagOnReadyRegistered,
+      onReadyFiredAt: _diagOnReadyFiredAt,
+      onReadyFiredCount: _diagOnReadyFiredCount,
+      bootCheckLog: _diagBootCheckLog.slice(),
+      storageEventCount: _diagStorageEventCount,
+      storageEventLastAt: _diagStorageEventLastAt,
+      storageEventLastKey: _diagStorageEventLastKey,
+      tabId: _tabId,
+      lockAcquireLog: _diagLockAcquireLog.slice(),
+      lastConsumedCommandId: _diagLastConsumedCommandId,
+      lastConsumedCommandAt: _diagLastConsumedCommandAt,
+      lastConsumedCommandType: _diagLastConsumedCommandType,
+      handleStartCallCount: _diagHandleStartCallCount,
+      lastHandleStartAt: _diagLastHandleStartAt,
+      // Explicit locality label — required distinction (0820 ownership
+      // checkpoint): getSnapshot()'s status field is IDENTICAL whether this
+      // tab is genuinely executing or merely reading a foreign tab's
+      // published state, so nothing downstream can tell them apart without
+      // this. 'here' = this tab's own controller is the source of truth.
+      // 'elsewhere' = whatever getSnapshot() reports belongs to a different
+      // (or no-longer-existing) tab, read back from shared storage.
+      runningLocality: _isOwner ? 'here' : 'elsewhere',
+    };
+  }
+
   SBE.ItineraryRunAuthority = Object.freeze({
     VERSION: VERSION,
+    getDiagnostics: getDiagnostics,
     getSnapshot: getSnapshot,
     isOwner: isOwner,
     subscribe: subscribe,

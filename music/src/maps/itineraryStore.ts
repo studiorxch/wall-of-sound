@@ -7,7 +7,10 @@
 // wall bridges, so its wiring pattern stays consistent even though this is a
 // plain IndexedDB-backed cache, not a cross-tab wall authority.
 
-import type { Itinerary, ItineraryStage, LocationRef, RouteSet, TravelMode } from "../data/itineraryTypes";
+import type {
+  Itinerary, ItineraryStage, LocationRef, RouteSet, TravelMode,
+  TransitLegPlan, TransitUnresolvedReason,
+} from "../data/itineraryTypes";
 import {
   listItinerariesFromDB,
   saveItineraryToDB,
@@ -137,10 +140,13 @@ export async function reorderItineraryStops(
   });
 }
 
-export async function addItineraryStop(id: string, stop: LocationRef): Promise<Itinerary | null> {
+// defaultMode: applies only to the genuinely new leg(s) this stop creates —
+// deriveStages() already reuses every untouched existing leg by reference
+// regardless. Omit to keep the existing DRIVE default.
+export async function addItineraryStop(id: string, stop: LocationRef, defaultMode?: TravelMode): Promise<Itinerary | null> {
   return updateItinerary(id, (it) => {
     const stops = [...it.stops, stop];
-    const stages = deriveStages(stops, it.stages);
+    const stages = deriveStages(stops, it.stages, defaultMode);
     return { ...it, stops, stages };
   });
 }
@@ -149,6 +155,24 @@ export async function removeItineraryStop(id: string, stopId: string): Promise<I
   return updateItinerary(id, (it) => {
     const stops = it.stops.filter((s) => s.id !== stopId);
     const stages = deriveStages(stops, it.stages);
+    return { ...it, stops, stages };
+  });
+}
+
+/**
+ * Swap one stop's location in place — used by the unresolved-transit-leg
+ * recovery UX ("Choose another station" / "Pick from map") so the user
+ * never has to remove-then-re-add to fix a single bad stop. `replacement`
+ * carries its own new id (never the old stopId) so deriveStages() correctly
+ * treats every leg touching this stop as genuinely new and needing
+ * re-resolution, while every other untouched leg is preserved by reference.
+ */
+export async function replaceItineraryStop(id: string, stopId: string, replacement: LocationRef, defaultMode?: TravelMode): Promise<Itinerary | null> {
+  return updateItinerary(id, (it) => {
+    const index = it.stops.findIndex((s) => s.id === stopId);
+    if (index === -1) return it;
+    const stops = it.stops.map((s, i) => (i === index ? replacement : s));
+    const stages = deriveStages(stops, it.stages, defaultMode);
     return { ...it, stops, stages };
   });
 }
@@ -163,7 +187,18 @@ export async function updateStageMode(id: string, stageId: string, mode: TravelM
     ...it,
     stages: it.stages.map((s) =>
       s.id === stageId
-        ? { ...s, mode, routeSetId: "", selectedRouteId: null, distanceMeters: null, durationSeconds: null }
+        ? {
+            ...s,
+            mode,
+            routeSetId: "",
+            selectedRouteId: null,
+            distanceMeters: null,
+            durationSeconds: null,
+            // A mode change invalidates any prior transit resolution too —
+            // never leave a stale transitLeg attached to a now-different mode.
+            transitLeg: null,
+            transitUnresolvedReason: null,
+          }
         : s,
     ),
   }));
@@ -190,4 +225,30 @@ export async function applyStageRouteSet(
     );
     return { ...it, stages, routeSets: { ...it.routeSets, [routeSet.id]: routeSet } };
   });
+}
+
+/**
+ * Attach a real resolved SUBWAY leg (or an honest failure reason) to one
+ * mode:"transit" stage, without touching any other stage. Mirrors
+ * applyStageRouteSet's shape/contract for DRIVE.
+ */
+export async function applyStageTransitLeg(
+  id: string,
+  stageId: string,
+  result: { leg: TransitLegPlan; reason?: undefined } | { leg?: undefined; reason: TransitUnresolvedReason },
+): Promise<Itinerary | null> {
+  return updateItinerary(id, (it) => ({
+    ...it,
+    stages: it.stages.map((s) =>
+      s.id === stageId
+        ? {
+            ...s,
+            transitLeg: result.leg ?? null,
+            transitUnresolvedReason: result.reason ?? null,
+            distanceMeters: null, // transit legs don't carry a Directions distance/duration — real stop-by-stop timing lives on transitLeg
+            durationSeconds: null,
+          }
+        : s,
+    ),
+  }));
 }

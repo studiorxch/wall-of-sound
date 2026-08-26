@@ -82,7 +82,16 @@
   function _discoverAtmosphereComposite() {
     var ac = SBE.AtmosphereComposite;
     if (!ac || typeof ac.init !== 'function') return null;
-    var enabled = typeof document !== 'undefined' && !!document.getElementById('atmosphere-composite');
+    // Persisted preference is the real source of truth (see
+    // atmosphereComposite.js's readEnabledPreference doc comment) — MUSIC's
+    // own document never has a canvas to check, so a raw DOM-presence check
+    // here always reported "false" there regardless of the actual toggle
+    // state. DOM presence remains the fallback only for the canonical LIVE
+    // MAP page before any preference has ever been saved.
+    var preference = typeof ac.readEnabledPreference === 'function' ? ac.readEnabledPreference() : null;
+    var enabled = preference !== null
+      ? preference
+      : (typeof document !== 'undefined' && !!document.getElementById('atmosphere-composite'));
     return {
       id: 'overlay.atmosphere-composite',
       label: 'Atmosphere Composite',

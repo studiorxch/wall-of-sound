@@ -72,6 +72,21 @@ describe("deriveStages — the core preservation safeguard", () => {
     expect(stagesNeedingRouting(stages)).toHaveLength(2);
   });
 
+  it("0821_SUBWAY_Boarding_UX — a genuinely new leg takes the passed defaultMode (Select Station authoring defaults to transit)", () => {
+    const stops = [stop("a"), stop("b")];
+    const stages = deriveStages(stops, [], "transit");
+    expect(stages).toHaveLength(1);
+    expect(stages[0].mode).toBe("transit");
+  });
+
+  it("0821_SUBWAY_Boarding_UX — an untouched existing leg keeps its own mode even when a NEW leg elsewhere is created with a different defaultMode", () => {
+    const stops = [stop("a"), stop("b"), stop("c")];
+    const previous = [realStage("a", "b", 0)]; // existing leg, mode:"driving"
+    const next = deriveStages(stops, previous, "transit"); // new stop c added via Select Station
+    expect(next[0].mode).toBe("driving"); // untouched a->b leg — never silently reassigned
+    expect(next[1].mode).toBe("transit"); // genuinely new b->c leg
+  });
+
   it("reuses the exact same stage object (id, routeSetId, distance, duration) for an unchanged adjacent pair", () => {
     const stops = [stop("a"), stop("b"), stop("c")];
     const previous = [realStage("a", "b", 0), realStage("b", "c", 1)];

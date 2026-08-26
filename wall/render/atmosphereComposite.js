@@ -20,8 +20,7 @@
   //   [3] Cloud shadow sweep      — slow elliptical patches, drift-intensity scaled
   //   [4] Rain wetness tint       — desaturating blue-grey + sky gradient
   //   [5] Ambient brightness veil — night/storm darkening
-  //   [6] Road reflectance        — luminance strokes over road geometry (WorldLightingModel)
-  //   [7] Ambient zone pockets    — localized emotional lighting (WorldLightingModel)
+  //   [6] Ambient zone pockets    — localized emotional lighting (WorldLightingModel)
   //
   // State sources:
   //   world:atmosphereChanged  → weather, time, tint, fog, cloudiness
@@ -31,6 +30,30 @@
   var _ctx     = null;
   var _raf     = null;
   var _running = false;
+
+  // ── Persisted enable/disable preference ────────────────────────────────
+  // Single source of truth for "should Atmosphere Composite be running,"
+  // independent of whether a canvas happens to exist in THIS document.
+  // MUSIC's own page loads this module dormant-only (no .canvas-area to
+  // attach to — see init() below) so DOM presence there is always false
+  // regardless of the real toggle state; readers that need the true
+  // enabled/disabled intent (overlayStyleRegistry.js's catalog display,
+  // overlayStyleApplyAdapters.js, workspaceUI.js's boot-time init) must call
+  // readEnabledPreference() instead of checking the DOM directly. Same
+  // storage key/shape OverlayStyleAuthority (wall/systems/presentation/
+  // overlayStyleAuthority.js) persists to on every setPropertyValue call.
+  var STORAGE_VALUES_KEY = "wos:overlayStyle:values";
+  var STORAGE_PROP_ID    = "overlay.atmosphere-composite.enabled";
+
+  function readEnabledPreference() {
+    try {
+      var raw = global.localStorage.getItem(STORAGE_VALUES_KEY);
+      if (!raw) return null;
+      var parsed = JSON.parse(raw);
+      if (!parsed || !Object.prototype.hasOwnProperty.call(parsed, STORAGE_PROP_ID)) return null;
+      return parsed[STORAGE_PROP_ID] === "true";
+    } catch (e) { return null; }
+  }
 
   // ── Atmosphere target (snaps on world:atmosphereChanged) ──────────────────
   var _atm = {
@@ -257,101 +280,7 @@
     ctx.fillRect(0, 0, W, H);
   }
 
-  // [6] Road reflectance — luminance strokes over Mapbox road geometry.
-  //
-  // Color semantics (grounded, not neon):
-  //   Clear night  → cool cyan-grey  rgba(120,160,220)
-  //   Rain night   → blue-grey       rgba(90,120,180)
-  //   Fog          → silver          rgba(140,150,165)
-  //   Day (any)    → near-invisible  max 3% opacity
-  //
-  // Geometry: WorldLightingModel caches road segment geo-coords.
-  // This function projects them to screen space per-frame and strokes them.
-  // At 50 segments × ~5 points = ~250 project() calls — well within 60fps budget.
-  function _drawRoadReflectance(ctx, W, H) {
-    var wet = _cur.roadWetness;
-    if (wet < 0.06) return;
-
-    var mbr = _mbr();
-    if (!mbr) return;
-    var map = mbr.getMap();
-    if (!map) return;
-
-    var segments = SBE.WorldLightingModel
-      ? SBE.WorldLightingModel.getRoadSegments()
-      : [];
-    if (!segments || !segments.length) return;
-
-    // Choose reflectance color
-    var rr, rg, rb;
-    if (_cur.isStorm || _cur.isRain) {
-      // Rain: blue-grey — roads carry pooled sky color
-      rr = 90;  rg = 120; rb = 180;
-    } else if (_cur.isFog) {
-      // Fog: desaturated silver-blue — diffused light
-      rr = 140; rg = 150; rb = 165;
-    } else if (_cur.isNight) {
-      // Clear night: cool cyan-grey — sodium/LED ambient
-      rr = 120; rg = 160; rb = 220;
-    } else {
-      // Day: barely there — 3% max
-      rr = 200; rg = 210; rb = 220;
-    }
-
-    // Night: 8–12% max opacity. Day: 2–4% max.
-    var maxA = _cur.isNight ? 0.11 : 0.034;
-    var baseA = wet * maxA;
-
-    ctx.save();
-    ctx.lineCap  = "round";
-    ctx.lineJoin = "round";
-
-    for (var i = 0; i < segments.length; i++) {
-      var seg    = segments[i];
-      var coords = seg.coords;
-      if (!coords || coords.length < 2) continue;
-
-      // Project all points; bail on segment if any projection fails
-      var pts = [];
-      var valid = true;
-      for (var j = 0; j < coords.length; j++) {
-        try {
-          var pt = map.project(coords[j]);
-          // Cull points outside viewport (with margin) to avoid overdraw
-          if (pt.x < -40 || pt.x > W + 40 || pt.y < -40 || pt.y > H + 40) {
-            // If both neighbors are also off-screen this segment won't be visible;
-            // keep going but mark — some roads cross the boundary
-          }
-          pts.push(pt);
-        } catch (e) { valid = false; break; }
-      }
-      if (!valid || pts.length < 2) continue;
-
-      // Width scales with road importance and wet intensity
-      var sw = (seg.strokeWidth || 1.5) * (0.6 + wet * 0.4);
-
-      // Two-pass rendering: wider soft halo + tighter bright core
-      // Halo: wider, lower alpha
-      ctx.beginPath();
-      ctx.moveTo(pts[0].x, pts[0].y);
-      for (var k = 1; k < pts.length; k++) ctx.lineTo(pts[k].x, pts[k].y);
-      ctx.strokeStyle = "rgba(" + rr + "," + rg + "," + rb + "," + (baseA * 0.45).toFixed(4) + ")";
-      ctx.lineWidth   = sw * 2.4;
-      ctx.stroke();
-
-      // Core: tighter, full strength
-      ctx.beginPath();
-      ctx.moveTo(pts[0].x, pts[0].y);
-      for (var m = 1; m < pts.length; m++) ctx.lineTo(pts[m].x, pts[m].y);
-      ctx.strokeStyle = "rgba(" + rr + "," + rg + "," + rb + "," + baseA.toFixed(4) + ")";
-      ctx.lineWidth   = sw;
-      ctx.stroke();
-    }
-
-    ctx.restore();
-  }
-
-  // [7] Ambient zone pockets — localized emotional lighting.
+  // [6] Ambient zone pockets — localized emotional lighting.
   //
   // Large soft radial gradients at density-derived screen positions.
   // These are felt before they are seen (0.03–0.07 opacity max).
@@ -397,7 +326,6 @@
     _drawCloudShadows(_ctx, W, H, now);
     _drawRainTint(_ctx, W, H);
     _drawBrightnessVeil(_ctx, W, H);
-    _drawRoadReflectance(_ctx, W, H);
     _drawAmbientZones(_ctx);
   }
 
@@ -449,7 +377,7 @@
     _running = true;
     _raf = requestAnimationFrame(_frame);
 
-    console.log("[AtmosphereComposite] initialized — 7-effect atmospheric stack");
+    console.log("[AtmosphereComposite] initialized — 6-effect atmospheric stack");
   }
 
   function destroy() {
@@ -461,6 +389,6 @@
     _ctx    = null;
   }
 
-  SBE.AtmosphereComposite = { init: init, destroy: destroy };
+  SBE.AtmosphereComposite = { init: init, destroy: destroy, readEnabledPreference: readEnabledPreference };
 
 })(window);

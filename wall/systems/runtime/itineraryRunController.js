@@ -139,6 +139,16 @@
   }
 
   function _stopRaf() {
+    // TEMPORARY diagnostic (0820_MAPS_Itinerary_Execution_Lifecycle_Repair) —
+    // records every cancellation with a caller stack snippet, so an
+    // unexpected cancel (e.g. from code outside this file) is provable
+    // rather than inferred from absence. A grep across wall/systems found
+    // zero external callers of stop()/teardown()/pause() at investigation
+    // time — this stays in place to catch a future regression, not because
+    // one is currently suspected.
+    _diagStopRafCallCount++;
+    _diagLastStopRafAt = Date.now();
+    try { throw new Error('trace'); } catch (e) { _diagLastStopRafCaller = (e.stack || '').split('\n').slice(1, 5).join(' | '); }
     if (_rafId != null) { try { global.cancelAnimationFrame(_rafId); } catch (e) {} }
     _rafId = null;
   }
@@ -356,17 +366,51 @@
     if (deltaMs > 0) _advanceByRealMs(deltaMs);
   }
 
-  function _frame() {
-    if (_status !== 'running') { _rafId = null; return; }
+  // ── TEMPORARY diagnostics (0820_MAPS_Itinerary_Execution_Lifecycle_Repair) —
+  // remove once the reported post-launch stall is root-caused. Distinguishes
+  // every stage of the RAF lifecycle individually — schedule vs entry vs
+  // exit vs cancellation — rather than one combined "is it running" signal,
+  // so a genuinely new failure mode (e.g. scheduled-then-immediately-
+  // cancelled) is distinguishable from every mode already ruled out. Never
+  // used by production logic — read-only. ──
+  var _diagFrameCount = 0;        // RAF callback ENTRY count
+  var _diagFrameExitCount = 0;    // RAF callback COMPLETION count (entry - exit > 0 would mean a callback is stuck mid-body, which shouldn't be possible in single-threaded JS but is recorded as a direct falsifiable check anyway)
+  var _diagLastFrameAt = null;
+  var _diagLastError = null;
+  var _diagRafScheduleCount = 0;  // every requestAnimationFrame(_frame) call, from any caller
+  var _diagLastRafRequestId = null;
+  var _diagStartCallCount = 0;
+  var _diagLastStartAt = null;
+  var _diagStopRafCallCount = 0;
+  var _diagLastStopRafAt = null;
+  var _diagLastStopRafCaller = null; // short stack snippet — proves WHO cancelled, if anyone ever does
+  function _diagScheduleFrame() {
     _rafId = global.requestAnimationFrame(_frame);
-    _settleClock();
-    // _settleClock() may have completed the run mid-tick (_complete() already
-    // did its own snap+push) — skip the redundant smoothing/render pass.
-    if (_status === 'running') { _advanceSmoothing(); _pushRenderSmoothed(); }
+    _diagRafScheduleCount++;
+    _diagLastRafRequestId = _rafId;
+    return _rafId;
+  }
+  function _frame() {
+    if (_status !== 'running') { _rafId = null; _diagFrameExitCount++; return; }
+    _diagScheduleFrame();
+    _diagFrameCount++;
+    _diagLastFrameAt = Date.now();
+    try {
+      _settleClock();
+      // _settleClock() may have completed the run mid-tick (_complete() already
+      // did its own snap+push) — skip the redundant smoothing/render pass.
+      if (_status === 'running') { _advanceSmoothing(); _pushRenderSmoothed(); }
+    } catch (e) {
+      _diagLastError = { message: (e && e.message) || String(e), stack: e && e.stack, at: Date.now(), frameCount: _diagFrameCount };
+      console.error('[ItineraryRunController][DIAG] _frame() threw on frame ' + _diagFrameCount + ':', e);
+    }
+    _diagFrameExitCount++;
   }
 
   // ── Public: lifecycle ──────────────────────────────────────────────────────
   function start(payload, speedMultiplier, heroAltitudeMeters, heroVisualLiftPixels) {
+    _diagStartCallCount++;
+    _diagLastStartAt = Date.now();
     if (!payload || !Array.isArray(payload.stages) || payload.stages.length === 0) {
       return { ok: false, reason: 'invalid_run_payload' };
     }
@@ -420,7 +464,7 @@
 
     _status = 'running';
     _checkpointRealMs = _now();
-    _rafId = global.requestAnimationFrame(_frame);
+    _diagScheduleFrame();
     console.log('[ItineraryRunController] started', _runId, '—', payload.stages.length, 'stages');
     return { ok: true, runId: _runId };
   }
@@ -447,7 +491,7 @@
     _pausedAt = null;
     _checkpointRealMs = _now(); // avoid crediting the paused interval as elapsed
     _lastSmoothMs = 0;          // avoid a smoothing dt spike from the paused interval
-    _rafId = global.requestAnimationFrame(_frame);
+    _diagScheduleFrame();
     return { ok: true };
   }
 
@@ -554,8 +598,88 @@
     };
   }
 
+  // TEMPORARY (0820_SUBWAY_Post_Launch_Execution_Investigation) — real,
+  // read-only proof of RAF loop health. Remove alongside the diagnostics
+  // above once the stall is root-caused.
+  // TEMPORARY (0820_MAPS_Itinerary_Execution_Lifecycle_Repair) — structural
+  // invariant: "running" must describe a genuinely active execution loop,
+  // never merely initialized state. Two checks, zero and small grace period
+  // respectively (scheduling a frame is synchronous; the first callback
+  // ENTRY happens on the next paint, so that one alone needs a short grace
+  // window — arbitrarily generous at 1000ms, well past any real frame
+  // interval, to avoid a false positive from ordinary jitter):
+  //   (a) running ⟹ a RAF request is currently outstanding — zero grace,
+  //       since _rafId is set synchronously in the same call that sets
+  //       _status='running'.
+  //   (b) running for > GRACE_MS ⟹ at least one callback has actually
+  //       entered — this is the exact check that would have caught the
+  //       reported stall class immediately instead of requiring a live
+  //       capture to notice.
+  var INVARIANT_GRACE_MS = 1000;
+  function _checkRunningInvariant() {
+    var violations = [];
+    if (_status === 'running') {
+      if (_rafId == null) violations.push('status=running but no RAF request is outstanding');
+      // A genuinely backgrounded tab (document.hidden) has requestAnimationFrame
+      // callbacks suspended by the browser itself — confirmed live this pass:
+      // a tab that correctly won ownership while backgrounded showed
+      // frameCount:0 the whole time, then immediately caught up (981 queued
+      // frames in one burst) the instant it became visible again. That is
+      // expected browser behavior, not a defect — flagging it as a
+      // violation would make the diagnostic cry wolf on ordinary tab
+      // switching. Only the two checks below are skipped while hidden;
+      // _rafId being non-null (above) still holds regardless of visibility
+      // — scheduling itself is not suspended, only the callback firing is.
+      var backgrounded = !!(global.document && global.document.hidden);
+      if (!backgrounded) {
+        var sinceStart = _diagLastStartAt != null ? (Date.now() - _diagLastStartAt) : null;
+        if (sinceStart != null && sinceStart > INVARIANT_GRACE_MS && _diagFrameCount === 0) {
+          violations.push('status=running for ' + Math.round(sinceStart) + 'ms but zero RAF callbacks have entered');
+        }
+        // Second, distinct case: the loop DID enter at least once (rules out
+        // "never started") but callbacks have since stopped landing — a
+        // mid-run death (e.g. RAF silently cancelled/orphaned from outside
+        // this module's own bookkeeping) rather than a launch failure. Same
+        // grace window, measured from the last successful entry instead of
+        // from start().
+        if (_diagFrameCount > 0 && _diagLastFrameAt != null) {
+          var sinceLastFrame = Date.now() - _diagLastFrameAt;
+          if (sinceLastFrame > INVARIANT_GRACE_MS) {
+            violations.push('status=running, ' + _diagFrameCount + ' frames entered previously, but none in the last ' + Math.round(sinceLastFrame) + 'ms — loop died mid-run');
+          }
+        }
+      }
+    }
+    return violations;
+  }
+
+  function getDiagnostics() {
+    return {
+      status: _status,
+      rafIdActive: _rafId != null,
+      frameCount: _diagFrameCount,
+      frameExitCount: _diagFrameExitCount,
+      lastFrameAt: _diagLastFrameAt,
+      msSinceLastFrame: _diagLastFrameAt != null ? (Date.now() - _diagLastFrameAt) : null,
+      lastError: _diagLastError,
+      baseElapsedMs: _baseElapsedMs,
+      checkpointRealMs: _checkpointRealMs,
+      msSinceCheckpoint: _checkpointRealMs ? (Date.now() - _checkpointRealMs) : null,
+      rafScheduleCount: _diagRafScheduleCount,
+      lastRafRequestId: _diagLastRafRequestId,
+      startCallCount: _diagStartCallCount,
+      lastStartAt: _diagLastStartAt,
+      msSinceStart: _diagLastStartAt != null ? (Date.now() - _diagLastStartAt) : null,
+      stopRafCallCount: _diagStopRafCallCount,
+      lastStopRafAt: _diagLastStopRafAt,
+      lastStopRafCaller: _diagLastStopRafCaller,
+      invariantViolations: _checkRunningInvariant(),
+    };
+  }
+
   SBE.ItineraryRunController = Object.freeze({
     VERSION: VERSION,
+    getDiagnostics: getDiagnostics,
     start: start,
     pause: pause,
     resume: resume,

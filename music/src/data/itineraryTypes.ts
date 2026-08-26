@@ -32,8 +32,14 @@ export const ROUTABLE_MODES: TravelMode[] = ["driving", "walking", "cycling"];
 // as a new-stage choice in the real workflow until genuinely supported
 // end-to-end; every non-enabled option must render disabled with an explicit
 // reason, never silently absent or selectable-then-failing.
-export const SELECTABLE_MODES: TravelMode[] = ["driving", "walking", "cycling", "flight"];
-export const ITINERARY_UI_ENABLED_MODES: TravelMode[] = ["driving"];
+//
+// 0819_SUBWAY_Itinerary_Recovery_Transit_Foundation — "transit" moves from
+// reserved-but-unreachable to real and enabled: a transit stage resolves via
+// SubwayItineraryLegResolver (wall/systems/transit/), not Mapbox Directions
+// — see TransitLegPlan below. Still no transfers/multi-modal — one direct
+// real subway leg only.
+export const SELECTABLE_MODES: TravelMode[] = ["driving", "walking", "cycling", "flight", "transit"];
+export const ITINERARY_UI_ENABLED_MODES: TravelMode[] = ["driving", "transit"];
 export const ITINERARY_UI_DISABLED_REASON = "Not yet supported for itineraries";
 
 export interface RouteStep {
@@ -60,17 +66,82 @@ export interface RouteSet {
   fetchedAt: string | null; // null for manual/unfetched legs
 }
 
+// A real SUBWAY station, as resolved by SubwayItineraryLegResolver — never a
+// synthesized point. `id` is the wall-side canonical station id
+// ("subway:stop:R41"), kept opaque here; MUSIC never interprets it, only
+// round-trips it back to wall-side calls.
+//
+// 0821_SUBWAY_Boarding_UX — `routeLabels` is optional (absent for a
+// TransitLegPlan's boarding/exit/orderedStops, which the wall-side resolver
+// doesn't currently attach service data to) but always populated for
+// station SEARCH results, where multiple real stations sharing the same
+// display name (e.g. two real "Rector St" stations) are otherwise
+// indistinguishable — real route/service data from the station library,
+// never inferred from the name.
+export interface TransitStationRef {
+  id: string;
+  name: string;
+  longitude: number;
+  latitude: number;
+  routeLabels?: string[];
+}
+
+// A real live train currently able to serve this leg — mirrors
+// SubwayItineraryLegResolver.getLiveCandidates()'s return shape exactly, so
+// no translation layer can drift from the wall-side source of truth.
+export interface TransitLiveCandidate {
+  logicalTrainId: string;
+  tripId: string;
+  destination: string | null;
+  etaSeconds: number;
+  dueSoon: boolean;
+  directionConfirmed: boolean;
+}
+
+// The resolved SUBWAY leg for one stage — populated by
+// SubwayItineraryLegResolver.resolveLeg() (wall/systems/transit/), never
+// fabricated client-side. Absent/null fields mean "not yet resolved" or "the
+// last resolution attempt failed" (see `unresolvedReason`), never a guess.
+export interface TransitLegPlan {
+  routeId: string;
+  routeLabel: string;               // real route's display label (e.g. "R"), for the UI only
+  alternateRouteIds: string[];      // other real direct routes for this exact station pair, if any
+  boardingStation: TransitStationRef;
+  exitStation: TransitStationRef;
+  boardingWalkMeters: number;
+  exitWalkMeters: number;
+  direction: { towardStationId: string; towardStationName: string };
+  orderedStops: TransitStationRef[];
+  resolvedAt: string;
+}
+
+// Reason codes mirroring SubwayItineraryLegResolver.resolveLeg()'s own
+// failure reasons — surfaced honestly in the UI, never collapsed into one
+// generic "couldn't route" message.
+export type TransitUnresolvedReason =
+  | "authority_unavailable"
+  | "no_boarding_station_nearby"
+  | "no_exit_station_nearby"
+  | "same_station"
+  | "no_direct_route"
+  | "preferred_route_not_direct"
+  | "unresolvable_geometry";
+
 export interface ItineraryStage {
   id: string;
   order: number;
   originStopId: string;      // reference into Itinerary.stops — never a duplicated LocationRef
   destinationStopId: string; // reference into Itinerary.stops — never a duplicated LocationRef
   mode: TravelMode;
-  routeSetId: string;             // always a real, persisted RouteSet id — never optional/undefined
+  routeSetId: string;             // always a real, persisted RouteSet id — never optional/undefined; unused ("") for mode:"transit"
   selectedRouteId: string | null; // defaults to routes[0].id when present; no picker UI ships in v1
   distanceMeters: number | null;
   durationSeconds: number | null;
   presentationState?: Record<string, unknown>;
+  // 0819_SUBWAY_Itinerary_Recovery_Transit_Foundation — populated only for
+  // mode:"transit" stages; absent for every other mode.
+  transitLeg?: TransitLegPlan | null;
+  transitUnresolvedReason?: TransitUnresolvedReason | null;
 }
 
 // STORED lifecycle only — user/lifecycle-driven, never a routing-readiness

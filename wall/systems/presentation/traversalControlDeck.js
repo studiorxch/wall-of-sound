@@ -42,6 +42,17 @@
     { id: "orbital", icon: "🌍", label: "Orbital", status: "active" },
   ]);
 
+  function _subwayLayer() {
+    return global.SBE && SBE.MTASubwayMapLayer;
+  }
+
+  function _transitModeStatus() {
+    var layer = _subwayLayer();
+    return layer && typeof layer.activate === "function" && typeof layer.deactivate === "function"
+      ? "active"
+      : "disabled";
+  }
+
   // ── Speed steps ───────────────────────────────────────────────────────────────
   // 1x = world-time reference (real flight takes real hours).
   // Below 1x = observation / slow-motion pacing.
@@ -1202,10 +1213,11 @@
 
     var transportDiv = _make("div", { cls: "nav-transport" });
     TRANSPORT_MODES.forEach(function (tm) {
+      var status = tm.id === "transit" ? _transitModeStatus() : tm.status;
       var extraCls =
-        tm.status === "experimental"
+        status === "experimental"
           ? " nav-mode-exp"
-          : tm.status === "disabled"
+          : status === "disabled"
             ? " nav-mode-dis"
             : "";
       var btn = _make("button", {
@@ -1213,17 +1225,17 @@
           "nav-mode" + (tm.id === _state.transport ? " active" : "") + extraCls,
         text: tm.label,
         title:
-          tm.status === "experimental"
+          status === "experimental"
             ? tm.label + " — experimental"
-            : tm.status === "disabled"
+            : status === "disabled"
               ? tm.label + " — not yet available"
               : tm.label,
       });
-      if (tm.status === "disabled") btn.setAttribute("disabled", "disabled");
+      if (status === "disabled") btn.setAttribute("disabled", "disabled");
       btn.dataset.transportId = tm.id;
       btn.addEventListener("click", function () {
-        if (tm.status === "disabled") return;
-        if (tm.status === "experimental") {
+        if (status === "disabled") return;
+        if (status === "experimental") {
           _showError(
             tm.label +
               " routing is experimental — coming soon. Use Flight for now.",
@@ -1234,9 +1246,18 @@
           b.classList.remove("active");
         });
         btn.classList.add("active");
+        var previousTransport = _state.transport;
         _state.transport = tm.id;
         _clearError();
         _routeReadyForRelaunch(); // 0606A — transport change re-enables Launch
+        var subwayLayer = _subwayLayer();
+        if (tm.id === "transit") {
+          if (subwayLayer && typeof subwayLayer.activate === "function" && !subwayLayer.isActive()) {
+            subwayLayer.activate();
+          }
+        } else if (previousTransport === "transit" && subwayLayer && typeof subwayLayer.deactivate === "function" && subwayLayer.isActive()) {
+          subwayLayer.deactivate();
+        }
         // Notify orbital system — route through startup coordinator for readiness gate
         if (tm.id === 'orbital') {
           var coord = SBE.WosStartupCoordinator;
@@ -1618,6 +1639,9 @@
   function mount() {
     if (_mounted) return;
     _loadState();
+    if (_subwayLayer() && typeof _subwayLayer().isActive === "function" && _subwayLayer().isActive()) {
+      _state.transport = "transit";
+    }
     _injectCSS();
     _root = _build();
     document.body.appendChild(_root);

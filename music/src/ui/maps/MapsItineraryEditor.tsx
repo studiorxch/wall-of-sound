@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import * as itineraryStore from "../../maps/itineraryStore";
 import { getMapboxToken, fetchRouteSet } from "../../logic/maps/itineraryRouting";
-import { stagesNeedingRouting } from "../../logic/maps/itineraryStageOrder";
+import { stagesNeedingRouting, stagesNeedingTransitResolution } from "../../logic/maps/itineraryStageOrder";
+import { resolveTransitLeg } from "../../maps/wallSubwayItineraryBridge";
 import { computeReadiness } from "../../logic/maps/itineraryReadiness";
 import type { Itinerary, TravelMode } from "../../data/itineraryTypes";
 import {
@@ -34,7 +35,10 @@ export function MapsItineraryEditor({ itineraryId, onBack }: Props) {
   const previewContainerRef = useRef<HTMLDivElement>(null);
   const [itinerary, setItinerary] = useState<Itinerary | null>(() => itineraryStore.getItinerary(itineraryId));
   const [previewMapReady, setPreviewMapReady] = useState(getPreviewState() === "ready");
-  const [addDialogOpen, setAddDialogOpen] = useState(false);
+  // "new" opens the dialog to append a stop (the original + Add Destination
+  // flow); a stopId opens it to REPLACE that one stop in place — the
+  // unresolved-transit-leg recovery action ("Choose another station").
+  const [dialogTarget, setDialogTarget] = useState<"new" | string | null>(null);
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
   const [titleDraft, setTitleDraft] = useState<string | null>(null);
   const [raceCourseCreatedName, setRaceCourseCreatedName] = useState<string | null>(null);
@@ -71,6 +75,24 @@ export function MapsItineraryEditor({ itineraryId, onBack }: Props) {
     }
   }, [itinerary, itineraryId]);
 
+  // Resolve a real SUBWAY leg for any mode:"transit" stage the store's
+  // derivation left needing it — same one-shot-per-need shape as the DRIVE
+  // routing effect above, via wallSubwayItineraryBridge (SubwayItineraryLegResolver).
+  useEffect(() => {
+    if (!itinerary) return;
+    const pending = stagesNeedingTransitResolution(itinerary.stages);
+    for (const stage of pending) {
+      if (routingInFlight.current.has(stage.id)) continue;
+      routingInFlight.current.add(stage.id);
+      const origin = itinerary.stops.find((s) => s.id === stage.originStopId);
+      const destination = itinerary.stops.find((s) => s.id === stage.destinationStopId);
+      if (!origin || !destination) { routingInFlight.current.delete(stage.id); continue; }
+      resolveTransitLeg(origin, destination)
+        .then((result) => itineraryStore.applyStageTransitLeg(itineraryId, stage.id, "leg" in result ? { leg: result.leg } : { reason: result.reason }))
+        .finally(() => routingInFlight.current.delete(stage.id));
+    }
+  }, [itinerary, itineraryId]);
+
   // Static map sync: numbered pins for every real stop + each stage's
   // selected route geometry. No animation beyond one instant reframe inside
   // setItineraryPins.
@@ -96,15 +118,24 @@ export function MapsItineraryEditor({ itineraryId, onBack }: Props) {
     );
   }
 
-  async function handleAddDestination(result: GeocodeResult) {
-    setAddDialogOpen(false);
-    await itineraryStore.addItineraryStop(itineraryId, {
+  // sourceMode: set to "transit" only when the stop came from Select Station
+  // (explicit transit-authoring intent, 0821_SUBWAY_Boarding_UX §5) — Search/
+  // Pick on Map omit it, so the new leg keeps its existing DRIVE default.
+  async function handleAddDestination(result: GeocodeResult, sourceMode?: TravelMode) {
+    const target = dialogTarget;
+    setDialogTarget(null);
+    const newStop = {
       id: `stop_${Math.random().toString(36).slice(2, 10)}`,
       name: result.name,
       longitude: result.longitude,
       latitude: result.latitude,
       placeId: result.placeId,
-    });
+    };
+    if (target && target !== "new") {
+      await itineraryStore.replaceItineraryStop(itineraryId, target, newStop, sourceMode);
+    } else {
+      await itineraryStore.addItineraryStop(itineraryId, newStop, sourceMode);
+    }
   }
 
   function handleDragStart(index: number) { setDraggingIndex(index); }
@@ -164,7 +195,7 @@ export function MapsItineraryEditor({ itineraryId, onBack }: Props) {
               {itinerary.title}
             </h2>
           )}
-          <button className="tb-btn" onClick={() => setAddDialogOpen(true)}>
+          <button className="tb-btn" onClick={() => setDialogTarget("new")}>
             <Icon name="add" /> Add Destination
           </button>
           <button
@@ -204,6 +235,7 @@ export function MapsItineraryEditor({ itineraryId, onBack }: Props) {
                 onDrop={handleDrop}
                 onChangeMode={handleChangeMode}
                 onRemove={handleRemoveStop}
+                onReplace={() => setDialogTarget(stop.id)}
               />
             );
           })}
@@ -221,8 +253,8 @@ export function MapsItineraryEditor({ itineraryId, onBack }: Props) {
         {!previewMapReady && <div className="md-preview-loading">Map preview loading…</div>}
       </div>
 
-      {addDialogOpen && (
-        <AddDestinationDialog onAdd={handleAddDestination} onClose={() => setAddDialogOpen(false)} />
+      {dialogTarget != null && (
+        <AddDestinationDialog onAdd={handleAddDestination} onClose={() => setDialogTarget(null)} />
       )}
     </div>
   );

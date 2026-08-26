@@ -27,6 +27,13 @@
   }
 
   function _readAtmosphereComposite() {
+    var ac = SBE.AtmosphereComposite;
+    // Persisted preference first (see atmosphereComposite.js's
+    // readEnabledPreference doc comment) — DOM presence alone is only
+    // meaningful on the canonical LIVE MAP page, and only before any
+    // preference has ever been saved.
+    var preference = ac && typeof ac.readEnabledPreference === 'function' ? ac.readEnabledPreference() : null;
+    if (preference !== null) return preference ? 'true' : 'false';
     return (typeof document !== 'undefined' && !!document.getElementById('atmosphere-composite')) ? 'true' : 'false';
   }
 

@@ -20,9 +20,32 @@ const MODE_ICON: Record<TravelMode, IconName> = {
   driving: "directions_car",
   walking: "directions_walk",
   cycling: "directions_bike",
-  transit: "directions_car", // unreachable — not in SELECTABLE_MODES
+  transit: "subway", // 0819_SUBWAY_Itinerary_Recovery_Transit_Foundation — real, enabled
   flight: "directions_car",  // rendered (0805A), disabled — no dedicated flight icon asset yet
   other: "directions_car",   // unreachable — not in SELECTABLE_MODES
+};
+
+// 0819_SUBWAY_Itinerary_Execution_Map_Authoring — every reason gets a real,
+// specific headline; only "same_station" is a genuinely fine end-state (no
+// recovery action needed) — every other reason offers "Choose another
+// station" so the user is never left stranded on a bare diagnostic string.
+const TRANSIT_UNRESOLVED_HEADLINE: Record<string, string> = {
+  authority_unavailable: "LIVE MAP DATA UNAVAILABLE",
+  no_boarding_station_nearby: "NO SUBWAY STATION NEARBY",
+  no_exit_station_nearby: "NO SUBWAY STATION NEARBY",
+  same_station: "SAME STATION",
+  no_direct_route: "NO DIRECT SUBWAY ROUTE",
+  preferred_route_not_direct: "CHOSEN LINE DOESN'T RUN THIS LEG",
+  unresolvable_geometry: "COULDN'T RESOLVE STOP SEQUENCE",
+};
+const TRANSIT_UNRESOLVED_DETAIL: Record<string, string> = {
+  authority_unavailable: "Wait a moment for Wall's runtime to connect and try again.",
+  no_boarding_station_nearby: "This stop isn't within walking distance of a real subway station.",
+  no_exit_station_nearby: "This destination isn't within walking distance of a real subway station.",
+  same_station: "No subway ride needed.",
+  no_direct_route: "No single real line serves both stations directly.",
+  preferred_route_not_direct: "Pick a route this pair of stations actually shares.",
+  unresolvable_geometry: "The real stop sequence between these stations couldn't be resolved.",
 };
 
 const MODE_LABEL: Record<TravelMode, string> = {
@@ -53,11 +76,12 @@ type Props = {
   onDrop: (index: number) => void;
   onChangeMode: (stageId: string, mode: TravelMode) => void;
   onRemove: (stopId: string) => void;
+  onReplace: () => void;
 };
 
 export function ItineraryStopRow({
   index, stop, incomingStage, isLast, draggingIndex,
-  onDragStart, onDragOver, onDrop, onChangeMode, onRemove,
+  onDragStart, onDragOver, onDrop, onChangeMode, onRemove, onReplace,
 }: Props) {
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -72,13 +96,38 @@ export function ItineraryStopRow({
       <span className="itin-stop-badge">{index + 1}</span>
       <div className="itin-stop-body">
         <span className="itin-stop-name">{stop.name}</span>
-        {incomingStage && (
+        {incomingStage && incomingStage.mode !== "transit" && (
           <span className="itin-stop-leg">
             <Icon name={MODE_ICON[incomingStage.mode]} />
             {incomingStage.durationSeconds != null && <span>{formatDuration(incomingStage.durationSeconds)}</span>}
             {incomingStage.distanceMeters != null && <span>{formatDistance(incomingStage.distanceMeters)}</span>}
             {incomingStage.routeSetId === "" && <span className="itin-stop-leg-pending">Routing…</span>}
           </span>
+        )}
+        {incomingStage && incomingStage.mode === "transit" && incomingStage.transitLeg && (
+          <span className="itin-stop-leg">
+            <Icon name="subway" />
+            <span>{incomingStage.transitLeg.routeLabel} · toward {incomingStage.transitLeg.direction.towardStationName}</span>
+          </span>
+        )}
+        {incomingStage && incomingStage.mode === "transit" && !incomingStage.transitLeg && !incomingStage.transitUnresolvedReason && (
+          <span className="itin-stop-leg">
+            <Icon name="subway" />
+            <span className="itin-stop-leg-pending">Resolving…</span>
+          </span>
+        )}
+        {incomingStage && incomingStage.mode === "transit" && incomingStage.transitUnresolvedReason && (
+          <div className="itin-stop-transit-unresolved">
+            <div className="itin-stop-transit-unresolved-headline">
+              <Icon name="subway" /> {TRANSIT_UNRESOLVED_HEADLINE[incomingStage.transitUnresolvedReason] ?? "COULDN'T RESOLVE THIS LEG"}
+            </div>
+            <div className="itin-stop-transit-unresolved-detail">
+              {TRANSIT_UNRESOLVED_DETAIL[incomingStage.transitUnresolvedReason] ?? ""}
+            </div>
+            {incomingStage.transitUnresolvedReason !== "same_station" && (
+              <button className="itin-stop-transit-unresolved-action" onClick={onReplace}>Choose another station</button>
+            )}
+          </div>
         )}
       </div>
       <span className="itin-stop-menu">

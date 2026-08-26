@@ -109,6 +109,16 @@
     <!-- 0818_SUBWAY_Resident_Graffiti_Artists — must load after Rolling
          Stock/Surface/Artwork/Placement (it depends on all four). -->
     <script src="/wall-app/systems/transit/subwayResidentGraffitiArtistAuthority.js"></script>
+    <!-- 0819_SUBWAY_Itinerary_Recovery_Transit_Foundation — SubwayArrivalIntelligence
+         (reads MTASubwayTransitStore/MTASubwayStationLibrary/
+         SubwayLogicalRollingStockAuthority/MTASubwayPollingRuntime only at
+         call time — safe anywhere after those, already the case here) and
+         SubwayItineraryLegResolver (reads all of the above, including
+         SubwayArrivalIntelligence, only at call time) — the pure leg-resolution
+         layer MapsItineraryEditor.tsx calls for a "transit" stage, matching
+         wall/index.html's own load order for these two files. -->
+    <script src="/wall-app/systems/transit/subwayArrivalIntelligence.js"></script>
+    <script src="/wall-app/systems/transit/subwayItineraryLegResolver.js"></script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

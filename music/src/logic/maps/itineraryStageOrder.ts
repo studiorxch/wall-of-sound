@@ -86,9 +86,25 @@ export function deriveStages(
   return next;
 }
 
-/** Stage ids that need a real routing fetch (placeholder routeSetId). */
+/**
+ * Stage ids that need a real Directions routing fetch (placeholder
+ * routeSetId). Transit stages never use routeSetId — see
+ * stagesNeedingTransitResolution below — so they're explicitly excluded
+ * here rather than perpetually looking like an unfetched DRIVE leg.
+ */
 export function stagesNeedingRouting(stages: ItineraryStage[]): ItineraryStage[] {
-  return stages.filter((s) => !s.routeSetId);
+  return stages.filter((s) => s.mode !== "transit" && !s.routeSetId);
+}
+
+/**
+ * mode:"transit" stage ids that need a real SubwayItineraryLegResolver
+ * call — resolved (transitLeg set) or honestly-failed
+ * (transitUnresolvedReason set) stages are never retried automatically,
+ * mirroring stagesNeedingRouting's own "an empty result still counts as
+ * fetched" behavior for DRIVE.
+ */
+export function stagesNeedingTransitResolution(stages: ItineraryStage[]): ItineraryStage[] {
+  return stages.filter((s) => s.mode === "transit" && !s.transitLeg && !s.transitUnresolvedReason);
 }
 
 /** Recompute stops+stages together after a reorder, preserving untouched legs. */

@@ -446,6 +446,91 @@
           authority.__test.isLockStale({ heartbeatAt: Date.now() - (tol - 5000) }) === false));
         results.push(_assert('a lock heartbeat beyond the widened tolerance IS still eventually reclaimed as stale',
           authority.__test.isLockStale({ heartbeatAt: Date.now() - (tol + 5000) }) === true));
+
+        // ── 0820_MAPS_Itinerary_Execution_Lifecycle_Ownership — end-to-end
+        // long-abandoned-lock takeover. The two assertions above test
+        // isLockStale() in isolation; this exercises the full real path
+        // (simulateCommand → _handleCommand → _handleStart → _tryAcquireLock
+        // → controller.start()) against a genuinely long-abandoned FOREIGN
+        // lock, the exact scenario a real diagnostic capture raised doubt
+        // about — proving takeover isn't merely computed correctly in
+        // isolation but actually happens when a real start command arrives.
+        try { global.localStorage.setItem(authority.__test.STORAGE_OWNER_KEY, JSON.stringify({
+          ownerId: 'tab-LONG-ABANDONED-TEST', itineraryId: 'old-itin', runId: 'old-run',
+          startedAt: new Date(Date.now() - 700000).toISOString(), heartbeatAt: Date.now() - 600000,
+        })); } catch (e) {}
+        var payloadTakeover = _samplePayload();
+        authority.__test.simulateCommand({ type: 'start', payload: payloadTakeover, speedMultiplier: 1, commandId: 't-stale-takeover', issuedAt: new Date().toISOString() });
+        results.push(_assert('a fresh start command takes over a genuinely long-abandoned (10min-old) foreign lock', authority.isOwner() === true));
+        var takeoverLock = authority.__test.readOwnerLock();
+        results.push(_assert('the reclaimed lock now names this tab, not the abandoned one', !!takeoverLock && takeoverLock.ownerId === authority.__test.tabId));
+        authority.__test.simulateCommand({ type: 'stop', commandId: 't-stale-takeover-stop', issuedAt: new Date().toISOString() });
+
+        // ── 0820_MAPS_Itinerary_Execution_Lifecycle_FocusPriority — a
+        // focused tab wins acquisition even against a LIVE, non-stale
+        // foreign owner. Real production case: the tab the user is looking
+        // at received a fresh command correctly but lost the ownership race
+        // to a different, live (not stale) LIVE MAP tab — staleness alone
+        // has no way to prefer "what the user can see" over "whoever
+        // grabbed it first". document.hasFocus() is stubbed here (this
+        // suite runs in test harnesses that never receive genuine OS-level
+        // focus) — proves the code path itself, not this environment's
+        // focus semantics.
+        (function () {
+          global.localStorage.setItem(authority.__test.STORAGE_OWNER_KEY, JSON.stringify({
+            ownerId: 'tab-LIVE-FOREIGN-TEST', itineraryId: 'other-itin', runId: 'other-run',
+            startedAt: new Date().toISOString(), heartbeatAt: Date.now(), // fresh — genuinely NOT stale
+          }));
+          var realHasFocus = global.document.hasFocus ? global.document.hasFocus.bind(global.document) : null;
+          try {
+            global.document.hasFocus = function () { return true; };
+            var payloadFocus = _samplePayload();
+            authority.__test.simulateCommand({ type: 'start', payload: payloadFocus, speedMultiplier: 1, commandId: 't-focus-override', issuedAt: new Date().toISOString() });
+            results.push(_assert('a focused tab wins acquisition even against a LIVE, non-stale foreign owner',
+              authority.isOwner() === true));
+            var focusLog = authority.getDiagnostics().lockAcquireLog;
+            var lastEntry = focusLog[focusLog.length - 1];
+            results.push(_assert('the acquisition is logged distinctly as a focus override, not conflated with an ordinary/stale-lock acquisition',
+              lastEntry && lastEntry.outcome === 'acquired_focus_override', lastEntry));
+          } finally {
+            if (realHasFocus) global.document.hasFocus = realHasFocus;
+          }
+          authority.__test.simulateCommand({ type: 'stop', commandId: 't-focus-override-stop', issuedAt: new Date().toISOString() });
+        })();
+
+        // ── Unfocused tabs are unaffected — the ORIGINAL, unchanged
+        // behavior for a non-focused tab against a live foreign owner must
+        // still correctly block (this fix only ever ADDS a focused-tab
+        // override; it must never weaken the existing safety behavior for
+        // every other case).
+        (function () {
+          global.localStorage.setItem(authority.__test.STORAGE_OWNER_KEY, JSON.stringify({
+            ownerId: 'tab-LIVE-FOREIGN-TEST-2', itineraryId: 'other-itin-2', runId: 'other-run-2',
+            startedAt: new Date().toISOString(), heartbeatAt: Date.now(),
+          }));
+          var realHasFocus2 = global.document.hasFocus ? global.document.hasFocus.bind(global.document) : null;
+          try {
+            global.document.hasFocus = function () { return false; };
+            var payloadNoFocus = _samplePayload();
+            authority.__test.simulateCommand({ type: 'start', payload: payloadNoFocus, speedMultiplier: 1, commandId: 't-no-focus-blocked', issuedAt: new Date().toISOString() });
+            results.push(_assert('an UNFOCUSED tab still correctly loses to a live, non-stale foreign owner (unchanged safety behavior)',
+              authority.isOwner() === false));
+          } finally {
+            if (realHasFocus2) global.document.hasFocus = realHasFocus2;
+            // Real bug caught running this test: leaving this foreign lock
+            // in place (this tab was correctly blocked, so it never becomes
+            // ITS job to release it) silently blocked every later test in
+            // this suite that starts its own real run — document.hasFocus()
+            // genuinely returns false in this harness once un-stubbed, so
+            // any subsequent unstubbed start() attempt would be blocked the
+            // exact same way, leaving _currentEntity null and crashing much
+            // later, non-obvious tests (camera/Follow Hero) with a
+            // misleading "reading 'lat' of null" error far from the actual
+            // cause. Clearing it here is this test's own responsibility,
+            // not a workaround.
+            global.localStorage.removeItem(authority.__test.STORAGE_OWNER_KEY);
+          }
+        })();
       }
 
       // ── 0730F: Follow Hero ──────────────────────────────────────────────────
