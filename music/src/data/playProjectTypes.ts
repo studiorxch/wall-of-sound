@@ -10,7 +10,7 @@ import type { PlayColorTheme } from "../logic/colorLab";
 import type { CrateRecord } from "./crateTypes";
 import type { PlaylistPathOption } from "./playlistPathTypes";
 import type { MachineLifeCollection, MachineLifeRecordingReview, MachineLifeProxyLibrary } from "./machineLifeTypes";
-import type { SunoLibraryImportPointer, SunoListeningRecord, SunoInterestMarker } from "./sunoLibraryTypes";
+import type { SunoLibraryImportPointer, SunoListeningRecord, SunoInterestMarker, SunoAnalysisRecord } from "./sunoLibraryTypes";
 export type { PlaylistPathOption } from "./playlistPathTypes";
 export type { PlayColorTheme };
 export type { CrateRecord };
@@ -263,6 +263,11 @@ export type PlayProject = {
   loopRevisions?: import("./loopTypes").LoopRevision[];
   loopBinViewState?: import("./loopTypes").LoopBinViewState;
   loopRevisionsMigrationVersion?: number;
+  // 0828_MUSIC_Looper_Loop_Library_Tagging — gates the explicit, versioned,
+  // conservative-never-fabricates sourceRecording backfill in
+  // ./migrations/migrateLoopSourceRecordingV1.ts. Same pattern as
+  // loopRevisionsMigrationVersion above.
+  loopSourceRecordingMigrationVersion?: number;
   // 0717C_MUSIC_Complete_Song_Intelligence_and_Section_Map — one
   // CompleteSongAnalysis per source track that has ever been analyzed,
   // project-level for the same reason as `loops`/`loopRevisions` above.
@@ -350,6 +355,11 @@ export type PlayProject = {
   sunoLibraryImportPointer?: SunoLibraryImportPointer;
   sunoListeningRecords?: SunoListeningRecord[];
   sunoInterestMarkers?: SunoInterestMarker[];
+  // Suno → Common MUSIC Intelligence Adapter (Phase 2) — computed analysis
+  // output (BPM/key/energy/mood/mechanical-role), kept structurally
+  // separate from the human-entered sunoListeningRecords above so an
+  // analysis re-run can never touch listening status/notes/suggested-use.
+  sunoAnalysisRecords?: SunoAnalysisRecord[];
   createdAt: string;
   updatedAt: string;
 };

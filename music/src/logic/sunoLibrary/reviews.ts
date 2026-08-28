@@ -15,6 +15,7 @@ import type {
   SunoSnapshotId,
   SunoSuggestedUse,
 } from "../../data/sunoLibraryTypes";
+import type { TrackRating } from "../../data/trackTypes";
 
 export function createListeningRecord(
   canonicalRecordingId: SunoCanonicalRecordingId,
@@ -93,6 +94,21 @@ export function toggleSuggestedUse(
     ? existing.suggestedUses.filter((u) => u !== use)
     : [...existing.suggestedUses, use];
   return upsertListeningRecord(records, { ...existing, suggestedUses }, nowIso);
+}
+
+// 0827 Ratings Parity — same TrackRating scale as Catalog/External/Sounds.
+// Setting the same value the recording already has clears it (rating: 0),
+// mirroring the existing Track star-rating click-to-clear interaction.
+export function setRating(
+  records: SunoListeningRecord[],
+  canonicalRecordingId: SunoCanonicalRecordingId,
+  snapshotId: SunoSnapshotId,
+  rating: TrackRating,
+  nowIso: string,
+): SunoListeningRecord[] {
+  const existing = getListeningRecord(records, canonicalRecordingId) ??
+    createListeningRecord(canonicalRecordingId, snapshotId, nowIso);
+  return upsertListeningRecord(records, { ...existing, rating }, nowIso);
 }
 
 export function setNotes(

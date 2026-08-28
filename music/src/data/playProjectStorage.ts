@@ -10,6 +10,7 @@ import { isValidScheduleBlock } from "../logic/scheduleResolver";
 import { normalizeTrackMetadata } from "../logic/trackMetadata";
 import { normalizeEnergyEnvelope, defaultEnvelopeForSection } from "../logic/playlistEnergyEnvelope";
 import { migrateApprovedLoopsToRevisionsV1 } from "./migrations/migrateLoopRevisionsV1";
+import { migrateLoopSourceRecordingV1 } from "./migrations/migrateLoopSourceRecordingV1";
 import { reconcileLibraryGridPreferences } from "../logic/library/libraryColumns";
 import type { LibrarySourceKey } from "./libraryGridTypes";
 import { isLegalTrackAnalysisStateTransition } from "../logic/trackAnalysisStateMachine";
@@ -324,14 +325,14 @@ export async function loadPlayProjectAsync(): Promise<PlayProject | null> {
     // 0715C §37 — explicit, versioned, idempotent migration; called
     // directly here (same load path as migrateV1 below), never folded
     // into repairStoredProject itself.
-    return migrateApprovedLoopsToRevisionsV1(repairStoredProject(result.state));
+    return migrateLoopSourceRecordingV1(migrateApprovedLoopsToRevisionsV1(repairStoredProject(result.state)));
   }
   // Fall through to legacy v1 format
   try {
     const raw1 = localStorage.getItem(V1_KEY);
     if (raw1) {
       const v1 = JSON.parse(raw1) as PlaylistProject;
-      return migrateApprovedLoopsToRevisionsV1(migrateV1(v1));
+      return migrateLoopSourceRecordingV1(migrateApprovedLoopsToRevisionsV1(migrateV1(v1)));
     }
   } catch (err) {
     console.warn("[PLAY] Failed to load v1 fallback:", err);
@@ -343,14 +344,14 @@ export function loadPlayProject(): PlayProject | null {
   // loadMusicState() handles cache + localStorage fallback for useState initializers.
   // Prefer loadPlayProjectAsync() in the startup useEffect — it reads from IDB.
   const state = loadMusicState();
-  if (state) return migrateApprovedLoopsToRevisionsV1(repairStoredProject(state));
+  if (state) return migrateLoopSourceRecordingV1(migrateApprovedLoopsToRevisionsV1(repairStoredProject(state)));
 
   // Final fallback: v1 legacy format
   try {
     const raw1 = localStorage.getItem(V1_KEY);
     if (raw1) {
       const v1 = JSON.parse(raw1) as PlaylistProject;
-      return migrateApprovedLoopsToRevisionsV1(migrateV1(v1));
+      return migrateLoopSourceRecordingV1(migrateApprovedLoopsToRevisionsV1(migrateV1(v1)));
     }
   } catch (err) {
     console.warn("[PLAY] Failed to load v1 fallback:", err);

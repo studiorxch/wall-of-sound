@@ -13,7 +13,7 @@ function loop(overrides: Partial<LoopAsset> = {}): LoopAsset {
     title: "Groove A", sourceTitle: "Track One",
     startSeconds: 10, endSeconds: 18, durationSeconds: 8, barCount: 8,
     boundarySource: "manual", contentClass: "unknown",
-    status: "approved", warnings: [], createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-02T00:00:00Z",
+    status: "approved", warnings: [], tags: [], purposeMemberships: [], createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-02T00:00:00Z",
     ...overrides,
   };
 }

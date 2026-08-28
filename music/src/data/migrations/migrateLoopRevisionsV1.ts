@@ -40,7 +40,7 @@ export function migrateApprovedLoopsToRevisionsV1(project: PlayProject): PlayPro
     if (loop.status !== "approved" || loop.activeRevisionId || revisionedLoopIds.has(loop.id)) {
       return loop;
     }
-    const sampleRate = sampleRateByTrackId.get(loop.sourceTrackId) ?? DEFAULT_SAMPLE_RATE;
+    const sampleRate = sampleRateByTrackId.get(loop.sourceTrackId ?? "") ?? DEFAULT_SAMPLE_RATE;
     const revision: LoopRevision = {
       id: genRevisionId(),
       loopId: loop.id,

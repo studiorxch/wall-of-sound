@@ -5,6 +5,7 @@
 
 import { useRef, useState } from "react";
 import type {
+  SunoAnalysisRecord,
   SunoAssetKind,
   SunoCanonicalRecording,
   SunoEncodedLocation,
@@ -18,6 +19,18 @@ import type {
 import { encodedLocationsForCanonicalRecording } from "../../logic/sunoLibrary/selectors";
 import { validateMarkerRange } from "../../logic/sunoLibrary/reviews";
 import type { SunoCanonicalExclusionSummary } from "../../data/sunoTrainingExclusionTypes";
+import { getAnalysisDisplayLabel } from "../../logic/analysisStatusDisplay";
+import type { TrackRating } from "../../data/trackTypes";
+
+export interface CreateSunoLoopParams {
+  canonicalRecordingId: string;
+  title: string;
+  durationSeconds: number;
+  playableAudioUrl: string;
+  assetId: string;
+  bpm: number | null;
+  beatMap?: import("../../data/beatMapTypes").TrackBeatMap;
+}
 
 type LoadedResult = Extract<SunoLibraryImportResult, { status: "PASS" | "PASS_WITH_LIMITATION" }>;
 
@@ -33,13 +46,21 @@ export interface SunoRecordingDetailProps {
   // data hasn't finished computing yet); present only for a genuinely
   // excluded canonical recording.
   trainingExclusion: SunoCanonicalExclusionSummary | undefined;
+  analysisRecord: SunoAnalysisRecord | undefined;
   onBack: () => void;
   onSetListeningStatus: (canonicalRecordingId: string, snapshotId: string, status: SunoListeningStatus) => void;
   onSetAssetKind: (canonicalRecordingId: string, snapshotId: string, assetKind: SunoAssetKind) => void;
   onToggleSuggestedUse: (canonicalRecordingId: string, snapshotId: string, use: SunoSuggestedUse) => void;
   onSetNotes: (canonicalRecordingId: string, snapshotId: string, notes: string) => void;
+  onSetRating: (canonicalRecordingId: string, snapshotId: string, rating: TrackRating) => void;
   onUpsertInterestMarker: (marker: SunoInterestMarker) => void;
   onRemoveInterestMarker: (markerId: string) => void;
+  onAnalyzeRecordings: (canonicalRecordingIds: string[], opts?: { onProgress?: (done: number, total: number) => void; onPersisting?: () => void; force?: boolean }) => Promise<unknown>;
+  // 0828_MUSIC_Looper_Loop_Library_Tagging — present only when this
+  // recording can genuinely open in the Looper (a playable member exists);
+  // gated further, inside this component, on the matching SunoAnalysisRecord
+  // actually carrying a beatMap — see the "Create Loop" section below.
+  onCreateLoopFromRecording?: (params: CreateSunoLoopParams) => void;
 }
 
 const SUGGESTED_USES: SunoSuggestedUse[] = [
@@ -61,6 +82,8 @@ export function SunoRecordingDetail(props: SunoRecordingDetailProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [currentTime, setCurrentTime] = useState(0);
 
+  const [analyzeBusy, setAnalyzeBusy] = useState(false);
+  const [analyzePersisting, setAnalyzePersisting] = useState(false);
   const review = props.listeningRecordsByCanonicalId.get(canonicalRecordingId);
   const markers = props.interestMarkers
     .filter((m) => m.canonicalRecordingId === canonicalRecordingId)
@@ -78,6 +101,18 @@ export function SunoRecordingDetail(props: SunoRecordingDetailProps) {
   if (currentResetKey !== notesResetKey) {
     setNotesResetKey(currentResetKey);
     setNotesDraft(review?.notes ?? "");
+  }
+
+  // 0827 Physical Asset Authority — an explicit per-location play click
+  // (below, "Alternate encodings" list) overrides ONLY which physical file
+  // this embedded player loads; it never rewrites
+  // canonical.playableEncodedLocationId or which member is "playable" by
+  // default. Resets when the user navigates to a different recording.
+  const [overrideLocationId, setOverrideLocationId] = useState<string | null>(null);
+  const [overrideResetKey, setOverrideResetKey] = useState<string>(canonicalRecordingId);
+  if (canonicalRecordingId !== overrideResetKey) {
+    setOverrideResetKey(canonicalRecordingId);
+    setOverrideLocationId(null);
   }
 
   if (!canonical) {
@@ -103,7 +138,11 @@ export function SunoRecordingDetail(props: SunoRecordingDetailProps) {
   const isUnavailable = !playableMember;
   const archiveOffline = props.archiveOnline === false;
   const playbackDisabled = isUnavailable || archiveOffline;
-  const audioSrc = playableMember && !archiveOffline ? `/suno-library-audio/${playableMember.archiveAssetId}` : undefined;
+  // An explicit override (below) plays that exact member; otherwise falls
+  // back to the default playableMember, unchanged.
+  const overrideMember = overrideLocationId ? locationsById.get(overrideLocationId) : undefined;
+  const effectivePlayableMember = overrideMember ?? playableMember;
+  const audioSrc = effectivePlayableMember && !archiveOffline ? `/suno-library-audio/${effectivePlayableMember.archiveAssetId}` : undefined;
 
   const title = canonical.primaryTitleGuess ?? primaryMember?.filename ?? canonicalRecordingId;
 
@@ -127,6 +166,24 @@ export function SunoRecordingDetail(props: SunoRecordingDetailProps) {
     props.onUpsertInterestMarker(marker);
   }
 
+  async function handleAnalyze() {
+    if (analyzeBusy) return;
+    setAnalyzeBusy(true);
+    setAnalyzePersisting(false);
+    try {
+      // Explicit Analyze/Reanalyze on one record must always run, even if
+      // it's already analyzed — force:true bypasses the batch loop's
+      // skip-already-good logic (0827_MUSIC_Suno_Library_Integrity_Repair).
+      await props.onAnalyzeRecordings([canonicalRecordingId], {
+        force: true,
+        onPersisting: () => setAnalyzePersisting(true),
+      });
+    } finally {
+      setAnalyzeBusy(false);
+      setAnalyzePersisting(false);
+    }
+  }
+
   return (
     <div className="suno-recording-detail">
       <button type="button" className="suno-breadcrumb-link" onClick={props.onBack}>
@@ -134,6 +191,20 @@ export function SunoRecordingDetail(props: SunoRecordingDetailProps) {
       </button>
 
       <h1 className="suno-detail-title">{title}</h1>
+      <span className="star-rating">
+        {([1, 2, 3, 4, 5] as const).map((n) => {
+          const rating: TrackRating = review?.rating ?? 0;
+          return (
+            <button
+              key={n}
+              type="button"
+              className={`star-btn${n <= rating ? " filled" : ""}${rating >= 4 && n <= rating ? " star-good" : ""}${rating > 0 && rating <= 3 && n <= rating ? " star-bad" : ""}`}
+              onClick={() => props.onSetRating(canonicalRecordingId, result.snapshot.snapshotId, n === rating ? 0 : n)}
+              title={n === 5 ? "5 — Strong" : n === 4 ? "4 — Good" : `${n} — Problem`}
+            >★</button>
+          );
+        })}
+      </span>
       {primaryMember?.filename && primaryMember.filename !== title && (
         <div className="suno-detail-original-filename">Original filename: {primaryMember.filename}</div>
       )}
@@ -156,8 +227,10 @@ export function SunoRecordingDetail(props: SunoRecordingDetailProps) {
         )}
         {!playbackDisabled && audioSrc && (
           <audio
+            key={audioSrc}
             ref={audioRef}
             controls
+            autoPlay={!!overrideMember}
             src={audioSrc}
             className="suno-audio-player"
             onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
@@ -214,6 +287,80 @@ export function SunoRecordingDetail(props: SunoRecordingDetailProps) {
         </div>
       </div>
 
+      <div className="suno-detail-analysis">
+        <h2 className="suno-section-heading">MUSIC intelligence</h2>
+        <div className={`suno-detail-analysis-status${props.analysisRecord?.analysisStatus === "analyzed" || props.analysisRecord?.analysisStatus === "partial" ? " suno-detail-analysis-status--ready" : props.analysisRecord?.analysisStatus === "queued" || props.analysisRecord?.analysisStatus === "analyzing" ? " suno-detail-analysis-status--pending" : ""}`}>
+          {getAnalysisDisplayLabel(props.analysisRecord ?? { analysisStatus: "not_analyzed" })}
+        </div>
+        <div className="suno-detail-grid">
+          <div className="suno-detail-field">
+            <span className="suno-detail-label">BPM</span>
+            <span className="suno-detail-value">{props.analysisRecord?.bpm != null ? props.analysisRecord.bpm.toFixed(1) : "—"}</span>
+          </div>
+          <div className="suno-detail-field">
+            <span className="suno-detail-label">Key</span>
+            <span className="suno-detail-value">{props.analysisRecord?.camelotKey ?? "—"}</span>
+          </div>
+          <div className="suno-detail-field">
+            <span className="suno-detail-label">Energy</span>
+            <span className="suno-detail-value">{props.analysisRecord?.energy != null ? props.analysisRecord.energy.toFixed(2) : "—"}</span>
+          </div>
+          <div className="suno-detail-field">
+            <span className="suno-detail-label">Mood</span>
+            <span className="suno-detail-value">{props.analysisRecord?.moodTags.length ? props.analysisRecord.moodTags.join(", ") : "—"}</span>
+          </div>
+          <div className="suno-detail-field">
+            <span className="suno-detail-label">Suggested</span>
+            <span className="suno-detail-value">{props.analysisRecord?.moodSuggestions.length ? props.analysisRecord.moodSuggestions.join(", ") : "—"}</span>
+          </div>
+          <div className="suno-detail-field">
+            <span className="suno-detail-label">Mechanism</span>
+            <span className="suno-detail-value">{props.analysisRecord?.mechanicalMoodTags.length ? props.analysisRecord.mechanicalMoodTags.join(", ") : "—"}</span>
+          </div>
+        </div>
+        <button type="button" className="suno-btn" onClick={handleAnalyze} disabled={analyzeBusy || isUnavailable}>
+          {analyzeBusy
+            ? (analyzePersisting ? "Saving…" : "Analyzing…")
+            : props.analysisRecord?.analysisStatus === "analyzed" || props.analysisRecord?.analysisStatus === "partial" ? "Reanalyze" : "Analyze"}
+        </button>
+        {isUnavailable && <span className="suno-detail-analysis-warnings">No materialized audio available for analysis.</span>}
+        {!isUnavailable && props.analysisRecord?.analysisStatus === "failed" && props.analysisRecord.analysisWarnings.length > 0 && (
+          <div className="suno-detail-analysis-warnings">{props.analysisRecord.analysisWarnings.join("; ")}</div>
+        )}
+      </div>
+
+      {props.onCreateLoopFromRecording && !isUnavailable && (
+        <div className="suno-detail-loop-create">
+          {props.analysisRecord?.beatMap ? (
+            <button
+              type="button"
+              className="suno-btn"
+              onClick={() => {
+                const beatMap = props.analysisRecord!.beatMap!;
+                props.onCreateLoopFromRecording!({
+                  canonicalRecordingId,
+                  title,
+                  durationSeconds: canonical.totalDurationSeconds,
+                  playableAudioUrl: `/suno-library-audio/${effectivePlayableMember!.archiveAssetId}`,
+                  assetId: effectivePlayableMember!.archiveAssetId,
+                  bpm: props.analysisRecord?.bpm ?? null,
+                  beatMap,
+                });
+              }}
+            >
+              Create Loop from this Recording
+            </button>
+          ) : (
+            // Spec's own honest-unavailable-state requirement: never a
+            // fabricated grid, never a time-only save offered here — the
+            // only path forward is (re)analyzing, via the button above.
+            <span className="suno-detail-analysis-warnings">
+              Grid unavailable — Analyze (or Reanalyze) this recording to enable Loop creation.
+            </span>
+          )}
+        </div>
+      )}
+
       {props.trainingExclusion && (() => {
         // "Propagated" means the recording's own PRIMARY displayed location
         // (the one its title/filename comes from) is not itself the reason
@@ -260,15 +407,27 @@ export function SunoRecordingDetail(props: SunoRecordingDetailProps) {
             {" "}({members.length})
           </h2>
           <ul className="suno-location-list">
-            {members.map((m) => (
-              <li key={m.archiveAssetId} className={m.archiveAssetId === playableId ? "suno-location-item--playable" : ""}>
-                {m.filename} — {m.technical.audioCodec}, {(m.technical.byteSize / 1024).toFixed(0)} KB
-                {m.archiveAssetId === playableId ? " (playable)" : m.extractedRelativePath === null ? " (no extracted copy)" : ""}
-                {m.collision.isCollisionRenamed && (
-                  <span className="suno-collision-note"> — extracted as "{m.collision.derivedBasename}" (collision-safe rename; original name shown above remains primary)</span>
-                )}
-              </li>
-            ))}
+            {members.map((m) => {
+              const isCurrentlyEffective = m.archiveAssetId === effectivePlayableMember?.archiveAssetId;
+              const isExtracted = m.extractedRelativePath !== null;
+              return (
+                <li key={m.archiveAssetId} className={isCurrentlyEffective ? "suno-location-item--playable" : ""}>
+                  {isExtracted && !archiveOffline && (
+                    <button
+                      type="button"
+                      className="suno-location-play-btn"
+                      title={`Play this exact file (${m.technical.audioCodec}, ${m.technical.containerFormat})`}
+                      onClick={() => setOverrideLocationId(m.archiveAssetId)}
+                    >▶</button>
+                  )}
+                  {" "}{m.filename} — {m.technical.audioCodec}, {(m.technical.byteSize / 1024).toFixed(0)} KB
+                  {isCurrentlyEffective ? " (playable)" : !isExtracted ? " (no extracted copy)" : ""}
+                  {m.collision.isCollisionRenamed && (
+                    <span className="suno-collision-note"> — extracted as "{m.collision.derivedBasename}" (collision-safe rename; original name shown above remains primary)</span>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         </div>
       )}

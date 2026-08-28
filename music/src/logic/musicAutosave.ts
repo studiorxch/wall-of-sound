@@ -404,6 +404,17 @@ export function saveMusicState(
   return { ok: true, blocked: false, summaryBefore: summaryBefore ?? undefined, summaryAfter };
 }
 
+// MUSIC Gate A — Completion Semantics. saveMusicState() enqueues onto
+// _writeQueue and returns before its write lands (see comment above
+// _writeQueue). A caller that needs to know every write it triggered has
+// actually landed in IndexedDB before reporting "done" (e.g. a batch
+// analysis run) can await this. It resolves once every write enqueued up
+// to the moment of the call has finished — it does not wait for writes
+// enqueued afterward.
+export function flushMusicStateWrites(): Promise<void> {
+  return _writeQueue;
+}
+
 // ---------------------------------------------------------------------------
 // Manual backup download
 // ---------------------------------------------------------------------------

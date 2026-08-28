@@ -52,6 +52,32 @@ export interface TrackAsset {
   // missing, FLAC healthy" instead of one collapsed track-level signal.
   assetStatus?: import("./fileHealthTypes").FileHealthStatus;
   assetStatusCheckedAt?: string;
+  // 0827 Catalog Technical Format Verification — foundation only. Absent
+  // means never verified (the overwhelming majority of assets today); its
+  // presence IS the verification signal, same convention as assetStatus
+  // above. Additive only: never overwrites `format` above (which stays the
+  // legacy, filename-derived, as-imported label untouched), never implies
+  // any rename/move/identity change. `verifiedFormat` is the MUSIC-level
+  // normalized result; the raw ffprobe-reported container/codec are kept
+  // alongside it so a real mismatch (e.g. a file named "*.mp3" that ffprobe
+  // reports as container "wav") stays fully inspectable rather than
+  // collapsed into one label.
+  verifiedTechnical?: TrackAssetVerifiedTechnical;
+}
+
+export interface TrackAssetVerifiedTechnical {
+  /** MUSIC-level normalized result (see logic/trackAssetVerification.ts). "unknown" when ffprobe reported no usable codec/container. */
+  verifiedFormat: TrackAssetFormat | "unknown";
+  /** Raw ffprobe format_name, unnormalized — preserved for inspection even when verifiedFormat collapses several containers to one label. */
+  containerFormat: string | null;
+  /** Raw ffprobe codec_name, unnormalized. */
+  audioCodec: string | null;
+  sampleRate: number | null;
+  bitDepth: number | null;
+  channelCount: number | null;
+  byteSize: number | null;
+  verifiedAt: string;
+  verificationSource: "ffprobe";
 }
 
 // The four identity classes a newly-encountered file can fall into relative

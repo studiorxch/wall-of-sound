@@ -88,7 +88,7 @@ export async function promoteLoopToRadio(params: PromoteLoopToRadioParams): Prom
   onProgress?.("creating_staging_operation");
   const stagingResp = await fetch("/radio-staging-create", {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ sourceTrackId: loop.sourceTrackId, sourceLoopId: loop.id }),
+    body: JSON.stringify({ sourceTrackId: track.trackId, sourceLoopId: loop.id }),
   });
   const stagingJson = await stagingResp.json();
   if (!stagingJson.ok) {
@@ -122,7 +122,7 @@ export async function promoteLoopToRadio(params: PromoteLoopToRadioParams): Prom
 
   onProgress?.("finalizing");
   const sourceReference: RadioLoopSourceReference = {
-    trackId: loop.sourceTrackId, loopId: loop.id, loopRevisionId: loop.activeRevisionId,
+    trackId: track.trackId, loopId: loop.id, loopRevisionId: loop.activeRevisionId,
     audioRelPath: track.audioRelPath, startSeconds: rendered.startSeconds, endSeconds: rendered.endSeconds,
     resolvedAt: new Date().toISOString(),
   };

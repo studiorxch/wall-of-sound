@@ -73,10 +73,16 @@ import { SamplerBankView } from "./ui/SamplerBankView";
 import { PlaylistsGrid } from "./ui/PlaylistsGrid";
 import { SamplerBanksGrid } from "./ui/SamplerBanksGrid";
 import { FileManager, type ViewMode } from "./ui/FileManager";
-import { SoundsLoopRows } from "./ui/library/SoundsLoopRows";
+import { LoopLibraryWorkspace } from "./ui/library/LoopLibraryWorkspace";
 import { ArtistLibraryPanel } from "./ui/ArtistLibraryPanel";
 import { PlaylistHeader } from "./ui/PlaylistHeader";
 import { MainTrackWindow } from "./ui/MainTrackWindow";
+// 0828_MUSIC_Looper_Loop_Library_Tagging — TrackInspector's own App-level
+// mount (inspectorState below) is a genuine runtime dependency of Loop
+// Library's "open source Recording" action, proven live during this
+// build's Step 7 acceptance gate — kept for that reason, not because this
+// build owns TrackInspector's mount-point architecture itself.
+import { TrackInspector } from "./ui/TrackInspector";
 import { PlaylistLowerPanel } from "./ui/PlaylistLowerPanel";
 import { PlaylistDeck } from "./ui/PlaylistDeck";
 import { PlaybackTransport } from "./ui/PlaybackTransport";
@@ -115,6 +121,7 @@ import { buildSyntheticFixtures } from "./logic/beatMap/calibration/calibrationF
 import { generatePlaylistPathOptions } from "./logic/pathOptionGenerator";
 import type { CrateRecord } from "./data/crateTypes";
 import type { LoopAsset, AudioExperimentRecord, DraftLoopSelection, LoopRevision, LoopBinViewState } from "./data/loopTypes";
+import { buildSunoLooperSourceTrack } from "./logic/loops/sunoLooperSource";
 import type { LoopRenderRecord, LoopRenderSettings } from "./data/loopRenderTypes";
 import { defaultRenderSettings } from "./data/loopRenderTypes";
 import { renderLoopToWav, downloadWavBuffer, verifyRenderedAudioIntegrity } from "./logic/loops/loopRenderService";
@@ -170,16 +177,30 @@ import type {
   SunoAssetKind,
   SunoSuggestedUse,
   SunoLibraryReviewExport,
+  SunoAnalysisRecord,
 } from "./data/sunoLibraryTypes";
 import {
   setListeningStatus,
   setAssetKind as setSunoAssetKindPure,
   toggleSuggestedUse as toggleSunoSuggestedUse,
   setNotes as setSunoNotesPure,
+  setRating as setSunoRatingPure,
   upsertInterestMarker as upsertSunoInterestMarker,
   removeInterestMarker as removeSunoInterestMarker,
 } from "./logic/sunoLibrary/reviews";
 import { mergeSunoLibraryReviewImport } from "./logic/sunoLibrary/reviewExport";
+// Suno → Common MUSIC Intelligence Adapter (Phase 2) — bundled foundational
+// dependency (not 0828-authored); 0828 Step 2's beatMap plumbing extends
+// this already-existing analysis pipeline, which the Song Library "Create
+// Loop" entry point requires to be wired up at all.
+import {
+  markAnalysisQueued as markSunoAnalysisQueuedPure,
+  markAnalysisAnalyzing as markSunoAnalysisAnalyzingPure,
+  applyAnalysisResult as applySunoAnalysisResultPure,
+  applyAnalysisFailure as applySunoAnalysisFailurePure,
+  resetOrphanedSunoAnalysis,
+  type SunoAnalysisResultInput,
+} from "./logic/sunoLibrary/analysisRecords";
 // 0812D_MUSIC_Autosave-Integrity-Repair_v1.0.0 — closes the gap that let
 // unhydrated/empty/temporary-session state overwrite the shared, absolute-
 // path library/music/sampler-banks/banks.json. See samplerBankPersistence.ts
@@ -347,6 +368,26 @@ export default function App() {
   // handleOpenStemInLooper. Never written into libraryTracksRef/persisted
   // state; only appended to the array prop SectionalLooperWorkspace reads.
   const [ephemeralLooperStemTrack, setEphemeralLooperStemTrack] = useState<Track | null>(null);
+  // 0828_MUSIC_Looper_Loop_Library_Tagging — same pattern, for "Create Loop
+  // from this Recording" on a Song Library recording. See
+  // handleOpenSunoRecordingInLooper / logic/loops/sunoLooperSource.ts.
+  // activeSunoSource carries the real, qualified provenance
+  // (canonicalRecordingId + the pinned archiveAssetId) that the loop-save
+  // path reads instead of the synthetic track's own id.
+  const [ephemeralLooperSunoTrack, setEphemeralLooperSunoTrack] = useState<Track | null>(null);
+  const [activeSunoSource, setActiveSunoSource] = useState<{ canonicalRecordingId: string; assetId: string } | null>(null);
+  // 0828 — deep-link into one Song Library recording's detail view from
+  // outside SunoLibraryWorkspace (the Loop Library's "open source
+  // Recording" action for a song_library-sourced loop).
+  const [sunoOpenRecordingRequest, setSunoOpenRecordingRequest] = useState<{ canonicalRecordingId: string; nonce: number } | null>(null);
+  // 0828_MUSIC_Looper_Loop_Library_Tagging — bundled runtime dependency
+  // (not this build's own architecture): the App-level Track Inspector
+  // mount point, proven necessary because Loop Library's "open source
+  // Recording" action opens a track this way, verified live in Step 7's
+  // acceptance gate. Stores only the trackId + snapshot list/index; the
+  // live track is always re-derived from libraryTracks so a save is
+  // reflected instantly.
+  const [inspectorState, setInspectorState] = useState<{ trackId: string; filteredList: Track[]; index: number } | null>(null);
   const [showLegacyStemMigration, setShowLegacyStemMigration] = useState(false);
   // 0716A_MUSIC_Direct_Manipulation_Looper_And_Playhead — the global
   // Spacebar handler below is mounted once ([] deps); this ref lets it read
@@ -359,22 +400,14 @@ export default function App() {
   const viewModeRef = useRef(viewMode);
   useEffect(() => { viewModeRef.current = viewMode; }, [viewMode]);
   const [sourceOwnerFilter, setSourceOwnerFilter] = useState<import("./data/trackTypes").TrackSourceOwner | null>(null);
-  // 0722_MUSIC_Loops_Library_And_Looper_Naming — Sounds' content-type
-  // toggle (Tracks/Loops). Lives in App state (not local to the library
-  // page) so the legacy loop_library redirect effect below can set it.
-  const [soundsShowLoops, setSoundsShowLoops] = useState(false);
-  // The standalone Loop Library destination is retired; "loop_library" has
-  // no nav row that can set it anymore, but this app has no URL router to
-  // intercept an old deep link, so this effect is the safe-redirect
-  // equivalent — any stray "loop_library" viewMode normalizes immediately
-  // to Sounds with the Loops filter on, rather than rendering nothing.
-  useEffect(() => {
-    if (viewMode === "loop_library") {
-      setViewMode("library");
-      setSourceOwnerFilter("reference");
-      setSoundsShowLoops(true);
-    }
-  }, [viewMode]);
+  // 0828_MUSIC_Looper_Loop_Library_Tagging — the pre-set Source filter a
+  // deep-link into Loop Library lands with (e.g. Sounds' own "Loops"
+  // button below). "all" when opened from the Loop Library nav row itself.
+  // "loop_library" was a genuinely retired, redirect-on-sight viewMode
+  // between 0722 and this build (its own safe-redirect effect used to live
+  // here) — this build reactivates it as a real, live destination, so that
+  // redirect is removed rather than fighting the new nav row below.
+  const [loopLibraryInitialSourceFilter, setLoopLibraryInitialSourceFilter] = useState<import("./data/loopTypes").LoopSourceLibrary | "all">("all");
   const [showCoveragePanel, setShowCoveragePanel] = useState(false);
   const [externalRepairHistory, setExternalRepairHistory] = useState<import("./logic/externalIdentityRepair").ExternalIdentityRepairRecord[]>(
     () => (loadPlayProject() as any)?.externalIdentityRepairHistory ?? []
@@ -500,6 +533,15 @@ export default function App() {
   const sunoListeningRecordsRef = useRef<SunoListeningRecord[]>([]);
   const [sunoInterestMarkers, setSunoInterestMarkers] = useState<SunoInterestMarker[]>(() => loadPlayProject()?.sunoInterestMarkers ?? []);
   const sunoInterestMarkersRef = useRef<SunoInterestMarker[]>([]);
+  // Suno → Common MUSIC Intelligence Adapter (Phase 2) — bundled
+  // foundational dependency, not 0828-authored. Computed analysis output,
+  // kept structurally separate from sunoListeningRecords above.
+  // resetOrphanedSunoAnalysis reapplies MUSIC P0 Step C's exact orphaned-
+  // queued/analyzing recovery rule at load time, same as Track's own.
+  const [sunoAnalysisRecords, setSunoAnalysisRecords] = useState<SunoAnalysisRecord[]>(() =>
+    resetOrphanedSunoAnalysis(loadPlayProject()?.sunoAnalysisRecords ?? []),
+  );
+  const sunoAnalysisRecordsRef = useRef<SunoAnalysisRecord[]>([]);
   // 0717D_RADIO_Playlist_Inbox_and_Performance_Foundation — RADIO Inbox
   // items and RADIO Playlists, client-local, project-level for the same
   // reason as loops/songAnalyses above.
@@ -748,6 +790,7 @@ export default function App() {
   useEffect(() => { sunoLibraryImportPointerRef.current = sunoLibraryImportPointer; }, [sunoLibraryImportPointer]);
   useEffect(() => { sunoListeningRecordsRef.current = sunoListeningRecords; }, [sunoListeningRecords]);
   useEffect(() => { sunoInterestMarkersRef.current = sunoInterestMarkers; }, [sunoInterestMarkers]);
+  useEffect(() => { sunoAnalysisRecordsRef.current = sunoAnalysisRecords; }, [sunoAnalysisRecords]);
   useEffect(() => { glyphAnalysesRef.current = glyphAnalyses; }, [glyphAnalyses]);
   useEffect(() => { glyphCompositionsRef.current = glyphCompositions; }, [glyphCompositions]);
   useEffect(() => { glyphMappingPresetsRef.current = glyphMappingPresets; }, [glyphMappingPresets]);
@@ -868,6 +911,7 @@ export default function App() {
       sunoLibraryImportPointer: sunoLibraryImportPointerRef.current,
       sunoListeningRecords: sunoListeningRecordsRef.current.length ? sunoListeningRecordsRef.current : undefined,
       sunoInterestMarkers: sunoInterestMarkersRef.current.length ? sunoInterestMarkersRef.current : undefined,
+      sunoAnalysisRecords: sunoAnalysisRecordsRef.current.length ? sunoAnalysisRecordsRef.current : undefined,
       glyphAnalyses: glyphAnalysesRef.current.length ? glyphAnalysesRef.current : undefined,
       glyphCompositions: glyphCompositionsRef.current.length ? glyphCompositionsRef.current : undefined,
       glyphMappingPresets: glyphMappingPresetsRef.current.length ? glyphMappingPresetsRef.current : undefined,
@@ -2072,6 +2116,18 @@ export default function App() {
     savePlayProject(makeProj(playlistsRef.current));
   }
 
+  // 0827 Ratings Parity — bundled foundational dependency, not
+  // 0828-authored. Required because SunoLibraryWorkspace/SunoArchiveTable/
+  // SunoRecordingDetail (0828's own Song Library UI) all declare
+  // onSetRating as a required prop with real, rendered star-rating
+  // controls — this is the minimal implementation that satisfies it.
+  function handleSetSunoRating(canonicalRecordingId: string, snapshotId: string, rating: import("./data/trackTypes").TrackRating) {
+    const next = setSunoRatingPure(sunoListeningRecordsRef.current, canonicalRecordingId, snapshotId, rating, nowIso());
+    sunoListeningRecordsRef.current = next;
+    setSunoListeningRecords(next);
+    savePlayProject(makeProj(playlistsRef.current));
+  }
+
   function handleUpsertSunoInterestMarker(marker: SunoInterestMarker) {
     const next = upsertSunoInterestMarker(sunoInterestMarkersRef.current, marker, nowIso());
     sunoInterestMarkersRef.current = next;
@@ -2083,6 +2139,43 @@ export default function App() {
     const next = removeSunoInterestMarker(sunoInterestMarkersRef.current, markerId);
     sunoInterestMarkersRef.current = next;
     setSunoInterestMarkers(next);
+    savePlayProject(makeProj(playlistsRef.current));
+  }
+
+  // Suno → Common MUSIC Intelligence Adapter (Phase 2) — bundled
+  // foundational dependency, not 0828-authored. Four thin wrappers
+  // mirroring the Suno-review handlers above exactly (pure function →
+  // update ref/state → savePlayProject). The actual analysis call (the
+  // real, unmodified analyzer via sunoIntelligenceAdapter.ts) happens
+  // inside SunoLibraryWorkspace, which has the loaded archive data
+  // (canonicalById/locationsById) these handlers don't need and never
+  // touch. Required for 0828 Step 2/3's beatMap-gated "Create Loop" entry
+  // point to be reachable at all.
+  function handleMarkSunoAnalysisQueued(canonicalRecordingId: string, snapshotId: string) {
+    const next = markSunoAnalysisQueuedPure(sunoAnalysisRecordsRef.current, canonicalRecordingId, snapshotId, nowIso());
+    sunoAnalysisRecordsRef.current = next;
+    setSunoAnalysisRecords(next);
+    savePlayProject(makeProj(playlistsRef.current));
+  }
+
+  function handleMarkSunoAnalysisAnalyzing(canonicalRecordingId: string, snapshotId: string) {
+    const next = markSunoAnalysisAnalyzingPure(sunoAnalysisRecordsRef.current, canonicalRecordingId, snapshotId, nowIso());
+    sunoAnalysisRecordsRef.current = next;
+    setSunoAnalysisRecords(next);
+    savePlayProject(makeProj(playlistsRef.current));
+  }
+
+  function handleApplySunoAnalysisResult(canonicalRecordingId: string, snapshotId: string, result: SunoAnalysisResultInput) {
+    const next = applySunoAnalysisResultPure(sunoAnalysisRecordsRef.current, canonicalRecordingId, snapshotId, result, nowIso());
+    sunoAnalysisRecordsRef.current = next;
+    setSunoAnalysisRecords(next);
+    savePlayProject(makeProj(playlistsRef.current));
+  }
+
+  function handleApplySunoAnalysisFailure(canonicalRecordingId: string, snapshotId: string, warnings: string[]) {
+    const next = applySunoAnalysisFailurePure(sunoAnalysisRecordsRef.current, canonicalRecordingId, snapshotId, warnings, nowIso());
+    sunoAnalysisRecordsRef.current = next;
+    setSunoAnalysisRecords(next);
     savePlayProject(makeProj(playlistsRef.current));
   }
 
@@ -2368,6 +2461,46 @@ export default function App() {
       updatedAt: now,
       stemSourceRef: { stemSetId, role },
     });
+  }
+
+  // 0828_MUSIC_Looper_Loop_Library_Tagging — "Create Loop from this
+  // Recording" for Song Library, mirroring handleOpenStemInLooper exactly.
+  // syntheticTrack (never in libraryTracksRef/persisted state, see
+  // sunoLooperSource.ts) is appended to the PROP array
+  // <SectionalLooperWorkspace> receives via ephemeralLooperSunoTrack below
+  // — the entire integration point, no changes to that component's own
+  // internals. activeSunoSource carries the real qualified provenance the
+  // loop-save path reads for sourceRecording; syntheticTrack.trackId stays
+  // the synthetic id purely so the existing per-track experiment/loop
+  // lookups keep working unmodified — it is never itself persisted onto a
+  // saved LoopAsset (see LoopAsset.sourceTrackId's own doc comment).
+  function handleOpenSunoRecordingInLooper(syntheticTrack: Track, canonicalRecordingId: string, assetId: string) {
+    setEphemeralLooperSunoTrack(syntheticTrack);
+    setActiveSunoSource({ canonicalRecordingId, assetId });
+    setLooperSourceTrackId(syntheticTrack.trackId);
+    setViewMode("sectional_looper");
+    const existing = audioExperimentsRef.current.find(
+      (e) => e.type === "sectional_looper" && e.sourceTrackId === syntheticTrack.trackId,
+    );
+    const now = nowIso();
+    handleUpsertAudioExperiment({
+      id: existing?.id ?? genId("experiment"),
+      type: "sectional_looper",
+      sourceTrackId: syntheticTrack.trackId,
+      sourceFingerprint: canonicalRecordingId,
+      status: "review",
+      candidateLoopIds: existing?.candidateLoopIds ?? [],
+      approvedLoopIds: existing?.approvedLoopIds ?? [],
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    });
+  }
+
+  // 0828_MUSIC_Looper_Loop_Library_Tagging — "open source Recording" for a
+  // song_library-sourced Loop, from the new Loop Library surface.
+  function handleOpenSourceSunoRecording(canonicalRecordingId: string) {
+    setSunoOpenRecordingRequest({ canonicalRecordingId, nonce: Date.now() });
+    setViewMode("suno_library");
   }
 
   // 0722C_MUSIC_Production_Stem_Export — marks the 4 legacy derived-stem
@@ -5738,6 +5871,9 @@ export default function App() {
     const loadedSunoInterestMarkers = p.sunoInterestMarkers ?? [];
     sunoInterestMarkersRef.current = loadedSunoInterestMarkers;
     setSunoInterestMarkers(loadedSunoInterestMarkers);
+    const loadedSunoAnalysisRecords = resetOrphanedSunoAnalysis(p.sunoAnalysisRecords ?? []);
+    sunoAnalysisRecordsRef.current = loadedSunoAnalysisRecords;
+    setSunoAnalysisRecords(loadedSunoAnalysisRecords);
     // Glyph Audio (0804A) — same mandatory re-seed-at-authoritative-load
     // step as songAnalyses/loopWorkspaceDrafts above (0715D bug class):
     // without this, the async IndexedDB load could silently revert a
@@ -6072,6 +6208,24 @@ export default function App() {
 
   // Audition a catalog track directly (not via playlist slot) — 0701G
   const [auditionTrackId, setAuditionTrackId] = useState<string | null>(null);
+  // Suno Library Parity Repair — bundled foundational dependency, not
+  // 0828-authored. Required because SunoLibraryWorkspace (0828's own file)
+  // declares onAuditionExternal/auditionTrackId/playbackStatus/
+  // onPauseTrack/onResumeTrack as required props for row playback of a
+  // recording that is NOT a real Track (never inserted into libraryTracks;
+  // see sunoIntelligenceAdapter.ts's identical "ephemeral, never
+  // persisted" precedent). Holds just enough to feed PlaybackTransport's
+  // real, unmodified display fields when `currentTrack` below can't find
+  // auditionTrackId in the real Track map.
+  interface AuditionExternalMeta {
+    trackId: string;
+    title: string;
+    artist: string;
+    bpm?: number;
+    camelotKey?: string;
+    energy?: number;
+  }
+  const [auditionExternalMeta, setAuditionExternalMeta] = useState<AuditionExternalMeta | null>(null);
 
   function handleAuditionTrack(trackId: string) {
     const track = libraryTracksRef.current.find((t) => t.trackId === trackId);
@@ -6080,6 +6234,7 @@ export default function App() {
       showNotify("No audio linked for this track — link an audio folder first.");
       return;
     }
+    setAuditionExternalMeta(null);
     const audio = audioRef.current!;
     audio.pause();
     audio.src = playUrl;
@@ -6090,6 +6245,34 @@ export default function App() {
     audio.play()
       .then(() => {
         setAuditionTrackId(trackId);
+        setCurrentSlotIdx(null);
+        setPlaybackStatus("playing");
+        setPlaybackError(undefined);
+      })
+      .catch((err: Error) => {
+        setPlaybackError(`Audition: ${err.message}`);
+        setPlaybackStatus("error");
+      });
+  }
+
+  // Suno Library Parity Repair — bundled foundational dependency, not
+  // 0828-authored. Row playback through the SAME shared transport (same
+  // audioRef, same playbackStatus, same PlaybackTransport component), for
+  // a recording with no libraryTracks entry to look up. Mirrors
+  // handleAuditionTrack exactly, minus the Track-array lookup (the caller
+  // already has a resolved, real playback URL).
+  function handleAuditionExternal(meta: AuditionExternalMeta, audioUrl: string) {
+    const audio = audioRef.current!;
+    audio.pause();
+    audio.src = audioUrl;
+    playCountedRef.current = false;
+    setAudioTime(0);
+    setAudioDuration(0);
+    audio.load();
+    audio.play()
+      .then(() => {
+        setAuditionExternalMeta(meta);
+        setAuditionTrackId(meta.trackId);
         setCurrentSlotIdx(null);
         setPlaybackStatus("playing");
         setPlaybackError(undefined);
@@ -6247,9 +6430,27 @@ export default function App() {
     ? playlists.find((p) => p.playlistId === playingPlaylistId)
     : undefined;
   const playingSlots = playingPlaylist?.slots ?? [];
+  // Suno Library Parity Repair — bundled foundational dependency, not
+  // 0828-authored. When auditioning a non-Track recording, tbm.get(
+  // auditionTrackId) is correctly undefined (it really isn't a Track);
+  // synthesize a minimal, real-Track-shaped display object ONLY for
+  // PlaybackTransport to read — never written to libraryTracks/tbm itself.
+  const auditionExternalDisplayTrack: Track | undefined =
+    auditionExternalMeta && auditionExternalMeta.trackId === auditionTrackId
+      ? {
+          trackId: auditionExternalMeta.trackId,
+          title: auditionExternalMeta.title,
+          artist: auditionExternalMeta.artist,
+          durationSeconds: audioDuration,
+          energy: auditionExternalMeta.energy ?? 0,
+          energySource: "estimated",
+          bpm: auditionExternalMeta.bpm,
+          camelotKey: auditionExternalMeta.camelotKey as Track["camelotKey"],
+        }
+      : undefined;
   const currentTrack = currentSlotIdx !== null
     ? tbm.get(playingSlots[currentSlotIdx]?.assignedTrackId ?? "")
-    : (auditionTrackId ? tbm.get(auditionTrackId) : undefined);
+    : (auditionTrackId ? (tbm.get(auditionTrackId) ?? auditionExternalDisplayTrack) : undefined);
   // The editor only highlights the playing slot when it is editing the playing playlist.
   const isEditingPlayingPlaylist = playingPlaylistId != null && playingPlaylistId === activePlaylistId;
   // HUD/transport reflect the playing playlist; fall back to editor when idle.
@@ -6995,8 +7196,14 @@ export default function App() {
           viewMode={viewMode}
           sourceOwnerFilter={sourceOwnerFilter}
           onSelectPlaylist={handleSelectPlaylist}
-          onViewModeChange={setViewMode}
-          onSourceOwnerFilterChange={(owner) => { setSourceOwnerFilter(owner); setSoundsShowLoops(false); }}
+          onViewModeChange={(mode) => {
+            // 0828 — a plain sidebar nav into Loop Library always shows
+            // everything; only an explicit deep-link (e.g. Sounds' own
+            // "Loops" button) pre-applies a source filter.
+            if (mode === "loop_library") setLoopLibraryInitialSourceFilter("all");
+            setViewMode(mode);
+          }}
+          onSourceOwnerFilterChange={(owner) => { setSourceOwnerFilter(owner); }}
           onCreatePlaylist={handleCreatePlaylist}
           onDuplicatePlaylist={handleDuplicatePlaylist}
           onDeletePlaylist={handleDeletePlaylist}
@@ -7008,6 +7215,7 @@ export default function App() {
           onCreateSamplerBank={handleCreateSamplerBank}
           crateCount={crates.length}
           onViewCrates={() => setViewMode("crates_grid")}
+          loopCount={loops.length}
           artistCount={17}
           radioPlaylistCount={radioPlaylists.length}
           radioBankCount={radioBanks.length}
@@ -7252,20 +7460,13 @@ export default function App() {
                   + Import Audio
                 </button>
                 {owner === "reference" && (
-                  <div className="lib-content-toggle">
-                    <button
-                      className={`lib-content-toggle-btn${!soundsShowLoops ? " active" : ""}`}
-                      onClick={() => setSoundsShowLoops(false)}
-                    >
-                      Tracks
-                    </button>
-                    <button
-                      className={`lib-content-toggle-btn${soundsShowLoops ? " active" : ""}`}
-                      onClick={() => setSoundsShowLoops(true)}
-                    >
-                      Loops
-                    </button>
-                  </div>
+                  <button
+                    className="lib-update-btn"
+                    onClick={() => { setLoopLibraryInitialSourceFilter("sounds"); setViewMode("loop_library"); }}
+                    title="Open Sounds' saved loops in the canonical Loop Library, pre-filtered to this source"
+                  >
+                    Loops
+                  </button>
                 )}
                 {owner === "external" && (
                   <button
@@ -7351,8 +7552,13 @@ export default function App() {
             <ArtistLibraryPanel libraryTracks={libraryTracks} />
           ) : viewMode === "sectional_looper" ? (
             <SectionalLooperWorkspace
-              libraryTracks={ephemeralLooperStemTrack ? [...libraryTracks, ephemeralLooperStemTrack] : libraryTracks}
+              libraryTracks={[
+                ...libraryTracks,
+                ...(ephemeralLooperStemTrack ? [ephemeralLooperStemTrack] : []),
+                ...(ephemeralLooperSunoTrack ? [ephemeralLooperSunoTrack] : []),
+              ]}
               sourceTrackId={looperSourceTrackId}
+              activeSunoSource={activeSunoSource}
               onSelectSourceTrack={handleSelectLooperSourceTrack}
               resolveTrackUrl={getTrackPlayUrl}
               onSaveLoop={handleSaveLoop}
@@ -7411,27 +7617,50 @@ export default function App() {
             <SunoLibraryWorkspace
               listeningRecords={sunoListeningRecords}
               interestMarkers={sunoInterestMarkers}
+              analysisRecords={sunoAnalysisRecords}
               onCommitImport={handleCommitSunoLibraryImport}
               onSetListeningStatus={handleSetSunoListeningStatus}
               onSetAssetKind={handleSetSunoAssetKind}
               onToggleSuggestedUse={handleToggleSunoSuggestedUse}
               onSetNotes={handleSetSunoNotes}
+              onSetRating={handleSetSunoRating}
               onUpsertInterestMarker={handleUpsertSunoInterestMarker}
               onRemoveInterestMarker={handleRemoveSunoInterestMarker}
               onMergeReviewImport={handleMergeSunoReviewImport}
+              onMarkAnalysisQueued={handleMarkSunoAnalysisQueued}
+              onMarkAnalysisAnalyzing={handleMarkSunoAnalysisAnalyzing}
+              onApplyAnalysisResult={handleApplySunoAnalysisResult}
+              onApplyAnalysisFailure={handleApplySunoAnalysisFailure}
+              auditionTrackId={auditionTrackId}
+              playbackStatus={playbackStatus}
+              onAuditionExternal={handleAuditionExternal}
+              onPauseTrack={handlePause}
+              onResumeTrack={handlePlay}
+              onCreateLoopFromRecording={(params) => {
+                const syntheticTrack = buildSunoLooperSourceTrack(params);
+                handleOpenSunoRecordingInLooper(syntheticTrack, params.canonicalRecordingId, params.assetId);
+              }}
+              openRecordingRequest={sunoOpenRecordingRequest}
             />
-          ) : viewMode === "library" && sourceOwnerFilter === "reference" && soundsShowLoops ? (
-            // 0722_MUSIC_Loops_Library_And_Looper_Naming — saved loops as a
-            // content type within Sounds, replacing the retired standalone
-            // Loop Library page. Same view mode/source filter as ordinary
-            // Sounds (viewMode "library" + sourceOwnerFilter "reference"),
-            // so the sidebar's Sounds row is active either way.
-            <SoundsLoopRows
+          ) : viewMode === "loop_library" ? (
+            // 0828_MUSIC_Looper_Loop_Library_Tagging — the canonical,
+            // multi-source Loop Library. Supersedes 0722's Sounds-only
+            // Tracks/Loops toggle (see LoopLibraryWorkspace.tsx's own header
+            // comment for why) — unconditional, no sourceOwnerFilter gate,
+            // aggregates every loop regardless of origin.
+            <LoopLibraryWorkspace
               loops={loops}
               libraryTracks={libraryTracks}
               resolveTrackUrl={getTrackPlayUrl}
               onUpdateLoop={handleUpdateLoop}
-              onOpenSourceTrack={(trackId) => { setSoundsShowLoops(false); void trackId; }}
+              onOpenSourceTrack={(trackId) => {
+                const t = libraryTracksRef.current.find((tr) => tr.trackId === trackId);
+                if (!t || !t.sourceOwner || t.sourceOwner === "unknown") return;
+                setSourceOwnerFilter(t.sourceOwner);
+                setViewMode("library");
+                setInspectorState({ trackId, filteredList: [t], index: 0 });
+              }}
+              onOpenSourceSunoRecording={handleOpenSourceSunoRecording}
               onReopenInLooper={(trackId) => { handleSelectLooperSourceTrack(trackId); setViewMode("sectional_looper"); }}
               onBeforeLoopPreview={handleBeforeLoopPreview}
               onDeleteRenderedFile={handleDeleteLoopRenderedFile}
@@ -7441,6 +7670,7 @@ export default function App() {
               loopRevisions={loopRevisions}
               onPromoteToRadio={handlePromoteToRadio}
               onSendLoopToRadio={handleSendLoopToRadio}
+              initialSourceLibraryFilter={loopLibraryInitialSourceFilter}
             />
           ) : viewMode === "radio" ? (
             <RadioDashboardView
@@ -7554,6 +7784,7 @@ export default function App() {
           ) : (
           <MainTrackWindow
             mode={viewMode}
+            onInspect={(track, filteredList, index) => setInspectorState({ trackId: track.trackId, filteredList, index })}
             tracks={libraryTracks}
             slots={slots}
             orphans={orphans}
@@ -7620,8 +7851,6 @@ export default function App() {
             onReanalyze={handleReanalyze}
             onAnalyzeMissing={handleAnalyzeMissingSelected}
             analyzerJobs={analyzerJobs}
-            onRecheckFileHealth={handleRecheckFileHealth}
-            recheckingFileHealthTrackId={recheckingFileHealthTrackId}
             sourcePools={sourcePools}
             onRenameSourcePool={handleRenameSourcePool}
             onRemoveSourcePool={handleRemoveSourcePool}
@@ -7646,6 +7875,44 @@ export default function App() {
             radioBanks={radioBanks}
           />
           )}
+          {/* 0828_MUSIC_Looper_Loop_Library_Tagging — bundled runtime
+              dependency, not this build's own mount-point architecture:
+              inspectorState/setInspectorState above and this render block
+              are kept because Loop Library's "open source Recording"
+              action opens a track this way, proven live in Step 7's
+              acceptance gate. onRecheckFileHealth/recheckingFileHealth/
+              onAuditionAsset/onVerifyAsset are all optional props on
+              TrackInspector and are deliberately omitted here rather than
+              wired to the unrelated Arc A format-verification/asset-
+              authority handlers. */}
+          {inspectorState && (() => {
+            const inspectorTrack = libraryTracks.find((t) => t.trackId === inspectorState.trackId);
+            if (!inspectorTrack) return null;
+            return (
+              <TrackInspector
+                track={inspectorTrack}
+                filteredList={inspectorState.filteredList}
+                currentIndex={inspectorState.index}
+                onNavigate={(index) => {
+                  const t = inspectorState.filteredList[index];
+                  if (t) setInspectorState({ ...inspectorState, trackId: t.trackId, index });
+                }}
+                onSave={(patch) => handleBulkUpdateTracks([inspectorTrack.trackId], patch)}
+                onClose={() => setInspectorState(null)}
+                onRateTrack={handleRateTrack}
+                onAnalyzeTrack={handleAnalyzeTrack}
+                onReanalyze={(id) => handleReanalyze([id])}
+                analyzerJobStatus={analyzerJobs?.get(inspectorTrack.trackId)}
+                onRestoreSuggestionsFromImport={handleRestoreSuggestionsFromImport}
+                onRestoreSuggestionsFromMechanical={handleRestoreSuggestionsFromMechanical}
+                onClearSuggestedMoods={handleClearSuggestedMoods}
+                onOpenInGlyph={(trackId) => { handleSelectGlyphSourceTrack(trackId); setViewMode("glyph_audio"); }}
+                onExportStems={(trackId) => setActiveStemTrackId(trackId)}
+                trackPlaybackIssue={trackPlaybackIssues?.[inspectorTrack.trackId]}
+                looperShared={radioLooperShared}
+              />
+            );
+          })()}
           {viewMode === "playlist" && (
             <PlaylistDeck
               playlistTitle={activePlaylist?.title ?? ""}

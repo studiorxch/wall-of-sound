@@ -1,5 +1,4 @@
 import { TrackEditorPanel } from "./TrackEditorPanel";
-import { TrackInspector } from "./TrackInspector";
 import type { ViewMode } from "./FileManager";
 import type { MusicSourcePool } from "../data/sourcePoolTypes";
 import type { TrackArchiveStatus, AnalyzerJobStatus } from "../data/trackTypes";
@@ -124,6 +123,14 @@ type Props = {
   radioInboxItems?: RadioInboxItem[];
   radioPlaylists?: RadioPlaylist[];
   radioBanks?: RadioBank[];
+  // 0828_MUSIC_Looper_Loop_Library_Tagging — bundled runtime dependency,
+  // not this build's own mount-point architecture. Bubbles a row's inspect
+  // request up to App.tsx, which owns the real Track Inspector mount
+  // (needs SectionalLooperWorkspace's full prop authority, only available
+  // at that level) — proven necessary because Loop Library's "open source
+  // Recording" action needs the same App-level mount reachable from this
+  // component's row clicks too, for interface consistency.
+  onInspect?: (track: Track, filteredList: Track[], index: number) => void;
 };
 
 function fmtDur(s: number | undefined | null) {
@@ -1923,28 +1930,24 @@ export function MainTrackWindow({
   onAddToPlaylistEnd, onInsertAfterSlot, onReplaceSlot, onFindBestSlot, onRemoveRepeats, onRunExportHealth,
   activePlaylistId, onFillGap, onDeleteGap, onClearPlaybackIssue, onRecheckPlaybackIssue, onBulkRecheckCodecIssues, bulkRechecking, onBulkUpdate, onCreateLibraryGroup,
   onGenerateMoodSuggestions, onApplyMoodSuggestions,
-  onRestoreSuggestionsFromImport, onRestoreSuggestionsFromMechanical, onClearSuggestedMoods, onCreateLoops, onOpenInGlyph, onExportStems, onOpenStems,
+  onRestoreSuggestionsFromImport, onRestoreSuggestionsFromMechanical, onClearSuggestedMoods, onOpenStems,
   onAuditionTrack, onAuditionAndAdd, auditionTrackId,
   playbackStatus, onPauseTrack, onResumeTrack,
   onBulkSetArchiveStatus,
   onAnalyzeTrack, onAnalyzeSelected, onAnalyzeLibrary, onReanalyze, onAnalyzeMissing, analyzerJobs,
-  onRecheckFileHealth, recheckingFileHealthTrackId,
   sourcePools, onRenameSourcePool, onRemoveSourcePool, onCleanEmptyGroups,
   sourceOwnerFilter,
   samplerBanks, loadedSamplerBankId, onAddTracksToSamplerBank, onCreateSamplerBankFromTracks, onDeleteFromReference,
   musicPlaylists, onBulkAddTracksToPlaylist, onBulkCreatePlaylistFromTracks,
   cratePoolTracks = [],
   isAcceptedMode = false,
-  onSendTrackToRadio,
+  onInspect, onSendTrackToRadio,
   libraryGridPreferences,
   onUpdateLibraryGridPreferences,
   crates, radioInboxItems, radioPlaylists, radioBanks,
 }: Props) {
   const [groupViewId, setGroupViewId] = useState<string | null>(null);
   const [crateTab, setCrateTab] = useState<"output" | "pool" | "candidates">("output");
-  const [inspectorTrack, setInspectorTrack] = useState<Track | null>(null);
-  const [inspectorList, setInspectorList] = useState<Track[]>([]);
-  const [inspectorIndex, setInspectorIndex] = useState(0);
   const [showBottomFade, setShowBottomFade] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -1969,50 +1972,19 @@ export function MainTrackWindow({
     if (slotIdx >= 0) onPlayFromSlot(slotIdx);
   }
 
+  // 0828_MUSIC_Looper_Loop_Library_Tagging — bundled runtime dependency,
+  // not this build's own mount-point architecture: the Track Inspector now
+  // mounts at App.tsx level (it needs the full SectionalLooperWorkspace
+  // prop authority — loops/loopAudition/songAnalyses/etc — which only
+  // exists there, not inside this component's tree). This just bubbles
+  // the click up; the top-level `onInspect` prop is App.tsx's real
+  // handler.
   function handleInspect(track: Track, filteredList: Track[], index: number) {
-    setInspectorTrack(track);
-    setInspectorList(filteredList);
-    setInspectorIndex(index);
-  }
-
-  function handleInspectorNavigate(index: number) {
-    const t = inspectorList[index];
-    if (!t) return;
-    setInspectorTrack(t);
-    setInspectorIndex(index);
-  }
-
-  function handleInspectorSave(patch: Partial<Track>) {
-    if (!inspectorTrack) return;
-    onBulkUpdate?.([inspectorTrack.trackId], patch);
-    // Reflect save in inspector by updating with patched data
-    setInspectorTrack({ ...inspectorTrack, ...patch });
+    onInspect?.(track, filteredList, index);
   }
 
   return (
-    <div className={`mtw${mode === "library" && inspectorTrack ? " mtw--inspecting" : ""}`}>
-      {mode === "library" && inspectorTrack && (
-        <TrackInspector
-          track={inspectorTrack}
-          filteredList={inspectorList}
-          currentIndex={inspectorIndex}
-          onNavigate={handleInspectorNavigate}
-          onSave={handleInspectorSave}
-          onClose={() => setInspectorTrack(null)}
-          onAnalyzeTrack={onAnalyzeTrack}
-          onReanalyze={onReanalyze ? (id) => onReanalyze([id]) : undefined}
-          analyzerJobStatus={analyzerJobs?.get(inspectorTrack.trackId)}
-          onRestoreSuggestionsFromImport={onRestoreSuggestionsFromImport}
-          onRestoreSuggestionsFromMechanical={onRestoreSuggestionsFromMechanical}
-          onClearSuggestedMoods={onClearSuggestedMoods}
-          onCreateLoops={onCreateLoops}
-          onOpenInGlyph={onOpenInGlyph}
-          onExportStems={onExportStems}
-          trackPlaybackIssue={trackPlaybackIssues?.[inspectorTrack.trackId]}
-          onRecheckFileHealth={onRecheckFileHealth}
-          recheckingFileHealth={recheckingFileHealthTrackId === inspectorTrack.trackId}
-        />
-      )}
+    <div className="mtw">
       <div className="mtw-fade-wrap">
       {showBottomFade && <div className="mtw-bottom-fade" aria-hidden />}
       <div ref={scrollRef} className="mtw-scroll">

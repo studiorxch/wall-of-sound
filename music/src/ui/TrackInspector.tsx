@@ -1,6 +1,21 @@
+// 0827_MUSIC_Library_Workspace_Track_Inspector_Rearchitecture Parts G-O —
+// replaces the previous docked-panel dense form with a spacious modal:
+// Properties / Song / Advanced tabs above a persistent, substantial
+// SectionalLooperWorkspace (embedded mode, reused unchanged — see
+// RadioMultiTrackPrepWorkspace.tsx for the exact same reuse pattern this
+// component copies). Mounted at App.tsx level (not inside
+// MainTrackWindow) because the Looper's real prop authority
+// (loops/loopAudition/songAnalyses/etc.) only exists there — see
+// App.tsx's inspectorState/radioLooperShared wiring.
+//
+// useTrackForm below is unchanged in spirit from the prior implementation:
+// one accumulated form-state object, one explicit Save action, no
+// autosave-per-field — matching spec §24's "if the current implementation
+// uses explicit Save/Cancel, keep them" instruction.
+
 import { useState, useEffect } from "react";
-import type { Track, TrackSourceOwner, PlatformUse, AnalysisStatus, AnalyzerJobStatus } from "../data/trackTypes";
-import { toPortableAudioPath, resolveAudioUrl, type AudioCategory } from "../logic/audioPathResolver";
+import type { Track, TrackSourceOwner, PlatformUse, AnalysisStatus, AnalyzerJobStatus, TrackRating } from "../data/trackTypes";
+import { toPortableAudioPath, type AudioCategory } from "../logic/audioPathResolver";
 import { isBeatMapTrustedForAnalysis } from "../logic/beatMap/beatMapTrust";
 import { isPlaybackBoundsTrusted } from "../logic/playbackBounds/playbackBoundsTrust";
 import type { TrackPlaybackIssue } from "../data/playProjectTypes";
@@ -8,6 +23,9 @@ import { getAnalysisDisplayLabel } from "../logic/analysisStatusDisplay";
 import { computeTrackOverallFileHealth } from "../logic/trackFileHealth";
 import { FILE_HEALTH_LABELS } from "../data/fileHealthTypes";
 import { getTrackAssets } from "../logic/trackAssetReconciliation";
+import type { TrackAsset } from "../data/trackAssetTypes";
+import { SectionalLooperWorkspace } from "./SectionalLooperWorkspace";
+import type { RadioLooperSharedProps } from "./radio/RadioMultiTrackPrepWorkspace";
 
 type Props = {
   track: Track;
@@ -16,20 +34,29 @@ type Props = {
   onNavigate: (index: number) => void;
   onSave: (patch: Partial<Track>) => void;
   onClose: () => void;
-  onOpenModal?: (track: Track) => void;
+  onRateTrack?: (trackId: string, rating: TrackRating) => void;
   onAnalyzeTrack?: (trackId: string) => void;
   onReanalyze?: (trackId: string) => void;
   analyzerJobStatus?: AnalyzerJobStatus;
   onRestoreSuggestionsFromImport?: (trackId: string) => void;
   onRestoreSuggestionsFromMechanical?: (trackId: string) => void;
   onClearSuggestedMoods?: (trackId: string) => void;
-  onCreateLoops?: (trackId: string) => void;
   onOpenInGlyph?: (trackId: string) => void;
   onExportStems?: (trackId: string) => void;
-  // MUSIC P0 Clean Library Foundation — Step C
   trackPlaybackIssue?: TrackPlaybackIssue;
   onRecheckFileHealth?: (trackId: string) => void;
   recheckingFileHealth?: boolean;
+  // 0827 Physical Asset Authority — clicking a specific format badge plays
+  // THAT asset's own physical file, never the track's default/legacy
+  // playback path. Does not change which asset is primary.
+  onAuditionAsset?: (track: Track, asset: TrackAsset) => void;
+  // 0827 Catalog Technical Format Verification — explicit, per-asset,
+  // user-triggered only. Writes only asset.verifiedTechnical; never
+  // asset.format, never file identity. Display-only consumer — does not
+  // touch trackHasFormat, dashboard counts, or filters.
+  onVerifyAsset?: (track: Track, asset: TrackAsset) => void | Promise<void>;
+  // The full Looper authority, unchanged — see module doc above.
+  looperShared: RadioLooperSharedProps;
 };
 
 const OWNER_OPTIONS: { value: TrackSourceOwner; label: string }[] = [
@@ -47,17 +74,8 @@ const PLATFORM_USE_OPTIONS: { value: PlatformUse; label: string }[] = [
   { value: "do_not_publish",    label: "Do Not Publish" },
 ];
 
-const ANALYSIS_STATUS_OPTIONS: { value: AnalysisStatus; label: string }[] = [
-  { value: "not_analyzed", label: "Not analyzed" },
-  { value: "partial",      label: "Partial (import data)" },
-  { value: "analyzed",     label: "Analyzed" },
-  { value: "stale",        label: "Stale — needs reanalysis" },
-  { value: "failed",       label: "Analysis failed" },
-];
-
 // `grouping` is typed as `string` on Track, but some runtime records store it
 // as `string[]` (see the same tolerance in libraryFilters.ts's buildFilterOptions).
-// Coerce defensively so the editor never crashes on a track with this shape.
 function groupingToDisplayString(grouping: unknown): string {
   if (Array.isArray(grouping)) return grouping.join(", ");
   return (grouping as string | undefined) ?? "";
@@ -72,7 +90,6 @@ function ownerToCategory(owner: TrackSourceOwner): AudioCategory {
 function buildAudioPatch(rawInput: string, track: Track): Partial<Track> {
   const trimmed = rawInput.trim();
   if (!trimmed) return { filePath: undefined };
-
   const category = ownerToCategory(track.sourceOwner ?? "studiorich");
   const portable = toPortableAudioPath({ value: trimmed, category });
   if (portable) {
@@ -81,12 +98,9 @@ function buildAudioPatch(rawInput: string, track: Track): Partial<Track> {
       audioFileName: portable.audioFileName,
       audioCategory: portable.audioCategory,
       audioStatus: "linked" as const,
-      // Clear legacy absolute path so playback doesn't fall back to it
       filePath: undefined,
     };
   }
-
-  // Could not parse — keep the raw value in filePath as fallback (legacy)
   return { filePath: trimmed };
 }
 
@@ -101,10 +115,6 @@ function useTrackForm(track: Track) {
   const [composer, setComposer]             = useState(track.composer ?? "");
   const [comment, setComment]               = useState(track.comment ?? "");
   const [notes, setNotes]                   = useState(track.notes ?? "");
-  // MUSIC P0 Clean Library Foundation — Step D. Same comma-separated-text
-  // pattern as moodTagsRaw below — plain strings, no chip-input widget,
-  // deliberately reusing an already-proven pattern in this exact file
-  // rather than inventing a new editing control.
   const [labelsRaw, setLabelsRaw]           = useState((track.labels ?? []).join(", "));
   const [bpm, setBpm]                       = useState(String(track.bpm ?? ""));
   const [musicalKey, setMusicalKey]         = useState(track.musicalKey ?? "");
@@ -141,9 +151,7 @@ function useTrackForm(track: Track) {
     setEnergy(String(track.energy ?? ""));
     setDurationSecs(String(track.durationSeconds ?? ""));
     setAnalysisStatus(track.analysisStatus ?? "not_analyzed");
-    setAudioRelPathInput(
-      (track as unknown as { audioRelPath?: string }).audioRelPath ?? track.filePath ?? ""
-    );
+    setAudioRelPathInput((track as unknown as { audioRelPath?: string }).audioRelPath ?? track.filePath ?? "");
     setCoverImagePath(track.coverImagePath ?? "");
     setMoodTagsRaw((track.moodTags ?? []).join(", "));
     setMechMoodsRaw((track.mechanicalMoodTags ?? []).join(", "));
@@ -167,8 +175,6 @@ function useTrackForm(track: Track) {
       notes: notes.trim() || undefined,
       labels: labelsRaw.trim() ? labelsRaw.split(",").map((l) => l.trim()).filter(Boolean) : undefined,
       bpm: parseFloat(bpm) || track.bpm,
-      // 0712_MUSIC_BPM_Key_Detection_Engine §17 — manual correction outranks
-      // detected/imported values and must survive reanalysis.
       bpmSource: bpm.trim() ? "manual" : track.bpmSource,
       musicalKey: musicalKey.trim() || undefined,
       camelotKey: (camelotKey.trim() || track.camelotKey) as Track["camelotKey"],
@@ -190,19 +196,30 @@ function useTrackForm(track: Track) {
   }
 
   function togglePlatformUse(val: PlatformUse) {
-    setPlatformUse((prev) =>
-      prev.includes(val) ? prev.filter((v) => v !== val) : [...prev, val]
-    );
+    setPlatformUse((prev) => (prev.includes(val) ? prev.filter((v) => v !== val) : [...prev, val]));
   }
 
+  // Comprehensive dirty check — every field the Properties/Advanced tabs
+  // let a person change, not just the subset the old docked panel tracked.
   const isDirty =
     title !== (track.title ?? "") ||
     artist !== (track.artist ?? "") ||
-    grouping !== (track.grouping ?? "") ||
+    albumTitle !== (track.albumTitle ?? "") ||
+    albumArtist !== (track.albumArtist ?? "") ||
     genre !== (track.genre ?? "") ||
+    grouping !== groupingToDisplayString(track.grouping) ||
+    year !== String(track.year ?? "") ||
+    composer !== (track.composer ?? "") ||
+    comment !== (track.comment ?? "") ||
+    notes !== (track.notes ?? "") ||
+    labelsRaw !== (track.labels ?? []).join(", ") ||
     coverImagePath !== (track.coverImagePath ?? "") ||
     moodTagsRaw !== (track.moodTags ?? []).join(", ") ||
-    labelsRaw !== (track.labels ?? []).join(", ");
+    audioRelPathInput !== ((track as unknown as { audioRelPath?: string }).audioRelPath ?? track.filePath ?? "") ||
+    sourceOwner !== (track.sourceOwner ?? "unknown") ||
+    sourceLibrary !== (track.sourceLibrary ?? "") ||
+    catalogId !== (track.catalogId ?? "") ||
+    platformUse.join(",") !== (track.platformUse ?? []).join(",");
 
   return {
     title, setTitle, artist, setArtist, albumTitle, setAlbumTitle,
@@ -220,461 +237,390 @@ function useTrackForm(track: Track) {
   };
 }
 
+// ── Quiet-until-edit field primitives ───────────────────────────────────
+
+function TextField({ label, value, onChange, placeholder, mono }: {
+  label: string; value: string; onChange: (v: string) => void; placeholder?: string; mono?: boolean;
+}) {
+  const [editing, setEditing] = useState(false);
+  const empty = !value;
+  if (editing) {
+    return (
+      <div className="ti2-field ti2-field--editing">
+        <div className="ti2-field-label">{label}</div>
+        <input
+          className="ti2-field-input"
+          autoFocus
+          value={value}
+          placeholder={placeholder}
+          onChange={(e) => onChange(e.target.value)}
+          onBlur={() => setEditing(false)}
+          onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") { e.stopPropagation(); setEditing(false); } }}
+        />
+      </div>
+    );
+  }
+  return (
+    <div className="ti2-field">
+      <div className="ti2-field-label">{label}</div>
+      <div className="ti2-field-row">
+        <div className={`ti2-field-value${empty ? " ti2-field-value--empty" : ""}${mono ? " ti2-mono" : ""}`}>
+          {empty ? "Not set" : value}
+        </div>
+        <button className="ti2-edit-btn" onClick={() => setEditing(true)} aria-label={`Edit ${label}`} title="Edit">✎</button>
+      </div>
+    </div>
+  );
+}
+
+// ── Component ─────────────────────────────────────────────────────────
+
 export function TrackInspector({
-  track,
-  filteredList,
-  currentIndex,
-  onNavigate,
-  onSave,
-  onClose,
-  onOpenModal,
-  onAnalyzeTrack,
-  onReanalyze,
-  analyzerJobStatus,
-  onRestoreSuggestionsFromImport,
-  onRestoreSuggestionsFromMechanical,
-  onClearSuggestedMoods,
-  onCreateLoops,
-  onOpenInGlyph,
-  onExportStems,
-  trackPlaybackIssue,
-  onRecheckFileHealth,
-  recheckingFileHealth,
+  track, filteredList, currentIndex, onNavigate, onSave, onClose,
+  onRateTrack, onAnalyzeTrack, onReanalyze, analyzerJobStatus,
+  onRestoreSuggestionsFromImport, onRestoreSuggestionsFromMechanical, onClearSuggestedMoods,
+  onOpenInGlyph, onExportStems, trackPlaybackIssue, onRecheckFileHealth, recheckingFileHealth,
+  onAuditionAsset, onVerifyAsset, looperShared,
 }: Props) {
   const form = useTrackForm(track);
+  const [tab, setTab] = useState<"properties" | "song" | "advanced">("properties");
   const [imgFailed, setImgFailed] = useState(false);
+  const [editingCover, setEditingCover] = useState(false);
+  const [advCollapsed, setAdvCollapsed] = useState<Record<string, boolean>>({});
+  const [verifyingAssetId, setVerifyingAssetId] = useState<string | null>(null);
 
-  useEffect(() => { setImgFailed(false); }, [form.coverImagePath]);
+  useEffect(() => { setImgFailed(false); setEditingCover(false); setTab("properties"); }, [track.trackId]);
+
+  async function handleVerifyAsset(asset: TrackAsset) {
+    if (!onVerifyAsset || verifyingAssetId) return;
+    setVerifyingAssetId(asset.assetId);
+    try {
+      await onVerifyAsset(track, asset);
+    } finally {
+      setVerifyingAssetId(null);
+    }
+  }
 
   const hasCover = !!form.coverImagePath && !imgFailed;
-  const coverSrc = form.coverImagePath;
 
   function handleSave() {
     onSave(form.buildPatch());
   }
 
+  function requestClose() {
+    if (form.isDirty && !window.confirm("You have unsaved changes. Close without saving?")) return;
+    onClose();
+  }
+
   function handleNavigate(dir: -1 | 1) {
+    if (form.isDirty && !window.confirm("You have unsaved changes. Discard and switch tracks?")) return;
     const next = currentIndex + dir;
     if (next < 0 || next >= filteredList.length) return;
+    // 0827_MUSIC_Track_Inspector_Live_Validation — the embedded Looper's
+    // loop-preview audition (loopAudition, App-root-lifted) is NOT reset
+    // just because sourceTrackId changes: SectionalLooperWorkspace stays
+    // mounted across a track switch here (same instance, new prop) rather
+    // than unmounting, unlike RADIO's expand/collapse usage. Without this,
+    // a loop preview started for the track being left keeps playing under
+    // the newly-displayed track — the highest-risk stale-state case this
+    // integration was flagged for. Only stop a session that actually
+    // belongs to the track being navigated away FROM; an unrelated
+    // session (e.g. started elsewhere before this Inspector opened) is
+    // left alone. Reuses the existing controller's own stop() — no new
+    // playback/loop authority.
+    if (looperShared.loopAudition.session?.sourceTrackId === track.trackId) {
+      looperShared.loopAudition.stop();
+    }
     onNavigate(next);
   }
 
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") requestClose();
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.isDirty]);
+
+  const assets = getTrackAssets(track);
+  const fileHealth = computeTrackOverallFileHealth(track, trackPlaybackIssue ? { [track.trackId]: trackPlaybackIssue } : undefined);
+
+  function toggleAdv(section: string) {
+    setAdvCollapsed((s) => ({ ...s, [section]: !s[section] }));
+  }
+
   return (
-    <div className="ti-panel">
-      {/* Header nav */}
-      <div className="ti-header">
-        <div className="ti-nav">
-          <button
-            className="ti-nav-btn"
-            onClick={() => handleNavigate(-1)}
-            disabled={currentIndex <= 0}
-            title="Previous track"
-          >←</button>
-          <span className="ti-nav-pos">{currentIndex + 1} / {filteredList.length}</span>
-          <button
-            className="ti-nav-btn"
-            onClick={() => handleNavigate(1)}
-            disabled={currentIndex >= filteredList.length - 1}
-            title="Next track"
-          >→</button>
-        </div>
-        <div className="ti-header-actions">
-          {onOpenModal && (
-            <button className="ti-modal-btn" onClick={() => onOpenModal(track)} title="Open full editor modal">⤢</button>
-          )}
-          <button className="ti-close" onClick={onClose} title="Close inspector">✕</button>
-        </div>
-      </div>
-
-      {/* Cover preview */}
-      <div className={`ti-cover${hasCover ? "" : " ti-cover--empty"}`}>
-        {hasCover ? (
-          <img
-            className="ti-cover-img"
-            src={coverSrc}
-            alt="Cover"
-            onError={() => setImgFailed(true)}
-          />
-        ) : (
-          <div className="ti-cover-placeholder">
-            <span className="ti-cover-icon">🎵</span>
-            <span className="ti-cover-missing">No cover</span>
-          </div>
-        )}
-      </div>
-
-      {/* Track identity summary */}
-      <div className="ti-identity">
-        <div className="ti-track-title" title={track.title}>{track.title ?? "—"}</div>
-        <div className="ti-track-artist">{track.artist ?? ""}</div>
-        <div className="ti-track-meta">
-          {form.isDirty && <span className="ti-dirty">● unsaved</span>}
-        </div>
-      </div>
-
-      {/* Scrollable form body */}
-      <div className="ti-body">
-
-        {/* Identity */}
-        <div className="te-section-label">Identity</div>
-        <div className="te-row">
-          <label className="te-label">Title</label>
-          <input className="te-input" value={form.title} onChange={(e) => form.setTitle(e.target.value)} />
-        </div>
-        <div className="te-row">
-          <label className="te-label">Artist</label>
-          <input className="te-input" value={form.artist} onChange={(e) => form.setArtist(e.target.value)} />
-        </div>
-        <div className="te-row">
-          <label className="te-label">Album</label>
-          <input className="te-input" value={form.albumTitle} onChange={(e) => form.setAlbumTitle(e.target.value)} />
-        </div>
-        <div className="te-row-group">
-          <div className="te-row te-row-half">
-            <label className="te-label">Genre</label>
-            <input className="te-input" value={form.genre} onChange={(e) => form.setGenre(e.target.value)} />
-          </div>
-          <div className="te-row te-row-half">
-            <label className="te-label">Year</label>
-            <input className="te-input" type="number" value={form.year} onChange={(e) => form.setYear(e.target.value)} />
-          </div>
-        </div>
-        <div className="te-row">
-          <label className="te-label">Grouping</label>
-          <input className="te-input" value={form.grouping} onChange={(e) => form.setGrouping(e.target.value)} />
-        </div>
-        <div className="te-row">
-          <label className="te-label">Composer</label>
-          <input className="te-input" value={form.composer} onChange={(e) => form.setComposer(e.target.value)} />
-        </div>
-        <div className="te-row">
-          <label className="te-label">Comment</label>
-          <input className="te-input" value={form.comment} onChange={(e) => form.setComment(e.target.value)} />
-        </div>
-
-        {/* Cover */}
-        <div className="te-section-label">Cover / File</div>
-        <div className="te-row">
-          <label className="te-label">Cover Path</label>
-          <input
-            className="te-input"
-            value={form.coverImagePath}
-            onChange={(e) => form.setCoverImagePath(e.target.value)}
-            placeholder="/path/to/cover.jpg or URL"
-          />
-        </div>
-        {track.artworkStatus && (
-          <div className="te-row">
-            <label className="te-label">Artwork</label>
-            <span className={`ti-artwork-status ti-artwork-${track.artworkStatus}`}>{track.artworkStatus}</span>
-          </div>
-        )}
-        {form.coverImagePath && (
-          <div className="ti-cover-actions">
-            <button
-              className="tb-btn sm"
-              onClick={() => form.setCoverImagePath("")}
-              title="Clear cover path"
-            >Clear Cover</button>
-          </div>
-        )}
-        <div className="te-row">
-          <label className="te-label">Audio File</label>
-          <input
-            className="te-input"
-            value={form.audioRelPathInput}
-            onChange={(e) => form.setAudioRelPathInput(e.target.value)}
-            placeholder="catalog/audio/filename.flac or filename.flac"
-            title="Relative path from library/music/ root, e.g. catalog/audio/track.flac"
-          />
-          {resolveAudioUrl(
-            (() => {
-              const t = track as unknown as { audioRelPath?: string };
-              return t.audioRelPath;
-            })()
-          ) && (
-            <span className="te-value-dim" style={{ fontSize: "0.7em", opacity: 0.6 }}>
-              {resolveAudioUrl((track as unknown as { audioRelPath?: string }).audioRelPath)}
-            </span>
-          )}
-        </div>
-        {track.sunoId && (
-          <div className="te-row">
-            <label className="te-label">Suno ID</label>
-            <span className="te-value-dim">{track.sunoId}</span>
-          </div>
-        )}
-
-        {/* Audio */}
-        <div className="te-section-label">Audio</div>
-        <div className="te-row-group">
-          <div className="te-row te-row-half">
-            <label className="te-label">BPM</label>
-            <input className="te-input" type="number" value={form.bpm} onChange={(e) => form.setBpm(e.target.value)} />
-          </div>
-          <div className="te-row te-row-half">
-            <label className="te-label">Energy</label>
-            <input className="te-input" type="number" step="0.01" min="0" max="1" value={form.energy} onChange={(e) => form.setEnergy(e.target.value)} />
-          </div>
-        </div>
-        <div className="te-row-group">
-          <div className="te-row te-row-half">
-            <label className="te-label">Key</label>
-            <input className="te-input" value={form.musicalKey} onChange={(e) => form.setMusicalKey(e.target.value)} placeholder="Eb major" />
-          </div>
-          <div className="te-row te-row-half">
-            <label className="te-label">Camelot</label>
-            <input className="te-input" value={form.camelotKey} onChange={(e) => form.setCamelotKey(e.target.value)} placeholder="5B" />
-          </div>
-        </div>
-        <div className="te-row-group">
-          <div className="te-row te-row-half">
-            <label className="te-label">Duration (s)</label>
-            <input className="te-input" type="number" value={form.durationSeconds} onChange={(e) => form.setDurationSecs(e.target.value)} />
-          </div>
-          <div className="te-row te-row-half">
-            <label className="te-label">Analysis</label>
-            <select className="te-select" value={form.analysisStatus} onChange={(e) => form.setAnalysisStatus(e.target.value as AnalysisStatus)}>
-              {ANALYSIS_STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-          </div>
-        </div>
-
-        {/* MUSIC P0 Clean Library Foundation — Step C. Two deliberately
-            separate, read-only signals: analysis state (BPM/key/mood
-            pipeline — editable above via the Analysis dropdown) vs. file
-            health (can the audio actually be played). Never collapsed into
-            one line — a healthy WAV with failed analysis reads as exactly
-            that, not just "failed". Per-asset breakdown only shown when a
-            track actually carries more than one physical format; a
-            single-file track just shows one File line. */}
-        <div className="te-section-label">Status</div>
-        <div className="te-row-group">
-          <div className="te-row te-row-half">
-            <label className="te-label">Analysis</label>
-            <span className="te-value-dim">{getAnalysisDisplayLabel(track)}</span>
-          </div>
-          <div className="te-row te-row-half">
-            <label className="te-label">File</label>
-            <span className="te-value-dim">{FILE_HEALTH_LABELS[computeTrackOverallFileHealth(track, trackPlaybackIssue ? { [track.trackId]: trackPlaybackIssue } : undefined).overall]}</span>
-          </div>
-        </div>
-        {getTrackAssets(track).length > 1 && (
-          <div className="te-row">
-            <label className="te-label">Formats</label>
-            <span className="te-value-dim">
-              {computeTrackOverallFileHealth(track, trackPlaybackIssue ? { [track.trackId]: trackPlaybackIssue } : undefined)
-                .perAsset.map((a) => `${a.format.toUpperCase()}: ${FILE_HEALTH_LABELS[a.status]}`).join(" · ")}
-            </span>
-          </div>
-        )}
-        {onRecheckFileHealth && (
-          <div className="ti-cover-actions">
-            <button
-              className="tb-btn sm"
-              onClick={() => onRecheckFileHealth(track.trackId)}
-              disabled={!!recheckingFileHealth}
-              title="Re-probe this track's audio file(s) for playability"
-            >
-              {recheckingFileHealth ? "Rechecking…" : "Recheck File Health"}
-            </button>
-          </div>
-        )}
-
-        {/* Beat Map (0713_MUSIC_Track_Beat_Map_Foundation §21) — compact
-            read-only diagnostic, not a grid editor. */}
-        <div className="te-section-label">Beat Map</div>
-        <div className="te-row-group">
-          <div className="te-row te-row-half">
-            <label className="te-label">Status</label>
-            <span className="te-value-dim">
-              {!track.beatMap ? "Missing" : isBeatMapTrustedForAnalysis(track.beatMap) ? "Trusted" : "Partial"}
-            </span>
-          </div>
-          <div className="te-row te-row-half">
-            <label className="te-label">Tempo</label>
-            <span className="te-value-dim">
-              {track.beatMap ? (track.beatMap.tempoStable ? "Stable" : "Drifting") : "—"}
-            </span>
-          </div>
-        </div>
-        <div className="te-row-group">
-          <div className="te-row te-row-half">
-            <label className="te-label">Intro</label>
-            <span className="te-value-dim">
-              {track.beatMap?.introRegion ? `${track.beatMap.introRegion.cleanBars} clean bars` : "—"}
-            </span>
-          </div>
-          <div className="te-row te-row-half">
-            <label className="te-label">Outro</label>
-            <span className="te-value-dim">
-              {track.beatMap?.outroRegion ? `${track.beatMap.outroRegion.cleanBars} clean bars` : "—"}
-            </span>
-          </div>
-        </div>
-
-        {/* Playback Bounds (0714_MUSIC_Track_Playback_Bounds §27) — compact
-            read-only diagnostic. No waveform editing. */}
-        <div className="te-section-label">Playback Bounds</div>
-        <div className="te-row-group">
-          <div className="te-row te-row-half">
-            <label className="te-label">Status</label>
-            <span className="te-value-dim">
-              {!track.playbackBounds ? "Missing" : isPlaybackBoundsTrusted(track.playbackBounds) ? "Trusted" : "Partial"}
-            </span>
-          </div>
-          <div className="te-row te-row-half">
-            <label className="te-label">Effective</label>
-            <span className="te-value-dim">
-              {track.playbackBounds ? `${track.playbackBounds.effectiveDurationSeconds.toFixed(1)}s` : "—"}
-            </span>
-          </div>
-        </div>
-        <div className="te-row-group">
-          <div className="te-row te-row-half">
-            <label className="te-label">Start</label>
-            <span className="te-value-dim">
-              {track.playbackBounds ? `${track.playbackBounds.preferredStartSeconds.toFixed(2)}s (${track.playbackBounds.startClassification})` : "—"}
-            </span>
-          </div>
-          <div className="te-row te-row-half">
-            <label className="te-label">End</label>
-            <span className="te-value-dim">
-              {track.playbackBounds ? `${track.playbackBounds.preferredEndSeconds.toFixed(2)}s (${track.playbackBounds.endClassification})` : "—"}
-            </span>
-          </div>
-        </div>
-
-        {/* Mood */}
-        <div className="te-section-label">Mood</div>
-        <div className="te-row">
-          <label className="te-label">Mood Tags</label>
-          <input className="te-input" value={form.moodTagsRaw} onChange={(e) => form.setMoodTagsRaw(e.target.value)} placeholder="Comma-separated" />
-        </div>
-        {track.primaryMood && (
-          <div className="te-row">
-            <label className="te-label">Primary</label>
-            <span className="te-value-dim">{track.primaryMood}</span>
-          </div>
-        )}
-        {(track.moodSuggestions?.length ?? 0) > 0 && (
-          <div className="te-row te-row-actions">
-            <label className="te-label te-label-dim">Suggested</label>
-            <span className="te-value-dim">{(track.moodSuggestions ?? []).join(", ")}</span>
-          </div>
-        )}
-        <div className="te-row te-row-actions">
-          <label className="te-label te-label-dim">Actions</label>
-          <div className="te-action-row">
-            {onRestoreSuggestionsFromImport && (track.importedMoodTags?.length ?? 0) > 0 && (
-              <button className="te-action-btn" onClick={() => onRestoreSuggestionsFromImport(track.trackId)}>From Import</button>
-            )}
-            {onRestoreSuggestionsFromMechanical && (track.mechanicalMoodTags?.length ?? 0) > 0 && (
-              <button className="te-action-btn" onClick={() => onRestoreSuggestionsFromMechanical(track.trackId)}>From Mechanical</button>
-            )}
-            {onClearSuggestedMoods && (
-              <button className="te-action-btn te-action-btn-danger" onClick={() => onClearSuggestedMoods(track.trackId)}>Clear Suggestions</button>
+    <div className="ti2-mask" onMouseDown={(e) => { if (e.target === e.currentTarget) requestClose(); }}>
+      <div className="ti2-modal">
+        <div className="ti2-header">
+          <div
+            className="ti2-cover"
+            onClick={() => setEditingCover(true)}
+            role="button"
+            tabIndex={0}
+            aria-label="Edit cover"
+            title="Click to replace cover"
+          >
+            {hasCover ? (
+              <img className="ti2-cover-img" src={form.coverImagePath} alt="" onError={() => setImgFailed(true)} />
+            ) : (
+              <span className="ti2-cover-empty">No<br />Cover</span>
             )}
           </div>
+          <div className="ti2-title-block">
+            {editingCover ? (
+              <input
+                className="ti2-field-input"
+                autoFocus
+                value={form.coverImagePath}
+                placeholder="/path/to/cover.jpg or URL"
+                onChange={(e) => form.setCoverImagePath(e.target.value)}
+                onBlur={() => setEditingCover(false)}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") { e.stopPropagation(); setEditingCover(false); } }}
+              />
+            ) : (
+              <>
+                <div className="ti2-title">{track.title || "Untitled"}</div>
+                <div className="ti2-artist">{track.artist || ""}</div>
+              </>
+            )}
+          </div>
+          <div className="ti2-nav">
+            <button className="ti2-nav-btn" onClick={() => handleNavigate(-1)} disabled={currentIndex <= 0} title="Previous track">←</button>
+            <span className="ti2-nav-pos">{currentIndex + 1} / {filteredList.length}</span>
+            <button className="ti2-nav-btn" onClick={() => handleNavigate(1)} disabled={currentIndex >= filteredList.length - 1} title="Next track">→</button>
+          </div>
+          <button className="ti2-close" onClick={requestClose} aria-label="Close" title="Close (Esc)">✕</button>
         </div>
 
-        {/* Source */}
-        <div className="te-section-label">Source</div>
-        <div className="te-row">
-          <label className="te-label">Owner</label>
-          <select className="te-select" value={form.sourceOwner} onChange={(e) => form.setSourceOwner(e.target.value as TrackSourceOwner)}>
-            {OWNER_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-        </div>
-        <div className="te-row">
-          <label className="te-label">Library</label>
-          <input className="te-input" value={form.sourceLibrary} onChange={(e) => form.setSourceLibrary(e.target.value)} placeholder="e.g. StudioRich Catalog" />
-        </div>
-        <div className="te-row">
-          <label className="te-label">Catalog ID</label>
-          <input className="te-input" value={form.catalogId} onChange={(e) => form.setCatalogId(e.target.value)} />
-        </div>
-        <div className="te-section-label" style={{ marginTop: 6 }}>Platform Use</div>
-        <div className="te-platform-use">
-          {PLATFORM_USE_OPTIONS.map((o) => (
-            <label key={o.value} className="te-check-label">
-              <input type="checkbox" checked={form.platformUse.includes(o.value)} onChange={() => form.togglePlatformUse(o.value)} />
-              {" "}{o.label}
-            </label>
-          ))}
+        <div className="ti2-tabs">
+          <button className={`ti2-tab${tab === "properties" ? " active" : ""}`} onClick={() => setTab("properties")}>Properties</button>
+          <button className={`ti2-tab${tab === "song" ? " active" : ""}`} onClick={() => setTab("song")}>Song</button>
+          <button className={`ti2-tab${tab === "advanced" ? " active" : ""}`} onClick={() => setTab("advanced")}>Advanced</button>
         </div>
 
-        {/* Labels (0813_MUSIC_P0_Clean_Library_Foundation StepD) — plain
-            user text, no taxonomy/color. Same comma-separated pattern as
-            Mood Tags above; deleting from the text list is how a label is
-            removed, no separate remove control needed. */}
-        <div className="te-section-label">Labels</div>
-        <div className="te-row">
-          <label className="te-label">Labels</label>
-          <input
-            className="te-input"
-            value={form.labelsRaw}
-            onChange={(e) => form.setLabelsRaw(e.target.value)}
-            placeholder="Episode 2, Needs Ableton, Strong bassline…"
+        <div className="ti2-body">
+          {tab === "properties" && (
+            <>
+              <div className="ti2-grid">
+                <TextField label="Title" value={form.title} onChange={form.setTitle} />
+                <TextField label="Artist" value={form.artist} onChange={form.setArtist} />
+                <TextField label="Album" value={form.albumTitle} onChange={form.setAlbumTitle} />
+                <TextField label="Album Artist" value={form.albumArtist} onChange={form.setAlbumArtist} />
+                <TextField label="Year" value={form.year} onChange={form.setYear} />
+                <TextField label="Composer" value={form.composer} onChange={form.setComposer} />
+                <TextField label="Group" value={form.grouping} onChange={form.setGrouping} />
+                <TextField label="Genre" value={form.genre} onChange={form.setGenre} />
+              </div>
+
+              <div className="ti2-field" style={{ marginTop: 4 }}>
+                <div className="ti2-field-label">Rating</div>
+                <div className="ti2-rating">
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <span
+                      key={n}
+                      className={`ti2-star${(track.rating ?? 0) >= n ? " on" : ""}`}
+                      onClick={() => onRateTrack?.(track.trackId, n as TrackRating)}
+                    >★</span>
+                  ))}
+                </div>
+              </div>
+
+              <div className="ti2-field-label" style={{ marginTop: 22 }}>Labels</div>
+              <TextField label="" value={form.labelsRaw} onChange={form.setLabelsRaw} placeholder="Episode 2, Needs Ableton, Strong bassline…" />
+
+              <div className="ti2-field-label" style={{ marginTop: 18 }}>Notes</div>
+              <textarea
+                className="ti2-textarea"
+                value={form.notes}
+                onChange={(e) => form.setNotes(e.target.value)}
+                placeholder="Internal notes…"
+                rows={4}
+              />
+            </>
+          )}
+
+          {tab === "song" && (
+            <>
+              {/* No generation/source-provenance fields exist on Track for
+                  Catalog/External/Sounds today (confirmed: Provider, Source
+                  ID, Prompt, Style, Model, Workspace, etc. are all Suno-
+                  specific concepts absent from this data model). Per §27:
+                  do not fabricate fields — show a clean neutral state. */}
+              <div className="ti2-empty-state">
+                No generation / source-specific data for this recording.
+              </div>
+            </>
+          )}
+
+          {tab === "advanced" && (
+            <>
+              <div className={`ti2-adv-section${advCollapsed.audio ? " collapsed" : ""}`}>
+                <div className="ti2-adv-header" onClick={() => toggleAdv("audio")}>
+                  <span className="ti2-chev">▾</span> Audio
+                </div>
+                <div className="ti2-adv-grid">
+                  <div className="ti2-adv-item"><div className="k">Duration</div><div className="v">{track.durationSeconds ? `${Math.floor(track.durationSeconds / 60)}:${String(Math.floor(track.durationSeconds % 60)).padStart(2, "0")}` : "—"}</div></div>
+                  <div className="ti2-adv-item"><div className="k">Formats</div><div className="v">{assets.length ? assets.map((a) => a.format.toUpperCase()).join(", ") : "—"}</div></div>
+                  <div className="ti2-adv-item"><div className="k">File Size</div><div className="v">{assets[0]?.fileSizeBytes ? `${(assets[0].fileSizeBytes / 1_000_000).toFixed(1)} MB` : "—"}</div></div>
+                </div>
+              </div>
+
+              <div className={`ti2-adv-section${advCollapsed.analysis ? " collapsed" : ""}`}>
+                <div className="ti2-adv-header" onClick={() => toggleAdv("analysis")}>
+                  <span className="ti2-chev">▾</span> Analysis
+                </div>
+                <div className="ti2-adv-grid">
+                  <div className="ti2-adv-item"><div className="k">BPM</div><div className="v">{track.bpm ?? "—"}</div></div>
+                  <div className="ti2-adv-item"><div className="k">Key</div><div className="v">{track.camelotKey ?? "—"}</div></div>
+                  <div className="ti2-adv-item"><div className="k">Energy</div><div className="v">{track.energy != null ? track.energy.toFixed(2) : "—"}</div></div>
+                  <div className="ti2-adv-item"><div className="k">Mood</div><div className="v">{(track.moodTags ?? []).join(", ") || "—"}</div></div>
+                  <div className="ti2-adv-item"><div className="k">Suggested Mood</div><div className="v">{(track.moodSuggestions ?? []).join(", ") || "—"}</div></div>
+                  <div className="ti2-adv-item"><div className="k">Mechanical Mood</div><div className="v">{(track.mechanicalMoodTags ?? []).join(", ") || "—"}</div></div>
+                  <div className="ti2-adv-item"><div className="k">Analysis Status</div><div className="v">{getAnalysisDisplayLabel(track)}</div></div>
+                  <div className="ti2-adv-item"><div className="k">File Health</div><div className="v">{FILE_HEALTH_LABELS[fileHealth.overall]}</div></div>
+                  <div className="ti2-adv-item"><div className="k">Beat Map</div><div className="v">{!track.beatMap ? "Missing" : isBeatMapTrustedForAnalysis(track.beatMap) ? "Trusted" : "Partial"}</div></div>
+                  <div className="ti2-adv-item"><div className="k">Playback Bounds</div><div className="v">{!track.playbackBounds ? "Missing" : isPlaybackBoundsTrusted(track.playbackBounds) ? "Trusted" : "Partial"}</div></div>
+                </div>
+                {onRecheckFileHealth && (
+                  <button className="ti2-small-btn" style={{ marginTop: 10 }} disabled={!!recheckingFileHealth} onClick={() => onRecheckFileHealth(track.trackId)}>
+                    {recheckingFileHealth ? "Rechecking…" : "Recheck File Health"}
+                  </button>
+                )}
+              </div>
+
+              <div className={`ti2-adv-section${advCollapsed.identity ? " collapsed" : ""}`}>
+                <div className="ti2-adv-header" onClick={() => toggleAdv("identity")}>
+                  <span className="ti2-chev">▾</span> Identity / Assets
+                </div>
+                <div className="ti2-adv-grid">
+                  <div className="ti2-adv-item"><div className="k">Canonical ID</div><div className="v">{track.trackId}</div></div>
+                  <div className="ti2-adv-item"><div className="k">Preferred Asset</div><div className="v">{assets.find((a) => a.isPrimary)?.fileName ?? assets[0]?.fileName ?? "—"}</div></div>
+                  <div className="ti2-adv-item">
+                    <div className="k">Available Formats</div>
+                    <div className="v">
+                      {assets.length ? (
+                        <span className="ti2-format-badges">
+                          {assets.map((a) => (
+                            <button
+                              key={a.assetId}
+                              type="button"
+                              className="ti2-format-badge"
+                              disabled={!onAuditionAsset}
+                              title={onAuditionAsset ? `Play ${a.fileName}` : a.fileName}
+                              onClick={() => onAuditionAsset?.(track, a)}
+                            >
+                              {a.format.toUpperCase()}
+                            </button>
+                          ))}
+                        </span>
+                      ) : "—"}
+                    </div>
+                  </div>
+                  <div className="ti2-adv-item"><div className="k">Checksum</div><div className="v">{assets.find((a) => a.checksum)?.checksum ?? "not computed"}</div></div>
+                  <div className="ti2-adv-item"><div className="k">Source Owner</div><div className="v">{OWNER_OPTIONS.find((o) => o.value === form.sourceOwner)?.label ?? form.sourceOwner}</div></div>
+                  <div className="ti2-adv-item"><div className="k">Catalog ID</div><div className="v">{track.catalogId ?? "—"}</div></div>
+                </div>
+                {onVerifyAsset && assets.length > 0 && (
+                  <div className="ti2-asset-verify-list">
+                    {assets.map((a) => {
+                      const vt = a.verifiedTechnical;
+                      const mismatch = !!vt && vt.verifiedFormat !== "unknown" && vt.verifiedFormat !== a.format;
+                      return (
+                        <div key={a.assetId} className={`ti2-asset-verify-row${mismatch ? " ti2-asset-verify-row--mismatch" : ""}`}>
+                          <span className="ti2-asset-verify-filename" title={a.fileName}>{a.fileName}</span>
+                          {vt ? (
+                            <span className="ti2-asset-verify-result">
+                              Imported: {a.format.toUpperCase()} · Verified: {vt.verifiedFormat === "unknown" ? "Unknown" : vt.verifiedFormat.toUpperCase()}
+                              {" "}· {vt.audioCodec ?? "—"}/{vt.containerFormat ?? "—"}
+                              {mismatch && <span className="ti2-asset-verify-mismatch-badge">MISMATCH</span>}
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              className="ti2-small-btn"
+                              disabled={verifyingAssetId === a.assetId}
+                              onClick={() => handleVerifyAsset(a)}
+                            >
+                              {verifyingAssetId === a.assetId ? "Verifying…" : "Verify Format"}
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Machine Life intentionally omitted: no Track-linked Machine
+                  Life authority (training eligibility/rights/dataset
+                  membership/lineage) exists in the current data model for
+                  Catalog/External/Sounds. Per instruction, this section
+                  appears only once real stored data backs it — never a
+                  placeholder. */}
+
+              <div className="ti2-field-label" style={{ marginTop: 22 }}>Mood Suggestions</div>
+              <div className="ti2-action-row">
+                {onRestoreSuggestionsFromImport && (track.importedMoodTags?.length ?? 0) > 0 && (
+                  <button className="ti2-small-btn" onClick={() => onRestoreSuggestionsFromImport(track.trackId)}>From Import</button>
+                )}
+                {onRestoreSuggestionsFromMechanical && (track.mechanicalMoodTags?.length ?? 0) > 0 && (
+                  <button className="ti2-small-btn" onClick={() => onRestoreSuggestionsFromMechanical(track.trackId)}>From Mechanical</button>
+                )}
+                {onClearSuggestedMoods && (
+                  <button className="ti2-small-btn ti2-danger" onClick={() => onClearSuggestedMoods(track.trackId)}>Clear Suggestions</button>
+                )}
+              </div>
+
+              <div className="ti2-field-label" style={{ marginTop: 18 }}>Platform Use</div>
+              <div className="ti2-checks">
+                {PLATFORM_USE_OPTIONS.map((o) => (
+                  <label key={o.value} className="ti2-check-label">
+                    <input type="checkbox" checked={form.platformUse.includes(o.value)} onChange={() => form.togglePlatformUse(o.value)} />
+                    {" "}{o.label}
+                  </label>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="ti2-looper">
+          <SectionalLooperWorkspace
+            {...looperShared}
+            sourceTrackId={track.trackId}
+            onSelectSourceTrack={() => {}}
+            embedded
           />
         </div>
 
-        {/* Notes */}
-        <div className="te-section-label">Notes</div>
-        <textarea
-          className="te-input te-textarea"
-          value={form.notes}
-          onChange={(e) => form.setNotes(e.target.value)}
-          placeholder="Internal notes…"
-          rows={3}
-        />
-      </div>
-
-      {/* Footer */}
-      <div className="ti-footer">
-        <div className="ti-footer-left">
-          {analyzerJobStatus === "running" && (
-            <span className="te-analysis-note te-analysis-partial" style={{ padding: "4px 8px" }}>Analyzing…</span>
-          )}
-          {analyzerJobStatus === "complete" && (
-            <span className="te-analysis-note te-analysis-ok" style={{ padding: "4px 8px" }}>Done ✓</span>
-          )}
-          {onAnalyzeTrack && (
-            <button className="tb-btn" disabled={analyzerJobStatus === "running"} onClick={() => onAnalyzeTrack(track.trackId)}>
-              Analyze
-            </button>
-          )}
-          {track.mechanicalAnalysisStatus && onReanalyze && (
-            <button className="tb-btn" disabled={analyzerJobStatus === "running"} onClick={() => onReanalyze(track.trackId)}>
-              Reanalyze
-            </button>
-          )}
-          {onCreateLoops && (
-            <button className="tb-btn" onClick={() => onCreateLoops(track.trackId)} title="Open in AUDIOLAB / Looper">
-              Create Loops
-            </button>
-          )}
-          {onOpenInGlyph && (
-            <button className="tb-btn" onClick={() => onOpenInGlyph(track.trackId)} title="Open in AUDIOLAB / Glyph">
-              Open in Glyph
-            </button>
-          )}
-          {/* 0722C_MUSIC_Production_Stem_Export — the old top-level-track
-              "Import Existing Stems" button (0715G) is retired here: MUSIC
-              cannot keep two live definitions of "stem." Existing legacy
-              derived-stem tracks are handled by the Legacy Stem Migration
-              panel (Library Actions), not this button. Not shown on a
-              legacy derived-stem track (it has no stems of its own) or once
-              this track has already been through migration. */}
-          {onExportStems && track.derivedKind !== "stem" && (
-            <button className="tb-btn" onClick={() => onExportStems(track.trackId)} title="Run local Demucs separation and archive vocals/drums/bass/other as a versioned child of this exact track">
-              Export Stems
-            </button>
-          )}
-        </div>
-        <div className="ti-footer-right">
-          <button className="tb-btn ph-btn-primary" onClick={handleSave}>Save</button>
-          <button className="tb-btn" onClick={onClose}>Close</button>
+        <div className={`ti2-footer${form.isDirty ? " show" : ""}`}>
+          <div className="ti2-footer-left">
+            {analyzerJobStatus === "running" && <span className="ti2-analyzing">Analyzing…</span>}
+            {analyzerJobStatus === "complete" && <span className="ti2-analyzed">Done ✓</span>}
+            {onAnalyzeTrack && (
+              <button className="ti2-small-btn" disabled={analyzerJobStatus === "running"} onClick={() => onAnalyzeTrack(track.trackId)}>Analyze</button>
+            )}
+            {track.mechanicalAnalysisStatus && onReanalyze && (
+              <button className="ti2-small-btn" disabled={analyzerJobStatus === "running"} onClick={() => onReanalyze(track.trackId)}>Reanalyze</button>
+            )}
+            {onOpenInGlyph && (
+              <button className="ti2-small-btn" onClick={() => onOpenInGlyph(track.trackId)} title="Open in AUDIOLAB / Glyph">Open in Glyph</button>
+            )}
+            {onExportStems && track.derivedKind !== "stem" && (
+              <button className="ti2-small-btn" onClick={() => onExportStems(track.trackId)} title="Run local Demucs separation and archive vocals/drums/bass/other as a versioned child of this exact track">Export Stems</button>
+            )}
+          </div>
+          <div className="ti2-footer-right">
+            <span className="ti2-unsaved-msg">Unsaved changes</span>
+            {/* Explicit Cancel is itself the deliberate discard decision —
+                no redundant confirm on top of it. The confirm guard in
+                requestClose protects the ACCIDENTAL dismissal paths only
+                (×/Esc/click-outside). */}
+            <button className="ti2-btn ghost" onClick={onClose}>Cancel</button>
+            <button className="ti2-btn primary" onClick={handleSave}>Save</button>
+          </div>
         </div>
       </div>
     </div>

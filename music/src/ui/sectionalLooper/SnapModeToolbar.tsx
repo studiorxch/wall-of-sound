@@ -4,6 +4,7 @@
 // no state of its own, never computes a snap itself.
 
 import type { TimelineSnapMode, ZeroCrossingWarningCode } from "../../data/loopTypes";
+import type { BarMultiple } from "../../logic/loops/barMultipleSnap";
 
 const USER_FACING_MODES: TimelineSnapMode[] = ["bar", "beat", "subdivision", "zero_crossing", "off"];
 const MODE_LABELS: Record<TimelineSnapMode, string> = {
@@ -29,11 +30,18 @@ interface SnapModeToolbarProps {
   zeroCrossingEnabled: boolean;
   onZeroCrossingEnabledChange: (enabled: boolean) => void;
   zeroCrossingFeedback?: ZeroCrossingFeedback | null;
+  // 0828_MUSIC_Looper_Loop_Library_Tagging — sibling to snapMode "bar",
+  // exactly mirroring how subdivisionDivision pairs with "subdivision".
+  barMultiple: BarMultiple;
+  onBarMultipleChange: (multiple: BarMultiple) => void;
 }
+
+const BAR_MULTIPLES: BarMultiple[] = [1, 2, 4, 8, 16];
 
 export function SnapModeToolbar({
   snapMode, onSnapModeChange, subdivisionDivision, onSubdivisionDivisionChange,
   zeroCrossingEnabled, onZeroCrossingEnabledChange, zeroCrossingFeedback,
+  barMultiple, onBarMultipleChange,
 }: SnapModeToolbarProps) {
   return (
     <div className="looper-snap-toolbar">
@@ -48,6 +56,15 @@ export function SnapModeToolbar({
           {MODE_LABELS[m]}
         </button>
       ))}
+      {snapMode === "bar" && (
+        <select
+          value={barMultiple}
+          onChange={(e) => onBarMultipleChange(Number(e.target.value) as BarMultiple)}
+          aria-label="Bar length"
+        >
+          {BAR_MULTIPLES.map((b) => <option key={b} value={b}>{b} Bar{b > 1 ? "s" : ""}</option>)}
+        </select>
+      )}
       {snapMode === "subdivision" && (
         <select
           value={subdivisionDivision}

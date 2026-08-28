@@ -16,6 +16,8 @@
 // exact checksum only — filename/title/workspace/duration similarity never
 // implies identity (spec §6.3).
 
+import type { TrackRating } from "./trackTypes";
+
 // ---------------------------------------------------------------------------
 // Identity aliases
 // ---------------------------------------------------------------------------
@@ -323,6 +325,11 @@ export interface SunoListeningRecord {
   suggestedUses: SunoSuggestedUse[];
   notes: string;
   trainingEligibility: SunoTrainingEligibility;
+  // Additive, optional — same TrackRating scale/semantics as Catalog/
+  // External/Sounds (0827 Ratings Parity). Absent on a record means
+  // unrated, identical to how Track.rating being absent/0 means unrated;
+  // existing records created before this field existed are unaffected.
+  rating?: TrackRating;
   createdAt: string;
   updatedAt: string;
 }
@@ -335,6 +342,41 @@ export type SunoInterestMarkerLabel =
   | "vocal-moment"
   | "texture"
   | "other";
+
+// Suno → Common MUSIC Intelligence Adapter (Phase 2) — persisted on
+// PlayProject exactly like SunoListeningRecord above, keyed by
+// canonicalRecordingId. Deliberately a SEPARATE record type, not a field
+// added onto SunoListeningRecord: this is derived/computed analysis output
+// (mirrors the existing Track analysis pipeline), not human-entered review
+// state — keeping them apart means an analysis re-run can never touch
+// listening status/notes/suggested-use, and vice versa. `analysisStatus`
+// reuses Track's own AnalysisStatus type/semantics verbatim (see
+// trackAnalysisStateMachine.ts) rather than inventing a parallel one.
+// bpm/camelotKey/energy/moodTags/moodSuggestions/mechanicalMoodTags are the
+// exact same fields the existing analyzer already produces for Catalog/
+// External tracks — genre is deliberately absent, since MUSIC has no
+// automatic genre classifier for any source.
+export interface SunoAnalysisRecord {
+  canonicalRecordingId: SunoCanonicalRecordingId;
+  snapshotId: SunoSnapshotId;
+  analysisStatus: import("./trackTypes").AnalysisStatus;
+  bpm: number | null;
+  camelotKey: string | null;
+  energy: number | null;
+  moodTags: string[];
+  moodSuggestions: string[];
+  mechanicalMoodTags: import("./trackTypes").MechanicalMoodTag[];
+  analysisWarnings: string[];
+  analysisUpdatedAt: string | null;
+  // 0828_MUSIC_Looper_Loop_Library_Tagging — the same beat-grid evidence
+  // Track.beatMap carries, forwarded from the identical analyzeTrackDspFeatures
+  // pipeline this record's other fields already come from (see
+  // sunoIntelligenceAdapter.ts's own header comment — no second analyzer).
+  // Absent for any recording analyzed before this field existed; present
+  // only once (re)analyzed. Loop creation for a Song Library recording is
+  // gated on this being present — never a fabricated/time-only grid.
+  beatMap?: import("./beatMapTypes").TrackBeatMap;
+}
 
 export interface SunoInterestMarker {
   markerId: string;

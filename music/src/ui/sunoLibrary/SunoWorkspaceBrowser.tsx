@@ -4,7 +4,7 @@
 // utility Radio's multi-track prep stack already established — no new
 // dependency).
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import type {
   SunoBatch,
   SunoCanonicalRecording,
@@ -48,7 +48,9 @@ const ROW_HEIGHT = 56;
 const CONTAINER_HEIGHT = 520;
 const OVERSCAN = 6;
 
-function titleFor(canonical: SunoCanonicalRecording, locationsById: Map<string, SunoEncodedLocation>): string {
+// Exported for reuse by SunoArchiveTable — one title-resolution rule, not a
+// second one for the new screen.
+export function titleFor(canonical: SunoCanonicalRecording, locationsById: Map<string, SunoEncodedLocation>): string {
   if (canonical.primaryTitleGuess) return canonical.primaryTitleGuess;
   const first = locationsById.get(canonical.encodedLocationIds[0]);
   return first?.filename ?? canonical.canonicalRecordingId;
@@ -207,17 +209,24 @@ export function SunoWorkspaceBrowser(props: SunoWorkspaceBrowserProps) {
   );
 }
 
-function SunoSearchAndFilters({
-  filters,
-  onChange,
-  showWorkspaceFilter,
-  workspaces,
-}: {
+export interface SunoSearchAndFiltersProps {
   filters: SunoSearchFilters;
   onChange: (next: SunoSearchFilters) => void;
   showWorkspaceFilter: boolean;
   workspaces: SunoWorkspace[];
-}) {
+  // 0827 layout patch — lets a caller-specific filter (e.g. SunoArchiveTable's
+  // Song/Sound type select) render as a real member of this component's own
+  // .suno-filters flex row, instead of sitting outside it as a sibling block
+  // (which forced it onto its own line regardless of available width).
+  // Optional and unused by SunoWorkspaceBrowser's own call site — zero
+  // behavior change there.
+  extraFilters?: ReactNode;
+}
+
+// Exported for reuse by SunoArchiveTable (the "All Recordings" flat table +
+// readiness dashboard) — one filter implementation, not a second one built
+// for the new screen.
+export function SunoSearchAndFilters({ filters, onChange, showWorkspaceFilter, workspaces, extraFilters }: SunoSearchAndFiltersProps) {
   const anyActive =
     filters.queryText ||
     filters.workspaceSlug ||
@@ -358,6 +367,7 @@ function SunoSearchAndFilters({
         <option value="excluded">Excluded</option>
         <option value="unreviewed">Unreviewed</option>
       </select>
+      {extraFilters}
       {anyActive && (
         <button type="button" className="suno-btn suno-btn--clear" onClick={() => onChange({ ...EMPTY_SUNO_SEARCH_FILTERS })}>
           Clear filters

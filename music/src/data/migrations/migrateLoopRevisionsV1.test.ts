@@ -22,7 +22,7 @@ function approvedLoop(overrides: Partial<LoopAsset> = {}): LoopAsset {
     title: "Groove A", sourceTitle: "Track One",
     startSeconds: 20.62, endSeconds: 41.24, durationSeconds: 20.62,
     boundarySource: "manual", contentClass: "unknown",
-    status: "approved", warnings: [], createdAt: "t0", updatedAt: "t0",
+    status: "approved", warnings: [], tags: [], purposeMemberships: [], createdAt: "t0", updatedAt: "t0",
     loopFilePath: "/rendered/groove_a.wav",
     ...overrides,
   };

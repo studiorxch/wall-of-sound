@@ -66,6 +66,10 @@ import { isRenderStale } from "../logic/loops/loopRenderStaleness";
 import { createRevision, updateExistingRevision, buildRevisionCompareSummary, resolveActiveLoopBoundsFrames, buildRevisionTimeline, wouldActivationStaleRender } from "../logic/loops/loopRevisions";
 import { isStemTrack, resolveParentTrack } from "../logic/loops/stemLineage";
 import { buildLoopBinRows, type LoopBinCandidateInput, type LoopBinLoopInput } from "../logic/loops/loopBinFilters";
+import { buildSourceRecordingForTrack, buildSourceRecordingForSuno } from "../logic/loops/loopSourceRecording";
+import { isSunoLooperSourceTrackId } from "../logic/loops/sunoLooperSource";
+import { computeLoopBars, frameToBarBeat } from "../logic/loops/loopBarLength";
+import { gridWithBarMultiple, type BarMultiple } from "../logic/loops/barMultipleSnap";
 import { SnapModeToolbar } from "./sectionalLooper/SnapModeToolbar";
 import { useLoopWorkspaceKeyboard } from "./sectionalLooper/useLoopWorkspaceKeyboard";
 import { useLoopWorkspaceHistory } from "./sectionalLooper/useLoopWorkspaceHistory";
@@ -177,6 +181,13 @@ function buildLoopAssetFromCurrentSelection(
   segments: TrackSegment[],
   activeGrid: MusicalGrid | null,
   buffer: AudioBuffer | null,
+  // 0828 — set only when `track` is the session-only Suno adapter AND the
+  // caller has the real, qualified provenance to attach (see
+  // handleOpenSunoRecordingInLooper in App.tsx). When set, sourceTrackId is
+  // omitted from the persisted result entirely (per LoopAsset.sourceTrackId's
+  // own doc comment) rather than writing the synthetic adapter id into
+  // permanent storage.
+  sunoSource?: { canonicalRecordingId: string; assetId: string } | null,
 ): LoopAsset {
   const { startSeconds: start, endSeconds: end } = timelineSelection;
   const overlappingSegment = segments.find((s) => timelineSelection.startFrame < s.endFrame && timelineSelection.endFrame > s.startFrame);
@@ -189,11 +200,15 @@ function buildLoopAssetFromCurrentSelection(
 
   const now = new Date().toISOString();
   const sectionLabel = overlappingSegment?.displayLabel ?? overlappingSegment?.label ?? "Manual";
+  const isSuno = sunoSource && isSunoLooperSourceTrackId(track.trackId);
   return {
     id: genLoopId(),
     sourceKind: isStemTrack(track) ? "stem" : "track",
-    sourceTrackId: track.trackId,
+    sourceTrackId: isSuno ? undefined : track.trackId,
     sourceStemId: isStemTrack(track) ? track.trackId : undefined,
+    sourceRecording: isSuno
+      ? buildSourceRecordingForSuno(sunoSource.canonicalRecordingId, sunoSource.assetId)
+      : (buildSourceRecordingForTrack(track) ?? undefined),
     title: buildLoopFileName({
       artist: track.artist, trackTitle: track.title, sectionLabel,
       barCount: undefined, bpm: activeGrid?.bpm ?? track.bpm,
@@ -215,6 +230,8 @@ function buildLoopAssetFromCurrentSelection(
     confidence: result.confidence,
     status: "approved",
     warnings: result.warnings,
+    tags: [],
+    purposeMemberships: [],
     createdAt: now, updatedAt: now,
   };
 }
@@ -297,6 +314,15 @@ export type SectionalLooperWorkspaceProps = {
   // is replaced by `onCollapse`.
   embedded?: boolean;
   onCollapse?: () => void;
+
+  // 0828_MUSIC_Looper_Loop_Library_Tagging — set only when the currently
+  // active source track is the session-only Suno adapter built by
+  // sunoLooperSource.ts (isSunoLooperSourceTrackId(track.trackId) is true).
+  // Carries the real, qualified provenance a Song Library loop's
+  // sourceRecording is built from — this component never derives Suno
+  // identity itself, exactly like it never derives Track identity beyond
+  // reading track.trackId/sourceOwner.
+  activeSunoSource?: { canonicalRecordingId: string; assetId: string } | null;
 };
 
 export function SectionalLooperWorkspace({
@@ -308,6 +334,7 @@ export function SectionalLooperWorkspace({
   songAnalyses, onUpdateSongAnalysis, ensureSongAnalysisReady, cancelSongAnalysis,
   recomputeSongAnalysisStatus, songAnalysisProgress,
   embedded, onCollapse,
+  activeSunoSource,
 }: SectionalLooperWorkspaceProps) {
   void onBeforeLoopPreview; // acquisition now happens inside loopAudition.start() via its onAcquire callback
   const audioBufferRef = useRef<AudioBuffer | null>(null);
@@ -397,6 +424,11 @@ export function SectionalLooperWorkspace({
   // Session-local (not yet persisted to PlayProject — see completion report).
   const [timelineSelection, setTimelineSelection] = useState<TimelineSelection | null>(null);
   const [snapMode, setSnapMode] = useState<TimelineSnapMode>("bar"); // §10 default: Bar
+  // 0828_MUSIC_Looper_Loop_Library_Tagging — sibling parameter to snapMode
+  // "bar", following the exact same shape as the pre-existing
+  // subdivisionDivision/"subdivision" pairing below. Only meaningful when
+  // snapMode === "bar"; see barMultipleSnap.ts.
+  const [barMultiple, setBarMultiple] = useState<BarMultiple>(1);
   const [selectionApproveError, setSelectionApproveError] = useState<string | null>(null);
   // 0716A_MUSIC_Direct_Manipulation_Looper_And_Playhead — "move" (whole-
   // selection-body drag) and "playhead" (playhead drag) join the existing
@@ -499,6 +531,11 @@ export function SectionalLooperWorkspace({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [track?.trackId, currentSongAnalysis?.djPreparation, sampleRate, trackDurationSeconds]);
   const activeGridRevisionId = currentSongAnalysis?.djPreparation?.activeGridRevisionId ?? "detected";
+  // 0828 — snap-purposes-only grid variant (see barMultipleSnap.ts). Every
+  // display/render use of activeGrid itself (BPM readout, grid-trust
+  // status, ruler, backdrop) is deliberately UNCHANGED — this is passed
+  // only to the snap functions below, never rendered directly.
+  const snapGrid = activeGrid ? gridWithBarMultiple(activeGrid, barMultiple) : null;
 
   const segments = track ? (segmentsByTrack[track.trackId] ?? []) : [];
   // §36 — a synthetic segmentation revision id, stable for as long as this
@@ -695,7 +732,7 @@ export function SectionalLooperWorkspace({
         sampleRate,
         "region",
         snapMode,
-        activeGrid,
+        snapGrid,
         { regionId: activeRegion.id },
       );
       if (!next) return prev;
@@ -1004,6 +1041,13 @@ export function SectionalLooperWorkspace({
 
   async function approveCandidate(index: number, c: LoopCandidate) {
     if (!track) return;
+    // 0828 §Step 7 correction — same refusal as approveSelection: a Song
+    // Library source with no usable bar grid must not save via a
+    // section-based (non-grid) candidate either.
+    if (activeSunoSource && isSunoLooperSourceTrackId(track.trackId) && !activeGrid) {
+      setSelectionApproveError("Grid unavailable for this Song Library recording — Analyze/Reanalyze it to enable loop creation. Time-only saves aren't offered for Song Library sources.");
+      return;
+    }
     const { start, end } = boundsFor(index, c);
     const buffer = await ensureDecodedBuffer();
     const gridAlignment = c.gridTrusted ? 1 : 0.2;
@@ -1014,12 +1058,16 @@ export function SectionalLooperWorkspace({
     const result = scoreLoopSeamlessness(evidence, end - start, track.beatMap?.tempoStable ?? c.gridTrusted);
 
     const now = new Date().toISOString();
+    const isSuno = activeSunoSource && isSunoLooperSourceTrackId(track.trackId);
     const loop: LoopAsset = {
       id: genLoopId(),
       // 0715E §12/§18 — derivedKind, not parentTrackId presence, decides stem-ness.
       sourceKind: isStemTrack(track) ? "stem" : "track",
-      sourceTrackId: track.trackId,
+      sourceTrackId: isSuno ? undefined : track.trackId,
       sourceStemId: isStemTrack(track) ? track.trackId : undefined,
+      sourceRecording: isSuno
+        ? buildSourceRecordingForSuno(activeSunoSource.canonicalRecordingId, activeSunoSource.assetId)
+        : (buildSourceRecordingForTrack(track) ?? undefined),
       title: buildLoopFileName({
         artist: track.artist, trackTitle: track.title, sectionLabel: c.sectionLabel,
         barCount: c.barCount, bpm: c.bpm ?? track.bpm,
@@ -1047,6 +1095,8 @@ export function SectionalLooperWorkspace({
       confidence: result.confidence,
       status: "approved",
       warnings: result.warnings,
+      tags: [],
+      purposeMemberships: [],
       createdAt: now,
       updatedAt: now,
     };
@@ -1301,7 +1351,7 @@ export function SectionalLooperWorkspace({
       // §5, §7 live feedback: subdivision snapping is cheap (grid-only) and
       // applied live; zero-crossing's windowed sample scan is NOT run per
       // move (audio=null here) — only at commit, in onUp below.
-      const snappedFrame = applySnapWithAudio(rawFrame, effectiveSnapMode, activeGrid, null, subdivisionDivision);
+      const snappedFrame = applySnapWithAudio(rawFrame, effectiveSnapMode, snapGrid, null, subdivisionDivision);
       // 0717C_MUSIC_Complete_Song_Intelligence_and_Section_Map — section
       // boundary drag. Returns early so this never falls into the
       // timelineSelection fallback branch below (mode isn't a valid
@@ -1324,7 +1374,7 @@ export function SectionalLooperWorkspace({
       }
       if (mode === "new") {
         if (!dragMovedRef.current) return; // still just a click candidate — no visual change yet
-        const snappedStart = applySnapWithAudio(dragStartFrameRef.current, effectiveSnapMode, activeGrid, null, subdivisionDivision);
+        const snappedStart = applySnapWithAudio(dragStartFrameRef.current, effectiveSnapMode, snapGrid, null, subdivisionDivision);
         const next = createSelection(track.trackId, snappedStart, snappedFrame, sourceFrames, sampleRate, "drag", effectiveSnapMode, null);
         if (next) setTimelineSelection(next); // live visual feedback only; committed in onUp
       } else if (mode === "move") {
@@ -1338,7 +1388,7 @@ export function SectionalLooperWorkspace({
         // silently blocked partway through a 3:40 track once the drag
         // crossed that detected (and here, over-conservative) boundary.
         // Detected bounds are display/trim metadata, not a movement limit.
-        const next = moveSelection(timelineSelection, delta, sourceFrames, sampleRate, effectiveSnapMode, activeGrid);
+        const next = moveSelection(timelineSelection, delta, sourceFrames, sampleRate, effectiveSnapMode, snapGrid);
         if (next) setTimelineSelection(next); // live visual feedback only; committed in onUp
       } else if (timelineSelection) {
         const next = moveSelectionBoundary(timelineSelection, mode, snappedFrame, sourceFrames, sampleRate, effectiveSnapMode, null);
@@ -1381,7 +1431,7 @@ export function SectionalLooperWorkspace({
           const section = analysis?.sections.find((s) => s.id === sel.sectionId);
           if (analysis && section) {
             const resolved = resolveActiveSongSection(section, analysis.sectionRevisions);
-            const releaseFrame = applySnapWithAudio(frameFromClientX(e.clientX), effectiveSnapMode, activeGrid, null, subdivisionDivision);
+            const releaseFrame = applySnapWithAudio(frameFromClientX(e.clientX), effectiveSnapMode, snapGrid, null, subdivisionDivision);
             const nextStart = sel.edge === "start" ? releaseFrame : resolved.startFrame;
             const nextEnd = sel.edge === "end" ? releaseFrame : resolved.endFrame;
             if (nextEnd > nextStart) {
@@ -1489,7 +1539,7 @@ export function SectionalLooperWorkspace({
       const sourceFrames = Math.round(trackDurationSeconds * sampleRate);
       const audio = audioBufferRef.current && (effectiveSnapMode === "zero_crossing")
         ? { channelData: channelDataFor(audioBufferRef.current), sampleRate } : null;
-      const settledFrame = applySnapWithAudio(rawNextFrame, effectiveSnapMode, activeGrid, audio, subdivisionDivision);
+      const settledFrame = applySnapWithAudio(rawNextFrame, effectiveSnapMode, snapGrid, audio, subdivisionDivision);
       const next = moveSelectionBoundary(timelineSelection, which, settledFrame, sourceFrames, sampleRate, "off", null);
       if (!next) { setSelectionApproveError("That boundary would invert the selection."); return; }
       if (effectiveSnapMode === "zero_crossing" && audio) {
@@ -1540,8 +1590,17 @@ export function SectionalLooperWorkspace({
   // numeric sources all approve through this same path).
   async function approveSelection(): Promise<string | undefined> {
     if (!track || !timelineSelection) return undefined;
+    // 0828 §Step 7 correction — a Song Library source with no usable bar
+    // grid (activeGrid null) must never fall back to a manual/time-only
+    // save the way Track sources' existing manual_only mode allows; the
+    // save is refused outright rather than silently persisting an
+    // arbitrary time slice with fabricated-looking provenance.
+    if (activeSunoSource && isSunoLooperSourceTrackId(track.trackId) && !activeGrid) {
+      setSelectionApproveError("Grid unavailable for this Song Library recording — Analyze/Reanalyze it to enable loop creation. Time-only saves aren't offered for Song Library sources.");
+      return undefined;
+    }
     const buffer = await ensureDecodedBuffer();
-    const loop = buildLoopAssetFromCurrentSelection(track, timelineSelection, segments, activeGrid, buffer);
+    const loop = buildLoopAssetFromCurrentSelection(track, timelineSelection, segments, activeGrid, buffer, activeSunoSource);
     onSaveLoop(loop);
     // §14 — "approve" is deliberately NOT pushed onto the undo stack (see
     // commitSelectionChange's doc comment / the completion plan's
@@ -2062,6 +2121,7 @@ export function SectionalLooperWorkspace({
         sourceKind: "stem",
         sourceTrackId: stem.trackId,
         sourceStemId: stem.trackId,
+        sourceRecording: buildSourceRecordingForTrack(track) ?? undefined,
         title: `${roleLabel} Loop`,
         sourceTitle: stem.title,
         sourceArtist: stem.artist,
@@ -2078,6 +2138,8 @@ export function SectionalLooperWorkspace({
         sectionLabel: "Stem Loop",
         status: "approved",
         warnings: [],
+        tags: [],
+        purposeMemberships: [],
         createdAt: now, updatedAt: now,
       };
       onSaveLoop(loop);
@@ -2299,6 +2361,7 @@ export function SectionalLooperWorkspace({
           <span>{track.artist}</span>
           <span>{fmtTime(trackDurationSeconds)}</span>
           {track.bpm && <span>{track.bpm.toFixed(2)} BPM</span>}
+          {activeGrid && <span>{activeGrid.meterNumerator}/{activeGrid.meterDenominator}</span>}
           {track.camelotKey && <span>{track.camelotKey}</span>}
           <span className={track.beatMap ? "looper-trust-ok" : "looper-trust-low"}>
             Beat grid: {track.beatMap ? `${Math.round((track.beatMap.confidence ?? 0) * 100)}%` : "none"}
@@ -2321,6 +2384,25 @@ export function SectionalLooperWorkspace({
         <button onClick={() => zoomBy(2)} disabled={!viewWindow} title="Zoom Out">－</button>
         {viewWindow && <span className="looper-zoom-hint">scroll to pan</span>}
       </div>
+
+      {/* 0828_MUSIC_Looper_Loop_Library_Tagging — Snap promoted out of the
+          collapsed Advanced Candidates disclosure into the always-visible
+          primary row: "hear it -> find the boundary -> snap it -> save it"
+          needs the snap granularity choosable BEFORE a selection is made,
+          unlike the diagnostic-only controls that correctly stay in
+          Advanced (grid-phase nudge, zoom, backdrop). Same component,
+          same state, relocated — not duplicated. */}
+      <SnapModeToolbar
+        snapMode={snapMode}
+        onSnapModeChange={setSnapMode}
+        subdivisionDivision={subdivisionDivision}
+        onSubdivisionDivisionChange={setSubdivisionDivision}
+        zeroCrossingEnabled={zeroCrossingEnabled}
+        onZeroCrossingEnabledChange={setZeroCrossingEnabled}
+        zeroCrossingFeedback={zeroCrossingFeedback}
+        barMultiple={barMultiple}
+        onBarMultipleChange={setBarMultiple}
+      />
 
       {/* Ableton-legible ruler pass — docked directly above the waveform
           stack, sharing the exact same live viewStartSeconds/viewEndSeconds
@@ -2536,7 +2618,8 @@ export function SectionalLooperWorkspace({
         >
           <DurationDisplay
             durationSeconds={timelineSelection.durationSeconds}
-            bars={activeGrid?.bpm ? timelineSelection.durationSeconds / (60 / activeGrid.bpm * activeGrid.meterNumerator) : undefined}
+            bars={activeGrid?.bpm ? computeLoopBars(timelineSelection.durationSeconds, activeGrid.bpm, activeGrid.meterNumerator) : undefined}
+            bpm={activeGrid?.bpm}
           />
           {selectionApproveError && <div className="looper-preview-error" role="alert">{selectionApproveError}</div>}
           {stemImportError && <div className="looper-preview-error" role="alert">{stemImportError}</div>}
@@ -2632,7 +2715,12 @@ export function SectionalLooperWorkspace({
           <div className="looper-selection-inspector" role="region" aria-label="Selection detail">
             <div className="looper-selection-summary" aria-live="polite">
               Selected range: {timelineSelection.startSeconds.toFixed(3)} to {timelineSelection.endSeconds.toFixed(3)} seconds
-              {activeGrid?.bpm ? `, ${(timelineSelection.durationSeconds / (60 / activeGrid.bpm * 4)).toFixed(2)} bars` : ""}
+              {activeGrid?.bpm ? `, ${computeLoopBars(timelineSelection.durationSeconds, activeGrid.bpm, activeGrid.meterNumerator).toFixed(2)} bars` : ""}
+              {(() => {
+                const start = frameToBarBeat(timelineSelection.startFrame, activeGrid);
+                const end = frameToBarBeat(timelineSelection.endFrame, activeGrid);
+                return start && end ? ` (bar ${start.bar}.${start.beat} → bar ${end.bar}.${end.beat})` : "";
+              })()}
               , {timelineSelection.snapMode} grid · Source: {timelineSelection.source}
             </div>
             <div className="looper-selection-fields">
@@ -2794,15 +2882,6 @@ export function SectionalLooperWorkspace({
             table's own internals/approve/reject/preview logic or to the
             developer-debug-only full card wall nested inside it. */}
         <AdvancedCandidatesPanel count={candidates.length}>
-        <SnapModeToolbar
-          snapMode={snapMode}
-          onSnapModeChange={setSnapMode}
-          subdivisionDivision={subdivisionDivision}
-          onSubdivisionDivisionChange={setSubdivisionDivision}
-          zeroCrossingEnabled={zeroCrossingEnabled}
-          onZeroCrossingEnabledChange={setZeroCrossingEnabled}
-          zeroCrossingFeedback={zeroCrossingFeedback}
-        />
         {structuralSections.length > 0 && (
           <p className="looper-structure-summary" aria-live="polite">
             {structuralSections.map((s) => `${s.displayLabel}: bars — ${fmtTime(s.startFrame / sampleRate)}–${fmtTime(s.endFrame / sampleRate)}${s.confidence === "provisional" ? ", provisional" : ""}`).join(" · ")}

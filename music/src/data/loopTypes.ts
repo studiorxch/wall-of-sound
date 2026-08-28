@@ -56,12 +56,90 @@ export type LoopLength =
 // §4 — which evidence tier a candidate's boundaries came from.
 export type LoopCandidateGenerationMode = "trusted_grid" | "provisional_grid" | "time_fallback" | "manual_only";
 
+// 0828_MUSIC_Looper_Loop_Library_Tagging — generalized, source-library-qualified
+// Recording reference. Introduced because a loop can now originate from either
+// a Track (catalog/external/sounds — its own trackId space) or a Song Library
+// recording (a completely separate canonicalRecordingId space) — an unqualified
+// id alone is ambiguous. This is the sole provenance authority for a loop's
+// origin; the legacy sourceTrackId/sourceKind/sourceStemId fields below remain
+// for Track-backed loops (unchanged, never rewritten) but are never populated
+// for a Song Library loop — see sourceTrackId's own doc comment.
+export type LoopSourceLibrary = "catalog" | "external" | "sounds" | "song_library";
+
+export interface LoopSourceRecording {
+  sourceLibrary: LoopSourceLibrary;
+  // Track.trackId for catalog/external/sounds; SunoCanonicalRecordingId
+  // (format "asset:<archiveAssetId>" / "alt-uuid-<uuid>" / "dup-sha-<hash>")
+  // for song_library.
+  recordingId: string;
+  // Reserved, not populated for catalog/external/sounds this pass. For
+  // song_library, the pinned SunoArchiveAssetId — canonicalRecordingId is
+  // deterministic per-snapshot but not guaranteed durable across re-syncs
+  // (a later duplicate-relationship discovery can reassign it); one
+  // archiveAssetId always maps to exactly one canonical recording even if
+  // the canonical grouping itself drifts, so this gives a future
+  // reconciliation pass a stable anchor to re-resolve recordingId from.
+  assetId?: string;
+}
+
+// Recording-to-Recording provenance (e.g. Suno's own "cover of"/"derived
+// from" relationships). Schema-only this pass — no construction path
+// populates it, and no editor UI is built for it; reserved so a later
+// increment can populate it without another LoopAsset shape change.
+export type LoopLineageRelation =
+  | "derived_from" | "cover_of" | "extended_from" | "remix_of" | "sampled_from" | "looped_from";
+
+export interface LoopLineage {
+  relation: LoopLineageRelation;
+  // Qualified for the same reason sourceRecording is — multiple Recording
+  // ID spaces exist, so a bare parent id would be ambiguous.
+  parentRecording: LoopSourceRecording;
+  provider?: string;
+  providerRelation?: string;
+}
+
+// 0828 §Phase D — additive, non-exclusive purpose membership. A loop may
+// belong to zero, one, or several purposes simultaneously; toggling is a
+// plain array include/exclude via the existing onUpdateLoop(id, patch)
+// handler — no new persistence path, no duplicated loop records.
+export type LoopPurpose = "production" | "machine_life" | "subway";
+
+// 0828 §Phase E — deliberately separate from general Loop tags (below) and
+// from the unrelated, recordingId-keyed MachineLifeRecordingReview
+// (machineLifeTypes.ts, which annotates immutable Pre-Life procedural
+// recordings, not loops) — zero field-name overlap with either, by design.
+export interface LoopMachineLifeAnnotation {
+  trainingEligible?: boolean;
+  learningPurpose?: string[];
+  materialRole?: string[];
+  behaviorTags?: string[];
+  trainingNotes?: string;
+  reviewStatus?: "unreviewed" | "reviewed" | "rejected";
+}
+
 export interface LoopAsset {
   id: string;
 
   sourceKind: LoopSourceKind;
-  sourceTrackId: string;
+  // 0828 — OPTIONAL. Every existing Track-backed (catalog/external/sounds)
+  // loop populates this exactly as before, unchanged. A Song Library loop
+  // never persists a value here — its provenance lives solely in
+  // sourceRecording below. The session-only synthetic adapter trackId
+  // (sunoloop_<canonicalRecordingId>, see logic/loops/sunoLooperSource.ts)
+  // that the active Looper session uses internally is never written here;
+  // it exists only on the ephemeral, never-persisted adapter Track object.
+  sourceTrackId?: string;
   sourceStemId?: string;
+
+  // 0828 — OPTIONAL: every newly-created loop always populates this via its
+  // real construction call site; a migrated legacy loop that can't be
+  // confidently resolved to a known source library is left unset (with
+  // needsReview: true) rather than guessed. This is the sole provenance
+  // authority once present — every display/navigation/reconciliation
+  // surface reads this, never sourceTrackId, for a Song Library loop.
+  sourceRecording?: LoopSourceRecording;
+  // Reserved this pass — see LoopLineage's own doc comment.
+  lineage?: LoopLineage;
 
   title: string;
   sourceTitle: string;
@@ -110,6 +188,14 @@ export interface LoopAsset {
   needsReview?: boolean;
 
   notes?: string;
+
+  // 0828 §Phase D/E — required, always-initialized (matches the existing
+  // `warnings` convention below) — never undefined, migrated on load.
+  tags: string[];
+  purposeMemberships: LoopPurpose[];
+  // Additive, distinctly separate from `tags` above — see
+  // LoopMachineLifeAnnotation's own doc comment.
+  machineLifeAnnotation?: LoopMachineLifeAnnotation;
 
   createdAt: string;
   updatedAt: string;
@@ -217,7 +303,7 @@ export interface MixerLoopDescriptor {
 export function toMixerLoopDescriptor(loop: LoopAsset, gridTrusted: boolean): MixerLoopDescriptor {
   return {
     loopId: loop.id,
-    sourceTrackId: loop.sourceTrackId,
+    sourceTrackId: loop.sourceTrackId ?? "",
     filePath: loop.loopFilePath,
     startSeconds: loop.startSeconds,
     endSeconds: loop.endSeconds,

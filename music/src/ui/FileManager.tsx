@@ -5,11 +5,11 @@ import type { Track, TrackSourceOwner } from "../data/trackTypes";
 import type { MusicSourcePool } from "../data/sourcePoolTypes";
 import { type TrackDragPayload } from "../logic/playlistMembership";
 
-// "loop_library" is retired from the sidebar and never set by any nav
-// row — kept only so App.tsx can recognize and redirect a stray reference
-// to Sounds with the Loops filter selected, rather than the value being an
-// unrecognized string.
-export type ViewMode = "playlist" | "library" | "groups" | "orphans" | "excluded" | "locks" | "playlists_grid" | "sampler_banks_grid" | "crates_grid" | "crate_detail" | "artists" | "mood_signal_audit" | "analyzer_review" | "loop_library" | "sectional_looper" | "glyph_audio" | "edit" | "perform" | "radio" | "radio_playlists_grid" | "radio_banks_grid" | "collections_overview" | "radio_loopchain_player" | "machine_life_research" | "suno_library";
+// 0828_MUSIC_Looper_Loop_Library_Tagging — "loop_library" was retired
+// between 0722 and this build (redirected on sight, no real nav row). This
+// build reactivates it as a real destination: the canonical, multi-source
+// Loop Library, with a real "Loop Library" row under Collections below.
+export type ViewMode = "playlist" | "library" | "library_dashboard" | "groups" | "orphans" | "excluded" | "locks" | "playlists_grid" | "sampler_banks_grid" | "crates_grid" | "crate_detail" | "artists" | "mood_signal_audit" | "analyzer_review" | "loop_library" | "sectional_looper" | "glyph_audio" | "edit" | "perform" | "radio" | "radio_playlists_grid" | "radio_banks_grid" | "collections_overview" | "radio_loopchain_player" | "machine_life_research" | "suno_library";
 
 type Props = {
   playlists: PlaylistRecord[];
@@ -34,7 +34,17 @@ type Props = {
   onCreateSamplerBank?: () => void;
   crateCount?: number;
   onViewCrates?: () => void;
+  // 0828_MUSIC_Looper_Loop_Library_Tagging
+  loopCount?: number;
   artistCount?: number;
+  // Suno Library Parity Repair — real, already-loaded count (
+  // sunoLibraryImportPointer.canonicalRecordingCount), never re-derived
+  // from a manifest parse here. Undefined (blank, not a fabricated 0)
+  // until Suno has been imported at least once this or a prior session.
+  sunoRecordingCount?: number;
+  // 0827_MUSIC_Library_Workspace_Track_Inspector_Rearchitecture §6 — sidebar
+  // click always opens Song Library's Recordings, never its dashboard.
+  onOpenSongLibraryRecordings?: () => void;
   // 0718A_MUSIC_RADIO_Clean_Board_and_Explicit_Send_Flows §9 — RADIO is
   // nested BENEATH Collections (Crates/Playlists/Banks/RADIO → Playlists/
   // Banks), never a sibling top-level section. These are RADIO-local
@@ -74,7 +84,7 @@ export function FileManager({
   viewMode, sourceOwnerFilter, onSelectPlaylist: _onSelectPlaylist, onViewModeChange, onSourceOwnerFilterChange,
   onCreatePlaylist: _onCreatePlaylist, onDuplicatePlaylist, onDeletePlaylist, onDropTracksOnPlaylist: _onDropTracksOnPlaylist,
   onPlayOnDeckA, onPlayOnDeckB, onCreateSamplerBank: _onCreateSamplerBank,
-  crateCount = 0, onViewCrates, artistCount = 0,
+  crateCount = 0, onViewCrates, loopCount = 0, artistCount = 0, sunoRecordingCount, onOpenSongLibraryRecordings,
   radioPlaylistCount = 0, radioBankCount = 0,
 }: Props) {
   const [collapsed, setCollapsed] = useState(false);
@@ -113,40 +123,49 @@ export function FileManager({
               icon="library_music"
               label="Catalog"
               count={sourceCounts.studiorich}
-              active={viewMode === "library" && sourceOwnerFilter === "studiorich"}
+              active={(viewMode === "library" || viewMode === "library_dashboard") && sourceOwnerFilter === "studiorich"}
               onClick={() => { onViewModeChange("library"); onSourceOwnerFilterChange?.("studiorich"); }}
+            />
+            {/* 0827_MUSIC_Library_Workspace_Track_Inspector_Rearchitecture
+                Part A — Song Library sits directly beneath Catalog so the
+                two primary StudioRich/generation music pools stay visually
+                adjacent; internal viewMode/state keys ("suno_library",
+                sunoLibraryImportPointer, etc.) are unchanged — this is a
+                user-facing rename/reorder only. Sidebar click always opens
+                Recordings (nav.level "all"), never the dashboard — see
+                onOpenSongLibraryRecordings. */}
+            <NavRow
+              icon="graphic_eq"
+              label="Song Library"
+              count={sunoRecordingCount}
+              active={viewMode === "suno_library"}
+              onClick={onOpenSongLibraryRecordings ? onOpenSongLibraryRecordings : () => onViewModeChange("suno_library")}
             />
             <NavRow
               icon="public"
               label="External"
               count={sourceCounts.external}
-              active={viewMode === "library" && sourceOwnerFilter === "external"}
+              active={(viewMode === "library" || viewMode === "library_dashboard") && sourceOwnerFilter === "external" || viewMode === "artists"}
               onClick={() => { onViewModeChange("library"); onSourceOwnerFilterChange?.("external"); }}
+            />
+            {/* Part D §13 — Artists is subordinate to External (navigation
+                consolidation only; ArtistLibraryPanel/ArtistProfile are
+                already External-scoped in practice, so no data-model
+                change is needed here). */}
+            <NavRow
+              icon="artist"
+              label="Artists"
+              count={artistCount}
+              nested
+              active={viewMode === "artists"}
+              onClick={() => onViewModeChange("artists")}
             />
             <NavRow
               icon="graphic_eq"
               label="Sounds"
               count={sourceCounts.reference}
-              active={viewMode === "library" && sourceOwnerFilter === "reference"}
+              active={(viewMode === "library" || viewMode === "library_dashboard") && sourceOwnerFilter === "reference"}
               onClick={() => { onViewModeChange("library"); onSourceOwnerFilterChange?.("reference"); }}
-            />
-            <NavRow
-              icon="artist"
-              label="Artists"
-              count={artistCount}
-              active={viewMode === "artists"}
-              onClick={() => onViewModeChange("artists")}
-            />
-            {/* 0812_MUSIC_Suno-Library-Manifest-Integration_v1.0.0 — spec
-                explicitly places Suno under Libraries, not AudioLab (a
-                deliberate divergence from Machine Life's own placement
-                below, which is architecturally the closer precedent but
-                was not the spec's instruction here). */}
-            <NavRow
-              icon="graphic_eq"
-              label="Suno"
-              active={viewMode === "suno_library"}
-              onClick={() => onViewModeChange("suno_library")}
             />
           </div>
 
@@ -212,6 +231,13 @@ export function FileManager({
               count={bankCount}
               active={viewMode === "sampler_banks_grid"}
               onClick={() => onViewModeChange("sampler_banks_grid")}
+            />
+            <NavRow
+              icon="repeat"
+              label="Loop Library"
+              count={loopCount}
+              active={viewMode === "loop_library"}
+              onClick={() => onViewModeChange("loop_library")}
             />
           </div>
 
