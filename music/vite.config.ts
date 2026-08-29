@@ -980,6 +980,32 @@ export default defineConfig({
           }).catch(() => radioJson(res, 400, { ok: false, error: 'invalid_json_body' }))
         })
 
+        server.middlewares.use('/voice-generation/preview', (req: IncomingMessage, res: ServerResponse) => {
+          if (req.method !== 'POST') { radioJson(res, 405, { ok: false, error: 'method_not_allowed' }); return }
+          readJsonBody(req).then(async (rawBody) => {
+            const body = rawBody as VoiceGenerationBody
+            const providerId = String(body?.providerId ?? '')
+            const providerVoiceId = body?.providerVoiceId == null ? null : String(body.providerVoiceId)
+            if (providerId !== 'macos-say') {
+              radioJson(res, 400, { ok: false, error: 'unsupported_provider' })
+              return
+            }
+            try {
+              const descriptor = getMacOsSayProviderDescriptor()
+              const generated = await generateMacOsSpeech(descriptor.previewText ?? 'StudioRich VOICE library.', providerVoiceId)
+              res.statusCode = 200
+              res.setHeader('Content-Type', generated.mimeType)
+              res.setHeader('Content-Length', generated.data.length)
+              res.setHeader('X-Voice-Provider', providerId)
+              res.setHeader('X-Voice-Provider-Voice', generated.providerVoiceId ?? '')
+              res.setHeader('X-Voice-Model', generated.model ?? '')
+              res.end(generated.data)
+            } catch (error) {
+              radioJson(res, 500, { ok: false, error: error instanceof Error ? error.message : String(error) })
+            }
+          }).catch((error) => radioJson(res, 400, { ok: false, error: String(error) }))
+        })
+
         server.middlewares.use('/voice-asset-reveal', (req: IncomingMessage, res: ServerResponse) => {
           if (req.method !== 'POST') { radioJson(res, 405, { ok: false, error: 'method_not_allowed' }); return }
           readJsonBody(req).then(async (rawBody) => {

@@ -127,12 +127,15 @@ export interface SpeechProviderDescriptor {
   displayName: string;
   available: boolean;
   reasonUnavailable?: string | null;
+  previewText?: string | null;
 }
 
 export interface SpeechProviderVoiceOption {
   id: string;
   label: string;
   language: string | null;
+  description?: string | null;
+  sampleText?: string | null;
 }
 
 export interface GeneratedSpeechResult extends Omit<GeneratedSpeech, "audioData"> {

@@ -6,6 +6,7 @@ import type { SpeechProviderDescriptor, SpeechProviderVoiceOption } from "../../
 
 const SAY_BINARY = "/usr/bin/say";
 const PROVIDER_ID = "macos-say";
+export const MACOS_SAY_PREVIEW_TEXT = "StudioRich VOICE library. Your next sound begins here.";
 
 function execFileAsync(file: string, args: string[]): Promise<{ stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
@@ -29,6 +30,7 @@ export function getMacOsSayProviderDescriptor(): SpeechProviderDescriptor {
     displayName: "macOS Say",
     available: isAvailable(),
     reasonUnavailable: isAvailable() ? null : "Built-in speech is available only on macOS.",
+    previewText: MACOS_SAY_PREVIEW_TEXT,
   };
 }
 
@@ -37,12 +39,14 @@ export async function listMacOsSayVoices(): Promise<SpeechProviderVoiceOption[]>
   const { stdout } = await execFileAsync(SAY_BINARY, ["-v", "?"]);
   const voices: SpeechProviderVoiceOption[] = [];
   for (const rawLine of stdout.split("\n")) {
-    const match = rawLine.trim().match(/^(.+?)\s{2,}([a-z]{2}_[A-Z]{2})\s+#/);
+    const match = rawLine.trim().match(/^(.+?)\s{2,}([a-z]{2}_[A-Z]{2})\s+#\s*(.*)$/);
     if (!match) continue;
     voices.push({
       id: match[1],
       label: match[1],
       language: match[2],
+      description: match[3] || null,
+      sampleText: match[3] || null,
     });
   }
   return voices;

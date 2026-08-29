@@ -4,6 +4,7 @@ import {
   buildGeneratedVoiceAsset,
   fetchSpeechProviders,
   fetchSpeechProviderVoices,
+  generateProviderVoicePreview,
   generateSpeechPreview,
   saveGeneratedVoiceAudio,
 } from "./voiceGenerationService";
@@ -91,6 +92,26 @@ describe("voiceGenerationService", () => {
     expect(result.model).toBe("macos-say");
     expect(result.mimeType).toBe("audio/wav");
     expect(result.audioData).toBeInstanceOf(Blob);
+  });
+
+  it("auditions a provider voice without creating or saving a library asset", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(new Blob(["audio-bytes"], { type: "audio/wav" }), {
+      status: 200,
+      headers: {
+        "Content-Type": "audio/wav",
+        "X-Voice-Provider": "macos-say",
+        "X-Voice-Provider-Voice": "Samantha",
+        "X-Voice-Model": "macos-say",
+      },
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(generateProviderVoicePreview("macos-say", "Samantha")).resolves.toMatchObject({
+      provider: "macos-say",
+      providerVoiceId: "Samantha",
+      model: "macos-say",
+    });
+    expect(fetchMock).toHaveBeenCalledWith("/voice-generation/preview", expect.objectContaining({ method: "POST" }));
   });
 
   it("surfaces provider failures without fabricating a preview", async () => {

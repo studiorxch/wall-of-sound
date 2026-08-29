@@ -54,6 +54,28 @@ export async function generateSpeechPreview(
   };
 }
 
+export async function generateProviderVoicePreview(
+  providerId: string,
+  providerVoiceId: string,
+): Promise<GeneratedSpeechResult> {
+  const response = await fetch("/voice-generation/preview", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ providerId, providerVoiceId }),
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+    throw new Error(payload.error ?? `HTTP ${response.status}`);
+  }
+  return {
+    audioData: await response.blob(),
+    mimeType: response.headers.get("Content-Type") ?? "audio/wav",
+    provider: response.headers.get("X-Voice-Provider") ?? providerId,
+    providerVoiceId: response.headers.get("X-Voice-Provider-Voice") ?? providerVoiceId,
+    model: response.headers.get("X-Voice-Model"),
+  };
+}
+
 export async function saveGeneratedVoiceAudio(
   audio: Blob,
   fileName: string,

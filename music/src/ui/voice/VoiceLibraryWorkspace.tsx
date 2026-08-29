@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import type { PlaybackStatus } from "../../data/playbackTypes";
 import type {
   SpeechProviderDescriptor,
@@ -18,6 +19,7 @@ import {
   buildGeneratedVoiceAsset,
   fetchSpeechProviderVoices,
   fetchSpeechProviders,
+  generateProviderVoicePreview,
   generateSpeechPreview,
   saveGeneratedVoiceAudio,
 } from "../../logic/voice/voiceGenerationService";
@@ -34,6 +36,8 @@ import {
   filterVoiceAssets,
   applyVoiceSort,
 } from "../../logic/voice/voiceLibraryView";
+import { isVoiceTextEditingTarget } from "../../logic/voice/voiceKeyboard";
+import { positionVoicePopover } from "../../logic/voice/voicePopoverPosition";
 import {
   clearLibrarySelection,
   emptyLibrarySelectionState,
@@ -235,11 +239,101 @@ function GroupEditorDialog({ groups, onSave, onClose }: GroupEditorProps) {
 interface ProfileEditorProps {
   profiles: VoiceProfile[];
   providerVoices: SpeechProviderVoiceOption[];
+  providerAdapterId: string;
   onSave: (next: VoiceProfile[]) => void;
+  onCreated: (profile: VoiceProfile) => void;
   onClose: () => void;
 }
 
-function ProfileEditorDialog({ profiles, providerVoices, onSave, onClose }: ProfileEditorProps) {
+const PROVIDER_PREVIEW_FALLBACK = "StudioRich VOICE library. Your next sound begins here.";
+
+function ProviderVoiceBrowser({ providerVoices, providerId, selectedVoiceId, onSelect }: {
+  providerVoices: SpeechProviderVoiceOption[];
+  providerId: string;
+  selectedVoiceId: string;
+  onSelect: (voice: SpeechProviderVoiceOption) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [previewingId, setPreviewingId] = useState<string | null>(null);
+  const filteredVoices = useMemo(() => {
+    const normalized = query.trim().toLowerCase();
+    return providerVoices.filter((voice) => !normalized || `${voice.label} ${voice.language ?? ""}`.toLowerCase().includes(normalized));
+  }, [providerVoices, query]);
+  const languageGroups = useMemo(() => {
+    const grouped = new Map<string, SpeechProviderVoiceOption[]>();
+    for (const voice of filteredVoices) {
+      const key = voice.language ?? "Other";
+      grouped.set(key, [...(grouped.get(key) ?? []), voice]);
+    }
+    return [...grouped.entries()].sort(([left], [right]) => left.localeCompare(right));
+  }, [filteredVoices]);
+
+  useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
+
+  async function previewVoice(voice: SpeechProviderVoiceOption) {
+    setPreviewingId(voice.id);
+    setPreviewError(null);
+    try {
+      const preview = await generateProviderVoicePreview(providerId, voice.id);
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      setPreviewUrl(URL.createObjectURL(preview.audioData));
+    } catch (error) {
+      setPreviewError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setPreviewingId(null);
+    }
+  }
+
+  return (
+    <div className="voice-provider-browser">
+      <label>Provider Voice
+        <input
+          aria-label="Search provider voices"
+          value={query}
+          placeholder="Search name or locale"
+          onChange={(event) => { setQuery(event.target.value); setActiveIndex(0); }}
+          onKeyDown={(event) => {
+            if (event.key === "ArrowDown") { event.preventDefault(); setActiveIndex((index) => Math.min(index + 1, Math.max(0, filteredVoices.length - 1))); }
+            if (event.key === "ArrowUp") { event.preventDefault(); setActiveIndex((index) => Math.max(index - 1, 0)); }
+            if (event.key === "Enter" && filteredVoices[activeIndex]) { event.preventDefault(); onSelect(filteredVoices[activeIndex]); }
+          }}
+        />
+      </label>
+      <div className="voice-provider-browser__list" role="listbox" aria-label="Provider voices">
+        {languageGroups.map(([language, voices]) => (
+          <div key={language} className="voice-provider-browser__group">
+            <div className="voice-provider-browser__locale">{language}</div>
+            {voices.map((voice) => {
+              const index = filteredVoices.indexOf(voice);
+              const selected = voice.id === selectedVoiceId;
+              return (
+                <div key={voice.id} className={`voice-provider-browser__row${selected ? " selected" : ""}${index === activeIndex ? " active" : ""}`} role="option" aria-selected={selected}>
+                  <button type="button" className="voice-provider-browser__select" onClick={() => onSelect(voice)}>
+                    <strong>{voice.label}</strong>
+                    <span>{voice.language ?? "Locale unavailable"}</span>
+                    {voice.description && <small>{voice.description}</small>}
+                  </button>
+                  <button type="button" className="tb-btn sm" onClick={() => { void previewVoice(voice); }} disabled={previewingId === voice.id}>
+                    {previewingId === voice.id ? "Previewing..." : "Preview"}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        ))}
+        {filteredVoices.length === 0 && <div className="voice-provider-browser__empty">No provider voices match this search.</div>}
+      </div>
+      {previewUrl && <audio className="voice-provider-browser__audio" controls autoPlay src={previewUrl} />}
+      {previewError && <div className="voice-error">{previewError}</div>}
+      <div className="voice-provider-browser__hint">Preview phrase: {PROVIDER_PREVIEW_FALLBACK}</div>
+    </div>
+  );
+}
+
+function ProfileEditorDialog({ profiles, providerVoices, providerAdapterId, onSave, onCreated, onClose }: ProfileEditorProps) {
   const [mode, setMode] = useState<EditorMode>("create");
   const [selectedId, setSelectedId] = useState<string>(profiles[0]?.id ?? "");
   const [name, setName] = useState("");
@@ -284,17 +378,10 @@ function ProfileEditorDialog({ profiles, providerVoices, onSave, onClose }: Prof
   function saveProfile() {
     if (!name.trim()) return;
     if (mode === "create") {
-      onSave([...profiles, createVoiceProfile(buildProfile())]);
-      setName("");
-      setColorToken(VOICE_COLOR_TOKENS[0]);
-      setIdentity("");
-      setCustomIdentityLabel("");
-      setPresentation("");
-      setLanguage("");
-      setProviderId("");
-      setProviderVoiceId("");
-      setModel("");
-      setNotes("");
+      const created = createVoiceProfile(buildProfile());
+      onSave([...profiles, created]);
+      onCreated(created);
+      onClose();
       return;
     }
     onSave(
@@ -371,12 +458,14 @@ function ProfileEditorDialog({ profiles, providerVoices, onSave, onClose }: Prof
           <label>Provider
             <input value={providerId} onChange={(event) => setProviderId(event.target.value)} placeholder="Optional provider id" />
           </label>
-          <label>Provider Voice
-            <select value={providerVoiceId} onChange={(event) => setProviderVoiceId(event.target.value)}>
-              <option value="">Profile name</option>
-              {providerVoices.map((voice) => <option key={voice.id} value={voice.id}>{voice.label}{voice.language ? ` (${voice.language})` : ""}</option>)}
-            </select>
-          </label>
+          <div className="voice-form-grid__full">
+            <ProviderVoiceBrowser
+              providerVoices={providerVoices}
+              providerId={providerAdapterId}
+              selectedVoiceId={providerVoiceId}
+              onSelect={(voice) => { setProviderVoiceId(voice.id); setProviderId(providerAdapterId); setLanguage((current) => current || voice.language || ""); }}
+            />
+          </div>
           <label>Model
             <input value={model} onChange={(event) => setModel(event.target.value)} placeholder="macos-say" />
           </label>
@@ -496,6 +585,7 @@ export function VoiceLibraryWorkspace({
   const [workspaceNotice, setWorkspaceNotice] = useState<string | null>(null);
   const [deleteTargetIds, setDeleteTargetIds] = useState<string[] | null>(null);
   const [openFilterMenu, setOpenFilterMenu] = useState<"group" | "voice" | null>(null);
+  const [filterPopoverPosition, setFilterPopoverPosition] = useState<{ left: number; top: number; maxHeight: number } | null>(null);
   const [providers, setProviders] = useState<SpeechProviderDescriptor[]>([]);
   const [providerVoices, setProviderVoices] = useState<SpeechProviderVoiceOption[]>([]);
   const [providersError, setProvidersError] = useState<string | null>(null);
@@ -548,6 +638,15 @@ export function VoiceLibraryWorkspace({
       .catch(() => setProviderVoices([]));
   }, [generateForm.providerId, providers]);
 
+  useEffect(() => {
+    function dismissFilter(event: MouseEvent) {
+      const target = event.target as HTMLElement | null;
+      if (!target?.closest(".voice-filter-menu, .voice-filter-button")) setOpenFilterMenu(null);
+    }
+    document.addEventListener("mousedown", dismissFilter);
+    return () => document.removeEventListener("mousedown", dismissFilter);
+  }, []);
+
   const context = useMemo(() => buildVoiceDisplayContext(groups, profiles), [groups, profiles]);
   const visibleAssets = useMemo(
     () => applyVoiceSort(filterVoiceAssets(assets, searchText, preferences.filters, context), preferences.sort, context),
@@ -574,6 +673,12 @@ export function VoiceLibraryWorkspace({
   }
 
   function handleKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+    if (isVoiceTextEditingTarget(event.target)) return;
+    if (event.key === "Escape" && openFilterMenu) {
+      event.preventDefault();
+      setOpenFilterMenu(null);
+      return;
+    }
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "a") {
       event.preventDefault();
       setSelection((current) => resolveSelectAllVisible(current, visibleIds));
@@ -763,6 +868,16 @@ export function VoiceLibraryWorkspace({
     });
   }
 
+  function openPropertyFilter(columnId: "group" | "voice", target: HTMLButtonElement) {
+    if (openFilterMenu === columnId) {
+      setOpenFilterMenu(null);
+      return;
+    }
+    const rect = target.getBoundingClientRect();
+    setFilterPopoverPosition(positionVoicePopover(rect, { width: window.innerWidth, height: window.innerHeight }));
+    setOpenFilterMenu(columnId);
+  }
+
   const providersAvailable = providers.filter((provider) => provider.available);
 
   return (
@@ -869,24 +984,10 @@ export function VoiceLibraryWorkspace({
                             <button
                               type="button"
                               className={`voice-filter-button${filterActive ? " active" : ""}`}
-                              onClick={() => setOpenFilterMenu(openFilterMenu === columnId ? null : (columnId === "group" || columnId === "voice" ? columnId : null))}
+                              onClick={(event) => openPropertyFilter(columnId, event.currentTarget)}
                             >
                               ⌄
                             </button>
-                            {openFilterMenu === columnId && (
-                              <div className="voice-filter-menu">
-                                {(columnId === "group" ? filterOptions.groups : filterOptions.voices).map((option) => (
-                                  <label key={option.id} className="voice-filter-menu__row">
-                                    <input
-                                      type="checkbox"
-                                      checked={(columnId === "group" ? preferences.filters.groupIds : preferences.filters.voiceProfileIds).includes(option.id)}
-                                      onChange={() => toggleFilterValue(columnId === "group" ? "groupIds" : "voiceProfileIds", option.id)}
-                                    />
-                                    <VoiceChip label={`${option.label} (${option.count})`} colorToken={option.colorToken} />
-                                  </label>
-                                ))}
-                              </div>
-                            )}
                           </div>
                         )}
                       </th>
@@ -1048,7 +1149,14 @@ export function VoiceLibraryWorkspace({
         <ProfileEditorDialog
           profiles={profiles}
           providerVoices={providerVoices}
+          providerAdapterId={generateForm.providerId || providersAvailable[0]?.id || ""}
           onSave={onSaveProfiles}
+          onCreated={(profile) => setGenerateForm((current) => ({
+            ...current,
+            voiceProfileId: profile.id,
+            name: current.name || profile.name,
+            providerId: current.providerId || profile.provider || providersAvailable[0]?.id || "",
+          }))}
           onClose={() => setShowProfileEditor(false)}
         />
       )}
@@ -1079,6 +1187,26 @@ export function VoiceLibraryWorkspace({
             </div>
           </div>
         </div>
+      )}
+      {openFilterMenu && filterPopoverPosition && createPortal(
+        <div
+          className="voice-filter-menu voice-filter-menu--portal"
+          style={{ left: filterPopoverPosition.left, top: filterPopoverPosition.top, maxHeight: filterPopoverPosition.maxHeight }}
+          role="dialog"
+          aria-label={`${openFilterMenu === "group" ? "Group" : "Voice"} filters`}
+        >
+          {(openFilterMenu === "group" ? filterOptions.groups : filterOptions.voices).map((option) => (
+            <label key={option.id} className="voice-filter-menu__row">
+              <input
+                type="checkbox"
+                checked={(openFilterMenu === "group" ? preferences.filters.groupIds : preferences.filters.voiceProfileIds).includes(option.id)}
+                onChange={() => toggleFilterValue(openFilterMenu === "group" ? "groupIds" : "voiceProfileIds", option.id)}
+              />
+              <VoiceChip label={`${option.label} (${option.count})`} colorToken={option.colorToken} />
+            </label>
+          ))}
+        </div>,
+        document.body,
       )}
     </div>
   );

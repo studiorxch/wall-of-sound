@@ -12800,6 +12800,11 @@ button.radio-stat-tile { font: inherit; text-align: left; cursor: default; }
   background: color-mix(in srgb, var(--surface2, #1a1a1a) 96%, black);
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.32);
 }
+.voice-filter-menu--portal {
+  position: fixed;
+  z-index: 1200;
+  overflow-y: auto;
+}
 .voice-filter-menu__row {
   display: flex;
   align-items: center;
@@ -12930,6 +12935,57 @@ button.radio-stat-tile { font: inherit; text-align: left; cursor: default; }
   padding: 4px 0 12px;
   color: var(--text);
 }
+.voice-provider-browser {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.voice-provider-browser__list {
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  background: rgba(5, 10, 18, 0.92);
+}
+.voice-provider-browser__group + .voice-provider-browser__group {
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+.voice-provider-browser__locale {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 5px 9px;
+  color: var(--text-muted, #98a2b3);
+  background: rgba(12, 20, 31, 0.98);
+  font-size: 11px;
+  font-weight: 700;
+}
+.voice-provider-browser__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+}
+.voice-provider-browser__row.active,
+.voice-provider-browser__row:hover { background: rgba(91, 141, 239, 0.1); }
+.voice-provider-browser__row.selected { box-shadow: inset 3px 0 0 var(--accent, #5b8def); background: rgba(91, 141, 239, 0.17); }
+.voice-provider-browser__select {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  gap: 2px;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.voice-provider-browser__select span,
+.voice-provider-browser__select small { color: var(--text-muted, #98a2b3); }
+.voice-provider-browser__empty,
+.voice-provider-browser__hint { padding: 8px; color: var(--text-muted, #98a2b3); font-size: 12px; }
+.voice-provider-browser__audio { width: 100%; }
 
 @media (max-width: 920px) {
   .voice-toolbar {
