@@ -11,6 +11,7 @@ import type { CrateRecord } from "./crateTypes";
 import type { PlaylistPathOption } from "./playlistPathTypes";
 import type { MachineLifeCollection, MachineLifeRecordingReview, MachineLifeProxyLibrary } from "./machineLifeTypes";
 import type { SunoLibraryImportPointer, SunoListeningRecord, SunoInterestMarker, SunoAnalysisRecord } from "./sunoLibraryTypes";
+import type { VoiceAsset, VoiceGroup, VoiceLibraryPreferences, VoiceProfile } from "./voiceLibraryTypes";
 export type { PlaylistPathOption } from "./playlistPathTypes";
 export type { PlayColorTheme };
 export type { CrateRecord };
@@ -360,6 +361,15 @@ export type PlayProject = {
   // separate from the human-entered sunoListeningRecords above so an
   // analysis re-run can never touch listening status/notes/suggested-use.
   sunoAnalysisRecords?: SunoAnalysisRecord[];
+  // 0829_MUSIC_VOICE_Library_TTS_v1.0.0 — local, reusable spoken-audio
+  // asset library. Same project-level pattern as loops, Suno review
+  // metadata, and Machine Life reviews: assets/groups/profiles persist as
+  // additive collections on the existing PlayProject, never in a second
+  // app-local database.
+  voiceAssets?: VoiceAsset[];
+  voiceGroups?: VoiceGroup[];
+  voiceProfiles?: VoiceProfile[];
+  voiceLibraryPreferences?: VoiceLibraryPreferences;
   createdAt: string;
   updatedAt: string;
 };

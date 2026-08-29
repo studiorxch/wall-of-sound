@@ -21,6 +21,8 @@ import type { RadioApprovalMetadata, RadioArrangementMetadata, RadioLoopSourceRe
 // 0718B_RADIO_Web_Publication_Asset_Export_Bridge
 import { sha256File } from './server/radio/radioVersionCloneHelper'
 import { isPathConfinedTo } from './server/radio/radioFsUtils'
+import { probeAudioFile } from './server/musicAssetProbe'
+import { normalizeVerifiedFormat } from './src/logic/trackAssetVerification'
 import { prepareTrackPackage } from './server/radio/radioTrackPackagePipeline'
 import { verifyTrackBinding } from './server/radio/radioTrackVerify'
 import { trackPackageVersionDir } from './server/radio/radioTrackPackageWriter'
@@ -28,8 +30,11 @@ import { readCurrentTrackManifest } from './server/radio/radioTrackManifestBuild
 import { exportWebBundle, listBundleVersions } from './server/radio/radioWebBundleWriter'
 import { validateWebBundle } from './server/radio/radioWebBundleValidator'
 import { revealDirectoryInFinder } from './server/radio/radioPackageReveal'
+import { deleteVoiceFile, revealVoiceFileInFinder } from './server/voice/voiceFileAccess'
+import { generateMacOsSpeech, getMacOsSayProviderDescriptor, listMacOsSayVoices } from './server/voice/macosSayProvider'
 import type { RadioTrackPrepareRequest } from './src/data/radioTrackPackageTypes'
 import type { RadioWebBundleExportRequest } from './src/data/radioWebBundleTypes'
+import type { SpeechProviderVoiceOption } from './src/data/voiceLibraryTypes'
 // 0722C_MUSIC_Production_Stem_Export
 import { reconcileAbandonedStemStaging } from './server/stems/stemStartupReconciliation'
 import { checkStemEngine } from './server/stems/stemEngineCheck'
@@ -115,6 +120,17 @@ interface RadioTrackSourceHashBody {
 interface RadioWebBundleRevealBody {
   slug?: string
   bundleVersion?: number
+}
+
+interface VoiceGenerationBody {
+  providerId?: string
+  text?: string
+  voiceProfileId?: string
+  providerVoiceId?: string | null
+}
+
+interface VoiceFileBody {
+  filePath?: string
 }
 
 // 0722C_MUSIC_Production_Stem_Export
@@ -436,6 +452,39 @@ export default defineConfig({
             stream.on('error', () => mediaError(res, 500, 'STREAM_ERROR', 'Stream error'))
             stream.pipe(res)
           }
+        })
+
+        // POST /track-asset-probe — 0827 Catalog Technical Format
+        // Verification, foundation only. Body {filePath} (the same
+        // library-relative convention as /music-audio's path). Read-only:
+        // runs ffprobe against the EXISTING file at its EXISTING path,
+        // returns raw + normalized evidence. Never writes, renames, or
+        // moves anything; never touches TrackAsset.format or any identity
+        // field — that only happens client-side, and only once a caller
+        // explicitly asks (no consumer does yet). Same traversal/
+        // confinement checks as /music-audio, reused verbatim, not
+        // reimplemented looser.
+        server.middlewares.use('/track-asset-probe', (req: IncomingMessage, res: ServerResponse) => {
+          if (req.method !== 'POST') { radioJson(res, 405, { ok: false, error: 'method_not_allowed' }); return }
+          readJsonBody(req).then(async (rawBody) => {
+            const body = rawBody as { filePath?: unknown }
+            const filePath = String(body?.filePath ?? '')
+            if (!filePath || filePath.split('/').some((seg) => seg === '..' || seg === '.')) {
+              radioJson(res, 400, { ok: false, reason: 'invalid_path' }); return
+            }
+
+            const resolved = path.join(LIBRARY_ROOT, filePath)
+            if (!isPathConfinedTo(LIBRARY_ROOT, resolved)) {
+              radioJson(res, 403, { ok: false, reason: 'forbidden' }); return
+            }
+            if (!fs.existsSync(resolved) || !fs.statSync(resolved).isFile()) {
+              radioJson(res, 404, { ok: false, reason: 'not_found' }); return
+            }
+
+            const raw = await probeAudioFile(resolved)
+            const verifiedFormat = normalizeVerifiedFormat(raw.containerFormat, raw.audioCodec)
+            radioJson(res, 200, { ok: true, raw, verifiedFormat })
+          }).catch(() => radioJson(res, 400, { ok: false, error: 'invalid_json_body' }))
         })
 
         // RADIO Web Playback Vertical Slice — /radio-web-export/<slug>/v<N>/<...>
@@ -829,6 +878,126 @@ export default defineConfig({
             stream.on('error', () => mediaError(res, 500, 'STREAM_ERROR', 'Stream error'))
             stream.pipe(res)
           }
+        })
+
+        // POST /suno-asset-reveal — Suno Archive Readiness Dashboard (MUSIC
+        // Suno Phase 1). Body {archiveAssetId}. Same reveal authority as
+        // /stem-set-reveal — resolves the real file server-side from a
+        // validated, manifest-authorized archive asset ID (never a
+        // client-supplied path) and calls the one shared
+        // revealDirectoryInFinder() (works on a file path exactly as it does
+        // on a directory — `open -R` selects either). Reveals the EXACT
+        // requested location's own file (no playback-style fallback
+        // substitution — clicking a present WAV/Opus pill must reveal that
+        // asset or nothing, never a different encoded location standing in
+        // for it). A location with no extracted copy returns not_found; this
+        // never pretends a missing asset exists.
+        server.middlewares.use('/suno-asset-reveal', (req: IncomingMessage, res: ServerResponse) => {
+          if (req.method !== 'POST') { radioJson(res, 405, { ok: false, error: 'method_not_allowed' }); return }
+          readJsonBody(req).then(async (rawBody) => {
+            const body = rawBody as { archiveAssetId?: unknown }
+            const archiveAssetId = String(body?.archiveAssetId ?? '')
+            if (!archiveAssetId || /[\\/]/.test(archiveAssetId) || archiveAssetId === '.' || archiveAssetId === '..') {
+              radioJson(res, 400, { ok: false, reason: 'not_found' }); return
+            }
+
+            const index = loadSunoManifestIndex()
+            if (!index) { radioJson(res, 503, { ok: false, reason: 'not_found' }); return }
+
+            const location = index.locationsById.get(archiveAssetId)
+            if (!location || !location.extractedRelativePath) {
+              radioJson(res, 200, { ok: false, reason: 'not_found' }); return
+            }
+
+            const candidate = path.join(SUNO_EXTRACTED_MIRROR_ROOT, location.extractedRelativePath)
+            if (!isPathConfinedTo(SUNO_EXTRACTED_MIRROR_ROOT, candidate)) {
+              radioJson(res, 200, { ok: false, reason: 'not_found' }); return
+            }
+            let realRoot: string
+            let realCandidate: string
+            try {
+              realRoot = fs.realpathSync(SUNO_EXTRACTED_MIRROR_ROOT)
+              realCandidate = fs.realpathSync(candidate)
+            } catch {
+              radioJson(res, 200, { ok: false, reason: 'not_found' }); return
+            }
+            if (!isPathConfinedTo(realRoot, realCandidate)) {
+              radioJson(res, 200, { ok: false, reason: 'not_found' }); return
+            }
+
+            const result = await revealDirectoryInFinder(realCandidate)
+            radioJson(res, 200, result)
+          }).catch(() => radioJson(res, 400, { ok: false, error: 'invalid_json_body' }))
+        })
+
+        server.middlewares.use('/voice-generation/providers', (_req: IncomingMessage, res: ServerResponse) => {
+          radioJson(res, 200, { providers: [getMacOsSayProviderDescriptor()] })
+        })
+
+        server.middlewares.use('/voice-generation/voices', async (req: IncomingMessage, res: ServerResponse) => {
+          if (req.method !== 'GET') { radioJson(res, 405, { ok: false, error: 'method_not_allowed' }); return }
+          const url = new URL(req.url ?? '/', 'http://localhost')
+          const provider = url.searchParams.get('provider') ?? ''
+          if (provider !== 'macos-say') {
+            radioJson(res, 400, { ok: false, error: 'unsupported_provider', voices: [] as SpeechProviderVoiceOption[] })
+            return
+          }
+          try {
+            const voices = await listMacOsSayVoices()
+            radioJson(res, 200, { voices })
+          } catch (error) {
+            radioJson(res, 500, { ok: false, error: String(error), voices: [] as SpeechProviderVoiceOption[] })
+          }
+        })
+
+        server.middlewares.use('/voice-generation/generate', (req: IncomingMessage, res: ServerResponse) => {
+          if (req.method !== 'POST') { radioJson(res, 405, { ok: false, error: 'method_not_allowed' }); return }
+          readJsonBody(req).then(async (rawBody) => {
+            const body = rawBody as VoiceGenerationBody
+            const providerId = String(body?.providerId ?? '')
+            const text = String(body?.text ?? '').trim()
+            const providerVoiceId = body?.providerVoiceId == null ? null : String(body.providerVoiceId)
+            if (providerId !== 'macos-say') {
+              radioJson(res, 400, { ok: false, error: 'unsupported_provider' })
+              return
+            }
+            if (!text) {
+              radioJson(res, 400, { ok: false, error: 'missing_text' })
+              return
+            }
+            try {
+              const generated = await generateMacOsSpeech(text, providerVoiceId)
+              res.statusCode = 200
+              res.setHeader('Content-Type', generated.mimeType)
+              res.setHeader('Content-Length', generated.data.length)
+              res.setHeader('X-Voice-Provider', providerId)
+              res.setHeader('X-Voice-Provider-Voice', generated.providerVoiceId ?? '')
+              res.setHeader('X-Voice-Model', generated.model ?? '')
+              res.end(generated.data)
+            } catch (error) {
+              radioJson(res, 500, { ok: false, error: error instanceof Error ? error.message : String(error) })
+            }
+          }).catch(() => radioJson(res, 400, { ok: false, error: 'invalid_json_body' }))
+        })
+
+        server.middlewares.use('/voice-asset-reveal', (req: IncomingMessage, res: ServerResponse) => {
+          if (req.method !== 'POST') { radioJson(res, 405, { ok: false, error: 'method_not_allowed' }); return }
+          readJsonBody(req).then(async (rawBody) => {
+            const body = rawBody as VoiceFileBody
+            const filePath = String(body?.filePath ?? '')
+            const result = await revealVoiceFileInFinder(LIBRARY_ROOT, filePath)
+            radioJson(res, 200, result)
+          }).catch(() => radioJson(res, 400, { ok: false, error: 'invalid_json_body' }))
+        })
+
+        server.middlewares.use('/voice-asset-delete', (req: IncomingMessage, res: ServerResponse) => {
+          if (req.method !== 'POST') { radioJson(res, 405, { ok: false, error: 'method_not_allowed' }); return }
+          readJsonBody(req).then((rawBody) => {
+            const body = rawBody as VoiceFileBody
+            const filePath = String(body?.filePath ?? '')
+            const result = deleteVoiceFile(LIBRARY_ROOT, filePath)
+            radioJson(res, 200, result)
+          }).catch(() => radioJson(res, 400, { ok: false, error: 'invalid_json_body' }))
         })
 
         // /library-data?path=... — read a text file (CSV) from the local filesystem

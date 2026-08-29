@@ -9,7 +9,7 @@ import { type TrackDragPayload } from "../logic/playlistMembership";
 // between 0722 and this build (redirected on sight, no real nav row). This
 // build reactivates it as a real destination: the canonical, multi-source
 // Loop Library, with a real "Loop Library" row under Collections below.
-export type ViewMode = "playlist" | "library" | "library_dashboard" | "groups" | "orphans" | "excluded" | "locks" | "playlists_grid" | "sampler_banks_grid" | "crates_grid" | "crate_detail" | "artists" | "mood_signal_audit" | "analyzer_review" | "loop_library" | "sectional_looper" | "glyph_audio" | "edit" | "perform" | "radio" | "radio_playlists_grid" | "radio_banks_grid" | "collections_overview" | "radio_loopchain_player" | "machine_life_research" | "suno_library";
+export type ViewMode = "playlist" | "library" | "library_dashboard" | "groups" | "orphans" | "excluded" | "locks" | "playlists_grid" | "sampler_banks_grid" | "crates_grid" | "crate_detail" | "artists" | "mood_signal_audit" | "analyzer_review" | "loop_library" | "sectional_looper" | "glyph_audio" | "edit" | "perform" | "radio" | "radio_playlists_grid" | "radio_banks_grid" | "collections_overview" | "radio_loopchain_player" | "machine_life_research" | "suno_library" | "voice_library";
 
 type Props = {
   playlists: PlaylistRecord[];
@@ -42,6 +42,7 @@ type Props = {
   // from a manifest parse here. Undefined (blank, not a fabricated 0)
   // until Suno has been imported at least once this or a prior session.
   sunoRecordingCount?: number;
+  voiceAssetCount?: number;
   // 0827_MUSIC_Library_Workspace_Track_Inspector_Rearchitecture §6 — sidebar
   // click always opens Song Library's Recordings, never its dashboard.
   onOpenSongLibraryRecordings?: () => void;
@@ -84,7 +85,7 @@ export function FileManager({
   viewMode, sourceOwnerFilter, onSelectPlaylist: _onSelectPlaylist, onViewModeChange, onSourceOwnerFilterChange,
   onCreatePlaylist: _onCreatePlaylist, onDuplicatePlaylist, onDeletePlaylist, onDropTracksOnPlaylist: _onDropTracksOnPlaylist,
   onPlayOnDeckA, onPlayOnDeckB, onCreateSamplerBank: _onCreateSamplerBank,
-  crateCount = 0, onViewCrates, loopCount = 0, artistCount = 0, sunoRecordingCount, onOpenSongLibraryRecordings,
+  crateCount = 0, onViewCrates, loopCount = 0, artistCount = 0, sunoRecordingCount, voiceAssetCount = 0, onOpenSongLibraryRecordings,
   radioPlaylistCount = 0, radioBankCount = 0,
 }: Props) {
   const [collapsed, setCollapsed] = useState(false);
@@ -140,6 +141,13 @@ export function FileManager({
               count={sunoRecordingCount}
               active={viewMode === "suno_library"}
               onClick={onOpenSongLibraryRecordings ? onOpenSongLibraryRecordings : () => onViewModeChange("suno_library")}
+            />
+            <NavRow
+              icon="artist"
+              label="VOICE"
+              count={voiceAssetCount}
+              active={viewMode === "voice_library"}
+              onClick={() => onViewModeChange("voice_library")}
             />
             <NavRow
               icon="public"

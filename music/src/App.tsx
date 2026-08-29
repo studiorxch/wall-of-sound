@@ -168,6 +168,7 @@ import type { ManuscriptLayoutPreset } from "./data/glyphLayoutTypes";
 import type { GlyphComposition, ExportRecord as GlyphExportRecord } from "./data/glyphCompositionTypes";
 import { MachineLifeResearchWorkspace } from "./ui/machineLife/MachineLifeResearchWorkspace";
 import { SunoLibraryWorkspace } from "./ui/sunoLibrary/SunoLibraryWorkspace";
+import { VoiceLibraryWorkspace } from "./ui/voice/VoiceLibraryWorkspace";
 import type { MachineLifeCollection, MachineLifeProxyLibrary, MachineLifeRecordingReview } from "./data/machineLifeTypes";
 import type {
   SunoLibraryImportPointer,
@@ -200,6 +201,8 @@ import {
   applyAnalysisFailure as applySunoAnalysisFailurePure,
   resetOrphanedSunoAnalysis,
   type SunoAnalysisResultInput,
+import type { VoiceAsset, VoiceGroup, VoiceLibraryPreferences, VoiceProfile } from "./data/voiceLibraryTypes";
+import { defaultVoiceLibraryPreferences } from "./logic/voice/voiceLibraryState";
 } from "./logic/sunoLibrary/analysisRecords";
 // 0812D_MUSIC_Autosave-Integrity-Repair_v1.0.0 — closes the gap that let
 // unhydrated/empty/temporary-session state overwrite the shared, absolute-
@@ -477,6 +480,16 @@ export default function App() {
   );
   const loopBinViewStateRef = useRef<LoopBinViewState>(loopBinViewState);
   const [libraryGridPreferences, setLibraryGridPreferences] = useState<LibraryGridPreferencesBySource>(
+  const [voiceAssets, setVoiceAssets] = useState<VoiceAsset[]>(() => loadPlayProject()?.voiceAssets ?? []);
+  const voiceAssetsRef = useRef<VoiceAsset[]>([]);
+  const [voiceGroups, setVoiceGroups] = useState<VoiceGroup[]>(() => loadPlayProject()?.voiceGroups ?? []);
+  const voiceGroupsRef = useRef<VoiceGroup[]>([]);
+  const [voiceProfiles, setVoiceProfiles] = useState<VoiceProfile[]>(() => loadPlayProject()?.voiceProfiles ?? []);
+  const voiceProfilesRef = useRef<VoiceProfile[]>([]);
+  const [voiceLibraryPreferences, setVoiceLibraryPreferences] = useState<VoiceLibraryPreferences>(
+    () => loadPlayProject()?.voiceLibraryPreferences ?? defaultVoiceLibraryPreferences(),
+  );
+  const voiceLibraryPreferencesRef = useRef<VoiceLibraryPreferences>(voiceLibraryPreferences);
     () => loadPlayProject()?.libraryGridPreferences ?? {},
   );
   const libraryGridPreferencesRef = useRef<LibraryGridPreferencesBySource>(libraryGridPreferences);
@@ -770,6 +783,10 @@ export default function App() {
     // Do not autosave before hydration — otherwise the default boot state
     // overwrites the user's saved project in localStorage on first mount.
     if (!hasHydratedProject) return;
+  useEffect(() => { voiceAssetsRef.current = voiceAssets; }, [voiceAssets]);
+  useEffect(() => { voiceGroupsRef.current = voiceGroups; }, [voiceGroups]);
+  useEffect(() => { voiceProfilesRef.current = voiceProfiles; }, [voiceProfiles]);
+  useEffect(() => { voiceLibraryPreferencesRef.current = voiceLibraryPreferences; }, [voiceLibraryPreferences]);
     savePlayProject(makeProj(playlistsRef.current, libraryTracksRef.current, excludedTrackIdsRef.current));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trackPlaybackIssues, hasHydratedProject]);
@@ -887,6 +904,10 @@ export default function App() {
 
   // ── Project helpers ──────────────────────────────────────────────────────
   function makeProj(pls: PlaylistRecord[], lib?: Track[], excl?: Set<string>, activePLId?: string): PlayProject {
+      voiceAssets: voiceAssetsRef.current.length ? voiceAssetsRef.current : undefined,
+      voiceGroups: voiceGroupsRef.current.length ? voiceGroupsRef.current : undefined,
+      voiceProfiles: voiceProfilesRef.current.length ? voiceProfilesRef.current : undefined,
+      voiceLibraryPreferences: voiceLibraryPreferencesRef.current,
     return {
       schemaVersion: "play-project-v2",
       libraryTracks: lib ?? libraryTracksRef.current,
@@ -1939,6 +1960,30 @@ export default function App() {
   // "Make Active" flow: repoints activeRevisionId at a past (or the
   // implicit original, revisionId: null) revision. Every consumer already
   // resolves current bounds through resolveActiveLoopBoundsFrames, so this
+  function handleSaveVoiceAssets(next: VoiceAsset[]) {
+    voiceAssetsRef.current = next;
+    setVoiceAssets(next);
+    savePlayProject(makeProj(playlistsRef.current));
+  }
+
+  function handleSaveVoiceGroups(next: VoiceGroup[]) {
+    voiceGroupsRef.current = next;
+    setVoiceGroups(next);
+    savePlayProject(makeProj(playlistsRef.current));
+  }
+
+  function handleSaveVoiceProfiles(next: VoiceProfile[]) {
+    voiceProfilesRef.current = next;
+    setVoiceProfiles(next);
+    savePlayProject(makeProj(playlistsRef.current));
+  }
+
+  function handleUpdateVoiceLibraryPreferences(next: VoiceLibraryPreferences) {
+    voiceLibraryPreferencesRef.current = next;
+    setVoiceLibraryPreferences(next);
+    savePlayProject(makeProj(playlistsRef.current));
+  }
+
   // one pointer update is the entire state change — no bounds/render/
   // staleness recomputation needed here.
   function handleMakeActiveRevision(loopId: string, revisionId: string | null) {
@@ -5795,6 +5840,18 @@ export default function App() {
     setActivePlaylistId(activeId);
     activePlaylistIdRef.current = activeId;
     const activePL = pls.find((pl) => pl.playlistId === activeId) ?? pls[0];
+    const loadedVoiceAssets = p.voiceAssets ?? [];
+    voiceAssetsRef.current = loadedVoiceAssets;
+    setVoiceAssets(loadedVoiceAssets);
+    const loadedVoiceGroups = p.voiceGroups ?? [];
+    voiceGroupsRef.current = loadedVoiceGroups;
+    setVoiceGroups(loadedVoiceGroups);
+    const loadedVoiceProfiles = p.voiceProfiles ?? [];
+    voiceProfilesRef.current = loadedVoiceProfiles;
+    setVoiceProfiles(loadedVoiceProfiles);
+    const loadedVoiceLibraryPreferences = p.voiceLibraryPreferences ?? defaultVoiceLibraryPreferences();
+    voiceLibraryPreferencesRef.current = loadedVoiceLibraryPreferences;
+    setVoiceLibraryPreferences(loadedVoiceLibraryPreferences);
     slotsRef.current = activePL?.slots ?? [];
     setCurrentSlotIdx(null);
     setSelectedSlotIdx(null);
@@ -7160,6 +7217,7 @@ export default function App() {
           resolvedSchedule={resolvedSchedule}
         />
       )}
+          voiceAssetCount={voiceAssets.length}
 
       {/* Scheduler / TV Guide Mode */}
       {workspaceMode === "scheduler" && (
@@ -7584,6 +7642,22 @@ export default function App() {
               ensureSongAnalysisReady={ensureSongAnalysisReady}
               cancelSongAnalysis={cancelSongAnalysis}
               recomputeSongAnalysisStatus={recomputeSongAnalysisStatus}
+          ) : viewMode === "voice_library" ? (
+            <VoiceLibraryWorkspace
+              assets={voiceAssets}
+              groups={voiceGroups}
+              profiles={voiceProfiles}
+              preferences={voiceLibraryPreferences}
+              onSaveAssets={handleSaveVoiceAssets}
+              onSaveGroups={handleSaveVoiceGroups}
+              onSaveProfiles={handleSaveVoiceProfiles}
+              onUpdatePreferences={handleUpdateVoiceLibraryPreferences}
+              auditionTrackId={auditionTrackId}
+              playbackStatus={playbackStatus}
+              onAuditionExternal={handleAuditionExternal}
+              onPauseTrack={handlePause}
+              onResumeTrack={handlePlay}
+            />
               songAnalysisProgress={songAnalysisProgress}
             />
           ) : viewMode === "glyph_audio" ? (

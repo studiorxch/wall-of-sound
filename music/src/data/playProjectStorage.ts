@@ -14,6 +14,7 @@ import { migrateLoopSourceRecordingV1 } from "./migrations/migrateLoopSourceReco
 import { reconcileLibraryGridPreferences } from "../logic/library/libraryColumns";
 import type { LibrarySourceKey } from "./libraryGridTypes";
 import { isLegalTrackAnalysisStateTransition } from "../logic/trackAnalysisStateMachine";
+import { createDefaultVoiceGroups, reconcileVoiceLibraryPreferences, validateVoiceReferences } from "../logic/voice/voiceLibraryState";
 
 function makeDefaultSchedule(): ScheduleState {
   const ts = nowIso();
@@ -129,6 +130,10 @@ export function repairStoredProject(project: PlayProject): PlayProject {
   if (!Array.isArray(repaired.radioDashboardReceipts)) repaired.radioDashboardReceipts = [];
   // 0718B_RADIO_Web_Publication_Asset_Export_Bridge
   if (!Array.isArray(repaired.radioWebExports)) repaired.radioWebExports = [];
+  if (!Array.isArray(repaired.voiceAssets)) repaired.voiceAssets = [];
+  if (!Array.isArray(repaired.voiceGroups)) repaired.voiceGroups = createDefaultVoiceGroups();
+  if (!Array.isArray(repaired.voiceProfiles)) repaired.voiceProfiles = [];
+  repaired.voiceLibraryPreferences = reconcileVoiceLibraryPreferences(repaired.voiceLibraryPreferences);
   // 0721_MUSIC_RADIO_Sectional_Loopchain_Player
   if (!Array.isArray(repaired.loopchainSectionAcceptances)) repaired.loopchainSectionAcceptances = [];
   if (!Array.isArray(repaired.loopchainObservations)) repaired.loopchainObservations = [];
@@ -313,6 +318,8 @@ export function repairStoredProject(project: PlayProject): PlayProject {
       blocks: validBlocks,
     };
   }
+
+  repaired.voiceAssets = validateVoiceReferences(repaired.voiceAssets, repaired.voiceGroups, repaired.voiceProfiles);
 
   return repaired;
 }

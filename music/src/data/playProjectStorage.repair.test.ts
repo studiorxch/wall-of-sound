@@ -15,6 +15,7 @@ import type { RadioBank } from "./radioBankTypes";
 import type { RadioDashboardReceipt } from "./radioDashboardReceiptTypes";
 import type { RadioWebExportRecord } from "./radioWebBundleTypes";
 import type { Track } from "./trackTypes";
+import type { VoiceAsset, VoiceGroup, VoiceProfile } from "./voiceLibraryTypes";
 
 const NOW = "2026-07-17T00:00:00.000Z";
 
@@ -158,5 +159,106 @@ describe("repairStoredProject — Step C interrupted-analysis recovery", () => {
     expect(t.notes).toBe("great track");
     expect(t.labels).toEqual(["Episode 2"]);
     expect(t.assets).toHaveLength(1);
+  });
+});
+
+const VOICE_GROUP: VoiceGroup = {
+  id: "voice_group_1",
+  name: "Radio",
+  colorToken: "amber",
+  createdAt: NOW,
+  updatedAt: NOW,
+};
+
+const VOICE_PROFILE: VoiceProfile = {
+  id: "voice_profile_1",
+  name: "Host",
+  colorToken: "sky",
+  identity: "woman",
+  customIdentityLabel: null,
+  presentation: "neutral",
+  language: "en-US",
+  provider: null,
+  providerVoiceId: null,
+  model: null,
+  notes: null,
+  createdAt: NOW,
+  updatedAt: NOW,
+};
+
+const VOICE_ASSET: VoiceAsset = {
+  id: "voice_asset_1",
+  name: "Station ID",
+  text: "Welcome aboard.",
+  durationMs: 1800,
+  rating: 4,
+  groupId: VOICE_GROUP.id,
+  voiceProfileId: VOICE_PROFILE.id,
+  source: "generated",
+  sourceLabel: "Generated",
+  provider: "macos-say",
+  providerVoiceId: "Samantha",
+  model: "macos-say",
+  filePath: "voice/audio/station-id.wav",
+  fileName: "station-id.wav",
+  parentAssetId: null,
+  version: 1,
+  notes: "Live ready",
+  createdAt: NOW,
+  updatedAt: NOW,
+};
+
+describe("repairStoredProject — 0829 VOICE library addition", () => {
+  it("backfills missing VOICE collections and preferences without disturbing the rest of the project", () => {
+    const legacy = minimalProject();
+    delete (legacy as Partial<PlayProject>).voiceAssets;
+    delete (legacy as Partial<PlayProject>).voiceGroups;
+    delete (legacy as Partial<PlayProject>).voiceProfiles;
+    delete (legacy as Partial<PlayProject>).voiceLibraryPreferences;
+
+    const repaired = repairStoredProject(legacy);
+
+    expect(repaired.voiceAssets).toEqual([]);
+    expect(repaired.voiceProfiles).toEqual([]);
+    expect(repaired.voiceGroups?.length).toBeGreaterThan(0);
+    expect(repaired.voiceLibraryPreferences?.columnOrder.length).toBeGreaterThan(0);
+  });
+
+  it("preserves valid existing VOICE records and repairs invalid references to null", () => {
+    const project = minimalProject({
+      voiceAssets: [
+        VOICE_ASSET,
+        {
+          ...VOICE_ASSET,
+          id: "voice_asset_2",
+          groupId: "missing-group",
+          voiceProfileId: "missing-profile",
+          parentAssetId: "missing-parent",
+        },
+      ],
+      voiceGroups: [VOICE_GROUP],
+      voiceProfiles: [VOICE_PROFILE],
+      voiceLibraryPreferences: {
+        version: 1,
+        columnOrder: ["source", "name", "play"],
+        columns: [
+          { id: "source", visible: true },
+          { id: "name", visible: false },
+          { id: "play", visible: false },
+        ],
+        sort: { columnId: "source", direction: "asc" },
+        filters: { groupIds: [VOICE_GROUP.id], voiceProfileIds: [VOICE_PROFILE.id] },
+        updatedAt: NOW,
+      },
+    });
+
+    const repaired = repairStoredProject(project);
+
+    expect(repaired.voiceAssets?.[0]).toEqual(VOICE_ASSET);
+    expect(repaired.voiceAssets?.[1].groupId).toBeNull();
+    expect(repaired.voiceAssets?.[1].voiceProfileId).toBeNull();
+    expect(repaired.voiceAssets?.[1].parentAssetId).toBeNull();
+    expect(repaired.voiceLibraryPreferences?.columns.find((column) => column.id === "name")?.visible).toBe(true);
+    expect(repaired.voiceLibraryPreferences?.columns.find((column) => column.id === "play")?.visible).toBe(true);
   });
 });
