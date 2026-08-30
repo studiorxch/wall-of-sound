@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatProviderVoiceLocale, providerVoiceLocaleSearchText } from "./providerVoiceLocale";
+import { formatProviderVoiceLanguage, formatProviderVoiceLocale, formatProviderVoiceRegion, providerVoiceLocaleSearchText } from "./providerVoiceLocale";
 
 describe("providerVoiceLocale", () => {
   it("renders provider locale IDs as friendly language and country labels", () => {
@@ -12,6 +12,13 @@ describe("providerVoiceLocale", () => {
   it("keeps raw provider locale IDs available to search without displaying them", () => {
     expect(providerVoiceLocaleSearchText("en_GB")).toContain("English · United Kingdom");
     expect(providerVoiceLocaleSearchText("en_GB")).toContain("en_GB");
+  });
+
+  it("separates language group labels from country row labels", () => {
+    expect(formatProviderVoiceLanguage("en_AU")).toBe("English");
+    expect(formatProviderVoiceRegion("en_AU")).toBe("Australia");
+    expect(formatProviderVoiceLanguage("en_US")).toBe("English");
+    expect(formatProviderVoiceRegion("en_US")).toBe("United States");
   });
 
   it("does not display a raw locale fallback when metadata is absent", () => {

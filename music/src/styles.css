@@ -12985,7 +12985,7 @@ button.radio-stat-tile { font: inherit; text-align: left; cursor: default; }
 .voice-provider-browser__row.selected { box-shadow: inset 3px 0 0 var(--accent, #5b8def); background: rgba(91, 141, 239, 0.17); }
 .voice-provider-browser__select {
   display: grid;
-  flex: 1;
+  flex: 0 1 360px;
   min-width: 0;
   gap: 2px;
   border: 0;
@@ -12997,6 +12997,20 @@ button.radio-stat-tile { font: inherit; text-align: left; cursor: default; }
 }
 .voice-provider-browser__select span,
 .voice-provider-browser__select small { color: var(--text-muted, #98a2b3); }
+.voice-provider-browser__preview {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  color: var(--text, #fff);
+  background: rgba(255, 255, 255, 0.05);
+  cursor: pointer;
+}
+.voice-provider-browser__preview:hover:not(:disabled) { background: rgba(91, 141, 239, 0.22); border-color: var(--accent, #5b8def); }
+.voice-provider-browser__preview:disabled { opacity: 0.55; cursor: wait; }
 .voice-provider-browser__empty,
 .voice-provider-browser__hint,
 .voice-provider-browser__status { padding: 8px; color: var(--text-muted, #98a2b3); font-size: 12px; }
