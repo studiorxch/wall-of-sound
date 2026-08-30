@@ -38,6 +38,7 @@ import {
   applyVoiceSort,
 } from "../../logic/voice/voiceLibraryView";
 import { isVoiceTextEditingTarget } from "../../logic/voice/voiceKeyboard";
+import { formatProviderVoiceLocale, providerVoiceLocaleSearchText } from "../../logic/voice/providerVoiceLocale";
 import { positionVoicePopover } from "../../logic/voice/voicePopoverPosition";
 import {
   clearLibrarySelection,
@@ -273,7 +274,7 @@ function ProviderVoiceBrowser({ providerVoices, providerId, selectedVoiceId, onS
       const matchesPresentation = presentationFilter === "all"
         || voice.presentation === presentationFilter
         || (presentationFilter === "neutral_other" && (voice.presentation == null || voice.presentation === "unknown"));
-      return matchesPresentation && (!normalized || `${voice.label} ${voice.language ?? ""}`.toLowerCase().includes(normalized));
+      return matchesPresentation && (!normalized || `${voice.label} ${providerVoiceLocaleSearchText(voice.language)}`.toLowerCase().includes(normalized));
     });
   }, [presentationFilter, providerVoices, query]);
   const languageGroups = useMemo(() => {
@@ -333,7 +334,7 @@ function ProviderVoiceBrowser({ providerVoices, providerId, selectedVoiceId, onS
       <div className="voice-provider-browser__list" role="listbox" aria-label="Provider voices">
         {languageGroups.map(([language, voices]) => (
           <div key={language} className="voice-provider-browser__group">
-            <div className="voice-provider-browser__locale">{language}</div>
+            <div className="voice-provider-browser__locale">{formatProviderVoiceLocale(language === "Other" ? null : language)}</div>
             {voices.map((voice) => {
               const index = filteredVoices.indexOf(voice);
               const selected = voice.id === selectedVoiceId;
@@ -341,8 +342,7 @@ function ProviderVoiceBrowser({ providerVoices, providerId, selectedVoiceId, onS
                 <div key={voice.id} className={`voice-provider-browser__row${selected ? " selected" : ""}${index === activeIndex ? " active" : ""}`} role="option" aria-selected={selected}>
                   <button type="button" className="voice-provider-browser__select" onClick={() => onSelect(voice)}>
                     <strong>{voice.label}</strong>
-                    <span>{voice.language ?? "Locale unavailable"}</span>
-                    {voice.description && <small>{voice.description}</small>}
+                    <span>{formatProviderVoiceLocale(voice.language)}</span>
                   </button>
                   <button type="button" className="tb-btn sm" onClick={() => { void previewVoice(voice); }} disabled={previewingId === voice.id || !providerId}>
                     {previewingId === voice.id ? "Previewing..." : "Preview"}
