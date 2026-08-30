@@ -12861,7 +12861,7 @@ button.radio-stat-tile { font: inherit; text-align: left; cursor: default; }
 }
 .voice-profile-modal {
   width: min(1080px, calc(100vw - 32px));
-  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
   display: flex;
   flex-direction: column;
 }
@@ -12869,6 +12869,7 @@ button.radio-stat-tile { font: inherit; text-align: left; cursor: default; }
   min-height: 0;
   flex: 1;
   overflow: hidden auto;
+  padding-bottom: 8px;
 }
 .voice-form-grid {
   display: grid;
@@ -12954,8 +12955,8 @@ button.radio-stat-tile { font: inherit; text-align: left; cursor: default; }
 }
 .voice-provider-browser__presentation { display: flex; flex-wrap: wrap; gap: 6px; }
 .voice-provider-browser__list {
-  height: min(56vh, 620px);
-  min-height: 420px;
+  height: min(36vh, 400px);
+  min-height: 260px;
   overflow-y: auto;
   border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 8px;
@@ -12968,7 +12969,7 @@ button.radio-stat-tile { font: inherit; text-align: left; cursor: default; }
   position: sticky;
   top: 0;
   z-index: 1;
-  padding: 5px 9px;
+  padding: 7px 12px;
   color: var(--text-muted, #98a2b3);
   background: rgba(12, 20, 31, 0.98);
   font-size: 11px;
@@ -12977,15 +12978,17 @@ button.radio-stat-tile { font: inherit; text-align: left; cursor: default; }
 .voice-provider-browser__row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
+  gap: 10px;
+  min-height: 54px;
+  padding: 7px 12px;
 }
 .voice-provider-browser__row.active,
 .voice-provider-browser__row:hover { background: rgba(91, 141, 239, 0.1); }
 .voice-provider-browser__row.selected { box-shadow: inset 3px 0 0 var(--accent, #5b8def); background: rgba(91, 141, 239, 0.17); }
 .voice-provider-browser__select {
   display: grid;
-  flex: 0 1 360px;
+  flex: 0 1 240px;
+  width: min(240px, calc(100% - 38px));
   min-width: 0;
   gap: 2px;
   border: 0;
@@ -12997,6 +13000,8 @@ button.radio-stat-tile { font: inherit; text-align: left; cursor: default; }
 }
 .voice-provider-browser__select span,
 .voice-provider-browser__select small { color: var(--text-muted, #98a2b3); }
+.voice-provider-browser__select strong { line-height: 1.2; }
+.voice-provider-browser__select span { line-height: 1.2; }
 .voice-provider-browser__preview {
   display: inline-grid;
   place-items: center;
@@ -13013,8 +13018,8 @@ button.radio-stat-tile { font: inherit; text-align: left; cursor: default; }
 .voice-provider-browser__preview:disabled { opacity: 0.55; cursor: wait; }
 .voice-provider-browser__empty,
 .voice-provider-browser__hint,
-.voice-provider-browser__status { padding: 8px; color: var(--text-muted, #98a2b3); font-size: 12px; }
-.voice-provider-browser__audio { width: 100%; }
+.voice-provider-browser__status { padding: 4px 8px; color: var(--text-muted, #98a2b3); font-size: 12px; }
+.voice-provider-browser__audio { width: 100%; max-height: 54px; }
 .voice-color-swatches {
   display: flex;
   flex-wrap: wrap;
@@ -13051,7 +13056,7 @@ button.radio-stat-tile { font: inherit; text-align: left; cursor: default; }
   .voice-form-grid--two {
     grid-template-columns: 1fr;
   }
-  .voice-provider-browser__list { min-height: 280px; height: 48vh; }
+  .voice-provider-browser__list { min-height: 240px; height: min(38vh, 360px); }
   .voice-cell-truncate {
     max-width: 220px;
   }

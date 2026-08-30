@@ -492,9 +492,6 @@ function ProfileEditorDialog({ profiles, providers, providerVoices, providerAdap
               onSelect={(voice) => { setProviderVoiceId(voice.id); setProviderId(providerId || providerAdapterId); setLanguage((current) => current || voice.language || ""); }}
             />
           </div>
-          <label className="voice-form-grid__full">Notes
-            <textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={3} />
-          </label>
         </div>
         <div className="npw-actions">
           <button className="npw-btn npw-btn--ghost" onClick={onClose}>Close</button>
