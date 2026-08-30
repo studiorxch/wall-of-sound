@@ -12865,12 +12865,25 @@ button.radio-stat-tile { font: inherit; text-align: left; cursor: default; }
   display: flex;
   flex-direction: column;
 }
+.voice-profile-modal .npw-header { padding: 10px 16px; }
+.voice-profile-mode { display: inline-flex; padding: 2px; border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 6px; background: rgba(0, 0, 0, 0.12); }
+.voice-profile-mode button { min-height: 24px; padding: 2px 9px; border: 0; border-radius: 4px; color: var(--text-muted, #98a2b3); background: transparent; font-size: 11px; cursor: pointer; }
+.voice-profile-mode button.active { color: var(--text, #fff); background: rgba(91, 141, 239, 0.26); }
+.voice-profile-mode button:disabled { opacity: 0.45; cursor: default; }
 .voice-profile-form {
   min-height: 0;
   flex: 1;
   overflow: hidden auto;
-  padding-bottom: 8px;
+  gap: 8px;
+  padding: 10px 16px 8px;
 }
+.voice-profile-top-fields { display: grid; grid-column: 1 / -1; grid-template-columns: minmax(220px, 1.2fr) minmax(156px, 0.7fr) minmax(200px, 1fr); gap: 8px 12px; align-items: end; }
+.voice-profile-top-fields__existing { grid-column: 1 / -1; }
+.voice-profile-form label { gap: 4px; font-size: 11px; }
+.voice-profile-form input,
+.voice-profile-form select { min-height: 32px; padding: 6px 9px; }
+.voice-profile-form .voice-color-swatches { min-height: 32px; align-items: center; }
+.voice-profile-modal .npw-actions { min-height: 44px; padding: 6px 16px; }
 .voice-form-grid {
   display: grid;
   gap: 12px;
@@ -12955,7 +12968,7 @@ button.radio-stat-tile { font: inherit; text-align: left; cursor: default; }
 }
 .voice-provider-browser__presentation { display: flex; flex-wrap: wrap; gap: 6px; }
 .voice-provider-browser__list {
-  height: min(36vh, 400px);
+  height: clamp(240px, 40dvh, 440px);
   min-height: 260px;
   overflow-y: auto;
   border: 1px solid rgba(255, 255, 255, 0.15);
@@ -13056,7 +13069,9 @@ button.radio-stat-tile { font: inherit; text-align: left; cursor: default; }
   .voice-form-grid--two {
     grid-template-columns: 1fr;
   }
-  .voice-provider-browser__list { min-height: 240px; height: min(38vh, 360px); }
+  .voice-profile-top-fields { grid-template-columns: 1fr; }
+  .voice-profile-top-fields__existing { grid-column: auto; }
+  .voice-provider-browser__list { min-height: 240px; height: min(38dvh, 360px); }
   .voice-cell-truncate {
     max-width: 220px;
   }

@@ -419,6 +419,17 @@ function ProfileEditorDialog({ profiles, providers, providerVoices, providerAdap
     };
   }
 
+  function changeMode(nextMode: EditorMode) {
+    setMode(nextMode);
+    if (nextMode === "edit") {
+      const fallbackId = selectedId || profiles[0]?.id || "";
+      setSelectedId(fallbackId);
+      loadProfile(profiles.find((profile) => profile.id === fallbackId));
+      return;
+    }
+    loadProfile(undefined);
+  }
+
   function saveProfile() {
     if (!name.trim()) return;
     if (mode === "create") {
@@ -442,48 +453,38 @@ function ProfileEditorDialog({ profiles, providers, providerVoices, providerAdap
       <div className="npw-modal voice-modal voice-modal--wide voice-profile-modal">
         <div className="npw-header">
           <div className="npw-header-title">Voice Profiles</div>
+          <div className="voice-profile-mode" role="group" aria-label="Profile mode">
+            <button type="button" className={mode === "create" ? "active" : ""} aria-pressed={mode === "create"} onClick={() => changeMode("create")}>Create</button>
+            <button type="button" className={mode === "edit" ? "active" : ""} aria-pressed={mode === "edit"} disabled={profiles.length === 0} onClick={() => changeMode("edit")}>Edit</button>
+          </div>
           <button className="npw-close" onClick={onClose}>✕</button>
         </div>
         <div className="voice-form-grid voice-form-grid--two voice-profile-form">
-          <label>Mode
-            <select value={mode} onChange={(event) => {
-              const nextMode = event.target.value as EditorMode;
-              setMode(nextMode);
-              if (nextMode === "edit") {
-                const fallbackId = selectedId || profiles[0]?.id || "";
-                setSelectedId(fallbackId);
-                loadProfile(profiles.find((profile) => profile.id === fallbackId));
-                return;
-              }
-              loadProfile(undefined);
-            }}>
-              <option value="create">Create</option>
-              <option value="edit">Edit</option>
-            </select>
-          </label>
-          {mode === "edit" && (
-            <label>Existing Profile
-              <select value={selectedId} onChange={(event) => {
-                const nextId = event.target.value;
-                setSelectedId(nextId);
-                loadProfile(profiles.find((profile) => profile.id === nextId));
-              }}>
-                {profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}
+          <div className="voice-profile-top-fields">
+            {mode === "edit" && (
+              <label className="voice-profile-top-fields__existing">Existing Profile
+                <select value={selectedId} onChange={(event) => {
+                  const nextId = event.target.value;
+                  setSelectedId(nextId);
+                  loadProfile(profiles.find((profile) => profile.id === nextId));
+                }}>
+                  {profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}
+                </select>
+              </label>
+            )}
+            <label className="voice-profile-top-fields__name">Name
+              <input value={name} onChange={(event) => setName(event.target.value)} />
+            </label>
+            <label>Color
+              <ProfileColorSwatches value={colorToken} onChange={setColorToken} />
+            </label>
+            <label>Provider
+              <select value={providerId || providerAdapterId} onChange={(event) => { setProviderId(event.target.value); setProviderVoiceId(""); }}>
+                <option value="">Select provider</option>
+                {providers.map((provider) => <option key={provider.id} value={provider.id} disabled={!provider.available}>{provider.displayName}{provider.available ? "" : " (Unavailable)"}</option>)}
               </select>
             </label>
-          )}
-          <label>Name
-            <input value={name} onChange={(event) => setName(event.target.value)} />
-          </label>
-          <label>Color
-            <ProfileColorSwatches value={colorToken} onChange={setColorToken} />
-          </label>
-          <label>Provider
-            <select value={providerId || providerAdapterId} onChange={(event) => { setProviderId(event.target.value); setProviderVoiceId(""); }}>
-              <option value="">Select provider</option>
-              {providers.map((provider) => <option key={provider.id} value={provider.id} disabled={!provider.available}>{provider.displayName}{provider.available ? "" : " (Unavailable)"}</option>)}
-            </select>
-          </label>
+          </div>
           <div className="voice-form-grid__full">
             <ProviderVoiceBrowser
               providerVoices={providerVoices}
