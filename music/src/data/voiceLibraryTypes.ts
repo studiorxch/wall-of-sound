@@ -130,12 +130,18 @@ export interface SpeechProviderDescriptor {
   previewText?: string | null;
 }
 
+/** Provider-supplied metadata. "unknown" is intentional: presentation is never inferred from names. */
+export type SpeechProviderVoicePresentation = "female" | "male" | "neutral_other" | "unknown";
+
+export const VOICE_PROVIDER_PREVIEW_ROUTE = "/voice-generation/preview";
+
 export interface SpeechProviderVoiceOption {
   id: string;
   label: string;
   language: string | null;
   description?: string | null;
   sampleText?: string | null;
+  presentation?: SpeechProviderVoicePresentation;
 }
 
 export interface GeneratedSpeechResult extends Omit<GeneratedSpeech, "audioData"> {

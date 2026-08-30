@@ -32,6 +32,7 @@ import { validateWebBundle } from './server/radio/radioWebBundleValidator'
 import { revealDirectoryInFinder } from './server/radio/radioPackageReveal'
 import { deleteVoiceFile, revealVoiceFileInFinder } from './server/voice/voiceFileAccess'
 import { generateMacOsSpeech, getMacOsSayProviderDescriptor, listMacOsSayVoices } from './server/voice/macosSayProvider'
+import { generateProviderVoicePreviewAudio, VOICE_PROVIDER_PREVIEW_ROUTE } from './server/voice/voicePreviewService'
 import type { RadioTrackPrepareRequest } from './src/data/radioTrackPackageTypes'
 import type { RadioWebBundleExportRequest } from './src/data/radioWebBundleTypes'
 import type { SpeechProviderVoiceOption } from './src/data/voiceLibraryTypes'
@@ -980,19 +981,14 @@ export default defineConfig({
           }).catch(() => radioJson(res, 400, { ok: false, error: 'invalid_json_body' }))
         })
 
-        server.middlewares.use('/voice-generation/preview', (req: IncomingMessage, res: ServerResponse) => {
+        server.middlewares.use(VOICE_PROVIDER_PREVIEW_ROUTE, (req: IncomingMessage, res: ServerResponse) => {
           if (req.method !== 'POST') { radioJson(res, 405, { ok: false, error: 'method_not_allowed' }); return }
           readJsonBody(req).then(async (rawBody) => {
             const body = rawBody as VoiceGenerationBody
             const providerId = String(body?.providerId ?? '')
             const providerVoiceId = body?.providerVoiceId == null ? null : String(body.providerVoiceId)
-            if (providerId !== 'macos-say') {
-              radioJson(res, 400, { ok: false, error: 'unsupported_provider' })
-              return
-            }
             try {
-              const descriptor = getMacOsSayProviderDescriptor()
-              const generated = await generateMacOsSpeech(descriptor.previewText ?? 'StudioRich VOICE library.', providerVoiceId)
+              const generated = await generateProviderVoicePreviewAudio(providerId, providerVoiceId)
               res.statusCode = 200
               res.setHeader('Content-Type', generated.mimeType)
               res.setHeader('Content-Length', generated.data.length)

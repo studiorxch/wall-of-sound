@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { VoiceAsset, VoiceProfile } from "../../data/voiceLibraryTypes";
+import { VOICE_PROVIDER_PREVIEW_ROUTE, type VoiceAsset, type VoiceProfile } from "../../data/voiceLibraryTypes";
 import {
   buildGeneratedVoiceAsset,
   fetchSpeechProviders,
@@ -111,7 +111,8 @@ describe("voiceGenerationService", () => {
       providerVoiceId: "Samantha",
       model: "macos-say",
     });
-    expect(fetchMock).toHaveBeenCalledWith("/voice-generation/preview", expect.objectContaining({ method: "POST" }));
+    expect(fetchMock).toHaveBeenCalledWith(VOICE_PROVIDER_PREVIEW_ROUTE, expect.objectContaining({ method: "POST" }));
+    expect(fetchMock.mock.calls.some(([route]) => String(route).startsWith("/library-import"))).toBe(false);
   });
 
   it("surfaces a provider-voice preview failure without creating an asset", async () => {
@@ -121,6 +122,12 @@ describe("voiceGenerationService", () => {
     })));
 
     await expect(generateProviderVoicePreview("macos-say", "Samantha")).rejects.toThrow("preview unavailable");
+  });
+
+  it("includes the preview route in diagnostics when the endpoint cannot return JSON", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("not found", { status: 404 })));
+
+    await expect(generateProviderVoicePreview("macos-say", "Samantha")).rejects.toThrow(`404) at ${VOICE_PROVIDER_PREVIEW_ROUTE}`);
   });
 
   it("surfaces provider failures without fabricating a preview", async () => {

@@ -4,6 +4,7 @@ import type { PlaybackStatus } from "../../data/playbackTypes";
 import type {
   SpeechProviderDescriptor,
   SpeechProviderVoiceOption,
+  SpeechProviderVoicePresentation,
   VoiceAsset,
   VoiceGroup,
   VoiceIdentity,
@@ -244,6 +245,14 @@ interface ProfileEditorProps {
 }
 
 const PROVIDER_PREVIEW_FALLBACK = "StudioRich VOICE library. Your next sound begins here.";
+type ProviderVoicePresentationFilter = "all" | Exclude<SpeechProviderVoicePresentation, "unknown">;
+
+const PROVIDER_VOICE_PRESENTATION_FILTERS: Array<{ id: ProviderVoicePresentationFilter; label: string }> = [
+  { id: "all", label: "All" },
+  { id: "female", label: "Female" },
+  { id: "male", label: "Male" },
+  { id: "neutral_other", label: "Neutral / Other" },
+];
 
 function ProviderVoiceBrowser({ providerVoices, providerId, selectedVoiceId, onSelect }: {
   providerVoices: SpeechProviderVoiceOption[];
@@ -252,6 +261,7 @@ function ProviderVoiceBrowser({ providerVoices, providerId, selectedVoiceId, onS
   onSelect: (voice: SpeechProviderVoiceOption) => void;
 }) {
   const [query, setQuery] = useState("");
+  const [presentationFilter, setPresentationFilter] = useState<ProviderVoicePresentationFilter>("all");
   const [activeIndex, setActiveIndex] = useState(0);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
@@ -259,8 +269,13 @@ function ProviderVoiceBrowser({ providerVoices, providerId, selectedVoiceId, onS
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
   const filteredVoices = useMemo(() => {
     const normalized = query.trim().toLowerCase();
-    return providerVoices.filter((voice) => !normalized || `${voice.label} ${voice.language ?? ""}`.toLowerCase().includes(normalized));
-  }, [providerVoices, query]);
+    return providerVoices.filter((voice) => {
+      const matchesPresentation = presentationFilter === "all"
+        || voice.presentation === presentationFilter
+        || (presentationFilter === "neutral_other" && (voice.presentation == null || voice.presentation === "unknown"));
+      return matchesPresentation && (!normalized || `${voice.label} ${voice.language ?? ""}`.toLowerCase().includes(normalized));
+    });
+  }, [presentationFilter, providerVoices, query]);
   const languageGroups = useMemo(() => {
     const grouped = new Map<string, SpeechProviderVoiceOption[]>();
     for (const voice of filteredVoices) {
@@ -295,6 +310,13 @@ function ProviderVoiceBrowser({ providerVoices, providerId, selectedVoiceId, onS
 
   return (
     <div className="voice-provider-browser">
+      <div className="voice-provider-browser__presentation" role="group" aria-label="Voice presentation">
+        {PROVIDER_VOICE_PRESENTATION_FILTERS.map((filter) => (
+          <button key={filter.id} type="button" className={`tb-btn sm${presentationFilter === filter.id ? " active" : ""}`} aria-pressed={presentationFilter === filter.id} onClick={() => { setPresentationFilter(filter.id); setActiveIndex(0); }}>
+            {filter.label}
+          </button>
+        ))}
+      </div>
       <label>Provider Voice
         <input
           aria-label="Search provider voices"
@@ -343,12 +365,12 @@ function ProviderVoiceBrowser({ providerVoices, providerId, selectedVoiceId, onS
 function ProfileColorSwatches({ value, onChange }: { value: string | null; onChange: (next: string | null) => void }) {
   return (
     <div className="voice-color-swatches" role="group" aria-label="Profile color">
-      <button type="button" className={`voice-color-swatch${value == null ? " selected" : ""}`} onClick={() => onChange(null)} aria-pressed={value == null}>
-        <span className="voice-color-swatch__dot voice-color-swatch__dot--none" />None
+      <button type="button" title="No color" aria-label="No color" className={`voice-color-swatch${value == null ? " selected" : ""}`} onClick={() => onChange(null)} aria-pressed={value == null}>
+        <span className="voice-color-swatch__dot voice-color-swatch__dot--none" />{value == null && <span className="voice-color-swatch__check" aria-hidden="true">✓</span>}
       </button>
       {VOICE_COLOR_TOKENS.map((token) => (
-        <button key={token} type="button" className={`voice-color-swatch${value === token ? " selected" : ""}`} onClick={() => onChange(token)} aria-pressed={value === token}>
-          <span className="voice-color-swatch__dot" style={{ background: colorValue(token) }} />{token}
+        <button key={token} type="button" title={token} aria-label={`${token} color`} className={`voice-color-swatch${value === token ? " selected" : ""}`} onClick={() => onChange(token)} aria-pressed={value === token}>
+          <span className="voice-color-swatch__dot" style={{ background: colorValue(token) }} />{value === token && <span className="voice-color-swatch__check" aria-hidden="true">✓</span>}
         </button>
       ))}
     </div>

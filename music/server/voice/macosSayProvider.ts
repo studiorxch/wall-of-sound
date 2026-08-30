@@ -2,11 +2,22 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execFile } from "node:child_process";
-import type { SpeechProviderDescriptor, SpeechProviderVoiceOption } from "../../src/data/voiceLibraryTypes";
+import type { SpeechProviderDescriptor, SpeechProviderVoiceOption, SpeechProviderVoicePresentation } from "../../src/data/voiceLibraryTypes";
 
 const SAY_BINARY = "/usr/bin/say";
 const PROVIDER_ID = "macos-say";
 export const MACOS_SAY_PREVIEW_TEXT = "StudioRich VOICE library. Your next sound begins here.";
+
+// macOS does not expose presentation metadata. Map only names we know; never guess from a name.
+export const MACOS_SAY_VOICE_PRESENTATIONS: Readonly<Record<string, SpeechProviderVoicePresentation>> = {
+  Alice: "female", Karen: "female", Kyoko: "female", Moira: "female", Samantha: "female", Tessa: "female", Veena: "female", Victoria: "female",
+  Albert: "male", Daniel: "male", Fred: "male", Ralph: "male", Thomas: "male", Xander: "male",
+  "Bad News": "neutral_other", Bahh: "neutral_other", Bells: "neutral_other", Boing: "neutral_other", Bubbles: "neutral_other", Cellos: "neutral_other", "Good News": "neutral_other", Jester: "neutral_other", Organ: "neutral_other", Superstar: "neutral_other", Trinoids: "neutral_other", Whisper: "neutral_other", Zarvox: "neutral_other",
+};
+
+export function macOsSayVoicePresentation(voiceId: string): SpeechProviderVoicePresentation {
+  return MACOS_SAY_VOICE_PRESENTATIONS[voiceId] ?? "unknown";
+}
 
 function execFileAsync(file: string, args: string[]): Promise<{ stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
@@ -47,6 +58,7 @@ export async function listMacOsSayVoices(): Promise<SpeechProviderVoiceOption[]>
       language: match[2],
       description: match[3] || null,
       sampleText: match[3] || null,
+      presentation: macOsSayVoicePresentation(match[1]),
     });
   }
   return voices;

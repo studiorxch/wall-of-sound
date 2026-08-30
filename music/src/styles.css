@@ -12952,6 +12952,7 @@ button.radio-stat-tile { font: inherit; text-align: left; cursor: default; }
   gap: 8px;
   min-height: 0;
 }
+.voice-provider-browser__presentation { display: flex; flex-wrap: wrap; gap: 6px; }
 .voice-provider-browser__list {
   height: min(56vh, 620px);
   min-height: 420px;
@@ -13006,22 +13007,22 @@ button.radio-stat-tile { font: inherit; text-align: left; cursor: default; }
   gap: 6px;
 }
 .voice-color-swatch {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  min-height: 28px;
-  padding: 4px 7px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 6px;
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 50%;
   background: rgba(255, 255, 255, 0.03);
   color: var(--text, #fff);
-  font: inherit;
-  font-size: 11px;
   cursor: pointer;
 }
-.voice-color-swatch.selected { border-color: var(--accent, #5b8def); box-shadow: inset 0 0 0 1px var(--accent, #5b8def); }
-.voice-color-swatch__dot { width: 12px; height: 12px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25); }
+.voice-color-swatch.selected { border-color: #fff; box-shadow: 0 0 0 2px var(--accent, #5b8def), inset 0 0 0 1px rgba(0, 0, 0, 0.3); }
+.voice-color-swatch__dot { width: 20px; height: 20px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25); }
 .voice-color-swatch__dot--none { background: linear-gradient(135deg, transparent 44%, #9aa4b2 45%, #9aa4b2 55%, transparent 56%); border: 1px solid #9aa4b2; }
+.voice-color-swatch__check { position: absolute; font-size: 15px; font-weight: 800; line-height: 1; color: #fff; text-shadow: 0 1px 2px #000, 0 0 2px #000; }
 
 @media (max-width: 920px) {
   .voice-toolbar {

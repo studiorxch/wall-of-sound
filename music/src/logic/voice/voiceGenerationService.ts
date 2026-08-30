@@ -6,6 +6,7 @@ import type {
   VoiceAsset,
   VoiceProfile,
 } from "../../data/voiceLibraryTypes";
+import { VOICE_PROVIDER_PREVIEW_ROUTE } from "../../data/voiceLibraryTypes";
 import { createVoiceAsset, nextVoiceAssetVersion } from "./voiceLibraryState";
 
 const VOICE_GENERATED_DESTINATION = "voice/audio";
@@ -58,14 +59,14 @@ export async function generateProviderVoicePreview(
   providerId: string,
   providerVoiceId: string,
 ): Promise<GeneratedSpeechResult> {
-  const response = await fetch("/voice-generation/preview", {
+  const response = await fetch(VOICE_PROVIDER_PREVIEW_ROUTE, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ providerId, providerVoiceId }),
   });
   if (!response.ok) {
-    const payload = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
-    throw new Error(payload.error ?? `HTTP ${response.status}`);
+    const payload = await response.json().catch(() => ({} as { error?: string }));
+    throw new Error(payload.error ?? `Provider preview failed (${response.status}) at ${VOICE_PROVIDER_PREVIEW_ROUTE}`);
   }
   return {
     audioData: await response.blob(),
