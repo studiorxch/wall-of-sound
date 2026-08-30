@@ -16,6 +16,7 @@ import type { RadioDashboardReceipt } from "./radioDashboardReceiptTypes";
 import type { RadioWebExportRecord } from "./radioWebBundleTypes";
 import type { Track } from "./trackTypes";
 import type { VoiceAsset, VoiceGroup, VoiceProfile } from "./voiceLibraryTypes";
+import { editVoiceAssetMetadata } from "../logic/voice/voiceAssetMetadata";
 
 const NOW = "2026-07-17T00:00:00.000Z";
 
@@ -260,5 +261,18 @@ describe("repairStoredProject — 0829 VOICE library addition", () => {
     expect(repaired.voiceAssets?.[1].parentAssetId).toBeNull();
     expect(repaired.voiceLibraryPreferences?.columns.find((column) => column.id === "name")?.visible).toBe(true);
     expect(repaired.voiceLibraryPreferences?.columns.find((column) => column.id === "play")?.visible).toBe(true);
+  });
+
+  it("retains inline-edited VOICE metadata after a PlayProject reload", () => {
+    const edited = editVoiceAssetMetadata(VOICE_ASSET, { name: "Station Arrival", text: "The next train is arriving." }, "2026-08-30T12:00:00.000Z");
+    if (!edited.ok) throw new Error(edited.error);
+
+    const reloaded = repairStoredProject(minimalProject({
+      voiceAssets: [edited.asset],
+      voiceGroups: [VOICE_GROUP],
+      voiceProfiles: [VOICE_PROFILE],
+    }));
+
+    expect(reloaded.voiceAssets?.[0]).toMatchObject({ name: "Station Arrival", text: "The next train is arriving.", filePath: VOICE_ASSET.filePath, source: VOICE_ASSET.source });
   });
 });

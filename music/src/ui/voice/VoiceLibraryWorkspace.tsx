@@ -15,6 +15,7 @@ import type {
 import { pickAudioFiles } from "../../logic/audioImport";
 import { createVoiceImportDraft, importVoiceFiles, type VoiceImportDraft } from "../../logic/voice/voiceImport";
 import { applyVoiceAssetDeletion } from "../../logic/voice/voiceLineage";
+import { editVoiceAssetMetadata } from "../../logic/voice/voiceAssetMetadata";
 import { deleteVoiceFileOnDisk, revealVoiceFileInFinder } from "../../logic/voice/voiceFileClient";
 import {
   buildGeneratedVoiceAsset,
@@ -71,6 +72,15 @@ interface VoiceLibraryWorkspaceProps {
 type VoicePage = "library" | "generate";
 
 type EditorMode = "create" | "edit";
+type EditableVoiceMetadataField = "name" | "text";
+
+interface VoiceMetadataEditor {
+  assetId: string;
+  field: EditableVoiceMetadataField;
+  name: string;
+  text: string;
+  error: string | null;
+}
 
 const COLOR_TOKEN_STYLES: Record<string, string> = {
   slate: "#8a94a6",
@@ -604,6 +614,8 @@ export function VoiceLibraryWorkspace({
   const [pendingImportDrafts, setPendingImportDrafts] = useState<VoiceImportDraft[] | null>(null);
   const [importBusy, setImportBusy] = useState(false);
   const [workspaceNotice, setWorkspaceNotice] = useState<string | null>(null);
+  const [metadataEditor, setMetadataEditor] = useState<VoiceMetadataEditor | null>(null);
+  const ignoreMetadataBlurRef = useRef(false);
   const [deleteTargetIds, setDeleteTargetIds] = useState<string[] | null>(null);
   const [openFilterMenu, setOpenFilterMenu] = useState<"group" | "voice" | null>(null);
   const [filterPopoverPosition, setFilterPopoverPosition] = useState<{ left: number; top: number; maxHeight: number } | null>(null);
@@ -782,6 +794,52 @@ export function VoiceLibraryWorkspace({
 
   function updateAsset(assetId: string, patch: Partial<VoiceAsset>) {
     onSaveAssets(assets.map((asset) => (asset.id === assetId ? { ...asset, ...patch, updatedAt: new Date().toISOString() } : asset)));
+  }
+
+  function beginMetadataEdit(asset: VoiceAsset, field: EditableVoiceMetadataField) {
+    setMetadataEditor({ assetId: asset.id, field, name: asset.name, text: asset.text ?? "", error: null });
+  }
+
+  function cancelMetadataEdit() {
+    setMetadataEditor(null);
+  }
+
+  function updateMetadataEditor(field: EditableVoiceMetadataField, value: string) {
+    setMetadataEditor((current) => current ? { ...current, [field]: value, error: null } : current);
+  }
+
+  function handleMetadataEditorKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+    event.stopPropagation();
+    if (event.key === "Enter") {
+      event.preventDefault();
+      commitMetadataEdit();
+    }
+    if (event.key === "Escape") {
+      event.preventDefault();
+      ignoreMetadataBlurRef.current = true;
+      cancelMetadataEdit();
+    }
+  }
+
+  function handleMetadataEditorBlur() {
+    if (ignoreMetadataBlurRef.current) {
+      ignoreMetadataBlurRef.current = false;
+      return;
+    }
+    commitMetadataEdit();
+  }
+
+  function commitMetadataEdit() {
+    if (!metadataEditor) return;
+    const asset = assets.find((candidate) => candidate.id === metadataEditor.assetId);
+    if (!asset) { setMetadataEditor(null); return; }
+    const result = editVoiceAssetMetadata(asset, metadataEditor);
+    if (!result.ok) {
+      setMetadataEditor((current) => current ? { ...current, error: result.error } : current);
+      return;
+    }
+    onSaveAssets(assets.map((candidate) => candidate.id === asset.id ? result.asset : candidate));
+    setMetadataEditor(null);
   }
 
   function applyBulkPatch(patch: Partial<VoiceAsset>) {
@@ -1016,6 +1074,8 @@ export function VoiceLibraryWorkspace({
                   const isCurrent = auditionTrackId === asset.id;
                   const group = groups.find((item) => item.id === asset.groupId) ?? null;
                   const profile = profiles.find((item) => item.id === asset.voiceProfileId) ?? null;
+                  const editingName = metadataEditor?.assetId === asset.id && metadataEditor.field === "name";
+                  const editingText = metadataEditor?.assetId === asset.id && metadataEditor.field === "text";
                   return (
                     <tr key={asset.id} className={`${isSelected ? "row-selected " : ""}${isCurrent ? "row-auditioning" : ""}`} onClick={(event) => handleRowClick(asset.id, event)}>
                       {visibleColumns.map((columnId) => (
@@ -1035,14 +1095,44 @@ export function VoiceLibraryWorkspace({
                             </button>
                           ) : columnId === "name" ? (
                             <div className="voice-name-cell">
-                              <span>{asset.name}</span>
+                              {editingName ? (
+                                <span className="voice-inline-editor" data-voice-row-control>
+                                  <input
+                                    autoFocus
+                                    aria-label={`Edit name for ${asset.name}`}
+                                    value={metadataEditor.name}
+                                    onChange={(event) => updateMetadataEditor("name", event.target.value)}
+                                    onKeyDown={handleMetadataEditorKeyDown}
+                                    onBlur={handleMetadataEditorBlur}
+                                  />
+                                  {metadataEditor.error && <small role="alert">{metadataEditor.error}</small>}
+                                </span>
+                              ) : (
+                                <span className="voice-editable-cell" title="Double-click to edit name" onDoubleClick={(event) => { event.stopPropagation(); beginMetadataEdit(asset, "name"); }}>{asset.name}</span>
+                              )}
                               <span className="voice-row-actions">
+                                <button type="button" className="tb-btn sm" data-voice-row-control onClick={(event) => { event.stopPropagation(); beginMetadataEdit(asset, "name"); }}>Edit</button>
                                 <button type="button" className="tb-btn sm" data-voice-row-control onClick={(event) => { event.stopPropagation(); void handleReveal(asset.filePath); }}>Reveal</button>
                                 <button type="button" className="tb-btn sm remove-btn" data-voice-row-control onClick={(event) => { event.stopPropagation(); setDeleteTargetIds([asset.id]); }}>Delete</button>
                               </span>
                             </div>
                           ) : columnId === "text" ? (
-                            <span className="voice-cell-truncate">{asset.text ?? "—"}</span>
+                            editingText ? (
+                              <span className="voice-inline-editor" data-voice-row-control>
+                                <input
+                                  autoFocus
+                                  aria-label={`Edit text for ${asset.name}`}
+                                  placeholder="Add transcript"
+                                  value={metadataEditor.text}
+                                  onChange={(event) => updateMetadataEditor("text", event.target.value)}
+                                  onKeyDown={handleMetadataEditorKeyDown}
+                                  onBlur={handleMetadataEditorBlur}
+                                />
+                                {metadataEditor.error && <small role="alert">{metadataEditor.error}</small>}
+                              </span>
+                            ) : (
+                              <span className="voice-cell-truncate voice-editable-cell" title="Double-click to edit text" onDoubleClick={(event) => { event.stopPropagation(); beginMetadataEdit(asset, "text"); }}>{asset.text ?? "—"}</span>
+                            )
                           ) : columnId === "duration" ? (
                             formatDuration(asset.durationMs)
                           ) : columnId === "rating" ? (

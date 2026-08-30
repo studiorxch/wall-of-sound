@@ -12829,6 +12829,10 @@ button.radio-stat-tile { font: inherit; text-align: left; cursor: default; }
   justify-content: space-between;
   gap: 10px;
 }
+.voice-editable-cell { cursor: text; }
+.voice-inline-editor { display: grid; gap: 3px; min-width: 160px; }
+.voice-inline-editor input { width: 100%; min-height: 28px; padding: 4px 7px; border: 1px solid var(--accent, #5b8def); border-radius: 4px; color: var(--text, #fff); background: rgba(7, 13, 24, 0.96); font: inherit; }
+.voice-inline-editor small { color: #ff9d9d; font-size: 10px; }
 .voice-row-actions {
   display: inline-flex;
   align-items: center;
