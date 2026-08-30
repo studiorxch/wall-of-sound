@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { PlaybackStatus } from "../../data/playbackTypes";
 import type {
@@ -90,9 +90,6 @@ const SOURCE_OPTIONS: Array<{ value: VoiceAsset["source"]; label: string }> = [
   { value: "recorded", label: "Recorded" },
   { value: "other", label: "Other" },
 ];
-
-const IDENTITY_OPTIONS: VoiceIdentity[] = ["woman", "man", "non-binary", "agender", "unspecified", "custom"];
-const PRESENTATION_OPTIONS: VoicePresentation[] = ["feminine", "masculine", "neutral", "androgynous", "synthetic", "unspecified"];
 
 function formatDuration(durationMs: number): string {
   if (!Number.isFinite(durationMs) || durationMs <= 0) return "0:00";
@@ -238,6 +235,7 @@ function GroupEditorDialog({ groups, onSave, onClose }: GroupEditorProps) {
 
 interface ProfileEditorProps {
   profiles: VoiceProfile[];
+  providers: SpeechProviderDescriptor[];
   providerVoices: SpeechProviderVoiceOption[];
   providerAdapterId: string;
   onSave: (next: VoiceProfile[]) => void;
@@ -258,6 +256,7 @@ function ProviderVoiceBrowser({ providerVoices, providerId, selectedVoiceId, onS
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [previewingId, setPreviewingId] = useState<string | null>(null);
+  const previewAudioRef = useRef<HTMLAudioElement | null>(null);
   const filteredVoices = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     return providerVoices.filter((voice) => !normalized || `${voice.label} ${voice.language ?? ""}`.toLowerCase().includes(normalized));
@@ -272,6 +271,13 @@ function ProviderVoiceBrowser({ providerVoices, providerId, selectedVoiceId, onS
   }, [filteredVoices]);
 
   useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
+
+  useEffect(() => {
+    if (!previewUrl) return;
+    previewAudioRef.current?.play().catch(() => {
+      setPreviewError("Preview is ready, but autoplay was blocked. Use the player controls to listen.");
+    });
+  }, [previewUrl]);
 
   async function previewVoice(voice: SpeechProviderVoiceOption) {
     setPreviewingId(voice.id);
@@ -316,7 +322,7 @@ function ProviderVoiceBrowser({ providerVoices, providerId, selectedVoiceId, onS
                     <span>{voice.language ?? "Locale unavailable"}</span>
                     {voice.description && <small>{voice.description}</small>}
                   </button>
-                  <button type="button" className="tb-btn sm" onClick={() => { void previewVoice(voice); }} disabled={previewingId === voice.id}>
+                  <button type="button" className="tb-btn sm" onClick={() => { void previewVoice(voice); }} disabled={previewingId === voice.id || !providerId}>
                     {previewingId === voice.id ? "Previewing..." : "Preview"}
                   </button>
                 </div>
@@ -326,14 +332,30 @@ function ProviderVoiceBrowser({ providerVoices, providerId, selectedVoiceId, onS
         ))}
         {filteredVoices.length === 0 && <div className="voice-provider-browser__empty">No provider voices match this search.</div>}
       </div>
-      {previewUrl && <audio className="voice-provider-browser__audio" controls autoPlay src={previewUrl} />}
+      {previewingId && <div className="voice-provider-browser__status" role="status">Generating temporary preview...</div>}
+      {previewUrl && <audio ref={previewAudioRef} className="voice-provider-browser__audio" controls src={previewUrl} onError={() => setPreviewError("The provider returned audio that could not be played.")} />}
       {previewError && <div className="voice-error">{previewError}</div>}
       <div className="voice-provider-browser__hint">Preview phrase: {PROVIDER_PREVIEW_FALLBACK}</div>
     </div>
   );
 }
 
-function ProfileEditorDialog({ profiles, providerVoices, providerAdapterId, onSave, onCreated, onClose }: ProfileEditorProps) {
+function ProfileColorSwatches({ value, onChange }: { value: string | null; onChange: (next: string | null) => void }) {
+  return (
+    <div className="voice-color-swatches" role="group" aria-label="Profile color">
+      <button type="button" className={`voice-color-swatch${value == null ? " selected" : ""}`} onClick={() => onChange(null)} aria-pressed={value == null}>
+        <span className="voice-color-swatch__dot voice-color-swatch__dot--none" />None
+      </button>
+      {VOICE_COLOR_TOKENS.map((token) => (
+        <button key={token} type="button" className={`voice-color-swatch${value === token ? " selected" : ""}`} onClick={() => onChange(token)} aria-pressed={value === token}>
+          <span className="voice-color-swatch__dot" style={{ background: colorValue(token) }} />{token}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function ProfileEditorDialog({ profiles, providers, providerVoices, providerAdapterId, onSave, onCreated, onClose }: ProfileEditorProps) {
   const [mode, setMode] = useState<EditorMode>("create");
   const [selectedId, setSelectedId] = useState<string>(profiles[0]?.id ?? "");
   const [name, setName] = useState("");
@@ -395,12 +417,12 @@ function ProfileEditorDialog({ profiles, providerVoices, providerAdapterId, onSa
 
   return (
     <div className="npw-overlay" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <div className="npw-modal voice-modal voice-modal--wide">
+      <div className="npw-modal voice-modal voice-modal--wide voice-profile-modal">
         <div className="npw-header">
           <div className="npw-header-title">Voice Profiles</div>
           <button className="npw-close" onClick={onClose}>✕</button>
         </div>
-        <div className="voice-form-grid voice-form-grid--two">
+        <div className="voice-form-grid voice-form-grid--two voice-profile-form">
           <label>Mode
             <select value={mode} onChange={(event) => {
               const nextMode = event.target.value as EditorMode;
@@ -432,43 +454,22 @@ function ProfileEditorDialog({ profiles, providerVoices, providerAdapterId, onSa
             <input value={name} onChange={(event) => setName(event.target.value)} />
           </label>
           <label>Color
-            <select value={colorToken ?? ""} onChange={(event) => setColorToken(event.target.value || null)}>
-              <option value="">None</option>
-              {VOICE_COLOR_TOKENS.map((token) => <option key={token} value={token}>{token}</option>)}
-            </select>
-          </label>
-          <label>Identity
-            <select value={identity} onChange={(event) => setIdentity(event.target.value as VoiceIdentity | "")}>
-              <option value="">None</option>
-              {IDENTITY_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
-            </select>
-          </label>
-          <label>Custom Identity
-            <input value={customIdentityLabel} onChange={(event) => setCustomIdentityLabel(event.target.value)} disabled={identity !== "custom"} />
-          </label>
-          <label>Presentation
-            <select value={presentation} onChange={(event) => setPresentation(event.target.value as VoicePresentation | "")}>
-              <option value="">None</option>
-              {PRESENTATION_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
-            </select>
-          </label>
-          <label>Language
-            <input value={language} onChange={(event) => setLanguage(event.target.value)} />
+            <ProfileColorSwatches value={colorToken} onChange={setColorToken} />
           </label>
           <label>Provider
-            <input value={providerId} onChange={(event) => setProviderId(event.target.value)} placeholder="Optional provider id" />
+            <select value={providerId || providerAdapterId} onChange={(event) => { setProviderId(event.target.value); setProviderVoiceId(""); }}>
+              <option value="">Select provider</option>
+              {providers.map((provider) => <option key={provider.id} value={provider.id} disabled={!provider.available}>{provider.displayName}{provider.available ? "" : " (Unavailable)"}</option>)}
+            </select>
           </label>
           <div className="voice-form-grid__full">
             <ProviderVoiceBrowser
               providerVoices={providerVoices}
-              providerId={providerAdapterId}
+              providerId={providerId || providerAdapterId}
               selectedVoiceId={providerVoiceId}
-              onSelect={(voice) => { setProviderVoiceId(voice.id); setProviderId(providerAdapterId); setLanguage((current) => current || voice.language || ""); }}
+              onSelect={(voice) => { setProviderVoiceId(voice.id); setProviderId(providerId || providerAdapterId); setLanguage((current) => current || voice.language || ""); }}
             />
           </div>
-          <label>Model
-            <input value={model} onChange={(event) => setModel(event.target.value)} placeholder="macos-say" />
-          </label>
           <label className="voice-form-grid__full">Notes
             <textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={3} />
           </label>
@@ -1148,6 +1149,7 @@ export function VoiceLibraryWorkspace({
       {showProfileEditor && (
         <ProfileEditorDialog
           profiles={profiles}
+          providers={providers}
           providerVoices={providerVoices}
           providerAdapterId={generateForm.providerId || providersAvailable[0]?.id || ""}
           onSave={onSaveProfiles}

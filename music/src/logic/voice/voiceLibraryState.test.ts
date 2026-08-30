@@ -119,10 +119,10 @@ describe("createVoiceProfile / createVoiceAsset", () => {
       customIdentityLabel: null,
       presentation: "neutral",
       language: "en-US",
-      provider: null,
-      providerVoiceId: null,
+      provider: "macos-say",
+      providerVoiceId: "Samantha",
       model: null,
-      notes: null,
+      notes: "Warm station voice",
     }, NOW);
     const createdAsset = createVoiceAsset({
       name: "  Station ID  ",
@@ -143,6 +143,10 @@ describe("createVoiceProfile / createVoiceAsset", () => {
       notes: "trim me",
     }, NOW);
     expect(createdProfile.name).toBe("Narrator");
+    expect(createdProfile.colorToken).toBe("rose");
+    expect(createdProfile.provider).toBe("macos-say");
+    expect(createdProfile.providerVoiceId).toBe("Samantha");
+    expect(createdProfile.notes).toBe("Warm station voice");
     expect(createdProfile.createdAt).toBe(NOW);
     expect(createdAsset.name).toBe("Station ID");
     expect(createdAsset.voiceProfileId).toBe(createdProfile.id);

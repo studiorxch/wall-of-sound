@@ -114,6 +114,15 @@ describe("voiceGenerationService", () => {
     expect(fetchMock).toHaveBeenCalledWith("/voice-generation/preview", expect.objectContaining({ method: "POST" }));
   });
 
+  it("surfaces a provider-voice preview failure without creating an asset", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: "preview unavailable" }), {
+      status: 503,
+      headers: { "Content-Type": "application/json" },
+    })));
+
+    await expect(generateProviderVoicePreview("macos-say", "Samantha")).rejects.toThrow("preview unavailable");
+  });
+
   it("surfaces provider failures without fabricating a preview", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ error: "provider unavailable" }), {

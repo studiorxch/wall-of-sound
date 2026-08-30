@@ -12859,6 +12859,17 @@ button.radio-stat-tile { font: inherit; text-align: left; cursor: default; }
 .voice-modal--wide {
   width: min(980px, calc(100vw - 32px));
 }
+.voice-profile-modal {
+  width: min(1080px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  display: flex;
+  flex-direction: column;
+}
+.voice-profile-form {
+  min-height: 0;
+  flex: 1;
+  overflow: hidden auto;
+}
 .voice-form-grid {
   display: grid;
   gap: 12px;
@@ -12939,9 +12950,11 @@ button.radio-stat-tile { font: inherit; text-align: left; cursor: default; }
   display: flex;
   flex-direction: column;
   gap: 8px;
+  min-height: 0;
 }
 .voice-provider-browser__list {
-  max-height: 300px;
+  height: min(56vh, 620px);
+  min-height: 420px;
   overflow-y: auto;
   border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 8px;
@@ -12984,8 +12997,31 @@ button.radio-stat-tile { font: inherit; text-align: left; cursor: default; }
 .voice-provider-browser__select span,
 .voice-provider-browser__select small { color: var(--text-muted, #98a2b3); }
 .voice-provider-browser__empty,
-.voice-provider-browser__hint { padding: 8px; color: var(--text-muted, #98a2b3); font-size: 12px; }
+.voice-provider-browser__hint,
+.voice-provider-browser__status { padding: 8px; color: var(--text-muted, #98a2b3); font-size: 12px; }
 .voice-provider-browser__audio { width: 100%; }
+.voice-color-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.voice-color-swatch {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 28px;
+  padding: 4px 7px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text, #fff);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.voice-color-swatch.selected { border-color: var(--accent, #5b8def); box-shadow: inset 0 0 0 1px var(--accent, #5b8def); }
+.voice-color-swatch__dot { width: 12px; height: 12px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25); }
+.voice-color-swatch__dot--none { background: linear-gradient(135deg, transparent 44%, #9aa4b2 45%, #9aa4b2 55%, transparent 56%); border: 1px solid #9aa4b2; }
 
 @media (max-width: 920px) {
   .voice-toolbar {
@@ -13000,6 +13036,7 @@ button.radio-stat-tile { font: inherit; text-align: left; cursor: default; }
   .voice-form-grid--two {
     grid-template-columns: 1fr;
   }
+  .voice-provider-browser__list { min-height: 280px; height: 48vh; }
   .voice-cell-truncate {
     max-width: 220px;
   }
