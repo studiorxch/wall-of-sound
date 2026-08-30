@@ -193,4 +193,17 @@ describe("voiceGenerationService", () => {
       text: "Transfer is available.",
     });
   });
+
+  it("persists a locally generated Kokoro provider identity with the saved VOICE asset", () => {
+    const next = buildGeneratedVoiceAsset(
+      [],
+      { filePath: "voice/audio/kokoro.wav", fileName: "kokoro.wav" },
+      { ...PROFILE, provider: "kokoro-local", providerVoiceId: "af_bella", model: "kokoro-82m-local" },
+      { audioData: new Blob(["audio"]), mimeType: "audio/wav", provider: "kokoro-local", providerVoiceId: "af_bella", model: "kokoro-82m-local" },
+      { name: "Kokoro Arrival", text: "The next train is arriving.", durationMs: 1_900, groupId: null, parentAssetId: null, notes: null },
+      NOW,
+    );
+
+    expect(next).toMatchObject({ provider: "kokoro-local", providerVoiceId: "af_bella", model: "kokoro-82m-local", text: "The next train is arriving.", source: "generated" });
+  });
 });

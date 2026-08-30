@@ -1,4 +1,5 @@
 import { generateMacOsSpeech, getMacOsSayProviderDescriptor } from "./macosSayProvider";
+import { generateKokoroLocalSpeech, KOKORO_LOCAL_PROVIDER_ID } from "./kokoroLocalProvider";
 import { VOICE_PROVIDER_PREVIEW_ROUTE } from "../../src/data/voiceLibraryTypes";
 
 export { VOICE_PROVIDER_PREVIEW_ROUTE };
@@ -8,6 +9,8 @@ export interface VoicePreviewAdapter {
   readonly previewText: string | null | undefined;
   generate(text: string, providerVoiceId: string | null): ReturnType<typeof generateMacOsSpeech>;
 }
+
+type KokoroPreviewGenerator = typeof generateKokoroLocalSpeech;
 
 function macOsSayPreviewAdapter(): VoicePreviewAdapter {
   const descriptor = getMacOsSayProviderDescriptor();
@@ -19,7 +22,11 @@ export async function generateProviderVoicePreviewAudio(
   providerId: string,
   providerVoiceId: string | null,
   adapter: VoicePreviewAdapter = macOsSayPreviewAdapter(),
+  kokoroGenerate: KokoroPreviewGenerator = generateKokoroLocalSpeech,
 ) {
+  if (providerId === KOKORO_LOCAL_PROVIDER_ID) {
+    return kokoroGenerate("StudioRich VOICE library. Your next sound begins here.", providerVoiceId);
+  }
   if (providerId !== adapter.id) {
     throw new Error(`Unsupported VOICE preview provider: ${providerId || "(missing provider)"}.`);
   }

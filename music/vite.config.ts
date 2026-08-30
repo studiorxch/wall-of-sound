@@ -32,6 +32,7 @@ import { validateWebBundle } from './server/radio/radioWebBundleValidator'
 import { revealDirectoryInFinder } from './server/radio/radioPackageReveal'
 import { deleteVoiceFile, revealVoiceFileInFinder } from './server/voice/voiceFileAccess'
 import { generateMacOsSpeech, getMacOsSayProviderDescriptor, listMacOsSayVoices } from './server/voice/macosSayProvider'
+import { generateKokoroLocalSpeech, getKokoroLocalProviderDescriptor, KOKORO_LOCAL_PROVIDER_ID, listKokoroLocalVoices } from './server/voice/kokoroLocalProvider'
 import { generateProviderVoicePreviewAudio, VOICE_PROVIDER_PREVIEW_ROUTE } from './server/voice/voicePreviewService'
 import type { RadioTrackPrepareRequest } from './src/data/radioTrackPackageTypes'
 import type { RadioWebBundleExportRequest } from './src/data/radioWebBundleTypes'
@@ -932,19 +933,19 @@ export default defineConfig({
         })
 
         server.middlewares.use('/voice-generation/providers', (_req: IncomingMessage, res: ServerResponse) => {
-          radioJson(res, 200, { providers: [getMacOsSayProviderDescriptor()] })
+          getKokoroLocalProviderDescriptor().then((kokoro) => radioJson(res, 200, { providers: [getMacOsSayProviderDescriptor(), kokoro] }))
         })
 
         server.middlewares.use('/voice-generation/voices', async (req: IncomingMessage, res: ServerResponse) => {
           if (req.method !== 'GET') { radioJson(res, 405, { ok: false, error: 'method_not_allowed' }); return }
           const url = new URL(req.url ?? '/', 'http://localhost')
           const provider = url.searchParams.get('provider') ?? ''
-          if (provider !== 'macos-say') {
+          if (provider !== 'macos-say' && provider !== KOKORO_LOCAL_PROVIDER_ID) {
             radioJson(res, 400, { ok: false, error: 'unsupported_provider', voices: [] as SpeechProviderVoiceOption[] })
             return
           }
           try {
-            const voices = await listMacOsSayVoices()
+            const voices = provider === KOKORO_LOCAL_PROVIDER_ID ? listKokoroLocalVoices() : await listMacOsSayVoices()
             radioJson(res, 200, { voices })
           } catch (error) {
             radioJson(res, 500, { ok: false, error: String(error), voices: [] as SpeechProviderVoiceOption[] })
@@ -958,7 +959,7 @@ export default defineConfig({
             const providerId = String(body?.providerId ?? '')
             const text = String(body?.text ?? '').trim()
             const providerVoiceId = body?.providerVoiceId == null ? null : String(body.providerVoiceId)
-            if (providerId !== 'macos-say') {
+            if (providerId !== 'macos-say' && providerId !== KOKORO_LOCAL_PROVIDER_ID) {
               radioJson(res, 400, { ok: false, error: 'unsupported_provider' })
               return
             }
@@ -967,7 +968,9 @@ export default defineConfig({
               return
             }
             try {
-              const generated = await generateMacOsSpeech(text, providerVoiceId)
+              const generated = providerId === KOKORO_LOCAL_PROVIDER_ID
+                ? await generateKokoroLocalSpeech(text, providerVoiceId)
+                : await generateMacOsSpeech(text, providerVoiceId)
               res.statusCode = 200
               res.setHeader('Content-Type', generated.mimeType)
               res.setHeader('Content-Length', generated.data.length)
