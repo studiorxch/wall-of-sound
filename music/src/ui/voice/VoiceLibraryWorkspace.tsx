@@ -43,11 +43,11 @@ import {
   emptyLibrarySelectionState,
   extendLibrarySelectionFromFocus,
   moveLibraryFocus,
-  resolveHeaderCheckboxToggle,
   resolvePointerSelect,
   resolveSelectAllVisible,
   toggleFocusedLibrarySelection,
 } from "../../logic/library/librarySelection";
+import { isVoiceRowControlTarget, voiceRowSelectionModifiers } from "../../logic/voice/voiceRowSelection";
 import { VoiceColumnsPanel } from "./VoiceColumnsPanel";
 
 interface VoiceLibraryWorkspaceProps {
@@ -141,7 +141,7 @@ function VoiceChip({ label, colorToken }: { label: string; colorToken: string | 
 
 function RatingCell({ value, onChange }: { value: number | null; onChange: (next: number | null) => void }) {
   return (
-    <span className="star-rating" onClick={(event) => event.stopPropagation()}>
+    <span className="star-rating" data-voice-row-control onClick={(event) => event.stopPropagation()}>
       {([1, 2, 3, 4, 5] as const).map((n) => (
         <button key={n} className={`star-btn${(value ?? 0) >= n ? " filled" : ""}`} onClick={() => onChange(value === n ? null : n)}>★</button>
       ))}
@@ -670,7 +670,8 @@ export function VoiceLibraryWorkspace({
   }
 
   function handleRowClick(assetId: string, event: React.MouseEvent) {
-    setSelection((current) => resolvePointerSelect(current, assetId, visibleIds, { shift: event.shiftKey, alt: event.altKey }));
+    if (isVoiceRowControlTarget(event.target)) return;
+    setSelection((current) => resolvePointerSelect(current, assetId, visibleIds, voiceRowSelectionModifiers(event.nativeEvent)));
   }
 
   function handleKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
@@ -947,13 +948,6 @@ export function VoiceLibraryWorkspace({
             <table className="voice-table">
               <thead>
                 <tr>
-                  <th className="voice-table__select">
-                    <input
-                      type="checkbox"
-                      checked={visibleIds.length > 0 && visibleIds.every((id) => selection.selectedIds.has(id))}
-                      onChange={() => setSelection((current) => resolveHeaderCheckboxToggle(current, visibleIds))}
-                    />
-                  </th>
                   {visibleColumns.map((columnId) => {
                     const definition = VOICE_COLUMN_REGISTRY.find((column) => column.id === columnId);
                     if (!definition) return null;
@@ -1004,21 +998,12 @@ export function VoiceLibraryWorkspace({
                   const profile = profiles.find((item) => item.id === asset.voiceProfileId) ?? null;
                   return (
                     <tr key={asset.id} className={`${isSelected ? "row-selected " : ""}${isCurrent ? "row-auditioning" : ""}`} onClick={(event) => handleRowClick(asset.id, event)}>
-                      <td className="voice-table__select">
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={(event) => {
-                            event.stopPropagation();
-                            setSelection((current) => resolvePointerSelect(current, asset.id, visibleIds, { shift: event.shiftKey, alt: event.altKey }));
-                          }}
-                        />
-                      </td>
                       {visibleColumns.map((columnId) => (
                         <td key={`${asset.id}-${columnId}`}>
                           {columnId === "play" ? (
                             <button
                               className={`tb-btn sm col-play-btn${isCurrent ? " tb-btn-playing" : ""}`}
+                              data-voice-row-control
                               onClick={(event) => {
                                 event.stopPropagation();
                                 if (isCurrent && playbackStatus === "playing") onPauseTrack();
@@ -1032,8 +1017,8 @@ export function VoiceLibraryWorkspace({
                             <div className="voice-name-cell">
                               <span>{asset.name}</span>
                               <span className="voice-row-actions">
-                                <button type="button" className="tb-btn sm" onClick={(event) => { event.stopPropagation(); void handleReveal(asset.filePath); }}>Reveal</button>
-                                <button type="button" className="tb-btn sm remove-btn" onClick={(event) => { event.stopPropagation(); setDeleteTargetIds([asset.id]); }}>Delete</button>
+                                <button type="button" className="tb-btn sm" data-voice-row-control onClick={(event) => { event.stopPropagation(); void handleReveal(asset.filePath); }}>Reveal</button>
+                                <button type="button" className="tb-btn sm remove-btn" data-voice-row-control onClick={(event) => { event.stopPropagation(); setDeleteTargetIds([asset.id]); }}>Delete</button>
                               </span>
                             </div>
                           ) : columnId === "text" ? (
