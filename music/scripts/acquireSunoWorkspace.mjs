@@ -41,10 +41,35 @@
  *
  * Usage:
  *   node scripts/acquireSunoWorkspace.mjs <workspace-url-or-id> [<url2> ...]
- *   node scripts/acquireSunoWorkspace.mjs --manifest <path-to-file>
+ *   node scripts/acquireSunoWorkspace.mjs --manifest <path-to-file> \
+ *     [--progress <path-to-json>] [--limit N] [--pause-ms N]
  *     (manifest: one workspace URL or id per line; '#'-prefixed lines and
  *     blank lines are ignored; processed strictly one at a time — no
- *     concurrency)
+ *     concurrency, modest pause between workspaces via --pause-ms,
+ *     default 3000ms)
+ *
+ *   --progress <path>  Resumable batch tracking. A JSON file of
+ *                       {completedIds, failedIds}. Any manifest target
+ *                       whose workspace id is already in completedIds is
+ *                       skipped without re-capturing it. Written after
+ *                       every workspace (success or failure), so a killed
+ *                       or crashed run loses at most the in-flight
+ *                       workspace, never prior progress.
+ *   --limit N           Attempt at most N NOT-yet-completed workspaces
+ *                       this run, then stop (remaining targets are left
+ *                       for the next invocation — re-run the same command
+ *                       to continue where it left off).
+ *   --pause-ms N        Pause this long between workspace attempts
+ *                       (default 3000). Not applied before the first.
+ *
+ *   The batch also stops itself automatically — before exhausting the
+ *   manifest — if: (a) navigating to a workspace redirects away from
+ *   /create (the Chrome session appears to have signed out — every
+ *   remaining target would fail the same way, so it's a batch-level
+ *   condition, not a per-workspace one), or (b) 3 consecutive workspace
+ *   failures occur (a persistent problem — e.g. rate limiting or a Suno
+ *   response-shape change — rather than isolated per-workspace issues).
+ *   Both print a clear STOPPED EARLY message and exit non-zero.
  *
  * Env:
  *   SUNO_CDP_ENDPOINT   CDP endpoint to attach to (default http://localhost:9222)
@@ -66,7 +91,7 @@
  */
 
 import { chromium } from "playwright-core";
-import { writeFileSync, mkdirSync, readFileSync } from "fs";
+import { writeFileSync, mkdirSync, readFileSync, existsSync } from "fs";
 import { join, resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 import { spawnSync } from "child_process";
@@ -422,6 +447,19 @@ async function acquireOneWorkspace(browser, target) {
 
   await page.goto(workspaceUrl, { waitUntil: "domcontentloaded" });
 
+  // If Chrome's session has been signed out (expired, revoked, etc.), Suno
+  // redirects away from /create to a sign-in/landing page instead of
+  // serving the workspace. That's a batch-level condition, not a
+  // per-workspace one — every remaining target would fail the same way —
+  // so it's flagged with a distinct AUTH_LOST: prefix the batch runner
+  // checks for to stop the whole run rather than burning through the rest
+  // of the manifest against a dead session.
+  if (!page.url().startsWith("https://suno.com/create")) {
+    const currentUrl = page.url();
+    await page.close();
+    throw new Error(`AUTH_LOST: navigating to the workspace redirected to ${currentUrl} instead of staying on /create — the Chrome session may have signed out`);
+  }
+
   await waitForCondition(
     () => projectResponse != null || feedPages.length > 0 || anomalies.length > 0,
     INITIAL_LOAD_TIMEOUT_MS,
@@ -517,27 +555,63 @@ async function acquireOneWorkspace(browser, target) {
 // ---------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------
+const DEFAULT_PAUSE_MS = 3000;
+const CONSECUTIVE_FAILURE_STOP = 3;
+
+function loadProgress(progressPath) {
+  if (!progressPath || !existsSync(progressPath)) return { completedIds: [], failedIds: {} };
+  const parsed = JSON.parse(readFileSync(progressPath, "utf-8"));
+  return {
+    completedIds: Array.isArray(parsed.completedIds) ? parsed.completedIds : [],
+    failedIds: typeof parsed.failedIds === "object" && parsed.failedIds != null ? parsed.failedIds : {},
+  };
+}
+
 async function main() {
-  const args = process.argv.slice(2);
-  if (args.length === 0) {
+  const rawArgs = process.argv.slice(2);
+  if (rawArgs.length === 0) {
     console.error("Usage: node scripts/acquireSunoWorkspace.mjs <workspace-url-or-id> [<url2> ...]");
-    console.error("   or: node scripts/acquireSunoWorkspace.mjs --manifest <path-to-file>");
+    console.error("   or: node scripts/acquireSunoWorkspace.mjs --manifest <path-to-file> [--progress <path>] [--limit N] [--pause-ms N]");
     process.exit(1);
   }
 
-  let targets;
-  if (args[0] === "--manifest") {
-    const manifestPath = args[1];
-    if (!manifestPath) {
-      console.error("--manifest requires a file path");
-      process.exit(1);
-    }
-    targets = readFileSync(manifestPath, "utf-8")
-      .split("\n")
-      .map((l) => l.trim())
-      .filter((l) => l && !l.startsWith("#"));
-  } else {
-    targets = args;
+  let manifestPath = null;
+  let progressPath = null;
+  let limit = Infinity;
+  let pauseMs = DEFAULT_PAUSE_MS;
+  const bareTargets = [];
+  for (let i = 0; i < rawArgs.length; i++) {
+    const a = rawArgs[i];
+    if (a === "--manifest") manifestPath = rawArgs[++i];
+    else if (a === "--progress") progressPath = rawArgs[++i];
+    else if (a === "--limit") limit = Number(rawArgs[++i]);
+    else if (a === "--pause-ms") pauseMs = Number(rawArgs[++i]);
+    else bareTargets.push(a);
+  }
+
+  const targets = manifestPath
+    ? readFileSync(manifestPath, "utf-8")
+        .split("\n")
+        .map((l) => l.trim())
+        .filter((l) => l && !l.startsWith("#"))
+    : bareTargets;
+  if (targets.length === 0) {
+    console.error("No targets to process (empty manifest or no bare targets given).");
+    process.exit(1);
+  }
+
+  let progress;
+  try {
+    progress = loadProgress(progressPath);
+  } catch (err) {
+    console.error(`FAIL: could not parse existing progress file ${progressPath}: ${err.message}`);
+    process.exit(1);
+  }
+  const completedSet = new Set(progress.completedIds);
+  function saveProgress() {
+    if (!progressPath) return;
+    progress.completedIds = Array.from(completedSet);
+    writeFileSync(progressPath, JSON.stringify(progress, null, 2), "utf-8");
   }
 
   console.log(`Connecting to Chrome over CDP at ${CDP_ENDPOINT} ...`);
@@ -556,17 +630,59 @@ async function main() {
   mkdirSync(AUTO_CAPTURE_DIR, { recursive: true });
 
   let overallExitCode = 0;
+  let attempted = 0;
+  let skippedCompleted = 0;
+  let consecutiveFailures = 0;
+  let stoppedEarly = null;
+
   for (const target of targets) {
+    let workspaceId;
+    try {
+      workspaceId = parseSunoWorkspaceId(target);
+    } catch (err) {
+      console.error(`SKIP (${target}): could not parse a workspace id: ${err.message}`);
+      continue;
+    }
+
+    if (completedSet.has(workspaceId)) {
+      skippedCompleted++;
+      continue;
+    }
+    if (attempted >= limit) {
+      console.log(`\nReached --limit ${limit} attempted workspace(s) this run — stopping (remaining targets left for a future run).`);
+      break;
+    }
+
+    if (attempted > 0 && pauseMs > 0) {
+      await sleep(pauseMs);
+    }
+    attempted++;
+
     console.log(`\n=== Acquiring: ${target} ===`);
     let capture;
     try {
       capture = await acquireOneWorkspace(browser, target);
     } catch (err) {
-      console.error(`FAIL (${target}): ${err?.message ?? err}`);
+      const message = err?.message ?? String(err);
+      console.error(`FAIL (${target}): ${message}`);
       overallExitCode = 1;
+      if (progressPath) {
+        progress.failedIds[workspaceId] = { target, reason: message, at: new Date().toISOString() };
+        saveProgress();
+      }
+      if (message.startsWith("AUTH_LOST:")) {
+        stoppedEarly = "authentication appears to have been lost";
+        break;
+      }
+      consecutiveFailures++;
+      if (consecutiveFailures >= CONSECUTIVE_FAILURE_STOP) {
+        stoppedEarly = `${consecutiveFailures} consecutive workspace failures (possible rate limiting or a Suno response-shape change)`;
+        break;
+      }
       continue;
     }
 
+    consecutiveFailures = 0;
     const pageCount = capture.feedPages.length + (capture.projectResponse ? 1 : 0);
     const terminalHasMore =
       capture.feedPages.length > 0
@@ -597,9 +713,31 @@ async function main() {
     if (mergeResult.status !== 0) {
       console.error(`FAIL (${target}): merge pipeline exited with status ${mergeResult.status}`);
       overallExitCode = 1;
+      if (progressPath) {
+        progress.failedIds[workspaceId] = { target, reason: `merge pipeline exited with status ${mergeResult.status}`, at: new Date().toISOString() };
+        saveProgress();
+      }
+      consecutiveFailures++;
+      if (consecutiveFailures >= CONSECUTIVE_FAILURE_STOP) {
+        stoppedEarly = `${consecutiveFailures} consecutive workspace failures (possible rate limiting or a Suno response-shape change)`;
+        break;
+      }
       continue;
     }
     console.log(`PASS (${target})`);
+    if (progressPath) {
+      completedSet.add(workspaceId);
+      delete progress.failedIds[workspaceId];
+      saveProgress();
+    }
+  }
+
+  console.log(
+    `\n=== BATCH RUN COMPLETE === attempted=${attempted}, skipped (already completed)=${skippedCompleted}, remaining targets in manifest=${targets.length - attempted - skippedCompleted}`,
+  );
+  if (stoppedEarly) {
+    console.error(`STOPPED EARLY: ${stoppedEarly}. Re-run once resolved — completed workspaces are skipped automatically via --progress.`);
+    overallExitCode = 1;
   }
 
   // Deliberately do not call browser.close() — this connection was
