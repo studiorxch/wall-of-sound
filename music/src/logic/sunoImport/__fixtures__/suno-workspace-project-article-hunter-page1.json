@@ -1,0 +1,3996 @@
+{
+    "id": "a34f779f-e4ce-4985-8f5d-93443cb23cc3",
+    "name": "→ Article Hunter",
+    "description": "→ Article Hunter",
+    "project_clips": [
+        {
+            "clip": {
+                "status": "complete",
+                "title": "River of Valentines – Ghost-Pop Inspired Lo-Fi Track: 👍",
+                "play_count": 6,
+                "upvote_count": 1,
+                "allow_comments": true,
+                "is_verified": false,
+                "id": "d3482e49-b6c2-4914-8bd6-2393d66e6e51",
+                "entity_type": "song_schema",
+                "video_url": "",
+                "audio_url": "https://studio-api.prod.suno.com/api/forbidden",
+                "media_urls": [
+                    {
+                        "url": "https://d2lwuy8qc234o3.cloudfront.net/1/clip/d3482e49-b6c2-4914-8bd6-2393d66e6e51.m4a",
+                        "content_type": "m4a-opus",
+                        "delivery": "progressive",
+                        "encoding": "1.0.0"
+                    }
+                ],
+                "image_url": "https://cdn2.suno.ai/image_d3482e49-b6c2-4914-8bd6-2393d66e6e51.jpeg",
+                "image_large_url": "https://cdn2.suno.ai/image_large_d3482e49-b6c2-4914-8bd6-2393d66e6e51.jpeg",
+                "major_model_version": "v4.5+",
+                "model_name": "chirp-bluejay",
+                "metadata": {
+                    "tags": "Dreamy vinyl hiss and carousel ambience set a nostalgic lofi intro, with misty Fmaj7 synth pads and reversed vocal whispers in reverb. Verses feature gentle boom bap, ghostly piano (Fmaj7-Dm9-Bbmaj7), soft fog-like bass, and distant seagull/windchime accents. Bridge A halves drums with phased snares, reversed/delayed “valentines” vocal chops, and filtered synth swells. Verse B gains warmth, swing, and glassy glockenspiel motifs, with breath samples and swirling pads. In Bridge B, drums drop for Rhodes progressions and grain-delayed “ghost-pop” echoes, ending unresolved on Bbmaj7sus2. Outro dissolves into river sounds and tape hiss.",
+                    "prompt": "[Intro]  \n[dreamy vinyl hiss + faint carousel ambience]  \n[soft synth pad: Fmaj7, misty and wobbled]  \n[reverse vocal fragment whisper: “...on the breeze” trailing into reverb]\n\n[Verse A]  \n[lo-fi drum groove, gentle boom bap with soft rim taps]  \n[ghostly piano chord loop: Fmaj7 → Dm9 → Bbmaj7]  \n[melancholy bassline, rounded and slow, like fog moving through a room]  \n[ambient accents: faint seagull echo + windchime shimmer]\n\n[Bridge A]  \n[drums halftime, with phaser on snare]  \n[vocal chop: “valentines…” reversed + delayed]  \n[synth bloom swells, filtered and floral]\n\n[Verse B]  \n[beat warmer with analog compression, slight swing]  \n[glockenspiel or celesta motif enters like rain drops on glass]  \n[subtle breath samples and swirling chorus FX on synth pad]\n\n[Bridge B]  \n[drums mute, soft Rhodes progression carries mood]  \n[echo motif callback: “...ghost-pop” fluttered through grain delay]  \n[chord: Bbmaj7sus2, unresolved]\n\n[Outro]  \n[ambient dissolve into river sounds + tape hiss]  \n[last whisper: “on the breeze…” fades to silence + soft click]\n",
+                    "type": "gen",
+                    "duration": 158.6,
+                    "refund_credits": false,
+                    "stream": true,
+                    "make_instrumental": false,
+                    "vox_render_mode": "strict",
+                    "can_remix": true,
+                    "is_remix": false,
+                    "priority": 10,
+                    "has_stem": false,
+                    "video_is_stale": true,
+                    "uses_latest_model": false,
+                    "model_badges": {
+                        "songrow": {
+                            "display_name": "v4.5+",
+                            "light": {
+                                "text_color": "7D7C83",
+                                "background_color": "00000000",
+                                "border_color": "0000001A"
+                            },
+                            "dark": {
+                                "text_color": "A3A3A3",
+                                "background_color": "00000000",
+                                "border_color": "FFFFFF1A"
+                            }
+                        }
+                    },
+                    "is_mumble": false
+                },
+                "is_liked": true,
+                "user_id": "8b30068d-6d03-43f2-a462-3eff4cb2af25",
+                "display_name": "SR",
+                "handle": "trackstar",
+                "is_handle_updated": true,
+                "avatar_image_url": "https://cdn2.suno.ai/29b82255-3a54-4e0b-966e-86fb597fbf2d.jpeg",
+                "is_trashed": false,
+                "is_hidden": false,
+                "created_at": "2025-08-06T20:30:05.678Z",
+                "is_public": false,
+                "reaction": {
+                    "play_count": 6,
+                    "skip_count": 0,
+                    "flagged": false,
+                    "reaction_type": "L",
+                    "updated_at": "2026-08-15T13:49:31.718Z"
+                },
+                "is_persona_root": false,
+                "is_following_creator": false,
+                "project": {
+                    "id": "a34f779f-e4ce-4985-8f5d-93443cb23cc3",
+                    "name": "→ Article Hunter",
+                    "description": "→ Article Hunter",
+                    "is_trashed": false,
+                    "is_public": false
+                },
+                "albums": [],
+                "ownership": {
+                    "ownership_reason": "subscribed"
+                },
+                "explicit": false,
+                "comment_count": 0,
+                "flag_count": 0,
+                "display_tags": "lofi hip hop, ambient, chillhop",
+                "is_download_unlocked": false,
+                "is_contest_clip": false,
+                "has_hook": false,
+                "batch_index": 1,
+                "action_config": {
+                    "actions": [
+                        {
+                            "action_type": "add_to_playlist",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "like_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "share_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "dislike_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "report_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remove_from_playlist",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "play_next",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "add_to_queue",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "delete_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "edit_song_details",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "create_hook",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "download_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "open_in_studio",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "publish_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remaster",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remix_extend",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remix_cover",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remix_reuse_style",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "create_voice",
+                            "disabled": false,
+                            "visible": true
+                        }
+                    ]
+                }
+            },
+            "relative_index": 37.0,
+            "pinned": false
+        },
+        {
+            "clip": {
+                "status": "complete",
+                "title": "River of Valentines – Ghost-Pop Inspired Lo-Fi Track",
+                "play_count": 2,
+                "upvote_count": 0,
+                "allow_comments": true,
+                "is_verified": false,
+                "id": "76f7516e-fa02-4ed2-9afe-e76d65caed3d",
+                "entity_type": "song_schema",
+                "video_url": "",
+                "audio_url": "https://studio-api.prod.suno.com/api/forbidden",
+                "media_urls": [
+                    {
+                        "url": "https://d2lwuy8qc234o3.cloudfront.net/1/clip/76f7516e-fa02-4ed2-9afe-e76d65caed3d.m4a",
+                        "content_type": "m4a-opus",
+                        "delivery": "progressive",
+                        "encoding": "1.0.0"
+                    }
+                ],
+                "image_url": "https://cdn2.suno.ai/image_76f7516e-fa02-4ed2-9afe-e76d65caed3d.jpeg",
+                "image_large_url": "https://cdn2.suno.ai/image_large_76f7516e-fa02-4ed2-9afe-e76d65caed3d.jpeg",
+                "major_model_version": "v4.5+",
+                "model_name": "chirp-bluejay",
+                "metadata": {
+                    "tags": "Dreamy vinyl hiss and carousel ambience set a nostalgic lofi intro, with misty Fmaj7 synth pads and reversed vocal whispers in reverb. Verses feature gentle boom bap, ghostly piano (Fmaj7-Dm9-Bbmaj7), soft fog-like bass, and distant seagull/windchime accents. Bridge A halves drums with phased snares, reversed/delayed “valentines” vocal chops, and filtered synth swells. Verse B gains warmth, swing, and glassy glockenspiel motifs, with breath samples and swirling pads. In Bridge B, drums drop for Rhodes progressions and grain-delayed “ghost-pop” echoes, ending unresolved on Bbmaj7sus2. Outro dissolves into river sounds and tape hiss.",
+                    "prompt": "[Intro]  \n[dreamy vinyl hiss + faint carousel ambience]  \n[soft synth pad: Fmaj7, misty and wobbled]  \n[reverse vocal fragment whisper: “...on the breeze” trailing into reverb]\n\n[Verse A]  \n[lo-fi drum groove, gentle boom bap with soft rim taps]  \n[ghostly piano chord loop: Fmaj7 → Dm9 → Bbmaj7]  \n[melancholy bassline, rounded and slow, like fog moving through a room]  \n[ambient accents: faint seagull echo + windchime shimmer]\n\n[Bridge A]  \n[drums halftime, with phaser on snare]  \n[vocal chop: “valentines…” reversed + delayed]  \n[synth bloom swells, filtered and floral]\n\n[Verse B]  \n[beat warmer with analog compression, slight swing]  \n[glockenspiel or celesta motif enters like rain drops on glass]  \n[subtle breath samples and swirling chorus FX on synth pad]\n\n[Bridge B]  \n[drums mute, soft Rhodes progression carries mood]  \n[echo motif callback: “...ghost-pop” fluttered through grain delay]  \n[chord: Bbmaj7sus2, unresolved]\n\n[Outro]  \n[ambient dissolve into river sounds + tape hiss]  \n[last whisper: “on the breeze…” fades to silence + soft click]\n",
+                    "type": "gen",
+                    "duration": 194.2,
+                    "refund_credits": false,
+                    "stream": true,
+                    "make_instrumental": false,
+                    "vox_render_mode": "strict",
+                    "can_remix": true,
+                    "is_remix": false,
+                    "priority": 10,
+                    "has_stem": false,
+                    "uses_latest_model": false,
+                    "model_badges": {
+                        "songrow": {
+                            "display_name": "v4.5+",
+                            "light": {
+                                "text_color": "7D7C83",
+                                "background_color": "00000000",
+                                "border_color": "0000001A"
+                            },
+                            "dark": {
+                                "text_color": "A3A3A3",
+                                "background_color": "00000000",
+                                "border_color": "FFFFFF1A"
+                            }
+                        }
+                    },
+                    "is_mumble": false
+                },
+                "is_liked": false,
+                "user_id": "8b30068d-6d03-43f2-a462-3eff4cb2af25",
+                "display_name": "SR",
+                "handle": "trackstar",
+                "is_handle_updated": true,
+                "avatar_image_url": "https://cdn2.suno.ai/29b82255-3a54-4e0b-966e-86fb597fbf2d.jpeg",
+                "is_trashed": false,
+                "is_hidden": false,
+                "created_at": "2025-08-06T20:30:05.677Z",
+                "is_public": false,
+                "reaction": {
+                    "play_count": 2,
+                    "skip_count": 0,
+                    "flagged": false,
+                    "updated_at": "2025-08-06T20:47:59.457Z"
+                },
+                "is_persona_root": false,
+                "is_following_creator": false,
+                "project": {
+                    "id": "a34f779f-e4ce-4985-8f5d-93443cb23cc3",
+                    "name": "→ Article Hunter",
+                    "description": "→ Article Hunter",
+                    "is_trashed": false,
+                    "is_public": false
+                },
+                "albums": [],
+                "ownership": {
+                    "ownership_reason": "subscribed"
+                },
+                "explicit": false,
+                "comment_count": 0,
+                "flag_count": 0,
+                "display_tags": "lofi hip hop, ambient, chillhop",
+                "is_download_unlocked": false,
+                "is_contest_clip": false,
+                "has_hook": false,
+                "batch_index": 0,
+                "action_config": {
+                    "actions": [
+                        {
+                            "action_type": "add_to_playlist",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "like_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "share_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "dislike_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "report_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remove_from_playlist",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "play_next",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "add_to_queue",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "delete_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "edit_song_details",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "create_hook",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "download_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "open_in_studio",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "publish_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remaster",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remix_extend",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remix_cover",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remix_reuse_style",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "create_voice",
+                            "disabled": false,
+                            "visible": true
+                        }
+                    ]
+                }
+            },
+            "relative_index": 36.0,
+            "pinned": false
+        },
+        {
+            "clip": {
+                "status": "complete",
+                "title": "Loops Between Pages",
+                "play_count": 3,
+                "upvote_count": 0,
+                "allow_comments": true,
+                "is_verified": false,
+                "id": "f032d3d9-4eaa-4709-b899-3f41985da06c",
+                "entity_type": "song_schema",
+                "video_url": "",
+                "audio_url": "https://studio-api.prod.suno.com/api/forbidden",
+                "media_urls": [
+                    {
+                        "url": "https://d2lwuy8qc234o3.cloudfront.net/1/clip/f032d3d9-4eaa-4709-b899-3f41985da06c.m4a",
+                        "content_type": "m4a-opus",
+                        "delivery": "progressive",
+                        "encoding": "1.0.0"
+                    }
+                ],
+                "image_url": "https://cdn2.suno.ai/image_f032d3d9-4eaa-4709-b899-3f41985da06c.jpeg",
+                "image_large_url": "https://cdn2.suno.ai/image_large_f032d3d9-4eaa-4709-b899-3f41985da06c.jpeg",
+                "major_model_version": "v4.5+",
+                "model_name": "chirp-bluejay",
+                "metadata": {
+                    "tags": "Lofi dreamy downtempo electronica opens with lush synth pads and mellow piano motifs, anchored by brushed drums and muted bass for a relaxed groove. Airy guitar lines smoothly mark transitions. Careful layering of textures preserves a tranquil, focused atmosphere throughout.",
+                    "prompt": "[Intro]\n[vinyl crackle + faint café ambience]\n[reversed piano chord, filtered narrow, mono]\n[vocal fragment: “in the margins…” whispered, drenched in reverb]\n\n[Verse A]\n[lo‑fi brushed drum groove, swung 72–75 BPM]\n[mellow Rhodes piano motif, hazy loop]\n[muted bassline, side‑chained softly to kick]\n[percussion accents: finger snaps + woodblock, EQ’d lo‑fi]\n\n[Bridge A]\n[drums halftime, more space + pad swells]\n[lush synth pad, wide stereo sweep]\n[reversed vocal fragment: “first note…” airy]\n[brushed snare bloom w/ reverb → transition into next section]\n\n[Verse B]\n[drums layer in: lo‑fi kit + subtle electronic kick]\n[piano motif evolves, airy guitar lines join w/ reverb]\n[ambient texture: soft hiss + faint water drip SFX]\n[bass steady + warm, low groove]\n\n[Bridge B]\n[drums mute, leaving piano loop + synth sustain]\n[callback motif: airy guitar harmonic echoes]\n[filter sweep slowly opens, builds anticipation]\n\n[Outro]\n[beat dissolves → pad + piano only]\n[final tape stop / vinyl wind‑down FX]\n[amp‑like hiss fades to silence]",
+                    "type": "gen",
+                    "duration": 230.8,
+                    "refund_credits": false,
+                    "stream": true,
+                    "make_instrumental": false,
+                    "control_sliders": {
+                        "style_weight": 0.56,
+                        "weirdness_constraint": 0.57
+                    },
+                    "vox_render_mode": "strict",
+                    "can_remix": true,
+                    "is_remix": false,
+                    "priority": 10,
+                    "has_stem": false,
+                    "uses_latest_model": false,
+                    "model_badges": {
+                        "songrow": {
+                            "display_name": "v4.5+",
+                            "light": {
+                                "text_color": "7D7C83",
+                                "background_color": "00000000",
+                                "border_color": "0000001A"
+                            },
+                            "dark": {
+                                "text_color": "A3A3A3",
+                                "background_color": "00000000",
+                                "border_color": "FFFFFF1A"
+                            }
+                        }
+                    },
+                    "is_mumble": false
+                },
+                "is_liked": false,
+                "user_id": "8b30068d-6d03-43f2-a462-3eff4cb2af25",
+                "display_name": "SR",
+                "handle": "trackstar",
+                "is_handle_updated": true,
+                "avatar_image_url": "https://cdn2.suno.ai/29b82255-3a54-4e0b-966e-86fb597fbf2d.jpeg",
+                "is_trashed": false,
+                "is_hidden": false,
+                "created_at": "2025-08-02T00:05:39.549Z",
+                "is_public": false,
+                "reaction": {
+                    "play_count": 3,
+                    "skip_count": 0,
+                    "flagged": false,
+                    "updated_at": "2025-08-06T20:44:52.926Z"
+                },
+                "is_persona_root": false,
+                "is_following_creator": false,
+                "project": {
+                    "id": "a34f779f-e4ce-4985-8f5d-93443cb23cc3",
+                    "name": "→ Article Hunter",
+                    "description": "→ Article Hunter",
+                    "is_trashed": false,
+                    "is_public": false
+                },
+                "albums": [],
+                "ownership": {
+                    "ownership_reason": "subscribed"
+                },
+                "explicit": false,
+                "comment_count": 0,
+                "flag_count": 0,
+                "display_tags": "lofi, downtempo, electronica",
+                "is_download_unlocked": false,
+                "is_contest_clip": false,
+                "has_hook": false,
+                "batch_index": 1,
+                "action_config": {
+                    "actions": [
+                        {
+                            "action_type": "add_to_playlist",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "like_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "share_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "dislike_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "report_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remove_from_playlist",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "play_next",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "add_to_queue",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "delete_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "edit_song_details",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "create_hook",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "download_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "open_in_studio",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "publish_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remaster",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remix_extend",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remix_cover",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remix_reuse_style",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "create_voice",
+                            "disabled": false,
+                            "visible": true
+                        }
+                    ]
+                }
+            },
+            "relative_index": 35.0,
+            "pinned": false
+        },
+        {
+            "clip": {
+                "status": "complete",
+                "title": "Loops Between Pages",
+                "play_count": 1,
+                "upvote_count": 0,
+                "allow_comments": true,
+                "is_verified": false,
+                "id": "9b925b28-74a6-453b-839d-668d02901d04",
+                "entity_type": "song_schema",
+                "video_url": "",
+                "audio_url": "https://studio-api.prod.suno.com/api/forbidden",
+                "media_urls": [
+                    {
+                        "url": "https://d2lwuy8qc234o3.cloudfront.net/1/clip/9b925b28-74a6-453b-839d-668d02901d04.m4a",
+                        "content_type": "m4a-opus",
+                        "delivery": "progressive",
+                        "encoding": "1.0.0"
+                    }
+                ],
+                "image_url": "https://cdn2.suno.ai/image_9b925b28-74a6-453b-839d-668d02901d04.jpeg",
+                "image_large_url": "https://cdn2.suno.ai/image_large_9b925b28-74a6-453b-839d-668d02901d04.jpeg",
+                "major_model_version": "v4.5+",
+                "model_name": "chirp-bluejay",
+                "metadata": {
+                    "tags": "Lofi dreamy downtempo electronica opens with lush synth pads and mellow piano motifs, anchored by brushed drums and muted bass for a relaxed groove. Airy guitar lines smoothly mark transitions. Careful layering of textures preserves a tranquil, focused atmosphere throughout.",
+                    "prompt": "[Intro]\n[vinyl crackle + faint café ambience]\n[reversed piano chord, filtered narrow, mono]\n[vocal fragment: “in the margins…” whispered, drenched in reverb]\n\n[Verse A]\n[lo‑fi brushed drum groove, swung 72–75 BPM]\n[mellow Rhodes piano motif, hazy loop]\n[muted bassline, side‑chained softly to kick]\n[percussion accents: finger snaps + woodblock, EQ’d lo‑fi]\n\n[Bridge A]\n[drums halftime, more space + pad swells]\n[lush synth pad, wide stereo sweep]\n[reversed vocal fragment: “first note…” airy]\n[brushed snare bloom w/ reverb → transition into next section]\n\n[Verse B]\n[drums layer in: lo‑fi kit + subtle electronic kick]\n[piano motif evolves, airy guitar lines join w/ reverb]\n[ambient texture: soft hiss + faint water drip SFX]\n[bass steady + warm, low groove]\n\n[Bridge B]\n[drums mute, leaving piano loop + synth sustain]\n[callback motif: airy guitar harmonic echoes]\n[filter sweep slowly opens, builds anticipation]\n\n[Outro]\n[beat dissolves → pad + piano only]\n[final tape stop / vinyl wind‑down FX]\n[amp‑like hiss fades to silence]",
+                    "type": "gen",
+                    "duration": 212.68,
+                    "refund_credits": false,
+                    "stream": true,
+                    "make_instrumental": false,
+                    "control_sliders": {
+                        "style_weight": 0.56,
+                        "weirdness_constraint": 0.57
+                    },
+                    "vox_render_mode": "strict",
+                    "can_remix": true,
+                    "is_remix": false,
+                    "priority": 10,
+                    "has_stem": false,
+                    "uses_latest_model": false,
+                    "model_badges": {
+                        "songrow": {
+                            "display_name": "v4.5+",
+                            "light": {
+                                "text_color": "7D7C83",
+                                "background_color": "00000000",
+                                "border_color": "0000001A"
+                            },
+                            "dark": {
+                                "text_color": "A3A3A3",
+                                "background_color": "00000000",
+                                "border_color": "FFFFFF1A"
+                            }
+                        }
+                    },
+                    "is_mumble": false
+                },
+                "is_liked": false,
+                "user_id": "8b30068d-6d03-43f2-a462-3eff4cb2af25",
+                "display_name": "SR",
+                "handle": "trackstar",
+                "is_handle_updated": true,
+                "avatar_image_url": "https://cdn2.suno.ai/29b82255-3a54-4e0b-966e-86fb597fbf2d.jpeg",
+                "is_trashed": false,
+                "is_hidden": false,
+                "created_at": "2025-08-02T00:05:39.549Z",
+                "is_public": false,
+                "reaction": {
+                    "play_count": 1,
+                    "skip_count": 0,
+                    "flagged": false,
+                    "updated_at": "2025-08-02T00:06:17.652Z"
+                },
+                "is_persona_root": false,
+                "is_following_creator": false,
+                "project": {
+                    "id": "a34f779f-e4ce-4985-8f5d-93443cb23cc3",
+                    "name": "→ Article Hunter",
+                    "description": "→ Article Hunter",
+                    "is_trashed": false,
+                    "is_public": false
+                },
+                "albums": [],
+                "ownership": {
+                    "ownership_reason": "subscribed"
+                },
+                "explicit": false,
+                "comment_count": 0,
+                "flag_count": 0,
+                "display_tags": "lofi, downtempo, electronica",
+                "is_download_unlocked": false,
+                "is_contest_clip": false,
+                "has_hook": false,
+                "batch_index": 0,
+                "action_config": {
+                    "actions": [
+                        {
+                            "action_type": "add_to_playlist",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "like_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "share_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "dislike_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "report_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remove_from_playlist",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "play_next",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "add_to_queue",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "delete_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "edit_song_details",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "create_hook",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "download_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "open_in_studio",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "publish_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remaster",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remix_extend",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remix_cover",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remix_reuse_style",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "create_voice",
+                            "disabled": false,
+                            "visible": true
+                        }
+                    ]
+                }
+            },
+            "relative_index": 34.0,
+            "pinned": false
+        },
+        {
+            "clip": {
+                "status": "complete",
+                "title": "Music for Reading",
+                "play_count": 2,
+                "upvote_count": 0,
+                "allow_comments": true,
+                "is_verified": false,
+                "id": "e5a4e781-cc26-4545-98c5-3ad072873c65",
+                "entity_type": "song_schema",
+                "video_url": "",
+                "audio_url": "https://studio-api.prod.suno.com/api/forbidden",
+                "media_urls": [
+                    {
+                        "url": "https://d2lwuy8qc234o3.cloudfront.net/1/clip/e5a4e781-cc26-4545-98c5-3ad072873c65.m4a",
+                        "content_type": "m4a-opus",
+                        "delivery": "progressive",
+                        "encoding": "1.0.0"
+                    }
+                ],
+                "image_url": "https://cdn2.suno.ai/image_e5a4e781-cc26-4545-98c5-3ad072873c65.jpeg",
+                "image_large_url": "https://cdn2.suno.ai/image_large_e5a4e781-cc26-4545-98c5-3ad072873c65.jpeg",
+                "major_model_version": "v4.5+",
+                "model_name": "chirp-bluejay",
+                "metadata": {
+                    "tags": "Dreamy downtempo electronica sets a calm pace with gentle synth pads, soft piano melodies, and subtle rhythmic textures from brushed drums and muted bass. Light guitar flourishes appear between sections, creating an unobtrusive, serene audio landscape perfect for focus.",
+                    "prompt": "",
+                    "type": "gen",
+                    "duration": 216.48,
+                    "refund_credits": false,
+                    "stream": true,
+                    "make_instrumental": false,
+                    "control_sliders": {
+                        "style_weight": 0.56,
+                        "weirdness_constraint": 0.57
+                    },
+                    "vox_render_mode": "strict",
+                    "can_remix": true,
+                    "is_remix": false,
+                    "priority": 10,
+                    "has_stem": false,
+                    "uses_latest_model": false,
+                    "model_badges": {
+                        "songrow": {
+                            "display_name": "v4.5+",
+                            "light": {
+                                "text_color": "7D7C83",
+                                "background_color": "00000000",
+                                "border_color": "0000001A"
+                            },
+                            "dark": {
+                                "text_color": "A3A3A3",
+                                "background_color": "00000000",
+                                "border_color": "FFFFFF1A"
+                            }
+                        }
+                    },
+                    "is_mumble": false
+                },
+                "is_liked": false,
+                "user_id": "8b30068d-6d03-43f2-a462-3eff4cb2af25",
+                "display_name": "SR",
+                "handle": "trackstar",
+                "is_handle_updated": true,
+                "avatar_image_url": "https://cdn2.suno.ai/29b82255-3a54-4e0b-966e-86fb597fbf2d.jpeg",
+                "is_trashed": false,
+                "is_hidden": false,
+                "created_at": "2025-08-01T23:58:30.160Z",
+                "is_public": false,
+                "reaction": {
+                    "play_count": 2,
+                    "skip_count": 0,
+                    "flagged": false,
+                    "updated_at": "2025-08-01T23:59:14.531Z"
+                },
+                "is_persona_root": false,
+                "is_following_creator": false,
+                "project": {
+                    "id": "a34f779f-e4ce-4985-8f5d-93443cb23cc3",
+                    "name": "→ Article Hunter",
+                    "description": "→ Article Hunter",
+                    "is_trashed": false,
+                    "is_public": false
+                },
+                "albums": [],
+                "ownership": {
+                    "ownership_reason": "subscribed"
+                },
+                "explicit": false,
+                "comment_count": 0,
+                "flag_count": 0,
+                "display_tags": "downtempo, electronica, ambient",
+                "is_download_unlocked": false,
+                "is_contest_clip": false,
+                "has_hook": false,
+                "batch_index": 1,
+                "action_config": {
+                    "actions": [
+                        {
+                            "action_type": "add_to_playlist",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "like_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "share_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "dislike_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "report_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remove_from_playlist",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "play_next",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "add_to_queue",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "delete_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "edit_song_details",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "create_hook",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "download_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "open_in_studio",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "publish_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remaster",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remix_extend",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remix_cover",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remix_reuse_style",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "create_voice",
+                            "disabled": false,
+                            "visible": true
+                        }
+                    ]
+                }
+            },
+            "relative_index": 33.0,
+            "pinned": false
+        },
+        {
+            "clip": {
+                "status": "complete",
+                "title": "Music for Reading",
+                "play_count": 1,
+                "upvote_count": 0,
+                "allow_comments": true,
+                "is_verified": false,
+                "id": "0c399b88-4636-4be4-be6c-cec13bbee1ea",
+                "entity_type": "song_schema",
+                "video_url": "",
+                "audio_url": "https://studio-api.prod.suno.com/api/forbidden",
+                "media_urls": [
+                    {
+                        "url": "https://d2lwuy8qc234o3.cloudfront.net/1/clip/0c399b88-4636-4be4-be6c-cec13bbee1ea.m4a",
+                        "content_type": "m4a-opus",
+                        "delivery": "progressive",
+                        "encoding": "1.0.0"
+                    }
+                ],
+                "image_url": "https://cdn2.suno.ai/image_0c399b88-4636-4be4-be6c-cec13bbee1ea.jpeg",
+                "image_large_url": "https://cdn2.suno.ai/image_large_0c399b88-4636-4be4-be6c-cec13bbee1ea.jpeg",
+                "major_model_version": "v4.5+",
+                "model_name": "chirp-bluejay",
+                "metadata": {
+                    "tags": "Dreamy downtempo electronica sets a calm pace with gentle synth pads, soft piano melodies, and subtle rhythmic textures from brushed drums and muted bass. Light guitar flourishes appear between sections, creating an unobtrusive, serene audio landscape perfect for focus.",
+                    "prompt": "",
+                    "type": "gen",
+                    "duration": 248.4,
+                    "refund_credits": false,
+                    "stream": true,
+                    "make_instrumental": false,
+                    "control_sliders": {
+                        "style_weight": 0.56,
+                        "weirdness_constraint": 0.57
+                    },
+                    "vox_render_mode": "strict",
+                    "can_remix": true,
+                    "is_remix": false,
+                    "priority": 10,
+                    "has_stem": false,
+                    "uses_latest_model": false,
+                    "model_badges": {
+                        "songrow": {
+                            "display_name": "v4.5+",
+                            "light": {
+                                "text_color": "7D7C83",
+                                "background_color": "00000000",
+                                "border_color": "0000001A"
+                            },
+                            "dark": {
+                                "text_color": "A3A3A3",
+                                "background_color": "00000000",
+                                "border_color": "FFFFFF1A"
+                            }
+                        }
+                    },
+                    "is_mumble": false
+                },
+                "is_liked": false,
+                "user_id": "8b30068d-6d03-43f2-a462-3eff4cb2af25",
+                "display_name": "SR",
+                "handle": "trackstar",
+                "is_handle_updated": true,
+                "avatar_image_url": "https://cdn2.suno.ai/29b82255-3a54-4e0b-966e-86fb597fbf2d.jpeg",
+                "is_trashed": false,
+                "is_hidden": false,
+                "created_at": "2025-08-01T23:58:30.159Z",
+                "is_public": false,
+                "reaction": {
+                    "play_count": 1,
+                    "skip_count": 0,
+                    "flagged": false,
+                    "updated_at": "2025-08-01T23:59:07.420Z"
+                },
+                "is_persona_root": false,
+                "is_following_creator": false,
+                "project": {
+                    "id": "a34f779f-e4ce-4985-8f5d-93443cb23cc3",
+                    "name": "→ Article Hunter",
+                    "description": "→ Article Hunter",
+                    "is_trashed": false,
+                    "is_public": false
+                },
+                "albums": [],
+                "ownership": {
+                    "ownership_reason": "subscribed"
+                },
+                "explicit": false,
+                "comment_count": 0,
+                "flag_count": 0,
+                "display_tags": "downtempo, electronica, ambient",
+                "is_download_unlocked": false,
+                "is_contest_clip": false,
+                "has_hook": false,
+                "batch_index": 0,
+                "action_config": {
+                    "actions": [
+                        {
+                            "action_type": "add_to_playlist",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "like_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "share_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "dislike_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "report_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remove_from_playlist",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "play_next",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "add_to_queue",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "delete_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "edit_song_details",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "create_hook",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "download_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "open_in_studio",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "publish_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remaster",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remix_extend",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remix_cover",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remix_reuse_style",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "create_voice",
+                            "disabled": false,
+                            "visible": true
+                        }
+                    ]
+                }
+            },
+            "relative_index": 32.0,
+            "pinned": false
+        },
+        {
+            "clip": {
+                "status": "complete",
+                "title": "Music for Reading X",
+                "play_count": 2,
+                "upvote_count": 0,
+                "allow_comments": true,
+                "is_verified": false,
+                "id": "22c894e6-7130-4e0d-8392-bf50d6acab92",
+                "entity_type": "song_schema",
+                "video_url": "",
+                "audio_url": "https://studio-api.prod.suno.com/api/forbidden",
+                "media_urls": [
+                    {
+                        "url": "https://d2lwuy8qc234o3.cloudfront.net/1/clip/22c894e6-7130-4e0d-8392-bf50d6acab92.m4a",
+                        "content_type": "m4a-opus",
+                        "delivery": "progressive",
+                        "encoding": "1.0.0"
+                    }
+                ],
+                "image_url": "https://cdn2.suno.ai/image_22c894e6-7130-4e0d-8392-bf50d6acab92.jpeg",
+                "image_large_url": "https://cdn2.suno.ai/image_large_22c894e6-7130-4e0d-8392-bf50d6acab92.jpeg",
+                "major_model_version": "v4.5+",
+                "model_name": "chirp-bluejay",
+                "metadata": {
+                    "tags": "Dreamy downtempo electronica sets a calm pace with gentle synth pads, soft piano melodies, and subtle rhythmic textures from brushed drums and muted bass. Light guitar flourishes appear between sections, creating an unobtrusive, serene audio landscape perfect for focus.",
+                    "prompt": "[Intro]  \n[metallic clank + faint gasoline slosh sample]  \n[tape hiss + muffled guitar chord, mono narrow]  \n[vocal fragment: “in the garage…” whispered, drenched in reverb]  \n\n[Verse A]  \n[gritty lo-fi boom bap groove, swung 75 BPM]  \n[guitar riff loop, distorted + filtered like gas-can resonance]  \n[bassline dirty + fuzzy, low rumble texture]  \n[percussion accents: stick taps on hollow metal]  \n\n[Bridge A]  \n[drums halftime, guitar feedback swells like echo in a can]  \n[filtered snare bloom with room reverb]  \n[vocal fragment reversed: “first loop…”]  \n\n[Verse B]  \n[beat heavier, layered with raw live-kit energy]  \n[guitar riff evolves, jagged and imperfect]  \n[ambient texture: garage reverb + dripping pipe SFX]  \n\n[Bridge B]  \n[drums mute, only gas-can guitar loop + bass sustain]  \n[callback motif: metallic scrape echoes through mix]  \n[last chord unresolved power chord, low + distorted]  \n\n[Outro]  \n[beat dissolves, amp buzz fades into silence]  \n[final tape stop + clank sample like dropping the can]  \n",
+                    "type": "gen",
+                    "duration": 209.84,
+                    "refund_credits": false,
+                    "stream": true,
+                    "make_instrumental": false,
+                    "control_sliders": {
+                        "style_weight": 0.56,
+                        "weirdness_constraint": 0.57
+                    },
+                    "vox_render_mode": "strict",
+                    "can_remix": true,
+                    "is_remix": false,
+                    "priority": 10,
+                    "has_stem": false,
+                    "uses_latest_model": false,
+                    "model_badges": {
+                        "songrow": {
+                            "display_name": "v4.5+",
+                            "light": {
+                                "text_color": "7D7C83",
+                                "background_color": "00000000",
+                                "border_color": "0000001A"
+                            },
+                            "dark": {
+                                "text_color": "A3A3A3",
+                                "background_color": "00000000",
+                                "border_color": "FFFFFF1A"
+                            }
+                        }
+                    },
+                    "is_mumble": false
+                },
+                "is_liked": false,
+                "user_id": "8b30068d-6d03-43f2-a462-3eff4cb2af25",
+                "display_name": "SR",
+                "handle": "trackstar",
+                "is_handle_updated": true,
+                "avatar_image_url": "https://cdn2.suno.ai/29b82255-3a54-4e0b-966e-86fb597fbf2d.jpeg",
+                "is_trashed": false,
+                "is_hidden": false,
+                "created_at": "2025-08-01T23:57:59.895Z",
+                "is_public": false,
+                "reaction": {
+                    "play_count": 2,
+                    "skip_count": 0,
+                    "flagged": false,
+                    "updated_at": "2025-08-02T00:00:51.462Z"
+                },
+                "is_persona_root": false,
+                "is_following_creator": false,
+                "project": {
+                    "id": "a34f779f-e4ce-4985-8f5d-93443cb23cc3",
+                    "name": "→ Article Hunter",
+                    "description": "→ Article Hunter",
+                    "is_trashed": false,
+                    "is_public": false
+                },
+                "albums": [],
+                "ownership": {
+                    "ownership_reason": "subscribed"
+                },
+                "explicit": false,
+                "comment_count": 0,
+                "flag_count": 0,
+                "display_tags": "downtempo, electronica, ambient",
+                "is_download_unlocked": false,
+                "is_contest_clip": false,
+                "has_hook": false,
+                "batch_index": 1,
+                "action_config": {
+                    "actions": [
+                        {
+                            "action_type": "add_to_playlist",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "like_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "share_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "dislike_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "report_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remove_from_playlist",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "play_next",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "add_to_queue",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "delete_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "edit_song_details",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "create_hook",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "download_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "open_in_studio",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "publish_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remaster",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remix_extend",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remix_cover",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remix_reuse_style",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "create_voice",
+                            "disabled": false,
+                            "visible": true
+                        }
+                    ]
+                }
+            },
+            "relative_index": 31.0,
+            "pinned": false
+        },
+        {
+            "clip": {
+                "status": "complete",
+                "title": "Music for Reading X S01",
+                "play_count": 2,
+                "upvote_count": 0,
+                "allow_comments": true,
+                "is_verified": false,
+                "id": "18d8f5a0-5501-41c7-86bb-5cc834df1208",
+                "entity_type": "song_schema",
+                "video_url": "",
+                "audio_url": "https://studio-api.prod.suno.com/api/forbidden",
+                "media_urls": [
+                    {
+                        "url": "https://d2lwuy8qc234o3.cloudfront.net/1/clip/18d8f5a0-5501-41c7-86bb-5cc834df1208.m4a",
+                        "content_type": "m4a-opus",
+                        "delivery": "progressive",
+                        "encoding": "1.0.0"
+                    }
+                ],
+                "image_url": "https://cdn2.suno.ai/image_18d8f5a0-5501-41c7-86bb-5cc834df1208.jpeg",
+                "image_large_url": "https://cdn2.suno.ai/image_large_18d8f5a0-5501-41c7-86bb-5cc834df1208.jpeg",
+                "major_model_version": "v4.5+",
+                "model_name": "chirp-bluejay",
+                "metadata": {
+                    "tags": "Dreamy downtempo electronica sets a calm pace with gentle synth pads, soft piano melodies, and subtle rhythmic textures from brushed drums and muted bass. Light guitar flourishes appear between sections, creating an unobtrusive, serene audio landscape perfect for focus.",
+                    "prompt": "[Intro]  \n[metallic clank + faint gasoline slosh sample]  \n[tape hiss + muffled guitar chord, mono narrow]  \n[vocal fragment: “in the garage…” whispered, drenched in reverb]  \n\n[Verse A]  \n[gritty lo-fi boom bap groove, swung 75 BPM]  \n[guitar riff loop, distorted + filtered like gas-can resonance]  \n[bassline dirty + fuzzy, low rumble texture]  \n[percussion accents: stick taps on hollow metal]  \n\n[Bridge A]  \n[drums halftime, guitar feedback swells like echo in a can]  \n[filtered snare bloom with room reverb]  \n[vocal fragment reversed: “first loop…”]  \n\n[Verse B]  \n[beat heavier, layered with raw live-kit energy]  \n[guitar riff evolves, jagged and imperfect]  \n[ambient texture: garage reverb + dripping pipe SFX]  \n\n[Bridge B]  \n[drums mute, only gas-can guitar loop + bass sustain]  \n[callback motif: metallic scrape echoes through mix]  \n[last chord unresolved power chord, low + distorted]  \n\n[Outro]  \n[beat dissolves, amp buzz fades into silence]  \n[final tape stop + clank sample like dropping the can]  \n",
+                    "type": "gen",
+                    "duration": 259.64,
+                    "refund_credits": false,
+                    "stream": true,
+                    "make_instrumental": false,
+                    "control_sliders": {
+                        "style_weight": 0.56,
+                        "weirdness_constraint": 0.57
+                    },
+                    "vox_render_mode": "strict",
+                    "can_remix": true,
+                    "is_remix": false,
+                    "priority": 10,
+                    "has_stem": false,
+                    "uses_latest_model": false,
+                    "model_badges": {
+                        "songrow": {
+                            "display_name": "v4.5+",
+                            "light": {
+                                "text_color": "7D7C83",
+                                "background_color": "00000000",
+                                "border_color": "0000001A"
+                            },
+                            "dark": {
+                                "text_color": "A3A3A3",
+                                "background_color": "00000000",
+                                "border_color": "FFFFFF1A"
+                            }
+                        }
+                    },
+                    "is_mumble": false
+                },
+                "is_liked": false,
+                "user_id": "8b30068d-6d03-43f2-a462-3eff4cb2af25",
+                "display_name": "SR",
+                "handle": "trackstar",
+                "is_handle_updated": true,
+                "avatar_image_url": "https://cdn2.suno.ai/29b82255-3a54-4e0b-966e-86fb597fbf2d.jpeg",
+                "is_trashed": false,
+                "is_hidden": false,
+                "created_at": "2025-08-01T23:57:59.895Z",
+                "is_public": false,
+                "reaction": {
+                    "play_count": 2,
+                    "skip_count": 0,
+                    "flagged": false,
+                    "updated_at": "2025-08-02T00:02:06.210Z"
+                },
+                "is_persona_root": false,
+                "is_following_creator": false,
+                "project": {
+                    "id": "a34f779f-e4ce-4985-8f5d-93443cb23cc3",
+                    "name": "→ Article Hunter",
+                    "description": "→ Article Hunter",
+                    "is_trashed": false,
+                    "is_public": false
+                },
+                "albums": [],
+                "ownership": {
+                    "ownership_reason": "subscribed"
+                },
+                "explicit": false,
+                "comment_count": 0,
+                "flag_count": 0,
+                "display_tags": "downtempo, electronica, ambient",
+                "is_download_unlocked": false,
+                "is_contest_clip": false,
+                "has_hook": false,
+                "batch_index": 0,
+                "action_config": {
+                    "actions": [
+                        {
+                            "action_type": "add_to_playlist",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "like_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "share_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "dislike_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "report_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remove_from_playlist",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "play_next",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "add_to_queue",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "delete_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "edit_song_details",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "create_hook",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "download_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "open_in_studio",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "publish_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remaster",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remix_extend",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remix_cover",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remix_reuse_style",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "create_voice",
+                            "disabled": false,
+                            "visible": true
+                        }
+                    ]
+                }
+            },
+            "relative_index": 30.0,
+            "pinned": false
+        },
+        {
+            "clip": {
+                "status": "complete",
+                "title": "Rust Amp Reverie",
+                "play_count": 1,
+                "upvote_count": 0,
+                "allow_comments": true,
+                "is_verified": false,
+                "id": "c2aa24c3-9092-4a38-9fba-4cbe8adcd091",
+                "entity_type": "song_schema",
+                "video_url": "",
+                "audio_url": "https://studio-api.prod.suno.com/api/forbidden",
+                "media_urls": [
+                    {
+                        "url": "https://d2lwuy8qc234o3.cloudfront.net/1/clip/c2aa24c3-9092-4a38-9fba-4cbe8adcd091.m4a",
+                        "content_type": "m4a-opus",
+                        "delivery": "progressive",
+                        "encoding": "1.0.0"
+                    }
+                ],
+                "image_url": "https://cdn2.suno.ai/image_c2aa24c3-9092-4a38-9fba-4cbe8adcd091.jpeg",
+                "image_large_url": "https://cdn2.suno.ai/image_large_c2aa24c3-9092-4a38-9fba-4cbe8adcd091.jpeg",
+                "major_model_version": "v4.5+",
+                "model_name": "chirp-bluejay",
+                "metadata": {
+                    "tags": "The track opens with metallic clanks, faint gasoline slosh, and narrow mono tape hiss, setting a lo-fi industrial mood. Verse A rides a gritty boom bap groove, swung and slow, with gas-can-filtered guitar, fuzzy rumbling bass, and metallic percussion. Bridge A shifts to halftime drums and echoing feedback with blooming snare and reversed vocal. Verse B thickens with raw live-kit layers, evolving jagged guitar riffs, and ambient garage SFX. Bridge B strips to bass sustain and gas-can guitar, with a metallic scrape motif, ending on an unresolved, distorted power chord. Outro dissolves as amp buzz fades and the tape abruptly stops with a final clank.",
+                    "prompt": "[Intro]  \n[metallic clank + faint gasoline slosh sample]  \n[tape hiss + muffled guitar chord, mono narrow]  \n[vocal fragment: “in the garage…” whispered, drenched in reverb]  \n\n[Verse A]  \n[gritty lo-fi boom bap groove, swung 75 BPM]  \n[guitar riff loop, distorted + filtered like gas-can resonance]  \n[bassline dirty + fuzzy, low rumble texture]  \n[percussion accents: stick taps on hollow metal]  \n\n[Bridge A]  \n[drums halftime, guitar feedback swells like echo in a can]  \n[filtered snare bloom with room reverb]  \n[vocal fragment reversed: “first loop…”]  \n\n[Verse B]  \n[beat heavier, layered with raw live-kit energy]  \n[guitar riff evolves, jagged and imperfect]  \n[ambient texture: garage reverb + dripping pipe SFX]  \n\n[Bridge B]  \n[drums mute, only gas-can guitar loop + bass sustain]  \n[callback motif: metallic scrape echoes through mix]  \n[last chord unresolved power chord, low + distorted]  \n\n[Outro]  \n[beat dissolves, amp buzz fades into silence]  \n[final tape stop + clank sample like dropping the can]  \n",
+                    "type": "gen",
+                    "duration": 318.4,
+                    "refund_credits": false,
+                    "stream": true,
+                    "make_instrumental": false,
+                    "control_sliders": {
+                        "style_weight": 0.56,
+                        "weirdness_constraint": 0.57
+                    },
+                    "vox_render_mode": "strict",
+                    "can_remix": true,
+                    "is_remix": false,
+                    "priority": 10,
+                    "has_stem": false,
+                    "uses_latest_model": false,
+                    "model_badges": {
+                        "songrow": {
+                            "display_name": "v4.5+",
+                            "light": {
+                                "text_color": "7D7C83",
+                                "background_color": "00000000",
+                                "border_color": "0000001A"
+                            },
+                            "dark": {
+                                "text_color": "A3A3A3",
+                                "background_color": "00000000",
+                                "border_color": "FFFFFF1A"
+                            }
+                        }
+                    },
+                    "is_mumble": false
+                },
+                "is_liked": false,
+                "user_id": "8b30068d-6d03-43f2-a462-3eff4cb2af25",
+                "display_name": "SR",
+                "handle": "trackstar",
+                "is_handle_updated": true,
+                "avatar_image_url": "https://cdn2.suno.ai/29b82255-3a54-4e0b-966e-86fb597fbf2d.jpeg",
+                "is_trashed": false,
+                "is_hidden": false,
+                "created_at": "2025-08-01T19:32:30.340Z",
+                "is_public": false,
+                "reaction": {
+                    "play_count": 1,
+                    "skip_count": 0,
+                    "flagged": false,
+                    "updated_at": "2026-08-15T13:49:35.033Z"
+                },
+                "is_persona_root": false,
+                "is_following_creator": false,
+                "project": {
+                    "id": "a34f779f-e4ce-4985-8f5d-93443cb23cc3",
+                    "name": "→ Article Hunter",
+                    "description": "→ Article Hunter",
+                    "is_trashed": false,
+                    "is_public": false
+                },
+                "albums": [],
+                "ownership": {
+                    "ownership_reason": "subscribed"
+                },
+                "explicit": false,
+                "comment_count": 0,
+                "flag_count": 0,
+                "display_tags": "industrial, lo-fi hip hop, experimental",
+                "is_download_unlocked": false,
+                "is_contest_clip": false,
+                "has_hook": false,
+                "batch_index": 1,
+                "action_config": {
+                    "actions": [
+                        {
+                            "action_type": "add_to_playlist",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "like_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "share_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "dislike_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "report_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remove_from_playlist",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "play_next",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "add_to_queue",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "delete_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "edit_song_details",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "create_hook",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "download_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "open_in_studio",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "publish_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remaster",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remix_extend",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remix_cover",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remix_reuse_style",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "create_voice",
+                            "disabled": false,
+                            "visible": true
+                        }
+                    ]
+                }
+            },
+            "relative_index": 29.0,
+            "pinned": false
+        },
+        {
+            "clip": {
+                "status": "complete",
+                "title": "Rust Amp Reverie",
+                "play_count": 1,
+                "upvote_count": 0,
+                "allow_comments": true,
+                "is_verified": false,
+                "id": "6e34961c-9412-464f-995c-f533aa7ff3c9",
+                "entity_type": "song_schema",
+                "video_url": "",
+                "audio_url": "https://studio-api.prod.suno.com/api/forbidden",
+                "media_urls": [
+                    {
+                        "url": "https://d2lwuy8qc234o3.cloudfront.net/1/clip/6e34961c-9412-464f-995c-f533aa7ff3c9.m4a",
+                        "content_type": "m4a-opus",
+                        "delivery": "progressive",
+                        "encoding": "1.0.0"
+                    }
+                ],
+                "image_url": "https://cdn2.suno.ai/image_6e34961c-9412-464f-995c-f533aa7ff3c9.jpeg",
+                "image_large_url": "https://cdn2.suno.ai/image_large_6e34961c-9412-464f-995c-f533aa7ff3c9.jpeg",
+                "major_model_version": "v4.5+",
+                "model_name": "chirp-bluejay",
+                "metadata": {
+                    "tags": "The track opens with metallic clanks, faint gasoline slosh, and narrow mono tape hiss, setting a lo-fi industrial mood. Verse A rides a gritty boom bap groove, swung and slow, with gas-can-filtered guitar, fuzzy rumbling bass, and metallic percussion. Bridge A shifts to halftime drums and echoing feedback with blooming snare and reversed vocal. Verse B thickens with raw live-kit layers, evolving jagged guitar riffs, and ambient garage SFX. Bridge B strips to bass sustain and gas-can guitar, with a metallic scrape motif, ending on an unresolved, distorted power chord. Outro dissolves as amp buzz fades and the tape abruptly stops with a final clank.",
+                    "prompt": "[Intro]  \n[metallic clank + faint gasoline slosh sample]  \n[tape hiss + muffled guitar chord, mono narrow]  \n[vocal fragment: “in the garage…” whispered, drenched in reverb]  \n\n[Verse A]  \n[gritty lo-fi boom bap groove, swung 75 BPM]  \n[guitar riff loop, distorted + filtered like gas-can resonance]  \n[bassline dirty + fuzzy, low rumble texture]  \n[percussion accents: stick taps on hollow metal]  \n\n[Bridge A]  \n[drums halftime, guitar feedback swells like echo in a can]  \n[filtered snare bloom with room reverb]  \n[vocal fragment reversed: “first loop…”]  \n\n[Verse B]  \n[beat heavier, layered with raw live-kit energy]  \n[guitar riff evolves, jagged and imperfect]  \n[ambient texture: garage reverb + dripping pipe SFX]  \n\n[Bridge B]  \n[drums mute, only gas-can guitar loop + bass sustain]  \n[callback motif: metallic scrape echoes through mix]  \n[last chord unresolved power chord, low + distorted]  \n\n[Outro]  \n[beat dissolves, amp buzz fades into silence]  \n[final tape stop + clank sample like dropping the can]  \n",
+                    "type": "gen",
+                    "duration": 308.08,
+                    "refund_credits": false,
+                    "stream": true,
+                    "make_instrumental": false,
+                    "control_sliders": {
+                        "style_weight": 0.56,
+                        "weirdness_constraint": 0.57
+                    },
+                    "vox_render_mode": "strict",
+                    "can_remix": true,
+                    "is_remix": false,
+                    "priority": 10,
+                    "has_stem": false,
+                    "uses_latest_model": false,
+                    "model_badges": {
+                        "songrow": {
+                            "display_name": "v4.5+",
+                            "light": {
+                                "text_color": "7D7C83",
+                                "background_color": "00000000",
+                                "border_color": "0000001A"
+                            },
+                            "dark": {
+                                "text_color": "A3A3A3",
+                                "background_color": "00000000",
+                                "border_color": "FFFFFF1A"
+                            }
+                        }
+                    },
+                    "is_mumble": false
+                },
+                "is_liked": false,
+                "user_id": "8b30068d-6d03-43f2-a462-3eff4cb2af25",
+                "display_name": "SR",
+                "handle": "trackstar",
+                "is_handle_updated": true,
+                "avatar_image_url": "https://cdn2.suno.ai/29b82255-3a54-4e0b-966e-86fb597fbf2d.jpeg",
+                "is_trashed": false,
+                "is_hidden": false,
+                "created_at": "2025-08-01T19:32:30.340Z",
+                "is_public": false,
+                "reaction": {
+                    "play_count": 1,
+                    "skip_count": 0,
+                    "flagged": false,
+                    "updated_at": "2025-08-01T19:35:54.533Z"
+                },
+                "is_persona_root": false,
+                "is_following_creator": false,
+                "project": {
+                    "id": "a34f779f-e4ce-4985-8f5d-93443cb23cc3",
+                    "name": "→ Article Hunter",
+                    "description": "→ Article Hunter",
+                    "is_trashed": false,
+                    "is_public": false
+                },
+                "albums": [],
+                "ownership": {
+                    "ownership_reason": "subscribed"
+                },
+                "explicit": false,
+                "comment_count": 0,
+                "flag_count": 0,
+                "display_tags": "industrial, lo-fi hip hop, experimental",
+                "is_download_unlocked": false,
+                "is_contest_clip": false,
+                "has_hook": false,
+                "batch_index": 0,
+                "action_config": {
+                    "actions": [
+                        {
+                            "action_type": "add_to_playlist",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "like_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "share_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "dislike_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "report_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remove_from_playlist",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "play_next",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "add_to_queue",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "delete_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "edit_song_details",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "create_hook",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "download_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "open_in_studio",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "publish_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remaster",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remix_extend",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remix_cover",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remix_reuse_style",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "create_voice",
+                            "disabled": false,
+                            "visible": true
+                        }
+                    ]
+                }
+            },
+            "relative_index": 28.0,
+            "pinned": false
+        },
+        {
+            "clip": {
+                "status": "complete",
+                "title": "Pixel Dreams Loop 👍",
+                "play_count": 5,
+                "upvote_count": 1,
+                "allow_comments": true,
+                "is_verified": false,
+                "id": "b6747154-207a-4161-8715-18762f4a2590",
+                "entity_type": "song_schema",
+                "video_url": "",
+                "audio_url": "https://studio-api.prod.suno.com/api/forbidden",
+                "media_urls": [
+                    {
+                        "url": "https://d2lwuy8qc234o3.cloudfront.net/1/clip/b6747154-207a-4161-8715-18762f4a2590.m4a",
+                        "content_type": "m4a-opus",
+                        "delivery": "progressive",
+                        "encoding": "1.0.0"
+                    }
+                ],
+                "image_url": "https://cdn2.suno.ai/image_b6747154-207a-4161-8715-18762f4a2590.jpeg",
+                "image_large_url": "https://cdn2.suno.ai/image_large_b6747154-207a-4161-8715-18762f4a2590.jpeg",
+                "major_model_version": "v4.5+",
+                "model_name": "chirp-bluejay",
+                "metadata": {
+                    "tags": "Ambient drone and soft, wide synth pads set a dreamlike intro, layered with whispered reversed vocals. Slow lo-fi groove at 70 BPM drives dreamy Em9–Cmaj7–Amaj9 chords, pulsing bass, and subtle night field recordings. Bridge halves the tempo, adds airy rim taps and reverb-soaked Rhodes beneath ghostly reversed vocals. Second verse warms with tape crackle; an arpeggiated synth motif mimics a flickering projector amid VHS hiss and heartbeat textures. The next bridge mutes drums, leaving dreamy pads and memory-themed reversed vocals over an unresolved Em9sus4. Outro fades with white noise and projector clicks for hypnotic closure.",
+                    "prompt": "[Intro]  \n[ambient drone with faint breathing texture]  \n[dreamy-cloud synth pad swells, stereo wide]  \n[reverse vocal fragment whisper: “was it real?” fading into reverb]  \n\n[Verse A]  \n[slow lo-fi groove, dusty kick + snare, 70 BPM]  \n[chords loop: Em9 → Cmaj7 → Amaj9, dreamy progression]  \n[bassline soft, pulsing like REM sleep]  \n[field recordings: faint bedsheet rustle, night window hum]  \n\n[Bridge A]  \n[drums halftime, rim taps echo softly]  \n[filtered Rhodes bloom swells, shimmering reverb overlays]  \n[vocal fragment reversed: “dreams are movies” ghostly playback]  \n\n[Verse B]  \n[beat warmer with subtle tape hiss crackle]  \n[synth motif: arpeggiated “flicker” melody, like projector reel]  \n[ambient wash: faint VHS hiss + heartbeat pulse]  \n\n[Bridge B]  \n[drums mute, dream-pad + vocal fragment carry mood]  \n[reverse fragment callback: “memory unspooling”]  \n[last chord unresolved Em9sus4, hanging soft]  \n\n[Outro]  \n[beat dissolves into white noise + faint projector click]  \n[final whisper: “I watched myself…” fading into silence]  \n",
+                    "type": "gen",
+                    "duration": 328.76,
+                    "refund_credits": false,
+                    "stream": true,
+                    "make_instrumental": false,
+                    "control_sliders": {
+                        "style_weight": 0.56,
+                        "weirdness_constraint": 0.57
+                    },
+                    "vox_render_mode": "strict",
+                    "can_remix": true,
+                    "is_remix": false,
+                    "priority": 10,
+                    "has_stem": false,
+                    "video_is_stale": true,
+                    "uses_latest_model": false,
+                    "model_badges": {
+                        "songrow": {
+                            "display_name": "v4.5+",
+                            "light": {
+                                "text_color": "7D7C83",
+                                "background_color": "00000000",
+                                "border_color": "0000001A"
+                            },
+                            "dark": {
+                                "text_color": "A3A3A3",
+                                "background_color": "00000000",
+                                "border_color": "FFFFFF1A"
+                            }
+                        }
+                    },
+                    "is_mumble": false
+                },
+                "is_liked": true,
+                "user_id": "8b30068d-6d03-43f2-a462-3eff4cb2af25",
+                "display_name": "SR",
+                "handle": "trackstar",
+                "is_handle_updated": true,
+                "avatar_image_url": "https://cdn2.suno.ai/29b82255-3a54-4e0b-966e-86fb597fbf2d.jpeg",
+                "is_trashed": false,
+                "is_hidden": false,
+                "created_at": "2025-08-01T19:31:23.796Z",
+                "is_public": false,
+                "reaction": {
+                    "play_count": 5,
+                    "skip_count": 0,
+                    "flagged": false,
+                    "reaction_type": "L",
+                    "updated_at": "2026-08-14T12:06:20.159Z"
+                },
+                "is_persona_root": false,
+                "is_following_creator": false,
+                "project": {
+                    "id": "a34f779f-e4ce-4985-8f5d-93443cb23cc3",
+                    "name": "→ Article Hunter",
+                    "description": "→ Article Hunter",
+                    "is_trashed": false,
+                    "is_public": false
+                },
+                "albums": [],
+                "ownership": {
+                    "ownership_reason": "subscribed"
+                },
+                "explicit": false,
+                "comment_count": 0,
+                "flag_count": 0,
+                "display_tags": "ambient, lo-fi, chillwave",
+                "is_download_unlocked": false,
+                "is_contest_clip": false,
+                "has_hook": false,
+                "batch_index": 1,
+                "action_config": {
+                    "actions": [
+                        {
+                            "action_type": "add_to_playlist",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "like_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "share_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "dislike_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "report_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remove_from_playlist",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "play_next",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "add_to_queue",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "delete_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "edit_song_details",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "create_hook",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "download_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "open_in_studio",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "publish_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remaster",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remix_extend",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remix_cover",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remix_reuse_style",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "create_voice",
+                            "disabled": false,
+                            "visible": true
+                        }
+                    ]
+                }
+            },
+            "relative_index": 27.0,
+            "pinned": false
+        },
+        {
+            "clip": {
+                "status": "complete",
+                "title": "Pixel Dreams Loop",
+                "play_count": 3,
+                "upvote_count": 0,
+                "allow_comments": true,
+                "is_verified": false,
+                "id": "a9e4870a-cf76-4b75-a5da-acc215dbd9ac",
+                "entity_type": "song_schema",
+                "video_url": "",
+                "audio_url": "https://studio-api.prod.suno.com/api/forbidden",
+                "media_urls": [
+                    {
+                        "url": "https://d2lwuy8qc234o3.cloudfront.net/1/clip/a9e4870a-cf76-4b75-a5da-acc215dbd9ac.m4a",
+                        "content_type": "m4a-opus",
+                        "delivery": "progressive",
+                        "encoding": "1.0.0"
+                    }
+                ],
+                "image_url": "https://cdn2.suno.ai/image_a9e4870a-cf76-4b75-a5da-acc215dbd9ac.jpeg",
+                "image_large_url": "https://cdn2.suno.ai/image_large_a9e4870a-cf76-4b75-a5da-acc215dbd9ac.jpeg",
+                "major_model_version": "v4.5+",
+                "model_name": "chirp-bluejay",
+                "metadata": {
+                    "tags": "Ambient drone and soft, wide synth pads set a dreamlike intro, layered with whispered reversed vocals. Slow lo-fi groove at 70 BPM drives dreamy Em9–Cmaj7–Amaj9 chords, pulsing bass, and subtle night field recordings. Bridge halves the tempo, adds airy rim taps and reverb-soaked Rhodes beneath ghostly reversed vocals. Second verse warms with tape crackle; an arpeggiated synth motif mimics a flickering projector amid VHS hiss and heartbeat textures. The next bridge mutes drums, leaving dreamy pads and memory-themed reversed vocals over an unresolved Em9sus4. Outro fades with white noise and projector clicks for hypnotic closure.",
+                    "prompt": "[Intro]  \n[ambient drone with faint breathing texture]  \n[dreamy-cloud synth pad swells, stereo wide]  \n[reverse vocal fragment whisper: “was it real?” fading into reverb]  \n\n[Verse A]  \n[slow lo-fi groove, dusty kick + snare, 70 BPM]  \n[chords loop: Em9 → Cmaj7 → Amaj9, dreamy progression]  \n[bassline soft, pulsing like REM sleep]  \n[field recordings: faint bedsheet rustle, night window hum]  \n\n[Bridge A]  \n[drums halftime, rim taps echo softly]  \n[filtered Rhodes bloom swells, shimmering reverb overlays]  \n[vocal fragment reversed: “dreams are movies” ghostly playback]  \n\n[Verse B]  \n[beat warmer with subtle tape hiss crackle]  \n[synth motif: arpeggiated “flicker” melody, like projector reel]  \n[ambient wash: faint VHS hiss + heartbeat pulse]  \n\n[Bridge B]  \n[drums mute, dream-pad + vocal fragment carry mood]  \n[reverse fragment callback: “memory unspooling”]  \n[last chord unresolved Em9sus4, hanging soft]  \n\n[Outro]  \n[beat dissolves into white noise + faint projector click]  \n[final whisper: “I watched myself…” fading into silence]  \n",
+                    "type": "gen",
+                    "duration": 284.12,
+                    "refund_credits": false,
+                    "stream": true,
+                    "make_instrumental": false,
+                    "control_sliders": {
+                        "style_weight": 0.56,
+                        "weirdness_constraint": 0.57
+                    },
+                    "vox_render_mode": "strict",
+                    "can_remix": true,
+                    "is_remix": false,
+                    "priority": 10,
+                    "has_stem": false,
+                    "uses_latest_model": false,
+                    "model_badges": {
+                        "songrow": {
+                            "display_name": "v4.5+",
+                            "light": {
+                                "text_color": "7D7C83",
+                                "background_color": "00000000",
+                                "border_color": "0000001A"
+                            },
+                            "dark": {
+                                "text_color": "A3A3A3",
+                                "background_color": "00000000",
+                                "border_color": "FFFFFF1A"
+                            }
+                        }
+                    },
+                    "is_mumble": false
+                },
+                "is_liked": false,
+                "user_id": "8b30068d-6d03-43f2-a462-3eff4cb2af25",
+                "display_name": "SR",
+                "handle": "trackstar",
+                "is_handle_updated": true,
+                "avatar_image_url": "https://cdn2.suno.ai/29b82255-3a54-4e0b-966e-86fb597fbf2d.jpeg",
+                "is_trashed": false,
+                "is_hidden": false,
+                "created_at": "2025-08-01T19:31:23.796Z",
+                "is_public": false,
+                "reaction": {
+                    "play_count": 3,
+                    "skip_count": 0,
+                    "flagged": false,
+                    "updated_at": "2025-08-01T23:57:34.983Z"
+                },
+                "is_persona_root": false,
+                "is_following_creator": false,
+                "project": {
+                    "id": "a34f779f-e4ce-4985-8f5d-93443cb23cc3",
+                    "name": "→ Article Hunter",
+                    "description": "→ Article Hunter",
+                    "is_trashed": false,
+                    "is_public": false
+                },
+                "albums": [],
+                "ownership": {
+                    "ownership_reason": "subscribed"
+                },
+                "explicit": false,
+                "comment_count": 0,
+                "flag_count": 0,
+                "display_tags": "ambient, lo-fi, chillwave",
+                "is_download_unlocked": false,
+                "is_contest_clip": false,
+                "has_hook": false,
+                "batch_index": 0,
+                "action_config": {
+                    "actions": [
+                        {
+                            "action_type": "add_to_playlist",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "like_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "share_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "dislike_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "report_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remove_from_playlist",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "play_next",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "add_to_queue",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "delete_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "edit_song_details",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "create_hook",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "download_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "open_in_studio",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "publish_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remaster",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remix_extend",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remix_cover",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remix_reuse_style",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "create_voice",
+                            "disabled": false,
+                            "visible": true
+                        }
+                    ]
+                }
+            },
+            "relative_index": 26.0,
+            "pinned": false
+        },
+        {
+            "clip": {
+                "status": "complete",
+                "title": "two-suns-to-nowhere 👍",
+                "play_count": 6,
+                "upvote_count": 1,
+                "allow_comments": true,
+                "is_verified": false,
+                "id": "e2a4a067-d5a3-4dfc-bc7b-62ab74ea55a3",
+                "entity_type": "song_schema",
+                "video_url": "",
+                "audio_url": "https://studio-api.prod.suno.com/api/forbidden",
+                "media_urls": [
+                    {
+                        "url": "https://d2lwuy8qc234o3.cloudfront.net/1/clip/e2a4a067-d5a3-4dfc-bc7b-62ab74ea55a3.m4a",
+                        "content_type": "m4a-opus",
+                        "delivery": "progressive",
+                        "encoding": "1.0.0"
+                    }
+                ],
+                "image_url": "https://cdn2.suno.ai/image_e2a4a067-d5a3-4dfc-bc7b-62ab74ea55a3.jpeg",
+                "image_large_url": "https://cdn2.suno.ai/image_large_e2a4a067-d5a3-4dfc-bc7b-62ab74ea55a3.jpeg",
+                "major_model_version": "v4.5+",
+                "model_name": "chirp-bluejay",
+                "metadata": {
+                    "tags": "Intro features stereo-wide space wind ambience and faint radio crackle, anchored by a low synth pulse of two alternating notes. A reverse vocal whisper (\"two suns…\") fades into reverb. Verse A unfolds a slow, lo-fi boom bap groove at 65 BPM, with a muted swing, cosmic Dm11–Fmaj9–Gm7 synth pads, warm pulsing bass, and desert wind textures. Bridge A shifts drums to halftime with ghost hats mimicking orbital movement, lush filtered pads, and a reversed vocal chop drenched in echo. Verse B intensifies with heavier beats, a layered sub-drone bass, hypnotic alien arpeggios, and space radio static. Bridge B mutes drums, isolating dual bass pulses and cosmic pads, with reverse arpeggio swirls and stereo glitch flickers.",
+                    "prompt": "[Intro]  \n[space wind ambience + faint radio crackle, stereo wide]  \n[low synth pulse: two notes alternating like binary stars orbiting]  \n[reverse vocal fragment whisper: “two suns…” trailing into reverb]  \n\n[Verse A]  \n[slow lo-fi boom bap groove, muted + swung, 65 BPM]  \n[synth pad progression: Dm11 → Fmaj9 → Gm7, cosmic and haunting]  \n[bassline warm + pulsing, two alternating low notes (failed stars)]  \n[ambient textures: desert wind, faint sand-shift SFX]  \n\n[Bridge A]  \n[drums halftime, ghost hats sync to orbital rhythm]  \n[filtered pad blooms, shimmering like twin sunsets on horizon]  \n[vocal chop: “Tatooine…” reversed + drenched in cosmic echo]  \n\n[Verse B]  \n[beat heavier, layered sub-drone pulse → dual thump bassline]  \n[arpeggiated synth motif cycles, alien but hypnotic]  \n[field recordings: faint crackling static, like deep space radio]  \n\n[Bridge B]  \n[drums mute — only dual bass pulses + cosmic pad remain]  \n[reverse arpeggio swirl, glitch flickers across stereo]  \n[last chord Gm7sus4 unresolved, suspended in orbit]  \n\n[Outro]  \n[beat dissolves, binary bass pulses fade into silence]  \n[final whisper: “two failed stars…” echoes faintly, then cuts to tape click]  \n",
+                    "type": "gen",
+                    "duration": 268.88,
+                    "refund_credits": false,
+                    "stream": true,
+                    "make_instrumental": false,
+                    "control_sliders": {
+                        "style_weight": 0.56,
+                        "weirdness_constraint": 0.57
+                    },
+                    "vox_render_mode": "strict",
+                    "can_remix": true,
+                    "is_remix": false,
+                    "priority": 10,
+                    "has_stem": false,
+                    "video_is_stale": true,
+                    "uses_latest_model": false,
+                    "model_badges": {
+                        "songrow": {
+                            "display_name": "v4.5+",
+                            "light": {
+                                "text_color": "7D7C83",
+                                "background_color": "00000000",
+                                "border_color": "0000001A"
+                            },
+                            "dark": {
+                                "text_color": "A3A3A3",
+                                "background_color": "00000000",
+                                "border_color": "FFFFFF1A"
+                            }
+                        }
+                    },
+                    "is_mumble": false
+                },
+                "is_liked": true,
+                "user_id": "8b30068d-6d03-43f2-a462-3eff4cb2af25",
+                "display_name": "SR",
+                "handle": "trackstar",
+                "is_handle_updated": true,
+                "avatar_image_url": "https://cdn2.suno.ai/29b82255-3a54-4e0b-966e-86fb597fbf2d.jpeg",
+                "is_trashed": false,
+                "is_hidden": false,
+                "created_at": "2025-08-01T15:37:15.633Z",
+                "is_public": false,
+                "reaction": {
+                    "play_count": 6,
+                    "skip_count": 0,
+                    "flagged": false,
+                    "reaction_type": "L",
+                    "updated_at": "2026-08-27T12:59:58.197Z"
+                },
+                "is_persona_root": false,
+                "is_following_creator": false,
+                "project": {
+                    "id": "a34f779f-e4ce-4985-8f5d-93443cb23cc3",
+                    "name": "→ Article Hunter",
+                    "description": "→ Article Hunter",
+                    "is_trashed": false,
+                    "is_public": false
+                },
+                "albums": [],
+                "ownership": {
+                    "ownership_reason": "subscribed"
+                },
+                "explicit": false,
+                "comment_count": 0,
+                "flag_count": 0,
+                "display_tags": "lo-fi hip hop, downtempo, ambient",
+                "is_download_unlocked": false,
+                "is_contest_clip": false,
+                "has_hook": false,
+                "batch_index": 1,
+                "action_config": {
+                    "actions": [
+                        {
+                            "action_type": "add_to_playlist",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "like_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "share_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "dislike_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "report_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remove_from_playlist",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "play_next",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "add_to_queue",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "delete_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "edit_song_details",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "create_hook",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "download_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "open_in_studio",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "publish_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remaster",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remix_extend",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remix_cover",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remix_reuse_style",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "create_voice",
+                            "disabled": false,
+                            "visible": true
+                        }
+                    ]
+                }
+            },
+            "relative_index": 25.0,
+            "pinned": false
+        },
+        {
+            "clip": {
+                "status": "complete",
+                "title": "two-suns-to-nowhere S01",
+                "play_count": 4,
+                "upvote_count": 0,
+                "allow_comments": true,
+                "is_verified": false,
+                "id": "0ad6f318-a1b7-45d4-9bed-402d2cbd6606",
+                "entity_type": "song_schema",
+                "video_url": "",
+                "audio_url": "https://studio-api.prod.suno.com/api/forbidden",
+                "media_urls": [
+                    {
+                        "url": "https://d2lwuy8qc234o3.cloudfront.net/1/clip/0ad6f318-a1b7-45d4-9bed-402d2cbd6606.m4a",
+                        "content_type": "m4a-opus",
+                        "delivery": "progressive",
+                        "encoding": "1.0.0"
+                    }
+                ],
+                "image_url": "https://cdn2.suno.ai/image_0ad6f318-a1b7-45d4-9bed-402d2cbd6606.jpeg",
+                "image_large_url": "https://cdn2.suno.ai/image_large_0ad6f318-a1b7-45d4-9bed-402d2cbd6606.jpeg",
+                "major_model_version": "v4.5+",
+                "model_name": "chirp-bluejay",
+                "metadata": {
+                    "tags": "Intro features stereo-wide space wind ambience and faint radio crackle, anchored by a low synth pulse of two alternating notes. A reverse vocal whisper (\"two suns…\") fades into reverb. Verse A unfolds a slow, lo-fi boom bap groove at 65 BPM, with a muted swing, cosmic Dm11–Fmaj9–Gm7 synth pads, warm pulsing bass, and desert wind textures. Bridge A shifts drums to halftime with ghost hats mimicking orbital movement, lush filtered pads, and a reversed vocal chop drenched in echo. Verse B intensifies with heavier beats, a layered sub-drone bass, hypnotic alien arpeggios, and space radio static. Bridge B mutes drums, isolating dual bass pulses and cosmic pads, with reverse arpeggio swirls and stereo glitch flickers.",
+                    "prompt": "[Intro]  \n[space wind ambience + faint radio crackle, stereo wide]  \n[low synth pulse: two notes alternating like binary stars orbiting]  \n[reverse vocal fragment whisper: “two suns…” trailing into reverb]  \n\n[Verse A]  \n[slow lo-fi boom bap groove, muted + swung, 65 BPM]  \n[synth pad progression: Dm11 → Fmaj9 → Gm7, cosmic and haunting]  \n[bassline warm + pulsing, two alternating low notes (failed stars)]  \n[ambient textures: desert wind, faint sand-shift SFX]  \n\n[Bridge A]  \n[drums halftime, ghost hats sync to orbital rhythm]  \n[filtered pad blooms, shimmering like twin sunsets on horizon]  \n[vocal chop: “Tatooine…” reversed + drenched in cosmic echo]  \n\n[Verse B]  \n[beat heavier, layered sub-drone pulse → dual thump bassline]  \n[arpeggiated synth motif cycles, alien but hypnotic]  \n[field recordings: faint crackling static, like deep space radio]  \n\n[Bridge B]  \n[drums mute — only dual bass pulses + cosmic pad remain]  \n[reverse arpeggio swirl, glitch flickers across stereo]  \n[last chord Gm7sus4 unresolved, suspended in orbit]  \n\n[Outro]  \n[beat dissolves, binary bass pulses fade into silence]  \n[final whisper: “two failed stars…” echoes faintly, then cuts to tape click]  \n",
+                    "type": "gen",
+                    "duration": 206.24,
+                    "refund_credits": false,
+                    "stream": true,
+                    "make_instrumental": false,
+                    "control_sliders": {
+                        "style_weight": 0.56,
+                        "weirdness_constraint": 0.57
+                    },
+                    "vox_render_mode": "strict",
+                    "can_remix": true,
+                    "is_remix": false,
+                    "priority": 10,
+                    "has_stem": false,
+                    "video_is_stale": true,
+                    "uses_latest_model": false,
+                    "model_badges": {
+                        "songrow": {
+                            "display_name": "v4.5+",
+                            "light": {
+                                "text_color": "7D7C83",
+                                "background_color": "00000000",
+                                "border_color": "0000001A"
+                            },
+                            "dark": {
+                                "text_color": "A3A3A3",
+                                "background_color": "00000000",
+                                "border_color": "FFFFFF1A"
+                            }
+                        }
+                    },
+                    "is_mumble": false
+                },
+                "is_liked": false,
+                "user_id": "8b30068d-6d03-43f2-a462-3eff4cb2af25",
+                "display_name": "SR",
+                "handle": "trackstar",
+                "is_handle_updated": true,
+                "avatar_image_url": "https://cdn2.suno.ai/29b82255-3a54-4e0b-966e-86fb597fbf2d.jpeg",
+                "is_trashed": false,
+                "is_hidden": false,
+                "created_at": "2025-08-01T15:37:15.633Z",
+                "is_public": false,
+                "reaction": {
+                    "play_count": 4,
+                    "skip_count": 0,
+                    "flagged": false,
+                    "updated_at": "2026-08-27T13:04:27.626Z"
+                },
+                "is_persona_root": false,
+                "is_following_creator": false,
+                "project": {
+                    "id": "a34f779f-e4ce-4985-8f5d-93443cb23cc3",
+                    "name": "→ Article Hunter",
+                    "description": "→ Article Hunter",
+                    "is_trashed": false,
+                    "is_public": false
+                },
+                "albums": [],
+                "ownership": {
+                    "ownership_reason": "subscribed"
+                },
+                "explicit": false,
+                "comment_count": 0,
+                "flag_count": 0,
+                "display_tags": "lo-fi hip hop, downtempo, ambient",
+                "is_download_unlocked": false,
+                "is_contest_clip": false,
+                "has_hook": false,
+                "batch_index": 0,
+                "action_config": {
+                    "actions": [
+                        {
+                            "action_type": "add_to_playlist",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "like_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "share_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "dislike_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "report_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remove_from_playlist",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "play_next",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "add_to_queue",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "delete_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "edit_song_details",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "create_hook",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "download_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "open_in_studio",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "publish_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remaster",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remix_extend",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remix_cover",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remix_reuse_style",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "create_voice",
+                            "disabled": false,
+                            "visible": true
+                        }
+                    ]
+                }
+            },
+            "relative_index": 24.0,
+            "pinned": false
+        },
+        {
+            "clip": {
+                "status": "complete",
+                "title": "KAWS Does THERAPY",
+                "play_count": 4,
+                "upvote_count": 0,
+                "allow_comments": true,
+                "is_verified": false,
+                "id": "5343deb1-fe37-41ee-b8c2-927e76e48783",
+                "entity_type": "song_schema",
+                "video_url": "",
+                "audio_url": "https://studio-api.prod.suno.com/api/forbidden",
+                "media_urls": [
+                    {
+                        "url": "https://d2lwuy8qc234o3.cloudfront.net/1/clip/5343deb1-fe37-41ee-b8c2-927e76e48783.m4a",
+                        "content_type": "m4a-opus",
+                        "delivery": "progressive",
+                        "encoding": "1.0.0"
+                    }
+                ],
+                "image_url": "https://cdn2.suno.ai/image_5343deb1-fe37-41ee-b8c2-927e76e48783.jpeg",
+                "image_large_url": "https://cdn2.suno.ai/image_large_5343deb1-fe37-41ee-b8c2-927e76e48783.jpeg",
+                "major_model_version": "v4.5+",
+                "model_name": "chirp-bluejay",
+                "metadata": {
+                    "tags": "A lo-fi hip hop track opens with soft vinyl hiss and muted gallery ambience, reverse vocal and wobbly Rhodes (Bbmaj7). Verse brings swung, gentle boom bap drums, round bass, dreamy Rhodes chords, faint glockenspiel melody. Bridge shifts to halftime, rim taps echo, airy pads; reversed vocals add space. Verse B grows with saturated drums, ambient synth waves, toy-box melody returns, slightly warped. Bridge B strips drums, leaving Rhodes and bass; tape rewind glitch closes on Ebmaj9.",
+                    "prompt": "[Intro]  \n[soft vinyl hiss + muted gallery ambience, faint reverb like a museum hall]  \n[reverse vocal fragment whisper: “therapy…” drifting into stereo echo]  \n[slow Rhodes chord (Bbmaj7), wobbled + detuned slightly melancholic]  \n\n[Verse A]  \n[gentle lo-fi boom bap groove, swung but restrained]  \n[Rhodes loop: Bbmaj7 → Gm7 → Ebmaj9, contemplative and warm]  \n[bassline deep, round, tucked low like a heartbeat]  \n[subtle toy-box glockenspiel melody, faint + childlike]  \n\n[Bridge A]  \n[drums halftime, rim taps echo in gallery space]  \n[filtered pad blooms, soft pastel shimmer like sculpture colors]  \n[vocal fragment: “talk to me…” reversed + drenched in verb]  \n\n[Verse B]  \n[beat fuller with gentle saturation, like emotional release]  \n[ambient synth drone enters, modulating in soft waves]  \n[toy-box motif returns, slightly warped, bittersweet]  \n\n[Bridge B]  \n[drums mute — Rhodes + bass carry reflective tone]  \n[glitch fragment: tape rewind, like rethinking memory]  \n[last chord Ebmaj9sus4 unresolved, suspended in air]  \n\n[Outro]  \n[beat dissolves into quiet gallery ambience]  \n[final whispered “therapy…” stretched and fading into silence]  \n",
+                    "type": "gen",
+                    "duration": 169.16,
+                    "refund_credits": false,
+                    "stream": true,
+                    "make_instrumental": false,
+                    "control_sliders": {
+                        "style_weight": 0.56,
+                        "weirdness_constraint": 0.57
+                    },
+                    "vox_render_mode": "strict",
+                    "can_remix": true,
+                    "is_remix": false,
+                    "priority": 10,
+                    "has_stem": false,
+                    "uses_latest_model": false,
+                    "model_badges": {
+                        "songrow": {
+                            "display_name": "v4.5+",
+                            "light": {
+                                "text_color": "7D7C83",
+                                "background_color": "00000000",
+                                "border_color": "0000001A"
+                            },
+                            "dark": {
+                                "text_color": "A3A3A3",
+                                "background_color": "00000000",
+                                "border_color": "FFFFFF1A"
+                            }
+                        }
+                    },
+                    "is_mumble": false
+                },
+                "is_liked": false,
+                "user_id": "8b30068d-6d03-43f2-a462-3eff4cb2af25",
+                "display_name": "SR",
+                "handle": "trackstar",
+                "is_handle_updated": true,
+                "avatar_image_url": "https://cdn2.suno.ai/29b82255-3a54-4e0b-966e-86fb597fbf2d.jpeg",
+                "is_trashed": false,
+                "is_hidden": false,
+                "created_at": "2025-08-01T15:24:20.862Z",
+                "is_public": false,
+                "reaction": {
+                    "play_count": 4,
+                    "skip_count": 0,
+                    "flagged": false,
+                    "updated_at": "2026-08-27T13:07:58.066Z"
+                },
+                "is_persona_root": false,
+                "is_following_creator": false,
+                "project": {
+                    "id": "a34f779f-e4ce-4985-8f5d-93443cb23cc3",
+                    "name": "→ Article Hunter",
+                    "description": "→ Article Hunter",
+                    "is_trashed": false,
+                    "is_public": false
+                },
+                "albums": [],
+                "ownership": {
+                    "ownership_reason": "subscribed"
+                },
+                "explicit": false,
+                "comment_count": 0,
+                "flag_count": 0,
+                "display_tags": "lo-fi hip hop, chillhop, instrumental",
+                "is_download_unlocked": false,
+                "is_contest_clip": false,
+                "has_hook": false,
+                "batch_index": 1,
+                "action_config": {
+                    "actions": [
+                        {
+                            "action_type": "add_to_playlist",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "like_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "share_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "dislike_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "report_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remove_from_playlist",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "play_next",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "add_to_queue",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "delete_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "edit_song_details",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "create_hook",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "download_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "open_in_studio",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "publish_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remaster",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remix_extend",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remix_cover",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remix_reuse_style",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "create_voice",
+                            "disabled": false,
+                            "visible": true
+                        }
+                    ]
+                }
+            },
+            "relative_index": 23.0,
+            "pinned": false
+        },
+        {
+            "clip": {
+                "status": "complete",
+                "title": "KAWS Does THERAPY",
+                "play_count": 5,
+                "upvote_count": 0,
+                "allow_comments": true,
+                "is_verified": false,
+                "id": "c856f7c9-7a68-4fbc-87ff-79b45b049604",
+                "entity_type": "song_schema",
+                "video_url": "",
+                "audio_url": "https://studio-api.prod.suno.com/api/forbidden",
+                "media_urls": [
+                    {
+                        "url": "https://d2lwuy8qc234o3.cloudfront.net/1/clip/c856f7c9-7a68-4fbc-87ff-79b45b049604.m4a",
+                        "content_type": "m4a-opus",
+                        "delivery": "progressive",
+                        "encoding": "1.0.0"
+                    }
+                ],
+                "image_url": "https://cdn2.suno.ai/image_c856f7c9-7a68-4fbc-87ff-79b45b049604.jpeg",
+                "image_large_url": "https://cdn2.suno.ai/image_large_c856f7c9-7a68-4fbc-87ff-79b45b049604.jpeg",
+                "major_model_version": "v4.5+",
+                "model_name": "chirp-bluejay",
+                "metadata": {
+                    "tags": "A lo-fi hip hop track opens with soft vinyl hiss and muted gallery ambience, reverse vocal and wobbly Rhodes (Bbmaj7). Verse brings swung, gentle boom bap drums, round bass, dreamy Rhodes chords, faint glockenspiel melody. Bridge shifts to halftime, rim taps echo, airy pads; reversed vocals add space. Verse B grows with saturated drums, ambient synth waves, toy-box melody returns, slightly warped. Bridge B strips drums, leaving Rhodes and bass; tape rewind glitch closes on Ebmaj9.",
+                    "prompt": "[Intro]  \n[soft vinyl hiss + muted gallery ambience, faint reverb like a museum hall]  \n[reverse vocal fragment whisper: “therapy…” drifting into stereo echo]  \n[slow Rhodes chord (Bbmaj7), wobbled + detuned slightly melancholic]  \n\n[Verse A]  \n[gentle lo-fi boom bap groove, swung but restrained]  \n[Rhodes loop: Bbmaj7 → Gm7 → Ebmaj9, contemplative and warm]  \n[bassline deep, round, tucked low like a heartbeat]  \n[subtle toy-box glockenspiel melody, faint + childlike]  \n\n[Bridge A]  \n[drums halftime, rim taps echo in gallery space]  \n[filtered pad blooms, soft pastel shimmer like sculpture colors]  \n[vocal fragment: “talk to me…” reversed + drenched in verb]  \n\n[Verse B]  \n[beat fuller with gentle saturation, like emotional release]  \n[ambient synth drone enters, modulating in soft waves]  \n[toy-box motif returns, slightly warped, bittersweet]  \n\n[Bridge B]  \n[drums mute — Rhodes + bass carry reflective tone]  \n[glitch fragment: tape rewind, like rethinking memory]  \n[last chord Ebmaj9sus4 unresolved, suspended in air]  \n\n[Outro]  \n[beat dissolves into quiet gallery ambience]  \n[final whispered “therapy…” stretched and fading into silence]  \n",
+                    "type": "gen",
+                    "duration": 294.24,
+                    "refund_credits": false,
+                    "stream": true,
+                    "make_instrumental": false,
+                    "control_sliders": {
+                        "style_weight": 0.56,
+                        "weirdness_constraint": 0.57
+                    },
+                    "vox_render_mode": "strict",
+                    "can_remix": true,
+                    "is_remix": false,
+                    "priority": 10,
+                    "has_stem": false,
+                    "uses_latest_model": false,
+                    "model_badges": {
+                        "songrow": {
+                            "display_name": "v4.5+",
+                            "light": {
+                                "text_color": "7D7C83",
+                                "background_color": "00000000",
+                                "border_color": "0000001A"
+                            },
+                            "dark": {
+                                "text_color": "A3A3A3",
+                                "background_color": "00000000",
+                                "border_color": "FFFFFF1A"
+                            }
+                        }
+                    },
+                    "is_mumble": false
+                },
+                "is_liked": false,
+                "user_id": "8b30068d-6d03-43f2-a462-3eff4cb2af25",
+                "display_name": "SR",
+                "handle": "trackstar",
+                "is_handle_updated": true,
+                "avatar_image_url": "https://cdn2.suno.ai/29b82255-3a54-4e0b-966e-86fb597fbf2d.jpeg",
+                "is_trashed": false,
+                "is_hidden": false,
+                "created_at": "2025-08-01T15:24:20.862Z",
+                "is_public": false,
+                "reaction": {
+                    "play_count": 5,
+                    "skip_count": 0,
+                    "flagged": false,
+                    "updated_at": "2026-08-27T13:10:56.981Z"
+                },
+                "is_persona_root": false,
+                "is_following_creator": false,
+                "project": {
+                    "id": "a34f779f-e4ce-4985-8f5d-93443cb23cc3",
+                    "name": "→ Article Hunter",
+                    "description": "→ Article Hunter",
+                    "is_trashed": false,
+                    "is_public": false
+                },
+                "albums": [],
+                "ownership": {
+                    "ownership_reason": "subscribed"
+                },
+                "explicit": false,
+                "comment_count": 0,
+                "flag_count": 0,
+                "display_tags": "lo-fi hip hop, chillhop, instrumental",
+                "is_download_unlocked": false,
+                "is_contest_clip": false,
+                "has_hook": false,
+                "batch_index": 0,
+                "action_config": {
+                    "actions": [
+                        {
+                            "action_type": "add_to_playlist",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "like_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "share_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "dislike_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "report_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remove_from_playlist",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "play_next",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "add_to_queue",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "delete_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "edit_song_details",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "create_hook",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "download_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "open_in_studio",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "publish_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remaster",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remix_extend",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remix_cover",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remix_reuse_style",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "create_voice",
+                            "disabled": false,
+                            "visible": true
+                        }
+                    ]
+                }
+            },
+            "relative_index": 22.0,
+            "pinned": false
+        },
+        {
+            "clip": {
+                "status": "complete",
+                "title": "Memory Rick Finale – Lost Love in Space",
+                "play_count": 8,
+                "upvote_count": 0,
+                "allow_comments": true,
+                "is_verified": false,
+                "id": "c8fd8bfd-f69b-4f4c-a18f-afc0df224daf",
+                "entity_type": "song_schema",
+                "video_url": "",
+                "audio_url": "https://studio-api.prod.suno.com/api/forbidden",
+                "media_urls": [
+                    {
+                        "url": "https://d2lwuy8qc234o3.cloudfront.net/1/clip/c8fd8bfd-f69b-4f4c-a18f-afc0df224daf.m4a",
+                        "content_type": "m4a-opus",
+                        "delivery": "progressive",
+                        "encoding": "1.0.0"
+                    }
+                ],
+                "image_url": "https://cdn2.suno.ai/image_c8fd8bfd-f69b-4f4c-a18f-afc0df224daf.jpeg",
+                "image_large_url": "https://cdn2.suno.ai/image_large_c8fd8bfd-f69b-4f4c-a18f-afc0df224daf.jpeg",
+                "major_model_version": "v4.5+",
+                "model_name": "chirp-bluejay",
+                "metadata": {
+                    "tags": "The track opens with a sad piano echo in D minor and soft tape hiss, plus a reverse whisper panning across the stereo field. Slow boom bap (60 BPM) and ride cymbal join, layered with emotive piano (Dm7–Gm9–Bbmaj7) and pulsing, deep bass. Fragile vocal glitches are chopped and reversed. The first bridge shifts to halftime with rim taps, swirling cosmic pads, and heavily echoed vocal fragments. Verse B builds the beat with lush ambiance and a gliding synth motif, interspersed with reverse glitches. The second bridge mutes drums, leaving only piano sustain and subtle ambient hum, suspending on Bbmaj7. The outro slowly dissolves into ambient piano and reverb, ending on a faint, fading whisper.",
+                    "prompt": "[Intro]  \n[sad piano echo (D minor motif) + soft tape hiss]  \n[reverse whisper: “Diane…” fading into reverb across stereo field]  \n\n[Verse A]  \n[slow boom bap groove (60 BPM), gentle ride cymbal glow]  \n[piano chords: Dm7 → Gm9 → Bbmaj7, melancholic warmth]  \n[bassline deep + emotional, pulsing memory rhythm]  \n[fragile vocal glitch: “memory Rick…” chopped + reversed softly]\n\n[Bridge A]  \n[halftime beat drop, soft rim taps echo]  \n[pad swirl representing cosmic space drift, layered sustain]  \n[vocal fragment: “never together…” echoed, drowned in echo tail]\n\n[Verse B]  \n[beat returns fuller with subtle ambiance]  \n[synth motif representing inter-memory flicker, shimmering glide]  \n[reverse glitch fragments like broken recollections]\n\n[Bridge B]  \n[drums mute — only piano sustain + ambient hum]  \n[last chord Bbmaj7 unresolved, suspended like memory loss]\n\n[Outro]  \n[beat dissolves into ambient piano + reverb haze]  \n[final whisper: “she’s with him…” faint, fading into silence]\n",
+                    "type": "gen",
+                    "duration": 239.0,
+                    "refund_credits": false,
+                    "stream": true,
+                    "make_instrumental": false,
+                    "control_sliders": {
+                        "style_weight": 0.56,
+                        "weirdness_constraint": 0.57
+                    },
+                    "vox_render_mode": "strict",
+                    "can_remix": true,
+                    "is_remix": false,
+                    "priority": 10,
+                    "has_stem": false,
+                    "uses_latest_model": false,
+                    "model_badges": {
+                        "songrow": {
+                            "display_name": "v4.5+",
+                            "light": {
+                                "text_color": "7D7C83",
+                                "background_color": "00000000",
+                                "border_color": "0000001A"
+                            },
+                            "dark": {
+                                "text_color": "A3A3A3",
+                                "background_color": "00000000",
+                                "border_color": "FFFFFF1A"
+                            }
+                        }
+                    },
+                    "is_mumble": false
+                },
+                "is_liked": false,
+                "user_id": "8b30068d-6d03-43f2-a462-3eff4cb2af25",
+                "display_name": "SR",
+                "handle": "trackstar",
+                "is_handle_updated": true,
+                "avatar_image_url": "https://cdn2.suno.ai/29b82255-3a54-4e0b-966e-86fb597fbf2d.jpeg",
+                "is_trashed": false,
+                "is_hidden": false,
+                "created_at": "2025-08-01T11:09:16.558Z",
+                "is_public": false,
+                "reaction": {
+                    "play_count": 8,
+                    "skip_count": 0,
+                    "flagged": false,
+                    "updated_at": "2026-08-27T13:15:26.134Z"
+                },
+                "is_persona_root": false,
+                "is_following_creator": false,
+                "project": {
+                    "id": "a34f779f-e4ce-4985-8f5d-93443cb23cc3",
+                    "name": "→ Article Hunter",
+                    "description": "→ Article Hunter",
+                    "is_trashed": false,
+                    "is_public": false
+                },
+                "albums": [],
+                "ownership": {
+                    "ownership_reason": "subscribed"
+                },
+                "explicit": false,
+                "comment_count": 0,
+                "flag_count": 0,
+                "display_tags": "hip hop, ambient, experimental",
+                "is_download_unlocked": false,
+                "is_contest_clip": false,
+                "has_hook": false,
+                "batch_index": 1,
+                "action_config": {
+                    "actions": [
+                        {
+                            "action_type": "add_to_playlist",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "like_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "share_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "dislike_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "report_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remove_from_playlist",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "play_next",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "add_to_queue",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "delete_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "edit_song_details",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "create_hook",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "download_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "open_in_studio",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "publish_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remaster",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remix_extend",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remix_cover",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remix_reuse_style",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "create_voice",
+                            "disabled": false,
+                            "visible": true
+                        }
+                    ]
+                }
+            },
+            "relative_index": 21.0,
+            "pinned": false
+        },
+        {
+            "clip": {
+                "status": "complete",
+                "title": "Memory Rick Finale – Lost Love in Space",
+                "play_count": 7,
+                "upvote_count": 0,
+                "allow_comments": true,
+                "is_verified": false,
+                "id": "21145f68-4f05-4ee2-8fba-0fab28be3d4c",
+                "entity_type": "song_schema",
+                "video_url": "",
+                "audio_url": "https://studio-api.prod.suno.com/api/forbidden",
+                "media_urls": [
+                    {
+                        "url": "https://d2lwuy8qc234o3.cloudfront.net/1/clip/21145f68-4f05-4ee2-8fba-0fab28be3d4c.m4a",
+                        "content_type": "m4a-opus",
+                        "delivery": "progressive",
+                        "encoding": "1.0.0"
+                    }
+                ],
+                "image_url": "https://cdn2.suno.ai/image_21145f68-4f05-4ee2-8fba-0fab28be3d4c.jpeg",
+                "image_large_url": "https://cdn2.suno.ai/image_large_21145f68-4f05-4ee2-8fba-0fab28be3d4c.jpeg",
+                "major_model_version": "v4.5+",
+                "model_name": "chirp-bluejay",
+                "metadata": {
+                    "tags": "The track opens with a sad piano echo in D minor and soft tape hiss, plus a reverse whisper panning across the stereo field. Slow boom bap (60 BPM) and ride cymbal join, layered with emotive piano (Dm7–Gm9–Bbmaj7) and pulsing, deep bass. Fragile vocal glitches are chopped and reversed. The first bridge shifts to halftime with rim taps, swirling cosmic pads, and heavily echoed vocal fragments. Verse B builds the beat with lush ambiance and a gliding synth motif, interspersed with reverse glitches. The second bridge mutes drums, leaving only piano sustain and subtle ambient hum, suspending on Bbmaj7. The outro slowly dissolves into ambient piano and reverb, ending on a faint, fading whisper.",
+                    "prompt": "[Intro]  \n[sad piano echo (D minor motif) + soft tape hiss]  \n[reverse whisper: “Diane…” fading into reverb across stereo field]  \n\n[Verse A]  \n[slow boom bap groove (60 BPM), gentle ride cymbal glow]  \n[piano chords: Dm7 → Gm9 → Bbmaj7, melancholic warmth]  \n[bassline deep + emotional, pulsing memory rhythm]  \n[fragile vocal glitch: “memory Rick…” chopped + reversed softly]\n\n[Bridge A]  \n[halftime beat drop, soft rim taps echo]  \n[pad swirl representing cosmic space drift, layered sustain]  \n[vocal fragment: “never together…” echoed, drowned in echo tail]\n\n[Verse B]  \n[beat returns fuller with subtle ambiance]  \n[synth motif representing inter-memory flicker, shimmering glide]  \n[reverse glitch fragments like broken recollections]\n\n[Bridge B]  \n[drums mute — only piano sustain + ambient hum]  \n[last chord Bbmaj7 unresolved, suspended like memory loss]\n\n[Outro]  \n[beat dissolves into ambient piano + reverb haze]  \n[final whisper: “she’s with him…” faint, fading into silence]\n",
+                    "type": "gen",
+                    "duration": 169.0,
+                    "refund_credits": false,
+                    "stream": true,
+                    "make_instrumental": false,
+                    "control_sliders": {
+                        "style_weight": 0.56,
+                        "weirdness_constraint": 0.57
+                    },
+                    "vox_render_mode": "strict",
+                    "can_remix": true,
+                    "is_remix": false,
+                    "priority": 10,
+                    "has_stem": false,
+                    "uses_latest_model": false,
+                    "model_badges": {
+                        "songrow": {
+                            "display_name": "v4.5+",
+                            "light": {
+                                "text_color": "7D7C83",
+                                "background_color": "00000000",
+                                "border_color": "0000001A"
+                            },
+                            "dark": {
+                                "text_color": "A3A3A3",
+                                "background_color": "00000000",
+                                "border_color": "FFFFFF1A"
+                            }
+                        }
+                    },
+                    "is_mumble": false
+                },
+                "is_liked": false,
+                "user_id": "8b30068d-6d03-43f2-a462-3eff4cb2af25",
+                "display_name": "SR",
+                "handle": "trackstar",
+                "is_handle_updated": true,
+                "avatar_image_url": "https://cdn2.suno.ai/29b82255-3a54-4e0b-966e-86fb597fbf2d.jpeg",
+                "is_trashed": false,
+                "is_hidden": false,
+                "created_at": "2025-08-01T11:09:16.558Z",
+                "is_public": false,
+                "reaction": {
+                    "play_count": 7,
+                    "skip_count": 0,
+                    "flagged": false,
+                    "updated_at": "2026-08-27T13:19:57.142Z"
+                },
+                "is_persona_root": false,
+                "is_following_creator": false,
+                "project": {
+                    "id": "a34f779f-e4ce-4985-8f5d-93443cb23cc3",
+                    "name": "→ Article Hunter",
+                    "description": "→ Article Hunter",
+                    "is_trashed": false,
+                    "is_public": false
+                },
+                "albums": [],
+                "ownership": {
+                    "ownership_reason": "subscribed"
+                },
+                "explicit": false,
+                "comment_count": 0,
+                "flag_count": 0,
+                "display_tags": "hip hop, ambient, experimental",
+                "is_download_unlocked": false,
+                "is_contest_clip": false,
+                "has_hook": false,
+                "batch_index": 0,
+                "action_config": {
+                    "actions": [
+                        {
+                            "action_type": "add_to_playlist",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "like_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "share_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "dislike_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "report_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remove_from_playlist",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "play_next",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "add_to_queue",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "delete_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "edit_song_details",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "create_hook",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "download_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "open_in_studio",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "publish_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remaster",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remix_extend",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remix_cover",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remix_reuse_style",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "create_voice",
+                            "disabled": false,
+                            "visible": true
+                        }
+                    ]
+                }
+            },
+            "relative_index": 20.0,
+            "pinned": false
+        },
+        {
+            "clip": {
+                "status": "complete",
+                "title": "Interstellar Visitor – 3I/ATLAS 👍",
+                "play_count": 8,
+                "upvote_count": 1,
+                "allow_comments": true,
+                "is_verified": false,
+                "id": "68f42721-1bc1-46ca-9b3e-10129296159b",
+                "entity_type": "song_schema",
+                "video_url": "",
+                "audio_url": "https://studio-api.prod.suno.com/api/forbidden",
+                "media_urls": [
+                    {
+                        "url": "https://d2lwuy8qc234o3.cloudfront.net/1/clip/68f42721-1bc1-46ca-9b3e-10129296159b.m4a",
+                        "content_type": "m4a-opus",
+                        "delivery": "progressive",
+                        "encoding": "1.0.0"
+                    }
+                ],
+                "image_url": "https://cdn2.suno.ai/image_68f42721-1bc1-46ca-9b3e-10129296159b.jpeg",
+                "image_large_url": "https://cdn2.suno.ai/image_large_68f42721-1bc1-46ca-9b3e-10129296159b.jpeg",
+                "major_model_version": "v4.5+",
+                "model_name": "chirp-bluejay",
+                "metadata": {
+                    "tags": "Ambient electronica track at 50 BPM opens with stereo-spread synth halos and cosmic hum, punctuated by reversed radio crackle. Verses layer minimal sine bass, floating Em11–Cmaj7sus2–D9add11 chords, and iridescent, echoing synth textures. Bridges drop to fractured percussion, sweep pads, and reversed vocals. Glitchy arps and modulating synths evoke a comet's tail. Outro dissolves into ethereal echoes and spatial shimmer, fading to silence.",
+                    "prompt": "[Intro]  \n[subtle space wind hum + distant twinkling synth halos in stereo]  \n[reverse radio crackle whisper: “3‑I Atlas…” trailing into cosmic reverb]  \n\n[Verse A]  \n[sparse ambient pulse (50 BPM), distant low drone]  \n[chord wash: Em11 → Cmaj7sus2 → D9add11, floating slowly]  \n[bassline minimal, warm sine wave undercurrent]  \n[celestial shimmer textures: rainbow coma synthesized, echoing dust]\n\n[Bridge A]  \n[beat drops to sub-beat tempo, soft fractured percussion]  \n[filter sweep on shimmer pads, gliding across stereo]  \n[vocal fragment: “interstellar…” reversed and drenched in tape echo]\n\n[Verse B]  \n[rhythm returns lightly, with glitchy arpeggiated motifs]  \n[modulating synth tail representing comet tail trail]  \n[ambient field layers: space radio samples + tail hiss]\n\n[Bridge B]  \n[drums mute — only simulated cosmic shimmer + hum]  \n[reverse tone swoop callback, unresolved chord D9add11 hanging]  \n\n[Outro]  \n[pulse dissolves into pure shimmer and echo fade]  \n[final distant whisper: “beyond…” echoing in drift]  \n",
+                    "type": "gen",
+                    "duration": 327.6,
+                    "refund_credits": false,
+                    "stream": true,
+                    "make_instrumental": false,
+                    "control_sliders": {
+                        "style_weight": 0.56,
+                        "weirdness_constraint": 0.57
+                    },
+                    "vox_render_mode": "strict",
+                    "can_remix": true,
+                    "is_remix": false,
+                    "priority": 10,
+                    "has_stem": false,
+                    "video_is_stale": true,
+                    "uses_latest_model": false,
+                    "model_badges": {
+                        "songrow": {
+                            "display_name": "v4.5+",
+                            "light": {
+                                "text_color": "7D7C83",
+                                "background_color": "00000000",
+                                "border_color": "0000001A"
+                            },
+                            "dark": {
+                                "text_color": "A3A3A3",
+                                "background_color": "00000000",
+                                "border_color": "FFFFFF1A"
+                            }
+                        }
+                    },
+                    "is_mumble": false
+                },
+                "is_liked": true,
+                "user_id": "8b30068d-6d03-43f2-a462-3eff4cb2af25",
+                "display_name": "SR",
+                "handle": "trackstar",
+                "is_handle_updated": true,
+                "avatar_image_url": "https://cdn2.suno.ai/29b82255-3a54-4e0b-966e-86fb597fbf2d.jpeg",
+                "is_trashed": false,
+                "is_hidden": false,
+                "created_at": "2025-08-01T11:08:26.239Z",
+                "is_public": false,
+                "reaction": {
+                    "play_count": 8,
+                    "skip_count": 0,
+                    "flagged": false,
+                    "reaction_type": "L",
+                    "updated_at": "2026-08-27T13:22:27.135Z"
+                },
+                "is_persona_root": false,
+                "is_following_creator": false,
+                "project": {
+                    "id": "a34f779f-e4ce-4985-8f5d-93443cb23cc3",
+                    "name": "→ Article Hunter",
+                    "description": "→ Article Hunter",
+                    "is_trashed": false,
+                    "is_public": false
+                },
+                "albums": [],
+                "ownership": {
+                    "ownership_reason": "subscribed"
+                },
+                "explicit": false,
+                "comment_count": 0,
+                "flag_count": 0,
+                "display_tags": "ambient, electronica, glitch",
+                "is_download_unlocked": false,
+                "is_contest_clip": false,
+                "has_hook": false,
+                "batch_index": 1,
+                "action_config": {
+                    "actions": [
+                        {
+                            "action_type": "add_to_playlist",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "like_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "share_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "dislike_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "report_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remove_from_playlist",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "play_next",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "add_to_queue",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "delete_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "edit_song_details",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "create_hook",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "download_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "open_in_studio",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "publish_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remaster",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remix_extend",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remix_cover",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remix_reuse_style",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "create_voice",
+                            "disabled": false,
+                            "visible": true
+                        }
+                    ]
+                }
+            },
+            "relative_index": 19.0,
+            "pinned": false
+        },
+        {
+            "clip": {
+                "status": "complete",
+                "title": "Interstellar Visitor – 3I/ATLAS 👍",
+                "play_count": 5,
+                "upvote_count": 1,
+                "allow_comments": true,
+                "is_verified": false,
+                "id": "a8f41a77-d5a8-4da6-8894-34c1f160d440",
+                "entity_type": "song_schema",
+                "video_url": "",
+                "audio_url": "https://studio-api.prod.suno.com/api/forbidden",
+                "media_urls": [
+                    {
+                        "url": "https://d2lwuy8qc234o3.cloudfront.net/1/clip/a8f41a77-d5a8-4da6-8894-34c1f160d440.m4a",
+                        "content_type": "m4a-opus",
+                        "delivery": "progressive",
+                        "encoding": "1.0.0"
+                    }
+                ],
+                "image_url": "https://cdn2.suno.ai/image_a8f41a77-d5a8-4da6-8894-34c1f160d440.jpeg",
+                "image_large_url": "https://cdn2.suno.ai/image_large_a8f41a77-d5a8-4da6-8894-34c1f160d440.jpeg",
+                "major_model_version": "v4.5+",
+                "model_name": "chirp-bluejay",
+                "metadata": {
+                    "tags": "Ambient electronica track at 50 BPM opens with stereo-spread synth halos and cosmic hum, punctuated by reversed radio crackle. Verses layer minimal sine bass, floating Em11–Cmaj7sus2–D9add11 chords, and iridescent, echoing synth textures. Bridges drop to fractured percussion, sweep pads, and reversed vocals. Glitchy arps and modulating synths evoke a comet's tail. Outro dissolves into ethereal echoes and spatial shimmer, fading to silence.",
+                    "prompt": "[Intro]  \n[subtle space wind hum + distant twinkling synth halos in stereo]  \n[reverse radio crackle whisper: “3‑I Atlas…” trailing into cosmic reverb]  \n\n[Verse A]  \n[sparse ambient pulse (50 BPM), distant low drone]  \n[chord wash: Em11 → Cmaj7sus2 → D9add11, floating slowly]  \n[bassline minimal, warm sine wave undercurrent]  \n[celestial shimmer textures: rainbow coma synthesized, echoing dust]\n\n[Bridge A]  \n[beat drops to sub-beat tempo, soft fractured percussion]  \n[filter sweep on shimmer pads, gliding across stereo]  \n[vocal fragment: “interstellar…” reversed and drenched in tape echo]\n\n[Verse B]  \n[rhythm returns lightly, with glitchy arpeggiated motifs]  \n[modulating synth tail representing comet tail trail]  \n[ambient field layers: space radio samples + tail hiss]\n\n[Bridge B]  \n[drums mute — only simulated cosmic shimmer + hum]  \n[reverse tone swoop callback, unresolved chord D9add11 hanging]  \n\n[Outro]  \n[pulse dissolves into pure shimmer and echo fade]  \n[final distant whisper: “beyond…” echoing in drift]  \n",
+                    "type": "gen",
+                    "duration": 219.08,
+                    "refund_credits": false,
+                    "stream": true,
+                    "make_instrumental": false,
+                    "control_sliders": {
+                        "style_weight": 0.56,
+                        "weirdness_constraint": 0.57
+                    },
+                    "vox_render_mode": "strict",
+                    "can_remix": true,
+                    "is_remix": false,
+                    "priority": 10,
+                    "has_stem": false,
+                    "video_is_stale": true,
+                    "uses_latest_model": false,
+                    "model_badges": {
+                        "songrow": {
+                            "display_name": "v4.5+",
+                            "light": {
+                                "text_color": "7D7C83",
+                                "background_color": "00000000",
+                                "border_color": "0000001A"
+                            },
+                            "dark": {
+                                "text_color": "A3A3A3",
+                                "background_color": "00000000",
+                                "border_color": "FFFFFF1A"
+                            }
+                        }
+                    },
+                    "is_mumble": false
+                },
+                "is_liked": true,
+                "user_id": "8b30068d-6d03-43f2-a462-3eff4cb2af25",
+                "display_name": "SR",
+                "handle": "trackstar",
+                "is_handle_updated": true,
+                "avatar_image_url": "https://cdn2.suno.ai/29b82255-3a54-4e0b-966e-86fb597fbf2d.jpeg",
+                "is_trashed": false,
+                "is_hidden": false,
+                "created_at": "2025-08-01T11:08:26.239Z",
+                "is_public": false,
+                "reaction": {
+                    "play_count": 5,
+                    "skip_count": 0,
+                    "flagged": false,
+                    "reaction_type": "L",
+                    "updated_at": "2026-08-14T12:06:50.192Z"
+                },
+                "is_persona_root": false,
+                "is_following_creator": false,
+                "project": {
+                    "id": "a34f779f-e4ce-4985-8f5d-93443cb23cc3",
+                    "name": "→ Article Hunter",
+                    "description": "→ Article Hunter",
+                    "is_trashed": false,
+                    "is_public": false
+                },
+                "albums": [],
+                "ownership": {
+                    "ownership_reason": "subscribed"
+                },
+                "explicit": false,
+                "comment_count": 0,
+                "flag_count": 0,
+                "display_tags": "ambient, electronica, glitch",
+                "is_download_unlocked": false,
+                "is_contest_clip": false,
+                "has_hook": false,
+                "batch_index": 0,
+                "action_config": {
+                    "actions": [
+                        {
+                            "action_type": "add_to_playlist",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "like_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "share_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "dislike_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "report_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remove_from_playlist",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "play_next",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "add_to_queue",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "delete_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "edit_song_details",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "create_hook",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "download_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "open_in_studio",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "publish_song",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remaster",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remix_extend",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remix_cover",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "remix_reuse_style",
+                            "disabled": false,
+                            "visible": true
+                        },
+                        {
+                            "action_type": "create_voice",
+                            "disabled": false,
+                            "visible": true
+                        }
+                    ]
+                }
+            },
+            "relative_index": 18.0,
+            "pinned": false
+        }
+    ],
+    "pinned_clips": [],
+    "is_owned": true,
+    "is_trashed": false,
+    "clip_count": 38,
+    "current_page": 1,
+    "shared": false
+}

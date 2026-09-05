@@ -1,0 +1,12 @@
+{
+  "cursor": "a8f41a77-d5a8-4da6-8894-34c1f160d440",
+  "limit": 20,
+  "filters": {
+    "disliked": "False",
+    "trashed": "False",
+    "fromStudioProject": { "presence": "False" },
+    "stem": { "presence": "False" },
+    "stemComplement": "False",
+    "workspace": { "presence": "True", "workspaceId": "a34f779f-e4ce-4985-8f5d-93443cb23cc3" }
+  }
+}
