@@ -125,11 +125,20 @@ const BOOTSTRAP_SETTLE_MS = 2_000;
 // ---------------------------------------------------------------------
 const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
 
+// Suno's own non-UUID pseudo-workspace id for a user's unassigned clips
+// ("My Workspace"). A live observation (0906) confirmed it uses the
+// IDENTICAL /api/project/{id} + /api/feed/v3 contract as any UUID
+// workspace. This is the ONLY non-UUID value ever accepted — not a
+// general loosening of workspace-id parsing.
+const DEFAULT_WORKSPACE_ID = "default";
+
 function parseSunoWorkspaceId(input) {
   const trimmed = input.trim();
+  if (trimmed === DEFAULT_WORKSPACE_ID) return DEFAULT_WORKSPACE_ID;
   try {
     const url = new URL(trimmed);
     const wid = url.searchParams.get("wid") ?? url.searchParams.get("wId") ?? url.searchParams.get("workspaceId");
+    if (wid === DEFAULT_WORKSPACE_ID) return DEFAULT_WORKSPACE_ID;
     if (wid && UUID_RE.test(wid)) return wid.match(UUID_RE)[0];
   } catch {
     // not a URL — fall through
@@ -139,12 +148,14 @@ function parseSunoWorkspaceId(input) {
   throw new Error(`Could not find a workspace id in: ${input}`);
 }
 
-// Matches GET /api/project/{workspaceId} ONLY — deliberately excludes
-// sibling paths like /api/project/{workspaceId}/pinned-clips, which a
-// live capture showed firing on the same page load with a mostly-empty
-// body that raced with (and once beat) the real response.
+// Matches GET /api/project/{workspaceId} ONLY, where workspaceId is a
+// UUID or the literal "default" — deliberately excludes sibling paths
+// like /api/project/{workspaceId}/pinned-clips, which a live capture
+// showed firing on the same page load with a mostly-empty body that
+// raced with (and once beat) the real response. Does not loosen to
+// arbitrary non-UUID project ids.
 function isSunoProjectRequestUrl(url) {
-  return /\/api\/project\/[0-9a-f-]{36}(?:\?.*)?$/i.test(url);
+  return /\/api\/project\/(?:[0-9a-f-]{36}|default)(?:\?.*)?$/i.test(url);
 }
 
 function isSunoFeedV3RequestUrl(url) {

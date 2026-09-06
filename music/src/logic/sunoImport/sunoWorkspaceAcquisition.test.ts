@@ -41,6 +41,22 @@ describe("parseSunoWorkspaceId", () => {
   it("throws on an empty string", () => {
     expect(() => parseSunoWorkspaceId("")).toThrow(SunoWorkspaceAcquisitionError);
   });
+
+  it("accepts the literal 'default' pseudo-workspace id as a bare string (regression: 0906 unassigned-clips bucket)", () => {
+    expect(parseSunoWorkspaceId("default")).toBe("default");
+  });
+
+  it("accepts 'default' from a suno.com/create?wid=default URL", () => {
+    expect(parseSunoWorkspaceId("https://suno.com/create?wid=default")).toBe("default");
+  });
+
+  it("rejects an arbitrary non-UUID, non-'default' bare string", () => {
+    expect(() => parseSunoWorkspaceId("not-a-real-workspace-id")).toThrow(SunoWorkspaceAcquisitionError);
+  });
+
+  it("rejects an arbitrary non-UUID, non-'default' wid query value", () => {
+    expect(() => parseSunoWorkspaceId("https://suno.com/create?wid=some-other-string")).toThrow(SunoWorkspaceAcquisitionError);
+  });
 });
 
 describe("isSunoProjectRequestUrl / isSunoFeedV3RequestUrl", () => {
@@ -59,6 +75,23 @@ describe("isSunoProjectRequestUrl / isSunoFeedV3RequestUrl", () => {
 
   it("does not match the sibling /pinned-clips endpoint (regression: Tron Arc 2.0 0905 live run)", () => {
     expect(isSunoProjectRequestUrl(`https://studio-api-prod.suno.com/api/project/${WID}/pinned-clips`)).toBe(false);
+  });
+
+  it("matches the literal /api/project/default pseudo-workspace endpoint (regression: 0906 unassigned-clips bucket)", () => {
+    expect(isSunoProjectRequestUrl("https://studio-api-prod.suno.com/api/project/default")).toBe(true);
+  });
+
+  it("matches /api/project/default with trailing query params", () => {
+    expect(isSunoProjectRequestUrl("https://studio-api-prod.suno.com/api/project/default?foo=bar")).toBe(true);
+  });
+
+  it("does not match the sibling /pinned-clips endpoint for the default bucket either", () => {
+    expect(isSunoProjectRequestUrl("https://studio-api-prod.suno.com/api/project/default/pinned-clips")).toBe(false);
+  });
+
+  it("does not loosen to arbitrary non-UUID, non-'default' project ids", () => {
+    expect(isSunoProjectRequestUrl("https://studio-api-prod.suno.com/api/project/defaults")).toBe(false);
+    expect(isSunoProjectRequestUrl("https://studio-api-prod.suno.com/api/project/some-other-string")).toBe(false);
   });
 
   it("matches the real /api/feed/v3 shape", () => {

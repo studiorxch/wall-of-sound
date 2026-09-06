@@ -33,13 +33,26 @@ export class SunoWorkspaceAcquisitionError extends Error {
 const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
 
 /**
- * Extract a workspace id from either a bare UUID or a Suno workspace URL
- * such as https://suno.com/create?wid=<uuid> (also tolerates ?wId=,
- * trailing slashes, and extra query params). Throws rather than guessing
- * when nothing UUID-shaped is found.
+ * Suno's own non-UUID pseudo-workspace id for a user's unassigned clips
+ * ("My Workspace"). A live observation (0906) confirmed it uses the
+ * IDENTICAL /api/project/{id} + /api/feed/v3 contract as any UUID
+ * workspace — Suno just substitutes this literal string for the id. This
+ * is the ONLY non-UUID value ever accepted; it is not a general
+ * loosening of workspace-id parsing.
+ */
+const DEFAULT_WORKSPACE_ID = "default";
+
+/**
+ * Extract a workspace id from either a bare UUID, the literal string
+ * "default", or a Suno workspace URL such as https://suno.com/create?wid=<uuid>
+ * (also tolerates ?wId=, trailing slashes, extra query params, and
+ * ?wid=default). Throws rather than guessing when nothing UUID-shaped or
+ * exactly "default" is found — an arbitrary non-UUID string is never
+ * accepted.
  */
 export function parseSunoWorkspaceId(input: string): string {
   const trimmed = input.trim();
+  if (trimmed === DEFAULT_WORKSPACE_ID) return DEFAULT_WORKSPACE_ID;
   if (UUID_RE.test(trimmed) && !trimmed.includes("://") && !trimmed.includes("?")) {
     const m = trimmed.match(UUID_RE);
     if (m) return m[0];
@@ -47,6 +60,7 @@ export function parseSunoWorkspaceId(input: string): string {
   try {
     const url = new URL(trimmed);
     const wid = url.searchParams.get("wid") ?? url.searchParams.get("wId") ?? url.searchParams.get("workspaceId");
+    if (wid === DEFAULT_WORKSPACE_ID) return DEFAULT_WORKSPACE_ID;
     if (wid && UUID_RE.test(wid)) return wid.match(UUID_RE)![0];
   } catch {
     // not a URL — fall through to a last-ditch scan below
@@ -57,17 +71,20 @@ export function parseSunoWorkspaceId(input: string): string {
 }
 
 /**
- * Matches Suno's GET /api/project/{workspaceId} endpoint — and ONLY
- * that endpoint. Deliberately excludes sibling paths like
+ * Matches Suno's GET /api/project/{workspaceId} endpoint — where
+ * workspaceId is either a UUID or the literal "default" — and ONLY that
+ * endpoint. Deliberately excludes sibling paths like
  * /api/project/{workspaceId}/pinned-clips: a real live capture (0905,
  * Tron Arc 2.0) showed that endpoint firing on the same page load with
  * a differently-shaped, mostly-empty body (no clip_count/project_clips
  * at all) — a looser match that accepted any trailing /suffix let that
  * body race with the real one and, when it landed first, poisoned the
- * driver's continuation check into exiting after a single page.
+ * driver's continuation check into exiting after a single page. This
+ * does NOT loosen to arbitrary non-UUID project ids — only the one
+ * literal value Suno itself uses for the unassigned-clips bucket.
  */
 export function isSunoProjectRequestUrl(url: string): boolean {
-  return /\/api\/project\/[0-9a-f-]{36}(?:\?.*)?$/i.test(url);
+  return /\/api\/project\/(?:[0-9a-f-]{36}|default)(?:\?.*)?$/i.test(url);
 }
 
 /** Matches Suno's POST /api/feed/v3 endpoint. */
