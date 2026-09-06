@@ -241,6 +241,36 @@ export function matchFeedResponseToExpectedCursor(
   return { matched: true, valid: true, next: { kind: "pending", cursor: lastId } };
 }
 
+/** Hard cap on retries for a single cursor before giving up on the whole workspace. */
+export const MAX_CURSOR_RETRIES = 3;
+
+/** Backoff before each successive retry of the same cursor (index 0 = retry 1). */
+export const CURSOR_RETRY_BACKOFF_MS = [2000, 5000, 10000];
+
+export type CursorRetryDecision =
+  | { action: "retry"; nextRetryCount: number; backoffMs: number }
+  | { action: "exhausted" };
+
+/**
+ * Decide what to do when a captured `/api/feed/v3` response's cursor
+ * matched what was expected, but its body was malformed — observed live
+ * (0906, the `default` pseudo-workspace's ~46-page crawl) as intermittent
+ * backend instability under deep pagination, not a deterministic break:
+ * two live attempts both hit this class of failure at different cursors
+ * and different depths. Never advances pagination or invents a next
+ * cursor on a malformed body — this only decides whether there's budget
+ * left to wait and ask for the SAME cursor again.
+ */
+export function decideCursorRetryOutcome(
+  retryCountSoFar: number,
+  maxRetries: number = MAX_CURSOR_RETRIES,
+): CursorRetryDecision {
+  if (retryCountSoFar >= maxRetries) return { action: "exhausted" };
+  const nextRetryCount = retryCountSoFar + 1;
+  const backoffMs = CURSOR_RETRY_BACKOFF_MS[Math.min(nextRetryCount - 1, CURSOR_RETRY_BACKOFF_MS.length - 1)];
+  return { action: "retry", nextRetryCount, backoffMs };
+}
+
 /**
  * Establish the pagination state to continue from when NO genuine
  * `cursor:null` feed bootstrap was captured — only a raw `/api/project`

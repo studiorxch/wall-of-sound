@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  CURSOR_RETRY_BACKOFF_MS,
   DEFAULT_ACQUISITION_LIMITS,
+  MAX_CURSOR_RETRIES,
   SunoWorkspaceAcquisitionError,
   buildCaptureWrapper,
+  decideCursorRetryOutcome,
   decideInitialContinuation,
   decideNextAction,
   deriveInitialExpectedCursor,
@@ -242,6 +245,46 @@ describe("matchFeedResponseToExpectedCursor", () => {
     const result = matchFeedResponseToExpectedCursor(pending("c1"), "c1", { clips: [{ id: 12345 }], has_more: true });
     expect(result.matched).toBe(true);
     expect((result as { valid: boolean }).valid).toBe(false);
+  });
+
+  it("a malformed matched response never advances the expected cursor — the same pending state still matches a later valid response for it (regression: 0906 default-bucket deep-crawl instability)", () => {
+    const malformed = matchFeedResponseToExpectedCursor(pending("c1"), "c1", { clips: "not-an-array", has_more: true });
+    expect(malformed).toEqual({
+      matched: true,
+      valid: false,
+      reason: expect.any(String),
+    });
+    // Because matchFeedResponseToExpectedCursor never mutates its inputs,
+    // re-checking the SAME pending("c1") state against a subsequent valid
+    // response for cursor c1 (a retry) is accepted exactly as if nothing
+    // had happened — this is what makes bounded per-cursor retry safe.
+    const retried = matchFeedResponseToExpectedCursor(pending("c1"), "c1", { clips: [{ id: "x" }], has_more: false });
+    expect(retried).toEqual({ matched: true, valid: true, next: { kind: "terminal" } });
+  });
+
+  it("a stale response for an already-superseded cursor still cannot satisfy a newer expected cursor after a successful retry", () => {
+    // Simulates: cursor c1 malformed once, retried and accepted (next expected -> c2),
+    // then a late/duplicate response for the OLD cursor c1 arrives.
+    const stale = matchFeedResponseToExpectedCursor(pending("c2"), "c1", { clips: [{ id: "x" }], has_more: true });
+    expect(stale).toEqual({ matched: false });
+  });
+});
+
+describe("decideCursorRetryOutcome", () => {
+  it("uses the documented backoff schedule for each successive retry", () => {
+    expect(decideCursorRetryOutcome(0)).toEqual({ action: "retry", nextRetryCount: 1, backoffMs: CURSOR_RETRY_BACKOFF_MS[0] });
+    expect(decideCursorRetryOutcome(1)).toEqual({ action: "retry", nextRetryCount: 2, backoffMs: CURSOR_RETRY_BACKOFF_MS[1] });
+    expect(decideCursorRetryOutcome(2)).toEqual({ action: "retry", nextRetryCount: 3, backoffMs: CURSOR_RETRY_BACKOFF_MS[2] });
+  });
+
+  it("exhausts after MAX_CURSOR_RETRIES retries have already been consumed (retry exhaustion fails cleanly)", () => {
+    expect(decideCursorRetryOutcome(MAX_CURSOR_RETRIES)).toEqual({ action: "exhausted" });
+    expect(decideCursorRetryOutcome(MAX_CURSOR_RETRIES + 1)).toEqual({ action: "exhausted" });
+  });
+
+  it("respects a custom maxRetries override", () => {
+    expect(decideCursorRetryOutcome(1, 1)).toEqual({ action: "exhausted" });
+    expect(decideCursorRetryOutcome(0, 1)).toEqual({ action: "retry", nextRetryCount: 1, backoffMs: CURSOR_RETRY_BACKOFF_MS[0] });
   });
 });
 

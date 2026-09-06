@@ -115,6 +115,13 @@ const POLL_INTERVAL_MS = 500;
 // feed bootstrap over a project-derived one" choice doesn't depend on
 // which of the two happened to settle first.
 const BOOTSTRAP_SETTLE_MS = 2_000;
+// Deep-pagination pacing: purely to reduce sustained request pressure on
+// very long crawls (e.g. the "default" bucket's ~46 pages) — not an
+// integrity mechanism. The per-cursor retry/backoff above is what
+// actually guards correctness; this just slows down once a crawl is
+// clearly not a normal short workspace.
+const DEEP_CRAWL_PAGE_THRESHOLD = 10;
+const DEEP_CRAWL_PAUSE_MS = 750;
 
 // ---------------------------------------------------------------------
 // Pure helpers — duplicated in plain JS from
@@ -236,6 +243,26 @@ function matchFeedResponseToExpectedCursor(expected, cursorUsed, response) {
     };
   }
   return { matched: true, valid: true, next: { kind: "pending", cursor: lastId } };
+}
+
+// Hard cap on retries for a single cursor before giving up on the whole workspace.
+const MAX_CURSOR_RETRIES = 3;
+// Backoff before each successive retry of the same cursor (index 0 = retry 1).
+const CURSOR_RETRY_BACKOFF_MS = [2000, 5000, 10000];
+
+// Decides what to do when a captured /api/feed/v3 response's cursor
+// matched what was expected, but its body was malformed — observed live
+// (0906, the "default" pseudo-workspace's ~46-page crawl) as intermittent
+// backend instability under deep pagination, not a deterministic break:
+// two live attempts both hit this class of failure at different cursors
+// and different depths. Never advances pagination or invents a next
+// cursor on a malformed body — this only decides whether there's budget
+// left to wait and ask for the SAME cursor again.
+function decideCursorRetryOutcome(retryCountSoFar, maxRetries = MAX_CURSOR_RETRIES) {
+  if (retryCountSoFar >= maxRetries) return { action: "exhausted" };
+  const nextRetryCount = retryCountSoFar + 1;
+  const backoffMs = CURSOR_RETRY_BACKOFF_MS[Math.min(nextRetryCount - 1, CURSOR_RETRY_BACKOFF_MS.length - 1)];
+  return { action: "retry", nextRetryCount, backoffMs };
 }
 
 // Establishes the pagination state to continue from when NO genuine
@@ -393,6 +420,8 @@ async function acquireOneWorkspace(browser, target) {
 
   let expectedCursor = { kind: "awaiting-bootstrap" };
   let terminalObserved = false;
+  let cursorRetryCount = 0; // retries consumed for the CURRENT expectedCursor only — resets on every successful acceptance
+  const cursorRetryHistory = []; // diagnostic record of every malformed-response retry, across the whole workspace
 
   page.on("response", (response) => {
     const req = response.request();
@@ -444,11 +473,22 @@ async function acquireOneWorkspace(browser, target) {
             return;
           }
           if (!result.valid) {
-            anomalies.push(result.reason);
+            const cursorLabel = expectedCursor.kind === "pending" ? expectedCursor.cursor : "null (bootstrap)";
+            const retryDecision = decideCursorRetryOutcome(cursorRetryCount);
+            if (retryDecision.action === "exhausted") {
+              cursorRetryHistory.push({ cursor: cursorLabel, outcome: "exhausted", reason: result.reason, at: new Date().toISOString() });
+              log(`MALFORMED response for cursor ${cursorLabel} — retries exhausted (${MAX_CURSOR_RETRIES}/${MAX_CURSOR_RETRIES})`, { reason: result.reason });
+              anomalies.push(`Exhausted ${MAX_CURSOR_RETRIES} retries for cursor ${cursorLabel}: ${result.reason}`);
+            } else {
+              cursorRetryCount = retryDecision.nextRetryCount;
+              cursorRetryHistory.push({ cursor: cursorLabel, outcome: "will retry", attempt: cursorRetryCount, reason: result.reason, at: new Date().toISOString() });
+              log(`MALFORMED response for cursor ${cursorLabel} — retry ${cursorRetryCount}/${MAX_CURSOR_RETRIES} scheduled`, { reason: result.reason });
+            }
             return;
           }
           feedPages.push({ cursorUsed, response: body });
           expectedCursor = result.next;
+          cursorRetryCount = 0;
           if (expectedCursor.kind === "terminal") terminalObserved = true;
           log("ACCEPTED into logical sequence", { index: feedPages.length - 1, nextExpectedCursor: expectedCursor });
         })
@@ -503,6 +543,65 @@ async function acquireOneWorkspace(browser, target) {
     log("Derived initial expected cursor from /api/project (no feed bootstrap arrived)", { expectedCursor });
   }
 
+  // Waits for a response matching pendingCursor to be ACCEPTED. If instead
+  // a malformed-but-matched response is tolerated (retry budget remains —
+  // see decideCursorRetryOutcome via the response handler above), this
+  // waits out the backoff and re-triggers the same natural continuation
+  // action, then waits again — never advancing pendingCursor itself, and
+  // never treating the malformed page as valid. Returns once the cursor
+  // has genuinely advanced, or once an anomaly (including retry
+  // exhaustion) has been recorded for the caller to act on.
+  async function waitForPageOrRetry(pendingCursor) {
+    let lastSeenRetryCount = cursorRetryCount;
+    while (true) {
+      await waitForCondition(
+        () => expectedCursor !== pendingCursor || cursorRetryCount !== lastSeenRetryCount || anomalies.length > 0,
+        CONTINUATION_TIMEOUT_MS,
+        `a feed/v3 response matching cursor=${pendingCursor.kind === "pending" ? pendingCursor.cursor : "null (bootstrap)"}`,
+      );
+      if (anomalies.length > 0 || expectedCursor !== pendingCursor) return;
+      // cursorRetryCount changed but the cursor didn't advance and no
+      // anomaly was recorded — a malformed response was tolerated and a
+      // retry was scheduled. Wait out its backoff, then ask again.
+      const backoffMs = CURSOR_RETRY_BACKOFF_MS[Math.min(cursorRetryCount - 1, CURSOR_RETRY_BACKOFF_MS.length - 1)];
+      log(`Waiting ${backoffMs}ms before re-triggering continuation for cursor retry ${cursorRetryCount}/${MAX_CURSOR_RETRIES}`);
+      await sleep(backoffMs);
+      await triggerScroll(page);
+      lastSeenRetryCount = cursorRetryCount;
+    }
+  }
+
+  async function writeFailureDiagnostics(reason) {
+    try {
+      const dir = join(REPO_ROOT, "WOS-share", "SUNO_LIBRARY", "WORKSPACE_RECON", "failures");
+      mkdirSync(dir, { recursive: true });
+      const path = join(dir, `${workspaceId}-${Date.now()}.json`);
+      writeFileSync(
+        path,
+        JSON.stringify(
+          {
+            workspaceId,
+            workspaceName,
+            failureReason: reason,
+            terminalObserved,
+            expectedCursorAtFailure: expectedCursor,
+            pagesAcceptedBeforeFailure: feedPages.length,
+            clipsCapturedBeforeFailure: feedPages.reduce((n, p) => n + (p.response?.clips?.length ?? 0), 0),
+            cursorRetryHistory,
+            rawFeedCaptureCount: rawFeedCaptures.length,
+            at: new Date().toISOString(),
+          },
+          null,
+          2,
+        ),
+        "utf-8",
+      );
+      console.error(`Preserved failure diagnostics -> ${path}`);
+    } catch (err) {
+      console.error(`Could not write failure diagnostics: ${err.message}`);
+    }
+  }
+
   const startedAt = Date.now();
   while (expectedCursor.kind !== "terminal") {
     const elapsedMs = Date.now() - startedAt;
@@ -512,33 +611,40 @@ async function acquireOneWorkspace(browser, target) {
     });
     if (decision.action === "stop") break; // redundant with expectedCursor reaching "terminal"; kept as a safety net
     if (decision.action === "abort") {
+      await writeFailureDiagnostics(decision.reason);
       await page.close();
       throw new Error(decision.reason);
     }
     if (feedPages.length === 0 && elapsedMs >= MAX_DURATION_MS) {
+      await writeFailureDiagnostics("Exceeded time budget waiting for the first continuation page");
       await page.close();
       throw new Error("Exceeded time budget waiting for the first continuation page");
     }
 
     const stall = detectObviousStall(feedPages);
     if (stall) {
+      await writeFailureDiagnostics(stall);
       await page.close();
       throw new Error(stall);
+    }
+
+    // Purely a request-pressure reducer for very long crawls — the
+    // per-cursor retry/backoff above is the actual integrity mechanism.
+    if (feedPages.length >= DEEP_CRAWL_PAGE_THRESHOLD) {
+      await sleep(DEEP_CRAWL_PAUSE_MS);
     }
 
     const pendingCursor = expectedCursor;
     await triggerScroll(page);
     try {
-      await waitForCondition(
-        () => expectedCursor !== pendingCursor || anomalies.length > 0,
-        CONTINUATION_TIMEOUT_MS,
-        `a feed/v3 response matching cursor=${pendingCursor.kind === "pending" ? pendingCursor.cursor : "null (bootstrap)"}`,
-      );
+      await waitForPageOrRetry(pendingCursor);
     } catch (err) {
+      await writeFailureDiagnostics(`Pagination stalled — no feed/v3 response matched the expected cursor: ${err.message}`);
       await page.close();
       throw new Error(`Pagination stalled — no feed/v3 response matched the expected cursor: ${err.message}`);
     }
     if (anomalies.length > 0) {
+      await writeFailureDiagnostics(anomalies[0]);
       await page.close();
       throw new Error(anomalies[0]);
     }
