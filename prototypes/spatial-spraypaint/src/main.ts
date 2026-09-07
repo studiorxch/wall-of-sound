@@ -1,7 +1,11 @@
 import { InputSourceMode, AnonymityMode } from "./types";
 import { CanonicalStrokeManager } from "./CanonicalStroke";
 import { SprayBrushEngine } from "./SprayBrushEngine";
-import { HandTracker, HandTrackingResult } from "./HandTracker";
+import {
+  HandTracker,
+  HandTrackingResult,
+  HandTrackingDiagnostics,
+} from "./HandTracker";
 import { AnonymityProcessor } from "./AnonymityProcessor";
 import { PerformanceRecorder } from "./PerformanceRecorder";
 
@@ -26,6 +30,10 @@ class SpatialSpraypaintApp {
   private isSpraying = false;
   private manualSprayOverride = false;
   private webcamActive = false;
+  private trackingOverlayEnabled = true;
+  private lastHandResult: HandTrackingResult | null = null;
+  private mappedPointLogged = false;
+  private sprayDeliveryLogged = false;
 
   private audioCtx: AudioContext | null = null;
   private audioElement: HTMLAudioElement | null = null;
@@ -42,6 +50,8 @@ class SpatialSpraypaintApp {
     this.bindControls();
     this.bindMouseEvents();
     this.bindKeyboardFallback();
+    this.updateTrackingOverlayVisibility();
+    this.updateTrackingOverlay(null);
     this.startRenderLoop();
   }
 
@@ -84,11 +94,16 @@ class SpatialSpraypaintApp {
     const toggleRecordBtn = document.getElementById("toggle-record") as HTMLButtonElement;
     const webcamControls = document.getElementById("webcam-controls")!;
     const manualSprayBtn = document.getElementById("manual-spray-trigger")!;
+    const toggleTrackingDebugBtn = document.getElementById(
+      "toggle-tracking-debug"
+    ) as HTMLButtonElement;
 
     inputSelect.addEventListener("change", (e) => {
       this.inputMode = (e.target as HTMLSelectElement).value as InputSourceMode;
       webcamControls.style.display = this.inputMode === "spatial" ? "flex" : "none";
       this.strokeManager.reset();
+      this.updateTrackingOverlayVisibility();
+      this.updateTrackingOverlay(this.inputMode === "spatial" ? this.lastHandResult : null);
     });
 
     anonymitySelect.addEventListener("change", (e) => {
@@ -110,18 +125,45 @@ class SpatialSpraypaintApp {
     });
 
     toggleWebcamBtn.addEventListener("click", async () => {
-      if (!this.webcamActive) {
-        await this.handTracker.initialize((res) => this.handleHandTrackingResult(res));
-        await this.handTracker.start();
-        this.webcamActive = true;
-        toggleWebcamBtn.textContent = "Stop Camera";
-        toggleWebcamBtn.classList.add("active");
-      } else {
-        this.handTracker.stop();
+      toggleWebcamBtn.disabled = true;
+      try {
+        if (!this.webcamActive) {
+          this.resetTrackingDiagnostics();
+          await this.handTracker.initialize(
+            (res) => this.handleHandTrackingResult(res),
+            (diagnostics) => this.handleHandTrackingDiagnostics(diagnostics)
+          );
+          await this.handTracker.start();
+          this.webcamActive = true;
+          toggleWebcamBtn.textContent = "Stop Camera";
+          toggleWebcamBtn.classList.add("active");
+        } else {
+          await this.handTracker.stop();
+          this.webcamActive = false;
+          this.lastHandResult = null;
+          this.updateTrackingOverlay(null);
+          toggleWebcamBtn.textContent = "Start Camera";
+          toggleWebcamBtn.classList.remove("active");
+        }
+      } catch {
         this.webcamActive = false;
-        toggleWebcamBtn.textContent = "Start Camera";
+        toggleWebcamBtn.textContent = "Retry Camera";
         toggleWebcamBtn.classList.remove("active");
+      } finally {
+        toggleWebcamBtn.disabled = false;
       }
+    });
+
+    toggleTrackingDebugBtn.addEventListener("click", () => {
+      this.trackingOverlayEnabled = !this.trackingOverlayEnabled;
+      toggleTrackingDebugBtn.textContent = this.trackingOverlayEnabled
+        ? "Hide Tracking Debug"
+        : "Show Tracking Debug";
+      toggleTrackingDebugBtn.setAttribute(
+        "aria-pressed",
+        this.trackingOverlayEnabled.toString()
+      );
+      this.updateTrackingOverlayVisibility();
     });
 
     clearBtn.addEventListener("click", () => {
@@ -145,9 +187,11 @@ class SpatialSpraypaintApp {
 
     manualSprayBtn.addEventListener("mousedown", () => {
       this.manualSprayOverride = true;
+      this.updateManualSprayIndicators();
     });
     window.addEventListener("mouseup", () => {
       this.manualSprayOverride = false;
+      this.updateManualSprayIndicators();
     });
 
     // Audio setup with Web Audio routing for performance recording
@@ -212,43 +256,199 @@ class SpatialSpraypaintApp {
   private bindKeyboardFallback() {
     window.addEventListener("keydown", (e) => {
       if (e.code === "Space" && !e.repeat) {
+        e.preventDefault();
         this.manualSprayOverride = true;
+        this.updateManualSprayIndicators();
       }
     });
     window.addEventListener("keyup", (e) => {
       if (e.code === "Space") {
+        e.preventDefault();
         this.manualSprayOverride = false;
+        this.updateManualSprayIndicators();
       }
     });
   }
 
   private handleHandTrackingResult(res: HandTrackingResult | null) {
-    const statusBadge = document.getElementById("spray-status");
+    if (this.inputMode !== "spatial") return;
 
-    if (!res || this.inputMode !== "spatial") {
+    this.lastHandResult = res;
+    this.updateTrackingOverlay(res);
+
+    if (!res) {
       this.isSpraying = this.manualSprayOverride;
-      if (statusBadge) {
-        statusBadge.textContent = this.isSpraying ? "SPRAYING" : "OFF";
-        if (this.isSpraying) statusBadge.classList.add("on");
-        else statusBadge.classList.remove("on");
-      }
+      this.updateSprayStatus();
       return;
     }
 
     this.isSpraying = res.isPinching || this.manualSprayOverride;
+    this.updateSprayStatus();
 
-    if (statusBadge) {
-      statusBadge.textContent = this.isSpraying ? "SPRAYING" : "OFF";
-      if (this.isSpraying) statusBadge.classList.add("on");
-      else statusBadge.classList.remove("on");
+    const px = res.x * this.compositeCanvas.width;
+    const py = res.y * this.compositeCanvas.height;
+    if (!this.mappedPointLogged) {
+      this.mappedPointLogged = true;
+      console.info(
+        `[Spatial Spraypaint] Fingertip mapped to canvas (${Math.round(px)}, ${Math.round(py)})`
+      );
     }
+    this.setTrackingStage("mapping", "pass", `${Math.round(px)}, ${Math.round(py)}`);
 
     if (this.isSpraying) {
-      const px = res.x * this.compositeCanvas.width;
-      const py = res.y * this.compositeCanvas.height;
       this.processPoint(px, py);
+      this.setTrackingStage("spray", "pass", "POINT RECEIVED");
+      if (!this.sprayDeliveryLogged) {
+        this.sprayDeliveryLogged = true;
+        console.info("[Spatial Spraypaint] Spray engine received tracked point");
+      }
     } else {
       this.strokeManager.reset();
+    }
+  }
+
+  private handleHandTrackingDiagnostics(diagnostics: HandTrackingDiagnostics) {
+    this.setTrackingStage(
+      "library",
+      diagnostics.libraryLoaded ? "pass" : "waiting",
+      diagnostics.libraryLoaded ? "LOADED" : "WAITING"
+    );
+    this.setTrackingStage(
+      "frames",
+      diagnostics.videoFramesReceived > 0 ? "pass" : "waiting",
+      diagnostics.videoFramesReceived > 0
+        ? diagnostics.videoFramesReceived.toString()
+        : "WAITING"
+    );
+    this.setTrackingStage(
+      "callback",
+      diagnostics.resultsCallbacks > 0 ? "pass" : "waiting",
+      diagnostics.resultsCallbacks > 0 ? diagnostics.resultsCallbacks.toString() : "WAITING"
+    );
+    this.setTrackingStage(
+      "landmarks",
+      diagnostics.landmarksDetected ? "pass" : "waiting",
+      diagnostics.landmarksDetected ? "DETECTED" : "WAITING"
+    );
+
+    const trackerStatus = document.getElementById("tracker-runtime-status");
+    if (trackerStatus) {
+      if (diagnostics.error) trackerStatus.textContent = "TRACKER ERROR";
+      else if (diagnostics.cameraStarted) trackerStatus.textContent = "CAMERA RUNNING";
+      else if (diagnostics.trackerInitialized) trackerStatus.textContent = "TRACKER READY";
+      else if (diagnostics.libraryLoaded) trackerStatus.textContent = "LOADING MODEL";
+      else trackerStatus.textContent = "TRACKER IDLE";
+    }
+
+    const errorElement = document.getElementById("tracking-error");
+    if (errorElement) {
+      errorElement.textContent = diagnostics.error ?? "";
+      errorElement.classList.toggle("visible", Boolean(diagnostics.error));
+    }
+  }
+
+  private updateTrackingOverlay(res: HandTrackingResult | null) {
+    const cursor = document.getElementById("tracking-cursor");
+    const handStatus = document.getElementById("hand-detection-status");
+    const confidence = document.getElementById("tracking-confidence");
+    const pinchDistance = document.getElementById("pinch-distance");
+    const pinchState = document.getElementById("pinch-state");
+    const manualState = document.getElementById("manual-state");
+
+    const handDetected = Boolean(res);
+    if (handStatus) {
+      handStatus.textContent = handDetected ? "HAND DETECTED" : "NO HAND";
+      handStatus.classList.toggle("detected", handDetected);
+    }
+    if (confidence) confidence.textContent = res ? `${(res.confidence * 100).toFixed(1)}%` : "—";
+    if (pinchDistance) pinchDistance.textContent = res ? res.pinchDist.toFixed(3) : "—";
+    if (pinchState) {
+      pinchState.textContent = res?.isPinching ? "ACTIVE" : "OPEN";
+      pinchState.classList.toggle("active", Boolean(res?.isPinching));
+    }
+    if (manualState) {
+      manualState.textContent = this.manualSprayOverride ? "ACTIVE" : "OFF";
+      manualState.classList.toggle("active", this.manualSprayOverride);
+    }
+
+    this.setTrackingStage(
+      "pinch",
+      res?.isPinching ? "active" : res ? "pass" : "waiting",
+      res?.isPinching ? "ACTIVE" : res ? "OPEN" : "WAITING"
+    );
+
+    if (!cursor) return;
+    cursor.classList.toggle("detected", handDetected);
+    cursor.classList.toggle("pinching", Boolean(res?.isPinching));
+    cursor.classList.toggle("manual", this.manualSprayOverride);
+    cursor.classList.toggle(
+      "spraying",
+      Boolean(res && (res.isPinching || this.manualSprayOverride))
+    );
+    if (res) {
+      cursor.style.left = `${res.x * 100}%`;
+      cursor.style.top = `${res.y * 100}%`;
+    }
+  }
+
+  private updateManualSprayIndicators() {
+    if (this.inputMode !== "spatial") return;
+    this.isSpraying = Boolean(
+      this.manualSprayOverride || this.lastHandResult?.isPinching
+    );
+    this.updateTrackingOverlay(this.lastHandResult);
+    this.updateSprayStatus();
+  }
+
+  private updateSprayStatus() {
+    const statusBadge = document.getElementById("spray-status");
+    if (!statusBadge) return;
+
+    const reason = this.manualSprayOverride
+      ? "SPACE"
+      : this.lastHandResult?.isPinching
+        ? "PINCH"
+        : null;
+    statusBadge.textContent = reason ? `SPRAYING · ${reason}` : "OFF";
+    statusBadge.classList.toggle("on", Boolean(reason));
+  }
+
+  private updateTrackingOverlayVisibility() {
+    const overlay = document.getElementById("tracking-overlay");
+    overlay?.classList.toggle(
+      "visible",
+      this.inputMode === "spatial" && this.trackingOverlayEnabled
+    );
+  }
+
+  private setTrackingStage(stage: string, state: string, value: string) {
+    const row = document.querySelector<HTMLElement>(`[data-tracking-stage="${stage}"]`);
+    if (!row) return;
+    row.dataset.state = state;
+    const valueElement = row.querySelector<HTMLElement>(".tracking-stage-value");
+    if (valueElement) valueElement.textContent = value;
+  }
+
+  private resetTrackingDiagnostics() {
+    this.mappedPointLogged = false;
+    this.sprayDeliveryLogged = false;
+    this.lastHandResult = null;
+    this.updateTrackingOverlay(null);
+    for (const stage of [
+      "library",
+      "frames",
+      "callback",
+      "landmarks",
+      "mapping",
+      "pinch",
+      "spray",
+    ]) {
+      this.setTrackingStage(stage, "waiting", "WAITING");
+    }
+    const errorElement = document.getElementById("tracking-error");
+    if (errorElement) {
+      errorElement.textContent = "";
+      errorElement.classList.remove("visible");
     }
   }
 

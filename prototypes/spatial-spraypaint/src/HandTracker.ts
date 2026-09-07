@@ -1,3 +1,15 @@
+import { Camera } from "@mediapipe/camera_utils";
+import {
+  Hands,
+  VERSION as HANDS_VERSION,
+  type NormalizedLandmark,
+  type Results,
+} from "@mediapipe/hands";
+
+const HANDS_ASSET_ROOT =
+  "https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240";
+const PINCH_THRESHOLD = 0.08;
+
 export interface HandTrackingResult {
   x: number;
   y: number;
@@ -6,108 +18,236 @@ export interface HandTrackingResult {
   confidence: number;
 }
 
+export interface HandTrackingDiagnostics {
+  libraryLoaded: boolean;
+  trackerInitialized: boolean;
+  cameraStarted: boolean;
+  videoFramesReceived: number;
+  resultsCallbacks: number;
+  landmarksDetected: boolean;
+  error: string | null;
+}
+
+export type HandTrackingDiagnosticCallback = (diagnostics: HandTrackingDiagnostics) => void;
+
+export function calculatePinchDistance(
+  indexTip: Pick<NormalizedLandmark, "x" | "y">,
+  thumbTip: Pick<NormalizedLandmark, "x" | "y">,
+): number {
+  return Math.hypot(indexTip.x - thumbTip.x, indexTip.y - thumbTip.y);
+}
+
+export function isPinchActive(distance: number): boolean {
+  return distance < PINCH_THRESHOLD;
+}
+
+export function mapMirroredFingertip(
+  indexTip: Pick<NormalizedLandmark, "x" | "y">,
+): { x: number; y: number } {
+  return {
+    x: Math.min(1, Math.max(0, 1 - indexTip.x)),
+    y: Math.min(1, Math.max(0, indexTip.y)),
+  };
+}
+
 export class HandTracker {
-  private videoElement: HTMLVideoElement;
-  private handsInstance: any = null;
-  private cameraInstance: any = null;
+  private readonly videoElement: HTMLVideoElement;
+  private handsInstance: Hands | null = null;
+  private cameraInstance: Camera | null = null;
   private onResultCallback: ((res: HandTrackingResult | null) => void) | null = null;
+  private onDiagnosticCallback: HandTrackingDiagnosticCallback | null = null;
   private smoothX = 0;
   private smoothY = 0;
+  private hasSmoothedPoint = false;
   private active = false;
+  private resultsCallbackLogged = false;
+  private handWasDetected = false;
+  private lastPinchState: boolean | null = null;
+  private diagnostics: HandTrackingDiagnostics = {
+    libraryLoaded: false,
+    trackerInitialized: false,
+    cameraStarted: false,
+    videoFramesReceived: 0,
+    resultsCallbacks: 0,
+    landmarksDetected: false,
+    error: null,
+  };
 
   constructor() {
     this.videoElement = document.createElement("video");
+    this.videoElement.autoplay = true;
+    this.videoElement.muted = true;
     this.videoElement.setAttribute("playsinline", "true");
   }
 
-  public async initialize(onResult: (res: HandTrackingResult | null) => void) {
+  public async initialize(
+    onResult: (res: HandTrackingResult | null) => void,
+    onDiagnostic?: HandTrackingDiagnosticCallback,
+  ): Promise<void> {
     this.onResultCallback = onResult;
+    this.onDiagnosticCallback = onDiagnostic ?? null;
+    this.updateDiagnostics({ error: null });
 
-    // Use MediaPipe Hands global from CDN script tag
-    const mpHands = (window as any).Hands;
-    const mpCamera = (window as any).Camera;
-
-    if (!mpHands) {
-      console.error("MediaPipe Hands library not loaded from CDN");
+    if (this.handsInstance && this.cameraInstance) {
+      this.emitDiagnostics();
       return;
     }
 
-    this.handsInstance = new mpHands({
-      locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
-    });
+    try {
+      console.info(
+        `[Spatial Spraypaint] MediaPipe library loaded (Hands ${HANDS_VERSION}, Camera Utils)`,
+      );
+      this.updateDiagnostics({ libraryLoaded: true });
 
-    this.handsInstance.setOptions({
-      maxNumHands: 1,
-      modelComplexity: 1,
-      minDetectionConfidence: 0.6,
-      minTrackingConfidence: 0.6,
-    });
+      this.handsInstance = new Hands({
+        locateFile: (file: string) => `${HANDS_ASSET_ROOT}/${file}`,
+      });
+      this.handsInstance.setOptions({
+        maxNumHands: 1,
+        modelComplexity: 1,
+        minDetectionConfidence: 0.6,
+        minTrackingConfidence: 0.6,
+      });
+      this.handsInstance.onResults((results) => this.handleResults(results));
+      await this.handsInstance.initialize();
 
-    this.handsInstance.onResults(this.handleResults.bind(this));
+      console.info("[Spatial Spraypaint] MediaPipe hand tracker initialized");
+      this.updateDiagnostics({ trackerInitialized: true });
 
-    this.cameraInstance = new mpCamera(this.videoElement, {
-      onFrame: async () => {
-        if (this.active) {
-          await this.handsInstance.send({ image: this.videoElement });
-        }
-      },
-      width: 640,
-      height: 480,
-    });
+      this.cameraInstance = new Camera(this.videoElement, {
+        onFrame: async () => {
+          if (!this.active || !this.handsInstance) return;
+          const firstFrame = this.diagnostics.videoFramesReceived === 0;
+          this.updateDiagnostics({
+            videoFramesReceived: this.diagnostics.videoFramesReceived + 1,
+          });
+          if (firstFrame) {
+            console.info("[Spatial Spraypaint] Camera frames reaching MediaPipe");
+          }
+
+          try {
+            await this.handsInstance.send({ image: this.videoElement });
+          } catch (error) {
+            this.reportError("MediaPipe could not process the camera frame.", error);
+          }
+        },
+        facingMode: "user",
+        width: 640,
+        height: 480,
+      });
+    } catch (error) {
+      this.handsInstance = null;
+      this.cameraInstance = null;
+      this.reportError(
+        "MediaPipe hand tracking failed to initialize. Check the network and reload the prototype.",
+        error,
+      );
+      throw error;
+    }
   }
 
-  public async start() {
-    this.active = true;
-    if (this.cameraInstance) {
+  public async start(): Promise<void> {
+    if (!this.handsInstance || !this.cameraInstance) {
+      const error = new Error("Hand tracker must initialize before the camera starts.");
+      this.reportError(error.message, error);
+      throw error;
+    }
+
+    try {
+      this.active = true;
       await this.cameraInstance.start();
+      console.info("[Spatial Spraypaint] Camera started");
+      this.updateDiagnostics({ cameraStarted: true });
+    } catch (error) {
+      this.active = false;
+      this.reportError(
+        "The camera could not start. Allow camera access and try again.",
+        error,
+      );
+      throw error;
     }
   }
 
-  public stop() {
+  public async stop(): Promise<void> {
     this.active = false;
-    if (this.cameraInstance) {
-      this.cameraInstance.stop();
-    }
+    if (this.cameraInstance) await this.cameraInstance.stop();
+    this.handWasDetected = false;
+    this.hasSmoothedPoint = false;
+    this.updateDiagnostics({ cameraStarted: false });
   }
 
   public getVideoElement(): HTMLVideoElement {
     return this.videoElement;
   }
 
-  private handleResults(results: any) {
-    if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) {
-      if (this.onResultCallback) this.onResultCallback(null);
+  private handleResults(results: Results): void {
+    this.updateDiagnostics({ resultsCallbacks: this.diagnostics.resultsCallbacks + 1 });
+    if (!this.resultsCallbackLogged) {
+      this.resultsCallbackLogged = true;
+      console.info("[Spatial Spraypaint] MediaPipe results callback firing");
+    }
+
+    if (!results.multiHandLandmarks?.length) {
+      this.handWasDetected = false;
+      this.lastPinchState = null;
+      this.onResultCallback?.(null);
       return;
     }
+
+    if (!this.handWasDetected) {
+      console.info("[Spatial Spraypaint] Hand landmarks detected");
+      this.handWasDetected = true;
+    }
+    this.updateDiagnostics({ landmarksDetected: true });
 
     const landmarks = results.multiHandLandmarks[0];
     const indexTip = landmarks[8];
     const thumbTip = landmarks[4];
-
-    // Mirroring horizontal axis so user movement matches natural mirror action
-    const rawX = 1 - indexTip.x;
-    const rawY = indexTip.y;
-
-    // Exponential smoothing to eliminate camera tracking jitter
-    this.smoothX = this.smoothX * 0.65 + rawX * 0.35;
-    this.smoothY = this.smoothY * 0.65 + rawY * 0.35;
-
-    // Calculate pinch distance between index tip and thumb tip
-    const dx = indexTip.x - thumbTip.x;
-    const dy = indexTip.y - thumbTip.y;
-    const pinchDist = Math.sqrt(dx * dx + dy * dy);
-
-    // Threshold pinch gesture (pinch = spray on)
-    const isPinching = pinchDist < 0.08;
-
-    if (this.onResultCallback) {
-      this.onResultCallback({
-        x: this.smoothX,
-        y: this.smoothY,
-        pinchDist,
-        isPinching,
-        confidence: results.multiHandedness?.[0]?.score || 1.0,
-      });
+    if (!indexTip || !thumbTip) {
+      this.reportError("MediaPipe returned incomplete hand landmarks.");
+      this.onResultCallback?.(null);
+      return;
     }
+
+    const mapped = mapMirroredFingertip(indexTip);
+    if (!this.hasSmoothedPoint) {
+      this.smoothX = mapped.x;
+      this.smoothY = mapped.y;
+      this.hasSmoothedPoint = true;
+    } else {
+      this.smoothX = this.smoothX * 0.65 + mapped.x * 0.35;
+      this.smoothY = this.smoothY * 0.65 + mapped.y * 0.35;
+    }
+
+    const pinchDist = calculatePinchDistance(indexTip, thumbTip);
+    const isPinching = isPinchActive(pinchDist);
+    if (isPinching !== this.lastPinchState) {
+      console.info(
+        `[Spatial Spraypaint] Pinch state ${isPinching ? "ACTIVE" : "OPEN"} (${pinchDist.toFixed(3)})`,
+      );
+      this.lastPinchState = isPinching;
+    }
+
+    this.onResultCallback?.({
+      x: this.smoothX,
+      y: this.smoothY,
+      pinchDist,
+      isPinching,
+      confidence: results.multiHandedness?.[0]?.score ?? 0,
+    });
+  }
+
+  private updateDiagnostics(update: Partial<HandTrackingDiagnostics>): void {
+    this.diagnostics = { ...this.diagnostics, ...update };
+    this.emitDiagnostics();
+  }
+
+  private emitDiagnostics(): void {
+    this.onDiagnosticCallback?.({ ...this.diagnostics });
+  }
+
+  private reportError(message: string, error?: unknown): void {
+    console.error(`[Spatial Spraypaint] ${message}`, error ?? "");
+    this.updateDiagnostics({ error: message });
   }
 }

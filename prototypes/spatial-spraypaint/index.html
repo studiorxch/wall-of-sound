@@ -40,6 +40,136 @@
       object-fit: contain;
       z-index: 1;
     }
+    #tracking-overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 6;
+      display: none;
+      pointer-events: none;
+    }
+    #tracking-overlay.visible {
+      display: block;
+    }
+    #tracking-cursor {
+      position: absolute;
+      width: 28px;
+      height: 28px;
+      margin: -14px 0 0 -14px;
+      border: 3px solid #ffffff;
+      border-radius: 50%;
+      opacity: 0;
+      transform: scale(0.8);
+      transition: opacity 80ms linear, transform 80ms ease, border-color 80ms ease;
+      box-shadow: 0 0 0 2px rgba(5, 5, 8, 0.8), 0 0 18px rgba(255, 255, 255, 0.65);
+    }
+    #tracking-cursor::after {
+      content: "";
+      position: absolute;
+      inset: 7px;
+      border-radius: 50%;
+      background: #ffffff;
+      opacity: 0.45;
+    }
+    #tracking-cursor.detected {
+      opacity: 1;
+      transform: scale(1);
+    }
+    #tracking-cursor.pinching {
+      border-color: #ff2a5f;
+      transform: scale(1.3);
+      box-shadow: 0 0 0 3px rgba(255, 42, 95, 0.25), 0 0 28px rgba(255, 42, 95, 0.9);
+    }
+    #tracking-cursor.manual {
+      border-color: #00f0ff;
+      box-shadow: 0 0 0 3px rgba(0, 240, 255, 0.25), 0 0 28px rgba(0, 240, 255, 0.9);
+    }
+    #tracking-cursor.spraying::after {
+      background: #ff2a5f;
+      opacity: 1;
+    }
+    #tracking-debug-panel {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      width: 272px;
+      padding: 14px;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 10px;
+      background: rgba(7, 8, 13, 0.88);
+      backdrop-filter: blur(12px);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+    }
+    .tracking-debug-title,
+    .tracking-metric,
+    .tracking-stage {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .tracking-debug-title {
+      padding-bottom: 9px;
+      margin-bottom: 8px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.9px;
+      color: #a7a7ba;
+    }
+    #hand-detection-status {
+      color: #ff8b9f;
+    }
+    #hand-detection-status.detected {
+      color: #00ff80;
+    }
+    .tracking-metric {
+      padding: 3px 0;
+      font-size: 11px;
+      color: #a0a0b0;
+    }
+    .tracking-metric strong {
+      color: #ffffff;
+      font-variant-numeric: tabular-nums;
+    }
+    .tracking-metric strong.active {
+      color: #ff2a5f;
+    }
+    .tracking-stages {
+      display: grid;
+      gap: 4px;
+      margin-top: 10px;
+      padding-top: 9px;
+      border-top: 1px solid rgba(255, 255, 255, 0.12);
+    }
+    .tracking-stage {
+      font-size: 10px;
+      color: #707080;
+    }
+    .tracking-stage-value {
+      color: #888896;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+    }
+    .tracking-stage[data-state="pass"] .tracking-stage-value {
+      color: #00ff80;
+    }
+    .tracking-stage[data-state="active"] .tracking-stage-value {
+      color: #ff2a5f;
+    }
+    #tracking-error {
+      display: none;
+      margin-top: 10px;
+      padding: 8px;
+      border: 1px solid rgba(255, 70, 95, 0.5);
+      border-radius: 6px;
+      background: rgba(255, 40, 70, 0.14);
+      color: #ff9aaa;
+      font-size: 11px;
+      line-height: 1.35;
+    }
+    #tracking-error.visible {
+      display: block;
+    }
     #controls-panel {
       position: absolute;
       top: 16px;
@@ -133,13 +263,34 @@
       color: #00ff80;
     }
   </style>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
 </head>
 <body>
   <div id="app">
     <div id="viewport-container">
       <canvas id="composite-canvas"></canvas>
+      <div id="tracking-overlay" aria-live="polite">
+        <div id="tracking-cursor" aria-hidden="true"></div>
+        <div id="tracking-debug-panel">
+          <div class="tracking-debug-title">
+            <span id="tracker-runtime-status">TRACKER IDLE</span>
+            <span id="hand-detection-status">NO HAND</span>
+          </div>
+          <div class="tracking-metric"><span>Confidence</span><strong id="tracking-confidence">—</strong></div>
+          <div class="tracking-metric"><span>Pinch distance</span><strong id="pinch-distance">—</strong></div>
+          <div class="tracking-metric"><span>Pinch</span><strong id="pinch-state">OPEN</strong></div>
+          <div class="tracking-metric"><span>Manual spray</span><strong id="manual-state">OFF</strong></div>
+          <div class="tracking-stages" aria-label="Hand tracking pipeline diagnostics">
+            <div class="tracking-stage" data-tracking-stage="library" data-state="waiting"><span>1 · MediaPipe</span><span class="tracking-stage-value">WAITING</span></div>
+            <div class="tracking-stage" data-tracking-stage="frames" data-state="waiting"><span>2 · Video frames</span><span class="tracking-stage-value">WAITING</span></div>
+            <div class="tracking-stage" data-tracking-stage="callback" data-state="waiting"><span>3 · Results callback</span><span class="tracking-stage-value">WAITING</span></div>
+            <div class="tracking-stage" data-tracking-stage="landmarks" data-state="waiting"><span>4 · Hand landmarks</span><span class="tracking-stage-value">WAITING</span></div>
+            <div class="tracking-stage" data-tracking-stage="mapping" data-state="waiting"><span>5 · Canvas mapping</span><span class="tracking-stage-value">WAITING</span></div>
+            <div class="tracking-stage" data-tracking-stage="pinch" data-state="waiting"><span>6 · Pinch state</span><span class="tracking-stage-value">WAITING</span></div>
+            <div class="tracking-stage" data-tracking-stage="spray" data-state="waiting"><span>7 · Spray delivery</span><span class="tracking-stage-value">WAITING</span></div>
+          </div>
+          <div id="tracking-error" role="alert"></div>
+        </div>
+      </div>
     </div>
 
     <div id="controls-panel">
@@ -160,6 +311,7 @@
           <span id="spray-status" class="status-badge">OFF</span>
         </div>
         <button id="manual-spray-trigger" style="margin-top: 4px;">Hold to Spray (Spacebar)</button>
+        <button id="toggle-tracking-debug" aria-pressed="true" style="margin-top: 4px;">Hide Tracking Debug</button>
       </div>
 
       <div class="control-group">
