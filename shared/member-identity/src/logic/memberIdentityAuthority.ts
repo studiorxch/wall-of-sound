@@ -21,6 +21,17 @@ export interface AuthGateway {
   signOut(): Promise<void>;
 }
 
+export interface MemberIdentityAuthority {
+  getState(): MemberIdentityState;
+  subscribe(listener: MemberIdentityStateListener): () => void;
+  start(): Promise<void>;
+  stop(): void;
+  signInWithEmailPassword(email: string, password: string): Promise<void>;
+  createAccountWithEmailPassword(email: string, password: string): Promise<void>;
+  signInWithGoogle(): Promise<void>;
+  signOut(): Promise<void>;
+}
+
 const INITIALIZING_STATE: MemberIdentityState = {
   status: "initializing",
   authUser: null,
@@ -85,7 +96,7 @@ export class MemberIdentityActionError extends Error {
   }
 }
 
-export class StudioRichMemberIdentityAuthority {
+export class StudioRichMemberIdentityAuthority implements MemberIdentityAuthority {
   private readonly listeners = new Set<MemberIdentityStateListener>();
   private state: MemberIdentityState = INITIALIZING_STATE;
   private unsubscribeAuth: AuthStateUnsubscribe | null = null;

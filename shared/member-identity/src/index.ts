@@ -8,13 +8,10 @@ export type {
 } from "./data/memberTypes.js";
 export {
   MemberIdentityActionError,
-  StudioRichMemberIdentityAuthority,
   normalizeMemberIdentityError,
-  type AuthGateway,
-  type AuthStateUnsubscribe,
+  type MemberIdentityAuthority,
   type MemberIdentityStateListener,
 } from "./logic/memberIdentityAuthority.js";
-export type { MemberRepository } from "./logic/memberRepository.js";
 export {
   STUDIO_RICH_FIREBASE_ENVIRONMENT_KEYS,
   StudioRichFirebaseConfigurationError,

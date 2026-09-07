@@ -3,6 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "files": [
+    "dist/index.*",
+    "dist/data",
+    "dist/firebase",
+    "dist/logic"
+  ],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
