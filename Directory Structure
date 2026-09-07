@@ -1,0 +1,10 @@
+prototypes/spatial-spraypaint/
+├── index.html
+├── src/
+│   ├── types.ts
+│   ├── CanonicalStroke.ts
+│   ├── SprayBrushEngine.ts
+│   ├── HandTracker.ts
+│   ├── AnonymityProcessor.ts
+│   ├── PerformanceRecorder.ts
+│   └── main.ts
