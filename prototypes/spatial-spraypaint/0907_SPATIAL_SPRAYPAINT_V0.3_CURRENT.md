@@ -46,7 +46,9 @@ No requested `.afpalette` files were found in the searched user project/document
 - Performance color selection synchronized across both palettes: PASS.
 - Performance Clear removed the persistent paint: PASS.
 - Long stationary dwell and animated drip appearance: NOT LIVE-VERIFIED on this host; deterministic drip threshold tests pass.
-- Spray hiss, rattle, mixed-audio recording, and WebM export implementations were not changed. Their focused regression tests pass; V0.2 browser recording evidence remains authoritative.
+- Spray hiss produced one start and one stop during the browser mouse stroke with no retrigger loop or console error: PASS.
+- Recording started with one mixed audio track and exported a non-empty 12,986-byte `video/webm`: PASS.
+- Spray audio and recording implementations were not changed. The focused transition tests prove repeated active updates do not restart a continuous hiss. The manual rattle source is unchanged and its V0.2 browser evidence remains authoritative.
 
 ## MacBook Pro Validation Required
 
