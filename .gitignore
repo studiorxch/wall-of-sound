@@ -95,10 +95,7 @@ audiolab/.venv/
 # truth, must never be committed.
 audiolab/rhythm_benchmark/human_validation/mixxx_batch/
 
-
-
-
-.# Aider local state
+# Aider local state
 /.aider*
 
 # Root-level pasted screenshots / temporary captures
