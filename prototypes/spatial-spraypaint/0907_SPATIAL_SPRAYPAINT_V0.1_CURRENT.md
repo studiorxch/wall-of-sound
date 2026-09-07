@@ -2,7 +2,7 @@
 
 Date: 2026-09-07
 
-Status: PARTIAL — the diagnostic and silhouette repairs are implemented and locally verified, but this validation host has no camera device. Physical hand/camera validation remains required on the MacBook Pro.
+Status: PASS — the diagnostic and silhouette repairs are implemented, and the user subsequently completed physical validation on the camera-equipped MacBook Pro.
 
 ## Implemented
 
@@ -29,27 +29,18 @@ The brush engine, persistent paint layer, audio path, video recorder, and non-pr
 - Pinned MediaPipe model/WASM initialization: PASS.
 - Missing-camera failure path: PASS — `NotFoundError: Requested device not found` was logged and surfaced visibly as `TRACKER ERROR` with a retry control.
 - Silhouette pixel transform: PASS — automated tests verify adaptive threshold bounds and strongly separated dark/light output values.
+- MacBook Pro physical validation (user-reported): PASS — webcam tracking, fingertip mapping, pinch-to-spray, mouse fallback, anonymity treatments including Silhouette, music playback, recording/export with music, diagnostics, and persistent spray drawing all worked.
 
 ## Hand Pipeline Status
 
 1. MediaPipe loads: PASS.
-2. Video frames reach MediaPipe: NOT VERIFIED — no camera device on this host.
-3. Results callback fires: NOT VERIFIED — blocked by stage 2.
-4. Hand landmarks exist: NOT VERIFIED — blocked by stage 2.
-5. Fingertip coordinates map to canvas: automated geometry PASS; physical hand NOT VERIFIED.
-6. Pinch state changes: automated threshold PASS; physical gesture NOT VERIFIED.
-7. Spray engine receives tracked points: code path retained and instrumented; physical hand NOT VERIFIED.
+2. Video frames reach MediaPipe: PASS on MacBook Pro (user-reported).
+3. Results callback fires: PASS on MacBook Pro (user-reported).
+4. Hand landmarks exist: PASS on MacBook Pro (user-reported).
+5. Fingertip coordinates map to canvas: PASS in automated geometry and MacBook Pro live use (user-reported).
+6. Pinch state changes: PASS in automated threshold and MacBook Pro live use (user-reported).
+7. Spray engine receives tracked points: PASS on MacBook Pro (user-reported).
 
-## Required MacBook Pro Check
+## Physical Validation
 
-Run the prototype on the camera-equipped MacBook Pro and verify:
-
-1. Start Webcam Hand Tracking and confirm stages 2 and 3 begin counting.
-2. Put one hand in frame and confirm `HAND DETECTED`, confidence, pinch distance, and the fingertip ring.
-3. Move the open hand and confirm the ring follows while spray remains off.
-4. Pinch and release to confirm the visual state toggles and paint is delivered.
-5. Hold Space while a hand is tracked to confirm the manual state and paint fallback.
-6. Select Silhouette and confirm the live frame is visibly reduced to dark/light posterized regions.
-7. Confirm the tracking overlay does not appear in saved paint or the recorded canvas output.
-
-Do not begin another Spatial Spraypaint checkpoint until this physical-camera validation is recorded here.
+The user completed the required MacBook Pro test after the current-host implementation run. V0.1 is accepted as the baseline for V0.2; hand tracking and pinch interaction must not be redesigned.
