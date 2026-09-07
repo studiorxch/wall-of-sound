@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>StudioRich - Spatial Spraypaint V0</title>
+  <title>StudioRich - Spatial Spraypaint V0.2</title>
   <style>
     * {
       box-sizing: border-box;
@@ -92,12 +92,16 @@
       top: 16px;
       right: 16px;
       width: 272px;
+      display: none;
       padding: 14px;
       border: 1px solid rgba(255, 255, 255, 0.16);
       border-radius: 10px;
       background: rgba(7, 8, 13, 0.88);
       backdrop-filter: blur(12px);
       box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+    }
+    #tracking-debug-panel.visible {
+      display: block;
     }
     .tracking-debug-title,
     .tracking-metric,
@@ -175,16 +179,31 @@
       top: 16px;
       left: 16px;
       z-index: 10;
-      width: 300px;
-      padding: 16px;
+      width: 286px;
+      max-height: calc(100vh - 32px);
+      padding: 14px;
       background: rgba(18, 18, 24, 0.85);
       backdrop-filter: blur(12px);
       border: 1px solid rgba(255, 255, 255, 0.1);
       border-radius: 12px;
       display: flex;
       flex-direction: column;
-      gap: 14px;
+      gap: 11px;
       box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+      overflow-y: auto;
+      transition: opacity 140ms ease, transform 140ms ease;
+    }
+    #app.controls-collapsed #controls-panel,
+    #app.performance-mode #controls-panel {
+      opacity: 0;
+      pointer-events: none;
+      transform: translateX(-24px);
+    }
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
     }
     .panel-title {
       font-size: 14px;
@@ -193,10 +212,83 @@
       text-transform: uppercase;
       color: #ff3366;
     }
+    .icon-button {
+      width: auto;
+      min-width: 34px;
+      padding: 5px 8px;
+      font-size: 15px;
+      line-height: 1;
+    }
+    #open-controls-tab {
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      z-index: 11;
+      display: none;
+      width: auto;
+      padding: 9px 13px;
+      border-color: rgba(255, 51, 102, 0.55);
+      background: rgba(18, 18, 24, 0.9);
+      color: #ff668c;
+    }
+    #app.controls-collapsed:not(.performance-mode) #open-controls-tab {
+      display: block;
+    }
+    #performance-hud {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      right: 12px;
+      z-index: 12;
+      display: none;
+      align-items: center;
+      gap: 8px;
+      pointer-events: none;
+    }
+    #app.performance-mode #performance-hud {
+      display: flex;
+    }
+    #performance-hud button {
+      width: auto;
+      pointer-events: auto;
+      background: rgba(18, 18, 24, 0.88);
+    }
+    .performance-pill {
+      padding: 7px 9px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 6px;
+      background: rgba(10, 10, 15, 0.74);
+      color: #b8b8c6;
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.45px;
+      pointer-events: none;
+    }
+    .performance-pill.on {
+      color: #00ff80;
+    }
+    .performance-pill.error,
+    .status-badge.error {
+      color: #ff7894;
+    }
+    .performance-pill.recording {
+      color: #ff426f;
+      animation: record-pulse 1s ease-in-out infinite alternate;
+    }
+    @keyframes record-pulse {
+      to { opacity: 0.52; }
+    }
     .control-group {
       display: flex;
       flex-direction: column;
       gap: 6px;
+    }
+    .button-row {
+      display: flex;
+      gap: 6px;
+    }
+    .button-row > * {
+      flex: 1;
     }
     label {
       font-size: 11px;
@@ -227,6 +319,10 @@
     button.active {
       background: #ff3366;
       border-color: #ff3366;
+      color: #fff;
+    }
+    #toggle-record {
+      background: #cc1100;
       color: #fff;
     }
     .color-swatches {
@@ -293,8 +389,29 @@
       </div>
     </div>
 
+    <button id="open-controls-tab" aria-label="Open controls">Controls</button>
+
+    <div id="performance-hud" aria-label="Performance mode controls">
+      <button id="performance-exit">Exit Performance (P)</button>
+      <span id="performance-cap-status" class="performance-pill">FAT CAP</span>
+      <span id="performance-spray-status" class="performance-pill">SPRAY OFF</span>
+      <span id="performance-tracking-status" class="performance-pill">NO CAMERA</span>
+      <span id="performance-record-status" class="performance-pill">READY</span>
+      <button id="performance-record-toggle">Record</button>
+    </div>
+
     <div id="controls-panel">
-      <div class="panel-title">Spatial Spraypaint V0</div>
+      <div class="panel-header">
+        <div class="panel-title">Spatial Spraypaint V0.2</div>
+        <button id="collapse-controls" class="icon-button" aria-label="Collapse controls" title="Collapse controls">‹</button>
+      </div>
+
+      <div class="control-group">
+        <button id="toggle-performance-mode" aria-pressed="false">Performance Mode (P)</button>
+        <div class="button-row">
+          <button id="toggle-fullscreen">Enter Fullscreen</button>
+        </div>
+      </div>
 
       <div class="control-group">
         <label>Input Mode</label>
@@ -311,7 +428,7 @@
           <span id="spray-status" class="status-badge">OFF</span>
         </div>
         <button id="manual-spray-trigger" style="margin-top: 4px;">Hold to Spray (Spacebar)</button>
-        <button id="toggle-tracking-debug" aria-pressed="true" style="margin-top: 4px;">Hide Tracking Debug</button>
+        <button id="toggle-tracking-debug" aria-pressed="false" style="margin-top: 4px;">Show Tracking Debug (D)</button>
       </div>
 
       <div class="control-group">
@@ -339,8 +456,24 @@
       </div>
 
       <div class="control-group">
-        <label>Cap Radius / Width (<span id="radius-val">28</span>px)</label>
-        <input type="range" id="brush-radius" min="8" max="72" value="28" />
+        <label>Cap Preset</label>
+        <select id="cap-preset">
+          <option value="fat" selected>Fat Cap</option>
+          <option value="skinny">Skinny Cap</option>
+          <option value="soft">Soft Cap</option>
+          <option value="high-pressure">High Pressure</option>
+          <option value="dust-fog">Dust / Fog</option>
+        </select>
+      </div>
+
+      <div class="control-group">
+        <label>Radius Override (<span id="radius-val">38</span>px)</label>
+        <input type="range" id="brush-radius" min="6" max="72" value="38" />
+      </div>
+
+      <div class="control-group">
+        <label>Can Audio <span id="spray-audio-status" class="status-badge">QUIET</span></label>
+        <button id="shake-can">Shake Can (Test Rattle)</button>
       </div>
 
       <div class="control-group">
@@ -353,7 +486,7 @@
       </div>
 
       <div class="control-group">
-        <button id="toggle-record" style="background: #cc1100; color: #fff;">Record Performance</button>
+        <button id="toggle-record">Record Performance</button>
         <button id="clear-canvas">Clear Canvas</button>
       </div>
     </div>
