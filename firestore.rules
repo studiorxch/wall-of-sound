@@ -1,0 +1,75 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwnMember(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function hasExactMemberFields(data) {
+      return data.keys().hasAll([
+          'uid',
+          'displayName',
+          'photoURL',
+          'accountStatus',
+          'createdAt',
+          'updatedAt',
+          'lastSeenAt',
+          'onboardingVersion'
+        ])
+        && data.keys().hasOnly([
+          'uid',
+          'displayName',
+          'photoURL',
+          'accountStatus',
+          'createdAt',
+          'updatedAt',
+          'lastSeenAt',
+          'onboardingVersion'
+        ]);
+    }
+
+    function hasValidMemberShape(data, uid) {
+      return hasExactMemberFields(data)
+        && data.uid == uid
+        && (data.displayName == null || data.displayName is string)
+        && (data.photoURL == null || data.photoURL is string)
+        && data.accountStatus in ['active', 'suspended', 'deleted']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp
+        && data.lastSeenAt is timestamp
+        && data.onboardingVersion is int
+        && data.onboardingVersion >= 1;
+    }
+
+    match /members/{uid} {
+      allow read: if isOwnMember(uid);
+
+      allow create: if isOwnMember(uid)
+        && hasValidMemberShape(request.resource.data, uid)
+        && request.resource.data.accountStatus == 'active'
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.lastSeenAt == request.time
+        && request.resource.data.onboardingVersion == 1;
+
+      allow update: if isOwnMember(uid)
+        && hasValidMemberShape(request.resource.data, uid)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'displayName',
+          'photoURL',
+          'updatedAt',
+          'lastSeenAt',
+          'onboardingVersion'
+        ])
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.lastSeenAt == request.time;
+
+      allow delete: if false;
+    }
+  }
+}
