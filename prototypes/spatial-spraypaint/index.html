@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>StudioRich - Spatial Spraypaint V0.2</title>
+  <title>StudioRich - Spatial Spraypaint V0.3</title>
   <style>
     * {
       box-sizing: border-box;
@@ -243,6 +243,7 @@
       display: none;
       align-items: center;
       gap: 8px;
+      flex-wrap: wrap;
       pointer-events: none;
     }
     #app.performance-mode #performance-hud {
@@ -252,6 +253,26 @@
       width: auto;
       pointer-events: auto;
       background: rgba(18, 18, 24, 0.88);
+    }
+    #performance-hud select {
+      width: auto;
+      max-width: 190px;
+      padding: 7px 26px 7px 8px;
+      pointer-events: auto;
+      background: rgba(18, 18, 24, 0.88);
+    }
+    .performance-palette {
+      display: flex;
+      gap: 4px;
+      padding: 4px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 7px;
+      background: rgba(10, 10, 15, 0.74);
+      pointer-events: auto;
+    }
+    .performance-palette .swatch {
+      width: 20px;
+      height: 20px;
     }
     .performance-pill {
       padding: 7px 9px;
@@ -328,6 +349,7 @@
     .color-swatches {
       display: flex;
       gap: 6px;
+      flex-wrap: wrap;
     }
     .swatch {
       width: 28px;
@@ -393,16 +415,49 @@
 
     <div id="performance-hud" aria-label="Performance mode controls">
       <button id="performance-exit">Exit Performance (P)</button>
+      <div class="performance-palette" aria-label="Performance color">
+        <div class="swatch" title="Black" style="background:#0b0b0d" data-color="#0b0b0d"></div>
+        <div class="swatch" title="White" style="background:#f5f1e7" data-color="#f5f1e7"></div>
+        <div class="swatch" title="Silver" style="background:#aeb4b8" data-color="#aeb4b8"></div>
+        <div class="swatch selected" title="Red" style="background:#e92f3d" data-color="#e92f3d"></div>
+        <div class="swatch" title="Orange" style="background:#ff6a1a" data-color="#ff6a1a"></div>
+        <div class="swatch" title="Yellow" style="background:#ffd21c" data-color="#ffd21c"></div>
+        <div class="swatch" title="Green" style="background:#20d96b" data-color="#20d96b"></div>
+        <div class="swatch" title="Cyan" style="background:#15cfe5" data-color="#15cfe5"></div>
+        <div class="swatch" title="Blue" style="background:#2764ff" data-color="#2764ff"></div>
+        <div class="swatch" title="Purple" style="background:#8347d8" data-color="#8347d8"></div>
+        <div class="swatch" title="Pink" style="background:#ff3f8f" data-color="#ff3f8f"></div>
+      </div>
+      <select id="performance-cap-preset" aria-label="Performance cap">
+        <option value="new-york-fat">New York Fat</option>
+        <option value="pink-dot-fat">Pink Dot Fat</option>
+        <option value="astro-fat">Astro Fat</option>
+        <option value="german-fat">German / Hardcore Fat</option>
+        <option value="lego-thin">Lego Thin</option>
+        <option value="universal-thin">Universal Thin</option>
+        <option value="level-1">Level 1 / Skinny Cream</option>
+        <option value="new-york-thin">New York Thin</option>
+        <option value="calligraphy">Calligraphy / Transversal</option>
+        <option value="needle">Needle</option>
+        <option value="soft-fade">Soft / Fade</option>
+      </select>
+      <select id="performance-background-preset" aria-label="Performance background">
+        <option value="black">Black</option>
+        <option value="charcoal">Charcoal Wall</option>
+        <option value="mid-gray">Mid Gray</option>
+        <option value="off-white">Off-White Wall</option>
+      </select>
       <span id="performance-cap-status" class="performance-pill">FAT CAP</span>
       <span id="performance-spray-status" class="performance-pill">SPRAY OFF</span>
       <span id="performance-tracking-status" class="performance-pill">NO CAMERA</span>
       <span id="performance-record-status" class="performance-pill">READY</span>
+      <button id="performance-clear-canvas">Clear</button>
       <button id="performance-record-toggle">Record</button>
     </div>
 
     <div id="controls-panel">
       <div class="panel-header">
-        <div class="panel-title">Spatial Spraypaint V0.2</div>
+        <div class="panel-title">Spatial Spraypaint V0.3</div>
         <button id="collapse-controls" class="icon-button" aria-label="Collapse controls" title="Collapse controls">‹</button>
       </div>
 
@@ -444,31 +499,66 @@
       </div>
 
       <div class="control-group">
-        <label>Color</label>
+        <label>Graffiti Color</label>
         <div class="color-swatches">
-          <div class="swatch selected" style="background: #ff2a5f;" data-color="#ff2a5f"></div>
-          <div class="swatch" style="background: #00f0ff;" data-color="#00f0ff"></div>
-          <div class="swatch" style="background: #ffe600;" data-color="#ffe600"></div>
-          <div class="swatch" style="background: #00ff66;" data-color="#00ff66"></div>
-          <div class="swatch" style="background: #a855f7;" data-color="#a855f7"></div>
-          <div class="swatch" style="background: #ffffff;" data-color="#ffffff"></div>
+          <div class="swatch" title="Black" style="background:#0b0b0d" data-color="#0b0b0d"></div>
+          <div class="swatch" title="White" style="background:#f5f1e7" data-color="#f5f1e7"></div>
+          <div class="swatch" title="Silver" style="background:#aeb4b8" data-color="#aeb4b8"></div>
+          <div class="swatch selected" title="Red" style="background:#e92f3d" data-color="#e92f3d"></div>
+          <div class="swatch" title="Orange" style="background:#ff6a1a" data-color="#ff6a1a"></div>
+          <div class="swatch" title="Yellow" style="background:#ffd21c" data-color="#ffd21c"></div>
+          <div class="swatch" title="Green" style="background:#20d96b" data-color="#20d96b"></div>
+          <div class="swatch" title="Cyan" style="background:#15cfe5" data-color="#15cfe5"></div>
+          <div class="swatch" title="Blue" style="background:#2764ff" data-color="#2764ff"></div>
+          <div class="swatch" title="Purple" style="background:#8347d8" data-color="#8347d8"></div>
+          <div class="swatch" title="Pink" style="background:#ff3f8f" data-color="#ff3f8f"></div>
         </div>
       </div>
 
       <div class="control-group">
         <label>Cap Preset</label>
         <select id="cap-preset">
-          <option value="fat" selected>Fat Cap</option>
-          <option value="skinny">Skinny Cap</option>
-          <option value="soft">Soft Cap</option>
-          <option value="high-pressure">High Pressure</option>
-          <option value="dust-fog">Dust / Fog</option>
+          <option value="new-york-fat" selected>New York Fat</option>
+          <option value="pink-dot-fat">Pink Dot Fat</option>
+          <option value="astro-fat">Astro Fat</option>
+          <option value="german-fat">German / Hardcore Fat</option>
+          <option value="lego-thin">Lego Thin</option>
+          <option value="universal-thin">Universal Thin</option>
+          <option value="level-1">Level 1 / Skinny Cream</option>
+          <option value="new-york-thin">New York Thin</option>
+          <option value="calligraphy">Calligraphy / Transversal</option>
+          <option value="needle">Needle</option>
+          <option value="soft-fade">Soft / Fade</option>
         </select>
       </div>
 
       <div class="control-group">
-        <label>Radius Override (<span id="radius-val">38</span>px)</label>
-        <input type="range" id="brush-radius" min="6" max="72" value="38" />
+        <label>Stroke Smoothing</label>
+        <select id="smoothing-level">
+          <option value="off">Off</option>
+          <option value="low">Low</option>
+          <option value="medium" selected>Medium</option>
+          <option value="high">High</option>
+        </select>
+      </div>
+
+      <div class="control-group">
+        <label>Wall Background</label>
+        <select id="background-preset">
+          <option value="black" selected>Black</option>
+          <option value="charcoal">Charcoal Wall</option>
+          <option value="mid-gray">Mid Gray</option>
+          <option value="off-white">Off-White Wall</option>
+        </select>
+      </div>
+
+      <div class="control-group">
+        <label><input id="drips-enabled" type="checkbox" checked /> Heavy stationary drips</label>
+      </div>
+
+      <div class="control-group">
+        <label>Radius Override (<span id="radius-val">32</span>px)</label>
+        <input type="range" id="brush-radius" min="4" max="72" value="32" />
       </div>
 
       <div class="control-group">

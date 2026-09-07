@@ -17,11 +17,18 @@ describe("CanonicalStrokeManager", () => {
   });
 
   it("interpolates points on rapid mouse or hand movement", () => {
-    strokeManager.createPoint(0, 0, 20);
-    const { interpolated } = strokeManager.createPoint(100, 0, 20);
-    expect(interpolated.length).toBeGreaterThan(0);
+    strokeManager.createPoint(0, 0, 20, 0, 100);
+    const { interpolated } = strokeManager.createPoint(100, 0, 20, 0, 116);
+    expect(interpolated.length).toBeGreaterThan(20);
     expect(interpolated[0].x).toBeGreaterThan(0);
     expect(interpolated[0].x).toBeLessThan(100);
+  });
+
+  it("keeps endpoint width within a restrained range", () => {
+    const start = strokeManager.createPoint(0, 0, 20, 0, 100).point;
+    const fast = strokeManager.createPoint(100, 0, 20, 0, 116).point;
+    expect(start.width).toBeLessThanOrEqual(21.2);
+    expect(fast.width).toBeGreaterThanOrEqual(16.4);
   });
 
   it("resets state clean when reset() is invoked", () => {

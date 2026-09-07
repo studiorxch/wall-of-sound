@@ -7,9 +7,11 @@ export class CanonicalStrokeManager {
     x: number,
     y: number,
     baseRadius: number,
-    z: number = 0
-  ): { point: StrokePoint; interpolated: StrokePoint[] } {
-    const now = performance.now();
+    z: number = 0,
+    timestamp: number = performance.now(),
+  ): { point: StrokePoint; interpolated: StrokePoint[]; previous: StrokePoint | null } {
+    const previous = this.lastPoint;
+    const now = timestamp;
     let velocity = 0;
 
     if (this.lastPoint) {
@@ -20,8 +22,8 @@ export class CanonicalStrokeManager {
       velocity = dist / dt; // pixels per ms
     }
 
-    // Velocity-based dynamic width adjustment (slower -> denser/slightly wider, faster -> thinner)
-    const velocityFactor = Math.max(0.5, Math.min(1.4, 1 - velocity * 0.15));
+    // Keep speed expression restrained so starts/stops do not form oversized bulbs.
+    const velocityFactor = Math.max(0.82, Math.min(1.06, 1.02 - velocity * 0.11));
     const width = baseRadius * velocityFactor;
     const opacity = Math.max(0.3, Math.min(1.0, 0.8 + velocityFactor * 0.2));
 
@@ -42,7 +44,7 @@ export class CanonicalStrokeManager {
       const dx = x - this.lastPoint.x;
       const dy = y - this.lastPoint.y;
       const dist = Math.sqrt(dx * dx + dy * dy);
-      const stepSize = Math.max(2, baseRadius * 0.25);
+      const stepSize = Math.max(1.25, Math.min(4, baseRadius * 0.1));
 
       if (dist > stepSize) {
         const steps = Math.floor(dist / stepSize);
@@ -62,7 +64,7 @@ export class CanonicalStrokeManager {
     }
 
     this.lastPoint = currentPoint;
-    return { point: currentPoint, interpolated: interpolatedPoints };
+    return { point: currentPoint, interpolated: interpolatedPoints, previous };
   }
 
   public reset() {

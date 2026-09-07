@@ -1,78 +1,139 @@
-import { StrokePoint } from "./types";
+import { type DripSeed } from "./DripLogic";
 import { resolveSprayDynamics, type SprayCapPreset } from "./SprayCapPresets";
+import { type StrokePoint } from "./types";
+
+interface ActiveDrip extends DripSeed {
+  color: string;
+  startedAt: number;
+  lastProgress: number;
+  bend: number;
+}
 
 export class SprayBrushEngine {
-  private offscreenCanvas: HTMLCanvasElement;
-  private offscreenCtx: CanvasRenderingContext2D;
+  private activeDrips: ActiveDrip[] = [];
 
-  constructor() {
-    this.offscreenCanvas = document.createElement("canvas");
-    this.offscreenCtx = this.offscreenCanvas.getContext("2d")!;
+  public resize(_width: number, _height: number): void {
+    // The brush deposits directly into the persistent paint canvas.
   }
 
-  public resize(width: number, height: number) {
-    this.offscreenCanvas.width = width;
-    this.offscreenCanvas.height = height;
+  public clear(): void {
+    this.activeDrips = [];
   }
 
-  public clear() {
-    this.offscreenCtx.clearRect(0, 0, this.offscreenCanvas.width, this.offscreenCanvas.height);
-  }
-
-  public renderPoint(
+  public renderSegment(
     ctx: CanvasRenderingContext2D,
+    previous: StrokePoint | null,
     point: StrokePoint,
     colorHex: string,
     cap: SprayCapPreset,
-  ) {
+  ): void {
     const dynamics = resolveSprayDynamics(cap, point.velocity, point.width);
-    const radius = dynamics.radius;
-    const x = point.x;
-    const y = point.y;
+    const start = previous ?? point;
+    const dx = point.x - start.x;
+    const dy = point.y - start.y;
+    const distance = Math.hypot(dx, dy);
+    const angle = distance > 0 ? Math.atan2(dy, dx) : 0;
+    const passOpacity = (dynamics.coreOpacity * point.opacity) / Math.sqrt(dynamics.corePasses);
 
-    // Layering creates physical accumulation without brightening the paint color.
-    for (let pass = 0; pass < dynamics.corePasses; pass += 1) {
-      const jitter = dynamics.corePasses > 1 ? radius * 0.018 : 0;
-      const coreX = x + (Math.random() - 0.5) * jitter;
-      const coreY = y + (Math.random() - 0.5) * jitter;
-      const coreGrad = ctx.createRadialGradient(coreX, coreY, 0, coreX, coreY, radius);
-      const passOpacity = (dynamics.coreOpacity * point.opacity) / Math.sqrt(dynamics.corePasses);
-      coreGrad.addColorStop(0, this.hexToRgba(colorHex, passOpacity));
-      coreGrad.addColorStop(
-        Math.min(0.92, Math.max(0.08, cap.edgeFalloff)),
-        this.hexToRgba(colorHex, passOpacity * 0.58),
-      );
-      coreGrad.addColorStop(1, this.hexToRgba(colorHex, 0));
+    ctx.save();
+    ctx.lineCap = cap.endpointBehavior === "raw" ? "butt" : "round";
+    ctx.lineJoin = "round";
 
-      ctx.fillStyle = coreGrad;
+    for (let pass = dynamics.corePasses - 1; pass >= 0; pass -= 1) {
+      const passRatio = dynamics.corePasses === 1 ? 0 : pass / (dynamics.corePasses - 1);
+      const edgeExpansion = 1 + passRatio * (1 - cap.edgeFalloff) * 0.72;
+      const jitterX = (Math.random() - 0.5) * dynamics.jitter;
+      const jitterY = (Math.random() - 0.5) * dynamics.jitter;
+      const endpointScale = previous ? 1 : cap.endpointBehavior === "punchy" ? 0.82 : 0.68;
+      ctx.strokeStyle = this.hexToRgba(colorHex, passOpacity * (1 - passRatio * 0.48));
+      ctx.lineWidth = Math.max(0.7, dynamics.radius * 2 * dynamics.anisotropy * edgeExpansion * endpointScale);
       ctx.beginPath();
-      ctx.arc(coreX, coreY, radius, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.moveTo(start.x + jitterX, start.y + jitterY);
+      ctx.lineTo(point.x + jitterX, point.y + jitterY);
+      ctx.stroke();
     }
 
-    // Fine overspray replaces the old large, obvious particle halo.
-    ctx.fillStyle = this.hexToRgba(colorHex, dynamics.particleOpacity * point.opacity);
+    ctx.restore();
+    this.renderOverspray(ctx, start, point, colorHex, dynamics, angle, distance);
+  }
 
-    for (let i = 0; i < dynamics.particleCount; i++) {
-      const angle = Math.random() * Math.PI * 2;
-      const dist = Math.pow(Math.random(), 1.35) * dynamics.particleSpread;
-      const px = x + Math.cos(angle) * dist;
-      const py = y + Math.sin(angle) * dist;
-      const pSize = Math.max(0.18, dynamics.particleSize * (0.45 + Math.random() * 0.9));
+  public startDrip(seed: DripSeed, color: string, now = performance.now()): void {
+    this.activeDrips.push({
+      ...seed,
+      color,
+      startedAt: now,
+      lastProgress: 0,
+      bend: (Math.random() - 0.5) * seed.length * 0.12,
+    });
+  }
+
+  public advanceDrips(ctx: CanvasRenderingContext2D, now = performance.now()): void {
+    const duration = 1200;
+    this.activeDrips = this.activeDrips.filter((drip) => {
+      const progress = Math.min(1, Math.max(0, (now - drip.startedAt) / duration));
+      if (progress <= drip.lastProgress) return progress < 1;
+
+      const easedPrevious = drip.lastProgress * drip.lastProgress;
+      const easedCurrent = progress * progress;
+      const startX = drip.x + drip.bend * easedPrevious;
+      const startY = drip.y + drip.length * easedPrevious;
+      const endX = drip.x + drip.bend * easedCurrent;
+      const endY = drip.y + drip.length * easedCurrent;
+
+      ctx.save();
+      ctx.lineCap = "round";
+      ctx.strokeStyle = this.hexToRgba(drip.color, drip.opacity * (1 - progress * 0.24));
+      ctx.lineWidth = Math.max(0.8, drip.width * (1 - progress * 0.42));
+      ctx.beginPath();
+      ctx.moveTo(startX, startY);
+      ctx.lineTo(endX, endY);
+      ctx.stroke();
+      ctx.restore();
+
+      drip.lastProgress = progress;
+      return progress < 1;
+    });
+  }
+
+  private renderOverspray(
+    ctx: CanvasRenderingContext2D,
+    start: StrokePoint,
+    point: StrokePoint,
+    color: string,
+    dynamics: ReturnType<typeof resolveSprayDynamics>,
+    angle: number,
+    distance: number,
+  ): void {
+    const segmentFactor = Math.max(0.3, Math.min(1.6, distance / Math.max(1, dynamics.radius) + 0.32));
+    const count = Math.round(dynamics.particleCount * segmentFactor);
+    ctx.fillStyle = this.hexToRgba(color, dynamics.particleOpacity * point.opacity);
+
+    for (let index = 0; index < count; index += 1) {
+      const along = Math.random();
+      const centerX = start.x + (point.x - start.x) * along;
+      const centerY = start.y + (point.y - start.y) * along;
+      const spreadAngle = Math.random() * Math.PI * 2;
+      const spread = Math.pow(Math.random(), 1.55) * dynamics.particleSpread;
+      const directionalX = Math.cos(spreadAngle) * spread;
+      const directionalY = Math.sin(spreadAngle) * spread;
+      const anisotropicX = directionalX * Math.cos(angle) - directionalY * dynamics.anisotropy * Math.sin(angle);
+      const anisotropicY = directionalX * Math.sin(angle) + directionalY * dynamics.anisotropy * Math.cos(angle);
+      const splatter = Math.random() < dynamics.splatterProbability ? 1.8 + Math.random() * 1.8 : 1;
+      const particleSize = Math.max(0.18, dynamics.particleSize * splatter * (0.45 + Math.random() * 0.9));
 
       ctx.beginPath();
-      ctx.arc(px, py, pSize, 0, Math.PI * 2);
+      ctx.arc(centerX + anisotropicX, centerY + anisotropicY, particleSize, 0, Math.PI * 2);
       ctx.fill();
     }
   }
 
   private hexToRgba(hex: string, alpha: number): string {
-    let c = hex.replace("#", "");
-    if (c.length === 3) c = c.split("").map((x) => x + x).join("");
-    const num = parseInt(c, 16);
-    const r = (num >> 16) & 255;
-    const g = (num >> 8) & 255;
-    const b = num & 255;
-    return `rgba(${r}, ${g}, ${b}, ${alpha.toFixed(3)})`;
+    let value = hex.replace("#", "");
+    if (value.length === 3) value = value.split("").map((channel) => channel + channel).join("");
+    const numeric = Number.parseInt(value, 16);
+    const red = (numeric >> 16) & 255;
+    const green = (numeric >> 8) & 255;
+    const blue = numeric & 255;
+    return `rgba(${red}, ${green}, ${blue}, ${Math.max(0, Math.min(1, alpha)).toFixed(3)})`;
   }
 }

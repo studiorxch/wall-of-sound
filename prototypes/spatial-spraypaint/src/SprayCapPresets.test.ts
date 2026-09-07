@@ -1,41 +1,39 @@
 import { describe, expect, it } from "vitest";
-import {
-  getSprayCapPreset,
-  mapVelocityToDensity,
-  resolveSprayDynamics,
-  SPRAY_CAP_PRESETS,
-} from "./SprayCapPresets";
+import { getSprayCapPreset, mapVelocityToDensity, resolveSprayDynamics, SPRAY_CAP_PRESETS } from "./SprayCapPresets";
 
 describe("spray cap presets", () => {
-  it("resolves all five data-driven cap personalities", () => {
+  it("defines all eleven graffiti cap families", () => {
+    expect(SPRAY_CAP_PRESETS).toHaveLength(11);
     expect(SPRAY_CAP_PRESETS.map((preset) => preset.id)).toEqual([
-      "fat",
-      "skinny",
-      "soft",
-      "high-pressure",
-      "dust-fog",
+      "new-york-fat", "pink-dot-fat", "astro-fat", "german-fat",
+      "lego-thin", "universal-thin", "level-1", "new-york-thin",
+      "calligraphy", "needle", "soft-fade",
     ]);
-    expect(getSprayCapPreset("skinny").name).toBe("Skinny Cap");
-    expect(getSprayCapPreset("unknown").id).toBe("fat");
+    expect(new Set(SPRAY_CAP_PRESETS.map((preset) => preset.family))).toEqual(new Set(["fat", "thin", "specialty"]));
+  });
+
+  it("keeps legacy preset links mapped to the new authority", () => {
+    expect(getSprayCapPreset("fat").id).toBe("new-york-fat");
+    expect(getSprayCapPreset("skinny").id).toBe("universal-thin");
+    expect(getSprayCapPreset("unknown").id).toBe("new-york-fat");
   });
 
   it("maps slower movement to denser accumulation", () => {
     expect(mapVelocityToDensity(0, 1)).toBeGreaterThan(mapVelocityToDensity(1.5, 1));
-    expect(mapVelocityToDensity(10, 1)).toBeGreaterThanOrEqual(0.55);
+    expect(mapVelocityToDensity(10, 1)).toBeGreaterThanOrEqual(0.58);
   });
 
-  it("makes high pressure stronger than skinny and dust visibly mistier", () => {
-    const high = resolveSprayDynamics(getSprayCapPreset("high-pressure"), 0.3, 34);
-    const fat = resolveSprayDynamics(getSprayCapPreset("fat"), 0.3, 38);
-    const skinny = resolveSprayDynamics(getSprayCapPreset("skinny"), 0.3, 12);
-    const dust = resolveSprayDynamics(getSprayCapPreset("dust-fog"), 0.3, 54);
+  it("gives caps materially different deposition personalities", () => {
+    const pink = resolveSprayDynamics(getSprayCapPreset("pink-dot-fat"), 0.3, 42);
+    const thin = resolveSprayDynamics(getSprayCapPreset("level-1"), 0.3, 6);
+    const soft = resolveSprayDynamics(getSprayCapPreset("soft-fade"), 0.3, 50);
+    const needle = resolveSprayDynamics(getSprayCapPreset("needle"), 0.3, 5);
+    const calligraphy = resolveSprayDynamics(getSprayCapPreset("calligraphy"), 0.3, 25);
 
-    expect(high.corePasses).toBeGreaterThan(skinny.corePasses);
-    expect(high.coreOpacity).toBeGreaterThan(skinny.coreOpacity);
-    expect(high.coreOpacity).toBeGreaterThan(fat.coreOpacity);
-    expect(high.particleCount).toBeGreaterThan(fat.particleCount);
-    expect(fat.coreOpacity).toBeGreaterThan(skinny.coreOpacity);
-    expect(dust.particleSpread).toBeGreaterThan(high.particleSpread);
-    expect(dust.coreOpacity).toBeLessThan(skinny.coreOpacity);
+    expect(pink.corePasses).toBeGreaterThan(thin.corePasses);
+    expect(pink.coreOpacity).toBeGreaterThan(soft.coreOpacity);
+    expect(soft.particleSpread).toBeGreaterThan(pink.particleSpread);
+    expect(needle.splatterProbability).toBeGreaterThan(thin.splatterProbability);
+    expect(calligraphy.anisotropy).toBeLessThan(1);
   });
 });

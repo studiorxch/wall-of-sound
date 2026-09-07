@@ -13,6 +13,9 @@ import {
   type SprayCapPreset,
 } from "./SprayCapPresets";
 import { SprayCanAudio } from "./SprayCanAudio";
+import { StrokeSmoother, type SmoothingLevel } from "./StrokeSmoother";
+import { DripAccumulator } from "./DripLogic";
+import { getSprayBackground, type SprayBackground } from "./Backgrounds";
 
 class SpatialSpraypaintApp {
   private compositeCanvas: HTMLCanvasElement;
@@ -28,11 +31,16 @@ class SpatialSpraypaintApp {
   private anonymityProcessor = new AnonymityProcessor();
   private recorder = new PerformanceRecorder();
   private sprayCanAudio = new SprayCanAudio();
+  private strokeSmoother = new StrokeSmoother();
+  private dripAccumulator = new DripAccumulator();
 
   private inputMode: InputSourceMode = "mouse";
   private anonymityMode: AnonymityMode = "hidden";
-  private selectedColor = "#ff2a5f";
-  private selectedCap: SprayCapPreset = getSprayCapPreset("fat");
+  private selectedColor = "#e92f3d";
+  private selectedCap: SprayCapPreset = getSprayCapPreset("new-york-fat");
+  private selectedBackground: SprayBackground = getSprayBackground("black");
+  private smoothingLevel: SmoothingLevel = "medium";
+  private dripsEnabled = true;
   private baseRadius = this.selectedCap.baseRadius;
   private isSpraying = false;
   private manualSprayOverride = false;
@@ -43,6 +51,8 @@ class SpatialSpraypaintApp {
   private lastHandResult: HandTrackingResult | null = null;
   private mappedPointLogged = false;
   private sprayDeliveryLogged = false;
+  private activeSprayPoint: { x: number; y: number } | null = null;
+  private lastDepositTimestamp = 0;
 
   private audioElement: HTMLAudioElement | null = null;
 
@@ -60,6 +70,7 @@ class SpatialSpraypaintApp {
     this.updateUiChrome();
     this.updateTrackingOverlay(null);
     this.updateCapControls();
+    this.updateBackgroundControls();
     this.updateSprayStatus();
     this.startRenderLoop();
   }
@@ -99,6 +110,11 @@ class SpatialSpraypaintApp {
     const radiusInput = document.getElementById("brush-radius") as HTMLInputElement;
     const radiusVal = document.getElementById("radius-val")!;
     const capSelect = document.getElementById("cap-preset") as HTMLSelectElement;
+    const performanceCapSelect = document.getElementById("performance-cap-preset") as HTMLSelectElement;
+    const backgroundSelect = document.getElementById("background-preset") as HTMLSelectElement;
+    const performanceBackgroundSelect = document.getElementById("performance-background-preset") as HTMLSelectElement;
+    const smoothingSelect = document.getElementById("smoothing-level") as HTMLSelectElement;
+    const dripsToggle = document.getElementById("drips-enabled") as HTMLInputElement;
     const toggleWebcamBtn = document.getElementById("toggle-webcam") as HTMLButtonElement;
     const clearBtn = document.getElementById("clear-canvas")!;
     const toggleRecordBtn = document.getElementById("toggle-record") as HTMLButtonElement;
@@ -114,11 +130,15 @@ class SpatialSpraypaintApp {
     const fullscreenBtn = document.getElementById("toggle-fullscreen")!;
     const shakeCanBtn = document.getElementById("shake-can")!;
     const performanceRecordBtn = document.getElementById("performance-record-toggle")!;
+    const performanceClearBtn = document.getElementById("performance-clear-canvas")!;
 
     inputSelect.addEventListener("change", (e) => {
       this.inputMode = (e.target as HTMLSelectElement).value as InputSourceMode;
       webcamControls.style.display = this.inputMode === "spatial" ? "flex" : "none";
       this.strokeManager.reset();
+      this.strokeSmoother.reset();
+      this.dripAccumulator.reset();
+      this.activeSprayPoint = null;
       this.setSprayActive(false);
       this.updateUiChrome();
       this.updateTrackingOverlay(this.inputMode === "spatial" ? this.lastHandResult : null);
@@ -133,19 +153,41 @@ class SpatialSpraypaintApp {
       radiusVal.textContent = this.baseRadius.toString();
     });
 
-    capSelect.addEventListener("change", (e) => {
-      this.selectedCap = getSprayCapPreset((e.target as HTMLSelectElement).value);
+    const selectCap = (id: string) => {
+      this.selectedCap = getSprayCapPreset(id);
       this.baseRadius = this.selectedCap.baseRadius;
       this.updateCapControls();
       this.strokeManager.reset();
+      this.strokeSmoother.reset();
+      this.dripAccumulator.reset();
+    };
+    capSelect.addEventListener("change", (e) => selectCap((e.target as HTMLSelectElement).value));
+    performanceCapSelect.addEventListener("change", (e) => selectCap((e.target as HTMLSelectElement).value));
+
+    const selectBackground = (id: string) => {
+      this.selectedBackground = getSprayBackground(id);
+      this.updateBackgroundControls();
+    };
+    backgroundSelect.addEventListener("change", (e) => selectBackground((e.target as HTMLSelectElement).value));
+    performanceBackgroundSelect.addEventListener("change", (e) => selectBackground((e.target as HTMLSelectElement).value));
+
+    smoothingSelect.addEventListener("change", (e) => {
+      this.smoothingLevel = (e.target as HTMLSelectElement).value as SmoothingLevel;
+      this.strokeSmoother.reset();
+      this.strokeManager.reset();
+    });
+    dripsToggle.addEventListener("change", () => {
+      this.dripsEnabled = dripsToggle.checked;
+      if (!this.dripsEnabled) this.dripAccumulator.reset();
     });
 
     document.querySelectorAll(".swatch").forEach((swatch) => {
       swatch.addEventListener("click", (e) => {
-        document.querySelectorAll(".swatch").forEach((s) => s.classList.remove("selected"));
         const el = e.currentTarget as HTMLElement;
-        el.classList.add("selected");
-        this.selectedColor = el.dataset.color || "#ff2a5f";
+        this.selectedColor = el.dataset.color || "#e92f3d";
+        document.querySelectorAll<HTMLElement>(".swatch").forEach((swatchElement) => {
+          swatchElement.classList.toggle("selected", swatchElement.dataset.color === this.selectedColor);
+        });
       });
     });
 
@@ -200,9 +242,9 @@ class SpatialSpraypaintApp {
     shakeCanBtn.addEventListener("click", () => void this.playCanRattle());
 
     clearBtn.addEventListener("click", () => {
-      this.paintCtx.clearRect(0, 0, this.paintCanvas.width, this.paintCanvas.height);
-      this.brushEngine.clear();
+      this.clearPaint();
     });
+    performanceClearBtn.addEventListener("click", () => this.clearPaint());
 
     toggleRecordBtn.addEventListener("click", () => void this.toggleRecording());
     performanceRecordBtn.addEventListener("click", () => void this.toggleRecording());
@@ -250,20 +292,25 @@ class SpatialSpraypaintApp {
   private bindMouseEvents() {
     this.compositeCanvas.addEventListener("mousedown", (e) => {
       if (this.inputMode !== "mouse") return;
-      this.setSprayActive(true);
       this.strokeManager.reset();
-      this.processPoint(e.clientX, e.clientY);
+      this.strokeSmoother.reset();
+      this.dripAccumulator.reset();
+      this.activeSprayPoint = { x: e.clientX, y: e.clientY };
+      this.lastDepositTimestamp = 0;
+      this.setSprayActive(true);
+      this.depositActivePoint(performance.now());
     });
 
     window.addEventListener("mousemove", (e) => {
       if (this.inputMode !== "mouse" || !this.isSpraying) return;
-      this.processPoint(e.clientX, e.clientY);
+      this.activeSprayPoint = { x: e.clientX, y: e.clientY };
     });
 
     window.addEventListener("mouseup", () => {
       if (this.inputMode !== "mouse") return;
+      this.depositActivePoint(performance.now(), true);
       this.setSprayActive(false);
-      this.strokeManager.reset();
+      this.endStroke();
     });
   }
 
@@ -301,6 +348,7 @@ class SpatialSpraypaintApp {
     this.updateTrackingOverlay(res);
 
     if (!res) {
+      this.activeSprayPoint = null;
       this.setSprayActive(this.manualSprayOverride);
       return;
     }
@@ -309,6 +357,7 @@ class SpatialSpraypaintApp {
 
     const px = res.x * this.compositeCanvas.width;
     const py = res.y * this.compositeCanvas.height;
+    this.activeSprayPoint = { x: px, y: py };
     if (!this.mappedPointLogged) {
       this.mappedPointLogged = true;
       console.info(
@@ -318,14 +367,13 @@ class SpatialSpraypaintApp {
     this.setTrackingStage("mapping", "pass", `${Math.round(px)}, ${Math.round(py)}`);
 
     if (this.isSpraying) {
-      this.processPoint(px, py);
       this.setTrackingStage("spray", "pass", "POINT RECEIVED");
       if (!this.sprayDeliveryLogged) {
         this.sprayDeliveryLogged = true;
         console.info("[Spatial Spraypaint] Spray engine received tracked point");
       }
     } else {
-      this.strokeManager.reset();
+      this.endStroke(false);
     }
   }
 
@@ -545,13 +593,22 @@ class SpatialSpraypaintApp {
 
   private updateCapControls() {
     const capSelect = document.getElementById("cap-preset") as HTMLSelectElement;
+    const performanceCapSelect = document.getElementById("performance-cap-preset") as HTMLSelectElement;
     const radiusInput = document.getElementById("brush-radius") as HTMLInputElement;
     const radiusValue = document.getElementById("radius-val");
     const compactCapStatus = document.getElementById("performance-cap-status");
     capSelect.value = this.selectedCap.id;
+    performanceCapSelect.value = this.selectedCap.id;
     radiusInput.value = this.baseRadius.toString();
     if (radiusValue) radiusValue.textContent = this.baseRadius.toString();
     if (compactCapStatus) compactCapStatus.textContent = this.selectedCap.name.toUpperCase();
+  }
+
+  private updateBackgroundControls() {
+    const backgroundSelect = document.getElementById("background-preset") as HTMLSelectElement;
+    const performanceBackgroundSelect = document.getElementById("performance-background-preset") as HTMLSelectElement;
+    backgroundSelect.value = this.selectedBackground.id;
+    performanceBackgroundSelect.value = this.selectedBackground.id;
   }
 
   private async toggleFullscreen() {
@@ -631,20 +688,68 @@ class SpatialSpraypaintApp {
     }
   }
 
-  private processPoint(x: number, y: number) {
-    const { point, interpolated } = this.strokeManager.createPoint(x, y, this.baseRadius);
+  private clearPaint() {
+    this.paintCtx.clearRect(0, 0, this.paintCanvas.width, this.paintCanvas.height);
+    this.brushEngine.clear();
+    this.endStroke();
+  }
 
-    // Draw spray persistent paint onto dedicated paint canvas
-    for (const p of interpolated) {
-      this.brushEngine.renderPoint(this.paintCtx, p, this.selectedColor, this.selectedCap);
+  private endStroke(clearActivePoint = true) {
+    this.strokeManager.reset();
+    this.strokeSmoother.reset();
+    this.dripAccumulator.reset();
+    if (clearActivePoint) this.activeSprayPoint = null;
+  }
+
+  private depositActivePoint(now: number, force = false) {
+    if (!this.isSpraying || !this.activeSprayPoint || (!force && now - this.lastDepositTimestamp < 28)) return;
+    this.lastDepositTimestamp = now;
+    this.processPoint(this.activeSprayPoint.x, this.activeSprayPoint.y, now);
+  }
+
+  private processPoint(x: number, y: number, timestamp: number) {
+    const smoothed = this.strokeSmoother.smooth({ x, y }, this.smoothingLevel);
+    const { point, interpolated, previous } = this.strokeManager.createPoint(
+      smoothed.x,
+      smoothed.y,
+      this.baseRadius,
+      0,
+      timestamp,
+    );
+    let segmentStart = previous;
+    for (const segmentEnd of [...interpolated, point]) {
+      this.brushEngine.renderSegment(
+        this.paintCtx,
+        segmentStart,
+        segmentEnd,
+        this.selectedColor,
+        this.selectedCap,
+      );
+      segmentStart = segmentEnd;
     }
-    this.brushEngine.renderPoint(this.paintCtx, point, this.selectedColor, this.selectedCap);
+
+    const drip = this.dripAccumulator.observe({
+      x: point.x,
+      y: point.y,
+      radius: point.width,
+      timestamp,
+      dripTendency: this.selectedCap.dripTendency,
+      enabled: this.dripsEnabled,
+    });
+    if (drip) this.brushEngine.startDrip(drip, this.selectedColor, timestamp);
   }
 
   private startRenderLoop() {
     const render = () => {
+      const now = performance.now();
+      this.depositActivePoint(now);
+      this.brushEngine.advanceDrips(this.paintCtx, now);
+
       // 1. Clear composite canvas
       this.compositeCtx.clearRect(0, 0, this.compositeCanvas.width, this.compositeCanvas.height);
+
+      this.compositeCtx.fillStyle = this.selectedBackground.color;
+      this.compositeCtx.fillRect(0, 0, this.compositeCanvas.width, this.compositeCanvas.height);
 
       // 2. Draw camera/background layer onto composite
       if (this.webcamActive && this.inputMode === "spatial") {
@@ -655,10 +760,6 @@ class SpatialSpraypaintApp {
           this.compositeCanvas.width,
           this.compositeCanvas.height
         );
-      } else {
-        // Dark neutral background for Hidden/Mouse mode
-        this.compositeCtx.fillStyle = "#050508";
-        this.compositeCtx.fillRect(0, 0, this.compositeCanvas.width, this.compositeCanvas.height);
       }
 
       // 3. Composite persistent spray paint layer on top
