@@ -90,6 +90,17 @@ audiolab/output/**
 !audiolab/output/reports/.gitkeep
 audiolab/.venv/
 
+# Tempo Arbitration Human Validation (0828N) — duplicate audio copies for a
+# temporary local Mixxx review batch. Real audio duplicates, never source-of-
+# truth, must never be committed.
+audiolab/rhythm_benchmark/human_validation/mixxx_batch/
 
 
 
+
+.# Aider local state
+/.aider*
+
+# Root-level pasted screenshots / temporary captures
+/Pasted image *
+/Screenshot *
