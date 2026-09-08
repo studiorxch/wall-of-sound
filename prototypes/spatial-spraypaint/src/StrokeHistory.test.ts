@@ -45,4 +45,19 @@ describe("stroke history", () => {
     expect(history.canUndo()).toBe(false);
     expect(history.snapshot().map((stroke) => stroke.id)).toEqual([1]);
   });
+
+  it("restores the complete pre-clear stroke state with one undo", () => {
+    const history = new StrokeHistory();
+    for (let index = 0; index < 2; index += 1) {
+      history.begin({ color: index ? "#f00" : "#fff", capId: "needle" });
+      history.appendPoint(point(index));
+      history.finalize();
+    }
+
+    expect(history.clearUndoably()).toBe(true);
+    expect(history.snapshot()).toEqual([]);
+    expect(history.canUndo()).toBe(true);
+    expect(history.undo().map((stroke) => stroke.id)).toEqual([1, 2]);
+    expect(history.undo().map((stroke) => stroke.id)).toEqual([1]);
+  });
 });

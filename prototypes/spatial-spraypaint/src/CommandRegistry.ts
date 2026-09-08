@@ -1,4 +1,4 @@
-export type CommandId = "undo" | "settings" | "record" | "play-pause" | "close-settings";
+export type CommandId = "undo" | "clear" | "settings" | "record" | "play-pause" | "close-settings";
 export type CommandCategory = "Canvas" | "Session" | "Interface";
 
 export interface CommandDefinition {
@@ -8,7 +8,7 @@ export interface CommandDefinition {
   category: CommandCategory;
   description: string;
   key: string;
-  modifier?: "mod";
+  modifier?: "mod" | "shift";
 }
 
 export interface Command extends CommandDefinition {
@@ -28,6 +28,7 @@ export interface CommandKeyEvent {
 
 export const COMMAND_DEFINITIONS: readonly CommandDefinition[] = [
   { id: "undo", label: "Undo last stroke", shortcut: "⌘/Ctrl Z", category: "Canvas", description: "Remove the most recently completed stroke.", key: "z", modifier: "mod" },
+  { id: "clear", label: "Clear canvas", shortcut: "Shift Delete", category: "Canvas", description: "Clear painted strokes; Undo restores them.", key: "delete", modifier: "shift" },
   { id: "play-pause", label: "Play / pause soundtrack", shortcut: "Space", category: "Session", description: "Toggle the loaded session soundtrack.", key: " " },
   { id: "record", label: "Start / stop recording", shortcut: "R", category: "Session", description: "Start recording, or stop and save the current performance.", key: "r" },
   { id: "settings", label: "Open / close settings", shortcut: ",", category: "Interface", description: "Toggle the temporary Settings panel.", key: "," },
@@ -57,12 +58,15 @@ export function resolveCommandId(
   event: Pick<CommandKeyEvent, "key" | "metaKey" | "ctrlKey" | "altKey" | "shiftKey" | "repeat">,
   definitions: readonly CommandDefinition[] = COMMAND_DEFINITIONS,
 ): CommandId | null {
-  if (event.repeat || event.altKey || event.shiftKey) return null;
-  const key = event.key.toLowerCase();
+  if (event.repeat || event.altKey) return null;
+  const rawKey = event.key.toLowerCase();
+  const key = rawKey === "backspace" ? "delete" : rawKey;
   const hasMod = event.metaKey || event.ctrlKey;
   return definitions.find((definition) => {
     if (definition.key !== key) return false;
-    return definition.modifier === "mod" ? hasMod : !hasMod;
+    if (definition.modifier === "mod") return hasMod && !event.shiftKey;
+    if (definition.modifier === "shift") return event.shiftKey && !hasMod;
+    return !hasMod && !event.shiftKey;
   })?.id ?? null;
 }
 

@@ -17,6 +17,7 @@ export class StrokeHistory {
   private current: RecordedStroke | null = null;
   private nextId = 1;
   private lockedCount = 0;
+  private clearedState: { strokes: RecordedStroke[]; lockedCount: number } | null = null;
 
   constructor(private readonly limit = 40) {}
 
@@ -49,26 +50,46 @@ export class StrokeHistory {
 
   public undo(): RecordedStroke[] {
     this.current = null;
-    if (this.canUndo()) this.strokes.pop();
+    if (this.strokes.length > this.lockedCount) {
+      this.strokes.pop();
+    } else if (this.clearedState) {
+      this.strokes = this.cloneStrokes(this.clearedState.strokes);
+      this.lockedCount = this.clearedState.lockedCount;
+      this.clearedState = null;
+    }
     return this.snapshot();
+  }
+
+  public clearUndoably(): boolean {
+    this.current = null;
+    if (!this.strokes.length) return false;
+    this.clearedState = { strokes: this.snapshot(), lockedCount: this.lockedCount };
+    this.strokes = [];
+    this.lockedCount = 0;
+    return true;
   }
 
   public clear(): void {
     this.current = null;
     this.strokes = [];
     this.lockedCount = 0;
+    this.clearedState = null;
   }
 
   public canUndo(): boolean {
-    return this.strokes.length > this.lockedCount;
+    return this.strokes.length > this.lockedCount || this.clearedState !== null;
   }
 
   public size(): number {
-    return this.strokes.length - this.lockedCount;
+    return this.strokes.length - this.lockedCount + (this.clearedState ? 1 : 0);
   }
 
   public snapshot(): RecordedStroke[] {
-    return this.strokes.map((stroke) => ({
+    return this.cloneStrokes(this.strokes);
+  }
+
+  private cloneStrokes(strokes: RecordedStroke[]): RecordedStroke[] {
+    return strokes.map((stroke) => ({
       ...stroke,
       points: stroke.points.map((point) => ({ ...point })),
       drips: stroke.drips.map((drip) => ({ ...drip })),

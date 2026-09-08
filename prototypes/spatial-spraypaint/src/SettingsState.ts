@@ -1,4 +1,5 @@
 import { type SmoothingLevel } from "./StrokeSmoother";
+import { type AnonymityMode, type InputSourceMode } from "./types";
 
 export interface SettingsState {
   isOpen: boolean;
@@ -24,6 +25,13 @@ export const INITIAL_SETTINGS_STATE: SettingsState = {
   radiusOverride: null,
   trackingDebugVisible: false,
 };
+
+export function cameraTreatmentForInputMode(
+  mode: InputSourceMode,
+  current: AnonymityMode,
+): AnonymityMode {
+  return mode === "spatial" ? "clean" : current;
+}
 
 export function reduceSettingsState(state: SettingsState, action: SettingsAction): SettingsState {
   switch (action.type) {

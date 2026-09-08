@@ -28,4 +28,11 @@ describe("command registry", () => {
     expect(resolveCommandId(keyEvent(" ", { repeat: true }))).toBeNull();
     expect(resolveCommandId(keyEvent(" ", { metaKey: true }))).toBeNull();
   });
+
+  it("reserves Shift Delete for undoable Clear without accepting bare Delete", () => {
+    expect(resolveCommandId(keyEvent("Delete", { shiftKey: true }))).toBe("clear");
+    expect(resolveCommandId(keyEvent("Backspace", { shiftKey: true }))).toBe("clear");
+    expect(resolveCommandId(keyEvent("Delete"))).toBeNull();
+    expect(resolveCommandId(keyEvent("Delete", { shiftKey: true, metaKey: true }))).toBeNull();
+  });
 });

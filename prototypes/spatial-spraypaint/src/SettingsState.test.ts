@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { INITIAL_SETTINGS_STATE, reduceSettingsState } from "./SettingsState";
+import { cameraTreatmentForInputMode, INITIAL_SETTINGS_STATE, reduceSettingsState } from "./SettingsState";
 
 describe("settings state", () => {
   it("opens, closes, and toggles without changing drawing preferences", () => {
@@ -13,5 +13,10 @@ describe("settings state", () => {
     const radius = reduceSettingsState(INITIAL_SETTINGS_STATE, { type: "radius", value: 24 });
     const debug = reduceSettingsState(radius, { type: "tracking-debug", value: true });
     expect(debug).toMatchObject({ radiusOverride: 24, trackingDebugVisible: true });
+  });
+
+  it("defaults Hand to Clean without changing the Physical treatment", () => {
+    expect(cameraTreatmentForInputMode("spatial", "hidden")).toBe("clean");
+    expect(cameraTreatmentForInputMode("mouse", "ghost")).toBe("ghost");
   });
 });

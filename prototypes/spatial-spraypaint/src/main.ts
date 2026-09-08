@@ -6,7 +6,7 @@ import { DripAccumulator } from "./DripLogic";
 import { HandTracker, type HandTrackingDiagnostics, type HandTrackingResult } from "./HandTracker";
 import { PerformanceRecorder } from "./PerformanceRecorder";
 import { INITIAL_PLAYER_STATE, reducePlayerState, type PlayerAction, type PlayerState } from "./PlayerState";
-import { INITIAL_SETTINGS_STATE, reduceSettingsState, type SettingsAction, type SettingsState } from "./SettingsState";
+import { cameraTreatmentForInputMode, INITIAL_SETTINGS_STATE, reduceSettingsState, type SettingsAction, type SettingsState } from "./SettingsState";
 import { SprayBrushEngine } from "./SprayBrushEngine";
 import { SprayCanAudio } from "./SprayCanAudio";
 import { getSprayCapPreset, type SprayCapPreset } from "./SprayCapPresets";
@@ -46,6 +46,7 @@ class SpatialSpraypaintApp {
   private lastDepositTimestamp = 0;
   private mappedPointLogged = false;
   private sprayDeliveryLogged = false;
+  private hasPinchSprayed = false;
   private audioElement: HTMLAudioElement | null = null;
   private audioObjectUrl: string | null = null;
 
@@ -56,6 +57,7 @@ class SpatialSpraypaintApp {
     this.paintCtx = this.paintCanvas.getContext("2d")!;
     this.commandRegistry = new CommandRegistry({
       undo: () => this.undoLastStroke(),
+      clear: () => this.clearAllStrokes(),
       settings: () => this.setSettings({ type: "toggle" }),
       record: () => this.toggleRecording(),
       "play-pause": () => this.togglePlayback(),
@@ -140,6 +142,7 @@ class SpatialSpraypaintApp {
     });
 
     this.requireElement("undo-stroke").addEventListener("click", () => this.undoLastStroke());
+    this.requireElement("clear-strokes").addEventListener("click", () => this.clearAllStrokes());
     this.requireElement("settings-toggle").addEventListener("click", () => this.setSettings({ type: "toggle" }));
     this.requireElement("settings-close").addEventListener("click", () => this.setSettings({ type: "close" }));
     this.requireElement<HTMLSelectElement>("smoothing-level").addEventListener("change", (event) => {
@@ -191,9 +194,7 @@ class SpatialSpraypaintApp {
 
     this.requireElement("toggle-record").addEventListener("click", () => void this.toggleRecording());
     this.requireElement("shake-can").addEventListener("click", () => void this.playCanRattle());
-    this.requireElement("clear-canvas").addEventListener("click", () => {
-      if (window.confirm("Clear every painted stroke? This cannot be undone.")) this.clearAllStrokes();
-    });
+    this.requireElement("clear-canvas").addEventListener("click", () => this.clearAllStrokes());
   }
 
   private bindMouseInput(): void {
@@ -282,6 +283,8 @@ class SpatialSpraypaintApp {
   private async selectInputMode(mode: InputSourceMode): Promise<void> {
     this.finishActiveStroke();
     this.inputMode = mode;
+    this.anonymityMode = cameraTreatmentForInputMode(mode, this.anonymityMode);
+    this.requireElement<HTMLSelectElement>("anonymity-mode").value = this.anonymityMode;
     this.lastHandResult = null;
     this.activeSprayPoint = null;
     this.updateTrackingOverlay(null);
@@ -405,6 +408,7 @@ class SpatialSpraypaintApp {
     const pinch = this.requireElement("pinch-state");
     pinch.textContent = result?.isPinching ? "ACTIVE" : "OPEN";
     pinch.classList.toggle("active", Boolean(result?.isPinching));
+    this.requireElement("hand-first-use-cue").classList.toggle("visible", detected && !this.hasPinchSprayed);
     this.setTrackingStage("pinch", result?.isPinching ? "active" : result ? "pass" : "waiting", result?.isPinching ? "ACTIVE" : result ? "OPEN" : "WAITING");
   }
 
@@ -476,6 +480,10 @@ class SpatialSpraypaintApp {
       this.strokeHistory.appendPoint(segmentEnd);
       segmentStart = segmentEnd;
     }
+    if (this.inputMode === "spatial" && !this.hasPinchSprayed) {
+      this.hasPinchSprayed = true;
+      this.requireElement("hand-first-use-cue").classList.remove("visible");
+    }
     const drip = this.dripAccumulator.observe({
       x: point.x,
       y: point.y,
@@ -517,13 +525,14 @@ class SpatialSpraypaintApp {
     button.disabled = !this.strokeHistory.canUndo();
     button.textContent = "↶";
     button.setAttribute("title", this.strokeHistory.canUndo() ? `Undo last stroke · ${this.strokeHistory.size()} available · ⌘/Ctrl Z` : "Undo last stroke · ⌘/Ctrl Z");
+    this.requireElement<HTMLButtonElement>("clear-strokes").disabled = this.strokeHistory.snapshot().length === 0;
   }
 
   private clearAllStrokes(): void {
     this.finishActiveStroke();
+    if (!this.strokeHistory.clearUndoably()) return;
     this.paintCtx.clearRect(0, 0, this.paintCanvas.width, this.paintCanvas.height);
     this.brushEngine.clear();
-    this.strokeHistory.clear();
     this.updateUndoControl();
   }
 
