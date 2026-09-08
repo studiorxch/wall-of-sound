@@ -95,6 +95,22 @@ export class SprayBrushEngine {
     });
   }
 
+  public renderCompletedDrip(
+    ctx: CanvasRenderingContext2D,
+    drip: DripSeed,
+    color: string,
+  ): void {
+    ctx.save();
+    ctx.lineCap = "round";
+    ctx.strokeStyle = this.hexToRgba(color, drip.opacity * 0.76);
+    ctx.lineWidth = Math.max(0.8, drip.width * 0.72);
+    ctx.beginPath();
+    ctx.moveTo(drip.x, drip.y);
+    ctx.lineTo(drip.x, drip.y + drip.length);
+    ctx.stroke();
+    ctx.restore();
+  }
+
   private renderOverspray(
     ctx: CanvasRenderingContext2D,
     start: StrokePoint,

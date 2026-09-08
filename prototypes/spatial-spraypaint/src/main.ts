@@ -1,522 +1,419 @@
-import { InputSourceMode, AnonymityMode } from "./types";
-import { CanonicalStrokeManager } from "./CanonicalStroke";
-import { SprayBrushEngine } from "./SprayBrushEngine";
-import {
-  HandTracker,
-  HandTrackingResult,
-  HandTrackingDiagnostics,
-} from "./HandTracker";
 import { AnonymityProcessor } from "./AnonymityProcessor";
-import { PerformanceRecorder } from "./PerformanceRecorder";
-import {
-  getSprayCapPreset,
-  type SprayCapPreset,
-} from "./SprayCapPresets";
-import { SprayCanAudio } from "./SprayCanAudio";
-import { StrokeSmoother, type SmoothingLevel } from "./StrokeSmoother";
-import { DripAccumulator } from "./DripLogic";
 import { getSprayBackground, type SprayBackground } from "./Backgrounds";
+import { CanonicalStrokeManager } from "./CanonicalStroke";
+import { CommandRegistry } from "./CommandRegistry";
+import { DripAccumulator } from "./DripLogic";
+import { HandTracker, type HandTrackingDiagnostics, type HandTrackingResult } from "./HandTracker";
+import { PerformanceRecorder } from "./PerformanceRecorder";
+import { INITIAL_PLAYER_STATE, reducePlayerState, type PlayerAction, type PlayerState } from "./PlayerState";
+import { INITIAL_SETTINGS_STATE, reduceSettingsState, type SettingsAction, type SettingsState } from "./SettingsState";
+import { SprayBrushEngine } from "./SprayBrushEngine";
+import { SprayCanAudio } from "./SprayCanAudio";
+import { getSprayCapPreset, type SprayCapPreset } from "./SprayCapPresets";
+import { StrokeHistory, type RecordedStroke } from "./StrokeHistory";
+import { StrokeSmoother } from "./StrokeSmoother";
+import { type AnonymityMode, type InputSourceMode } from "./types";
 
 class SpatialSpraypaintApp {
-  private compositeCanvas: HTMLCanvasElement;
-  private compositeCtx: CanvasRenderingContext2D;
+  private readonly compositeCanvas: HTMLCanvasElement;
+  private readonly compositeCtx: CanvasRenderingContext2D;
+  private readonly paintCanvas: HTMLCanvasElement;
+  private readonly paintCtx: CanvasRenderingContext2D;
 
-  // Separate persistent paint canvas
-  private paintCanvas: HTMLCanvasElement;
-  private paintCtx: CanvasRenderingContext2D;
-
-  private strokeManager = new CanonicalStrokeManager();
-  private brushEngine = new SprayBrushEngine();
-  private handTracker = new HandTracker();
-  private anonymityProcessor = new AnonymityProcessor();
-  private recorder = new PerformanceRecorder();
-  private sprayCanAudio = new SprayCanAudio();
-  private strokeSmoother = new StrokeSmoother();
-  private dripAccumulator = new DripAccumulator();
+  private readonly strokeManager = new CanonicalStrokeManager();
+  private readonly strokeSmoother = new StrokeSmoother();
+  private readonly brushEngine = new SprayBrushEngine();
+  private readonly dripAccumulator = new DripAccumulator();
+  private readonly strokeHistory = new StrokeHistory(40);
+  private readonly handTracker = new HandTracker();
+  private readonly anonymityProcessor = new AnonymityProcessor();
+  private readonly recorder = new PerformanceRecorder();
+  private readonly sprayCanAudio = new SprayCanAudio();
+  private readonly commandRegistry: CommandRegistry;
 
   private inputMode: InputSourceMode = "mouse";
   private anonymityMode: AnonymityMode = "hidden";
   private selectedColor = "#e92f3d";
   private selectedCap: SprayCapPreset = getSprayCapPreset("new-york-fat");
   private selectedBackground: SprayBackground = getSprayBackground("black");
-  private smoothingLevel: SmoothingLevel = "medium";
-  private dripsEnabled = true;
+  private settings: SettingsState = { ...INITIAL_SETTINGS_STATE };
+  private player: PlayerState = { ...INITIAL_PLAYER_STATE };
   private baseRadius = this.selectedCap.baseRadius;
   private isSpraying = false;
-  private manualSprayOverride = false;
   private webcamActive = false;
-  private trackingDiagnosticsVisible = false;
-  private controlsCollapsed = false;
-  private performanceMode = false;
   private lastHandResult: HandTrackingResult | null = null;
-  private mappedPointLogged = false;
-  private sprayDeliveryLogged = false;
   private activeSprayPoint: { x: number; y: number } | null = null;
   private lastDepositTimestamp = 0;
-
+  private mappedPointLogged = false;
+  private sprayDeliveryLogged = false;
   private audioElement: HTMLAudioElement | null = null;
+  private audioObjectUrl: string | null = null;
 
   constructor() {
-    this.compositeCanvas = document.getElementById("composite-canvas") as HTMLCanvasElement;
+    this.compositeCanvas = this.requireElement<HTMLCanvasElement>("composite-canvas");
     this.compositeCtx = this.compositeCanvas.getContext("2d")!;
-
     this.paintCanvas = document.createElement("canvas");
     this.paintCtx = this.paintCanvas.getContext("2d")!;
+    this.commandRegistry = new CommandRegistry({
+      undo: () => this.undoLastStroke(),
+      settings: () => this.setSettings({ type: "toggle" }),
+      record: () => this.toggleRecording(),
+      "play-pause": () => this.togglePlayback(),
+      "close-settings": () => this.setSettings({ type: "close" }),
+    });
 
     this.initResize();
     this.bindControls();
-    this.bindMouseEvents();
-    this.bindKeyboardFallback();
-    this.updateUiChrome();
+    this.bindMouseInput();
+    this.bindCommandSystem();
+    this.renderShortcutReference();
+    this.updateSettingsUi();
+    this.updatePlayerUi();
+    this.updateUndoControl();
     this.updateTrackingOverlay(null);
-    this.updateCapControls();
-    this.updateBackgroundControls();
-    this.updateSprayStatus();
+    this.updateTrackingVisibility();
     this.startRenderLoop();
   }
 
-  private initResize() {
-    const handleResize = () => {
-      const w = window.innerWidth;
-      const h = window.innerHeight;
+  private requireElement<T extends HTMLElement>(id: string): T {
+    const element = document.getElementById(id);
+    if (!element) throw new Error(`Spatial Spraypaint UI is missing #${id}.`);
+    return element as T;
+  }
 
-      // Copy existing paint during resize
-      const tempCanvas = document.createElement("canvas");
-      tempCanvas.width = this.paintCanvas.width;
-      tempCanvas.height = this.paintCanvas.height;
-      if (tempCanvas.width > 0 && tempCanvas.height > 0) {
-        tempCanvas.getContext("2d")?.drawImage(this.paintCanvas, 0, 0);
+  private initResize(): void {
+    const handleResize = () => {
+      const temporaryCanvas = document.createElement("canvas");
+      temporaryCanvas.width = this.paintCanvas.width;
+      temporaryCanvas.height = this.paintCanvas.height;
+      if (temporaryCanvas.width && temporaryCanvas.height) {
+        temporaryCanvas.getContext("2d")?.drawImage(this.paintCanvas, 0, 0);
       }
 
-      this.compositeCanvas.width = w;
-      this.compositeCanvas.height = h;
-      this.paintCanvas.width = w;
-      this.paintCanvas.height = h;
-
-      this.brushEngine.resize(w, h);
-
-      if (tempCanvas.width > 0 && tempCanvas.height > 0) {
-        this.paintCtx.drawImage(tempCanvas, 0, 0);
+      this.compositeCanvas.width = window.innerWidth;
+      this.compositeCanvas.height = window.innerHeight;
+      this.paintCanvas.width = window.innerWidth;
+      this.paintCanvas.height = window.innerHeight;
+      this.brushEngine.resize(window.innerWidth, window.innerHeight);
+      if (temporaryCanvas.width && temporaryCanvas.height) {
+        this.paintCtx.drawImage(temporaryCanvas, 0, 0);
       }
     };
-
     window.addEventListener("resize", handleResize);
     handleResize();
   }
 
-  private bindControls() {
-    const inputSelect = document.getElementById("input-mode") as HTMLSelectElement;
-    const anonymitySelect = document.getElementById("anonymity-mode") as HTMLSelectElement;
-    const radiusInput = document.getElementById("brush-radius") as HTMLInputElement;
-    const radiusVal = document.getElementById("radius-val")!;
-    const capSelect = document.getElementById("cap-preset") as HTMLSelectElement;
-    const performanceCapSelect = document.getElementById("performance-cap-preset") as HTMLSelectElement;
-    const backgroundSelect = document.getElementById("background-preset") as HTMLSelectElement;
-    const performanceBackgroundSelect = document.getElementById("performance-background-preset") as HTMLSelectElement;
-    const smoothingSelect = document.getElementById("smoothing-level") as HTMLSelectElement;
-    const dripsToggle = document.getElementById("drips-enabled") as HTMLInputElement;
-    const toggleWebcamBtn = document.getElementById("toggle-webcam") as HTMLButtonElement;
-    const clearBtn = document.getElementById("clear-canvas")!;
-    const toggleRecordBtn = document.getElementById("toggle-record") as HTMLButtonElement;
-    const webcamControls = document.getElementById("webcam-controls")!;
-    const manualSprayBtn = document.getElementById("manual-spray-trigger")!;
-    const toggleTrackingDebugBtn = document.getElementById(
-      "toggle-tracking-debug"
-    ) as HTMLButtonElement;
-    const collapseControlsBtn = document.getElementById("collapse-controls")!;
-    const openControlsBtn = document.getElementById("open-controls-tab")!;
-    const performanceModeBtn = document.getElementById("toggle-performance-mode")!;
-    const performanceExitBtn = document.getElementById("performance-exit")!;
-    const fullscreenBtn = document.getElementById("toggle-fullscreen")!;
-    const shakeCanBtn = document.getElementById("shake-can")!;
-    const performanceRecordBtn = document.getElementById("performance-record-toggle")!;
-    const performanceClearBtn = document.getElementById("performance-clear-canvas")!;
-
-    inputSelect.addEventListener("change", (e) => {
-      this.inputMode = (e.target as HTMLSelectElement).value as InputSourceMode;
-      webcamControls.style.display = this.inputMode === "spatial" ? "flex" : "none";
-      this.strokeManager.reset();
-      this.strokeSmoother.reset();
-      this.dripAccumulator.reset();
-      this.activeSprayPoint = null;
-      this.setSprayActive(false);
-      this.updateUiChrome();
-      this.updateTrackingOverlay(this.inputMode === "spatial" ? this.lastHandResult : null);
+  private bindControls(): void {
+    this.requireElement("color-control").addEventListener("click", () => {
+      this.toggleToolChooser("color-chooser");
     });
-
-    anonymitySelect.addEventListener("change", (e) => {
-      this.anonymityMode = (e.target as HTMLSelectElement).value as AnonymityMode;
+    this.requireElement("cap-control").addEventListener("click", () => {
+      this.toggleToolChooser("cap-chooser");
     });
-
-    radiusInput.addEventListener("input", (e) => {
-      this.baseRadius = parseInt((e.target as HTMLInputElement).value, 10);
-      radiusVal.textContent = this.baseRadius.toString();
-    });
-
-    const selectCap = (id: string) => {
-      this.selectedCap = getSprayCapPreset(id);
-      this.baseRadius = this.selectedCap.baseRadius;
-      this.updateCapControls();
-      this.strokeManager.reset();
-      this.strokeSmoother.reset();
-      this.dripAccumulator.reset();
-    };
-    capSelect.addEventListener("change", (e) => selectCap((e.target as HTMLSelectElement).value));
-    performanceCapSelect.addEventListener("change", (e) => selectCap((e.target as HTMLSelectElement).value));
-
-    const selectBackground = (id: string) => {
-      this.selectedBackground = getSprayBackground(id);
-      this.updateBackgroundControls();
-    };
-    backgroundSelect.addEventListener("change", (e) => selectBackground((e.target as HTMLSelectElement).value));
-    performanceBackgroundSelect.addEventListener("change", (e) => selectBackground((e.target as HTMLSelectElement).value));
-
-    smoothingSelect.addEventListener("change", (e) => {
-      this.smoothingLevel = (e.target as HTMLSelectElement).value as SmoothingLevel;
-      this.strokeSmoother.reset();
-      this.strokeManager.reset();
-    });
-    dripsToggle.addEventListener("change", () => {
-      this.dripsEnabled = dripsToggle.checked;
-      if (!this.dripsEnabled) this.dripAccumulator.reset();
-    });
-
-    document.querySelectorAll(".swatch").forEach((swatch) => {
-      swatch.addEventListener("click", (e) => {
-        const el = e.currentTarget as HTMLElement;
-        this.selectedColor = el.dataset.color || "#e92f3d";
-        document.querySelectorAll<HTMLElement>(".swatch").forEach((swatchElement) => {
-          swatchElement.classList.toggle("selected", swatchElement.dataset.color === this.selectedColor);
+    document.querySelectorAll<HTMLButtonElement>(".cap-choice").forEach((choice) => {
+      choice.addEventListener("click", () => {
+        this.finishActiveStroke();
+        this.selectedCap = getSprayCapPreset(choice.dataset.cap ?? "new-york-fat");
+        if (this.settings.radiusOverride === null) this.baseRadius = this.selectedCap.baseRadius;
+        document.querySelectorAll<HTMLButtonElement>(".cap-choice").forEach((candidate) => {
+          candidate.classList.toggle("selected", candidate.dataset.cap === this.selectedCap.id);
         });
+        const capControl = this.requireElement("cap-control");
+        capControl.setAttribute("title", `Cap: ${this.selectedCap.name}`);
+        this.updateRadiusUi();
+        this.closeToolChoosers();
       });
     });
 
-    toggleWebcamBtn.addEventListener("click", async () => {
-      toggleWebcamBtn.disabled = true;
-      try {
-        if (!this.webcamActive) {
-          await this.sprayCanAudio.unlock();
-          this.resetTrackingDiagnostics();
-          await this.handTracker.initialize(
-            (res) => this.handleHandTrackingResult(res),
-            (diagnostics) => this.handleHandTrackingDiagnostics(diagnostics)
-          );
-          await this.handTracker.start();
-          this.webcamActive = true;
-          toggleWebcamBtn.textContent = "Stop Camera";
-          toggleWebcamBtn.classList.add("active");
-        } else {
-          await this.handTracker.stop();
-          this.webcamActive = false;
-          this.lastHandResult = null;
-          this.updateTrackingOverlay(null);
-          toggleWebcamBtn.textContent = "Start Camera";
-          toggleWebcamBtn.classList.remove("active");
-        }
-      } catch {
-        this.webcamActive = false;
-        toggleWebcamBtn.textContent = "Retry Camera";
-        toggleWebcamBtn.classList.remove("active");
-      } finally {
-        toggleWebcamBtn.disabled = false;
-      }
+    document.querySelectorAll<HTMLButtonElement>(".swatch").forEach((swatch) => {
+      swatch.addEventListener("click", () => {
+        this.finishActiveStroke();
+        this.selectedColor = swatch.dataset.color ?? this.selectedColor;
+        document.querySelectorAll<HTMLButtonElement>(".swatch").forEach((candidate) => {
+          candidate.classList.toggle("selected", candidate.dataset.color === this.selectedColor);
+        });
+        const colorControl = this.requireElement<HTMLElement>("color-control");
+        colorControl.style.setProperty("--current-color", this.selectedColor);
+        colorControl.setAttribute("title", `Color: ${swatch.getAttribute("aria-label") ?? "selected"}`);
+        this.closeToolChoosers();
+      });
     });
 
-    toggleTrackingDebugBtn.addEventListener("click", () => {
-      this.toggleTrackingDiagnostics();
+    this.requireElement("undo-stroke").addEventListener("click", () => this.undoLastStroke());
+    this.requireElement("settings-toggle").addEventListener("click", () => this.setSettings({ type: "toggle" }));
+    this.requireElement("settings-close").addEventListener("click", () => this.setSettings({ type: "close" }));
+    this.requireElement<HTMLSelectElement>("smoothing-level").addEventListener("change", (event) => {
+      this.setSettings({ type: "smoothing", value: (event.target as HTMLSelectElement).value as SettingsState["smoothing"] });
+      this.finishActiveStroke();
+    });
+    this.requireElement<HTMLInputElement>("drips-enabled").addEventListener("change", (event) => {
+      this.setSettings({ type: "drips", value: (event.target as HTMLInputElement).checked });
+      this.dripAccumulator.reset();
+    });
+    this.requireElement<HTMLInputElement>("brush-radius").addEventListener("input", (event) => {
+      const value = Number.parseInt((event.target as HTMLInputElement).value, 10);
+      this.baseRadius = value;
+      this.setSettings({ type: "radius", value });
+      this.updateRadiusUi();
+    });
+    this.requireElement("radius-reset").addEventListener("click", () => {
+      this.finishActiveStroke();
+      this.baseRadius = this.selectedCap.baseRadius;
+      this.setSettings({ type: "radius", value: null });
+      this.updateRadiusUi();
+    });
+    this.requireElement<HTMLSelectElement>("background-preset").addEventListener("change", (event) => {
+      this.selectedBackground = getSprayBackground((event.target as HTMLSelectElement).value);
+    });
+    this.requireElement<HTMLSelectElement>("anonymity-mode").addEventListener("change", (event) => {
+      this.anonymityMode = (event.target as HTMLSelectElement).value as AnonymityMode;
+    });
+    this.requireElement<HTMLInputElement>("tracking-debug-visible").addEventListener("change", (event) => {
+      this.setSettings({ type: "tracking-debug", value: (event.target as HTMLInputElement).checked });
+      this.updateTrackingVisibility();
     });
 
-    collapseControlsBtn.addEventListener("click", () => {
-      this.controlsCollapsed = true;
-      this.updateUiChrome();
+    this.requireElement("physical-input").addEventListener("click", () => void this.selectInputMode("mouse"));
+    this.requireElement("hand-input").addEventListener("click", () => void this.selectInputMode("spatial"));
+
+    this.requireElement<HTMLInputElement>("audio-file").addEventListener("change", (event) => {
+      const file = (event.target as HTMLInputElement).files?.[0];
+      if (file) this.loadAudioFile(file);
     });
-    openControlsBtn.addEventListener("click", () => {
-      this.controlsCollapsed = false;
-      this.updateUiChrome();
+    this.requireElement("player-play-pause").addEventListener("click", () => void this.togglePlayback());
+    this.requireElement<HTMLInputElement>("player-progress").addEventListener("input", (event) => {
+      if (!this.audioElement || !this.player.duration) return;
+      const ratio = Number.parseInt((event.target as HTMLInputElement).value, 10) / 1000;
+      this.audioElement.currentTime = ratio * this.player.duration;
+      this.setPlayer({ type: "seek", currentTime: this.audioElement.currentTime });
     });
-    performanceModeBtn.addEventListener("click", () => this.togglePerformanceMode());
-    performanceExitBtn.addEventListener("click", () => this.togglePerformanceMode(false));
-    fullscreenBtn.addEventListener("click", () => void this.toggleFullscreen());
-    document.addEventListener("fullscreenchange", () => this.updateFullscreenControl());
+    this.requireElement("player-loop").addEventListener("click", () => this.toggleLoop());
 
-    shakeCanBtn.addEventListener("click", () => void this.playCanRattle());
-
-    clearBtn.addEventListener("click", () => {
-      this.clearPaint();
-    });
-    performanceClearBtn.addEventListener("click", () => this.clearPaint());
-
-    toggleRecordBtn.addEventListener("click", () => void this.toggleRecording());
-    performanceRecordBtn.addEventListener("click", () => void this.toggleRecording());
-
-    manualSprayBtn.addEventListener("mousedown", () => {
-      this.manualSprayOverride = true;
-      this.updateManualSprayIndicators();
-    });
-    window.addEventListener("mouseup", () => {
-      this.manualSprayOverride = false;
-      this.updateManualSprayIndicators();
-    });
-
-    // Audio setup with Web Audio routing for performance recording
-    const audioInput = document.getElementById("audio-file") as HTMLInputElement;
-    const playBtn = document.getElementById("play-audio") as HTMLButtonElement;
-    const stopBtn = document.getElementById("stop-audio") as HTMLButtonElement;
-
-    audioInput.addEventListener("change", (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0];
-      if (file) {
-        if (this.audioElement) this.audioElement.pause();
-        this.audioElement = new Audio(URL.createObjectURL(file));
-
-        this.sprayCanAudio.attachMusicElement(this.audioElement);
-
-        playBtn.disabled = false;
-        stopBtn.disabled = false;
-      }
-    });
-
-    playBtn.addEventListener("click", async () => {
-      await this.sprayCanAudio.unlock();
-      await this.audioElement?.play();
-    });
-
-    stopBtn.addEventListener("click", () => {
-      if (this.audioElement) {
-        this.audioElement.pause();
-        this.audioElement.currentTime = 0;
-      }
+    this.requireElement("toggle-record").addEventListener("click", () => void this.toggleRecording());
+    this.requireElement("shake-can").addEventListener("click", () => void this.playCanRattle());
+    this.requireElement("clear-canvas").addEventListener("click", () => {
+      if (window.confirm("Clear every painted stroke? This cannot be undone.")) this.clearAllStrokes();
     });
   }
 
-  private bindMouseEvents() {
-    this.compositeCanvas.addEventListener("mousedown", (e) => {
-      if (this.inputMode !== "mouse") return;
+  private bindMouseInput(): void {
+    this.compositeCanvas.addEventListener("mousedown", (event) => {
+      if (this.inputMode !== "mouse" || event.button !== 0) return;
+      this.closeToolChoosers();
+      if (this.settings.isOpen) this.setSettings({ type: "close" });
       this.strokeManager.reset();
       this.strokeSmoother.reset();
       this.dripAccumulator.reset();
-      this.activeSprayPoint = { x: e.clientX, y: e.clientY };
+      this.activeSprayPoint = { x: event.clientX, y: event.clientY };
       this.lastDepositTimestamp = 0;
       this.setSprayActive(true);
       this.depositActivePoint(performance.now());
     });
-
-    window.addEventListener("mousemove", (e) => {
-      if (this.inputMode !== "mouse" || !this.isSpraying) return;
-      this.activeSprayPoint = { x: e.clientX, y: e.clientY };
+    window.addEventListener("mousemove", (event) => {
+      if (this.inputMode === "mouse" && this.isSpraying) {
+        this.activeSprayPoint = { x: event.clientX, y: event.clientY };
+      }
     });
-
     window.addEventListener("mouseup", () => {
-      if (this.inputMode !== "mouse") return;
+      if (this.inputMode !== "mouse" || !this.isSpraying) return;
       this.depositActivePoint(performance.now(), true);
       this.setSprayActive(false);
-      this.endStroke();
+      this.resetStrokeInput();
     });
   }
 
-  private bindKeyboardFallback() {
-    window.addEventListener("keydown", (e) => {
-      if (!e.metaKey && !e.ctrlKey && !e.altKey && !e.repeat && e.code === "KeyP") {
-        e.preventDefault();
-        this.togglePerformanceMode();
-        return;
-      }
-      if (!e.metaKey && !e.ctrlKey && !e.altKey && !e.repeat && e.code === "KeyD") {
-        e.preventDefault();
-        this.toggleTrackingDiagnostics();
-        return;
-      }
-      if (e.code === "Space" && !e.repeat) {
-        e.preventDefault();
-        this.manualSprayOverride = true;
-        this.updateManualSprayIndicators();
-      }
-    });
-    window.addEventListener("keyup", (e) => {
-      if (e.code === "Space") {
-        e.preventDefault();
-        this.manualSprayOverride = false;
-        this.updateManualSprayIndicators();
-      }
-    });
+  private bindCommandSystem(): void {
+    window.addEventListener("keydown", (event) => this.commandRegistry.handleKeyboardEvent(event));
   }
 
-  private handleHandTrackingResult(res: HandTrackingResult | null) {
-    if (this.inputMode !== "spatial") return;
+  private renderShortcutReference(): void {
+    const list = this.requireElement("shortcut-list");
+    for (const command of this.commandRegistry.list()) {
+      const row = document.createElement("div");
+      row.className = "shortcut-row";
+      const shortcut = document.createElement("kbd");
+      shortcut.textContent = command.shortcut;
+      const description = document.createElement("span");
+      description.textContent = `${command.label} — ${command.description}`;
+      row.append(shortcut, description);
+      list.append(row);
+    }
+  }
 
-    this.lastHandResult = res;
-    this.updateTrackingOverlay(res);
+  private toggleToolChooser(id: "color-chooser" | "cap-chooser"): void {
+    const target = this.requireElement(id);
+    const shouldOpen = !target.classList.contains("open");
+    this.closeToolChoosers();
+    if (shouldOpen && this.settings.isOpen) this.setSettings({ type: "close" });
+    target.classList.toggle("open", shouldOpen);
+  }
 
-    if (!res) {
-      this.activeSprayPoint = null;
-      this.setSprayActive(this.manualSprayOverride);
+  private closeToolChoosers(): void {
+    this.requireElement("color-chooser").classList.remove("open");
+    this.requireElement("cap-chooser").classList.remove("open");
+  }
+
+  private setSettings(action: SettingsAction): void {
+    this.settings = reduceSettingsState(this.settings, action);
+    if (this.settings.isOpen) this.closeToolChoosers();
+    this.updateSettingsUi();
+  }
+
+  private updateSettingsUi(): void {
+    const panel = this.requireElement("settings-panel");
+    panel.classList.toggle("open", this.settings.isOpen);
+    panel.setAttribute("aria-hidden", (!this.settings.isOpen).toString());
+    const toggle = this.requireElement("settings-toggle");
+    toggle.setAttribute("aria-pressed", this.settings.isOpen.toString());
+    toggle.setAttribute("aria-label", this.settings.isOpen ? "Close settings" : "Open settings");
+    this.requireElement<HTMLSelectElement>("smoothing-level").value = this.settings.smoothing;
+    this.requireElement<HTMLInputElement>("drips-enabled").checked = this.settings.dripsEnabled;
+    this.requireElement<HTMLInputElement>("tracking-debug-visible").checked = this.settings.trackingDebugVisible;
+    this.updateRadiusUi();
+    this.updateTrackingVisibility();
+  }
+
+  private updateRadiusUi(): void {
+    this.requireElement<HTMLInputElement>("brush-radius").value = this.baseRadius.toString();
+    this.requireElement("radius-val").textContent = this.baseRadius.toString();
+    this.requireElement("radius-reset").textContent = this.settings.radiusOverride === null ? "Using cap default" : "Use cap default";
+  }
+
+  private async selectInputMode(mode: InputSourceMode): Promise<void> {
+    this.finishActiveStroke();
+    this.inputMode = mode;
+    this.lastHandResult = null;
+    this.activeSprayPoint = null;
+    this.updateTrackingOverlay(null);
+    this.updateInputModeUi(mode === "spatial" ? "STARTING…" : "READY");
+
+    if (mode === "mouse") {
+      if (this.webcamActive) await this.handTracker.stop();
+      this.webcamActive = false;
+      this.updateInputModeUi("READY");
+      this.updateTrackingVisibility();
       return;
     }
 
-    this.setSprayActive(res.isPinching || this.manualSprayOverride);
+    if (this.webcamActive) {
+      this.updateInputModeUi("CAMERA ON");
+      return;
+    }
 
-    const px = res.x * this.compositeCanvas.width;
-    const py = res.y * this.compositeCanvas.height;
-    this.activeSprayPoint = { x: px, y: py };
+    const handButton = this.requireElement<HTMLButtonElement>("hand-input");
+    handButton.disabled = true;
+    try {
+      this.resetTrackingDiagnostics();
+      await this.sprayCanAudio.unlock();
+      await this.handTracker.initialize(
+        (result) => this.handleHandTrackingResult(result),
+        (diagnostics) => this.handleHandTrackingDiagnostics(diagnostics),
+      );
+      await this.handTracker.start();
+      this.webcamActive = true;
+      this.updateInputModeUi("CAMERA ON");
+    } catch {
+      this.webcamActive = false;
+      this.updateInputModeUi("RETRY CAMERA", true);
+    } finally {
+      handButton.disabled = false;
+      this.updateTrackingVisibility();
+    }
+  }
+
+  private updateInputModeUi(status: string, error = false): void {
+    const physical = this.requireElement("physical-input");
+    const hand = this.requireElement("hand-input");
+    const isHand = this.inputMode === "spatial";
+    physical.classList.toggle("selected", !isHand);
+    hand.classList.toggle("selected", isHand);
+    physical.setAttribute("aria-pressed", (!isHand).toString());
+    hand.setAttribute("aria-pressed", isHand.toString());
+    const statusElement = this.requireElement("input-status");
+    statusElement.textContent = status;
+    statusElement.classList.toggle("on", status === "CAMERA ON");
+    statusElement.classList.toggle("error", error);
+  }
+
+  private handleHandTrackingResult(result: HandTrackingResult | null): void {
+    if (this.inputMode !== "spatial") return;
+    this.lastHandResult = result;
+    this.updateTrackingOverlay(result);
+    if (!result) {
+      this.activeSprayPoint = null;
+      this.setSprayActive(false);
+      this.resetStrokeInput(false);
+      return;
+    }
+
+    const x = result.x * this.compositeCanvas.width;
+    const y = result.y * this.compositeCanvas.height;
+    this.activeSprayPoint = { x, y };
+    this.setTrackingStage("mapping", "pass", `${Math.round(x)}, ${Math.round(y)}`);
     if (!this.mappedPointLogged) {
       this.mappedPointLogged = true;
-      console.info(
-        `[Spatial Spraypaint] Fingertip mapped to canvas (${Math.round(px)}, ${Math.round(py)})`
-      );
+      console.info(`[Spatial Spraypaint] Fingertip mapped to canvas (${Math.round(x)}, ${Math.round(y)})`);
     }
-    this.setTrackingStage("mapping", "pass", `${Math.round(px)}, ${Math.round(py)}`);
 
-    if (this.isSpraying) {
+    this.setSprayActive(result.isPinching);
+    if (result.isPinching) {
       this.setTrackingStage("spray", "pass", "POINT RECEIVED");
       if (!this.sprayDeliveryLogged) {
         this.sprayDeliveryLogged = true;
         console.info("[Spatial Spraypaint] Spray engine received tracked point");
       }
     } else {
-      this.endStroke(false);
+      this.resetStrokeInput(false);
     }
   }
 
-  private handleHandTrackingDiagnostics(diagnostics: HandTrackingDiagnostics) {
-    this.setTrackingStage(
-      "library",
-      diagnostics.libraryLoaded ? "pass" : "waiting",
-      diagnostics.libraryLoaded ? "LOADED" : "WAITING"
-    );
-    this.setTrackingStage(
-      "frames",
-      diagnostics.videoFramesReceived > 0 ? "pass" : "waiting",
-      diagnostics.videoFramesReceived > 0
-        ? diagnostics.videoFramesReceived.toString()
-        : "WAITING"
-    );
-    this.setTrackingStage(
-      "callback",
-      diagnostics.resultsCallbacks > 0 ? "pass" : "waiting",
-      diagnostics.resultsCallbacks > 0 ? diagnostics.resultsCallbacks.toString() : "WAITING"
-    );
-    this.setTrackingStage(
-      "landmarks",
-      diagnostics.landmarksDetected ? "pass" : "waiting",
-      diagnostics.landmarksDetected ? "DETECTED" : "WAITING"
-    );
+  private handleHandTrackingDiagnostics(diagnostics: HandTrackingDiagnostics): void {
+    this.setTrackingStage("library", diagnostics.libraryLoaded ? "pass" : "waiting", diagnostics.libraryLoaded ? "LOADED" : "WAITING");
+    this.setTrackingStage("frames", diagnostics.videoFramesReceived > 0 ? "pass" : "waiting", diagnostics.videoFramesReceived > 0 ? diagnostics.videoFramesReceived.toString() : "WAITING");
+    this.setTrackingStage("callback", diagnostics.resultsCallbacks > 0 ? "pass" : "waiting", diagnostics.resultsCallbacks > 0 ? diagnostics.resultsCallbacks.toString() : "WAITING");
+    this.setTrackingStage("landmarks", diagnostics.landmarksDetected ? "pass" : "waiting", diagnostics.landmarksDetected ? "DETECTED" : "WAITING");
 
-    const trackerStatus = document.getElementById("tracker-runtime-status");
-    if (trackerStatus) {
-      if (diagnostics.error) trackerStatus.textContent = "TRACKER ERROR";
-      else if (diagnostics.cameraStarted) trackerStatus.textContent = "CAMERA RUNNING";
-      else if (diagnostics.trackerInitialized) trackerStatus.textContent = "TRACKER READY";
-      else if (diagnostics.libraryLoaded) trackerStatus.textContent = "LOADING MODEL";
-      else trackerStatus.textContent = "TRACKER IDLE";
-    }
+    const status = diagnostics.error ? "TRACKER ERROR" : diagnostics.cameraStarted ? "CAMERA ON" : diagnostics.trackerInitialized ? "TRACKER READY" : diagnostics.libraryLoaded ? "LOADING MODEL" : "CAMERA OFF";
+    this.updateInputModeUi(status, Boolean(diagnostics.error));
+    this.requireElement("tracking-debug-runtime").textContent = status;
 
-    const errorElement = document.getElementById("tracking-error");
-    if (errorElement) {
-      errorElement.textContent = diagnostics.error ?? "";
-      errorElement.classList.toggle("visible", Boolean(diagnostics.error));
-    }
-    if (diagnostics.error && !this.performanceMode) {
-      this.trackingDiagnosticsVisible = true;
-      this.updateUiChrome();
-    }
-    const compactTrackingStatus = document.getElementById("performance-tracking-status");
-    if (compactTrackingStatus) {
-      compactTrackingStatus.textContent = diagnostics.error
-        ? "TRACKER ERROR"
-        : diagnostics.cameraStarted
-          ? "TRACKING"
-          : "NO CAMERA";
-      compactTrackingStatus.classList.toggle("error", Boolean(diagnostics.error));
+    const errorElement = this.requireElement("tracking-error");
+    errorElement.textContent = diagnostics.error ?? "";
+    errorElement.classList.toggle("visible", Boolean(diagnostics.error));
+    if (diagnostics.error) {
+      this.settings = reduceSettingsState(this.settings, { type: "tracking-debug", value: true });
+      this.settings = reduceSettingsState(this.settings, { type: "open" });
+      this.updateSettingsUi();
     }
   }
 
-  private updateTrackingOverlay(res: HandTrackingResult | null) {
-    const cursor = document.getElementById("tracking-cursor");
-    const handStatus = document.getElementById("hand-detection-status");
-    const confidence = document.getElementById("tracking-confidence");
-    const pinchDistance = document.getElementById("pinch-distance");
-    const pinchState = document.getElementById("pinch-state");
-    const manualState = document.getElementById("manual-state");
-
-    const handDetected = Boolean(res);
-    if (handStatus) {
-      handStatus.textContent = handDetected ? "HAND DETECTED" : "NO HAND";
-      handStatus.classList.toggle("detected", handDetected);
+  private updateTrackingOverlay(result: HandTrackingResult | null): void {
+    const detected = Boolean(result);
+    const cursor = this.requireElement("tracking-cursor");
+    cursor.classList.toggle("detected", detected);
+    cursor.classList.toggle("pinching", Boolean(result?.isPinching));
+    cursor.classList.toggle("spraying", Boolean(result?.isPinching));
+    if (result) {
+      cursor.style.left = `${result.x * 100}%`;
+      cursor.style.top = `${result.y * 100}%`;
     }
-    if (confidence) confidence.textContent = res ? `${(res.confidence * 100).toFixed(1)}%` : "—";
-    if (pinchDistance) pinchDistance.textContent = res ? res.pinchDist.toFixed(3) : "—";
-    if (pinchState) {
-      pinchState.textContent = res?.isPinching ? "ACTIVE" : "OPEN";
-      pinchState.classList.toggle("active", Boolean(res?.isPinching));
-    }
-    if (manualState) {
-      manualState.textContent = this.manualSprayOverride ? "ACTIVE" : "OFF";
-      manualState.classList.toggle("active", this.manualSprayOverride);
-    }
-
-    this.setTrackingStage(
-      "pinch",
-      res?.isPinching ? "active" : res ? "pass" : "waiting",
-      res?.isPinching ? "ACTIVE" : res ? "OPEN" : "WAITING"
-    );
-
-    if (!cursor) return;
-    cursor.classList.toggle("detected", handDetected);
-    cursor.classList.toggle("pinching", Boolean(res?.isPinching));
-    cursor.classList.toggle("manual", this.manualSprayOverride);
-    cursor.classList.toggle(
-      "spraying",
-      Boolean(res && (res.isPinching || this.manualSprayOverride))
-    );
-    if (res) {
-      cursor.style.left = `${res.x * 100}%`;
-      cursor.style.top = `${res.y * 100}%`;
-    }
+    const handStatus = this.requireElement("hand-detection-status");
+    handStatus.textContent = detected ? "HAND DETECTED" : "NO HAND";
+    handStatus.classList.toggle("detected", detected);
+    this.requireElement("tracking-confidence").textContent = result ? `${(result.confidence * 100).toFixed(1)}%` : "—";
+    this.requireElement("pinch-distance").textContent = result ? result.pinchDist.toFixed(3) : "—";
+    const pinch = this.requireElement("pinch-state");
+    pinch.textContent = result?.isPinching ? "ACTIVE" : "OPEN";
+    pinch.classList.toggle("active", Boolean(result?.isPinching));
+    this.setTrackingStage("pinch", result?.isPinching ? "active" : result ? "pass" : "waiting", result?.isPinching ? "ACTIVE" : result ? "OPEN" : "WAITING");
   }
 
-  private updateManualSprayIndicators() {
-    if (this.inputMode !== "spatial") return;
-    this.setSprayActive(Boolean(this.manualSprayOverride || this.lastHandResult?.isPinching));
-    this.updateTrackingOverlay(this.lastHandResult);
+  private updateTrackingVisibility(): void {
+    this.requireElement("tracking-overlay").classList.toggle("visible", this.inputMode === "spatial");
+    this.requireElement("tracking-debug-panel").classList.toggle("visible", this.inputMode === "spatial" && this.settings.trackingDebugVisible);
   }
 
-  private updateSprayStatus() {
-    const statusBadge = document.getElementById("spray-status");
-    const reason = this.manualSprayOverride
-      ? "SPACE"
-      : this.lastHandResult?.isPinching
-        ? "PINCH"
-        : this.inputMode === "mouse" && this.isSpraying
-          ? "MOUSE"
-        : null;
-    if (statusBadge) {
-      statusBadge.textContent = reason ? `SPRAYING · ${reason}` : "OFF";
-      statusBadge.classList.toggle("on", Boolean(reason));
-    }
-    const compactSprayStatus = document.getElementById("performance-spray-status");
-    if (compactSprayStatus) {
-      compactSprayStatus.textContent = reason ? `SPRAY ${reason}` : "SPRAY OFF";
-      compactSprayStatus.classList.toggle("on", Boolean(reason));
-    }
-    const audioStatus = document.getElementById("spray-audio-status");
-    if (audioStatus) {
-      audioStatus.textContent = this.isSpraying ? "HISS" : "QUIET";
-      audioStatus.classList.toggle("on", this.isSpraying);
-      audioStatus.classList.remove("error");
-    }
-  }
-
-  private updateTrackingOverlayVisibility() {
-    const overlay = document.getElementById("tracking-overlay");
-    const panel = document.getElementById("tracking-debug-panel");
-    overlay?.classList.toggle("visible", this.inputMode === "spatial");
-    panel?.classList.toggle(
-      "visible",
-      this.inputMode === "spatial" && this.trackingDiagnosticsVisible && !this.performanceMode,
-    );
-  }
-
-  private setTrackingStage(stage: string, state: string, value: string) {
+  private setTrackingStage(stage: string, state: string, value: string): void {
     const row = document.querySelector<HTMLElement>(`[data-tracking-stage="${stage}"]`);
     if (!row) return;
     row.dataset.state = state;
@@ -524,130 +421,195 @@ class SpatialSpraypaintApp {
     if (valueElement) valueElement.textContent = value;
   }
 
-  private resetTrackingDiagnostics() {
+  private resetTrackingDiagnostics(): void {
     this.mappedPointLogged = false;
     this.sprayDeliveryLogged = false;
     this.lastHandResult = null;
     this.updateTrackingOverlay(null);
-    for (const stage of [
-      "library",
-      "frames",
-      "callback",
-      "landmarks",
-      "mapping",
-      "pinch",
-      "spray",
-    ]) {
+    for (const stage of ["library", "frames", "callback", "landmarks", "mapping", "pinch", "spray"]) {
       this.setTrackingStage(stage, "waiting", "WAITING");
     }
-    const errorElement = document.getElementById("tracking-error");
-    if (errorElement) {
-      errorElement.textContent = "";
-      errorElement.classList.remove("visible");
-    }
+    const errorElement = this.requireElement("tracking-error");
+    errorElement.textContent = "";
+    errorElement.classList.remove("visible");
   }
 
-  private setSprayActive(active: boolean) {
+  private setSprayActive(active: boolean): void {
+    if (this.isSpraying === active) return;
     this.isSpraying = active;
-    this.updateSprayStatus();
+    if (active) {
+      this.strokeHistory.begin({ color: this.selectedColor, capId: this.selectedCap.id });
+    } else {
+      this.strokeHistory.finalize();
+      this.updateUndoControl();
+    }
+    const audioStatus = this.requireElement("spray-audio-status");
+    audioStatus.textContent = active ? "HISS" : "QUIET";
+    audioStatus.classList.toggle("on", active);
     void this.sprayCanAudio.setSpraying(active).catch((error) => {
       console.error("[Spatial Spraypaint] Spray audio failed", error);
-      const audioStatus = document.getElementById("spray-audio-status");
-      if (audioStatus) {
-        audioStatus.textContent = "AUDIO ERROR";
-        audioStatus.classList.add("error");
-      }
+      audioStatus.textContent = "AUDIO ERROR";
+      audioStatus.classList.add("error");
     });
   }
 
-  private toggleTrackingDiagnostics() {
-    this.trackingDiagnosticsVisible = !this.trackingDiagnosticsVisible;
-    this.updateUiChrome();
+  private finishActiveStroke(): void {
+    if (this.isSpraying) this.setSprayActive(false);
+    this.resetStrokeInput();
   }
 
-  private togglePerformanceMode(force?: boolean) {
-    this.performanceMode = force ?? !this.performanceMode;
-    if (!this.performanceMode) this.controlsCollapsed = false;
-    this.updateUiChrome();
+  private resetStrokeInput(clearActivePoint = true): void {
+    this.strokeManager.reset();
+    this.strokeSmoother.reset();
+    this.dripAccumulator.reset();
+    if (clearActivePoint) this.activeSprayPoint = null;
   }
 
-  private updateUiChrome() {
-    const app = document.getElementById("app");
-    const debugToggle = document.getElementById("toggle-tracking-debug") as HTMLButtonElement;
-    const performanceToggle = document.getElementById(
-      "toggle-performance-mode",
-    ) as HTMLButtonElement;
-
-    app?.classList.toggle("controls-collapsed", this.controlsCollapsed);
-    app?.classList.toggle("performance-mode", this.performanceMode);
-    debugToggle.textContent = this.trackingDiagnosticsVisible
-      ? "Hide Tracking Debug (D)"
-      : "Show Tracking Debug (D)";
-    debugToggle.setAttribute("aria-pressed", this.trackingDiagnosticsVisible.toString());
-    performanceToggle.textContent = this.performanceMode
-      ? "Exit Performance Mode (P)"
-      : "Performance Mode (P)";
-    performanceToggle.setAttribute("aria-pressed", this.performanceMode.toString());
-    this.updateTrackingOverlayVisibility();
+  private depositActivePoint(now: number, force = false): void {
+    if (!this.isSpraying || !this.activeSprayPoint || (!force && now - this.lastDepositTimestamp < 28)) return;
+    this.lastDepositTimestamp = now;
+    const smoothed = this.strokeSmoother.smooth(this.activeSprayPoint, this.settings.smoothing);
+    const { point, interpolated, previous } = this.strokeManager.createPoint(smoothed.x, smoothed.y, this.baseRadius, 0, now);
+    let segmentStart = previous;
+    for (const segmentEnd of [...interpolated, point]) {
+      this.brushEngine.renderSegment(this.paintCtx, segmentStart, segmentEnd, this.selectedColor, this.selectedCap);
+      this.strokeHistory.appendPoint(segmentEnd);
+      segmentStart = segmentEnd;
+    }
+    const drip = this.dripAccumulator.observe({
+      x: point.x,
+      y: point.y,
+      radius: point.width,
+      timestamp: now,
+      dripTendency: this.selectedCap.dripTendency,
+      enabled: this.settings.dripsEnabled,
+    });
+    if (drip) {
+      this.brushEngine.startDrip(drip, this.selectedColor, now);
+      this.strokeHistory.appendDrip(drip);
+    }
   }
 
-  private updateCapControls() {
-    const capSelect = document.getElementById("cap-preset") as HTMLSelectElement;
-    const performanceCapSelect = document.getElementById("performance-cap-preset") as HTMLSelectElement;
-    const radiusInput = document.getElementById("brush-radius") as HTMLInputElement;
-    const radiusValue = document.getElementById("radius-val");
-    const compactCapStatus = document.getElementById("performance-cap-status");
-    capSelect.value = this.selectedCap.id;
-    performanceCapSelect.value = this.selectedCap.id;
-    radiusInput.value = this.baseRadius.toString();
-    if (radiusValue) radiusValue.textContent = this.baseRadius.toString();
-    if (compactCapStatus) compactCapStatus.textContent = this.selectedCap.name.toUpperCase();
+  private undoLastStroke(): void {
+    this.finishActiveStroke();
+    if (!this.strokeHistory.canUndo()) return;
+    const retainedStrokes = this.strokeHistory.undo();
+    this.replayStrokes(retainedStrokes);
+    this.updateUndoControl();
   }
 
-  private updateBackgroundControls() {
-    const backgroundSelect = document.getElementById("background-preset") as HTMLSelectElement;
-    const performanceBackgroundSelect = document.getElementById("performance-background-preset") as HTMLSelectElement;
-    backgroundSelect.value = this.selectedBackground.id;
-    performanceBackgroundSelect.value = this.selectedBackground.id;
+  private replayStrokes(strokes: RecordedStroke[]): void {
+    this.paintCtx.clearRect(0, 0, this.paintCanvas.width, this.paintCanvas.height);
+    this.brushEngine.clear();
+    for (const stroke of strokes) {
+      const cap = getSprayCapPreset(stroke.capId);
+      let previous = null;
+      for (const point of stroke.points) {
+        this.brushEngine.renderSegment(this.paintCtx, previous, point, stroke.color, cap);
+        previous = point;
+      }
+      for (const drip of stroke.drips) this.brushEngine.renderCompletedDrip(this.paintCtx, drip, stroke.color);
+    }
   }
 
-  private async toggleFullscreen() {
+  private updateUndoControl(): void {
+    const button = this.requireElement<HTMLButtonElement>("undo-stroke");
+    button.disabled = !this.strokeHistory.canUndo();
+    button.textContent = "↶";
+    button.setAttribute("title", this.strokeHistory.canUndo() ? `Undo last stroke · ${this.strokeHistory.size()} available · ⌘/Ctrl Z` : "Undo last stroke · ⌘/Ctrl Z");
+  }
+
+  private clearAllStrokes(): void {
+    this.finishActiveStroke();
+    this.paintCtx.clearRect(0, 0, this.paintCanvas.width, this.paintCanvas.height);
+    this.brushEngine.clear();
+    this.strokeHistory.clear();
+    this.updateUndoControl();
+  }
+
+  private loadAudioFile(file: File): void {
+    this.audioElement?.pause();
+    if (this.audioObjectUrl) URL.revokeObjectURL(this.audioObjectUrl);
+    this.audioObjectUrl = URL.createObjectURL(file);
+    const audio = new Audio(this.audioObjectUrl);
+    audio.loop = this.player.loop;
+    this.audioElement = audio;
+    this.sprayCanAudio.attachMusicElement(audio);
+    this.setPlayer({ type: "load", trackName: file.name });
+    audio.addEventListener("loadedmetadata", () => this.setPlayer({ type: "time", currentTime: audio.currentTime, duration: Number.isFinite(audio.duration) ? audio.duration : 0 }));
+    audio.addEventListener("timeupdate", () => this.setPlayer({ type: "time", currentTime: audio.currentTime, duration: Number.isFinite(audio.duration) ? audio.duration : 0 }));
+    audio.addEventListener("play", () => this.setPlayer({ type: "play" }));
+    audio.addEventListener("pause", () => this.setPlayer({ type: "pause" }));
+    audio.addEventListener("ended", () => this.setPlayer({ type: "ended" }));
+    audio.addEventListener("error", () => {
+      console.error("[Spatial Spraypaint] The selected audio track could not be played.");
+      this.requireElement("player-track-name").textContent = "Track could not be played";
+    });
+  }
+
+  private setPlayer(action: PlayerAction): void {
+    this.player = reducePlayerState(this.player, action);
+    this.updatePlayerUi();
+  }
+
+  private async togglePlayback(): Promise<void> {
+    if (!this.audioElement) return;
     try {
-      if (document.fullscreenElement) await document.exitFullscreen();
-      else await document.documentElement.requestFullscreen();
+      if (this.audioElement.paused) {
+        await this.sprayCanAudio.unlock();
+        await this.audioElement.play();
+      } else {
+        this.audioElement.pause();
+      }
     } catch (error) {
-      console.warn("[Spatial Spraypaint] Fullscreen is unavailable in this browser", error);
+      console.error("[Spatial Spraypaint] Session soundtrack playback failed", error);
     }
   }
 
-  private updateFullscreenControl() {
-    const fullscreenButton = document.getElementById("toggle-fullscreen");
-    if (fullscreenButton) {
-      fullscreenButton.textContent = document.fullscreenElement
-        ? "Exit Fullscreen"
-        : "Enter Fullscreen";
-    }
+  private toggleLoop(): void {
+    this.setPlayer({ type: "toggle-loop" });
+    if (this.audioElement) this.audioElement.loop = this.player.loop;
   }
 
-  private async playCanRattle() {
-    const status = document.getElementById("spray-audio-status");
+  private updatePlayerUi(): void {
+    this.requireElement("player-island").classList.toggle("empty", this.player.status === "empty");
+    this.requireElement("player-track-name").textContent = this.player.trackName;
+    const playButton = this.requireElement<HTMLButtonElement>("player-play-pause");
+    playButton.disabled = this.player.status === "empty";
+    playButton.textContent = this.player.status === "playing" ? "Ⅱ" : "▶";
+    playButton.setAttribute("aria-label", this.player.status === "playing" ? "Pause soundtrack" : "Play soundtrack");
+    const progress = this.requireElement<HTMLInputElement>("player-progress");
+    progress.disabled = this.player.status === "empty" || this.player.duration <= 0;
+    progress.value = this.player.duration > 0 ? Math.round((this.player.currentTime / this.player.duration) * 1000).toString() : "0";
+    this.requireElement("player-time").textContent = `${this.formatTime(this.player.currentTime)} / ${this.formatTime(this.player.duration)}`;
+    const loopButton = this.requireElement("player-loop");
+    loopButton.setAttribute("aria-pressed", this.player.loop.toString());
+    loopButton.textContent = "↻";
+    loopButton.setAttribute("aria-label", this.player.loop ? "Disable soundtrack loop" : "Enable soundtrack loop");
+  }
+
+  private formatTime(seconds: number): string {
+    const safeSeconds = Number.isFinite(seconds) ? Math.max(0, Math.floor(seconds)) : 0;
+    return `${Math.floor(safeSeconds / 60)}:${(safeSeconds % 60).toString().padStart(2, "0")}`;
+  }
+
+  private async playCanRattle(): Promise<void> {
     try {
       await this.sprayCanAudio.playRattle();
-      if (status) {
-        status.textContent = "RATTLE";
-        status.classList.add("on");
-      }
-      window.setTimeout(() => this.updateSprayStatus(), 480);
+      const status = this.requireElement("spray-audio-status");
+      status.textContent = "RATTLE";
+      status.classList.add("on");
+      window.setTimeout(() => {
+        status.textContent = this.isSpraying ? "HISS" : "QUIET";
+        status.classList.toggle("on", this.isSpraying);
+      }, 480);
     } catch (error) {
       console.error("[Spatial Spraypaint] Can rattle audio failed", error);
-      if (status) {
-        status.textContent = "AUDIO ERROR";
-        status.classList.add("error");
-      }
     }
   }
 
-  private async toggleRecording() {
+  private async toggleRecording(): Promise<void> {
+    const button = this.requireElement<HTMLButtonElement>("toggle-record");
     if (!this.recorder.getIsRecording()) {
       let audioStream: MediaStream | undefined;
       try {
@@ -657,129 +619,52 @@ class SpatialSpraypaintApp {
         console.error("[Spatial Spraypaint] Recording audio mix unavailable", error);
       }
       this.recorder.start(this.compositeCanvas, audioStream);
-      console.info(
-        `[Spatial Spraypaint] Recording started (${audioStream?.getAudioTracks().length ?? 0} mixed audio track)`,
-      );
-      this.updateRecordingControls(true);
+      console.info(`[Spatial Spraypaint] Recording started (${audioStream?.getAudioTracks().length ?? 0} mixed audio track)`);
+      button.classList.add("recording");
+      button.setAttribute("aria-label", "Stop and save recording");
+      button.setAttribute("title", "Stop and save recording · R");
       return;
     }
 
     const blob = await this.recorder.stop();
-    console.info(
-      `[Spatial Spraypaint] Recording export ready (${blob.size} bytes, ${blob.type})`,
-    );
-    this.updateRecordingControls(false);
+    console.info(`[Spatial Spraypaint] Recording export ready (${blob.size} bytes, ${blob.type})`);
+    button.classList.remove("recording");
+    button.setAttribute("aria-label", "Start recording");
+    button.setAttribute("title", "Record · R");
     this.downloadBlob(blob, `spatial-spraypaint-${Date.now()}.webm`);
   }
 
-  private updateRecordingControls(recording: boolean) {
-    const recordButton = document.getElementById("toggle-record") as HTMLButtonElement;
-    const compactRecordButton = document.getElementById(
-      "performance-record-toggle",
-    ) as HTMLButtonElement;
-    const compactStatus = document.getElementById("performance-record-status");
-    recordButton.textContent = recording ? "Stop & Save Video" : "Record Performance";
-    recordButton.classList.toggle("active", recording);
-    compactRecordButton.textContent = recording ? "STOP + SAVE" : "RECORD";
-    compactRecordButton.classList.toggle("active", recording);
-    if (compactStatus) {
-      compactStatus.textContent = recording ? "REC" : "READY";
-      compactStatus.classList.toggle("recording", recording);
-    }
+  private downloadBlob(blob: Blob, filename: string): void {
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
-  private clearPaint() {
-    this.paintCtx.clearRect(0, 0, this.paintCanvas.width, this.paintCanvas.height);
-    this.brushEngine.clear();
-    this.endStroke();
-  }
-
-  private endStroke(clearActivePoint = true) {
-    this.strokeManager.reset();
-    this.strokeSmoother.reset();
-    this.dripAccumulator.reset();
-    if (clearActivePoint) this.activeSprayPoint = null;
-  }
-
-  private depositActivePoint(now: number, force = false) {
-    if (!this.isSpraying || !this.activeSprayPoint || (!force && now - this.lastDepositTimestamp < 28)) return;
-    this.lastDepositTimestamp = now;
-    this.processPoint(this.activeSprayPoint.x, this.activeSprayPoint.y, now);
-  }
-
-  private processPoint(x: number, y: number, timestamp: number) {
-    const smoothed = this.strokeSmoother.smooth({ x, y }, this.smoothingLevel);
-    const { point, interpolated, previous } = this.strokeManager.createPoint(
-      smoothed.x,
-      smoothed.y,
-      this.baseRadius,
-      0,
-      timestamp,
-    );
-    let segmentStart = previous;
-    for (const segmentEnd of [...interpolated, point]) {
-      this.brushEngine.renderSegment(
-        this.paintCtx,
-        segmentStart,
-        segmentEnd,
-        this.selectedColor,
-        this.selectedCap,
-      );
-      segmentStart = segmentEnd;
-    }
-
-    const drip = this.dripAccumulator.observe({
-      x: point.x,
-      y: point.y,
-      radius: point.width,
-      timestamp,
-      dripTendency: this.selectedCap.dripTendency,
-      enabled: this.dripsEnabled,
-    });
-    if (drip) this.brushEngine.startDrip(drip, this.selectedColor, timestamp);
-  }
-
-  private startRenderLoop() {
+  private startRenderLoop(): void {
     const render = () => {
       const now = performance.now();
       this.depositActivePoint(now);
       this.brushEngine.advanceDrips(this.paintCtx, now);
-
-      // 1. Clear composite canvas
       this.compositeCtx.clearRect(0, 0, this.compositeCanvas.width, this.compositeCanvas.height);
-
       this.compositeCtx.fillStyle = this.selectedBackground.color;
       this.compositeCtx.fillRect(0, 0, this.compositeCanvas.width, this.compositeCanvas.height);
-
-      // 2. Draw camera/background layer onto composite
       if (this.webcamActive && this.inputMode === "spatial") {
         this.anonymityProcessor.processFrame(
           this.compositeCtx,
           this.handTracker.getVideoElement(),
           this.anonymityMode,
           this.compositeCanvas.width,
-          this.compositeCanvas.height
+          this.compositeCanvas.height,
         );
       }
-
-      // 3. Composite persistent spray paint layer on top
       this.compositeCtx.drawImage(this.paintCanvas, 0, 0);
-
       requestAnimationFrame(render);
     };
     requestAnimationFrame(render);
   }
-
-  private downloadBlob(blob: Blob, filename: string) {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
 }
 
-window.addEventListener("DOMContentLoaded", () => {
-  new SpatialSpraypaintApp();
-});
+window.addEventListener("DOMContentLoaded", () => new SpatialSpraypaintApp());

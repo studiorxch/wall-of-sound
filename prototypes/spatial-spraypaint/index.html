@@ -3,585 +3,279 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>StudioRich - Spatial Spraypaint V0.3</title>
+  <title>StudioRich — Spatial Spraypaint V0.4</title>
   <style>
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
-    body, html {
-      width: 100%;
-      height: 100%;
-      overflow: hidden;
-      background: #0d0d11;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      color: #e0e0e0;
-    }
-    #app {
-      position: relative;
-      width: 100vw;
-      height: 100vh;
-      display: flex;
-    }
-    #viewport-container {
-      position: relative;
-      flex: 1;
-      height: 100%;
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      color-scheme: dark;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: #f4f3f0;
       background: #050508;
-      display: flex;
-      align-items: center;
-      justify-content: center;
     }
-    #composite-canvas {
+    html, body, #app { width: 100%; height: 100%; overflow: hidden; }
+    button, select, input { font: inherit; }
+    button, select, .file-button {
+      min-height: 34px;
+      border: 1px solid rgba(255,255,255,.16);
+      border-radius: 9px;
+      background: rgba(24,24,31,.94);
+      color: #f8f7f3;
+    }
+    button, .file-button { padding: 7px 10px; cursor: pointer; font-weight: 700; }
+    button:hover, .file-button:hover { border-color: rgba(255,255,255,.34); background: rgba(40,40,51,.98); }
+    button:disabled { cursor: default; opacity: .42; }
+    button.active, button[aria-pressed="true"] { border-color: #ff496f; color: #ff88a1; }
+    select { padding: 7px 30px 7px 9px; }
+    input[type="range"] { accent-color: #ff365f; }
+    #app { position: relative; background: #050508; }
+    #composite-canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
+
+    .island {
       position: absolute;
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
-      z-index: 1;
-    }
-    #tracking-overlay {
-      position: absolute;
-      inset: 0;
-      z-index: 6;
-      display: none;
-      pointer-events: none;
-    }
-    #tracking-overlay.visible {
-      display: block;
-    }
-    #tracking-cursor {
-      position: absolute;
-      width: 28px;
-      height: 28px;
-      margin: -14px 0 0 -14px;
-      border: 3px solid #ffffff;
-      border-radius: 50%;
-      opacity: 0;
-      transform: scale(0.8);
-      transition: opacity 80ms linear, transform 80ms ease, border-color 80ms ease;
-      box-shadow: 0 0 0 2px rgba(5, 5, 8, 0.8), 0 0 18px rgba(255, 255, 255, 0.65);
-    }
-    #tracking-cursor::after {
-      content: "";
-      position: absolute;
-      inset: 7px;
-      border-radius: 50%;
-      background: #ffffff;
-      opacity: 0.45;
-    }
-    #tracking-cursor.detected {
-      opacity: 1;
-      transform: scale(1);
-    }
-    #tracking-cursor.pinching {
-      border-color: #ff2a5f;
-      transform: scale(1.3);
-      box-shadow: 0 0 0 3px rgba(255, 42, 95, 0.25), 0 0 28px rgba(255, 42, 95, 0.9);
-    }
-    #tracking-cursor.manual {
-      border-color: #00f0ff;
-      box-shadow: 0 0 0 3px rgba(0, 240, 255, 0.25), 0 0 28px rgba(0, 240, 255, 0.9);
-    }
-    #tracking-cursor.spraying::after {
-      background: #ff2a5f;
-      opacity: 1;
-    }
-    #tracking-debug-panel {
-      position: absolute;
-      top: 16px;
-      right: 16px;
-      width: 272px;
-      display: none;
-      padding: 14px;
-      border: 1px solid rgba(255, 255, 255, 0.16);
-      border-radius: 10px;
-      background: rgba(7, 8, 13, 0.88);
-      backdrop-filter: blur(12px);
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
-    }
-    #tracking-debug-panel.visible {
-      display: block;
-    }
-    .tracking-debug-title,
-    .tracking-metric,
-    .tracking-stage {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-    }
-    .tracking-debug-title {
-      padding-bottom: 9px;
-      margin-bottom: 8px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.12);
-      font-size: 10px;
-      font-weight: 800;
-      letter-spacing: 0.9px;
-      color: #a7a7ba;
-    }
-    #hand-detection-status {
-      color: #ff8b9f;
-    }
-    #hand-detection-status.detected {
-      color: #00ff80;
-    }
-    .tracking-metric {
-      padding: 3px 0;
-      font-size: 11px;
-      color: #a0a0b0;
-    }
-    .tracking-metric strong {
-      color: #ffffff;
-      font-variant-numeric: tabular-nums;
-    }
-    .tracking-metric strong.active {
-      color: #ff2a5f;
-    }
-    .tracking-stages {
-      display: grid;
-      gap: 4px;
-      margin-top: 10px;
-      padding-top: 9px;
-      border-top: 1px solid rgba(255, 255, 255, 0.12);
-    }
-    .tracking-stage {
-      font-size: 10px;
-      color: #707080;
-    }
-    .tracking-stage-value {
-      color: #888896;
-      font-weight: 800;
-      font-variant-numeric: tabular-nums;
-    }
-    .tracking-stage[data-state="pass"] .tracking-stage-value {
-      color: #00ff80;
-    }
-    .tracking-stage[data-state="active"] .tracking-stage-value {
-      color: #ff2a5f;
-    }
-    #tracking-error {
-      display: none;
-      margin-top: 10px;
-      padding: 8px;
-      border: 1px solid rgba(255, 70, 95, 0.5);
-      border-radius: 6px;
-      background: rgba(255, 40, 70, 0.14);
-      color: #ff9aaa;
-      font-size: 11px;
-      line-height: 1.35;
-    }
-    #tracking-error.visible {
-      display: block;
-    }
-    #controls-panel {
-      position: absolute;
-      top: 16px;
-      left: 16px;
       z-index: 10;
-      width: 286px;
-      max-height: calc(100vh - 32px);
-      padding: 14px;
-      background: rgba(18, 18, 24, 0.85);
-      backdrop-filter: blur(12px);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 12px;
-      display: flex;
-      flex-direction: column;
-      gap: 11px;
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-      overflow-y: auto;
-      transition: opacity 140ms ease, transform 140ms ease;
+      border: 1px solid rgba(255,255,255,.12);
+      border-radius: 14px;
+      background: rgba(12,12,17,.82);
+      box-shadow: 0 12px 40px rgba(0,0,0,.38);
+      backdrop-filter: blur(16px);
     }
-    #app.controls-collapsed #controls-panel,
-    #app.performance-mode #controls-panel {
+    #brand-mark {
+      top: 58px;
+      left: 18px;
+      z-index: 9;
+      color: rgba(255,255,255,.48);
+      font-size: 10px;
+      font-weight: 900;
+      letter-spacing: 1.5px;
+      pointer-events: none;
+    }
+    #art-island {
+      left: 16px;
+      bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 7px;
+    }
+    .tool-icon { width: 40px; height: 40px; min-height: 40px; padding: 0; display: grid; place-items: center; font-size: 19px; }
+    #color-control::after { content:""; width:22px; height:22px; border:2px solid #fff; border-radius:50%; background:var(--current-color, #e92f3d); box-shadow:inset 0 0 0 3px rgba(0,0,0,.16); }
+    #cap-control::before { content:""; width:18px; height:8px; border:2px solid currentColor; border-radius:2px 8px 8px 2px; transform:rotate(-28deg); }
+    #cap-control::after { content:"•••"; margin-left:-4px; color:#ff6a7f; font-size:10px; letter-spacing:-1px; transform:rotate(-28deg); }
+    .tool-popover { position:absolute; z-index:12; left:16px; bottom:72px; display:none; padding:9px; border:1px solid rgba(255,255,255,.14); border-radius:13px; background:rgba(12,12,17,.94); box-shadow:0 12px 40px rgba(0,0,0,.42); backdrop-filter:blur(16px); }
+    .tool-popover.open { display:grid; }
+    #color-chooser { grid-template-columns:repeat(6, 30px); gap:6px; }
+    #cap-chooser { gap:4px; max-height:min(480px, calc(100vh - 110px)); overflow-y:auto; }
+    .cap-choice { min-width:210px; display:grid; grid-template-columns:66px 1fr; align-items:center; gap:10px; text-align:left; font-size:11px; }
+    .cap-choice.selected { border-color:#ff6a83; color:#ff91a7; }
+    .cap-sample { display:block; height:0; border-top:var(--sample-width, 8px) solid currentColor; border-radius:999px; opacity:.78; }
+    .palette { display: flex; flex-wrap: wrap; gap: 5px; }
+    .swatch {
+      width: 26px;
+      min-height: 26px;
+      height: 26px;
+      padding: 0;
+      border: 2px solid rgba(255,255,255,.12);
+      border-radius: 50%;
+    }
+    .swatch.selected { border-color: #fff; box-shadow: 0 0 0 2px #11131a, 0 0 0 3px rgba(255,255,255,.65); transform: scale(1.04); }
+    #session-island {
+      top: 14px;
+      right: 14px;
+      padding: 7px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    #session-island .icon-button { width:38px; height:38px; min-height:38px; padding:0; display:grid; place-items:center; font-size:18px; }
+    #toggle-record .record-dot { width:13px; height:13px; border-radius:50%; background:#ff355d; box-shadow:0 0 0 2px rgba(255,53,93,.18); }
+    #toggle-record.recording .record-dot { border-radius:3px; background:#fff; animation:record-pulse .8s ease-in-out infinite alternate; }
+    #toggle-record.recording { background:#d71c45; border-color:#ff5d7d; }
+    @keyframes record-pulse { to { opacity:.5; } }
+    #member-placeholder { color:#8f8e99; }
+
+    #input-island { top:14px; left:16px; padding:5px; display:flex; align-items:center; gap:4px; }
+    #input-island button { min-height:32px; padding:6px 9px; font-size:10px; letter-spacing:.4px; }
+    #input-island button.selected { border-color:#fff; background:#343440; }
+    #input-status { max-width:130px; overflow:hidden; text-overflow:ellipsis; }
+
+    #player-island { top:14px; left:50%; transform:translateX(-50%); width:min(470px, calc(100vw - 340px)); min-width:46px; padding:7px; display:flex; align-items:center; gap:6px; }
+    #player-island.empty { width:auto; }
+    #player-island.empty .player-loaded { display:none; }
+    #player-track-name { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #c9c8cf; font-size: 11px; }
+    #audio-file { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+    .file-button { display: inline-flex; align-items: center; white-space: nowrap; }
+    #player-progress { flex: 1; min-width: 72px; }
+    #player-time { min-width: 76px; text-align: center; color: #9b9aa5; font-variant-numeric: tabular-nums; font-size: 10px; }
+    .status-chip { color: #94939e; font-size: 10px; font-weight: 800; letter-spacing: .45px; white-space: nowrap; }
+    .status-chip.on { color: #41e991; }
+    .status-chip.error { color: #ff7894; }
+
+    #settings-panel {
+      top: 14px;
+      right: 14px;
+      z-index: 20;
+      width: min(340px, calc(100vw - 28px));
+      max-height: calc(100vh - 28px);
+      padding: 15px;
+      overflow-y: auto;
       opacity: 0;
       pointer-events: none;
-      transform: translateX(-24px);
+      transform: translateX(20px) scale(.98);
+      transition: opacity 130ms ease, transform 130ms ease;
     }
-    .panel-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-    }
-    .panel-title {
-      font-size: 14px;
-      font-weight: 700;
-      letter-spacing: 1px;
-      text-transform: uppercase;
-      color: #ff3366;
-    }
-    .icon-button {
-      width: auto;
-      min-width: 34px;
-      padding: 5px 8px;
-      font-size: 15px;
-      line-height: 1;
-    }
-    #open-controls-tab {
-      position: absolute;
-      top: 16px;
-      left: 16px;
-      z-index: 11;
-      display: none;
-      width: auto;
-      padding: 9px 13px;
-      border-color: rgba(255, 51, 102, 0.55);
-      background: rgba(18, 18, 24, 0.9);
-      color: #ff668c;
-    }
-    #app.controls-collapsed:not(.performance-mode) #open-controls-tab {
-      display: block;
-    }
-    #performance-hud {
-      position: absolute;
-      top: 12px;
-      left: 12px;
-      right: 12px;
-      z-index: 12;
-      display: none;
-      align-items: center;
-      gap: 8px;
-      flex-wrap: wrap;
-      pointer-events: none;
-    }
-    #app.performance-mode #performance-hud {
-      display: flex;
-    }
-    #performance-hud button {
-      width: auto;
-      pointer-events: auto;
-      background: rgba(18, 18, 24, 0.88);
-    }
-    #performance-hud select {
-      width: auto;
-      max-width: 190px;
-      padding: 7px 26px 7px 8px;
-      pointer-events: auto;
-      background: rgba(18, 18, 24, 0.88);
-    }
-    .performance-palette {
-      display: flex;
-      gap: 4px;
-      padding: 4px;
-      border: 1px solid rgba(255, 255, 255, 0.12);
-      border-radius: 7px;
-      background: rgba(10, 10, 15, 0.74);
-      pointer-events: auto;
-    }
-    .performance-palette .swatch {
-      width: 20px;
-      height: 20px;
-    }
-    .performance-pill {
-      padding: 7px 9px;
-      border: 1px solid rgba(255, 255, 255, 0.14);
-      border-radius: 6px;
-      background: rgba(10, 10, 15, 0.74);
-      color: #b8b8c6;
-      font-size: 10px;
-      font-weight: 800;
-      letter-spacing: 0.45px;
-      pointer-events: none;
-    }
-    .performance-pill.on {
-      color: #00ff80;
-    }
-    .performance-pill.error,
-    .status-badge.error {
-      color: #ff7894;
-    }
-    .performance-pill.recording {
-      color: #ff426f;
-      animation: record-pulse 1s ease-in-out infinite alternate;
-    }
-    @keyframes record-pulse {
-      to { opacity: 0.52; }
-    }
-    .control-group {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
-    .button-row {
-      display: flex;
-      gap: 6px;
-    }
-    .button-row > * {
-      flex: 1;
-    }
-    label {
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      color: #a0a0b0;
-    }
-    select, input[type="range"], button, input[type="file"] {
-      width: 100%;
-      background: #1a1a24;
-      border: 1px solid rgba(255, 255, 255, 0.15);
-      color: #ffffff;
-      padding: 8px 10px;
-      border-radius: 6px;
-      font-size: 12px;
-      outline: none;
-      transition: all 0.2s ease;
-    }
-    button {
-      cursor: pointer;
-      font-weight: 600;
-      background: #2a2a3a;
-    }
-    button:hover {
-      background: #3a3a4e;
-      border-color: rgba(255, 255, 255, 0.3);
-    }
-    button.active {
-      background: #ff3366;
-      border-color: #ff3366;
-      color: #fff;
-    }
-    #toggle-record {
-      background: #cc1100;
-      color: #fff;
-    }
-    .color-swatches {
-      display: flex;
-      gap: 6px;
-      flex-wrap: wrap;
-    }
-    .swatch {
-      width: 28px;
-      height: 28px;
-      border-radius: 50%;
-      cursor: pointer;
-      border: 2px solid transparent;
-      transition: transform 0.15s ease;
-    }
-    .swatch:hover {
-      transform: scale(1.1);
-    }
-    .swatch.selected {
-      border-color: #ffffff;
-      transform: scale(1.15);
-    }
-    .status-badge {
-      display: inline-block;
-      padding: 4px 8px;
-      border-radius: 4px;
-      font-size: 10px;
-      font-weight: 700;
-      text-transform: uppercase;
-      background: rgba(255, 255, 255, 0.05);
-      color: #808090;
-    }
-    .status-badge.on {
-      background: rgba(0, 255, 128, 0.2);
-      color: #00ff80;
+    #settings-panel.open { opacity: 1; pointer-events: auto; transform: none; }
+    .settings-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+    .settings-title { font-size: 13px; font-weight: 900; letter-spacing: 1px; text-transform: uppercase; }
+    .settings-section { display: grid; gap: 8px; padding: 12px 0; border-top: 1px solid rgba(255,255,255,.1); }
+    .settings-section h2 { color: #8f8e99; font-size: 10px; letter-spacing: 1px; text-transform: uppercase; }
+    .setting-row { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px; color: #d1d0d7; font-size: 11px; }
+    .setting-row select { max-width: 175px; }
+    .setting-stack { display: grid; gap: 6px; color: #d1d0d7; font-size: 11px; }
+    .setting-actions { display: flex; gap: 6px; }
+    #clear-canvas { color: #ff91a7; }
+    #tracking-error { display: none; padding: 9px; border: 1px solid rgba(255,70,95,.45); border-radius: 8px; color: #ff9aaf; background: rgba(255,40,70,.12); font-size: 11px; line-height: 1.4; }
+    #tracking-error.visible { display: block; }
+    #shortcut-list { display: grid; gap: 7px; }
+    .shortcut-row { display: grid; grid-template-columns: 90px 1fr; gap: 8px; align-items: start; font-size: 10px; }
+    .shortcut-row kbd { padding: 3px 5px; border: 1px solid rgba(255,255,255,.16); border-radius: 5px; background: #20202a; color: #fff; text-align: center; }
+    .shortcut-row span { color: #aaa9b2; line-height: 1.35; }
+
+    #tracking-overlay { position: absolute; inset: 0; z-index: 7; display: none; pointer-events: none; }
+    #tracking-overlay.visible { display: block; }
+    #tracking-cursor { position: absolute; width: 28px; height: 28px; margin: -14px 0 0 -14px; border: 3px solid #fff; border-radius: 50%; opacity: 0; transform: scale(.8); transition: opacity 80ms linear, transform 80ms ease, border-color 80ms ease; box-shadow: 0 0 0 2px rgba(5,5,8,.8), 0 0 18px rgba(255,255,255,.65); }
+    #tracking-cursor::after { content:""; position:absolute; inset:7px; border-radius:50%; background:#fff; opacity:.45; }
+    #tracking-cursor.detected { opacity: 1; transform: scale(1); }
+    #tracking-cursor.pinching { border-color:#ff2a5f; transform:scale(1.3); box-shadow:0 0 0 3px rgba(255,42,95,.25),0 0 28px rgba(255,42,95,.9); }
+    #tracking-cursor.spraying::after { background:#ff2a5f; opacity:1; }
+    #tracking-debug-panel { position:absolute; top:96px; right:16px; width:272px; display:none; padding:14px; border:1px solid rgba(255,255,255,.16); border-radius:12px; background:rgba(7,8,13,.9); box-shadow:0 8px 32px rgba(0,0,0,.45); }
+    #tracking-debug-panel.visible { display:block; }
+    .tracking-debug-title,.tracking-metric,.tracking-stage { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+    .tracking-debug-title { padding-bottom:9px; margin-bottom:8px; border-bottom:1px solid rgba(255,255,255,.12); font-size:10px; font-weight:800; color:#aaa9b4; }
+    #hand-detection-status.detected,.tracking-stage[data-state="pass"] .tracking-stage-value { color:#00ff80; }
+    .tracking-metric,.tracking-stage { padding:3px 0; font-size:10px; color:#8e8d98; }
+    .tracking-metric strong,.tracking-stage-value { color:#fff; font-variant-numeric:tabular-nums; }
+    .tracking-metric strong.active,.tracking-stage[data-state="active"] .tracking-stage-value { color:#ff2a5f; }
+    .tracking-stages { display:grid; gap:3px; margin-top:9px; padding-top:8px; border-top:1px solid rgba(255,255,255,.1); }
+
+    @media (max-width: 760px) {
+      #input-island { left:10px; top:10px; }
+      #session-island { right:10px; top:10px; }
+      #player-island { left:10px; right:10px; top:64px; width:auto; transform:none; }
+      #art-island { left:10px; bottom:10px; }
+      .swatch { width: 22px; height: 22px; min-height: 22px; }
+      #brand-mark { display: none; }
+      .status-chip { display: none; }
     }
   </style>
 </head>
 <body>
-  <div id="app">
-    <div id="viewport-container">
-      <canvas id="composite-canvas"></canvas>
-      <div id="tracking-overlay" aria-live="polite">
-        <div id="tracking-cursor" aria-hidden="true"></div>
-        <div id="tracking-debug-panel">
-          <div class="tracking-debug-title">
-            <span id="tracker-runtime-status">TRACKER IDLE</span>
-            <span id="hand-detection-status">NO HAND</span>
-          </div>
-          <div class="tracking-metric"><span>Confidence</span><strong id="tracking-confidence">—</strong></div>
-          <div class="tracking-metric"><span>Pinch distance</span><strong id="pinch-distance">—</strong></div>
-          <div class="tracking-metric"><span>Pinch</span><strong id="pinch-state">OPEN</strong></div>
-          <div class="tracking-metric"><span>Manual spray</span><strong id="manual-state">OFF</strong></div>
-          <div class="tracking-stages" aria-label="Hand tracking pipeline diagnostics">
-            <div class="tracking-stage" data-tracking-stage="library" data-state="waiting"><span>1 · MediaPipe</span><span class="tracking-stage-value">WAITING</span></div>
-            <div class="tracking-stage" data-tracking-stage="frames" data-state="waiting"><span>2 · Video frames</span><span class="tracking-stage-value">WAITING</span></div>
-            <div class="tracking-stage" data-tracking-stage="callback" data-state="waiting"><span>3 · Results callback</span><span class="tracking-stage-value">WAITING</span></div>
-            <div class="tracking-stage" data-tracking-stage="landmarks" data-state="waiting"><span>4 · Hand landmarks</span><span class="tracking-stage-value">WAITING</span></div>
-            <div class="tracking-stage" data-tracking-stage="mapping" data-state="waiting"><span>5 · Canvas mapping</span><span class="tracking-stage-value">WAITING</span></div>
-            <div class="tracking-stage" data-tracking-stage="pinch" data-state="waiting"><span>6 · Pinch state</span><span class="tracking-stage-value">WAITING</span></div>
-            <div class="tracking-stage" data-tracking-stage="spray" data-state="waiting"><span>7 · Spray delivery</span><span class="tracking-stage-value">WAITING</span></div>
-          </div>
-          <div id="tracking-error" role="alert"></div>
+  <main id="app">
+    <canvas id="composite-canvas" aria-label="Spatial Spraypaint drawing canvas"></canvas>
+    <div id="brand-mark" class="island">SPATIAL SPRAYPAINT · V0.4</div>
+
+    <section id="input-island" class="island" aria-label="Input mode">
+      <button id="physical-input" class="selected" aria-pressed="true">Physical</button>
+      <button id="hand-input" aria-pressed="false">Hand</button>
+      <span id="input-status" class="status-chip">READY</span>
+    </section>
+
+    <section id="art-island" class="island" aria-label="Art tools">
+      <button id="color-control" class="tool-icon" style="--current-color:#e92f3d" aria-label="Choose color" title="Color"></button>
+      <button id="cap-control" class="tool-icon" aria-label="Choose spray cap" title="Cap: New York Fat"></button>
+    </section>
+    <div id="color-chooser" class="tool-popover" aria-label="Color chooser">
+        <button class="swatch" title="Black" aria-label="Black" style="background:#0b0b0d" data-color="#0b0b0d"></button>
+        <button class="swatch" title="White" aria-label="White" style="background:#f5f1e7" data-color="#f5f1e7"></button>
+        <button class="swatch" title="Silver" aria-label="Silver" style="background:#aeb4b8" data-color="#aeb4b8"></button>
+        <button class="swatch selected" title="Red" aria-label="Red" style="background:#e92f3d" data-color="#e92f3d"></button>
+        <button class="swatch" title="Orange" aria-label="Orange" style="background:#ff6a1a" data-color="#ff6a1a"></button>
+        <button class="swatch" title="Yellow" aria-label="Yellow" style="background:#ffd21c" data-color="#ffd21c"></button>
+        <button class="swatch" title="Green" aria-label="Green" style="background:#20d96b" data-color="#20d96b"></button>
+        <button class="swatch" title="Cyan" aria-label="Cyan" style="background:#15cfe5" data-color="#15cfe5"></button>
+        <button class="swatch" title="Blue" aria-label="Blue" style="background:#2764ff" data-color="#2764ff"></button>
+        <button class="swatch" title="Purple" aria-label="Purple" style="background:#8347d8" data-color="#8347d8"></button>
+        <button class="swatch" title="Pink" aria-label="Pink" style="background:#ff3f8f" data-color="#ff3f8f"></button>
+    </div>
+    <div id="cap-chooser" class="tool-popover" aria-label="Cap chooser">
+      <button class="cap-choice selected" data-cap="new-york-fat"><span class="cap-sample" style="--sample-width:10px"></span><span>New York Fat</span></button>
+      <button class="cap-choice" data-cap="pink-dot-fat"><span class="cap-sample" style="--sample-width:13px"></span><span>Pink Dot Fat</span></button>
+      <button class="cap-choice" data-cap="astro-fat"><span class="cap-sample" style="--sample-width:18px"></span><span>Astro Fat</span></button>
+      <button class="cap-choice" data-cap="german-fat"><span class="cap-sample" style="--sample-width:11px"></span><span>German / Hardcore Fat</span></button>
+      <button class="cap-choice" data-cap="lego-thin"><span class="cap-sample" style="--sample-width:5px"></span><span>Lego Thin</span></button>
+      <button class="cap-choice" data-cap="universal-thin"><span class="cap-sample" style="--sample-width:4px"></span><span>Universal Thin</span></button>
+      <button class="cap-choice" data-cap="level-1"><span class="cap-sample" style="--sample-width:2px"></span><span>Level 1 / Skinny Cream</span></button>
+      <button class="cap-choice" data-cap="new-york-thin"><span class="cap-sample" style="--sample-width:3px"></span><span>New York Thin</span></button>
+      <button class="cap-choice" data-cap="calligraphy"><span class="cap-sample" style="--sample-width:7px"></span><span>Calligraphy / Transversal</span></button>
+      <button class="cap-choice" data-cap="needle"><span class="cap-sample" style="--sample-width:1px"></span><span>Needle</span></button>
+      <button class="cap-choice" data-cap="soft-fade"><span class="cap-sample" style="--sample-width:15px;opacity:.32"></span><span>Soft / Fade</span></button>
+    </div>
+
+    <section id="session-island" class="island" aria-label="Screen and session controls">
+      <button id="undo-stroke" class="icon-button" disabled aria-label="Undo last stroke" title="Undo last stroke · ⌘/Ctrl Z">↶</button>
+      <button id="toggle-record" class="icon-button" aria-label="Start recording" title="Record · R"><span class="record-dot"></span></button>
+      <button id="member-placeholder" class="icon-button" aria-label="Member profile placeholder" title="Member profile · coming later">♙</button>
+      <button id="settings-toggle" class="icon-button" aria-pressed="false" aria-label="Open settings" title="Settings · ,">⚙</button>
+    </section>
+
+    <section id="player-island" class="island empty" aria-label="Session soundtrack player">
+      <input type="file" id="audio-file" accept="audio/*" />
+      <label for="audio-file" class="file-button" aria-label="Load soundtrack" title="Load soundtrack">♫</label>
+      <button id="player-play-pause" class="player-loaded" disabled aria-label="Play soundtrack" title="Play / pause · Space">▶</button>
+      <span id="player-track-name" class="player-loaded">No track loaded</span>
+      <input id="player-progress" class="player-loaded" type="range" min="0" max="1000" value="0" disabled aria-label="Track progress" />
+      <span id="player-time" class="player-loaded">0:00 / 0:00</span>
+      <button id="player-loop" class="player-loaded" aria-pressed="true" aria-label="Toggle soundtrack loop" title="Loop soundtrack">↻</button>
+    </section>
+
+    <aside id="settings-panel" class="island" aria-label="Settings" aria-hidden="true">
+      <div class="settings-header"><div class="settings-title">Settings</div><button id="settings-close" aria-label="Close settings">Close</button></div>
+      <section class="settings-section">
+        <h2>Drawing</h2>
+        <label class="setting-row"><span>Smoothing</span><select id="smoothing-level"><option value="off">Off</option><option value="low">Low</option><option value="medium" selected>Medium</option><option value="high">High</option></select></label>
+        <label class="setting-row"><span>Stationary drips</span><input id="drips-enabled" type="checkbox" checked /></label>
+        <div class="setting-stack"><span>Radius override · <strong id="radius-val">32</strong> px</span><input type="range" id="brush-radius" min="4" max="72" value="32" /><button id="radius-reset">Use cap default</button></div>
+        <label class="setting-row"><span>Background</span><select id="background-preset"><option value="black">Black</option><option value="charcoal">Charcoal Wall</option><option value="mid-gray">Mid Gray</option><option value="off-white">Off-White Wall</option></select></label>
+      </section>
+      <section class="settings-section">
+        <h2>Input</h2>
+        <label class="setting-row"><span>Camera treatment</span><select id="anonymity-mode"><option value="clean">Clean</option><option value="ghost">Ghost</option><option value="pixel">Pixelated</option><option value="silhouette">Silhouette</option><option value="chromatic">Chromatic</option><option value="hidden" selected>Hidden canvas</option></select></label>
+        <label class="setting-row"><span>Tracking diagnostics</span><input id="tracking-debug-visible" type="checkbox" /></label>
+        <div id="tracking-error" role="alert"></div>
+      </section>
+      <section class="settings-section">
+        <h2>Sound</h2>
+        <div class="setting-row"><span>Spray can</span><strong id="spray-audio-status" class="status-chip">QUIET</strong></div>
+        <button id="shake-can">Test can rattle</button>
+      </section>
+      <section class="settings-section">
+        <h2>Shortcuts</h2>
+        <div id="shortcut-list"></div>
+      </section>
+      <section class="settings-section">
+        <h2>Advanced</h2>
+        <button id="clear-canvas">Clear canvas…</button>
+      </section>
+    </aside>
+
+    <div id="tracking-overlay" aria-live="polite">
+      <div id="tracking-cursor" aria-hidden="true"></div>
+      <div id="tracking-debug-panel">
+        <div class="tracking-debug-title"><span id="tracking-debug-runtime">TRACKER IDLE</span><span id="hand-detection-status">NO HAND</span></div>
+        <div class="tracking-metric"><span>Confidence</span><strong id="tracking-confidence">—</strong></div>
+        <div class="tracking-metric"><span>Pinch distance</span><strong id="pinch-distance">—</strong></div>
+        <div class="tracking-metric"><span>Pinch</span><strong id="pinch-state">OPEN</strong></div>
+        <div class="tracking-stages">
+          <div class="tracking-stage" data-tracking-stage="library"><span>1 · MediaPipe</span><span class="tracking-stage-value">WAITING</span></div>
+          <div class="tracking-stage" data-tracking-stage="frames"><span>2 · Video frames</span><span class="tracking-stage-value">WAITING</span></div>
+          <div class="tracking-stage" data-tracking-stage="callback"><span>3 · Results callback</span><span class="tracking-stage-value">WAITING</span></div>
+          <div class="tracking-stage" data-tracking-stage="landmarks"><span>4 · Hand landmarks</span><span class="tracking-stage-value">WAITING</span></div>
+          <div class="tracking-stage" data-tracking-stage="mapping"><span>5 · Canvas mapping</span><span class="tracking-stage-value">WAITING</span></div>
+          <div class="tracking-stage" data-tracking-stage="pinch"><span>6 · Pinch state</span><span class="tracking-stage-value">WAITING</span></div>
+          <div class="tracking-stage" data-tracking-stage="spray"><span>7 · Spray delivery</span><span class="tracking-stage-value">WAITING</span></div>
         </div>
       </div>
     </div>
-
-    <button id="open-controls-tab" aria-label="Open controls">Controls</button>
-
-    <div id="performance-hud" aria-label="Performance mode controls">
-      <button id="performance-exit">Exit Performance (P)</button>
-      <div class="performance-palette" aria-label="Performance color">
-        <div class="swatch" title="Black" style="background:#0b0b0d" data-color="#0b0b0d"></div>
-        <div class="swatch" title="White" style="background:#f5f1e7" data-color="#f5f1e7"></div>
-        <div class="swatch" title="Silver" style="background:#aeb4b8" data-color="#aeb4b8"></div>
-        <div class="swatch selected" title="Red" style="background:#e92f3d" data-color="#e92f3d"></div>
-        <div class="swatch" title="Orange" style="background:#ff6a1a" data-color="#ff6a1a"></div>
-        <div class="swatch" title="Yellow" style="background:#ffd21c" data-color="#ffd21c"></div>
-        <div class="swatch" title="Green" style="background:#20d96b" data-color="#20d96b"></div>
-        <div class="swatch" title="Cyan" style="background:#15cfe5" data-color="#15cfe5"></div>
-        <div class="swatch" title="Blue" style="background:#2764ff" data-color="#2764ff"></div>
-        <div class="swatch" title="Purple" style="background:#8347d8" data-color="#8347d8"></div>
-        <div class="swatch" title="Pink" style="background:#ff3f8f" data-color="#ff3f8f"></div>
-      </div>
-      <select id="performance-cap-preset" aria-label="Performance cap">
-        <option value="new-york-fat">New York Fat</option>
-        <option value="pink-dot-fat">Pink Dot Fat</option>
-        <option value="astro-fat">Astro Fat</option>
-        <option value="german-fat">German / Hardcore Fat</option>
-        <option value="lego-thin">Lego Thin</option>
-        <option value="universal-thin">Universal Thin</option>
-        <option value="level-1">Level 1 / Skinny Cream</option>
-        <option value="new-york-thin">New York Thin</option>
-        <option value="calligraphy">Calligraphy / Transversal</option>
-        <option value="needle">Needle</option>
-        <option value="soft-fade">Soft / Fade</option>
-      </select>
-      <select id="performance-background-preset" aria-label="Performance background">
-        <option value="black">Black</option>
-        <option value="charcoal">Charcoal Wall</option>
-        <option value="mid-gray">Mid Gray</option>
-        <option value="off-white">Off-White Wall</option>
-      </select>
-      <span id="performance-cap-status" class="performance-pill">FAT CAP</span>
-      <span id="performance-spray-status" class="performance-pill">SPRAY OFF</span>
-      <span id="performance-tracking-status" class="performance-pill">NO CAMERA</span>
-      <span id="performance-record-status" class="performance-pill">READY</span>
-      <button id="performance-clear-canvas">Clear</button>
-      <button id="performance-record-toggle">Record</button>
-    </div>
-
-    <div id="controls-panel">
-      <div class="panel-header">
-        <div class="panel-title">Spatial Spraypaint V0.3</div>
-        <button id="collapse-controls" class="icon-button" aria-label="Collapse controls" title="Collapse controls">‹</button>
-      </div>
-
-      <div class="control-group">
-        <button id="toggle-performance-mode" aria-pressed="false">Performance Mode (P)</button>
-        <div class="button-row">
-          <button id="toggle-fullscreen">Enter Fullscreen</button>
-        </div>
-      </div>
-
-      <div class="control-group">
-        <label>Input Mode</label>
-        <select id="input-mode">
-          <option value="mouse">Mouse / Trackpad</option>
-          <option value="spatial">Webcam Hand Tracking</option>
-        </select>
-      </div>
-
-      <div class="control-group" id="webcam-controls" style="display: none;">
-        <button id="toggle-webcam">Start Camera</button>
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 4px;">
-          <span style="font-size: 11px; color: #a0a0b0;">Spray Status (Pinch/Space)</span>
-          <span id="spray-status" class="status-badge">OFF</span>
-        </div>
-        <button id="manual-spray-trigger" style="margin-top: 4px;">Hold to Spray (Spacebar)</button>
-        <button id="toggle-tracking-debug" aria-pressed="false" style="margin-top: 4px;">Show Tracking Debug (D)</button>
-      </div>
-
-      <div class="control-group">
-        <label>Anonymity Treatment</label>
-        <select id="anonymity-mode">
-          <option value="clean">Clean (Normal)</option>
-          <option value="ghost">Ghost (Soft Blur)</option>
-          <option value="pixel">Pixelated</option>
-          <option value="silhouette">Silhouette</option>
-          <option value="chromatic">Chromatic Split</option>
-          <option value="hidden" selected>Hidden (Canvas Only)</option>
-        </select>
-      </div>
-
-      <div class="control-group">
-        <label>Graffiti Color</label>
-        <div class="color-swatches">
-          <div class="swatch" title="Black" style="background:#0b0b0d" data-color="#0b0b0d"></div>
-          <div class="swatch" title="White" style="background:#f5f1e7" data-color="#f5f1e7"></div>
-          <div class="swatch" title="Silver" style="background:#aeb4b8" data-color="#aeb4b8"></div>
-          <div class="swatch selected" title="Red" style="background:#e92f3d" data-color="#e92f3d"></div>
-          <div class="swatch" title="Orange" style="background:#ff6a1a" data-color="#ff6a1a"></div>
-          <div class="swatch" title="Yellow" style="background:#ffd21c" data-color="#ffd21c"></div>
-          <div class="swatch" title="Green" style="background:#20d96b" data-color="#20d96b"></div>
-          <div class="swatch" title="Cyan" style="background:#15cfe5" data-color="#15cfe5"></div>
-          <div class="swatch" title="Blue" style="background:#2764ff" data-color="#2764ff"></div>
-          <div class="swatch" title="Purple" style="background:#8347d8" data-color="#8347d8"></div>
-          <div class="swatch" title="Pink" style="background:#ff3f8f" data-color="#ff3f8f"></div>
-        </div>
-      </div>
-
-      <div class="control-group">
-        <label>Cap Preset</label>
-        <select id="cap-preset">
-          <option value="new-york-fat" selected>New York Fat</option>
-          <option value="pink-dot-fat">Pink Dot Fat</option>
-          <option value="astro-fat">Astro Fat</option>
-          <option value="german-fat">German / Hardcore Fat</option>
-          <option value="lego-thin">Lego Thin</option>
-          <option value="universal-thin">Universal Thin</option>
-          <option value="level-1">Level 1 / Skinny Cream</option>
-          <option value="new-york-thin">New York Thin</option>
-          <option value="calligraphy">Calligraphy / Transversal</option>
-          <option value="needle">Needle</option>
-          <option value="soft-fade">Soft / Fade</option>
-        </select>
-      </div>
-
-      <div class="control-group">
-        <label>Stroke Smoothing</label>
-        <select id="smoothing-level">
-          <option value="off">Off</option>
-          <option value="low">Low</option>
-          <option value="medium" selected>Medium</option>
-          <option value="high">High</option>
-        </select>
-      </div>
-
-      <div class="control-group">
-        <label>Wall Background</label>
-        <select id="background-preset">
-          <option value="black" selected>Black</option>
-          <option value="charcoal">Charcoal Wall</option>
-          <option value="mid-gray">Mid Gray</option>
-          <option value="off-white">Off-White Wall</option>
-        </select>
-      </div>
-
-      <div class="control-group">
-        <label><input id="drips-enabled" type="checkbox" checked /> Heavy stationary drips</label>
-      </div>
-
-      <div class="control-group">
-        <label>Radius Override (<span id="radius-val">32</span>px)</label>
-        <input type="range" id="brush-radius" min="4" max="72" value="32" />
-      </div>
-
-      <div class="control-group">
-        <label>Can Audio <span id="spray-audio-status" class="status-badge">QUIET</span></label>
-        <button id="shake-can">Shake Can (Test Rattle)</button>
-      </div>
-
-      <div class="control-group">
-        <label>Audio Track</label>
-        <input type="file" id="audio-file" accept="audio/*" />
-        <div style="display: flex; gap: 6px; margin-top: 4px;">
-          <button id="play-audio" disabled>Play</button>
-          <button id="stop-audio" disabled>Stop</button>
-        </div>
-      </div>
-
-      <div class="control-group">
-        <button id="toggle-record">Record Performance</button>
-        <button id="clear-canvas">Clear Canvas</button>
-      </div>
-    </div>
-  </div>
-
+  </main>
   <script type="module" src="./src/main.ts"></script>
 </body>
 </html>
