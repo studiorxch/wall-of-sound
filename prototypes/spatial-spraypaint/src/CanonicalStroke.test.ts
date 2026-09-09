@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { CanonicalStrokeManager } from "./CanonicalStroke";
+import { CanonicalStrokeManager, resolveInterpolationSpacing } from "./CanonicalStroke";
 
 describe("CanonicalStrokeManager", () => {
   let strokeManager: CanonicalStrokeManager;
@@ -22,6 +22,30 @@ describe("CanonicalStrokeManager", () => {
     expect(interpolated.length).toBeGreaterThan(20);
     expect(interpolated[0].x).toBeGreaterThan(0);
     expect(interpolated[0].x).toBeLessThan(100);
+  });
+
+  it("uses denser wall-space resampling as movement velocity rises", () => {
+    expect(resolveInterpolationSpacing(32, 4)).toBeLessThan(resolveInterpolationSpacing(32, 0.25));
+
+    const slow = new CanonicalStrokeManager();
+    slow.createPoint(0, 0, 32, 0, 0);
+    const slowPoints = slow.createPoint(120, 0, 32, 0, 240).interpolated.length;
+    const fast = new CanonicalStrokeManager();
+    fast.createPoint(0, 0, 32, 0, 0);
+    const fastPoints = fast.createPoint(120, 0, 32, 0, 20).interpolated.length;
+
+    expect(fastPoints).toBeGreaterThan(slowPoints);
+  });
+
+  it("keeps every resampled segment within the resolved large-gap spacing", () => {
+    const first = strokeManager.createPoint(0, 0, 20, 0, 100).point;
+    const { interpolated, point } = strokeManager.createPoint(173, 91, 20, 0, 116);
+    const samples = [first, ...interpolated, point];
+    const maxGap = Math.max(...samples.slice(1).map((sample, index) =>
+      Math.hypot(sample.x - samples[index].x, sample.y - samples[index].y),
+    ));
+
+    expect(maxGap).toBeLessThanOrEqual(resolveInterpolationSpacing(20, point.velocity) + 1e-9);
   });
 
   it("keeps endpoint width within a restrained range", () => {

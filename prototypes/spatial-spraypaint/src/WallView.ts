@@ -14,6 +14,20 @@ export interface QuickZoomState {
   restoreView: WallViewState | null;
 }
 
+export type PanSource = "space" | "middle" | null;
+
+export interface PanInteractionState {
+  spaceHeld: boolean;
+  source: PanSource;
+}
+
+export interface WheelPanInput {
+  deltaX: number;
+  deltaY: number;
+  shiftKey: boolean;
+  deltaMode?: number;
+}
+
 export const MIN_ZOOM = 0.25;
 export const MAX_ZOOM = 4;
 export const QUICK_ZOOM_LEVEL = 2;
@@ -42,6 +56,45 @@ export function applyPan(view: WallViewState, deltaX: number, deltaY: number): W
 
 export function shouldPanPointer(spaceHeld: boolean, button: number): boolean {
   return (spaceHeld && button === 0) || button === 1;
+}
+
+export function resetPanInteraction(): PanInteractionState {
+  return { spaceHeld: false, source: null };
+}
+
+export function setSpacePanHeld(state: PanInteractionState, spaceHeld: boolean): PanInteractionState {
+  return {
+    spaceHeld,
+    source: !spaceHeld && state.source === "space" ? null : state.source,
+  };
+}
+
+export function beginPanInteraction(state: PanInteractionState, button: number): PanInteractionState {
+  const source: PanSource = button === 1 ? "middle" : state.spaceHeld && button === 0 ? "space" : null;
+  return { ...state, source };
+}
+
+export function endPanInteraction(state: PanInteractionState): PanInteractionState {
+  return { ...state, source: null };
+}
+
+export function effectiveTool<T extends string>(activeTool: T, state: PanInteractionState): T | "pan" {
+  return state.source ? "pan" : activeTool;
+}
+
+export function resolveWheelPan(
+  input: WheelPanInput,
+  pageSize = 800,
+): WallPoint {
+  const scale = input.deltaMode === 1 ? 16 : input.deltaMode === 2 ? pageSize : 1;
+  if (input.shiftKey) {
+    const horizontal = Math.abs(input.deltaX) >= Math.abs(input.deltaY) ? input.deltaX : input.deltaY;
+    return { x: horizontal === 0 ? 0 : -horizontal * scale, y: 0 };
+  }
+  return {
+    x: input.deltaX === 0 ? 0 : -input.deltaX * scale,
+    y: input.deltaY === 0 ? 0 : -input.deltaY * scale,
+  };
 }
 
 export function clampZoom(zoom: number): number {

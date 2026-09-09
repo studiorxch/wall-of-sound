@@ -1,5 +1,11 @@
 import { StrokePoint } from "./types";
 
+export function resolveInterpolationSpacing(baseRadius: number, velocity: number): number {
+  const radiusSpacing = Math.max(0.8, Math.min(3.2, baseRadius * 0.08));
+  const velocityDensity = Math.max(0.55, Math.min(1, 1 - velocity * 0.12));
+  return radiusSpacing * velocityDensity;
+}
+
 export class CanonicalStrokeManager {
   private lastPoint: StrokePoint | null = null;
 
@@ -19,7 +25,7 @@ export class CanonicalStrokeManager {
       const dx = x - this.lastPoint.x;
       const dy = y - this.lastPoint.y;
       const dist = Math.sqrt(dx * dx + dy * dy);
-      velocity = dist / dt; // pixels per ms
+      velocity = dist / dt; // wall units per ms
     }
 
     // Keep speed expression restrained so starts/stops do not form oversized bulbs.
@@ -39,17 +45,17 @@ export class CanonicalStrokeManager {
 
     const interpolatedPoints: StrokePoint[] = [];
 
-    // Interpolate points if moving quickly to eliminate disconnected dot artifacts
+    // Bound every wall-space segment, increasing deposition density for fast movement.
     if (this.lastPoint) {
       const dx = x - this.lastPoint.x;
       const dy = y - this.lastPoint.y;
       const dist = Math.sqrt(dx * dx + dy * dy);
-      const stepSize = Math.max(1.25, Math.min(4, baseRadius * 0.1));
+      const stepSize = resolveInterpolationSpacing(baseRadius, velocity);
 
       if (dist > stepSize) {
-        const steps = Math.floor(dist / stepSize);
-        for (let i = 1; i < steps; i++) {
-          const t = i / steps;
+        const segments = Math.ceil(dist / stepSize);
+        for (let i = 1; i < segments; i++) {
+          const t = i / segments;
           interpolatedPoints.push({
             x: this.lastPoint.x + dx * t,
             y: this.lastPoint.y + dy * t,

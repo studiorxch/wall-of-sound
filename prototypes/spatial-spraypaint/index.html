@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>StudioRich — Spatial Spraypaint V0.5</title>
+  <title>StudioRich — Spatial Spraypaint V0.5.1</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
@@ -181,7 +181,7 @@
 <body>
   <main id="app">
     <canvas id="composite-canvas" aria-label="Spatial Spraypaint drawing canvas"></canvas>
-    <div id="brand-mark" class="island">SPATIAL SPRAYPAINT · V0.5</div>
+    <div id="brand-mark" class="island">SPATIAL SPRAYPAINT · V0.5.1</div>
 
     <section id="input-island" class="island" aria-label="Input mode">
       <button id="physical-input" class="selected" aria-pressed="true">Physical</button>
@@ -282,10 +282,10 @@
         <div class="tracking-metric"><span>Pinch</span><strong id="pinch-state">OPEN</strong></div>
         <div class="tracking-stages">
           <div class="tracking-stage" data-tracking-stage="library"><span>1 · MediaPipe</span><span class="tracking-stage-value">WAITING</span></div>
-          <div class="tracking-stage" data-tracking-stage="frames"><span>2 · Video frames</span><span class="tracking-stage-value">WAITING</span></div>
-          <div class="tracking-stage" data-tracking-stage="callback"><span>3 · Results callback</span><span class="tracking-stage-value">WAITING</span></div>
-          <div class="tracking-stage" data-tracking-stage="landmarks"><span>4 · Hand landmarks</span><span class="tracking-stage-value">WAITING</span></div>
-          <div class="tracking-stage" data-tracking-stage="mapping"><span>5 · Canvas mapping</span><span class="tracking-stage-value">WAITING</span></div>
+          <div class="tracking-stage" data-tracking-stage="frames"><span>2 · Frame cadence</span><span class="tracking-stage-value">WAITING</span></div>
+          <div class="tracking-stage" data-tracking-stage="callback"><span>3 · Result cadence</span><span class="tracking-stage-value">WAITING</span></div>
+          <div class="tracking-stage" data-tracking-stage="landmarks"><span>4 · Landmark gaps</span><span class="tracking-stage-value">WAITING</span></div>
+          <div class="tracking-stage" data-tracking-stage="mapping"><span>5 · Wall delivery</span><span class="tracking-stage-value">WAITING</span></div>
           <div class="tracking-stage" data-tracking-stage="pinch"><span>6 · Pinch state</span><span class="tracking-stage-value">WAITING</span></div>
           <div class="tracking-stage" data-tracking-stage="spray"><span>7 · Spray delivery</span><span class="tracking-stage-value">WAITING</span></div>
         </div>

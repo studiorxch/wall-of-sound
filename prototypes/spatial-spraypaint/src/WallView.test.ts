@@ -4,8 +4,14 @@ import {
   MIN_ZOOM,
   applyPan,
   applyZoomAroundPoint,
+  beginPanInteraction,
+  effectiveTool,
+  endPanInteraction,
   resetWallView,
+  resetPanInteraction,
+  resolveWheelPan,
   screenToWall,
+  setSpacePanHeld,
   shouldPanPointer,
   toggleQuickZoom,
   wallToScreen,
@@ -38,6 +44,31 @@ describe("wall view transforms", () => {
     expect(shouldPanPointer(true, 0)).toBe(true);
     expect(shouldPanPointer(false, 1)).toBe(true);
     expect(shouldPanPointer(false, 0)).toBe(false);
+  });
+
+  it("treats Space-pan as a temporary override and restores the active tool on release", () => {
+    const ready = setSpacePanHeld(resetPanInteraction(), true);
+    const panning = beginPanInteraction(ready, 0);
+    expect(effectiveTool("spray", panning)).toBe("pan");
+
+    const released = setSpacePanHeld(panning, false);
+    expect(released).toEqual({ spaceHeld: false, source: null });
+    expect(effectiveTool("spray", released)).toBe("spray");
+    expect(effectiveTool("future-tool", released)).toBe("future-tool");
+  });
+
+  it("ends middle-button pan without changing the active drawing tool", () => {
+    const panning = beginPanInteraction(resetPanInteraction(), 1);
+    expect(effectiveTool("spray", panning)).toBe("pan");
+    expect(effectiveTool("spray", endPanInteraction(panning))).toBe("spray");
+  });
+
+  it("maps vertical, horizontal, and Shift-wheel input to screen-space pan", () => {
+    expect(resolveWheelPan({ deltaX: 0, deltaY: 24, shiftKey: false })).toEqual({ x: 0, y: -24 });
+    expect(resolveWheelPan({ deltaX: -18, deltaY: 6, shiftKey: false })).toEqual({ x: 18, y: -6 });
+    expect(resolveWheelPan({ deltaX: 0, deltaY: 20, shiftKey: true })).toEqual({ x: -20, y: 0 });
+    expect(resolveWheelPan({ deltaX: 2, deltaY: 20, shiftKey: true })).toEqual({ x: -20, y: 0 });
+    expect(resolveWheelPan({ deltaX: 20, deltaY: 2, shiftKey: true })).toEqual({ x: -20, y: 0 });
   });
 
   it("keeps the wall point beneath the zoom anchor visually stable", () => {

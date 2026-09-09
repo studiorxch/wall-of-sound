@@ -5,6 +5,10 @@ import {
   type NormalizedLandmark,
   type Results,
 } from "@mediapipe/hands";
+import {
+  HandTrackingReliabilityMonitor,
+  type HandTrackingReliabilitySnapshot,
+} from "./HandTrackingReliability";
 
 const HANDS_ASSET_ROOT =
   "https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240";
@@ -16,6 +20,7 @@ export interface HandTrackingResult {
   pinchDist: number;
   isPinching: boolean;
   confidence: number;
+  timestamp: number;
 }
 
 export interface HandTrackingDiagnostics {
@@ -25,6 +30,7 @@ export interface HandTrackingDiagnostics {
   videoFramesReceived: number;
   resultsCallbacks: number;
   landmarksDetected: boolean;
+  reliability: HandTrackingReliabilitySnapshot;
   error: string | null;
 }
 
@@ -63,6 +69,7 @@ export class HandTracker {
   private resultsCallbackLogged = false;
   private handWasDetected = false;
   private lastPinchState: boolean | null = null;
+  private readonly reliabilityMonitor = new HandTrackingReliabilityMonitor();
   private diagnostics: HandTrackingDiagnostics = {
     libraryLoaded: false,
     trackerInitialized: false,
@@ -70,6 +77,7 @@ export class HandTracker {
     videoFramesReceived: 0,
     resultsCallbacks: 0,
     landmarksDetected: false,
+    reliability: this.reliabilityMonitor.snapshot(),
     error: null,
   };
 
@@ -86,7 +94,8 @@ export class HandTracker {
   ): Promise<void> {
     this.onResultCallback = onResult;
     this.onDiagnosticCallback = onDiagnostic ?? null;
-    this.updateDiagnostics({ error: null });
+    this.reliabilityMonitor.reset();
+    this.updateDiagnostics({ error: null, reliability: this.reliabilityMonitor.snapshot() });
 
     if (this.handsInstance && this.cameraInstance) {
       this.emitDiagnostics();
@@ -120,6 +129,7 @@ export class HandTracker {
           const firstFrame = this.diagnostics.videoFramesReceived === 0;
           this.updateDiagnostics({
             videoFramesReceived: this.diagnostics.videoFramesReceived + 1,
+            reliability: this.reliabilityMonitor.recordFrame(performance.now()),
           });
           if (firstFrame) {
             console.info("[Spatial Spraypaint] Camera frames reaching MediaPipe");
@@ -181,13 +191,18 @@ export class HandTracker {
   }
 
   private handleResults(results: Results): void {
-    this.updateDiagnostics({ resultsCallbacks: this.diagnostics.resultsCallbacks + 1 });
+    const timestamp = performance.now();
+    const hasLandmarks = Boolean(results.multiHandLandmarks?.length);
+    this.updateDiagnostics({
+      resultsCallbacks: this.diagnostics.resultsCallbacks + 1,
+      reliability: this.reliabilityMonitor.recordResult(timestamp, hasLandmarks),
+    });
     if (!this.resultsCallbackLogged) {
       this.resultsCallbackLogged = true;
       console.info("[Spatial Spraypaint] MediaPipe results callback firing");
     }
 
-    if (!results.multiHandLandmarks?.length) {
+    if (!hasLandmarks) {
       this.handWasDetected = false;
       this.lastPinchState = null;
       this.onResultCallback?.(null);
@@ -221,6 +236,9 @@ export class HandTracker {
 
     const pinchDist = calculatePinchDistance(indexTip, thumbTip);
     const isPinching = isPinchActive(pinchDist);
+    this.updateDiagnostics({
+      reliability: this.reliabilityMonitor.recordLandmark(timestamp, mapped, isPinching),
+    });
     if (isPinching !== this.lastPinchState) {
       console.info(
         `[Spatial Spraypaint] Pinch state ${isPinching ? "ACTIVE" : "OPEN"} (${pinchDist.toFixed(3)})`,
@@ -234,6 +252,7 @@ export class HandTracker {
       pinchDist,
       isPinching,
       confidence: results.multiHandedness?.[0]?.score ?? 0,
+      timestamp,
     });
   }
 
