@@ -1,11 +1,19 @@
 import { AnonymityProcessor } from "./AnonymityProcessor";
+import { AdaptiveCurveReconstructor, type CurveInputSample } from "./AdaptiveCurveReconstructor";
 import { getSprayBackground, type SprayBackground } from "./Backgrounds";
+import {
+  CameraEnvironmentProcessor,
+  effectiveEnvironmentMode,
+  needsPersonSegmentation,
+  type CameraEnvironmentMode,
+} from "./CameraEnvironment";
 import { CanonicalStrokeManager } from "./CanonicalStroke";
 import { CommandRegistry } from "./CommandRegistry";
 import { DripAccumulator } from "./DripLogic";
 import { HandTracker, type HandTrackingDiagnostics, type HandTrackingResult } from "./HandTracker";
 import { shouldBridgeMissingHandSample } from "./HandTrackingReliability";
 import { PerformanceRecorder } from "./PerformanceRecorder";
+import { PersonSegmenter, type SegmentationDiagnostics } from "./PersonSegmenter";
 import { INITIAL_PLAYER_STATE, reducePlayerState, type PlayerAction, type PlayerState } from "./PlayerState";
 import { cameraTreatmentForInputMode, INITIAL_SETTINGS_STATE, reduceSettingsState, type SettingsAction, type SettingsState } from "./SettingsState";
 import { createStrokeRandom, SprayBrushEngine } from "./SprayBrushEngine";
@@ -13,7 +21,7 @@ import { SprayCanAudio } from "./SprayCanAudio";
 import { getSprayCapPreset, type SprayCapPreset } from "./SprayCapPresets";
 import { StrokeHistory, type RecordedStroke } from "./StrokeHistory";
 import { StrokeSmoother } from "./StrokeSmoother";
-import { type AnonymityMode, type InputSourceMode } from "./types";
+import { type AnonymityMode, type InputSourceMode, type StrokePoint } from "./types";
 import {
   applyPan,
   applyZoomAroundPoint,
@@ -43,17 +51,25 @@ class SpatialSpraypaintApp {
 
   private readonly strokeManager = new CanonicalStrokeManager();
   private readonly strokeSmoother = new StrokeSmoother();
+  private readonly curveReconstructor = new AdaptiveCurveReconstructor();
   private readonly brushEngine = new SprayBrushEngine();
   private readonly dripAccumulator = new DripAccumulator();
   private readonly strokeHistory = new StrokeHistory(40);
   private readonly handTracker = new HandTracker();
   private readonly anonymityProcessor = new AnonymityProcessor();
+  private readonly cameraEnvironmentProcessor = new CameraEnvironmentProcessor();
+  private readonly personSegmenter = new PersonSegmenter();
   private readonly recorder = new PerformanceRecorder();
   private readonly sprayCanAudio = new SprayCanAudio();
   private readonly commandRegistry: CommandRegistry;
 
   private inputMode: InputSourceMode = "mouse";
   private anonymityMode: AnonymityMode = "hidden";
+  private cameraEnvironmentMode: CameraEnvironmentMode = "original";
+  private cameraEnvironmentColor = "#171822";
+  private cameraEnvironmentImage: HTMLImageElement | null = null;
+  private cameraEnvironmentImageUrl: string | null = null;
+  private segmentationInitialization: Promise<void> | null = null;
   private selectedColor = "#e92f3d";
   private selectedCap: SprayCapPreset = getSprayCapPreset("new-york-fat");
   private selectedBackground: SprayBackground = getSprayBackground("black");
@@ -201,6 +217,23 @@ class SpatialSpraypaintApp {
     });
     this.requireElement<HTMLSelectElement>("anonymity-mode").addEventListener("change", (event) => {
       this.anonymityMode = (event.target as HTMLSelectElement).value as AnonymityMode;
+      this.updateCameraEnvironmentUi();
+      void this.ensurePersonSegmentation();
+    });
+    this.requireElement<HTMLSelectElement>("camera-environment").addEventListener("change", (event) => {
+      this.cameraEnvironmentMode = (event.target as HTMLSelectElement).value as CameraEnvironmentMode;
+      this.updateCameraEnvironmentUi();
+      if (this.cameraEnvironmentMode === "image" && !this.cameraEnvironmentImage) {
+        this.requireElement<HTMLInputElement>("environment-image-file").click();
+      }
+      void this.ensurePersonSegmentation();
+    });
+    this.requireElement<HTMLInputElement>("environment-solid-color").addEventListener("input", (event) => {
+      this.cameraEnvironmentColor = (event.target as HTMLInputElement).value;
+    });
+    this.requireElement<HTMLInputElement>("environment-image-file").addEventListener("change", (event) => {
+      const file = (event.target as HTMLInputElement).files?.[0];
+      if (file) void this.loadCameraEnvironmentImage(file);
     });
     this.requireElement<HTMLInputElement>("tracking-debug-visible").addEventListener("change", (event) => {
       this.setSettings({ type: "tracking-debug", value: (event.target as HTMLInputElement).checked });
@@ -242,6 +275,7 @@ class SpatialSpraypaintApp {
       if (this.settings.isOpen) this.setSettings({ type: "close" });
       this.strokeManager.reset();
       this.strokeSmoother.reset();
+      this.curveReconstructor.reset();
       this.dripAccumulator.reset();
       this.activeWallPoint = screenToWall(this.wallView, screenPoint);
       this.lastDepositTimestamp = 0;
@@ -451,6 +485,7 @@ class SpatialSpraypaintApp {
     this.requireElement<HTMLSelectElement>("smoothing-level").value = this.settings.smoothing;
     this.requireElement<HTMLInputElement>("drips-enabled").checked = this.settings.dripsEnabled;
     this.requireElement<HTMLInputElement>("tracking-debug-visible").checked = this.settings.trackingDebugVisible;
+    this.updateCameraEnvironmentUi();
     this.updateRadiusUi();
     this.updateTrackingVisibility();
   }
@@ -470,11 +505,13 @@ class SpatialSpraypaintApp {
     this.activeWallPoint = null;
     this.updateTrackingOverlay(null);
     this.updateInputModeUi(mode === "spatial" ? "STARTING…" : "READY");
+    this.updateCameraEnvironmentUi();
 
     if (mode === "mouse") {
       if (this.webcamActive) await this.handTracker.stop();
       this.webcamActive = false;
       this.updateInputModeUi("READY");
+      this.updateCameraEnvironmentUi();
       this.updateTrackingVisibility();
       return;
     }
@@ -496,9 +533,14 @@ class SpatialSpraypaintApp {
       await this.handTracker.start();
       this.webcamActive = true;
       this.updateInputModeUi("CAMERA ON");
+      this.updateCameraEnvironmentUi();
+      void this.ensurePersonSegmentation();
     } catch {
       this.webcamActive = false;
       this.updateInputModeUi("RETRY CAMERA", true);
+      const environmentStatus = this.requireElement("environment-status");
+      environmentStatus.textContent = "CAMERA UNAVAILABLE · ORIGINAL FALLBACK";
+      environmentStatus.classList.add("error");
     } finally {
       handButton.disabled = false;
       this.updateTrackingVisibility();
@@ -517,6 +559,93 @@ class SpatialSpraypaintApp {
     statusElement.textContent = status;
     statusElement.classList.toggle("on", status === "CAMERA ON");
     statusElement.classList.toggle("error", error);
+  }
+
+  private async ensurePersonSegmentation(): Promise<void> {
+    if (
+      this.inputMode !== "spatial"
+      || !this.webcamActive
+      || !needsPersonSegmentation(this.anonymityMode, this.cameraEnvironmentMode)
+    ) return;
+    if (this.personSegmenter.getDiagnostics().phase === "ready" || this.segmentationInitialization) return;
+
+    this.segmentationInitialization = this.personSegmenter
+      .initialize((diagnostics) => this.handleSegmentationDiagnostics(diagnostics))
+      .catch(() => undefined)
+      .finally(() => {
+        this.segmentationInitialization = null;
+      });
+    await this.segmentationInitialization;
+  }
+
+  private handleSegmentationDiagnostics(diagnostics: SegmentationDiagnostics): void {
+    if (this.inputMode !== "spatial") {
+      this.updateCameraEnvironmentUi();
+      return;
+    }
+    const status = this.requireElement("environment-status");
+    const error = this.requireElement("environment-error");
+    status.textContent = diagnostics.message;
+    status.classList.toggle("on", diagnostics.phase === "ready");
+    status.classList.toggle("error", diagnostics.phase === "error");
+    if (diagnostics.phase === "error") {
+      this.cameraEnvironmentMode = "original";
+      this.requireElement<HTMLSelectElement>("camera-environment").value = "original";
+      error.textContent = diagnostics.message;
+      error.classList.add("visible");
+      this.updateCameraEnvironmentUi(false);
+    } else {
+      error.textContent = "";
+      error.classList.remove("visible");
+    }
+  }
+
+  private updateCameraEnvironmentUi(updateStatus = true): void {
+    this.requireElement<HTMLSelectElement>("camera-environment").value = this.cameraEnvironmentMode;
+    this.requireElement<HTMLInputElement>("environment-solid-color").value = this.cameraEnvironmentColor;
+    this.requireElement("environment-solid-row").toggleAttribute("hidden", this.cameraEnvironmentMode !== "solid");
+    this.requireElement("environment-image-row").toggleAttribute("hidden", this.cameraEnvironmentMode !== "image");
+    if (updateStatus) {
+      const status = this.requireElement("environment-status");
+      if (this.inputMode !== "spatial") {
+        status.textContent = "HAND MODE REQUIRED";
+        status.classList.remove("on", "error");
+      } else if (!this.webcamActive) {
+        status.textContent = "WAITING FOR CAMERA";
+        status.classList.remove("on", "error");
+      } else if (!needsPersonSegmentation(this.anonymityMode, this.cameraEnvironmentMode)) {
+        status.textContent = "ORIGINAL · SEGMENTATION IDLE";
+        status.classList.remove("on", "error");
+        const error = this.requireElement("environment-error");
+        error.textContent = "";
+        error.classList.remove("visible");
+      }
+    }
+  }
+
+  private async loadCameraEnvironmentImage(file: File): Promise<void> {
+    const image = new Image();
+    const url = URL.createObjectURL(file);
+    try {
+      await new Promise<void>((resolve, reject) => {
+        image.onload = () => resolve();
+        image.onerror = () => reject(new Error("The selected background image could not be decoded."));
+        image.src = url;
+      });
+      if (this.cameraEnvironmentImageUrl) URL.revokeObjectURL(this.cameraEnvironmentImageUrl);
+      this.cameraEnvironmentImageUrl = url;
+      this.cameraEnvironmentImage = image;
+      this.cameraEnvironmentMode = "image";
+      this.updateCameraEnvironmentUi();
+      void this.ensurePersonSegmentation();
+    } catch (loadError) {
+      URL.revokeObjectURL(url);
+      this.cameraEnvironmentMode = "original";
+      this.updateCameraEnvironmentUi();
+      const error = this.requireElement("environment-error");
+      error.textContent = loadError instanceof Error ? loadError.message : "The background image could not load.";
+      error.classList.add("visible");
+    }
   }
 
   private handleHandTrackingResult(result: HandTrackingResult | null): void {
@@ -654,6 +783,7 @@ class SpatialSpraypaintApp {
 
   private setSprayActive(active: boolean): void {
     if (this.isSpraying === active) return;
+    if (!active) this.flushReconstructedPath();
     this.isSpraying = active;
     if (active) {
       const strokeId = this.strokeHistory.begin({ color: this.selectedColor, capId: this.selectedCap.id });
@@ -681,6 +811,7 @@ class SpatialSpraypaintApp {
   private resetStrokeInput(clearActivePoint = true): void {
     this.strokeManager.reset();
     this.strokeSmoother.reset();
+    this.curveReconstructor.reset();
     this.dripAccumulator.reset();
     if (clearActivePoint) this.activeWallPoint = null;
   }
@@ -695,30 +826,19 @@ class SpatialSpraypaintApp {
     ) return;
     this.lastDepositTimestamp = now;
     const smoothed = this.strokeSmoother.smooth(this.activeWallPoint, this.settings.smoothing);
-    const { point, interpolated, previous } = this.strokeManager.createPoint(smoothed.x, smoothed.y, this.baseRadius, 0, now);
-    let segmentStart = previous;
-    this.withWallPaintTransform(() => {
-      for (const segmentEnd of [...interpolated, point]) {
-        this.brushEngine.renderSegment(
-          this.paintCtx,
-          segmentStart,
-          segmentEnd,
-          this.selectedColor,
-          this.selectedCap,
-          this.activeStrokeRandom ?? Math.random,
-        );
-        this.strokeHistory.appendPoint(segmentEnd);
-        segmentStart = segmentEnd;
-      }
-    });
+    const reconstructed = this.curveReconstructor.push(
+      { ...smoothed, timestamp: now },
+      { baseRadius: this.baseRadius },
+    );
+    const point = this.depositReconstructedPath(reconstructed);
     if (this.inputMode === "spatial" && !this.hasPinchSprayed) {
       this.hasPinchSprayed = true;
       this.requireElement("hand-first-use-cue").classList.remove("visible");
     }
     const drip = this.dripAccumulator.observe({
-      x: point.x,
-      y: point.y,
-      radius: point.width,
+      x: point?.x ?? smoothed.x,
+      y: point?.y ?? smoothed.y,
+      radius: point?.width ?? this.baseRadius,
       timestamp: now,
       dripTendency: this.selectedCap.dripTendency,
       enabled: this.settings.dripsEnabled,
@@ -727,6 +847,41 @@ class SpatialSpraypaintApp {
       this.brushEngine.startDrip(drip, this.selectedColor, now);
       this.strokeHistory.appendDrip(drip);
     }
+  }
+
+  private flushReconstructedPath(): void {
+    const remaining = this.curveReconstructor.finish({ baseRadius: this.baseRadius });
+    this.depositReconstructedPath(remaining);
+  }
+
+  private depositReconstructedPath(samples: CurveInputSample[]): StrokePoint | null {
+    let lastPoint: StrokePoint | null = null;
+    this.withWallPaintTransform(() => {
+      for (const sample of samples) {
+        const { point, interpolated, previous } = this.strokeManager.createPoint(
+          sample.x,
+          sample.y,
+          this.baseRadius,
+          0,
+          sample.timestamp,
+        );
+        let segmentStart = previous;
+        for (const segmentEnd of [...interpolated, point]) {
+          this.brushEngine.renderSegment(
+            this.paintCtx,
+            segmentStart,
+            segmentEnd,
+            this.selectedColor,
+            this.selectedCap,
+            this.activeStrokeRandom ?? Math.random,
+          );
+          this.strokeHistory.appendPoint(segmentEnd);
+          segmentStart = segmentEnd;
+        }
+        lastPoint = point;
+      }
+    });
+    return lastPoint;
   }
 
   private undoLastStroke(): void {
@@ -951,13 +1106,41 @@ class SpatialSpraypaintApp {
       this.compositeCtx.clearRect(0, 0, this.compositeCanvas.width, this.compositeCanvas.height);
       this.renderWallBackground();
       if (this.webcamActive && this.inputMode === "spatial") {
-        this.anonymityProcessor.processFrame(
-          this.compositeCtx,
-          this.handTracker.getVideoElement(),
+        const video = this.handTracker.getVideoElement();
+        const segmentationRequired = needsPersonSegmentation(
           this.anonymityMode,
-          this.compositeCanvas.width,
-          this.compositeCanvas.height,
+          this.cameraEnvironmentMode,
         );
+        if (segmentationRequired) void this.personSegmenter.requestFrame(video, now, this.isSpraying);
+        const mask = segmentationRequired ? this.personSegmenter.getMask() : null;
+        if (mask) {
+          const effectiveMode = effectiveEnvironmentMode(
+            this.cameraEnvironmentMode,
+            true,
+            Boolean(this.cameraEnvironmentImage),
+          );
+          this.cameraEnvironmentProcessor.processFrame(
+            this.compositeCtx,
+            video,
+            this.anonymityMode,
+            {
+              mode: effectiveMode,
+              solidColor: this.cameraEnvironmentColor,
+              image: this.cameraEnvironmentImage,
+            },
+            mask,
+            this.compositeCanvas.width,
+            this.compositeCanvas.height,
+          );
+        } else {
+          this.anonymityProcessor.processFrame(
+            this.compositeCtx,
+            video,
+            segmentationRequired ? "clean" : this.anonymityMode,
+            this.compositeCanvas.width,
+            this.compositeCanvas.height,
+          );
+        }
       }
       this.compositeCtx.drawImage(this.paintCanvas, 0, 0);
       requestAnimationFrame(render);

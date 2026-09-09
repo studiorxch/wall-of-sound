@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>StudioRich — Spatial Spraypaint V0.5.1</title>
+  <title>StudioRich — Spatial Spraypaint V0.5.2</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
@@ -142,6 +142,11 @@
     #clear-canvas { color: #ff91a7; }
     #tracking-error { display: none; padding: 9px; border: 1px solid rgba(255,70,95,.45); border-radius: 8px; color: #ff9aaf; background: rgba(255,40,70,.12); font-size: 11px; line-height: 1.4; }
     #tracking-error.visible { display: block; }
+    #environment-error { display:none; padding:8px; border:1px solid rgba(255,188,74,.38); border-radius:8px; color:#ffd18a; background:rgba(130,82,0,.16); font-size:10px; line-height:1.4; }
+    #environment-error.visible { display:block; }
+    #environment-status { text-align:right; white-space:normal; line-height:1.3; }
+    .environment-dependent[hidden] { display:none; }
+    #environment-image-file { position:absolute; width:1px; height:1px; opacity:0; pointer-events:none; }
     #shortcut-list { display: grid; gap: 7px; }
     .shortcut-row { display: grid; grid-template-columns: 90px 1fr; gap: 8px; align-items: start; font-size: 10px; }
     .shortcut-row kbd { padding: 3px 5px; border: 1px solid rgba(255,255,255,.16); border-radius: 5px; background: #20202a; color: #fff; text-align: center; }
@@ -181,7 +186,7 @@
 <body>
   <main id="app">
     <canvas id="composite-canvas" aria-label="Spatial Spraypaint drawing canvas"></canvas>
-    <div id="brand-mark" class="island">SPATIAL SPRAYPAINT · V0.5.1</div>
+    <div id="brand-mark" class="island">SPATIAL SPRAYPAINT · V0.5.2</div>
 
     <section id="input-island" class="island" aria-label="Input mode">
       <button id="physical-input" class="selected" aria-pressed="true">Physical</button>
@@ -253,7 +258,12 @@
       </section>
       <section class="settings-section">
         <h2>Input</h2>
-        <label class="setting-row"><span>Camera treatment</span><select id="anonymity-mode"><option value="clean">Clean</option><option value="ghost">Ghost</option><option value="pixel">Pixelated</option><option value="silhouette">Silhouette</option><option value="chromatic">Chromatic</option><option value="hidden" selected>Hidden canvas</option></select></label>
+        <label class="setting-row"><span>Person treatment</span><select id="anonymity-mode"><option value="clean">Clean</option><option value="ghost">Ghost</option><option value="pixel">Pixelated</option><option value="silhouette">Silhouette</option><option value="chromatic">Chromatic</option><option value="hidden" selected>Hidden</option></select></label>
+        <label class="setting-row"><span>Environment</span><select id="camera-environment"><option value="original" selected>Original</option><option value="blur">Blur</option><option value="solid">Solid color</option><option value="image">Local image</option></select></label>
+        <label id="environment-solid-row" class="setting-row environment-dependent" hidden><span>Environment color</span><input id="environment-solid-color" type="color" value="#171822" aria-label="Environment solid color" /></label>
+        <div id="environment-image-row" class="setting-row environment-dependent" hidden><span>Background image</span><label for="environment-image-file" class="file-button">Choose image</label><input id="environment-image-file" type="file" accept="image/*" /></div>
+        <div class="setting-row"><span>Environment runtime</span><strong id="environment-status" class="status-chip">ORIGINAL · SEGMENTATION IDLE</strong></div>
+        <div id="environment-error" role="status"></div>
         <label class="setting-row"><span>Tracking diagnostics</span><input id="tracking-debug-visible" type="checkbox" /></label>
         <div id="tracking-error" role="alert"></div>
       </section>
