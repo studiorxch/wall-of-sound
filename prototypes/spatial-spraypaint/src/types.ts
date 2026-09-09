@@ -1,11 +1,11 @@
 export type InputSourceMode = "mouse" | "spatial";
 
 export interface StrokePoint {
-  x: number; // Normalized (0 to 1) or canvas pixels
-  y: number; // Normalized (0 to 1) or canvas pixels
+  x: number; // Persistent wall coordinate
+  y: number; // Persistent wall coordinate
   z?: number; // Optional depth factor
   timestamp: number;
-  velocity: number; // Calculated speed in pixels/ms
+  velocity: number; // Calculated speed in wall units/ms
   width: number;
   opacity: number;
 }

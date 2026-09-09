@@ -9,6 +9,17 @@ interface ActiveDrip extends DripSeed {
   bend: number;
 }
 
+export function createStrokeRandom(seed: number): () => number {
+  let state = (seed || 1) >>> 0;
+  return () => {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let value = state;
+    value = Math.imul(value ^ (value >>> 15), value | 1);
+    value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 export class SprayBrushEngine {
   private activeDrips: ActiveDrip[] = [];
 
@@ -26,6 +37,7 @@ export class SprayBrushEngine {
     point: StrokePoint,
     colorHex: string,
     cap: SprayCapPreset,
+    random: () => number = Math.random,
   ): void {
     const dynamics = resolveSprayDynamics(cap, point.velocity, point.width);
     const start = previous ?? point;
@@ -42,8 +54,8 @@ export class SprayBrushEngine {
     for (let pass = dynamics.corePasses - 1; pass >= 0; pass -= 1) {
       const passRatio = dynamics.corePasses === 1 ? 0 : pass / (dynamics.corePasses - 1);
       const edgeExpansion = 1 + passRatio * (1 - cap.edgeFalloff) * 0.72;
-      const jitterX = (Math.random() - 0.5) * dynamics.jitter;
-      const jitterY = (Math.random() - 0.5) * dynamics.jitter;
+      const jitterX = (random() - 0.5) * dynamics.jitter;
+      const jitterY = (random() - 0.5) * dynamics.jitter;
       const endpointScale = previous ? 1 : cap.endpointBehavior === "punchy" ? 0.82 : 0.68;
       ctx.strokeStyle = this.hexToRgba(colorHex, passOpacity * (1 - passRatio * 0.48));
       ctx.lineWidth = Math.max(0.7, dynamics.radius * 2 * dynamics.anisotropy * edgeExpansion * endpointScale);
@@ -54,7 +66,7 @@ export class SprayBrushEngine {
     }
 
     ctx.restore();
-    this.renderOverspray(ctx, start, point, colorHex, dynamics, angle, distance);
+    this.renderOverspray(ctx, start, point, colorHex, dynamics, angle, distance, random);
   }
 
   public startDrip(seed: DripSeed, color: string, now = performance.now()): void {
@@ -119,23 +131,24 @@ export class SprayBrushEngine {
     dynamics: ReturnType<typeof resolveSprayDynamics>,
     angle: number,
     distance: number,
+    random: () => number,
   ): void {
     const segmentFactor = Math.max(0.3, Math.min(1.6, distance / Math.max(1, dynamics.radius) + 0.32));
     const count = Math.round(dynamics.particleCount * segmentFactor);
     ctx.fillStyle = this.hexToRgba(color, dynamics.particleOpacity * point.opacity);
 
     for (let index = 0; index < count; index += 1) {
-      const along = Math.random();
+      const along = random();
       const centerX = start.x + (point.x - start.x) * along;
       const centerY = start.y + (point.y - start.y) * along;
-      const spreadAngle = Math.random() * Math.PI * 2;
-      const spread = Math.pow(Math.random(), 1.55) * dynamics.particleSpread;
+      const spreadAngle = random() * Math.PI * 2;
+      const spread = Math.pow(random(), 1.55) * dynamics.particleSpread;
       const directionalX = Math.cos(spreadAngle) * spread;
       const directionalY = Math.sin(spreadAngle) * spread;
       const anisotropicX = directionalX * Math.cos(angle) - directionalY * dynamics.anisotropy * Math.sin(angle);
       const anisotropicY = directionalX * Math.sin(angle) + directionalY * dynamics.anisotropy * Math.cos(angle);
-      const splatter = Math.random() < dynamics.splatterProbability ? 1.8 + Math.random() * 1.8 : 1;
-      const particleSize = Math.max(0.18, dynamics.particleSize * splatter * (0.45 + Math.random() * 0.9));
+      const splatter = random() < dynamics.splatterProbability ? 1.8 + random() * 1.8 : 1;
+      const particleSize = Math.max(0.18, dynamics.particleSize * splatter * (0.45 + random() * 0.9));
 
       ctx.beginPath();
       ctx.arc(centerX + anisotropicX, centerY + anisotropicY, particleSize, 0, Math.PI * 2);

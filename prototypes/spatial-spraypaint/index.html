@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>StudioRich — Spatial Spraypaint V0.4</title>
+  <title>StudioRich — Spatial Spraypaint V0.5</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
@@ -28,7 +28,9 @@
     select { padding: 7px 30px 7px 9px; }
     input[type="range"] { accent-color: #ff365f; }
     #app { position: relative; background: #050508; }
-    #composite-canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
+    #composite-canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: crosshair; }
+    body.pan-ready #composite-canvas { cursor: grab; }
+    body.panning #composite-canvas { cursor: grabbing; }
 
     .island {
       position: absolute;
@@ -93,6 +95,10 @@
     #toggle-record.recording { background:#d71c45; border-color:#ff5d7d; }
     @keyframes record-pulse { to { opacity:.5; } }
     #member-placeholder { color:#8f8e99; }
+
+    #navigation-island { right:16px; bottom:16px; padding:6px; }
+    #reset-view { min-width:58px; min-height:34px; padding:6px 9px; font-size:11px; font-variant-numeric:tabular-nums; }
+    #reset-view.quick { border-color:#59b8ff; color:#9ed7ff; box-shadow:inset 0 0 0 1px rgba(89,184,255,.14); }
 
     #input-island { top:14px; left:16px; padding:5px; display:flex; align-items:center; gap:4px; }
     #input-island button { min-height:32px; padding:6px 9px; font-size:10px; letter-spacing:.4px; }
@@ -165,6 +171,7 @@
       #session-island { right:10px; top:10px; }
       #player-island { left:10px; right:10px; top:64px; width:auto; transform:none; }
       #art-island { left:10px; bottom:10px; }
+      #navigation-island { right:10px; bottom:10px; }
       .swatch { width: 22px; height: 22px; min-height: 22px; }
       #brand-mark { display: none; }
       .status-chip { display: none; }
@@ -174,7 +181,7 @@
 <body>
   <main id="app">
     <canvas id="composite-canvas" aria-label="Spatial Spraypaint drawing canvas"></canvas>
-    <div id="brand-mark" class="island">SPATIAL SPRAYPAINT · V0.4.1</div>
+    <div id="brand-mark" class="island">SPATIAL SPRAYPAINT · V0.5</div>
 
     <section id="input-island" class="island" aria-label="Input mode">
       <button id="physical-input" class="selected" aria-pressed="true">Physical</button>
@@ -224,11 +231,15 @@
     <section id="player-island" class="island empty" aria-label="Session soundtrack player">
       <input type="file" id="audio-file" accept="audio/*" />
       <label for="audio-file" class="file-button" aria-label="Load soundtrack" title="Load soundtrack">♫</label>
-      <button id="player-play-pause" class="player-loaded" disabled aria-label="Play soundtrack" title="Play / pause · Space">▶</button>
+      <button id="player-play-pause" class="player-loaded" disabled aria-label="Play soundtrack" title="Play / pause soundtrack">▶</button>
       <span id="player-track-name" class="player-loaded">No track loaded</span>
       <input id="player-progress" class="player-loaded" type="range" min="0" max="1000" value="0" disabled aria-label="Track progress" />
       <span id="player-time" class="player-loaded">0:00 / 0:00</span>
       <button id="player-loop" class="player-loaded" aria-pressed="true" aria-label="Toggle soundtrack loop" title="Loop soundtrack">↻</button>
+    </section>
+
+    <section id="navigation-island" class="island" aria-label="Wall navigation">
+      <button id="reset-view" aria-label="Reset wall view. Current zoom 100%" title="Reset view · 0">100%</button>
     </section>
 
     <aside id="settings-panel" class="island" aria-label="Settings" aria-hidden="true">
@@ -237,7 +248,7 @@
         <h2>Drawing</h2>
         <label class="setting-row"><span>Smoothing</span><select id="smoothing-level"><option value="off">Off</option><option value="low">Low</option><option value="medium" selected>Medium</option><option value="high">High</option></select></label>
         <label class="setting-row"><span>Stationary drips</span><input id="drips-enabled" type="checkbox" checked /></label>
-        <div class="setting-stack"><span>Radius override · <strong id="radius-val">32</strong> px</span><input type="range" id="brush-radius" min="4" max="72" value="32" /><button id="radius-reset">Use cap default</button></div>
+        <div class="setting-stack"><span>Radius override · <strong id="radius-val">32</strong> wall units</span><input type="range" id="brush-radius" min="4" max="72" value="32" /><button id="radius-reset">Use cap default</button></div>
         <label class="setting-row"><span>Background</span><select id="background-preset"><option value="black">Black</option><option value="charcoal">Charcoal Wall</option><option value="mid-gray">Mid Gray</option><option value="off-white">Off-White Wall</option></select></label>
       </section>
       <section class="settings-section">

@@ -21,10 +21,11 @@ export class StrokeHistory {
 
   constructor(private readonly limit = 40) {}
 
-  public begin(metadata: StrokeMetadata): void {
+  public begin(metadata: StrokeMetadata): number {
     if (this.current?.points.length) this.finalize();
     this.current = { id: this.nextId, ...metadata, points: [], drips: [] };
     this.nextId += 1;
+    return this.current.id;
   }
 
   public appendPoint(point: StrokePoint): void {
