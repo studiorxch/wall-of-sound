@@ -80,4 +80,23 @@ describe("stroke history", () => {
     expect(history.clearUndoably()).toBe(true);
     expect(history.undo()[0].points[0].x).toBe(120);
   });
+
+  it("renders an in-progress canonical stroke through view movement without splitting it", () => {
+    const history = new StrokeHistory();
+    history.begin({ color: "#fff", capId: "needle" });
+    history.appendPoint(point(120));
+    const before = history.renderSnapshot();
+    const movedView = applyPan(resetWallView(), -40, 20);
+    const projected = before[0].points.map((storedPoint) => wallToScreen(movedView, storedPoint));
+
+    expect(before).toHaveLength(1);
+    expect(before[0].points[0]).toEqual(point(120));
+    expect(projected[0]).toEqual({ x: 80, y: 30 });
+    expect(before[0].points[0].width).toBe(10);
+
+    history.appendPoint(point(180));
+    expect(history.finalize()).toBe(true);
+    expect(history.snapshot()).toHaveLength(1);
+    expect(history.snapshot()[0].points.map(({ x }) => x)).toEqual([120, 180]);
+  });
 });

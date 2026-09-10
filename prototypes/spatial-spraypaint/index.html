@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>StudioRich — Spatial Spraypaint V0.5.3.1</title>
+  <title>StudioRich — Spatial Spraypaint V0.5.4</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
@@ -96,8 +96,12 @@
     #member-placeholder { color:#8f8e99; }
 
     #navigation-island { right:16px; bottom:16px; padding:6px; }
-    #reset-view { min-width:58px; min-height:34px; padding:6px 9px; font-size:11px; font-variant-numeric:tabular-nums; }
-    #reset-view.quick { border-color:#59b8ff; color:#9ed7ff; box-shadow:inset 0 0 0 1px rgba(89,184,255,.14); }
+    #scale-control { min-width:58px; min-height:34px; padding:6px 9px; font-size:11px; font-variant-numeric:tabular-nums; }
+    #scale-control.quick { border-color:#59b8ff; color:#9ed7ff; box-shadow:inset 0 0 0 1px rgba(89,184,255,.14); }
+    #scale-chooser { left:auto; right:16px; bottom:62px; width:204px; grid-template-columns:repeat(3, 58px); gap:5px; }
+    .scale-choice { min-width:58px; padding:7px 6px; font-size:10px; font-variant-numeric:tabular-nums; }
+    .scale-choice.selected { border-color:#59b8ff; color:#9ed7ff; }
+    #scale-reset { grid-column:1 / -1; font-size:10px; }
 
     #input-island { top:14px; left:16px; padding:5px; display:flex; align-items:center; gap:4px; }
     #input-island button { min-height:32px; padding:6px 9px; font-size:10px; letter-spacing:.4px; }
@@ -190,7 +194,7 @@
 <body>
   <main id="app">
     <canvas id="composite-canvas" aria-label="Spatial Spraypaint drawing canvas"></canvas>
-    <div id="brand-mark" class="island">SPATIAL SPRAYPAINT · V0.5.3.1</div>
+    <div id="brand-mark" class="island">SPATIAL SPRAYPAINT · V0.5.4</div>
 
     <section id="input-island" class="island" aria-label="Input mode">
       <button id="physical-input" class="selected" aria-pressed="true">Physical</button>
@@ -248,8 +252,20 @@
     </section>
 
     <section id="navigation-island" class="island" aria-label="Wall navigation">
-      <button id="reset-view" aria-label="Reset wall view. Current zoom 100%" title="Reset view · 0">100%</button>
+      <button id="scale-control" aria-label="Choose wall scale. Current scale 100%" aria-controls="scale-chooser" aria-expanded="false" title="Wall scale 100% · click for presets">100%</button>
     </section>
+    <div id="scale-chooser" class="tool-popover" aria-label="Wall scale presets">
+      <button class="scale-choice" data-zoom="0.25" aria-pressed="false">25%</button>
+      <button class="scale-choice" data-zoom="0.5" aria-pressed="false">50%</button>
+      <button class="scale-choice" data-zoom="0.75" aria-pressed="false">75%</button>
+      <button class="scale-choice selected" data-zoom="1" aria-pressed="true">100%</button>
+      <button class="scale-choice" data-zoom="1.25" aria-pressed="false">125%</button>
+      <button class="scale-choice" data-zoom="1.5" aria-pressed="false">150%</button>
+      <button class="scale-choice" data-zoom="2" aria-pressed="false">200%</button>
+      <button class="scale-choice" data-zoom="3" aria-pressed="false">300%</button>
+      <button class="scale-choice" data-zoom="4" aria-pressed="false">400%</button>
+      <button id="scale-reset" aria-label="Reset wall view to origin at 100%">Reset · 100%</button>
+    </div>
 
     <aside id="settings-panel" class="island" aria-label="Settings" aria-hidden="true">
       <div class="settings-header"><div class="settings-title">Settings</div><button id="settings-close" aria-label="Close settings" title="Close settings · Esc">×</button></div>

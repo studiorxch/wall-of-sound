@@ -89,11 +89,21 @@ export class StrokeHistory {
     return this.cloneStrokes(this.strokes);
   }
 
+  public renderSnapshot(): RecordedStroke[] {
+    const snapshot = this.snapshot();
+    if (this.current?.points.length) snapshot.push(this.cloneStroke(this.current));
+    return snapshot;
+  }
+
   private cloneStrokes(strokes: RecordedStroke[]): RecordedStroke[] {
-    return strokes.map((stroke) => ({
+    return strokes.map((stroke) => this.cloneStroke(stroke));
+  }
+
+  private cloneStroke(stroke: RecordedStroke): RecordedStroke {
+    return {
       ...stroke,
       points: stroke.points.map((point) => ({ ...point })),
       drips: stroke.drips.map((drip) => ({ ...drip })),
-    }));
+    };
   }
 }

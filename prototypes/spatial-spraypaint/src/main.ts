@@ -6,6 +6,12 @@ import { CommandRegistry } from "./CommandRegistry";
 import { DripAccumulator } from "./DripLogic";
 import { HandTracker, type HandTrackingDiagnostics, type HandTrackingResult } from "./HandTracker";
 import {
+  HAND_EDGE_TRACKING_FRESH_MS,
+  resetHandEdgeMotion,
+  resolveHandEdgeMotion,
+  type HandEdgeMotionState,
+} from "./HandEdgeMotion";
+import {
   shouldBridgeMissingHandSample,
   shouldResumeHandDrawingAfterPan,
 } from "./HandTrackingReliability";
@@ -26,9 +32,12 @@ import {
   applyZoomAroundPoint,
   beginPanInteraction,
   cancelPanInteraction,
+  formatZoomPercentage,
+  isWheelZoomGesture,
   resetPanInteraction,
   resetWallView,
   resolveWheelPan,
+  resolveWheelZoom,
   screenToWall,
   setSpacePanHeld,
   shouldPanPointer,
@@ -76,6 +85,8 @@ class SpatialSpraypaintApp {
   private activeWallPoint: WallPoint | null = null;
   private wallView: WallViewState = resetWallView();
   private quickZoomRestore: WallViewState | null = null;
+  private handEdgeMotion: HandEdgeMotionState = resetHandEdgeMotion();
+  private lastRenderTimestamp = 0;
   private lastScreenPoint: WallPoint | null = null;
   private panInteraction: PanInteractionState = resetPanInteraction();
   private panPointerId: number | null = null;
@@ -192,7 +203,20 @@ class SpatialSpraypaintApp {
 
     this.requireElement("undo-stroke").addEventListener("click", () => this.undoLastStroke());
     this.requireElement("clear-strokes").addEventListener("click", () => this.clearAllStrokes());
-    this.requireElement("reset-view").addEventListener("click", () => this.resetView());
+    this.requireElement("scale-control").addEventListener("click", () => {
+      this.toggleToolChooser("scale-chooser");
+    });
+    document.querySelectorAll<HTMLButtonElement>(".scale-choice[data-zoom]").forEach((choice) => {
+      choice.addEventListener("click", () => {
+        const zoom = Number.parseFloat(choice.dataset.zoom ?? "1");
+        this.setZoomLevel(zoom);
+        this.closeToolChoosers();
+      });
+    });
+    this.requireElement("scale-reset").addEventListener("click", () => {
+      this.resetView();
+      this.closeToolChoosers();
+    });
     this.requireElement("settings-toggle").addEventListener("click", () => this.setSettings({ type: "toggle" }));
     this.requireElement("settings-close").addEventListener("click", () => this.setSettings({ type: "close" }));
     this.requireElement<HTMLSelectElement>("smoothing-level").addEventListener("change", (event) => {
@@ -321,7 +345,7 @@ class SpatialSpraypaintApp {
     });
   }
 
-  private pointerScreenPoint(event: PointerEvent): WallPoint {
+  private pointerScreenPoint(event: Pick<MouseEvent, "clientX" | "clientY">): WallPoint {
     const bounds = this.compositeCanvas.getBoundingClientRect();
     return {
       x: (event.clientX - bounds.left) * (this.compositeCanvas.width / bounds.width),
@@ -411,12 +435,21 @@ class SpatialSpraypaintApp {
       if (document.hidden) this.cancelPan("visibilitychange", false);
     });
     this.compositeCanvas.addEventListener("wheel", (event) => {
-      if (event.ctrlKey || event.metaKey) return;
       event.preventDefault();
       this.finishActiveStroke();
       this.cancelPan("wheel", false);
-      const delta = resolveWheelPan(event, this.compositeCanvas.height);
-      this.wallView = applyPan(this.wallView, delta.x, delta.y);
+      if (isWheelZoomGesture(event)) {
+        this.wallView = resolveWheelZoom(
+          this.wallView,
+          event,
+          this.pointerScreenPoint(event),
+          this.compositeCanvas.height,
+        );
+        this.quickZoomRestore = null;
+      } else {
+        const delta = resolveWheelPan(event, this.compositeCanvas.height);
+        this.wallView = applyPan(this.wallView, delta.x, delta.y);
+      }
       this.replayStrokes(this.strokeHistory.snapshot());
       this.updateNavigationUi();
       this.resumeHandAfterPan();
@@ -451,12 +484,13 @@ class SpatialSpraypaintApp {
   }
 
   private zoomBy(factor: number): void {
+    this.setZoomLevel(this.wallView.zoom * factor);
+  }
+
+  private setZoomLevel(zoom: number): void {
     this.finishActiveStroke();
-    this.wallView = applyZoomAroundPoint(
-      this.wallView,
-      this.wallView.zoom * factor,
-      this.navigationAnchor(),
-    );
+    this.wallView = applyZoomAroundPoint(this.wallView, zoom, this.navigationAnchor());
+    this.quickZoomRestore = null;
     this.replayStrokes(this.strokeHistory.snapshot());
     this.updateNavigationUi();
   }
@@ -482,12 +516,17 @@ class SpatialSpraypaintApp {
   }
 
   private updateNavigationUi(): void {
-    const control = this.requireElement<HTMLButtonElement>("reset-view");
-    const percentage = `${Math.round(this.wallView.zoom * 100)}%`;
+    const control = this.requireElement<HTMLButtonElement>("scale-control");
+    const percentage = formatZoomPercentage(this.wallView);
     control.textContent = percentage;
-    control.setAttribute("aria-label", `Reset wall view. Current zoom ${percentage}`);
-    control.setAttribute("title", `Reset view · 0 · pan ${Math.round(this.wallView.panX)}, ${Math.round(this.wallView.panY)}`);
+    control.setAttribute("aria-label", `Choose wall scale. Current scale ${percentage}`);
+    control.setAttribute("title", `Wall scale ${percentage} · click for presets · 0 resets view`);
     control.classList.toggle("quick", this.quickZoomRestore !== null);
+    document.querySelectorAll<HTMLButtonElement>(".scale-choice[data-zoom]").forEach((choice) => {
+      const selected = Math.abs(Number.parseFloat(choice.dataset.zoom ?? "0") - this.wallView.zoom) < 0.001;
+      choice.classList.toggle("selected", selected);
+      choice.setAttribute("aria-pressed", selected.toString());
+    });
     const island = this.requireElement("navigation-island");
     island.dataset.zoom = this.wallView.zoom.toString();
     island.dataset.panX = this.wallView.panX.toString();
@@ -509,17 +548,22 @@ class SpatialSpraypaintApp {
     }
   }
 
-  private toggleToolChooser(id: "color-chooser" | "cap-chooser"): void {
+  private toggleToolChooser(id: "color-chooser" | "cap-chooser" | "scale-chooser"): void {
     const target = this.requireElement(id);
     const shouldOpen = !target.classList.contains("open");
     this.closeToolChoosers();
     if (shouldOpen && this.settings.isOpen) this.setSettings({ type: "close" });
     target.classList.toggle("open", shouldOpen);
+    if (id === "scale-chooser") {
+      this.requireElement("scale-control").setAttribute("aria-expanded", shouldOpen.toString());
+    }
   }
 
   private closeToolChoosers(): void {
     this.requireElement("color-chooser").classList.remove("open");
     this.requireElement("cap-chooser").classList.remove("open");
+    this.requireElement("scale-chooser").classList.remove("open");
+    this.requireElement("scale-control").setAttribute("aria-expanded", "false");
   }
 
   private setSettings(action: SettingsAction): void {
@@ -896,6 +940,32 @@ class SpatialSpraypaintApp {
     }
   }
 
+  private advanceHandEdgeMotion(now: number, deltaMs: number): void {
+    const hand = this.lastHandResult;
+    const drawingActive = this.inputMode === "spatial"
+      && this.isSpraying
+      && Boolean(hand?.isPinching)
+      && this.panPointerId === null
+      && Boolean(hand && now - hand.timestamp <= HAND_EDGE_TRACKING_FRESH_MS);
+    const motion = resolveHandEdgeMotion(this.handEdgeMotion, {
+      hand: hand ? { x: hand.x, y: hand.y } : { x: 0.5, y: 0.5 },
+      drawingActive,
+      deltaMs,
+    });
+    this.handEdgeMotion = motion.state;
+    if (motion.wallDelta.x === 0 && motion.wallDelta.y === 0) return;
+
+    this.wallView = applyPan(this.wallView, motion.wallDelta.x, motion.wallDelta.y);
+    if (hand) {
+      this.activeWallPoint = screenToWall(this.wallView, {
+        x: hand.x * this.compositeCanvas.width,
+        y: hand.y * this.compositeCanvas.height,
+      });
+    }
+    this.replayStrokes(this.strokeHistory.renderSnapshot());
+    this.updateNavigationUi();
+  }
+
   private flushReconstructedPath(): void {
     const remaining = this.curveReconstructor.finish({ baseRadius: this.baseRadius });
     this.depositReconstructedPath(remaining);
@@ -1165,12 +1235,15 @@ class SpatialSpraypaintApp {
   private startRenderLoop(): void {
     const render = () => {
       const now = performance.now();
+      const deltaMs = this.lastRenderTimestamp === 0 ? 0 : now - this.lastRenderTimestamp;
+      this.lastRenderTimestamp = now;
       if (this.webcamActive && this.inputMode === "spatial") {
         this.cameraLuminance = this.cameraLuminanceSampler.sample(
           this.handTracker.getVideoElement(),
           now,
         );
       }
+      this.advanceHandEdgeMotion(now, deltaMs);
       this.depositActivePoint(now);
       this.withWallPaintTransform(() => this.brushEngine.advanceDrips(this.paintCtx, now));
       this.compositeCtx.clearRect(0, 0, this.compositeCanvas.width, this.compositeCanvas.height);

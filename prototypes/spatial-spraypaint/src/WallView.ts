@@ -39,9 +39,18 @@ export interface WheelPanInput {
   deltaMode?: number;
 }
 
+export interface WheelZoomInput {
+  deltaY: number;
+  ctrlKey: boolean;
+  metaKey: boolean;
+  deltaMode?: number;
+}
+
 export const MIN_ZOOM = 0.25;
 export const MAX_ZOOM = 4;
 export const QUICK_ZOOM_LEVEL = 2;
+export const WALL_ZOOM_PRESETS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4] as const;
+const WHEEL_ZOOM_SENSITIVITY = 0.002;
 
 export function resetWallView(): WallViewState {
   return { panX: 0, panY: 0, zoom: 1 };
@@ -115,6 +124,23 @@ export function resolveWheelPan(
   };
 }
 
+export function isWheelZoomGesture(
+  input: Pick<WheelZoomInput, "ctrlKey" | "metaKey">,
+): boolean {
+  return input.ctrlKey || input.metaKey;
+}
+
+export function resolveWheelZoom(
+  view: WallViewState,
+  input: WheelZoomInput,
+  screenAnchor: WallPoint,
+  pageSize = 800,
+): WallViewState {
+  const scale = input.deltaMode === 1 ? 16 : input.deltaMode === 2 ? pageSize : 1;
+  const factor = Math.exp(-input.deltaY * scale * WHEEL_ZOOM_SENSITIVITY);
+  return applyZoomAroundPoint(view, view.zoom * factor, screenAnchor);
+}
+
 export function clampZoom(zoom: number): number {
   return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom));
 }
@@ -131,6 +157,10 @@ export function applyZoomAroundPoint(
     panX: screenAnchor.x - wallAnchor.x * zoom,
     panY: screenAnchor.y - wallAnchor.y * zoom,
   };
+}
+
+export function formatZoomPercentage(view: Pick<WallViewState, "zoom">): string {
+  return `${Math.round(view.zoom * 100)}%`;
 }
 
 export function toggleQuickZoom(

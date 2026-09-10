@@ -2,15 +2,19 @@ import { describe, expect, it } from "vitest";
 import {
   MAX_ZOOM,
   MIN_ZOOM,
+  WALL_ZOOM_PRESETS,
   applyPan,
   applyZoomAroundPoint,
   beginPanInteraction,
   cancelPanInteraction,
   effectiveTool,
   endPanInteraction,
+  formatZoomPercentage,
+  isWheelZoomGesture,
   resetWallView,
   resetPanInteraction,
   resolveWheelPan,
+  resolveWheelZoom,
   screenToWall,
   setSpacePanHeld,
   shouldPanPointer,
@@ -98,6 +102,40 @@ describe("wall view transforms", () => {
     expect(resolveWheelPan({ deltaX: 20, deltaY: 2, shiftKey: true })).toEqual({ x: -20, y: 0 });
   });
 
+  it("recognizes trackpad pinch and modified wheel zoom without consuming ordinary pan", () => {
+    expect(isWheelZoomGesture({ ctrlKey: true, metaKey: false })).toBe(true);
+    expect(isWheelZoomGesture({ ctrlKey: false, metaKey: true })).toBe(true);
+    expect(isWheelZoomGesture({ ctrlKey: false, metaKey: false })).toBe(false);
+  });
+
+  it("keeps the pointer focal point anchored during wheel zoom", () => {
+    const before = { panX: -80, panY: 35, zoom: 0.75 };
+    const anchor = { x: 318, y: 244 };
+    const wallAnchor = screenToWall(before, anchor);
+    const after = resolveWheelZoom(
+      before,
+      { deltaY: -80, ctrlKey: true, metaKey: false },
+      anchor,
+    );
+    expect(after.zoom).toBeGreaterThan(before.zoom);
+    expect(wallToScreen(after, wallAnchor).x).toBeCloseTo(anchor.x, 8);
+    expect(wallToScreen(after, wallAnchor).y).toBeCloseTo(anchor.y, 8);
+  });
+
+  it("applies every Scale preset through the existing WallView zoom authority", () => {
+    const anchor = { x: 400, y: 300 };
+    for (const preset of WALL_ZOOM_PRESETS) {
+      expect(applyZoomAroundPoint(resetWallView(), preset, anchor).zoom).toBe(preset);
+    }
+  });
+
+  it("formats the Scale readout from actual WallView zoom", () => {
+    expect(formatZoomPercentage({ zoom: 0.25 })).toBe("25%");
+    expect(formatZoomPercentage({ zoom: 1 })).toBe("100%");
+    expect(formatZoomPercentage({ zoom: 1.253 })).toBe("125%");
+    expect(formatZoomPercentage({ zoom: 4 })).toBe("400%");
+  });
+
   it("keeps the wall point beneath the zoom anchor visually stable", () => {
     const before = { panX: -100, panY: 45, zoom: 0.8 };
     const anchor = { x: 640, y: 360 };
@@ -110,6 +148,16 @@ describe("wall view transforms", () => {
     const view = resetWallView();
     expect(applyZoomAroundPoint(view, 0.01, { x: 0, y: 0 }).zoom).toBe(MIN_ZOOM);
     expect(applyZoomAroundPoint(view, 99, { x: 0, y: 0 }).zoom).toBe(MAX_ZOOM);
+    expect(resolveWheelZoom(
+      view,
+      { deltaY: 10000, ctrlKey: true, metaKey: false },
+      { x: 0, y: 0 },
+    ).zoom).toBe(MIN_ZOOM);
+    expect(resolveWheelZoom(
+      view,
+      { deltaY: -10000, ctrlKey: true, metaKey: false },
+      { x: 0, y: 0 },
+    ).zoom).toBe(MAX_ZOOM);
   });
 
   it("resets to the useful default view", () => {

@@ -38,6 +38,7 @@ describe("command registry", () => {
 
   it("registers quick and precision zoom without shortcut conflicts", () => {
     expect(resolveCommandId(keyEvent("z"))).toBe("quick-zoom");
+    expect(resolveCommandId(keyEvent("+"))).toBe("zoom-in");
     expect(resolveCommandId(keyEvent("+", { shiftKey: true }))).toBe("zoom-in");
     expect(resolveCommandId(keyEvent("=", { shiftKey: true }))).toBe("zoom-in");
     expect(resolveCommandId(keyEvent("-"))).toBe("zoom-out");
