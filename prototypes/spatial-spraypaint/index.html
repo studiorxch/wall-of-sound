@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>StudioRich — Spatial Spraypaint V0.5.3</title>
+  <title>StudioRich — Spatial Spraypaint V0.5.3.1</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
@@ -29,7 +29,6 @@
     input[type="range"] { accent-color: #ff365f; }
     #app { position: relative; background: #050508; }
     #composite-canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: crosshair; }
-    body.pan-ready #composite-canvas { cursor: grab; }
     body.panning #composite-canvas { cursor: grabbing; }
 
     .island {
@@ -170,6 +169,11 @@
     .tracking-metric strong,.tracking-stage-value { color:#fff; font-variant-numeric:tabular-nums; }
     .tracking-metric strong.active,.tracking-stage[data-state="active"] .tracking-stage-value { color:#ff2a5f; }
     .tracking-stages { display:grid; gap:3px; margin-top:9px; padding-top:8px; border-top:1px solid rgba(255,255,255,.1); }
+    #tracking-quality[data-quality="degraded"] { color:#ffd36d; }
+    #tracking-quality[data-quality="poor"] { color:#ff7894; }
+    #tracking-quality-evidence { max-width:160px; text-align:right; white-space:normal; }
+    #tracking-quality-warning { position:absolute; z-index:8; left:16px; top:96px; width:min(270px, calc(100vw - 32px)); padding:9px 11px; border:1px solid rgba(255,205,94,.28); border-radius:10px; background:rgba(14,14,19,.86); color:#e8d9ad; font-size:10px; line-height:1.45; opacity:0; transform:translateX(-8px); pointer-events:none; transition:opacity 160ms ease, transform 160ms ease; }
+    #tracking-quality-warning.visible { opacity:1; transform:none; }
 
     @media (max-width: 760px) {
       #input-island { left:10px; top:10px; }
@@ -186,7 +190,7 @@
 <body>
   <main id="app">
     <canvas id="composite-canvas" aria-label="Spatial Spraypaint drawing canvas"></canvas>
-    <div id="brand-mark" class="island">SPATIAL SPRAYPAINT · V0.5.3</div>
+    <div id="brand-mark" class="island">SPATIAL SPRAYPAINT · V0.5.3.1</div>
 
     <section id="input-island" class="island" aria-label="Input mode">
       <button id="physical-input" class="selected" aria-pressed="true">Physical</button>
@@ -281,6 +285,8 @@
       </section>
     </aside>
 
+    <div id="tracking-quality-warning" role="status">💡 Hand tracking is struggling. Improve lighting or increase hand/background contrast.</div>
+
     <div id="tracking-overlay" aria-live="polite">
       <div id="tracking-cursor" aria-hidden="true"></div>
       <div id="hand-first-use-cue">Pinch thumb + index finger to spray</div>
@@ -289,6 +295,9 @@
         <div class="tracking-metric"><span>Confidence</span><strong id="tracking-confidence">—</strong></div>
         <div class="tracking-metric"><span>Pinch distance</span><strong id="pinch-distance">—</strong></div>
         <div class="tracking-metric"><span>Pinch</span><strong id="pinch-state">OPEN</strong></div>
+        <div class="tracking-metric"><span>Tracking quality</span><strong id="tracking-quality" data-quality="good">GOOD</strong></div>
+        <div class="tracking-metric"><span>Frame brightness</span><strong id="tracking-luminance">—</strong></div>
+        <div class="tracking-metric"><span>Evidence</span><strong id="tracking-quality-evidence">HEALTHY CADENCE</strong></div>
         <div class="tracking-stages">
           <div class="tracking-stage" data-tracking-stage="library"><span>1 · MediaPipe</span><span class="tracking-stage-value">WAITING</span></div>
           <div class="tracking-stage" data-tracking-stage="frames"><span>2 · Frame cadence</span><span class="tracking-stage-value">WAITING</span></div>
@@ -297,6 +306,7 @@
           <div class="tracking-stage" data-tracking-stage="mapping"><span>5 · Wall delivery</span><span class="tracking-stage-value">WAITING</span></div>
           <div class="tracking-stage" data-tracking-stage="pinch"><span>6 · Pinch state</span><span class="tracking-stage-value">WAITING</span></div>
           <div class="tracking-stage" data-tracking-stage="spray"><span>7 · Spray delivery</span><span class="tracking-stage-value">WAITING</span></div>
+          <div class="tracking-stage" data-tracking-stage="authority"><span>8 · Paint authority</span><span class="tracking-stage-value">WAITING</span></div>
         </div>
       </div>
     </div>

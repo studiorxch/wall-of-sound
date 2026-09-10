@@ -1,5 +1,6 @@
 import { AdaptiveCurveReconstructor, type CurveInputSample } from "./AdaptiveCurveReconstructor";
 import { getSprayBackground, type SprayBackground } from "./Backgrounds";
+import { CameraLuminanceSampler } from "./CameraLuminance";
 import { CanonicalStrokeManager } from "./CanonicalStroke";
 import { CommandRegistry } from "./CommandRegistry";
 import { DripAccumulator } from "./DripLogic";
@@ -9,6 +10,7 @@ import {
   shouldResumeHandDrawingAfterPan,
 } from "./HandTrackingReliability";
 import { PerformanceRecorder } from "./PerformanceRecorder";
+import { resolveInteractionAuthority, type InteractionAuthority } from "./InteractionAuthority";
 import { INITIAL_PLAYER_STATE, reducePlayerState, type PlayerAction, type PlayerState } from "./PlayerState";
 import { INITIAL_SETTINGS_STATE, reduceSettingsState, type SettingsAction, type SettingsState } from "./SettingsState";
 import { createStrokeRandom, SprayBrushEngine } from "./SprayBrushEngine";
@@ -16,6 +18,7 @@ import { SprayCanAudio } from "./SprayCanAudio";
 import { getSprayCapPreset, type SprayCapPreset } from "./SprayCapPresets";
 import { StrokeHistory, type RecordedStroke } from "./StrokeHistory";
 import { StrokeSmoother } from "./StrokeSmoother";
+import { TrackingQualityMonitor, type TrackingQualityAssessment } from "./TrackingQuality";
 import { type InputSourceMode, type StrokePoint } from "./types";
 import { resolveWallComposition, type WallEnvironmentMode } from "./WallComposition";
 import {
@@ -23,8 +26,6 @@ import {
   applyZoomAroundPoint,
   beginPanInteraction,
   cancelPanInteraction,
-  effectiveTool,
-  endPanInteraction,
   resetPanInteraction,
   resetWallView,
   resolveWheelPan,
@@ -52,6 +53,8 @@ class SpatialSpraypaintApp {
   private readonly dripAccumulator = new DripAccumulator();
   private readonly strokeHistory = new StrokeHistory(40);
   private readonly handTracker = new HandTracker();
+  private readonly cameraLuminanceSampler = new CameraLuminanceSampler();
+  private readonly trackingQualityMonitor = new TrackingQualityMonitor();
   private readonly recorder = new PerformanceRecorder();
   private readonly sprayCanAudio = new SprayCanAudio();
   private readonly commandRegistry: CommandRegistry;
@@ -82,6 +85,12 @@ class SpatialSpraypaintApp {
   private sprayDeliveryLogged = false;
   private hasPinchSprayed = false;
   private lastPinchingAt = 0;
+  private trackingQuality: TrackingQualityAssessment = {
+    quality: "good",
+    warningVisible: false,
+    evidence: [],
+  };
+  private cameraLuminance: number | null = null;
   private lastDeliveredWallPoint: WallPoint | null = null;
   private lastDeliveredAt = 0;
   private activeStrokeRandom: (() => number) | null = null;
@@ -273,7 +282,8 @@ class SpatialSpraypaintApp {
     window.addEventListener("pointermove", (event) => {
       const screenPoint = this.pointerScreenPoint(event);
       this.lastScreenPoint = screenPoint;
-      if (effectiveTool("draw", this.panInteraction) === "pan" && event.pointerId === this.panPointerId && this.lastPanScreen) {
+      const authority = this.synchronizeInteractionAuthority(this.currentSprayIntent());
+      if (authority.panGestureActive && event.pointerId === this.panPointerId && this.lastPanScreen) {
         event.preventDefault();
         this.wallView = applyPan(
           this.wallView,
@@ -290,7 +300,7 @@ class SpatialSpraypaintApp {
       }
     });
     window.addEventListener("pointerup", (event) => {
-      if (effectiveTool("draw", this.panInteraction) === "pan" && event.pointerId === this.panPointerId) {
+      if (event.pointerId === this.panPointerId) {
         this.endPan();
         return;
       }
@@ -332,14 +342,13 @@ class SpatialSpraypaintApp {
 
   private endPan(resumeHand = true): void {
     const pointerId = this.panPointerId;
-    this.panInteraction = endPanInteraction(this.panInteraction);
+    this.panInteraction = resetPanInteraction();
     this.panPointerId = null;
     this.lastPanScreen = null;
     if (pointerId !== null && this.compositeCanvas.hasPointerCapture(pointerId)) {
       this.compositeCanvas.releasePointerCapture(pointerId);
     }
     document.body.classList.remove("panning");
-    document.body.classList.toggle("pan-ready", this.panInteraction.spaceHeld);
     if (resumeHand) this.resumeHandAfterPan();
   }
 
@@ -365,7 +374,33 @@ class SpatialSpraypaintApp {
       return;
     }
     this.panInteraction = setSpacePanHeld(this.panInteraction, active);
-    document.body.classList.toggle("pan-ready", active && this.panInteraction.source === null);
+    this.synchronizeInteractionAuthority(this.currentSprayIntent());
+  }
+
+  private currentSprayIntent(): boolean {
+    return this.inputMode === "spatial" ? Boolean(this.lastHandResult?.isPinching) : this.isSpraying;
+  }
+
+  private synchronizeInteractionAuthority(sprayIntent: boolean): InteractionAuthority<"spray"> {
+    const pointerId = this.panPointerId;
+    const authority = resolveInteractionAuthority({
+      activeDrawingTool: "spray",
+      sprayIntent,
+      panInteraction: this.panInteraction,
+      panPointerActive: pointerId !== null,
+    });
+    if (authority.normalized) {
+      console.info("[Spatial Spraypaint] Stale Pan authority normalized; Spray paint and audio restored");
+      this.panInteraction = authority.normalizedPan;
+      this.panPointerId = null;
+      this.lastPanScreen = null;
+      if (pointerId !== null && this.compositeCanvas.hasPointerCapture(pointerId)) {
+        this.compositeCanvas.releasePointerCapture(pointerId);
+      }
+    }
+    document.body.classList.toggle("panning", authority.panVisualActive);
+    document.body.classList.remove("pan-ready");
+    return authority;
   }
 
   private bindCommandSystem(): void {
@@ -390,11 +425,12 @@ class SpatialSpraypaintApp {
 
   private resumeHandAfterPan(): void {
     const sampleAgeMs = this.lastHandResult ? performance.now() - this.lastHandResult.timestamp : Number.POSITIVE_INFINITY;
+    const authority = this.synchronizeInteractionAuthority(Boolean(this.lastHandResult?.isPinching));
     if (!shouldResumeHandDrawingAfterPan({
       isHandMode: this.inputMode === "spatial",
       isPinching: Boolean(this.lastHandResult?.isPinching),
       sampleAgeMs,
-      panGestureActive: this.panInteraction.spaceHeld || this.panInteraction.source !== null,
+      panGestureActive: authority.panGestureActive,
     }) || !this.lastHandResult) return;
     const screenPoint = {
       x: this.lastHandResult.x * this.compositeCanvas.width,
@@ -402,7 +438,9 @@ class SpatialSpraypaintApp {
     };
     this.activeWallPoint = screenToWall(this.wallView, screenPoint);
     this.lastPinchingAt = this.lastHandResult.timestamp;
-    this.setSprayActive(true);
+    this.setSprayActive(authority.paintAllowed && authority.sprayAudioAllowed);
+    this.updatePaintAuthorityDiagnostics(authority, true);
+    this.updateTrackingOverlay(this.lastHandResult);
   }
 
   private navigationAnchor(): WallPoint {
@@ -605,18 +643,17 @@ class SpatialSpraypaintApp {
 
   private handleHandTrackingResult(result: HandTrackingResult | null): void {
     if (this.inputMode !== "spatial") return;
-    if (this.panInteraction.source !== null && this.panPointerId === null) {
-      this.cancelPan("hand-resume", false);
-    }
-    this.updateTrackingOverlay(result);
     if (!result) {
+      const authority = this.synchronizeInteractionAuthority(Boolean(this.lastHandResult?.isPinching));
       const bridgeMissingSample = shouldBridgeMissingHandSample({
         wasPinching: Boolean(this.lastHandResult?.isPinching),
         lastPinchingAt: this.lastPinchingAt,
         now: performance.now(),
-        navigationActive: this.panInteraction.spaceHeld || this.panInteraction.source !== null,
+        navigationActive: authority.panGestureActive,
       });
       this.activeWallPoint = null;
+      this.updatePaintAuthorityDiagnostics(authority, Boolean(this.lastHandResult?.isPinching));
+      this.updateTrackingOverlay(null);
       if (bridgeMissingSample) return;
       this.lastHandResult = null;
       this.setSprayActive(false);
@@ -624,6 +661,7 @@ class SpatialSpraypaintApp {
       return;
     }
     this.lastHandResult = result;
+    const authority = this.synchronizeInteractionAuthority(result.isPinching);
 
     const screenPoint = {
       x: result.x * this.compositeCanvas.width,
@@ -648,15 +686,17 @@ class SpatialSpraypaintApp {
     }
 
     if (result.isPinching) this.lastPinchingAt = result.timestamp;
-    const drawingAvailable = !this.panInteraction.spaceHeld && this.panInteraction.source === null;
-    this.setSprayActive(result.isPinching && drawingAvailable);
-    if (result.isPinching && drawingAvailable) {
+    this.setSprayActive(authority.paintAllowed && authority.sprayAudioAllowed);
+    this.updatePaintAuthorityDiagnostics(authority, result.isPinching);
+    this.updateTrackingOverlay(result);
+    if (authority.paintAllowed) {
       this.setTrackingStage("spray", "pass", "POINT RECEIVED");
       if (!this.sprayDeliveryLogged) {
         this.sprayDeliveryLogged = true;
         console.info("[Spatial Spraypaint] Spray engine received tracked point");
       }
     } else {
+      if (authority.paintSuppressed) this.setTrackingStage("spray", "active", "SUPPRESSED · PAN ACTIVE");
       this.resetStrokeInput(false);
     }
   }
@@ -673,6 +713,17 @@ class SpatialSpraypaintApp {
         ? `Δ${cadence(diagnostics.reliability.landmarkIntervalMs)} · MISS ${diagnostics.reliability.missingHandFrames}/${diagnostics.reliability.consecutiveMissingHandFrames} · PINCH ${diagnostics.reliability.pinchTransitions}`
         : "WAITING",
     );
+    this.trackingQuality = diagnostics.cameraStarted && !diagnostics.error
+      ? this.trackingQualityMonitor.update({
+        confidence: this.lastHandResult?.confidence ?? null,
+        resultIntervalMs: diagnostics.reliability.resultIntervalMs,
+        landmarkIntervalMs: diagnostics.reliability.landmarkIntervalMs,
+        consecutiveMissingHandFrames: diagnostics.reliability.consecutiveMissingHandFrames,
+        pinchTransitions: diagnostics.reliability.pinchTransitions,
+        cameraLuminance: this.cameraLuminance,
+      }, performance.now())
+      : this.trackingQualityMonitor.reset();
+    this.updateTrackingQualityUi();
 
     const status = diagnostics.error ? "TRACKER ERROR" : diagnostics.cameraStarted ? "CAMERA ON" : diagnostics.trackerInitialized ? "TRACKER READY" : diagnostics.libraryLoaded ? "LOADING MODEL" : "CAMERA OFF";
     this.updateInputModeUi(status, Boolean(diagnostics.error));
@@ -693,7 +744,7 @@ class SpatialSpraypaintApp {
     const cursor = this.requireElement("tracking-cursor");
     cursor.classList.toggle("detected", detected);
     cursor.classList.toggle("pinching", Boolean(result?.isPinching));
-    cursor.classList.toggle("spraying", Boolean(result?.isPinching));
+    cursor.classList.toggle("spraying", this.isSpraying);
     if (result) {
       cursor.style.left = `${result.x * 100}%`;
       cursor.style.top = `${result.y * 100}%`;
@@ -710,9 +761,43 @@ class SpatialSpraypaintApp {
     this.setTrackingStage("pinch", result?.isPinching ? "active" : result ? "pass" : "waiting", result?.isPinching ? "ACTIVE" : result ? "OPEN" : "WAITING");
   }
 
+  private updatePaintAuthorityDiagnostics(
+    authority: InteractionAuthority<"spray">,
+    sprayIntent: boolean,
+  ): void {
+    const value = authority.panGestureActive
+      ? `BLOCKED · PAN ${authority.navigationOwner?.toUpperCase() ?? "ACTIVE"}`
+      : sprayIntent
+        ? "PAINT + AUDIO ALLOWED"
+        : "READY";
+    this.setTrackingStage(
+      "authority",
+      authority.panGestureActive ? "active" : sprayIntent ? "pass" : "waiting",
+      value,
+    );
+  }
+
   private updateTrackingVisibility(): void {
     this.requireElement("tracking-overlay").classList.toggle("visible", this.inputMode === "spatial");
     this.requireElement("tracking-debug-panel").classList.toggle("visible", this.inputMode === "spatial" && this.settings.trackingDebugVisible);
+    this.updateTrackingQualityUi();
+  }
+
+  private updateTrackingQualityUi(): void {
+    const quality = this.requireElement("tracking-quality");
+    quality.textContent = this.trackingQuality.quality.toUpperCase();
+    quality.dataset.quality = this.trackingQuality.quality;
+    const evidence = this.requireElement("tracking-quality-evidence");
+    evidence.textContent = this.trackingQuality.evidence.length > 0
+      ? this.trackingQuality.evidence.join(" · ")
+      : "HEALTHY CADENCE";
+    this.requireElement("tracking-luminance").textContent = this.cameraLuminance === null
+      ? "—"
+      : `${Math.round(this.cameraLuminance * 100)}%`;
+    this.requireElement("tracking-quality-warning").classList.toggle(
+      "visible",
+      this.inputMode === "spatial" && this.trackingQuality.warningVisible,
+    );
   }
 
   private setTrackingStage(stage: string, state: string, value: string): void {
@@ -730,8 +815,12 @@ class SpatialSpraypaintApp {
     this.lastPinchingAt = 0;
     this.lastDeliveredWallPoint = null;
     this.lastDeliveredAt = 0;
+    this.cameraLuminance = null;
+    this.cameraLuminanceSampler.reset();
+    this.trackingQuality = this.trackingQualityMonitor.reset();
     this.updateTrackingOverlay(null);
-    for (const stage of ["library", "frames", "callback", "landmarks", "mapping", "pinch", "spray"]) {
+    this.updateTrackingQualityUi();
+    for (const stage of ["library", "frames", "callback", "landmarks", "mapping", "pinch", "spray", "authority"]) {
       this.setTrackingStage(stage, "waiting", "WAITING");
     }
     const errorElement = this.requireElement("tracking-error");
@@ -775,11 +864,11 @@ class SpatialSpraypaintApp {
   }
 
   private depositActivePoint(now: number, force = false): void {
+    const authority = this.synchronizeInteractionAuthority(this.isSpraying);
     if (
       !this.isSpraying
       || !this.activeWallPoint
-      || this.panInteraction.spaceHeld
-      || this.panInteraction.source !== null
+      || !authority.paintAllowed
       || (!force && now - this.lastDepositTimestamp < MIN_DEPOSIT_INTERVAL_MS)
     ) return;
     this.lastDepositTimestamp = now;
@@ -1076,6 +1165,12 @@ class SpatialSpraypaintApp {
   private startRenderLoop(): void {
     const render = () => {
       const now = performance.now();
+      if (this.webcamActive && this.inputMode === "spatial") {
+        this.cameraLuminance = this.cameraLuminanceSampler.sample(
+          this.handTracker.getVideoElement(),
+          now,
+        );
+      }
       this.depositActivePoint(now);
       this.withWallPaintTransform(() => this.brushEngine.advanceDrips(this.paintCtx, now));
       this.compositeCtx.clearRect(0, 0, this.compositeCanvas.width, this.compositeCanvas.height);
