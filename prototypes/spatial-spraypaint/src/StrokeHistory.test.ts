@@ -1,17 +1,32 @@
 import { describe, expect, it } from "vitest";
-import { StrokeHistory } from "./StrokeHistory";
+import { StrokeHistory, type StrokeMetadata } from "./StrokeHistory";
 import { type StrokePoint } from "./types";
 import { applyPan, applyZoomAroundPoint, resetWallView, wallToScreen } from "./WallView";
 
 const point = (x: number): StrokePoint => ({ x, y: 10, timestamp: x, velocity: 0, width: 10, opacity: 1 });
+type MetadataOverrides = Partial<Omit<StrokeMetadata, "toolId" | "variantId">> & {
+  toolId?: "spray-can" | "paint-marker";
+  variantId?: StrokeMetadata["variantId"];
+};
+
+const metadata = (overrides: MetadataOverrides = {}): StrokeMetadata => {
+  const shared = {
+    color: overrides.color ?? "#fff",
+    size: overrides.size ?? 10,
+    inputSource: overrides.inputSource ?? "mouse",
+  };
+  return overrides.toolId === "paint-marker"
+    ? { ...shared, toolId: "paint-marker", variantId: overrides.variantId === "chisel" || overrides.variantId === "mop" ? overrides.variantId : "round" }
+    : { ...shared, toolId: "spray-can", variantId: overrides.variantId === "round" || overrides.variantId === "chisel" || overrides.variantId === "mop" ? "new-york-fat" : overrides.variantId ?? "new-york-fat" };
+};
 
 describe("stroke history", () => {
   it("undoes finalized strokes one at a time in reverse order", () => {
     const history = new StrokeHistory();
-    history.begin({ color: "#fff", capId: "new-york-fat" });
+    history.begin(metadata());
     history.appendPoint(point(1));
     history.finalize();
-    history.begin({ color: "#f00", capId: "needle" });
+    history.begin(metadata({ color: "#f00", variantId: "needle" }));
     history.appendPoint(point(2));
     history.finalize();
 
@@ -22,9 +37,9 @@ describe("stroke history", () => {
 
   it("does not commit an empty stroke and returns defensive snapshots", () => {
     const history = new StrokeHistory();
-    history.begin({ color: "#fff", capId: "new-york-fat" });
+    history.begin(metadata());
     expect(history.finalize()).toBe(false);
-    history.begin({ color: "#fff", capId: "new-york-fat" });
+    history.begin(metadata());
     history.appendPoint(point(1));
     history.finalize();
     const snapshot = history.snapshot();
@@ -35,7 +50,7 @@ describe("stroke history", () => {
   it("bounds undo depth without dropping older paint from replay", () => {
     const history = new StrokeHistory(2);
     for (let index = 0; index < 3; index += 1) {
-      history.begin({ color: "#fff", capId: "needle" });
+      history.begin(metadata({ variantId: "needle" }));
       history.appendPoint(point(index));
       history.finalize();
     }
@@ -50,7 +65,7 @@ describe("stroke history", () => {
   it("restores the complete pre-clear stroke state with one undo", () => {
     const history = new StrokeHistory();
     for (let index = 0; index < 2; index += 1) {
-      history.begin({ color: index ? "#f00" : "#fff", capId: "needle" });
+      history.begin(metadata({ color: index ? "#f00" : "#fff", variantId: "needle" }));
       history.appendPoint(point(index));
       history.finalize();
     }
@@ -64,10 +79,10 @@ describe("stroke history", () => {
 
   it("preserves wall coordinates through transformed replay, Undo, and Clear restoration", () => {
     const history = new StrokeHistory();
-    history.begin({ color: "#fff", capId: "needle" });
+    history.begin(metadata({ variantId: "needle" }));
     history.appendPoint(point(120));
     history.finalize();
-    history.begin({ color: "#f00", capId: "needle" });
+    history.begin(metadata({ color: "#f00", variantId: "needle" }));
     history.appendPoint(point(300));
     history.finalize();
     const view = applyPan(applyZoomAroundPoint(resetWallView(), 2, { x: 0, y: 0 }), -50, 80);
@@ -83,7 +98,7 @@ describe("stroke history", () => {
 
   it("renders an in-progress canonical stroke through view movement without splitting it", () => {
     const history = new StrokeHistory();
-    history.begin({ color: "#fff", capId: "needle" });
+    history.begin(metadata({ variantId: "needle" }));
     history.appendPoint(point(120));
     const before = history.renderSnapshot();
     const movedView = applyPan(resetWallView(), -40, 20);
@@ -98,5 +113,29 @@ describe("stroke history", () => {
     expect(history.finalize()).toBe(true);
     expect(history.snapshot()).toHaveLength(1);
     expect(history.snapshot()[0].points.map(({ x }) => x)).toEqual([120, 180]);
+  });
+
+  it("replays, undoes, clears, and restores mixed Tool strokes", () => {
+    const history = new StrokeHistory();
+    history.begin(metadata({ toolId: "spray-can", variantId: "new-york-fat" }));
+    history.appendPoint(point(20));
+    history.finalize();
+    history.begin(metadata({
+      toolId: "paint-marker",
+      variantId: "round",
+      color: "#f00",
+      size: 28,
+      inputSource: "spatial",
+    }));
+    history.appendPoint(point(40));
+    history.finalize();
+
+    expect(history.snapshot().map(({ toolId, variantId }) => [toolId, variantId])).toEqual([
+      ["spray-can", "new-york-fat"],
+      ["paint-marker", "round"],
+    ]);
+    expect(history.undo().map(({ toolId }) => toolId)).toEqual(["spray-can"]);
+    expect(history.clearUndoably()).toBe(true);
+    expect(history.undo().map(({ toolId }) => toolId)).toEqual(["spray-can"]);
   });
 });

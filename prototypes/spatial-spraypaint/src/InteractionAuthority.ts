@@ -2,7 +2,7 @@ import { resetPanInteraction, type PanInteractionState, type PanSource } from ".
 
 export interface InteractionAuthorityInput<T extends string> {
   activeDrawingTool: T;
-  sprayIntent: boolean;
+  drawingIntent: boolean;
   panInteraction: PanInteractionState;
   panPointerActive: boolean;
 }
@@ -14,9 +14,9 @@ export interface InteractionAuthority<T extends string> {
   panGestureActive: boolean;
   panVisualActive: boolean;
   effectiveTool: T | "pan";
-  paintAllowed: boolean;
-  sprayAudioAllowed: boolean;
-  paintSuppressed: boolean;
+  drawingAllowed: boolean;
+  materialFeedbackAllowed: boolean;
+  drawingSuppressed: boolean;
 }
 
 export function resolveInteractionAuthority<T extends string>(
@@ -26,7 +26,7 @@ export function resolveInteractionAuthority<T extends string>(
   const normalized = sourceWithoutPointer;
   const normalizedPan = normalized ? resetPanInteraction() : input.panInteraction;
   const panGestureActive = normalizedPan.source !== null && input.panPointerActive;
-  const paintAllowed = input.sprayIntent && !panGestureActive;
+  const drawingAllowed = input.drawingIntent && !panGestureActive;
 
   return {
     normalizedPan,
@@ -35,8 +35,8 @@ export function resolveInteractionAuthority<T extends string>(
     panGestureActive,
     panVisualActive: panGestureActive,
     effectiveTool: panGestureActive ? "pan" : input.activeDrawingTool,
-    paintAllowed,
-    sprayAudioAllowed: paintAllowed,
-    paintSuppressed: input.sprayIntent && !paintAllowed,
+    drawingAllowed,
+    materialFeedbackAllowed: drawingAllowed,
+    drawingSuppressed: input.drawingIntent && !drawingAllowed,
   };
 }

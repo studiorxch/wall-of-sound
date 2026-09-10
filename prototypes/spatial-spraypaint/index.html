@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>StudioRich — Spatial Spraypaint V0.5.4</title>
+  <title>StudioRich — Spatial Spraypaint V0.6</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
@@ -60,14 +60,22 @@
     }
     .tool-icon { width: 40px; height: 40px; min-height: 40px; padding: 0; display: grid; place-items: center; font-size: 19px; }
     #color-control::after { content:""; width:22px; height:22px; border:2px solid #fff; border-radius:50%; background:var(--current-color, #e92f3d); box-shadow:inset 0 0 0 3px rgba(0,0,0,.16); }
-    #cap-control::before { content:""; width:18px; height:8px; border:2px solid currentColor; border-radius:2px 8px 8px 2px; transform:rotate(-28deg); }
-    #cap-control::after { content:"•••"; margin-left:-4px; color:#ff6a7f; font-size:10px; letter-spacing:-1px; transform:rotate(-28deg); }
+    #tool-control { font-size:12px; font-weight:950; letter-spacing:.4px; }
+    #tool-control[data-tool="paint-marker"] { color:#ffd36d; }
+    #variant-control::before { content:""; width:18px; height:8px; border:2px solid currentColor; border-radius:2px 8px 8px 2px; transform:rotate(-28deg); }
+    #variant-control::after { content:"•••"; margin-left:-4px; color:#ff6a7f; font-size:10px; letter-spacing:-1px; transform:rotate(-28deg); }
+    #variant-control[data-tool="paint-marker"]::before { width:7px; height:22px; border-radius:3px 3px 7px 7px; background:currentColor; transform:rotate(32deg); }
+    #variant-control[data-tool="paint-marker"]::after { content:""; display:none; }
     .tool-popover { position:absolute; z-index:12; left:16px; bottom:72px; display:none; padding:9px; border:1px solid rgba(255,255,255,.14); border-radius:13px; background:rgba(12,12,17,.94); box-shadow:0 12px 40px rgba(0,0,0,.42); backdrop-filter:blur(16px); }
     .tool-popover.open { display:grid; }
     #color-chooser { grid-template-columns:repeat(6, 30px); gap:6px; }
-    #cap-chooser { gap:4px; max-height:min(480px, calc(100vh - 110px)); overflow-y:auto; }
-    .cap-choice { min-width:210px; display:grid; grid-template-columns:66px 1fr; align-items:center; gap:10px; text-align:left; font-size:11px; }
-    .cap-choice.selected { border-color:#ff6a83; color:#ff91a7; }
+    #tool-chooser, #cap-chooser, #marker-chooser { gap:4px; max-height:min(480px, calc(100vh - 110px)); overflow-y:auto; }
+    .tool-choice, .cap-choice, .marker-choice { min-width:210px; display:grid; grid-template-columns:66px 1fr; align-items:center; gap:10px; text-align:left; font-size:11px; }
+    .tool-choice.selected, .cap-choice.selected, .marker-choice.selected { border-color:#ff6a83; color:#ff91a7; }
+    .tool-sample, .marker-sample { display:grid; place-items:center; height:20px; color:#fff; font-size:10px; font-weight:900; }
+    .marker-sample::before { content:""; display:block; width:48px; border-top:var(--sample-width, 8px) solid currentColor; border-radius:999px; transform:rotate(var(--sample-angle, 0deg)); opacity:.88; }
+    .marker-choice[data-marker="chisel"] .marker-sample::before { border-radius:1px; }
+    .marker-choice[data-marker="mop"] .marker-sample::before { opacity:.72; box-shadow:0 4px 0 -2px currentColor; }
     .cap-sample { display:block; height:0; border-top:var(--sample-width, 8px) solid currentColor; border-radius:999px; opacity:.78; }
     .palette { display: flex; flex-wrap: wrap; gap: 5px; }
     .swatch {
@@ -194,7 +202,7 @@
 <body>
   <main id="app">
     <canvas id="composite-canvas" aria-label="Spatial Spraypaint drawing canvas"></canvas>
-    <div id="brand-mark" class="island">SPATIAL SPRAYPAINT · V0.5.4</div>
+    <div id="brand-mark" class="island">SPATIAL SPRAYPAINT · V0.6</div>
 
     <section id="input-island" class="island" aria-label="Input mode">
       <button id="physical-input" class="selected" aria-pressed="true">Physical</button>
@@ -203,9 +211,14 @@
     </section>
 
     <section id="art-island" class="island" aria-label="Art tools">
+      <button id="tool-control" class="tool-icon" data-tool="spray-can" aria-label="Choose drawing tool. Current tool Spray Can" aria-controls="tool-chooser" aria-expanded="false" title="Tool: Spray Can">S</button>
       <button id="color-control" class="tool-icon" style="--current-color:#e92f3d" aria-label="Choose color" title="Color"></button>
-      <button id="cap-control" class="tool-icon" aria-label="Choose spray cap" title="Cap: New York Fat"></button>
+      <button id="variant-control" class="tool-icon" data-tool="spray-can" aria-label="Choose Cap. Current New York Fat" aria-controls="cap-chooser marker-chooser" aria-expanded="false" title="Cap: New York Fat"></button>
     </section>
+    <div id="tool-chooser" class="tool-popover" aria-label="Drawing tool chooser">
+      <button class="tool-choice selected" data-tool="spray-can" aria-pressed="true"><span class="tool-sample">SPRAY</span><span>Spray Can</span></button>
+      <button class="tool-choice" data-tool="paint-marker" aria-pressed="false"><span class="tool-sample">MARK</span><span>Paint Marker</span></button>
+    </div>
     <div id="color-chooser" class="tool-popover" aria-label="Color chooser">
         <button class="swatch" title="Black" aria-label="Black" style="background:#0b0b0d" data-color="#0b0b0d"></button>
         <button class="swatch" title="White" aria-label="White" style="background:#f5f1e7" data-color="#f5f1e7"></button>
@@ -231,6 +244,11 @@
       <button class="cap-choice" data-cap="calligraphy"><span class="cap-sample" style="--sample-width:7px"></span><span>Calligraphy / Transversal</span></button>
       <button class="cap-choice" data-cap="needle"><span class="cap-sample" style="--sample-width:1px"></span><span>Needle</span></button>
       <button class="cap-choice" data-cap="soft-fade"><span class="cap-sample" style="--sample-width:15px;opacity:.32"></span><span>Soft / Fade</span></button>
+    </div>
+    <div id="marker-chooser" class="tool-popover" aria-label="Marker and nib chooser">
+      <button class="marker-choice selected" data-marker="round" aria-pressed="true"><span class="marker-sample" style="--sample-width:8px"></span><span>Round Marker</span></button>
+      <button class="marker-choice" data-marker="chisel" aria-pressed="false"><span class="marker-sample" style="--sample-width:12px;--sample-angle:-25deg"></span><span>Chisel / Calligraphy</span></button>
+      <button class="marker-choice" data-marker="mop" aria-pressed="false"><span class="marker-sample" style="--sample-width:16px"></span><span>Mop / Drip Mop</span></button>
     </div>
 
     <section id="session-island" class="island" aria-label="Screen and session controls">
@@ -273,7 +291,7 @@
         <h2>Drawing</h2>
         <label class="setting-row"><span>Smoothing</span><select id="smoothing-level"><option value="off">Off</option><option value="low">Low</option><option value="medium" selected>Medium</option><option value="high">High</option></select></label>
         <label class="setting-row"><span>Stationary drips</span><input id="drips-enabled" type="checkbox" checked /></label>
-        <div class="setting-stack"><span>Radius override · <strong id="radius-val">32</strong> wall units</span><input type="range" id="brush-radius" min="4" max="72" value="32" /><button id="radius-reset">Use cap default</button></div>
+        <div class="setting-stack"><span>Size override · <strong id="radius-val">32</strong> wall units</span><input type="range" id="brush-radius" min="4" max="72" value="32" /><button id="radius-reset">Use cap default</button></div>
         <label class="setting-row"><span>Environment</span><select id="wall-environment"><option value="wall" selected>Wall / Default</option><option value="solid">Solid background</option><option value="image">Image background</option></select></label>
         <label id="wall-surface-row" class="setting-row wall-environment-dependent"><span>Wall surface</span><select id="background-preset"><option value="black">Black</option><option value="charcoal">Charcoal Wall</option><option value="mid-gray">Mid Gray</option><option value="off-white">Off-White Wall</option></select></label>
         <label id="wall-solid-row" class="setting-row wall-environment-dependent" hidden><span>Background color</span><input id="wall-solid-color" type="color" value="#171822" aria-label="Solid wall background color" /></label>
@@ -288,7 +306,7 @@
       </section>
       <section class="settings-section">
         <h2>Sound</h2>
-        <div class="setting-row"><span>Spray can</span><strong id="spray-audio-status" class="status-chip">QUIET</strong></div>
+        <div class="setting-row"><span id="tool-feedback-label">Spray Can</span><strong id="spray-audio-status" class="status-chip">QUIET</strong></div>
         <button id="shake-can">Test can rattle</button>
       </section>
       <section class="settings-section">
@@ -305,7 +323,7 @@
 
     <div id="tracking-overlay" aria-live="polite">
       <div id="tracking-cursor" aria-hidden="true"></div>
-      <div id="hand-first-use-cue">Pinch thumb + index finger to spray</div>
+      <div id="hand-first-use-cue">Pinch thumb + index finger to use Spray Can</div>
       <div id="tracking-debug-panel">
         <div class="tracking-debug-title"><span id="tracking-debug-runtime">TRACKER IDLE</span><span id="hand-detection-status">NO HAND</span></div>
         <div class="tracking-metric"><span>Confidence</span><strong id="tracking-confidence">—</strong></div>
@@ -321,8 +339,8 @@
           <div class="tracking-stage" data-tracking-stage="landmarks"><span>4 · Landmark gaps</span><span class="tracking-stage-value">WAITING</span></div>
           <div class="tracking-stage" data-tracking-stage="mapping"><span>5 · Wall delivery</span><span class="tracking-stage-value">WAITING</span></div>
           <div class="tracking-stage" data-tracking-stage="pinch"><span>6 · Pinch state</span><span class="tracking-stage-value">WAITING</span></div>
-          <div class="tracking-stage" data-tracking-stage="spray"><span>7 · Spray delivery</span><span class="tracking-stage-value">WAITING</span></div>
-          <div class="tracking-stage" data-tracking-stage="authority"><span>8 · Paint authority</span><span class="tracking-stage-value">WAITING</span></div>
+          <div class="tracking-stage" data-tracking-stage="mark"><span id="tracking-delivery-label">7 · Spray Can delivery</span><span class="tracking-stage-value">WAITING</span></div>
+          <div class="tracking-stage" data-tracking-stage="authority"><span>8 · Mark authority</span><span class="tracking-stage-value">WAITING</span></div>
         </div>
       </div>
     </div>

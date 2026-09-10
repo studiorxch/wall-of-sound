@@ -6,6 +6,7 @@ import {
   resolveHandEdgeMotion,
 } from "./HandEdgeMotion";
 import { applyPan, resetWallView, screenToWall } from "./WallView";
+import { INITIAL_DRAWING_TOOL_SELECTION, selectDrawingTool } from "./DrawingTool";
 
 const step = (
   hand: { x: number; y: number },
@@ -86,4 +87,14 @@ describe("Hand edge-driven wall motion", () => {
     expect(afterWallPoint.x).toBeGreaterThan(beforeWallPoint.x);
     expect(screenHand).toEqual({ x: 950, y: 500 });
   });
+
+  it.each(["spray-can", "paint-marker"] as const)(
+    "assists a continuous %s gesture without changing Tool authority",
+    (toolId) => {
+      const selection = selectDrawingTool(INITIAL_DRAWING_TOOL_SELECTION, toolId);
+      const result = step({ x: 0.96, y: 0.5 });
+      expect(result.moving).toBe(true);
+      expect(selection.selectedToolId).toBe(toolId);
+    },
+  );
 });

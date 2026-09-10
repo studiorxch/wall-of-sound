@@ -4,6 +4,20 @@ import { CameraLuminanceSampler } from "./CameraLuminance";
 import { CanonicalStrokeManager } from "./CanonicalStroke";
 import { CommandRegistry } from "./CommandRegistry";
 import { DripAccumulator } from "./DripLogic";
+import {
+  INITIAL_DRAWING_TOOL_SELECTION,
+  getDrawingTool,
+  isDrawingToolId,
+  resolveDrawingToolPresentation,
+  resolveSelectedToolForInput,
+  selectDrawingTool,
+  selectMarkerVariant,
+  selectSprayCap,
+  type DrawingToolId,
+  type DrawingToolSelection,
+  type MarkerVariantId,
+} from "./DrawingTool";
+import { DrawingToolRenderer, type ToolStrokeStyle } from "./DrawingToolRenderer";
 import { HandTracker, type HandTrackingDiagnostics, type HandTrackingResult } from "./HandTracker";
 import {
   HAND_EDGE_TRACKING_FRESH_MS,
@@ -16,15 +30,17 @@ import {
   shouldResumeHandDrawingAfterPan,
 } from "./HandTrackingReliability";
 import { PerformanceRecorder } from "./PerformanceRecorder";
+import { getMarkerVariant } from "./PaintMarkerEngine";
 import { resolveInteractionAuthority, type InteractionAuthority } from "./InteractionAuthority";
 import { INITIAL_PLAYER_STATE, reducePlayerState, type PlayerAction, type PlayerState } from "./PlayerState";
 import { INITIAL_SETTINGS_STATE, reduceSettingsState, type SettingsAction, type SettingsState } from "./SettingsState";
-import { createStrokeRandom, SprayBrushEngine } from "./SprayBrushEngine";
+import { createStrokeRandom } from "./SprayBrushEngine";
 import { SprayCanAudio } from "./SprayCanAudio";
-import { getSprayCapPreset, type SprayCapPreset } from "./SprayCapPresets";
+import { getSprayCapPreset } from "./SprayCapPresets";
 import { StrokeHistory, type RecordedStroke } from "./StrokeHistory";
 import { StrokeSmoother } from "./StrokeSmoother";
 import { TrackingQualityMonitor, type TrackingQualityAssessment } from "./TrackingQuality";
+import { resolveToolFeedback } from "./ToolFeedback";
 import { type InputSourceMode, type StrokePoint } from "./types";
 import { resolveWallComposition, type WallEnvironmentMode } from "./WallComposition";
 import {
@@ -58,7 +74,7 @@ class SpatialSpraypaintApp {
   private readonly strokeManager = new CanonicalStrokeManager();
   private readonly strokeSmoother = new StrokeSmoother();
   private readonly curveReconstructor = new AdaptiveCurveReconstructor();
-  private readonly brushEngine = new SprayBrushEngine();
+  private readonly toolRenderer = new DrawingToolRenderer();
   private readonly dripAccumulator = new DripAccumulator();
   private readonly strokeHistory = new StrokeHistory(40);
   private readonly handTracker = new HandTracker();
@@ -73,13 +89,13 @@ class SpatialSpraypaintApp {
   private wallEnvironmentColor = "#171822";
   private wallEnvironmentImage: HTMLImageElement | null = null;
   private wallEnvironmentImageUrl: string | null = null;
+  private toolSelection: DrawingToolSelection = { ...INITIAL_DRAWING_TOOL_SELECTION };
   private selectedColor = "#e92f3d";
-  private selectedCap: SprayCapPreset = getSprayCapPreset("new-york-fat");
   private selectedBackground: SprayBackground = getSprayBackground("black");
   private settings: SettingsState = { ...INITIAL_SETTINGS_STATE };
   private player: PlayerState = { ...INITIAL_PLAYER_STATE };
-  private baseRadius = this.selectedCap.baseRadius;
-  private isSpraying = false;
+  private baseRadius = getSprayCapPreset(INITIAL_DRAWING_TOOL_SELECTION.sprayCapId).baseRadius;
+  private isDrawing = false;
   private webcamActive = false;
   private lastHandResult: HandTrackingResult | null = null;
   private activeWallPoint: WallPoint | null = null;
@@ -93,8 +109,8 @@ class SpatialSpraypaintApp {
   private lastPanScreen: WallPoint | null = null;
   private lastDepositTimestamp = 0;
   private mappedPointLogged = false;
-  private sprayDeliveryLogged = false;
-  private hasPinchSprayed = false;
+  private markDeliveryLogged = false;
+  private hasPinchDrawn = false;
   private lastPinchingAt = 0;
   private trackingQuality: TrackingQualityAssessment = {
     quality: "good",
@@ -105,6 +121,7 @@ class SpatialSpraypaintApp {
   private lastDeliveredWallPoint: WallPoint | null = null;
   private lastDeliveredAt = 0;
   private activeStrokeRandom: (() => number) | null = null;
+  private activeStrokeStyle: ToolStrokeStyle | null = null;
   private audioElement: HTMLAudioElement | null = null;
   private audioObjectUrl: string | null = null;
 
@@ -137,6 +154,7 @@ class SpatialSpraypaintApp {
     this.bindCommandSystem();
     this.renderShortcutReference();
     this.updateSettingsUi();
+    this.updateToolUi();
     this.updatePlayerUi();
     this.updateUndoControl();
     this.updateNavigationUi();
@@ -158,7 +176,7 @@ class SpatialSpraypaintApp {
       this.compositeCanvas.height = window.innerHeight;
       this.paintCanvas.width = window.innerWidth;
       this.paintCanvas.height = window.innerHeight;
-      this.brushEngine.resize(window.innerWidth, window.innerHeight);
+      this.toolRenderer.resize(window.innerWidth, window.innerHeight);
       this.replayStrokes(this.strokeHistory.snapshot());
     };
     window.addEventListener("resize", handleResize);
@@ -166,22 +184,53 @@ class SpatialSpraypaintApp {
   }
 
   private bindControls(): void {
+    this.requireElement("tool-control").addEventListener("click", () => {
+      this.toggleToolChooser("tool-chooser");
+    });
     this.requireElement("color-control").addEventListener("click", () => {
       this.toggleToolChooser("color-chooser");
     });
-    this.requireElement("cap-control").addEventListener("click", () => {
-      this.toggleToolChooser("cap-chooser");
+    this.requireElement("variant-control").addEventListener("click", () => {
+      const presentation = resolveDrawingToolPresentation(
+        this.toolSelection,
+        (id) => getSprayCapPreset(id).name,
+        (id) => getMarkerVariant(id).name,
+      );
+      this.toggleToolChooser(presentation.contextualChooserId);
+    });
+    document.querySelectorAll<HTMLButtonElement>(".tool-choice").forEach((choice) => {
+      choice.addEventListener("click", () => {
+        const toolId = choice.dataset.tool ?? "";
+        if (!isDrawingToolId(toolId)) return;
+        this.finishActiveStroke();
+        this.toolSelection = selectDrawingTool(this.toolSelection, toolId);
+        this.updateToolUi();
+        this.closeToolChoosers();
+      });
     });
     document.querySelectorAll<HTMLButtonElement>(".cap-choice").forEach((choice) => {
       choice.addEventListener("click", () => {
         this.finishActiveStroke();
-        this.selectedCap = getSprayCapPreset(choice.dataset.cap ?? "new-york-fat");
-        if (this.settings.radiusOverride === null) this.baseRadius = this.selectedCap.baseRadius;
+        const cap = getSprayCapPreset(choice.dataset.cap ?? "new-york-fat");
+        this.toolSelection = selectSprayCap(this.toolSelection, cap.id);
+        if (this.settings.radiusOverride === null) this.baseRadius = cap.baseRadius;
         document.querySelectorAll<HTMLButtonElement>(".cap-choice").forEach((candidate) => {
-          candidate.classList.toggle("selected", candidate.dataset.cap === this.selectedCap.id);
+          candidate.classList.toggle("selected", candidate.dataset.cap === this.toolSelection.sprayCapId);
         });
-        const capControl = this.requireElement("cap-control");
-        capControl.setAttribute("title", `Cap: ${this.selectedCap.name}`);
+        this.updateToolUi();
+        this.updateRadiusUi();
+        this.closeToolChoosers();
+      });
+    });
+    document.querySelectorAll<HTMLButtonElement>(".marker-choice").forEach((choice) => {
+      choice.addEventListener("click", () => {
+        const markerId = choice.dataset.marker as MarkerVariantId | undefined;
+        if (!markerId) return;
+        const marker = getMarkerVariant(markerId);
+        this.finishActiveStroke();
+        this.toolSelection = selectMarkerVariant(this.toolSelection, marker.id);
+        if (this.settings.radiusOverride === null) this.baseRadius = marker.defaultSize;
+        this.updateToolUi();
         this.updateRadiusUi();
         this.closeToolChoosers();
       });
@@ -235,7 +284,7 @@ class SpatialSpraypaintApp {
     });
     this.requireElement("radius-reset").addEventListener("click", () => {
       this.finishActiveStroke();
-      this.baseRadius = this.selectedCap.baseRadius;
+      this.baseRadius = this.selectedToolDefaultSize();
       this.setSettings({ type: "radius", value: null });
       this.updateRadiusUi();
     });
@@ -300,13 +349,13 @@ class SpatialSpraypaintApp {
       this.dripAccumulator.reset();
       this.activeWallPoint = screenToWall(this.wallView, screenPoint);
       this.lastDepositTimestamp = 0;
-      this.setSprayActive(true);
+      this.setDrawingActive(true);
       this.depositActivePoint(performance.now());
     });
     window.addEventListener("pointermove", (event) => {
       const screenPoint = this.pointerScreenPoint(event);
       this.lastScreenPoint = screenPoint;
-      const authority = this.synchronizeInteractionAuthority(this.currentSprayIntent());
+      const authority = this.synchronizeInteractionAuthority(this.currentDrawingIntent());
       if (authority.panGestureActive && event.pointerId === this.panPointerId && this.lastPanScreen) {
         event.preventDefault();
         this.wallView = applyPan(
@@ -319,7 +368,7 @@ class SpatialSpraypaintApp {
         this.updateNavigationUi();
         return;
       }
-      if (this.inputMode === "mouse" && this.isSpraying) {
+      if (this.inputMode === "mouse" && this.isDrawing) {
         this.activeWallPoint = screenToWall(this.wallView, screenPoint);
       }
     });
@@ -328,15 +377,15 @@ class SpatialSpraypaintApp {
         this.endPan();
         return;
       }
-      if (this.inputMode !== "mouse" || !this.isSpraying) return;
+      if (this.inputMode !== "mouse" || !this.isDrawing) return;
       this.depositActivePoint(performance.now(), true);
-      this.setSprayActive(false);
+      this.setDrawingActive(false);
       this.resetStrokeInput();
     });
     window.addEventListener("pointercancel", (event) => {
       if (event.pointerId === this.panPointerId) this.cancelPan("pointercancel");
-      if (this.inputMode === "mouse" && this.isSpraying) {
-        this.setSprayActive(false);
+      if (this.inputMode === "mouse" && this.isDrawing) {
+        this.setDrawingActive(false);
         this.resetStrokeInput();
       }
     });
@@ -398,18 +447,18 @@ class SpatialSpraypaintApp {
       return;
     }
     this.panInteraction = setSpacePanHeld(this.panInteraction, active);
-    this.synchronizeInteractionAuthority(this.currentSprayIntent());
+    this.synchronizeInteractionAuthority(this.currentDrawingIntent());
   }
 
-  private currentSprayIntent(): boolean {
-    return this.inputMode === "spatial" ? Boolean(this.lastHandResult?.isPinching) : this.isSpraying;
+  private currentDrawingIntent(): boolean {
+    return this.inputMode === "spatial" ? Boolean(this.lastHandResult?.isPinching) : this.isDrawing;
   }
 
-  private synchronizeInteractionAuthority(sprayIntent: boolean): InteractionAuthority<"spray"> {
+  private synchronizeInteractionAuthority(drawingIntent: boolean): InteractionAuthority<DrawingToolId> {
     const pointerId = this.panPointerId;
     const authority = resolveInteractionAuthority({
-      activeDrawingTool: "spray",
-      sprayIntent,
+      activeDrawingTool: this.toolSelection.selectedToolId,
+      drawingIntent,
       panInteraction: this.panInteraction,
       panPointerActive: pointerId !== null,
     });
@@ -471,7 +520,7 @@ class SpatialSpraypaintApp {
     };
     this.activeWallPoint = screenToWall(this.wallView, screenPoint);
     this.lastPinchingAt = this.lastHandResult.timestamp;
-    this.setSprayActive(authority.paintAllowed && authority.sprayAudioAllowed);
+    this.setDrawingActive(authority.drawingAllowed && authority.materialFeedbackAllowed);
     this.updatePaintAuthorityDiagnostics(authority, true);
     this.updateTrackingOverlay(this.lastHandResult);
   }
@@ -548,7 +597,9 @@ class SpatialSpraypaintApp {
     }
   }
 
-  private toggleToolChooser(id: "color-chooser" | "cap-chooser" | "scale-chooser"): void {
+  private toggleToolChooser(
+    id: "tool-chooser" | "color-chooser" | "cap-chooser" | "marker-chooser" | "scale-chooser",
+  ): void {
     const target = this.requireElement(id);
     const shouldOpen = !target.classList.contains("open");
     this.closeToolChoosers();
@@ -556,13 +607,21 @@ class SpatialSpraypaintApp {
     target.classList.toggle("open", shouldOpen);
     if (id === "scale-chooser") {
       this.requireElement("scale-control").setAttribute("aria-expanded", shouldOpen.toString());
+    } else if (id === "tool-chooser") {
+      this.requireElement("tool-control").setAttribute("aria-expanded", shouldOpen.toString());
+    } else if (id === "cap-chooser" || id === "marker-chooser") {
+      this.requireElement("variant-control").setAttribute("aria-expanded", shouldOpen.toString());
     }
   }
 
   private closeToolChoosers(): void {
+    this.requireElement("tool-chooser").classList.remove("open");
     this.requireElement("color-chooser").classList.remove("open");
     this.requireElement("cap-chooser").classList.remove("open");
+    this.requireElement("marker-chooser").classList.remove("open");
     this.requireElement("scale-chooser").classList.remove("open");
+    this.requireElement("tool-control").setAttribute("aria-expanded", "false");
+    this.requireElement("variant-control").setAttribute("aria-expanded", "false");
     this.requireElement("scale-control").setAttribute("aria-expanded", "false");
   }
 
@@ -590,7 +649,64 @@ class SpatialSpraypaintApp {
   private updateRadiusUi(): void {
     this.requireElement<HTMLInputElement>("brush-radius").value = this.baseRadius.toString();
     this.requireElement("radius-val").textContent = this.baseRadius.toString();
-    this.requireElement("radius-reset").textContent = this.settings.radiusOverride === null ? "Using cap default" : "Use cap default";
+    const parameter = getDrawingTool(this.toolSelection.selectedToolId).parameterLabel;
+    this.requireElement("radius-reset").textContent = this.settings.radiusOverride === null
+      ? `Using ${parameter.toLowerCase()} default`
+      : `Use ${parameter.toLowerCase()} default`;
+  }
+
+  private selectedToolDefaultSize(): number {
+    return this.toolSelection.selectedToolId === "spray-can"
+      ? getSprayCapPreset(this.toolSelection.sprayCapId).baseRadius
+      : getMarkerVariant(this.toolSelection.markerVariantId).defaultSize;
+  }
+
+  private currentToolStyle(): ToolStrokeStyle {
+    const shared = {
+      color: this.selectedColor,
+      size: this.baseRadius,
+    };
+    return this.toolSelection.selectedToolId === "spray-can"
+      ? { ...shared, toolId: "spray-can", variantId: this.toolSelection.sprayCapId }
+      : { ...shared, toolId: "paint-marker", variantId: this.toolSelection.markerVariantId };
+  }
+
+  private updateToolUi(): void {
+    const tool = getDrawingTool(this.toolSelection.selectedToolId);
+    const presentation = resolveDrawingToolPresentation(
+      this.toolSelection,
+      (id) => getSprayCapPreset(id).name,
+      (id) => getMarkerVariant(id).name,
+    );
+    const toolControl = this.requireElement<HTMLButtonElement>("tool-control");
+    toolControl.textContent = tool.id === "spray-can" ? "S" : "M";
+    toolControl.setAttribute("aria-label", `Choose drawing tool. Current tool ${tool.name}`);
+    toolControl.setAttribute("title", `Tool: ${tool.name}`);
+    toolControl.dataset.tool = tool.id;
+    const variantControl = this.requireElement<HTMLButtonElement>("variant-control");
+    variantControl.setAttribute("aria-label", `Choose ${presentation.parameterLabel}. Current ${presentation.variantName}`);
+    variantControl.setAttribute("title", `${presentation.parameterLabel}: ${presentation.variantName}`);
+    variantControl.dataset.tool = tool.id;
+    document.querySelectorAll<HTMLButtonElement>(".tool-choice").forEach((choice) => {
+      const selected = choice.dataset.tool === tool.id;
+      choice.classList.toggle("selected", selected);
+      choice.setAttribute("aria-pressed", selected.toString());
+    });
+    document.querySelectorAll<HTMLButtonElement>(".cap-choice").forEach((choice) => {
+      const selected = choice.dataset.cap === this.toolSelection.sprayCapId;
+      choice.classList.toggle("selected", selected);
+      choice.setAttribute("aria-pressed", selected.toString());
+    });
+    document.querySelectorAll<HTMLButtonElement>(".marker-choice").forEach((choice) => {
+      const selected = choice.dataset.marker === this.toolSelection.markerVariantId;
+      choice.classList.toggle("selected", selected);
+      choice.setAttribute("aria-pressed", selected.toString());
+    });
+    const rattle = this.requireElement<HTMLButtonElement>("shake-can");
+    rattle.disabled = tool.id !== "spray-can";
+    this.requireElement("tool-feedback-label").textContent = tool.name;
+    this.requireElement("hand-first-use-cue").textContent = `Pinch thumb + index finger to use ${tool.name}`;
+    this.requireElement("tracking-delivery-label").textContent = `7 · ${tool.name} delivery`;
   }
 
   private async selectInputMode(mode: InputSourceMode): Promise<void> {
@@ -700,7 +816,7 @@ class SpatialSpraypaintApp {
       this.updateTrackingOverlay(null);
       if (bridgeMissingSample) return;
       this.lastHandResult = null;
-      this.setSprayActive(false);
+      this.setDrawingActive(false);
       this.resetStrokeInput(false);
       return;
     }
@@ -730,17 +846,17 @@ class SpatialSpraypaintApp {
     }
 
     if (result.isPinching) this.lastPinchingAt = result.timestamp;
-    this.setSprayActive(authority.paintAllowed && authority.sprayAudioAllowed);
+    this.setDrawingActive(authority.drawingAllowed && authority.materialFeedbackAllowed);
     this.updatePaintAuthorityDiagnostics(authority, result.isPinching);
     this.updateTrackingOverlay(result);
-    if (authority.paintAllowed) {
-      this.setTrackingStage("spray", "pass", "POINT RECEIVED");
-      if (!this.sprayDeliveryLogged) {
-        this.sprayDeliveryLogged = true;
-        console.info("[Spatial Spraypaint] Spray engine received tracked point");
+    if (authority.drawingAllowed) {
+      this.setTrackingStage("mark", "pass", "POINT RECEIVED");
+      if (!this.markDeliveryLogged) {
+        this.markDeliveryLogged = true;
+        console.info(`[Spatial Spraypaint] ${getDrawingTool(this.toolSelection.selectedToolId).name} received tracked point`);
       }
     } else {
-      if (authority.paintSuppressed) this.setTrackingStage("spray", "active", "SUPPRESSED · PAN ACTIVE");
+      if (authority.drawingSuppressed) this.setTrackingStage("mark", "active", "SUPPRESSED · PAN ACTIVE");
       this.resetStrokeInput(false);
     }
   }
@@ -788,7 +904,7 @@ class SpatialSpraypaintApp {
     const cursor = this.requireElement("tracking-cursor");
     cursor.classList.toggle("detected", detected);
     cursor.classList.toggle("pinching", Boolean(result?.isPinching));
-    cursor.classList.toggle("spraying", this.isSpraying);
+    cursor.classList.toggle("spraying", this.isDrawing);
     if (result) {
       cursor.style.left = `${result.x * 100}%`;
       cursor.style.top = `${result.y * 100}%`;
@@ -801,22 +917,22 @@ class SpatialSpraypaintApp {
     const pinch = this.requireElement("pinch-state");
     pinch.textContent = result?.isPinching ? "ACTIVE" : "OPEN";
     pinch.classList.toggle("active", Boolean(result?.isPinching));
-    this.requireElement("hand-first-use-cue").classList.toggle("visible", detected && !this.hasPinchSprayed);
+    this.requireElement("hand-first-use-cue").classList.toggle("visible", detected && !this.hasPinchDrawn);
     this.setTrackingStage("pinch", result?.isPinching ? "active" : result ? "pass" : "waiting", result?.isPinching ? "ACTIVE" : result ? "OPEN" : "WAITING");
   }
 
   private updatePaintAuthorityDiagnostics(
-    authority: InteractionAuthority<"spray">,
-    sprayIntent: boolean,
+    authority: InteractionAuthority<DrawingToolId>,
+    drawingIntent: boolean,
   ): void {
     const value = authority.panGestureActive
       ? `BLOCKED · PAN ${authority.navigationOwner?.toUpperCase() ?? "ACTIVE"}`
-      : sprayIntent
-        ? "PAINT + AUDIO ALLOWED"
+      : drawingIntent
+        ? "MARK + FEEDBACK ALLOWED"
         : "READY";
     this.setTrackingStage(
       "authority",
-      authority.panGestureActive ? "active" : sprayIntent ? "pass" : "waiting",
+      authority.panGestureActive ? "active" : drawingIntent ? "pass" : "waiting",
       value,
     );
   }
@@ -854,7 +970,7 @@ class SpatialSpraypaintApp {
 
   private resetTrackingDiagnostics(): void {
     this.mappedPointLogged = false;
-    this.sprayDeliveryLogged = false;
+    this.markDeliveryLogged = false;
     this.lastHandResult = null;
     this.lastPinchingAt = 0;
     this.lastDeliveredWallPoint = null;
@@ -864,7 +980,7 @@ class SpatialSpraypaintApp {
     this.trackingQuality = this.trackingQualityMonitor.reset();
     this.updateTrackingOverlay(null);
     this.updateTrackingQualityUi();
-    for (const stage of ["library", "frames", "callback", "landmarks", "mapping", "pinch", "spray", "authority"]) {
+    for (const stage of ["library", "frames", "callback", "landmarks", "mapping", "pinch", "mark", "authority"]) {
       this.setTrackingStage(stage, "waiting", "WAITING");
     }
     const errorElement = this.requireElement("tracking-error");
@@ -872,22 +988,28 @@ class SpatialSpraypaintApp {
     errorElement.classList.remove("visible");
   }
 
-  private setSprayActive(active: boolean): void {
-    if (this.isSpraying === active) return;
+  private setDrawingActive(active: boolean): void {
+    if (this.isDrawing === active) return;
+    if (active && !resolveSelectedToolForInput(this.toolSelection, this.inputMode)) return;
     if (!active) this.flushReconstructedPath();
-    this.isSpraying = active;
+    this.isDrawing = active;
     if (active) {
-      const strokeId = this.strokeHistory.begin({ color: this.selectedColor, capId: this.selectedCap.id });
+      const style = this.currentToolStyle();
+      const strokeId = this.strokeHistory.begin({ ...style, inputSource: this.inputMode });
+      this.activeStrokeStyle = style;
       this.activeStrokeRandom = createStrokeRandom(strokeId);
     } else {
       this.strokeHistory.finalize();
       this.activeStrokeRandom = null;
       this.updateUndoControl();
     }
+    const feedbackToolId = this.activeStrokeStyle?.toolId ?? this.toolSelection.selectedToolId;
+    const feedback = resolveToolFeedback(feedbackToolId, active);
+    if (!active) this.activeStrokeStyle = null;
     const audioStatus = this.requireElement("spray-audio-status");
-    audioStatus.textContent = active ? "HISS" : "QUIET";
+    audioStatus.textContent = feedback.materialState.toUpperCase();
     audioStatus.classList.toggle("on", active);
-    void this.sprayCanAudio.setSpraying(active).catch((error) => {
+    void this.sprayCanAudio.setSpraying(feedback.sprayHissActive).catch((error) => {
       console.error("[Spatial Spraypaint] Spray audio failed", error);
       audioStatus.textContent = "AUDIO ERROR";
       audioStatus.classList.add("error");
@@ -895,7 +1017,7 @@ class SpatialSpraypaintApp {
   }
 
   private finishActiveStroke(): void {
-    if (this.isSpraying) this.setSprayActive(false);
+    if (this.isDrawing) this.setDrawingActive(false);
     this.resetStrokeInput();
   }
 
@@ -908,11 +1030,11 @@ class SpatialSpraypaintApp {
   }
 
   private depositActivePoint(now: number, force = false): void {
-    const authority = this.synchronizeInteractionAuthority(this.isSpraying);
+    const authority = this.synchronizeInteractionAuthority(this.isDrawing);
     if (
-      !this.isSpraying
+      !this.isDrawing
       || !this.activeWallPoint
-      || !authority.paintAllowed
+      || !authority.drawingAllowed
       || (!force && now - this.lastDepositTimestamp < MIN_DEPOSIT_INTERVAL_MS)
     ) return;
     this.lastDepositTimestamp = now;
@@ -922,8 +1044,8 @@ class SpatialSpraypaintApp {
       { baseRadius: this.baseRadius },
     );
     const point = this.depositReconstructedPath(reconstructed);
-    if (this.inputMode === "spatial" && !this.hasPinchSprayed) {
-      this.hasPinchSprayed = true;
+    if (this.inputMode === "spatial" && !this.hasPinchDrawn) {
+      this.hasPinchDrawn = true;
       this.requireElement("hand-first-use-cue").classList.remove("visible");
     }
     const drip = this.dripAccumulator.observe({
@@ -931,11 +1053,11 @@ class SpatialSpraypaintApp {
       y: point?.y ?? smoothed.y,
       radius: point?.width ?? this.baseRadius,
       timestamp: now,
-      dripTendency: this.selectedCap.dripTendency,
+      dripTendency: this.activeStrokeStyle ? this.toolRenderer.dripTendency(this.activeStrokeStyle) : 0,
       enabled: this.settings.dripsEnabled,
     });
     if (drip) {
-      this.brushEngine.startDrip(drip, this.selectedColor, now);
+      this.toolRenderer.startDrip(drip, this.activeStrokeStyle?.color ?? this.selectedColor, now);
       this.strokeHistory.appendDrip(drip);
     }
   }
@@ -943,7 +1065,7 @@ class SpatialSpraypaintApp {
   private advanceHandEdgeMotion(now: number, deltaMs: number): void {
     const hand = this.lastHandResult;
     const drawingActive = this.inputMode === "spatial"
-      && this.isSpraying
+      && this.isDrawing
       && Boolean(hand?.isPinching)
       && this.panPointerId === null
       && Boolean(hand && now - hand.timestamp <= HAND_EDGE_TRACKING_FRESH_MS);
@@ -972,6 +1094,8 @@ class SpatialSpraypaintApp {
   }
 
   private depositReconstructedPath(samples: CurveInputSample[]): StrokePoint | null {
+    const style = this.activeStrokeStyle;
+    if (!style) return null;
     let lastPoint: StrokePoint | null = null;
     this.withWallPaintTransform(() => {
       for (const sample of samples) {
@@ -984,12 +1108,11 @@ class SpatialSpraypaintApp {
         );
         let segmentStart = previous;
         for (const segmentEnd of [...interpolated, point]) {
-          this.brushEngine.renderSegment(
+          this.toolRenderer.renderSegment(
             this.paintCtx,
             segmentStart,
             segmentEnd,
-            this.selectedColor,
-            this.selectedCap,
+            style,
             this.activeStrokeRandom ?? Math.random,
           );
           this.strokeHistory.appendPoint(segmentEnd);
@@ -1012,17 +1135,16 @@ class SpatialSpraypaintApp {
   private replayStrokes(strokes: RecordedStroke[]): void {
     this.paintCtx.setTransform(1, 0, 0, 1, 0, 0);
     this.paintCtx.clearRect(0, 0, this.paintCanvas.width, this.paintCanvas.height);
-    this.brushEngine.clear();
+    this.toolRenderer.clear();
     this.withWallPaintTransform(() => {
       for (const stroke of strokes) {
-        const cap = getSprayCapPreset(stroke.capId);
         const random = createStrokeRandom(stroke.id);
         let previous = null;
         for (const point of stroke.points) {
-          this.brushEngine.renderSegment(this.paintCtx, previous, point, stroke.color, cap, random);
+          this.toolRenderer.renderSegment(this.paintCtx, previous, point, stroke, random);
           previous = point;
         }
-        for (const drip of stroke.drips) this.brushEngine.renderCompletedDrip(this.paintCtx, drip, stroke.color);
+        for (const drip of stroke.drips) this.toolRenderer.renderCompletedDrip(this.paintCtx, drip, stroke.color);
       }
     });
   }
@@ -1112,7 +1234,7 @@ class SpatialSpraypaintApp {
     if (!this.strokeHistory.clearUndoably()) return;
     this.paintCtx.setTransform(1, 0, 0, 1, 0, 0);
     this.paintCtx.clearRect(0, 0, this.paintCanvas.width, this.paintCanvas.height);
-    this.brushEngine.clear();
+    this.toolRenderer.clear();
     this.updateUndoControl();
   }
 
@@ -1183,14 +1305,16 @@ class SpatialSpraypaintApp {
   }
 
   private async playCanRattle(): Promise<void> {
+    if (this.toolSelection.selectedToolId !== "spray-can") return;
     try {
       await this.sprayCanAudio.playRattle();
       const status = this.requireElement("spray-audio-status");
       status.textContent = "RATTLE";
       status.classList.add("on");
       window.setTimeout(() => {
-        status.textContent = this.isSpraying ? "HISS" : "QUIET";
-        status.classList.toggle("on", this.isSpraying);
+        const feedback = resolveToolFeedback(this.toolSelection.selectedToolId, this.isDrawing);
+        status.textContent = feedback.materialState.toUpperCase();
+        status.classList.toggle("on", this.isDrawing);
       }, 480);
     } catch (error) {
       console.error("[Spatial Spraypaint] Can rattle audio failed", error);
@@ -1245,7 +1369,7 @@ class SpatialSpraypaintApp {
       }
       this.advanceHandEdgeMotion(now, deltaMs);
       this.depositActivePoint(now);
-      this.withWallPaintTransform(() => this.brushEngine.advanceDrips(this.paintCtx, now));
+      this.withWallPaintTransform(() => this.toolRenderer.advanceDrips(this.paintCtx, now));
       this.compositeCtx.clearRect(0, 0, this.compositeCanvas.width, this.compositeCanvas.height);
       this.renderWallBackground();
       this.compositeCtx.drawImage(this.paintCanvas, 0, 0);

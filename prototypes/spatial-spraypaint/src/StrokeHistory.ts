@@ -1,16 +1,16 @@
 import { type DripSeed } from "./DripLogic";
-import { type SprayCapId } from "./SprayCapPresets";
-import { type StrokePoint } from "./types";
+import { type ToolStrokeStyle } from "./DrawingToolRenderer";
+import { type InputSourceMode, type StrokePoint } from "./types";
 
-export interface RecordedStroke {
+export type StrokeMetadata = ToolStrokeStyle & {
+  inputSource: InputSourceMode;
+};
+
+export type RecordedStroke = StrokeMetadata & {
   id: number;
-  color: string;
-  capId: SprayCapId;
   points: StrokePoint[];
   drips: DripSeed[];
-}
-
-type StrokeMetadata = Pick<RecordedStroke, "color" | "capId">;
+};
 
 export class StrokeHistory {
   private strokes: RecordedStroke[] = [];
