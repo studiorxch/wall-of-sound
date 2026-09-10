@@ -5,6 +5,7 @@ import {
   applyPan,
   applyZoomAroundPoint,
   beginPanInteraction,
+  cancelPanInteraction,
   effectiveTool,
   endPanInteraction,
   resetWallView,
@@ -61,6 +62,32 @@ describe("wall view transforms", () => {
     const panning = beginPanInteraction(resetPanInteraction(), 1);
     expect(effectiveTool("spray", panning)).toBe("pan");
     expect(effectiveTool("spray", endPanInteraction(panning))).toBe("spray");
+  });
+
+  it.each([
+    "pointercancel",
+    "lostpointercapture",
+    "window-blur",
+    "visibilitychange",
+    "escape",
+    "mode-switch",
+    "hand-resume",
+    "wheel",
+  ] as const)("clears temporary Pan on %s", (reason) => {
+    const panning = beginPanInteraction(setSpacePanHeld(resetPanInteraction(), true), 0);
+    const recovered = cancelPanInteraction(panning, reason);
+    expect(recovered).toEqual(resetPanInteraction());
+    expect(effectiveTool("spray", recovered)).toBe("spray");
+  });
+
+  it("restores drawing through repeated spray and Space-pan cycles", () => {
+    let interaction = resetPanInteraction();
+    for (let cycle = 0; cycle < 12; cycle += 1) {
+      interaction = beginPanInteraction(setSpacePanHeld(interaction, true), 0);
+      expect(effectiveTool("spray", interaction)).toBe("pan");
+      interaction = cancelPanInteraction(interaction, "space-keyup");
+      expect(effectiveTool("spray", interaction)).toBe("spray");
+    }
   });
 
   it("maps vertical, horizontal, and Shift-wheel input to screen-space pan", () => {

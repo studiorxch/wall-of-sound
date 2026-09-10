@@ -1,31 +1,28 @@
-import { AnonymityProcessor } from "./AnonymityProcessor";
 import { AdaptiveCurveReconstructor, type CurveInputSample } from "./AdaptiveCurveReconstructor";
 import { getSprayBackground, type SprayBackground } from "./Backgrounds";
-import {
-  CameraEnvironmentProcessor,
-  effectiveEnvironmentMode,
-  needsPersonSegmentation,
-  type CameraEnvironmentMode,
-} from "./CameraEnvironment";
 import { CanonicalStrokeManager } from "./CanonicalStroke";
 import { CommandRegistry } from "./CommandRegistry";
 import { DripAccumulator } from "./DripLogic";
 import { HandTracker, type HandTrackingDiagnostics, type HandTrackingResult } from "./HandTracker";
-import { shouldBridgeMissingHandSample } from "./HandTrackingReliability";
+import {
+  shouldBridgeMissingHandSample,
+  shouldResumeHandDrawingAfterPan,
+} from "./HandTrackingReliability";
 import { PerformanceRecorder } from "./PerformanceRecorder";
-import { PersonSegmenter, type SegmentationDiagnostics } from "./PersonSegmenter";
 import { INITIAL_PLAYER_STATE, reducePlayerState, type PlayerAction, type PlayerState } from "./PlayerState";
-import { cameraTreatmentForInputMode, INITIAL_SETTINGS_STATE, reduceSettingsState, type SettingsAction, type SettingsState } from "./SettingsState";
+import { INITIAL_SETTINGS_STATE, reduceSettingsState, type SettingsAction, type SettingsState } from "./SettingsState";
 import { createStrokeRandom, SprayBrushEngine } from "./SprayBrushEngine";
 import { SprayCanAudio } from "./SprayCanAudio";
 import { getSprayCapPreset, type SprayCapPreset } from "./SprayCapPresets";
 import { StrokeHistory, type RecordedStroke } from "./StrokeHistory";
 import { StrokeSmoother } from "./StrokeSmoother";
-import { type AnonymityMode, type InputSourceMode, type StrokePoint } from "./types";
+import { type InputSourceMode, type StrokePoint } from "./types";
+import { resolveWallComposition, type WallEnvironmentMode } from "./WallComposition";
 import {
   applyPan,
   applyZoomAroundPoint,
   beginPanInteraction,
+  cancelPanInteraction,
   effectiveTool,
   endPanInteraction,
   resetPanInteraction,
@@ -36,13 +33,12 @@ import {
   shouldPanPointer,
   toggleQuickZoom,
   type PanInteractionState,
+  type PanCancellationReason,
   type WallPoint,
   type WallViewState,
 } from "./WallView";
 
 const MIN_DEPOSIT_INTERVAL_MS = 16;
-const HAND_PAN_RESUME_FRESHNESS_MS = 120;
-
 class SpatialSpraypaintApp {
   private readonly compositeCanvas: HTMLCanvasElement;
   private readonly compositeCtx: CanvasRenderingContext2D;
@@ -56,20 +52,15 @@ class SpatialSpraypaintApp {
   private readonly dripAccumulator = new DripAccumulator();
   private readonly strokeHistory = new StrokeHistory(40);
   private readonly handTracker = new HandTracker();
-  private readonly anonymityProcessor = new AnonymityProcessor();
-  private readonly cameraEnvironmentProcessor = new CameraEnvironmentProcessor();
-  private readonly personSegmenter = new PersonSegmenter();
   private readonly recorder = new PerformanceRecorder();
   private readonly sprayCanAudio = new SprayCanAudio();
   private readonly commandRegistry: CommandRegistry;
 
   private inputMode: InputSourceMode = "mouse";
-  private anonymityMode: AnonymityMode = "hidden";
-  private cameraEnvironmentMode: CameraEnvironmentMode = "original";
-  private cameraEnvironmentColor = "#171822";
-  private cameraEnvironmentImage: HTMLImageElement | null = null;
-  private cameraEnvironmentImageUrl: string | null = null;
-  private segmentationInitialization: Promise<void> | null = null;
+  private wallEnvironmentMode: WallEnvironmentMode = "wall";
+  private wallEnvironmentColor = "#171822";
+  private wallEnvironmentImage: HTMLImageElement | null = null;
+  private wallEnvironmentImageUrl: string | null = null;
   private selectedColor = "#e92f3d";
   private selectedCap: SprayCapPreset = getSprayCapPreset("new-york-fat");
   private selectedBackground: SprayBackground = getSprayBackground("black");
@@ -112,7 +103,10 @@ class SpatialSpraypaintApp {
       "reset-view": () => this.resetView(),
       settings: () => this.setSettings({ type: "toggle" }),
       record: () => this.toggleRecording(),
-      "close-settings": () => this.setSettings({ type: "close" }),
+      "close-settings": () => {
+        this.setSettings({ type: "close" });
+        this.cancelPan("escape");
+      },
     }, {
       pan: () => this.setPanModifier(false),
     });
@@ -215,25 +209,19 @@ class SpatialSpraypaintApp {
     this.requireElement<HTMLSelectElement>("background-preset").addEventListener("change", (event) => {
       this.selectedBackground = getSprayBackground((event.target as HTMLSelectElement).value);
     });
-    this.requireElement<HTMLSelectElement>("anonymity-mode").addEventListener("change", (event) => {
-      this.anonymityMode = (event.target as HTMLSelectElement).value as AnonymityMode;
-      this.updateCameraEnvironmentUi();
-      void this.ensurePersonSegmentation();
-    });
-    this.requireElement<HTMLSelectElement>("camera-environment").addEventListener("change", (event) => {
-      this.cameraEnvironmentMode = (event.target as HTMLSelectElement).value as CameraEnvironmentMode;
-      this.updateCameraEnvironmentUi();
-      if (this.cameraEnvironmentMode === "image" && !this.cameraEnvironmentImage) {
-        this.requireElement<HTMLInputElement>("environment-image-file").click();
+    this.requireElement<HTMLSelectElement>("wall-environment").addEventListener("change", (event) => {
+      this.wallEnvironmentMode = (event.target as HTMLSelectElement).value as WallEnvironmentMode;
+      this.updateWallEnvironmentUi();
+      if (this.wallEnvironmentMode === "image" && !this.wallEnvironmentImage) {
+        this.requireElement<HTMLInputElement>("wall-image-file").click();
       }
-      void this.ensurePersonSegmentation();
     });
-    this.requireElement<HTMLInputElement>("environment-solid-color").addEventListener("input", (event) => {
-      this.cameraEnvironmentColor = (event.target as HTMLInputElement).value;
+    this.requireElement<HTMLInputElement>("wall-solid-color").addEventListener("input", (event) => {
+      this.wallEnvironmentColor = (event.target as HTMLInputElement).value;
     });
-    this.requireElement<HTMLInputElement>("environment-image-file").addEventListener("change", (event) => {
+    this.requireElement<HTMLInputElement>("wall-image-file").addEventListener("change", (event) => {
       const file = (event.target as HTMLInputElement).files?.[0];
-      if (file) void this.loadCameraEnvironmentImage(file);
+      if (file) void this.loadWallEnvironmentImage(file);
     });
     this.requireElement<HTMLInputElement>("tracking-debug-visible").addEventListener("change", (event) => {
       this.setSettings({ type: "tracking-debug", value: (event.target as HTMLInputElement).checked });
@@ -312,11 +300,14 @@ class SpatialSpraypaintApp {
       this.resetStrokeInput();
     });
     window.addEventListener("pointercancel", (event) => {
-      if (effectiveTool("draw", this.panInteraction) === "pan" && event.pointerId === this.panPointerId) this.endPan();
+      if (event.pointerId === this.panPointerId) this.cancelPan("pointercancel");
       if (this.inputMode === "mouse" && this.isSpraying) {
         this.setSprayActive(false);
         this.resetStrokeInput();
       }
+    });
+    this.compositeCanvas.addEventListener("lostpointercapture", (event) => {
+      if (event.pointerId === this.panPointerId) this.cancelPan("lostpointercapture");
     });
   }
 
@@ -340,47 +331,71 @@ class SpatialSpraypaintApp {
   }
 
   private endPan(resumeHand = true): void {
-    if (this.panPointerId !== null && this.compositeCanvas.hasPointerCapture(this.panPointerId)) {
-      this.compositeCanvas.releasePointerCapture(this.panPointerId);
-    }
+    const pointerId = this.panPointerId;
     this.panInteraction = endPanInteraction(this.panInteraction);
     this.panPointerId = null;
     this.lastPanScreen = null;
+    if (pointerId !== null && this.compositeCanvas.hasPointerCapture(pointerId)) {
+      this.compositeCanvas.releasePointerCapture(pointerId);
+    }
     document.body.classList.remove("panning");
     document.body.classList.toggle("pan-ready", this.panInteraction.spaceHeld);
     if (resumeHand) this.resumeHandAfterPan();
   }
 
+  private cancelPan(reason: PanCancellationReason, resumeHand = true): void {
+    const pointerId = this.panPointerId;
+    const wasNavigationActive = this.panInteraction.spaceHeld
+      || this.panInteraction.source !== null
+      || pointerId !== null;
+    this.panInteraction = cancelPanInteraction(this.panInteraction, reason);
+    this.panPointerId = null;
+    this.lastPanScreen = null;
+    if (pointerId !== null && this.compositeCanvas.hasPointerCapture(pointerId)) {
+      this.compositeCanvas.releasePointerCapture(pointerId);
+    }
+    document.body.classList.remove("panning", "pan-ready");
+    if (resumeHand && wasNavigationActive) this.resumeHandAfterPan();
+  }
+
   private setPanModifier(active: boolean): void {
     if (active && !this.panInteraction.spaceHeld) this.finishActiveStroke();
-    const releasingSpacePan = !active && this.panInteraction.source === "space";
-    if (releasingSpacePan) this.endPan(false);
+    if (!active) {
+      this.cancelPan("space-keyup");
+      return;
+    }
     this.panInteraction = setSpacePanHeld(this.panInteraction, active);
     document.body.classList.toggle("pan-ready", active && this.panInteraction.source === null);
-    if (!active) this.resumeHandAfterPan();
   }
 
   private bindCommandSystem(): void {
     window.addEventListener("keydown", (event) => this.commandRegistry.handleKeyboardEvent(event));
     window.addEventListener("keyup", (event) => this.commandRegistry.handleKeyUpEvent(event));
-    window.addEventListener("blur", () => {
-      if (this.panInteraction.source) this.endPan();
-      this.setPanModifier(false);
+    window.addEventListener("blur", () => this.cancelPan("window-blur", false));
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) this.cancelPan("visibilitychange", false);
     });
     this.compositeCanvas.addEventListener("wheel", (event) => {
       if (event.ctrlKey || event.metaKey) return;
       event.preventDefault();
       this.finishActiveStroke();
+      this.cancelPan("wheel", false);
       const delta = resolveWheelPan(event, this.compositeCanvas.height);
       this.wallView = applyPan(this.wallView, delta.x, delta.y);
       this.replayStrokes(this.strokeHistory.snapshot());
       this.updateNavigationUi();
+      this.resumeHandAfterPan();
     }, { passive: false });
   }
 
   private resumeHandAfterPan(): void {
-    if (this.panInteraction.spaceHeld || this.inputMode !== "spatial" || !this.lastHandResult?.isPinching) return;
-    if (performance.now() - this.lastHandResult.timestamp > HAND_PAN_RESUME_FRESHNESS_MS) return;
+    const sampleAgeMs = this.lastHandResult ? performance.now() - this.lastHandResult.timestamp : Number.POSITIVE_INFINITY;
+    if (!shouldResumeHandDrawingAfterPan({
+      isHandMode: this.inputMode === "spatial",
+      isPinching: Boolean(this.lastHandResult?.isPinching),
+      sampleAgeMs,
+      panGestureActive: this.panInteraction.spaceHeld || this.panInteraction.source !== null,
+    }) || !this.lastHandResult) return;
     const screenPoint = {
       x: this.lastHandResult.x * this.compositeCanvas.width,
       y: this.lastHandResult.y * this.compositeCanvas.height,
@@ -485,7 +500,7 @@ class SpatialSpraypaintApp {
     this.requireElement<HTMLSelectElement>("smoothing-level").value = this.settings.smoothing;
     this.requireElement<HTMLInputElement>("drips-enabled").checked = this.settings.dripsEnabled;
     this.requireElement<HTMLInputElement>("tracking-debug-visible").checked = this.settings.trackingDebugVisible;
-    this.updateCameraEnvironmentUi();
+    this.updateWallEnvironmentUi();
     this.updateRadiusUi();
     this.updateTrackingVisibility();
   }
@@ -498,20 +513,17 @@ class SpatialSpraypaintApp {
 
   private async selectInputMode(mode: InputSourceMode): Promise<void> {
     this.finishActiveStroke();
+    this.cancelPan("mode-switch", false);
     this.inputMode = mode;
-    this.anonymityMode = cameraTreatmentForInputMode(mode, this.anonymityMode);
-    this.requireElement<HTMLSelectElement>("anonymity-mode").value = this.anonymityMode;
     this.lastHandResult = null;
     this.activeWallPoint = null;
     this.updateTrackingOverlay(null);
     this.updateInputModeUi(mode === "spatial" ? "STARTING…" : "READY");
-    this.updateCameraEnvironmentUi();
 
     if (mode === "mouse") {
       if (this.webcamActive) await this.handTracker.stop();
       this.webcamActive = false;
       this.updateInputModeUi("READY");
-      this.updateCameraEnvironmentUi();
       this.updateTrackingVisibility();
       return;
     }
@@ -533,14 +545,9 @@ class SpatialSpraypaintApp {
       await this.handTracker.start();
       this.webcamActive = true;
       this.updateInputModeUi("CAMERA ON");
-      this.updateCameraEnvironmentUi();
-      void this.ensurePersonSegmentation();
     } catch {
       this.webcamActive = false;
       this.updateInputModeUi("RETRY CAMERA", true);
-      const environmentStatus = this.requireElement("environment-status");
-      environmentStatus.textContent = "CAMERA UNAVAILABLE · ORIGINAL FALLBACK";
-      environmentStatus.classList.add("error");
     } finally {
       handButton.disabled = false;
       this.updateTrackingVisibility();
@@ -561,69 +568,15 @@ class SpatialSpraypaintApp {
     statusElement.classList.toggle("error", error);
   }
 
-  private async ensurePersonSegmentation(): Promise<void> {
-    if (
-      this.inputMode !== "spatial"
-      || !this.webcamActive
-      || !needsPersonSegmentation(this.anonymityMode, this.cameraEnvironmentMode)
-    ) return;
-    if (this.personSegmenter.getDiagnostics().phase === "ready" || this.segmentationInitialization) return;
-
-    this.segmentationInitialization = this.personSegmenter
-      .initialize((diagnostics) => this.handleSegmentationDiagnostics(diagnostics))
-      .catch(() => undefined)
-      .finally(() => {
-        this.segmentationInitialization = null;
-      });
-    await this.segmentationInitialization;
+  private updateWallEnvironmentUi(): void {
+    this.requireElement<HTMLSelectElement>("wall-environment").value = this.wallEnvironmentMode;
+    this.requireElement<HTMLInputElement>("wall-solid-color").value = this.wallEnvironmentColor;
+    this.requireElement("wall-surface-row").toggleAttribute("hidden", this.wallEnvironmentMode !== "wall");
+    this.requireElement("wall-solid-row").toggleAttribute("hidden", this.wallEnvironmentMode !== "solid");
+    this.requireElement("wall-image-row").toggleAttribute("hidden", this.wallEnvironmentMode !== "image");
   }
 
-  private handleSegmentationDiagnostics(diagnostics: SegmentationDiagnostics): void {
-    if (this.inputMode !== "spatial") {
-      this.updateCameraEnvironmentUi();
-      return;
-    }
-    const status = this.requireElement("environment-status");
-    const error = this.requireElement("environment-error");
-    status.textContent = diagnostics.message;
-    status.classList.toggle("on", diagnostics.phase === "ready");
-    status.classList.toggle("error", diagnostics.phase === "error");
-    if (diagnostics.phase === "error") {
-      this.cameraEnvironmentMode = "original";
-      this.requireElement<HTMLSelectElement>("camera-environment").value = "original";
-      error.textContent = diagnostics.message;
-      error.classList.add("visible");
-      this.updateCameraEnvironmentUi(false);
-    } else {
-      error.textContent = "";
-      error.classList.remove("visible");
-    }
-  }
-
-  private updateCameraEnvironmentUi(updateStatus = true): void {
-    this.requireElement<HTMLSelectElement>("camera-environment").value = this.cameraEnvironmentMode;
-    this.requireElement<HTMLInputElement>("environment-solid-color").value = this.cameraEnvironmentColor;
-    this.requireElement("environment-solid-row").toggleAttribute("hidden", this.cameraEnvironmentMode !== "solid");
-    this.requireElement("environment-image-row").toggleAttribute("hidden", this.cameraEnvironmentMode !== "image");
-    if (updateStatus) {
-      const status = this.requireElement("environment-status");
-      if (this.inputMode !== "spatial") {
-        status.textContent = "HAND MODE REQUIRED";
-        status.classList.remove("on", "error");
-      } else if (!this.webcamActive) {
-        status.textContent = "WAITING FOR CAMERA";
-        status.classList.remove("on", "error");
-      } else if (!needsPersonSegmentation(this.anonymityMode, this.cameraEnvironmentMode)) {
-        status.textContent = "ORIGINAL · SEGMENTATION IDLE";
-        status.classList.remove("on", "error");
-        const error = this.requireElement("environment-error");
-        error.textContent = "";
-        error.classList.remove("visible");
-      }
-    }
-  }
-
-  private async loadCameraEnvironmentImage(file: File): Promise<void> {
+  private async loadWallEnvironmentImage(file: File): Promise<void> {
     const image = new Image();
     const url = URL.createObjectURL(file);
     try {
@@ -632,17 +585,19 @@ class SpatialSpraypaintApp {
         image.onerror = () => reject(new Error("The selected background image could not be decoded."));
         image.src = url;
       });
-      if (this.cameraEnvironmentImageUrl) URL.revokeObjectURL(this.cameraEnvironmentImageUrl);
-      this.cameraEnvironmentImageUrl = url;
-      this.cameraEnvironmentImage = image;
-      this.cameraEnvironmentMode = "image";
-      this.updateCameraEnvironmentUi();
-      void this.ensurePersonSegmentation();
+      if (this.wallEnvironmentImageUrl) URL.revokeObjectURL(this.wallEnvironmentImageUrl);
+      this.wallEnvironmentImageUrl = url;
+      this.wallEnvironmentImage = image;
+      this.wallEnvironmentMode = "image";
+      this.updateWallEnvironmentUi();
+      const error = this.requireElement("wall-environment-error");
+      error.textContent = "";
+      error.classList.remove("visible");
     } catch (loadError) {
       URL.revokeObjectURL(url);
-      this.cameraEnvironmentMode = "original";
-      this.updateCameraEnvironmentUi();
-      const error = this.requireElement("environment-error");
+      this.wallEnvironmentMode = "wall";
+      this.updateWallEnvironmentUi();
+      const error = this.requireElement("wall-environment-error");
       error.textContent = loadError instanceof Error ? loadError.message : "The background image could not load.";
       error.classList.add("visible");
     }
@@ -650,6 +605,9 @@ class SpatialSpraypaintApp {
 
   private handleHandTrackingResult(result: HandTrackingResult | null): void {
     if (this.inputMode !== "spatial") return;
+    if (this.panInteraction.source !== null && this.panPointerId === null) {
+      this.cancelPan("hand-resume", false);
+    }
     this.updateTrackingOverlay(result);
     if (!result) {
       const bridgeMissingSample = shouldBridgeMissingHandSample({
@@ -925,7 +883,13 @@ class SpatialSpraypaintApp {
   }
 
   private renderWallBackground(): void {
-    this.compositeCtx.fillStyle = this.selectedBackground.color;
+    const composition = resolveWallComposition(
+      this.wallEnvironmentMode,
+      Boolean(this.wallEnvironmentImage),
+    );
+    this.compositeCtx.fillStyle = composition.environment === "solid"
+      ? this.wallEnvironmentColor
+      : this.selectedBackground.color;
     this.compositeCtx.fillRect(0, 0, this.compositeCanvas.width, this.compositeCanvas.height);
 
     const topLeft = screenToWall(this.wallView, { x: 0, y: 0 });
@@ -948,6 +912,17 @@ class SpatialSpraypaintApp {
       this.wallView.panX,
       this.wallView.panY,
     );
+    if (composition.environment === "image" && this.wallEnvironmentImage) {
+      const tileWidth = Math.max(640, Math.min(1920, this.wallEnvironmentImage.naturalWidth));
+      const tileHeight = tileWidth * (this.wallEnvironmentImage.naturalHeight / this.wallEnvironmentImage.naturalWidth);
+      const firstTileX = Math.floor(topLeft.x / tileWidth) * tileWidth;
+      const firstTileY = Math.floor(topLeft.y / tileHeight) * tileHeight;
+      for (let y = firstTileY; y <= bottomRight.y; y += tileHeight) {
+        for (let x = firstTileX; x <= bottomRight.x; x += tileWidth) {
+          this.compositeCtx.drawImage(this.wallEnvironmentImage, x, y, tileWidth, tileHeight);
+        }
+      }
+    }
     this.compositeCtx.strokeStyle = this.selectedBackground.id === "off-white"
       ? "rgba(20, 20, 24, 0.045)"
       : "rgba(255, 255, 255, 0.045)";
@@ -1105,43 +1080,6 @@ class SpatialSpraypaintApp {
       this.withWallPaintTransform(() => this.brushEngine.advanceDrips(this.paintCtx, now));
       this.compositeCtx.clearRect(0, 0, this.compositeCanvas.width, this.compositeCanvas.height);
       this.renderWallBackground();
-      if (this.webcamActive && this.inputMode === "spatial") {
-        const video = this.handTracker.getVideoElement();
-        const segmentationRequired = needsPersonSegmentation(
-          this.anonymityMode,
-          this.cameraEnvironmentMode,
-        );
-        if (segmentationRequired) void this.personSegmenter.requestFrame(video, now, this.isSpraying);
-        const mask = segmentationRequired ? this.personSegmenter.getMask() : null;
-        if (mask) {
-          const effectiveMode = effectiveEnvironmentMode(
-            this.cameraEnvironmentMode,
-            true,
-            Boolean(this.cameraEnvironmentImage),
-          );
-          this.cameraEnvironmentProcessor.processFrame(
-            this.compositeCtx,
-            video,
-            this.anonymityMode,
-            {
-              mode: effectiveMode,
-              solidColor: this.cameraEnvironmentColor,
-              image: this.cameraEnvironmentImage,
-            },
-            mask,
-            this.compositeCanvas.width,
-            this.compositeCanvas.height,
-          );
-        } else {
-          this.anonymityProcessor.processFrame(
-            this.compositeCtx,
-            video,
-            segmentationRequired ? "clean" : this.anonymityMode,
-            this.compositeCanvas.width,
-            this.compositeCanvas.height,
-          );
-        }
-      }
       this.compositeCtx.drawImage(this.paintCanvas, 0, 0);
       requestAnimationFrame(render);
     };

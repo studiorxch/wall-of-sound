@@ -27,10 +27,10 @@ export const INITIAL_SETTINGS_STATE: SettingsState = {
 };
 
 export function cameraTreatmentForInputMode(
-  mode: InputSourceMode,
-  current: AnonymityMode,
+  _mode: InputSourceMode,
+  _current: AnonymityMode,
 ): AnonymityMode {
-  return mode === "spatial" ? "clean" : current;
+  return "hidden";
 }
 
 export function reduceSettingsState(state: SettingsState, action: SettingsAction): SettingsState {

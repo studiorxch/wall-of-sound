@@ -16,6 +16,7 @@ export interface HandTrackingReliabilitySnapshot {
 }
 
 export const HAND_SAMPLE_BRIDGE_MS = 90;
+export const HAND_PAN_RESUME_FRESHNESS_MS = 120;
 
 export function shouldBridgeMissingHandSample(options: {
   wasPinching: boolean;
@@ -28,6 +29,19 @@ export function shouldBridgeMissingHandSample(options: {
   return options.wasPinching
     && !options.navigationActive
     && options.now - options.lastPinchingAt <= maxGapMs;
+}
+
+export function shouldResumeHandDrawingAfterPan(options: {
+  isHandMode: boolean;
+  isPinching: boolean;
+  sampleAgeMs: number;
+  panGestureActive: boolean;
+  maxSampleAgeMs?: number;
+}): boolean {
+  return options.isHandMode
+    && options.isPinching
+    && !options.panGestureActive
+    && options.sampleAgeMs <= (options.maxSampleAgeMs ?? HAND_PAN_RESUME_FRESHNESS_MS);
 }
 
 export class HandTrackingReliabilityMonitor {

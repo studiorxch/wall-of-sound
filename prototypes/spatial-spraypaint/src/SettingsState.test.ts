@@ -15,8 +15,8 @@ describe("settings state", () => {
     expect(debug).toMatchObject({ radiusOverride: 24, trackingDebugVisible: true });
   });
 
-  it("defaults Hand to Clean without changing the Physical treatment", () => {
-    expect(cameraTreatmentForInputMode("spatial", "hidden")).toBe("clean");
-    expect(cameraTreatmentForInputMode("mouse", "ghost")).toBe("ghost");
+  it("keeps the performer hidden across Physical and Hand modes", () => {
+    expect(cameraTreatmentForInputMode("spatial", "clean")).toBe("hidden");
+    expect(cameraTreatmentForInputMode("mouse", "ghost")).toBe("hidden");
   });
 });

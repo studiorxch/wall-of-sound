@@ -3,6 +3,7 @@ import {
   HAND_SAMPLE_BRIDGE_MS,
   HandTrackingReliabilityMonitor,
   shouldBridgeMissingHandSample,
+  shouldResumeHandDrawingAfterPan,
 } from "./HandTrackingReliability";
 
 describe("hand tracking reliability monitor", () => {
@@ -43,5 +44,13 @@ describe("hand tracking reliability monitor", () => {
     expect(shouldBridgeMissingHandSample({ ...base, now: 101 + HAND_SAMPLE_BRIDGE_MS })).toBe(false);
     expect(shouldBridgeMissingHandSample({ ...base, now: 130, navigationActive: true })).toBe(false);
     expect(shouldBridgeMissingHandSample({ ...base, now: 130, wasPinching: false })).toBe(false);
+  });
+
+  it("resumes Hand drawing after Pan only from a fresh active pinch", () => {
+    const ready = { isHandMode: true, isPinching: true, sampleAgeMs: 40, panGestureActive: false };
+    expect(shouldResumeHandDrawingAfterPan(ready)).toBe(true);
+    expect(shouldResumeHandDrawingAfterPan({ ...ready, panGestureActive: true })).toBe(false);
+    expect(shouldResumeHandDrawingAfterPan({ ...ready, sampleAgeMs: 121 })).toBe(false);
+    expect(shouldResumeHandDrawingAfterPan({ ...ready, isHandMode: false })).toBe(false);
   });
 });

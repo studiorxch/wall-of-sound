@@ -21,6 +21,17 @@ export interface PanInteractionState {
   source: PanSource;
 }
 
+export type PanCancellationReason =
+  | "space-keyup"
+  | "pointercancel"
+  | "lostpointercapture"
+  | "window-blur"
+  | "visibilitychange"
+  | "escape"
+  | "mode-switch"
+  | "hand-resume"
+  | "wheel";
+
 export interface WheelPanInput {
   deltaX: number;
   deltaY: number;
@@ -76,6 +87,13 @@ export function beginPanInteraction(state: PanInteractionState, button: number):
 
 export function endPanInteraction(state: PanInteractionState): PanInteractionState {
   return { ...state, source: null };
+}
+
+export function cancelPanInteraction(
+  _state: PanInteractionState,
+  _reason: PanCancellationReason,
+): PanInteractionState {
+  return resetPanInteraction();
 }
 
 export function effectiveTool<T extends string>(activeTool: T, state: PanInteractionState): T | "pan" {
