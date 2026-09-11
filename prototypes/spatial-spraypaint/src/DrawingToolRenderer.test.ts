@@ -20,6 +20,7 @@ function recordingContext(): { ctx: CanvasRenderingContext2D; calls: string[] } 
     beginPath: () => calls.push("beginPath"),
     moveTo: () => calls.push("moveTo"),
     lineTo: () => calls.push("lineTo"),
+    closePath: () => calls.push("closePath"),
     stroke: () => calls.push("stroke"),
     fill: () => calls.push("fill"),
     arc: () => calls.push("arc"),
@@ -56,14 +57,16 @@ describe("shared Drawing Tool renderer", () => {
   it("dispatches Paint Marker without aerosol particles", () => {
     const style: ToolStrokeStyle = {
       toolId: "paint-marker",
-      variantId: "round",
+      variantId: "chisel",
       color: "#e92f3d",
       size: 24,
     };
     const recording = recordingContext();
-    new DrawingToolRenderer().renderSegment(recording.ctx, point(0), point(30), style);
-    expect(recording.calls).toContain("stroke");
+    const renderer = new DrawingToolRenderer();
+    renderer.beginStroke(style);
+    renderer.renderSegment(recording.ctx, point(0), point(30), style);
+    expect(recording.calls).toContain("fill");
+    expect(recording.calls).toContain("closePath");
     expect(recording.calls).not.toContain("arc");
-    expect(recording.calls).not.toContain("fill");
   });
 });

@@ -7,6 +7,7 @@ interface ActiveDrip extends DripSeed {
   startedAt: number;
   lastProgress: number;
   bend: number;
+  durationMs: number;
 }
 
 export function createStrokeRandom(seed: number): () => number {
@@ -75,14 +76,14 @@ export class SprayBrushEngine {
       color,
       startedAt: now,
       lastProgress: 0,
-      bend: (Math.random() - 0.5) * seed.length * 0.12,
+      bend: seed.bend ?? (Math.random() - 0.5) * seed.length * 0.12,
+      durationMs: seed.durationMs ?? 1200,
     });
   }
 
   public advanceDrips(ctx: CanvasRenderingContext2D, now = performance.now()): void {
-    const duration = 1200;
     this.activeDrips = this.activeDrips.filter((drip) => {
-      const progress = Math.min(1, Math.max(0, (now - drip.startedAt) / duration));
+      const progress = Math.min(1, Math.max(0, (now - drip.startedAt) / drip.durationMs));
       if (progress <= drip.lastProgress) return progress < 1;
 
       const easedPrevious = drip.lastProgress * drip.lastProgress;
@@ -118,7 +119,7 @@ export class SprayBrushEngine {
     ctx.lineWidth = Math.max(0.8, drip.width * 0.72);
     ctx.beginPath();
     ctx.moveTo(drip.x, drip.y);
-    ctx.lineTo(drip.x, drip.y + drip.length);
+    ctx.lineTo(drip.x + (drip.bend ?? 0), drip.y + drip.length);
     ctx.stroke();
     ctx.restore();
   }

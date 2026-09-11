@@ -9,6 +9,7 @@ import {
   selectMarkerVariant,
   selectedToolVariant,
 } from "./DrawingTool";
+import { MARKER_VARIANTS } from "./PaintMarkerEngine";
 
 describe("drawing Tool authority", () => {
   it("holds one canonical selected Tool", () => {
@@ -66,5 +67,14 @@ describe("drawing Tool authority", () => {
       contextualChooserId: "marker-chooser",
       variantName: "marker:mop",
     });
+  });
+
+  it("keeps Mop and Drip Mop as distinct contextual marker variants", () => {
+    expect(MARKER_VARIANTS.map(({ id }) => id)).toEqual(["round", "chisel", "mop", "drip-mop"]);
+    const selected = selectMarkerVariant(
+      selectDrawingTool(INITIAL_DRAWING_TOOL_SELECTION, "paint-marker"),
+      "drip-mop",
+    );
+    expect(selectedToolVariant(selected)).toBe("drip-mop");
   });
 });

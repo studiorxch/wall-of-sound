@@ -2,7 +2,7 @@ import { type SprayCapId } from "./SprayCapPresets";
 import { type InputSourceMode } from "./types";
 
 export type DrawingToolId = "spray-can" | "paint-marker";
-export type MarkerVariantId = "round" | "chisel" | "mop";
+export type MarkerVariantId = "round" | "chisel" | "mop" | "drip-mop";
 export type DrawingToolVariantId = SprayCapId | MarkerVariantId;
 export type ToolRendererId = "spray" | "paint-marker";
 export type ToolFeedbackId = "spray-hiss" | "silent";

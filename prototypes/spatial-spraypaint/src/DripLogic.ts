@@ -13,6 +13,8 @@ export interface DripSeed {
   width: number;
   length: number;
   opacity: number;
+  bend?: number;
+  durationMs?: number;
 }
 
 export class DripAccumulator {

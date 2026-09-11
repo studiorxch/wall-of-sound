@@ -1,7 +1,8 @@
 import { type MarkerVariantId } from "./DrawingTool";
 import { PaintMarkerEngine, getMarkerVariant } from "./PaintMarkerEngine";
 import { SprayBrushEngine } from "./SprayBrushEngine";
-import { getSprayCapPreset, type SprayCapId } from "./SprayCapPresets";
+import { type SprayCapId } from "./SprayCapPresets";
+import { getSprayCapProfile } from "./SprayCapProfile";
 import { type StrokePoint } from "./types";
 import { type DripSeed } from "./DripLogic";
 
@@ -19,12 +20,21 @@ export class DrawingToolRenderer {
   private readonly spray = new SprayBrushEngine();
   private readonly marker = new PaintMarkerEngine();
 
+  public beginStroke(style: ToolStrokeStyle): void {
+    if (style.toolId === "paint-marker") this.marker.beginStroke(style.variantId);
+  }
+
+  public endStroke(): void {
+    this.marker.endStroke();
+  }
+
   public resize(width: number, height: number): void {
     this.spray.resize(width, height);
   }
 
   public clear(): void {
     this.spray.clear();
+    this.marker.endStroke();
   }
 
   public renderSegment(
@@ -40,7 +50,7 @@ export class DrawingToolRenderer {
         previous,
         point,
         style.color,
-        getSprayCapPreset(style.variantId),
+        getSprayCapProfile(style.variantId).deposition,
         random,
       );
       return;
@@ -50,7 +60,7 @@ export class DrawingToolRenderer {
 
   public dripTendency(style: ToolStrokeStyle): number {
     return style.toolId === "spray-can"
-      ? getSprayCapPreset(style.variantId).dripTendency
+      ? getSprayCapProfile(style.variantId).deposition.dripTendency
       : getMarkerVariant(style.variantId).dripTendency;
   }
 

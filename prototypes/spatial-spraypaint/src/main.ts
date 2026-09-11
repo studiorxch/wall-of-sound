@@ -42,6 +42,7 @@ import { StrokeSmoother } from "./StrokeSmoother";
 import { TrackingQualityMonitor, type TrackingQualityAssessment } from "./TrackingQuality";
 import { resolveToolFeedback } from "./ToolFeedback";
 import { type InputSourceMode, type StrokePoint } from "./types";
+import { WetPaintAccumulator, isWetMarkerVariant } from "./WetPaintModel";
 import { resolveWallComposition, type WallEnvironmentMode } from "./WallComposition";
 import {
   applyPan,
@@ -76,6 +77,7 @@ class SpatialSpraypaintApp {
   private readonly curveReconstructor = new AdaptiveCurveReconstructor();
   private readonly toolRenderer = new DrawingToolRenderer();
   private readonly dripAccumulator = new DripAccumulator();
+  private readonly wetPaintAccumulator = new WetPaintAccumulator();
   private readonly strokeHistory = new StrokeHistory(40);
   private readonly handTracker = new HandTracker();
   private readonly cameraLuminanceSampler = new CameraLuminanceSampler();
@@ -998,8 +1000,14 @@ class SpatialSpraypaintApp {
       const strokeId = this.strokeHistory.begin({ ...style, inputSource: this.inputMode });
       this.activeStrokeStyle = style;
       this.activeStrokeRandom = createStrokeRandom(strokeId);
+      this.toolRenderer.beginStroke(style);
+      if (style.toolId === "paint-marker" && isWetMarkerVariant(style.variantId)) {
+        this.wetPaintAccumulator.beginStroke(strokeId, style.variantId);
+      }
     } else {
       this.strokeHistory.finalize();
+      this.toolRenderer.endStroke();
+      this.wetPaintAccumulator.reset();
       this.activeStrokeRandom = null;
       this.updateUndoControl();
     }
@@ -1026,6 +1034,7 @@ class SpatialSpraypaintApp {
     this.strokeSmoother.reset();
     this.curveReconstructor.reset();
     this.dripAccumulator.reset();
+    this.wetPaintAccumulator.reset();
     if (clearActivePoint) this.activeWallPoint = null;
   }
 
@@ -1048,17 +1057,19 @@ class SpatialSpraypaintApp {
       this.hasPinchDrawn = true;
       this.requireElement("hand-first-use-cue").classList.remove("visible");
     }
-    const drip = this.dripAccumulator.observe({
-      x: point?.x ?? smoothed.x,
-      y: point?.y ?? smoothed.y,
-      radius: point?.width ?? this.baseRadius,
-      timestamp: now,
-      dripTendency: this.activeStrokeStyle ? this.toolRenderer.dripTendency(this.activeStrokeStyle) : 0,
-      enabled: this.settings.dripsEnabled,
-    });
-    if (drip) {
-      this.toolRenderer.startDrip(drip, this.activeStrokeStyle?.color ?? this.selectedColor, now);
-      this.strokeHistory.appendDrip(drip);
+    if (this.activeStrokeStyle?.toolId === "spray-can") {
+      const drip = this.dripAccumulator.observe({
+        x: point?.x ?? smoothed.x,
+        y: point?.y ?? smoothed.y,
+        radius: point?.width ?? this.baseRadius,
+        timestamp: now,
+        dripTendency: this.toolRenderer.dripTendency(this.activeStrokeStyle),
+        enabled: this.settings.dripsEnabled,
+      });
+      if (drip) {
+        this.toolRenderer.startDrip(drip, this.activeStrokeStyle.color, now);
+        this.strokeHistory.appendDrip(drip);
+      }
     }
   }
 
@@ -1108,15 +1119,28 @@ class SpatialSpraypaintApp {
         );
         let segmentStart = previous;
         for (const segmentEnd of [...interpolated, point]) {
+          let renderedPoint = segmentEnd;
+          if (style.toolId === "paint-marker" && isWetMarkerVariant(style.variantId)) {
+            const wetPaint = this.wetPaintAccumulator.observe(
+              segmentEnd,
+              style.size,
+              this.settings.dripsEnabled,
+            );
+            renderedPoint = { ...segmentEnd, paintLoad: wetPaint.paintLoad };
+            for (const drip of wetPaint.drips) {
+              this.toolRenderer.startDrip(drip, style.color, segmentEnd.timestamp);
+              this.strokeHistory.appendDrip(drip);
+            }
+          }
           this.toolRenderer.renderSegment(
             this.paintCtx,
             segmentStart,
-            segmentEnd,
+            renderedPoint,
             style,
             this.activeStrokeRandom ?? Math.random,
           );
-          this.strokeHistory.appendPoint(segmentEnd);
-          segmentStart = segmentEnd;
+          this.strokeHistory.appendPoint(renderedPoint);
+          segmentStart = renderedPoint;
         }
         lastPoint = point;
       }
@@ -1137,7 +1161,8 @@ class SpatialSpraypaintApp {
     this.paintCtx.clearRect(0, 0, this.paintCanvas.width, this.paintCanvas.height);
     this.toolRenderer.clear();
     this.withWallPaintTransform(() => {
-      for (const stroke of strokes) {
+      for (const [index, stroke] of strokes.entries()) {
+        this.toolRenderer.beginStroke(stroke);
         const random = createStrokeRandom(stroke.id);
         let previous = null;
         for (const point of stroke.points) {
@@ -1145,6 +1170,7 @@ class SpatialSpraypaintApp {
           previous = point;
         }
         for (const drip of stroke.drips) this.toolRenderer.renderCompletedDrip(this.paintCtx, drip, stroke.color);
+        if (!this.isDrawing || index < strokes.length - 1) this.toolRenderer.endStroke();
       }
     });
   }

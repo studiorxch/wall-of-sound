@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>StudioRich — Spatial Spraypaint V0.6</title>
+  <title>StudioRich — Spatial Spraypaint V0.6.1</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
@@ -75,7 +75,9 @@
     .tool-sample, .marker-sample { display:grid; place-items:center; height:20px; color:#fff; font-size:10px; font-weight:900; }
     .marker-sample::before { content:""; display:block; width:48px; border-top:var(--sample-width, 8px) solid currentColor; border-radius:999px; transform:rotate(var(--sample-angle, 0deg)); opacity:.88; }
     .marker-choice[data-marker="chisel"] .marker-sample::before { border-radius:1px; }
-    .marker-choice[data-marker="mop"] .marker-sample::before { opacity:.72; box-shadow:0 4px 0 -2px currentColor; }
+    .marker-choice[data-marker="mop"] .marker-sample::before,
+    .marker-choice[data-marker="drip-mop"] .marker-sample::before { opacity:.72; box-shadow:0 4px 0 -2px currentColor; }
+    .marker-choice[data-marker="drip-mop"] .marker-sample::before { box-shadow:0 4px 0 -2px currentColor, 10px 9px 0 -4px currentColor; }
     .cap-sample { display:block; height:0; border-top:var(--sample-width, 8px) solid currentColor; border-radius:999px; opacity:.78; }
     .palette { display: flex; flex-wrap: wrap; gap: 5px; }
     .swatch {
@@ -202,7 +204,7 @@
 <body>
   <main id="app">
     <canvas id="composite-canvas" aria-label="Spatial Spraypaint drawing canvas"></canvas>
-    <div id="brand-mark" class="island">SPATIAL SPRAYPAINT · V0.6</div>
+    <div id="brand-mark" class="island">SPATIAL SPRAYPAINT · V0.6.1</div>
 
     <section id="input-island" class="island" aria-label="Input mode">
       <button id="physical-input" class="selected" aria-pressed="true">Physical</button>
@@ -248,7 +250,8 @@
     <div id="marker-chooser" class="tool-popover" aria-label="Marker and nib chooser">
       <button class="marker-choice selected" data-marker="round" aria-pressed="true"><span class="marker-sample" style="--sample-width:8px"></span><span>Round Marker</span></button>
       <button class="marker-choice" data-marker="chisel" aria-pressed="false"><span class="marker-sample" style="--sample-width:12px;--sample-angle:-25deg"></span><span>Chisel / Calligraphy</span></button>
-      <button class="marker-choice" data-marker="mop" aria-pressed="false"><span class="marker-sample" style="--sample-width:16px"></span><span>Mop / Drip Mop</span></button>
+      <button class="marker-choice" data-marker="mop" aria-pressed="false"><span class="marker-sample" style="--sample-width:14px"></span><span>Mop</span></button>
+      <button class="marker-choice" data-marker="drip-mop" aria-pressed="false"><span class="marker-sample" style="--sample-width:17px"></span><span>Drip Mop</span></button>
     </div>
 
     <section id="session-island" class="island" aria-label="Screen and session controls">

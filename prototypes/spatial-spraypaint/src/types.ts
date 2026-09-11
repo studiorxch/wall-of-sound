@@ -8,6 +8,7 @@ export interface StrokePoint {
   velocity: number; // Calculated speed in wall units/ms
   width: number;
   opacity: number;
+  paintLoad?: number; // Retained wet-media state when the selected Tool requires it.
 }
 
 export interface Stroke {

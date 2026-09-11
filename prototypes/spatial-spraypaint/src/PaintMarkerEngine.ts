@@ -6,6 +6,7 @@ export interface MarkerVariantDefinition {
   name: string;
   defaultSize: number;
   dripTendency: number;
+  material: "dense" | "calligraphy" | "wet" | "high-flow";
 }
 
 export interface MarkerGeometry {
@@ -15,15 +16,33 @@ export interface MarkerGeometry {
   nibAngle: number;
   passCount: number;
   particleCount: 0;
+  paintLoad: number;
+  edgeStreakWidth: number;
+}
+
+export interface SweptRibbonSegment {
+  startLeft: { x: number; y: number };
+  startRight: { x: number; y: number };
+  endLeft: { x: number; y: number };
+  endRight: { x: number; y: number };
+  direction: number;
 }
 
 export const MARKER_VARIANTS: readonly MarkerVariantDefinition[] = [
-  { id: "round", name: "Round Marker", defaultSize: 28, dripTendency: 0.04 },
-  { id: "chisel", name: "Chisel / Calligraphy", defaultSize: 34, dripTendency: 0.08 },
-  { id: "mop", name: "Mop / Drip Mop", defaultSize: 46, dripTendency: 0.96 },
+  { id: "round", name: "Round Marker", defaultSize: 28, dripTendency: 0, material: "dense" },
+  { id: "chisel", name: "Chisel / Calligraphy", defaultSize: 34, dripTendency: 0, material: "calligraphy" },
+  { id: "mop", name: "Mop", defaultSize: 44, dripTendency: 0.68, material: "wet" },
+  { id: "drip-mop", name: "Drip Mop", defaultSize: 50, dripTendency: 1, material: "high-flow" },
 ] as const;
 
 const CHISEL_NIB_ANGLE = -25 * Math.PI / 180;
+
+interface MarkerStrokeState {
+  variantId: MarkerVariantId;
+  lastDirection: number | null;
+  lastHalfWidth: number | null;
+  lastPoint: StrokePoint | null;
+}
 
 export function getMarkerVariant(id: string): MarkerVariantDefinition {
   return MARKER_VARIANTS.find((variant) => variant.id === id) ?? MARKER_VARIANTS[0];
@@ -33,44 +52,99 @@ export function resolveMarkerGeometry(
   variantId: MarkerVariantId,
   previous: StrokePoint | null,
   point: StrokePoint,
+  directionOverride?: number,
 ): MarkerGeometry {
-  const direction = previous
+  const direction = directionOverride ?? (previous
     ? Math.atan2(point.y - previous.y, point.x - previous.x)
-    : 0;
+    : 0);
   const baseWidth = Math.max(1, point.width);
+  const organicVariation = 1 + Math.sin(
+    point.x * 0.031 + point.y * 0.017 + point.timestamp * 0.0007,
+  ) * 0.022;
   if (variantId === "chisel") {
     const broadEdge = Math.abs(Math.sin(direction - CHISEL_NIB_ANGLE));
     return {
-      width: baseWidth * (0.24 + broadEdge * 0.76),
-      opacity: 0.96,
+      width: baseWidth * (0.22 + broadEdge * 0.78),
+      opacity: 1,
       direction,
       nibAngle: CHISEL_NIB_ANGLE,
       passCount: 1,
       particleCount: 0,
+      paintLoad: 0,
+      edgeStreakWidth: 0,
     };
   }
-  if (variantId === "mop") {
-    const speedThinning = Math.min(0.42, Math.max(0, point.velocity) * 0.12);
+  if (variantId === "mop" || variantId === "drip-mop") {
+    const paintLoad = Math.max(0.22, Math.min(1, point.paintLoad ?? (variantId === "drip-mop" ? 0.68 : 0.54)));
+    const speedThinning = Math.min(0.28, Math.max(0, point.velocity) * (variantId === "drip-mop" ? 0.065 : 0.085));
+    const flowScale = variantId === "drip-mop" ? 1.1 : 1;
+    const width = baseWidth * flowScale * (1.04 + paintLoad * 0.34 - speedThinning);
     return {
-      width: baseWidth * (1.42 - speedThinning),
-      opacity: Math.min(1, 0.82 + Math.max(0, 0.16 - point.velocity * 0.025)),
+      width,
+      opacity: 1,
       direction,
       nibAngle: direction,
-      passCount: 3,
+      passCount: variantId === "drip-mop" ? 4 : 3,
       particleCount: 0,
+      paintLoad,
+      edgeStreakWidth: Math.max(1.2, width * (0.038 + paintLoad * 0.024)),
     };
   }
   return {
-    width: baseWidth * (1 - Math.min(0.12, Math.max(0, point.velocity) * 0.025)),
-    opacity: 0.94,
+    width: baseWidth * organicVariation * (1 - Math.min(0.08, Math.max(0, point.velocity) * 0.018)),
+    opacity: 1,
     direction,
     nibAngle: direction,
     passCount: 1,
     particleCount: 0,
+    paintLoad: 0,
+    edgeStreakWidth: 0,
   };
 }
 
+export function buildSweptRibbonSegment(
+  start: StrokePoint,
+  end: StrokePoint,
+  startWidth: number,
+  endWidth: number,
+  direction: number,
+): SweptRibbonSegment {
+  const normalX = -Math.sin(direction);
+  const normalY = Math.cos(direction);
+  const startHalf = startWidth * 0.5;
+  const endHalf = endWidth * 0.5;
+  return {
+    startLeft: { x: start.x + normalX * startHalf, y: start.y + normalY * startHalf },
+    startRight: { x: start.x - normalX * startHalf, y: start.y - normalY * startHalf },
+    endLeft: { x: end.x + normalX * endHalf, y: end.y + normalY * endHalf },
+    endRight: { x: end.x - normalX * endHalf, y: end.y - normalY * endHalf },
+    direction,
+  };
+}
+
+export function smoothMarkerDirection(
+  previousDirection: number | null,
+  nextDirection: number,
+  velocity: number,
+): number {
+  if (previousDirection === null) return nextDirection;
+  const delta = normalizeAngle(nextDirection - previousDirection);
+  if (Math.abs(delta) >= Math.PI * 0.52) return nextDirection;
+  const response = Math.max(0.44, Math.min(0.74, 0.54 + velocity * 0.08));
+  return previousDirection + delta * response;
+}
+
 export class PaintMarkerEngine {
+  private stroke: MarkerStrokeState | null = null;
+
+  public beginStroke(variantId: MarkerVariantId): void {
+    this.stroke = { variantId, lastDirection: null, lastHalfWidth: null, lastPoint: null };
+  }
+
+  public endStroke(): void {
+    this.stroke = null;
+  }
+
   public renderSegment(
     ctx: CanvasRenderingContext2D,
     previous: StrokePoint | null,
@@ -78,52 +152,157 @@ export class PaintMarkerEngine {
     color: string,
     variantId: MarkerVariantId,
   ): void {
-    const geometry = resolveMarkerGeometry(variantId, previous, point);
+    if (!this.stroke || this.stroke.variantId !== variantId || !previous) this.beginStroke(variantId);
+    const stroke = this.stroke!;
     const start = previous ?? point;
-    const normalX = -Math.sin(geometry.direction);
-    const normalY = Math.cos(geometry.direction);
+    const rawDirection = previous
+      ? Math.atan2(point.y - previous.y, point.x - previous.x)
+      : stroke.lastDirection ?? 0;
+    const direction = variantId === "chisel"
+      ? smoothMarkerDirection(stroke.lastDirection, rawDirection, point.velocity)
+      : rawDirection;
+    const geometry = resolveMarkerGeometry(variantId, previous, point, direction);
 
     ctx.save();
-    ctx.lineJoin = variantId === "chisel" ? "miter" : "round";
-    ctx.lineCap = variantId === "chisel" ? "butt" : "round";
-    for (let pass = 0; pass < geometry.passCount; pass += 1) {
-      const passOffset = geometry.passCount === 1
-        ? 0
-        : (pass - (geometry.passCount - 1) / 2) * geometry.width * 0.11;
-      const edgePass = geometry.passCount > 1 && pass !== 1;
-      ctx.strokeStyle = hexToRgba(color, geometry.opacity * point.opacity * (edgePass ? 0.5 : 0.78));
-      ctx.lineWidth = geometry.width * (edgePass ? 0.24 : 0.82);
-      ctx.beginPath();
-      ctx.moveTo(start.x + normalX * passOffset, start.y + normalY * passOffset);
-      ctx.lineTo(point.x + normalX * passOffset, point.y + normalY * passOffset);
-      ctx.stroke();
-    }
+    ctx.fillStyle = color;
+    ctx.strokeStyle = color;
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
 
     if (!previous) {
-      ctx.fillStyle = hexToRgba(color, geometry.opacity * point.opacity);
-      ctx.beginPath();
-      if (variantId === "chisel") {
-        ctx.ellipse(
-          point.x,
-          point.y,
-          geometry.width * 0.5,
-          Math.max(1, point.width * 0.12),
-          geometry.nibAngle,
-          0,
-          Math.PI * 2,
-        );
-      } else {
-        ctx.arc(point.x, point.y, geometry.width * 0.41, 0, Math.PI * 2);
+      this.renderStartingFootprint(ctx, point, geometry, variantId);
+    } else {
+      const startHalfWidth = stroke.lastHalfWidth ?? resolveMarkerGeometry(
+        variantId,
+        null,
+        previous,
+        direction,
+      ).width * 0.5;
+      const ribbon = buildSweptRibbonSegment(start, point, startHalfWidth * 2, geometry.width, direction);
+      this.fillRibbon(ctx, ribbon);
+      if (stroke.lastDirection !== null && stroke.lastHalfWidth !== null && stroke.lastPoint) {
+        this.fillContinuousJoin(ctx, stroke.lastPoint, stroke.lastDirection, direction, stroke.lastHalfWidth, startHalfWidth);
       }
-      ctx.fill();
+      if (variantId === "round") {
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, geometry.width * 0.5, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (variantId === "mop" || variantId === "drip-mop") {
+        this.renderWetEdges(ctx, ribbon, geometry, color);
+      }
     }
     ctx.restore();
+
+    stroke.lastDirection = direction;
+    stroke.lastHalfWidth = geometry.width * 0.5;
+    stroke.lastPoint = { ...point };
+  }
+
+  private fillRibbon(ctx: CanvasRenderingContext2D, ribbon: SweptRibbonSegment): void {
+    ctx.beginPath();
+    ctx.moveTo(ribbon.startLeft.x, ribbon.startLeft.y);
+    ctx.lineTo(ribbon.endLeft.x, ribbon.endLeft.y);
+    ctx.lineTo(ribbon.endRight.x, ribbon.endRight.y);
+    ctx.lineTo(ribbon.startRight.x, ribbon.startRight.y);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  private fillContinuousJoin(
+    ctx: CanvasRenderingContext2D,
+    point: StrokePoint,
+    priorDirection: number,
+    nextDirection: number,
+    priorHalfWidth: number,
+    nextHalfWidth: number,
+  ): void {
+    const priorNormal = { x: -Math.sin(priorDirection), y: Math.cos(priorDirection) };
+    const nextNormal = { x: -Math.sin(nextDirection), y: Math.cos(nextDirection) };
+    const priorTangent = { x: Math.cos(priorDirection), y: Math.sin(priorDirection) };
+    const nextTangent = { x: Math.cos(nextDirection), y: Math.sin(nextDirection) };
+    const overlap = Math.max(0.8, Math.min(2, Math.min(priorHalfWidth, nextHalfWidth) * 0.14));
+    ctx.beginPath();
+    ctx.moveTo(
+      point.x + priorNormal.x * priorHalfWidth - priorTangent.x * overlap,
+      point.y + priorNormal.y * priorHalfWidth - priorTangent.y * overlap,
+    );
+    ctx.lineTo(
+      point.x + nextNormal.x * nextHalfWidth + nextTangent.x * overlap,
+      point.y + nextNormal.y * nextHalfWidth + nextTangent.y * overlap,
+    );
+    ctx.lineTo(
+      point.x - nextNormal.x * nextHalfWidth + nextTangent.x * overlap,
+      point.y - nextNormal.y * nextHalfWidth + nextTangent.y * overlap,
+    );
+    ctx.lineTo(
+      point.x - priorNormal.x * priorHalfWidth - priorTangent.x * overlap,
+      point.y - priorNormal.y * priorHalfWidth - priorTangent.y * overlap,
+    );
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  private renderStartingFootprint(
+    ctx: CanvasRenderingContext2D,
+    point: StrokePoint,
+    geometry: MarkerGeometry,
+    variantId: MarkerVariantId,
+  ): void {
+    ctx.beginPath();
+    if (variantId === "chisel") {
+      ctx.ellipse(point.x, point.y, Math.max(1, point.width * 0.5), Math.max(1, point.width * 0.11), geometry.nibAngle, 0, Math.PI * 2);
+    } else {
+      ctx.arc(point.x, point.y, geometry.width * 0.5, 0, Math.PI * 2);
+    }
+    ctx.fill();
+  }
+
+  private renderWetEdges(
+    ctx: CanvasRenderingContext2D,
+    ribbon: SweptRibbonSegment,
+    geometry: MarkerGeometry,
+    color: string,
+  ): void {
+    ctx.strokeStyle = adjustHex(color, -18);
+    ctx.lineWidth = geometry.edgeStreakWidth;
+    for (const [start, end] of [
+      [ribbon.startLeft, ribbon.endLeft],
+      [ribbon.startRight, ribbon.endRight],
+    ] as const) {
+      ctx.beginPath();
+      ctx.moveTo(start.x, start.y);
+      ctx.lineTo(end.x, end.y);
+      ctx.stroke();
+    }
+    if (geometry.paintLoad > 0.72) {
+      const inset = 0.18;
+      ctx.strokeStyle = adjustHex(color, 10);
+      ctx.lineWidth = Math.max(0.8, geometry.edgeStreakWidth * 0.55);
+      ctx.beginPath();
+      ctx.moveTo(
+        ribbon.startLeft.x + (ribbon.startRight.x - ribbon.startLeft.x) * inset,
+        ribbon.startLeft.y + (ribbon.startRight.y - ribbon.startLeft.y) * inset,
+      );
+      ctx.lineTo(
+        ribbon.endLeft.x + (ribbon.endRight.x - ribbon.endLeft.x) * inset,
+        ribbon.endLeft.y + (ribbon.endRight.y - ribbon.endLeft.y) * inset,
+      );
+      ctx.stroke();
+    }
   }
 }
 
-function hexToRgba(hex: string, alpha: number): string {
+function normalizeAngle(value: number): number {
+  let normalized = value;
+  while (normalized > Math.PI) normalized -= Math.PI * 2;
+  while (normalized < -Math.PI) normalized += Math.PI * 2;
+  return normalized;
+}
+
+function adjustHex(hex: string, amount: number): string {
   let value = hex.replace("#", "");
   if (value.length === 3) value = value.split("").map((channel) => channel + channel).join("");
   const numeric = Number.parseInt(value, 16);
-  return `rgba(${(numeric >> 16) & 255}, ${(numeric >> 8) & 255}, ${numeric & 255}, ${Math.max(0, Math.min(1, alpha)).toFixed(3)})`;
+  const channel = (shift: number) => Math.max(0, Math.min(255, ((numeric >> shift) & 255) + amount));
+  return `rgb(${channel(16)}, ${channel(8)}, ${channel(0)})`;
 }
