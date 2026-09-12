@@ -6,6 +6,8 @@ import {
   getMarkerVariant,
   resolveMarkerGeometry,
   resolveMarkerCurveCornerAngle,
+  insetWetEdgePoint,
+  shouldUseRoundedWetJoin,
   smoothMarkerDirection,
   smoothWetContactWidth,
   smoothWetMarkerDirection,
@@ -243,5 +245,26 @@ describe("Paint Marker renderer", () => {
     expect(resolveMarkerCurveCornerAngle("drippy-chisel")).toBe(78);
     expect(resolveMarkerCurveCornerAngle("round")).toBeUndefined();
     expect(resolveMarkerCurveCornerAngle("clean-chisel")).toBeUndefined();
+  });
+
+  it("uses bounded round geometry for tight wet joins only", () => {
+    expect(shouldUseRoundedWetJoin(0, 0.08)).toBe(false);
+    expect(shouldUseRoundedWetJoin(0, Math.PI * 0.5)).toBe(true);
+    expect(shouldUseRoundedWetJoin(Math.PI * 0.99, -Math.PI * 0.99)).toBe(false);
+
+    const recording = recordingContext();
+    const engine = new PaintMarkerEngine();
+    engine.beginStroke("drip-mop");
+    engine.renderSegment(recording.ctx, null, { ...point(0, 0), paintLoad: 0.9 }, "#ff0000", "drip-mop");
+    engine.renderSegment(recording.ctx, point(0, 0), { ...point(40, 0), paintLoad: 0.9 }, "#ff0000", "drip-mop");
+    engine.renderSegment(recording.ctx, point(40, 0), { ...point(40, 40), paintLoad: 0.9 }, "#ff0000", "drip-mop");
+    expect(recording.arcs).toHaveLength(2);
+    expect(recording.arcs[1].slice(0, 2)).toEqual([40, 0]);
+    expect(recording.arcs[1][2]).toBeLessThanOrEqual(25);
+  });
+
+  it("keeps wet edge character inside the body envelope", () => {
+    expect(insetWetEdgePoint({ x: 0, y: -20 }, { x: 0, y: 20 })).toEqual({ x: 0, y: -17.8 });
+    expect(insetWetEdgePoint({ x: 10, y: 0 }, { x: -10, y: 0 }, 1)).toEqual({ x: 5, y: 0 });
   });
 });

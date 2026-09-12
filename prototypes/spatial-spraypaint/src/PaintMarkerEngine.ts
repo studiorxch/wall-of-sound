@@ -172,6 +172,25 @@ export function smoothWetMarkerDirection(
   return previousDirection + boundedDelta * 0.42;
 }
 
+export function shouldUseRoundedWetJoin(
+  priorDirection: number,
+  nextDirection: number,
+): boolean {
+  return Math.abs(normalizeAngle(nextDirection - priorDirection)) >= 0.14;
+}
+
+export function insetWetEdgePoint(
+  edge: { x: number; y: number },
+  opposite: { x: number; y: number },
+  inset = 0.055,
+): { x: number; y: number } {
+  const ratio = Math.max(0, Math.min(0.25, inset));
+  return {
+    x: edge.x + (opposite.x - edge.x) * ratio,
+    y: edge.y + (opposite.y - edge.y) * ratio,
+  };
+}
+
 export function buildContinuousJoinPolygon(
   point: Pick<StrokePoint, "x" | "y">,
   priorDirection: number,
@@ -300,7 +319,15 @@ export class PaintMarkerEngine {
       const ribbon = buildSweptRibbonSegment(start, point, startHalfWidth * 2, geometry.width, direction);
       this.fillRibbon(ctx, ribbon);
       if (stroke.lastDirection !== null && stroke.lastHalfWidth !== null && stroke.lastPoint) {
-        this.fillContinuousJoin(ctx, stroke.lastPoint, stroke.lastDirection, direction, stroke.lastHalfWidth, startHalfWidth);
+        if (wetVariant && shouldUseRoundedWetJoin(stroke.lastDirection, direction)) {
+          this.fillRoundedWetJoin(
+            ctx,
+            stroke.lastPoint,
+            Math.min(stroke.lastHalfWidth, startHalfWidth),
+          );
+        } else {
+          this.fillContinuousJoin(ctx, stroke.lastPoint, stroke.lastDirection, direction, stroke.lastHalfWidth, startHalfWidth);
+        }
       }
       if (variantId === "round") {
         ctx.beginPath();
@@ -353,6 +380,16 @@ export class PaintMarkerEngine {
     ctx.fill();
   }
 
+  private fillRoundedWetJoin(
+    ctx: CanvasRenderingContext2D,
+    point: StrokePoint,
+    radius: number,
+  ): void {
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
   private renderStartingFootprint(
     ctx: CanvasRenderingContext2D,
     point: StrokePoint,
@@ -399,9 +436,16 @@ export class PaintMarkerEngine {
   ): void {
     ctx.strokeStyle = adjustHex(color, -18);
     ctx.lineWidth = geometry.edgeStreakWidth;
+    ctx.lineCap = "butt";
     for (const [start, end] of [
-      [ribbon.startLeft, ribbon.endLeft],
-      [ribbon.startRight, ribbon.endRight],
+      [
+        insetWetEdgePoint(ribbon.startLeft, ribbon.startRight),
+        insetWetEdgePoint(ribbon.endLeft, ribbon.endRight),
+      ],
+      [
+        insetWetEdgePoint(ribbon.startRight, ribbon.startLeft),
+        insetWetEdgePoint(ribbon.endRight, ribbon.endLeft),
+      ],
     ] as const) {
       ctx.beginPath();
       ctx.moveTo(start.x, start.y);
