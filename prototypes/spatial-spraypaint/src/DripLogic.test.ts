@@ -56,6 +56,8 @@ describe("continuous wet drip geometry", () => {
     length: 180,
     opacity: 0.84,
     bend: 18,
+    kink: -7,
+    kinkAt: 0.46,
     tipWidthRatio: 0.3,
     originPoolRadius: 10,
   };
@@ -74,5 +76,16 @@ describe("continuous wet drip geometry", () => {
     expect(first[0].width).toBe(wetDrip.width);
     expect(first[first.length - 1].width).toBeCloseTo(wetDrip.width * wetDrip.tipWidthRatio);
     expect(first.slice(1).every((section, index) => section.width <= first[index].width)).toBe(true);
+  });
+
+  it("keeps deterministic subtle kinks connected to the same gravity run", () => {
+    const strip = buildContinuousDripStrip(wetDrip, 20);
+    expect(strip[0].center).toEqual({ x: wetDrip.x, y: wetDrip.y });
+    expect(strip[strip.length - 1].center.x).toBe(wetDrip.x + wetDrip.bend);
+    expect(strip.some((section) => {
+      const unKinkedX = wetDrip.x + wetDrip.bend * section.progress * section.progress;
+      return Math.abs(section.center.x - unKinkedX) > 1;
+    })).toBe(true);
+    expect(strip.every((section, index) => index === 0 || section.center.y >= strip[index - 1].center.y)).toBe(true);
   });
 });

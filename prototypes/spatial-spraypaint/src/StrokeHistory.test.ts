@@ -148,7 +148,17 @@ describe("stroke history", () => {
         paintLoad: variantId === "drippy-chisel" || variantId.includes("mop") ? 0.84 : undefined,
       });
       if (variantId === "drippy-chisel" || variantId === "drip-mop") {
-        history.appendDrip({ x: 10, y: 20, width: 2, length: 90, opacity: 0.8, bend: 4, durationMs: 1280 });
+        history.appendDrip({
+          x: 10,
+          y: 20,
+          width: 2,
+          length: 90,
+          opacity: 0.8,
+          bend: 4,
+          kink: -2,
+          kinkAt: 0.46,
+          durationMs: 1280,
+        });
       }
       history.finalize();
     }
@@ -158,9 +168,10 @@ describe("stroke history", () => {
       "round", "chisel", "clean-chisel", "drippy-chisel", "mop", "drip-mop",
     ]);
     expect(snapshot[3].points[0].paintLoad).toBe(0.84);
-    expect(snapshot[5].drips[0]).toMatchObject({ bend: 4, durationMs: 1280 });
+    expect(snapshot[5].drips[0]).toMatchObject({ bend: 4, kink: -2, kinkAt: 0.46, durationMs: 1280 });
     snapshot[5].drips[0].bend = 99;
-    expect(history.snapshot()[5].drips[0].bend).toBe(4);
+    snapshot[5].drips[0].kink = 99;
+    expect(history.snapshot()[5].drips[0]).toMatchObject({ bend: 4, kink: -2, kinkAt: 0.46 });
   });
 
   it("restores exact mixed-color wet marks and continuous-run state after Clear", () => {

@@ -14,6 +14,8 @@ export interface DripSeed {
   length: number;
   opacity: number;
   bend?: number;
+  kink?: number;
+  kinkAt?: number;
   durationMs?: number;
   tipWidthRatio?: number;
   originPoolRadius?: number;
@@ -35,12 +37,26 @@ export function resolveDripStripSection(
   const safeProgress = Math.min(1, Math.max(0, progress));
   const eased = safeProgress * safeProgress;
   const bend = drip.bend ?? 0;
-  const center = {
-    x: drip.x + bend * eased,
-    y: drip.y + drip.length * eased,
+  const resolveCenter = (value: number) => {
+    const localProgress = Math.min(1, Math.max(0, value));
+    const localEased = localProgress * localProgress;
+    const kinkAt = drip.kinkAt ?? 0.55;
+    const kinkRadius = 0.3;
+    const kinkDistance = Math.abs(localProgress - kinkAt) / kinkRadius;
+    const kinkEnvelope = kinkDistance < 1
+      ? 0.5 + Math.cos(Math.PI * kinkDistance) * 0.5
+      : 0;
+    return {
+      x: drip.x + bend * localEased + (drip.kink ?? 0) * kinkEnvelope,
+      y: drip.y + drip.length * localEased,
+    };
   };
-  const tangentX = Math.abs(safeProgress) > 0.0001 ? 2 * bend * safeProgress : bend;
-  const tangentY = Math.abs(safeProgress) > 0.0001 ? 2 * drip.length * safeProgress : drip.length;
+  const center = resolveCenter(safeProgress);
+  const tangentStep = 0.001;
+  const tangentStart = resolveCenter(Math.max(0, safeProgress - tangentStep));
+  const tangentEnd = resolveCenter(Math.min(1, safeProgress + tangentStep));
+  const tangentX = tangentEnd.x - tangentStart.x;
+  const tangentY = tangentEnd.y - tangentStart.y;
   const tangentLength = Math.max(0.0001, Math.hypot(tangentX, tangentY));
   const normal = { x: -tangentY / tangentLength, y: tangentX / tangentLength };
   const tipWidthRatio = drip.tipWidthRatio ?? 0.58;

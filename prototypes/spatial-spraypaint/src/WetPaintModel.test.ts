@@ -93,7 +93,7 @@ describe("wet paint load authority", () => {
     expect(dripMopDrips.every(({ width }) => width > 10)).toBe(true);
   });
 
-  it("replays drip origins, lengths, bends, and timing deterministically", () => {
+  it("replays drip origins, lengths, bends, kinks, and timing deterministically", () => {
     const run = () => {
       const accumulator = new WetPaintAccumulator();
       accumulator.beginStroke(314, "drip-mop");
@@ -108,6 +108,7 @@ describe("wet paint load authority", () => {
     expect(new Set(first.map(({ length }) => length)).size).toBeGreaterThan(1);
     expect(new Set(first.map(({ durationMs }) => durationMs)).size).toBeGreaterThan(1);
     expect(first.some(({ bend }) => bend !== 0)).toBe(true);
+    expect(first.some(({ kink }) => kink !== 0)).toBe(true);
   });
 
   it("suppresses wet drips when stationary drips are disabled", () => {
@@ -164,5 +165,17 @@ describe("wet paint load authority", () => {
     const drips = observeStationary(accumulator, 2400, 50).flatMap(({ drips: emitted }) => emitted);
     expect(drips.length).toBeGreaterThan(0);
     expect(drips.every(({ x, y }) => y === 51 && Math.abs(x - 20) <= 15.5)).toBe(true);
+  });
+
+  it("anchors Drippy Chisel pools inside even its narrow contact edge", () => {
+    const accumulator = new WetPaintAccumulator();
+    accumulator.beginStroke(314, "drippy-chisel", { flow: "high", viscosity: "runny" });
+    const size = 38;
+    const drips = observeStationary(accumulator, 3000, size).flatMap(({ drips: emitted }) => emitted);
+    expect(drips.length).toBeGreaterThan(0);
+    expect(drips.every(({ y, originPoolRadius }) => (
+      y - 20 <= size * 0.15
+      && y - (originPoolRadius ?? 0) < 20 + size * 0.15
+    ))).toBe(true);
   });
 });

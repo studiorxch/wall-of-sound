@@ -54,12 +54,12 @@ const WET_VARIANT_PROFILES: Record<WetMarkerVariantId, WetVariantProfile> = {
     dwellThresholdMs: 880,
     travelThreshold: 3.2,
     cooldownMs: 1150,
-    lengthMin: 1.15,
-    lengthRange: 1.7,
+    lengthMin: 1.35,
+    lengthRange: 2.05,
     stemWidthBaseRatio: 0.055,
     stemWidthLoadRatio: 0.05,
     tipWidthRatio: 0.5,
-    originPoolRatio: 0.95,
+    originPoolRatio: 1.05,
     originOffsetRatio: 0.56,
     originSpanRatio: 0.54,
     durationMinMs: 1050,
@@ -74,12 +74,12 @@ const WET_VARIANT_PROFILES: Record<WetMarkerVariantId, WetVariantProfile> = {
     dwellThresholdMs: 380,
     travelThreshold: 1.8,
     cooldownMs: 680,
-    lengthMin: 5.2,
-    lengthRange: 7.4,
+    lengthMin: 5.7,
+    lengthRange: 8.6,
     stemWidthBaseRatio: 0.16,
     stemWidthLoadRatio: 0.12,
     tipWidthRatio: 0.62,
-    originPoolRatio: 0.78,
+    originPoolRatio: 0.9,
     originOffsetRatio: 0.62,
     originSpanRatio: 0.62,
     durationMinMs: 1450,
@@ -94,13 +94,13 @@ const WET_VARIANT_PROFILES: Record<WetMarkerVariantId, WetVariantProfile> = {
     dwellThresholdMs: 620,
     travelThreshold: 2.6,
     cooldownMs: 860,
-    lengthMin: 2.35,
-    lengthRange: 3.75,
+    lengthMin: 2.7,
+    lengthRange: 4.35,
     stemWidthBaseRatio: 0.08,
     stemWidthLoadRatio: 0.07,
     tipWidthRatio: 0.54,
-    originPoolRatio: 0.62,
-    originOffsetRatio: 0.34,
+    originPoolRatio: 0.86,
+    originOffsetRatio: 0.12,
     originSpanRatio: 0.42,
     durationMinMs: 1250,
     durationRangeMs: 1050,
@@ -217,6 +217,10 @@ export class WetPaintAccumulator {
           * (0.84 + this.random() * 0.34)
           * this.modifiers.width,
       );
+      const kinkSample = this.random();
+      const kink = kinkSample > 0.64
+        ? (this.random() - 0.5) * length * (this.variant === "drippy-chisel" ? 0.052 : 0.038)
+        : 0;
       drips.push({
         x: point.x + offset,
         y: point.y + size * profile.originOffsetRatio,
@@ -224,6 +228,8 @@ export class WetPaintAccumulator {
         length,
         opacity: clamp(0.58 + paintLoad * 0.28, 0, 0.92),
         bend: (this.random() - 0.5) * length * (this.variant === "drip-mop" ? 0.055 : 0.1),
+        kink,
+        kinkAt: kink === 0 ? undefined : 0.32 + this.random() * 0.36,
         durationMs: (
           profile.durationMinMs
           + (1 - paintLoad) * 420

@@ -93,9 +93,7 @@ export function resolveMarkerGeometry(
   }
   if (variantId === "mop" || variantId === "drip-mop") {
     const paintLoad = Math.max(0.22, Math.min(1, point.paintLoad ?? (variantId === "drip-mop" ? 0.68 : 0.54)));
-    const speedThinning = Math.min(0.28, Math.max(0, point.velocity) * (variantId === "drip-mop" ? 0.065 : 0.085));
-    const flowScale = variantId === "drip-mop" ? 1.1 : 1;
-    const width = baseWidth * flowScale * (1.04 + paintLoad * 0.34 - speedThinning);
+    const width = baseWidth * resolveWetMarkerBodyScale(variantId, paintLoad, point.velocity);
     return {
       width,
       opacity: 1,
@@ -117,6 +115,21 @@ export function resolveMarkerGeometry(
     paintLoad: 0,
     edgeStreakWidth: 0,
   };
+}
+
+export function resolveWetMarkerBodyScale(
+  variantId: Extract<MarkerVariantId, "mop" | "drip-mop">,
+  paintLoad: number,
+  velocity: number,
+): number {
+  const safeLoad = Math.max(0.22, Math.min(1, paintLoad));
+  const travelSpeed = Math.min(1, Math.max(0, velocity) / 2);
+  const pauseContact = 1 - Math.min(1, Math.max(0, velocity) / 0.38);
+  const pooledLoad = Math.max(0, (safeLoad - 0.72) / 0.28);
+  const baseScale = variantId === "drip-mop" ? 1.32 : 1.18;
+  const speedScale = 1 - travelSpeed * (variantId === "drip-mop" ? 0.045 : 0.065);
+  const pooledBulge = 1 + pooledLoad * pauseContact * (variantId === "drip-mop" ? 0.13 : 0.1);
+  return baseScale * speedScale * pooledBulge;
 }
 
 export function buildSweptRibbonSegment(

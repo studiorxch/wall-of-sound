@@ -6,6 +6,7 @@ import {
   getMarkerVariant,
   resolveMarkerGeometry,
   resolveMarkerCurveCornerAngle,
+  resolveWetMarkerBodyScale,
   insetWetEdgePoint,
   shouldUseRoundedWetJoin,
   smoothMarkerDirection,
@@ -266,5 +267,14 @@ describe("Paint Marker renderer", () => {
   it("keeps wet edge character inside the body envelope", () => {
     expect(insetWetEdgePoint({ x: 0, y: -20 }, { x: 0, y: 20 })).toEqual({ x: 0, y: -17.8 });
     expect(insetWetEdgePoint({ x: 10, y: 0 }, { x: -10, y: 0 }, 1)).toEqual({ x: 5, y: 0 });
+  });
+
+  it("keeps Mop travel width clean while reserving wet bulge for pooled pauses", () => {
+    const movingLowLoad = resolveWetMarkerBodyScale("mop", 0.55, 0.45);
+    const movingHighLoad = resolveWetMarkerBodyScale("mop", 0.95, 0.45);
+    const pausedHighLoad = resolveWetMarkerBodyScale("mop", 0.95, 0);
+    expect(movingHighLoad).toBeCloseTo(movingLowLoad);
+    expect(pausedHighLoad).toBeGreaterThan(movingHighLoad * 1.05);
+    expect(pausedHighLoad).toBeLessThan(movingHighLoad * 1.15);
   });
 });
