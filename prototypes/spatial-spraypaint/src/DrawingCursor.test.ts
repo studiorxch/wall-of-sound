@@ -24,6 +24,10 @@ describe("shared Drawing cursor authority", () => {
   it("uses the renderer's physical Chisel angle and aspect", () => {
     const cursor = resolveDrawingCursorGeometry({ toolId: "paint-marker", variantId: "chisel", color: "#f00", size: 40 }, 1, 1.2);
     expect(cursor).toMatchObject({ shape: "chisel", width: 40, height: 8.8, angle: CHISEL_NIB_ANGLE });
+    expect(resolveDrawingCursorGeometry(
+      { toolId: "paint-marker", variantId: "clean-chisel", color: "#f00", size: 40 },
+      1,
+    )).toMatchObject({ shape: "chisel", width: 40, height: 8.8, angle: CHISEL_NIB_ANGLE });
   });
 
   it("tracks size and Wall zoom without input-source-specific geometry", () => {

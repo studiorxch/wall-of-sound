@@ -72,6 +72,8 @@ describe("wet paint load authority", () => {
     expect(dripProfile.stemWidthLoadRatio).toBeGreaterThan(mopProfile.stemWidthLoadRatio);
     expect(dripProfile.lengthMin).toBeGreaterThan(mopProfile.lengthMin * 2);
     expect(dripProfile.lengthRange).toBeGreaterThan(mopProfile.lengthRange * 2);
+    expect(dripProfile.tipWidthRatio).toBeGreaterThan(0.4);
+    expect(dripProfile.originPoolRatio).toBeGreaterThan(1.5);
     expect(dripProfile.cooldownMs).toBeLessThan(mopProfile.cooldownMs);
 
     const collect = (variant: "mop" | "drip-mop", size: number) => {
@@ -87,6 +89,8 @@ describe("wet paint load authority", () => {
     expect(average(dripMopDrips.map(({ width }) => width))).toBeGreaterThan(average(mopDrips.map(({ width }) => width)) * 1.5);
     expect(average(dripMopDrips.map(({ length }) => length))).toBeGreaterThan(average(mopDrips.map(({ length }) => length)) * 2);
     expect(dripMopDrips.every(({ originPoolRadius, tipWidthRatio }) => Boolean(originPoolRadius) && Boolean(tipWidthRatio))).toBe(true);
+    expect(dripMopDrips.every(({ bend, length }) => Math.abs(bend ?? 0) <= length * 0.028)).toBe(true);
+    expect(dripMopDrips.every(({ width }) => width > 10)).toBe(true);
   });
 
   it("replays drip origins, lengths, bends, and timing deterministically", () => {

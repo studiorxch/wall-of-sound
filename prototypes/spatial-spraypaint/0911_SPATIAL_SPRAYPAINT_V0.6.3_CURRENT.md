@@ -2,7 +2,7 @@
 
 Date: 2026-09-12
 
-Status: PARTIAL — the V0.6.2 tool-contact/cursor work and the V0.6.3 continuous wet-run, contextual Flow/Viscosity, and calibration-palette work are implemented. The full automated suite, TypeScript, production build, and available current-host Physical/browser workflows pass. Human-timed wet-flow behavior and physical Hand behavior remain MacBook gates.
+Status: PARTIAL — the V0.6.2 tool-contact/cursor work and the V0.6.3 continuous wet-run, contextual Flow/Viscosity, calibration-palette, Drip Mop fidelity, and Clean Chisel work are implemented. The full automated suite, TypeScript, production build, and available current-host Physical/browser workflows pass. Human-timed wet-flow behavior and physical Hand behavior remain MacBook gates.
 
 Baseline: V0.6.1 commit `59e909e46455f41e4a9627698c5541feab951c15`, with the approved uncommitted V0.6.2 working state treated as the V0.6.3 starting point.
 
@@ -36,6 +36,7 @@ No Tool family, Waveformer, surface material, shell redesign, Spray-plume calibr
 
 - Mop and Drip Mop use a circular reservoir/contact footprint at their initial point and every deposited endpoint, producing rounded starts, ends, and joined wet bodies while retaining edge streaks and paint load.
 - Chisel uses bounded, sorted continuity polygons and does not allow a zero-motion seed to establish a false movement direction. The first real segment owns its start geometry, eliminating the reproduced triangular/splintered start artifact while preserving movement-derived broad/narrow response and intentional corners.
+- Clean Chisel is an additional contextual Marker/Nib variant, not a new Tool. It retains movement-derived chisel geometry while using a fuller narrow edge, more restrained direction response, and a finite rounded contact cap for cleaner, less-frayed endpoints. The original Chisel remains available.
 - One `DrawingCursor` authority serves Physical and Hand input. It resolves from selected Tool, Cap/Nib, current size, orientation, and Wall zoom.
 - Spray cursor coverage is derived from `SprayCapProfile.cursorFootprint`, which remains layered over the existing canonical Cap deposition preset rather than duplicating Spray authority.
 - Round, Mop, and Drip Mop cursors are circular contact previews. Chisel uses the renderer's nib-angle constant and aspect. Drips are not predicted in the cursor.
@@ -71,6 +72,8 @@ Wet runs now use deterministic connected strip geometry:
 - legacy non-Mop Spray drips retain their existing restrained line path.
 
 Generated origin, width, length, bend, duration, taper, pool, and terminal-bulb state is stored with canonical history and cloned defensively for deterministic replay, Undo, Clear, and Clear restoration.
+
+The primary visual calibration reference for the final fidelity pass is the user-supplied black-door/white-mop photograph `b4163c1f042d0033ee9bf59faa5f8621.jpg`. It establishes direction rather than literal brand simulation: a smooth round-nib body feeding substantial attached, mostly vertical, long gravity channels. To move toward that reference, consecutive wet-contact widths now converge through a bounded deterministic response instead of following every point's load/velocity change immediately. Drip Mop origins and retained tips are thicker, average and exceptional runs are longer, lateral bend is reduced, and simultaneous channels are more selective. This avoids lumpy body changes and thin antenna/tentacle silhouettes without changing Spray.
 
 ## Mop Versus Drip Mop
 
@@ -112,10 +115,10 @@ MacBook field testing continues to show that a neutral/white ring light near the
 ## Automated Verification
 
 - Focused wet controls/model/continuous geometry/palette/cursor/contact tests: PASS — 40/40.
-- Final `npm test`: PASS — 32 test files, 177/177 tests.
+- Final `npm test`: PASS — 32 test files, 180/180 tests.
 - Final `npm run build`: PASS — TypeScript and Vite production build; 39 modules transformed.
 
-Coverage includes continuous connected drip-strip geometry, parent origin, taper, gravity direction, deterministic replay, pooled origin, Flow and Viscosity mapping, Mop/Drip Mop differentiation, dwell/load gain, speed drain, multiple origins, restrained non-Mop routing, mixed-color wet history, exact Clear restoration, palette/recent-color state, shared cursor geometry, all required zoom scales, raw Hand aim separation, Chisel clean initialization, corner bounds, and all retained navigation/input/audio/recording/composition tests.
+Coverage includes continuous connected drip-strip geometry, thicker parent origin and retained tip, restrained bend, long-run distribution, deterministic replay, pooled origin, Flow and Viscosity mapping, smoothed wet-contact width, Mop/Drip Mop differentiation, dwell/load gain, speed drain, multiple origins, restrained non-Mop routing, mixed-color wet history, exact Clear restoration, palette/recent-color state, shared cursor geometry, all required zoom scales, raw Hand aim separation, Chisel clean initialization, Clean Chisel selection/contact, corner bounds, and all retained navigation/input/audio/recording/composition tests.
 
 ## Current-Host Browser Validation
 
@@ -128,7 +131,9 @@ Passed in the current in-app browser with Physical input where automation permit
 - Flow and Viscosity appeared only for Mop/Drip Mop inside the Marker/Nib chooser and accepted High/Runny and Balanced/Balanced calibration states;
 - Mop showed a large round cursor, circular dot, rounded start/end, broad wet body, and retained edge character;
 - Drip Mop showed a materially larger circular contact/body than Mop;
+- the reference-calibrated Drip Mop pass produced a visually smooth, continuous round-contact body without point-to-point width lumps in a Physical drag sample;
 - Chisel horizontal, vertical, and diagonal live samples reproduced the original false-corner splinter, then passed after the zero-motion direction fix with clean starts/ends;
+- Clean Chisel appeared as a compact contextual Marker/Nib choice and produced clean finite horizontal/diagonal endpoints without visible fraying;
 - New York Fat Spray, Round Marker, Mop, and Drip Mop created a mixed-color Wall;
 - keyboard Undo removed the latest mixed-color stroke;
 - Clear disabled Clear while retaining Undo, and one Undo restored the prior colored Wall;
@@ -137,7 +142,7 @@ Passed in the current in-app browser with Physical input where automation permit
 - cursor geometry scaled exactly at 25%, 100%, and 400% in live DOM measurements (17.479px, 69.916px, and 279.664px for the same Drip Mop contact); and
 - recording entered and exited the active state around a Physical mark without an application error.
 
-The browser automation surface compresses pointer timing and does not provide a reliable held-pointer dwell gesture. A High/Runny slow-path attempt verified the wet body but did not produce a trustworthy human-timed live run. Connected-run form, dwell/flow thresholds, long-run distribution, and replay are therefore proven deterministically but not claimed as visually live-verified on this host. Modified-wheel zoom and held-Space Pan were also not re-proven through this automation surface; their retained deterministic suites pass. No local soundtrack file was loaded in this V0.6.3 browser pass, so existing music mixing is regression-tested but not newly live-claimed.
+The browser automation surface compresses pointer timing and does not provide a reliable held-pointer dwell gesture. A High/Runny slow-path attempt verified the wet body but did not produce a trustworthy human-timed live run. The longer, thicker, more vertical connected-run form, dwell/flow thresholds, long-run distribution, and replay are therefore proven deterministically but not claimed as visually live-verified on this host. Modified-wheel zoom and held-Space Pan were also not re-proven through this automation surface; their retained deterministic suites pass. No local soundtrack file was loaded in this V0.6.3 browser pass, so existing music mixing is regression-tested but not newly live-claimed.
 
 ## MacBook Manual Validation Checklist
 
@@ -147,17 +152,19 @@ After committing, push and pull before testing.
 2. For each, draw slow, fast, horizontal, and vertical marks; hold short and long dwells at several points.
 3. Confirm Mop produces moderate connected runs and Drip Mop produces visibly wider, longer, more frequent, and occasionally very long runs.
 4. Confirm every run remains attached to its wet body, tapers continuously, follows gravity, and never becomes a string of beads.
-5. Set Flow Low/Balanced/High while holding Viscosity constant; confirm delivery, buildup, trigger ease, and width increase coherently.
-6. Set Viscosity Thick/Balanced/Runny while holding Flow constant; confirm thick is wider/slower/shorter and runny is narrower/faster/longer.
-7. Verify multiple Drip Mop origins under high load and that faster movement reduces accumulation.
-8. Switch repeatedly among dark, light, and saturated colors; overlap wet marks and inspect opacity, pooling, edge softness, and continuous-run visibility.
-9. Verify current color, recent colors, and all palette labels; remember Montana/BLACK ranges are explicitly calibration fallbacks, not imported manufacturer truth.
-10. Verify Spray, Round, Chisel, Mop, and Drip Mop cursor size/color/shape alignment at several Wall scales.
-11. With Hand input and a neutral/white ring light, compare the raw aim cursor's responsiveness with the stabilized deposited stroke during fast movement.
-12. Confirm Hand short-gap protection, tracking-quality warning, edge-driven motion, pinch paint, Pan recovery, and sensor-only camera privacy remain intact.
-13. Repeat Mop/Drip Mop slow, fast, and dwell tests with Hand; compare continuous-run behavior against Physical.
-14. Exercise mixed-color Undo, Clear, Undo Clear, resize replay, Pan, zoom, edge continuation, soundtrack, and recording; verify exact colors and wet runs survive.
-15. Confirm the final WebM contains the Wall composite and mixed audio, and inspect the console for warnings/errors.
+5. Compare the result directly with the supplied black-door reference: body continuity, substantial origin width, predominantly vertical fall, long connected runs, and the absence of antenna/tentacle artifacts.
+6. Compare original Chisel and Clean Chisel with horizontal, vertical, diagonal, loop, and sharp-turn samples; confirm Clean Chisel ends are visibly less frayed.
+7. Set Flow Low/Balanced/High while holding Viscosity constant; confirm delivery, buildup, trigger ease, and width increase coherently.
+8. Set Viscosity Thick/Balanced/Runny while holding Flow constant; confirm thick is wider/slower/shorter and runny is narrower/faster/longer.
+9. Verify multiple Drip Mop origins under high load and that faster movement reduces accumulation.
+10. Switch repeatedly among dark, light, and saturated colors; overlap wet marks and inspect opacity, pooling, edge softness, and continuous-run visibility.
+11. Verify current color, recent colors, and all palette labels; remember Montana/BLACK ranges are explicitly calibration fallbacks, not imported manufacturer truth.
+12. Verify Spray, Round, both Chisels, Mop, and Drip Mop cursor size/color/shape alignment at several Wall scales.
+13. With Hand input and a neutral/white ring light, compare the raw aim cursor's responsiveness with the stabilized deposited stroke during fast movement.
+14. Confirm Hand short-gap protection, tracking-quality warning, edge-driven motion, pinch paint, Pan recovery, and sensor-only camera privacy remain intact.
+15. Repeat Mop/Drip Mop slow, fast, and dwell tests with Hand; compare continuous-run behavior against Physical.
+16. Exercise mixed-color Undo, Clear, Undo Clear, resize replay, Pan, zoom, edge continuation, soundtrack, and recording; verify exact colors and wet runs survive.
+17. Confirm the final WebM contains the Wall composite and mixed audio, and inspect the console for warnings/errors.
 
 ## Known Limitations And Deferred Work
 
@@ -171,4 +178,3 @@ After committing, push and pull before testing.
 - Surface materials, paint chemistry/drying, Pencil pressure/tilt, Waveformer, Sticker, Roller, Fire Extinguisher, Black Book, collaboration, and shell redesign remain deferred.
 
 Next safe step: push this checkpoint, pull it on the MacBook, complete the manual wet/Hand checklist, and return measured observations before V0.6.4 Spray-plume work.
-

@@ -16,8 +16,8 @@ const metadata = (overrides: MetadataOverrides = {}): StrokeMetadata => {
     inputSource: overrides.inputSource ?? "mouse",
   };
   return overrides.toolId === "paint-marker"
-    ? { ...shared, toolId: "paint-marker", variantId: overrides.variantId === "chisel" || overrides.variantId === "mop" || overrides.variantId === "drip-mop" ? overrides.variantId : "round" }
-    : { ...shared, toolId: "spray-can", variantId: overrides.variantId === "round" || overrides.variantId === "chisel" || overrides.variantId === "mop" || overrides.variantId === "drip-mop" ? "new-york-fat" : overrides.variantId ?? "new-york-fat" };
+    ? { ...shared, toolId: "paint-marker", variantId: overrides.variantId === "chisel" || overrides.variantId === "clean-chisel" || overrides.variantId === "mop" || overrides.variantId === "drip-mop" ? overrides.variantId : "round" }
+    : { ...shared, toolId: "spray-can", variantId: overrides.variantId === "round" || overrides.variantId === "chisel" || overrides.variantId === "clean-chisel" || overrides.variantId === "mop" || overrides.variantId === "drip-mop" ? "new-york-fat" : overrides.variantId ?? "new-york-fat" };
 };
 
 describe("stroke history", () => {

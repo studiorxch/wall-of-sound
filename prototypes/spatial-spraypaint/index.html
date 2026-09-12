@@ -101,7 +101,8 @@
     .tool-choice.selected, .cap-choice.selected, .marker-choice.selected { border-color:#ff6a83; color:#ff91a7; }
     .tool-sample, .marker-sample { display:grid; place-items:center; height:20px; color:#fff; font-size:10px; font-weight:900; }
     .marker-sample::before { content:""; display:block; width:48px; border-top:var(--sample-width, 8px) solid currentColor; border-radius:999px; transform:rotate(var(--sample-angle, 0deg)); opacity:.88; }
-    .marker-choice[data-marker="chisel"] .marker-sample::before { border-radius:1px; }
+    .marker-choice[data-marker="chisel"] .marker-sample::before,
+    .marker-choice[data-marker="clean-chisel"] .marker-sample::before { border-radius:1px; }
     .marker-choice[data-marker="mop"] .marker-sample::before,
     .marker-choice[data-marker="drip-mop"] .marker-sample::before { opacity:.72; box-shadow:0 4px 0 -2px currentColor; }
     .marker-choice[data-marker="drip-mop"] .marker-sample::before { box-shadow:0 4px 0 -2px currentColor, 10px 9px 0 -4px currentColor; }
@@ -271,6 +272,7 @@
     <div id="marker-chooser" class="tool-popover" aria-label="Marker and nib chooser">
       <button class="marker-choice selected" data-marker="round" aria-pressed="true"><span class="marker-sample" style="--sample-width:8px"></span><span>Round Marker</span></button>
       <button class="marker-choice" data-marker="chisel" aria-pressed="false"><span class="marker-sample" style="--sample-width:12px;--sample-angle:-25deg"></span><span>Chisel / Calligraphy</span></button>
+      <button class="marker-choice" data-marker="clean-chisel" aria-pressed="false"><span class="marker-sample" style="--sample-width:12px;--sample-angle:-25deg"></span><span>Clean Chisel</span></button>
       <button class="marker-choice" data-marker="mop" aria-pressed="false"><span class="marker-sample" style="--sample-width:14px"></span><span>Mop</span></button>
       <button class="marker-choice" data-marker="drip-mop" aria-pressed="false"><span class="marker-sample" style="--sample-width:17px"></span><span>Drip Mop</span></button>
       <div id="wet-controls" aria-label="Wet paint calibration controls" hidden>

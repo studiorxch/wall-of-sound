@@ -6,6 +6,7 @@ import {
   getMarkerVariant,
   resolveMarkerGeometry,
   smoothMarkerDirection,
+  smoothWetContactWidth,
 } from "./PaintMarkerEngine";
 import { type StrokePoint } from "./types";
 
@@ -119,6 +120,21 @@ describe("Paint Marker renderer", () => {
     expect(recording.ellipses.every((ellipse) => ellipse[3] <= 2.2)).toBe(true);
   });
 
+  it("offers a cleaner Chisel variation with a fuller finite endpoint", () => {
+    const standard = resolveMarkerGeometry("chisel", point(0, 0), point(40, -19));
+    const clean = resolveMarkerGeometry("clean-chisel", point(0, 0), point(40, -19));
+    expect(clean.width).toBeGreaterThan(standard.width);
+
+    const recording = recordingContext();
+    const engine = new PaintMarkerEngine();
+    engine.beginStroke("clean-chisel");
+    engine.renderSegment(recording.ctx, null, point(10, 10), "#ff0000", "clean-chisel");
+    engine.renderSegment(recording.ctx, point(10, 10), point(60, 24), "#ff0000", "clean-chisel");
+    expect(recording.ellipses).toHaveLength(1);
+    expect(recording.ellipses[0][3]).toBeGreaterThan(2.2);
+    expect(recording.ellipses[0].every(Number.isFinite)).toBe(true);
+  });
+
   it("renders a deterministic stable geometry plan", () => {
     const previous = point(10, 12);
     const current = point(44, 51, 1.2);
@@ -185,5 +201,12 @@ describe("Paint Marker renderer", () => {
     expect(recording.ellipses).toHaveLength(0);
     expect(recording.arcs[0][2]).toBeGreaterThan(15);
     expect(recording.arcs[1][2]).toBeGreaterThan(15);
+  });
+
+  it("smooths wet contact-width changes into a continuous mop body", () => {
+    expect(smoothWetContactWidth(60, 90, "drip-mop")).toBeLessThan(65);
+    expect(smoothWetContactWidth(60, 30, "drip-mop")).toBeGreaterThan(55);
+    expect(smoothWetContactWidth(60, 90, "mop")).toBeLessThan(66);
+    expect(smoothWetContactWidth(60, 60, "mop")).toBe(60);
   });
 });

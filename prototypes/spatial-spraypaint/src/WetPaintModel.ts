@@ -69,15 +69,15 @@ const WET_VARIANT_PROFILES: Record<WetMarkerVariantId, WetVariantProfile> = {
     dripLoadThreshold: 0.66,
     dwellThresholdMs: 380,
     travelThreshold: 1.8,
-    cooldownMs: 520,
-    lengthMin: 3.2,
-    lengthRange: 4.8,
-    stemWidthBaseRatio: 0.1,
-    stemWidthLoadRatio: 0.1,
-    tipWidthRatio: 0.3,
-    originPoolRatio: 1.35,
-    durationMinMs: 1150,
-    durationRangeMs: 1250,
+    cooldownMs: 680,
+    lengthMin: 4.4,
+    lengthRange: 6.2,
+    stemWidthBaseRatio: 0.14,
+    stemWidthLoadRatio: 0.11,
+    tipWidthRatio: 0.48,
+    originPoolRatio: 1.55,
+    durationMinMs: 1450,
+    durationRangeMs: 1650,
   },
 };
 
@@ -173,17 +173,16 @@ export class WetPaintAccumulator {
   private createDrips(point: StrokePoint, size: number, paintLoad: number): DripSeed[] {
     const profile = WET_VARIANT_PROFILES[this.variant];
     const firstRandom = this.random();
-    const additionalDrip = this.variant === "drip-mop" && paintLoad > 0.82 && firstRandom > 0.42 ? 1 : 0;
-    const thirdDrip = this.variant === "drip-mop" && paintLoad > 0.95 && this.random() > 0.84 ? 1 : 0;
-    const count = 1 + additionalDrip + thirdDrip;
+    const additionalDrip = this.variant === "drip-mop" && paintLoad > 0.84 && firstRandom > 0.58 ? 1 : 0;
+    const count = 1 + additionalDrip;
     const drips: DripSeed[] = [];
     for (let index = 0; index < count; index += 1) {
       const offset = (this.random() - 0.5) * size * 0.92;
-      const dramatic = this.variant === "drip-mop" && this.random() > 0.78;
+      const dramatic = this.variant === "drip-mop" && this.random() > 0.8;
       const length = size * (
         profile.lengthMin
         + this.random() * profile.lengthRange
-        + (dramatic ? 3.4 : 0)
+        + (dramatic ? 5.2 : 0)
       ) * this.modifiers.length;
       const width = Math.max(
         1.4,
@@ -198,7 +197,7 @@ export class WetPaintAccumulator {
         width,
         length,
         opacity: clamp(0.58 + paintLoad * 0.28, 0, 0.92),
-        bend: (this.random() - 0.5) * length * 0.13,
+        bend: (this.random() - 0.5) * length * (this.variant === "drip-mop" ? 0.055 : 0.1),
         durationMs: (
           profile.durationMinMs
           + (1 - paintLoad) * 420
