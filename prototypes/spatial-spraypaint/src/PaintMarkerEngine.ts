@@ -50,6 +50,7 @@ interface MarkerStrokeState {
   lastDirection: number | null;
   lastHalfWidth: number | null;
   lastPoint: StrokePoint | null;
+  lastColor: string | null;
 }
 
 export function getMarkerVariant(id: string): MarkerVariantDefinition {
@@ -194,10 +195,37 @@ export class PaintMarkerEngine {
   private stroke: MarkerStrokeState | null = null;
 
   public beginStroke(variantId: MarkerVariantId): void {
-    this.stroke = { variantId, lastDirection: null, lastHalfWidth: null, lastPoint: null };
+    this.stroke = {
+      variantId,
+      lastDirection: null,
+      lastHalfWidth: null,
+      lastPoint: null,
+      lastColor: null,
+    };
   }
 
-  public endStroke(): void {
+  public endStroke(ctx?: CanvasRenderingContext2D): void {
+    if (
+      ctx
+      && this.stroke
+      && (this.stroke.variantId === "mop" || this.stroke.variantId === "drip-mop")
+      && this.stroke.lastPoint
+      && this.stroke.lastHalfWidth
+      && this.stroke.lastColor
+    ) {
+      ctx.save();
+      ctx.fillStyle = this.stroke.lastColor;
+      ctx.beginPath();
+      ctx.arc(
+        this.stroke.lastPoint.x,
+        this.stroke.lastPoint.y,
+        this.stroke.lastHalfWidth,
+        0,
+        Math.PI * 2,
+      );
+      ctx.fill();
+      ctx.restore();
+    }
     this.stroke = null;
   }
 
@@ -255,7 +283,7 @@ export class PaintMarkerEngine {
       if (stroke.lastDirection !== null && stroke.lastHalfWidth !== null && stroke.lastPoint) {
         this.fillContinuousJoin(ctx, stroke.lastPoint, stroke.lastDirection, direction, stroke.lastHalfWidth, startHalfWidth);
       }
-      if (variantId === "round" || variantId === "mop" || variantId === "drip-mop") {
+      if (variantId === "round") {
         ctx.beginPath();
         ctx.arc(point.x, point.y, geometry.width * 0.5, 0, Math.PI * 2);
         ctx.fill();
@@ -271,6 +299,7 @@ export class PaintMarkerEngine {
     stroke.lastDirection = previous ? direction : null;
     stroke.lastHalfWidth = previous ? geometry.width * 0.5 : null;
     stroke.lastPoint = { ...point };
+    stroke.lastColor = color;
   }
 
   private fillRibbon(ctx: CanvasRenderingContext2D, ribbon: SweptRibbonSegment): void {

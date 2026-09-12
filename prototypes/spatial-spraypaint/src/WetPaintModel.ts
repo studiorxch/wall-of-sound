@@ -70,12 +70,12 @@ const WET_VARIANT_PROFILES: Record<WetMarkerVariantId, WetVariantProfile> = {
     dwellThresholdMs: 380,
     travelThreshold: 1.8,
     cooldownMs: 680,
-    lengthMin: 4.4,
-    lengthRange: 6.2,
-    stemWidthBaseRatio: 0.14,
-    stemWidthLoadRatio: 0.11,
-    tipWidthRatio: 0.48,
-    originPoolRatio: 1.55,
+    lengthMin: 5.2,
+    lengthRange: 7.4,
+    stemWidthBaseRatio: 0.16,
+    stemWidthLoadRatio: 0.12,
+    tipWidthRatio: 0.62,
+    originPoolRatio: 0.78,
     durationMinMs: 1450,
     durationRangeMs: 1650,
   },
@@ -205,7 +205,7 @@ export class WetPaintAccumulator {
         ) * this.modifiers.gravityDuration,
         tipWidthRatio: profile.tipWidthRatio,
         originPoolRadius: width * profile.originPoolRatio,
-        terminalBulbRatio: this.variant === "drip-mop" ? 0.72 : 0.48,
+        terminalBulbRatio: this.variant === "drip-mop" ? 0.58 : 0.48,
       });
     }
     return drips;

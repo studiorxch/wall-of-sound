@@ -72,8 +72,8 @@ describe("wet paint load authority", () => {
     expect(dripProfile.stemWidthLoadRatio).toBeGreaterThan(mopProfile.stemWidthLoadRatio);
     expect(dripProfile.lengthMin).toBeGreaterThan(mopProfile.lengthMin * 2);
     expect(dripProfile.lengthRange).toBeGreaterThan(mopProfile.lengthRange * 2);
-    expect(dripProfile.tipWidthRatio).toBeGreaterThan(0.4);
-    expect(dripProfile.originPoolRatio).toBeGreaterThan(1.5);
+    expect(dripProfile.tipWidthRatio).toBeGreaterThan(0.6);
+    expect(dripProfile.originPoolRatio).toBeLessThan(1);
     expect(dripProfile.cooldownMs).toBeLessThan(mopProfile.cooldownMs);
 
     const collect = (variant: "mop" | "drip-mop", size: number) => {

@@ -179,6 +179,7 @@ describe("Paint Marker renderer", () => {
       "#ff0000",
       "drip-mop",
     );
+    engine.endStroke(recording.ctx);
     expect(recording.calls).toContain("fill");
     expect(recording.calls.filter((call) => call === "stroke")).toHaveLength(3);
     expect(recording.arcs).toHaveLength(1);
@@ -197,10 +198,23 @@ describe("Paint Marker renderer", () => {
       "#ff0000",
       "mop",
     );
+    engine.endStroke(recording.ctx);
     expect(recording.arcs).toHaveLength(2);
     expect(recording.ellipses).toHaveLength(0);
     expect(recording.arcs[0][2]).toBeGreaterThan(15);
     expect(recording.arcs[1][2]).toBeGreaterThan(15);
+  });
+
+  it("does not stamp round contact discs at every wet sample", () => {
+    const recording = recordingContext();
+    const engine = new PaintMarkerEngine();
+    engine.beginStroke("drip-mop");
+    engine.renderSegment(recording.ctx, null, { ...point(0, 0), paintLoad: 0.9 }, "#ff0000", "drip-mop");
+    engine.renderSegment(recording.ctx, point(0, 0), { ...point(20, 2), paintLoad: 0.92 }, "#ff0000", "drip-mop");
+    engine.renderSegment(recording.ctx, point(20, 2), { ...point(40, 3), paintLoad: 0.88 }, "#ff0000", "drip-mop");
+    expect(recording.arcs).toHaveLength(1);
+    engine.endStroke(recording.ctx);
+    expect(recording.arcs).toHaveLength(2);
   });
 
   it("smooths wet contact-width changes into a continuous mop body", () => {

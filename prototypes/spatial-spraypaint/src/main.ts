@@ -1165,7 +1165,7 @@ class SpatialSpraypaintApp {
       }
     } else {
       this.strokeHistory.finalize();
-      this.toolRenderer.endStroke();
+      this.withWallPaintTransform(() => this.toolRenderer.endStroke(this.paintCtx));
       this.wetPaintAccumulator.reset();
       this.activeStrokeRandom = null;
       this.updateUndoControl();
@@ -1330,7 +1330,7 @@ class SpatialSpraypaintApp {
           previous = point;
         }
         for (const drip of stroke.drips) this.toolRenderer.renderCompletedDrip(this.paintCtx, drip, stroke.color);
-        if (!this.isDrawing || index < strokes.length - 1) this.toolRenderer.endStroke();
+        if (!this.isDrawing || index < strokes.length - 1) this.toolRenderer.endStroke(this.paintCtx);
       }
     });
   }

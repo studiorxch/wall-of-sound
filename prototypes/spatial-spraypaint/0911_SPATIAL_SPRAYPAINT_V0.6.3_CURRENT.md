@@ -73,7 +73,7 @@ Wet runs now use deterministic connected strip geometry:
 
 Generated origin, width, length, bend, duration, taper, pool, and terminal-bulb state is stored with canonical history and cloned defensively for deterministic replay, Undo, Clear, and Clear restoration.
 
-The primary visual calibration reference for the final fidelity pass is the user-supplied black-door/white-mop photograph `b4163c1f042d0033ee9bf59faa5f8621.jpg`. It establishes direction rather than literal brand simulation: a smooth round-nib body feeding substantial attached, mostly vertical, long gravity channels. To move toward that reference, consecutive wet-contact widths now converge through a bounded deterministic response instead of following every point's load/velocity change immediately. Drip Mop origins and retained tips are thicker, average and exceptional runs are longer, lateral bend is reduced, and simultaneous channels are more selective. This avoids lumpy body changes and thin antenna/tentacle silhouettes without changing Spray.
+The primary visual calibration set for the final fidelity pass is the user-supplied black-door photograph `b4163c1f042d0033ee9bf59faa5f8621.jpg`, the black-on-white `kr-interview-4.jpg`, the white-on-black `Costello5sm.jpg`, and the red prototype screenshot. Together they establish direction rather than literal brand simulation: a smooth round-nib body feeding substantial attached, mostly vertical, long gravity channels. To move toward those references, consecutive wet-contact widths now converge through a bounded deterministic response instead of following every point's load/velocity change immediately. The renderer draws one round start and one round final contact rather than stamping a full disc at every wet sample; intermediate body continuity comes from swept ribbons and bounded joins. Drip Mop stems and retained tips are thicker, taper is less extreme, average and exceptional runs are longer, lateral bend is reduced, origin pools no longer form oversized body knots, and simultaneous channels are more selective. This avoids the red example's lumpy stitched body and thin antenna/tentacle silhouettes without changing Spray.
 
 ## Mop Versus Drip Mop
 
@@ -115,10 +115,10 @@ MacBook field testing continues to show that a neutral/white ring light near the
 ## Automated Verification
 
 - Focused wet controls/model/continuous geometry/palette/cursor/contact tests: PASS — 40/40.
-- Final `npm test`: PASS — 32 test files, 180/180 tests.
+- Final `npm test`: PASS — 32 test files, 181/181 tests.
 - Final `npm run build`: PASS — TypeScript and Vite production build; 39 modules transformed.
 
-Coverage includes continuous connected drip-strip geometry, thicker parent origin and retained tip, restrained bend, long-run distribution, deterministic replay, pooled origin, Flow and Viscosity mapping, smoothed wet-contact width, Mop/Drip Mop differentiation, dwell/load gain, speed drain, multiple origins, restrained non-Mop routing, mixed-color wet history, exact Clear restoration, palette/recent-color state, shared cursor geometry, all required zoom scales, raw Hand aim separation, Chisel clean initialization, Clean Chisel selection/contact, corner bounds, and all retained navigation/input/audio/recording/composition tests.
+Coverage includes continuous connected drip-strip geometry, thicker parent origin and retained tip, restrained bend, less-extreme taper, long-run distribution, deterministic replay, bounded origin pool, Flow and Viscosity mapping, smoothed wet-contact width, absence of intermediate wet-disc stamping, Mop/Drip Mop differentiation, dwell/load gain, speed drain, multiple origins, restrained non-Mop routing, mixed-color wet history, exact Clear restoration, palette/recent-color state, shared cursor geometry, all required zoom scales, raw Hand aim separation, Chisel clean initialization, Clean Chisel selection/contact, corner bounds, and all retained navigation/input/audio/recording/composition tests.
 
 ## Current-Host Browser Validation
 
@@ -131,7 +131,7 @@ Passed in the current in-app browser with Physical input where automation permit
 - Flow and Viscosity appeared only for Mop/Drip Mop inside the Marker/Nib chooser and accepted High/Runny and Balanced/Balanced calibration states;
 - Mop showed a large round cursor, circular dot, rounded start/end, broad wet body, and retained edge character;
 - Drip Mop showed a materially larger circular contact/body than Mop;
-- the reference-calibrated Drip Mop pass produced a visually smooth, continuous round-contact body without point-to-point width lumps in a Physical drag sample;
+- the reference-calibrated Drip Mop pass produced visually smooth curved and straight continuous round-contact bodies without the red screenshot's point-to-point circular knots;
 - Chisel horizontal, vertical, and diagonal live samples reproduced the original false-corner splinter, then passed after the zero-motion direction fix with clean starts/ends;
 - Clean Chisel appeared as a compact contextual Marker/Nib choice and produced clean finite horizontal/diagonal endpoints without visible fraying;
 - New York Fat Spray, Round Marker, Mop, and Drip Mop created a mixed-color Wall;

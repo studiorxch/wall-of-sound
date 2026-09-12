@@ -24,8 +24,8 @@ export class DrawingToolRenderer {
     if (style.toolId === "paint-marker") this.marker.beginStroke(style.variantId);
   }
 
-  public endStroke(): void {
-    this.marker.endStroke();
+  public endStroke(ctx?: CanvasRenderingContext2D): void {
+    this.marker.endStroke(ctx);
   }
 
   public resize(width: number, height: number): void {
