@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>StudioRich — Spatial Spraypaint V0.6.1</title>
+  <title>StudioRich — Spatial Spraypaint V0.6.3</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
@@ -28,8 +28,29 @@
     select { padding: 7px 30px 7px 9px; }
     input[type="range"] { accent-color: #ff365f; }
     #app { position: relative; background: #050508; }
-    #composite-canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: crosshair; }
+    #composite-canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: none; }
     body.panning #composite-canvas { cursor: grabbing; }
+    #drawing-cursor {
+      position: absolute;
+      z-index: 8;
+      left: 0;
+      top: 0;
+      min-width: 5px;
+      min-height: 5px;
+      border: 2px solid var(--drawing-cursor-color, #fff);
+      border-radius: 50%;
+      opacity: 0;
+      pointer-events: none;
+      transform: translate(-50%, -50%) rotate(var(--drawing-cursor-angle, 0rad)) scale(.86);
+      box-shadow: 0 0 0 1px rgba(5,5,8,.88), 0 0 8px rgba(255,255,255,.24);
+      transition: opacity 55ms linear, transform 55ms ease, border-color 55ms ease, background-color 55ms ease;
+    }
+    #drawing-cursor::after { content:""; position:absolute; left:50%; top:50%; width:3px; height:3px; margin:-1.5px; border-radius:50%; background:#fff; box-shadow:0 0 0 1px rgba(5,5,8,.75); }
+    #drawing-cursor.visible { opacity: 1; transform: translate(-50%, -50%) rotate(var(--drawing-cursor-angle, 0rad)) scale(1); }
+    #drawing-cursor.active { background:color-mix(in srgb, var(--drawing-cursor-color, #fff) 26%, transparent); box-shadow:0 0 0 2px rgba(5,5,8,.72),0 0 14px color-mix(in srgb, var(--drawing-cursor-color, #fff) 48%, transparent); }
+    #drawing-cursor.pinching { border-width:3px; }
+    #drawing-cursor[data-shape="chisel"] { border-radius: 28%; }
+    #drawing-cursor[data-tool="spray-can"] { border-style: dashed; }
 
     .island {
       position: absolute;
@@ -68,7 +89,13 @@
     #variant-control[data-tool="paint-marker"]::after { content:""; display:none; }
     .tool-popover { position:absolute; z-index:12; left:16px; bottom:72px; display:none; padding:9px; border:1px solid rgba(255,255,255,.14); border-radius:13px; background:rgba(12,12,17,.94); box-shadow:0 12px 40px rgba(0,0,0,.42); backdrop-filter:blur(16px); }
     .tool-popover.open { display:grid; }
-    #color-chooser { grid-template-columns:repeat(6, 30px); gap:6px; }
+    #color-chooser { width:238px; gap:8px; }
+    .palette-toolbar { display:grid; grid-template-columns:1fr auto; align-items:center; gap:7px; }
+    #palette-select { min-width:0; width:100%; font-size:10px; }
+    #palette-current { width:26px; height:26px; border:2px solid #fff; border-radius:50%; background:var(--current-color, #e92f3d); box-shadow:inset 0 0 0 3px rgba(0,0,0,.18); }
+    .palette-section-label { color:#8f8e99; font-size:9px; font-weight:800; letter-spacing:.8px; text-transform:uppercase; }
+    .palette-grid { display:grid; grid-template-columns:repeat(6, 30px); gap:6px; }
+    #recent-colors[hidden], #recent-colors-label[hidden] { display:none; }
     #tool-chooser, #cap-chooser, #marker-chooser { gap:4px; max-height:min(480px, calc(100vh - 110px)); overflow-y:auto; }
     .tool-choice, .cap-choice, .marker-choice { min-width:210px; display:grid; grid-template-columns:66px 1fr; align-items:center; gap:10px; text-align:left; font-size:11px; }
     .tool-choice.selected, .cap-choice.selected, .marker-choice.selected { border-color:#ff6a83; color:#ff91a7; }
@@ -78,6 +105,10 @@
     .marker-choice[data-marker="mop"] .marker-sample::before,
     .marker-choice[data-marker="drip-mop"] .marker-sample::before { opacity:.72; box-shadow:0 4px 0 -2px currentColor; }
     .marker-choice[data-marker="drip-mop"] .marker-sample::before { box-shadow:0 4px 0 -2px currentColor, 10px 9px 0 -4px currentColor; }
+    #wet-controls { margin-top:5px; padding-top:9px; border-top:1px solid rgba(255,255,255,.12); display:grid; gap:6px; }
+    #wet-controls[hidden] { display:none; }
+    .wet-control-row { display:grid; grid-template-columns:58px 1fr; align-items:center; gap:8px; color:#aaa9b2; font-size:10px; }
+    .wet-control-row select { min-width:0; font-size:10px; }
     .cap-sample { display:block; height:0; border-top:var(--sample-width, 8px) solid currentColor; border-radius:999px; opacity:.78; }
     .palette { display: flex; flex-wrap: wrap; gap: 5px; }
     .swatch {
@@ -167,11 +198,6 @@
 
     #tracking-overlay { position: absolute; inset: 0; z-index: 7; display: none; pointer-events: none; }
     #tracking-overlay.visible { display: block; }
-    #tracking-cursor { position: absolute; width: 28px; height: 28px; margin: -14px 0 0 -14px; border: 3px solid #fff; border-radius: 50%; opacity: 0; transform: scale(.8); transition: opacity 80ms linear, transform 80ms ease, border-color 80ms ease; box-shadow: 0 0 0 2px rgba(5,5,8,.8), 0 0 18px rgba(255,255,255,.65); }
-    #tracking-cursor::after { content:""; position:absolute; inset:7px; border-radius:50%; background:#fff; opacity:.45; }
-    #tracking-cursor.detected { opacity: 1; transform: scale(1); }
-    #tracking-cursor.pinching { border-color:#ff2a5f; transform:scale(1.3); box-shadow:0 0 0 3px rgba(255,42,95,.25),0 0 28px rgba(255,42,95,.9); }
-    #tracking-cursor.spraying::after { background:#ff2a5f; opacity:1; }
     #hand-first-use-cue { position:absolute; left:50%; top:74px; transform:translateX(-50%) translateY(-5px); opacity:0; padding:8px 11px; border:1px solid rgba(255,255,255,.2); border-radius:999px; background:rgba(7,8,13,.86); color:#fff; font-size:11px; transition:opacity 120ms ease, transform 120ms ease; }
     #hand-first-use-cue.visible { opacity:1; transform:translateX(-50%); }
     #tracking-debug-panel { position:absolute; top:96px; right:16px; width:272px; display:none; padding:14px; border:1px solid rgba(255,255,255,.16); border-radius:12px; background:rgba(7,8,13,.9); box-shadow:0 8px 32px rgba(0,0,0,.45); }
@@ -204,7 +230,8 @@
 <body>
   <main id="app">
     <canvas id="composite-canvas" aria-label="Spatial Spraypaint drawing canvas"></canvas>
-    <div id="brand-mark" class="island">SPATIAL SPRAYPAINT · V0.6.1</div>
+    <div id="drawing-cursor" aria-hidden="true"></div>
+    <div id="brand-mark" class="island">SPATIAL SPRAYPAINT · V0.6.3</div>
 
     <section id="input-island" class="island" aria-label="Input mode">
       <button id="physical-input" class="selected" aria-pressed="true">Physical</button>
@@ -222,17 +249,11 @@
       <button class="tool-choice" data-tool="paint-marker" aria-pressed="false"><span class="tool-sample">MARK</span><span>Paint Marker</span></button>
     </div>
     <div id="color-chooser" class="tool-popover" aria-label="Color chooser">
-        <button class="swatch" title="Black" aria-label="Black" style="background:#0b0b0d" data-color="#0b0b0d"></button>
-        <button class="swatch" title="White" aria-label="White" style="background:#f5f1e7" data-color="#f5f1e7"></button>
-        <button class="swatch" title="Silver" aria-label="Silver" style="background:#aeb4b8" data-color="#aeb4b8"></button>
-        <button class="swatch selected" title="Red" aria-label="Red" style="background:#e92f3d" data-color="#e92f3d"></button>
-        <button class="swatch" title="Orange" aria-label="Orange" style="background:#ff6a1a" data-color="#ff6a1a"></button>
-        <button class="swatch" title="Yellow" aria-label="Yellow" style="background:#ffd21c" data-color="#ffd21c"></button>
-        <button class="swatch" title="Green" aria-label="Green" style="background:#20d96b" data-color="#20d96b"></button>
-        <button class="swatch" title="Cyan" aria-label="Cyan" style="background:#15cfe5" data-color="#15cfe5"></button>
-        <button class="swatch" title="Blue" aria-label="Blue" style="background:#2764ff" data-color="#2764ff"></button>
-        <button class="swatch" title="Purple" aria-label="Purple" style="background:#8347d8" data-color="#8347d8"></button>
-        <button class="swatch" title="Pink" aria-label="Pink" style="background:#ff3f8f" data-color="#ff3f8f"></button>
+      <div class="palette-toolbar"><select id="palette-select" aria-label="Calibration palette"></select><span id="palette-current" aria-hidden="true"></span></div>
+      <div id="recent-colors-label" class="palette-section-label" hidden>Recent</div>
+      <div id="recent-colors" class="palette-grid" hidden></div>
+      <div class="palette-section-label">Palette</div>
+      <div id="palette-swatches" class="palette-grid"></div>
     </div>
     <div id="cap-chooser" class="tool-popover" aria-label="Cap chooser">
       <button class="cap-choice selected" data-cap="new-york-fat"><span class="cap-sample" style="--sample-width:10px"></span><span>New York Fat</span></button>
@@ -252,6 +273,10 @@
       <button class="marker-choice" data-marker="chisel" aria-pressed="false"><span class="marker-sample" style="--sample-width:12px;--sample-angle:-25deg"></span><span>Chisel / Calligraphy</span></button>
       <button class="marker-choice" data-marker="mop" aria-pressed="false"><span class="marker-sample" style="--sample-width:14px"></span><span>Mop</span></button>
       <button class="marker-choice" data-marker="drip-mop" aria-pressed="false"><span class="marker-sample" style="--sample-width:17px"></span><span>Drip Mop</span></button>
+      <div id="wet-controls" aria-label="Wet paint calibration controls" hidden>
+        <label class="wet-control-row"><span>Flow</span><select id="wet-flow"><option value="low">Low</option><option value="balanced" selected>Balanced</option><option value="high">High</option></select></label>
+        <label class="wet-control-row"><span>Viscosity</span><select id="wet-viscosity"><option value="thick">Thick</option><option value="balanced" selected>Balanced</option><option value="runny">Runny</option></select></label>
+      </div>
     </div>
 
     <section id="session-island" class="island" aria-label="Screen and session controls">
@@ -325,7 +350,6 @@
     <div id="tracking-quality-warning" role="status">💡 Hand tracking is struggling. Improve lighting or increase hand/background contrast.</div>
 
     <div id="tracking-overlay" aria-live="polite">
-      <div id="tracking-cursor" aria-hidden="true"></div>
       <div id="hand-first-use-cue">Pinch thumb + index finger to use Spray Can</div>
       <div id="tracking-debug-panel">
         <div class="tracking-debug-title"><span id="tracking-debug-runtime">TRACKER IDLE</span><span id="hand-detection-status">NO HAND</span></div>

@@ -28,6 +28,13 @@ export interface SweptRibbonSegment {
   direction: number;
 }
 
+export type MarkerJoinPolygon = readonly [
+  { x: number; y: number },
+  { x: number; y: number },
+  { x: number; y: number },
+  { x: number; y: number },
+];
+
 export const MARKER_VARIANTS: readonly MarkerVariantDefinition[] = [
   { id: "round", name: "Round Marker", defaultSize: 28, dripTendency: 0, material: "dense" },
   { id: "chisel", name: "Chisel / Calligraphy", defaultSize: 34, dripTendency: 0, material: "calligraphy" },
@@ -35,7 +42,7 @@ export const MARKER_VARIANTS: readonly MarkerVariantDefinition[] = [
   { id: "drip-mop", name: "Drip Mop", defaultSize: 50, dripTendency: 1, material: "high-flow" },
 ] as const;
 
-const CHISEL_NIB_ANGLE = -25 * Math.PI / 180;
+export const CHISEL_NIB_ANGLE = -25 * Math.PI / 180;
 
 interface MarkerStrokeState {
   variantId: MarkerVariantId;
@@ -134,6 +141,42 @@ export function smoothMarkerDirection(
   return previousDirection + delta * response;
 }
 
+export function buildContinuousJoinPolygon(
+  point: Pick<StrokePoint, "x" | "y">,
+  priorDirection: number,
+  nextDirection: number,
+  priorHalfWidth: number,
+  nextHalfWidth: number,
+): MarkerJoinPolygon {
+  const priorNormal = { x: -Math.sin(priorDirection), y: Math.cos(priorDirection) };
+  const nextNormal = { x: -Math.sin(nextDirection), y: Math.cos(nextDirection) };
+  const priorTangent = { x: Math.cos(priorDirection), y: Math.sin(priorDirection) };
+  const nextTangent = { x: Math.cos(nextDirection), y: Math.sin(nextDirection) };
+  const overlap = Math.max(0.8, Math.min(2, Math.min(priorHalfWidth, nextHalfWidth) * 0.14));
+  const vertices = [
+    {
+      x: point.x + priorNormal.x * priorHalfWidth - priorTangent.x * overlap,
+      y: point.y + priorNormal.y * priorHalfWidth - priorTangent.y * overlap,
+    },
+    {
+      x: point.x + nextNormal.x * nextHalfWidth + nextTangent.x * overlap,
+      y: point.y + nextNormal.y * nextHalfWidth + nextTangent.y * overlap,
+    },
+    {
+      x: point.x - nextNormal.x * nextHalfWidth + nextTangent.x * overlap,
+      y: point.y - nextNormal.y * nextHalfWidth + nextTangent.y * overlap,
+    },
+    {
+      x: point.x - priorNormal.x * priorHalfWidth - priorTangent.x * overlap,
+      y: point.y - priorNormal.y * priorHalfWidth - priorTangent.y * overlap,
+    },
+  ];
+  vertices.sort((first, second) =>
+    Math.atan2(first.y - point.y, first.x - point.x)
+    - Math.atan2(second.y - point.y, second.x - point.x));
+  return vertices as unknown as MarkerJoinPolygon;
+}
+
 export class PaintMarkerEngine {
   private stroke: MarkerStrokeState | null = null;
 
@@ -183,18 +226,21 @@ export class PaintMarkerEngine {
       if (stroke.lastDirection !== null && stroke.lastHalfWidth !== null && stroke.lastPoint) {
         this.fillContinuousJoin(ctx, stroke.lastPoint, stroke.lastDirection, direction, stroke.lastHalfWidth, startHalfWidth);
       }
-      if (variantId === "round") {
+      if (variantId === "round" || variantId === "mop" || variantId === "drip-mop") {
         ctx.beginPath();
         ctx.arc(point.x, point.y, geometry.width * 0.5, 0, Math.PI * 2);
         ctx.fill();
-      } else if (variantId === "mop" || variantId === "drip-mop") {
+      } else if (variantId === "chisel") {
+        this.renderChiselCap(ctx, point, geometry);
+      }
+      if (variantId === "mop" || variantId === "drip-mop") {
         this.renderWetEdges(ctx, ribbon, geometry, color);
       }
     }
     ctx.restore();
 
-    stroke.lastDirection = direction;
-    stroke.lastHalfWidth = geometry.width * 0.5;
+    stroke.lastDirection = previous ? direction : null;
+    stroke.lastHalfWidth = previous ? geometry.width * 0.5 : null;
     stroke.lastPoint = { ...point };
   }
 
@@ -216,28 +262,16 @@ export class PaintMarkerEngine {
     priorHalfWidth: number,
     nextHalfWidth: number,
   ): void {
-    const priorNormal = { x: -Math.sin(priorDirection), y: Math.cos(priorDirection) };
-    const nextNormal = { x: -Math.sin(nextDirection), y: Math.cos(nextDirection) };
-    const priorTangent = { x: Math.cos(priorDirection), y: Math.sin(priorDirection) };
-    const nextTangent = { x: Math.cos(nextDirection), y: Math.sin(nextDirection) };
-    const overlap = Math.max(0.8, Math.min(2, Math.min(priorHalfWidth, nextHalfWidth) * 0.14));
+    const vertices = buildContinuousJoinPolygon(
+      point,
+      priorDirection,
+      nextDirection,
+      priorHalfWidth,
+      nextHalfWidth,
+    );
     ctx.beginPath();
-    ctx.moveTo(
-      point.x + priorNormal.x * priorHalfWidth - priorTangent.x * overlap,
-      point.y + priorNormal.y * priorHalfWidth - priorTangent.y * overlap,
-    );
-    ctx.lineTo(
-      point.x + nextNormal.x * nextHalfWidth + nextTangent.x * overlap,
-      point.y + nextNormal.y * nextHalfWidth + nextTangent.y * overlap,
-    );
-    ctx.lineTo(
-      point.x - nextNormal.x * nextHalfWidth + nextTangent.x * overlap,
-      point.y - nextNormal.y * nextHalfWidth + nextTangent.y * overlap,
-    );
-    ctx.lineTo(
-      point.x - priorNormal.x * priorHalfWidth - priorTangent.x * overlap,
-      point.y - priorNormal.y * priorHalfWidth - priorTangent.y * overlap,
-    );
+    ctx.moveTo(vertices[0].x, vertices[0].y);
+    for (const vertex of vertices.slice(1)) ctx.lineTo(vertex.x, vertex.y);
     ctx.closePath();
     ctx.fill();
   }
@@ -250,10 +284,30 @@ export class PaintMarkerEngine {
   ): void {
     ctx.beginPath();
     if (variantId === "chisel") {
-      ctx.ellipse(point.x, point.y, Math.max(1, point.width * 0.5), Math.max(1, point.width * 0.11), geometry.nibAngle, 0, Math.PI * 2);
+      // Direction is unknown until the first real segment. Deferring the
+      // footprint lets that segment establish one clean, authoritative cap.
+      return;
     } else {
       ctx.arc(point.x, point.y, geometry.width * 0.5, 0, Math.PI * 2);
     }
+    ctx.fill();
+  }
+
+  private renderChiselCap(
+    ctx: CanvasRenderingContext2D,
+    point: StrokePoint,
+    geometry: MarkerGeometry,
+  ): void {
+    ctx.beginPath();
+    ctx.ellipse(
+      point.x,
+      point.y,
+      geometry.width * 0.5,
+      Math.max(0.9, Math.min(2.2, geometry.width * 0.09)),
+      geometry.direction + Math.PI * 0.5,
+      0,
+      Math.PI * 2,
+    );
     ctx.fill();
   }
 

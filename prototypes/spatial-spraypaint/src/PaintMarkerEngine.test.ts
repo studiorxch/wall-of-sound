@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   PaintMarkerEngine,
+  buildContinuousJoinPolygon,
   buildSweptRibbonSegment,
   getMarkerVariant,
   resolveMarkerGeometry,
@@ -17,8 +18,15 @@ const point = (x: number, y: number, velocity = 0.5): StrokePoint => ({
   opacity: 1,
 });
 
-function recordingContext(): { ctx: CanvasRenderingContext2D; calls: string[] } {
+function recordingContext(): {
+  ctx: CanvasRenderingContext2D;
+  calls: string[];
+  arcs: number[][];
+  ellipses: number[][];
+} {
   const calls: string[] = [];
+  const arcs: number[][] = [];
+  const ellipses: number[][] = [];
   const ctx = {
     save: () => calls.push("save"),
     restore: () => calls.push("restore"),
@@ -28,15 +36,15 @@ function recordingContext(): { ctx: CanvasRenderingContext2D; calls: string[] } 
     closePath: () => calls.push("closePath"),
     stroke: () => calls.push("stroke"),
     fill: () => calls.push("fill"),
-    arc: () => calls.push("arc"),
-    ellipse: () => calls.push("ellipse"),
+    arc: (...args: number[]) => { calls.push("arc"); arcs.push(args); },
+    ellipse: (...args: number[]) => { calls.push("ellipse"); ellipses.push(args); },
     lineJoin: "round",
     lineCap: "round",
     strokeStyle: "",
     fillStyle: "",
     lineWidth: 0,
   } as unknown as CanvasRenderingContext2D;
-  return { ctx, calls };
+  return { ctx, calls, arcs, ellipses };
 }
 
 describe("Paint Marker renderer", () => {
@@ -87,7 +95,28 @@ describe("Paint Marker renderer", () => {
     engine.renderSegment(recording.ctx, point(0, 0), point(40, 0), "#ff0000", "chisel");
     engine.renderSegment(recording.ctx, point(40, 0), point(80, 0), "#ff0000", "chisel");
     expect(recording.calls.filter((call) => call === "closePath")).toHaveLength(3);
-    expect(recording.calls.filter((call) => call === "fill")).toHaveLength(3);
+    expect(recording.calls.filter((call) => call === "fill")).toHaveLength(5);
+    expect(recording.ellipses).toHaveLength(2);
+  });
+
+  it("bounds Chisel corner joins so they cannot produce fray spikes", () => {
+    const join = buildContinuousJoinPolygon(point(40, 40), 0, Math.PI * 0.48, 17, 12);
+    expect(join).toEqual(buildContinuousJoinPolygon(point(40, 40), 0, Math.PI * 0.48, 17, 12));
+    expect(join).toHaveLength(4);
+    expect(Math.max(...join.map(({ x, y }) => Math.hypot(x - 40, y - 40)))).toBeLessThan(18);
+  });
+
+  it("uses clean finite Chisel contact caps at both ends", () => {
+    const recording = recordingContext();
+    const engine = new PaintMarkerEngine();
+    engine.beginStroke("chisel");
+    engine.renderSegment(recording.ctx, null, point(10, 10), "#ff0000", "chisel");
+    engine.renderSegment(recording.ctx, point(10, 10), point(60, 24), "#ff0000", "chisel");
+    expect(recording.ellipses).toHaveLength(1);
+    expect(recording.arcs).toHaveLength(0);
+    expect(recording.calls.filter((call) => call === "closePath")).toHaveLength(1);
+    expect(recording.ellipses.flat().every(Number.isFinite)).toBe(true);
+    expect(recording.ellipses.every((ellipse) => ellipse[3] <= 2.2)).toBe(true);
   });
 
   it("renders a deterministic stable geometry plan", () => {
@@ -136,6 +165,25 @@ describe("Paint Marker renderer", () => {
     );
     expect(recording.calls).toContain("fill");
     expect(recording.calls.filter((call) => call === "stroke")).toHaveLength(3);
-    expect(recording.calls).not.toContain("arc");
+    expect(recording.arcs).toHaveLength(1);
+    expect(recording.ellipses).toHaveLength(0);
+  });
+
+  it("uses round Mop contact footprints at both start and end without Chisel termination", () => {
+    const recording = recordingContext();
+    const engine = new PaintMarkerEngine();
+    engine.beginStroke("mop");
+    engine.renderSegment(recording.ctx, null, { ...point(12, 18), paintLoad: 0.7 }, "#ff0000", "mop");
+    engine.renderSegment(
+      recording.ctx,
+      { ...point(12, 18), paintLoad: 0.7 },
+      { ...point(62, 28), paintLoad: 0.72 },
+      "#ff0000",
+      "mop",
+    );
+    expect(recording.arcs).toHaveLength(2);
+    expect(recording.ellipses).toHaveLength(0);
+    expect(recording.arcs[0][2]).toBeGreaterThan(15);
+    expect(recording.arcs[1][2]).toBeGreaterThan(15);
   });
 });

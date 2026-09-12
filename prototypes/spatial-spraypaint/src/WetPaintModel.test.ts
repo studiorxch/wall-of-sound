@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { WetPaintAccumulator } from "./WetPaintModel";
+import { WetPaintAccumulator, getWetPaintProfile, isWetMarkerVariant } from "./WetPaintModel";
 import { type StrokePoint } from "./types";
 
 const point = (x: number, y: number, timestamp: number, velocity: number): StrokePoint => ({
@@ -65,6 +65,30 @@ describe("wet paint load authority", () => {
     expect(mopResults.flatMap(({ drips }) => drips)).toHaveLength(0);
   });
 
+  it("keeps Mop moderate while making Drip Mop stems and runs materially stronger", () => {
+    const mopProfile = getWetPaintProfile("mop");
+    const dripProfile = getWetPaintProfile("drip-mop");
+    expect(dripProfile.stemWidthBaseRatio).toBeGreaterThan(mopProfile.stemWidthBaseRatio);
+    expect(dripProfile.stemWidthLoadRatio).toBeGreaterThan(mopProfile.stemWidthLoadRatio);
+    expect(dripProfile.lengthMin).toBeGreaterThan(mopProfile.lengthMin * 2);
+    expect(dripProfile.lengthRange).toBeGreaterThan(mopProfile.lengthRange * 2);
+    expect(dripProfile.cooldownMs).toBeLessThan(mopProfile.cooldownMs);
+
+    const collect = (variant: "mop" | "drip-mop", size: number) => {
+      const accumulator = new WetPaintAccumulator();
+      accumulator.beginStroke(314, variant);
+      return observeStationary(accumulator, 3600, size).flatMap(({ drips }) => drips);
+    };
+    const mopDrips = collect("mop", 44);
+    const dripMopDrips = collect("drip-mop", 50);
+    const average = (values: number[]) => values.reduce((sum, value) => sum + value, 0) / values.length;
+    expect(mopDrips.length).toBeGreaterThan(0);
+    expect(dripMopDrips.length).toBeGreaterThan(mopDrips.length);
+    expect(average(dripMopDrips.map(({ width }) => width))).toBeGreaterThan(average(mopDrips.map(({ width }) => width)) * 1.5);
+    expect(average(dripMopDrips.map(({ length }) => length))).toBeGreaterThan(average(mopDrips.map(({ length }) => length)) * 2);
+    expect(dripMopDrips.every(({ originPoolRadius, tipWidthRatio }) => Boolean(originPoolRadius) && Boolean(tipWidthRatio))).toBe(true);
+  });
+
   it("replays drip origins, lengths, bends, and timing deterministically", () => {
     const run = () => {
       const accumulator = new WetPaintAccumulator();
@@ -89,5 +113,33 @@ describe("wet paint load authority", () => {
     const results = Array.from({ length: 14 }, (_, index) =>
       accumulator.observe(point(0, 0, (index + 1) * 120, 0), 50, false));
     expect(results.flatMap(({ drips }) => drips)).toHaveLength(0);
+  });
+
+  it("applies Flow authority to reservoir delivery without affecting non-wet tools", () => {
+    const low = new WetPaintAccumulator();
+    low.beginStroke(21, "mop", { flow: "low", viscosity: "balanced" });
+    const lowResults = observeStationary(low, 960);
+    const high = new WetPaintAccumulator();
+    high.beginStroke(21, "mop", { flow: "high", viscosity: "balanced" });
+    const highResults = observeStationary(high, 960);
+    expect(highResults[0].paintLoad).toBeGreaterThan(lowResults[0].paintLoad);
+    expect(highResults[highResults.length - 1].paintLoad).toBeGreaterThan(lowResults[lowResults.length - 1].paintLoad);
+    expect(isWetMarkerVariant("round")).toBe(false);
+    expect(isWetMarkerVariant("chisel")).toBe(false);
+  });
+
+  it("applies Viscosity authority to deterministic run length, width, and fall time", () => {
+    const collect = (viscosity: "thick" | "runny") => {
+      const accumulator = new WetPaintAccumulator();
+      accumulator.beginStroke(52, "drip-mop", { flow: "high", viscosity });
+      return observeStationary(accumulator, 3600, 50).flatMap(({ drips }) => drips);
+    };
+    const thick = collect("thick");
+    const runny = collect("runny");
+    expect(thick.length).toBeGreaterThan(0);
+    expect(runny.length).toBeGreaterThan(0);
+    expect(runny[0].length).toBeGreaterThan(thick[0].length);
+    expect(thick[0].width).toBeGreaterThan(runny[0].width);
+    expect(runny[0].durationMs!).toBeLessThan(thick[0].durationMs!);
   });
 });

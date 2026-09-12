@@ -1,4 +1,9 @@
-import { type DripSeed } from "./DripLogic";
+import {
+  buildContinuousDripStrip,
+  resolveDripStripSection,
+  type DripSeed,
+  type DripStripSection,
+} from "./DripLogic";
 import { resolveSprayDynamics, type SprayCapPreset } from "./SprayCapPresets";
 import { type StrokePoint } from "./types";
 
@@ -8,6 +13,7 @@ interface ActiveDrip extends DripSeed {
   lastProgress: number;
   bend: number;
   durationMs: number;
+  poolRendered: boolean;
 }
 
 export function createStrokeRandom(seed: number): () => number {
@@ -78,6 +84,7 @@ export class SprayBrushEngine {
       lastProgress: 0,
       bend: seed.bend ?? (Math.random() - 0.5) * seed.length * 0.12,
       durationMs: seed.durationMs ?? 1200,
+      poolRendered: false,
     });
   }
 
@@ -95,12 +102,32 @@ export class SprayBrushEngine {
 
       ctx.save();
       ctx.lineCap = "round";
-      ctx.strokeStyle = this.hexToRgba(drip.color, drip.opacity * (1 - progress * 0.24));
-      ctx.lineWidth = Math.max(0.8, drip.width * (1 - progress * 0.42));
-      ctx.beginPath();
-      ctx.moveTo(startX, startY);
-      ctx.lineTo(endX, endY);
-      ctx.stroke();
+      if (!drip.poolRendered && drip.originPoolRadius) {
+        ctx.fillStyle = this.hexToRgba(drip.color, Math.min(0.94, drip.opacity));
+        ctx.beginPath();
+        ctx.arc(drip.x, drip.y, drip.originPoolRadius, 0, Math.PI * 2);
+        ctx.fill();
+        drip.poolRendered = true;
+      }
+      if (drip.tipWidthRatio !== undefined) {
+        ctx.fillStyle = this.hexToRgba(drip.color, drip.opacity * (1 - progress * 0.18));
+        this.fillDripStrip(ctx, [
+          resolveDripStripSection(drip, drip.lastProgress),
+          resolveDripStripSection(drip, progress),
+        ]);
+        if (progress === 1 && drip.terminalBulbRatio) {
+          ctx.beginPath();
+          ctx.arc(endX, endY, Math.max(0.7, drip.width * drip.terminalBulbRatio * 0.5), 0, Math.PI * 2);
+          ctx.fill();
+        }
+      } else {
+        ctx.strokeStyle = this.hexToRgba(drip.color, drip.opacity * (1 - progress * 0.24));
+        ctx.lineWidth = Math.max(0.8, drip.width * (1 - progress * 0.42));
+        ctx.beginPath();
+        ctx.moveTo(startX, startY);
+        ctx.lineTo(endX, endY);
+        ctx.stroke();
+      }
       ctx.restore();
 
       drip.lastProgress = progress;
@@ -116,12 +143,49 @@ export class SprayBrushEngine {
     ctx.save();
     ctx.lineCap = "round";
     ctx.strokeStyle = this.hexToRgba(color, drip.opacity * 0.76);
-    ctx.lineWidth = Math.max(0.8, drip.width * 0.72);
-    ctx.beginPath();
-    ctx.moveTo(drip.x, drip.y);
-    ctx.lineTo(drip.x + (drip.bend ?? 0), drip.y + drip.length);
-    ctx.stroke();
+    if (drip.originPoolRadius) {
+      ctx.fillStyle = this.hexToRgba(color, Math.min(0.94, drip.opacity));
+      ctx.beginPath();
+      ctx.arc(drip.x, drip.y, drip.originPoolRadius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    if (drip.tipWidthRatio !== undefined) {
+      ctx.fillStyle = this.hexToRgba(color, drip.opacity * 0.82);
+      const strip = buildContinuousDripStrip(drip);
+      this.fillDripStrip(ctx, strip);
+      if (drip.terminalBulbRatio) {
+        const tip = strip[strip.length - 1];
+        ctx.beginPath();
+        ctx.arc(
+          tip.center.x,
+          tip.center.y,
+          Math.max(0.7, drip.width * drip.terminalBulbRatio * 0.5),
+          0,
+          Math.PI * 2,
+        );
+        ctx.fill();
+      }
+    } else {
+      ctx.lineWidth = Math.max(0.8, drip.width * 0.72);
+      ctx.beginPath();
+      ctx.moveTo(drip.x, drip.y);
+      ctx.lineTo(drip.x + (drip.bend ?? 0), drip.y + drip.length);
+      ctx.stroke();
+    }
     ctx.restore();
+  }
+
+  private fillDripStrip(
+    ctx: CanvasRenderingContext2D,
+    sections: readonly DripStripSection[],
+  ): void {
+    if (sections.length < 2) return;
+    ctx.beginPath();
+    ctx.moveTo(sections[0].left.x, sections[0].left.y);
+    for (const section of sections.slice(1)) ctx.lineTo(section.left.x, section.left.y);
+    for (const section of [...sections].reverse()) ctx.lineTo(section.right.x, section.right.y);
+    ctx.closePath();
+    ctx.fill();
   }
 
   private renderOverspray(

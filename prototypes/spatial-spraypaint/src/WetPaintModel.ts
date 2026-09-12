@@ -1,6 +1,12 @@
 import { type DripSeed } from "./DripLogic";
 import { type MarkerVariantId } from "./DrawingTool";
 import { type StrokePoint } from "./types";
+import {
+  INITIAL_WET_PAINT_CONTROLS,
+  resolveWetPaintControlModifiers,
+  type WetPaintControlModifiers,
+  type WetPaintControlState,
+} from "./WetPaintControls";
 
 export type WetMarkerVariantId = Extract<MarkerVariantId, "mop" | "drip-mop">;
 
@@ -17,7 +23,7 @@ export interface WetPaintObservationResult {
   drips: DripSeed[];
 }
 
-interface WetVariantProfile {
+export interface WetVariantProfile {
   initialLoad: number;
   slowGainPerSecond: number;
   dwellGainPerSecond: number;
@@ -28,6 +34,12 @@ interface WetVariantProfile {
   cooldownMs: number;
   lengthMin: number;
   lengthRange: number;
+  stemWidthBaseRatio: number;
+  stemWidthLoadRatio: number;
+  tipWidthRatio: number;
+  originPoolRatio: number;
+  durationMinMs: number;
+  durationRangeMs: number;
 }
 
 const WET_VARIANT_PROFILES: Record<WetMarkerVariantId, WetVariantProfile> = {
@@ -42,20 +54,36 @@ const WET_VARIANT_PROFILES: Record<WetMarkerVariantId, WetVariantProfile> = {
     cooldownMs: 1150,
     lengthMin: 1.15,
     lengthRange: 1.7,
+    stemWidthBaseRatio: 0.055,
+    stemWidthLoadRatio: 0.05,
+    tipWidthRatio: 0.5,
+    originPoolRatio: 0.95,
+    durationMinMs: 1050,
+    durationRangeMs: 850,
   },
   "drip-mop": {
     initialLoad: 0.68,
     slowGainPerSecond: 0.36,
     dwellGainPerSecond: 0.58,
     speedDrain: 0.08,
-    dripLoadThreshold: 0.7,
-    dwellThresholdMs: 480,
+    dripLoadThreshold: 0.66,
+    dwellThresholdMs: 380,
     travelThreshold: 1.8,
-    cooldownMs: 620,
-    lengthMin: 1.8,
-    lengthRange: 3.5,
+    cooldownMs: 520,
+    lengthMin: 3.2,
+    lengthRange: 4.8,
+    stemWidthBaseRatio: 0.1,
+    stemWidthLoadRatio: 0.1,
+    tipWidthRatio: 0.3,
+    originPoolRatio: 1.35,
+    durationMinMs: 1150,
+    durationRangeMs: 1250,
   },
 };
+
+export function getWetPaintProfile(variant: WetMarkerVariantId): WetVariantProfile {
+  return { ...WET_VARIANT_PROFILES[variant] };
+}
 
 export function resetWetPaintState(initialLoad = 0): WetPaintState {
   return {
@@ -75,10 +103,22 @@ export class WetPaintAccumulator {
   private state = resetWetPaintState();
   private variant: WetMarkerVariantId = "mop";
   private random = createDeterministicRandom(1);
+  private controls: WetPaintControlState = { ...INITIAL_WET_PAINT_CONTROLS };
+  private modifiers: WetPaintControlModifiers = resolveWetPaintControlModifiers(this.controls);
 
-  public beginStroke(strokeId: number, variant: WetMarkerVariantId): void {
+  public beginStroke(
+    strokeId: number,
+    variant: WetMarkerVariantId,
+    controls: WetPaintControlState = INITIAL_WET_PAINT_CONTROLS,
+  ): void {
     this.variant = variant;
-    this.state = resetWetPaintState(WET_VARIANT_PROFILES[variant].initialLoad);
+    this.controls = { ...controls };
+    this.modifiers = resolveWetPaintControlModifiers(this.controls);
+    this.state = resetWetPaintState(clamp(
+      WET_VARIANT_PROFILES[variant].initialLoad * this.modifiers.delivery,
+      0.22,
+      1,
+    ));
     this.random = createDeterministicRandom(strokeId * 2654435761);
   }
 
@@ -92,8 +132,8 @@ export class WetPaintAccumulator {
     const slowFactor = 1 - Math.min(1, speed / 1.45);
     const elapsedSeconds = elapsed / 1000;
     const gain = elapsedSeconds * (
-      profile.slowGainPerSecond * slowFactor
-      + (stationary ? profile.dwellGainPerSecond : 0)
+      profile.slowGainPerSecond * slowFactor * this.modifiers.delivery
+      + (stationary ? profile.dwellGainPerSecond * this.modifiers.dwellResponse : 0)
     );
     const drain = Math.min(0.2, speed * profile.speedDrain * elapsedSeconds);
     const paintLoad = clamp(this.state.paintLoad + gain - drain, 0.22, 1);
@@ -103,7 +143,7 @@ export class WetPaintAccumulator {
     const dwellReady = dwellMs >= profile.dwellThresholdMs;
     const travelReady = distanceSinceDrip >= size * profile.travelThreshold && slowFactor >= 0.7;
     const canDrip = dripsEnabled
-      && paintLoad >= profile.dripLoadThreshold
+      && paintLoad >= Math.min(0.98, profile.dripLoadThreshold * this.modifiers.threshold)
       && timeSinceDrip >= profile.cooldownMs
       && (dwellReady || travelReady);
     const drips = canDrip ? this.createDrips(point, size, paintLoad) : [];
@@ -133,24 +173,40 @@ export class WetPaintAccumulator {
   private createDrips(point: StrokePoint, size: number, paintLoad: number): DripSeed[] {
     const profile = WET_VARIANT_PROFILES[this.variant];
     const firstRandom = this.random();
-    const count = this.variant === "drip-mop" && paintLoad > 0.88 && firstRandom > 0.56 ? 2 : 1;
+    const additionalDrip = this.variant === "drip-mop" && paintLoad > 0.82 && firstRandom > 0.42 ? 1 : 0;
+    const thirdDrip = this.variant === "drip-mop" && paintLoad > 0.95 && this.random() > 0.84 ? 1 : 0;
+    const count = 1 + additionalDrip + thirdDrip;
     const drips: DripSeed[] = [];
     for (let index = 0; index < count; index += 1) {
       const offset = (this.random() - 0.5) * size * 0.92;
-      const dramatic = this.variant === "drip-mop" && this.random() > 0.82;
+      const dramatic = this.variant === "drip-mop" && this.random() > 0.78;
       const length = size * (
         profile.lengthMin
         + this.random() * profile.lengthRange
-        + (dramatic ? 2.1 : 0)
+        + (dramatic ? 3.4 : 0)
+      ) * this.modifiers.length;
+      const width = Math.max(
+        1.4,
+        size
+          * (profile.stemWidthBaseRatio + paintLoad * profile.stemWidthLoadRatio)
+          * (0.84 + this.random() * 0.34)
+          * this.modifiers.width,
       );
       drips.push({
         x: point.x + offset,
         y: point.y + size * 0.38,
-        width: Math.max(1.4, size * (0.045 + paintLoad * 0.035) * (0.82 + this.random() * 0.38)),
+        width,
         length,
         opacity: clamp(0.58 + paintLoad * 0.28, 0, 0.92),
         bend: (this.random() - 0.5) * length * 0.13,
-        durationMs: 850 + (1 - paintLoad) * 520 + this.random() * 780,
+        durationMs: (
+          profile.durationMinMs
+          + (1 - paintLoad) * 420
+          + this.random() * profile.durationRangeMs
+        ) * this.modifiers.gravityDuration,
+        tipWidthRatio: profile.tipWidthRatio,
+        originPoolRadius: width * profile.originPoolRatio,
+        terminalBulbRatio: this.variant === "drip-mop" ? 0.72 : 0.48,
       });
     }
     return drips;

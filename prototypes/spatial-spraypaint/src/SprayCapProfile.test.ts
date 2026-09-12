@@ -13,6 +13,8 @@ describe("spray cap calibration profile", () => {
       expect(profile.calibrationStatus).toBe("digital-baseline-not-physical-reference");
       expect(profile.calibrationNotes.length).toBeGreaterThan(20);
       expect(profile.distanceResponse).toContain("pending-physical-calibration");
+      expect(profile.cursorFootprint.coverageScale).toBeGreaterThanOrEqual(1);
+      expect(profile.cursorFootprint.aspectRatio).toBe(profile.deposition.anisotropy);
     }
   });
 
@@ -38,5 +40,10 @@ describe("spray cap calibration profile", () => {
     expect(calligraphy.orientationBehavior).toBe("fixed-transversal");
     expect(calligraphy.calibrationNotes).toContain("aerosol");
     expect(calligraphy.calibrationNotes).toContain("Chisel marker nib");
+    expect(calligraphy.cursorFootprint).toMatchObject({
+      shape: "ellipse",
+      aspectRatio: 0.32,
+      orientationBehavior: "fixed-transversal",
+    });
   });
 });

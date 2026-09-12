@@ -15,6 +15,52 @@ export interface DripSeed {
   opacity: number;
   bend?: number;
   durationMs?: number;
+  tipWidthRatio?: number;
+  originPoolRadius?: number;
+  terminalBulbRatio?: number;
+}
+
+export interface DripStripSection {
+  progress: number;
+  center: { x: number; y: number };
+  left: { x: number; y: number };
+  right: { x: number; y: number };
+  width: number;
+}
+
+export function resolveDripStripSection(
+  drip: DripSeed,
+  progress: number,
+): DripStripSection {
+  const safeProgress = Math.min(1, Math.max(0, progress));
+  const eased = safeProgress * safeProgress;
+  const bend = drip.bend ?? 0;
+  const center = {
+    x: drip.x + bend * eased,
+    y: drip.y + drip.length * eased,
+  };
+  const tangentX = Math.abs(safeProgress) > 0.0001 ? 2 * bend * safeProgress : bend;
+  const tangentY = Math.abs(safeProgress) > 0.0001 ? 2 * drip.length * safeProgress : drip.length;
+  const tangentLength = Math.max(0.0001, Math.hypot(tangentX, tangentY));
+  const normal = { x: -tangentY / tangentLength, y: tangentX / tangentLength };
+  const tipWidthRatio = drip.tipWidthRatio ?? 0.58;
+  const width = Math.max(0.8, drip.width * (1 - (1 - tipWidthRatio) * safeProgress));
+  return {
+    progress: safeProgress,
+    center,
+    left: { x: center.x + normal.x * width * 0.5, y: center.y + normal.y * width * 0.5 },
+    right: { x: center.x - normal.x * width * 0.5, y: center.y - normal.y * width * 0.5 },
+    width,
+  };
+}
+
+export function buildContinuousDripStrip(
+  drip: DripSeed,
+  segmentCount = 12,
+): DripStripSection[] {
+  const count = Math.max(2, Math.floor(segmentCount));
+  return Array.from({ length: count + 1 }, (_, index) =>
+    resolveDripStripSection(drip, index / count));
 }
 
 export class DripAccumulator {

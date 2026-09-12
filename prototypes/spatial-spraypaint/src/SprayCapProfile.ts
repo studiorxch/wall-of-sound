@@ -10,6 +10,13 @@ export interface NominalWidthRange {
   unit: "wall-units-digital-baseline";
 }
 
+export interface SprayCursorFootprint {
+  shape: "circle" | "ellipse";
+  coverageScale: number;
+  aspectRatio: number;
+  orientationBehavior: SprayCapProfile["orientationBehavior"];
+}
+
 export interface SprayCapProfile {
   id: SprayCapId;
   name: string;
@@ -25,12 +32,13 @@ export interface SprayCapProfile {
   speedResponse: "low" | "medium" | "high";
   stationaryDotBehavior: "tight" | "settled" | "loaded" | "raw";
   orientationBehavior: "symmetric" | "fixed-transversal";
+  cursorFootprint: SprayCursorFootprint;
   calibrationStatus: "digital-baseline-not-physical-reference";
   calibrationNotes: string;
   deposition: SprayCapPreset;
 }
 
-type ProfileDetails = Omit<SprayCapProfile, "id" | "name" | "family" | "deposition">;
+type ProfileDetails = Omit<SprayCapProfile, "id" | "name" | "family" | "deposition" | "cursorFootprint">;
 
 const units = "wall-units-digital-baseline" as const;
 const pending = "digital-baseline-pending-physical-calibration" as const;
@@ -52,11 +60,18 @@ const CAP_PROFILE_DETAILS: Record<SprayCapId, ProfileDetails> = {
 
 export function getSprayCapProfile(id: string): SprayCapProfile {
   const deposition = getSprayCapPreset(id);
+  const details = CAP_PROFILE_DETAILS[deposition.id];
   return {
     id: deposition.id,
     name: deposition.name,
     family: deposition.family,
-    ...CAP_PROFILE_DETAILS[deposition.id],
+    ...details,
+    cursorFootprint: {
+      shape: deposition.anisotropy < 0.98 ? "ellipse" : "circle",
+      coverageScale: Math.max(1, deposition.particleSpread),
+      aspectRatio: deposition.anisotropy,
+      orientationBehavior: details.orientationBehavior,
+    },
     deposition,
   };
 }

@@ -15,12 +15,26 @@ const HANDS_ASSET_ROOT =
 const PINCH_THRESHOLD = 0.08;
 
 export interface HandTrackingResult {
+  aimX: number;
+  aimY: number;
   x: number;
   y: number;
   pinchDist: number;
   isPinching: boolean;
   confidence: number;
   timestamp: number;
+}
+
+export interface HandTrackingCoordinateState {
+  x: number;
+  y: number;
+  initialized: boolean;
+}
+
+export interface ResolvedHandTrackingCoordinates {
+  aim: { x: number; y: number };
+  stroke: { x: number; y: number };
+  state: HandTrackingCoordinateState;
 }
 
 export interface HandTrackingDiagnostics {
@@ -53,6 +67,25 @@ export function mapMirroredFingertip(
   return {
     x: Math.min(1, Math.max(0, 1 - indexTip.x)),
     y: Math.min(1, Math.max(0, indexTip.y)),
+  };
+}
+
+export function resolveHandTrackingCoordinates(
+  mapped: { x: number; y: number },
+  previous: HandTrackingCoordinateState,
+  strokeResponse = 0.35,
+): ResolvedHandTrackingCoordinates {
+  const response = Math.max(0, Math.min(1, strokeResponse));
+  const stroke = previous.initialized
+    ? {
+      x: previous.x + (mapped.x - previous.x) * response,
+      y: previous.y + (mapped.y - previous.y) * response,
+    }
+    : { ...mapped };
+  return {
+    aim: { ...mapped },
+    stroke,
+    state: { ...stroke, initialized: true },
   };
 }
 
@@ -225,14 +258,14 @@ export class HandTracker {
     }
 
     const mapped = mapMirroredFingertip(indexTip);
-    if (!this.hasSmoothedPoint) {
-      this.smoothX = mapped.x;
-      this.smoothY = mapped.y;
-      this.hasSmoothedPoint = true;
-    } else {
-      this.smoothX = this.smoothX * 0.65 + mapped.x * 0.35;
-      this.smoothY = this.smoothY * 0.65 + mapped.y * 0.35;
-    }
+    const coordinates = resolveHandTrackingCoordinates(mapped, {
+      x: this.smoothX,
+      y: this.smoothY,
+      initialized: this.hasSmoothedPoint,
+    });
+    this.smoothX = coordinates.state.x;
+    this.smoothY = coordinates.state.y;
+    this.hasSmoothedPoint = coordinates.state.initialized;
 
     const pinchDist = calculatePinchDistance(indexTip, thumbTip);
     const isPinching = isPinchActive(pinchDist);
@@ -247,6 +280,8 @@ export class HandTracker {
     }
 
     this.onResultCallback?.({
+      aimX: coordinates.aim.x,
+      aimY: coordinates.aim.y,
       x: this.smoothX,
       y: this.smoothY,
       pinchDist,

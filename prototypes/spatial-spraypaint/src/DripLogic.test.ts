@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DripAccumulator } from "./DripLogic";
+import { DripAccumulator, buildContinuousDripStrip } from "./DripLogic";
 
 describe("DripAccumulator", () => {
   it("does not drip during fast movement", () => {
@@ -45,5 +45,34 @@ describe("DripAccumulator", () => {
       dripTendency: 1,
       enabled: false,
     })).toBeNull();
+  });
+});
+
+describe("continuous wet drip geometry", () => {
+  const wetDrip = {
+    x: 20,
+    y: 30,
+    width: 12,
+    length: 180,
+    opacity: 0.84,
+    bend: 18,
+    tipWidthRatio: 0.3,
+    originPoolRadius: 10,
+  };
+
+  it("builds one connected gravity strip rather than a bead chain", () => {
+    const strip = buildContinuousDripStrip(wetDrip, 12);
+    expect(strip).toHaveLength(13);
+    expect(strip[0].center).toEqual({ x: wetDrip.x, y: wetDrip.y });
+    expect(strip[strip.length - 1].center.y).toBe(wetDrip.y + wetDrip.length);
+    expect(strip.every((section, index) => index === 0 || section.center.y >= strip[index - 1].center.y)).toBe(true);
+  });
+
+  it("tapers continuously and replays the exact same strip", () => {
+    const first = buildContinuousDripStrip(wetDrip, 18);
+    expect(first).toEqual(buildContinuousDripStrip(wetDrip, 18));
+    expect(first[0].width).toBe(wetDrip.width);
+    expect(first[first.length - 1].width).toBeCloseTo(wetDrip.width * wetDrip.tipWidthRatio);
+    expect(first.slice(1).every((section, index) => section.width <= first[index].width)).toBe(true);
   });
 });

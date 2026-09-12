@@ -157,4 +157,30 @@ describe("stroke history", () => {
     snapshot[3].drips[0].bend = 99;
     expect(history.snapshot()[3].drips[0].bend).toBe(4);
   });
+
+  it("restores exact mixed-color wet marks and continuous-run state after Clear", () => {
+    const history = new StrokeHistory();
+    history.begin(metadata({ toolId: "paint-marker", variantId: "mop", color: "#15cfe5", size: 44 }));
+    history.appendPoint({ ...point(20), paintLoad: 0.78 });
+    history.appendDrip({
+      x: 20,
+      y: 24,
+      width: 7,
+      length: 130,
+      opacity: 0.82,
+      bend: 5,
+      tipWidthRatio: 0.4,
+      originPoolRadius: 8,
+      terminalBulbRatio: 0.5,
+    });
+    history.finalize();
+    history.begin(metadata({ toolId: "paint-marker", variantId: "drip-mop", color: "#ffd21c", size: 50 }));
+    history.appendPoint({ ...point(80), paintLoad: 0.94 });
+    history.finalize();
+    const before = history.snapshot();
+
+    expect(history.clearUndoably()).toBe(true);
+    expect(history.undo()).toEqual(before);
+    expect(history.snapshot().map(({ color }) => color)).toEqual(["#15cfe5", "#ffd21c"]);
+  });
 });
