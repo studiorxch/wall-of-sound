@@ -102,7 +102,8 @@
     .tool-sample, .marker-sample { display:grid; place-items:center; height:20px; color:#fff; font-size:10px; font-weight:900; }
     .marker-sample::before { content:""; display:block; width:48px; border-top:var(--sample-width, 8px) solid currentColor; border-radius:999px; transform:rotate(var(--sample-angle, 0deg)); opacity:.88; }
     .marker-choice[data-marker="chisel"] .marker-sample::before,
-    .marker-choice[data-marker="clean-chisel"] .marker-sample::before { border-radius:1px; }
+    .marker-choice[data-marker="clean-chisel"] .marker-sample::before,
+    .marker-choice[data-marker="drippy-chisel"] .marker-sample::before { border-radius:1px; }
     .marker-choice[data-marker="mop"] .marker-sample::before,
     .marker-choice[data-marker="drip-mop"] .marker-sample::before { opacity:.72; box-shadow:0 4px 0 -2px currentColor; }
     .marker-choice[data-marker="drip-mop"] .marker-sample::before { box-shadow:0 4px 0 -2px currentColor, 10px 9px 0 -4px currentColor; }
@@ -110,6 +111,12 @@
     #wet-controls[hidden] { display:none; }
     .wet-control-row { display:grid; grid-template-columns:58px 1fr; align-items:center; gap:8px; color:#aaa9b2; font-size:10px; }
     .wet-control-row select { min-width:0; font-size:10px; }
+    #marker-width-controls { margin-top:7px; padding-top:8px; border-top:1px solid rgba(255,255,255,.12); }
+    #radius-slider-setting[hidden] { display:none; }
+    .marker-width-label { margin-bottom:6px; color:#8f8e99; font-size:9px; font-weight:800; letter-spacing:.8px; text-transform:uppercase; }
+    #marker-width-presets { display:grid; grid-template-columns:repeat(5, 1fr); gap:4px; }
+    .marker-width-choice { min-width:0; padding:6px 4px; font-size:9px; }
+    .marker-width-choice.selected { border-color:#ff6a83; color:#ff91a7; background:rgba(255,55,94,.12); }
     .cap-sample { display:block; height:0; border-top:var(--sample-width, 8px) solid currentColor; border-radius:999px; opacity:.78; }
     .palette { display: flex; flex-wrap: wrap; gap: 5px; }
     .swatch {
@@ -273,8 +280,13 @@
       <button class="marker-choice selected" data-marker="round" aria-pressed="true"><span class="marker-sample" style="--sample-width:8px"></span><span>Round Marker</span></button>
       <button class="marker-choice" data-marker="chisel" aria-pressed="false"><span class="marker-sample" style="--sample-width:12px;--sample-angle:-25deg"></span><span>Chisel / Calligraphy</span></button>
       <button class="marker-choice" data-marker="clean-chisel" aria-pressed="false"><span class="marker-sample" style="--sample-width:12px;--sample-angle:-25deg"></span><span>Clean Chisel</span></button>
+      <button class="marker-choice" data-marker="drippy-chisel" aria-pressed="false"><span class="marker-sample" style="--sample-width:12px;--sample-angle:-25deg"></span><span>Drippy Chisel</span></button>
       <button class="marker-choice" data-marker="mop" aria-pressed="false"><span class="marker-sample" style="--sample-width:14px"></span><span>Mop</span></button>
       <button class="marker-choice" data-marker="drip-mop" aria-pressed="false"><span class="marker-sample" style="--sample-width:17px"></span><span>Drip Mop</span></button>
+      <div id="marker-width-controls" aria-label="Marker width presets">
+        <div class="marker-width-label">Width · <span id="marker-width-value">28</span></div>
+        <div id="marker-width-presets"></div>
+      </div>
       <div id="wet-controls" aria-label="Wet paint calibration controls" hidden>
         <label class="wet-control-row"><span>Flow</span><select id="wet-flow"><option value="low">Low</option><option value="balanced" selected>Balanced</option><option value="high">High</option></select></label>
         <label class="wet-control-row"><span>Viscosity</span><select id="wet-viscosity"><option value="thick">Thick</option><option value="balanced" selected>Balanced</option><option value="runny">Runny</option></select></label>
@@ -321,7 +333,7 @@
         <h2>Drawing</h2>
         <label class="setting-row"><span>Smoothing</span><select id="smoothing-level"><option value="off">Off</option><option value="low">Low</option><option value="medium" selected>Medium</option><option value="high">High</option></select></label>
         <label class="setting-row"><span>Stationary drips</span><input id="drips-enabled" type="checkbox" checked /></label>
-        <div class="setting-stack"><span>Size override · <strong id="radius-val">32</strong> wall units</span><input type="range" id="brush-radius" min="4" max="72" value="32" /><button id="radius-reset">Use cap default</button></div>
+        <div id="radius-slider-setting" class="setting-stack"><span>Spray size override · <strong id="radius-val">32</strong> wall units</span><input type="range" id="brush-radius" min="4" max="72" value="32" /><button id="radius-reset">Use cap default</button></div>
         <label class="setting-row"><span>Environment</span><select id="wall-environment"><option value="wall" selected>Wall / Default</option><option value="solid">Solid background</option><option value="image">Image background</option></select></label>
         <label id="wall-surface-row" class="setting-row wall-environment-dependent"><span>Wall surface</span><select id="background-preset"><option value="black">Black</option><option value="charcoal">Charcoal Wall</option><option value="mid-gray">Mid Gray</option><option value="off-white">Off-White Wall</option></select></label>
         <label id="wall-solid-row" class="setting-row wall-environment-dependent" hidden><span>Background color</span><input id="wall-solid-color" type="color" value="#171822" aria-label="Solid wall background color" /></label>

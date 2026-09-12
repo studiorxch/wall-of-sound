@@ -48,4 +48,36 @@ describe("spray brush replay randomness", () => {
     expect(first.filter(({ operation }) => operation === "closePath")).toHaveLength(1);
     expect(Math.max(...lines.map(({ values }) => values[1]))).toBeGreaterThan(160);
   });
+
+  it("uses one stable opacity across progressive wet-run sections", () => {
+    const fillStyles: string[] = [];
+    let fillStyle = "";
+    const ctx = {
+      save: () => undefined,
+      restore: () => undefined,
+      beginPath: () => undefined,
+      moveTo: () => undefined,
+      lineTo: () => undefined,
+      closePath: () => undefined,
+      fill: () => fillStyles.push(fillStyle),
+      get fillStyle() { return fillStyle; },
+      set fillStyle(value: string | CanvasGradient | CanvasPattern) { fillStyle = String(value); },
+      lineCap: "round",
+    } as unknown as CanvasRenderingContext2D;
+    const engine = new SprayBrushEngine();
+    engine.startDrip({
+      x: 20,
+      y: 30,
+      width: 10,
+      length: 180,
+      opacity: 0.8,
+      bend: 2,
+      durationMs: 1000,
+      tipWidthRatio: 0.62,
+    }, "#ff0000", 0);
+    engine.advanceDrips(ctx, 250);
+    engine.advanceDrips(ctx, 500);
+    engine.advanceDrips(ctx, 750);
+    expect(new Set(fillStyles)).toEqual(new Set(["rgba(255, 0, 0, 0.656)"]));
+  });
 });

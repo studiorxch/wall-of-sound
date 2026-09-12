@@ -110,7 +110,9 @@ export class SprayBrushEngine {
         drip.poolRendered = true;
       }
       if (drip.tipWidthRatio !== undefined) {
-        ctx.fillStyle = this.hexToRgba(drip.color, drip.opacity * (1 - progress * 0.18));
+        // A stable alpha prevents visible bands where progressive wet-strip
+        // sections meet on the persistent paint layer.
+        ctx.fillStyle = this.hexToRgba(drip.color, drip.opacity * 0.82);
         this.fillDripStrip(ctx, [
           resolveDripStripSection(drip, drip.lastProgress),
           resolveDripStripSection(drip, progress),

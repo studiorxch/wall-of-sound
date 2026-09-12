@@ -1,4 +1,8 @@
-import { AdaptiveCurveReconstructor, type CurveInputSample } from "./AdaptiveCurveReconstructor";
+import {
+  AdaptiveCurveReconstructor,
+  type CurveInputSample,
+  type CurveReconstructionOptions,
+} from "./AdaptiveCurveReconstructor";
 import { getSprayBackground, type SprayBackground } from "./Backgrounds";
 import { CameraLuminanceSampler } from "./CameraLuminance";
 import { CanonicalStrokeManager } from "./CanonicalStroke";
@@ -44,7 +48,13 @@ import {
   shouldResumeHandDrawingAfterPan,
 } from "./HandTrackingReliability";
 import { PerformanceRecorder } from "./PerformanceRecorder";
-import { getMarkerVariant } from "./PaintMarkerEngine";
+import { getMarkerVariant, resolveMarkerCurveCornerAngle } from "./PaintMarkerEngine";
+import {
+  INITIAL_MARKER_WIDTHS,
+  getMarkerWidthPresets,
+  selectMarkerWidth,
+  type MarkerWidthState,
+} from "./MarkerWidthPresets";
 import { resolveInteractionAuthority, type InteractionAuthority } from "./InteractionAuthority";
 import { INITIAL_PLAYER_STATE, reducePlayerState, type PlayerAction, type PlayerState } from "./PlayerState";
 import { INITIAL_SETTINGS_STATE, reduceSettingsState, type SettingsAction, type SettingsState } from "./SettingsState";
@@ -118,6 +128,7 @@ class SpatialSpraypaintApp {
     recentColors: [...INITIAL_COLOR_PALETTE_STATE.recentColors],
   };
   private wetPaintControls: WetPaintControlState = { ...INITIAL_WET_PAINT_CONTROLS };
+  private markerWidths: MarkerWidthState = { ...INITIAL_MARKER_WIDTHS };
   private selectedBackground: SprayBackground = getSprayBackground("black");
   private settings: SettingsState = { ...INITIAL_SETTINGS_STATE };
   private player: PlayerState = { ...INITIAL_PLAYER_STATE };
@@ -239,7 +250,11 @@ class SpatialSpraypaintApp {
         if (!isDrawingToolId(toolId)) return;
         this.finishActiveStroke();
         this.toolSelection = selectDrawingTool(this.toolSelection, toolId);
+        this.baseRadius = toolId === "spray-can"
+          ? this.settings.radiusOverride ?? getSprayCapPreset(this.toolSelection.sprayCapId).baseRadius
+          : this.markerWidths[this.toolSelection.markerVariantId];
         this.updateToolUi();
+        this.updateRadiusUi();
         this.closeToolChoosers();
       });
     });
@@ -264,7 +279,7 @@ class SpatialSpraypaintApp {
         const marker = getMarkerVariant(markerId);
         this.finishActiveStroke();
         this.toolSelection = selectMarkerVariant(this.toolSelection, marker.id);
-        if (this.settings.radiusOverride === null) this.baseRadius = marker.defaultSize;
+        this.baseRadius = this.markerWidths[marker.id];
         this.updateToolUi();
         this.updateRadiusUi();
         this.closeToolChoosers();
@@ -319,12 +334,14 @@ class SpatialSpraypaintApp {
       this.dripAccumulator.reset();
     });
     this.requireElement<HTMLInputElement>("brush-radius").addEventListener("input", (event) => {
+      if (this.toolSelection.selectedToolId !== "spray-can") return;
       const value = Number.parseInt((event.target as HTMLInputElement).value, 10);
       this.baseRadius = value;
       this.setSettings({ type: "radius", value });
       this.updateRadiusUi();
     });
     this.requireElement("radius-reset").addEventListener("click", () => {
+      if (this.toolSelection.selectedToolId !== "spray-can") return;
       this.finishActiveStroke();
       this.baseRadius = this.selectedToolDefaultSize();
       this.setSettings({ type: "radius", value: null });
@@ -708,8 +725,12 @@ class SpatialSpraypaintApp {
   }
 
   private updateRadiusUi(): void {
-    this.requireElement<HTMLInputElement>("brush-radius").value = this.baseRadius.toString();
-    this.requireElement("radius-val").textContent = this.baseRadius.toString();
+    const spraySelected = this.toolSelection.selectedToolId === "spray-can";
+    this.requireElement("radius-slider-setting").toggleAttribute("hidden", !spraySelected);
+    if (spraySelected) {
+      this.requireElement<HTMLInputElement>("brush-radius").value = this.baseRadius.toString();
+      this.requireElement("radius-val").textContent = this.baseRadius.toString();
+    }
     const parameter = getDrawingTool(this.toolSelection.selectedToolId).parameterLabel;
     this.requireElement("radius-reset").textContent = this.settings.radiusOverride === null
       ? `Using ${parameter.toLowerCase()} default`
@@ -720,7 +741,31 @@ class SpatialSpraypaintApp {
   private selectedToolDefaultSize(): number {
     return this.toolSelection.selectedToolId === "spray-can"
       ? getSprayCapPreset(this.toolSelection.sprayCapId).baseRadius
-      : getMarkerVariant(this.toolSelection.markerVariantId).defaultSize;
+      : this.markerWidths[this.toolSelection.markerVariantId];
+  }
+
+  private renderMarkerWidthPresets(): void {
+    const variantId = this.toolSelection.markerVariantId;
+    const selectedWidth = this.markerWidths[variantId];
+    const buttons = getMarkerWidthPresets(variantId).map((preset) => {
+      const button = document.createElement("button");
+      button.className = "marker-width-choice";
+      button.textContent = preset.label;
+      button.title = `${preset.label} · ${preset.width} wall units`;
+      button.setAttribute("aria-label", `${getMarkerVariant(variantId).name} width ${preset.width}`);
+      button.setAttribute("aria-pressed", (preset.width === selectedWidth).toString());
+      button.classList.toggle("selected", preset.width === selectedWidth);
+      button.addEventListener("click", () => {
+        this.finishActiveStroke();
+        this.markerWidths = selectMarkerWidth(this.markerWidths, variantId, preset.width);
+        this.baseRadius = preset.width;
+        this.renderMarkerWidthPresets();
+        this.updateRadiusUi();
+      });
+      return button;
+    });
+    this.requireElement("marker-width-presets").replaceChildren(...buttons);
+    this.requireElement("marker-width-value").textContent = `${selectedWidth} wall units`;
   }
 
   private renderColorPalette(): void {
@@ -817,6 +862,8 @@ class SpatialSpraypaintApp {
     this.requireElement("wet-controls").toggleAttribute("hidden", !wetControlsVisible);
     this.requireElement<HTMLSelectElement>("wet-flow").value = this.wetPaintControls.flow;
     this.requireElement<HTMLSelectElement>("wet-viscosity").value = this.wetPaintControls.viscosity;
+    this.renderMarkerWidthPresets();
+    this.updateRadiusUi();
     const rattle = this.requireElement<HTMLButtonElement>("shake-can");
     rattle.disabled = tool.id !== "spray-can";
     this.requireElement("tool-feedback-label").textContent = tool.name;
@@ -1210,7 +1257,7 @@ class SpatialSpraypaintApp {
     const smoothed = this.strokeSmoother.smooth(this.activeWallPoint, this.settings.smoothing);
     const reconstructed = this.curveReconstructor.push(
       { ...smoothed, timestamp: now },
-      { baseRadius: this.baseRadius },
+      this.currentCurveOptions(),
     );
     const point = this.depositReconstructedPath(reconstructed);
     if (this.inputMode === "spatial" && !this.hasPinchDrawn) {
@@ -1260,8 +1307,17 @@ class SpatialSpraypaintApp {
   }
 
   private flushReconstructedPath(): void {
-    const remaining = this.curveReconstructor.finish({ baseRadius: this.baseRadius });
+    const remaining = this.curveReconstructor.finish(this.currentCurveOptions());
     this.depositReconstructedPath(remaining);
+  }
+
+  private currentCurveOptions(): CurveReconstructionOptions {
+    const style = this.activeStrokeStyle;
+    if (!style || style.toolId !== "paint-marker") return { baseRadius: this.baseRadius };
+    const cornerAngleDegrees = resolveMarkerCurveCornerAngle(style.variantId);
+    return cornerAngleDegrees === undefined
+      ? { baseRadius: this.baseRadius }
+      : { baseRadius: this.baseRadius, cornerAngleDegrees };
   }
 
   private depositReconstructedPath(samples: CurveInputSample[]): StrokePoint | null {

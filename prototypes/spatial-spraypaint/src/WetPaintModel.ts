@@ -8,7 +8,7 @@ import {
   type WetPaintControlState,
 } from "./WetPaintControls";
 
-export type WetMarkerVariantId = Extract<MarkerVariantId, "mop" | "drip-mop">;
+export type WetMarkerVariantId = Extract<MarkerVariantId, "drippy-chisel" | "mop" | "drip-mop">;
 
 export interface WetPaintState {
   paintLoad: number;
@@ -38,6 +38,8 @@ export interface WetVariantProfile {
   stemWidthLoadRatio: number;
   tipWidthRatio: number;
   originPoolRatio: number;
+  originOffsetRatio: number;
+  originSpanRatio: number;
   durationMinMs: number;
   durationRangeMs: number;
 }
@@ -58,6 +60,8 @@ const WET_VARIANT_PROFILES: Record<WetMarkerVariantId, WetVariantProfile> = {
     stemWidthLoadRatio: 0.05,
     tipWidthRatio: 0.5,
     originPoolRatio: 0.95,
+    originOffsetRatio: 0.56,
+    originSpanRatio: 0.54,
     durationMinMs: 1050,
     durationRangeMs: 850,
   },
@@ -76,8 +80,30 @@ const WET_VARIANT_PROFILES: Record<WetMarkerVariantId, WetVariantProfile> = {
     stemWidthLoadRatio: 0.12,
     tipWidthRatio: 0.62,
     originPoolRatio: 0.78,
+    originOffsetRatio: 0.62,
+    originSpanRatio: 0.62,
     durationMinMs: 1450,
     durationRangeMs: 1650,
+  },
+  "drippy-chisel": {
+    initialLoad: 0.58,
+    slowGainPerSecond: 0.28,
+    dwellGainPerSecond: 0.44,
+    speedDrain: 0.11,
+    dripLoadThreshold: 0.76,
+    dwellThresholdMs: 620,
+    travelThreshold: 2.6,
+    cooldownMs: 860,
+    lengthMin: 2.35,
+    lengthRange: 3.75,
+    stemWidthBaseRatio: 0.08,
+    stemWidthLoadRatio: 0.07,
+    tipWidthRatio: 0.54,
+    originPoolRatio: 0.62,
+    originOffsetRatio: 0.34,
+    originSpanRatio: 0.42,
+    durationMinMs: 1250,
+    durationRangeMs: 1050,
   },
 };
 
@@ -96,7 +122,7 @@ export function resetWetPaintState(initialLoad = 0): WetPaintState {
 }
 
 export function isWetMarkerVariant(value: MarkerVariantId): value is WetMarkerVariantId {
-  return value === "mop" || value === "drip-mop";
+  return value === "drippy-chisel" || value === "mop" || value === "drip-mop";
 }
 
 export class WetPaintAccumulator {
@@ -177,7 +203,7 @@ export class WetPaintAccumulator {
     const count = 1 + additionalDrip;
     const drips: DripSeed[] = [];
     for (let index = 0; index < count; index += 1) {
-      const offset = (this.random() - 0.5) * size * 0.92;
+      const offset = (this.random() - 0.5) * size * profile.originSpanRatio;
       const dramatic = this.variant === "drip-mop" && this.random() > 0.8;
       const length = size * (
         profile.lengthMin
@@ -193,7 +219,7 @@ export class WetPaintAccumulator {
       );
       drips.push({
         x: point.x + offset,
-        y: point.y + size * 0.38,
+        y: point.y + size * profile.originOffsetRatio,
         width,
         length,
         opacity: clamp(0.58 + paintLoad * 0.28, 0, 0.92),

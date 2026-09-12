@@ -70,12 +70,21 @@ describe("drawing Tool authority", () => {
   });
 
   it("keeps Mop and Drip Mop as distinct contextual marker variants", () => {
-    expect(MARKER_VARIANTS.map(({ id }) => id)).toEqual(["round", "chisel", "clean-chisel", "mop", "drip-mop"]);
+    expect(MARKER_VARIANTS.map(({ id }) => id)).toEqual(["round", "chisel", "clean-chisel", "drippy-chisel", "mop", "drip-mop"]);
     const selected = selectMarkerVariant(
       selectDrawingTool(INITIAL_DRAWING_TOOL_SELECTION, "paint-marker"),
       "drip-mop",
     );
     expect(selectedToolVariant(selected)).toBe("drip-mop");
+  });
+
+  it("keeps Drippy Chisel inside the Marker Tool family", () => {
+    const selected = selectMarkerVariant(
+      selectDrawingTool(INITIAL_DRAWING_TOOL_SELECTION, "paint-marker"),
+      "drippy-chisel",
+    );
+    expect(selectedToolVariant(selected)).toBe("drippy-chisel");
+    expect(MARKER_VARIANTS.find(({ id }) => id === "drippy-chisel")?.material).toBe("wet-calligraphy");
   });
 
   it("offers Clean Chisel as a contextual variant without adding a Tool family", () => {

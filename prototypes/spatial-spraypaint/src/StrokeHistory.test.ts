@@ -16,8 +16,8 @@ const metadata = (overrides: MetadataOverrides = {}): StrokeMetadata => {
     inputSource: overrides.inputSource ?? "mouse",
   };
   return overrides.toolId === "paint-marker"
-    ? { ...shared, toolId: "paint-marker", variantId: overrides.variantId === "chisel" || overrides.variantId === "clean-chisel" || overrides.variantId === "mop" || overrides.variantId === "drip-mop" ? overrides.variantId : "round" }
-    : { ...shared, toolId: "spray-can", variantId: overrides.variantId === "round" || overrides.variantId === "chisel" || overrides.variantId === "clean-chisel" || overrides.variantId === "mop" || overrides.variantId === "drip-mop" ? "new-york-fat" : overrides.variantId ?? "new-york-fat" };
+    ? { ...shared, toolId: "paint-marker", variantId: overrides.variantId === "chisel" || overrides.variantId === "clean-chisel" || overrides.variantId === "drippy-chisel" || overrides.variantId === "mop" || overrides.variantId === "drip-mop" ? overrides.variantId : "round" }
+    : { ...shared, toolId: "spray-can", variantId: overrides.variantId === "round" || overrides.variantId === "chisel" || overrides.variantId === "clean-chisel" || overrides.variantId === "drippy-chisel" || overrides.variantId === "mop" || overrides.variantId === "drip-mop" ? "new-york-fat" : overrides.variantId ?? "new-york-fat" };
 };
 
 describe("stroke history", () => {
@@ -141,21 +141,26 @@ describe("stroke history", () => {
 
   it("retains every marker identity and deterministic wet state defensively", () => {
     const history = new StrokeHistory();
-    for (const variantId of ["round", "chisel", "mop", "drip-mop"] as const) {
+    for (const variantId of ["round", "chisel", "clean-chisel", "drippy-chisel", "mop", "drip-mop"] as const) {
       history.begin(metadata({ toolId: "paint-marker", variantId }));
-      history.appendPoint({ ...point(history.snapshot().length + 1), paintLoad: variantId.includes("mop") ? 0.84 : undefined });
-      if (variantId === "drip-mop") {
+      history.appendPoint({
+        ...point(history.snapshot().length + 1),
+        paintLoad: variantId === "drippy-chisel" || variantId.includes("mop") ? 0.84 : undefined,
+      });
+      if (variantId === "drippy-chisel" || variantId === "drip-mop") {
         history.appendDrip({ x: 10, y: 20, width: 2, length: 90, opacity: 0.8, bend: 4, durationMs: 1280 });
       }
       history.finalize();
     }
 
     const snapshot = history.snapshot();
-    expect(snapshot.map(({ variantId }) => variantId)).toEqual(["round", "chisel", "mop", "drip-mop"]);
-    expect(snapshot[2].points[0].paintLoad).toBe(0.84);
-    expect(snapshot[3].drips[0]).toMatchObject({ bend: 4, durationMs: 1280 });
-    snapshot[3].drips[0].bend = 99;
-    expect(history.snapshot()[3].drips[0].bend).toBe(4);
+    expect(snapshot.map(({ variantId }) => variantId)).toEqual([
+      "round", "chisel", "clean-chisel", "drippy-chisel", "mop", "drip-mop",
+    ]);
+    expect(snapshot[3].points[0].paintLoad).toBe(0.84);
+    expect(snapshot[5].drips[0]).toMatchObject({ bend: 4, durationMs: 1280 });
+    snapshot[5].drips[0].bend = 99;
+    expect(history.snapshot()[5].drips[0].bend).toBe(4);
   });
 
   it("restores exact mixed-color wet marks and continuous-run state after Clear", () => {

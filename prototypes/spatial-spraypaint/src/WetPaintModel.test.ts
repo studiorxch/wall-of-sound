@@ -146,4 +146,23 @@ describe("wet paint load authority", () => {
     expect(thick[0].width).toBeGreaterThan(runny[0].width);
     expect(runny[0].durationMs!).toBeLessThan(thick[0].durationMs!);
   });
+
+  it("keeps Drippy Chisel wet but restrained below Drip Mop", () => {
+    const chisel = getWetPaintProfile("drippy-chisel");
+    const dripMop = getWetPaintProfile("drip-mop");
+    expect(isWetMarkerVariant("drippy-chisel")).toBe(true);
+    expect(chisel.dripLoadThreshold).toBeGreaterThan(dripMop.dripLoadThreshold);
+    expect(chisel.lengthMin).toBeLessThan(dripMop.lengthMin);
+    expect(chisel.lengthRange).toBeLessThan(dripMop.lengthRange);
+    expect(chisel.stemWidthBaseRatio).toBeLessThan(dripMop.stemWidthBaseRatio);
+    expect(chisel.cooldownMs).toBeGreaterThan(dripMop.cooldownMs);
+  });
+
+  it("places wet origins beneath the mark and within its contact span", () => {
+    const accumulator = new WetPaintAccumulator();
+    accumulator.beginStroke(314, "drip-mop", { flow: "high", viscosity: "runny" });
+    const drips = observeStationary(accumulator, 2400, 50).flatMap(({ drips: emitted }) => emitted);
+    expect(drips.length).toBeGreaterThan(0);
+    expect(drips.every(({ x, y }) => y === 51 && Math.abs(x - 20) <= 15.5)).toBe(true);
+  });
 });

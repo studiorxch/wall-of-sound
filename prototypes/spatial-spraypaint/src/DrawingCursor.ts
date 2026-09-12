@@ -53,7 +53,11 @@ export function resolveDrawingCursorGeometry(
     };
   }
 
-  if (style.variantId === "chisel" || style.variantId === "clean-chisel") {
+  if (
+    style.variantId === "chisel"
+    || style.variantId === "clean-chisel"
+    || style.variantId === "drippy-chisel"
+  ) {
     return {
       shape: "chisel",
       width: style.size * zoom,

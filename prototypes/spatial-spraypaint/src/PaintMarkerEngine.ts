@@ -6,7 +6,7 @@ export interface MarkerVariantDefinition {
   name: string;
   defaultSize: number;
   dripTendency: number;
-  material: "dense" | "calligraphy" | "wet" | "high-flow";
+  material: "dense" | "calligraphy" | "wet-calligraphy" | "wet" | "high-flow";
 }
 
 export interface MarkerGeometry {
@@ -39,11 +39,18 @@ export const MARKER_VARIANTS: readonly MarkerVariantDefinition[] = [
   { id: "round", name: "Round Marker", defaultSize: 28, dripTendency: 0, material: "dense" },
   { id: "chisel", name: "Chisel / Calligraphy", defaultSize: 34, dripTendency: 0, material: "calligraphy" },
   { id: "clean-chisel", name: "Clean Chisel", defaultSize: 34, dripTendency: 0, material: "calligraphy" },
+  { id: "drippy-chisel", name: "Drippy Chisel", defaultSize: 38, dripTendency: 0.48, material: "wet-calligraphy" },
   { id: "mop", name: "Mop", defaultSize: 44, dripTendency: 0.68, material: "wet" },
   { id: "drip-mop", name: "Drip Mop", defaultSize: 50, dripTendency: 1, material: "high-flow" },
 ] as const;
 
 export const CHISEL_NIB_ANGLE = -25 * Math.PI / 180;
+
+export function resolveMarkerCurveCornerAngle(variantId: MarkerVariantId): number | undefined {
+  if (variantId === "mop" || variantId === "drip-mop") return 125;
+  if (variantId === "drippy-chisel") return 78;
+  return undefined;
+}
 
 interface MarkerStrokeState {
   variantId: MarkerVariantId;
@@ -72,7 +79,7 @@ export function resolveMarkerGeometry(
   ) * 0.022;
   if (isChiselVariant(variantId)) {
     const broadEdge = Math.abs(Math.sin(direction - CHISEL_NIB_ANGLE));
-    const narrowRatio = variantId === "clean-chisel" ? 0.3 : 0.22;
+    const narrowRatio = variantId === "chisel" ? 0.22 : 0.3;
     return {
       width: baseWidth * (narrowRatio + broadEdge * (1 - narrowRatio)),
       opacity: 1,
@@ -153,6 +160,16 @@ export function smoothWetContactWidth(
   const maximumStep = Math.max(1, previousWidth * (variantId === "drip-mop" ? 0.075 : 0.09));
   const requestedStep = (targetWidth - previousWidth) * response;
   return previousWidth + Math.max(-maximumStep, Math.min(maximumStep, requestedStep));
+}
+
+export function smoothWetMarkerDirection(
+  previousDirection: number | null,
+  nextDirection: number,
+): number {
+  if (previousDirection === null) return nextDirection;
+  const delta = normalizeAngle(nextDirection - previousDirection);
+  const boundedDelta = Math.max(-Math.PI * 0.34, Math.min(Math.PI * 0.34, delta));
+  return previousDirection + boundedDelta * 0.42;
 }
 
 export function buildContinuousJoinPolygon(
@@ -242,15 +259,17 @@ export class PaintMarkerEngine {
     const rawDirection = previous
       ? Math.atan2(point.y - previous.y, point.x - previous.x)
       : stroke.lastDirection ?? 0;
+    const wetVariant = variantId === "mop" || variantId === "drip-mop" ? variantId : null;
     const direction = isChiselVariant(variantId)
       ? smoothMarkerDirection(
         stroke.lastDirection,
         rawDirection,
-        variantId === "clean-chisel" ? Math.min(point.velocity, 0.35) : point.velocity,
+        variantId === "chisel" ? point.velocity : Math.min(point.velocity, 0.35),
       )
+      : wetVariant
+        ? smoothWetMarkerDirection(stroke.lastDirection, rawDirection)
       : rawDirection;
     const targetGeometry = resolveMarkerGeometry(variantId, previous, point, direction);
-    const wetVariant = variantId === "mop" || variantId === "drip-mop" ? variantId : null;
     const previousWetWidth = previous && wetVariant
       ? stroke.lastHalfWidth !== null
         ? stroke.lastHalfWidth * 2
@@ -288,7 +307,7 @@ export class PaintMarkerEngine {
         ctx.arc(point.x, point.y, geometry.width * 0.5, 0, Math.PI * 2);
         ctx.fill();
       } else if (isChiselVariant(variantId)) {
-        this.renderChiselCap(ctx, point, geometry, variantId === "clean-chisel");
+        this.renderChiselCap(ctx, point, geometry, variantId !== "chisel");
       }
       if (variantId === "mop" || variantId === "drip-mop") {
         this.renderWetEdges(ctx, ribbon, geometry, color);
@@ -408,7 +427,7 @@ export class PaintMarkerEngine {
 }
 
 function isChiselVariant(variantId: MarkerVariantId): boolean {
-  return variantId === "chisel" || variantId === "clean-chisel";
+  return variantId === "chisel" || variantId === "clean-chisel" || variantId === "drippy-chisel";
 }
 
 function normalizeAngle(value: number): number {

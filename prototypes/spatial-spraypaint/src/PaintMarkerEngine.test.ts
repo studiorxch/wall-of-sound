@@ -5,8 +5,10 @@ import {
   buildSweptRibbonSegment,
   getMarkerVariant,
   resolveMarkerGeometry,
+  resolveMarkerCurveCornerAngle,
   smoothMarkerDirection,
   smoothWetContactWidth,
+  smoothWetMarkerDirection,
 } from "./PaintMarkerEngine";
 import { type StrokePoint } from "./types";
 
@@ -222,5 +224,24 @@ describe("Paint Marker renderer", () => {
     expect(smoothWetContactWidth(60, 30, "drip-mop")).toBeGreaterThan(55);
     expect(smoothWetContactWidth(60, 90, "mop")).toBeLessThan(66);
     expect(smoothWetContactWidth(60, 60, "mop")).toBe(60);
+  });
+
+  it("smooths Mop direction changes without breaking deterministic curve continuity", () => {
+    const first = smoothWetMarkerDirection(null, 0);
+    const second = smoothWetMarkerDirection(first, Math.PI * 0.5);
+    const sharp = smoothWetMarkerDirection(second, -Math.PI * 0.8);
+    expect(first).toBe(0);
+    expect(second).toBeGreaterThan(0);
+    expect(second).toBeLessThan(Math.PI * 0.5);
+    expect(Math.abs(sharp - second)).toBeLessThan(Math.PI * 0.35);
+    expect(smoothWetMarkerDirection(second, -Math.PI * 0.8)).toBe(sharp);
+  });
+
+  it("raises only wet marker corner tolerance for fluid curve reconstruction", () => {
+    expect(resolveMarkerCurveCornerAngle("mop")).toBe(125);
+    expect(resolveMarkerCurveCornerAngle("drip-mop")).toBe(125);
+    expect(resolveMarkerCurveCornerAngle("drippy-chisel")).toBe(78);
+    expect(resolveMarkerCurveCornerAngle("round")).toBeUndefined();
+    expect(resolveMarkerCurveCornerAngle("clean-chisel")).toBeUndefined();
   });
 });
