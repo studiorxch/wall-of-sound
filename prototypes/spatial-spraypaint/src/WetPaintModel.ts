@@ -1,5 +1,9 @@
 import { type DripSeed } from "./DripLogic";
 import { type MarkerVariantId } from "./DrawingTool";
+import {
+  buildSweptRibbonSegment,
+  resolveWetContactBulgeScale,
+} from "./PaintMarkerEngine";
 import { type StrokePoint } from "./types";
 import {
   INITIAL_WET_PAINT_CONTROLS,
@@ -132,19 +136,19 @@ export interface MopDripAttachment {
   overlap: number;
 }
 
+type MopFootprintPoint = Pick<StrokePoint, "x" | "y" | "width" | "velocity" | "paintLoad">;
+
 export function resolveMopDripAttachment(
   variant: Extract<WetMarkerVariantId, "mop" | "drip-mop">,
-  previous: Pick<StrokePoint, "x" | "y"> | null,
-  point: Pick<StrokePoint, "x" | "y">,
-  size: number,
+  footprint: readonly MopFootprintPoint[],
+  reservoir: MopFootprintPoint,
   horizontalOffset: number,
 ): MopDripAttachment {
-  const start = previous ?? point;
-  const renderedWidth = size * (variant === "drip-mop" ? 1.32 : 1.18);
-  const radius = renderedWidth * 0.5;
+  if (footprint.length === 0) throw new Error("Mop attachment requires a rendered footprint");
+  const radius = resolveMopPointRadius(variant, reservoir);
   const overlap = Math.max(1, radius * 0.05);
-  const x = point.x + clamp(horizontalOffset, -radius * 0.72, radius * 0.72);
-  const boundaryY = resolveCapsuleLowerBoundaryY(start, point, radius, x);
+  const x = reservoir.x + clamp(horizontalOffset, -radius * 0.72, radius * 0.72);
+  const boundaryY = resolveMopFootprintLowerBoundaryY(variant, footprint, x);
   return {
     origin: { x, y: boundaryY - overlap },
     boundaryY,
@@ -153,41 +157,96 @@ export function resolveMopDripAttachment(
   };
 }
 
-function resolveCapsuleLowerBoundaryY(
-  start: Pick<StrokePoint, "x" | "y">,
-  end: Pick<StrokePoint, "x" | "y">,
-  radius: number,
+function resolveMopPointRadius(
+  variant: Extract<WetMarkerVariantId, "mop" | "drip-mop">,
+  point: Pick<StrokePoint, "width">,
+): number {
+  return point.width * (variant === "drip-mop" ? 1.32 : 1.18) * 0.5;
+}
+
+function resolveMopFootprintLowerBoundaryY(
+  variant: Extract<WetMarkerVariantId, "mop" | "drip-mop">,
+  footprint: readonly MopFootprintPoint[],
   x: number,
 ): number {
   const candidates: number[] = [];
-  for (const endpoint of [start, end]) {
-    const horizontalDistance = x - endpoint.x;
-    if (Math.abs(horizontalDistance) <= radius) {
-      candidates.push(endpoint.y + Math.sqrt(Math.max(0, radius ** 2 - horizontalDistance ** 2)));
-    }
+  const addCircle = (center: Pick<StrokePoint, "x" | "y">, radius: number) => {
+    const horizontalDistance = x - center.x;
+    if (Math.abs(horizontalDistance) > radius) return;
+    candidates.push(center.y + Math.sqrt(Math.max(0, radius ** 2 - horizontalDistance ** 2)));
+  };
+
+  for (let index = 0; index < footprint.length; index += 1) {
+    const point = footprint[index];
+    const joinRadius = resolveMopPointRadius(
+      variant,
+      footprint[Math.min(index + 1, footprint.length - 1)],
+    );
+    addCircle(point, joinRadius);
   }
 
-  const deltaX = end.x - start.x;
-  const deltaY = end.y - start.y;
-  const length = Math.hypot(deltaX, deltaY);
-  if (length > 0.0001) {
-    const tangent = { x: deltaX / length, y: deltaY / length };
-    const normal = { x: -tangent.y, y: tangent.x };
-    if (Math.abs(tangent.x) > 0.0001) {
-      for (const side of [-1, 1]) {
-        const sideStart = {
-          x: start.x + normal.x * radius * side,
-          y: start.y + normal.y * radius * side,
-        };
-        const distanceAlong = (x - sideStart.x) / tangent.x;
-        if (distanceAlong >= 0 && distanceAlong <= length) {
-          candidates.push(sideStart.y + tangent.y * distanceAlong);
-        }
-      }
+  for (let index = 1; index < footprint.length; index += 1) {
+    const start = footprint[index - 1];
+    const end = footprint[index];
+    const direction = Math.atan2(end.y - start.y, end.x - start.x);
+    const ribbon = buildSweptRibbonSegment(
+      start,
+      end,
+      resolveMopPointRadius(variant, start) * 2,
+      resolveMopPointRadius(variant, end) * 2,
+      direction,
+    );
+    addPolygonVerticalIntersections([
+      ribbon.startLeft,
+      ribbon.endLeft,
+      ribbon.endRight,
+      ribbon.startRight,
+    ], x, candidates);
+  }
+
+  for (let index = 1; index < footprint.length; index += 1) {
+    const prior = footprint[index - 1];
+    const point = footprint[index];
+    const distance = Math.hypot(point.x - prior.x, point.y - prior.y);
+    const radius = resolveMopPointRadius(variant, point);
+    if (distance <= Math.max(1.2, radius * 2 * 0.04)) {
+      addCircle(point, radius * resolveWetContactBulgeScale(point.paintLoad ?? 0, point.velocity));
+    }
+  }
+  for (let index = 2; index < footprint.length; index += 1) {
+    const start = footprint[index - 2];
+    const corner = footprint[index - 1];
+    const end = footprint[index];
+    const incoming = Math.atan2(corner.y - start.y, corner.x - start.x);
+    const outgoing = Math.atan2(end.y - corner.y, end.x - corner.x);
+    if (Math.abs(normalizeAngle(outgoing - incoming)) >= Math.PI * 0.24) {
+      const radius = resolveMopPointRadius(variant, end);
+      addCircle(corner, radius * resolveWetContactBulgeScale(end.paintLoad ?? 0, 0));
     }
   }
 
   return Math.max(...candidates);
+}
+
+function addPolygonVerticalIntersections(
+  polygon: readonly { x: number; y: number }[],
+  x: number,
+  candidates: number[],
+): void {
+  for (let index = 0; index < polygon.length; index += 1) {
+    const start = polygon[index];
+    const end = polygon[(index + 1) % polygon.length];
+    const minimumX = Math.min(start.x, end.x);
+    const maximumX = Math.max(start.x, end.x);
+    if (x < minimumX || x > maximumX) continue;
+    const deltaX = end.x - start.x;
+    if (Math.abs(deltaX) <= 0.0001) {
+      if (Math.abs(x - start.x) <= 0.0001) candidates.push(start.y, end.y);
+      continue;
+    }
+    const progress = (x - start.x) / deltaX;
+    candidates.push(start.y + (end.y - start.y) * progress);
+  }
 }
 
 export class WetPaintAccumulator {
@@ -196,6 +255,7 @@ export class WetPaintAccumulator {
   private random = createDeterministicRandom(1);
   private controls: WetPaintControlState = { ...INITIAL_WET_PAINT_CONTROLS };
   private modifiers: WetPaintControlModifiers = resolveWetPaintControlModifiers(this.controls);
+  private footprint: StrokePoint[] = [];
 
   public beginStroke(
     strokeId: number,
@@ -211,9 +271,15 @@ export class WetPaintAccumulator {
       1,
     ));
     this.random = createDeterministicRandom(strokeId * 2654435761);
+    this.footprint = [];
   }
 
-  public observe(point: StrokePoint, size: number, dripsEnabled: boolean): WetPaintObservationResult {
+  public observe(
+    point: StrokePoint,
+    size: number,
+    dripsEnabled: boolean,
+    nextPoint: StrokePoint | null = null,
+  ): WetPaintObservationResult {
     const profile = WET_VARIANT_PROFILES[this.variant];
     const previous = this.state.lastPoint;
     const elapsed = previous ? Math.max(0, Math.min(120, point.timestamp - previous.timestamp)) : 0;
@@ -237,7 +303,9 @@ export class WetPaintAccumulator {
       && paintLoad >= Math.min(0.98, profile.dripLoadThreshold * this.modifiers.threshold)
       && timeSinceDrip >= profile.cooldownMs
       && (dwellReady || travelReady);
-    const drips = canDrip ? this.createDrips(previous, point, size, paintLoad) : [];
+    const renderedPoint = { ...point, paintLoad };
+    const footprint = [...this.footprint, renderedPoint, ...(nextPoint ? [nextPoint] : [])];
+    const drips = canDrip ? this.createDrips(footprint, renderedPoint, size, paintLoad) : [];
 
     this.state = {
       paintLoad: clamp(paintLoad - drips.length * (this.variant === "drip-mop" ? 0.13 : 0.2), 0.22, 1),
@@ -246,6 +314,7 @@ export class WetPaintAccumulator {
       lastPoint: { ...point, paintLoad },
       lastDripTimestamp: drips.length > 0 ? point.timestamp : this.state.lastDripTimestamp,
     };
+    this.footprint = [...this.footprint, renderedPoint].slice(-2);
     return { paintLoad, drips };
   }
 
@@ -259,10 +328,11 @@ export class WetPaintAccumulator {
   public reset(): void {
     this.state = resetWetPaintState();
     this.random = createDeterministicRandom(1);
+    this.footprint = [];
   }
 
   private createDrips(
-    previous: Pick<StrokePoint, "x" | "y"> | null,
+    footprint: readonly MopFootprintPoint[],
     point: StrokePoint,
     size: number,
     paintLoad: number,
@@ -292,7 +362,7 @@ export class WetPaintAccumulator {
         ? (this.random() - 0.5) * length * (this.variant === "drippy-chisel" ? 0.052 : 0.038)
         : 0;
       const origin = this.variant === "mop" || this.variant === "drip-mop"
-        ? resolveMopDripAttachment(this.variant, previous, point, size, offset).origin
+        ? resolveMopDripAttachment(this.variant, footprint, point, offset).origin
         : { x: point.x + offset, y: point.y + size * profile.originOffsetRatio };
       drips.push({
         x: origin.x,
@@ -331,4 +401,11 @@ function createDeterministicRandom(seed: number): () => number {
 
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(maximum, Math.max(minimum, value));
+}
+
+function normalizeAngle(value: number): number {
+  let normalized = value;
+  while (normalized > Math.PI) normalized -= Math.PI * 2;
+  while (normalized < -Math.PI) normalized += Math.PI * 2;
+  return normalized;
 }

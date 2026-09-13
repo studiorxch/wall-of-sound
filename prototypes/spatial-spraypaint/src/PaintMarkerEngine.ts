@@ -128,8 +128,8 @@ export function resolveWetContactBulgeScale(
 }
 
 export function buildSweptRibbonSegment(
-  start: StrokePoint,
-  end: StrokePoint,
+  start: Pick<StrokePoint, "x" | "y">,
+  end: Pick<StrokePoint, "x" | "y">,
   startWidth: number,
   endWidth: number,
   direction: number,

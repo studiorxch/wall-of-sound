@@ -1360,13 +1360,15 @@ class SpatialSpraypaintApp {
           sample.timestamp,
         );
         let segmentStart = previous;
-        for (const segmentEnd of [...interpolated, point]) {
+        const segmentEnds = [...interpolated, point];
+        for (const [segmentIndex, segmentEnd] of segmentEnds.entries()) {
           let renderedPoint = segmentEnd;
           if (style.toolId === "paint-marker" && isWetMarkerVariant(style.variantId)) {
             const wetPaint = this.wetPaintAccumulator.observe(
               segmentEnd,
               style.size,
               this.settings.dripsEnabled,
+              segmentEnds[segmentIndex + 1] ?? null,
             );
             renderedPoint = { ...segmentEnd, paintLoad: wetPaint.paintLoad };
             for (const drip of wetPaint.drips) {

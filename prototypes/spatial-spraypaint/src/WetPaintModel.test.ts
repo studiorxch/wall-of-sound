@@ -36,6 +36,19 @@ function distanceToSegment(
   );
 }
 
+function insideRenderedMopBody(
+  sample: { x: number; y: number },
+  footprint: readonly StrokePoint[],
+): boolean {
+  const radius = footprint[0].width * 1.32 * 0.5;
+  if (footprint.length === 1) {
+    return Math.hypot(sample.x - footprint[0].x, sample.y - footprint[0].y) <= radius;
+  }
+  return footprint.slice(1).some((end, index) => (
+    distanceToSegment(sample, footprint[index], end) <= radius
+  ));
+}
+
 function observeStationary(
   accumulator: WetPaintAccumulator,
   durationMs: number,
@@ -193,14 +206,26 @@ describe("wet paint load authority", () => {
     expect(drips.every(({ x, y }) => y > 45 && y < 52 && Math.abs(x - 20) <= 15.5)).toBe(true);
   });
 
-  it.each([
-    ["stationary dot / dwell", null, { x: 40, y: 40 }],
-    ["vertical stroke", { x: 40, y: 0 }, { x: 40, y: 80 }],
-    ["horizontal stroke", { x: 0, y: 40 }, { x: 80, y: 40 }],
-    ["diagonal stroke", { x: 0, y: 0 }, { x: 70, y: 70 }],
-    ["circular / curved local segment", { x: 48, y: 22 }, { x: 64, y: 42 }],
-  ] as const)("keeps the first drip segment attached for %s", (_label, previous, current) => {
-    const attachment = resolveMopDripAttachment("drip-mop", previous, current, 50, 8);
+  const attachmentCases = [
+    ["stationary dot / dwell", [[40, 40]], 0],
+    ["vertical stroke", [[40, 0], [40, 40], [40, 80]], 1],
+    ["horizontal stroke", [[0, 40], [40, 40], [80, 40]], 1],
+    ["+45° lower-left → upper-right", [[0, 70], [35, 35], [70, 0]], 1],
+    ["+45° upper-right → lower-left", [[70, 0], [35, 35], [0, 70]], 1],
+    ["-45° upper-left → lower-right", [[0, 0], [35, 35], [70, 70]], 1],
+    ["-45° lower-right → upper-left", [[70, 70], [35, 35], [0, 0]], 1],
+    ["shallow diagonal", [[0, 30], [40, 40], [80, 50]], 1],
+    ["steep diagonal", [[30, 0], [40, 40], [50, 80]], 1],
+    ["clockwise circle", [[20, 0], [35, 5], [45, 18], [50, 35]], 2],
+    ["counter-clockwise circle", [[50, 35], [45, 18], [35, 5], [20, 0]], 1],
+    ["tight curve", [[0, 0], [25, 0], [25, 25], [50, 25]], 2],
+    ["broad curve", [[0, 20], [25, 5], [55, 5], [80, 20]], 2],
+  ] as const;
+
+  it.each(attachmentCases)("keeps the first drip segment attached for %s", (_label, coordinates, reservoirIndex) => {
+    const footprint = coordinates.map(([x, y], index) => point(x, y, index * 16, 0.25));
+    const reservoir = footprint[reservoirIndex];
+    const attachment = resolveMopDripAttachment("drip-mop", footprint, reservoir, 8);
     const strip = buildContinuousDripStrip({
       x: attachment.origin.x,
       y: attachment.origin.y,
@@ -213,18 +238,24 @@ describe("wet paint load authority", () => {
       renderAsOverlay: true,
     }, 24);
 
-    const strokeStart = previous ?? current;
-    expect(distanceToSegment(
-      { x: attachment.origin.x, y: attachment.boundaryY },
-      strokeStart,
-      current,
-    )).toBeCloseTo(attachment.radius, 5);
-    expect(distanceToSegment(attachment.origin, strokeStart, current)).toBeLessThan(attachment.radius);
     expect(attachment.origin.y).toBeLessThan(attachment.boundaryY);
     expect(attachment.boundaryY - attachment.origin.y).toBeCloseTo(attachment.overlap, 10);
     expect(strip[0].center).toEqual(attachment.origin);
-    expect(strip[1].center.y).toBeLessThanOrEqual(attachment.boundaryY);
-    expect(attachment).toEqual(resolveMopDripAttachment("drip-mop", previous, current, 50, 8));
+    expect(insideRenderedMopBody(strip[0].center, footprint)).toBe(true);
+    expect(insideRenderedMopBody(strip[1].center, footprint)).toBe(true);
+    expect(attachment).toEqual(resolveMopDripAttachment("drip-mop", footprint, reservoir, 8));
+  });
+
+  it.each([
+    ["+45°", [[0, 70], [35, 35], [70, 0]]],
+    ["-45°", [[0, 0], [35, 35], [70, 70]]],
+  ] as const)("is attachment-direction invariant for %s diagonals", (_label, coordinates) => {
+    const forward = coordinates.map(([x, y], index) => point(x, y, index * 16, 0.25));
+    const reverse = [...forward].reverse();
+    const reservoir = forward[1];
+    expect(resolveMopDripAttachment("drip-mop", forward, reservoir, 8)).toEqual(
+      resolveMopDripAttachment("drip-mop", reverse, reservoir, 8),
+    );
   });
 
   it("anchors Drippy Chisel pools inside even its narrow contact edge", () => {
