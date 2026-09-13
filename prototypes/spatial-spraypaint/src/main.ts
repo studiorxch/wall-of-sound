@@ -300,6 +300,9 @@ class SpatialSpraypaintApp {
       );
       this.renderColorPalette();
     });
+    this.requireElement<HTMLInputElement>("palette-search").addEventListener("input", () => {
+      this.renderColorPalette();
+    });
     this.requireElement<HTMLSelectElement>("wet-flow").addEventListener("change", (event) => {
       this.finishActiveStroke();
       this.wetPaintControls = updateWetPaintControls(this.wetPaintControls, {
@@ -776,6 +779,7 @@ class SpatialSpraypaintApp {
 
   private renderColorPalette(): void {
     const palette = getColorPalette(this.colorPaletteState.paletteId);
+    const search = this.requireElement<HTMLInputElement>("palette-search").value.trim().toLocaleLowerCase();
     const paletteSelect = this.requireElement<HTMLSelectElement>("palette-select");
     paletteSelect.replaceChildren(...COLOR_PALETTES.map((candidate) => {
       const option = document.createElement("option");
@@ -784,19 +788,27 @@ class SpatialSpraypaintApp {
       option.selected = candidate.id === palette.id;
       return option;
     }));
-    const renderSwatch = (color: string, name: string) => {
+    const renderSwatch = (color: string, name: string, code: string | null = null) => {
       const swatch = document.createElement("button");
       swatch.className = "swatch";
       swatch.dataset.color = color;
+      swatch.dataset.name = name;
+      if (code) swatch.dataset.code = code;
       swatch.style.background = color;
       swatch.title = name;
       swatch.setAttribute("aria-label", name);
-      swatch.classList.toggle("selected", color.toLowerCase() === this.selectedColor.toLowerCase());
-      swatch.addEventListener("click", () => this.chooseColor(color, name));
+      const selected = this.colorPaletteState.selectedSwatchName
+        ? name === this.colorPaletteState.selectedSwatchName
+        : color.toLowerCase() === this.selectedColor.toLowerCase();
+      swatch.classList.toggle("selected", selected);
+      swatch.addEventListener("click", () => this.chooseColor(color, name, code));
       return swatch;
     };
+    const visibleColors = search
+      ? palette.colors.filter(({ name, code }) => `${name} ${code ?? ""}`.toLocaleLowerCase().includes(search))
+      : palette.colors;
     this.requireElement("palette-swatches").replaceChildren(
-      ...palette.colors.map(({ hex, name }) => renderSwatch(hex, name)),
+      ...visibleColors.map(({ hex, name, code }) => renderSwatch(hex, name, code)),
     );
     const recent = this.requireElement("recent-colors");
     recent.replaceChildren(...this.colorPaletteState.recentColors.map((color) =>
@@ -807,15 +819,23 @@ class SpatialSpraypaintApp {
       this.colorPaletteState.recentColors.length === 0,
     );
     this.requireElement("palette-current").style.setProperty("--current-color", this.selectedColor);
+    const selectedName = this.colorPaletteState.selectedSwatchName;
+    const selectedCode = this.colorPaletteState.selectedSwatchCode;
+    const selectedLabel = selectedName
+      ? selectedCode && !selectedName.startsWith(selectedCode)
+        ? `${selectedCode} · ${selectedName}`
+        : selectedName
+      : `Custom ${this.selectedColor}`;
+    this.requireElement("palette-selection").textContent = selectedLabel;
     const colorControl = this.requireElement("color-control");
     colorControl.style.setProperty("--current-color", this.selectedColor);
     colorControl.setAttribute("title", `Color ${this.selectedColor} · ${palette.name}`);
     colorControl.setAttribute("aria-label", `Choose color. Current ${this.selectedColor} from ${palette.name}`);
   }
 
-  private chooseColor(color: string, name: string): void {
+  private chooseColor(color: string, name: string, code: string | null = null): void {
     this.finishActiveStroke();
-    this.colorPaletteState = selectPaletteColor(this.colorPaletteState, color);
+    this.colorPaletteState = selectPaletteColor(this.colorPaletteState, color, { name, code });
     this.renderColorPalette();
     this.requireElement("color-control").setAttribute("title", `Color: ${name}`);
     this.refreshDrawingCursor();

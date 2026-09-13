@@ -92,9 +92,12 @@
     #color-chooser { width:238px; gap:8px; }
     .palette-toolbar { display:grid; grid-template-columns:1fr auto; align-items:center; gap:7px; }
     #palette-select { min-width:0; width:100%; font-size:10px; }
+    #palette-search { min-width:0; width:100%; box-sizing:border-box; font-size:10px; }
     #palette-current { width:26px; height:26px; border:2px solid #fff; border-radius:50%; background:var(--current-color, #e92f3d); box-shadow:inset 0 0 0 3px rgba(0,0,0,.18); }
+    #palette-selection { min-height:12px; color:#d5d3dc; font-size:10px; line-height:1.25; overflow-wrap:anywhere; }
     .palette-section-label { color:#8f8e99; font-size:9px; font-weight:800; letter-spacing:.8px; text-transform:uppercase; }
     .palette-grid { display:grid; grid-template-columns:repeat(6, 30px); gap:6px; }
+    #palette-swatches { max-height:min(300px, calc(100vh - 220px)); overflow-y:auto; padding:3px; }
     #recent-colors[hidden], #recent-colors-label[hidden] { display:none; }
     #tool-chooser, #cap-chooser, #marker-chooser { gap:4px; max-height:min(480px, calc(100vh - 110px)); overflow-y:auto; }
     .tool-choice, .cap-choice, .marker-choice { min-width:210px; display:grid; grid-template-columns:66px 1fr; align-items:center; gap:10px; text-align:left; font-size:11px; }
@@ -258,6 +261,8 @@
     </div>
     <div id="color-chooser" class="tool-popover" aria-label="Color chooser">
       <div class="palette-toolbar"><select id="palette-select" aria-label="Calibration palette"></select><span id="palette-current" aria-hidden="true"></span></div>
+      <input id="palette-search" type="search" placeholder="Search colors or codes" aria-label="Search palette colors">
+      <div id="palette-selection" aria-live="polite"></div>
       <div id="recent-colors-label" class="palette-section-label" hidden>Recent</div>
       <div id="recent-colors" class="palette-grid" hidden></div>
       <div class="palette-section-label">Palette</div>
