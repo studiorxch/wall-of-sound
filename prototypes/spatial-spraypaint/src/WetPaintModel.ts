@@ -136,6 +136,11 @@ export interface MopDripAttachment {
   overlap: number;
 }
 
+export interface MopDripAttachmentOptions {
+  /** The completed-stroke helper includes its final round cap by default. */
+  terminalCapRendered?: boolean;
+}
+
 type MopFootprintPoint = Pick<StrokePoint, "x" | "y" | "width" | "velocity" | "paintLoad">;
 
 export function resolveMopDripAttachment(
@@ -143,12 +148,18 @@ export function resolveMopDripAttachment(
   footprint: readonly MopFootprintPoint[],
   reservoir: MopFootprintPoint,
   horizontalOffset: number,
+  options: MopDripAttachmentOptions = {},
 ): MopDripAttachment {
   if (footprint.length === 0) throw new Error("Mop attachment requires a rendered footprint");
   const radius = resolveMopPointRadius(variant, reservoir);
   const overlap = Math.max(1, radius * 0.05);
   const x = reservoir.x + clamp(horizontalOffset, -radius * 0.72, radius * 0.72);
-  const boundaryY = resolveMopFootprintLowerBoundaryY(variant, footprint, x);
+  const boundaryY = resolveMopFootprintLowerBoundaryY(
+    variant,
+    footprint,
+    x,
+    options.terminalCapRendered ?? true,
+  );
   return {
     origin: { x, y: boundaryY - overlap },
     boundaryY,
@@ -168,6 +179,7 @@ function resolveMopFootprintLowerBoundaryY(
   variant: Extract<WetMarkerVariantId, "mop" | "drip-mop">,
   footprint: readonly MopFootprintPoint[],
   x: number,
+  terminalCapRendered: boolean,
 ): number {
   const candidates: number[] = [];
   const addCircle = (center: Pick<StrokePoint, "x" | "y">, radius: number) => {
@@ -177,6 +189,9 @@ function resolveMopFootprintLowerBoundaryY(
   };
 
   for (let index = 0; index < footprint.length; index += 1) {
+    const isInitialDot = footprint.length === 1;
+    const isUnrenderedTerminal = index === footprint.length - 1 && !terminalCapRendered;
+    if (isUnrenderedTerminal && !isInitialDot) continue;
     const point = footprint[index];
     const joinRadius = resolveMopPointRadius(
       variant,
@@ -210,7 +225,8 @@ function resolveMopFootprintLowerBoundaryY(
     const distance = Math.hypot(point.x - prior.x, point.y - prior.y);
     const radius = resolveMopPointRadius(variant, point);
     if (distance <= Math.max(1.2, radius * 2 * 0.04)) {
-      addCircle(point, radius * resolveWetContactBulgeScale(point.paintLoad ?? 0, point.velocity));
+      const bulgeScale = resolveWetContactBulgeScale(point.paintLoad ?? 0, point.velocity);
+      if (bulgeScale > 1) addCircle(point, radius * bulgeScale);
     }
   }
   for (let index = 2; index < footprint.length; index += 1) {
@@ -221,7 +237,8 @@ function resolveMopFootprintLowerBoundaryY(
     const outgoing = Math.atan2(end.y - corner.y, end.x - corner.x);
     if (Math.abs(normalizeAngle(outgoing - incoming)) >= Math.PI * 0.24) {
       const radius = resolveMopPointRadius(variant, end);
-      addCircle(corner, radius * resolveWetContactBulgeScale(end.paintLoad ?? 0, 0));
+      const bulgeScale = resolveWetContactBulgeScale(end.paintLoad ?? 0, 0);
+      if (bulgeScale > 1) addCircle(corner, radius * bulgeScale);
     }
   }
 
@@ -362,7 +379,13 @@ export class WetPaintAccumulator {
         ? (this.random() - 0.5) * length * (this.variant === "drippy-chisel" ? 0.052 : 0.038)
         : 0;
       const origin = this.variant === "mop" || this.variant === "drip-mop"
-        ? resolveMopDripAttachment(this.variant, footprint, point, offset).origin
+        ? resolveMopDripAttachment(
+          this.variant,
+          footprint,
+          point,
+          offset,
+          { terminalCapRendered: false },
+        ).origin
         : { x: point.x + offset, y: point.y + size * profile.originOffsetRatio };
       drips.push({
         x: origin.x,
