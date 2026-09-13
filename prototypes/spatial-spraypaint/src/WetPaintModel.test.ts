@@ -3,8 +3,9 @@ import {
   WetPaintAccumulator,
   getWetPaintProfile,
   isWetMarkerVariant,
-  resolveMopDripOrigin,
+  resolveMopDripAttachment,
 } from "./WetPaintModel";
+import { buildContinuousDripStrip } from "./DripLogic";
 import { type StrokePoint } from "./types";
 
 const point = (x: number, y: number, timestamp: number, velocity: number): StrokePoint => ({
@@ -15,6 +16,25 @@ const point = (x: number, y: number, timestamp: number, velocity: number): Strok
   width: 44,
   opacity: 1,
 });
+
+function distanceToSegment(
+  sample: { x: number; y: number },
+  start: { x: number; y: number },
+  end: { x: number; y: number },
+): number {
+  const deltaX = end.x - start.x;
+  const deltaY = end.y - start.y;
+  const lengthSquared = deltaX ** 2 + deltaY ** 2;
+  const progress = lengthSquared === 0
+    ? 0
+    : Math.max(0, Math.min(1, (
+      (sample.x - start.x) * deltaX + (sample.y - start.y) * deltaY
+    ) / lengthSquared));
+  return Math.hypot(
+    sample.x - (start.x + deltaX * progress),
+    sample.y - (start.y + deltaY * progress),
+  );
+}
 
 function observeStationary(
   accumulator: WetPaintAccumulator,
@@ -170,42 +190,41 @@ describe("wet paint load authority", () => {
     accumulator.beginStroke(314, "drip-mop", { flow: "high", viscosity: "runny" });
     const drips = observeStationary(accumulator, 2400, 50).flatMap(({ drips: emitted }) => emitted);
     expect(drips.length).toBeGreaterThan(0);
-    expect(drips.every(({ x, y }) => y === 51.35 && x <= 20 && x >= 4.5)).toBe(true);
+    expect(drips.every(({ x, y }) => y > 45 && y < 52 && Math.abs(x - 20) <= 15.5)).toBe(true);
   });
 
-  it("derives curved Mop drip attachment from the current local lower normal", () => {
-    const previous = { x: 10, y: 10 };
-    const current = { x: 30, y: 30 };
-    const origin = resolveMopDripOrigin("drip-mop", previous, current, 50, 8);
-    const inverseSqrtTwo = 1 / Math.sqrt(2);
-    const lowerNormal = { x: -inverseSqrtTwo, y: inverseSqrtTwo };
-    const projectedFromCenter = (
-      (origin.x - current.x) * lowerNormal.x
-      + (origin.y - current.y) * lowerNormal.y
-    );
-    expect(projectedFromCenter).toBeCloseTo(31.35, 5);
-    expect(origin.y).toBeGreaterThan(current.y);
-    expect(origin).toEqual(resolveMopDripOrigin("drip-mop", previous, current, 50, 8));
-  });
+  it.each([
+    ["stationary dot / dwell", null, { x: 40, y: 40 }],
+    ["vertical stroke", { x: 40, y: 0 }, { x: 40, y: 80 }],
+    ["horizontal stroke", { x: 0, y: 40 }, { x: 80, y: 40 }],
+    ["diagonal stroke", { x: 0, y: 0 }, { x: 70, y: 70 }],
+    ["circular / curved local segment", { x: 48, y: 22 }, { x: 64, y: 42 }],
+  ] as const)("keeps the first drip segment attached for %s", (_label, previous, current) => {
+    const attachment = resolveMopDripAttachment("drip-mop", previous, current, 50, 8);
+    const strip = buildContinuousDripStrip({
+      x: attachment.origin.x,
+      y: attachment.origin.y,
+      width: 12,
+      length: 220,
+      opacity: 0.84,
+      bend: 4,
+      tipWidthRatio: 0.62,
+      originPoolRadius: 9,
+      renderAsOverlay: true,
+    }, 24);
 
-  it("retains the curved travel normal while a dwell builds enough load to drip", () => {
-    const accumulator = new WetPaintAccumulator();
-    accumulator.beginStroke(314, "drip-mop", { flow: "high", viscosity: "runny" });
-    accumulator.observe(point(0, 0, 0, 0.2), 50, true);
-    accumulator.observe(point(20, 20, 120, 0.2), 50, true);
-    const results = Array.from({ length: 14 }, (_, index) =>
-      accumulator.observe(point(20, 20, 240 + index * 120, 0), 50, true));
-    const drips = results.flatMap(({ drips: emitted }) => emitted);
-    const inverseSqrtTwo = 1 / Math.sqrt(2);
-    const lowerNormal = { x: -inverseSqrtTwo, y: inverseSqrtTwo };
-    expect(drips.length).toBeGreaterThan(0);
-    expect(drips.every((origin) => {
-      const projection = (
-        (origin.x - 20) * lowerNormal.x
-        + (origin.y - 20) * lowerNormal.y
-      );
-      return Math.abs(projection - 31.35) < 0.00001;
-    })).toBe(true);
+    const strokeStart = previous ?? current;
+    expect(distanceToSegment(
+      { x: attachment.origin.x, y: attachment.boundaryY },
+      strokeStart,
+      current,
+    )).toBeCloseTo(attachment.radius, 5);
+    expect(distanceToSegment(attachment.origin, strokeStart, current)).toBeLessThan(attachment.radius);
+    expect(attachment.origin.y).toBeLessThan(attachment.boundaryY);
+    expect(attachment.boundaryY - attachment.origin.y).toBeCloseTo(attachment.overlap, 10);
+    expect(strip[0].center).toEqual(attachment.origin);
+    expect(strip[1].center.y).toBeLessThanOrEqual(attachment.boundaryY);
+    expect(attachment).toEqual(resolveMopDripAttachment("drip-mop", previous, current, 50, 8));
   });
 
   it("anchors Drippy Chisel pools inside even its narrow contact edge", () => {

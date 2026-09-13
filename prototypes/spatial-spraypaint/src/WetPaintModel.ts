@@ -15,7 +15,6 @@ export interface WetPaintState {
   dwellMs: number;
   distanceSinceDrip: number;
   lastPoint: StrokePoint | null;
-  lastTravelDirection: { x: number; y: number } | null;
   lastDripTimestamp: number;
 }
 
@@ -118,7 +117,6 @@ export function resetWetPaintState(initialLoad = 0): WetPaintState {
     dwellMs: 0,
     distanceSinceDrip: 0,
     lastPoint: null,
-    lastTravelDirection: null,
     lastDripTimestamp: -Infinity,
   };
 }
@@ -127,35 +125,69 @@ export function isWetMarkerVariant(value: MarkerVariantId): value is WetMarkerVa
   return value === "drippy-chisel" || value === "mop" || value === "drip-mop";
 }
 
-export function resolveMopDripOrigin(
+export interface MopDripAttachment {
+  origin: { x: number; y: number };
+  boundaryY: number;
+  radius: number;
+  overlap: number;
+}
+
+export function resolveMopDripAttachment(
   variant: Extract<WetMarkerVariantId, "mop" | "drip-mop">,
   previous: Pick<StrokePoint, "x" | "y"> | null,
   point: Pick<StrokePoint, "x" | "y">,
   size: number,
-  travelOffset: number,
-): { x: number; y: number } {
-  const deltaX = previous ? point.x - previous.x : 1;
-  const deltaY = previous ? point.y - previous.y : 0;
-  const length = Math.hypot(deltaX, deltaY);
-  const tangent = length > 0.0001
-    ? { x: deltaX / length, y: deltaY / length }
-    : { x: 1, y: 0 };
-  const normal = { x: -tangent.y, y: tangent.x };
-  const lowerNormal = normal.y >= 0
-    ? normal
-    : { x: -normal.x, y: -normal.y };
+  horizontalOffset: number,
+): MopDripAttachment {
+  const start = previous ?? point;
   const renderedWidth = size * (variant === "drip-mop" ? 1.32 : 1.18);
   const radius = renderedWidth * 0.5;
-  const attachmentRadius = radius - Math.max(1, radius * 0.05);
-  const behind = Math.min(radius * 0.7, Math.abs(travelOffset));
-  const localCenter = {
-    x: point.x - tangent.x * behind,
-    y: point.y - tangent.y * behind,
-  };
+  const overlap = Math.max(1, radius * 0.05);
+  const x = point.x + clamp(horizontalOffset, -radius * 0.72, radius * 0.72);
+  const boundaryY = resolveCapsuleLowerBoundaryY(start, point, radius, x);
   return {
-    x: localCenter.x + lowerNormal.x * attachmentRadius,
-    y: localCenter.y + lowerNormal.y * attachmentRadius,
+    origin: { x, y: boundaryY - overlap },
+    boundaryY,
+    radius,
+    overlap,
   };
+}
+
+function resolveCapsuleLowerBoundaryY(
+  start: Pick<StrokePoint, "x" | "y">,
+  end: Pick<StrokePoint, "x" | "y">,
+  radius: number,
+  x: number,
+): number {
+  const candidates: number[] = [];
+  for (const endpoint of [start, end]) {
+    const horizontalDistance = x - endpoint.x;
+    if (Math.abs(horizontalDistance) <= radius) {
+      candidates.push(endpoint.y + Math.sqrt(Math.max(0, radius ** 2 - horizontalDistance ** 2)));
+    }
+  }
+
+  const deltaX = end.x - start.x;
+  const deltaY = end.y - start.y;
+  const length = Math.hypot(deltaX, deltaY);
+  if (length > 0.0001) {
+    const tangent = { x: deltaX / length, y: deltaY / length };
+    const normal = { x: -tangent.y, y: tangent.x };
+    if (Math.abs(tangent.x) > 0.0001) {
+      for (const side of [-1, 1]) {
+        const sideStart = {
+          x: start.x + normal.x * radius * side,
+          y: start.y + normal.y * radius * side,
+        };
+        const distanceAlong = (x - sideStart.x) / tangent.x;
+        if (distanceAlong >= 0 && distanceAlong <= length) {
+          candidates.push(sideStart.y + tangent.y * distanceAlong);
+        }
+      }
+    }
+  }
+
+  return Math.max(...candidates);
 }
 
 export class WetPaintAccumulator {
@@ -186,9 +218,6 @@ export class WetPaintAccumulator {
     const previous = this.state.lastPoint;
     const elapsed = previous ? Math.max(0, Math.min(120, point.timestamp - previous.timestamp)) : 0;
     const distance = previous ? Math.hypot(point.x - previous.x, point.y - previous.y) : 0;
-    const travelDirection = previous && distance > 0.0001
-      ? { x: (point.x - previous.x) / distance, y: (point.y - previous.y) / distance }
-      : this.state.lastTravelDirection;
     const stationary = Boolean(previous) && distance <= Math.max(1.2, size * 0.055);
     const speed = Math.max(0, point.velocity);
     const slowFactor = 1 - Math.min(1, speed / 1.45);
@@ -208,17 +237,13 @@ export class WetPaintAccumulator {
       && paintLoad >= Math.min(0.98, profile.dripLoadThreshold * this.modifiers.threshold)
       && timeSinceDrip >= profile.cooldownMs
       && (dwellReady || travelReady);
-    const originPrevious = travelDirection
-      ? { x: point.x - travelDirection.x, y: point.y - travelDirection.y }
-      : previous;
-    const drips = canDrip ? this.createDrips(originPrevious, point, size, paintLoad) : [];
+    const drips = canDrip ? this.createDrips(previous, point, size, paintLoad) : [];
 
     this.state = {
       paintLoad: clamp(paintLoad - drips.length * (this.variant === "drip-mop" ? 0.13 : 0.2), 0.22, 1),
       dwellMs: drips.length > 0 ? dwellMs * 0.28 : dwellMs,
       distanceSinceDrip: drips.length > 0 ? 0 : distanceSinceDrip,
       lastPoint: { ...point, paintLoad },
-      lastTravelDirection: travelDirection,
       lastDripTimestamp: drips.length > 0 ? point.timestamp : this.state.lastDripTimestamp,
     };
     return { paintLoad, drips };
@@ -228,9 +253,6 @@ export class WetPaintAccumulator {
     return {
       ...this.state,
       lastPoint: this.state.lastPoint ? { ...this.state.lastPoint } : null,
-      lastTravelDirection: this.state.lastTravelDirection
-        ? { ...this.state.lastTravelDirection }
-        : null,
     };
   }
 
@@ -270,7 +292,7 @@ export class WetPaintAccumulator {
         ? (this.random() - 0.5) * length * (this.variant === "drippy-chisel" ? 0.052 : 0.038)
         : 0;
       const origin = this.variant === "mop" || this.variant === "drip-mop"
-        ? resolveMopDripOrigin(this.variant, previous, point, size, offset)
+        ? resolveMopDripAttachment(this.variant, previous, point, size, offset).origin
         : { x: point.x + offset, y: point.y + size * profile.originOffsetRatio };
       drips.push({
         x: origin.x,
