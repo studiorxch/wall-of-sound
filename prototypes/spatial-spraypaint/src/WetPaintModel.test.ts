@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { WetPaintAccumulator, getWetPaintProfile, isWetMarkerVariant } from "./WetPaintModel";
+import {
+  WetPaintAccumulator,
+  getWetPaintProfile,
+  isWetMarkerVariant,
+  resolveMopDripOrigin,
+} from "./WetPaintModel";
 import { type StrokePoint } from "./types";
 
 const point = (x: number, y: number, timestamp: number, velocity: number): StrokePoint => ({
@@ -165,7 +170,42 @@ describe("wet paint load authority", () => {
     accumulator.beginStroke(314, "drip-mop", { flow: "high", viscosity: "runny" });
     const drips = observeStationary(accumulator, 2400, 50).flatMap(({ drips: emitted }) => emitted);
     expect(drips.length).toBeGreaterThan(0);
-    expect(drips.every(({ x, y }) => y === 51 && Math.abs(x - 20) <= 15.5)).toBe(true);
+    expect(drips.every(({ x, y }) => y === 51.35 && x <= 20 && x >= 4.5)).toBe(true);
+  });
+
+  it("derives curved Mop drip attachment from the current local lower normal", () => {
+    const previous = { x: 10, y: 10 };
+    const current = { x: 30, y: 30 };
+    const origin = resolveMopDripOrigin("drip-mop", previous, current, 50, 8);
+    const inverseSqrtTwo = 1 / Math.sqrt(2);
+    const lowerNormal = { x: -inverseSqrtTwo, y: inverseSqrtTwo };
+    const projectedFromCenter = (
+      (origin.x - current.x) * lowerNormal.x
+      + (origin.y - current.y) * lowerNormal.y
+    );
+    expect(projectedFromCenter).toBeCloseTo(31.35, 5);
+    expect(origin.y).toBeGreaterThan(current.y);
+    expect(origin).toEqual(resolveMopDripOrigin("drip-mop", previous, current, 50, 8));
+  });
+
+  it("retains the curved travel normal while a dwell builds enough load to drip", () => {
+    const accumulator = new WetPaintAccumulator();
+    accumulator.beginStroke(314, "drip-mop", { flow: "high", viscosity: "runny" });
+    accumulator.observe(point(0, 0, 0, 0.2), 50, true);
+    accumulator.observe(point(20, 20, 120, 0.2), 50, true);
+    const results = Array.from({ length: 14 }, (_, index) =>
+      accumulator.observe(point(20, 20, 240 + index * 120, 0), 50, true));
+    const drips = results.flatMap(({ drips: emitted }) => emitted);
+    const inverseSqrtTwo = 1 / Math.sqrt(2);
+    const lowerNormal = { x: -inverseSqrtTwo, y: inverseSqrtTwo };
+    expect(drips.length).toBeGreaterThan(0);
+    expect(drips.every((origin) => {
+      const projection = (
+        (origin.x - 20) * lowerNormal.x
+        + (origin.y - 20) * lowerNormal.y
+      );
+      return Math.abs(projection - 31.35) < 0.00001;
+    })).toBe(true);
   });
 
   it("anchors Drippy Chisel pools inside even its narrow contact edge", () => {

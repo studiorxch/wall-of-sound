@@ -8,7 +8,6 @@ import {
   resolveMarkerCurveCornerAngle,
   resolveWetContactBulgeScale,
   smoothMarkerDirection,
-  smoothWetMarkerDirection,
 } from "./PaintMarkerEngine";
 import { type StrokePoint } from "./types";
 
@@ -191,6 +190,44 @@ describe("Paint Marker renderer", () => {
     expect(recording.ellipses).toHaveLength(0);
   });
 
+  it("keeps curved Mop travel on one constant-width swept body", () => {
+    const recording = recordingContext();
+    const engine = new PaintMarkerEngine();
+    const points = [point(0, 0), point(30, 4), point(60, 12), point(90, 24)];
+    engine.beginStroke("drip-mop");
+    engine.renderSegment(recording.ctx, null, { ...points[0], paintLoad: 0.92 }, "#ff0000", "drip-mop");
+    for (let index = 1; index < points.length; index += 1) {
+      engine.renderSegment(
+        recording.ctx,
+        points[index - 1],
+        { ...points[index], paintLoad: 0.92 },
+        "#ff0000",
+        "drip-mop",
+      );
+    }
+    engine.endStroke(recording.ctx);
+    const expectedRadius = points[0].width * 1.32 * 0.5;
+    expect(recording.arcs).toHaveLength(4);
+    expect(recording.arcs.every((arc) => arc[2] === expectedRadius)).toBe(true);
+  });
+
+  it("adds wet swelling only at a dwell contact rather than along travel", () => {
+    const recording = recordingContext();
+    const engine = new PaintMarkerEngine();
+    engine.beginStroke("drip-mop");
+    engine.renderSegment(recording.ctx, null, { ...point(0, 0), paintLoad: 1 }, "#ff0000", "drip-mop");
+    engine.renderSegment(recording.ctx, point(0, 0), { ...point(40, 0), paintLoad: 1 }, "#ff0000", "drip-mop");
+    engine.renderSegment(
+      recording.ctx,
+      { ...point(40, 0), paintLoad: 1 },
+      { ...point(40, 0, 0), paintLoad: 1 },
+      "#ff0000",
+      "drip-mop",
+    );
+    const baseRadius = point(0, 0).width * 1.32 * 0.5;
+    expect(recording.arcs.filter((arc) => arc[2] > baseRadius)).toHaveLength(1);
+  });
+
   it("uses round Mop contact footprints at both start and end without Chisel termination", () => {
     const recording = recordingContext();
     const engine = new PaintMarkerEngine();
@@ -222,17 +259,6 @@ describe("Paint Marker renderer", () => {
     expect(recording.arcs).toHaveLength(3);
   });
 
-  it("smooths Mop direction changes without breaking deterministic curve continuity", () => {
-    const first = smoothWetMarkerDirection(null, 0);
-    const second = smoothWetMarkerDirection(first, Math.PI * 0.5);
-    const sharp = smoothWetMarkerDirection(second, -Math.PI * 0.8);
-    expect(first).toBe(0);
-    expect(second).toBeGreaterThan(0);
-    expect(second).toBeLessThan(Math.PI * 0.5);
-    expect(Math.abs(sharp - second)).toBeLessThan(Math.PI * 0.35);
-    expect(smoothWetMarkerDirection(second, -Math.PI * 0.8)).toBe(sharp);
-  });
-
   it("raises only wet marker corner tolerance for fluid curve reconstruction", () => {
     expect(resolveMarkerCurveCornerAngle("mop")).toBe(125);
     expect(resolveMarkerCurveCornerAngle("drip-mop")).toBe(125);
@@ -248,9 +274,9 @@ describe("Paint Marker renderer", () => {
     engine.renderSegment(recording.ctx, null, { ...point(0, 0), paintLoad: 0.9 }, "#ff0000", "drip-mop");
     engine.renderSegment(recording.ctx, point(0, 0), { ...point(40, 0), paintLoad: 0.9 }, "#ff0000", "drip-mop");
     engine.renderSegment(recording.ctx, point(40, 0), { ...point(40, 40), paintLoad: 0.9 }, "#ff0000", "drip-mop");
-    expect(recording.arcs).toHaveLength(2);
-    expect(recording.arcs[1].slice(0, 2)).toEqual([40, 0]);
-    expect(recording.arcs[1][2]).toBeLessThanOrEqual(25);
+    expect(recording.arcs).toHaveLength(3);
+    expect(recording.arcs.slice(1).every((arc) => arc.slice(0, 2).every((value, index) => value === [40, 0][index]))).toBe(true);
+    expect(recording.arcs.slice(1).every((arc) => arc[2] <= 22)).toBe(true);
   });
 
   it("keeps wet bulge out of ordinary travel and reserves it for pooled dwell", () => {

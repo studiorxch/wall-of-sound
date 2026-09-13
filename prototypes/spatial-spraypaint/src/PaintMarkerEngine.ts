@@ -159,16 +159,6 @@ export function smoothMarkerDirection(
   return previousDirection + delta * response;
 }
 
-export function smoothWetMarkerDirection(
-  previousDirection: number | null,
-  nextDirection: number,
-): number {
-  if (previousDirection === null) return nextDirection;
-  const delta = normalizeAngle(nextDirection - previousDirection);
-  const boundedDelta = Math.max(-Math.PI * 0.34, Math.min(Math.PI * 0.34, delta));
-  return previousDirection + boundedDelta * 0.42;
-}
-
 export function buildContinuousJoinPolygon(
   point: Pick<StrokePoint, "x" | "y">,
   priorDirection: number,
@@ -263,8 +253,6 @@ export class PaintMarkerEngine {
         rawDirection,
         variantId === "chisel" ? point.velocity : Math.min(point.velocity, 0.35),
       )
-      : wetVariant
-        ? smoothWetMarkerDirection(stroke.lastDirection, rawDirection)
       : rawDirection;
     const targetGeometry = resolveMarkerGeometry(variantId, previous, point, direction);
     const geometry = targetGeometry;
@@ -305,7 +293,14 @@ export class PaintMarkerEngine {
         this.renderChiselCap(ctx, point, geometry, variantId !== "chisel");
       }
       if (variantId === "mop" || variantId === "drip-mop") {
-        this.renderWetContactOverlay(ctx, point, geometry);
+        this.renderWetContactOverlay(
+          ctx,
+          start,
+          point,
+          geometry,
+          stroke.lastDirection,
+          direction,
+        );
       }
     }
     ctx.restore();
@@ -398,13 +393,27 @@ export class PaintMarkerEngine {
 
   private renderWetContactOverlay(
     ctx: CanvasRenderingContext2D,
+    previous: StrokePoint,
     point: StrokePoint,
     geometry: MarkerGeometry,
+    previousDirection: number | null,
+    direction: number,
   ): void {
-    const bulgeScale = resolveWetContactBulgeScale(geometry.paintLoad, point.velocity);
+    const distance = Math.hypot(point.x - previous.x, point.y - previous.y);
+    const stationary = distance <= Math.max(1.2, geometry.width * 0.04);
+    const cornerAngle = previousDirection === null
+      ? 0
+      : Math.abs(normalizeAngle(direction - previousDirection));
+    const corner = cornerAngle >= Math.PI * 0.24;
+    if (!stationary && !corner) return;
+    const bulgeScale = resolveWetContactBulgeScale(
+      geometry.paintLoad,
+      stationary ? point.velocity : 0,
+    );
     if (bulgeScale <= 1) return;
+    const center = corner ? previous : point;
     ctx.beginPath();
-    ctx.arc(point.x, point.y, geometry.width * 0.5 * bulgeScale, 0, Math.PI * 2);
+    ctx.arc(center.x, center.y, geometry.width * 0.5 * bulgeScale, 0, Math.PI * 2);
     ctx.fill();
   }
 }
