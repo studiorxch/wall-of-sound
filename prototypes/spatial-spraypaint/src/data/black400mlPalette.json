@@ -1,0 +1,5655 @@
+[
+  {
+    "label": "Schwarz",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0,
+        "m": 0,
+        "y": 0,
+        "k": 1,
+        "alpha": 1
+      },
+      "displayHex": "#000000"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 0,
+      "objectId": 0,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "CMYK Rot",
+    "code": null,
+    "color": {
+      "model": "RGBA",
+      "components": {
+        "r": 0.847058892250061,
+        "g": 0.12156863510608673,
+        "b": 0.14901961386203766,
+        "alpha": 1
+      },
+      "displayHex": "#d81f26"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 1,
+      "objectId": 2,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "CMYK Gelb",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0,
+        "m": 0,
+        "y": 1,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#ffff00"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 2,
+      "objectId": 4,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "CMYK Grün",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 1,
+        "m": 0,
+        "y": 1,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#00ff00"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 3,
+      "objectId": 6,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "CMYK Cyan",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 1,
+        "m": 0,
+        "y": 0,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#00ffff"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 4,
+      "objectId": 8,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "CMYK Blau",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 1,
+        "m": 1,
+        "y": 0,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#0000ff"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 5,
+      "objectId": 10,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "CMYK Magenta",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0,
+        "m": 1,
+        "y": 0,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#ff00ff"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 6,
+      "objectId": 12,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "C=15 M=100 Y=90 K=10",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.1499999761581421,
+        "m": 1,
+        "y": 0.9000000357627869,
+        "k": 0.10000002384185791,
+        "alpha": 1
+      },
+      "displayHex": "#c30017"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 7,
+      "objectId": 14,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "C=0 M=90 Y=85 K=0",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0,
+        "m": 0.9000000357627869,
+        "y": 0.8499999642372131,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#ff1926"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 8,
+      "objectId": 16,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "C=0 M=80 Y=95 K=0",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0,
+        "m": 0.800000011920929,
+        "y": 0.949999988079071,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#ff330d"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 9,
+      "objectId": 18,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "C=0 M=50 Y=100 K=0",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0,
+        "m": 0.5,
+        "y": 1,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#ff8000"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 10,
+      "objectId": 20,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "C=0 M=35 Y=85 K=0",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0,
+        "m": 0.3500000238418579,
+        "y": 0.8499999642372131,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#ffa626"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 11,
+      "objectId": 22,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "C=5 M=0 Y=90 K=0",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.050000011920928955,
+        "m": 0,
+        "y": 0.9000000357627869,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#f2ff19"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 12,
+      "objectId": 24,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "C=20 M=0 Y=100 K=0",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.19999998807907104,
+        "m": 0,
+        "y": 1,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#ccff00"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 13,
+      "objectId": 26,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "C=50 M=0 Y=100 K=0",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.5,
+        "m": 0,
+        "y": 1,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#80ff00"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 14,
+      "objectId": 28,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "C=75 M=0 Y=100 K=0",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.75,
+        "m": 0,
+        "y": 1,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#40ff00"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 15,
+      "objectId": 30,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "C=85 M=10 Y=100 K=10",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.8499999642372131,
+        "m": 0.10000002384185791,
+        "y": 1,
+        "k": 0.10000002384185791,
+        "alpha": 1
+      },
+      "displayHex": "#22cf00"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 16,
+      "objectId": 32,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "C=90 M=30 Y=95 K=30",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.9000000357627869,
+        "m": 0.30000001192092896,
+        "y": 0.949999988079071,
+        "k": 0.30000001192092896,
+        "alpha": 1
+      },
+      "displayHex": "#127d09"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 17,
+      "objectId": 34,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "C=75 M=0 Y=75 K=0",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.75,
+        "m": 0,
+        "y": 0.75,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#40ff40"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 18,
+      "objectId": 36,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "C=80 M=10 Y=45 K=0",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.800000011920929,
+        "m": 0.10000002384185791,
+        "y": 0.44999998807907104,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#33e58c"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 19,
+      "objectId": 38,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "C=70 M=15 Y=0 K=0",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.699999988079071,
+        "m": 0.1499999761581421,
+        "y": 0,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#4dd9ff"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 20,
+      "objectId": 40,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "C=85 M=50 Y=0 K=0",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.8499999642372131,
+        "m": 0.5,
+        "y": 0,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#2680ff"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 21,
+      "objectId": 42,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "C=100 M=95 Y=5 K=0",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 1,
+        "m": 0.949999988079071,
+        "y": 0.050000011920928955,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#000df2"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 22,
+      "objectId": 44,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "C=100 M=100 Y=25 K=25",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 1,
+        "m": 1,
+        "y": 0.25,
+        "k": 0.25,
+        "alpha": 1
+      },
+      "displayHex": "#00008f"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 23,
+      "objectId": 46,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "C=75 M=100 Y=0 K=0",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.75,
+        "m": 1,
+        "y": 0,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#4000ff"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 24,
+      "objectId": 48,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "C=50 M=100 Y=0 K=0",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.5,
+        "m": 1,
+        "y": 0,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#8000ff"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 25,
+      "objectId": 50,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "C=35 M=100 Y=35 K=10",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.3500000238418579,
+        "m": 1,
+        "y": 0.3500000238418579,
+        "k": 0.10000002384185791,
+        "alpha": 1
+      },
+      "displayHex": "#950095"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 26,
+      "objectId": 52,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "C=10 M=100 Y=50 K=0",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.10000002384185791,
+        "m": 1,
+        "y": 0.5,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#e50080"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 27,
+      "objectId": 54,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "C=0 M=95 Y=20 K=0",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0,
+        "m": 0.949999988079071,
+        "y": 0.19999998807907104,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#ff0dcc"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 28,
+      "objectId": 56,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "C=25 M=25 Y=40 K=0",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.25,
+        "m": 0.25,
+        "y": 0.3999999761581421,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#bfbf99"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 29,
+      "objectId": 58,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "C=40 M=45 Y=50 K=5",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.3999999761581421,
+        "m": 0.44999998807907104,
+        "y": 0.5,
+        "k": 0.050000011920928955,
+        "alpha": 1
+      },
+      "displayHex": "#918579"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 30,
+      "objectId": 60,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "C=50 M=50 Y=60 K=25",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.5,
+        "m": 0.5,
+        "y": 0.6000000238418579,
+        "k": 0.25,
+        "alpha": 1
+      },
+      "displayHex": "#60604c"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 31,
+      "objectId": 62,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "C=55 M=60 Y=65 K=40",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.550000011920929,
+        "m": 0.6000000238418579,
+        "y": 0.6499999761581421,
+        "k": 0.3999999761581421,
+        "alpha": 1
+      },
+      "displayHex": "#453d36"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 32,
+      "objectId": 64,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "C=25 M=40 Y=65 K=0",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.25,
+        "m": 0.3999999761581421,
+        "y": 0.6499999761581421,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#bf9959"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 33,
+      "objectId": 66,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "C=30 M=50 Y=75 K=10",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.30000001192092896,
+        "m": 0.5,
+        "y": 0.75,
+        "k": 0.10000002384185791,
+        "alpha": 1
+      },
+      "displayHex": "#a17339"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 34,
+      "objectId": 68,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "C=35 M=60 Y=80 K=25",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.3500000238418579,
+        "m": 0.6000000238418579,
+        "y": 0.800000011920929,
+        "k": 0.25,
+        "alpha": 1
+      },
+      "displayHex": "#7c4c26"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 35,
+      "objectId": 70,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "C=40 M=65 Y=90 K=35",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.3999999761581421,
+        "m": 0.6499999761581421,
+        "y": 0.9000000357627869,
+        "k": 0.3500000238418579,
+        "alpha": 1
+      },
+      "displayHex": "#633a11"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 36,
+      "objectId": 72,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "C=40 M=70 Y=100 K=50",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.3999999761581421,
+        "m": 0.699999988079071,
+        "y": 1,
+        "k": 0.5,
+        "alpha": 1
+      },
+      "displayHex": "#4d2600"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 37,
+      "objectId": 74,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "C=50 M=70 Y=80 K=70",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.5,
+        "m": 0.699999988079071,
+        "y": 0.800000011920929,
+        "k": 0.699999988079071,
+        "alpha": 1
+      },
+      "displayHex": "#26170f"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 38,
+      "objectId": 76,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "Denimstone washed",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.6499999761581421,
+        "m": 0.3199999928474426,
+        "y": 0.04999999701976776,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#59adf2"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 39,
+      "objectId": 78,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "Denim ",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.44999998807907104,
+        "m": 0.11999999731779099,
+        "y": 0.03999999910593033,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#8ce0f5"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 40,
+      "objectId": 80,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "Poison",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.30000001192092896,
+        "m": 0,
+        "y": 0.949999988079071,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#b2ff0d"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 41,
+      "objectId": 82,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "Poison light",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.17999999225139618,
+        "m": 0,
+        "y": 0.8899999856948853,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#d1ff1c"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 42,
+      "objectId": 84,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "4220 Sweet Dream",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.5099999904632568,
+        "m": 0.7899999618530273,
+        "y": 0,
+        "k": 0.04999999701976776,
+        "alpha": 1
+      },
+      "displayHex": "#7733f2"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 43,
+      "objectId": 86,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "Neues Farbfeld 1",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0,
+        "m": 0,
+        "y": 0,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#ffffff"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 44,
+      "objectId": 88,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "Shrimp dark",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0,
+        "m": 0.6000000238418579,
+        "y": 0.5799999833106995,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#ff666b"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 45,
+      "objectId": 90,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "Shrimp pastell",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0,
+        "m": 0.5,
+        "y": 0.429999977350235,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#ff8091"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 46,
+      "objectId": 92,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "8070 salmon",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0,
+        "m": 0.44999998807907104,
+        "y": 0.41999998688697815,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#ff8c94"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 47,
+      "objectId": 94,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "fluor 1000 flour flash yellow",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.04999999701976776,
+        "m": 0,
+        "y": 1,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#f2ff00"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 48,
+      "objectId": 96,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "100% Cyan",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.800000011920929,
+        "m": 0,
+        "y": 0.20000000298023224,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#33ffcc"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 49,
+      "objectId": 98,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "8430 Make up",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.11999999731779099,
+        "m": 0.3499999940395355,
+        "y": 0.4000000059604645,
+        "k": 0.04999999701976776,
+        "alpha": 1
+      },
+      "displayHex": "#d59d91"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 50,
+      "objectId": 100,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "8200 manila green",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.5600000023841858,
+        "m": 0.4099999964237213,
+        "y": 0.6499999761581421,
+        "k": 0.03999999910593033,
+        "alpha": 1
+      },
+      "displayHex": "#6c9056"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 51,
+      "objectId": 102,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "White",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0,
+        "m": 0,
+        "y": 0,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#ffffff"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 52,
+      "objectId": 88,
+      "aliasOfObjectId": 88
+    }
+  },
+  {
+    "label": "C=0 M=0 Y=0 K=100",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0,
+        "m": 0,
+        "y": 0,
+        "k": 1,
+        "alpha": 1
+      },
+      "displayHex": "#000000"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 53,
+      "objectId": 0,
+      "aliasOfObjectId": 0
+    }
+  },
+  {
+    "label": "C=0 M=0 Y=0 K=90",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0,
+        "m": 0,
+        "y": 0,
+        "k": 0.8999940156936646,
+        "alpha": 1
+      },
+      "displayHex": "#1a1a1a"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 54,
+      "objectId": 104,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "C=0 M=0 Y=0 K=80",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0,
+        "m": 0,
+        "y": 0,
+        "k": 0.7999879717826843,
+        "alpha": 1
+      },
+      "displayHex": "#333333"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 55,
+      "objectId": 106,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "C=0 M=0 Y=0 K=70",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0,
+        "m": 0,
+        "y": 0,
+        "k": 0.6999970078468323,
+        "alpha": 1
+      },
+      "displayHex": "#4d4d4d"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 56,
+      "objectId": 108,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "C=0 M=0 Y=0 K=60",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0,
+        "m": 0,
+        "y": 0,
+        "k": 0.5999910235404968,
+        "alpha": 1
+      },
+      "displayHex": "#666666"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 57,
+      "objectId": 110,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "C=0 M=0 Y=0 K=50",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0,
+        "m": 0,
+        "y": 0,
+        "k": 0.5,
+        "alpha": 1
+      },
+      "displayHex": "#808080"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 58,
+      "objectId": 112,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "C=0 M=0 Y=0 K=40",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0,
+        "m": 0,
+        "y": 0,
+        "k": 0.39999401569366455,
+        "alpha": 1
+      },
+      "displayHex": "#999999"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 59,
+      "objectId": 114,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "C=0 M=0 Y=0 K=30",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0,
+        "m": 0,
+        "y": 0,
+        "k": 0.2999880313873291,
+        "alpha": 1
+      },
+      "displayHex": "#b3b3b3"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 60,
+      "objectId": 116,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "C=0 M=0 Y=0 K=20",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0,
+        "m": 0,
+        "y": 0,
+        "k": 0.19999700784683228,
+        "alpha": 1
+      },
+      "displayHex": "#cccccc"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 61,
+      "objectId": 118,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "C=0 M=0 Y=0 K=10",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0,
+        "m": 0,
+        "y": 0,
+        "k": 0.09999102354049683,
+        "alpha": 1
+      },
+      "displayHex": "#e6e6e6"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 62,
+      "objectId": 120,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "C=0 M=0 Y=0 K=5",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0,
+        "m": 0,
+        "y": 0,
+        "k": 0.0499880313873291,
+        "alpha": 1
+      },
+      "displayHex": "#f2f2f2"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 63,
+      "objectId": 122,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "C=0 M=100 Y=100 K=0",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0,
+        "m": 1,
+        "y": 1,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#ff0000"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 64,
+      "objectId": 124,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "C=0 M=75 Y=100 K=0",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0,
+        "m": 0.75,
+        "y": 1,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#ff4000"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 65,
+      "objectId": 126,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "C=0 M=10 Y=95 K=0",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0,
+        "m": 0.10000002384185791,
+        "y": 0.949999988079071,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#ffe50d"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 66,
+      "objectId": 128,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "C=85 M=10 Y=100 K=0",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.8499999642372131,
+        "m": 0.10000002384185791,
+        "y": 1,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#26e500"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 67,
+      "objectId": 130,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "C=100 M=90 Y=0 K=0",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 1,
+        "m": 0.9000000357627869,
+        "y": 0,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#0019ff"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 68,
+      "objectId": 132,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "C=60 M=90 Y=0 K=0",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.6000000238418579,
+        "m": 0.9000000357627869,
+        "y": 0.000030994415283203125,
+        "k": 0.000030994415283203125,
+        "alpha": 1
+      },
+      "displayHex": "#6619ff"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 69,
+      "objectId": 134,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK1005 Smash137's Yellow ",
+    "code": "BLK1005",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0,
+        "m": 0.04000002145767212,
+        "y": 0.5,
+        "k": 0.06000000238418579,
+        "alpha": 1
+      },
+      "displayHex": "#f0e678"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 70,
+      "objectId": 136,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK 1010 Easter Yellow",
+    "code": "BLK 1010",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0,
+        "m": 0.06999999284744263,
+        "y": 0.6800000071525574,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#ffed52"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 71,
+      "objectId": 138,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK1025 Kicking Yellow",
+    "code": "BLK1025",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0,
+        "m": 0.12000000476837158,
+        "y": 0.9300000071525574,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#ffe012"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 72,
+      "objectId": 140,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK1030 Yellow",
+    "code": "BLK1030",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0,
+        "m": 0.26999998092651367,
+        "y": 1,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#ffba00"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 73,
+      "objectId": 142,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK1045 Melon Yellow",
+    "code": "BLK1045",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0,
+        "m": 0.3999999761581421,
+        "y": 1,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#ff9900"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 74,
+      "objectId": 144,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK1050 Topaz",
+    "code": "BLK1050",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.1499999761581421,
+        "m": 0.5699999928474426,
+        "y": 1,
+        "k": 0.029999971389770508,
+        "alpha": 1
+      },
+      "displayHex": "#d26a00"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 75,
+      "objectId": 146,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK1060 Hazle",
+    "code": "BLK1060",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.32999998331069946,
+        "m": 0.800000011920929,
+        "y": 0.9199999570846558,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#ab3314"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 76,
+      "objectId": 148,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK1070 Peacan Nut",
+    "code": "BLK1070",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.2799999713897705,
+        "m": 0.800000011920929,
+        "y": 0.75,
+        "k": 0.5399999618530273,
+        "alpha": 1
+      },
+      "displayHex": "#54171d"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 77,
+      "objectId": 150,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK1080 Maroon",
+    "code": "BLK1080",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.550000011920929,
+        "m": 0.949999988079071,
+        "y": 1,
+        "k": 0.5,
+        "alpha": 1
+      },
+      "displayHex": "#390600"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 78,
+      "objectId": 152,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK1110 Indian Spice",
+    "code": "BLK1110",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.0273439884185791,
+        "m": 0.3199999928474426,
+        "y": 1,
+        "k": 0.1132810115814209,
+        "alpha": 1
+      },
+      "displayHex": "#dc9a00"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 79,
+      "objectId": 154,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK1120 Masala",
+    "code": "BLK1120",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.32999998331069946,
+        "m": 0.36000001430511475,
+        "y": 0.9700009822845459,
+        "k": 0.039994001388549805,
+        "alpha": 1
+      },
+      "displayHex": "#a49d07"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 80,
+      "objectId": 156,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK1130 Delhi",
+    "code": "BLK1130",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.31999701261520386,
+        "m": 0.3999999761581421,
+        "y": 1,
+        "k": 0.19999998807907104,
+        "alpha": 1
+      },
+      "displayHex": "#8b7a00"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 81,
+      "objectId": 158,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK1140 Bombay",
+    "code": "BLK1140",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.29803895950317383,
+        "m": 0.4235290288925171,
+        "y": 0.7882350087165833,
+        "k": 0.550000011920929,
+        "alpha": 1
+      },
+      "displayHex": "#514218"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 82,
+      "objectId": 160,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK2060 Juice",
+    "code": "BLK2060",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0,
+        "m": 0.44999998807907104,
+        "y": 0.9000000357627869,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#ff8c19"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 83,
+      "objectId": 162,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK2070 Clockwork Orange",
+    "code": "BLK2070",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0,
+        "m": 0.6000000238418579,
+        "y": 0.9699999690055847,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#ff6608"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 84,
+      "objectId": 164,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK2075 Pure Orange",
+    "code": "BLK2075",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0,
+        "m": 0.7199999690055847,
+        "y": 1,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#ff4700"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 85,
+      "objectId": 166,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK2085 Halloween",
+    "code": "BLK2085",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0,
+        "m": 0.800000011920929,
+        "y": 1,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#ff3300"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 86,
+      "objectId": 168,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK2093 Code Red",
+    "code": "BLK2093",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0,
+        "m": 1,
+        "y": 1,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#ff0000"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 87,
+      "objectId": 124,
+      "aliasOfObjectId": 124
+    }
+  },
+  {
+    "label": "BLK2110 Tomorrow",
+    "code": "BLK2110",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0,
+        "m": 0.550000011920929,
+        "y": 0.75,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#ff7340"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 88,
+      "objectId": 170,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK2120 Atom's Megablast",
+    "code": "BLK2120",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0,
+        "m": 0.699999988079071,
+        "y": 0.9000000357627869,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#ff4d19"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 89,
+      "objectId": 172,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK3020 Fire Rose",
+    "code": "BLK3020",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.10000002384185791,
+        "m": 1,
+        "y": 1,
+        "k": 0.13999998569488525,
+        "alpha": 1
+      },
+      "displayHex": "#c50000"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 90,
+      "objectId": 174,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK3062 Cardinal",
+    "code": "BLK3062",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.17000001668930054,
+        "m": 1,
+        "y": 0.5699999928474426,
+        "k": 0.6000000238418579,
+        "alpha": 1
+      },
+      "displayHex": "#55002c"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 91,
+      "objectId": 176,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK3065 Merlot",
+    "code": "BLK3065",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.550000011920929,
+        "m": 0.9000000357627869,
+        "y": 0.800000011920929,
+        "k": 0.6499999761581421,
+        "alpha": 1
+      },
+      "displayHex": "#280912"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 92,
+      "objectId": 178,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK3070 Cherry",
+    "code": "BLK3070",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.7099999785423279,
+        "m": 1,
+        "y": 0.5299999713897705,
+        "k": 0.6599999666213989,
+        "alpha": 1
+      },
+      "displayHex": "#190029"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 93,
+      "objectId": 180,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK3080 Winegum",
+    "code": "BLK3080",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.10000002384185791,
+        "m": 1,
+        "y": 0,
+        "k": 0.800000011920929,
+        "alpha": 1
+      },
+      "displayHex": "#2e0033"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 94,
+      "objectId": 182,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK3100 Miss Piggy",
+    "code": "BLK3100",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0,
+        "m": 0.3799999952316284,
+        "y": 0.0899999737739563,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#ff9ee8"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 95,
+      "objectId": 184,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK3120 Pink Cadillac",
+    "code": "BLK3120",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0,
+        "m": 0.5699999928474426,
+        "y": 0.06000000238418579,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#ff6ef0"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 96,
+      "objectId": 186,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK3130 Pink Panther",
+    "code": "BLK3130",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0,
+        "m": 0.8299999833106995,
+        "y": 0.06999999284744263,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#ff2bed"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 97,
+      "objectId": 188,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK3145 Punk Pink",
+    "code": "BLK3145",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.23000001907348633,
+        "m": 1,
+        "y": 0.3500000238418579,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#c400a6"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 98,
+      "objectId": 190,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK3148 Beast",
+    "code": "BLK3148",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0,
+        "m": 0.8499999642372131,
+        "y": 0,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#ff26ff"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 99,
+      "objectId": 192,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK3150 Freak",
+    "code": "BLK3150",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.12000000476837158,
+        "m": 1,
+        "y": 0.01373302936553955,
+        "k": 0.07999998331069946,
+        "alpha": 1
+      },
+      "displayHex": "#ce00e7"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 100,
+      "objectId": 194,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK3155 Purple Rain",
+    "code": "BLK3155",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.4700000286102295,
+        "m": 1,
+        "y": 0.25,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#8700bf"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 101,
+      "objectId": 196,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK3160 Good Times",
+    "code": "BLK3160",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.18000000715255737,
+        "m": 1,
+        "y": 0.06000000238418579,
+        "k": 0.18000000715255737,
+        "alpha": 1
+      },
+      "displayHex": "#ab00c5"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 102,
+      "objectId": 198,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK3170 Imperator",
+    "code": "BLK3170",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.30000001192092896,
+        "m": 0.949999988079071,
+        "y": 0.3500000238418579,
+        "k": 0.3999999761581421,
+        "alpha": 1
+      },
+      "displayHex": "#6b0863"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 103,
+      "objectId": 200,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK3200 Cocktail",
+    "code": "BLK3200",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0,
+        "m": 0.5,
+        "y": 0.4299999475479126,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#ff8091"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 104,
+      "objectId": 202,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK3220 Mr. Crab",
+    "code": "BLK3220",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0,
+        "m": 0.5,
+        "y": 0.4299999475479126,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#ff8091"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 105,
+      "objectId": 202,
+      "aliasOfObjectId": 202
+    }
+  },
+  {
+    "label": "BLK3240 Sushi",
+    "code": "BLK3240",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0,
+        "m": 0.6000000238418579,
+        "y": 0.5799999833106995,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#ff666b"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 106,
+      "objectId": 90,
+      "aliasOfObjectId": 90
+    }
+  },
+  {
+    "label": "BLK3305 Patpong",
+    "code": "BLK3305",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.0039060115814208984,
+        "m": 0.44999998807907104,
+        "y": 0.1899999976158142,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#fe8ccf"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 107,
+      "objectId": 204,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK3310 Pink Lemonade",
+    "code": "BLK3310",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0,
+        "m": 0.6800000071525574,
+        "y": 0.3700000047683716,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#ff52a1"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 108,
+      "objectId": 206,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK3320 Lollipop",
+    "code": "BLK3320",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0,
+        "m": 0.8299999833106995,
+        "y": 0.44999998807907104,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#ff2b8c"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 109,
+      "objectId": 208,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK3330 Bloody Mary",
+    "code": "BLK3330",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.26999998092651367,
+        "m": 1,
+        "y": 0.699999988079071,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#ba004d"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 110,
+      "objectId": 210,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK3920 Illusion",
+    "code": "BLK3920",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.41999995708465576,
+        "m": 0.9099999666213989,
+        "y": 0,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#9417ff"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 111,
+      "objectId": 212,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK3940 Magic",
+    "code": "BLK3940",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.26999998092651367,
+        "m": 0.6699999570846558,
+        "y": 0,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#ba54ff"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 112,
+      "objectId": 214,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK3995 Bubble Bath",
+    "code": "BLK3995",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.25,
+        "m": 0.3999999761581421,
+        "y": 0.07999998331069946,
+        "k": 0.000030994415283203125,
+        "alpha": 1
+      },
+      "displayHex": "#bf99eb"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 113,
+      "objectId": 216,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK4000 Ms. Jackson",
+    "code": "BLK4000",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.3199999928474426,
+        "m": 0.5,
+        "y": 0,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#ad80ff"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 114,
+      "objectId": 218,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK4020 Monster",
+    "code": "BLK4020",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.5099999904632568,
+        "m": 0.7899999618530273,
+        "y": 0,
+        "k": 0.050000011920928955,
+        "alpha": 1
+      },
+      "displayHex": "#7733f2"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 115,
+      "objectId": 220,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK4040 Pimp Violet",
+    "code": "BLK4040",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.6499999761581421,
+        "m": 0.9399999976158142,
+        "y": 0,
+        "k": 0.1499999761581421,
+        "alpha": 1
+      },
+      "displayHex": "#4c0dd9"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 116,
+      "objectId": 222,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK4060 Galaxy",
+    "code": "BLK4060",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.6000000238418579,
+        "m": 0.949999988079071,
+        "y": 0,
+        "k": 0.5600000023841858,
+        "alpha": 1
+      },
+      "displayHex": "#2d0670"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 117,
+      "objectId": 224,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK4115 Lavender",
+    "code": "BLK4115",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.36000001430511475,
+        "m": 0.3500000238418579,
+        "y": 0.050000011920928955,
+        "k": 0.029999971389770508,
+        "alpha": 1
+      },
+      "displayHex": "#9ea1eb"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 118,
+      "objectId": 226,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK4130 Blue Velvet",
+    "code": "BLK4130",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.4700000286102295,
+        "m": 0.4700000286102295,
+        "y": 0.050000011920928955,
+        "k": 0.04000002145767212,
+        "alpha": 1
+      },
+      "displayHex": "#8282e9"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 119,
+      "objectId": 228,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK4155 Royal Purple",
+    "code": "BLK4155",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.699999988079071,
+        "m": 0.699999988079071,
+        "y": 0,
+        "k": 0.050000011920928955,
+        "alpha": 1
+      },
+      "displayHex": "#4949f2"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 120,
+      "objectId": 230,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK4160 Wizard",
+    "code": "BLK4160",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.7899999618530273,
+        "m": 0.8399999737739563,
+        "y": 0.06999999284744263,
+        "k": 0.04000002145767212,
+        "alpha": 1
+      },
+      "displayHex": "#3327e4"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 121,
+      "objectId": 232,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK4182 Universe",
+    "code": "BLK4182",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 1,
+        "m": 1,
+        "y": 0,
+        "k": 0.6800000071525574,
+        "alpha": 1
+      },
+      "displayHex": "#000052"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 122,
+      "objectId": 234,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK4210 Gut",
+    "code": "BLK4210",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.3799999952316284,
+        "m": 0.41999995708465576,
+        "y": 0.30000001192092896,
+        "k": 0.019999980926513672,
+        "alpha": 1
+      },
+      "displayHex": "#9b91af"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 123,
+      "objectId": 236,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK4230 Kidney",
+    "code": "BLK4230",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.3999999761581421,
+        "m": 0.5,
+        "y": 0.28999996185302734,
+        "k": 0.30000001192092896,
+        "alpha": 1
+      },
+      "displayHex": "#6b597f"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 124,
+      "objectId": 238,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK4250 Liver",
+    "code": "BLK4250",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.550000011920929,
+        "m": 0.6499999761581421,
+        "y": 0.3799999952316284,
+        "k": 0.3500000238418579,
+        "alpha": 1
+      },
+      "displayHex": "#4b3a67"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 125,
+      "objectId": 240,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK4260 Dummy",
+    "code": "BLK4260",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.12000000476837158,
+        "m": 0.3500000238418579,
+        "y": 0.1499999761581421,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#e0a6d9"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 126,
+      "objectId": 242,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK4280 Plum",
+    "code": "BLK4280",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.25,
+        "m": 0.6000000238418579,
+        "y": 0.3199999928474426,
+        "k": 0.12000000476837158,
+        "alpha": 1
+      },
+      "displayHex": "#a85a99"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 127,
+      "objectId": 244,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK4290 Amethyst",
+    "code": "BLK4290",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.44999998807907104,
+        "m": 0.8299999833106995,
+        "y": 0.5,
+        "k": 0.3799999952316284,
+        "alpha": 1
+      },
+      "displayHex": "#571b4f"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 128,
+      "objectId": 246,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK4310 Edelgard",
+    "code": "BLK4310",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.20999997854232788,
+        "m": 0.12999999523162842,
+        "y": 0.07999998331069946,
+        "k": 0.029999971389770508,
+        "alpha": 1
+      },
+      "displayHex": "#c3d7e4"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 129,
+      "objectId": 248,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK4320 Brunhilde",
+    "code": "BLK4320",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.3999999761581421,
+        "m": 0.25999999046325684,
+        "y": 0.050000011920928955,
+        "k": 0.029999971389770508,
+        "alpha": 1
+      },
+      "displayHex": "#94b7eb"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 130,
+      "objectId": 250,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK4330 Waltraut",
+    "code": "BLK4330",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.6000000238418579,
+        "m": 0.4099999666213989,
+        "y": 0,
+        "k": 0.050000011920928955,
+        "alpha": 1
+      },
+      "displayHex": "#618ff2"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 131,
+      "objectId": 252,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK4340 Irmgard",
+    "code": "BLK4340",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.7699999809265137,
+        "m": 0.6699999570846558,
+        "y": 0.029999971389770508,
+        "k": 0.050000011920928955,
+        "alpha": 1
+      },
+      "displayHex": "#3850eb"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 132,
+      "objectId": 254,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK5020 Baby Blue",
+    "code": "BLK5020",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.5700010061264038,
+        "m": 0,
+        "y": 0.029999971389770508,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#6efff7"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 133,
+      "objectId": 256,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK5030 Light Blue",
+    "code": "BLK5030",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.8499999642372131,
+        "m": 0.0899999737739563,
+        "y": 0.06999999284744263,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#26e8ed"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 134,
+      "objectId": 258,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK5070 Horizon",
+    "code": "BLK5070",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.9799999594688416,
+        "m": 0.44999998807907104,
+        "y": 0,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#058cff"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 135,
+      "objectId": 260,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK5077 Royal Blue",
+    "code": "BLK5077",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.9799999594688416,
+        "m": 0.6699999570846558,
+        "y": 0,
+        "k": 0.17000001668930054,
+        "alpha": 1
+      },
+      "displayHex": "#0446d4"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 136,
+      "objectId": 262,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK5080 Ultramarine",
+    "code": "BLK5080",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 1,
+        "m": 0.75,
+        "y": 0,
+        "k": 0.4099999666213989,
+        "alpha": 1
+      },
+      "displayHex": "#002696"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 137,
+      "objectId": 264,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK5092 Dark Indigo",
+    "code": "BLK5092",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 1,
+        "m": 0.5899999737739563,
+        "y": 0,
+        "k": 0.8199999928474426,
+        "alpha": 1
+      },
+      "displayHex": "#00132e"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 138,
+      "objectId": 266,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK5125 Dove",
+    "code": "BLK5125",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.2799999713897705,
+        "m": 0,
+        "y": 0.12999999523162842,
+        "k": 0.26999998092651367,
+        "alpha": 1
+      },
+      "displayHex": "#86baa2"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 139,
+      "objectId": 268,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK5140 Seal",
+    "code": "BLK5140",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.4299999475479126,
+        "m": 0.029999971389770508,
+        "y": 0.11000001430511475,
+        "k": 0.699999988079071,
+        "alpha": 1
+      },
+      "displayHex": "#2c4a44"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 140,
+      "objectId": 270,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK5160 Space",
+    "code": "BLK5160",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.6000000238418579,
+        "m": 0.25,
+        "y": 0.1499999761581421,
+        "k": 0.7699999809265137,
+        "alpha": 1
+      },
+      "displayHex": "#172c32"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 141,
+      "objectId": 272,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK5180 Trout",
+    "code": "BLK5180",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.3500000238418579,
+        "m": 0.12000000476837158,
+        "y": 0.04000002145767212,
+        "k": 0.19999998807907104,
+        "alpha": 1
+      },
+      "displayHex": "#85b4c4"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 142,
+      "objectId": 274,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK5185 Marlin",
+    "code": "BLK5185",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.5600000023841858,
+        "m": 0.2799999713897705,
+        "y": 0.050000011920928955,
+        "k": 0.3999999761581421,
+        "alpha": 1
+      },
+      "displayHex": "#436e91"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 143,
+      "objectId": 276,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK5190 Whale",
+    "code": "BLK5190",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.6899999976158142,
+        "m": 0.3100000023841858,
+        "y": 0,
+        "k": 0.6399999856948853,
+        "alpha": 1
+      },
+      "displayHex": "#1c3f5c"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 144,
+      "objectId": 278,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK5200 Ice Blue",
+    "code": "BLK5200",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.26999998092651367,
+        "m": 0.06000000238418579,
+        "y": 0.029999971389770508,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#baf0f7"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 145,
+      "objectId": 280,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK5210 Lenor",
+    "code": "BLK5210",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.44999998807907104,
+        "m": 0.12000000476837158,
+        "y": 0.04000002145767212,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#8ce0f5"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 146,
+      "objectId": 282,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK5230 Blue Lagoon",
+    "code": "BLK5230",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.6499999761581421,
+        "m": 0.3199999928474426,
+        "y": 0.050000011920928955,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#59adf2"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 147,
+      "objectId": 284,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK5250 Knock Out Blue",
+    "code": "BLK5250",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 1,
+        "m": 0.6200000047683716,
+        "y": 0.019999980926513672,
+        "k": 0.050000011920928955,
+        "alpha": 1
+      },
+      "displayHex": "#005ced"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 148,
+      "objectId": 286,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK5270 Sorrento Blue",
+    "code": "BLK5270",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 1,
+        "m": 0.800000011920929,
+        "y": 0.19999998807907104,
+        "k": 0.10000002384185791,
+        "alpha": 1
+      },
+      "displayHex": "#002eb8"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 149,
+      "objectId": 288,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK6000 Pistachio",
+    "code": "BLK6000",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.18000000715255737,
+        "m": 0,
+        "y": 0.8899999856948853,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#d1ff1c"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 150,
+      "objectId": 290,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK6005 Acid",
+    "code": "BLK6005",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.30000001192092896,
+        "m": 0,
+        "y": 0.949999988079071,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#b2ff0d"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 151,
+      "objectId": 82,
+      "aliasOfObjectId": 82
+    }
+  },
+  {
+    "label": "BLK6010 Slimer",
+    "code": "BLK6010",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.4299999475479126,
+        "m": 0,
+        "y": 1,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#91ff00"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 152,
+      "objectId": 292,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK6012 Oasis",
+    "code": "BLK6012",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.41999995708465576,
+        "m": 0.2200000286102295,
+        "y": 0.949999988079071,
+        "k": 0.06999999284744263,
+        "alpha": 1
+      },
+      "displayHex": "#8ab90c"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 153,
+      "objectId": 294,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK6013 Spring",
+    "code": "BLK6013",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.25,
+        "m": 0,
+        "y": 0.6800000071525574,
+        "k": 0.04000002145767212,
+        "alpha": 1
+      },
+      "displayHex": "#b8f54e"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 154,
+      "objectId": 296,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK6015 Wild Lime",
+    "code": "BLK6015",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.3799999952316284,
+        "m": 0,
+        "y": 0.9300000071525574,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#9eff12"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 155,
+      "objectId": 298,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK6045 Irish Green",
+    "code": "BLK6045",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.7099999785423279,
+        "m": 0,
+        "y": 1,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#4aff00"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 156,
+      "objectId": 300,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK6055 Boston",
+    "code": "BLK6055",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.9199999570846558,
+        "m": 0.25,
+        "y": 1,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#14bf00"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 157,
+      "objectId": 302,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK6060 Celtic",
+    "code": "BLK6060",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.949999988079071,
+        "m": 0.3500000238418579,
+        "y": 1,
+        "k": 0.32999998331069946,
+        "alpha": 1
+      },
+      "displayHex": "#096f00"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 158,
+      "objectId": 304,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK6065 Banknote",
+    "code": "BLK6065",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 1,
+        "m": 0.19999998807907104,
+        "y": 1,
+        "k": 0.75,
+        "alpha": 1
+      },
+      "displayHex": "#003300"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 159,
+      "objectId": 306,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK6070 TAG Green",
+    "code": "BLK6070",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 1,
+        "m": 0.30000001192092896,
+        "y": 1,
+        "k": 0.8499999642372131,
+        "alpha": 1
+      },
+      "displayHex": "#001b00"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 160,
+      "objectId": 308,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK6075 Hippie",
+    "code": "BLK6075",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.550000011920929,
+        "m": 0,
+        "y": 0.699999988079071,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#73ff4d"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 161,
+      "objectId": 310,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK6080 Mesaline",
+    "code": "BLK6080",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.699999988079071,
+        "m": 0,
+        "y": 0.75,
+        "k": 0.050000011920928955,
+        "alpha": 1
+      },
+      "displayHex": "#49f23d"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 162,
+      "objectId": 312,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK6090 Woodstock",
+    "code": "BLK6090",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.9099999666213989,
+        "m": 0,
+        "y": 0.9000000357627869,
+        "k": 0.10000002384185791,
+        "alpha": 1
+      },
+      "displayHex": "#15e517"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 163,
+      "objectId": 314,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK6095 Plant",
+    "code": "BLK6095",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.9099999666213989,
+        "m": 0,
+        "y": 1,
+        "k": 0.3500000238418579,
+        "alpha": 1
+      },
+      "displayHex": "#0fa600"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 164,
+      "objectId": 316,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK6110 Tiffany",
+    "code": "BLK6110",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.5299999713897705,
+        "m": 0,
+        "y": 0.24000000953674316,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#78ffc2"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 165,
+      "objectId": 318,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK6130 Cool Cologne",
+    "code": "BLK6130",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.7299999594688416,
+        "m": 0,
+        "y": 0.2799999713897705,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#45ffb8"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 166,
+      "objectId": 320,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK6150 Mermaid",
+    "code": "BLK6150",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 1,
+        "m": 0.050000011920928955,
+        "y": 0.3999999761581421,
+        "k": 0.18000000715255737,
+        "alpha": 1
+      },
+      "displayHex": "#00c77d"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 167,
+      "objectId": 322,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK6170 Neptune",
+    "code": "BLK6170",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 1,
+        "m": 0.25,
+        "y": 0.3500000238418579,
+        "k": 0.6699999570846558,
+        "alpha": 1
+      },
+      "displayHex": "#003f37"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 168,
+      "objectId": 324,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK6175 Riffs",
+    "code": "BLK6175",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 1,
+        "m": 0.30000001192092896,
+        "y": 0.3999999761581421,
+        "k": 0.800000011920929,
+        "alpha": 1
+      },
+      "displayHex": "#00241f"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 169,
+      "objectId": 326,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK6180 Drops",
+    "code": "BLK6180",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.549767017364502,
+        "m": 0,
+        "y": 0.24000000953674316,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#73ffc2"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 170,
+      "objectId": 328,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK6190 Nappies",
+    "code": "BLK6190",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.7400000095367432,
+        "m": 0,
+        "y": 0.3400000333786011,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#42ffa8"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 171,
+      "objectId": 330,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK6195 Surgery",
+    "code": "BLK6195",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.9000000357627869,
+        "m": 0,
+        "y": 0.48000001907348633,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#19ff85"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 172,
+      "objectId": 332,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK6210 E2E Green",
+    "code": "BLK6210",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.4700000286102295,
+        "m": 0,
+        "y": 0.5199999809265137,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#87ff7a"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 173,
+      "objectId": 334,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK6220 Revolt Green",
+    "code": "BLK6220",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.699999988079071,
+        "m": 0,
+        "y": 0.800000011920929,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#4dff33"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 174,
+      "objectId": 336,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK6240 Atlantis",
+    "code": "BLK6240",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 1,
+        "m": 0.15999996662139893,
+        "y": 0.6800000071525574,
+        "k": 0.07999998331069946,
+        "alpha": 1
+      },
+      "displayHex": "#00c54b"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 175,
+      "objectId": 338,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK6310 Olymp",
+    "code": "BLK6310",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.2200000286102295,
+        "m": 0,
+        "y": 0.2200000286102295,
+        "k": 0.07999998331069946,
+        "alpha": 1
+      },
+      "displayHex": "#b7ebb7"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 176,
+      "objectId": 340,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK6320 Hope",
+    "code": "BLK6320",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.37300002574920654,
+        "m": 0.0040000081062316895,
+        "y": 0.3140000104904175,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#a0feaf"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 177,
+      "objectId": 342,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK6330 Patina",
+    "code": "BLK6330",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.6299999952316284,
+        "m": 0.029999971389770508,
+        "y": 0.4700000286102295,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#5ef787"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 178,
+      "objectId": 344,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK6340 Copper Green",
+    "code": "BLK6340",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.9000000357627869,
+        "m": 0.25,
+        "y": 0.6399999856948853,
+        "k": 0.18000000715255737,
+        "alpha": 1
+      },
+      "displayHex": "#159d4b"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 179,
+      "objectId": 346,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK6410 Trabi",
+    "code": "BLK6410",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.1499999761581421,
+        "m": 0.050000011920928955,
+        "y": 0.25,
+        "k": 0.10000002384185791,
+        "alpha": 1
+      },
+      "displayHex": "#c3daac"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 180,
+      "objectId": 348,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK6420 Beetle",
+    "code": "BLK6420",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.25,
+        "m": 0.07999998331069946,
+        "y": 0.44999998807907104,
+        "k": 0.10000002384185791,
+        "alpha": 1
+      },
+      "displayHex": "#acd37e"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 181,
+      "objectId": 350,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK6430 Reseda",
+    "code": "BLK6430",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.3500000238418579,
+        "m": 0.1499999761581421,
+        "y": 0.5299999713897705,
+        "k": 0.1499999761581421,
+        "alpha": 1
+      },
+      "displayHex": "#8db866"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 182,
+      "objectId": 352,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK6510 Fog",
+    "code": "BLK6510",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.3400000333786011,
+        "m": 0.1499999761581421,
+        "y": 0.36000001430511475,
+        "k": 0.12999999523162842,
+        "alpha": 1
+      },
+      "displayHex": "#92bd8e"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 183,
+      "objectId": 354,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK6520 Mist",
+    "code": "BLK6520",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.44999998807907104,
+        "m": 0.18000000715255737,
+        "y": 0.3999999761581421,
+        "k": 0.3199999928474426,
+        "alpha": 1
+      },
+      "displayHex": "#5f8e68"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 184,
+      "objectId": 356,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK6530 Storm",
+    "code": "BLK6530",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.6499999761581421,
+        "m": 0.38999998569488525,
+        "y": 0.699999988079071,
+        "k": 0.38999998569488525,
+        "alpha": 1
+      },
+      "displayHex": "#365f2f"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 185,
+      "objectId": 358,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK6610 Bamboo",
+    "code": "BLK6610",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.18000000715255737,
+        "m": 0.12999999523162842,
+        "y": 0.550000011920929,
+        "k": 0.06999999284744263,
+        "alpha": 1
+      },
+      "displayHex": "#c2ce6b"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 186,
+      "objectId": 360,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK6620 Hemp",
+    "code": "BLK6620",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.4399999976158142,
+        "m": 0.3999999761581421,
+        "y": 0.8499999642372131,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#8f9926"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 187,
+      "objectId": 362,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK6625 Boa",
+    "code": "BLK6625",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.5299999713897705,
+        "m": 0.4299999475479126,
+        "y": 0.949999988079071,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#78910d"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 188,
+      "objectId": 364,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK6630 Pan",
+    "code": "BLK6630",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.550000011920929,
+        "m": 0.5799999833106995,
+        "y": 0.800000011920929,
+        "k": 0.25,
+        "alpha": 1
+      },
+      "displayHex": "#565026"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 189,
+      "objectId": 366,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK6710 Pear Green",
+    "code": "BLK6710",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.3500000238418579,
+        "m": 0.1899999976158142,
+        "y": 0.9199999570846558,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#a6cf14"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 190,
+      "objectId": 368,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK6720 Lost Island",
+    "code": "BLK6720",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.6499999761581421,
+        "m": 0.38999998569488525,
+        "y": 1,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#599c00"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 191,
+      "objectId": 370,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK6725 Troops",
+    "code": "BLK6725",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.5,
+        "m": 0.30000001192092896,
+        "y": 0.9000000357627869,
+        "k": 0.550000011920929,
+        "alpha": 1
+      },
+      "displayHex": "#39500b"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 192,
+      "objectId": 372,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK6730 Toad",
+    "code": "BLK6730",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.8199999928474426,
+        "m": 0.5799999833106995,
+        "y": 1,
+        "k": 0.48000001907348633,
+        "alpha": 1
+      },
+      "displayHex": "#183800"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 193,
+      "objectId": 374,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK6905 Face",
+    "code": "BLK6905",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.19999998807907104,
+        "m": 0.1499999761581421,
+        "y": 0.3500000238418579,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#ccd9a6"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 194,
+      "objectId": 376,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK6910 Hannibal",
+    "code": "BLK6910",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.3999999761581421,
+        "m": 0.25,
+        "y": 0.5,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#99bf80"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 195,
+      "objectId": 378,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK6920 Murdock",
+    "code": "BLK6920",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.5600000023841858,
+        "m": 0.4099999666213989,
+        "y": 0.6499999761581421,
+        "k": 0.04000002145767212,
+        "alpha": 1
+      },
+      "displayHex": "#6c9056"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 196,
+      "objectId": 380,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK6930 B.A Bosko",
+    "code": "BLK6930",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.6000000238418579,
+        "m": 0.5,
+        "y": 0.7400000095367432,
+        "k": 0.6200000047683716,
+        "alpha": 1
+      },
+      "displayHex": "#273019"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 197,
+      "objectId": 382,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK7010 Jaws",
+    "code": "BLK7010",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.06999999284744263,
+        "m": 0.029999971389770508,
+        "y": 0.0899999737739563,
+        "k": 0.050000011920928955,
+        "alpha": 1
+      },
+      "displayHex": "#e1ebdc"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 198,
+      "objectId": 384,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK7030 Mouse",
+    "code": "BLK7030",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.050000011920928955,
+        "m": 0.050000011920928955,
+        "y": 0.11000001430511475,
+        "k": 0.30000001192092896,
+        "alpha": 1
+      },
+      "displayHex": "#aaaa9f"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 199,
+      "objectId": 386,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK7050 Shark",
+    "code": "BLK7050",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.24000000953674316,
+        "m": 0.10000002384185791,
+        "y": 0.2200000286102295,
+        "k": 0.4700000286102295,
+        "alpha": 1
+      },
+      "displayHex": "#677a69"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 200,
+      "objectId": 388,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK7070 Rhino",
+    "code": "BLK7070",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.23000001907348633,
+        "m": 0.050000011920928955,
+        "y": 0.19999998807907104,
+        "k": 0.7299999594688416,
+        "alpha": 1
+      },
+      "displayHex": "#354137"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 201,
+      "objectId": 390,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK7080 Ant",
+    "code": "BLK7080",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.5199999809265137,
+        "m": 0.5099999904632568,
+        "y": 0.5,
+        "k": 0.6200000047683716,
+        "alpha": 1
+      },
+      "displayHex": "#2f2f30"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 202,
+      "objectId": 392,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK7110 Gambetta",
+    "code": "BLK7110",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.10000002384185791,
+        "m": 0.13999998569488525,
+        "y": 0.25,
+        "k": 0.19999998807907104,
+        "alpha": 1
+      },
+      "displayHex": "#b8af99"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 203,
+      "objectId": 394,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK7120 Lennox",
+    "code": "BLK7120",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.24000000953674316,
+        "m": 0.25999999046325684,
+        "y": 0.3400000333786011,
+        "k": 0.30000001192092896,
+        "alpha": 1
+      },
+      "displayHex": "#888476"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 204,
+      "objectId": 396,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK7130 Lambrate",
+    "code": "BLK7130",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.3400000333786011,
+        "m": 0.3500000238418579,
+        "y": 0.3999999761581421,
+        "k": 0.4099999666213989,
+        "alpha": 1
+      },
+      "displayHex": "#63625a"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 205,
+      "objectId": 398,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK7140 Industriilor",
+    "code": "BLK7140",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.5,
+        "m": 0.5799999833106995,
+        "y": 0.6000000238418579,
+        "k": 0.5699999928474426,
+        "alpha": 1
+      },
+      "displayHex": "#372e2c"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 206,
+      "objectId": 400,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK7210 Houdini",
+    "code": "BLK7210",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.36000001430511475,
+        "m": 0.3199999928474426,
+        "y": 0.25999999046325684,
+        "k": 0.0899999737739563,
+        "alpha": 1
+      },
+      "displayHex": "#959eac"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 207,
+      "objectId": 402,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK7220 Morpheus",
+    "code": "BLK7220",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.49000000953674316,
+        "m": 0.44999998807907104,
+        "y": 0.3500000238418579,
+        "k": 0.1499999761581421,
+        "alpha": 1
+      },
+      "displayHex": "#6f778d"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 208,
+      "objectId": 404,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK7230 Nostradamus",
+    "code": "BLK7230",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.6599999666213989,
+        "m": 0.6100000143051147,
+        "y": 0.4700000286102295,
+        "k": 0.28999996185302734,
+        "alpha": 1
+      },
+      "displayHex": "#3e4760"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 209,
+      "objectId": 406,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK7320 Ghetto",
+    "code": "BLK7320",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.10000002384185791,
+        "m": 0.10000002384185791,
+        "y": 0.12000000476837158,
+        "k": 0.3999999761581421,
+        "alpha": 1
+      },
+      "displayHex": "#8a8a87"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 210,
+      "objectId": 408,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK7340 Dumbo",
+    "code": "BLK7340",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.1499999761581421,
+        "m": 0.1499999761581421,
+        "y": 0.19999998807907104,
+        "k": 0.6000000238418579,
+        "alpha": 1
+      },
+      "displayHex": "#575752"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 211,
+      "objectId": 410,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK7360 Slate",
+    "code": "BLK7360",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.19999998807907104,
+        "m": 0.25,
+        "y": 0.25,
+        "k": 0.8299999833106995,
+        "alpha": 1
+      },
+      "displayHex": "#232121"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 212,
+      "objectId": 412,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK8000 Ivory",
+    "code": "BLK8000",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.06000000238418579,
+        "m": 0.07999998331069946,
+        "y": 0.2799999713897705,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#f0ebb8"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 213,
+      "objectId": 414,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK8010 Sand",
+    "code": "BLK8010",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.30000001192092896,
+        "m": 0.4299999475479126,
+        "y": 0.7599999904632568,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#b2913d"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 214,
+      "objectId": 416,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK8020 Beige",
+    "code": "BLK8020",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.18000000715255737,
+        "m": 0.28999996185302734,
+        "y": 0.5399999618530273,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#d1b575"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 215,
+      "objectId": 418,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK8030 Skin",
+    "code": "BLK8030",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.12000000476837158,
+        "m": 0.3500000238418579,
+        "y": 0.3999999761581421,
+        "k": 0.050000011920928955,
+        "alpha": 1
+      },
+      "displayHex": "#d59d91"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 216,
+      "objectId": 420,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK8040 Cremino",
+    "code": "BLK8040",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.17000001668930054,
+        "m": 0.4299999475479126,
+        "y": 0.550000011920929,
+        "k": 0.10000002384185791,
+        "alpha": 1
+      },
+      "displayHex": "#be8367"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 217,
+      "objectId": 422,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK8050 Frappé",
+    "code": "BLK8050",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.23000001907348633,
+        "m": 0.5,
+        "y": 0.6000000238418579,
+        "k": 0.24000000953674316,
+        "alpha": 1
+      },
+      "displayHex": "#95614e"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 218,
+      "objectId": 424,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK8060 Chocolate",
+    "code": "BLK8060",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.4700000286102295,
+        "m": 0.6699999570846558,
+        "y": 0.800000011920929,
+        "k": 0.3199999928474426,
+        "alpha": 1
+      },
+      "displayHex": "#5c3923"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 219,
+      "objectId": 426,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK8070 Jawa",
+    "code": "BLK8070",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.6000000238418579,
+        "m": 0.9000000357627869,
+        "y": 0.9000000357627869,
+        "k": 0.550000011920929,
+        "alpha": 1
+      },
+      "displayHex": "#2e0b0b"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 220,
+      "objectId": 428,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK8080 Rust",
+    "code": "BLK8080",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.44999998807907104,
+        "m": 0.9399999976158142,
+        "y": 0.8700000047683716,
+        "k": 0.10000002384185791,
+        "alpha": 1
+      },
+      "displayHex": "#7e0e1e"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 221,
+      "objectId": 430,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK8110 arabian",
+    "code": "BLK8110",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.19999998807907104,
+        "m": 0.2799999713897705,
+        "y": 0.550000011920929,
+        "k": 0.12000000476837158,
+        "alpha": 1
+      },
+      "displayHex": "#b4a265"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 222,
+      "objectId": 432,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK8120 Gobi",
+    "code": "BLK8120",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.2200000286102295,
+        "m": 0.3100000023841858,
+        "y": 0.550000011920929,
+        "k": 0.24000000953674316,
+        "alpha": 1
+      },
+      "displayHex": "#978657"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 223,
+      "objectId": 434,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK8130 Syrian",
+    "code": "BLK8130",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.2799999713897705,
+        "m": 0.38999998569488525,
+        "y": 0.6299999952316284,
+        "k": 0.3500000238418579,
+        "alpha": 1
+      },
+      "displayHex": "#77653d"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 224,
+      "objectId": 436,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK8210 After",
+    "code": "BLK8210",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.38999998569488525,
+        "m": 0.6000000238418579,
+        "y": 0.6000000238418579,
+        "k": 0.10000002384185791,
+        "alpha": 1
+      },
+      "displayHex": "#8c5c5c"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 225,
+      "objectId": 438,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK8220 Snail",
+    "code": "BLK8220",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0,
+        "m": 0.44999998807907104,
+        "y": 0.41999995708465576,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#ff8c94"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 226,
+      "objectId": 440,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK8230 Koi",
+    "code": "BLK8230",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0,
+        "m": 0.8499999642372131,
+        "y": 0.8499999642372131,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#ff2626"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 227,
+      "objectId": 442,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK8240 Falling",
+    "code": "BLK8240",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.19999998807907104,
+        "m": 0.9000000357627869,
+        "y": 0.949999988079071,
+        "k": 0.1499999761581421,
+        "alpha": 1
+      },
+      "displayHex": "#ad160b"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 228,
+      "objectId": 444,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK8250 Candy Bar",
+    "code": "BLK8250",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.5,
+        "m": 0.75,
+        "y": 0.75,
+        "k": 0.3199999928474426,
+        "alpha": 1
+      },
+      "displayHex": "#572b2b"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 229,
+      "objectId": 446,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK8260 Mud",
+    "code": "BLK8260",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.5,
+        "m": 0.8499999642372131,
+        "y": 0.75,
+        "k": 0.6000000238418579,
+        "alpha": 1
+      },
+      "displayHex": "#330f19"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 230,
+      "objectId": 448,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK9001 Black",
+    "code": "BLK9001",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.6499999761581421,
+        "m": 0.44999998807907104,
+        "y": 0.44999998807907104,
+        "k": 1,
+        "alpha": 1
+      },
+      "displayHex": "#000000"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 231,
+      "objectId": 450,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK9100 Snow White",
+    "code": "BLK9100",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0,
+        "m": 0,
+        "y": 0,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#ffffff"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 232,
+      "objectId": 88,
+      "aliasOfObjectId": 88
+    }
+  },
+  {
+    "label": "BLK9105 White",
+    "code": "BLK9105",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.029999971389770508,
+        "m": 0,
+        "y": 0.050000011920928955,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#f7fff2"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 233,
+      "objectId": 452,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK TR1000 True Yellow",
+    "code": "BLK TR1000",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.050000011920928955,
+        "m": 0,
+        "y": 1,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#f2ff00"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 234,
+      "objectId": 454,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK TR1010 50% True Yellow",
+    "code": "BLK TR1010",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0,
+        "m": 0,
+        "y": 0.6399999856948853,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#ffff5c"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 235,
+      "objectId": 456,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK TR4000 True Magenta",
+    "code": "BLK TR4000",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.06000000238418579,
+        "m": 1,
+        "y": 0.25,
+        "k": 0.06000000238418579,
+        "alpha": 1
+      },
+      "displayHex": "#e100b4"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 236,
+      "objectId": 458,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK TR4010 50% True Magenta",
+    "code": "BLK TR4010",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.050000011920928955,
+        "m": 0.699999988079071,
+        "y": 0.1499999761581421,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#f24dd9"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 237,
+      "objectId": 460,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK TR5000 True Cyan",
+    "code": "BLK TR5000",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.800000011920929,
+        "m": 0,
+        "y": 0.19999998807907104,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#33ffcc"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 238,
+      "objectId": 462,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK TR5010 50% True Cyan",
+    "code": "BLK TR5010",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.5,
+        "m": 0,
+        "y": 0.17000001668930054,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#80ffd4"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 239,
+      "objectId": 464,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK P1000 Power Yellow",
+    "code": "BLK P1000",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0,
+        "m": 0.12000000476837158,
+        "y": 1,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#ffe000"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 240,
+      "objectId": 466,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK P2000 Power Orange",
+    "code": "BLK P2000",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0,
+        "m": 0.7299999594688416,
+        "y": 1,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#ff4500"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 241,
+      "objectId": 468,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK P3000 Power Red",
+    "code": "BLK P3000",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.009999990463256836,
+        "m": 0.9300000071525574,
+        "y": 1,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#fc1200"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 242,
+      "objectId": 470,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK P4000 Power Pink",
+    "code": "BLK P4000",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0,
+        "m": 0.8299999833106995,
+        "y": 0,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#ff2bff"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 243,
+      "objectId": 472,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK P4100 Power Violet",
+    "code": "BLK P4100",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.9699999690055847,
+        "m": 0.9699999690055847,
+        "y": 0.1499999761581421,
+        "k": 0.3500000238418579,
+        "alpha": 1
+      },
+      "displayHex": "#05058d"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 244,
+      "objectId": 474,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK P5000 Power Blue",
+    "code": "BLK P5000",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 1,
+        "m": 0.6499999761581421,
+        "y": 0,
+        "k": 0.050000011920928955,
+        "alpha": 1
+      },
+      "displayHex": "#0055f2"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 245,
+      "objectId": 476,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK P6000 Power Green",
+    "code": "BLK P6000",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.6499999761581421,
+        "m": 0,
+        "y": 0.9799999594688416,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#59ff05"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 246,
+      "objectId": 478,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK IN1000 Infra Yellow",
+    "code": "BLK IN1000",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.07999998331069946,
+        "m": 0,
+        "y": 0.800000011920929,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#ebff33"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 247,
+      "objectId": 480,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK IN2000 Infra Orange",
+    "code": "BLK IN2000",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0,
+        "m": 0.5,
+        "y": 0.8499999642372131,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#ff8026"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 248,
+      "objectId": 482,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK IN3000 Infra Red",
+    "code": "BLK IN3000",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0,
+        "m": 0.8499999642372131,
+        "y": 0.9000000357627869,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#ff2619"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 249,
+      "objectId": 484,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK IN4000 Infra Pink",
+    "code": "BLK IN4000",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0,
+        "m": 1,
+        "y": 0.19999998807907104,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#ff00cc"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 250,
+      "objectId": 486,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK IN4500 Infra Violet",
+    "code": "BLK IN4500",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.6000000238418579,
+        "m": 0.800000011920929,
+        "y": 0.050000011920928955,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#6633f2"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 251,
+      "objectId": 488,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "BLK IN6000 Infra Green",
+    "code": "BLK IN6000",
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.550000011920929,
+        "m": 0,
+        "y": 0.800000011920929,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#73ff33"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 252,
+      "objectId": 490,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "Goldchrome",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.5000079870223999,
+        "m": 0.5799949765205383,
+        "y": 0.8200049996376038,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#7f6b2e"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 253,
+      "objectId": 492,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "Copperchrome",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0.5799949765205383,
+        "m": 0.7400010228157043,
+        "y": 0.6899979710578918,
+        "k": 0,
+        "alpha": 1
+      },
+      "displayHex": "#6b424f"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 254,
+      "objectId": 494,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "Silverchrome",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0,
+        "m": 0,
+        "y": 0,
+        "k": 0.14999599754810333,
+        "alpha": 1
+      },
+      "displayHex": "#d9d9d9"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 255,
+      "objectId": 496,
+      "aliasOfObjectId": null
+    }
+  },
+  {
+    "label": "Outline Silver",
+    "code": null,
+    "color": {
+      "model": "CMYK",
+      "components": {
+        "c": 0,
+        "m": 0,
+        "y": 0,
+        "k": 0.1499999761581421,
+        "alpha": 1
+      },
+      "displayHex": "#d9d9d9"
+    },
+    "source": {
+      "palette": "black-400ml",
+      "file": "BLACK 400ML 187 COLORS.afpalette",
+      "index": 256,
+      "objectId": 498,
+      "aliasOfObjectId": null
+    }
+  }
+]
