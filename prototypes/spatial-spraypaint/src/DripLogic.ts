@@ -20,6 +20,7 @@ export interface DripSeed {
   tipWidthRatio?: number;
   originPoolRadius?: number;
   terminalBulbRatio?: number;
+  renderAsOverlay?: boolean;
 }
 
 export interface DripStripSection {
@@ -60,7 +61,13 @@ export function resolveDripStripSection(
   const tangentLength = Math.max(0.0001, Math.hypot(tangentX, tangentY));
   const normal = { x: -tangentY / tangentLength, y: tangentX / tangentLength };
   const tipWidthRatio = drip.tipWidthRatio ?? 0.58;
-  const width = Math.max(0.8, drip.width * (1 - (1 - tipWidthRatio) * safeProgress));
+  const stemWidth = drip.width * (1 - (1 - tipWidthRatio) * safeProgress);
+  const shoulderWidth = drip.renderAsOverlay && drip.originPoolRadius
+    ? Math.max(stemWidth, drip.originPoolRadius * 2)
+    : stemWidth;
+  const shoulderProgress = Math.min(1, safeProgress / 0.18);
+  const shoulderBlend = 1 - shoulderProgress * shoulderProgress * (3 - shoulderProgress * 2);
+  const width = Math.max(0.8, stemWidth + (shoulderWidth - stemWidth) * shoulderBlend);
   return {
     progress: safeProgress,
     center,
@@ -73,10 +80,12 @@ export function resolveDripStripSection(
 export function buildContinuousDripStrip(
   drip: DripSeed,
   segmentCount = 12,
+  endProgress = 1,
 ): DripStripSection[] {
   const count = Math.max(2, Math.floor(segmentCount));
+  const safeEndProgress = Math.min(1, Math.max(0, endProgress));
   return Array.from({ length: count + 1 }, (_, index) =>
-    resolveDripStripSection(drip, index / count));
+    resolveDripStripSection(drip, (index / count) * safeEndProgress));
 }
 
 export class DripAccumulator {

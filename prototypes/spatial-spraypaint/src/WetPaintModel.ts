@@ -238,6 +238,7 @@ export class WetPaintAccumulator {
         tipWidthRatio: profile.tipWidthRatio,
         originPoolRadius: width * profile.originPoolRatio,
         terminalBulbRatio: this.variant === "drip-mop" ? 0.58 : 0.48,
+        renderAsOverlay: this.variant === "mop" || this.variant === "drip-mop",
       });
     }
     return drips;

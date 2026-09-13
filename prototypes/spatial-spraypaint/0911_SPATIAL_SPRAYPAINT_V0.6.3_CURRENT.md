@@ -107,15 +107,17 @@ The controls appear only inside the existing Marker/Nib chooser when Mop or Drip
 
 Direct threshold, length, width, and dwell knobs are not separately exposed in V0.6.3; their authority is already represented by the two compact physical controls and can be extended later without a second wet model.
 
-## Wet Attachment And Travel Fidelity Follow-Up
+## Mop Geometry Layer Separation
 
-A bounded reference pass corrected the remaining Drippy Chisel attachment gap and reduced Mop travel lumpiness without changing Spray:
+The final failure-reference pass corrected the architectural source of the bone/spiky body, circular drip nodes, and repeated run bands without changing Spray or Chisel:
 
-- Drippy Chisel origins now begin inside the narrowest possible chisel contact edge. A larger deterministic origin pool overlaps both the opaque source mark and the first connected-run section, so the gravity run cannot begin across an empty gap.
-- Mop and Drip Mop now use a stable round-nib travel scale. Reservoir load no longer changes width continuously during ordinary movement; high-load bulge is concentrated at slow/paused contact, while the existing round start/end and bounded joint geometry remain authoritative.
-- Mop, Drip Mop, and Drippy Chisel received modestly longer base/range profiles. The existing Viscosity control remains the user-facing short/long run authority.
-- Origin pools are wider, and some seeded runs receive one subtle localized lateral kink. Kink amount and position are stored in the same canonical `DripSeed`, remain connected to the gravity strip, resolve identically during replay, and return to the seeded terminal bend rather than producing a detached branch.
-- Existing rounded terminal bulbs, width presets, mixed-tool history, Undo/Clear restoration, Physical/Hand routing, navigation, recording, and Spray deposition remain unchanged.
+- Mop and Drip Mop base marks are now one constant-width round-nib tube. Preset size and Mop variant determine base width; reservoir load and travel speed do not modify that base geometry.
+- Each base stroke has one round start cap, continuous filled ribbon segments, bounded round joins, and one round end cap. Ordinary travel no longer receives wet edge streaks or repeated wet stamps.
+- Wet contact is a separate overlay. Only stationary high-load contact can add a small local swelling; drip-origin swelling is owned by the drip geometry rather than the base tube.
+- Mop drip origins are a flared first section of the connected gravity strip, not a circular pool stamp. The flare narrows smoothly into the stem while remaining attached inside the stroke edge.
+- Growing Mop drips are redrawn as one continuous transient strip on a dedicated overlay canvas, then committed once when complete. This prevents frame-by-frame translucent strip edges from accumulating as periodic horizontal bands while keeping the final composite recordable.
+- A deterministic gradient begins at opaque stroke color and eases into the configured drip opacity. Existing rounded terminal bulbs and occasional stored kinks remain intact.
+- Drippy Chisel retains its previously verified attached origin behavior unchanged. Width presets, mixed-tool history, Undo/Clear restoration, Physical/Hand routing, navigation, recording, and Spray deposition also remain unchanged.
 
 ## Calibration Color Palette
 
@@ -137,19 +139,19 @@ MacBook field testing continues to show that a neutral/white ring light near the
 
 ## Automated Verification
 
-- Focused wet geometry/model/history/renderer tests: PASS — 48/48.
-- Final `npm test`: PASS — 33 test files, 199/199 tests.
-- Final `npm run build`: PASS — TypeScript and Vite production build; 40 modules transformed.
+- Focused wet geometry/model/history/renderer/composition tests: PASS — 58/58.
+- Final `npm test`: PASS — 34 test files, 200/200 tests.
+- Final `npm run build`: PASS — TypeScript and Vite production build; 41 modules transformed.
 
-Coverage includes continuous connected drip-strip geometry, thicker parent origin and retained tip, restrained bend, less-extreme taper, long-run distribution, deterministic replay, bounded origin pool, Flow and Viscosity mapping, smoothed wet-contact width, absence of intermediate wet-disc stamping, Mop/Drip Mop differentiation, dwell/load gain, speed drain, multiple origins, restrained non-Mop routing, mixed-color wet history, exact Clear restoration, palette/recent-color state, shared cursor geometry, all required zoom scales, raw Hand aim separation, Chisel clean initialization, Clean Chisel selection/contact, corner bounds, and all retained navigation/input/audio/recording/composition tests.
+Coverage includes a load/speed-independent Mop base tube, sparse dwell-only wet swelling, flared node-free Mop origins, continuous transient full-strip redraw, opaque-to-drip gradient transition, connected deterministic kink geometry, retained rounded tips, Flow and Viscosity mapping, Mop/Drip Mop differentiation, dwell/load gain, speed drain, multiple origins, restrained non-Mop routing, mixed-color wet history, exact Clear restoration, palette/recent-color state, shared cursor geometry, all required zoom scales, raw Hand aim separation, Chisel initialization/contact, corner bounds, and all retained navigation/input/audio/recording/composition tests.
 
 ## Current-Host Browser Validation
 
 Passed in the current in-app browser with Physical input where automation permits:
 
 - V0.6.3 loaded in the preserved compact shell with no console warnings or errors;
-- a fresh Drip Mop curve rendered as a smooth, even round-nib travel band with clean rounded contact ends;
-- a held Drippy Chisel sample emitted a long gravity run whose pooled origin visibly overlapped the source mark with no detached gap;
+- straight and curved Drip Mop travel rendered as a clean, constant-width round-nib tube with smooth joins and clean rounded contact ends;
+- a controlled High/Runny Drip Mop dwell emitted a long gravity run from a subtle flared edge shoulder with no circular origin node and no visible horizontal construction bands;
 - Color opened one 238px temporary surface rather than a persistent strip;
 - StudioRich, 12-color Montana fallback, and 12-color BLACK fallback palette states switched successfully;
 - repeated dark/light/saturated selections updated the cursor and active marks, while two recent colors persisted;
@@ -169,7 +171,7 @@ Passed in the current in-app browser with Physical input where automation permit
 - cursor geometry scaled exactly at 25%, 100%, and 400% in live DOM measurements (17.479px, 69.916px, and 279.664px for the same Drip Mop contact); and
 - recording entered and exited the active state around a Physical mark without an application error.
 
-The browser automation surface compresses pointer timing and does not provide a reliable held-pointer dwell gesture. High/Runny attempts verified straight and curved wet bodies but did not produce a trustworthy human-timed live run. Clean underside emergence, stable progressive-run opacity, longer connected-run form, dwell/flow thresholds, Drippy Chisel frequency, and replay are therefore proven deterministically but not claimed as visually live-verified on this host. Modified-wheel zoom and held-Space Pan were also not re-proven through this automation surface; their retained deterministic suites pass. No local soundtrack file was loaded in this V0.6.3 browser pass, so existing music mixing is regression-tested but not newly live-claimed.
+The browser automation surface compresses pointer timing. It produced one controlled High/Runny Mop run suitable for checking attachment, origin shape, gradient continuity, and band-free rendering, but it is not evidence for human dwell timing or natural drip frequency. Those timing judgments, Drippy Chisel frequency, and Hand behavior remain MacBook checks. Modified-wheel zoom and held-Space Pan were also not re-proven through this pass; their retained deterministic suites pass. No local soundtrack file was loaded, so existing music mixing is regression-tested but not newly live-claimed.
 
 ## MacBook Manual Validation Checklist
 

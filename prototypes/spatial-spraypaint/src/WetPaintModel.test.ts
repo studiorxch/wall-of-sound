@@ -89,6 +89,7 @@ describe("wet paint load authority", () => {
     expect(average(dripMopDrips.map(({ width }) => width))).toBeGreaterThan(average(mopDrips.map(({ width }) => width)) * 1.5);
     expect(average(dripMopDrips.map(({ length }) => length))).toBeGreaterThan(average(mopDrips.map(({ length }) => length)) * 2);
     expect(dripMopDrips.every(({ originPoolRadius, tipWidthRatio }) => Boolean(originPoolRadius) && Boolean(tipWidthRatio))).toBe(true);
+    expect(dripMopDrips.every(({ renderAsOverlay }) => renderAsOverlay)).toBe(true);
     expect(dripMopDrips.every(({ bend, length }) => Math.abs(bend ?? 0) <= length * 0.028)).toBe(true);
     expect(dripMopDrips.every(({ width }) => width > 10)).toBe(true);
   });
@@ -177,5 +178,6 @@ describe("wet paint load authority", () => {
       y - 20 <= size * 0.15
       && y - (originPoolRadius ?? 0) < 20 + size * 0.15
     ))).toBe(true);
+    expect(drips.every(({ renderAsOverlay }) => !renderAsOverlay)).toBe(true);
   });
 });

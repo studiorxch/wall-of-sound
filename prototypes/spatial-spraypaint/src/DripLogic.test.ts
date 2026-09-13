@@ -88,4 +88,12 @@ describe("continuous wet drip geometry", () => {
     })).toBe(true);
     expect(strip.every((section, index) => index === 0 || section.center.y >= strip[index - 1].center.y)).toBe(true);
   });
+
+  it("blends a Mop origin shoulder into one continuous strip without a node", () => {
+    const strip = buildContinuousDripStrip({ ...wetDrip, renderAsOverlay: true }, 20);
+    expect(strip[0].width).toBe((wetDrip.originPoolRadius ?? 0) * 2);
+    expect(strip[4].width).toBeLessThan(strip[0].width);
+    expect(strip[strip.length - 1].width).toBeCloseTo(wetDrip.width * wetDrip.tipWidthRatio);
+    expect(strip.every((section, index) => index === 0 || section.center.y >= strip[index - 1].center.y)).toBe(true);
+  });
 });

@@ -102,6 +102,8 @@ class SpatialSpraypaintApp {
   private readonly compositeCtx: CanvasRenderingContext2D;
   private readonly paintCanvas: HTMLCanvasElement;
   private readonly paintCtx: CanvasRenderingContext2D;
+  private readonly wetOverlayCanvas: HTMLCanvasElement;
+  private readonly wetOverlayCtx: CanvasRenderingContext2D;
 
   private readonly strokeManager = new CanonicalStrokeManager();
   private readonly strokeSmoother = new StrokeSmoother();
@@ -170,6 +172,8 @@ class SpatialSpraypaintApp {
     this.compositeCtx = this.compositeCanvas.getContext("2d")!;
     this.paintCanvas = document.createElement("canvas");
     this.paintCtx = this.paintCanvas.getContext("2d")!;
+    this.wetOverlayCanvas = document.createElement("canvas");
+    this.wetOverlayCtx = this.wetOverlayCanvas.getContext("2d")!;
     this.commandRegistry = new CommandRegistry({
       undo: () => this.undoLastStroke(),
       clear: () => this.clearAllStrokes(),
@@ -221,6 +225,8 @@ class SpatialSpraypaintApp {
       this.compositeCanvas.height = window.innerHeight;
       this.paintCanvas.width = window.innerWidth;
       this.paintCanvas.height = window.innerHeight;
+      this.wetOverlayCanvas.width = window.innerWidth;
+      this.wetOverlayCanvas.height = window.innerHeight;
       this.toolRenderer.resize(window.innerWidth, window.innerHeight);
       this.replayStrokes(this.strokeHistory.snapshot());
       this.refreshDrawingCursor();
@@ -1611,10 +1617,27 @@ class SpatialSpraypaintApp {
       }
       this.advanceHandEdgeMotion(now, deltaMs);
       this.depositActivePoint(now);
-      this.withWallPaintTransform(() => this.toolRenderer.advanceDrips(this.paintCtx, now));
+      this.wetOverlayCtx.setTransform(1, 0, 0, 1, 0, 0);
+      this.wetOverlayCtx.clearRect(0, 0, this.wetOverlayCanvas.width, this.wetOverlayCanvas.height);
+      this.wetOverlayCtx.save();
+      this.wetOverlayCtx.setTransform(
+        this.wallView.zoom,
+        0,
+        0,
+        this.wallView.zoom,
+        this.wallView.panX,
+        this.wallView.panY,
+      );
+      this.withWallPaintTransform(() => this.toolRenderer.advanceDrips(
+        this.paintCtx,
+        now,
+        this.wetOverlayCtx,
+      ));
+      this.wetOverlayCtx.restore();
       this.compositeCtx.clearRect(0, 0, this.compositeCanvas.width, this.compositeCanvas.height);
       this.renderWallBackground();
       this.compositeCtx.drawImage(this.paintCanvas, 0, 0);
+      this.compositeCtx.drawImage(this.wetOverlayCanvas, 0, 0);
       requestAnimationFrame(render);
     };
     requestAnimationFrame(render);

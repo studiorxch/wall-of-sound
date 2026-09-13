@@ -6,11 +6,8 @@ import {
   getMarkerVariant,
   resolveMarkerGeometry,
   resolveMarkerCurveCornerAngle,
-  resolveWetMarkerBodyScale,
-  insetWetEdgePoint,
-  shouldUseRoundedWetJoin,
+  resolveWetContactBulgeScale,
   smoothMarkerDirection,
-  smoothWetContactWidth,
   smoothWetMarkerDirection,
 } from "./PaintMarkerEngine";
 import { type StrokePoint } from "./types";
@@ -160,34 +157,37 @@ describe("Paint Marker renderer", () => {
     expect(resolveMarkerGeometry("round", point(0, 0), point(30, 0, 4)).width).toBeGreaterThan(25);
   });
 
-  it("separates Mop and Drip Mop load, width, edge passes, and drip authority", () => {
+  it("keeps each Mop base tube independent from load and travel speed", () => {
     const slow = resolveMarkerGeometry("mop", point(0, 0), point(1, 0, 0.1));
     const fast = resolveMarkerGeometry("mop", point(0, 0), point(50, 0, 4));
+    const loaded = resolveMarkerGeometry("mop", point(0, 0), { ...point(1, 0, 0.1), paintLoad: 1 });
     const dripMop = resolveMarkerGeometry("drip-mop", point(0, 0), { ...point(1, 0, 0.1), paintLoad: 0.9 });
-    expect(slow.width).toBeGreaterThan(fast.width);
-    expect(slow.passCount).toBe(3);
+    expect(slow.width).toBe(fast.width);
+    expect(slow.width).toBe(loaded.width);
+    expect(slow.passCount).toBe(1);
     expect(dripMop.width).toBeGreaterThan(slow.width);
-    expect(dripMop.passCount).toBe(4);
+    expect(dripMop.passCount).toBe(1);
     expect(getMarkerVariant("mop").dripTendency).toBeLessThan(getMarkerVariant("drip-mop").dripTendency);
     expect(getMarkerVariant("mop").material).toBe("wet");
     expect(getMarkerVariant("drip-mop").material).toBe("high-flow");
   });
 
-  it("combines a continuous wet body with visible edge streak passes", () => {
+  it("renders one clean Mop ribbon without ordinary-travel wet edge passes", () => {
     const recording = recordingContext();
     const engine = new PaintMarkerEngine();
     engine.beginStroke("drip-mop");
+    engine.renderSegment(recording.ctx, null, { ...point(0, 0), paintLoad: 0.7 }, "#ff0000", "drip-mop");
     engine.renderSegment(
       recording.ctx,
-      { ...point(0, 0), paintLoad: 0.9 },
-      { ...point(50, 4), paintLoad: 0.9 },
+      { ...point(0, 0), paintLoad: 0.7 },
+      { ...point(50, 4), paintLoad: 0.7 },
       "#ff0000",
       "drip-mop",
     );
     engine.endStroke(recording.ctx);
     expect(recording.calls).toContain("fill");
-    expect(recording.calls.filter((call) => call === "stroke")).toHaveLength(3);
-    expect(recording.arcs).toHaveLength(1);
+    expect(recording.calls.filter((call) => call === "stroke")).toHaveLength(0);
+    expect(recording.arcs).toHaveLength(2);
     expect(recording.ellipses).toHaveLength(0);
   });
 
@@ -210,23 +210,16 @@ describe("Paint Marker renderer", () => {
     expect(recording.arcs[1][2]).toBeGreaterThan(15);
   });
 
-  it("does not stamp round contact discs at every wet sample", () => {
+  it("uses one start/end cap and bounded round geometry only at joins", () => {
     const recording = recordingContext();
     const engine = new PaintMarkerEngine();
     engine.beginStroke("drip-mop");
     engine.renderSegment(recording.ctx, null, { ...point(0, 0), paintLoad: 0.9 }, "#ff0000", "drip-mop");
     engine.renderSegment(recording.ctx, point(0, 0), { ...point(20, 2), paintLoad: 0.92 }, "#ff0000", "drip-mop");
     engine.renderSegment(recording.ctx, point(20, 2), { ...point(40, 3), paintLoad: 0.88 }, "#ff0000", "drip-mop");
-    expect(recording.arcs).toHaveLength(1);
-    engine.endStroke(recording.ctx);
     expect(recording.arcs).toHaveLength(2);
-  });
-
-  it("smooths wet contact-width changes into a continuous mop body", () => {
-    expect(smoothWetContactWidth(60, 90, "drip-mop")).toBeLessThan(65);
-    expect(smoothWetContactWidth(60, 30, "drip-mop")).toBeGreaterThan(55);
-    expect(smoothWetContactWidth(60, 90, "mop")).toBeLessThan(66);
-    expect(smoothWetContactWidth(60, 60, "mop")).toBe(60);
+    engine.endStroke(recording.ctx);
+    expect(recording.arcs).toHaveLength(3);
   });
 
   it("smooths Mop direction changes without breaking deterministic curve continuity", () => {
@@ -248,11 +241,7 @@ describe("Paint Marker renderer", () => {
     expect(resolveMarkerCurveCornerAngle("clean-chisel")).toBeUndefined();
   });
 
-  it("uses bounded round geometry for tight wet joins only", () => {
-    expect(shouldUseRoundedWetJoin(0, 0.08)).toBe(false);
-    expect(shouldUseRoundedWetJoin(0, Math.PI * 0.5)).toBe(true);
-    expect(shouldUseRoundedWetJoin(Math.PI * 0.99, -Math.PI * 0.99)).toBe(false);
-
+  it("uses bounded round geometry for wet joins", () => {
     const recording = recordingContext();
     const engine = new PaintMarkerEngine();
     engine.beginStroke("drip-mop");
@@ -264,17 +253,10 @@ describe("Paint Marker renderer", () => {
     expect(recording.arcs[1][2]).toBeLessThanOrEqual(25);
   });
 
-  it("keeps wet edge character inside the body envelope", () => {
-    expect(insetWetEdgePoint({ x: 0, y: -20 }, { x: 0, y: 20 })).toEqual({ x: 0, y: -17.8 });
-    expect(insetWetEdgePoint({ x: 10, y: 0 }, { x: -10, y: 0 }, 1)).toEqual({ x: 5, y: 0 });
-  });
-
-  it("keeps Mop travel width clean while reserving wet bulge for pooled pauses", () => {
-    const movingLowLoad = resolveWetMarkerBodyScale("mop", 0.55, 0.45);
-    const movingHighLoad = resolveWetMarkerBodyScale("mop", 0.95, 0.45);
-    const pausedHighLoad = resolveWetMarkerBodyScale("mop", 0.95, 0);
-    expect(movingHighLoad).toBeCloseTo(movingLowLoad);
-    expect(pausedHighLoad).toBeGreaterThan(movingHighLoad * 1.05);
-    expect(pausedHighLoad).toBeLessThan(movingHighLoad * 1.15);
+  it("keeps wet bulge out of ordinary travel and reserves it for pooled dwell", () => {
+    expect(resolveWetContactBulgeScale(1, 0.45)).toBe(1);
+    expect(resolveWetContactBulgeScale(0.7, 0)).toBe(1);
+    expect(resolveWetContactBulgeScale(1, 0)).toBeGreaterThan(1.08);
+    expect(resolveWetContactBulgeScale(1, 0)).toBeLessThanOrEqual(1.1);
   });
 });

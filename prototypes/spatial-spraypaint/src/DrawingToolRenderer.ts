@@ -5,6 +5,7 @@ import { type SprayCapId } from "./SprayCapPresets";
 import { getSprayCapProfile } from "./SprayCapProfile";
 import { type StrokePoint } from "./types";
 import { type DripSeed } from "./DripLogic";
+import { WetDripEngine } from "./WetDripEngine";
 
 interface BaseToolStrokeStyle {
   color: string;
@@ -19,6 +20,7 @@ export type ToolStrokeStyle = BaseToolStrokeStyle & (
 export class DrawingToolRenderer {
   private readonly spray = new SprayBrushEngine();
   private readonly marker = new PaintMarkerEngine();
+  private readonly wetDrips = new WetDripEngine();
 
   public beginStroke(style: ToolStrokeStyle): void {
     if (style.toolId === "paint-marker") this.marker.beginStroke(style.variantId);
@@ -34,6 +36,7 @@ export class DrawingToolRenderer {
 
   public clear(): void {
     this.spray.clear();
+    this.wetDrips.clear();
     this.marker.endStroke();
   }
 
@@ -65,14 +68,27 @@ export class DrawingToolRenderer {
   }
 
   public startDrip(seed: DripSeed, color: string, now: number): void {
+    if (seed.renderAsOverlay) {
+      this.wetDrips.startDrip(seed, color, now);
+      return;
+    }
     this.spray.startDrip(seed, color, now);
   }
 
-  public advanceDrips(ctx: CanvasRenderingContext2D, now: number): void {
+  public advanceDrips(
+    ctx: CanvasRenderingContext2D,
+    now: number,
+    wetOverlayCtx?: CanvasRenderingContext2D,
+  ): void {
     this.spray.advanceDrips(ctx, now);
+    if (wetOverlayCtx) this.wetDrips.advanceDrips(ctx, wetOverlayCtx, now);
   }
 
   public renderCompletedDrip(ctx: CanvasRenderingContext2D, drip: DripSeed, color: string): void {
+    if (drip.renderAsOverlay) {
+      this.wetDrips.renderCompletedDrip(ctx, drip, color);
+      return;
+    }
     this.spray.renderCompletedDrip(ctx, drip, color);
   }
 }

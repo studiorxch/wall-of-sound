@@ -93,13 +93,13 @@ export function resolveMarkerGeometry(
   }
   if (variantId === "mop" || variantId === "drip-mop") {
     const paintLoad = Math.max(0.22, Math.min(1, point.paintLoad ?? (variantId === "drip-mop" ? 0.68 : 0.54)));
-    const width = baseWidth * resolveWetMarkerBodyScale(variantId, paintLoad, point.velocity);
+    const width = baseWidth * (variantId === "drip-mop" ? 1.32 : 1.18);
     return {
       width,
       opacity: 1,
       direction,
       nibAngle: direction,
-      passCount: variantId === "drip-mop" ? 4 : 3,
+      passCount: 1,
       particleCount: 0,
       paintLoad,
       edgeStreakWidth: Math.max(1.2, width * (0.038 + paintLoad * 0.024)),
@@ -117,19 +117,14 @@ export function resolveMarkerGeometry(
   };
 }
 
-export function resolveWetMarkerBodyScale(
-  variantId: Extract<MarkerVariantId, "mop" | "drip-mop">,
+export function resolveWetContactBulgeScale(
   paintLoad: number,
   velocity: number,
 ): number {
   const safeLoad = Math.max(0.22, Math.min(1, paintLoad));
-  const travelSpeed = Math.min(1, Math.max(0, velocity) / 2);
-  const pauseContact = 1 - Math.min(1, Math.max(0, velocity) / 0.38);
-  const pooledLoad = Math.max(0, (safeLoad - 0.72) / 0.28);
-  const baseScale = variantId === "drip-mop" ? 1.32 : 1.18;
-  const speedScale = 1 - travelSpeed * (variantId === "drip-mop" ? 0.045 : 0.065);
-  const pooledBulge = 1 + pooledLoad * pauseContact * (variantId === "drip-mop" ? 0.13 : 0.1);
-  return baseScale * speedScale * pooledBulge;
+  const dwellContact = 1 - Math.min(1, Math.max(0, velocity) / 0.1);
+  const pooledLoad = Math.max(0, (safeLoad - 0.76) / 0.24);
+  return 1 + pooledLoad * dwellContact * 0.1;
 }
 
 export function buildSweptRibbonSegment(
@@ -164,17 +159,6 @@ export function smoothMarkerDirection(
   return previousDirection + delta * response;
 }
 
-export function smoothWetContactWidth(
-  previousWidth: number,
-  targetWidth: number,
-  variantId: Extract<MarkerVariantId, "mop" | "drip-mop">,
-): number {
-  const response = variantId === "drip-mop" ? 0.24 : 0.3;
-  const maximumStep = Math.max(1, previousWidth * (variantId === "drip-mop" ? 0.075 : 0.09));
-  const requestedStep = (targetWidth - previousWidth) * response;
-  return previousWidth + Math.max(-maximumStep, Math.min(maximumStep, requestedStep));
-}
-
 export function smoothWetMarkerDirection(
   previousDirection: number | null,
   nextDirection: number,
@@ -183,25 +167,6 @@ export function smoothWetMarkerDirection(
   const delta = normalizeAngle(nextDirection - previousDirection);
   const boundedDelta = Math.max(-Math.PI * 0.34, Math.min(Math.PI * 0.34, delta));
   return previousDirection + boundedDelta * 0.42;
-}
-
-export function shouldUseRoundedWetJoin(
-  priorDirection: number,
-  nextDirection: number,
-): boolean {
-  return Math.abs(normalizeAngle(nextDirection - priorDirection)) >= 0.14;
-}
-
-export function insetWetEdgePoint(
-  edge: { x: number; y: number },
-  opposite: { x: number; y: number },
-  inset = 0.055,
-): { x: number; y: number } {
-  const ratio = Math.max(0, Math.min(0.25, inset));
-  return {
-    x: edge.x + (opposite.x - edge.x) * ratio,
-    y: edge.y + (opposite.y - edge.y) * ratio,
-  };
 }
 
 export function buildContinuousJoinPolygon(
@@ -302,17 +267,7 @@ export class PaintMarkerEngine {
         ? smoothWetMarkerDirection(stroke.lastDirection, rawDirection)
       : rawDirection;
     const targetGeometry = resolveMarkerGeometry(variantId, previous, point, direction);
-    const previousWetWidth = previous && wetVariant
-      ? stroke.lastHalfWidth !== null
-        ? stroke.lastHalfWidth * 2
-        : resolveMarkerGeometry(wetVariant, null, previous, direction).width
-      : null;
-    const geometry = previousWetWidth === null || wetVariant === null
-      ? targetGeometry
-      : {
-        ...targetGeometry,
-        width: smoothWetContactWidth(previousWetWidth, targetGeometry.width, wetVariant),
-      };
+    const geometry = targetGeometry;
 
     ctx.save();
     ctx.fillStyle = color;
@@ -332,11 +287,11 @@ export class PaintMarkerEngine {
       const ribbon = buildSweptRibbonSegment(start, point, startHalfWidth * 2, geometry.width, direction);
       this.fillRibbon(ctx, ribbon);
       if (stroke.lastDirection !== null && stroke.lastHalfWidth !== null && stroke.lastPoint) {
-        if (wetVariant && shouldUseRoundedWetJoin(stroke.lastDirection, direction)) {
+        if (wetVariant) {
           this.fillRoundedWetJoin(
             ctx,
             stroke.lastPoint,
-            Math.min(stroke.lastHalfWidth, startHalfWidth),
+            geometry.width * 0.5,
           );
         } else {
           this.fillContinuousJoin(ctx, stroke.lastPoint, stroke.lastDirection, direction, stroke.lastHalfWidth, startHalfWidth);
@@ -350,7 +305,7 @@ export class PaintMarkerEngine {
         this.renderChiselCap(ctx, point, geometry, variantId !== "chisel");
       }
       if (variantId === "mop" || variantId === "drip-mop") {
-        this.renderWetEdges(ctx, ribbon, geometry, color);
+        this.renderWetContactOverlay(ctx, point, geometry);
       }
     }
     ctx.restore();
@@ -441,45 +396,16 @@ export class PaintMarkerEngine {
     ctx.fill();
   }
 
-  private renderWetEdges(
+  private renderWetContactOverlay(
     ctx: CanvasRenderingContext2D,
-    ribbon: SweptRibbonSegment,
+    point: StrokePoint,
     geometry: MarkerGeometry,
-    color: string,
   ): void {
-    ctx.strokeStyle = adjustHex(color, -18);
-    ctx.lineWidth = geometry.edgeStreakWidth;
-    ctx.lineCap = "butt";
-    for (const [start, end] of [
-      [
-        insetWetEdgePoint(ribbon.startLeft, ribbon.startRight),
-        insetWetEdgePoint(ribbon.endLeft, ribbon.endRight),
-      ],
-      [
-        insetWetEdgePoint(ribbon.startRight, ribbon.startLeft),
-        insetWetEdgePoint(ribbon.endRight, ribbon.endLeft),
-      ],
-    ] as const) {
-      ctx.beginPath();
-      ctx.moveTo(start.x, start.y);
-      ctx.lineTo(end.x, end.y);
-      ctx.stroke();
-    }
-    if (geometry.paintLoad > 0.72) {
-      const inset = 0.18;
-      ctx.strokeStyle = adjustHex(color, 10);
-      ctx.lineWidth = Math.max(0.8, geometry.edgeStreakWidth * 0.55);
-      ctx.beginPath();
-      ctx.moveTo(
-        ribbon.startLeft.x + (ribbon.startRight.x - ribbon.startLeft.x) * inset,
-        ribbon.startLeft.y + (ribbon.startRight.y - ribbon.startLeft.y) * inset,
-      );
-      ctx.lineTo(
-        ribbon.endLeft.x + (ribbon.endRight.x - ribbon.endLeft.x) * inset,
-        ribbon.endLeft.y + (ribbon.endRight.y - ribbon.endLeft.y) * inset,
-      );
-      ctx.stroke();
-    }
+    const bulgeScale = resolveWetContactBulgeScale(geometry.paintLoad, point.velocity);
+    if (bulgeScale <= 1) return;
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, geometry.width * 0.5 * bulgeScale, 0, Math.PI * 2);
+    ctx.fill();
   }
 }
 
@@ -492,12 +418,4 @@ function normalizeAngle(value: number): number {
   while (normalized > Math.PI) normalized -= Math.PI * 2;
   while (normalized < -Math.PI) normalized += Math.PI * 2;
   return normalized;
-}
-
-function adjustHex(hex: string, amount: number): string {
-  let value = hex.replace("#", "");
-  if (value.length === 3) value = value.split("").map((channel) => channel + channel).join("");
-  const numeric = Number.parseInt(value, 16);
-  const channel = (shift: number) => Math.max(0, Math.min(255, ((numeric >> shift) & 255) + amount));
-  return `rgb(${channel(16)}, ${channel(8)}, ${channel(0)})`;
 }
