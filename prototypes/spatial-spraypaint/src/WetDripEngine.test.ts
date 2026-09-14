@@ -1,20 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { WetDripEngine } from "./WetDripEngine";
+import { WetDripEngine, prependHiddenDripUnderlap } from "./WetDripEngine";
+import { buildContinuousDripStrip } from "./DripLogic";
 
 function recordingContext(): {
   ctx: CanvasRenderingContext2D;
   calls: string[];
   colorStops: Array<[number, string]>;
+  moveTos: Array<[number, number]>;
 } {
   const calls: string[] = [];
   const colorStops: Array<[number, string]> = [];
+  const moveTos: Array<[number, number]> = [];
   const ctx = {
     save: () => undefined,
     restore: () => undefined,
     beginPath: () => undefined,
     arc: () => calls.push("arc"),
     fill: () => calls.push("fill"),
-    moveTo: () => undefined,
+    moveTo: (x: number, y: number) => moveTos.push([x, y]),
     lineTo: () => undefined,
     closePath: () => calls.push("closePath"),
     createLinearGradient: () => ({
@@ -22,10 +25,27 @@ function recordingContext(): {
     }),
     fillStyle: "",
   } as unknown as CanvasRenderingContext2D;
-  return { ctx, calls, colorStops };
+  return { ctx, calls, colorStops, moveTos };
 }
 
 describe("WetDripEngine", () => {
+  it("prepends a straight hidden underlap without changing the existing visible strip", () => {
+    const drip = {
+      x: 20,
+      y: 30,
+      width: 10,
+      length: 180,
+      opacity: 0.8,
+      bend: 4,
+      attachmentUnderlap: 14,
+    };
+    const visible = buildContinuousDripStrip(drip, 24);
+    const underpainted = prependHiddenDripUnderlap(drip, visible);
+    expect(underpainted.slice(1)).toEqual(visible);
+    expect(underpainted[0].center).toEqual({ x: 20, y: 16 });
+    expect(underpainted[0].width).toBeGreaterThanOrEqual(drip.width);
+  });
+
   it("redraws a growing Mop drip as one gradient strip without circular origin stamps", () => {
     const persistent = recordingContext();
     const overlay = recordingContext();
@@ -42,12 +62,15 @@ describe("WetDripEngine", () => {
       originPoolRadius: 8,
       terminalBulbRatio: 0.58,
       renderAsOverlay: true,
+      attachmentUnderlap: 14,
     }, "#ff0000", 0);
 
     engine.advanceDrips(persistent.ctx, overlay.ctx, 250);
     engine.advanceDrips(persistent.ctx, overlay.ctx, 500);
     expect(persistent.calls).toEqual([]);
     expect(overlay.calls.filter((call) => call === "closePath")).toHaveLength(2);
+    expect(overlay.moveTos[0][1]).toBe(16);
+    expect(overlay.moveTos[1][1]).toBe(16);
     expect(overlay.colorStops.filter(([offset]) => offset === 0).every(([, color]) => (
       color.endsWith(", 1.000)")
     ))).toBe(true);
@@ -71,6 +94,7 @@ describe("WetDripEngine", () => {
       originPoolRadius: 10,
       terminalBulbRatio: 0.58,
       renderAsOverlay: true,
+      attachmentUnderlap: 14,
     };
     const render = () => {
       const recording = recordingContext();
@@ -83,5 +107,6 @@ describe("WetDripEngine", () => {
     expect(first.colorStops).toEqual(second.colorStops);
     expect(first.calls.filter((call) => call === "closePath")).toHaveLength(1);
     expect(first.calls.filter((call) => call === "arc")).toHaveLength(1);
+    expect(first.moveTos[0][1]).toBe(36);
   });
 });

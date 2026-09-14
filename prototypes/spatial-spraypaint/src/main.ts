@@ -102,6 +102,8 @@ class SpatialSpraypaintApp {
   private readonly compositeCtx: CanvasRenderingContext2D;
   private readonly paintCanvas: HTMLCanvasElement;
   private readonly paintCtx: CanvasRenderingContext2D;
+  private readonly wetDripCanvas: HTMLCanvasElement;
+  private readonly wetDripCtx: CanvasRenderingContext2D;
   private readonly wetOverlayCanvas: HTMLCanvasElement;
   private readonly wetOverlayCtx: CanvasRenderingContext2D;
 
@@ -172,6 +174,8 @@ class SpatialSpraypaintApp {
     this.compositeCtx = this.compositeCanvas.getContext("2d")!;
     this.paintCanvas = document.createElement("canvas");
     this.paintCtx = this.paintCanvas.getContext("2d")!;
+    this.wetDripCanvas = document.createElement("canvas");
+    this.wetDripCtx = this.wetDripCanvas.getContext("2d")!;
     this.wetOverlayCanvas = document.createElement("canvas");
     this.wetOverlayCtx = this.wetOverlayCanvas.getContext("2d")!;
     this.commandRegistry = new CommandRegistry({
@@ -225,6 +229,8 @@ class SpatialSpraypaintApp {
       this.compositeCanvas.height = window.innerHeight;
       this.paintCanvas.width = window.innerWidth;
       this.paintCanvas.height = window.innerHeight;
+      this.wetDripCanvas.width = window.innerWidth;
+      this.wetDripCanvas.height = window.innerHeight;
       this.wetOverlayCanvas.width = window.innerWidth;
       this.wetOverlayCanvas.height = window.innerHeight;
       this.toolRenderer.resize(window.innerWidth, window.innerHeight);
@@ -1403,8 +1409,10 @@ class SpatialSpraypaintApp {
   private replayStrokes(strokes: RecordedStroke[]): void {
     this.paintCtx.setTransform(1, 0, 0, 1, 0, 0);
     this.paintCtx.clearRect(0, 0, this.paintCanvas.width, this.paintCanvas.height);
+    this.wetDripCtx.setTransform(1, 0, 0, 1, 0, 0);
+    this.wetDripCtx.clearRect(0, 0, this.wetDripCanvas.width, this.wetDripCanvas.height);
     this.toolRenderer.clear();
-    this.withWallPaintTransform(() => {
+    this.withWallLayerTransforms(() => {
       for (const [index, stroke] of strokes.entries()) {
         this.toolRenderer.beginStroke(stroke);
         const random = createStrokeRandom(stroke.id);
@@ -1413,7 +1421,13 @@ class SpatialSpraypaintApp {
           this.toolRenderer.renderSegment(this.paintCtx, previous, point, stroke, random);
           previous = point;
         }
-        for (const drip of stroke.drips) this.toolRenderer.renderCompletedDrip(this.paintCtx, drip, stroke.color);
+        for (const drip of stroke.drips) {
+          this.toolRenderer.renderCompletedDrip(
+            drip.renderAsOverlay ? this.wetDripCtx : this.paintCtx,
+            drip,
+            stroke.color,
+          );
+        }
         if (!this.isDrawing || index < strokes.length - 1) this.toolRenderer.endStroke(this.paintCtx);
       }
     });
@@ -1430,6 +1444,24 @@ class SpatialSpraypaintApp {
       this.wallView.panY,
     );
     action();
+    this.paintCtx.restore();
+  }
+
+  private withWallLayerTransforms(action: () => void): void {
+    this.paintCtx.save();
+    this.wetDripCtx.save();
+    for (const context of [this.paintCtx, this.wetDripCtx]) {
+      context.setTransform(
+        this.wallView.zoom,
+        0,
+        0,
+        this.wallView.zoom,
+        this.wallView.panX,
+        this.wallView.panY,
+      );
+    }
+    action();
+    this.wetDripCtx.restore();
     this.paintCtx.restore();
   }
 
@@ -1650,16 +1682,18 @@ class SpatialSpraypaintApp {
         this.wallView.panX,
         this.wallView.panY,
       );
-      this.withWallPaintTransform(() => this.toolRenderer.advanceDrips(
+      this.withWallLayerTransforms(() => this.toolRenderer.advanceDrips(
         this.paintCtx,
         now,
         this.wetOverlayCtx,
+        this.wetDripCtx,
       ));
       this.wetOverlayCtx.restore();
       this.compositeCtx.clearRect(0, 0, this.compositeCanvas.width, this.compositeCanvas.height);
       this.renderWallBackground();
-      this.compositeCtx.drawImage(this.paintCanvas, 0, 0);
+      this.compositeCtx.drawImage(this.wetDripCanvas, 0, 0);
       this.compositeCtx.drawImage(this.wetOverlayCanvas, 0, 0);
+      this.compositeCtx.drawImage(this.paintCanvas, 0, 0);
       requestAnimationFrame(render);
     };
     requestAnimationFrame(render);

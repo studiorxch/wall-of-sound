@@ -79,9 +79,10 @@ export class DrawingToolRenderer {
     ctx: CanvasRenderingContext2D,
     now: number,
     wetOverlayCtx?: CanvasRenderingContext2D,
+    wetPersistentCtx: CanvasRenderingContext2D = ctx,
   ): void {
     this.spray.advanceDrips(ctx, now);
-    if (wetOverlayCtx) this.wetDrips.advanceDrips(ctx, wetOverlayCtx, now);
+    if (wetOverlayCtx) this.wetDrips.advanceDrips(wetPersistentCtx, wetOverlayCtx, now);
   }
 
   public renderCompletedDrip(ctx: CanvasRenderingContext2D, drip: DripSeed, color: string): void {

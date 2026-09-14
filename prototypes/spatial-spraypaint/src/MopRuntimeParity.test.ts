@@ -109,7 +109,10 @@ function runIncrementalStroke(strokeId: number, rawPoints: readonly CurveInputSa
     for (const spawn of frameSpawns) {
       evidence.push({
         ...spawn,
-        attachedAtFrame: recording.shapes.some((shape) => pointInShape(spawn.drip, shape)),
+        attachedAtFrame: recording.shapes.some((shape) => pointInShape({
+          x: spawn.drip.x,
+          y: spawn.drip.y - (spawn.drip.attachmentUnderlap ?? 0),
+        }, shape)),
       });
     }
   });
@@ -133,13 +136,19 @@ describe("Mop incremental runtime parity", () => {
       x: 120 + (index % 3) * 1.4,
       y: 120 + (index % 5) * 3.2,
     }))],
-    ["diagonal", repeatedPath((index) => ({ x: 70 + index * 12, y: 120 + index * 4 }), 90, 33)],
+    ["descending diagonal", repeatedPath((index) => ({ x: 70 + index * 12, y: 120 + index * 4 }), 90, 33)],
+    ["rising diagonal", repeatedPath((index) => ({ x: 70 + index * 12, y: 480 - index * 4 }), 90, 33)],
     ["horizontal control", repeatedPath((index) => ({ x: 70 + index * 1.5, y: 120 }))],
     ["vertical control", repeatedPath((index) => ({ x: 120, y: 70 + index * 1.5 }))],
+    ["curved / circular", repeatedPath((index) => ({
+      x: 320 + Math.cos(index * 0.055) * 120,
+      y: 320 + Math.sin(index * 0.055) * 120,
+    }), 130, 33)],
   ] as const)("attaches every spawned drip to the body present that frame: %s", (label, rawPoints) => {
     const results = Array.from({ length: 20 }, (_, index) => runIncrementalStroke(index + 1, rawPoints)).flat();
     const failures = results.filter(({ attachedAtFrame }) => !attachedAtFrame);
     expect(results.length, `${label} did not emit a drip`).toBeGreaterThan(0);
+    expect(results.every(({ drip }) => (drip.attachmentUnderlap ?? 0) > 0)).toBe(true);
     expect(failures, `${label} detached runtime spawns: ${JSON.stringify(failures)}`).toHaveLength(0);
   });
 

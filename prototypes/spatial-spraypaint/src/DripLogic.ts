@@ -21,6 +21,7 @@ export interface DripSeed {
   originPoolRadius?: number;
   terminalBulbRatio?: number;
   renderAsOverlay?: boolean;
+  attachmentUnderlap?: number;
 }
 
 export interface DripStripSection {

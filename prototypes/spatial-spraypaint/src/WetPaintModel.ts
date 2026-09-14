@@ -405,6 +405,9 @@ export class WetPaintAccumulator {
         originPoolRadius: width * profile.originPoolRatio,
         terminalBulbRatio: this.variant === "drip-mop" ? 0.58 : 0.48,
         renderAsOverlay: this.variant === "mop" || this.variant === "drip-mop",
+        attachmentUnderlap: this.variant === "mop" || this.variant === "drip-mop"
+          ? size * 0.28
+          : undefined,
       });
     }
     return drips;

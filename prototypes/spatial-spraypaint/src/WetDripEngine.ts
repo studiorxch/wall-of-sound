@@ -6,6 +6,23 @@ interface ActiveWetDrip extends DripSeed {
   durationMs: number;
 }
 
+export function prependHiddenDripUnderlap(
+  drip: DripSeed,
+  strip: readonly DripStripSection[],
+): DripStripSection[] {
+  const underlap = Math.max(0, drip.attachmentUnderlap ?? 0);
+  if (underlap === 0 || strip.length === 0) return [...strip];
+  const origin = strip[0];
+  const hiddenWidth = Math.max(drip.width, origin.width * 0.72);
+  return [{
+    progress: 0,
+    center: { x: drip.x, y: drip.y - underlap },
+    left: { x: drip.x - hiddenWidth * 0.5, y: drip.y - underlap },
+    right: { x: drip.x + hiddenWidth * 0.5, y: drip.y - underlap },
+    width: hiddenWidth,
+  }, ...strip];
+}
+
 export class WetDripEngine {
   private activeDrips: ActiveWetDrip[] = [];
 
@@ -43,7 +60,7 @@ export class WetDripEngine {
     drip: DripSeed,
     color: string,
   ): void {
-    const strip = buildContinuousDripStrip(drip, 24);
+    const strip = prependHiddenDripUnderlap(drip, buildContinuousDripStrip(drip, 24));
     ctx.save();
     ctx.fillStyle = this.createGradient(ctx, drip, color);
     this.fillStrip(ctx, strip);
@@ -57,7 +74,10 @@ export class WetDripEngine {
     progress: number,
   ): void {
     const sectionCount = Math.max(4, Math.ceil(progress * 24));
-    const strip = buildContinuousDripStrip(drip, sectionCount, progress);
+    const strip = prependHiddenDripUnderlap(
+      drip,
+      buildContinuousDripStrip(drip, sectionCount, progress),
+    );
     ctx.save();
     ctx.fillStyle = this.createGradient(ctx, drip, drip.color);
     this.fillStrip(ctx, strip);
