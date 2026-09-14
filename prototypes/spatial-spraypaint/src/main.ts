@@ -31,6 +31,7 @@ import {
   type MarkerVariantId,
 } from "./DrawingTool";
 import { DrawingToolRenderer, type ToolStrokeStyle } from "./DrawingToolRenderer";
+import { clearDrawingSurfaceState } from "./DrawingSurfaceClear";
 import {
   resolveDrawingCursorAim,
   resolveDrawingCursorGeometry,
@@ -1407,11 +1408,7 @@ class SpatialSpraypaintApp {
   }
 
   private replayStrokes(strokes: RecordedStroke[]): void {
-    this.paintCtx.setTransform(1, 0, 0, 1, 0, 0);
-    this.paintCtx.clearRect(0, 0, this.paintCanvas.width, this.paintCanvas.height);
-    this.wetDripCtx.setTransform(1, 0, 0, 1, 0, 0);
-    this.wetDripCtx.clearRect(0, 0, this.wetDripCanvas.width, this.wetDripCanvas.height);
-    this.toolRenderer.clear();
+    this.clearDrawingLayers();
     this.withWallLayerTransforms(() => {
       for (const [index, stroke] of strokes.entries()) {
         this.toolRenderer.beginStroke(stroke);
@@ -1534,10 +1531,16 @@ class SpatialSpraypaintApp {
   private clearAllStrokes(): void {
     this.finishActiveStroke();
     if (!this.strokeHistory.clearUndoably()) return;
-    this.paintCtx.setTransform(1, 0, 0, 1, 0, 0);
-    this.paintCtx.clearRect(0, 0, this.paintCanvas.width, this.paintCanvas.height);
-    this.toolRenderer.clear();
+    this.clearDrawingLayers();
     this.updateUndoControl();
+  }
+
+  private clearDrawingLayers(): void {
+    clearDrawingSurfaceState([
+      { canvas: this.paintCanvas, context: this.paintCtx },
+      { canvas: this.wetDripCanvas, context: this.wetDripCtx },
+      { canvas: this.wetOverlayCanvas, context: this.wetOverlayCtx },
+    ], this.toolRenderer);
   }
 
   private loadAudioFile(file: File): void {
