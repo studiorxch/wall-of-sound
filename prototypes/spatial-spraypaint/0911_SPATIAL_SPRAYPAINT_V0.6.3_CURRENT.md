@@ -1,8 +1,8 @@
 # Spatial Spraypaint V0.6.3 Current Status
 
-Date: 2026-09-12
+Date: 2026-09-14
 
-Status: PARTIAL — the V0.6.2 tool-contact/cursor work and the V0.6.3 continuous wet-run, contextual Flow/Viscosity, calibration-palette, Drip Mop fidelity, and Clean Chisel work are implemented. The full automated suite, TypeScript, production build, and available current-host Physical/browser workflows pass. Human-timed wet-flow behavior and physical Hand behavior remain MacBook gates.
+Status: PARTIAL — the V0.6.2 tool-contact/cursor work and the V0.6.3 continuous wet-run, contextual Flow/Viscosity, complete manufacturer palettes, Drip Mop fidelity, and Clean Chisel work are implemented. Mop drip attachment and Clear behavior are stable. The full automated suite, TypeScript, production build, and available current-host Physical/browser workflows pass. Physical Hand behavior remains a MacBook gate.
 
 Baseline: V0.6.1 commit `59e909e46455f41e4a9627698c5541feab951c15`, with the approved uncommitted V0.6.2 working state treated as the V0.6.3 starting point.
 
@@ -125,13 +125,36 @@ The Color button remains the sole compact entry point. Its temporary popover now
 
 - canonical current palette and current color state;
 - StudioRich's existing 11 prototype swatches;
-- 12-color `Montana Gold · fallback` and 12-color `BLACK 400ML · fallback` calibration ranges;
+- the complete supplied 256-entry Montana Gold manufacturer palette;
+- the complete supplied 257-entry BLACK 400ML manufacturer palette;
 - a current-color indicator; and
 - up to six recent, deduplicated colors.
 
-Palette switching changes only palette state; it preserves current Tool, current Color, view, and history. Color remains stored per canonical stroke, so mixed-color wet marks replay and restore exactly.
+Palette switching changes only palette state; it preserves current Tool, current Color, view, and history. Supplied manufacturer labels, codes, duplicate values, and aliases remain distinct entries. Color remains stored per canonical stroke, so mixed-color wet marks replay and restore exactly.
 
-The local private Affinity palette files `MONTANA GOLD 400ML.afpalette` and `BLACK 400ML 187 COLORS.afpalette` were found under WOS-share. They are proprietary binary Affinity data, not a safely supported text/config format in this prototype. V0.6.3 does not copy or claim exact values from them. The two expanded ranges are explicitly labeled embedded calibration fallbacks; WOS-share remains ignored/private and unchanged.
+The canonical extracted manufacturer data is tracked inside the Spatial Spraypaint prototype. Runtime does not depend on private WOS-share files. Manufacturer palette integration is stable and should remain untouched for now.
+
+## Stable Mop Attachment And Clear Authority
+
+The latest Mop attachment work is complete and physically verified:
+
+- dot: PASS;
+- horizontal: PASS;
+- vertical: PASS;
+- rising diagonal: PASS;
+- descending diagonal: PASS; and
+- circle: PASS.
+
+Active and completed Mop drips are composited beneath the opaque Mop body/wet contact. A short hidden underlap lets the body mask the attachment while preserving the existing visible run, origin, length, width, bend, rounded tip, gradient, timing, frequency, and deterministic replay.
+
+The Clear defect introduced by the persistent drip-underlay layer was fixed in commit `5a170f1550f837c386bb3d6fb7aafd8465a00158`. One authoritative Clear path now resets:
+
+- the main body/wet-contact canvas;
+- the persistent `wetDripCanvas` underlay;
+- the active wet-drip overlay; and
+- retained active drip renderer state.
+
+Undo continues to restore the pre-Clear canonical history through replay. Mop rendering and drip attachment are now **FROZEN** unless a new physical defect appears.
 
 ## Lighting Observation
 
@@ -139,9 +162,9 @@ MacBook field testing continues to show that a neutral/white ring light near the
 
 ## Automated Verification
 
-- Focused wet geometry/model/history/renderer/composition tests: PASS — 58/58.
-- Final `npm test`: PASS — 34 test files, 200/200 tests.
-- Final `npm run build`: PASS — TypeScript and Vite production build; 41 modules transformed.
+- Focused Clear/Mop tests: PASS — 46/46.
+- Final `npm test`: PASS — 36 test files, 226/226 tests.
+- Final `npm run build`: PASS — TypeScript and Vite production build; 44 modules transformed.
 
 Coverage includes a load/speed-independent Mop base tube, sparse dwell-only wet swelling, flared node-free Mop origins, continuous transient full-strip redraw, opaque-to-drip gradient transition, connected deterministic kink geometry, retained rounded tips, Flow and Viscosity mapping, Mop/Drip Mop differentiation, dwell/load gain, speed drain, multiple origins, restrained non-Mop routing, mixed-color wet history, exact Clear restoration, palette/recent-color state, shared cursor geometry, all required zoom scales, raw Hand aim separation, Chisel initialization/contact, corner bounds, and all retained navigation/input/audio/recording/composition tests.
 
@@ -189,7 +212,7 @@ After committing, push and pull before testing.
 10. Set Viscosity Thick/Balanced/Runny while holding Flow constant; confirm thick is wider/slower/shorter and runny is narrower/faster/longer.
 11. Verify multiple Drip Mop origins under high load and that faster movement reduces accumulation.
 12. Switch repeatedly among dark, light, and saturated colors; overlap wet marks and inspect opacity, pooling, edge softness, and continuous-run visibility.
-13. Verify current color, recent colors, and all palette labels; remember Montana/BLACK ranges are explicitly calibration fallbacks, not imported manufacturer truth.
+13. Verify current color, recent colors, and the complete manufacturer palette labels/codes; manufacturer integration is stable and should remain unchanged.
 14. Verify Spray, Round, all Chisels, Mop, and Drip Mop cursor size/color/shape alignment at several Wall scales.
 15. With Hand input and a neutral/white ring light, compare the raw aim cursor's responsiveness with the stabilized deposited stroke during fast movement.
 16. Confirm Hand short-gap protection, tracking-quality warning, edge-driven motion, pinch paint, Pan recovery, and sensor-only camera privacy remain intact.
@@ -203,9 +226,17 @@ After committing, push and pull before testing.
 - Human-timed live dwell, long-run frequency, and KRINK-like subjective fidelity remain unverified; V0.6.3 is a deterministic digital wet model, not a measured paint-brand simulation.
 - Chisel click-only dots are deferred until a direction-aware tap-contact policy can avoid reintroducing false start splinters.
 - Flow and Viscosity are session calibration state and are not yet persisted as user settings; generated wet state itself is fully recorded for replay.
-- The private Affinity palettes require a separate supported parser/import checkpoint before exact manufacturer swatches can be claimed.
 - CLEAN / RAW / GRITTY is a documented future nib/mark-condition axis only.
 - V0.6.4 is reserved for Spray Plume + Opacity Calibration: density, edge falloff, opacity curve, radial distribution, overspray, distance/output response, stationary dots, fill/outline utility, blending, and detail precision.
 - Surface materials, paint chemistry/drying, Pencil pressure/tilt, Waveformer, Sticker, Roller, Fire Extinguisher, Black Book, collaboration, and shell redesign remain deferred.
 
-Next safe step: push this checkpoint, pull it on the MacBook, complete the manual wet/Hand checklist, and return measured observations before V0.6.4 Spray-plume work.
+## Likely Next Spatial Drawing Priorities
+
+1. Toolbox/UI flow planning.
+2. Spray Cap Calibration V1.
+3. Throwie-oriented testing: fill, outline, highlight, shadow, opacity, and width.
+4. Spatial/reactive spray audio experiment.
+5. iPad / Apple Pencil input evaluation.
+6. Waveformer later, after Spray behavior is mature.
+
+Next safe step: preserve the frozen Mop and manufacturer-palette checkpoints while planning the toolbox/UI flow and Spray Cap Calibration V1.
