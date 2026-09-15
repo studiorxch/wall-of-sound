@@ -286,3 +286,26 @@ describe("Paint Marker renderer", () => {
     expect(resolveWetContactBulgeScale(1, 0)).toBeLessThanOrEqual(1.1);
   });
 });
+
+describe("consolidated marker preset presentation and compatibility", () => {
+  it("keeps every legacy MarkerVariantId resolvable and unchanged in behavior", () => {
+    const legacyIds = ["round", "chisel", "clean-chisel", "drippy-chisel", "mop", "drip-mop"] as const;
+    for (const id of legacyIds) {
+      const variant = getMarkerVariant(id);
+      expect(variant.id).toBe(id);
+    }
+    // Unknown/foreign ids fall back to the first variant rather than throwing,
+    // matching the same defensive pattern used by getSprayCapPreset.
+    expect(getMarkerVariant("not-a-real-id").id).toBe("round");
+  });
+
+  it("labels presets as Family · Preset without changing any id", () => {
+    expect(getMarkerVariant("chisel")).toMatchObject({ id: "chisel", name: "Chisel · Classic" });
+    expect(getMarkerVariant("clean-chisel")).toMatchObject({ id: "clean-chisel", name: "Chisel · Clean" });
+    expect(getMarkerVariant("drippy-chisel")).toMatchObject({ id: "drippy-chisel", name: "Chisel · Wet" });
+    expect(getMarkerVariant("mop")).toMatchObject({ id: "mop", name: "Mop · Balanced" });
+    expect(getMarkerVariant("drip-mop")).toMatchObject({ id: "drip-mop", name: "Mop · Drippy" });
+    expect(getMarkerVariant("round")).toMatchObject({ id: "round", name: "Round" });
+  });
+
+});

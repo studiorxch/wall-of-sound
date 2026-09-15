@@ -54,6 +54,28 @@ describe("spray cap calibration profile", () => {
     );
   });
 
+  it("keeps the displayed digital-baseline width metadata separate from the rendering radius authority", () => {
+    // These are the exact ranges hardcoded into the cap browser's metadata line;
+    // a change here without an equal change in index.html is a drift the UI
+    // would silently go stale on.
+    const expectedRanges: Record<string, [number, number]> = {
+      "new-york-fat": [24, 42],
+      "pink-dot-fat": [34, 54],
+      "astro-fat": [48, 78],
+      "german-fat": [28, 50],
+      "fuzz-fat": [28, 50],
+      "level-1": [4, 9],
+    };
+    for (const [id, [minimum, maximum]] of Object.entries(expectedRanges)) {
+      const profile = getSprayCapProfile(id);
+      expect(profile.nominalWidthRange).toMatchObject({ minimum, maximum, unit: "wall-units-digital-baseline" });
+      // The metadata is descriptive only — it is never read by resolveSprayDynamics,
+      // which only ever sees deposition.baseRadius, so displaying it cannot move
+      // the actual render width.
+      expect(profile.deposition).not.toHaveProperty("nominalWidthRange");
+    }
+  });
+
   it("keeps aerosol calligraphy physically distinct from a marker nib", () => {
     const calligraphy = getSprayCapProfile("calligraphy");
     expect(calligraphy.coneShape).toBe("fan");

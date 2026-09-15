@@ -36,12 +36,12 @@ export type MarkerJoinPolygon = readonly [
 ];
 
 export const MARKER_VARIANTS: readonly MarkerVariantDefinition[] = [
-  { id: "round", name: "Round Marker", defaultSize: 28, dripTendency: 0, material: "dense" },
-  { id: "chisel", name: "Chisel / Calligraphy", defaultSize: 34, dripTendency: 0, material: "calligraphy" },
-  { id: "clean-chisel", name: "Clean Chisel", defaultSize: 34, dripTendency: 0, material: "calligraphy" },
-  { id: "drippy-chisel", name: "Drippy Chisel", defaultSize: 38, dripTendency: 0.48, material: "wet-calligraphy" },
-  { id: "mop", name: "Mop", defaultSize: 44, dripTendency: 0.68, material: "wet" },
-  { id: "drip-mop", name: "Drip Mop", defaultSize: 50, dripTendency: 1, material: "high-flow" },
+  { id: "round", name: "Round", defaultSize: 28, dripTendency: 0, material: "dense" },
+  { id: "chisel", name: "Chisel · Classic", defaultSize: 34, dripTendency: 0, material: "calligraphy" },
+  { id: "clean-chisel", name: "Chisel · Clean", defaultSize: 34, dripTendency: 0, material: "calligraphy" },
+  { id: "drippy-chisel", name: "Chisel · Wet", defaultSize: 38, dripTendency: 0.48, material: "wet-calligraphy" },
+  { id: "mop", name: "Mop · Balanced", defaultSize: 44, dripTendency: 0.68, material: "wet" },
+  { id: "drip-mop", name: "Mop · Drippy", defaultSize: 50, dripTendency: 1, material: "high-flow" },
 ] as const;
 
 export const CHISEL_NIB_ANGLE = -25 * Math.PI / 180;

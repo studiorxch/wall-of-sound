@@ -142,6 +142,16 @@ Each canonical stroke stores its Spray cap as a `SprayCapId` string (`ToolStroke
 
 First application of this rule: the pre-calibration `german-fat` preset's fuzzy/hairy/dry-brush digital behavior was forked verbatim into a new permanent `fuzz-fat` ("Fuzz Fat") specialty/effect cap before any physical recalibration of `german-fat` toward the real German/Hardcore Fat cap. `german-fat`'s numbers remain free to be recalibrated later without disturbing `fuzz-fat`.
 
+This rule applies identically to `MarkerVariantId`. The V0.6 preset-browser pass relabeled all six existing marker variants for display (e.g. `chisel` now shows as "Chisel · Classic", `mop` as "Mop · Balanced") without touching any `MarkerVariantId` value, `MARKER_VARIANTS[...].id`, or render geometry — a pure presentation change, safe under this rule because the id a canonical stroke stores never changed. Any future rename that needs to change an id itself (not just its label) must follow the same fork-or-alias discipline already established for Spray caps.
+
+## V0.6 Preset Browser (Spray + Marker)
+
+Both the Spray cap chooser and the Marker/Mop chooser became visual preset browsers: each row now renders a real deterministic preview (via `BrushPreview.ts`, which drives the same `SprayBrushEngine`/`PaintMarkerEngine` used for live drawing against a fixed synthetic stroke — never a hand-drawn fake), grouped under family section headers (Spray: Fat/Thin/Specialty, from the existing `SprayCapPreset.family`; Marker: Round/Chisel/Mop, a new presentation-only grouping of the six existing variant ids). Spray rows also show each cap's existing `nominalWidthRange` labeled explicitly as "digital baseline" — no physical (cm/inch) calibration data exists anywhere in this repo to show instead, so none was fabricated; the metadata is purely descriptive and is never read by `resolveSprayDynamics`, which only ever consumes `deposition.baseRadius`.
+
+**Deliberately deferred, not attempted:** the deeper ask of making every Marker preset (not just `drippy-chisel`/`mop`/`drip-mop`) capable of wet accumulation and dripping via shared Flow/Accumulation/Hardness/Drip-tendency dimensions. The engine currently gates this in two separate hardcoded places — `isWetMarkerVariant` in `WetPaintModel.ts`, and the mop-only check inside `PaintMarkerEngine.renderWetContactOverlay`/`renderSegment` — and generalizing both together, for presets (`round`, `chisel`, `clean-chisel`) that have never been wet, needs dedicated before/after visual verification beyond what one pass can responsibly cover alongside the physically-verified-Mop freeze. Left as its own future bounded step.
+
+**Also deferred:** Spray drips from over-accumulation/dwell. Current Spray deposition is pointermove-driven only (no continuous emission while the pointer is stationary), so there is no dwell signal to threshold against yet — the same prerequisite gap identified in the prior UI-friction audit. Not hacked around.
+
 ## Stable Mop Attachment And Clear Authority
 
 The latest Mop attachment work is complete and physically verified:

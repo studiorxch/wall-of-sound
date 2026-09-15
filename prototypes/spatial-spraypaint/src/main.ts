@@ -4,6 +4,7 @@ import {
   type CurveReconstructionOptions,
 } from "./AdaptiveCurveReconstructor";
 import { getSprayBackground, type SprayBackground } from "./Backgrounds";
+import { renderAllBrushPreviews } from "./BrushPreview";
 import { CameraLuminanceSampler } from "./CameraLuminance";
 import { CanonicalStrokeManager } from "./CanonicalStroke";
 import {
@@ -199,6 +200,7 @@ class SpatialSpraypaintApp {
 
     this.initResize();
     this.renderColorPalette();
+    renderAllBrushPreviews(document);
     this.bindControls();
     this.bindPhysicalInput();
     this.bindCommandSystem();
