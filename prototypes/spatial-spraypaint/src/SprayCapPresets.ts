@@ -101,6 +101,50 @@ export interface SprayCapPreset {
    * `Math.random()` involved, so the gap pattern replays identically.
    */
   streakLanes: number;
+  /**
+   * Pink Dot Fat correction fields (see `SprayBrushEngine.renderHalo` and its
+   * `resolveHalo*` helpers). All 0 on every cap without a halo (`haloRadius`
+   * 0), and 0 is always a safe/neutral value even on a halo cap — each field
+   * independently reduces to the ORIGINAL pre-correction halo behavior at 0.
+   *
+   * `haloDistanceGain` — how strongly the resolved size (the live Size
+   * control, session-adjustable, already live-previewed in Brush Studio) as a
+   * ratio of the cap's own `baseRadius` scales halo radius/opacity. 0 = halo
+   * strength is constant regardless of size (legacy). >0 = a small
+   * resolved size (proxy for spraying close to the wall) suppresses the halo
+   * toward a clean hot dot/line, while a large resolved size (proxy for
+   * pulling back) amplifies it toward a pronounced center+halo bloom.
+   */
+  haloDistanceGain: number;
+  /**
+   * `haloFlareAnisotropy` — 0 = the halo is always a perfect circle
+   * (legacy). >0 = at higher point velocity the halo elongates into an
+   * ellipse along the travel direction (an oblique-spray flare), while a
+   * stationary dwell (near-zero velocity) still renders circular regardless
+   * of this value.
+   */
+  haloFlareAnisotropy: number;
+  /**
+   * `haloDabSpacing` — 0 = the halo is drawn at every segment endpoint along
+   * a path, same as every other continuous-line mechanism in this engine
+   * (legacy). >0 = a multiplier of the resolved radius; while a segment has
+   * real travel distance, halo draws are gated until that much distance has
+   * accumulated since the last one, producing discrete overlapping dabs
+   * along a moving stroke instead of one continuous smeared bar. A true
+   * dwell (repeated zero-distance points at the same spot) is NEVER gated by
+   * this — it always draws, preserving the existing "dwell strengthens the
+   * halo" behavior untouched.
+   */
+  haloDabSpacing: number;
+  /**
+   * `haloRingBias` — 0 = a single smooth alpha-to-zero radial fade (legacy).
+   * >0 = the gradient gains a soft moat then a brighter outer band, so a
+   * large resolved halo reads as a genuine center-plus-ring bloom instead of
+   * a single continuous glow. The core disc underneath stays fully opaque
+   * regardless — this never creates a hollow center, keeping Pink Dot
+   * structurally distinct from Ring/Donut's genuinely hollow annular core.
+   */
+  haloRingBias: number;
 }
 
 export interface ResolvedSprayDynamics {
@@ -125,10 +169,21 @@ export const SPRAY_CAP_PRESETS: readonly SprayCapPreset[] = [
   // (SprayBrushEngine's fillLocalSaturation ceiling) is unchanged — this only
   // changes what a freshly-selected fat brush's Fill toggle starts at; the
   // artist can still switch Fill OFF per brush for dense outline work.
-  { id: "new-york-fat", name: "New York Fat", family: "fat", baseRadius: 32, coreDensity: 1.14, coreOpacity: 0.29, edgeFalloff: 0.7, particleCount: 18, particleSpread: 1.08, particleSize: 0.65, particleOpacity: 0.25, flowRate: 1.2, accumulationRate: 1.16, velocityResponse: 0.58, jitter: 0.08, endpointBehavior: "settled", splatterProbability: 0.08, dripTendency: 0.48, anisotropy: 1, haloRadius: 0, haloOpacity: 0, wiggleAmplitude: 0, wiggleFrequency: 0, depositionShape: "line", defaultFillMode: true, ringRadius: 0, ringThickness: 0, ringOpacity: 0, centerOpacity: 0, streakLanes: 0 },
+  { id: "new-york-fat", name: "New York Fat", family: "fat", baseRadius: 32, coreDensity: 1.14, coreOpacity: 0.29, edgeFalloff: 0.7, particleCount: 18, particleSpread: 1.08, particleSize: 0.65, particleOpacity: 0.25, flowRate: 1.2, accumulationRate: 1.16, velocityResponse: 0.58, jitter: 0.08, endpointBehavior: "settled", splatterProbability: 0.08, dripTendency: 0.48, anisotropy: 1, haloRadius: 0, haloOpacity: 0, wiggleAmplitude: 0, wiggleFrequency: 0, depositionShape: "line", defaultFillMode: true, ringRadius: 0, ringThickness: 0, ringOpacity: 0, centerOpacity: 0, streakLanes: 0, haloDistanceGain: 0, haloFlareAnisotropy: 0, haloDabSpacing: 0, haloRingBias: 0 },
   // Halo is this cap's signature — a dense loaded core plus a soft atmospheric
   // outer ring, distinguishing it from New York Fat's controlled, halo-free dot.
-  { id: "pink-dot-fat", name: "Pink Dot Fat", family: "fat", baseRadius: 42, coreDensity: 1.46, coreOpacity: 0.34, edgeFalloff: 0.76, particleCount: 26, particleSpread: 1.2, particleSize: 0.72, particleOpacity: 0.29, flowRate: 1.48, accumulationRate: 1.38, velocityResponse: 0.42, jitter: 0.06, endpointBehavior: "punchy", splatterProbability: 0.14, dripTendency: 0.72, anisotropy: 1, haloRadius: 2.4, haloOpacity: 0.05, wiggleAmplitude: 0, wiggleFrequency: 0, depositionShape: "line", defaultFillMode: true, ringRadius: 0, ringThickness: 0, ringOpacity: 0, centerOpacity: 0, streakLanes: 0 },
+  // Corrected: the halo previously read as a constant glow/bloom regardless of
+  // size or movement. haloDistanceGain ties halo strength to the live Size
+  // control (small size -> clean hot dot/line, large size -> pronounced
+  // center+ring bloom); haloFlareAnisotropy elongates the halo into an oblique
+  // ellipse at higher point velocity instead of staying a circle;
+  // haloDabSpacing gates halo draws by travel distance so a moving stroke
+  // deposits discrete overlapping dabs (dusty/layered) instead of one smeared
+  // bar, while a true dwell (zero travel) is never gated and still strengthens
+  // continuously as before; haloRingBias reshapes the gradient into a soft
+  // moat-then-peak so a large halo reads as a genuine center-plus-ring, not a
+  // single glow. Core/overspray physics and every other cap are untouched.
+  { id: "pink-dot-fat", name: "Pink Dot Fat", family: "fat", baseRadius: 42, coreDensity: 1.46, coreOpacity: 0.34, edgeFalloff: 0.76, particleCount: 26, particleSpread: 1.2, particleSize: 0.72, particleOpacity: 0.29, flowRate: 1.48, accumulationRate: 1.38, velocityResponse: 0.42, jitter: 0.06, endpointBehavior: "punchy", splatterProbability: 0.14, dripTendency: 0.72, anisotropy: 1, haloRadius: 2.4, haloOpacity: 0.05, wiggleAmplitude: 0, wiggleFrequency: 0, depositionShape: "line", defaultFillMode: true, ringRadius: 0, ringThickness: 0, ringOpacity: 0, centerOpacity: 0, streakLanes: 0, haloDistanceGain: 0.85, haloFlareAnisotropy: 0.55, haloDabSpacing: 0.85, haloRingBias: 0.6 },
   // Astro Fat — corrected. At default velocity the OLD numbers resolved to a
   // core opacity only ~9% denser than New York Fat's despite nearly 2x the
   // radius (0.394 vs 0.432 resolved coreOpacity) — Astro read as "New York
@@ -148,19 +203,19 @@ export const SPRAY_CAP_PRESETS: readonly SprayCapPreset[] = [
   // restrained start). velocityResponse (already low, stays aggressive
   // regardless of speed), baseRadius, jitter, splatterProbability, and
   // dripTendency are untouched — not in the audited field list.
-  { id: "astro-fat", name: "Astro Fat", family: "fat", baseRadius: 62, coreDensity: 1.4, coreOpacity: 0.36, edgeFalloff: 0.56, particleCount: 46, particleSpread: 1.55, particleSize: 0.8, particleOpacity: 0.32, flowRate: 1.65, accumulationRate: 1.5, velocityResponse: 0.36, jitter: 0.1, endpointBehavior: "punchy", splatterProbability: 0.18, dripTendency: 0.66, anisotropy: 1, haloRadius: 0, haloOpacity: 0, wiggleAmplitude: 0, wiggleFrequency: 0, depositionShape: "line", defaultFillMode: true, ringRadius: 0, ringThickness: 0, ringOpacity: 0, centerOpacity: 0, streakLanes: 0 },
-  { id: "german-fat", name: "German / Hardcore Fat", family: "fat", baseRadius: 38, coreDensity: 1.06, coreOpacity: 0.27, edgeFalloff: 0.54, particleCount: 32, particleSpread: 1.42, particleSize: 0.62, particleOpacity: 0.24, flowRate: 1.18, accumulationRate: 1.08, velocityResponse: 0.68, jitter: 0.18, endpointBehavior: "raw", splatterProbability: 0.28, dripTendency: 0.5, anisotropy: 1, haloRadius: 0, haloOpacity: 0, wiggleAmplitude: 0, wiggleFrequency: 0, depositionShape: "line", defaultFillMode: true, ringRadius: 0, ringThickness: 0, ringOpacity: 0, centerOpacity: 0, streakLanes: 0 },
-  { id: "lego-thin", name: "Lego Thin", family: "thin", baseRadius: 14, coreDensity: 1.08, coreOpacity: 0.35, edgeFalloff: 0.84, particleCount: 8, particleSpread: 0.8, particleSize: 0.4, particleOpacity: 0.22, flowRate: 0.88, accumulationRate: 0.9, velocityResponse: 0.92, jitter: 0.04, endpointBehavior: "settled", splatterProbability: 0.03, dripTendency: 0.18, anisotropy: 1, haloRadius: 0, haloOpacity: 0, wiggleAmplitude: 0, wiggleFrequency: 0, depositionShape: "line", defaultFillMode: false, ringRadius: 0, ringThickness: 0, ringOpacity: 0, centerOpacity: 0, streakLanes: 0 },
-  { id: "universal-thin", name: "Universal Thin", family: "thin", baseRadius: 11, coreDensity: 0.92, coreOpacity: 0.32, edgeFalloff: 0.78, particleCount: 7, particleSpread: 0.88, particleSize: 0.38, particleOpacity: 0.2, flowRate: 0.8, accumulationRate: 0.84, velocityResponse: 1, jitter: 0.07, endpointBehavior: "tapered", splatterProbability: 0.05, dripTendency: 0.12, anisotropy: 1, haloRadius: 0, haloOpacity: 0, wiggleAmplitude: 0, wiggleFrequency: 0, depositionShape: "line", defaultFillMode: false, ringRadius: 0, ringThickness: 0, ringOpacity: 0, centerOpacity: 0, streakLanes: 0 },
-  { id: "level-1", name: "Level 1 / Skinny Cream", family: "thin", baseRadius: 6, coreDensity: 0.84, coreOpacity: 0.3, edgeFalloff: 0.88, particleCount: 4, particleSpread: 0.68, particleSize: 0.3, particleOpacity: 0.18, flowRate: 0.64, accumulationRate: 0.72, velocityResponse: 1, jitter: 0.03, endpointBehavior: "tapered", splatterProbability: 0.01, dripTendency: 0.06, anisotropy: 1, haloRadius: 0, haloOpacity: 0, wiggleAmplitude: 0, wiggleFrequency: 0, depositionShape: "line", defaultFillMode: false, ringRadius: 0, ringThickness: 0, ringOpacity: 0, centerOpacity: 0, streakLanes: 0 },
-  { id: "new-york-thin", name: "New York Thin", family: "thin", baseRadius: 9, coreDensity: 1.2, coreOpacity: 0.38, edgeFalloff: 0.82, particleCount: 6, particleSpread: 0.76, particleSize: 0.34, particleOpacity: 0.2, flowRate: 0.82, accumulationRate: 0.92, velocityResponse: 0.86, jitter: 0.04, endpointBehavior: "punchy", splatterProbability: 0.04, dripTendency: 0.16, anisotropy: 1, haloRadius: 0, haloOpacity: 0, wiggleAmplitude: 0, wiggleFrequency: 0, depositionShape: "line", defaultFillMode: false, ringRadius: 0, ringThickness: 0, ringOpacity: 0, centerOpacity: 0, streakLanes: 0 },
+  { id: "astro-fat", name: "Astro Fat", family: "fat", baseRadius: 62, coreDensity: 1.4, coreOpacity: 0.36, edgeFalloff: 0.56, particleCount: 46, particleSpread: 1.55, particleSize: 0.8, particleOpacity: 0.32, flowRate: 1.65, accumulationRate: 1.5, velocityResponse: 0.36, jitter: 0.1, endpointBehavior: "punchy", splatterProbability: 0.18, dripTendency: 0.66, anisotropy: 1, haloRadius: 0, haloOpacity: 0, wiggleAmplitude: 0, wiggleFrequency: 0, depositionShape: "line", defaultFillMode: true, ringRadius: 0, ringThickness: 0, ringOpacity: 0, centerOpacity: 0, streakLanes: 0, haloDistanceGain: 0, haloFlareAnisotropy: 0, haloDabSpacing: 0, haloRingBias: 0 },
+  { id: "german-fat", name: "German / Hardcore Fat", family: "fat", baseRadius: 38, coreDensity: 1.06, coreOpacity: 0.27, edgeFalloff: 0.54, particleCount: 32, particleSpread: 1.42, particleSize: 0.62, particleOpacity: 0.24, flowRate: 1.18, accumulationRate: 1.08, velocityResponse: 0.68, jitter: 0.18, endpointBehavior: "raw", splatterProbability: 0.28, dripTendency: 0.5, anisotropy: 1, haloRadius: 0, haloOpacity: 0, wiggleAmplitude: 0, wiggleFrequency: 0, depositionShape: "line", defaultFillMode: true, ringRadius: 0, ringThickness: 0, ringOpacity: 0, centerOpacity: 0, streakLanes: 0, haloDistanceGain: 0, haloFlareAnisotropy: 0, haloDabSpacing: 0, haloRingBias: 0 },
+  { id: "lego-thin", name: "Lego Thin", family: "thin", baseRadius: 14, coreDensity: 1.08, coreOpacity: 0.35, edgeFalloff: 0.84, particleCount: 8, particleSpread: 0.8, particleSize: 0.4, particleOpacity: 0.22, flowRate: 0.88, accumulationRate: 0.9, velocityResponse: 0.92, jitter: 0.04, endpointBehavior: "settled", splatterProbability: 0.03, dripTendency: 0.18, anisotropy: 1, haloRadius: 0, haloOpacity: 0, wiggleAmplitude: 0, wiggleFrequency: 0, depositionShape: "line", defaultFillMode: false, ringRadius: 0, ringThickness: 0, ringOpacity: 0, centerOpacity: 0, streakLanes: 0, haloDistanceGain: 0, haloFlareAnisotropy: 0, haloDabSpacing: 0, haloRingBias: 0 },
+  { id: "universal-thin", name: "Universal Thin", family: "thin", baseRadius: 11, coreDensity: 0.92, coreOpacity: 0.32, edgeFalloff: 0.78, particleCount: 7, particleSpread: 0.88, particleSize: 0.38, particleOpacity: 0.2, flowRate: 0.8, accumulationRate: 0.84, velocityResponse: 1, jitter: 0.07, endpointBehavior: "tapered", splatterProbability: 0.05, dripTendency: 0.12, anisotropy: 1, haloRadius: 0, haloOpacity: 0, wiggleAmplitude: 0, wiggleFrequency: 0, depositionShape: "line", defaultFillMode: false, ringRadius: 0, ringThickness: 0, ringOpacity: 0, centerOpacity: 0, streakLanes: 0, haloDistanceGain: 0, haloFlareAnisotropy: 0, haloDabSpacing: 0, haloRingBias: 0 },
+  { id: "level-1", name: "Level 1 / Skinny Cream", family: "thin", baseRadius: 6, coreDensity: 0.84, coreOpacity: 0.3, edgeFalloff: 0.88, particleCount: 4, particleSpread: 0.68, particleSize: 0.3, particleOpacity: 0.18, flowRate: 0.64, accumulationRate: 0.72, velocityResponse: 1, jitter: 0.03, endpointBehavior: "tapered", splatterProbability: 0.01, dripTendency: 0.06, anisotropy: 1, haloRadius: 0, haloOpacity: 0, wiggleAmplitude: 0, wiggleFrequency: 0, depositionShape: "line", defaultFillMode: false, ringRadius: 0, ringThickness: 0, ringOpacity: 0, centerOpacity: 0, streakLanes: 0, haloDistanceGain: 0, haloFlareAnisotropy: 0, haloDabSpacing: 0, haloRingBias: 0 },
+  { id: "new-york-thin", name: "New York Thin", family: "thin", baseRadius: 9, coreDensity: 1.2, coreOpacity: 0.38, edgeFalloff: 0.82, particleCount: 6, particleSpread: 0.76, particleSize: 0.34, particleOpacity: 0.2, flowRate: 0.82, accumulationRate: 0.92, velocityResponse: 0.86, jitter: 0.04, endpointBehavior: "punchy", splatterProbability: 0.04, dripTendency: 0.16, anisotropy: 1, haloRadius: 0, haloOpacity: 0, wiggleAmplitude: 0, wiggleFrequency: 0, depositionShape: "line", defaultFillMode: false, ringRadius: 0, ringThickness: 0, ringOpacity: 0, centerOpacity: 0, streakLanes: 0, haloDistanceGain: 0, haloFlareAnisotropy: 0, haloDabSpacing: 0, haloRingBias: 0 },
   // Oval Calligraphy — same numbers as the original single "Calligraphy /
   // Transversal" cap, same stable `calligraphy` id (no persisted artwork
   // exists yet to break, matching the precedent already used for german-fat's
   // pre-fork numbers), now stamped as a genuinely elongated oval footprint
   // (depositionShape "oval") instead of a width-modulated line. See
   // SprayBrushEngine.resolveShapedStampGeometry.
-  { id: "calligraphy", name: "Oval Calligraphy", family: "specialty", baseRadius: 25, coreDensity: 1.02, coreOpacity: 0.33, edgeFalloff: 0.74, particleCount: 10, particleSpread: 0.82, particleSize: 0.42, particleOpacity: 0.2, flowRate: 0.96, accumulationRate: 0.94, velocityResponse: 0.72, jitter: 0.04, endpointBehavior: "tapered", splatterProbability: 0.04, dripTendency: 0.22, anisotropy: 0.32, haloRadius: 0, haloOpacity: 0, wiggleAmplitude: 0, wiggleFrequency: 0, depositionShape: "oval", defaultFillMode: false, ringRadius: 0, ringThickness: 0, ringOpacity: 0, centerOpacity: 0, streakLanes: 0 },
+  { id: "calligraphy", name: "Oval Calligraphy", family: "specialty", baseRadius: 25, coreDensity: 1.02, coreOpacity: 0.33, edgeFalloff: 0.74, particleCount: 10, particleSpread: 0.82, particleSize: 0.42, particleOpacity: 0.2, flowRate: 0.96, accumulationRate: 0.94, velocityResponse: 0.72, jitter: 0.04, endpointBehavior: "tapered", splatterProbability: 0.04, dripTendency: 0.22, anisotropy: 0.32, haloRadius: 0, haloOpacity: 0, wiggleAmplitude: 0, wiggleFrequency: 0, depositionShape: "oval", defaultFillMode: false, ringRadius: 0, ringThickness: 0, ringOpacity: 0, centerOpacity: 0, streakLanes: 0, haloDistanceGain: 0, haloFlareAnisotropy: 0, haloDabSpacing: 0, haloRingBias: 0 },
   // Rectangular / Slot Transversal — a NEW canonical id (never overwrites
   // "calligraphy"), stamped with depositionShape "slot" (a rotated rounded
   // rectangle, sharper corners than the oval) at a harder edgeFalloff and
@@ -168,7 +223,7 @@ export const SPRAY_CAP_PRESETS: readonly SprayCapPreset[] = [
   // Lower anisotropy than Oval Calligraphy gives its overspray plume a
   // stronger squash too, reinforcing the "more obvious wide/narrow contrast"
   // target relative to the oval sibling.
-  { id: "transversal-slot", name: "Rectangular Transversal", family: "specialty", baseRadius: 25, coreDensity: 1.02, coreOpacity: 0.33, edgeFalloff: 0.85, particleCount: 10, particleSpread: 0.82, particleSize: 0.42, particleOpacity: 0.2, flowRate: 0.96, accumulationRate: 0.94, velocityResponse: 0.72, jitter: 0.03, endpointBehavior: "tapered", splatterProbability: 0.04, dripTendency: 0.22, anisotropy: 0.22, haloRadius: 0, haloOpacity: 0, wiggleAmplitude: 0, wiggleFrequency: 0, depositionShape: "slot", defaultFillMode: false, ringRadius: 0, ringThickness: 0, ringOpacity: 0, centerOpacity: 0, streakLanes: 0 },
+  { id: "transversal-slot", name: "Rectangular Transversal", family: "specialty", baseRadius: 25, coreDensity: 1.02, coreOpacity: 0.33, edgeFalloff: 0.85, particleCount: 10, particleSpread: 0.82, particleSize: 0.42, particleOpacity: 0.2, flowRate: 0.96, accumulationRate: 0.94, velocityResponse: 0.72, jitter: 0.03, endpointBehavior: "tapered", splatterProbability: 0.04, dripTendency: 0.22, anisotropy: 0.22, haloRadius: 0, haloOpacity: 0, wiggleAmplitude: 0, wiggleFrequency: 0, depositionShape: "slot", defaultFillMode: false, ringRadius: 0, ringThickness: 0, ringOpacity: 0, centerOpacity: 0, streakLanes: 0, haloDistanceGain: 0, haloFlareAnisotropy: 0, haloDabSpacing: 0, haloRingBias: 0 },
   // Needle — corrected. The prior numbers (edgeFalloff 0.92, particleSpread
   // 2.05, particleCount 15, particleOpacity 0.3, endpointBehavior "raw")
   // already gave a tight CORE (high edgeFalloff means LESS pass-to-pass core
@@ -184,17 +239,17 @@ export const SPRAY_CAP_PRESETS: readonly SprayCapPreset[] = [
   // and accumulationRate are untouched — not in the audited field list and
   // not identified as causes of the fuzzy read. wiggleAmplitude stays 0:
   // normal Needle must not wiggle.
-  { id: "needle", name: "Needle", family: "specialty", baseRadius: 5, coreDensity: 1.58, coreOpacity: 0.48, edgeFalloff: 0.94, particleCount: 9, particleSpread: 0.65, particleSize: 0.26, particleOpacity: 0.16, flowRate: 1.12, accumulationRate: 1.6, velocityResponse: 0.9, jitter: 0.12, endpointBehavior: "tapered", splatterProbability: 0.24, dripTendency: 0.94, anisotropy: 1, haloRadius: 0, haloOpacity: 0, wiggleAmplitude: 0, wiggleFrequency: 0, depositionShape: "line", defaultFillMode: false, ringRadius: 0, ringThickness: 0, ringOpacity: 0, centerOpacity: 0, streakLanes: 0 },
+  { id: "needle", name: "Needle", family: "specialty", baseRadius: 5, coreDensity: 1.58, coreOpacity: 0.48, edgeFalloff: 0.94, particleCount: 9, particleSpread: 0.65, particleSize: 0.26, particleOpacity: 0.16, flowRate: 1.12, accumulationRate: 1.6, velocityResponse: 0.9, jitter: 0.12, endpointBehavior: "tapered", splatterProbability: 0.24, dripTendency: 0.94, anisotropy: 1, haloRadius: 0, haloOpacity: 0, wiggleAmplitude: 0, wiggleFrequency: 0, depositionShape: "line", defaultFillMode: false, ringRadius: 0, ringThickness: 0, ringOpacity: 0, centerOpacity: 0, streakLanes: 0, haloDistanceGain: 0, haloFlareAnisotropy: 0, haloDabSpacing: 0, haloRingBias: 0 },
   // Wiggly Needle — forked from the CORRECTED Needle above (every deposition
   // field identical), adding only the deterministic lateral wander. Keeping
   // this fork in place (rather than letting it silently retain the old fuzzy
   // numbers) is exactly what "inherits the corrected Needle personality"
   // requires.
-  { id: "wiggly-needle", name: "Wiggly Needle", family: "specialty", baseRadius: 5, coreDensity: 1.58, coreOpacity: 0.48, edgeFalloff: 0.94, particleCount: 9, particleSpread: 0.65, particleSize: 0.26, particleOpacity: 0.16, flowRate: 1.12, accumulationRate: 1.6, velocityResponse: 0.9, jitter: 0.12, endpointBehavior: "tapered", splatterProbability: 0.24, dripTendency: 0.94, anisotropy: 1, haloRadius: 0, haloOpacity: 0, wiggleAmplitude: 0.6, wiggleFrequency: 0.02, depositionShape: "line", defaultFillMode: false, ringRadius: 0, ringThickness: 0, ringOpacity: 0, centerOpacity: 0, streakLanes: 0 },
-  { id: "soft-fade", name: "Soft / Fade", family: "specialty", baseRadius: 50, coreDensity: 0.36, coreOpacity: 0.13, edgeFalloff: 0.28, particleCount: 42, particleSpread: 1.6, particleSize: 0.38, particleOpacity: 0.14, flowRate: 0.68, accumulationRate: 0.52, velocityResponse: 0.82, jitter: 0.2, endpointBehavior: "settled", splatterProbability: 0.12, dripTendency: 0.04, anisotropy: 1, haloRadius: 0, haloOpacity: 0, wiggleAmplitude: 0, wiggleFrequency: 0, depositionShape: "line", defaultFillMode: false, ringRadius: 0, ringThickness: 0, ringOpacity: 0, centerOpacity: 0, streakLanes: 0 },
+  { id: "wiggly-needle", name: "Wiggly Needle", family: "specialty", baseRadius: 5, coreDensity: 1.58, coreOpacity: 0.48, edgeFalloff: 0.94, particleCount: 9, particleSpread: 0.65, particleSize: 0.26, particleOpacity: 0.16, flowRate: 1.12, accumulationRate: 1.6, velocityResponse: 0.9, jitter: 0.12, endpointBehavior: "tapered", splatterProbability: 0.24, dripTendency: 0.94, anisotropy: 1, haloRadius: 0, haloOpacity: 0, wiggleAmplitude: 0.6, wiggleFrequency: 0.02, depositionShape: "line", defaultFillMode: false, ringRadius: 0, ringThickness: 0, ringOpacity: 0, centerOpacity: 0, streakLanes: 0, haloDistanceGain: 0, haloFlareAnisotropy: 0, haloDabSpacing: 0, haloRingBias: 0 },
+  { id: "soft-fade", name: "Soft / Fade", family: "specialty", baseRadius: 50, coreDensity: 0.36, coreOpacity: 0.13, edgeFalloff: 0.28, particleCount: 42, particleSpread: 1.6, particleSize: 0.38, particleOpacity: 0.14, flowRate: 0.68, accumulationRate: 0.52, velocityResponse: 0.82, jitter: 0.2, endpointBehavior: "settled", splatterProbability: 0.12, dripTendency: 0.04, anisotropy: 1, haloRadius: 0, haloOpacity: 0, wiggleAmplitude: 0, wiggleFrequency: 0, depositionShape: "line", defaultFillMode: false, ringRadius: 0, ringThickness: 0, ringOpacity: 0, centerOpacity: 0, streakLanes: 0, haloDistanceGain: 0, haloFlareAnisotropy: 0, haloDabSpacing: 0, haloRingBias: 0 },
   // Forked verbatim from "german-fat" (see SprayCapProfile.ts) to freeze this fuzzy/dry-brush digital
   // behavior under its own permanent identity before "german-fat" is recalibrated to the real cap.
-  { id: "fuzz-fat", name: "Fuzz Fat", family: "specialty", baseRadius: 38, coreDensity: 1.06, coreOpacity: 0.27, edgeFalloff: 0.54, particleCount: 32, particleSpread: 1.42, particleSize: 0.62, particleOpacity: 0.24, flowRate: 1.18, accumulationRate: 1.08, velocityResponse: 0.68, jitter: 0.18, endpointBehavior: "raw", splatterProbability: 0.28, dripTendency: 0.5, anisotropy: 1, haloRadius: 0, haloOpacity: 0, wiggleAmplitude: 0, wiggleFrequency: 0, depositionShape: "line", defaultFillMode: false, ringRadius: 0, ringThickness: 0, ringOpacity: 0, centerOpacity: 0, streakLanes: 0 },
+  { id: "fuzz-fat", name: "Fuzz Fat", family: "specialty", baseRadius: 38, coreDensity: 1.06, coreOpacity: 0.27, edgeFalloff: 0.54, particleCount: 32, particleSpread: 1.42, particleSize: 0.62, particleOpacity: 0.24, flowRate: 1.18, accumulationRate: 1.08, velocityResponse: 0.68, jitter: 0.18, endpointBehavior: "raw", splatterProbability: 0.28, dripTendency: 0.5, anisotropy: 1, haloRadius: 0, haloOpacity: 0, wiggleAmplitude: 0, wiggleFrequency: 0, depositionShape: "line", defaultFillMode: false, ringRadius: 0, ringThickness: 0, ringOpacity: 0, centerOpacity: 0, streakLanes: 0, haloDistanceGain: 0, haloFlareAnisotropy: 0, haloDabSpacing: 0, haloRingBias: 0 },
   // Ring / Donut — StudioRich digital effect archetype, NOT a physical-cap
   // identity (no real cap this maps to; see checkpoint doc/Visual Audit).
   // depositionShape "ring" replaces the filled core entirely with a genuine
@@ -207,7 +262,7 @@ export const SPRAY_CAP_PRESETS: readonly SprayCapPreset[] = [
   // Fill mode default OFF: dot/dwell personality is the point, and the
   // fill-mode-only tests below already confirm the ring's own ceiling
   // integration works if the user opts in manually.
-  { id: "ring-donut", name: "Ring / Donut", family: "specialty", baseRadius: 40, coreDensity: 1.2, coreOpacity: 0.3, edgeFalloff: 0.7, particleCount: 20, particleSpread: 1.15, particleSize: 0.6, particleOpacity: 0.22, flowRate: 1.2, accumulationRate: 1.2, velocityResponse: 0.5, jitter: 0.06, endpointBehavior: "punchy", splatterProbability: 0.1, dripTendency: 0.5, anisotropy: 1, haloRadius: 0, haloOpacity: 0, wiggleAmplitude: 0, wiggleFrequency: 0, depositionShape: "ring", defaultFillMode: false, ringRadius: 1.15, ringThickness: 0.4, ringOpacity: 0.4, centerOpacity: 0.05, streakLanes: 0 },
+  { id: "ring-donut", name: "Ring / Donut", family: "specialty", baseRadius: 40, coreDensity: 1.2, coreOpacity: 0.3, edgeFalloff: 0.7, particleCount: 20, particleSpread: 1.15, particleSize: 0.6, particleOpacity: 0.22, flowRate: 1.2, accumulationRate: 1.2, velocityResponse: 0.5, jitter: 0.06, endpointBehavior: "punchy", splatterProbability: 0.1, dripTendency: 0.5, anisotropy: 1, haloRadius: 0, haloOpacity: 0, wiggleAmplitude: 0, wiggleFrequency: 0, depositionShape: "ring", defaultFillMode: false, ringRadius: 1.15, ringThickness: 0.4, ringOpacity: 0.4, centerOpacity: 0.05, streakLanes: 0, haloDistanceGain: 0, haloFlareAnisotropy: 0, haloDabSpacing: 0, haloRingBias: 0 },
   // Dry / Streak — StudioRich digital effect archetype, NOT a physical-cap
   // identity. depositionShape "streak" replaces the concentric-pass core
   // with streakLanes (5) parallel deterministic lanes, each gated on/off
@@ -220,7 +275,7 @@ export const SPRAY_CAP_PRESETS: readonly SprayCapPreset[] = [
   // cap should feel deliberately under-loaded per stroke, with the
   // broken/textured character the point of a single pass — the user opts
   // into Fill for throwie-style repeated-pass buildup, same as any other cap.
-  { id: "dry-streak", name: "Dry / Streak", family: "specialty", baseRadius: 34, coreDensity: 1.1, coreOpacity: 0.34, edgeFalloff: 0.66, particleCount: 14, particleSpread: 1, particleSize: 0.5, particleOpacity: 0.18, flowRate: 1, accumulationRate: 1, velocityResponse: 0.62, jitter: 0.05, endpointBehavior: "raw", splatterProbability: 0.06, dripTendency: 0.14, anisotropy: 1, haloRadius: 0, haloOpacity: 0, wiggleAmplitude: 0, wiggleFrequency: 0, depositionShape: "streak", defaultFillMode: false, ringRadius: 0, ringThickness: 0, ringOpacity: 0, centerOpacity: 0, streakLanes: 5 },
+  { id: "dry-streak", name: "Dry / Streak", family: "specialty", baseRadius: 34, coreDensity: 1.1, coreOpacity: 0.34, edgeFalloff: 0.66, particleCount: 14, particleSpread: 1, particleSize: 0.5, particleOpacity: 0.18, flowRate: 1, accumulationRate: 1, velocityResponse: 0.62, jitter: 0.05, endpointBehavior: "raw", splatterProbability: 0.06, dripTendency: 0.14, anisotropy: 1, haloRadius: 0, haloOpacity: 0, wiggleAmplitude: 0, wiggleFrequency: 0, depositionShape: "streak", defaultFillMode: false, ringRadius: 0, ringThickness: 0, ringOpacity: 0, centerOpacity: 0, streakLanes: 5, haloDistanceGain: 0, haloFlareAnisotropy: 0, haloDabSpacing: 0, haloRingBias: 0 },
 ] as const;
 
 const LEGACY_CAP_ALIASES: Record<string, SprayCapId> = {

@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   SprayBrushEngine,
   createStrokeRandom,
+  resolveHaloDistanceGain,
+  resolveHaloFlareRatio,
+  resolveHaloGradientStops,
   resolveOverspraySquashAngle,
   resolveRingProfile,
   resolveShapedStampGeometry,
@@ -22,10 +25,14 @@ function segmentRecordingContext(): {
   strokeStyles: string[];
   fillStyles: string[];
   gradients: RecordedGradient[];
+  rotateCalls: number[];
+  scaleCalls: Array<{ x: number; y: number }>;
 } {
   const strokeStyles: string[] = [];
   const fillStyles: string[] = [];
   const gradients: RecordedGradient[] = [];
+  const rotateCalls: number[] = [];
+  const scaleCalls: Array<{ x: number; y: number }> = [];
   let strokeStyle = "";
   let fillStyle = "";
   let activeGradient: RecordedGradient | null = null;
@@ -40,7 +47,8 @@ function segmentRecordingContext(): {
     arcTo: () => undefined,
     ellipse: () => undefined,
     translate: () => undefined,
-    rotate: () => undefined,
+    rotate: (angle: number) => rotateCalls.push(angle),
+    scale: (x: number, y: number) => scaleCalls.push({ x, y }),
     stroke: () => strokeStyles.push(strokeStyle),
     fill: () => fillStyles.push(fillStyle),
     createRadialGradient: (x0: number, y0: number, r0: number, x1: number, y1: number, r1: number) => {
@@ -61,7 +69,7 @@ function segmentRecordingContext(): {
     lineJoin: "round",
     lineWidth: 0,
   } as unknown as CanvasRenderingContext2D;
-  return { ctx, strokeStyles, fillStyles, gradients };
+  return { ctx, strokeStyles, fillStyles, gradients, rotateCalls, scaleCalls };
 }
 
 function alphaOf(rgba: string): number {
@@ -417,6 +425,215 @@ describe("spray cap personality — halo, fixed-axis overspray, Wiggly Needle", 
     const first = render();
     const second = render();
     expect(second.ys).toEqual(first.ys);
+  });
+});
+
+describe("Pink Dot Fat correction — distance-sensitive, oblique-flared, dab-spaced, center+ring halo", () => {
+  const pink = getSprayCapPreset("pink-dot-fat");
+
+  describe("resolveHaloDistanceGain — near-wall clean dot vs. pulled-back bloom", () => {
+    it("is exactly 1 (no change) for a cap with haloDistanceGain 0, regardless of size", () => {
+      const flat = { ...pink, haloDistanceGain: 0 };
+      expect(resolveHaloDistanceGain(flat, 10)).toBe(1);
+      expect(resolveHaloDistanceGain(flat, 200)).toBe(1);
+    });
+
+    it("suppresses the halo below 1 when the resolved size is well below the cap's own baseRadius", () => {
+      const gain = resolveHaloDistanceGain(pink, pink.baseRadius * 0.3);
+      expect(gain).toBeLessThan(1);
+      expect(gain).toBeGreaterThan(0);
+    });
+
+    it("amplifies the halo above 1 when the resolved size is well above the cap's own baseRadius", () => {
+      const gain = resolveHaloDistanceGain(pink, pink.baseRadius * 1.7);
+      expect(gain).toBeGreaterThan(1);
+    });
+
+    it("resolves to exactly 1 at the cap's own native baseRadius", () => {
+      expect(resolveHaloDistanceGain(pink, pink.baseRadius)).toBe(1);
+    });
+
+    it("is monotonic — bigger resolved size always yields bigger (or equal) gain", () => {
+      const small = resolveHaloDistanceGain(pink, pink.baseRadius * 0.4);
+      const medium = resolveHaloDistanceGain(pink, pink.baseRadius * 1);
+      const large = resolveHaloDistanceGain(pink, pink.baseRadius * 1.6);
+      expect(medium).toBeGreaterThan(small);
+      expect(large).toBeGreaterThan(medium);
+    });
+  });
+
+  describe("resolveHaloFlareRatio — oblique elliptical flare on movement, circular at rest", () => {
+    it("is exactly 1 (a perfect circle) for a cap with haloFlareAnisotropy 0, regardless of velocity", () => {
+      const flat = { ...pink, haloFlareAnisotropy: 0 };
+      expect(resolveHaloFlareRatio(flat, 0)).toBe(1);
+      expect(resolveHaloFlareRatio(flat, 5)).toBe(1);
+    });
+
+    it("stays exactly 1 for stationary/near-stationary dwell velocities", () => {
+      expect(resolveHaloFlareRatio(pink, 0)).toBe(1);
+      expect(resolveHaloFlareRatio(pink, 0.03)).toBe(1);
+      expect(resolveHaloFlareRatio(pink, 0.05)).toBe(1);
+    });
+
+    it("drops below 1 for genuinely fast/oblique travel", () => {
+      const ratio = resolveHaloFlareRatio(pink, 1);
+      expect(ratio).toBeLessThan(1);
+      expect(ratio).toBeGreaterThan(0);
+    });
+
+    it("never goes below (1 - haloFlareAnisotropy), even at extreme velocity", () => {
+      const ratio = resolveHaloFlareRatio(pink, 50);
+      expect(ratio).toBeCloseTo(1 - pink.haloFlareAnisotropy, 5);
+    });
+  });
+
+  describe("resolveHaloGradientStops — moat-then-peak center+ring profile", () => {
+    it("returns the exact original two-stop linear fade when haloRingBias is 0", () => {
+      const flat = { ...pink, haloRingBias: 0 };
+      expect(resolveHaloGradientStops(flat, 0.4)).toEqual([{ offset: 0, alpha: 0.4 }, { offset: 1, alpha: 0 }]);
+    });
+
+    it("returns a four-stop moat-then-peak profile when haloRingBias is set", () => {
+      const stops = resolveHaloGradientStops(pink, 0.4);
+      expect(stops).toHaveLength(4);
+      expect(stops[0].offset).toBe(0);
+      expect(stops[stops.length - 1]).toEqual({ offset: 1, alpha: 0 });
+      // A genuine moat: the middle stop dips below both its neighbors.
+      const moat = stops[1];
+      expect(moat.alpha).toBeLessThan(stops[0].alpha);
+      expect(moat.alpha).toBeLessThan(stops[2].alpha);
+      // A genuine peak: the outer band stop is brighter than the fading-in center.
+      expect(stops[2].alpha).toBeGreaterThan(stops[0].alpha);
+    });
+
+    it("keeps every stop's alpha strictly proportional to the input alpha, so haloOpacity scaling stays deterministic", () => {
+      const half = resolveHaloGradientStops(pink, 0.2);
+      const full = resolveHaloGradientStops(pink, 0.4);
+      for (let i = 0; i < half.length; i += 1) {
+        expect(full[i].alpha).toBeCloseTo(half[i].alpha * 2, 6);
+      }
+    });
+
+    it("never mutates the core disc — this reshapes the halo gradient only, the core stays fully opaque underneath, distinct from Ring/Donut's genuinely hollow center", () => {
+      const stops = resolveHaloGradientStops(pink, 0.4);
+      // Every stop offset stays inside (0,1) except the fixed 0/1 endpoints — no moat reaches all the way to 0 alpha at the center, unlike Ring/Donut's real hollow.
+      expect(stops[0].alpha).toBeGreaterThan(0);
+    });
+  });
+
+  describe("rendered halo — dab spacing, ellipse transform, and non-Pink-Dot regression", () => {
+    it("gates halo draws by travel distance on a moving stroke, producing fewer dabs than segments", () => {
+      const engine = new SprayBrushEngine();
+      const { ctx, gradients } = segmentRecordingContext();
+      const random = createStrokeRandom(9);
+      engine.beginStroke();
+      let previous: StrokePoint | null = null;
+      const segments = 20;
+      for (let i = 0; i <= segments; i += 1) {
+        // Small steps relative to Pink Dot's ~42-unit baseRadius/halo size, so several segments fall within one dab-spacing window.
+        const point: StrokePoint = { x: i * 4, y: 0, timestamp: i * 16, velocity: 0.3, width: 42, opacity: 1 };
+        engine.renderSegment(ctx, previous, point, "#ffffff", pink, random);
+        previous = point;
+      }
+      // One gradient per halo draw call (single-point-per-call after the first), each call draws at most one NEW endpoint once a stroke is underway.
+      expect(gradients.length).toBeLessThan(segments);
+      expect(gradients.length).toBeGreaterThan(0);
+    });
+
+    it("never gates a true dwell (zero travel distance) — every repeated call at the same point still draws", () => {
+      const engine = new SprayBrushEngine();
+      const { ctx, gradients } = segmentRecordingContext();
+      const random = createStrokeRandom(9);
+      const point: StrokePoint = { x: 40, y: 40, timestamp: 0, velocity: 0.03, width: 42, opacity: 1 };
+      engine.beginStroke();
+      engine.renderSegment(ctx, null, point, "#ffffff", pink, random);
+      for (let i = 0; i < 5; i += 1) engine.renderSegment(ctx, point, point, "#ffffff", pink, random);
+      expect(gradients.length).toBe(6);
+    });
+
+    it("resets dab spacing at the start of each new stroke", () => {
+      const engine = new SprayBrushEngine();
+      const random = createStrokeRandom(9);
+      const runStroke = () => {
+        const { ctx, gradients } = segmentRecordingContext();
+        engine.beginStroke();
+        let previous: StrokePoint | null = null;
+        for (let i = 0; i <= 3; i += 1) {
+          const point: StrokePoint = { x: i * 3, y: 0, timestamp: i * 16, velocity: 0.3, width: 42, opacity: 1 };
+          engine.renderSegment(ctx, previous, point, "#ffffff", pink, random);
+          previous = point;
+        }
+        return gradients.length;
+      };
+      const first = runStroke();
+      const second = runStroke();
+      // Same short deterministic path each time -> same dab count each time, proving state didn't leak/accumulate across the beginStroke() boundary.
+      expect(second).toBe(first);
+    });
+
+    it("elongates the halo into an ellipse (rotate + scale) on a fast-moving segment, but never on a stationary dwell", () => {
+      const dwell = segmentRecordingContext();
+      const dwellPoint: StrokePoint = { x: 40, y: 40, timestamp: 0, velocity: 0.05, width: 42, opacity: 1 };
+      new SprayBrushEngine().renderSegment(dwell.ctx, null, dwellPoint, "#ffffff", pink, createStrokeRandom(4));
+      expect(dwell.rotateCalls).toHaveLength(0);
+      expect(dwell.scaleCalls).toHaveLength(0);
+
+      const moving = segmentRecordingContext();
+      const start: StrokePoint = { x: 0, y: 0, timestamp: 0, velocity: 1.2, width: 42, opacity: 1 };
+      // Distance must clear the dab-spacing threshold (haloRadius * haloDabSpacing) or the draw is gated entirely.
+      const end: StrokePoint = { x: 200, y: 0, timestamp: 16, velocity: 1.2, width: 42, opacity: 1 };
+      new SprayBrushEngine().renderSegment(moving.ctx, start, end, "#ffffff", pink, createStrokeRandom(4));
+      expect(moving.rotateCalls.length).toBeGreaterThan(0);
+      expect(moving.scaleCalls.length).toBeGreaterThan(0);
+      // Elongated along a purely horizontal travel (dx>0, dy=0) -> travel angle 0.
+      expect(moving.rotateCalls[0]).toBeCloseTo(0, 5);
+      expect(moving.scaleCalls[0].y).toBeLessThan(1);
+      expect(moving.scaleCalls[0].x).toBe(1);
+    });
+
+    it("gives every OTHER cap all four halo-correction fields at 0 — the same neutral default as every cap before this build", () => {
+      for (const id of [
+        "new-york-fat", "astro-fat", "german-fat", "lego-thin", "universal-thin", "level-1",
+        "new-york-thin", "calligraphy", "transversal-slot", "needle", "wiggly-needle",
+        "soft-fade", "fuzz-fat", "ring-donut", "dry-streak",
+      ]) {
+        const cap = getSprayCapPreset(id);
+        expect(cap.haloDistanceGain).toBe(0);
+        expect(cap.haloFlareAnisotropy).toBe(0);
+        expect(cap.haloDabSpacing).toBe(0);
+        expect(cap.haloRingBias).toBe(0);
+      }
+    });
+
+    it("leaves every cap WITHOUT a halo field producing zero halo gradients — renderHalo still no-ops immediately (Ring/Donut is excluded here: its own core IS a gradient, an unrelated pre-existing mechanism, not a halo)", () => {
+      for (const id of [
+        "new-york-fat", "astro-fat", "german-fat", "lego-thin", "universal-thin", "level-1",
+        "new-york-thin", "calligraphy", "transversal-slot", "needle", "wiggly-needle",
+        "soft-fade", "fuzz-fat", "dry-streak",
+      ]) {
+        const cap = getSprayCapPreset(id);
+        const point: StrokePoint = { x: 40, y: 40, timestamp: 0, velocity: 1.2, width: cap.baseRadius, opacity: 1 };
+        const rec = segmentRecordingContext();
+        new SprayBrushEngine().renderSegment(rec.ctx, null, point, "#ffffff", cap, createStrokeRandom(6));
+        expect(rec.gradients).toHaveLength(0);
+      }
+    });
+
+    it("leaves Pink Dot's CORE and overspray rendering completely unaffected by the halo correction fields — same corePasses draw sequence and same overspray particles regardless of dab spacing/flare/distance gain/ring bias", () => {
+      const point: StrokePoint = { x: 40, y: 40, timestamp: 0, velocity: 1.2, width: 42, opacity: 1 };
+      const withCorrection = segmentRecordingContext();
+      new SprayBrushEngine().renderSegment(withCorrection.ctx, null, point, "#ffffff", pink, createStrokeRandom(11));
+      const legacy = { ...pink, haloDistanceGain: 0, haloFlareAnisotropy: 0, haloDabSpacing: 0, haloRingBias: 0 };
+      const withoutCorrection = segmentRecordingContext();
+      new SprayBrushEngine().renderSegment(withoutCorrection.ctx, null, point, "#ffffff", legacy, createStrokeRandom(11));
+      // The core (line stroke passes) never touches the halo at all.
+      expect(withCorrection.strokeStyles).toEqual(withoutCorrection.strokeStyles);
+      // fillStyles[0] is the halo's OWN fill (legitimately different — that's
+      // the correction working); fillStyles[1:] is the overspray particles,
+      // which must still match exactly since none of these fields touch overspray.
+      expect(withCorrection.fillStyles.slice(1)).toEqual(withoutCorrection.fillStyles.slice(1));
+      expect(withCorrection.fillStyles[0]).not.toEqual(withoutCorrection.fillStyles[0]);
+    });
   });
 });
 

@@ -187,6 +187,75 @@ export function createStrokeRandom(seed: number): () => number {
   };
 }
 
+/**
+ * Pink Dot Fat's halo-distance correction (see `SprayCapPresets.ts`'s
+ * `haloDistanceGain` field doc). Pure function of the cap and the resolved
+ * (live) radius — a small resolved size relative to the cap's own
+ * `baseRadius` (spraying "close," in effect) suppresses the halo toward a
+ * clean hot dot/line; a large resolved size ("pulled back") amplifies it.
+ * `haloDistanceGain` 0 always returns gain 1 — the exact legacy strength.
+ */
+export function resolveHaloDistanceGain(cap: SprayCapPreset, resolvedRadius: number): number {
+  if (cap.haloDistanceGain <= 0 || cap.baseRadius <= 0) return 1;
+  const sizeRatio = resolvedRadius / cap.baseRadius;
+  const clampedRatio = Math.max(0.15, Math.min(1.8, sizeRatio));
+  return 1 + (clampedRatio - 1) * cap.haloDistanceGain;
+}
+
+/**
+ * Below this velocity, spraying reads as a stationary/near-stationary dwell
+ * — the halo stays an exact circle (no elongation at all), matching typical
+ * dwell fixture velocities (~0.03-0.05) used throughout this codebase's own
+ * tests and the Calibration Bench's dwell samples. Real "oblique, moving"
+ * spraying starts above this.
+ */
+const HALO_FLARE_VELOCITY_THRESHOLD = 0.12;
+
+/**
+ * Pink Dot Fat's oblique-flare correction (see `haloFlareAnisotropy` field
+ * doc). Returns the halo's minor:major axis ratio — 1 is a perfect circle.
+ * A stationary/near-stationary dwell (velocity at or below
+ * `HALO_FLARE_VELOCITY_THRESHOLD`) always resolves to EXACTLY 1 regardless
+ * of `haloFlareAnisotropy`, so dwell behavior is unaffected; faster travel
+ * elongates the halo along the segment's own travel angle, reaching full
+ * effect at 1.5 units/ms (the same normalization `mapVelocityToDensity`
+ * already uses elsewhere in this engine).
+ */
+export function resolveHaloFlareRatio(cap: SprayCapPreset, velocity: number): number {
+  if (cap.haloFlareAnisotropy <= 0) return 1;
+  const clampedVelocity = Math.max(0, velocity);
+  if (clampedVelocity <= HALO_FLARE_VELOCITY_THRESHOLD) return 1;
+  const velocityFactor = Math.min(1, (clampedVelocity - HALO_FLARE_VELOCITY_THRESHOLD) / (1.5 - HALO_FLARE_VELOCITY_THRESHOLD));
+  return 1 - cap.haloFlareAnisotropy * velocityFactor;
+}
+
+export interface HaloGradientStop {
+  offset: number;
+  alpha: number;
+}
+
+/**
+ * Pink Dot Fat's center-plus-ring correction (see `haloRingBias` field doc).
+ * At bias 0 this returns the ORIGINAL two-stop linear fade — byte-identical
+ * to the pre-correction halo everywhere `haloRingBias` is 0 (every cap but
+ * Pink Dot). At bias > 0 it returns a moat-then-peak profile so a large
+ * resolved halo reads as a genuine center+ring bloom, not one smooth glow.
+ * The stop alphas stay strictly proportional to the input `alpha`, so
+ * scaling a cap's `haloOpacity` still scales every stop deterministically.
+ */
+export function resolveHaloGradientStops(cap: SprayCapPreset, alpha: number): readonly HaloGradientStop[] {
+  if (cap.haloRingBias <= 0 || alpha <= 0) {
+    return [{ offset: 0, alpha }, { offset: 1, alpha: 0 }];
+  }
+  const bias = Math.min(1, cap.haloRingBias);
+  return [
+    { offset: 0, alpha: alpha * (1 - bias * 0.55) },
+    { offset: 0.42, alpha: alpha * (1 - bias) * 0.25 },
+    { offset: 0.7, alpha: Math.min(1, alpha * (1 + bias * 0.35)) },
+    { offset: 1, alpha: 0 },
+  ];
+}
+
 export class SprayBrushEngine {
   private activeDrips: ActiveDrip[] = [];
   /**
@@ -201,6 +270,15 @@ export class SprayBrushEngine {
    * top of whatever a prior stroke already deposited.
    */
   private fillLocalSaturation = new Map<string, number>();
+  /**
+   * Cumulative travel distance (world units) since the last drawn halo dab,
+   * for caps with `haloDabSpacing > 0` (currently only Pink Dot Fat) — see
+   * `renderHalo`. A single running scalar, not a spatial map like
+   * `fillLocalSaturation`: dab spacing is a 1D "how far along THIS path
+   * since the last dab" concept, not a per-location saturation one. Reset at
+   * the start of every stroke so a new stroke's first dab always draws.
+   */
+  private haloTravelSinceLastDab = 0;
 
   public resize(_width: number, _height: number): void {
     // The brush deposits directly into the persistent paint canvas.
@@ -212,6 +290,7 @@ export class SprayBrushEngine {
 
   public beginStroke(): void {
     this.fillLocalSaturation.clear();
+    this.haloTravelSinceLastDab = 0;
   }
 
   private fillCellKey(x: number, y: number, cellSize: number): string {
@@ -265,7 +344,7 @@ export class SprayBrushEngine {
       drawPoint.y += perpY * pointOffset;
     }
 
-    this.renderHalo(ctx, drawStart, drawPoint, colorHex, cap, dynamics, coverageFactor);
+    this.renderHalo(ctx, drawStart, drawPoint, colorHex, cap, dynamics, coverageFactor, angle, distance);
 
     ctx.save();
     ctx.lineCap = cap.endpointBehavior === "raw" ? "butt" : "round";
@@ -362,29 +441,60 @@ export class SprayBrushEngine {
    * halo tube, and a stationary dwell (repeated near-zero-distance segments
    * at the same point) naturally strengthens the center through ordinary
    * source-over compositing — no separate dwell/time tracking needed.
+   *
+   * Pink Dot Fat's correction fields layer on top of that same base
+   * mechanism, each independently a no-op at 0 (see their field docs in
+   * `SprayCapPresets.ts`): `haloDistanceGain` scales radius/opacity by the
+   * live resolved size; `haloDabSpacing` gates draws by travel distance
+   * (never gating a true zero-distance dwell, so dwell strengthening is
+   * untouched); `haloFlareAnisotropy` elongates the gradient into an ellipse
+   * along the travel angle at higher velocity; `haloRingBias` reshapes the
+   * gradient stops into a moat-then-peak profile.
    */
   private renderHalo(
     ctx: CanvasRenderingContext2D,
-    start: { x: number; y: number },
-    point: { x: number; y: number },
+    start: StrokePoint,
+    point: StrokePoint,
     colorHex: string,
     cap: SprayCapPreset,
     dynamics: ReturnType<typeof resolveSprayDynamics>,
     coverageFactor: number,
+    angle: number,
+    distance: number,
   ): void {
     if (cap.haloRadius <= 0 || cap.haloOpacity <= 0) return;
-    const haloRadius = dynamics.radius * cap.haloRadius;
+    const distanceGain = resolveHaloDistanceGain(cap, dynamics.radius);
+    const haloRadius = dynamics.radius * cap.haloRadius * distanceGain;
     if (haloRadius <= 0) return;
-    const alpha = cap.haloOpacity * coverageFactor;
+    const alpha = Math.min(1, cap.haloOpacity * coverageFactor * distanceGain);
     if (alpha <= 0) return;
+
+    // Dab spacing: while this segment has real travel distance, gate draws
+    // until enough distance has accumulated since the last dab — a moving
+    // stroke deposits discrete overlapping dabs instead of a continuous
+    // smeared bar. A true dwell (distance === 0) is NEVER gated here.
+    if (cap.haloDabSpacing > 0 && distance > 0) {
+      this.haloTravelSinceLastDab += distance;
+      if (this.haloTravelSinceLastDab < haloRadius * cap.haloDabSpacing) return;
+      this.haloTravelSinceLastDab = 0;
+    }
+
+    const flareRatio = resolveHaloFlareRatio(cap, point.velocity);
+    const stops = resolveHaloGradientStops(cap, alpha);
     const drawHaloAt = (x: number, y: number) => {
-      const gradient = ctx.createRadialGradient(x, y, 0, x, y, haloRadius);
-      gradient.addColorStop(0, this.hexToRgba(colorHex, alpha));
-      gradient.addColorStop(1, this.hexToRgba(colorHex, 0));
+      ctx.save();
+      ctx.translate(x, y);
+      if (flareRatio < 1) {
+        ctx.rotate(angle);
+        ctx.scale(1, flareRatio);
+      }
+      const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, haloRadius);
+      for (const stop of stops) gradient.addColorStop(stop.offset, this.hexToRgba(colorHex, stop.alpha));
       ctx.fillStyle = gradient;
       ctx.beginPath();
-      ctx.arc(x, y, haloRadius, 0, Math.PI * 2);
+      ctx.arc(0, 0, haloRadius, 0, Math.PI * 2);
       ctx.fill();
+      ctx.restore();
     };
     drawHaloAt(start.x, start.y);
     if (start.x !== point.x || start.y !== point.y) drawHaloAt(point.x, point.y);

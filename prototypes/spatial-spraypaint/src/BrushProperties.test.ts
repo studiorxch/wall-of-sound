@@ -216,3 +216,24 @@ describe("Fat caps default to Fill ON (dense normal-mode Spray read as smooth so
     expect(resolveEffectiveSprayStyle(getSprayCapPreset("pink-dot-fat"), getSprayOverride(store, "pink-dot-fat")).fillMode).toBe(true);
   });
 });
+
+describe("Pink Dot Fat correction dials surfaced in Brush Studio's PAINT readout", () => {
+  it("shows all four halo-correction fields as read-only diagnostics for Pink Dot Fat", () => {
+    const pink = getSprayCapPreset("pink-dot-fat");
+    const groups = getSprayPropertyGroups(pink, resolveEffectiveSprayStyle(pink, {}), {});
+    for (const key of ["haloDistanceGain", "haloFlareAnisotropy", "haloDabSpacing", "haloRingBias"]) {
+      const row = groups.paint.find((r) => r.key === key);
+      expect(row).toBeDefined();
+      expect(row?.kind).toBe("readonly");
+      expect(row?.value).toBeGreaterThan(0);
+    }
+  });
+
+  it("omits the halo-correction rows entirely for a cap with no halo (New York Fat)", () => {
+    const nyFat = getSprayCapPreset("new-york-fat");
+    const groups = getSprayPropertyGroups(nyFat, resolveEffectiveSprayStyle(nyFat, {}), {});
+    for (const key of ["haloDistanceGain", "haloFlareAnisotropy", "haloDabSpacing", "haloRingBias"]) {
+      expect(groups.paint.find((r) => r.key === key)).toBeUndefined();
+    }
+  });
+});

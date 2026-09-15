@@ -316,6 +316,26 @@ A small, deliberately narrow behavioral-default change — no cap physics, no Br
 
 **Files:** `SprayCapPresets.ts` (four `defaultFillMode` flips + comment), `SprayCapPresets.test.ts` / `SprayCapProfile.test.ts` (Fuzz Fat/German Fat fork tests updated for the one deliberate exception), `BrushProperties.test.ts` (new coverage: defaults, per-brush isolation, Reset behavior).
 
+## Pink Dot Fat Correction — Distance-Sensitive, Oblique-Flared, Dab-Spaced, Center+Ring Halo
+
+Scoped to Pink Dot Fat's halo mechanism only. No cap physics beyond the halo, no Brush Studio redesign, no Calibration Bench changes, no Throwie Fill algorithm changes — every other cap's rendering is provably byte-identical (regression-tested).
+
+**Problem.** Pink Dot Fat's halo (`haloRadius`/`haloOpacity`, added in commit `31fc282`) was a constant strength/shape glow regardless of size, movement, or dwell — reading as an "airbrushed constant bloom" cap rather than the distance-sensitive, texturally loaded-dot cap shown in physical reference footage (near-wall: clean hot dot/line; pulled back: center + clear outer ring; oblique/moving: elliptical flare, not a circular blur; overlapping passes: dusty layered fill, not a flat bar).
+
+**Root cause.** The halo was drawn as one continuous circular radial gradient at every segment endpoint along a path (near-identical spacing for a smoothed continuous pointer stroke), with no relationship at all to the live Size control, travel direction, or velocity — hence "constant glow."
+
+**Correction — four new `SprayCapPreset` fields, each independently a no-op at 0 and explicitly `0` on all 15 other caps (regression-tested):**
+- `haloDistanceGain` (Pink Dot: `0.85`) — scales halo radius/opacity by the ratio of the live resolved Size to the cap's own `baseRadius`. A small resolved size (proxy for spraying close to the wall — real hand-to-wall depth isn't sensed anywhere in this app) suppresses the halo toward a clean hot dot/line; a large resolved size (pulled back) amplifies it toward a pronounced bloom. Gain is exactly `1` (unchanged) at the cap's own native `baseRadius`.
+- `haloFlareAnisotropy` (Pink Dot: `0.55`) — elongates the halo into an ellipse along the segment's travel angle at higher point velocity. Below a stationary/near-stationary velocity threshold (0.12 units/ms — covers every dwell fixture already in this codebase's tests and the Calibration Bench's own dwell sample) the ratio is exactly `1`, a perfect circle; dwell behavior is completely unaffected.
+- `haloDabSpacing` (Pink Dot: `0.85`) — gates halo draws by travel distance while a segment is actually moving (distance > 0), so a moving stroke deposits discrete overlapping dabs instead of one continuous smeared bar. A true dwell (repeated zero-distance points) is NEVER gated — the existing "dwell strengthens the halo" behavior (live-verified in a prior build, still regression-tested) is untouched.
+- `haloRingBias` (Pink Dot: `0.6`) — reshapes the gradient from a single linear fade into a soft moat-then-peak profile, so a large resolved halo reads as a genuine center-plus-ring bloom instead of one glow. The core disc underneath stays fully opaque regardless — this never creates a hollow center, keeping Pink Dot structurally distinct from Ring/Donut's genuinely hollow annular core (a deliberate, tested distinction).
+
+**Mechanism.** All four are pure, individually unit-tested functions (`resolveHaloDistanceGain`, `resolveHaloFlareRatio`, `resolveHaloGradientStops`) plus a small per-stroke `haloTravelSinceLastDab` counter (reset in `beginStroke()`, mirroring `fillLocalSaturation`'s reset pattern but as a single running scalar — dab spacing is a 1D "how far along this path" concept, not a per-location one). The core/overspray rendering loop is completely untouched — regression-tested byte-identical strokeStyles output with the correction fields on vs. off.
+
+**Live-verified.** At Pink Dot's native Size (42), a dwell dot shows a distinct hot core plus a separated outer ring band with a visible moat between them. Reducing Size to 14 produces a clean, tight, near-halo-free dot. Raising Size to 70 produces a dramatically larger, clearly separated center-plus-wide-ring bloom. A continuous horizontal sweep shows a visibly scalloped/bulging edge from discrete overlapping dabs, not a smooth cylindrical bar. No console errors.
+
+**Files:** `SprayCapPresets.ts` (4 new interface fields + values on all 16 presets), `SprayBrushEngine.ts` (`resolveHaloDistanceGain`/`resolveHaloFlareRatio`/`resolveHaloGradientStops`, `haloTravelSinceLastDab` state, `renderHalo` rewritten to use them), `SprayCapProfile.ts` (Pink Dot calibration notes updated), `BrushProperties.ts` (4 new read-only PAINT rows, shown only for a cap with a halo), `SprayBrushEngine.test.ts` / `SprayCapPresets.test.ts` / `BrushProperties.test.ts` (new coverage), `BrushPreview.test.ts` (mock canvas context gained a `scale` method — required by the new ellipse transform, exercised only when Pink Dot Fat's preview renders at a velocity above the dwell threshold).
+
 ## Stable Mop Attachment And Clear Authority
 
 The latest Mop attachment work is complete and physically verified:

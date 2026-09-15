@@ -194,3 +194,42 @@ describe("Astro Fat vs. New York Fat differentiation", () => {
     });
   });
 });
+
+describe("Pink Dot Fat correction fields — distance-sensitive, oblique-flared, dab-spaced, center+ring halo", () => {
+  it("gives Pink Dot Fat non-zero values for all four correction fields", () => {
+    const pink = getSprayCapPreset("pink-dot-fat");
+    expect(pink.haloDistanceGain).toBeGreaterThan(0);
+    expect(pink.haloFlareAnisotropy).toBeGreaterThan(0);
+    expect(pink.haloDabSpacing).toBeGreaterThan(0);
+    expect(pink.haloRingBias).toBeGreaterThan(0);
+  });
+
+  it("gives every other cap all four correction fields at exactly 0", () => {
+    for (const preset of SPRAY_CAP_PRESETS) {
+      if (preset.id === "pink-dot-fat") continue;
+      expect(preset.haloDistanceGain).toBe(0);
+      expect(preset.haloFlareAnisotropy).toBe(0);
+      expect(preset.haloDabSpacing).toBe(0);
+      expect(preset.haloRingBias).toBe(0);
+    }
+  });
+
+  it("leaves Pink Dot's core/overspray physics (coreDensity, coreOpacity, particleCount/Spread/Opacity, flowRate, accumulationRate) numerically untouched — this is a halo-only correction", () => {
+    const pink = getSprayCapPreset("pink-dot-fat");
+    expect(pink).toMatchObject({
+      baseRadius: 42, coreDensity: 1.46, coreOpacity: 0.34, edgeFalloff: 0.76,
+      particleCount: 26, particleSpread: 1.2, particleOpacity: 0.29,
+      flowRate: 1.48, accumulationRate: 1.38, velocityResponse: 0.42,
+      endpointBehavior: "punchy", haloRadius: 2.4, haloOpacity: 0.05,
+    });
+  });
+
+  it("keeps Pink Dot structurally distinct from Ring/Donut — Pink Dot's core opacity stays fully opaque-capable (no hollow center field), unlike Ring/Donut's deliberately low centerOpacity", () => {
+    const pink = getSprayCapPreset("pink-dot-fat");
+    const ring = getSprayCapPreset("ring-donut");
+    expect(pink.depositionShape).toBe("line");
+    expect(pink.ringRadius).toBe(0);
+    expect(ring.depositionShape).toBe("ring");
+    expect(ring.centerOpacity).toBeLessThan(ring.ringOpacity);
+  });
+});

@@ -146,6 +146,19 @@ export function getSprayPropertyGroups(
     number("haloRadius", "Halo radius", preset.haloRadius),
     number("haloOpacity", "Halo opacity", preset.haloOpacity),
   ];
+  // Pink Dot Fat's correction dials — only meaningful (and only shown) on a
+  // cap that actually has a halo. Read-only diagnostics, same as every other
+  // Shape/Paint/Motion row; the live-adjustable control that drives their
+  // visible effect is Size (haloDistanceGain reacts to it), already
+  // live-previewed above. See SprayCapPresets.ts's field docs.
+  if (preset.haloRadius > 0) {
+    paint.push(
+      number("haloDistanceGain", "Halo distance gain", preset.haloDistanceGain),
+      number("haloFlareAnisotropy", "Halo flare", preset.haloFlareAnisotropy),
+      number("haloDabSpacing", "Halo dab spacing", preset.haloDabSpacing),
+      number("haloRingBias", "Halo ring bias", preset.haloRingBias),
+    );
+  }
 
   const motion: SprayPropertyRow[] = [
     number("velocityResponse", "Velocity response", preset.velocityResponse),

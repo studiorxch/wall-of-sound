@@ -27,6 +27,7 @@ function recordingContext(): { ctx: CanvasRenderingContext2D; log: string[] } {
       push(`arcTo(${x1.toFixed(2)},${y1.toFixed(2)},${x2.toFixed(2)},${y2.toFixed(2)})`),
     translate: (x: number, y: number) => push(`translate(${x.toFixed(2)},${y.toFixed(2)})`),
     rotate: (angle: number) => push(`rotate(${angle.toFixed(3)})`),
+    scale: (x: number, y: number) => push(`scale(${x.toFixed(2)},${y.toFixed(2)})`),
     fill: () => push(`fill:${fillStyle}`),
     stroke: () => push(`stroke:${strokeStyle}:${lineWidth.toFixed(2)}`),
     clearRect: () => push("clearRect"),
