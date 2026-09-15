@@ -34,7 +34,57 @@ function recordingContext(): { ctx: CanvasRenderingContext2D; calls: string[] } 
   return { ctx, calls };
 }
 
+function alphaRecordingContext(): { ctx: CanvasRenderingContext2D; strokeStyles: string[] } {
+  const strokeStyles: string[] = [];
+  let strokeStyle = "";
+  const ctx = {
+    save: () => undefined,
+    restore: () => undefined,
+    beginPath: () => undefined,
+    moveTo: () => undefined,
+    lineTo: () => undefined,
+    arc: () => undefined,
+    fill: () => undefined,
+    stroke: () => strokeStyles.push(strokeStyle),
+    get strokeStyle() { return strokeStyle; },
+    set strokeStyle(value: string | CanvasGradient | CanvasPattern) { strokeStyle = String(value); },
+    fillStyle: "",
+    lineJoin: "round",
+    lineCap: "round",
+    lineWidth: 0,
+  } as unknown as CanvasRenderingContext2D;
+  return { ctx, strokeStyles };
+}
+
 describe("shared Drawing Tool renderer", () => {
+  it("threads Spray coverage into measurably lower deposition opacity without redesigning Paint Marker", () => {
+    const fullStyle: ToolStrokeStyle = { toolId: "spray-can", variantId: "new-york-fat", color: "#e92f3d", size: 24, coverage: 1 };
+    const lightStyle: ToolStrokeStyle = { toolId: "spray-can", variantId: "new-york-fat", color: "#e92f3d", size: 24, coverage: 0.4 };
+    const full = alphaRecordingContext();
+    new DrawingToolRenderer().renderSegment(full.ctx, point(0), point(30), fullStyle, createStrokeRandom(9));
+    const light = alphaRecordingContext();
+    new DrawingToolRenderer().renderSegment(light.ctx, point(0), point(30), lightStyle, createStrokeRandom(9));
+
+    expect(full.strokeStyles.length).toBeGreaterThan(0);
+    expect(light.strokeStyles.length).toBe(full.strokeStyles.length);
+    full.strokeStyles.forEach((rgba, index) => {
+      const fullAlpha = Number.parseFloat(rgba.split(",")[3]);
+      const lightAlpha = Number.parseFloat(light.strokeStyles[index].split(",")[3]);
+      expect(lightAlpha).toBeLessThan(fullAlpha);
+    });
+  });
+
+  it("omits coverage for Paint Marker without affecting its render calls", () => {
+    const style: ToolStrokeStyle = { toolId: "paint-marker", variantId: "chisel", color: "#e92f3d", size: 24 };
+    const recording = recordingContext();
+    const renderer = new DrawingToolRenderer();
+    renderer.beginStroke(style);
+    renderer.renderSegment(recording.ctx, point(0), point(30), style);
+    expect(recording.calls).toContain("fill");
+    expect(recording.calls).not.toContain("arc");
+  });
+
+
   it("dispatches Spray through the calibrated aerosol renderer", () => {
     const style: ToolStrokeStyle = {
       toolId: "spray-can",

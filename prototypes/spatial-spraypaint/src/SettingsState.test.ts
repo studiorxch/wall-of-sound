@@ -15,6 +15,13 @@ describe("settings state", () => {
     expect(debug).toMatchObject({ radiusOverride: 24, trackingDebugVisible: true });
   });
 
+  it("tracks optional Spray coverage override independently of radius", () => {
+    const coverage = reduceSettingsState(INITIAL_SETTINGS_STATE, { type: "coverage", value: 0.4 });
+    expect(coverage).toMatchObject({ coverageOverride: 0.4, radiusOverride: null });
+    const cleared = reduceSettingsState(coverage, { type: "coverage", value: null });
+    expect(cleared.coverageOverride).toBeNull();
+  });
+
   it("keeps the performer hidden across Physical and Hand modes", () => {
     expect(cameraTreatmentForInputMode("spatial", "clean")).toBe("hidden");
     expect(cameraTreatmentForInputMode("mouse", "ghost")).toBe("hidden");

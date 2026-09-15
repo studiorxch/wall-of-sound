@@ -10,6 +10,8 @@ import { WetDripEngine } from "./WetDripEngine";
 interface BaseToolStrokeStyle {
   color: string;
   size: number;
+  /** Spray-only build-up authority, independent of velocity. 1 preserves current default density. */
+  coverage?: number;
 }
 
 export type ToolStrokeStyle = BaseToolStrokeStyle & (
@@ -55,6 +57,7 @@ export class DrawingToolRenderer {
         style.color,
         getSprayCapProfile(style.variantId).deposition,
         random,
+        style.coverage ?? 1,
       );
       return;
     }

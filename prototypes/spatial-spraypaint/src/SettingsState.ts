@@ -6,6 +6,7 @@ export interface SettingsState {
   smoothing: SmoothingLevel;
   dripsEnabled: boolean;
   radiusOverride: number | null;
+  coverageOverride: number | null;
   trackingDebugVisible: boolean;
 }
 
@@ -16,6 +17,7 @@ export type SettingsAction =
   | { type: "smoothing"; value: SmoothingLevel }
   | { type: "drips"; value: boolean }
   | { type: "radius"; value: number | null }
+  | { type: "coverage"; value: number | null }
   | { type: "tracking-debug"; value: boolean };
 
 export const INITIAL_SETTINGS_STATE: SettingsState = {
@@ -23,6 +25,7 @@ export const INITIAL_SETTINGS_STATE: SettingsState = {
   smoothing: "medium",
   dripsEnabled: true,
   radiusOverride: null,
+  coverageOverride: null,
   trackingDebugVisible: false,
 };
 
@@ -41,6 +44,7 @@ export function reduceSettingsState(state: SettingsState, action: SettingsAction
     case "smoothing": return { ...state, smoothing: action.value };
     case "drips": return { ...state, dripsEnabled: action.value };
     case "radius": return { ...state, radiusOverride: action.value };
+    case "coverage": return { ...state, coverageOverride: action.value };
     case "tracking-debug": return { ...state, trackingDebugVisible: action.value };
   }
 }

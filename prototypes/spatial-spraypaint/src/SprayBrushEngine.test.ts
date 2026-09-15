@@ -1,5 +1,36 @@
 import { describe, expect, it } from "vitest";
 import { SprayBrushEngine, createStrokeRandom } from "./SprayBrushEngine";
+import { getSprayCapPreset } from "./SprayCapPresets";
+import { type StrokePoint } from "./types";
+
+function segmentRecordingContext(): { ctx: CanvasRenderingContext2D; strokeStyles: string[]; fillStyles: string[] } {
+  const strokeStyles: string[] = [];
+  const fillStyles: string[] = [];
+  let strokeStyle = "";
+  let fillStyle = "";
+  const ctx = {
+    save: () => undefined,
+    restore: () => undefined,
+    beginPath: () => undefined,
+    moveTo: () => undefined,
+    lineTo: () => undefined,
+    arc: () => undefined,
+    stroke: () => strokeStyles.push(strokeStyle),
+    fill: () => fillStyles.push(fillStyle),
+    get strokeStyle() { return strokeStyle; },
+    set strokeStyle(value: string | CanvasGradient | CanvasPattern) { strokeStyle = String(value); },
+    get fillStyle() { return fillStyle; },
+    set fillStyle(value: string | CanvasGradient | CanvasPattern) { fillStyle = String(value); },
+    lineCap: "round",
+    lineJoin: "round",
+    lineWidth: 0,
+  } as unknown as CanvasRenderingContext2D;
+  return { ctx, strokeStyles, fillStyles };
+}
+
+function alphaOf(rgba: string): number {
+  return Number.parseFloat(rgba.split(",")[3]);
+}
 
 describe("spray brush replay randomness", () => {
   it("replays a canonical stroke with the same stable random sequence", () => {
@@ -47,6 +78,52 @@ describe("spray brush replay randomness", () => {
     const lines = first.filter(({ operation }) => operation === "lineTo");
     expect(first.filter(({ operation }) => operation === "closePath")).toHaveLength(1);
     expect(Math.max(...lines.map(({ values }) => values[1]))).toBeGreaterThan(160);
+  });
+
+  it("defaults renderSegment coverage to full density, preserving current Spray behavior", () => {
+    const point: StrokePoint = { x: 30, y: 20, timestamp: 30, velocity: 0.7, width: 24, opacity: 1 };
+    const cap = getSprayCapPreset("new-york-fat");
+    const withDefault = segmentRecordingContext();
+    new SprayBrushEngine().renderSegment(withDefault.ctx, null, point, "#ff0000", cap, createStrokeRandom(11));
+    const withExplicitFull = segmentRecordingContext();
+    new SprayBrushEngine().renderSegment(withExplicitFull.ctx, null, point, "#ff0000", cap, createStrokeRandom(11), 1);
+    expect(withDefault.strokeStyles).toEqual(withExplicitFull.strokeStyles);
+    expect(withDefault.fillStyles).toEqual(withExplicitFull.fillStyles);
+  });
+
+  it("lets a lower coverage value produce measurably lower core and overspray opacity", () => {
+    const point: StrokePoint = { x: 30, y: 20, timestamp: 30, velocity: 0.7, width: 24, opacity: 1 };
+    const cap = getSprayCapPreset("new-york-fat");
+    const full = segmentRecordingContext();
+    new SprayBrushEngine().renderSegment(full.ctx, null, point, "#ff0000", cap, createStrokeRandom(11), 1);
+    const light = segmentRecordingContext();
+    new SprayBrushEngine().renderSegment(light.ctx, null, point, "#ff0000", cap, createStrokeRandom(11), 0.4);
+
+    expect(full.strokeStyles.length).toBeGreaterThan(0);
+    expect(light.strokeStyles.length).toBe(full.strokeStyles.length);
+    full.strokeStyles.forEach((rgba, index) => {
+      expect(alphaOf(light.strokeStyles[index])).toBeLessThan(alphaOf(rgba));
+    });
+
+    expect(full.fillStyles.length).toBeGreaterThan(0);
+    expect(light.fillStyles.length).toBe(full.fillStyles.length);
+    full.fillStyles.forEach((rgba, index) => {
+      expect(alphaOf(light.fillStyles[index])).toBeLessThan(alphaOf(rgba));
+    });
+  });
+
+  it("clamps out-of-range coverage instead of inverting or exceeding full density", () => {
+    const point: StrokePoint = { x: 30, y: 20, timestamp: 30, velocity: 0.7, width: 24, opacity: 1 };
+    const cap = getSprayCapPreset("new-york-fat");
+    const full = segmentRecordingContext();
+    new SprayBrushEngine().renderSegment(full.ctx, null, point, "#ff0000", cap, createStrokeRandom(11), 1);
+    const overshoot = segmentRecordingContext();
+    new SprayBrushEngine().renderSegment(overshoot.ctx, null, point, "#ff0000", cap, createStrokeRandom(11), 2.5);
+    expect(overshoot.strokeStyles).toEqual(full.strokeStyles);
+
+    const negative = segmentRecordingContext();
+    new SprayBrushEngine().renderSegment(negative.ctx, null, point, "#ff0000", cap, createStrokeRandom(11), -1);
+    negative.strokeStyles.forEach((rgba) => expect(alphaOf(rgba)).toBe(0));
   });
 
   it("uses one stable opacity across progressive wet-run sections", () => {

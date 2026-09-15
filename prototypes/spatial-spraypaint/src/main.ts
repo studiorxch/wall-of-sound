@@ -363,6 +363,17 @@ class SpatialSpraypaintApp {
       this.setSettings({ type: "radius", value: null });
       this.updateRadiusUi();
     });
+    this.requireElement<HTMLInputElement>("spray-coverage").addEventListener("input", (event) => {
+      if (this.toolSelection.selectedToolId !== "spray-can") return;
+      const value = Number.parseInt((event.target as HTMLInputElement).value, 10) / 100;
+      this.setSettings({ type: "coverage", value });
+      this.updateCoverageUi();
+    });
+    this.requireElement("coverage-reset").addEventListener("click", () => {
+      if (this.toolSelection.selectedToolId !== "spray-can") return;
+      this.setSettings({ type: "coverage", value: null });
+      this.updateCoverageUi();
+    });
     this.requireElement<HTMLSelectElement>("background-preset").addEventListener("change", (event) => {
       this.selectedBackground = getSprayBackground((event.target as HTMLSelectElement).value);
     });
@@ -751,7 +762,20 @@ class SpatialSpraypaintApp {
     this.requireElement("radius-reset").textContent = this.settings.radiusOverride === null
       ? `Using ${parameter.toLowerCase()} default`
       : `Use ${parameter.toLowerCase()} default`;
+    this.updateCoverageUi();
     this.refreshDrawingCursor();
+  }
+
+  private updateCoverageUi(): void {
+    const spraySelected = this.toolSelection.selectedToolId === "spray-can";
+    this.requireElement("coverage-slider-setting").toggleAttribute("hidden", !spraySelected);
+    if (!spraySelected) return;
+    const coveragePercent = Math.round((this.settings.coverageOverride ?? 1) * 100);
+    this.requireElement<HTMLInputElement>("spray-coverage").value = coveragePercent.toString();
+    this.requireElement("coverage-val").textContent = coveragePercent.toString();
+    this.requireElement("coverage-reset").textContent = this.settings.coverageOverride === null
+      ? "Using full coverage"
+      : "Use full coverage";
   }
 
   private selectedToolDefaultSize(): number {
@@ -853,6 +877,7 @@ class SpatialSpraypaintApp {
     const shared = {
       color: this.selectedColor,
       size: this.baseRadius,
+      coverage: this.settings.coverageOverride ?? 1,
     };
     return this.toolSelection.selectedToolId === "spray-can"
       ? { ...shared, toolId: "spray-can", variantId: this.toolSelection.sprayCapId }

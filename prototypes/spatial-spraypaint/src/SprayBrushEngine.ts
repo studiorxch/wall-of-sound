@@ -45,14 +45,16 @@ export class SprayBrushEngine {
     colorHex: string,
     cap: SprayCapPreset,
     random: () => number = Math.random,
+    coverage: number = 1,
   ): void {
     const dynamics = resolveSprayDynamics(cap, point.velocity, point.width);
+    const coverageFactor = Math.max(0, Math.min(1, coverage));
     const start = previous ?? point;
     const dx = point.x - start.x;
     const dy = point.y - start.y;
     const distance = Math.hypot(dx, dy);
     const angle = distance > 0 ? Math.atan2(dy, dx) : 0;
-    const passOpacity = (dynamics.coreOpacity * point.opacity) / Math.sqrt(dynamics.corePasses);
+    const passOpacity = (dynamics.coreOpacity * point.opacity * coverageFactor) / Math.sqrt(dynamics.corePasses);
 
     ctx.save();
     ctx.lineCap = cap.endpointBehavior === "raw" ? "butt" : "round";
@@ -73,7 +75,7 @@ export class SprayBrushEngine {
     }
 
     ctx.restore();
-    this.renderOverspray(ctx, start, point, colorHex, dynamics, angle, distance, random);
+    this.renderOverspray(ctx, start, point, colorHex, dynamics, angle, distance, random, coverageFactor);
   }
 
   public startDrip(seed: DripSeed, color: string, now = performance.now()): void {
@@ -199,10 +201,11 @@ export class SprayBrushEngine {
     angle: number,
     distance: number,
     random: () => number,
+    coverageFactor: number = 1,
   ): void {
     const segmentFactor = Math.max(0.3, Math.min(1.6, distance / Math.max(1, dynamics.radius) + 0.32));
     const count = Math.round(dynamics.particleCount * segmentFactor);
-    ctx.fillStyle = this.hexToRgba(color, dynamics.particleOpacity * point.opacity);
+    ctx.fillStyle = this.hexToRgba(color, dynamics.particleOpacity * point.opacity * coverageFactor);
 
     for (let index = 0; index < count; index += 1) {
       const along = random();
