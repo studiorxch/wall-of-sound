@@ -1,13 +1,25 @@
 import { describe, expect, it } from "vitest";
-import { SprayBrushEngine, createStrokeRandom } from "./SprayBrushEngine";
+import { SprayBrushEngine, createStrokeRandom, resolveOverspraySquashAngle, TRANSVERSAL_AXIS_ANGLE } from "./SprayBrushEngine";
 import { getSprayCapPreset, resolveSprayDynamics } from "./SprayCapPresets";
 import { type StrokePoint } from "./types";
 
-function segmentRecordingContext(): { ctx: CanvasRenderingContext2D; strokeStyles: string[]; fillStyles: string[] } {
+interface RecordedGradient {
+  x0: number; y0: number; r0: number; x1: number; y1: number; r1: number;
+  stops: Array<{ offset: number; color: string }>;
+}
+
+function segmentRecordingContext(): {
+  ctx: CanvasRenderingContext2D;
+  strokeStyles: string[];
+  fillStyles: string[];
+  gradients: RecordedGradient[];
+} {
   const strokeStyles: string[] = [];
   const fillStyles: string[] = [];
+  const gradients: RecordedGradient[] = [];
   let strokeStyle = "";
   let fillStyle = "";
+  let activeGradient: RecordedGradient | null = null;
   const ctx = {
     save: () => undefined,
     restore: () => undefined,
@@ -17,15 +29,25 @@ function segmentRecordingContext(): { ctx: CanvasRenderingContext2D; strokeStyle
     arc: () => undefined,
     stroke: () => strokeStyles.push(strokeStyle),
     fill: () => fillStyles.push(fillStyle),
+    createRadialGradient: (x0: number, y0: number, r0: number, x1: number, y1: number, r1: number) => {
+      const gradient: RecordedGradient = { x0, y0, r0, x1, y1, r1, stops: [] };
+      gradients.push(gradient);
+      activeGradient = gradient;
+      return {
+        addColorStop: (offset: number, color: string) => gradient.stops.push({ offset, color }),
+      } as unknown as CanvasGradient;
+    },
     get strokeStyle() { return strokeStyle; },
     set strokeStyle(value: string | CanvasGradient | CanvasPattern) { strokeStyle = String(value); },
     get fillStyle() { return fillStyle; },
-    set fillStyle(value: string | CanvasGradient | CanvasPattern) { fillStyle = String(value); },
+    set fillStyle(value: string | CanvasGradient | CanvasPattern) {
+      fillStyle = typeof value === "string" ? value : `gradient:${JSON.stringify(activeGradient)}`;
+    },
     lineCap: "round",
     lineJoin: "round",
     lineWidth: 0,
   } as unknown as CanvasRenderingContext2D;
-  return { ctx, strokeStyles, fillStyles };
+  return { ctx, strokeStyles, fillStyles, gradients };
 }
 
 function alphaOf(rgba: string): number {
@@ -272,6 +294,115 @@ describe("spray fill-mode per-stroke opacity ceiling", () => {
     expect(lowCoverage).toBeLessThan(fullCoverage);
     // Fill mode's ceiling still bounds the high-coverage case well below normal-mode saturation.
     expect(fullCoverage).toBeLessThan(0.75);
+  });
+});
+
+describe("spray cap personality — halo, fixed-axis overspray, Wiggly Needle", () => {
+  it("draws a soft radial halo behind Pink Dot Fat's dot but not New York Fat's", () => {
+    const drawDot = (capId: string) => {
+      const cap = getSprayCapPreset(capId);
+      const point: StrokePoint = { x: 40, y: 40, timestamp: 0, velocity: 0.05, width: 32, opacity: 1 };
+      const { ctx, gradients } = segmentRecordingContext();
+      new SprayBrushEngine().renderSegment(ctx, null, point, "#ffffff", cap, createStrokeRandom(3));
+      return gradients;
+    };
+    expect(drawDot("pink-dot-fat").length).toBeGreaterThan(0);
+    expect(drawDot("new-york-fat")).toHaveLength(0);
+  });
+
+  it("scales halo alpha deterministically with the cap's haloOpacity field", () => {
+    const base = getSprayCapPreset("pink-dot-fat");
+    const brighter = { ...base, haloOpacity: base.haloOpacity * 2 };
+    const point: StrokePoint = { x: 40, y: 40, timestamp: 0, velocity: 0.05, width: 32, opacity: 1 };
+    const dim = segmentRecordingContext();
+    new SprayBrushEngine().renderSegment(dim.ctx, null, point, "#ffffff", base, createStrokeRandom(3));
+    const bright = segmentRecordingContext();
+    new SprayBrushEngine().renderSegment(bright.ctx, null, point, "#ffffff", brighter, createStrokeRandom(3));
+    expect(alphaOf(bright.gradients[0].stops[0].color)).toBeGreaterThan(alphaOf(dim.gradients[0].stops[0].color));
+  });
+
+  it("strengthens Pink Dot's halo through repeated dwell via ordinary compositing, no new dwell/time tracking", () => {
+    const cap = getSprayCapPreset("pink-dot-fat");
+    const point: StrokePoint = { x: 40, y: 40, timestamp: 0, velocity: 0.05, width: 32, opacity: 1 };
+    const { ctx, gradients } = segmentRecordingContext();
+    const engine = new SprayBrushEngine();
+    const random = createStrokeRandom(3);
+    engine.renderSegment(ctx, null, point, "#ffffff", cap, random);
+    engine.renderSegment(ctx, point, point, "#ffffff", cap, random);
+    engine.renderSegment(ctx, point, point, "#ffffff", cap, random);
+    expect(gradients.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("resolves the overspray squash axis: fixed for directional caps, travel-following for symmetric ones", () => {
+    expect(resolveOverspraySquashAngle(0.32, 0)).toBe(TRANSVERSAL_AXIS_ANGLE);
+    expect(resolveOverspraySquashAngle(0.32, Math.PI / 2)).toBe(TRANSVERSAL_AXIS_ANGLE);
+    expect(resolveOverspraySquashAngle(1, Math.PI / 3)).toBe(Math.PI / 3);
+  });
+
+  it("keeps Calligraphy's overspray plume anchored to its fixed transversal axis regardless of travel direction (regression: it must not read as a rotating ribbon)", () => {
+    const cap = getSprayCapPreset("calligraphy");
+    const captureFixedAxisSpread = (travelAngleDeg: number) => {
+      const rad = (travelAngleDeg * Math.PI) / 180;
+      const epsilon = 0.001; // negligible distance: exercises travel angle without along-interpolation noise
+      const start: StrokePoint = { x: 500, y: 500, timestamp: 0, velocity: 0.3, width: 25, opacity: 1 };
+      const point: StrokePoint = { ...start, x: 500 + Math.cos(rad) * epsilon, y: 500 + Math.sin(rad) * epsilon, timestamp: 1 };
+      const offsets: Array<[number, number]> = [];
+      const { ctx } = segmentRecordingContext();
+      (ctx as unknown as { arc: (x: number, y: number) => void }).arc = (x: number, y: number) =>
+        offsets.push([x - start.x, y - start.y]);
+      new SprayBrushEngine().renderSegment(ctx, start, point, "#ffffff", cap, createStrokeRandom(5));
+      const perpDistances = offsets.map(([dx, dy]) =>
+        Math.abs(dx * Math.sin(TRANSVERSAL_AXIS_ANGLE) - dy * Math.cos(TRANSVERSAL_AXIS_ANGLE)),
+      );
+      return perpDistances.reduce((sum, v) => sum + v, 0) / perpDistances.length;
+    };
+
+    const spreadAt0 = captureFixedAxisSpread(0);
+    const spreadAt90 = captureFixedAxisSpread(90);
+    expect(spreadAt0).toBeGreaterThan(0);
+    // Same random seed, only travel direction differs: a fixed squash axis keeps
+    // this fixed-axis-relative spread stat roughly stable across travel angles.
+    // A travel-following squash (the pre-fix bug) would swing this far more.
+    expect(spreadAt90).toBeGreaterThan(spreadAt0 * 0.6);
+    expect(spreadAt90).toBeLessThan(spreadAt0 * 1.4);
+  });
+
+  it("gives Wiggly Needle a deterministic lateral wander while Needle itself stays a straight line", () => {
+    const needle = getSprayCapPreset("needle");
+    const wiggly = getSprayCapPreset("wiggly-needle");
+    const start: StrokePoint = { x: 0, y: 0, timestamp: 0, velocity: 0.3, width: 25, opacity: 1 };
+    const point: StrokePoint = { x: 200, y: 0, timestamp: 80, velocity: 0.3, width: 25, opacity: 1 };
+
+    const captureLineToYs = (cap: ReturnType<typeof getSprayCapPreset>) => {
+      const ys: number[] = [];
+      const { ctx } = segmentRecordingContext();
+      (ctx as unknown as { lineTo: (x: number, y: number) => void }).lineTo = (_x: number, y: number) => ys.push(y);
+      new SprayBrushEngine().renderSegment(ctx, start, point, "#ffffff", cap, createStrokeRandom(9));
+      return ys;
+    };
+
+    const needleYs = captureLineToYs(needle);
+    const wigglyYs = captureLineToYs(wiggly);
+    // Needle's travel is perfectly horizontal; any y deviation is just per-pass jitter (small).
+    expect(Math.max(...needleYs.map(Math.abs))).toBeLessThan(3);
+    // Wiggly Needle's deterministic lateral offset is far larger than jitter alone.
+    expect(Math.max(...wigglyYs.map(Math.abs))).toBeGreaterThan(5);
+  });
+
+  it("reproduces Wiggly Needle's wander identically for the same points, seed, and timestamps (replay-safe)", () => {
+    const wiggly = getSprayCapPreset("wiggly-needle");
+    const start: StrokePoint = { x: 0, y: 0, timestamp: 0, velocity: 0.3, width: 25, opacity: 1 };
+    const point: StrokePoint = { x: 200, y: 0, timestamp: 80, velocity: 0.3, width: 25, opacity: 1 };
+    const render = () => {
+      const { ctx, strokeStyles } = segmentRecordingContext();
+      const ys: number[] = [];
+      (ctx as unknown as { lineTo: (x: number, y: number) => void }).lineTo = (_x: number, y: number) => ys.push(y);
+      new SprayBrushEngine().renderSegment(ctx, start, point, "#ffffff", wiggly, createStrokeRandom(9));
+      return { ys, strokeStyles };
+    };
+    const first = render();
+    const second = render();
+    expect(second.ys).toEqual(first.ys);
   });
 });
 

@@ -24,7 +24,7 @@ interface ActiveDrip extends DripSeed {
  * unlike overspray's anisotropy, which stays travel-relative and is untouched
  * here.
  */
-const TRANSVERSAL_AXIS_ANGLE = (-25 * Math.PI) / 180;
+export const TRANSVERSAL_AXIS_ANGLE = (-25 * Math.PI) / 180;
 
 /**
  * Fill mode's per-stroke core-opacity ceiling. A single continuous stroke's
@@ -45,6 +45,20 @@ const FILL_MODE_CORE_CEILING = 0.45;
  * several cells along its travel direction.
  */
 const FILL_MODE_CELL_SIZE_RATIO = 0.6;
+
+/**
+ * The angle used to orient a cap's anisotropic squash (core width AND
+ * overspray plume shape alike). A directional/"fixed-transversal" cap
+ * (anisotropy < 1, currently only Calligraphy) keeps this at its fixed
+ * physical axis regardless of travel direction — a real transversal nozzle's
+ * orientation doesn't rotate as the hand moves. Every other cap keeps using
+ * travel direction, which is a no-op for symmetric caps (anisotropy === 1).
+ * Exported as a pure function so the "no wiggle/no rotating ribbon"
+ * requirement is directly unit-testable without recording particle draws.
+ */
+export function resolveOverspraySquashAngle(anisotropy: number, travelAngle: number): number {
+  return anisotropy < 1 ? TRANSVERSAL_AXIS_ANGLE : travelAngle;
+}
 
 export function createStrokeRandom(seed: number): () => number {
   let state = (seed || 1) >>> 0;
@@ -115,6 +129,28 @@ export class SprayBrushEngine {
       ? dynamics.anisotropy + (1 - dynamics.anisotropy) * directionalBroadening
       : dynamics.anisotropy;
 
+    // Wiggly Needle's bounded deterministic wander: a smooth lateral offset
+    // driven by each point's own recorded timestamp (not Math.random), so it
+    // reproduces identically on replay. Perpendicular to true travel — the
+    // dynamics/velocity math above still uses the real path, only the drawn
+    // ink wanders. Every other cap has wiggleAmplitude 0 and is unaffected.
+    const wiggleAmplitude = dynamics.radius * cap.wiggleAmplitude;
+    const drawStart: StrokePoint = { ...start };
+    const drawPoint: StrokePoint = { ...point };
+    if (wiggleAmplitude > 0) {
+      const perpAngle = angle + Math.PI / 2;
+      const perpX = Math.cos(perpAngle);
+      const perpY = Math.sin(perpAngle);
+      const startOffset = Math.sin(start.timestamp * cap.wiggleFrequency) * wiggleAmplitude;
+      const pointOffset = Math.sin(point.timestamp * cap.wiggleFrequency) * wiggleAmplitude;
+      drawStart.x += perpX * startOffset;
+      drawStart.y += perpY * startOffset;
+      drawPoint.x += perpX * pointOffset;
+      drawPoint.y += perpY * pointOffset;
+    }
+
+    this.renderHalo(ctx, drawStart, drawPoint, colorHex, cap, dynamics, coverageFactor);
+
     ctx.save();
     ctx.lineCap = cap.endpointBehavior === "raw" ? "butt" : "round";
     ctx.lineJoin = "round";
@@ -128,7 +164,9 @@ export class SprayBrushEngine {
     // whole segment; the cell size scales with cap radius so thin and fat
     // caps both get sensible granularity.
     const cellSize = Math.max(1, dynamics.radius * FILL_MODE_CELL_SIZE_RATIO);
-    const cellKey = fillMode ? this.fillCellKey((start.x + point.x) / 2, (start.y + point.y) / 2, cellSize) : null;
+    const cellKey = fillMode
+      ? this.fillCellKey((drawStart.x + drawPoint.x) / 2, (drawStart.y + drawPoint.y) / 2, cellSize)
+      : null;
 
     for (let pass = dynamics.corePasses - 1; pass >= 0; pass -= 1) {
       const passRatio = dynamics.corePasses === 1 ? 0 : pass / (dynamics.corePasses - 1);
@@ -160,13 +198,50 @@ export class SprayBrushEngine {
       ctx.strokeStyle = this.hexToRgba(colorHex, drawnAlpha);
       ctx.lineWidth = Math.max(0.7, dynamics.radius * 2 * directionalAnisotropy * edgeExpansion * endpointScale);
       ctx.beginPath();
-      ctx.moveTo(start.x + jitterX, start.y + jitterY);
-      ctx.lineTo(point.x + jitterX, point.y + jitterY);
+      ctx.moveTo(drawStart.x + jitterX, drawStart.y + jitterY);
+      ctx.lineTo(drawPoint.x + jitterX, drawPoint.y + jitterY);
       ctx.stroke();
     }
 
     ctx.restore();
-    this.renderOverspray(ctx, start, point, colorHex, dynamics, angle, distance, random, coverageFactor);
+    const oversprayAngle = resolveOverspraySquashAngle(dynamics.anisotropy, angle);
+    this.renderOverspray(ctx, drawStart, drawPoint, colorHex, dynamics, oversprayAngle, distance, random, coverageFactor);
+  }
+
+  /**
+   * Soft outer "halo" ring beneath the core — a continuous radial field
+   * (not speckled particles like overspray), so a "loaded dot" cap reads as
+   * a recognizable dense-center/soft-ring bloom rather than a blurred fat
+   * dot. Drawn at both segment endpoints so a moving stroke gets a continuous
+   * halo tube, and a stationary dwell (repeated near-zero-distance segments
+   * at the same point) naturally strengthens the center through ordinary
+   * source-over compositing — no separate dwell/time tracking needed.
+   */
+  private renderHalo(
+    ctx: CanvasRenderingContext2D,
+    start: { x: number; y: number },
+    point: { x: number; y: number },
+    colorHex: string,
+    cap: SprayCapPreset,
+    dynamics: ReturnType<typeof resolveSprayDynamics>,
+    coverageFactor: number,
+  ): void {
+    if (cap.haloRadius <= 0 || cap.haloOpacity <= 0) return;
+    const haloRadius = dynamics.radius * cap.haloRadius;
+    if (haloRadius <= 0) return;
+    const alpha = cap.haloOpacity * coverageFactor;
+    if (alpha <= 0) return;
+    const drawHaloAt = (x: number, y: number) => {
+      const gradient = ctx.createRadialGradient(x, y, 0, x, y, haloRadius);
+      gradient.addColorStop(0, this.hexToRgba(colorHex, alpha));
+      gradient.addColorStop(1, this.hexToRgba(colorHex, 0));
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.arc(x, y, haloRadius, 0, Math.PI * 2);
+      ctx.fill();
+    };
+    drawHaloAt(start.x, start.y);
+    if (start.x !== point.x || start.y !== point.y) drawHaloAt(point.x, point.y);
   }
 
   public startDrip(seed: DripSeed, color: string, now = performance.now()): void {

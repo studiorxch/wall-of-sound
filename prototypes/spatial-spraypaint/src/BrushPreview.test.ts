@@ -20,6 +20,12 @@ function recordingContext(): { ctx: CanvasRenderingContext2D; log: string[] } {
     fill: () => push(`fill:${fillStyle}`),
     stroke: () => push(`stroke:${strokeStyle}:${lineWidth.toFixed(2)}`),
     clearRect: () => push("clearRect"),
+    createRadialGradient: (x0: number, y0: number, r0: number, x1: number, y1: number, r1: number) => {
+      push(`createRadialGradient(${x0.toFixed(2)},${y0.toFixed(2)},${r0.toFixed(2)},${x1.toFixed(2)},${y1.toFixed(2)},${r1.toFixed(2)})`);
+      return {
+        addColorStop: (offset: number, color: string) => push(`addColorStop(${offset.toFixed(2)},${color})`),
+      } as unknown as CanvasGradient;
+    },
     get strokeStyle() { return strokeStyle; },
     set strokeStyle(value: string | CanvasGradient | CanvasPattern) { strokeStyle = String(value); },
     get fillStyle() { return fillStyle; },
@@ -70,6 +76,16 @@ describe("brush preview rendering", () => {
     renderMarkerPreviewToContext(chisel.ctx, 60, 24, "chisel");
     expect(roundA.log).toEqual(roundB.log);
     expect(roundA.log).not.toEqual(chisel.log);
+  });
+
+  it("shows Pink Dot Fat's halo bloom in its preview, distinct from New York Fat's halo-free dot", () => {
+    const pink = recordingContext();
+    const newYork = recordingContext();
+    renderSprayCapPreviewToContext(pink.ctx, 60, 24, "pink-dot-fat");
+    renderSprayCapPreviewToContext(newYork.ctx, 60, 24, "new-york-fat");
+    expect(pink.log.some((entry) => entry.startsWith("createRadialGradient"))).toBe(true);
+    expect(newYork.log.some((entry) => entry.startsWith("createRadialGradient"))).toBe(false);
+    expect(pink.log).not.toEqual(newYork.log);
   });
 
   it("distinguishes every Chisel and Mop family sub-preset from its siblings", () => {

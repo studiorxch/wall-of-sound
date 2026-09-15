@@ -14,7 +14,16 @@ import { type StrokePoint } from "./types";
 const PREVIEW_COLOR = "#f4f3f0";
 const PREVIEW_SEED = 4242;
 const PREVIEW_STEPS = 6;
+const PREVIEW_DWELL_STEPS = 3;
 
+/**
+ * A moving sweep alone can't show a cap's dot/halo/dwell character — a fat
+ * cap's loaded-dot bloom, a specialty cap's oscillation settling, an edge
+ * softness only visible where paint has had time to build up. So every
+ * preview ends with a brief real dwell (near-zero-distance repeat points) at
+ * its own endpoint, through the same real engine call used for the moving
+ * part — never a separate fake "dot" drawing.
+ */
 function buildPreviewPoints(width: number, height: number, strokeWidth: number): StrokePoint[] {
   const marginX = width * 0.16;
   const midY = height * 0.5;
@@ -30,6 +39,10 @@ function buildPreviewPoints(width: number, height: number, strokeWidth: number):
       width: strokeWidth,
       opacity: 1,
     });
+  }
+  const last = points[points.length - 1];
+  for (let i = 1; i <= PREVIEW_DWELL_STEPS; i += 1) {
+    points.push({ ...last, timestamp: last.timestamp + i * 40, velocity: 0.04 });
   }
   return points;
 }
