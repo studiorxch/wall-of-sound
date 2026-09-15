@@ -769,13 +769,19 @@ class SpatialSpraypaintApp {
   private updateCoverageUi(): void {
     const spraySelected = this.toolSelection.selectedToolId === "spray-can";
     this.requireElement("coverage-slider-setting").toggleAttribute("hidden", !spraySelected);
-    if (!spraySelected) return;
+    const badge = this.requireElement("coverage-badge");
+    if (!spraySelected) {
+      badge.hidden = true;
+      return;
+    }
     const coveragePercent = Math.round((this.settings.coverageOverride ?? 1) * 100);
     this.requireElement<HTMLInputElement>("spray-coverage").value = coveragePercent.toString();
     this.requireElement("coverage-val").textContent = coveragePercent.toString();
     this.requireElement("coverage-reset").textContent = this.settings.coverageOverride === null
       ? "Using full coverage"
       : "Use full coverage";
+    badge.hidden = coveragePercent >= 100;
+    badge.textContent = `${coveragePercent}%`;
   }
 
   private selectedToolDefaultSize(): number {

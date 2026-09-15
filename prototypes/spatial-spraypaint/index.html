@@ -53,8 +53,6 @@
     #drawing-cursor[data-tool="spray-can"] { border-style: dashed; }
 
     .island {
-      position: absolute;
-      z-index: 10;
       border: 1px solid rgba(255,255,255,.12);
       border-radius: 14px;
       background: rgba(12,12,17,.82);
@@ -62,18 +60,42 @@
       backdrop-filter: blur(16px);
     }
     #brand-mark {
-      top: 58px;
+      position: absolute;
+      top: 16px;
       left: 18px;
       z-index: 9;
-      color: rgba(255,255,255,.48);
-      font-size: 10px;
+      color: rgba(255,255,255,.3);
+      font-size: 9px;
       font-weight: 900;
       letter-spacing: 1.5px;
       pointer-events: none;
     }
-    #art-island {
+
+    /* Bottom bar: LEFT identity/media — CENTER instrument — RIGHT document/system */
+    #bottom-bar {
+      position: absolute;
+      z-index: 10;
       left: 16px;
+      right: 16px;
       bottom: 16px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+      align-items: end;
+      gap: 12px;
+      pointer-events: none;
+    }
+    #identity-group, #instrument-group, #system-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      pointer-events: auto;
+    }
+    #identity-group { justify-self: start; }
+    #instrument-group { justify-self: center; }
+    #system-group { justify-self: end; justify-content: flex-end; }
+
+    #art-island {
       display: flex;
       align-items: center;
       gap: 7px;
@@ -87,7 +109,25 @@
     #variant-control::after { content:"•••"; margin-left:-4px; color:#ff6a7f; font-size:10px; letter-spacing:-1px; transform:rotate(-28deg); }
     #variant-control[data-tool="paint-marker"]::before { width:7px; height:22px; border-radius:3px 3px 7px 7px; background:currentColor; transform:rotate(32deg); }
     #variant-control[data-tool="paint-marker"]::after { content:""; display:none; }
-    .tool-popover { position:absolute; z-index:12; left:16px; bottom:72px; display:none; padding:9px; border:1px solid rgba(255,255,255,.14); border-radius:13px; background:rgba(12,12,17,.94); box-shadow:0 12px 40px rgba(0,0,0,.42); backdrop-filter:blur(16px); }
+    #variant-control { position: relative; }
+    .coverage-badge {
+      position: absolute;
+      right: -4px;
+      bottom: -4px;
+      min-width: 18px;
+      padding: 1px 4px;
+      border-radius: 999px;
+      border: 1px solid rgba(5,5,8,.7);
+      background: #ff365f;
+      color: #fff;
+      font-size: 8px;
+      font-weight: 800;
+      line-height: 13px;
+      text-align: center;
+      pointer-events: none;
+    }
+    .coverage-badge[hidden] { display: none; }
+    .tool-popover { position:absolute; z-index:12; left:50%; bottom:72px; transform:translateX(-50%); display:none; padding:9px; border:1px solid rgba(255,255,255,.14); border-radius:13px; background:rgba(12,12,17,.94); box-shadow:0 12px 40px rgba(0,0,0,.42); backdrop-filter:blur(16px); }
     .tool-popover.open { display:grid; }
     #color-chooser { width:238px; gap:8px; }
     .palette-toolbar { display:grid; grid-template-columns:1fr auto; align-items:center; gap:7px; }
@@ -133,14 +173,12 @@
     }
     .swatch.selected { border-color: #fff; box-shadow: 0 0 0 2px #11131a, 0 0 0 3px rgba(255,255,255,.65); transform: scale(1.04); }
     #session-island {
-      top: 14px;
-      right: 14px;
       padding: 7px;
       display: flex;
       align-items: center;
       gap: 5px;
     }
-    #session-island .icon-button { width:38px; height:38px; min-height:38px; padding:0; display:grid; place-items:center; font-size:18px; }
+    .icon-button { width:38px; height:38px; min-height:38px; padding:0; display:grid; place-items:center; font-size:18px; }
     #settings-close { width:44px; height:44px; min-height:44px; padding:0; display:grid; place-items:center; font-size:30px; line-height:1; }
     #toggle-record .record-dot { width:13px; height:13px; border-radius:50%; background:#ff355d; box-shadow:0 0 0 2px rgba(255,53,93,.18); }
     #toggle-record.recording .record-dot { border-radius:3px; background:#fff; animation:record-pulse .8s ease-in-out infinite alternate; }
@@ -148,20 +186,20 @@
     @keyframes record-pulse { to { opacity:.5; } }
     #member-placeholder { color:#8f8e99; }
 
-    #navigation-island { right:16px; bottom:16px; padding:6px; }
+    #navigation-island { padding:6px; }
     #scale-control { min-width:58px; min-height:34px; padding:6px 9px; font-size:11px; font-variant-numeric:tabular-nums; }
     #scale-control.quick { border-color:#59b8ff; color:#9ed7ff; box-shadow:inset 0 0 0 1px rgba(89,184,255,.14); }
-    #scale-chooser { left:auto; right:16px; bottom:62px; width:204px; grid-template-columns:repeat(3, 58px); gap:5px; }
+    #scale-chooser { left:auto; right:16px; bottom:62px; transform:none; width:204px; grid-template-columns:repeat(3, 58px); gap:5px; }
     .scale-choice { min-width:58px; padding:7px 6px; font-size:10px; font-variant-numeric:tabular-nums; }
     .scale-choice.selected { border-color:#59b8ff; color:#9ed7ff; }
     #scale-reset { grid-column:1 / -1; font-size:10px; }
 
-    #input-island { top:14px; left:16px; padding:5px; display:flex; align-items:center; gap:4px; }
+    #input-island { padding:5px; display:flex; align-items:center; gap:4px; }
     #input-island button { min-height:32px; padding:6px 9px; font-size:10px; letter-spacing:.4px; }
     #input-island button.selected { border-color:#fff; background:#343440; }
     #input-status { max-width:130px; overflow:hidden; text-overflow:ellipsis; }
 
-    #player-island { top:14px; left:50%; transform:translateX(-50%); width:min(470px, calc(100vw - 340px)); min-width:46px; padding:7px; display:flex; align-items:center; gap:6px; }
+    #player-island { width:min(260px, 40vw); min-width:46px; padding:7px; display:flex; align-items:center; gap:6px; }
     #player-island.empty { width:auto; }
     #player-island.empty .player-loaded { display:none; }
     #player-track-name { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #c9c8cf; font-size: 11px; }
@@ -174,16 +212,17 @@
     .status-chip.error { color: #ff7894; }
 
     #settings-panel {
-      top: 14px;
-      right: 14px;
+      position: absolute;
+      bottom: 16px;
+      right: 16px;
       z-index: 20;
       width: min(340px, calc(100vw - 28px));
-      max-height: calc(100vh - 28px);
+      max-height: calc(100vh - 32px);
       padding: 15px;
       overflow-y: auto;
       opacity: 0;
       pointer-events: none;
-      transform: translateX(20px) scale(.98);
+      transform: translateY(20px) scale(.98);
       transition: opacity 130ms ease, transform 130ms ease;
     }
     #settings-panel.open { opacity: 1; pointer-events: auto; transform: none; }
@@ -228,11 +267,8 @@
     #tracking-quality-warning.visible { opacity:1; transform:none; }
 
     @media (max-width: 760px) {
-      #input-island { left:10px; top:10px; }
-      #session-island { right:10px; top:10px; }
-      #player-island { left:10px; right:10px; top:64px; width:auto; transform:none; }
-      #art-island { left:10px; bottom:10px; }
-      #navigation-island { right:10px; bottom:10px; }
+      #bottom-bar { left:10px; right:10px; bottom:10px; gap:8px; }
+      #player-island { width:auto; }
       .swatch { width: 22px; height: 22px; min-height: 22px; }
       #brand-mark { display: none; }
       .status-chip { display: none; }
@@ -245,17 +281,46 @@
     <div id="drawing-cursor" aria-hidden="true"></div>
     <div id="brand-mark" class="island">SPATIAL SPRAYPAINT · V0.6.3</div>
 
-    <section id="input-island" class="island" aria-label="Input mode">
-      <button id="physical-input" class="selected" aria-pressed="true">Physical</button>
-      <button id="hand-input" aria-pressed="false">Hand</button>
-      <span id="input-status" class="status-chip">READY</span>
-    </section>
+    <div id="bottom-bar">
+      <div id="identity-group" aria-label="Identity and media">
+        <button id="member-placeholder" class="icon-button island" aria-label="Member profile placeholder" title="Member profile · coming later">♙</button>
+        <section id="player-island" class="island empty" aria-label="Session soundtrack player">
+          <input type="file" id="audio-file" accept="audio/*" />
+          <label for="audio-file" class="file-button" aria-label="Load soundtrack" title="Load soundtrack">♫</label>
+          <button id="player-play-pause" class="player-loaded" disabled aria-label="Play soundtrack" title="Play / pause soundtrack">▶</button>
+          <span id="player-track-name" class="player-loaded">No track loaded</span>
+          <input id="player-progress" class="player-loaded" type="range" min="0" max="1000" value="0" disabled aria-label="Track progress" />
+          <span id="player-time" class="player-loaded">0:00 / 0:00</span>
+          <button id="player-loop" class="player-loaded" aria-pressed="true" aria-label="Toggle soundtrack loop" title="Loop soundtrack">↻</button>
+        </section>
+        <section id="input-island" class="island" aria-label="Input mode">
+          <button id="physical-input" class="selected" aria-pressed="true">Physical</button>
+          <button id="hand-input" aria-pressed="false">Hand</button>
+          <span id="input-status" class="status-chip">READY</span>
+        </section>
+      </div>
 
-    <section id="art-island" class="island" aria-label="Art tools">
-      <button id="tool-control" class="tool-icon" data-tool="spray-can" aria-label="Choose drawing tool. Current tool Spray Can" aria-controls="tool-chooser" aria-expanded="false" title="Tool: Spray Can">S</button>
-      <button id="color-control" class="tool-icon" style="--current-color:#e92f3d" aria-label="Choose color" title="Color"></button>
-      <button id="variant-control" class="tool-icon" data-tool="spray-can" aria-label="Choose Cap. Current New York Fat" aria-controls="cap-chooser marker-chooser" aria-expanded="false" title="Cap: New York Fat"></button>
-    </section>
+      <div id="instrument-group" aria-label="Instrument">
+        <section id="art-island" class="island" aria-label="Art tools">
+          <button id="tool-control" class="tool-icon" data-tool="spray-can" aria-label="Choose drawing tool. Current tool Spray Can" aria-controls="tool-chooser" aria-expanded="false" title="Tool: Spray Can">S</button>
+          <button id="color-control" class="tool-icon" style="--current-color:#e92f3d" aria-label="Choose color" title="Color"></button>
+          <button id="variant-control" class="tool-icon" data-tool="spray-can" aria-label="Choose Cap. Current New York Fat" aria-controls="cap-chooser marker-chooser" aria-expanded="false" title="Cap: New York Fat"><span id="coverage-badge" class="coverage-badge" hidden></span></button>
+        </section>
+      </div>
+
+      <div id="system-group" aria-label="Document and system">
+        <section id="session-island" class="island" aria-label="Screen and session controls">
+          <button id="undo-stroke" class="icon-button" disabled aria-label="Undo last stroke" title="Undo last stroke · ⌘/Ctrl Z">↶</button>
+          <button id="clear-strokes" class="icon-button" disabled aria-label="Clear canvas" title="Clear canvas · Shift Delete">⌫</button>
+          <button id="toggle-record" class="icon-button" aria-label="Start recording" title="Record · R"><span class="record-dot"></span></button>
+          <button id="settings-toggle" class="icon-button" aria-pressed="false" aria-label="Open settings" title="Settings · ,">⚙</button>
+        </section>
+        <section id="navigation-island" class="island" aria-label="Wall navigation">
+          <button id="scale-control" aria-label="Choose wall scale. Current scale 100%" aria-controls="scale-chooser" aria-expanded="false" title="Wall scale 100% · click for presets">100%</button>
+        </section>
+      </div>
+    </div>
+
     <div id="tool-chooser" class="tool-popover" aria-label="Drawing tool chooser">
       <button class="tool-choice selected" data-tool="spray-can" aria-pressed="true"><span class="tool-sample">SPRAY</span><span>Spray Can</span></button>
       <button class="tool-choice" data-tool="paint-marker" aria-pressed="false"><span class="tool-sample">MARK</span><span>Paint Marker</span></button>
@@ -304,27 +369,6 @@
       </div>
     </div>
 
-    <section id="session-island" class="island" aria-label="Screen and session controls">
-      <button id="undo-stroke" class="icon-button" disabled aria-label="Undo last stroke" title="Undo last stroke · ⌘/Ctrl Z">↶</button>
-      <button id="clear-strokes" class="icon-button" disabled aria-label="Clear canvas" title="Clear canvas · Shift Delete">⌫</button>
-      <button id="toggle-record" class="icon-button" aria-label="Start recording" title="Record · R"><span class="record-dot"></span></button>
-      <button id="member-placeholder" class="icon-button" aria-label="Member profile placeholder" title="Member profile · coming later">♙</button>
-      <button id="settings-toggle" class="icon-button" aria-pressed="false" aria-label="Open settings" title="Settings · ,">⚙</button>
-    </section>
-
-    <section id="player-island" class="island empty" aria-label="Session soundtrack player">
-      <input type="file" id="audio-file" accept="audio/*" />
-      <label for="audio-file" class="file-button" aria-label="Load soundtrack" title="Load soundtrack">♫</label>
-      <button id="player-play-pause" class="player-loaded" disabled aria-label="Play soundtrack" title="Play / pause soundtrack">▶</button>
-      <span id="player-track-name" class="player-loaded">No track loaded</span>
-      <input id="player-progress" class="player-loaded" type="range" min="0" max="1000" value="0" disabled aria-label="Track progress" />
-      <span id="player-time" class="player-loaded">0:00 / 0:00</span>
-      <button id="player-loop" class="player-loaded" aria-pressed="true" aria-label="Toggle soundtrack loop" title="Loop soundtrack">↻</button>
-    </section>
-
-    <section id="navigation-island" class="island" aria-label="Wall navigation">
-      <button id="scale-control" aria-label="Choose wall scale. Current scale 100%" aria-controls="scale-chooser" aria-expanded="false" title="Wall scale 100% · click for presets">100%</button>
-    </section>
     <div id="scale-chooser" class="tool-popover" aria-label="Wall scale presets">
       <button class="scale-choice" data-zoom="0.25" aria-pressed="false">25%</button>
       <button class="scale-choice" data-zoom="0.5" aria-pressed="false">50%</button>
