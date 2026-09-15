@@ -134,6 +134,14 @@ Palette switching changes only palette state; it preserves current Tool, current
 
 The canonical extracted manufacturer data is tracked inside the Spatial Spraypaint prototype. Runtime does not depend on private WOS-share files. Manufacturer palette integration is stable and should remain untouched for now.
 
+## Spray Cap Identity Compatibility Rule
+
+Each canonical stroke stores its Spray cap as a `SprayCapId` string (`ToolStrokeStyle.variantId`), not a snapshot of the numeric preset. Replay, pan, zoom, and Undo all re-resolve `getSprayCapProfile(variantId)` live against whatever preset data currently exists for that ID. There is currently no artwork persistence (no localStorage, save, or export), so this has no live effect today, but the moment persistence/export/Surface-ID attachment exists, this becomes load-bearing.
+
+**Standing rule:** once artwork persistence/save/export exists, rendering behavior referenced by a canonical cap ID must never be silently mutated in place. A behavior change forks or versions the ID (or uses explicit migration/alias logic) rather than redefining an existing ID's numbers underneath already-referenced artwork. `LEGACY_CAP_ALIASES` in `SprayCapPresets.ts` is the existing mechanism for keeping old short-hand IDs pointed at the correct canonical entry through a rename.
+
+First application of this rule: the pre-calibration `german-fat` preset's fuzzy/hairy/dry-brush digital behavior was forked verbatim into a new permanent `fuzz-fat` ("Fuzz Fat") specialty/effect cap before any physical recalibration of `german-fat` toward the real German/Hardcore Fat cap. `german-fat`'s numbers remain free to be recalibrated later without disturbing `fuzz-fat`.
+
 ## Stable Mop Attachment And Clear Authority
 
 The latest Mop attachment work is complete and physically verified:

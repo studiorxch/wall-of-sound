@@ -56,6 +56,7 @@ const CAP_PROFILE_DETAILS: Record<SprayCapId, ProfileDetails> = {
   calligraphy: profile(14, 34, "fan", "balanced", "restrained", "medium", "moderate", "balanced", "medium", "settled", "fixed-transversal", "Shaped aerosol plume, physically distinct from a contacting Chisel marker nib."),
   needle: profile(3, 10, "needle", "raw", "splattery", "medium", "pronounced", "dense", "high", "loaded", "symmetric", "Needle cone, output, edge breakup, and stationary load need dedicated empirical calibration."),
   "soft-fade": profile(34, 68, "diffuse", "soft", "wide", "low", "restrained", "soft-fade", "high", "settled", "symmetric", "Diffuse fade baseline pending measured distance and paint-opacity references."),
+  "fuzz-fat": profile(28, 50, "round", "raw", "splattery", "high", "moderate", "balanced", "high", "raw", "symmetric", "StudioRich effect cap. A permanent fork of the pre-calibration \"German / Hardcore Fat\" digital behavior, preserved for its fuzzy/hairy/dry-brush texture. Not a physical-cap target and not intended to be recalibrated against real German/Hardcore Fat references."),
 };
 
 export function getSprayCapProfile(id: string): SprayCapProfile {

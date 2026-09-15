@@ -9,7 +9,8 @@ export type SprayCapId =
   | "new-york-thin"
   | "calligraphy"
   | "needle"
-  | "soft-fade";
+  | "soft-fade"
+  | "fuzz-fat";
 
 export type SprayCapFamily = "fat" | "thin" | "specialty";
 export type EndpointBehavior = "settled" | "tapered" | "punchy" | "raw";
@@ -62,6 +63,9 @@ export const SPRAY_CAP_PRESETS: readonly SprayCapPreset[] = [
   { id: "calligraphy", name: "Calligraphy / Transversal", family: "specialty", baseRadius: 25, coreDensity: 1.02, coreOpacity: 0.33, edgeFalloff: 0.74, particleCount: 10, particleSpread: 0.82, particleSize: 0.42, particleOpacity: 0.2, flowRate: 0.96, accumulationRate: 0.94, velocityResponse: 0.72, jitter: 0.04, endpointBehavior: "tapered", splatterProbability: 0.04, dripTendency: 0.22, anisotropy: 0.32 },
   { id: "needle", name: "Needle", family: "specialty", baseRadius: 5, coreDensity: 1.58, coreOpacity: 0.42, edgeFalloff: 0.92, particleCount: 15, particleSpread: 2.05, particleSize: 0.26, particleOpacity: 0.3, flowRate: 1.12, accumulationRate: 1.6, velocityResponse: 0.9, jitter: 0.12, endpointBehavior: "raw", splatterProbability: 0.24, dripTendency: 0.94, anisotropy: 1 },
   { id: "soft-fade", name: "Soft / Fade", family: "specialty", baseRadius: 50, coreDensity: 0.36, coreOpacity: 0.13, edgeFalloff: 0.28, particleCount: 42, particleSpread: 1.6, particleSize: 0.38, particleOpacity: 0.14, flowRate: 0.68, accumulationRate: 0.52, velocityResponse: 0.82, jitter: 0.2, endpointBehavior: "settled", splatterProbability: 0.12, dripTendency: 0.04, anisotropy: 1 },
+  // Forked verbatim from "german-fat" (see SprayCapProfile.ts) to freeze this fuzzy/dry-brush digital
+  // behavior under its own permanent identity before "german-fat" is recalibrated to the real cap.
+  { id: "fuzz-fat", name: "Fuzz Fat", family: "specialty", baseRadius: 38, coreDensity: 1.06, coreOpacity: 0.27, edgeFalloff: 0.54, particleCount: 32, particleSpread: 1.42, particleSize: 0.62, particleOpacity: 0.24, flowRate: 1.18, accumulationRate: 1.08, velocityResponse: 0.68, jitter: 0.18, endpointBehavior: "raw", splatterProbability: 0.28, dripTendency: 0.5, anisotropy: 1 },
 ] as const;
 
 const LEGACY_CAP_ALIASES: Record<string, SprayCapId> = {

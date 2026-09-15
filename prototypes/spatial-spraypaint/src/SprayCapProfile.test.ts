@@ -5,7 +5,7 @@ import { getSprayCapPreset, resolveSprayDynamics, SPRAY_CAP_PRESETS } from "./Sp
 describe("spray cap calibration profile", () => {
   it("describes every existing cap without adding a second deposition authority", () => {
     const profiles = SPRAY_CAP_PRESETS.map(({ id }) => getSprayCapProfile(id));
-    expect(profiles).toHaveLength(11);
+    expect(profiles).toHaveLength(12);
     expect(profiles.map(({ id }) => id)).toEqual(SPRAY_CAP_PRESETS.map(({ id }) => id));
     for (const profile of profiles) {
       expect(profile.deposition).toBe(getSprayCapPreset(profile.id));
@@ -32,6 +32,26 @@ describe("spray cap calibration profile", () => {
         resolveSprayDynamics(preset, 0.72, 31),
       );
     }
+  });
+
+  it("gives Fuzz Fat a distinct specialty identity while its deposition matches german-fat exactly", () => {
+    const fuzzFat = getSprayCapProfile("fuzz-fat");
+    const germanFat = getSprayCapProfile("german-fat");
+
+    expect(fuzzFat.id).toBe("fuzz-fat");
+    expect(fuzzFat.name).toBe("Fuzz Fat");
+    expect(fuzzFat.family).toBe("specialty");
+    expect(fuzzFat.calibrationNotes).not.toBe(germanFat.calibrationNotes);
+    expect(fuzzFat.calibrationNotes).toContain("effect cap");
+
+    expect(fuzzFat.deposition).not.toBe(germanFat.deposition);
+    const { id: _fuzzId, name: _fuzzName, family: _fuzzFamily, ...fuzzDeposition } = fuzzFat.deposition;
+    const { id: _germanId, name: _germanName, family: _germanFamily, ...germanDeposition } = germanFat.deposition;
+    expect(fuzzDeposition).toEqual(germanDeposition);
+
+    expect(resolveSprayDynamics(fuzzFat.deposition, 0.72, 31)).toEqual(
+      resolveSprayDynamics(germanFat.deposition, 0.72, 31),
+    );
   });
 
   it("keeps aerosol calligraphy physically distinct from a marker nib", () => {
