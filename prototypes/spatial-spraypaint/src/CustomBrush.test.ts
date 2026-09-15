@@ -26,6 +26,13 @@ describe("Spray brush provenance classification", () => {
     expect(classifyBuiltInSprayCap("wiggly-needle")).toBe("digital-effect");
   });
 
+  it("classifies Ring/Donut and Dry/Streak as digital-effect output archetypes, never physical-reference", () => {
+    expect(classifyBuiltInSprayCap("ring-donut")).toBe("digital-effect");
+    expect(classifyBuiltInSprayCap("dry-streak")).toBe("digital-effect");
+    expect(classifySprayCapId("ring-donut")).toBe("digital-effect");
+    expect(classifySprayCapId("dry-streak")).toBe("digital-effect");
+  });
+
   it("classifies the rest of the built-in set as physical-reference caps", () => {
     expect(classifyBuiltInSprayCap("new-york-fat")).toBe("physical-reference");
     expect(classifyBuiltInSprayCap("calligraphy")).toBe("physical-reference");

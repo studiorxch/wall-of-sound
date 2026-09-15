@@ -133,4 +133,20 @@ describe("Spray brush property override model (PRESET DEFAULT -> SESSION MODIFIC
     expect(groups.shape.find((row) => row.key === "orientationAngle")?.value).toBe("symmetric");
     expect(groups.shape.find((row) => row.key === "aspectRatio")?.value).toBe(1);
   });
+
+  it("defaults Ring/Donut and Dry/Streak Fill mode to off, same mechanism as every other brush", () => {
+    const ring = getSprayCapPreset("ring-donut");
+    const streak = getSprayCapPreset("dry-streak");
+    expect(ring.defaultFillMode).toBe(false);
+    expect(streak.defaultFillMode).toBe(false);
+    expect(resolveEffectiveSprayStyle(ring, {}).fillMode).toBe(false);
+    expect(resolveEffectiveSprayStyle(streak, {}).fillMode).toBe(false);
+  });
+
+  it("keeps Ring/Donut and Dry/Streak property overrides fully independent, like any other pair of brushes", () => {
+    let store = setSprayOverride(EMPTY_SPRAY_OVERRIDES, "ring-donut", { size: 60, fillMode: true });
+    store = setSprayOverride(store, "dry-streak", { size: 10 });
+    expect(getSprayOverride(store, "ring-donut")).toEqual({ size: 60, fillMode: true });
+    expect(getSprayOverride(store, "dry-streak")).toEqual({ size: 10 });
+  });
 });

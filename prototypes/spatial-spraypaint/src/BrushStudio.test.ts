@@ -65,4 +65,14 @@ describe("Brush Studio brush-list grouping (Spray and Marker each expose their o
     expect(findSprayBrushPreset(SPRAY_CAP_PRESETS, registry, custom.preset.id)?.id).toBe(custom.preset.id);
     expect(findSprayBrushPreset(SPRAY_CAP_PRESETS, registry, "not-a-real-id")).toBeUndefined();
   });
+
+  it("lists Ring/Donut and Dry/Streak as built-in Specialty-group digital brushes, correctly classified", () => {
+    const groups = buildSprayBrushList(SPRAY_CAP_PRESETS, EMPTY_CUSTOM_SPRAY_REGISTRY);
+    const specialty = groups.find((g) => g.key === "specialty");
+    expect(specialty).toBeDefined();
+    const ring = specialty?.entries.find((e) => e.id === "ring-donut");
+    const streak = specialty?.entries.find((e) => e.id === "dry-streak");
+    expect(ring).toMatchObject({ isCustom: false, provenance: "digital-effect" });
+    expect(streak).toMatchObject({ isCustom: false, provenance: "digital-effect" });
+  });
 });

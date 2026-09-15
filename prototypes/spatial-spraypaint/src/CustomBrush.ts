@@ -30,6 +30,11 @@ const BUILT_IN_PROVENANCE: Record<SprayCapId, BrushProvenance> = {
   "wiggly-needle": "digital-effect",
   "soft-fade": "physical-reference",
   "fuzz-fat": "digital-effect",
+  // Output archetypes explored ahead of any confirmed physical-cap match —
+  // see the Visual Audit's "Unassigned / future output archetypes" section.
+  // Never label these physical/reference until real evidence supports it.
+  "ring-donut": "digital-effect",
+  "dry-streak": "digital-effect",
 };
 
 export function classifyBuiltInSprayCap(id: SprayCapId): BrushProvenance {

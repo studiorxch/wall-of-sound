@@ -5,7 +5,7 @@ import { getSprayCapPreset, resolveSprayDynamics, SPRAY_CAP_PRESETS } from "./Sp
 describe("spray cap calibration profile", () => {
   it("describes every existing cap without adding a second deposition authority", () => {
     const profiles = SPRAY_CAP_PRESETS.map(({ id }) => getSprayCapProfile(id));
-    expect(profiles).toHaveLength(14);
+    expect(profiles).toHaveLength(16);
     expect(profiles.map(({ id }) => id)).toEqual(SPRAY_CAP_PRESETS.map(({ id }) => id));
     for (const profile of profiles) {
       expect(profile.deposition).toBe(getSprayCapPreset(profile.id));

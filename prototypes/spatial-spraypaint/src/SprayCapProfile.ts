@@ -22,7 +22,7 @@ export interface SprayCapProfile {
   name: string;
   family: SprayCapPreset["family"];
   nominalWidthRange: NominalWidthRange;
-  coneShape: "round" | "fan" | "needle" | "diffuse";
+  coneShape: "round" | "fan" | "needle" | "diffuse" | "annular" | "banded";
   edgeCharacter: "hard" | "balanced" | "soft" | "raw";
   oversprayCharacter: "restrained" | "balanced" | "wide" | "splattery";
   outputVolume: "low" | "medium" | "high" | "very-high";
@@ -59,6 +59,8 @@ const CAP_PROFILE_DETAILS: Record<SprayCapId, ProfileDetails> = {
   "wiggly-needle": profile(3, 10, "needle", "hard", "restrained", "medium", "restrained", "dense", "high", "loaded", "symmetric", "Specialty oscillating variant of the corrected Needle above — deposition identical to Needle (both corrected together), plus a bounded deterministic lateral wander. Digital effect cap, not a physical-cap target; future Waveformer audio-modulation candidate."),
   "soft-fade": profile(34, 68, "diffuse", "soft", "wide", "low", "restrained", "soft-fade", "high", "settled", "symmetric", "Diffuse fade baseline pending measured distance and paint-opacity references."),
   "fuzz-fat": profile(28, 50, "round", "raw", "splattery", "high", "moderate", "balanced", "high", "raw", "symmetric", "StudioRich effect cap. A permanent fork of the pre-calibration \"German / Hardcore Fat\" digital behavior, preserved for its fuzzy/hairy/dry-brush texture. Not a physical-cap target and not intended to be recalibrated against real German/Hardcore Fat references."),
+  "ring-donut": profile(36, 62, "annular", "soft", "balanced", "high", "pronounced", "balanced", "medium", "loaded", "symmetric", "StudioRich digital output archetype — a genuine annular (ring/donut) structure, not a physical-cap target and not assigned to any real cap identity. Center opacity deliberately below ring-band opacity; magnitude chosen by screenshot judgment, unverified against any reference."),
+  "dry-streak": profile(28, 48, "banded", "raw", "restrained", "medium", "moderate", "balanced", "medium", "raw", "symmetric", "StudioRich digital output archetype — deterministic multi-lane directional gaps/ribbing, not a physical-cap target and not assigned to any real cap identity. Distinct from Fuzz Fat's random-jitter raggedness: the gap pattern is pure position-derived trig, replays identically, and is unverified against any reference."),
 };
 
 export function getSprayCapProfile(id: string): SprayCapProfile {

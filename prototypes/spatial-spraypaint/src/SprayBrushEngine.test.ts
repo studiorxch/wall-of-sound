@@ -3,7 +3,9 @@ import {
   SprayBrushEngine,
   createStrokeRandom,
   resolveOverspraySquashAngle,
+  resolveRingProfile,
   resolveShapedStampGeometry,
+  resolveStreakGate,
   shapedStampWidthAlongTravel,
   TRANSVERSAL_AXIS_ANGLE,
 } from "./SprayBrushEngine";
@@ -415,6 +417,160 @@ describe("spray cap personality — halo, fixed-axis overspray, Wiggly Needle", 
     const first = render();
     const second = render();
     expect(second.ys).toEqual(first.ys);
+  });
+});
+
+describe("Ring / Donut — genuine annular structure", () => {
+  it("gives the ring band a higher peak opacity than the center, with a moat between them (real hollow, not a blurred dot)", () => {
+    const cap = getSprayCapPreset("ring-donut");
+    const profile = resolveRingProfile(cap, 40, 1);
+    expect(profile).not.toBeNull();
+    if (!profile) return;
+    const centerAlpha = profile.stops[0].alpha;
+    const moatAlpha = profile.stops[1].alpha;
+    const peakAlpha = profile.stops[2].alpha;
+    expect(centerAlpha).toBeGreaterThan(0); // "optional faint center mist"
+    expect(centerAlpha).toBeLessThan(peakAlpha); // the actual "center < ring" requirement
+    expect(moatAlpha).toBeLessThan(centerAlpha); // the annular dip that makes it read as hollow, not tapered
+    expect(moatAlpha).toBeLessThan(peakAlpha);
+    expect(profile.stops[profile.stops.length - 1].alpha).toBe(0); // soft outer bloom fades to nothing
+  });
+
+  it("returns null for caps with ringRadius 0 (every other cap)", () => {
+    expect(resolveRingProfile(getSprayCapPreset("pink-dot-fat"), 40, 1)).toBeNull();
+    expect(resolveRingProfile(getSprayCapPreset("new-york-fat"), 40, 1)).toBeNull();
+  });
+
+  it("is deterministic — same cap/scale/alpha always produces the same profile", () => {
+    const cap = getSprayCapPreset("ring-donut");
+    expect(resolveRingProfile(cap, 40, 0.6)).toEqual(resolveRingProfile(cap, 40, 0.6));
+  });
+
+  it("differs structurally from Pink Dot Fat: a real annular gradient (with a moat), not Pink Dot's single center-to-edge halo fade", () => {
+    const ring = getSprayCapPreset("ring-donut");
+    const pinkDot = getSprayCapPreset("pink-dot-fat");
+    expect(ring.ringRadius).toBeGreaterThan(0);
+    expect(pinkDot.ringRadius).toBe(0);
+    expect(ring.haloRadius).toBe(0); // does not also stack Pink Dot's halo mechanism
+    expect(pinkDot.haloRadius).toBeGreaterThan(0);
+    expect(ring.depositionShape).toBe("ring");
+    expect(pinkDot.depositionShape).toBe("line");
+  });
+
+  it("draws a real multi-stop radial gradient (not a flat fill) at a stationary dot, and again on a moving stroke", () => {
+    const cap = getSprayCapPreset("ring-donut");
+    const dot = segmentRecordingContext();
+    const point: StrokePoint = { x: 40, y: 40, timestamp: 0, velocity: 0.05, width: 40, opacity: 1 };
+    new SprayBrushEngine().renderSegment(dot.ctx, null, point, "#ffffff", cap, createStrokeRandom(3));
+    expect(dot.gradients.length).toBeGreaterThan(0);
+    expect(dot.gradients[0].stops.length).toBeGreaterThanOrEqual(4);
+
+    const stroke = segmentRecordingContext();
+    const start: StrokePoint = { x: 0, y: 0, timestamp: 0, velocity: 0.3, width: 40, opacity: 1 };
+    const end: StrokePoint = { x: 150, y: 0, timestamp: 100, velocity: 0.3, width: 40, opacity: 1 };
+    new SprayBrushEngine().renderSegment(stroke.ctx, start, end, "#ffffff", cap, createStrokeRandom(3));
+    expect(stroke.gradients.length).toBeGreaterThan(0);
+  });
+});
+
+describe("Dry / Streak — deterministic directional lanes and gaps", () => {
+  it("gates lanes fully to zero periodically along travel distance (real gaps, not just low opacity)", () => {
+    const radius = 34;
+    const samples = Array.from({ length: 40 }, (_, i) => resolveStreakGate(radius, 0, i * 8));
+    expect(Math.min(...samples)).toBeLessThan(0.01);
+    expect(Math.max(...samples)).toBeGreaterThan(0.9);
+  });
+
+  it("is deterministic — same radius/lane/position always produces the same gate, no Math.random involved", () => {
+    expect(resolveStreakGate(34, 2, 123.4)).toBe(resolveStreakGate(34, 2, 123.4));
+  });
+
+  it("staggers different lanes out of phase, producing internal ribbing rather than all lanes gapping together", () => {
+    const radius = 34;
+    const along = 50;
+    const gates = [0, 1, 2, 3, 4].map((lane) => resolveStreakGate(radius, lane, along));
+    expect(new Set(gates.map((g) => g.toFixed(4))).size).toBeGreaterThan(1);
+  });
+
+  it("keeps the gap pattern tied to the CURRENT travel direction (recomputed from angle-projected position, not a fixed world grid)", () => {
+    // Same world point, different `alongTravel` projections (as travel angle changes) legitimately
+    // produce different gates — this is what "orientation follows stroke direction" requires.
+    const radius = 34;
+    const alongHorizontal = 100 * Math.cos(0) + 0 * Math.sin(0);
+    const alongDiagonal = 100 * Math.cos(Math.PI / 4) + 100 * Math.sin(Math.PI / 4);
+    expect(alongHorizontal).not.toBe(alongDiagonal);
+    expect(resolveStreakGate(radius, 0, alongHorizontal)).not.toBe(resolveStreakGate(radius, 0, alongDiagonal));
+  });
+
+  it("is not equivalent to Fuzz Fat: a distinct deterministic multi-lane mechanism, not raw jitter/splatter", () => {
+    const streak = getSprayCapPreset("dry-streak");
+    const fuzz = getSprayCapPreset("fuzz-fat");
+    expect(streak.depositionShape).toBe("streak");
+    expect(fuzz.depositionShape).toBe("line");
+    expect(streak.streakLanes).toBeGreaterThan(1);
+    expect(fuzz.streakLanes).toBe(0);
+    // Fuzz Fat's raggedness comes from jitter/splatter; Dry/Streak deliberately keeps both low —
+    // its texture comes entirely from the deterministic lane gate, not from randomness.
+    expect(streak.jitter).toBeLessThan(fuzz.jitter);
+    expect(streak.splatterProbability).toBeLessThan(fuzz.splatterProbability);
+  });
+
+  it("renders as multiple separate strokeStyle draws per segment (lanes), with some segments producing fewer draws than others (gaps)", () => {
+    const cap = getSprayCapPreset("dry-streak");
+    const engine = new SprayBrushEngine();
+    const { ctx, strokeStyles } = segmentRecordingContext();
+    let previous: StrokePoint | null = null;
+    const drawsPerSegment: number[] = [];
+    for (let i = 0; i <= 24; i += 1) {
+      const point: StrokePoint = { x: i * 10, y: 0, timestamp: i * 20, velocity: 0.3, width: 34, opacity: 1 };
+      const before = strokeStyles.length;
+      engine.renderSegment(ctx, previous, point, "#ffffff", cap, createStrokeRandom(5));
+      drawsPerSegment.push(strokeStyles.length - before);
+      previous = point;
+    }
+    // Some segments should draw fewer than the full lane count (visible gaps along the stroke).
+    expect(Math.min(...drawsPerSegment)).toBeLessThan(cap.streakLanes);
+    // But not literally every segment is a total gap — the stroke is still visible overall.
+    expect(Math.max(...drawsPerSegment)).toBeGreaterThan(0);
+  });
+
+  it("lets Fill mode's repeated-sweep accumulation still increase coverage, same as any other cap", () => {
+    const cap = getSprayCapPreset("dry-streak");
+    const cumulativeAlpha = (alphas: number[]) => 1 - alphas.reduce((remaining, a) => remaining * (1 - a), 1);
+    const sweep = (engine: SprayBrushEngine, seed: number) => {
+      const { ctx, strokeStyles } = segmentRecordingContext();
+      let previous: StrokePoint | null = null;
+      const random = createStrokeRandom(seed);
+      for (let i = 0; i <= 20; i += 1) {
+        const point: StrokePoint = { x: i * 6, y: 0, timestamp: i * 20, velocity: 0.3, width: 34, opacity: 1 };
+        engine.renderSegment(ctx, previous, point, "#ffffff", cap, random, 1, true);
+        previous = point;
+      }
+      return strokeStyles.map(alphaOf);
+    };
+    const engine = new SprayBrushEngine();
+    const sweep1 = sweep(engine, 1);
+    const sweep2 = sweep(engine, 2);
+    const after1 = cumulativeAlpha(sweep1);
+    const after2 = cumulativeAlpha([...sweep1, ...sweep2]);
+    expect(after2).toBeGreaterThan(after1);
+  });
+
+  it("replays deterministically: identical points/seed/timestamps produce an identical gap pattern", () => {
+    const cap = getSprayCapPreset("dry-streak");
+    const render = () => {
+      const engine = new SprayBrushEngine();
+      const { ctx, strokeStyles } = segmentRecordingContext();
+      let previous: StrokePoint | null = null;
+      const random = createStrokeRandom(7);
+      for (let i = 0; i <= 16; i += 1) {
+        const point: StrokePoint = { x: i * 8, y: 0, timestamp: i * 20, velocity: 0.3, width: 34, opacity: 1 };
+        engine.renderSegment(ctx, previous, point, "#ffffff", cap, random);
+        previous = point;
+      }
+      return strokeStyles;
+    };
+    expect(render()).toEqual(render());
   });
 });
 

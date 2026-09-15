@@ -154,6 +154,46 @@ describe("brush preview rendering", () => {
     expect(oval.log).not.toEqual(slot.log);
   });
 
+  it("gives Ring/Donut a preview drawn through createRadialGradient with an annular structure, distinct from Pink Dot's halo and New York Fat's flat dot", () => {
+    const ring = recordingContext();
+    const pinkDot = recordingContext();
+    const newYorkFat = recordingContext();
+    renderSprayCapPreviewToContext(ring.ctx, 60, 24, "ring-donut");
+    renderSprayCapPreviewToContext(pinkDot.ctx, 60, 24, "pink-dot-fat");
+    renderSprayCapPreviewToContext(newYorkFat.ctx, 60, 24, "new-york-fat");
+    expect(ring.log.some((entry) => entry.startsWith("createRadialGradient"))).toBe(true);
+    expect(ring.log).not.toEqual(pinkDot.log);
+    expect(ring.log).not.toEqual(newYorkFat.log);
+  });
+
+  it("gives Dry/Streak a preview visibly distinct from Fuzz Fat and a normal fat cap, rendered through the real engine", () => {
+    const streak = recordingContext();
+    const fuzz = recordingContext();
+    const fat = recordingContext();
+    renderSprayCapPreviewToContext(streak.ctx, 60, 24, "dry-streak");
+    renderSprayCapPreviewToContext(fuzz.ctx, 60, 24, "fuzz-fat");
+    renderSprayCapPreviewToContext(fat.ctx, 60, 24, "new-york-fat");
+    expect(streak.log.length).toBeGreaterThan(0);
+    expect(streak.log).not.toEqual(fuzz.log);
+    expect(streak.log).not.toEqual(fat.log);
+  });
+
+  it("renders Ring/Donut and Dry/Streak Brush Studio previews deterministically through the real engine", () => {
+    const ringA = recordingContext();
+    const ringB = recordingContext();
+    renderSprayBrushStudioPreview(ringA.ctx, 320, 150, getSprayCapPreset("ring-donut"));
+    renderSprayBrushStudioPreview(ringB.ctx, 320, 150, getSprayCapPreset("ring-donut"));
+    expect(ringA.log).toEqual(ringB.log);
+    expect(ringA.log.length).toBeGreaterThan(0);
+
+    const streakA = recordingContext();
+    const streakB = recordingContext();
+    renderSprayBrushStudioPreview(streakA.ctx, 320, 150, getSprayCapPreset("dry-streak"));
+    renderSprayBrushStudioPreview(streakB.ctx, 320, 150, getSprayCapPreset("dry-streak"));
+    expect(streakA.log).toEqual(streakB.log);
+    expect(streakA.log.length).toBeGreaterThan(0);
+  });
+
   it("renders Brush Studio's larger Marker preview deterministically and reflects a size override", () => {
     const first = recordingContext();
     const second = recordingContext();

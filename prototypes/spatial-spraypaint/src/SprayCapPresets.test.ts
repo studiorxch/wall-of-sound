@@ -2,12 +2,13 @@ import { describe, expect, it } from "vitest";
 import { getSprayCapPreset, mapVelocityToDensity, resolveSprayDynamics, SPRAY_CAP_PRESETS } from "./SprayCapPresets";
 
 describe("spray cap presets", () => {
-  it("defines all eleven graffiti cap families plus Rectangular Transversal, Fuzz Fat, and Wiggly Needle", () => {
-    expect(SPRAY_CAP_PRESETS).toHaveLength(14);
+  it("defines all eleven graffiti cap families plus Rectangular Transversal, Fuzz Fat, Wiggly Needle, Ring/Donut, and Dry/Streak", () => {
+    expect(SPRAY_CAP_PRESETS).toHaveLength(16);
     expect(SPRAY_CAP_PRESETS.map((preset) => preset.id)).toEqual([
       "new-york-fat", "pink-dot-fat", "astro-fat", "german-fat",
       "lego-thin", "universal-thin", "level-1", "new-york-thin",
       "calligraphy", "transversal-slot", "needle", "wiggly-needle", "soft-fade", "fuzz-fat",
+      "ring-donut", "dry-streak",
     ]);
     expect(new Set(SPRAY_CAP_PRESETS.map((preset) => preset.family))).toEqual(new Set(["fat", "thin", "specialty"]));
   });

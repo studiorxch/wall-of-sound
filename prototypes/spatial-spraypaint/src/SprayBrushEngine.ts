@@ -92,7 +92,7 @@ export function resolveShapedStampGeometry(
   depositionShape: SprayCapPreset["depositionShape"],
   scale: number,
 ): ShapedStampGeometry | null {
-  if (depositionShape === "line") return null;
+  if (depositionShape !== "oval" && depositionShape !== "slot") return null;
   const lengthRatio = depositionShape === "oval" ? OVAL_STAMP_LENGTH_RATIO : SLOT_STAMP_LENGTH_RATIO;
   const widthRatio = depositionShape === "oval" ? OVAL_STAMP_WIDTH_RATIO : SLOT_STAMP_WIDTH_RATIO;
   const halfWidth = scale * widthRatio;
@@ -119,6 +119,61 @@ export function shapedStampWidthAlongTravel(geometry: ShapedStampGeometry, trave
   return 2 * Math.sqrt(
     (geometry.halfLength * Math.cos(local)) ** 2 + (geometry.halfWidth * Math.sin(local)) ** 2,
   );
+}
+
+/**
+ * Ring/Donut's annular alpha profile — a genuine hollow structure, not a
+ * blurred dot with a halo layered on top. `centerOpacity` sits far below
+ * `ringOpacity` (the defining "donut" shape), with a near-zero "moat" between
+ * them so the ring band reads as a distinct raised structure rather than a
+ * smooth taper. Pure function of the cap's own fields and the resolved
+ * scale — no travel angle, no randomness, so it's identical at every stamp.
+ */
+export interface RingProfile {
+  outerRadius: number;
+  stops: ReadonlyArray<{ offset: number; alpha: number }>;
+}
+
+export function resolveRingProfile(cap: SprayCapPreset, scale: number, alphaScale: number): RingProfile | null {
+  if (cap.ringRadius <= 0 || alphaScale <= 0) return null;
+  const ringRadius = scale * cap.ringRadius;
+  const thickness = Math.max(1, ringRadius * cap.ringThickness);
+  const outerRadius = ringRadius + thickness;
+  if (outerRadius <= 0) return null;
+  const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
+  const centerAlpha = cap.centerOpacity * alphaScale;
+  const peakAlpha = cap.ringOpacity * alphaScale;
+  return {
+    outerRadius,
+    stops: [
+      { offset: 0, alpha: centerAlpha },
+      { offset: clamp01((ringRadius - thickness) / outerRadius), alpha: centerAlpha * 0.2 },
+      { offset: clamp01(ringRadius / outerRadius), alpha: peakAlpha },
+      { offset: clamp01(Math.min(outerRadius, ringRadius + thickness * 0.6) / outerRadius), alpha: peakAlpha * 0.55 },
+      { offset: 1, alpha: 0 },
+    ],
+  };
+}
+
+/**
+ * Dry/Streak's deterministic lane-visibility gate. A pure function of the
+ * resolved radius, which lane this is, and how far along the CURRENT travel
+ * direction this segment sits (`alongTravel` — the segment position
+ * projected onto the travel angle, so the pattern re-orients with the
+ * stroke instead of being fixed to world-space axes). No `Math.random`
+ * anywhere: the same inputs always produce the same gate, so replay is
+ * pixel-identical. Different lanes get a fixed phase offset so they gap out
+ * at different points along the stroke — the "ribbing" — rather than all
+ * lanes vanishing together.
+ */
+const STREAK_CYCLE_LENGTH_RATIO = 2.2;
+const STREAK_LANE_PHASE_STEP = (Math.PI * 2) / 5;
+const STREAK_GATE_SHARPNESS = 1.6;
+
+export function resolveStreakGate(radius: number, laneIndex: number, alongTravel: number): number {
+  const cycleLength = Math.max(1, radius * STREAK_CYCLE_LENGTH_RATIO);
+  const phase = (alongTravel / cycleLength) * Math.PI * 2 + laneIndex * STREAK_LANE_PHASE_STEP;
+  return Math.max(0, Math.sin(phase)) ** STREAK_GATE_SHARPNESS;
 }
 
 export function createStrokeRandom(seed: number): () => number {
@@ -229,52 +284,68 @@ export class SprayBrushEngine {
       ? this.fillCellKey((drawStart.x + drawPoint.x) / 2, (drawStart.y + drawPoint.y) / 2, cellSize)
       : null;
 
-    for (let pass = dynamics.corePasses - 1; pass >= 0; pass -= 1) {
-      const passRatio = dynamics.corePasses === 1 ? 0 : pass / (dynamics.corePasses - 1);
-      const edgeExpansion = 1 + passRatio * (1 - cap.edgeFalloff) * 0.72;
-      const jitterX = (random() - 0.5) * dynamics.jitter;
-      const jitterY = (random() - 0.5) * dynamics.jitter;
-      const endpointScale = previous ? 1 : cap.endpointBehavior === "punchy" ? 0.82 : 0.68;
-      const nominalPassAlpha = passOpacity * (1 - passRatio * 0.48);
-      // Cap this LOCATION's own cumulative core opacity, without touching how
-      // a physically separate stroke composites on top of it. Tracked per
-      // actual draw call (every corePasses sub-layer counts, not just once
-      // per segment) so the true composited result — corePasses stack on
-      // each other too — asymptotes to the ceiling, not just the segment-
-      // level estimate. Track what this draw's coverage would be under
-      // ordinary compositing (`nextVirtual`), remap into the ceiling band,
-      // then solve for the alpha this draw must actually use so the canvas
-      // moves from the previous remapped coverage to the next one exactly —
-      // the definition of standard "source-over" compositing, just aimed at
-      // a lower asymptote.
-      let drawnAlpha = nominalPassAlpha;
-      if (fillMode && cellKey !== null) {
-        const priorVirtual = this.fillLocalSaturation.get(cellKey) ?? 0;
-        const nextVirtual = 1 - (1 - priorVirtual) * (1 - nominalPassAlpha);
-        const priorVisible = FILL_MODE_CORE_CEILING * priorVirtual;
-        const nextVisible = FILL_MODE_CORE_CEILING * nextVirtual;
-        drawnAlpha = priorVisible >= 1 ? 0 : (nextVisible - priorVisible) / (1 - priorVisible);
-        this.fillLocalSaturation.set(cellKey, nextVirtual);
-      }
-      const stampGeometry = resolveShapedStampGeometry(cap.depositionShape, dynamics.radius * edgeExpansion * endpointScale);
-      if (stampGeometry) {
-        // A genuinely elongated, fixed-orientation stamp — not a width trick.
-        // Stamped at both segment endpoints (like renderHalo above) so fine
-        // interpolation spacing tiles into a continuous swept band; the
-        // wide/narrow response is a pure consequence of this fixed shape's
-        // own geometry as it's swept through different travel directions.
-        const fillStyle = this.hexToRgba(colorHex, drawnAlpha);
-        this.drawShapedStamp(ctx, drawStart.x + jitterX, drawStart.y + jitterY, stampGeometry, fillStyle);
-        if (drawStart.x !== drawPoint.x || drawStart.y !== drawPoint.y) {
-          this.drawShapedStamp(ctx, drawPoint.x + jitterX, drawPoint.y + jitterY, stampGeometry, fillStyle);
+    if (cap.depositionShape === "streak") {
+      // Dry/Streak replaces the concentric-pass core entirely with
+      // deterministic parallel lanes — see renderStreakCore below.
+      this.renderStreakCore(ctx, drawStart, drawPoint, colorHex, cap, dynamics, angle, passOpacity, fillMode, cellKey);
+    } else {
+      for (let pass = dynamics.corePasses - 1; pass >= 0; pass -= 1) {
+        const passRatio = dynamics.corePasses === 1 ? 0 : pass / (dynamics.corePasses - 1);
+        const edgeExpansion = 1 + passRatio * (1 - cap.edgeFalloff) * 0.72;
+        const jitterX = (random() - 0.5) * dynamics.jitter;
+        const jitterY = (random() - 0.5) * dynamics.jitter;
+        const endpointScale = previous ? 1 : cap.endpointBehavior === "punchy" ? 0.82 : 0.68;
+        const nominalPassAlpha = passOpacity * (1 - passRatio * 0.48);
+        // Cap this LOCATION's own cumulative core opacity, without touching how
+        // a physically separate stroke composites on top of it. Tracked per
+        // actual draw call (every corePasses sub-layer counts, not just once
+        // per segment) so the true composited result — corePasses stack on
+        // each other too — asymptotes to the ceiling, not just the segment-
+        // level estimate. Track what this draw's coverage would be under
+        // ordinary compositing (`nextVirtual`), remap into the ceiling band,
+        // then solve for the alpha this draw must actually use so the canvas
+        // moves from the previous remapped coverage to the next one exactly —
+        // the definition of standard "source-over" compositing, just aimed at
+        // a lower asymptote.
+        let drawnAlpha = nominalPassAlpha;
+        if (fillMode && cellKey !== null) {
+          const priorVirtual = this.fillLocalSaturation.get(cellKey) ?? 0;
+          const nextVirtual = 1 - (1 - priorVirtual) * (1 - nominalPassAlpha);
+          const priorVisible = FILL_MODE_CORE_CEILING * priorVirtual;
+          const nextVisible = FILL_MODE_CORE_CEILING * nextVirtual;
+          drawnAlpha = priorVisible >= 1 ? 0 : (nextVisible - priorVisible) / (1 - priorVisible);
+          this.fillLocalSaturation.set(cellKey, nextVirtual);
         }
-      } else {
-        ctx.strokeStyle = this.hexToRgba(colorHex, drawnAlpha);
-        ctx.lineWidth = Math.max(0.7, dynamics.radius * 2 * directionalAnisotropy * edgeExpansion * endpointScale);
-        ctx.beginPath();
-        ctx.moveTo(drawStart.x + jitterX, drawStart.y + jitterY);
-        ctx.lineTo(drawPoint.x + jitterX, drawPoint.y + jitterY);
-        ctx.stroke();
+        const scale = dynamics.radius * edgeExpansion * endpointScale;
+        const ringProfile = cap.depositionShape === "ring" ? resolveRingProfile(cap, scale, drawnAlpha) : null;
+        const stampGeometry = resolveShapedStampGeometry(cap.depositionShape, scale);
+        if (ringProfile) {
+          // A genuine annular gradient — hollow center, raised ring band, soft
+          // outer bloom — stamped at both endpoints like renderHalo, so a
+          // moving stroke reads as a ringed plume rather than a solid line.
+          this.drawRingStamp(ctx, drawStart.x + jitterX, drawStart.y + jitterY, ringProfile, colorHex);
+          if (drawStart.x !== drawPoint.x || drawStart.y !== drawPoint.y) {
+            this.drawRingStamp(ctx, drawPoint.x + jitterX, drawPoint.y + jitterY, ringProfile, colorHex);
+          }
+        } else if (stampGeometry) {
+          // A genuinely elongated, fixed-orientation stamp — not a width trick.
+          // Stamped at both segment endpoints (like renderHalo above) so fine
+          // interpolation spacing tiles into a continuous swept band; the
+          // wide/narrow response is a pure consequence of this fixed shape's
+          // own geometry as it's swept through different travel directions.
+          const fillStyle = this.hexToRgba(colorHex, drawnAlpha);
+          this.drawShapedStamp(ctx, drawStart.x + jitterX, drawStart.y + jitterY, stampGeometry, fillStyle);
+          if (drawStart.x !== drawPoint.x || drawStart.y !== drawPoint.y) {
+            this.drawShapedStamp(ctx, drawPoint.x + jitterX, drawPoint.y + jitterY, stampGeometry, fillStyle);
+          }
+        } else {
+          ctx.strokeStyle = this.hexToRgba(colorHex, drawnAlpha);
+          ctx.lineWidth = Math.max(0.7, dynamics.radius * 2 * directionalAnisotropy * edgeExpansion * endpointScale);
+          ctx.beginPath();
+          ctx.moveTo(drawStart.x + jitterX, drawStart.y + jitterY);
+          ctx.lineTo(drawPoint.x + jitterX, drawPoint.y + jitterY);
+          ctx.stroke();
+        }
       }
     }
 
@@ -359,6 +430,84 @@ export class SprayBrushEngine {
     ctx.closePath();
     ctx.fill();
     ctx.restore();
+  }
+
+  /**
+   * Draws one Ring/Donut annular gradient stamp centered at (cx, cy) from a
+   * pre-resolved `RingProfile` (see `resolveRingProfile`) — a real multi-stop
+   * radial gradient with a hollow center and a raised ring band, not a single
+   * center-to-edge fade like `renderHalo`.
+   */
+  private drawRingStamp(
+    ctx: CanvasRenderingContext2D,
+    cx: number,
+    cy: number,
+    profile: RingProfile,
+    colorHex: string,
+  ): void {
+    const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, profile.outerRadius);
+    for (const stop of profile.stops) gradient.addColorStop(stop.offset, this.hexToRgba(colorHex, stop.alpha));
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.arc(cx, cy, profile.outerRadius, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  /**
+   * Dry/Streak's core: `cap.streakLanes` parallel deterministic lanes spread
+   * across the stroke's width, each gated on/off via `resolveStreakGate` —
+   * directional broken coverage with internal ribbing, replacing the normal
+   * concentric-pass core entirely (not layered on top of a solid line).
+   * Reuses the exact same Fill-mode ceiling math as the normal core loop,
+   * called once per lane instead of once per pass, so "spatial-local Fill
+   * correctness" and "repeated sweeps accumulate" both hold unchanged.
+   */
+  private renderStreakCore(
+    ctx: CanvasRenderingContext2D,
+    start: StrokePoint,
+    point: StrokePoint,
+    colorHex: string,
+    cap: SprayCapPreset,
+    dynamics: ReturnType<typeof resolveSprayDynamics>,
+    angle: number,
+    passOpacity: number,
+    fillMode: boolean,
+    cellKey: string | null,
+  ): void {
+    const laneCount = Math.max(1, cap.streakLanes);
+    const laneSpread = dynamics.radius * 1.6;
+    const perpAngle = angle + Math.PI / 2;
+    const perpX = Math.cos(perpAngle);
+    const perpY = Math.sin(perpAngle);
+    const midX = (start.x + point.x) / 2;
+    const midY = (start.y + point.y) / 2;
+    const alongTravel = midX * Math.cos(angle) + midY * Math.sin(angle);
+
+    for (let lane = 0; lane < laneCount; lane += 1) {
+      const laneOffset = laneCount > 1 ? ((lane / (laneCount - 1)) - 0.5) * laneSpread : 0;
+      const offsetX = perpX * laneOffset;
+      const offsetY = perpY * laneOffset;
+      const gate = resolveStreakGate(dynamics.radius, lane, alongTravel);
+      const nominalLaneAlpha = passOpacity * gate;
+
+      let drawnAlpha = nominalLaneAlpha;
+      if (fillMode && cellKey !== null) {
+        const priorVirtual = this.fillLocalSaturation.get(cellKey) ?? 0;
+        const nextVirtual = 1 - (1 - priorVirtual) * (1 - nominalLaneAlpha);
+        const priorVisible = FILL_MODE_CORE_CEILING * priorVirtual;
+        const nextVisible = FILL_MODE_CORE_CEILING * nextVirtual;
+        drawnAlpha = priorVisible >= 1 ? 0 : (nextVisible - priorVisible) / (1 - priorVisible);
+        this.fillLocalSaturation.set(cellKey, nextVirtual);
+      }
+      if (drawnAlpha < 0.01) continue;
+
+      ctx.strokeStyle = this.hexToRgba(colorHex, drawnAlpha);
+      ctx.lineWidth = Math.max(0.7, (dynamics.radius * 1.7) / laneCount);
+      ctx.beginPath();
+      ctx.moveTo(start.x + offsetX, start.y + offsetY);
+      ctx.lineTo(point.x + offsetX, point.y + offsetY);
+      ctx.stroke();
+    }
   }
 
   public startDrip(seed: DripSeed, color: string, now = performance.now()): void {

@@ -2,17 +2,17 @@
 
 Date: 2026-09-15
 
-Status: Originally documentation-only as of commit `31fc282`. **Updated (still same date) after the P0 build that followed this audit** — Needle correction and the Calligraphy→Oval/Rectangular split are now implemented; this revision reflects the 14-cap inventory that resulted. It is the canonical inventory of every currently defined Spray cap plus every currently identified (not yet built) future cap-output archetype.
+Status: Originally documentation-only as of commit `31fc282`. **Updated (still same date) after the P0 build that followed this audit** — Needle correction and the Calligraphy→Oval/Rectangular split are now implemented; this revision reflects the 16-cap inventory that resulted. It is the canonical inventory of every currently defined Spray cap plus every currently identified (not yet built) future cap-output archetype.
 
 ## Sources used
 
-- `src/SprayCapPresets.ts` — `SPRAY_CAP_PRESETS` (14 entries) and `resolveSprayDynamics`.
+- `src/SprayCapPresets.ts` — `SPRAY_CAP_PRESETS` (16 entries) and `resolveSprayDynamics`.
 - `src/SprayCapProfile.ts` — `CAP_PROFILE_DETAILS` (coneShape, edge/overspray/output character, orientation behavior, calibration notes, `nominalWidthRange`).
-- `src/SprayBrushEngine.ts` — `resolveShapedStampGeometry`/`shapedStampWidthAlongTravel`/`drawShapedStamp` (the new true-shaped-deposition mechanism for Oval Calligraphy and Rectangular Transversal).
+- `src/SprayBrushEngine.ts` — `resolveShapedStampGeometry`/`shapedStampWidthAlongTravel`/`drawShapedStamp` (Oval Calligraphy / Rectangular Transversal), plus `resolveRingProfile`/`drawRingStamp` (Ring/Donut) and `resolveStreakGate`/`renderStreakCore` (Dry/Streak).
 - `src/main.ts` — how `baseRadius` actually reaches a live stroke.
-- `0911_SPATIAL_SPRAYPAINT_V0.6.3_CURRENT.md` — prior audit findings, including the new "Needle Correction + Calligraphy Split (P0)" section.
-- Commit `31fc282` (cap personalities / Pink Dot halo / Calligraphy overspray fix / Wiggly Needle) and the P0 build that followed it (Needle correction, Oval/Rectangular split, live-verified in-browser).
-- `SprayCapPresets.test.ts` / `SprayCapProfile.test.ts` / `SprayBrushEngine.test.ts` / `BrushPreview.test.ts` / `DrawingCursor.test.ts` for what is actually regression-locked today.
+- `0911_SPATIAL_SPRAYPAINT_V0.6.3_CURRENT.md` — prior audit findings, including "Needle Correction + Calligraphy Split (P0)", "Brush Studio V1", and "Ring/Donut + Dry/Streak Output Archetypes".
+- Commit `31fc282` (cap personalities), the Needle/Calligraphy P0 build, Brush Studio V1, and the Ring/Donut + Dry/Streak P0 build — all live-verified in-browser.
+- `SprayCapPresets.test.ts` / `SprayCapProfile.test.ts` / `SprayBrushEngine.test.ts` / `BrushPreview.test.ts` / `BrushProperties.test.ts` / `BrushStudio.test.ts` / `CustomBrush.test.ts` / `DrawingCursor.test.ts` for what is actually regression-locked today.
 
 ## Classification legend
 
@@ -245,7 +245,7 @@ Below, "documented width/range" quotes `nominalWidthRange` (display-only, unmeas
 - **Physical vs. digital:** represents the real "Needle" ultra-fine, high-pressure cap category.
 - **Documented width/range:** 3–10 (tied narrowest with Wiggly Needle; unmeasured).
 - **Digital Wall-space width:** `baseRadius` 5.
-- **Dot profile:** `coreDensity` 1.58 (highest of all 14 caps, unchanged), `coreOpacity` 0.48 (raised from 0.42 — hotter, highest of all 14 caps), no halo.
+- **Dot profile:** `coreDensity` 1.58 (highest of all 16 caps, unchanged), `coreOpacity` 0.48 (raised from 0.42 — hotter, highest of all 16 caps), no halo.
 - **Moving stroke profile (corrected):** `particleSpread` 0.65 (was 2.05, the widest of any cap — now one of the *tightest*), `particleOpacity` 0.16 (was 0.3, the highest — now well below New York Fat's 0.25), `particleCount` 9 (was 15), `edgeFalloff` 0.94 (was 0.92 — already near-tightest by this formula, nudged tighter still), `endpointBehavior` "tapered" (was "raw" — no longer shares Fuzz Fat/German Fat's identity), `jitter`/`velocityResponse`/`splatterProbability`/`dripTendency`/`flowRate`/`accumulationRate` unchanged (not in the audited field list, not identified as causes).
 - **Core/body character:** extremely concentrated core (highest density/opacity of any cap) now paired with a genuinely tight, sparse overspray field — a real "pinline jet," not a hot core drowned in mist.
 - **Edge character:** hard (was raw) — refined, not rough.
@@ -286,15 +286,15 @@ Below, "documented width/range" quotes `nominalWidthRange` (display-only, unmeas
 - **Physical vs. digital:** no single named real cap maps to this as cleanly as the others — `LEGACY_CAP_ALIASES` maps both `"soft"` and `"dust-fog"` to this id, suggesting it represents a general low-pressure/dust-cap-style diffuse output rather than one specific named physical cap. Audited against real reference photos in the prior pass and found already correct.
 - **Documented width/range:** 34–68 (unmeasured).
 - **Digital Wall-space width:** `baseRadius` 50.
-- **Dot profile:** `coreDensity` 0.36 (lowest of all 14 caps), `coreOpacity` 0.13 (lowest of all 14 caps), no halo — weak center by design.
-- **Moving stroke profile:** `particleCount` 42 (highest of all 14 caps), `particleSpread` 1.6, `particleOpacity` 0.14 (low) — broad, misty, low-density field rather than a dense core.
+- **Dot profile:** `coreDensity` 0.36 (lowest of all 16 caps), `coreOpacity` 0.13 (lowest of all 16 caps), no halo — weak center by design.
+- **Moving stroke profile:** `particleCount` 42 (highest of all 16 caps), `particleSpread` 1.6, `particleOpacity` 0.14 (low) — broad, misty, low-density field rather than a dense core.
 - **Core/body character:** weak center, broad mist — matches prior audit language "broad/diffuse."
-- **Edge character:** soft (`edgeFalloff` 0.28 — lowest of all 14 caps, i.e. the most pass-to-pass spread/softening).
+- **Edge character:** soft (`edgeFalloff` 0.28 — lowest of all 16 caps, i.e. the most pass-to-pass spread/softening).
 - **Overspray character:** wide, high particle count, low per-particle opacity — genuinely diffuse rather than a fat cap with blur.
 - **Motion/speed response:** `velocityResponse` 0.82.
 - **Orientation behavior:** symmetric.
 - **Dwell behavior:** settled, gradual accumulation (matches target, confirmed already correct).
-- **Drip status:** `dripTendency` 0.04 — lowest of all 14 caps (a diffuse mist cap shouldn't drip).
+- **Drip status:** `dripTendency` 0.04 — lowest of all 16 caps (a diffuse mist cap shouldn't drip).
 - **Current visual strengths:** confirmed by direct photo audit — "clearly different from a fat cap with blur," matches target already, no changes made.
 - **Known visual defects:** none identified.
 - **Target behavior:** no change.
@@ -307,7 +307,7 @@ Below, "documented width/range" quotes `nominalWidthRange` (display-only, unmeas
 - **Documented width/range:** 28–50 (identical text to German/Hardcore Fat, inherited from the fork; unmeasured).
 - **Digital Wall-space width:** `baseRadius` 38 (identical to German/Hardcore Fat).
 - **Dot profile:** identical to German/Hardcore Fat's (`coreDensity` 1.06, `coreOpacity` 0.27, no halo).
-- **Moving stroke profile:** identical to German/Hardcore Fat's (`edgeFalloff` 0.54, `jitter` 0.18, `splatterProbability` 0.28 — highest of all 14 caps, `endpointBehavior` "raw").
+- **Moving stroke profile:** identical to German/Hardcore Fat's (`edgeFalloff` 0.54, `jitter` 0.18, `splatterProbability` 0.28 — highest of all 16 caps, `endpointBehavior` "raw").
 - **Core/body character:** fuzzy/hairy/dry-brush texture — its defining, intentional character.
 - **Edge character:** raw.
 - **Overspray character:** splattery, highest `splatterProbability` of any cap.
@@ -320,21 +320,61 @@ Below, "documented width/range" quotes `nominalWidthRange` (display-only, unmeas
 - **Target behavior:** preserve exactly; must never be overwritten by German/Hardcore Fat recalibration.
 - **Exact next calibration test:** none — regression-only. Any future German/Hardcore Fat recalibration should re-run the existing Fuzz-Fat-byte-identical test as its own gate.
 
+### 15. Ring / Donut
+- **ID:** `ring-donut` · **Family:** specialty
+- **Classification:** DIGITAL EFFECT
+- **Physical vs. digital:** StudioRich digital output archetype — explicitly not assigned to any confirmed physical cap. `depositionShape` "ring".
+- **Documented width/range:** 36–62 (unmeasured).
+- **Digital Wall-space width:** `baseRadius` 40.
+- **Dot profile:** `ringRadius` 1.15× resolved radius, `ringThickness` 0.4× ring radius, `ringOpacity` 0.4 (peak, at the band), `centerOpacity` 0.05 (faint mist, dead center) — a real annular gradient (`SprayBrushEngine.resolveRingProfile`: center → near-zero moat → peak ring band → soft fading tail), not a blurred dot or Pink Dot with more halo. `haloRadius` 0 — the ring fields are this cap's own halo-equivalent mechanism, not a second stacked one.
+- **Moving stroke profile:** the ring gradient is stamped at both segment endpoints per corePass (same pattern as `renderHalo`/the oval-slot stamps), so a moving stroke tiles into a continuous ringed/rimmed tube rather than collapsing into a solid fat line.
+- **Core/body character:** hollow structure — lower center density, raised ring band, soft outer bloom. Loaded-cap-scale `coreDensity`/`accumulationRate`/`dripTendency`, similar territory to Pink Dot Fat, but structurally distinct (see below).
+- **Edge character:** soft (`edgeFalloff` 0.7) plus the ring gradient's own soft outer tail.
+- **Overspray character:** balanced (`particleCount` 20, `particleSpread` 1.15).
+- **Motion/speed response:** `velocityResponse` 0.5.
+- **Orientation behavior:** symmetric — the ring itself has no directional axis, unlike Oval/Rectangular Transversal.
+- **Dwell behavior:** repeated dwell strengthens the ring band through ordinary source-over compositing (same no-new-state-tracking approach as halo) — live-verified: a longer dwell reads as a denser, more saturated ring than a quick tap, both clearly hollow.
+- **Drip status:** `dripTendency` 0.5.
+- **Current visual strengths:** live-verified — a four-way stationary-dot comparison (Ring/Donut, Pink Dot Fat, New York Fat, Soft/Fade) shows Ring/Donut as the only one with a visibly darker/hollow center inside a denser outer band; the other three are solid-filled (with or without an external halo) or diffuse with no ring structure at all.
+- **Known visual defects:** none identified against its own target; the moving-stroke "ringed plume" character is present but reads more like a rimmed tube than a strongly hollow line at typical interpolation spacing — the hollow structure is clearest on dots/short dwells, per the brief's own emphasis ("dot/dwell personality emphasized").
+- **Target behavior:** lower center density, stronger ring/annular band, soft outer bloom, optional faint center mist — holds for stationary/short-dwell output; moving-stroke hollowness is present but softer.
+- **Exact next calibration test:** `ringRadius`/`ringThickness`/`ringOpacity` magnitude checked against a real donut-shaped/loaded-ring reference once one exists; a moving-stroke pass specifically judged for whether the hollow character should read more strongly at speed.
+
+### 16. Dry / Streak
+- **ID:** `dry-streak` · **Family:** specialty
+- **Classification:** DIGITAL EFFECT
+- **Physical vs. digital:** StudioRich digital output archetype — explicitly not assigned to any confirmed physical cap. `depositionShape` "streak".
+- **Documented width/range:** 28–48 (unmeasured).
+- **Digital Wall-space width:** `baseRadius` 34.
+- **Dot profile:** `streakLanes` 5 — the concentric-pass core is replaced entirely by 5 parallel deterministic lanes (`SprayBrushEngine.renderStreakCore`), each independently gated on/off via `resolveStreakGate` (pure trig on resolved radius, lane index, and stroke-direction-projected position — no `Math.random`).
+- **Moving stroke profile:** lanes spread perpendicular to the CURRENT travel angle (recomputed every segment, so the pattern re-orients with the stroke rather than sitting on a fixed world-space grid); each lane's gate is a smooth periodic function that dips fully to zero (a real gap, not just lower opacity) with a fixed per-lane phase offset so lanes gap out at different points along the stroke (the "ribbing"), not all together.
+- **Core/body character:** directional broken coverage with internal striation — near-New-York-Fat-strength numbers (`coreOpacity` 0.34, `edgeFalloff` 0.66), deliberately NOT Fuzz Fat's raw/splattery numbers (`jitter` 0.05 vs. Fuzz Fat's 0.18, `splatterProbability` 0.06 vs. 0.28) — the texture comes entirely from the deterministic lane/gate mechanism, not randomness.
+- **Edge character:** raw (`endpointBehavior` "raw" — sharp, dry-feeling lane ends).
+- **Overspray character:** restrained (`particleCount` 14, low `splatterProbability`) — texture is carried by the lanes, not the overspray.
+- **Motion/speed response:** `velocityResponse` 0.62.
+- **Orientation behavior:** symmetric core-wise, but the lane pattern itself is direction-coherent by construction (see above) — a distinct sense of "orientation" from Oval/Rectangular Transversal's fixed-axis anisotropy.
+- **Dwell behavior:** a stationary dwell reads as a small cluster of gated lane dots rather than a filled disc — not the primary intended use (this is fundamentally a moving-stroke archetype).
+- **Drip status:** `dripTendency` 0.14 — low, consistent with a "dry" cap.
+- **Current visual strengths:** live-verified — a three-way stroke comparison (Dry/Streak, Fuzz Fat, New York Fat) shows Dry/Streak as coherent chevron-like directional ribbing, structurally distinct from Fuzz Fat's random jittery/splattery texture and New York Fat's flat solid fill. Throwie Fill interaction confirmed: one sweep stays visibly broken/textured, three back-and-forth passes read denser while ribbing stays visible (never flattens to solid) — spatial-local Fill correctness unaffected (same ceiling math, called per-lane instead of per-pass).
+- **Known visual defects:** none identified against its own target; all magnitude constants (cycle length, phase step, gate sharpness, lane spread) were tuned by screenshot judgment, not measurement.
+- **Target behavior:** directional streaks/ribbing, visible gaps, broken coverage, coherent with stroke direction, repeated passes build naturally — holds at the mechanism level.
+- **Exact next calibration test:** lane count/cycle-length/gate-sharpness checked against a real dry-cap or worn-nozzle reference once one exists; a dedicated Fill-mode throwie-fill session to judge whether the ribbing reads as "useful texture" or "distracting" at real tag/throwie scale.
+
 ---
 
 ## Unassigned / future output archetypes
 
 None of the following correspond to a confirmed physical cap. They are named here as identified behavioral targets only, per the reference evidence and gaps surfaced by this and prior passes — **do not claim a specific physical-cap correspondence for any of these until real reference evidence supports it.**
 
-1. **Ring / Donut** — a hollow ring/donut-shaped deposition (dense ring, lighter or empty center) instead of a filled dot. No current mechanism produces this — every cap's core is a filled stroke/dot. Would need either an inverse-alpha center mask or a stroked (unfilled) ring drawn per point. Not started. Explicitly NOT implemented in the P0 build that resolved archetypes #3–4 below — still open.
+1. ~~Ring / Donut~~ — **RESOLVED, now built** as cap #15, "Ring / Donut" (`ring-donut` id, `depositionShape: "ring"`). No longer a future archetype.
 
-2. **Dry / Streak** — an under-loaded/dry-cap output: streaky, broken, textured coverage with visible gaps, rather than the continuous coverage every current cap produces. Closer to a real cap running low on paint or held too far from the surface. Would need a texture/gap mechanism (e.g. probabilistic per-pass alpha dropout or a noise-masked core) that doesn't exist in the engine today. Not started. Also explicitly out of scope for the P0 build below — still open.
+2. ~~Dry / Streak~~ — **RESOLVED, now built** as cap #16, "Dry / Streak" (`dry-streak` id, `depositionShape: "streak"`). No longer a future archetype.
 
 3. ~~Rounded Oval Calligraphy~~ — **RESOLVED, now built** as cap #9, "Oval Calligraphy" (`calligraphy` id, `depositionShape: "oval"`). No longer a future archetype.
 
 4. ~~Rectangular / Slot Transversal~~ — **RESOLVED, now built** as cap #10, "Rectangular Transversal" (new `transversal-slot` id, `depositionShape: "slot"`). No longer a future archetype.
 
-5. **Loaded Dot / Halo (as a general trait)** — generalizing Pink Dot Fat's `haloRadius`/`haloOpacity` mechanism as a trait any cap could opt into, not just Pink Dot Fat. The mechanism exists in the engine now (`SprayBrushEngine.renderHalo`); it is not yet exposed as an independent, reusable trait beyond the one cap it was built for. Still open — untouched by the P0 build.
+5. **Loaded Dot / Halo (as a general trait)** — generalizing Pink Dot Fat's `haloRadius`/`haloOpacity` mechanism as a trait any cap could opt into, not just Pink Dot Fat. The mechanism exists in the engine now (`SprayBrushEngine.renderHalo`); it is not yet exposed as an independent, reusable trait beyond the one cap it was built for. Still open.
 
 6. ~~Concentrated Needle Jet~~ — **RESOLVED, now built** directly into cap #11, "Needle" itself (not a separate identity — the corrected Needle *is* the concentrated jet). No separate archetype needed.
 
@@ -349,6 +389,7 @@ None of the following correspond to a confirmed physical cap. They are named her
 - **Wiggly Needle is a separate intentional specialty behavior and a future Waveformer candidate** — re-forked from the *corrected* Needle in the same P0 build (verified byte-identical to Needle at zero travel distance), so it does not silently retain the old fuzzy personality.
 - **Pink Dot** still has core+halo behavior but remains physically unverified — unchanged by this build (cap #2 above), magnitude unverified against a real reference.
 - **Throwie Fill mode** is usage/deposition behavior (`ToolStrokeStyle.fillMode`, `SprayBrushEngine.fillLocalSaturation`), not a cap identity — it layers on top of whichever cap is active and remains unaffected; re-verified live after this build's changes (a partially-overlapping fill still shows denser overlap regions and lighter-but-present fresh territory, no fade-to-zero).
+- **Ring/Donut and Dry/Streak are digital-effect output archetypes, not physical-cap identities** — classified alongside Fuzz Fat and Wiggly Needle (`CustomBrush.classifyBuiltInSprayCap`), never assigned to a real cap until reference evidence supports it. Both are live-verified structurally distinct from their nearest existing-cap neighbors (see caps #15–16).
 
 ---
 
@@ -357,9 +398,9 @@ None of the following correspond to a confirmed physical cap. They are named her
 ### P0 (as directed)
 1. ~~**Needle correction**~~ — **DONE.** See cap #11; root cause corrected (overspray, not core), Wiggly Needle re-forked from the corrected result.
 2. ~~**Calligraphy split/correction**~~ — **DONE.** Split into Oval Calligraphy (cap #9) and Rectangular Transversal (cap #10), both with genuine fixed-orientation shape geometry, not a line-width trick.
-3. **Ring archetype** — no current mechanism; earliest of the remaining wholly-new archetypes to scope. Still open.
-4. **Dry/Streak archetype** — no current mechanism; second new archetype to scope. Still open.
-5. **Astro / New York Fat / German-Hardcore differentiation** — Astro-vs-NY-Fat live comparison is still overdue (never run as a dedicated test); German/Hardcore is still blocked on reference evidence acquisition specifically. Still open.
+3. ~~**Ring archetype**~~ — **DONE.** See cap #15, "Ring / Donut" — a genuine annular gradient mechanism (`resolveRingProfile`), live-verified structurally distinct from Pink Dot/New York Fat/Soft-Fade.
+4. ~~**Dry/Streak archetype**~~ — **DONE.** See cap #16, "Dry / Streak" — deterministic multi-lane gated core (`resolveStreakGate`), live-verified structurally distinct from Fuzz Fat and normal fat caps, Fill-mode interaction confirmed.
+5. **Astro / New York Fat / German-Hardcore differentiation** — Astro-vs-NY-Fat live comparison is still overdue (never run as a dedicated test); German/Hardcore is still blocked on reference evidence acquisition specifically. Still open — now the top remaining P0 item.
 
 ### P1
 - **Pink Dot halo physical calibration** — tune `haloRadius`/`haloOpacity` magnitude against a real loaded-dot reference once available (cap #2's exact next test).
@@ -367,6 +408,7 @@ None of the following correspond to a confirmed physical cap. They are named her
 - **Oval vs. Rectangular Transversal magnitude verification** — both caps' aspect ratios (2.4 vs. 3.9) and Rectangular's corner radius were judgment calls; check against the reference sketch's actual proportions.
 - **Needle's corrected magnitude verification** — direction is now right (tight, hot); exact numbers (how tight, how hot) are still a judgment call pending a real Needle reference.
 - **Transversal configurable rotation control** — a genuinely new item now: letting a user pick a different fixed axis (not just choose Oval vs. Slot shape). Needs a UI control beyond this build's scope.
+- **Ring/Donut and Dry/Streak magnitude verification** — every numeric constant in both (ring radius/thickness/opacity, streak lane count/cycle length/phase step/gate sharpness) was a judgment call against the target description, not a reference photo; neither archetype has one yet.
 
 ### P2
 - **Loaded Dot/Halo as a general reusable trait** (archetype #5) — speculative until a second cap besides Pink Dot Fat is identified as needing it.
