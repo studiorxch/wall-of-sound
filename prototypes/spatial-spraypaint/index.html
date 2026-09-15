@@ -103,13 +103,21 @@
     }
     .tool-icon { width: 40px; height: 40px; min-height: 40px; padding: 0; display: grid; place-items: center; font-size: 19px; }
     #color-control::after { content:""; width:22px; height:22px; border:2px solid #fff; border-radius:50%; background:var(--current-color, #e92f3d); box-shadow:inset 0 0 0 3px rgba(0,0,0,.16); }
-    #tool-control { font-size:12px; font-weight:950; letter-spacing:.4px; }
-    #tool-control[data-tool="paint-marker"] { color:#ffd36d; }
-    #variant-control::before { content:""; width:18px; height:8px; border:2px solid currentColor; border-radius:2px 8px 8px 2px; transform:rotate(-28deg); }
-    #variant-control::after { content:"•••"; margin-left:-4px; color:#ff6a7f; font-size:10px; letter-spacing:-1px; transform:rotate(-28deg); }
-    #variant-control[data-tool="paint-marker"]::before { width:7px; height:22px; border-radius:3px 3px 7px 7px; background:currentColor; transform:rotate(32deg); }
-    #variant-control[data-tool="paint-marker"]::after { content:""; display:none; }
-    #variant-control { position: relative; }
+    #mode-brush-control {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      justify-content: center;
+      gap: 1px;
+      min-width: 92px;
+      height: 40px;
+      min-height: 40px;
+      padding: 5px 12px;
+    }
+    .mode-label { font-size: 9px; font-weight: 800; letter-spacing: .8px; color: #ff91a7; text-transform: uppercase; }
+    #mode-brush-control[data-tool="paint-marker"] .mode-label { color: #ffd36d; }
+    .brush-label { max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 700; color: #f8f7f3; }
     .coverage-badge {
       position: absolute;
       right: -4px;
@@ -129,17 +137,23 @@
     .coverage-badge[hidden] { display: none; }
     .tool-popover { position:absolute; z-index:12; left:50%; bottom:72px; transform:translateX(-50%); display:none; padding:9px; border:1px solid rgba(255,255,255,.14); border-radius:13px; background:rgba(12,12,17,.94); box-shadow:0 12px 40px rgba(0,0,0,.42); backdrop-filter:blur(16px); }
     .tool-popover.open { display:grid; }
-    #color-chooser { width:238px; gap:8px; }
-    .palette-toolbar { display:grid; grid-template-columns:1fr auto; align-items:center; gap:7px; }
+    #color-chooser { width:300px; gap:8px; }
+    .color-current-row { display:flex; align-items:center; gap:10px; padding-bottom:8px; border-bottom:1px solid rgba(255,255,255,.12); }
+    #palette-current { width:40px; height:40px; border:2px solid #fff; border-radius:50%; background:var(--current-color, #e92f3d); box-shadow:inset 0 0 0 3px rgba(0,0,0,.18); flex-shrink:0; }
+    #palette-selection { min-height:12px; color:#f4f3f0; font-size:12px; font-weight:700; line-height:1.3; overflow-wrap:anywhere; }
+    .palette-toolbar { display:grid; grid-template-columns:1fr; gap:7px; }
     #palette-select { min-width:0; width:100%; font-size:10px; }
     #palette-search { min-width:0; width:100%; box-sizing:border-box; font-size:10px; }
-    #palette-current { width:26px; height:26px; border:2px solid #fff; border-radius:50%; background:var(--current-color, #e92f3d); box-shadow:inset 0 0 0 3px rgba(0,0,0,.18); }
-    #palette-selection { min-height:12px; color:#d5d3dc; font-size:10px; line-height:1.25; overflow-wrap:anywhere; }
     .palette-section-label { color:#8f8e99; font-size:9px; font-weight:800; letter-spacing:.8px; text-transform:uppercase; }
-    .palette-grid { display:grid; grid-template-columns:repeat(6, 30px); gap:6px; }
-    #palette-swatches { max-height:min(300px, calc(100vh - 220px)); overflow-y:auto; padding:3px; }
+    .palette-grid { display:grid; grid-template-columns:repeat(8, 30px); gap:6px; }
+    .recent-grid { grid-template-columns:repeat(6, 30px); }
+    #palette-swatches { max-height:min(320px, calc(100vh - 240px)); overflow-y:auto; padding:3px; }
     #recent-colors[hidden], #recent-colors-label[hidden] { display:none; }
-    #tool-chooser, #cap-chooser, #marker-chooser { gap:4px; max-height:min(480px, calc(100vh - 110px)); overflow-y:auto; }
+    #mode-chooser { gap:0; max-height:min(560px, calc(100vh - 110px)); overflow-y:auto; }
+    .mode-row { display:flex; gap:6px; padding-bottom:8px; margin-bottom:8px; border-bottom:1px solid rgba(255,255,255,.12); }
+    .mode-row .tool-choice { min-width:0; flex:1; grid-template-columns:1fr; justify-items:center; text-align:center; padding:8px 6px; }
+    .brush-panel { display:grid; gap:4px; }
+    .brush-panel[hidden] { display:none; }
     .tool-choice, .cap-choice, .marker-choice { min-width:210px; display:grid; grid-template-columns:66px 1fr; align-items:center; gap:10px; text-align:left; font-size:11px; }
     .tool-choice.selected, .cap-choice.selected, .marker-choice.selected { border-color:#ff6a83; color:#ff91a7; }
     .tool-sample, .marker-sample { display:grid; place-items:center; height:20px; color:#fff; font-size:10px; font-weight:900; }
@@ -172,7 +186,7 @@
       border-radius: 50%;
     }
     .swatch.selected { border-color: #fff; box-shadow: 0 0 0 2px #11131a, 0 0 0 3px rgba(255,255,255,.65); transform: scale(1.04); }
-    #session-island {
+    #quick-actions {
       padding: 7px;
       display: flex;
       align-items: center;
@@ -184,20 +198,27 @@
     #toggle-record.recording .record-dot { border-radius:3px; background:#fff; animation:record-pulse .8s ease-in-out infinite alternate; }
     #toggle-record.recording { background:#d71c45; border-color:#ff5d7d; }
     @keyframes record-pulse { to { opacity:.5; } }
-    #member-placeholder { color:#8f8e99; }
+    #member-placeholder { color:#8f8e99; border-radius:50%; }
+
+    #more-toggle { font-size:20px; line-height:1; }
+    #more-menu { width:190px; gap:2px; }
+    .more-section-label { padding:6px 8px 2px; color:#8f8e99; font-size:9px; font-weight:800; letter-spacing:.8px; text-transform:uppercase; }
+    .more-item { display:flex; align-items:center; gap:9px; width:100%; min-width:0; text-align:left; font-size:12px; font-weight:600; border:1px solid transparent; background:transparent; padding:8px; border-radius:8px; }
+    .more-item:hover { border-color:rgba(255,255,255,.14); background:rgba(255,255,255,.06); }
 
     #navigation-island { padding:6px; }
     #scale-control { min-width:58px; min-height:34px; padding:6px 9px; font-size:11px; font-variant-numeric:tabular-nums; }
     #scale-control.quick { border-color:#59b8ff; color:#9ed7ff; box-shadow:inset 0 0 0 1px rgba(89,184,255,.14); }
-    #scale-chooser { left:auto; right:16px; bottom:62px; transform:none; width:204px; grid-template-columns:repeat(3, 58px); gap:5px; }
-    .scale-choice { min-width:58px; padding:7px 6px; font-size:10px; font-variant-numeric:tabular-nums; }
+    #scale-chooser { left:auto; right:16px; bottom:62px; transform:none; width:auto; max-width:min(400px, calc(100vw - 32px)); flex-wrap:wrap; gap:5px; }
+    #scale-chooser.open { display:flex; }
+    .scale-choice { min-width:50px; flex:0 0 auto; padding:7px 6px; font-size:10px; font-variant-numeric:tabular-nums; }
     .scale-choice.selected { border-color:#59b8ff; color:#9ed7ff; }
-    #scale-reset { grid-column:1 / -1; font-size:10px; }
+    #scale-reset { flex:1 1 100%; font-size:10px; }
 
-    #input-island { padding:5px; display:flex; align-items:center; gap:4px; }
-    #input-island button { min-height:32px; padding:6px 9px; font-size:10px; letter-spacing:.4px; }
-    #input-island button.selected { border-color:#fff; background:#343440; }
-    #input-status { max-width:130px; overflow:hidden; text-overflow:ellipsis; }
+    #input-island { display:flex; align-items:center; }
+    #physical-input { display:none; }
+    #hand-input { width:38px; height:38px; min-height:38px; padding:0; display:grid; place-items:center; font-size:16px; }
+    #input-status { position:absolute; width:1px; height:1px; overflow:hidden; white-space:nowrap; clip:rect(0,0,0,0); }
 
     #player-island { width:min(260px, 40vw); min-width:46px; padding:7px; display:flex; align-items:center; gap:6px; }
     #player-island.empty { width:auto; }
@@ -293,80 +314,93 @@
           <span id="player-time" class="player-loaded">0:00 / 0:00</span>
           <button id="player-loop" class="player-loaded" aria-pressed="true" aria-label="Toggle soundtrack loop" title="Loop soundtrack">↻</button>
         </section>
-        <section id="input-island" class="island" aria-label="Input mode">
+        <section id="input-island" aria-label="Input mode">
           <button id="physical-input" class="selected" aria-pressed="true">Physical</button>
-          <button id="hand-input" aria-pressed="false">Hand</button>
+          <button id="hand-input" class="icon-button island" aria-pressed="false" title="Hand tracking (camera): off — Physical input active" aria-label="Toggle Hand tracking. Currently off, Physical input active">✋</button>
           <span id="input-status" class="status-chip">READY</span>
         </section>
       </div>
 
       <div id="instrument-group" aria-label="Instrument">
         <section id="art-island" class="island" aria-label="Art tools">
-          <button id="tool-control" class="tool-icon" data-tool="spray-can" aria-label="Choose drawing tool. Current tool Spray Can" aria-controls="tool-chooser" aria-expanded="false" title="Tool: Spray Can">S</button>
+          <button id="mode-brush-control" data-tool="spray-can" aria-label="Choose mode and brush. Current Spray Can, New York Fat" aria-controls="mode-chooser" aria-expanded="false" title="Spray Can · New York Fat">
+            <span class="mode-label">Spray</span>
+            <span class="brush-label" id="brush-label">New York Fat</span>
+            <span id="coverage-badge" class="coverage-badge" hidden></span>
+          </button>
           <button id="color-control" class="tool-icon" style="--current-color:#e92f3d" aria-label="Choose color" title="Color"></button>
-          <button id="variant-control" class="tool-icon" data-tool="spray-can" aria-label="Choose Cap. Current New York Fat" aria-controls="cap-chooser marker-chooser" aria-expanded="false" title="Cap: New York Fat"><span id="coverage-badge" class="coverage-badge" hidden></span></button>
         </section>
       </div>
 
       <div id="system-group" aria-label="Document and system">
-        <section id="session-island" class="island" aria-label="Screen and session controls">
+        <section id="quick-actions" class="island" aria-label="Undo and clear">
           <button id="undo-stroke" class="icon-button" disabled aria-label="Undo last stroke" title="Undo last stroke · ⌘/Ctrl Z">↶</button>
           <button id="clear-strokes" class="icon-button" disabled aria-label="Clear canvas" title="Clear canvas · Shift Delete">⌫</button>
-          <button id="toggle-record" class="icon-button" aria-label="Start recording" title="Record · R"><span class="record-dot"></span></button>
-          <button id="settings-toggle" class="icon-button" aria-pressed="false" aria-label="Open settings" title="Settings · ,">⚙</button>
         </section>
         <section id="navigation-island" class="island" aria-label="Wall navigation">
           <button id="scale-control" aria-label="Choose wall scale. Current scale 100%" aria-controls="scale-chooser" aria-expanded="false" title="Wall scale 100% · click for presets">100%</button>
         </section>
+        <button id="more-toggle" class="icon-button island" aria-label="More" aria-controls="more-menu" aria-expanded="false" title="More">…</button>
       </div>
     </div>
 
-    <div id="tool-chooser" class="tool-popover" aria-label="Drawing tool chooser">
-      <button class="tool-choice selected" data-tool="spray-can" aria-pressed="true"><span class="tool-sample">SPRAY</span><span>Spray Can</span></button>
-      <button class="tool-choice" data-tool="paint-marker" aria-pressed="false"><span class="tool-sample">MARK</span><span>Paint Marker</span></button>
+    <div id="mode-chooser" class="tool-popover" aria-label="Mode and brush chooser">
+      <div id="tool-chooser" class="mode-row" aria-label="Mode">
+        <button class="tool-choice selected" data-tool="spray-can" aria-pressed="true"><span class="tool-sample">SPRAY</span><span>Spray Can</span></button>
+        <button class="tool-choice" data-tool="paint-marker" aria-pressed="false"><span class="tool-sample">MARK</span><span>Paint Marker</span></button>
+      </div>
+      <div id="cap-chooser" class="brush-panel" aria-label="Spray cap">
+        <button class="cap-choice selected" data-cap="new-york-fat"><span class="cap-sample" style="--sample-width:10px"></span><span>New York Fat</span></button>
+        <button class="cap-choice" data-cap="pink-dot-fat"><span class="cap-sample" style="--sample-width:13px"></span><span>Pink Dot Fat</span></button>
+        <button class="cap-choice" data-cap="astro-fat"><span class="cap-sample" style="--sample-width:18px"></span><span>Astro Fat</span></button>
+        <button class="cap-choice" data-cap="german-fat"><span class="cap-sample" style="--sample-width:11px"></span><span>German / Hardcore Fat</span></button>
+        <button class="cap-choice" data-cap="lego-thin"><span class="cap-sample" style="--sample-width:5px"></span><span>Lego Thin</span></button>
+        <button class="cap-choice" data-cap="universal-thin"><span class="cap-sample" style="--sample-width:4px"></span><span>Universal Thin</span></button>
+        <button class="cap-choice" data-cap="level-1"><span class="cap-sample" style="--sample-width:2px"></span><span>Level 1 / Skinny Cream</span></button>
+        <button class="cap-choice" data-cap="new-york-thin"><span class="cap-sample" style="--sample-width:3px"></span><span>New York Thin</span></button>
+        <button class="cap-choice" data-cap="calligraphy"><span class="cap-sample" style="--sample-width:7px"></span><span>Calligraphy / Transversal</span></button>
+        <button class="cap-choice" data-cap="needle"><span class="cap-sample" style="--sample-width:1px"></span><span>Needle</span></button>
+        <button class="cap-choice" data-cap="soft-fade"><span class="cap-sample" style="--sample-width:15px;opacity:.32"></span><span>Soft / Fade</span></button>
+        <button class="cap-choice" data-cap="fuzz-fat"><span class="cap-sample" style="--sample-width:11px"></span><span>Fuzz Fat</span></button>
+        <div id="spray-property-controls" aria-label="Spray size and coverage">
+          <div id="radius-slider-setting" class="setting-stack"><span>Spray size override · <strong id="radius-val">32</strong> wall units</span><input type="range" id="brush-radius" min="4" max="72" value="32" /><button id="radius-reset">Use cap default</button></div>
+          <div id="coverage-slider-setting" class="setting-stack"><span>Spray coverage override · <strong id="coverage-val">100</strong>%</span><input type="range" id="spray-coverage" min="20" max="100" step="5" value="100" /><button id="coverage-reset">Use full coverage</button></div>
+        </div>
+      </div>
+      <div id="marker-chooser" class="brush-panel" aria-label="Marker / nib" hidden>
+        <button class="marker-choice selected" data-marker="round" aria-pressed="true"><span class="marker-sample" style="--sample-width:8px"></span><span>Round Marker</span></button>
+        <button class="marker-choice" data-marker="chisel" aria-pressed="false"><span class="marker-sample" style="--sample-width:12px;--sample-angle:-25deg"></span><span>Chisel / Calligraphy</span></button>
+        <button class="marker-choice" data-marker="clean-chisel" aria-pressed="false"><span class="marker-sample" style="--sample-width:12px;--sample-angle:-25deg"></span><span>Clean Chisel</span></button>
+        <button class="marker-choice" data-marker="drippy-chisel" aria-pressed="false"><span class="marker-sample" style="--sample-width:12px;--sample-angle:-25deg"></span><span>Drippy Chisel</span></button>
+        <button class="marker-choice" data-marker="mop" aria-pressed="false"><span class="marker-sample" style="--sample-width:14px"></span><span>Mop</span></button>
+        <button class="marker-choice" data-marker="drip-mop" aria-pressed="false"><span class="marker-sample" style="--sample-width:17px"></span><span>Drip Mop</span></button>
+        <div id="marker-width-controls" aria-label="Marker width presets">
+          <div class="marker-width-label">Width · <span id="marker-width-value">28</span></div>
+          <div id="marker-width-presets"></div>
+        </div>
+        <div id="wet-controls" aria-label="Wet paint calibration controls" hidden>
+          <label class="wet-control-row"><span>Flow</span><select id="wet-flow"><option value="low">Low</option><option value="balanced" selected>Balanced</option><option value="high">High</option></select></label>
+          <label class="wet-control-row"><span>Viscosity</span><select id="wet-viscosity"><option value="thick">Thick</option><option value="balanced" selected>Balanced</option><option value="runny">Runny</option></select></label>
+        </div>
+      </div>
     </div>
     <div id="color-chooser" class="tool-popover" aria-label="Color chooser">
-      <div class="palette-toolbar"><select id="palette-select" aria-label="Calibration palette"></select><span id="palette-current" aria-hidden="true"></span></div>
-      <input id="palette-search" type="search" placeholder="Search colors or codes" aria-label="Search palette colors">
-      <div id="palette-selection" aria-live="polite"></div>
+      <div class="color-current-row">
+        <span id="palette-current" aria-hidden="true"></span>
+        <div id="palette-selection" aria-live="polite"></div>
+      </div>
       <div id="recent-colors-label" class="palette-section-label" hidden>Recent</div>
-      <div id="recent-colors" class="palette-grid" hidden></div>
-      <div class="palette-section-label">Palette</div>
+      <div id="recent-colors" class="palette-grid recent-grid" hidden></div>
+      <div class="palette-toolbar"><select id="palette-select" aria-label="Calibration palette"></select></div>
+      <input id="palette-search" type="search" placeholder="Search colors or codes" aria-label="Search palette colors">
+      <div class="palette-section-label">Colors</div>
       <div id="palette-swatches" class="palette-grid"></div>
     </div>
-    <div id="cap-chooser" class="tool-popover" aria-label="Cap chooser">
-      <button class="cap-choice selected" data-cap="new-york-fat"><span class="cap-sample" style="--sample-width:10px"></span><span>New York Fat</span></button>
-      <button class="cap-choice" data-cap="pink-dot-fat"><span class="cap-sample" style="--sample-width:13px"></span><span>Pink Dot Fat</span></button>
-      <button class="cap-choice" data-cap="astro-fat"><span class="cap-sample" style="--sample-width:18px"></span><span>Astro Fat</span></button>
-      <button class="cap-choice" data-cap="german-fat"><span class="cap-sample" style="--sample-width:11px"></span><span>German / Hardcore Fat</span></button>
-      <button class="cap-choice" data-cap="lego-thin"><span class="cap-sample" style="--sample-width:5px"></span><span>Lego Thin</span></button>
-      <button class="cap-choice" data-cap="universal-thin"><span class="cap-sample" style="--sample-width:4px"></span><span>Universal Thin</span></button>
-      <button class="cap-choice" data-cap="level-1"><span class="cap-sample" style="--sample-width:2px"></span><span>Level 1 / Skinny Cream</span></button>
-      <button class="cap-choice" data-cap="new-york-thin"><span class="cap-sample" style="--sample-width:3px"></span><span>New York Thin</span></button>
-      <button class="cap-choice" data-cap="calligraphy"><span class="cap-sample" style="--sample-width:7px"></span><span>Calligraphy / Transversal</span></button>
-      <button class="cap-choice" data-cap="needle"><span class="cap-sample" style="--sample-width:1px"></span><span>Needle</span></button>
-      <button class="cap-choice" data-cap="soft-fade"><span class="cap-sample" style="--sample-width:15px;opacity:.32"></span><span>Soft / Fade</span></button>
-      <button class="cap-choice" data-cap="fuzz-fat"><span class="cap-sample" style="--sample-width:11px"></span><span>Fuzz Fat</span></button>
-      <div id="spray-property-controls" aria-label="Spray size and coverage">
-        <div id="radius-slider-setting" class="setting-stack"><span>Spray size override · <strong id="radius-val">32</strong> wall units</span><input type="range" id="brush-radius" min="4" max="72" value="32" /><button id="radius-reset">Use cap default</button></div>
-        <div id="coverage-slider-setting" class="setting-stack"><span>Spray coverage override · <strong id="coverage-val">100</strong>%</span><input type="range" id="spray-coverage" min="20" max="100" step="5" value="100" /><button id="coverage-reset">Use full coverage</button></div>
-      </div>
-    </div>
-    <div id="marker-chooser" class="tool-popover" aria-label="Marker and nib chooser">
-      <button class="marker-choice selected" data-marker="round" aria-pressed="true"><span class="marker-sample" style="--sample-width:8px"></span><span>Round Marker</span></button>
-      <button class="marker-choice" data-marker="chisel" aria-pressed="false"><span class="marker-sample" style="--sample-width:12px;--sample-angle:-25deg"></span><span>Chisel / Calligraphy</span></button>
-      <button class="marker-choice" data-marker="clean-chisel" aria-pressed="false"><span class="marker-sample" style="--sample-width:12px;--sample-angle:-25deg"></span><span>Clean Chisel</span></button>
-      <button class="marker-choice" data-marker="drippy-chisel" aria-pressed="false"><span class="marker-sample" style="--sample-width:12px;--sample-angle:-25deg"></span><span>Drippy Chisel</span></button>
-      <button class="marker-choice" data-marker="mop" aria-pressed="false"><span class="marker-sample" style="--sample-width:14px"></span><span>Mop</span></button>
-      <button class="marker-choice" data-marker="drip-mop" aria-pressed="false"><span class="marker-sample" style="--sample-width:17px"></span><span>Drip Mop</span></button>
-      <div id="marker-width-controls" aria-label="Marker width presets">
-        <div class="marker-width-label">Width · <span id="marker-width-value">28</span></div>
-        <div id="marker-width-presets"></div>
-      </div>
-      <div id="wet-controls" aria-label="Wet paint calibration controls" hidden>
-        <label class="wet-control-row"><span>Flow</span><select id="wet-flow"><option value="low">Low</option><option value="balanced" selected>Balanced</option><option value="high">High</option></select></label>
-        <label class="wet-control-row"><span>Viscosity</span><select id="wet-viscosity"><option value="thick">Thick</option><option value="balanced" selected>Balanced</option><option value="runny">Runny</option></select></label>
-      </div>
+    <div id="more-menu" class="tool-popover" aria-label="More">
+      <div class="more-section-label">Session</div>
+      <button id="toggle-record" class="more-item" aria-label="Start recording" title="Record · R"><span class="record-dot"></span><span>Record</span></button>
+      <div class="more-section-label">Configuration</div>
+      <button id="settings-toggle" class="more-item" aria-pressed="false" aria-label="Open settings" title="Settings · ,"><span>⚙</span><span>Settings</span></button>
     </div>
 
     <div id="scale-chooser" class="tool-popover" aria-label="Wall scale presets">

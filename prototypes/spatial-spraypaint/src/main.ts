@@ -243,19 +243,11 @@ class SpatialSpraypaintApp {
   }
 
   private bindControls(): void {
-    this.requireElement("tool-control").addEventListener("click", () => {
-      this.toggleToolChooser("tool-chooser");
+    this.requireElement("mode-brush-control").addEventListener("click", () => {
+      this.toggleToolChooser("mode-chooser");
     });
     this.requireElement("color-control").addEventListener("click", () => {
       this.toggleToolChooser("color-chooser");
-    });
-    this.requireElement("variant-control").addEventListener("click", () => {
-      const presentation = resolveDrawingToolPresentation(
-        this.toolSelection,
-        (id) => getSprayCapPreset(id).name,
-        (id) => getMarkerVariant(id).name,
-      );
-      this.toggleToolChooser(presentation.contextualChooserId);
     });
     document.querySelectorAll<HTMLButtonElement>(".tool-choice").forEach((choice) => {
       choice.addEventListener("click", () => {
@@ -268,7 +260,6 @@ class SpatialSpraypaintApp {
           : this.markerWidths[this.toolSelection.markerVariantId];
         this.updateToolUi();
         this.updateRadiusUi();
-        this.closeToolChoosers();
       });
     });
     document.querySelectorAll<HTMLButtonElement>(".cap-choice").forEach((choice) => {
@@ -397,7 +388,9 @@ class SpatialSpraypaintApp {
     });
 
     this.requireElement("physical-input").addEventListener("click", () => void this.selectInputMode("mouse"));
-    this.requireElement("hand-input").addEventListener("click", () => void this.selectInputMode("spatial"));
+    this.requireElement("hand-input").addEventListener("click", () => {
+      void this.selectInputMode(this.inputMode === "spatial" ? "mouse" : "spatial");
+    });
 
     this.requireElement<HTMLInputElement>("audio-file").addEventListener("change", (event) => {
       const file = (event.target as HTMLInputElement).files?.[0];
@@ -412,7 +405,13 @@ class SpatialSpraypaintApp {
     });
     this.requireElement("player-loop").addEventListener("click", () => this.toggleLoop());
 
-    this.requireElement("toggle-record").addEventListener("click", () => void this.toggleRecording());
+    this.requireElement("toggle-record").addEventListener("click", () => {
+      void this.toggleRecording();
+      this.closeToolChoosers();
+    });
+    this.requireElement("more-toggle").addEventListener("click", () => {
+      this.toggleToolChooser("more-menu");
+    });
     this.requireElement("shake-can").addEventListener("click", () => void this.playCanRattle());
     this.requireElement("clear-canvas").addEventListener("click", () => this.clearAllStrokes());
   }
@@ -703,7 +702,7 @@ class SpatialSpraypaintApp {
   }
 
   private toggleToolChooser(
-    id: "tool-chooser" | "color-chooser" | "cap-chooser" | "marker-chooser" | "scale-chooser",
+    id: "mode-chooser" | "color-chooser" | "more-menu" | "scale-chooser",
   ): void {
     const target = this.requireElement(id);
     const shouldOpen = !target.classList.contains("open");
@@ -712,21 +711,20 @@ class SpatialSpraypaintApp {
     target.classList.toggle("open", shouldOpen);
     if (id === "scale-chooser") {
       this.requireElement("scale-control").setAttribute("aria-expanded", shouldOpen.toString());
-    } else if (id === "tool-chooser") {
-      this.requireElement("tool-control").setAttribute("aria-expanded", shouldOpen.toString());
-    } else if (id === "cap-chooser" || id === "marker-chooser") {
-      this.requireElement("variant-control").setAttribute("aria-expanded", shouldOpen.toString());
+    } else if (id === "mode-chooser") {
+      this.requireElement("mode-brush-control").setAttribute("aria-expanded", shouldOpen.toString());
+    } else if (id === "more-menu") {
+      this.requireElement("more-toggle").setAttribute("aria-expanded", shouldOpen.toString());
     }
   }
 
   private closeToolChoosers(): void {
-    this.requireElement("tool-chooser").classList.remove("open");
+    this.requireElement("mode-chooser").classList.remove("open");
     this.requireElement("color-chooser").classList.remove("open");
-    this.requireElement("cap-chooser").classList.remove("open");
-    this.requireElement("marker-chooser").classList.remove("open");
+    this.requireElement("more-menu").classList.remove("open");
     this.requireElement("scale-chooser").classList.remove("open");
-    this.requireElement("tool-control").setAttribute("aria-expanded", "false");
-    this.requireElement("variant-control").setAttribute("aria-expanded", "false");
+    this.requireElement("mode-brush-control").setAttribute("aria-expanded", "false");
+    this.requireElement("more-toggle").setAttribute("aria-expanded", "false");
     this.requireElement("scale-control").setAttribute("aria-expanded", "false");
   }
 
@@ -897,15 +895,18 @@ class SpatialSpraypaintApp {
       (id) => getSprayCapPreset(id).name,
       (id) => getMarkerVariant(id).name,
     );
-    const toolControl = this.requireElement<HTMLButtonElement>("tool-control");
-    toolControl.textContent = tool.id === "spray-can" ? "S" : "M";
-    toolControl.setAttribute("aria-label", `Choose drawing tool. Current tool ${tool.name}`);
-    toolControl.setAttribute("title", `Tool: ${tool.name}`);
-    toolControl.dataset.tool = tool.id;
-    const variantControl = this.requireElement<HTMLButtonElement>("variant-control");
-    variantControl.setAttribute("aria-label", `Choose ${presentation.parameterLabel}. Current ${presentation.variantName}`);
-    variantControl.setAttribute("title", `${presentation.parameterLabel}: ${presentation.variantName}`);
-    variantControl.dataset.tool = tool.id;
+    const modeBrushControl = this.requireElement<HTMLButtonElement>("mode-brush-control");
+    modeBrushControl.dataset.tool = tool.id;
+    modeBrushControl.setAttribute(
+      "aria-label",
+      `Choose mode and brush. Current ${tool.name}, ${presentation.variantName}`,
+    );
+    modeBrushControl.setAttribute("title", `${tool.name} · ${presentation.variantName}`);
+    modeBrushControl.querySelector(".mode-label")!.textContent =
+      tool.id === "spray-can" ? "Spray" : "Marker";
+    this.requireElement("brush-label").textContent = presentation.variantName;
+    this.requireElement("cap-chooser").hidden = tool.id !== "spray-can";
+    this.requireElement("marker-chooser").hidden = tool.id !== "paint-marker";
     document.querySelectorAll<HTMLButtonElement>(".tool-choice").forEach((choice) => {
       const selected = choice.dataset.tool === tool.id;
       choice.classList.toggle("selected", selected);
