@@ -253,6 +253,16 @@ export function buildCalibrationPropertyReadout(preset: CalibrationPreset, effec
   if (preset.streakLanes > 0) {
     rows.push({ key: "streakLanes", label: "Streak lanes", value: preset.streakLanes });
   }
+  if (preset.depositionShape === "plume") {
+    rows.push({ key: "plumeRingRadius", label: "Plume ring radius", value: round2(preset.plumeRingRadius) });
+    rows.push({ key: "plumeRingThickness", label: "Plume ring thickness", value: round2(preset.plumeRingThickness) });
+    rows.push({ key: "plumeRingOpacity", label: "Plume ring opacity", value: round2(preset.plumeRingOpacity) });
+    rows.push({ key: "plumeMistRadius", label: "Plume mist radius", value: round2(preset.plumeMistRadius) });
+    rows.push({ key: "plumeMistOpacity", label: "Plume mist opacity", value: round2(preset.plumeMistOpacity) });
+    rows.push({ key: "plumeDistanceGain", label: "Plume distance gain", value: round2(preset.plumeDistanceGain) });
+    rows.push({ key: "plumeFlareStrength", label: "Plume flare strength", value: round2(preset.plumeFlareStrength) });
+    rows.push({ key: "plumeDabSpacing", label: "Plume dab spacing", value: round2(preset.plumeDabSpacing) });
+  }
   return rows;
 }
 

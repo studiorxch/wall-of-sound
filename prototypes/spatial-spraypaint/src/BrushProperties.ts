@@ -1,17 +1,26 @@
-import { resolveShapedStampGeometry, type ShapedStampGeometry } from "./SprayBrushEngine";
+import { PLUME_MAX_ANGLE_DEGREES, resolveShapedStampGeometry, type ShapedStampGeometry } from "./SprayBrushEngine";
 import { type SprayCapPreset } from "./SprayCapPresets";
 
 /**
  * The PRESET DEFAULT -> SESSION/USER MODIFICATION -> EFFECTIVE VALUE model for
- * Spray brushes, in V1's curated editable surface: Size, Coverage, Fill mode.
- * Everything else (shape/paint/motion) is exposed read-only via
+ * Spray brushes, in V1's curated editable surface: Size, Coverage, Fill mode,
+ * Spray Angle. Everything else (shape/paint/motion) is exposed read-only via
  * `getSprayPropertyGroups` below — real runtime authority, just not a second
  * stateful override surface in this pass (see checkpoint doc for why).
+ *
+ * `sprayAngle` is a generic per-brush property (available on every cap, same
+ * as Size/Coverage/Fill), degrees, 0-`PLUME_MAX_ANGLE_DEGREES`. It is Mouse
+ * V1's input into the input-neutral `SprayInputState` canonical shape (see
+ * `SprayBrushEngine.resolveMouseSprayInput`) — only a `depositionShape:
+ * "plume"` cap (currently Pink Dot Fat) actually responds to it; every other
+ * cap accepts the value but it has no visible effect, exactly like Fill mode
+ * being shown for every cap regardless of whether it changes anything.
  */
 export interface SprayPropertyOverride {
   size?: number;
   coverage?: number;
   fillMode?: boolean;
+  sprayAngle?: number;
 }
 
 export type SprayPropertyKey = keyof SprayPropertyOverride;
@@ -61,6 +70,8 @@ export interface EffectiveSprayStyle {
   size: number;
   coverage: number;
   fillMode: boolean;
+  /** Degrees, 0-`PLUME_MAX_ANGLE_DEGREES`. 0 (straight-on) is every cap's default — no preset field opts a cap into a non-zero default. */
+  sprayAngle: number;
 }
 
 /** PRESET DEFAULT merged with SESSION/USER MODIFICATION -> the value actually fed to the renderer. */
@@ -72,6 +83,7 @@ export function resolveEffectiveSprayStyle(
     size: override.size ?? preset.baseRadius,
     coverage: override.coverage ?? 1,
     fillMode: override.fillMode ?? preset.defaultFillMode,
+    sprayAngle: Math.max(0, Math.min(PLUME_MAX_ANGLE_DEGREES, override.sprayAngle ?? 0)),
   };
 }
 
@@ -124,6 +136,7 @@ export function getSprayPropertyGroups(
     { key: "size", label: "Size", kind: "editable-number", value: effective.size, unit: "wall units", modified: isSprayPropertyModified(override, "size") },
     { key: "coverage", label: "Coverage", kind: "editable-number", value: Math.round(effective.coverage * 100), unit: "%", modified: isSprayPropertyModified(override, "coverage") },
     { key: "fillMode", label: "Fill mode", kind: "editable-boolean", value: effective.fillMode, modified: isSprayPropertyModified(override, "fillMode") },
+    { key: "sprayAngle", label: "Spray Angle", kind: "editable-number", value: Math.round(effective.sprayAngle), unit: "°", modified: isSprayPropertyModified(override, "sprayAngle") },
   ];
 
   const geometry: ShapedStampGeometry | null = resolveShapedStampGeometry(preset.depositionShape, effective.size);
@@ -146,17 +159,22 @@ export function getSprayPropertyGroups(
     number("haloRadius", "Halo radius", preset.haloRadius),
     number("haloOpacity", "Halo opacity", preset.haloOpacity),
   ];
-  // Pink Dot Fat's correction dials — only meaningful (and only shown) on a
-  // cap that actually has a halo. Read-only diagnostics, same as every other
-  // Shape/Paint/Motion row; the live-adjustable control that drives their
-  // visible effect is Size (haloDistanceGain reacts to it), already
-  // live-previewed above. See SprayCapPresets.ts's field docs.
-  if (preset.haloRadius > 0) {
+  // Pink Dot Fat's unified plume dials — only meaningful (and only shown) on
+  // a cap that actually uses the plume mechanism. Read-only diagnostics,
+  // same as every other Shape/Paint/Motion row; the live-adjustable controls
+  // that drive their visible effect are Size (distance gain) and Spray
+  // Angle (flare), both already live-previewed above. See
+  // SprayCapPresets.ts's `plume*` field docs.
+  if (preset.depositionShape === "plume") {
     paint.push(
-      number("haloDistanceGain", "Halo distance gain", preset.haloDistanceGain),
-      number("haloFlareAnisotropy", "Halo flare", preset.haloFlareAnisotropy),
-      number("haloDabSpacing", "Halo dab spacing", preset.haloDabSpacing),
-      number("haloRingBias", "Halo ring bias", preset.haloRingBias),
+      number("plumeRingRadius", "Ring radius", preset.plumeRingRadius),
+      number("plumeRingThickness", "Ring thickness", preset.plumeRingThickness),
+      number("plumeRingOpacity", "Ring opacity", preset.plumeRingOpacity),
+      number("plumeMistRadius", "Mist radius", preset.plumeMistRadius),
+      number("plumeMistOpacity", "Mist opacity", preset.plumeMistOpacity),
+      number("plumeDistanceGain", "Plume distance gain", preset.plumeDistanceGain),
+      number("plumeFlareStrength", "Plume flare strength", preset.plumeFlareStrength),
+      number("plumeDabSpacing", "Plume dab spacing", preset.plumeDabSpacing),
     );
   }
 

@@ -101,13 +101,16 @@ export interface SprayStudioPreviewOptions {
   size?: number;
   coverage?: number;
   fillMode?: boolean;
+  /** Degrees, 0-PLUME_MAX_ANGLE_DEGREES — see `SprayBrushEngine.resolveMouseSprayInput`. Only visibly affects a `depositionShape: "plume"` cap (Pink Dot Fat); inert on every other cap, same as fillMode. */
+  sprayAngle?: number;
 }
 
 /**
  * Brush Studio's live preview. Takes the resolved preset directly (not just
  * an id) so it renders custom brushes too, and accepts the EFFECTIVE
- * size/coverage/fillMode so property edits are reflected immediately —
- * still the same real SprayBrushEngine, still deterministic per call.
+ * size/coverage/fillMode/sprayAngle so property edits are reflected
+ * immediately — still the same real SprayBrushEngine, still deterministic
+ * per call.
  */
 export function renderSprayBrushStudioPreview(
   ctx: CanvasRenderingContext2D,
@@ -123,10 +126,11 @@ export function renderSprayBrushStudioPreview(
   const random = createStrokeRandom(PREVIEW_SEED);
   const coverage = options.coverage ?? 1;
   const fillMode = options.fillMode ?? false;
+  const sprayAngle = options.sprayAngle ?? 0;
   engine.beginStroke();
-  engine.renderSegment(ctx, null, points[0], PREVIEW_COLOR, preset, random, coverage, fillMode);
+  engine.renderSegment(ctx, null, points[0], PREVIEW_COLOR, preset, random, coverage, fillMode, sprayAngle);
   for (let i = 1; i < points.length; i += 1) {
-    engine.renderSegment(ctx, points[i - 1], points[i], PREVIEW_COLOR, preset, random, coverage, fillMode);
+    engine.renderSegment(ctx, points[i - 1], points[i], PREVIEW_COLOR, preset, random, coverage, fillMode, sprayAngle);
   }
 }
 

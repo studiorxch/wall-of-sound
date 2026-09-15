@@ -169,9 +169,11 @@
     .wet-control-row select { min-width:0; font-size:10px; }
     #marker-width-controls { margin-top:7px; padding-top:8px; border-top:1px solid rgba(255,255,255,.12); }
     #spray-property-controls { margin-top:7px; padding-top:8px; border-top:1px solid rgba(255,255,255,.12); display:grid; gap:8px; }
-    #radius-slider-setting[hidden], #coverage-slider-setting[hidden], #fill-mode-setting[hidden] { display:none; }
+    #radius-slider-setting[hidden], #coverage-slider-setting[hidden], #fill-mode-setting[hidden], #spray-angle-status[hidden] { display:none; }
     .fill-mode-row { grid-template-columns:1fr auto; font-size:11px; }
     .fill-mode-note { display:block; margin-top:2px; color:#8f8e99; font-size:9px; font-weight:600; line-height:1.35; }
+    #spray-angle-status { display:flex; align-items:center; justify-content:space-between; font-size:10px; color:#aaa9b2; padding:4px 0 0; }
+    #spray-angle-status strong { color:#f4f3f0; font-variant-numeric:tabular-nums; }
     .marker-width-label { margin-bottom:6px; color:#8f8e99; font-size:9px; font-weight:800; letter-spacing:.8px; text-transform:uppercase; }
     #marker-width-presets { display:grid; grid-template-columns:repeat(5, 1fr); gap:4px; }
     .marker-width-choice { min-width:0; padding:6px 4px; font-size:9px; }
@@ -458,6 +460,7 @@
           <div id="radius-slider-setting" class="setting-stack"><span>Spray size override · <strong id="radius-val">32</strong> wall units</span><input type="range" id="brush-radius" min="4" max="72" value="32" /><button id="radius-reset">Use cap default</button></div>
           <div id="coverage-slider-setting" class="setting-stack"><span>Spray coverage override · <strong id="coverage-val">100</strong>%</span><input type="range" id="spray-coverage" min="20" max="100" step="5" value="100" /><button id="coverage-reset">Use full coverage</button></div>
           <label id="fill-mode-setting" class="setting-row fill-mode-row"><span>Fill mode (throwie)<span class="fill-mode-note">caps one sweep's build-up; lift and sweep again for fuller coverage</span></span><input type="checkbox" id="fill-mode-toggle" /></label>
+          <div id="spray-angle-status" hidden title="Alt + scroll wheel over the wall to adjust"><span>Spray angle (Alt + scroll)</span><strong id="spray-angle-val">0°</strong></div>
         </div>
       </div>
       <div id="marker-chooser" class="brush-panel" aria-label="Marker / nib" hidden>

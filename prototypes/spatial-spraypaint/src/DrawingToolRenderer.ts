@@ -14,6 +14,8 @@ interface BaseToolStrokeStyle {
   coverage?: number;
   /** Spray-only per-stroke fill ceiling. Falsy/absent preserves current default behavior exactly. */
   fillMode?: boolean;
+  /** Spray-only: degrees, 0-PLUME_MAX_ANGLE_DEGREES. Mouse V1's input into `SprayInputState.sprayAngle` — see `resolveMouseSprayInput`. Absent/0 preserves current default behavior exactly on every cap. */
+  sprayAngle?: number;
 }
 
 export type ToolStrokeStyle = BaseToolStrokeStyle & (
@@ -62,6 +64,7 @@ export class DrawingToolRenderer {
         random,
         style.coverage ?? 1,
         style.fillMode ?? false,
+        style.sprayAngle ?? 0,
       );
       return;
     }

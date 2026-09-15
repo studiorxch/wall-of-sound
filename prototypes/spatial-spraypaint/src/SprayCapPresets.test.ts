@@ -60,14 +60,19 @@ describe("spray cap presets", () => {
     expect(calligraphy.anisotropy).toBeLessThan(1);
   });
 
-  it("gives Pink Dot Fat a halo/loaded-dot identity that New York Fat does not have", () => {
+  it("gives Pink Dot Fat a loaded-dot identity that New York Fat does not have (unified plume, not a generic halo)", () => {
     const pink = getSprayCapPreset("pink-dot-fat");
     const newYork = getSprayCapPreset("new-york-fat");
-    expect(pink.haloRadius).toBeGreaterThan(0);
-    expect(pink.haloOpacity).toBeGreaterThan(0);
+    expect(pink.depositionShape).toBe("plume");
+    expect(pink.plumeRingRadius).toBeGreaterThan(0);
+    expect(pink.plumeMistRadius).toBeGreaterThan(0);
+    expect(newYork.depositionShape).toBe("line");
+    expect(newYork.plumeRingRadius).toBe(0);
+    expect(newYork.plumeMistRadius).toBe(0);
+    // Neither cap uses the generic (dormant) halo mechanism.
+    expect(pink.haloRadius).toBe(0);
     expect(newYork.haloRadius).toBe(0);
-    expect(newYork.haloOpacity).toBe(0);
-    // Pink Dot's center is already denser/louder than New York Fat's, before the halo is added on top.
+    // Pink Dot's center is already denser/louder than New York Fat's, before the ring/mist are added on top.
     expect(pink.coreDensity).toBeGreaterThan(newYork.coreDensity);
     expect(pink.coreOpacity).toBeGreaterThan(newYork.coreOpacity);
   });
@@ -195,40 +200,60 @@ describe("Astro Fat vs. New York Fat differentiation", () => {
   });
 });
 
-describe("Pink Dot Fat correction fields — distance-sensitive, oblique-flared, dab-spaced, center+ring halo", () => {
-  it("gives Pink Dot Fat non-zero values for all four correction fields", () => {
+describe("Pink Dot Fat unified plume fields", () => {
+  it("gives Pink Dot Fat non-zero values for all eight plume fields", () => {
     const pink = getSprayCapPreset("pink-dot-fat");
-    expect(pink.haloDistanceGain).toBeGreaterThan(0);
-    expect(pink.haloFlareAnisotropy).toBeGreaterThan(0);
-    expect(pink.haloDabSpacing).toBeGreaterThan(0);
-    expect(pink.haloRingBias).toBeGreaterThan(0);
+    expect(pink.depositionShape).toBe("plume");
+    expect(pink.plumeRingRadius).toBeGreaterThan(0);
+    expect(pink.plumeRingThickness).toBeGreaterThan(0);
+    expect(pink.plumeRingOpacity).toBeGreaterThan(0);
+    expect(pink.plumeMistRadius).toBeGreaterThan(0);
+    expect(pink.plumeMistOpacity).toBeGreaterThan(0);
+    expect(pink.plumeDistanceGain).toBeGreaterThan(0);
+    expect(pink.plumeFlareStrength).toBeGreaterThan(0);
+    expect(pink.plumeDabSpacing).toBeGreaterThan(0);
   });
 
-  it("gives every other cap all four correction fields at exactly 0", () => {
+  it("gives every other cap all eight plume fields at exactly 0, and depositionShape 'plume' only on Pink Dot Fat", () => {
     for (const preset of SPRAY_CAP_PRESETS) {
       if (preset.id === "pink-dot-fat") continue;
-      expect(preset.haloDistanceGain).toBe(0);
-      expect(preset.haloFlareAnisotropy).toBe(0);
-      expect(preset.haloDabSpacing).toBe(0);
-      expect(preset.haloRingBias).toBe(0);
+      expect(preset.depositionShape).not.toBe("plume");
+      expect(preset.plumeRingRadius).toBe(0);
+      expect(preset.plumeRingThickness).toBe(0);
+      expect(preset.plumeRingOpacity).toBe(0);
+      expect(preset.plumeMistRadius).toBe(0);
+      expect(preset.plumeMistOpacity).toBe(0);
+      expect(preset.plumeDistanceGain).toBe(0);
+      expect(preset.plumeFlareStrength).toBe(0);
+      expect(preset.plumeDabSpacing).toBe(0);
     }
   });
 
-  it("leaves Pink Dot's core/overspray physics (coreDensity, coreOpacity, particleCount/Spread/Opacity, flowRate, accumulationRate) numerically untouched — this is a halo-only correction", () => {
+  it("retires Pink Dot Fat from the generic (dormant) halo mechanism entirely — every halo field is now 0, same as every other cap", () => {
+    const pink = getSprayCapPreset("pink-dot-fat");
+    expect(pink.haloRadius).toBe(0);
+    expect(pink.haloOpacity).toBe(0);
+    expect(pink.haloDistanceGain).toBe(0);
+    expect(pink.haloFlareAnisotropy).toBe(0);
+    expect(pink.haloDabSpacing).toBe(0);
+    expect(pink.haloRingBias).toBe(0);
+  });
+
+  it("leaves Pink Dot's core/overspray physics (coreDensity, coreOpacity, particleCount/Spread/Opacity, flowRate, accumulationRate) numerically untouched — this is a deposition-mechanism change, not a physics retune", () => {
     const pink = getSprayCapPreset("pink-dot-fat");
     expect(pink).toMatchObject({
       baseRadius: 42, coreDensity: 1.46, coreOpacity: 0.34, edgeFalloff: 0.76,
       particleCount: 26, particleSpread: 1.2, particleOpacity: 0.29,
       flowRate: 1.48, accumulationRate: 1.38, velocityResponse: 0.42,
-      endpointBehavior: "punchy", haloRadius: 2.4, haloOpacity: 0.05,
+      endpointBehavior: "punchy",
     });
   });
 
-  it("keeps Pink Dot structurally distinct from Ring/Donut — Pink Dot's core opacity stays fully opaque-capable (no hollow center field), unlike Ring/Donut's deliberately low centerOpacity", () => {
+  it("keeps Pink Dot structurally distinct from Ring/Donut — Pink Dot's core is a normal opaque-capable disc (no hollow-center field), unlike Ring/Donut's deliberately low centerOpacity", () => {
     const pink = getSprayCapPreset("pink-dot-fat");
     const ring = getSprayCapPreset("ring-donut");
-    expect(pink.depositionShape).toBe("line");
-    expect(pink.ringRadius).toBe(0);
+    expect(pink.depositionShape).toBe("plume");
+    expect(pink.ringRadius).toBe(0); // Ring/Donut's OWN ring fields, distinct from plumeRingRadius
     expect(ring.depositionShape).toBe("ring");
     expect(ring.centerOpacity).toBeLessThan(ring.ringOpacity);
   });

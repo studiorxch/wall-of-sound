@@ -18,6 +18,7 @@ import {
 import { type DrawingToolId, type MarkerVariantId } from "./DrawingTool";
 import { getMarkerVariant, MARKER_VARIANTS, type MarkerVariantDefinition } from "./PaintMarkerEngine";
 import { getSprayCapPreset, SPRAY_CAP_PRESETS, type SprayCapFamily, type SprayCapId, type SprayCapPreset } from "./SprayCapPresets";
+import { PLUME_MAX_ANGLE_DEGREES } from "./SprayBrushEngine";
 
 /**
  * Pure list/grouping/labeling logic for Brush Studio's middle (Brushes)
@@ -394,6 +395,7 @@ export class BrushStudioController {
       input.disabled = isCustom;
       if (row.key === "size") { input.min = "4"; input.max = "72"; input.step = "1"; }
       if (row.key === "coverage") { input.min = "20"; input.max = "100"; input.step = "5"; }
+      if (row.key === "sprayAngle") { input.min = "0"; input.max = String(PLUME_MAX_ANGLE_DEGREES); input.step = "1"; }
       input.value = String(row.value);
       const readout = document.createElement("span");
       readout.className = "brush-studio-property-value";
@@ -403,7 +405,9 @@ export class BrushStudioController {
         readout.textContent = `${numeric}${row.unit ? row.unit : ""}`;
         const patch: SprayPropertyOverride = row.key === "size"
           ? { size: numeric }
-          : { coverage: numeric / 100 };
+          : row.key === "coverage"
+          ? { coverage: numeric / 100 }
+          : { sprayAngle: numeric };
         this.deps.setSprayProperty(capId, patch);
         const canvas = this.el<HTMLCanvasElement>("brush-studio-preview");
         const ctx = canvas.getContext("2d");

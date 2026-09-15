@@ -209,11 +209,13 @@ describe("Calibration Bench — property readout", () => {
     expect(keys).not.toContain("streakLanes");
   });
 
-  it("surfaces halo fields only for a cap that actually has a halo", () => {
+  it("surfaces plume fields only for a cap that actually uses the plume mechanism (Pink Dot Fat)", () => {
     const pink = getSprayCapPreset("pink-dot-fat");
     const keys = buildCalibrationPropertyReadout(pink, 42).map((r) => r.key);
-    expect(keys).toContain("haloRadius");
-    expect(keys).toContain("haloOpacity");
+    expect(keys).toContain("plumeRingRadius");
+    expect(keys).toContain("plumeMistOpacity");
+    // The generic halo mechanism is dormant — Pink Dot no longer uses it.
+    expect(keys).not.toContain("haloRadius");
   });
 
   it("surfaces ring fields only for Ring/Donut and streak fields only for Dry/Streak", () => {
@@ -243,16 +245,16 @@ describe("Calibration Bench — merged property comparison table", () => {
     expect(coreDensity.rightValue).toBe(astro.coreDensity);
   });
 
-  it("leaves the other side's value undefined when only one cap has a row (e.g. halo), rather than dropping the row", () => {
+  it("leaves the other side's value undefined when only one cap has a row (e.g. Pink Dot's plume ring), rather than dropping the row", () => {
     const nyFat = getSprayCapPreset("new-york-fat");
     const pink = getSprayCapPreset("pink-dot-fat");
     const merged = mergeCalibrationPropertyRows(
       buildCalibrationPropertyReadout(nyFat, 32),
       buildCalibrationPropertyReadout(pink, 42),
     );
-    const halo = merged.find((r) => r.key === "haloRadius")!;
-    expect(halo.leftValue).toBeUndefined();
-    expect(halo.rightValue).toBe(pink.haloRadius);
+    const ring = merged.find((r) => r.key === "plumeRingRadius")!;
+    expect(ring.leftValue).toBeUndefined();
+    expect(ring.rightValue).toBe(pink.plumeRingRadius);
   });
 
   it("preserves Left's own row order, appending Right-only rows at the end", () => {
@@ -261,7 +263,7 @@ describe("Calibration Bench — merged property comparison table", () => {
     const leftRows = buildCalibrationPropertyReadout(nyFat, 32);
     const merged = mergeCalibrationPropertyRows(leftRows, buildCalibrationPropertyReadout(pink, 42));
     expect(merged.slice(0, leftRows.length).map((r) => r.key)).toEqual(leftRows.map((r) => r.key));
-    expect(merged[merged.length - 1].key).toBe("haloOpacity");
+    expect(merged[merged.length - 1].key).toBe("plumeDabSpacing");
   });
 });
 

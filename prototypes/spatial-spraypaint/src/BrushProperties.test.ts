@@ -11,13 +11,14 @@ import {
   setSprayOverride,
   type SprayOverrideStore,
 } from "./BrushProperties";
+import { PLUME_MAX_ANGLE_DEGREES } from "./SprayBrushEngine";
 import { getSprayCapPreset } from "./SprayCapPresets";
 
 describe("Spray brush property override model (PRESET DEFAULT -> SESSION MODIFICATION -> EFFECTIVE VALUE)", () => {
   it("resolves effective style straight from the preset when there is no override", () => {
     const needle = getSprayCapPreset("needle");
     const effective = resolveEffectiveSprayStyle(needle, {});
-    expect(effective).toEqual({ size: needle.baseRadius, coverage: 1, fillMode: needle.defaultFillMode });
+    expect(effective).toEqual({ size: needle.baseRadius, coverage: 1, fillMode: needle.defaultFillMode, sprayAngle: 0 });
     expect(effective.fillMode).toBe(false);
   });
 
@@ -30,7 +31,7 @@ describe("Spray brush property override model (PRESET DEFAULT -> SESSION MODIFIC
   it("lets a session override win over the preset default", () => {
     const cap = getSprayCapPreset("new-york-fat");
     const effective = resolveEffectiveSprayStyle(cap, { size: 50, coverage: 0.4, fillMode: true });
-    expect(effective).toEqual({ size: 50, coverage: 0.4, fillMode: true });
+    expect(effective).toEqual({ size: 50, coverage: 0.4, fillMode: true, sprayAngle: 0 });
   });
 
   it("setSprayOverride never mutates the store passed in, and leaves other brushes' entries untouched", () => {
@@ -217,11 +218,17 @@ describe("Fat caps default to Fill ON (dense normal-mode Spray read as smooth so
   });
 });
 
-describe("Pink Dot Fat correction dials surfaced in Brush Studio's PAINT readout", () => {
-  it("shows all four halo-correction fields as read-only diagnostics for Pink Dot Fat", () => {
+describe("Pink Dot Fat unified plume dials surfaced in Brush Studio's PAINT readout", () => {
+  const PLUME_KEYS = [
+    "plumeRingRadius", "plumeRingThickness", "plumeRingOpacity",
+    "plumeMistRadius", "plumeMistOpacity",
+    "plumeDistanceGain", "plumeFlareStrength", "plumeDabSpacing",
+  ];
+
+  it("shows all eight plume fields as read-only diagnostics for Pink Dot Fat", () => {
     const pink = getSprayCapPreset("pink-dot-fat");
     const groups = getSprayPropertyGroups(pink, resolveEffectiveSprayStyle(pink, {}), {});
-    for (const key of ["haloDistanceGain", "haloFlareAnisotropy", "haloDabSpacing", "haloRingBias"]) {
+    for (const key of PLUME_KEYS) {
       const row = groups.paint.find((r) => r.key === key);
       expect(row).toBeDefined();
       expect(row?.kind).toBe("readonly");
@@ -229,11 +236,37 @@ describe("Pink Dot Fat correction dials surfaced in Brush Studio's PAINT readout
     }
   });
 
-  it("omits the halo-correction rows entirely for a cap with no halo (New York Fat)", () => {
+  it("omits the plume rows entirely for a cap that doesn't use depositionShape 'plume' (New York Fat)", () => {
     const nyFat = getSprayCapPreset("new-york-fat");
     const groups = getSprayPropertyGroups(nyFat, resolveEffectiveSprayStyle(nyFat, {}), {});
-    for (const key of ["haloDistanceGain", "haloFlareAnisotropy", "haloDabSpacing", "haloRingBias"]) {
+    for (const key of PLUME_KEYS) {
       expect(groups.paint.find((r) => r.key === key)).toBeUndefined();
     }
+  });
+});
+
+describe("Spray Angle — generic GENERAL property, available on every cap, only visibly effective on Pink Dot Fat's plume", () => {
+  it("defaults to 0 (straight-on) with no override, on any cap", () => {
+    for (const id of ["new-york-fat", "pink-dot-fat", "astro-fat"]) {
+      const preset = getSprayCapPreset(id);
+      const effective = resolveEffectiveSprayStyle(preset, {});
+      expect(effective.sprayAngle).toBe(0);
+      const groups = getSprayPropertyGroups(preset, effective, {});
+      const row = groups.general.find((r) => r.key === "sprayAngle");
+      expect(row).toMatchObject({ kind: "editable-number", value: 0, unit: "°", modified: false });
+    }
+  });
+
+  it("resolves a session override, clamped to [0, PLUME_MAX_ANGLE_DEGREES]", () => {
+    const pink = getSprayCapPreset("pink-dot-fat");
+    expect(resolveEffectiveSprayStyle(pink, { sprayAngle: 20 }).sprayAngle).toBe(20);
+    expect(resolveEffectiveSprayStyle(pink, { sprayAngle: 999 }).sprayAngle).toBe(PLUME_MAX_ANGLE_DEGREES);
+    expect(resolveEffectiveSprayStyle(pink, { sprayAngle: -5 }).sprayAngle).toBe(0);
+  });
+
+  it("is a per-brush override like Size/Coverage/Fill — switching brushes doesn't leak it", () => {
+    const store = setSprayOverride(EMPTY_SPRAY_OVERRIDES, "pink-dot-fat", { sprayAngle: 30 });
+    expect(resolveEffectiveSprayStyle(getSprayCapPreset("pink-dot-fat"), getSprayOverride(store, "pink-dot-fat")).sprayAngle).toBe(30);
+    expect(resolveEffectiveSprayStyle(getSprayCapPreset("astro-fat"), getSprayOverride(store, "astro-fat")).sprayAngle).toBe(0);
   });
 });

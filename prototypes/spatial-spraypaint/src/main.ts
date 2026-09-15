@@ -64,7 +64,7 @@ import {
 import { resolveInteractionAuthority, type InteractionAuthority } from "./InteractionAuthority";
 import { INITIAL_PLAYER_STATE, reducePlayerState, type PlayerAction, type PlayerState } from "./PlayerState";
 import { INITIAL_SETTINGS_STATE, reduceSettingsState, type SettingsAction, type SettingsState } from "./SettingsState";
-import { createStrokeRandom } from "./SprayBrushEngine";
+import { createStrokeRandom, PLUME_MAX_ANGLE_DEGREES } from "./SprayBrushEngine";
 import { SprayCanAudio } from "./SprayCanAudio";
 import { getSprayCapPreset } from "./SprayCapPresets";
 import { StrokeHistory, type RecordedStroke } from "./StrokeHistory";
@@ -621,6 +621,13 @@ class SpatialSpraypaintApp {
     });
     this.compositeCanvas.addEventListener("wheel", (event) => {
       event.preventDefault();
+      // Temporary desktop control for live Spray Angle adjustment while
+      // drawing (build brief section 4) — Alt held, spray tool active.
+      // Deliberately does not touch pan/zoom/stroke state below.
+      if (event.altKey && this.toolSelection.selectedToolId === "spray-can") {
+        this.adjustSprayAngle(event.deltaY);
+        return;
+      }
       this.finishActiveStroke();
       this.cancelPan("wheel", false);
       if (isWheelZoomGesture(event)) {
@@ -823,6 +830,32 @@ class SpatialSpraypaintApp {
     if (!spraySelected) return;
     this.requireElement<HTMLInputElement>("fill-mode-toggle").checked =
       this.effectiveSprayStyle(this.toolSelection.sprayCapId).fillMode;
+    this.updateSprayAngleUi();
+  }
+
+  /**
+   * Compact status readout for the live Alt+wheel Spray Angle shortcut —
+   * quiet by default (Creative Interface Doctrine: normal state stays
+   * visually quiet), shown only once the angle has actually been moved off
+   * its 0/straight-on default. See `adjustSprayAngle` and Brush Studio's own
+   * "Spray Angle" row for the same underlying per-brush override.
+   */
+  private updateSprayAngleUi(): void {
+    const spraySelected = this.toolSelection.selectedToolId === "spray-can";
+    const angle = spraySelected ? Math.round(this.effectiveSprayStyle(this.toolSelection.sprayCapId).sprayAngle) : 0;
+    this.requireElement("spray-angle-status").toggleAttribute("hidden", !spraySelected || angle <= 0);
+    this.requireElement("spray-angle-val").textContent = `${angle}°`;
+  }
+
+  /** Alt+wheel over the wall: the temporary desktop shortcut for live Spray Angle adjustment while drawing (see build brief section 4). Reuses the same per-brush spray-property override Brush Studio's "Spray Angle" slider writes to — one underlying state, two ways to reach it. */
+  private adjustSprayAngle(deltaY: number): void {
+    if (this.toolSelection.selectedToolId !== "spray-can") return;
+    const capId = this.toolSelection.sprayCapId;
+    const current = this.effectiveSprayStyle(capId).sprayAngle;
+    const step = deltaY > 0 ? -3 : 3;
+    const next = Math.max(0, Math.min(PLUME_MAX_ANGLE_DEGREES, current + step));
+    this.setSettings({ type: "spray-property", capId, patch: { sprayAngle: next } });
+    this.updateSprayAngleUi();
   }
 
   /** PRESET DEFAULT -> SESSION/USER MODIFICATION -> EFFECTIVE VALUE for one Spray brush's Size/Coverage/Fill. */
@@ -977,6 +1010,7 @@ class SpatialSpraypaintApp {
       size: this.baseRadius,
       coverage: sprayStyle.coverage,
       fillMode: sprayStyle.fillMode,
+      sprayAngle: sprayStyle.sprayAngle,
     };
     return this.toolSelection.selectedToolId === "spray-can"
       ? { ...shared, toolId: "spray-can", variantId: this.toolSelection.sprayCapId }
