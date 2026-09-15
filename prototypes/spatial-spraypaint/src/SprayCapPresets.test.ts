@@ -13,7 +13,7 @@ describe("spray cap presets", () => {
     expect(new Set(SPRAY_CAP_PRESETS.map((preset) => preset.family))).toEqual(new Set(["fat", "thin", "specialty"]));
   });
 
-  it("forks fuzz-fat from german-fat's exact current numeric behavior without disturbing german-fat", () => {
+  it("forks fuzz-fat from german-fat's exact current RENDERING behavior without disturbing german-fat (defaultFillMode is the one deliberate exception — see below)", () => {
     const germanFat = getSprayCapPreset("german-fat");
     const fuzzFat = getSprayCapPreset("fuzz-fat");
 
@@ -23,11 +23,16 @@ describe("spray cap presets", () => {
     expect(germanFat.id).toBe("german-fat");
     expect(germanFat.family).toBe("fat");
 
-    const { id: _fuzzId, name: _fuzzName, family: _fuzzFamily, ...fuzzRendering } = fuzzFat;
-    const { id: _germanId, name: _germanName, family: _germanFamily, ...germanRendering } = germanFat;
+    const { id: _fuzzId, name: _fuzzName, family: _fuzzFamily, defaultFillMode: _fuzzFillMode, ...fuzzRendering } = fuzzFat;
+    const { id: _germanId, name: _germanName, family: _germanFamily, defaultFillMode: _germanFillMode, ...germanRendering } = germanFat;
     expect(fuzzRendering).toEqual(germanRendering);
 
     expect(resolveSprayDynamics(fuzzFat, 0.3, 38)).toEqual(resolveSprayDynamics(germanFat, 0.3, 38));
+  });
+
+  it("keeps Fuzz Fat's Fill default OFF even though German/Hardcore Fat now defaults to Fill ON — a deliberate divergence, not drift: Fuzz Fat is a usage-mode fork exception, not a physics fork exception", () => {
+    expect(getSprayCapPreset("fuzz-fat").defaultFillMode).toBe(false);
+    expect(getSprayCapPreset("german-fat").defaultFillMode).toBe(true);
   });
 
   it("keeps legacy preset links mapped to the new authority", () => {

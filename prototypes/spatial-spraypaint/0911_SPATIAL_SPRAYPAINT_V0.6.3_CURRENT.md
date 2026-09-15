@@ -300,6 +300,22 @@ Ad hoc wall scribbles stopped being sufficient once Spray accumulated enough dis
 
 **Known limitations / next step.** No image/PNG snapshot export and no reference-photo import yet — both explicitly deferred rather than half-built; a future pass could add a dedicated multi-canvas capture utility if repeated manual comparison against photos proves the bottleneck. Matched Width's target is always `min(left, right)` with no manual override input in V1 — sufficient for every comparison run so far, but a numeric override could be added if a specific calibration session needs a width outside that range.
 
+## Fat Caps Default To Fill Behavior
+
+A small, deliberately narrow behavioral-default change — no cap physics, no Brush Studio redesign, no Calibration Bench changes, no Throwie Fill algorithm changes.
+
+**Problem.** Dense normal-mode Spray made New York Fat, Pink Dot Fat, Astro Fat, and German/Hardcore Fat read as smooth solid monolines. The more characteristic fat-cap use is the existing Throwie Fill deposition: one sweep stays partially deposited, overlapping/back-and-forth passes visibly build coverage, stroke history/banding stays visible.
+
+**Change.** `defaultFillMode` flipped `false → true` for exactly those four caps in `SprayCapPresets.ts` — the same field Brush Studio's existing Fill toggle and `resolveEffectiveSprayStyle`'s PRESET DEFAULT → SESSION MODIFICATION → EFFECTIVE VALUE model already used; no new mechanism. Fill's own math (`SprayBrushEngine`'s `fillLocalSaturation` ceiling) is completely untouched — this only changes what a freshly-selected fat brush's Fill toggle starts at.
+
+**Deliberately not changed.** Thin caps, Needle/Wiggly Needle, Calligraphy/Transversal, Soft/Fade, and Fuzz Fat all keep `defaultFillMode: false`. Ring/Donut and Dry/Streak (both `family: "specialty"`, not `"fat"`) also stay `false` — broad alone isn't a reason for Fill-ON, and Dry/Streak's own deliberately-under-loaded single-pass character is the point of its default staying off. Fuzz Fat is the one interesting case: it's a byte-for-byte rendering fork of German/Hardcore Fat (`SprayCapPresets.test.ts`'s fork test), and German/Hardcore Fat's `defaultFillMode` just changed — so the fork test was updated to exclude `defaultFillMode` from the byte-identical comparison specifically, with a new explicit assertion that Fuzz Fat stays Fill-OFF while German/Hardcore Fat is now Fill-ON. This is a deliberate, documented exception (a usage-mode divergence), not drift in the rendering fork itself — every other field between the two remains byte-identical.
+
+**Brush Studio / compact chooser / Wall.** No code changes were needed beyond the preset data: Brush Studio's Fill checkbox, the compact bottom-bar Fill toggle, and the actual live-paint style (`main.ts`'s `currentToolStyle`) all already read `resolveEffectiveSprayStyle(preset, override).fillMode`, which falls back to `preset.defaultFillMode` whenever no session override exists. Turning Fill OFF on one fat cap is stored as a per-brush override (keyed by cap id, exactly like Size/Coverage already were) — switching to a different fat cap uses that cap's own default, and switching back to the modified one preserves the modification. Reset Brush / reset-this-property both already restore the (now-true) preset default.
+
+**Live-verified.** New York Fat opens with Fill already ON; a back-and-forth pass over the same region visibly builds density beyond a single sweep. Turning Fill OFF and drawing a fresh line produces a flat, dense, fully-solid line by clear visual contrast. Selecting Astro Fat shows Fill ON independently of New York Fat's per-brush OFF override from the same session.
+
+**Files:** `SprayCapPresets.ts` (four `defaultFillMode` flips + comment), `SprayCapPresets.test.ts` / `SprayCapProfile.test.ts` (Fuzz Fat/German Fat fork tests updated for the one deliberate exception), `BrushProperties.test.ts` (new coverage: defaults, per-brush isolation, Reset behavior).
+
 ## Stable Mop Attachment And Clear Authority
 
 The latest Mop attachment work is complete and physically verified:

@@ -34,7 +34,7 @@ describe("spray cap calibration profile", () => {
     }
   });
 
-  it("gives Fuzz Fat a distinct specialty identity while its deposition matches german-fat exactly", () => {
+  it("gives Fuzz Fat a distinct specialty identity while its RENDERING deposition matches german-fat exactly (defaultFillMode is the one deliberate exception — Fuzz Fat stays Fill-OFF even though German/Hardcore Fat now defaults to Fill-ON)", () => {
     const fuzzFat = getSprayCapProfile("fuzz-fat");
     const germanFat = getSprayCapProfile("german-fat");
 
@@ -45,9 +45,11 @@ describe("spray cap calibration profile", () => {
     expect(fuzzFat.calibrationNotes).toContain("effect cap");
 
     expect(fuzzFat.deposition).not.toBe(germanFat.deposition);
-    const { id: _fuzzId, name: _fuzzName, family: _fuzzFamily, ...fuzzDeposition } = fuzzFat.deposition;
-    const { id: _germanId, name: _germanName, family: _germanFamily, ...germanDeposition } = germanFat.deposition;
+    const { id: _fuzzId, name: _fuzzName, family: _fuzzFamily, defaultFillMode: _fuzzFillMode, ...fuzzDeposition } = fuzzFat.deposition;
+    const { id: _germanId, name: _germanName, family: _germanFamily, defaultFillMode: _germanFillMode, ...germanDeposition } = germanFat.deposition;
     expect(fuzzDeposition).toEqual(germanDeposition);
+    expect(fuzzFat.deposition.defaultFillMode).toBe(false);
+    expect(germanFat.deposition.defaultFillMode).toBe(true);
 
     expect(resolveSprayDynamics(fuzzFat.deposition, 0.72, 31)).toEqual(
       resolveSprayDynamics(germanFat.deposition, 0.72, 31),
