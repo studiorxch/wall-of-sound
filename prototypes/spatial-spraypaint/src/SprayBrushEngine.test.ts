@@ -32,6 +32,28 @@ function alphaOf(rgba: string): number {
   return Number.parseFloat(rgba.split(",")[3]);
 }
 
+function lineWidthRecordingContext(): { ctx: CanvasRenderingContext2D; lineWidths: number[] } {
+  const lineWidths: number[] = [];
+  let lineWidth = 0;
+  const ctx = {
+    save: () => undefined,
+    restore: () => undefined,
+    beginPath: () => undefined,
+    moveTo: () => undefined,
+    lineTo: () => undefined,
+    arc: () => undefined,
+    stroke: () => lineWidths.push(lineWidth),
+    fill: () => undefined,
+    strokeStyle: "",
+    fillStyle: "",
+    lineCap: "round",
+    lineJoin: "round",
+    get lineWidth() { return lineWidth; },
+    set lineWidth(value: number) { lineWidth = value; },
+  } as unknown as CanvasRenderingContext2D;
+  return { ctx, lineWidths };
+}
+
 describe("spray brush replay randomness", () => {
   it("replays a canonical stroke with the same stable random sequence", () => {
     const firstReplay = createStrokeRandom(42);
@@ -124,6 +146,47 @@ describe("spray brush replay randomness", () => {
     const negative = segmentRecordingContext();
     new SprayBrushEngine().renderSegment(negative.ctx, null, point, "#ff0000", cap, createStrokeRandom(11), -1);
     negative.strokeStyles.forEach((rgba) => expect(alphaOf(rgba)).toBe(0));
+  });
+
+  it("gives Calligraphy genuine direction-dependent wide/thin width, not just a uniform thinning", () => {
+    const cap = getSprayCapPreset("calligraphy");
+    const axisAngle = (-25 * Math.PI) / 180;
+    const perpendicularAngle = axisAngle + Math.PI / 2;
+    const along = (angle: number) => ({ x: Math.cos(angle) * 100, y: Math.sin(angle) * 100 });
+
+    const point = (angle: number): StrokePoint => {
+      const { x, y } = along(angle);
+      return { x, y, timestamp: 0, velocity: 0.3, width: 25, opacity: 1 };
+    };
+
+    const alongAxis = lineWidthRecordingContext();
+    new SprayBrushEngine().renderSegment(
+      alongAxis.ctx, { x: 0, y: 0, timestamp: 0, velocity: 0.3, width: 25, opacity: 1 },
+      point(axisAngle), "#ffffff", cap, createStrokeRandom(1),
+    );
+    const perpendicular = lineWidthRecordingContext();
+    new SprayBrushEngine().renderSegment(
+      perpendicular.ctx, { x: 0, y: 0, timestamp: 0, velocity: 0.3, width: 25, opacity: 1 },
+      point(perpendicularAngle), "#ffffff", cap, createStrokeRandom(1),
+    );
+
+    expect(alongAxis.lineWidths.length).toBeGreaterThan(0);
+    expect(Math.max(...perpendicular.lineWidths)).toBeGreaterThan(Math.max(...alongAxis.lineWidths));
+  });
+
+  it("keeps symmetric caps direction-independent — the transversal fix only touches anisotropic caps", () => {
+    const cap = getSprayCapPreset("new-york-fat");
+    const point = (angle: number): StrokePoint => ({
+      x: Math.cos(angle) * 100, y: Math.sin(angle) * 100, timestamp: 0, velocity: 0.3, width: 25, opacity: 1,
+    });
+    const start: StrokePoint = { x: 0, y: 0, timestamp: 0, velocity: 0.3, width: 25, opacity: 1 };
+
+    const horizontal = lineWidthRecordingContext();
+    new SprayBrushEngine().renderSegment(horizontal.ctx, start, point(0), "#ffffff", cap, createStrokeRandom(1));
+    const vertical = lineWidthRecordingContext();
+    new SprayBrushEngine().renderSegment(vertical.ctx, start, point(Math.PI / 2), "#ffffff", cap, createStrokeRandom(1));
+
+    expect(Math.max(...horizontal.lineWidths)).toBeCloseTo(Math.max(...vertical.lineWidths), 5);
   });
 
   it("uses one stable opacity across progressive wet-run sections", () => {

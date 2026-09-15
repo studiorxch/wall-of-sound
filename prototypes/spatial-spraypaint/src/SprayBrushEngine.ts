@@ -16,6 +16,16 @@ interface ActiveDrip extends DripSeed {
   poolRendered: boolean;
 }
 
+/**
+ * Fixed physical orientation for the one currently-defined "fixed-transversal"
+ * cap (Calligraphy / Transversal). Matches the Marker Chisel's own nib angle so
+ * both tool families share one StudioRich transversal convention. A real
+ * transversal nozzle keeps this axis constant regardless of travel direction —
+ * unlike overspray's anisotropy, which stays travel-relative and is untouched
+ * here.
+ */
+const TRANSVERSAL_AXIS_ANGLE = (-25 * Math.PI) / 180;
+
 export function createStrokeRandom(seed: number): () => number {
   let state = (seed || 1) >>> 0;
   return () => {
@@ -55,6 +65,14 @@ export class SprayBrushEngine {
     const distance = Math.hypot(dx, dy);
     const angle = distance > 0 ? Math.atan2(dy, dx) : 0;
     const passOpacity = (dynamics.coreOpacity * point.opacity * coverageFactor) / Math.sqrt(dynamics.corePasses);
+    // A directional/"fixed-transversal" cap (anisotropy < 1, currently only
+    // Calligraphy) should read wide or thin depending on travel direction
+    // relative to its fixed physical axis — not just uniformly thinner in
+    // every direction, which is all the raw anisotropy factor alone gives.
+    const directionalBroadening = Math.abs(Math.sin(angle - TRANSVERSAL_AXIS_ANGLE));
+    const directionalAnisotropy = dynamics.anisotropy < 1
+      ? dynamics.anisotropy + (1 - dynamics.anisotropy) * directionalBroadening
+      : dynamics.anisotropy;
 
     ctx.save();
     ctx.lineCap = cap.endpointBehavior === "raw" ? "butt" : "round";
@@ -67,7 +85,7 @@ export class SprayBrushEngine {
       const jitterY = (random() - 0.5) * dynamics.jitter;
       const endpointScale = previous ? 1 : cap.endpointBehavior === "punchy" ? 0.82 : 0.68;
       ctx.strokeStyle = this.hexToRgba(colorHex, passOpacity * (1 - passRatio * 0.48));
-      ctx.lineWidth = Math.max(0.7, dynamics.radius * 2 * dynamics.anisotropy * edgeExpansion * endpointScale);
+      ctx.lineWidth = Math.max(0.7, dynamics.radius * 2 * directionalAnisotropy * edgeExpansion * endpointScale);
       ctx.beginPath();
       ctx.moveTo(start.x + jitterX, start.y + jitterY);
       ctx.lineTo(point.x + jitterX, point.y + jitterY);
