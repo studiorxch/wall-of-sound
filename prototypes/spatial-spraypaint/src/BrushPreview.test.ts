@@ -89,13 +89,14 @@ describe("brush preview rendering", () => {
     expect(roundA.log).not.toEqual(chisel.log);
   });
 
-  it("shows Pink Dot Fat's halo bloom in its preview, distinct from New York Fat's halo-free dot", () => {
+  it("shows Pink Dot Fat's dual-plume atmosphere in its preview, distinct from New York Fat's plain core", () => {
     const pink = recordingContext();
     const newYork = recordingContext();
     renderSprayCapPreviewToContext(pink.ctx, 60, 24, "pink-dot-fat");
     renderSprayCapPreviewToContext(newYork.ctx, 60, 24, "new-york-fat");
-    expect(pink.log.some((entry) => entry.startsWith("createRadialGradient"))).toBe(true);
-    expect(newYork.log.some((entry) => entry.startsWith("createRadialGradient"))).toBe(false);
+    // Pink Dot's outer mist/ring bands add extra stroke() calls beyond its own core passes.
+    expect(pink.log.filter((entry) => entry.startsWith("stroke:")).length)
+      .toBeGreaterThan(newYork.log.filter((entry) => entry.startsWith("stroke:")).length);
     expect(pink.log).not.toEqual(newYork.log);
   });
 

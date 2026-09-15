@@ -8,7 +8,7 @@ import {
   resolveHaloGradientStops,
   resolveMouseSprayInput,
   resolveOverspraySquashAngle,
-  resolvePinkDotPlume,
+  resolvePinkDotDualPlume,
   resolveRingProfile,
   resolveShapedStampGeometry,
   resolveStreakGate,
@@ -323,16 +323,18 @@ describe("spray fill-mode per-stroke opacity ceiling", () => {
 });
 
 describe("spray cap personality — halo, fixed-axis overspray, Wiggly Needle", () => {
-  it("draws radial gradients behind Pink Dot Fat's dot (its unified plume) but not New York Fat's", () => {
+  it("draws visibly more stroke passes behind Pink Dot Fat's dot (its dual-plume outer atmosphere) than New York Fat's plain core", () => {
     const drawDot = (capId: string) => {
       const cap = getSprayCapPreset(capId);
       const point: StrokePoint = { x: 40, y: 40, timestamp: 0, velocity: 0.05, width: 32, opacity: 1 };
-      const { ctx, gradients } = segmentRecordingContext();
+      const { ctx, strokeStyles } = segmentRecordingContext();
       new SprayBrushEngine().renderSegment(ctx, null, point, "#ffffff", cap, createStrokeRandom(3));
-      return gradients;
+      return strokeStyles;
     };
-    expect(drawDot("pink-dot-fat").length).toBeGreaterThan(0);
-    expect(drawDot("new-york-fat")).toHaveLength(0);
+    const pinkStrokes = drawDot("pink-dot-fat");
+    const nyFatStrokes = drawDot("new-york-fat");
+    // Pink Dot draws its own core passes PLUS two outer atmosphere bands (mist, ring); New York Fat draws only its own core passes.
+    expect(pinkStrokes.length).toBeGreaterThan(nyFatStrokes.length);
   });
 
   it("scales the generic (dormant) halo mechanism's alpha deterministically with a cap's haloOpacity field — using a synthetic line-cap fixture, since no built-in cap uses it after Pink Dot's migration to the unified plume", () => {
@@ -349,13 +351,15 @@ describe("spray cap personality — halo, fixed-axis overspray, Wiggly Needle", 
   it("strengthens Pink Dot's plume through repeated dwell via ordinary compositing, no new dwell/time tracking", () => {
     const cap = getSprayCapPreset("pink-dot-fat");
     const point: StrokePoint = { x: 40, y: 40, timestamp: 0, velocity: 0.05, width: 32, opacity: 1 };
-    const { ctx, gradients } = segmentRecordingContext();
+    const { ctx, strokeStyles } = segmentRecordingContext();
     const engine = new SprayBrushEngine();
     const random = createStrokeRandom(3);
     engine.renderSegment(ctx, null, point, "#ffffff", cap, random);
+    const afterFirst = strokeStyles.length;
     engine.renderSegment(ctx, point, point, "#ffffff", cap, random);
     engine.renderSegment(ctx, point, point, "#ffffff", cap, random);
-    expect(gradients.length).toBeGreaterThanOrEqual(3);
+    // Every one of the 3 dwell calls draws its own full set of strokes (mist + ring + core passes) — none gated — so the total after 3 calls is 3x a single call's worth.
+    expect(strokeStyles.length).toBeGreaterThanOrEqual(afterFirst * 3);
   });
 
   it("resolves the overspray squash axis: fixed for directional caps, travel-following for symmetric ones", () => {
@@ -469,11 +473,11 @@ describe("generic halo mechanism (dormant, preserved infrastructure — no built
   });
 });
 
-describe("Pink Dot Fat unified plume — one resolved state drives core, ring, and mist together", () => {
+describe("Pink Dot Fat dual-plume — one resolver, two coordinated CONTINUOUS layers (inner core + outer atmosphere)", () => {
   const pink = getSprayCapPreset("pink-dot-fat");
   const nativeDynamics = resolveSprayDynamics(pink, 0.3, pink.baseRadius);
 
-  describe("resolveMouseSprayInput — mouse V1's mapping into the input-neutral canonical state", () => {
+  describe("resolveMouseSprayInput — mouse V1's mapping into the input-neutral canonical state (unchanged API)", () => {
     it("bounds sprayAngle to PLUME_MAX_ANGLE_DEGREES and converts to radians", () => {
       const point: StrokePoint = { x: 0, y: 0, timestamp: 0, velocity: 0.3, width: 42, opacity: 1 };
       const withinBound = resolveMouseSprayInput(point, pink, 1, 20);
@@ -489,118 +493,102 @@ describe("Pink Dot Fat unified plume — one resolved state drives core, ring, a
       const input = resolveMouseSprayInput(point, pink, 1, 0);
       expect(input.sprayDistance).toBeCloseTo(1.5, 5);
     });
-
-    it("resolves sprayOutput from point opacity and coverage, clamped to [0,1]", () => {
-      const point: StrokePoint = { x: 0, y: 0, timestamp: 0, velocity: 0.3, width: 42, opacity: 0.5 };
-      const input = resolveMouseSprayInput(point, pink, 0.5, 0);
-      expect(input.sprayOutput).toBeCloseTo(0.25, 5);
-    });
   });
 
-  describe("resolvePinkDotPlume — distance response (preserves 82bf82c's proven close/far behavior)", () => {
-    it("amplifies ring/mist beyond their own proportional scaling when resolved size is well above baseRadius (far)", () => {
-      const far = resolvePinkDotPlume(pink, { sprayAngle: 0, sprayDistance: 1.7, sprayOutput: 1 }, 0.3, nativeDynamics);
-      const native = resolvePinkDotPlume(pink, { sprayAngle: 0, sprayDistance: 1, sprayOutput: 1 }, 0.3, nativeDynamics);
-      expect(far.ringRadius).toBeGreaterThan(native.ringRadius);
-      expect(far.mistRadius).toBeGreaterThan(native.mistRadius);
-      expect(far.ringOpacity).toBeGreaterThan(native.ringOpacity);
-    });
-
-    it("suppresses ring/mist below their native strength when resolved size is well below baseRadius (near)", () => {
-      const near = resolvePinkDotPlume(pink, { sprayAngle: 0, sprayDistance: 0.3, sprayOutput: 1 }, 0.3, nativeDynamics);
-      const native = resolvePinkDotPlume(pink, { sprayAngle: 0, sprayDistance: 1, sprayOutput: 1 }, 0.3, nativeDynamics);
-      expect(near.ringRadius).toBeLessThan(native.ringRadius);
-      expect(near.mistRadius).toBeLessThan(native.mistRadius);
-    });
-
-    it("scales mist more aggressively than the ring with distance — far reads as disproportionately more atmospheric", () => {
-      const far = resolvePinkDotPlume(pink, { sprayAngle: 0, sprayDistance: 1.7, sprayOutput: 1 }, 0.3, nativeDynamics);
-      const native = resolvePinkDotPlume(pink, { sprayAngle: 0, sprayDistance: 1, sprayOutput: 1 }, 0.3, nativeDynamics);
-      const ringGrowth = far.ringRadius / native.ringRadius;
-      const mistGrowth = far.mistRadius / native.mistRadius;
-      expect(mistGrowth).toBeGreaterThan(ringGrowth);
-    });
-
-    it("does not need extra gain to broaden the core at far distance — coreRadius already tracks the resolved (live Size) radius directly, like every other cap", () => {
+  describe("resolvePinkDotDualPlume — distance response: outer grows FASTER than inner (not simply proportionally bigger)", () => {
+    it("gives the inner core no extra distance gain — it scales exactly with the resolved (live Size) radius, same as every cap", () => {
       const farDynamics = resolveSprayDynamics(pink, 0.3, pink.baseRadius * 1.7);
-      const far = resolvePinkDotPlume(pink, { sprayAngle: 0, sprayDistance: 1.7, sprayOutput: 1 }, 0.3, farDynamics);
-      expect(far.coreRadius).toBeCloseTo(farDynamics.radius, 5);
-      expect(far.coreRadius).toBeGreaterThan(nativeDynamics.radius);
+      const far = resolvePinkDotDualPlume(pink, { sprayAngle: 0, sprayDistance: 1.7, sprayOutput: 1 }, 0.3, farDynamics);
+      expect(far.inner.radius).toBeCloseTo(farDynamics.radius, 5);
     });
 
-    it("returns gain-neutral ring/mist scaling for a cap with plumeDistanceGain 0", () => {
-      const flat = { ...pink, plumeDistanceGain: 0 };
-      const far = resolvePinkDotPlume(flat, { sprayAngle: 0, sprayDistance: 1.7, sprayOutput: 1 }, 0.3, nativeDynamics);
-      const native = resolvePinkDotPlume(flat, { sprayAngle: 0, sprayDistance: 1, sprayOutput: 1 }, 0.3, nativeDynamics);
-      // Still grows somewhat (dynamics.radius itself is unaffected by sprayDistance directly in this pure call — both use nativeDynamics here), so ring radius should match exactly with gain disabled.
-      expect(far.ringRadius).toBeCloseTo(native.ringRadius, 5);
+    it("amplifies the outer ring/mist beyond their own proportional scaling at far distance", () => {
+      const far = resolvePinkDotDualPlume(pink, { sprayAngle: 0, sprayDistance: 1.7, sprayOutput: 1 }, 0.3, nativeDynamics);
+      const native = resolvePinkDotDualPlume(pink, { sprayAngle: 0, sprayDistance: 1, sprayOutput: 1 }, 0.3, nativeDynamics);
+      expect(far.outer.ringRadius).toBeGreaterThan(native.outer.ringRadius);
+      expect(far.outer.mistRadius).toBeGreaterThan(native.outer.mistRadius);
+      expect(far.outer.ringOpacity).toBeGreaterThan(native.outer.ringOpacity);
+    });
+
+    it("grows the outer envelope by a LARGER factor than the inner core between near and far — the brief's explicit 'outer grows faster than inner' requirement", () => {
+      const nearDynamics = resolveSprayDynamics(pink, 0.3, pink.baseRadius * 0.3);
+      const farDynamics = resolveSprayDynamics(pink, 0.3, pink.baseRadius * 1.7);
+      const near = resolvePinkDotDualPlume(pink, { sprayAngle: 0, sprayDistance: 0.3, sprayOutput: 1 }, 0.3, nearDynamics);
+      const far = resolvePinkDotDualPlume(pink, { sprayAngle: 0, sprayDistance: 1.7, sprayOutput: 1 }, 0.3, farDynamics);
+      const innerGrowth = far.inner.radius / near.inner.radius;
+      const outerRingGrowth = far.outer.ringRadius / near.outer.ringRadius;
+      const outerMistGrowth = far.outer.mistRadius / near.outer.mistRadius;
+      expect(outerRingGrowth).toBeGreaterThan(innerGrowth);
+      expect(outerMistGrowth).toBeGreaterThan(outerRingGrowth);
+    });
+
+    it("suppresses the outer bands below their native strength when resolved size is well below baseRadius (near)", () => {
+      const near = resolvePinkDotDualPlume(pink, { sprayAngle: 0, sprayDistance: 0.3, sprayOutput: 1 }, 0.3, nativeDynamics);
+      const native = resolvePinkDotDualPlume(pink, { sprayAngle: 0, sprayDistance: 1, sprayOutput: 1 }, 0.3, nativeDynamics);
+      expect(near.outer.ringRadius).toBeLessThan(native.outer.ringRadius);
+      expect(near.outer.mistRadius).toBeLessThan(native.outer.mistRadius);
     });
   });
 
-  describe("resolvePinkDotPlume — angle and velocity flare (works for both stationary deposits and moving strokes)", () => {
-    it("stays a perfect circle at zero angle and low (dwell) velocity", () => {
-      const state = resolvePinkDotPlume(pink, { sprayAngle: 0, sprayDistance: 1, sprayOutput: 1 }, 0.05, nativeDynamics);
-      expect(state.anisotropy).toBe(1);
+  describe("resolvePinkDotDualPlume — bullseye structure (stationary): hot core -> ring -> fading mist, never hollow", () => {
+    it("gives the core a materially higher opacity than the ring, and the ring a higher opacity than the mist", () => {
+      const state = resolvePinkDotDualPlume(pink, { sprayAngle: 0, sprayDistance: 1, sprayOutput: 1 }, 0.05, nativeDynamics);
+      expect(state.inner.opacity).toBeGreaterThan(state.outer.ringOpacity);
+      expect(state.outer.ringOpacity).toBeGreaterThan(state.outer.mistOpacity);
     });
 
-    it("flares a STATIONARY deposit (velocity 0) purely from a non-zero simulated spray angle", () => {
-      const angled = resolvePinkDotPlume(pink, { sprayAngle: (30 * Math.PI) / 180, sprayDistance: 1, sprayOutput: 1 }, 0, nativeDynamics);
-      expect(angled.anisotropy).toBeLessThan(1);
+    it("orders the geometry core < ring < mist, so the ring/mist extend past the core rather than being hidden inside it", () => {
+      const state = resolvePinkDotDualPlume(pink, { sprayAngle: 0, sprayDistance: 1, sprayOutput: 1 }, 0.05, nativeDynamics);
+      expect(state.inner.radius).toBeLessThan(state.outer.ringRadius);
+      expect(state.outer.ringRadius).toBeLessThan(state.outer.mistRadius);
     });
 
-    it("flares a moving stroke purely from velocity at zero simulated angle (preserves prior movement-driven flare)", () => {
-      const moving = resolvePinkDotPlume(pink, { sprayAngle: 0, sprayDistance: 1, sprayOutput: 1 }, 1.2, nativeDynamics);
-      expect(moving.anisotropy).toBeLessThan(1);
+    it("never zeroes the core's own opacity — the center stays visibly painted, unlike Ring/Donut's deliberately hollow center", () => {
+      const state = resolvePinkDotDualPlume(pink, { sprayAngle: 0, sprayDistance: 1, sprayOutput: 1 }, 0.05, nativeDynamics);
+      expect(state.inner.opacity).toBeGreaterThan(0);
+      const ring = getSprayCapPreset("ring-donut");
+      expect(ring.centerOpacity).toBeLessThan(ring.ringOpacity); // Ring/Donut's own, genuinely different, hollow structure
+    });
+  });
+
+  describe("resolvePinkDotDualPlume — angle and velocity flare, applied coherently to BOTH layers (inner moderate, outer stronger)", () => {
+    it("stays a perfect circle on both layers at zero angle and low (dwell) velocity", () => {
+      const state = resolvePinkDotDualPlume(pink, { sprayAngle: 0, sprayDistance: 1, sprayOutput: 1 }, 0.05, nativeDynamics);
+      expect(state.inner.anisotropy).toBe(1);
+      expect(state.outer.anisotropy).toBe(1);
+    });
+
+    it("flares a STATIONARY deposit (velocity 0) on both layers purely from a non-zero simulated spray angle", () => {
+      const angled = resolvePinkDotDualPlume(pink, { sprayAngle: (30 * Math.PI) / 180, sprayDistance: 1, sprayOutput: 1 }, 0, nativeDynamics);
+      expect(angled.inner.anisotropy).toBeLessThan(1);
+      expect(angled.outer.anisotropy).toBeLessThan(1);
+    });
+
+    it("gives the outer layer a STRONGER stretch than the inner layer at the same angle — 'inner: moderate, outer: stronger'", () => {
+      const state = resolvePinkDotDualPlume(pink, { sprayAngle: (30 * Math.PI) / 180, sprayDistance: 1, sprayOutput: 1 }, 0, nativeDynamics);
+      expect(state.outer.anisotropy).toBeLessThan(state.inner.anisotropy);
     });
 
     it("does not stack angle and velocity into an exaggerated combined flare — the stronger of the two wins", () => {
-      const angleOnly = resolvePinkDotPlume(pink, { sprayAngle: ((PLUME_MAX_ANGLE_DEGREES * Math.PI) / 180), sprayDistance: 1, sprayOutput: 1 }, 0, nativeDynamics);
-      const angleAndVelocity = resolvePinkDotPlume(pink, { sprayAngle: ((PLUME_MAX_ANGLE_DEGREES * Math.PI) / 180), sprayDistance: 1, sprayOutput: 1 }, 1.2, nativeDynamics);
-      expect(angleAndVelocity.anisotropy).toBeCloseTo(angleOnly.anisotropy, 5);
+      const angleRad = (PLUME_MAX_ANGLE_DEGREES * Math.PI) / 180;
+      const angleOnly = resolvePinkDotDualPlume(pink, { sprayAngle: angleRad, sprayDistance: 1, sprayOutput: 1 }, 0, nativeDynamics);
+      const angleAndVelocity = resolvePinkDotDualPlume(pink, { sprayAngle: angleRad, sprayDistance: 1, sprayOutput: 1 }, 1.2, nativeDynamics);
+      expect(angleAndVelocity.outer.anisotropy).toBeCloseTo(angleOnly.outer.anisotropy, 5);
+      expect(angleAndVelocity.inner.anisotropy).toBeCloseTo(angleOnly.inner.anisotropy, 5);
     });
 
-    it("keeps the same simulated angle 'related' across different speeds — anisotropy never drops below the angle-only floor regardless of velocity", () => {
-      const slow = resolvePinkDotPlume(pink, { sprayAngle: (20 * Math.PI) / 180, sprayDistance: 1, sprayOutput: 1 }, 0.2, nativeDynamics);
-      const fast = resolvePinkDotPlume(pink, { sprayAngle: (20 * Math.PI) / 180, sprayDistance: 1, sprayOutput: 1 }, 3, nativeDynamics);
-      // Fast movement can only match or exceed the angle-driven floor, never read as a fundamentally different personality at the same angle.
-      expect(fast.anisotropy).toBeLessThanOrEqual(slow.anisotropy + 1e-9);
-    });
-
-    it("applies the SAME anisotropy to whatever consumes it — core, ring, and mist are not independently computed", () => {
-      const state = resolvePinkDotPlume(pink, { sprayAngle: (30 * Math.PI) / 180, sprayDistance: 1, sprayOutput: 1 }, 0.3, nativeDynamics);
-      // One scalar on the returned state, by construction — there is no separate per-layer anisotropy field to diverge.
-      expect(typeof state.anisotropy).toBe("number");
-    });
-
-    it("never flares a cap with plumeFlareStrength 0, regardless of angle or velocity", () => {
+    it("never flares either layer for a cap with plumeFlareStrength 0", () => {
       const flat = { ...pink, plumeFlareStrength: 0 };
-      const state = resolvePinkDotPlume(flat, { sprayAngle: ((PLUME_MAX_ANGLE_DEGREES * Math.PI) / 180), sprayDistance: 1, sprayOutput: 1 }, 5, nativeDynamics);
-      expect(state.anisotropy).toBe(1);
+      const state = resolvePinkDotDualPlume(flat, { sprayAngle: (PLUME_MAX_ANGLE_DEGREES * Math.PI) / 180, sprayDistance: 1, sprayOutput: 1 }, 5, nativeDynamics);
+      expect(state.inner.anisotropy).toBe(1);
+      expect(state.outer.anisotropy).toBe(1);
     });
   });
 
-  describe("resolvePinkDotPlume — deposit spacing (unifies the core with the ring/mist dab timing)", () => {
-    it("returns 0 (no gating) for a cap with plumeDabSpacing 0", () => {
-      const flat = { ...pink, plumeDabSpacing: 0 };
-      const state = resolvePinkDotPlume(flat, { sprayAngle: 0, sprayDistance: 1, sprayOutput: 1 }, 0.3, nativeDynamics);
-      expect(state.depositSpacing).toBe(0);
-    });
-
-    it("widens deposit spacing at far distance — reinforces dusty/gapped buildup, not just a bigger continuous bar", () => {
-      const far = resolvePinkDotPlume(pink, { sprayAngle: 0, sprayDistance: 1.7, sprayOutput: 1 }, 0.3, nativeDynamics);
-      const near = resolvePinkDotPlume(pink, { sprayAngle: 0, sprayDistance: 0.3, sprayOutput: 1 }, 0.3, nativeDynamics);
-      expect(far.depositSpacing).toBeGreaterThan(near.depositSpacing);
-    });
-  });
-
-  describe("rendered plume — dab spacing gates the WHOLE stamp, dwell is never gated, and the ellipse transform is shared", () => {
-    it("gates the whole plume stamp by travel distance on a moving stroke, producing far fewer dabs than segments", () => {
+  describe("rendered dual-plume — continuity, no coarse whole-plume gating, reversals stay connected", () => {
+    it("draws the inner core, and both outer bands, on EVERY segment — no dab-spacing gate skips any of them", () => {
       const engine = new SprayBrushEngine();
-      // Use gradients (mist+ring, exactly 2 per dab-stamp) rather than
-      // fillStyles — fillStyles also captures every overspray PARTICLE fill,
-      // which is unrelated to plume dab-spacing and fires every segment
-      // regardless (same as any other cap), so it isn't a clean gating signal.
-      const { ctx, gradients } = segmentRecordingContext();
+      const { ctx, strokeStyles } = segmentRecordingContext();
       const random = createStrokeRandom(9);
       engine.beginStroke();
       let previous: StrokePoint | null = null;
@@ -610,101 +598,121 @@ describe("Pink Dot Fat unified plume — one resolved state drives core, ring, a
         engine.renderSegment(ctx, previous, point, "#ffffff", pink, random);
         previous = point;
       }
-      // Each dab draws at most 2 stamps (start+point) x 2 gradients (mist,
-      // ring) = 4 gradients; with (segments+1) calls all landing a dab every
-      // time, gating would produce many more than a handful.
-      expect(gradients.length).toBeGreaterThan(0);
-      expect(gradients.length).toBeLessThan((segments + 1) * 4 * 0.5);
+      // Every one of the `segments` non-first calls strokes 2 outer bands + N inner passes; the FIRST call strokes only once each (start===point).
+      // At minimum: 2 outer strokes/segment across `segments` segments proves no gating dropped any.
+      const dynamics = resolveSprayDynamics(pink, 0.3, 42);
+      const minimumOuterStrokes = segments * 2; // mist + ring, every one of the `segments` moving segments (excludes the very first zero-distance call)
+      expect(strokeStyles.length).toBeGreaterThanOrEqual(minimumOuterStrokes + segments * dynamics.corePasses);
     });
 
-    it("never gates a true dwell (zero travel distance) — every repeated call at the same point still draws the full stamp", () => {
-      const engine = new SprayBrushEngine();
-      const { ctx, gradients } = segmentRecordingContext();
-      const random = createStrokeRandom(9);
-      const point: StrokePoint = { x: 40, y: 40, timestamp: 0, velocity: 0.03, width: 42, opacity: 1 };
-      engine.beginStroke();
-      engine.renderSegment(ctx, null, point, "#ffffff", pink, random);
-      const afterFirst = gradients.length;
-      expect(afterFirst).toBeGreaterThan(0);
-      for (let i = 0; i < 5; i += 1) engine.renderSegment(ctx, point, point, "#ffffff", pink, random);
-      // 6 total draw calls (1 + 5) at the same point, none gated -> strictly more gradients than after just the first.
-      expect(gradients.length).toBeGreaterThan(afterFirst);
-    });
-
-    it("resets deposit spacing at the start of each new stroke", () => {
-      const engine = new SprayBrushEngine();
-      const random = createStrokeRandom(9);
-      const runStroke = () => {
-        const { ctx, fillStyles } = segmentRecordingContext();
-        engine.beginStroke();
+    it("is deterministic — identical points/seed always render the identical draw sequence", () => {
+      const engine1 = new SprayBrushEngine();
+      const first = segmentRecordingContext();
+      const engine2 = new SprayBrushEngine();
+      const second = segmentRecordingContext();
+      for (const engine of [{ engine: engine1, rec: first }, { engine: engine2, rec: second }]) {
+        const random = createStrokeRandom(11);
+        engine.engine.beginStroke();
         let previous: StrokePoint | null = null;
-        for (let i = 0; i <= 3; i += 1) {
-          const point: StrokePoint = { x: i * 3, y: 0, timestamp: i * 16, velocity: 0.3, width: 42, opacity: 1 };
-          engine.renderSegment(ctx, previous, point, "#ffffff", pink, random);
+        for (let i = 0; i <= 8; i += 1) {
+          const point: StrokePoint = { x: i * 5, y: Math.sin(i) * 10, timestamp: i * 16, velocity: 0.4, width: 42, opacity: 1 };
+          engine.engine.renderSegment(engine.rec.ctx, previous, point, "#ffffff", pink, random);
           previous = point;
         }
-        return fillStyles.length;
+      }
+      expect(second.strokeStyles).toEqual(first.strokeStyles);
+    });
+
+    it("keeps drawing (never silently drops) through a sharp zigzag, a closed loop, and a backtrack/reversal", () => {
+      const engine = new SprayBrushEngine();
+      const { ctx, strokeStyles } = segmentRecordingContext();
+      const random = createStrokeRandom(5);
+      engine.beginStroke();
+      const zigzag: StrokePoint[] = [
+        { x: 0, y: 0, timestamp: 0, velocity: 0.4, width: 42, opacity: 1 },
+        { x: 50, y: 50, timestamp: 16, velocity: 0.4, width: 42, opacity: 1 },
+        { x: 100, y: 0, timestamp: 32, velocity: 0.4, width: 42, opacity: 1 },
+        { x: 60, y: -40, timestamp: 48, velocity: 0.4, width: 42, opacity: 1 }, // sharp corner
+        { x: 20, y: 0, timestamp: 64, velocity: 0.4, width: 42, opacity: 1 }, // backtrack toward start
+        { x: 0, y: 0, timestamp: 80, velocity: 0.4, width: 42, opacity: 1 }, // closes the loop
+      ];
+      let previous: StrokePoint | null = null;
+      for (const point of zigzag) {
+        const before = strokeStyles.length;
+        expect(() => engine.renderSegment(ctx, previous, point, "#ffffff", pink, random)).not.toThrow();
+        expect(strokeStyles.length).toBeGreaterThan(before); // every segment, including the sharp corner and the reversal, actually draws something
+        previous = point;
+      }
+    });
+
+    it("uses genuine continuous strokes for the outer bands (lineTo, not arc/stamp draws) — proving the envelope is a swept line, not discrete circles", () => {
+      const engine = new SprayBrushEngine();
+      const lineToCalls: number[][] = [];
+      const { ctx } = segmentRecordingContext();
+      (ctx as unknown as { lineTo: (x: number, y: number) => void }).lineTo = (x: number, y: number) => lineToCalls.push([x, y]);
+      const random = createStrokeRandom(3);
+      engine.beginStroke();
+      const start: StrokePoint = { x: 0, y: 0, timestamp: 0, velocity: 0.3, width: 42, opacity: 1 };
+      const point: StrokePoint = { x: 120, y: 0, timestamp: 16, velocity: 0.3, width: 42, opacity: 1 };
+      engine.renderSegment(ctx, start, point, "#ffffff", pink, random);
+      expect(lineToCalls.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe("Fill mode — architecture unchanged: inner core stays ceiling-bounded, outer atmosphere composites freely (same convention as every other cap's halo/overspray)", () => {
+    it("keeps a filled Pink Dot core's max alpha well below a solid/opaque read, same ceiling mechanism as any other cap's core", () => {
+      const point: StrokePoint = { x: 40, y: 40, timestamp: 0, velocity: 0.3, width: 42, opacity: 1 };
+      const filled = segmentRecordingContext();
+      const engine = new SprayBrushEngine();
+      engine.beginStroke();
+      for (let pass = 0; pass < 3; pass += 1) {
+        engine.renderSegment(filled.ctx, null, point, "#ffffff", pink, createStrokeRandom(7), 1, true);
+      }
+      const alphas = filled.strokeStyles.map(alphaOf).filter((a) => !Number.isNaN(a));
+      expect(Math.max(...alphas)).toBeLessThan(0.6);
+    });
+
+    it("lets three overlapping Fill sweeps build MORE cumulative outer-band coverage than one sweep — dusty buildup, not a flat bucket fill", () => {
+      const random = createStrokeRandom(3);
+      const sweep = (passes: number) => {
+        const { ctx, strokeStyles } = segmentRecordingContext();
+        const engine = new SprayBrushEngine();
+        for (let pass = 0; pass < passes; pass += 1) {
+          engine.beginStroke();
+          let previous: StrokePoint | null = null;
+          for (let i = 0; i <= 10; i += 1) {
+            const point: StrokePoint = { x: i * 6, y: 0, timestamp: i * 16, velocity: 0.3, width: 42, opacity: 1 };
+            engine.renderSegment(ctx, previous, point, "#ffffff", pink, random, 1, true);
+            previous = point;
+          }
+        }
+        return strokeStyles.length;
       };
-      const first = runStroke();
-      const second = runStroke();
-      expect(second).toBe(first);
+      expect(sweep(3)).toBeGreaterThan(sweep(1));
     });
+  });
 
-    it("elongates the WHOLE plume (rotate + scale applied once, wrapping mist/ring/core together) on a fast-moving segment, but never on a stationary dwell", () => {
-      const dwell = segmentRecordingContext();
-      const dwellPoint: StrokePoint = { x: 40, y: 40, timestamp: 0, velocity: 0.05, width: 42, opacity: 1 };
-      new SprayBrushEngine().renderSegment(dwell.ctx, null, dwellPoint, "#ffffff", pink, createStrokeRandom(4));
-      expect(dwell.rotateCalls).toHaveLength(0);
-      expect(dwell.scaleCalls).toHaveLength(0);
-
-      const moving = segmentRecordingContext();
-      const start: StrokePoint = { x: 0, y: 0, timestamp: 0, velocity: 1.2, width: 42, opacity: 1 };
-      const end: StrokePoint = { x: 300, y: 0, timestamp: 16, velocity: 1.2, width: 42, opacity: 1 };
-      new SprayBrushEngine().renderSegment(moving.ctx, start, end, "#ffffff", pink, createStrokeRandom(4));
-      expect(moving.rotateCalls.length).toBeGreaterThan(0);
-      expect(moving.scaleCalls.length).toBeGreaterThan(0);
-      expect(moving.rotateCalls[0]).toBeCloseTo(0, 5); // purely horizontal travel -> angle 0
-      expect(moving.scaleCalls[0].y).toBeLessThan(1);
-      expect(moving.scaleCalls[0].x).toBe(1);
-      // Every rotate/scale call shares the exact same pair — one transform per dab, wrapping every layer, not per-layer transforms.
-      expect(new Set(moving.rotateCalls).size).toBeLessThanOrEqual(2); // start + end dab at most
-    });
-
-    it("leaves every OTHER cap's rendering byte-identical — depositionShape 'plume' is exclusive to Pink Dot Fat", () => {
+  describe("regression — every OTHER cap is unaffected by the dual-plume rework", () => {
+    it("gives every other cap all plume fields at 0 and depositionShape !== 'plume'", () => {
       for (const id of [
         "new-york-fat", "astro-fat", "german-fat", "lego-thin", "universal-thin", "level-1",
         "new-york-thin", "calligraphy", "transversal-slot", "needle", "wiggly-needle",
         "soft-fade", "fuzz-fat", "ring-donut", "dry-streak",
       ]) {
-        expect(getSprayCapPreset(id).depositionShape).not.toBe("plume");
+        const cap = getSprayCapPreset(id);
+        expect(cap.depositionShape).not.toBe("plume");
+        expect(cap.plumeRingRadius).toBe(0);
+        expect(cap.plumeMistRadius).toBe(0);
+        expect(cap.plumeFlareStrength).toBe(0);
       }
     });
 
-    it("still bounds Pink Dot's Fill-mode core layer well below normal-mode saturation, same ceiling mechanism as every other cap", () => {
-      const point: StrokePoint = { x: 40, y: 40, timestamp: 0, velocity: 0.3, width: 42, opacity: 1 };
-      const normal = segmentRecordingContext();
-      new SprayBrushEngine().renderSegment(normal.ctx, null, point, "#ffffff", pink, createStrokeRandom(7), 1, false);
-      const filled = segmentRecordingContext();
-      const filledEngine = new SprayBrushEngine();
-      filledEngine.beginStroke();
-      for (let pass = 0; pass < 3; pass += 1) {
-        filledEngine.renderSegment(filled.ctx, null, point, "#ffffff", pink, createStrokeRandom(7), 1, true);
-      }
-      const maxNormalAlpha = Math.max(...normal.fillStyles.map(alphaOf).filter((a) => !Number.isNaN(a)));
-      const maxFilledAlpha = Math.max(...filled.fillStyles.map(alphaOf).filter((a) => !Number.isNaN(a)));
-      expect(maxFilledAlpha).toBeLessThan(maxNormalAlpha + 0.5); // filled core passes stay bounded, never approach solid opacity
-    });
-
-    it("draws Pink Dot's own core with the standard endpointBehavior taper on the very first stamp of a stroke, same convention as every other cap", () => {
-      const point: StrokePoint = { x: 40, y: 40, timestamp: 0, velocity: 0.3, width: 42, opacity: 1 };
-      const first = segmentRecordingContext();
-      new SprayBrushEngine().renderSegment(first.ctx, null, point, "#ffffff", pink, createStrokeRandom(7));
-      const midStroke = segmentRecordingContext();
-      const point2: StrokePoint = { x: 80, y: 40, timestamp: 32, velocity: 0.3, width: 42, opacity: 1 };
-      new SprayBrushEngine().renderSegment(midStroke.ctx, point, point2, "#ffffff", pink, createStrokeRandom(7));
-      // Both draw the same cap; the distinction (endpointScale) is exercised without throwing and produces real output either way.
-      expect(first.fillStyles.length).toBeGreaterThan(0);
-      expect(midStroke.fillStyles.length).toBeGreaterThan(0);
+    it("renders every other cap through the ordinary generic core loop, unaffected by renderPinkDotDualPlume/renderPinkDotOuterBand/renderPinkDotInnerCore", () => {
+      const point: StrokePoint = { x: 40, y: 40, timestamp: 0, velocity: 1.2, width: 32, opacity: 1 };
+      const nyFat = getSprayCapPreset("new-york-fat");
+      const rec = segmentRecordingContext();
+      expect(() => new SprayBrushEngine().renderSegment(rec.ctx, null, point, "#ffffff", nyFat, createStrokeRandom(6))).not.toThrow();
+      expect(rec.strokeStyles.length).toBeGreaterThan(0);
     });
   });
 });

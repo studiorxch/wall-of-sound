@@ -218,11 +218,11 @@ describe("Fat caps default to Fill ON (dense normal-mode Spray read as smooth so
   });
 });
 
-describe("Pink Dot Fat unified plume dials surfaced in Brush Studio's PAINT readout", () => {
+describe("Pink Dot Fat dual-plume dials surfaced in Brush Studio's PAINT readout", () => {
   const PLUME_KEYS = [
     "plumeRingRadius", "plumeRingThickness", "plumeRingOpacity",
     "plumeMistRadius", "plumeMistOpacity",
-    "plumeDistanceGain", "plumeFlareStrength", "plumeDabSpacing",
+    "plumeDistanceGain", "plumeFlareStrength",
   ];
 
   it("shows all eight plume fields as read-only diagnostics for Pink Dot Fat", () => {

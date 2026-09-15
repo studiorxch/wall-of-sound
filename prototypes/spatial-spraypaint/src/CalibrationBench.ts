@@ -261,7 +261,6 @@ export function buildCalibrationPropertyReadout(preset: CalibrationPreset, effec
     rows.push({ key: "plumeMistOpacity", label: "Plume mist opacity", value: round2(preset.plumeMistOpacity) });
     rows.push({ key: "plumeDistanceGain", label: "Plume distance gain", value: round2(preset.plumeDistanceGain) });
     rows.push({ key: "plumeFlareStrength", label: "Plume flare strength", value: round2(preset.plumeFlareStrength) });
-    rows.push({ key: "plumeDabSpacing", label: "Plume dab spacing", value: round2(preset.plumeDabSpacing) });
   }
   return rows;
 }

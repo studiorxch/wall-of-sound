@@ -159,9 +159,9 @@ export function getSprayPropertyGroups(
     number("haloRadius", "Halo radius", preset.haloRadius),
     number("haloOpacity", "Halo opacity", preset.haloOpacity),
   ];
-  // Pink Dot Fat's unified plume dials — only meaningful (and only shown) on
-  // a cap that actually uses the plume mechanism. Read-only diagnostics,
-  // same as every other Shape/Paint/Motion row; the live-adjustable controls
+  // Pink Dot Fat's dual-plume dials — only meaningful (and only shown) on a
+  // cap that actually uses the plume mechanism. Read-only diagnostics, same
+  // as every other Shape/Paint/Motion row; the live-adjustable controls
   // that drive their visible effect are Size (distance gain) and Spray
   // Angle (flare), both already live-previewed above. See
   // SprayCapPresets.ts's `plume*` field docs.
@@ -172,9 +172,8 @@ export function getSprayPropertyGroups(
       number("plumeRingOpacity", "Ring opacity", preset.plumeRingOpacity),
       number("plumeMistRadius", "Mist radius", preset.plumeMistRadius),
       number("plumeMistOpacity", "Mist opacity", preset.plumeMistOpacity),
-      number("plumeDistanceGain", "Plume distance gain", preset.plumeDistanceGain),
-      number("plumeFlareStrength", "Plume flare strength", preset.plumeFlareStrength),
-      number("plumeDabSpacing", "Plume dab spacing", preset.plumeDabSpacing),
+      number("plumeDistanceGain", "Plume distance gain (outer only)", preset.plumeDistanceGain),
+      number("plumeFlareStrength", "Plume flare strength (outer; inner is half)", preset.plumeFlareStrength),
     );
   }
 

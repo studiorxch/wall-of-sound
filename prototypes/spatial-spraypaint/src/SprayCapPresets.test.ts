@@ -200,8 +200,8 @@ describe("Astro Fat vs. New York Fat differentiation", () => {
   });
 });
 
-describe("Pink Dot Fat unified plume fields", () => {
-  it("gives Pink Dot Fat non-zero values for all eight plume fields", () => {
+describe("Pink Dot Fat dual-plume fields", () => {
+  it("gives Pink Dot Fat non-zero values for all seven plume fields", () => {
     const pink = getSprayCapPreset("pink-dot-fat");
     expect(pink.depositionShape).toBe("plume");
     expect(pink.plumeRingRadius).toBeGreaterThan(0);
@@ -211,10 +211,9 @@ describe("Pink Dot Fat unified plume fields", () => {
     expect(pink.plumeMistOpacity).toBeGreaterThan(0);
     expect(pink.plumeDistanceGain).toBeGreaterThan(0);
     expect(pink.plumeFlareStrength).toBeGreaterThan(0);
-    expect(pink.plumeDabSpacing).toBeGreaterThan(0);
   });
 
-  it("gives every other cap all eight plume fields at exactly 0, and depositionShape 'plume' only on Pink Dot Fat", () => {
+  it("gives every other cap all seven plume fields at exactly 0, and depositionShape 'plume' only on Pink Dot Fat", () => {
     for (const preset of SPRAY_CAP_PRESETS) {
       if (preset.id === "pink-dot-fat") continue;
       expect(preset.depositionShape).not.toBe("plume");
@@ -225,7 +224,6 @@ describe("Pink Dot Fat unified plume fields", () => {
       expect(preset.plumeMistOpacity).toBe(0);
       expect(preset.plumeDistanceGain).toBe(0);
       expect(preset.plumeFlareStrength).toBe(0);
-      expect(preset.plumeDabSpacing).toBe(0);
     }
   });
 

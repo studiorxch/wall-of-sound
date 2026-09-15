@@ -263,7 +263,7 @@ describe("Calibration Bench — merged property comparison table", () => {
     const leftRows = buildCalibrationPropertyReadout(nyFat, 32);
     const merged = mergeCalibrationPropertyRows(leftRows, buildCalibrationPropertyReadout(pink, 42));
     expect(merged.slice(0, leftRows.length).map((r) => r.key)).toEqual(leftRows.map((r) => r.key));
-    expect(merged[merged.length - 1].key).toBe("plumeDabSpacing");
+    expect(merged[merged.length - 1].key).toBe("plumeFlareStrength");
   });
 });
 

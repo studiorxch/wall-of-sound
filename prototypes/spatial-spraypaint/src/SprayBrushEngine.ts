@@ -303,50 +303,66 @@ export function resolveMouseSprayInput(
 }
 
 /**
- * Pink Dot Fat's unified plume state — core, ring, and mist resolved
- * TOGETHER from the same inputs, so a moving stroke's center, ring, and mist
- * all share one distance/angle/velocity response and one deposit spacing,
- * instead of a generic core stroke with an independently-timed halo layered
- * on top. See `SprayCapPresets.ts`'s `plume*` field docs for what each field
- * controls, and `SprayBrushEngine.renderPinkDotPlume` for how this state is
- * actually drawn.
+ * Pink Dot Fat's dual-plume state — ONE physical cap, TWO coordinated
+ * CONTINUOUS deposition layers, both resolved together from the same
+ * inputs so distance/angle/velocity respond coherently across both. Not
+ * independent tools: `inner` is a normal continuous line core (see
+ * `renderPinkDotInnerCore`); `outer` is a continuous atmosphere sheath
+ * (mist+ring bands, see `renderPinkDotOuterBand`) drawn under it every
+ * segment, with no distance-based gating — an earlier version stamped the
+ * whole plume at gated intervals, which read as lumpy/scalloped on a moving
+ * line; continuous per-segment strokes fixed that. See `SprayCapPresets.ts`'s
+ * `plume*` field docs for what each input field controls.
  */
-export interface PinkDotPlumeState {
-  coreRadius: number;
-  coreOpacity: number;
-  coreDensity: number;
+export interface PinkDotInnerState {
+  radius: number;
+  opacity: number;
+  /** Pass count — same concept as `ResolvedSprayDynamics.corePasses`, reused directly. */
+  density: number;
+  /** Same semantics as `SprayCapPreset.edgeFalloff` — higher is tighter/crisper. */
+  falloff: number;
+  /** Minor:major axis ratio — 1 is a perfect circle. A MODERATE stretch: half of `plumeFlareStrength * flareFactor`, keeping the line body legible under flare. */
+  anisotropy: number;
+}
+
+export interface PinkDotOuterState {
   ringRadius: number;
   ringThickness: number;
   ringOpacity: number;
   mistRadius: number;
   mistOpacity: number;
-  /** Minor:major axis ratio applied uniformly to core, ring, AND mist — 1 is a perfect circle. */
+  /** Minor:major axis ratio — 1 is a perfect circle. The FULL `plumeFlareStrength * flareFactor` stretch — stronger than the inner layer's. */
   anisotropy: number;
-  /** World units: 0 disables dab-spacing gating entirely (draws every segment endpoint, like a normal line cap). */
-  depositSpacing: number;
+}
+
+export interface PinkDotDualPlumeState {
+  inner: PinkDotInnerState;
+  outer: PinkDotOuterState;
 }
 
 /** Below this velocity, movement alone contributes no flare — matches the dwell-fixture velocities (~0.03-0.05) used throughout this codebase's tests. An explicit `sprayAngle` can still flare a stationary dwell; only the VELOCITY contribution is gated. */
 const PLUME_VELOCITY_FLARE_THRESHOLD = 0.12;
 /** Velocity (units/ms) at which the velocity-driven flare contribution reaches its full strength — matches `mapVelocityToDensity`'s own normalization elsewhere in this engine. */
 const PLUME_VELOCITY_FLARE_FULL = 1.5;
+/** The inner (core) layer's flare is deliberately a fraction of the outer layer's — "moderate" vs. "stronger" per the target behavior. */
+const PLUME_INNER_FLARE_RATIO = 0.5;
+/** The outer (mist) band's distance gain grows faster than the ring's own gain — "far" reads as disproportionately more atmospheric, not just uniformly bigger. */
+const PLUME_MIST_GAIN_MULTIPLIER = 1.3;
 
-export function resolvePinkDotPlume(
+export function resolvePinkDotDualPlume(
   cap: SprayCapPreset,
   input: SprayInputState,
   velocity: number,
   dynamics: ResolvedSprayDynamics,
-): PinkDotPlumeState {
+): PinkDotDualPlumeState {
   const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
 
-  // Distance gain: near (small resolved size) suppresses ring/mist toward a
-  // clean hot core; far (large resolved size) amplifies them beyond their
-  // own already-proportional size scaling. The core itself needs no extra
-  // gain here — it already scales with resolved size directly, same as
-  // every other cap.
+  // Distance gain applies ONLY to the outer bands — the inner core already
+  // scales with resolved size directly (dynamics.radius), same as every
+  // other cap, so outer always grows faster than inner with distance.
   const distanceRatio = Math.max(0.15, Math.min(1.8, input.sprayDistance));
-  const distanceGain = cap.plumeDistanceGain <= 0 ? 1 : 1 + (distanceRatio - 1) * cap.plumeDistanceGain;
-  const mistGain = 1 + (distanceGain - 1) * 1.3;
+  const outerGain = cap.plumeDistanceGain <= 0 ? 1 : 1 + (distanceRatio - 1) * cap.plumeDistanceGain;
+  const mistGain = 1 + (outerGain - 1) * PLUME_MIST_GAIN_MULTIPLIER;
 
   // Flare: an explicit simulated spray angle and point velocity can each
   // independently drive elongation; the stronger of the two wins rather
@@ -358,19 +374,25 @@ export function resolvePinkDotPlume(
     ? 0
     : Math.min(1, (clampedVelocity - PLUME_VELOCITY_FLARE_THRESHOLD) / (PLUME_VELOCITY_FLARE_FULL - PLUME_VELOCITY_FLARE_THRESHOLD));
   const flareFactor = Math.max(angleFactor, velocityFactor);
-  const anisotropy = cap.plumeFlareStrength <= 0 ? 1 : 1 - cap.plumeFlareStrength * flareFactor;
+  const outerAnisotropy = cap.plumeFlareStrength <= 0 ? 1 : 1 - cap.plumeFlareStrength * flareFactor;
+  const innerAnisotropy = cap.plumeFlareStrength <= 0 ? 1 : 1 - cap.plumeFlareStrength * PLUME_INNER_FLARE_RATIO * flareFactor;
 
   return {
-    coreRadius: dynamics.radius,
-    coreOpacity: Math.min(0.72, dynamics.coreOpacity * input.sprayOutput),
-    coreDensity: dynamics.corePasses,
-    ringRadius: dynamics.radius * cap.plumeRingRadius * distanceGain,
-    ringThickness: cap.plumeRingThickness,
-    ringOpacity: Math.min(1, cap.plumeRingOpacity * input.sprayOutput * distanceGain),
-    mistRadius: dynamics.radius * cap.plumeMistRadius * mistGain,
-    mistOpacity: Math.min(1, cap.plumeMistOpacity * input.sprayOutput * mistGain),
-    anisotropy,
-    depositSpacing: cap.plumeDabSpacing <= 0 ? 0 : cap.plumeDabSpacing * (1 + (distanceGain - 1) * 0.5),
+    inner: {
+      radius: dynamics.radius,
+      opacity: Math.min(0.72, dynamics.coreOpacity * input.sprayOutput),
+      density: dynamics.corePasses,
+      falloff: cap.edgeFalloff,
+      anisotropy: innerAnisotropy,
+    },
+    outer: {
+      ringRadius: dynamics.radius * cap.plumeRingRadius * outerGain,
+      ringThickness: cap.plumeRingThickness,
+      ringOpacity: Math.min(1, cap.plumeRingOpacity * input.sprayOutput * outerGain),
+      mistRadius: dynamics.radius * cap.plumeMistRadius * mistGain,
+      mistOpacity: Math.min(1, cap.plumeMistOpacity * input.sprayOutput * mistGain),
+      anisotropy: outerAnisotropy,
+    },
   };
 }
 
@@ -390,15 +412,15 @@ export class SprayBrushEngine {
   private fillLocalSaturation = new Map<string, number>();
   /**
    * Cumulative travel distance (world units) since the last drawn halo dab,
-   * for caps with `haloDabSpacing > 0` (currently only Pink Dot Fat) — see
-   * `renderHalo`. A single running scalar, not a spatial map like
-   * `fillLocalSaturation`: dab spacing is a 1D "how far along THIS path
-   * since the last dab" concept, not a per-location saturation one. Reset at
-   * the start of every stroke so a new stroke's first dab always draws.
+   * for caps with `haloDabSpacing > 0` — currently no built-in cap (Pink Dot
+   * Fat used this mechanism prior to its dual-plume rework; the generic halo
+   * mechanism remains dormant, preserved infrastructure — see `renderHalo`).
+   * A single running scalar, not a spatial map like `fillLocalSaturation`:
+   * dab spacing is a 1D "how far along THIS path since the last dab" concept,
+   * not a per-location saturation one. Reset at the start of every stroke so
+   * a new stroke's first dab always draws.
    */
   private haloTravelSinceLastDab = 0;
-  /** Same concept as `haloTravelSinceLastDab`, tracked separately for Pink Dot Fat's unified plume stamp (see `renderPinkDotPlume`) — a distinct counter so the (dormant) generic halo mechanism and the plume mechanism can never interfere with each other's spacing state. */
-  private plumeTravelSinceLastDab = 0;
 
   public resize(_width: number, _height: number): void {
     // The brush deposits directly into the persistent paint canvas.
@@ -411,7 +433,6 @@ export class SprayBrushEngine {
   public beginStroke(): void {
     this.fillLocalSaturation.clear();
     this.haloTravelSinceLastDab = 0;
-    this.plumeTravelSinceLastDab = 0;
   }
 
   private fillCellKey(x: number, y: number, cellSize: number): string {
@@ -466,10 +487,11 @@ export class SprayBrushEngine {
       drawPoint.y += perpY * pointOffset;
     }
 
-    // Pink Dot Fat's plume replaces the generic halo entirely (see
-    // renderPinkDotPlume below) — the generic halo mechanism stays dormant
-    // for it (haloRadius is 0), so this call already no-ops, but skipping it
-    // explicitly documents that the two mechanisms are mutually exclusive.
+    // Pink Dot Fat's dual-plume replaces the generic halo entirely (see
+    // renderPinkDotDualPlume below) — the generic halo mechanism stays
+    // dormant for it (haloRadius is 0), so this call already no-ops, but
+    // skipping it explicitly documents that the two mechanisms are mutually
+    // exclusive.
     if (cap.depositionShape !== "plume") {
       this.renderHalo(ctx, drawStart, drawPoint, colorHex, cap, dynamics, coverageFactor, angle, distance);
     }
@@ -491,13 +513,21 @@ export class SprayBrushEngine {
       ? this.fillCellKey((drawStart.x + drawPoint.x) / 2, (drawStart.y + drawPoint.y) / 2, cellSize)
       : null;
 
+    // Populated only for a "plume" cap — reused below to keep overspray's
+    // own flare coherent with the plume's atmosphere instead of using the
+    // generic (fixed-transversal) squash-angle logic, which doesn't apply
+    // to this cap's travel-following flare at all.
+    let dualPlumeState: PinkDotDualPlumeState | null = null;
+
     if (cap.depositionShape === "plume") {
       // Pink Dot Fat replaces the concentric-pass LINE core (and the
-      // generic halo, skipped above) entirely with one unified, dab-spaced
-      // center+ring+mist stamp — see renderPinkDotPlume below.
+      // generic halo, skipped above) with TWO coordinated CONTINUOUS layers
+      // — see renderPinkDotDualPlume below. Both drawn every segment, no
+      // distance-based gating, so the line body and its atmosphere stay
+      // connected through corners, reversals, and loops.
       const input = resolveMouseSprayInput(point, cap, coverageFactor, sprayAngleDegrees);
-      const plume = resolvePinkDotPlume(cap, input, point.velocity, dynamics);
-      this.renderPinkDotPlume(ctx, drawStart, drawPoint, colorHex, cap, plume, angle, distance, previous !== null, fillMode, cellKey);
+      dualPlumeState = resolvePinkDotDualPlume(cap, input, point.velocity, dynamics);
+      this.renderPinkDotDualPlume(ctx, drawStart, drawPoint, colorHex, cap, dualPlumeState, angle, previous !== null, random, fillMode, cellKey);
     } else if (cap.depositionShape === "streak") {
       // Dry/Streak replaces the concentric-pass core entirely with
       // deterministic parallel lanes — see renderStreakCore below.
@@ -564,8 +594,14 @@ export class SprayBrushEngine {
     }
 
     ctx.restore();
-    const oversprayAngle = resolveOverspraySquashAngle(dynamics.anisotropy, angle);
-    this.renderOverspray(ctx, drawStart, drawPoint, colorHex, dynamics, oversprayAngle, distance, random, coverageFactor);
+    // Pink Dot's overspray follows travel direction and flares with the
+    // SAME outer anisotropy as the atmosphere bands, for one coherent
+    // "whole plume flares together" read — resolveOverspraySquashAngle's
+    // fixed-transversal-axis branch is for a genuinely fixed-orientation cap
+    // (Calligraphy) and does not apply to Pink Dot's travel-following flare.
+    const oversprayAngle = dualPlumeState ? angle : resolveOverspraySquashAngle(dynamics.anisotropy, angle);
+    const oversprayDynamics = dualPlumeState ? { ...dynamics, anisotropy: dualPlumeState.outer.anisotropy } : dynamics;
+    this.renderOverspray(ctx, drawStart, drawPoint, colorHex, oversprayDynamics, oversprayAngle, distance, random, coverageFactor);
   }
 
   /**
@@ -636,103 +672,142 @@ export class SprayBrushEngine {
   }
 
   /**
-   * Pink Dot Fat's unified plume — mist, ring, and core drawn together as
-   * ONE stamp from a single resolved `PinkDotPlumeState`, at dab-spaced
-   * points along the path (a true dwell is never gated). Mist and ring are
-   * drawn UNDER the core in that order, so the core's own opaque passes
-   * naturally cover their inner portion — the "ring" read is two stacked
-   * circles, not a moat-gradient trick — and one shared rotate/scale
-   * transform elongates all three layers together for a coherent flare,
-   * instead of a generic line core plus an independently-timed halo.
+   * Pink Dot Fat's dual-plume — TWO coordinated CONTINUOUS layers drawn
+   * every segment (no distance-based gating anywhere in this method), so
+   * the line body and its atmosphere stay connected through corners,
+   * reversals, and loops. Draws the outer atmosphere (mist, then ring)
+   * FIRST, then the inner core on top — the core's own opaque passes cover
+   * the ring band's inner portion, which is how the bullseye/ring read
+   * emerges from two stacked continuous bands rather than a moat-gradient
+   * trick or discrete stamps.
    */
-  private renderPinkDotPlume(
+  private renderPinkDotDualPlume(
     ctx: CanvasRenderingContext2D,
     start: StrokePoint,
     point: StrokePoint,
     colorHex: string,
     cap: SprayCapPreset,
-    plume: PinkDotPlumeState,
+    state: PinkDotDualPlumeState,
     angle: number,
-    distance: number,
     hasPrevious: boolean,
+    random: () => number,
     fillMode: boolean,
     cellKey: string | null,
   ): void {
-    if (plume.coreRadius <= 0) return;
+    this.renderPinkDotOuterBand(ctx, start, point, colorHex, state.outer.mistRadius * 2, state.outer.mistOpacity, angle, state.outer.anisotropy);
+    this.renderPinkDotOuterBand(ctx, start, point, colorHex, state.outer.ringRadius * 2, state.outer.ringOpacity, angle, state.outer.anisotropy);
+    this.renderPinkDotInnerCore(ctx, start, point, colorHex, cap, state.inner, angle, hasPrevious, random, fillMode, cellKey);
+  }
 
-    // Dab spacing gates the WHOLE stamp (mist+ring+core together) while this
-    // segment has real travel distance; a true dwell (distance === 0) is
-    // never gated, preserving continuous dwell strengthening.
-    if (plume.depositSpacing > 0 && distance > 0) {
-      this.plumeTravelSinceLastDab += distance;
-      if (this.plumeTravelSinceLastDab < plume.coreRadius * plume.depositSpacing) return;
-      this.plumeTravelSinceLastDab = 0;
+  /**
+   * One continuous stroked band of the outer/atmosphere layer (mist or
+   * ring) — a single `stroke()` call from `start` to `point` every segment,
+   * exactly like a normal cap's core line, just wider and softer. A
+   * zero-length segment (a true dwell, `start === point`) degenerates to a
+   * round-capped dot at that point, which is how a stationary bullseye's
+   * ring/mist bands form and strengthen through ordinary dwell compositing
+   * — no separate stamp path needed. No dab spacing, no gating: the outer
+   * envelope must never have gaps, so every segment draws.
+   */
+  private renderPinkDotOuterBand(
+    ctx: CanvasRenderingContext2D,
+    start: StrokePoint,
+    point: StrokePoint,
+    colorHex: string,
+    diameter: number,
+    opacity: number,
+    angle: number,
+    anisotropy: number,
+  ): void {
+    if (diameter <= 0 || opacity <= 0) return;
+    ctx.save();
+    ctx.strokeStyle = this.hexToRgba(colorHex, opacity);
+    ctx.lineWidth = diameter;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.beginPath();
+    if (anisotropy < 1) {
+      const midX = (start.x + point.x) / 2;
+      const midY = (start.y + point.y) / 2;
+      const halfLength = Math.hypot(point.x - start.x, point.y - start.y) / 2;
+      ctx.translate(midX, midY);
+      ctx.rotate(angle);
+      ctx.scale(1, anisotropy);
+      ctx.moveTo(-halfLength, 0);
+      ctx.lineTo(halfLength, 0);
+    } else {
+      ctx.moveTo(start.x, start.y);
+      ctx.lineTo(point.x, point.y);
     }
+    ctx.stroke();
+    ctx.restore();
+  }
 
-    // Same endpoint taper convention as the generic core loop: the very
-    // first stamp of a stroke (no previous point) starts smaller, scaled by
-    // this cap's own endpointBehavior — applied uniformly to every layer so
-    // the whole plume tapers together, not just the core.
+  /**
+   * The inner/core layer — a normal continuous multi-pass stroked line
+   * every segment, same edgeExpansion/endpointScale/Fill-ceiling technique
+   * every other line cap already uses (see the generic core loop in
+   * `renderSegment`), just parameterized by the resolved `inner` state and
+   * carrying its own (moderate) flare anisotropy. This is what guarantees
+   * clean connected line continuity through straight segments, curves,
+   * sharp corners, reversals, and loops — it is never gated or stamped.
+   */
+  private renderPinkDotInnerCore(
+    ctx: CanvasRenderingContext2D,
+    start: StrokePoint,
+    point: StrokePoint,
+    colorHex: string,
+    cap: SprayCapPreset,
+    inner: PinkDotInnerState,
+    angle: number,
+    hasPrevious: boolean,
+    random: () => number,
+    fillMode: boolean,
+    cellKey: string | null,
+  ): void {
+    if (inner.radius <= 0 || inner.density <= 0) return;
     const endpointScale = hasPrevious ? 1 : cap.endpointBehavior === "punchy" ? 0.82 : 0.68;
+    for (let pass = inner.density - 1; pass >= 0; pass -= 1) {
+      const passRatio = inner.density <= 1 ? 0 : pass / (inner.density - 1);
+      const edgeExpansion = 1 + passRatio * (1 - inner.falloff) * 0.72;
+      const nominalPassAlpha = (inner.opacity * (1 - passRatio * 0.48)) / Math.sqrt(inner.density);
+      let drawnAlpha = nominalPassAlpha;
+      if (fillMode && cellKey !== null) {
+        const priorVirtual = this.fillLocalSaturation.get(cellKey) ?? 0;
+        const nextVirtual = 1 - (1 - priorVirtual) * (1 - nominalPassAlpha);
+        const priorVisible = FILL_MODE_CORE_CEILING * priorVirtual;
+        const nextVisible = FILL_MODE_CORE_CEILING * nextVirtual;
+        drawnAlpha = priorVisible >= 1 ? 0 : (nextVisible - priorVisible) / (1 - priorVisible);
+        this.fillLocalSaturation.set(cellKey, nextVirtual);
+      }
+      const jitterX = (random() - 0.5) * cap.jitter * inner.radius;
+      const jitterY = (random() - 0.5) * cap.jitter * inner.radius;
+      const diameter = Math.max(0.7, inner.radius * 2 * edgeExpansion * endpointScale);
 
-    const stampAt = (x: number, y: number) => {
       ctx.save();
-      ctx.translate(x, y);
-      if (plume.anisotropy < 1) {
+      ctx.strokeStyle = this.hexToRgba(colorHex, drawnAlpha);
+      ctx.lineWidth = diameter;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.beginPath();
+      const jStart = { x: start.x + jitterX, y: start.y + jitterY };
+      const jPoint = { x: point.x + jitterX, y: point.y + jitterY };
+      if (inner.anisotropy < 1) {
+        const midX = (jStart.x + jPoint.x) / 2;
+        const midY = (jStart.y + jPoint.y) / 2;
+        const halfLength = Math.hypot(jPoint.x - jStart.x, jPoint.y - jStart.y) / 2;
+        ctx.translate(midX, midY);
         ctx.rotate(angle);
-        ctx.scale(1, plume.anisotropy);
+        ctx.scale(1, inner.anisotropy);
+        ctx.moveTo(-halfLength, 0);
+        ctx.lineTo(halfLength, 0);
+      } else {
+        ctx.moveTo(jStart.x, jStart.y);
+        ctx.lineTo(jPoint.x, jPoint.y);
       }
-
-      if (plume.mistRadius > 0 && plume.mistOpacity > 0) {
-        const mistRadius = plume.mistRadius * endpointScale;
-        const mistGradient = ctx.createRadialGradient(0, 0, 0, 0, 0, mistRadius);
-        mistGradient.addColorStop(0, this.hexToRgba(colorHex, plume.mistOpacity));
-        mistGradient.addColorStop(1, this.hexToRgba(colorHex, 0));
-        ctx.fillStyle = mistGradient;
-        ctx.beginPath();
-        ctx.arc(0, 0, mistRadius, 0, Math.PI * 2);
-        ctx.fill();
-      }
-
-      if (plume.ringRadius > 0 && plume.ringOpacity > 0) {
-        const ringRadius = plume.ringRadius * endpointScale;
-        const innerStop = Math.max(0, Math.min(1, 1 - plume.ringThickness));
-        const ringGradient = ctx.createRadialGradient(0, 0, 0, 0, 0, ringRadius);
-        ringGradient.addColorStop(0, this.hexToRgba(colorHex, plume.ringOpacity));
-        ringGradient.addColorStop(innerStop, this.hexToRgba(colorHex, plume.ringOpacity));
-        ringGradient.addColorStop(1, this.hexToRgba(colorHex, 0));
-        ctx.fillStyle = ringGradient;
-        ctx.beginPath();
-        ctx.arc(0, 0, ringRadius, 0, Math.PI * 2);
-        ctx.fill();
-      }
-
-      // Core: multiple soft overlapping passes, same edgeFalloff-driven
-      // softening as the generic core loop, just stamped as circles instead
-      // of stroked as a line segment — the same technique, discretized.
-      for (let pass = plume.coreDensity - 1; pass >= 0; pass -= 1) {
-        const passRatio = plume.coreDensity <= 1 ? 0 : pass / (plume.coreDensity - 1);
-        const edgeExpansion = 1 + passRatio * (1 - cap.edgeFalloff) * 0.72;
-        const nominalPassAlpha = (plume.coreOpacity * (1 - passRatio * 0.48)) / Math.sqrt(plume.coreDensity);
-        let drawnAlpha = nominalPassAlpha;
-        if (fillMode && cellKey !== null) {
-          const priorVirtual = this.fillLocalSaturation.get(cellKey) ?? 0;
-          const nextVirtual = 1 - (1 - priorVirtual) * (1 - nominalPassAlpha);
-          const priorVisible = FILL_MODE_CORE_CEILING * priorVirtual;
-          const nextVisible = FILL_MODE_CORE_CEILING * nextVirtual;
-          drawnAlpha = priorVisible >= 1 ? 0 : (nextVisible - priorVisible) / (1 - priorVisible);
-          this.fillLocalSaturation.set(cellKey, nextVirtual);
-        }
-        ctx.fillStyle = this.hexToRgba(colorHex, drawnAlpha);
-        ctx.beginPath();
-        ctx.arc(0, 0, plume.coreRadius * edgeExpansion * endpointScale, 0, Math.PI * 2);
-        ctx.fill();
-      }
-
+      ctx.stroke();
       ctx.restore();
-    };
-    stampAt(start.x, start.y);
-    if (start.x !== point.x || start.y !== point.y) stampAt(point.x, point.y);
+    }
   }
 
   /**
