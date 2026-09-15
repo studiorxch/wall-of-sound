@@ -136,3 +136,56 @@ describe("spray cap presets", () => {
     expect(getSprayCapPreset("calligraphy").id).toBe("calligraphy");
   });
 });
+
+describe("Astro Fat vs. New York Fat differentiation", () => {
+  it("gives Astro Fat a resolved core opacity meaningfully denser than New York Fat's, not just a wider radius", () => {
+    const astro = resolveSprayDynamics(getSprayCapPreset("astro-fat"), 0.3, 62);
+    const nyFat = resolveSprayDynamics(getSprayCapPreset("new-york-fat"), 0.3, 32);
+    // Old baseline resolved to only ~1.09x here — barely distinguishable per unit area.
+    expect(astro.coreOpacity).toBeGreaterThan(nyFat.coreOpacity * 1.3);
+    expect(astro.corePasses).toBeGreaterThan(nyFat.corePasses);
+  });
+
+  it("gives Astro Fat a visibly wider, denser overspray field than New York Fat's", () => {
+    const astro = resolveSprayDynamics(getSprayCapPreset("astro-fat"), 0.3, 62);
+    const nyFat = resolveSprayDynamics(getSprayCapPreset("new-york-fat"), 0.3, 32);
+    expect(astro.particleCount).toBeGreaterThan(nyFat.particleCount * 2);
+    expect(astro.particleSpread).toBeGreaterThan(nyFat.particleSpread * 2);
+  });
+
+  it("gives Astro Fat a forceful punchy dwell/start character, distinct from New York Fat's more restrained settled one", () => {
+    expect(getSprayCapPreset("astro-fat").endpointBehavior).toBe("punchy");
+    expect(getSprayCapPreset("new-york-fat").endpointBehavior).toBe("settled");
+  });
+
+  it("keeps Astro Fat's core clearly hotter than Soft/Fade's despite a similar overspray breadth, so the two 'big broad' caps stay distinguishable", () => {
+    const astro = resolveSprayDynamics(getSprayCapPreset("astro-fat"), 0.3, 62);
+    const softFade = resolveSprayDynamics(getSprayCapPreset("soft-fade"), 0.3, 50);
+    expect(astro.coreOpacity).toBeGreaterThan(softFade.coreOpacity * 4);
+  });
+
+  it("never gives Astro Fat a halo or ring field, so it can't duplicate Pink Dot Fat's or Ring/Donut's bloom mechanism", () => {
+    const astro = getSprayCapPreset("astro-fat");
+    expect(astro.haloRadius).toBe(0);
+    expect(astro.haloOpacity).toBe(0);
+    expect(astro.ringRadius).toBe(0);
+  });
+
+  it("does not raise Astro Fat's jitter/splatter into Fuzz Fat's raw/splattery territory", () => {
+    const astro = getSprayCapPreset("astro-fat");
+    const fuzz = getSprayCapPreset("fuzz-fat");
+    expect(astro.jitter).toBeLessThan(fuzz.jitter);
+    expect(astro.splatterProbability).toBeLessThan(fuzz.splatterProbability);
+    expect(astro.endpointBehavior).not.toBe("raw");
+  });
+
+  it("preserves New York Fat's exact numbers — the controlled baseline this task differentiated Astro away from, not vice versa", () => {
+    const nyFat = getSprayCapPreset("new-york-fat");
+    expect(nyFat).toMatchObject({
+      baseRadius: 32, coreDensity: 1.14, coreOpacity: 0.29, edgeFalloff: 0.7,
+      particleCount: 18, particleSpread: 1.08, particleOpacity: 0.25,
+      flowRate: 1.2, accumulationRate: 1.16, velocityResponse: 0.58,
+      endpointBehavior: "settled", haloRadius: 0,
+    });
+  });
+});

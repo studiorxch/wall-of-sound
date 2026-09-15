@@ -473,6 +473,44 @@ describe("Ring / Donut — genuine annular structure", () => {
   });
 });
 
+describe("Astro Fat vs. New York Fat — rendered output, not just preset numbers", () => {
+  it("gives Astro Fat's dwell dot a substantially higher composited alpha than New York Fat's, at each cap's own live default size", () => {
+    const cumulativeAlpha = (alphas: number[]) => 1 - alphas.reduce((remaining, a) => remaining * (1 - a), 1);
+    const dwell = (capId: string, radius: number) => {
+      const cap = getSprayCapPreset(capId);
+      const { ctx, strokeStyles } = segmentRecordingContext();
+      const point: StrokePoint = { x: 40, y: 40, timestamp: 0, velocity: 0.1, width: radius, opacity: 1 };
+      new SprayBrushEngine().renderSegment(ctx, null, point, "#ffffff", cap, createStrokeRandom(3));
+      return cumulativeAlpha(strokeStyles.map(alphaOf));
+    };
+    const astroAlpha = dwell("astro-fat", 62);
+    const nyFatAlpha = dwell("new-york-fat", 32);
+    expect(astroAlpha).toBeGreaterThan(nyFatAlpha);
+  });
+
+  it("still bounds Astro Fat's Fill-mode sweep well below normal-mode saturation, same ceiling mechanism as any other cap", () => {
+    const cap = getSprayCapPreset("astro-fat");
+    const cumulativeAlpha = (alphas: number[]) => 1 - alphas.reduce((remaining, a) => remaining * (1 - a), 1);
+    const sweep = (fillMode: boolean) => {
+      const { ctx, strokeStyles } = segmentRecordingContext();
+      const random = createStrokeRandom(7);
+      const engine = new SprayBrushEngine();
+      engine.beginStroke();
+      let previous: StrokePoint | null = null;
+      for (let i = 0; i <= 20; i += 1) {
+        const point: StrokePoint = { x: i * 0.3, y: 0, timestamp: i * 16, velocity: 0.3, width: 62, opacity: 1 };
+        engine.renderSegment(ctx, previous, point, "#ffffff", cap, random, 1, fillMode);
+        previous = point;
+      }
+      return cumulativeAlpha(strokeStyles.map(alphaOf));
+    };
+    const normal = sweep(false);
+    const filled = sweep(true);
+    expect(filled).toBeLessThan(0.75);
+    expect(filled).toBeLessThan(normal);
+  });
+});
+
 describe("Dry / Streak — deterministic directional lanes and gaps", () => {
   it("gates lanes fully to zero periodically along travel distance (real gaps, not just low opacity)", () => {
     const radius = 34;

@@ -122,7 +122,26 @@ export const SPRAY_CAP_PRESETS: readonly SprayCapPreset[] = [
   // Halo is this cap's signature — a dense loaded core plus a soft atmospheric
   // outer ring, distinguishing it from New York Fat's controlled, halo-free dot.
   { id: "pink-dot-fat", name: "Pink Dot Fat", family: "fat", baseRadius: 42, coreDensity: 1.46, coreOpacity: 0.34, edgeFalloff: 0.76, particleCount: 26, particleSpread: 1.2, particleSize: 0.72, particleOpacity: 0.29, flowRate: 1.48, accumulationRate: 1.38, velocityResponse: 0.42, jitter: 0.06, endpointBehavior: "punchy", splatterProbability: 0.14, dripTendency: 0.72, anisotropy: 1, haloRadius: 2.4, haloOpacity: 0.05, wiggleAmplitude: 0, wiggleFrequency: 0, depositionShape: "line", defaultFillMode: false, ringRadius: 0, ringThickness: 0, ringOpacity: 0, centerOpacity: 0, streakLanes: 0 },
-  { id: "astro-fat", name: "Astro Fat", family: "fat", baseRadius: 62, coreDensity: 1.28, coreOpacity: 0.3, edgeFalloff: 0.64, particleCount: 38, particleSpread: 1.34, particleSize: 0.8, particleOpacity: 0.27, flowRate: 1.56, accumulationRate: 1.3, velocityResponse: 0.36, jitter: 0.1, endpointBehavior: "settled", splatterProbability: 0.18, dripTendency: 0.66, anisotropy: 1, haloRadius: 0, haloOpacity: 0, wiggleAmplitude: 0, wiggleFrequency: 0, depositionShape: "line", defaultFillMode: false, ringRadius: 0, ringThickness: 0, ringOpacity: 0, centerOpacity: 0, streakLanes: 0 },
+  // Astro Fat — corrected. At default velocity the OLD numbers resolved to a
+  // core opacity only ~9% denser than New York Fat's despite nearly 2x the
+  // radius (0.394 vs 0.432 resolved coreOpacity) — Astro read as "New York
+  // Fat scaled up with more speckles," not a distinct personality. Corrected
+  // within the audited field list only: coreDensity/coreOpacity/flowRate/
+  // accumulationRate raised together (hotter core, one more corePass at
+  // default velocity — resolved coreOpacity now ~0.60 vs New York Fat's
+  // ~0.39, a real difference), edgeFalloff lowered (softer pass-to-pass
+  // expansion — "broader bloom," via overspray/core softness, never a halo
+  // or ring field — those stay 0 so Astro never duplicates Pink Dot Fat or
+  // Ring/Donut's bloom mechanism), particleCount/particleSpread/
+  // particleOpacity raised (wider, denser atmospheric footprint — kept
+  // below Soft/Fade's particleSpread so the two "big broad" caps stay
+  // distinguishable by their opposite core character: Astro hot/dense,
+  // Soft/Fade deliberately weak), endpointBehavior "settled" -> "punchy"
+  // (forceful dwell/load character, distinct from New York Fat's more
+  // restrained start). velocityResponse (already low, stays aggressive
+  // regardless of speed), baseRadius, jitter, splatterProbability, and
+  // dripTendency are untouched — not in the audited field list.
+  { id: "astro-fat", name: "Astro Fat", family: "fat", baseRadius: 62, coreDensity: 1.4, coreOpacity: 0.36, edgeFalloff: 0.56, particleCount: 46, particleSpread: 1.55, particleSize: 0.8, particleOpacity: 0.32, flowRate: 1.65, accumulationRate: 1.5, velocityResponse: 0.36, jitter: 0.1, endpointBehavior: "punchy", splatterProbability: 0.18, dripTendency: 0.66, anisotropy: 1, haloRadius: 0, haloOpacity: 0, wiggleAmplitude: 0, wiggleFrequency: 0, depositionShape: "line", defaultFillMode: false, ringRadius: 0, ringThickness: 0, ringOpacity: 0, centerOpacity: 0, streakLanes: 0 },
   { id: "german-fat", name: "German / Hardcore Fat", family: "fat", baseRadius: 38, coreDensity: 1.06, coreOpacity: 0.27, edgeFalloff: 0.54, particleCount: 32, particleSpread: 1.42, particleSize: 0.62, particleOpacity: 0.24, flowRate: 1.18, accumulationRate: 1.08, velocityResponse: 0.68, jitter: 0.18, endpointBehavior: "raw", splatterProbability: 0.28, dripTendency: 0.5, anisotropy: 1, haloRadius: 0, haloOpacity: 0, wiggleAmplitude: 0, wiggleFrequency: 0, depositionShape: "line", defaultFillMode: false, ringRadius: 0, ringThickness: 0, ringOpacity: 0, centerOpacity: 0, streakLanes: 0 },
   { id: "lego-thin", name: "Lego Thin", family: "thin", baseRadius: 14, coreDensity: 1.08, coreOpacity: 0.35, edgeFalloff: 0.84, particleCount: 8, particleSpread: 0.8, particleSize: 0.4, particleOpacity: 0.22, flowRate: 0.88, accumulationRate: 0.9, velocityResponse: 0.92, jitter: 0.04, endpointBehavior: "settled", splatterProbability: 0.03, dripTendency: 0.18, anisotropy: 1, haloRadius: 0, haloOpacity: 0, wiggleAmplitude: 0, wiggleFrequency: 0, depositionShape: "line", defaultFillMode: false, ringRadius: 0, ringThickness: 0, ringOpacity: 0, centerOpacity: 0, streakLanes: 0 },
   { id: "universal-thin", name: "Universal Thin", family: "thin", baseRadius: 11, coreDensity: 0.92, coreOpacity: 0.32, edgeFalloff: 0.78, particleCount: 7, particleSpread: 0.88, particleSize: 0.38, particleOpacity: 0.2, flowRate: 0.8, accumulationRate: 0.84, velocityResponse: 1, jitter: 0.07, endpointBehavior: "tapered", splatterProbability: 0.05, dripTendency: 0.12, anisotropy: 1, haloRadius: 0, haloOpacity: 0, wiggleAmplitude: 0, wiggleFrequency: 0, depositionShape: "line", defaultFillMode: false, ringRadius: 0, ringThickness: 0, ringOpacity: 0, centerOpacity: 0, streakLanes: 0 },

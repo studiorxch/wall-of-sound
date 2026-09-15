@@ -52,7 +52,7 @@ Below, "documented width/range" quotes `nominalWidthRange` (display-only, unmeas
 - **Orientation behavior:** symmetric round.
 - **Dwell behavior:** no halo; dwell simply deepens the core toward saturation via ordinary compositing (no ceiling outside Fill mode).
 - **Drip status:** `dripTendency` 0.48 — mid-pack among fat caps.
-- **Current visual strengths:** reads as a controlled, usable tag/outline line; live-verified (commit `31fc282`) as the sharp-edged, even-density baseline against which Pink Dot Fat's new halo now reads as clearly distinct.
+- **Current visual strengths:** reads as a controlled, usable tag/outline line; live-verified (commit `31fc282`) as the sharp-edged, even-density baseline against which Pink Dot Fat's new halo now reads as clearly distinct; re-audited this pass as the reference baseline that Astro Fat was differentiated away from — left numerically unchanged (values re-confirmed exact via a dedicated regression test).
 - **Known visual defects:** none newly identified; no dedicated photo-matched calibration has been run against it specifically.
 - **Target behavior:** keep as the controlled baseline fat cap; current evidence indicates no change.
 - **Exact next calibration test:** side-by-side outline/tag stroke against a real NY-Fat reference photo at matched apparent width, to move PROVISIONAL → VERIFIED or surface a defect.
@@ -79,23 +79,23 @@ Below, "documented width/range" quotes `nominalWidthRange` (display-only, unmeas
 
 ### 3. Astro Fat
 - **ID:** `astro-fat` · **Family:** fat
-- **Classification:** PROVISIONAL
+- **Classification:** PROVISIONAL (corrected V2 this pass; still digital-baseline, not physically verified)
 - **Physical vs. digital:** represents a real high-output "Astro"-class cap. "Not yet matched to a physical Astro cap at measured distance" (calibration notes).
 - **Documented width/range:** 48–78 (widest of all caps; unmeasured).
-- **Digital Wall-space width:** `baseRadius` 62 (largest of all caps).
-- **Dot profile:** `coreDensity` 1.28, `coreOpacity` 0.3, no halo — same mechanism as New York Fat, scaled up.
-- **Moving stroke profile:** highest `particleCount` of all caps (38), `particleSpread` 1.34, `flowRate` 1.56 — aggressive/high-output plume by design.
-- **Core/body character:** very broad/high-output; strong fill usefulness per target.
-- **Edge character:** soft (`edgeFalloff` 0.64 — lowest of the fat family, most pass-to-pass softening).
-- **Overspray character:** wide, `splatterProbability` 0.18.
-- **Motion/speed response:** least speed-sensitive of the fat family (`velocityResponse` 0.36) — stays aggressive regardless of movement.
+- **Digital Wall-space width:** `baseRadius` 62 (largest of all caps, unchanged this pass).
+- **Dot profile (corrected):** `coreDensity` 1.4 (was 1.28), `coreOpacity` 0.36 (was 0.3), no halo — resolved core opacity now ~1.5x New York Fat's at matched default velocity (was ~1.09x, barely distinguishable per unit area despite the 2x radius).
+- **Moving stroke profile (corrected):** `particleCount` 46 (was 38, highest of all caps), `particleSpread` 1.55 (was 1.34, kept below Soft/Fade's 1.6 so the two "big broad" caps stay distinguishable by core character), `flowRate` 1.65 (was 1.56), `accumulationRate` 1.5 (was 1.3), `particleOpacity` 0.32 (was 0.27), `edgeFalloff` 0.56 (was 0.64 — softer pass-to-pass expansion, broader bloom via the existing overspray/core mechanism, no halo or ring field added), `endpointBehavior` "punchy" (was "settled" — matches New York Fat's, now distinct), `jitter`/`splatterProbability`/`dripTendency`/`velocityResponse`/`baseRadius` unchanged (not in the audited field list).
+- **Core/body character:** very broad/high-output; strong fill usefulness per target; now measurably hotter than New York Fat's, not just wider.
+- **Edge character:** soft (`edgeFalloff` 0.56 — lowest of the fat family, most pass-to-pass softening).
+- **Overspray character:** wide, `splatterProbability` 0.18 (unchanged; stays well below Fuzz Fat's raw/splattery numbers).
+- **Motion/speed response:** least speed-sensitive of the fat family (`velocityResponse` 0.36, unchanged) — stays aggressive regardless of movement.
 - **Orientation behavior:** symmetric round.
-- **Dwell behavior:** no halo; dwell saturates the (already large) core.
-- **Drip status:** `dripTendency` 0.66 — second-highest of the fat family.
-- **Current visual strengths:** numerically the most differentiated fat cap from New York Fat (radius, particle count, flow all clearly higher).
-- **Known visual defects:** no dedicated photo comparison against a real Astro cap has been run.
-- **Target behavior:** "very broad/high-output, strong fill usefulness, larger plume/aggressive output" — numerically aligned already; not yet visually confirmed against Astro-specific reference.
-- **Exact next calibration test:** Astro Fat vs. New York Fat side-by-side moving-stroke and fill-sweep comparison (explicitly called for by this task's live calibration sheet; not yet run as a dedicated live test).
+- **Dwell behavior:** no halo; dwell saturates the (already large, now denser) core — live-verified longer dwell reads visibly more diffuse-edged than New York Fat's at any dwell length.
+- **Drip status:** `dripTendency` 0.66 — second-highest of the fat family (unchanged).
+- **Current visual strengths:** live-verified (this pass) as visibly and behaviorally distinct from New York Fat at every tested dwell length and stroke speed — genuine soft atmospheric bloom extending past a denser core, thicker line with visible speckle bleed, three-pass Fill sweep reads denser than one pass while staying bounded (ceiling mechanism unaffected, confirmed by test). No longer reads as "New York Fat scaled up."
+- **Known visual defects:** no dedicated photo comparison against a real Astro cap has been run; magnitude of the correction was set by resolved-value ratios and live screenshot judgment, not a physical reference.
+- **Target behavior:** "very broad/high-output, strong fill usefulness, larger plume/aggressive output, more pronounced dwell/load character" — now both numerically and visually distinct from New York Fat; still not visually confirmed against an Astro-specific physical reference.
+- **Exact next calibration test:** side-by-side outline/tag stroke against a real Astro-class reference photo at matched apparent width, to move PROVISIONAL → VERIFIED or surface a defect. The New York Fat vs. Astro Fat differentiation gap itself is now resolved (see cap #1 and the calibration queue).
 
 ### 4. German / Hardcore Fat
 - **ID:** `german-fat` · **Family:** fat
@@ -400,7 +400,7 @@ None of the following correspond to a confirmed physical cap. They are named her
 2. ~~**Calligraphy split/correction**~~ — **DONE.** Split into Oval Calligraphy (cap #9) and Rectangular Transversal (cap #10), both with genuine fixed-orientation shape geometry, not a line-width trick.
 3. ~~**Ring archetype**~~ — **DONE.** See cap #15, "Ring / Donut" — a genuine annular gradient mechanism (`resolveRingProfile`), live-verified structurally distinct from Pink Dot/New York Fat/Soft-Fade.
 4. ~~**Dry/Streak archetype**~~ — **DONE.** See cap #16, "Dry / Streak" — deterministic multi-lane gated core (`resolveStreakGate`), live-verified structurally distinct from Fuzz Fat and normal fat caps, Fill-mode interaction confirmed.
-5. **Astro / New York Fat / German-Hardcore differentiation** — Astro-vs-NY-Fat live comparison is still overdue (never run as a dedicated test); German/Hardcore is still blocked on reference evidence acquisition specifically. Still open — now the top remaining P0 item.
+5. ~~**Astro / New York Fat differentiation**~~ — **DONE.** Astro Fat's `coreDensity`/`coreOpacity`/`flowRate`/`accumulationRate`/`particleCount`/`particleSpread`/`particleOpacity`/`edgeFalloff`/`endpointBehavior` corrected (see cap #3); New York Fat left unchanged as the reference baseline (see cap #1); live-verified visibly and behaviorally distinct at every tested dwell length, stroke speed, and Fill sweep. **German/Hardcore Fat differentiation remains explicitly blocked** on reference-evidence acquisition — no change this pass, still the top remaining open item within this line.
 
 ### P1
 - **Pink Dot halo physical calibration** — tune `haloRadius`/`haloOpacity` magnitude against a real loaded-dot reference once available (cap #2's exact next test).
