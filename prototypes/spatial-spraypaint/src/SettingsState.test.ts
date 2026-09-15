@@ -9,25 +9,37 @@ describe("settings state", () => {
     expect(closed).toMatchObject({ isOpen: false, smoothing: "high", dripsEnabled: true });
   });
 
-  it("tracks optional radius and diagnostics independently", () => {
-    const radius = reduceSettingsState(INITIAL_SETTINGS_STATE, { type: "radius", value: 24 });
-    const debug = reduceSettingsState(radius, { type: "tracking-debug", value: true });
-    expect(debug).toMatchObject({ radiusOverride: 24, trackingDebugVisible: true });
+  it("tracks per-brush Spray property overrides independently of diagnostics", () => {
+    const sized = reduceSettingsState(INITIAL_SETTINGS_STATE, {
+      type: "spray-property", capId: "needle", patch: { size: 24 },
+    });
+    const debug = reduceSettingsState(sized, { type: "tracking-debug", value: true });
+    expect(debug.sprayOverrides).toEqual({ needle: { size: 24 } });
+    expect(debug.trackingDebugVisible).toBe(true);
   });
 
-  it("tracks optional Spray coverage override independently of radius", () => {
-    const coverage = reduceSettingsState(INITIAL_SETTINGS_STATE, { type: "coverage", value: 0.4 });
-    expect(coverage).toMatchObject({ coverageOverride: 0.4, radiusOverride: null });
-    const cleared = reduceSettingsState(coverage, { type: "coverage", value: null });
-    expect(cleared.coverageOverride).toBeNull();
+  it("keeps overrides for different brushes independent — setting one never mutates another", () => {
+    let state = reduceSettingsState(INITIAL_SETTINGS_STATE, {
+      type: "spray-property", capId: "needle", patch: { fillMode: true },
+    });
+    state = reduceSettingsState(state, {
+      type: "spray-property", capId: "calligraphy", patch: { fillMode: false },
+    });
+    expect(state.sprayOverrides).toEqual({ needle: { fillMode: true }, calligraphy: { fillMode: false } });
   });
 
-  it("tracks Fill mode independently, defaulting off", () => {
-    expect(INITIAL_SETTINGS_STATE.fillModeEnabled).toBe(false);
-    const enabled = reduceSettingsState(INITIAL_SETTINGS_STATE, { type: "fill-mode", value: true });
-    expect(enabled).toMatchObject({ fillModeEnabled: true, coverageOverride: null, radiusOverride: null });
-    const disabled = reduceSettingsState(enabled, { type: "fill-mode", value: false });
-    expect(disabled.fillModeEnabled).toBe(false);
+  it("reset-spray-property clears one property and reset-spray-brush clears all of a brush's overrides", () => {
+    let state = reduceSettingsState(INITIAL_SETTINGS_STATE, {
+      type: "spray-property", capId: "needle", patch: { size: 12, coverage: 0.5 },
+    });
+    state = reduceSettingsState(state, { type: "reset-spray-property", capId: "needle", key: "size" });
+    expect(state.sprayOverrides).toEqual({ needle: { coverage: 0.5 } });
+    state = reduceSettingsState(state, { type: "reset-spray-brush", capId: "needle" });
+    expect(state.sprayOverrides).toEqual({});
+  });
+
+  it("starts with an empty override store, defaulting to every brush's own preset values", () => {
+    expect(INITIAL_SETTINGS_STATE.sprayOverrides).toEqual({});
   });
 
   it("keeps the performer hidden across Physical and Hand modes", () => {

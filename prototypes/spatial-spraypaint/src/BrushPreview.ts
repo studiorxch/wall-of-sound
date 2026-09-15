@@ -51,6 +51,106 @@ function clampStrokeWidth(actual: number, height: number, scale: number): number
   return Math.max(1.5, Math.min(height * 0.85, actual * scale));
 }
 
+/**
+ * A richer deterministic path for Brush Studio's larger preview: a straight
+ * segment, then a steep diagonal (the opposite directional extreme), then a
+ * curve, then a dwell tail — the same composition manually verified live for
+ * Oval Calligraphy / Rectangular Transversal's wide/narrow contrast, plus a
+ * dot/dwell signature and enough curvature to show taper, wiggle, and halo
+ * behavior in one compact pass. Still the real engine, still deterministic.
+ */
+function buildStudioPreviewPoints(width: number, height: number, strokeWidth: number): StrokePoint[] {
+  const marginX = width * 0.08;
+  const topY = height * 0.24;
+  const midY = height * 0.5;
+  const botY = height * 0.78;
+  const straightEndX = marginX + (width - marginX * 2) * 0.28;
+  const diagEndX = marginX + (width - marginX * 2) * 0.52;
+  const curveEndX = width - marginX;
+
+  const points: StrokePoint[] = [];
+  let t = 0;
+  const push = (x: number, y: number, velocity = 0.3) => {
+    points.push({ x, y, timestamp: t, velocity, width: strokeWidth, opacity: 1 });
+    t += 40;
+  };
+
+  const straightSteps = 5;
+  for (let i = 0; i <= straightSteps; i += 1) {
+    push(marginX + (straightEndX - marginX) * (i / straightSteps), topY);
+  }
+  const diagSteps = 5;
+  for (let i = 1; i <= diagSteps; i += 1) {
+    const f = i / diagSteps;
+    push(straightEndX + (diagEndX - straightEndX) * f, topY + (botY - topY) * f);
+  }
+  const curveSteps = 10;
+  for (let i = 1; i <= curveSteps; i += 1) {
+    const f = i / curveSteps;
+    push(diagEndX + (curveEndX - diagEndX) * f, botY - Math.sin(f * Math.PI) * (botY - midY));
+  }
+
+  const last = points[points.length - 1];
+  for (let i = 1; i <= PREVIEW_DWELL_STEPS; i += 1) {
+    points.push({ ...last, timestamp: last.timestamp + i * 40, velocity: 0.04 });
+  }
+  return points;
+}
+
+export interface SprayStudioPreviewOptions {
+  size?: number;
+  coverage?: number;
+  fillMode?: boolean;
+}
+
+/**
+ * Brush Studio's live preview. Takes the resolved preset directly (not just
+ * an id) so it renders custom brushes too, and accepts the EFFECTIVE
+ * size/coverage/fillMode so property edits are reflected immediately —
+ * still the same real SprayBrushEngine, still deterministic per call.
+ */
+export function renderSprayBrushStudioPreview(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  preset: SprayCapPreset,
+  options: SprayStudioPreviewOptions = {},
+): void {
+  ctx.clearRect(0, 0, width, height);
+  const strokeWidth = clampStrokeWidth((options.size ?? preset.baseRadius) * 2, height, 0.16);
+  const points = buildStudioPreviewPoints(width, height, strokeWidth);
+  const engine = new SprayBrushEngine();
+  const random = createStrokeRandom(PREVIEW_SEED);
+  const coverage = options.coverage ?? 1;
+  const fillMode = options.fillMode ?? false;
+  engine.beginStroke();
+  engine.renderSegment(ctx, null, points[0], PREVIEW_COLOR, preset, random, coverage, fillMode);
+  for (let i = 1; i < points.length; i += 1) {
+    engine.renderSegment(ctx, points[i - 1], points[i], PREVIEW_COLOR, preset, random, coverage, fillMode);
+  }
+}
+
+/** Same richer path, for Paint Marker — real PaintMarkerEngine, optional live size override. */
+export function renderMarkerBrushStudioPreview(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  variantId: MarkerVariantId,
+  sizeOverride?: number,
+): void {
+  const variant = getMarkerVariant(variantId);
+  ctx.clearRect(0, 0, width, height);
+  const strokeWidth = clampStrokeWidth((sizeOverride ?? variant.defaultSize), height, 0.4);
+  const points = buildStudioPreviewPoints(width, height, strokeWidth);
+  const engine = new PaintMarkerEngine();
+  engine.beginStroke(variantId);
+  engine.renderSegment(ctx, null, points[0], PREVIEW_COLOR, variantId);
+  for (let i = 1; i < points.length; i += 1) {
+    engine.renderSegment(ctx, points[i - 1], points[i], PREVIEW_COLOR, variantId);
+  }
+  engine.endStroke(ctx);
+}
+
 export function renderSprayCapPreviewToContext(
   ctx: CanvasRenderingContext2D,
   width: number,

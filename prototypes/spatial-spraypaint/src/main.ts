@@ -5,6 +5,9 @@ import {
 } from "./AdaptiveCurveReconstructor";
 import { getSprayBackground, type SprayBackground } from "./Backgrounds";
 import { renderAllBrushPreviews } from "./BrushPreview";
+import { getSprayOverride, resolveEffectiveSprayStyle } from "./BrushProperties";
+import { BrushStudioController } from "./BrushStudio";
+import { EMPTY_CUSTOM_SPRAY_REGISTRY, type CustomSprayBrushRegistry } from "./CustomBrush";
 import { CameraLuminanceSampler } from "./CameraLuminance";
 import { CanonicalStrokeManager } from "./CanonicalStroke";
 import {
@@ -170,8 +173,28 @@ class SpatialSpraypaintApp {
   private activeStrokeStyle: ToolStrokeStyle | null = null;
   private audioElement: HTMLAudioElement | null = null;
   private audioObjectUrl: string | null = null;
+  private customSprayRegistry: CustomSprayBrushRegistry = EMPTY_CUSTOM_SPRAY_REGISTRY;
+  private readonly brushStudio: BrushStudioController;
 
   constructor() {
+    this.brushStudio = new BrushStudioController({
+      getToolSelection: () => this.toolSelection,
+      getSprayOverrides: () => this.settings.sprayOverrides,
+      getMarkerWidths: () => this.markerWidths,
+      getCustomSprayRegistry: () => this.customSprayRegistry,
+      selectTool: (toolId) => this.applyToolSelection(toolId),
+      selectSprayCap: (capId) => this.applySprayCapSelection(capId),
+      selectMarkerVariant: (id) => this.applyMarkerSelection(id),
+      setSprayProperty: (capId, patch) => this.setSettings({ type: "spray-property", capId, patch }),
+      resetSprayProperty: (capId, key) => this.setSettings({ type: "reset-spray-property", capId, key }),
+      resetSprayBrush: (capId) => this.setSettings({ type: "reset-spray-brush", capId }),
+      setMarkerWidth: (id, width) => {
+        this.markerWidths = selectMarkerWidth(this.markerWidths, id, width);
+        if (this.toolSelection.markerVariantId === id) this.baseRadius = width;
+        this.updateRadiusUi();
+      },
+      setCustomSprayRegistry: (registry) => { this.customSprayRegistry = registry; },
+    });
     this.compositeCanvas = this.requireElement<HTMLCanvasElement>("composite-canvas");
     this.compositeCtx = this.compositeCanvas.getContext("2d")!;
     this.paintCanvas = document.createElement("canvas");
@@ -255,41 +278,31 @@ class SpatialSpraypaintApp {
       choice.addEventListener("click", () => {
         const toolId = choice.dataset.tool ?? "";
         if (!isDrawingToolId(toolId)) return;
-        this.finishActiveStroke();
-        this.toolSelection = selectDrawingTool(this.toolSelection, toolId);
-        this.baseRadius = toolId === "spray-can"
-          ? this.settings.radiusOverride ?? getSprayCapPreset(this.toolSelection.sprayCapId).baseRadius
-          : this.markerWidths[this.toolSelection.markerVariantId];
-        this.updateToolUi();
-        this.updateRadiusUi();
+        this.applyToolSelection(toolId);
       });
     });
     document.querySelectorAll<HTMLButtonElement>(".cap-choice").forEach((choice) => {
       choice.addEventListener("click", () => {
-        this.finishActiveStroke();
-        const cap = getSprayCapPreset(choice.dataset.cap ?? "new-york-fat");
-        this.toolSelection = selectSprayCap(this.toolSelection, cap.id);
-        if (this.settings.radiusOverride === null) this.baseRadius = cap.baseRadius;
-        document.querySelectorAll<HTMLButtonElement>(".cap-choice").forEach((candidate) => {
-          candidate.classList.toggle("selected", candidate.dataset.cap === this.toolSelection.sprayCapId);
-        });
-        this.updateToolUi();
-        this.updateRadiusUi();
-        this.closeToolChoosers();
+        this.applySprayCapSelection(choice.dataset.cap ?? "new-york-fat", { closeChoosers: true });
       });
     });
     document.querySelectorAll<HTMLButtonElement>(".marker-choice").forEach((choice) => {
       choice.addEventListener("click", () => {
         const markerId = choice.dataset.marker as MarkerVariantId | undefined;
         if (!markerId) return;
-        const marker = getMarkerVariant(markerId);
-        this.finishActiveStroke();
-        this.toolSelection = selectMarkerVariant(this.toolSelection, marker.id);
-        this.baseRadius = this.markerWidths[marker.id];
-        this.updateToolUi();
-        this.updateRadiusUi();
-        this.closeToolChoosers();
+        this.applyMarkerSelection(markerId, { closeChoosers: true });
       });
+    });
+    this.requireElement("open-brush-studio").addEventListener("click", () => {
+      this.closeToolChoosers();
+      this.brushStudio.open();
+    });
+    this.requireElement("brush-studio-close").addEventListener("click", () => this.brushStudio.close());
+    this.requireElement("brush-studio-overlay").addEventListener("click", (event) => {
+      if (event.target === event.currentTarget) this.brushStudio.close();
+    });
+    window.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && this.brushStudio.isOpen()) this.brushStudio.close();
     });
 
     this.requireElement<HTMLSelectElement>("palette-select").addEventListener("change", (event) => {
@@ -346,31 +359,35 @@ class SpatialSpraypaintApp {
       if (this.toolSelection.selectedToolId !== "spray-can") return;
       const value = Number.parseInt((event.target as HTMLInputElement).value, 10);
       this.baseRadius = value;
-      this.setSettings({ type: "radius", value });
+      this.setSettings({ type: "spray-property", capId: this.toolSelection.sprayCapId, patch: { size: value } });
       this.updateRadiusUi();
     });
     this.requireElement("radius-reset").addEventListener("click", () => {
       if (this.toolSelection.selectedToolId !== "spray-can") return;
       this.finishActiveStroke();
+      this.setSettings({ type: "reset-spray-property", capId: this.toolSelection.sprayCapId, key: "size" });
       this.baseRadius = this.selectedToolDefaultSize();
-      this.setSettings({ type: "radius", value: null });
       this.updateRadiusUi();
     });
     this.requireElement<HTMLInputElement>("spray-coverage").addEventListener("input", (event) => {
       if (this.toolSelection.selectedToolId !== "spray-can") return;
       const value = Number.parseInt((event.target as HTMLInputElement).value, 10) / 100;
-      this.setSettings({ type: "coverage", value });
+      this.setSettings({ type: "spray-property", capId: this.toolSelection.sprayCapId, patch: { coverage: value } });
       this.updateCoverageUi();
     });
     this.requireElement("coverage-reset").addEventListener("click", () => {
       if (this.toolSelection.selectedToolId !== "spray-can") return;
-      this.setSettings({ type: "coverage", value: null });
+      this.setSettings({ type: "reset-spray-property", capId: this.toolSelection.sprayCapId, key: "coverage" });
       this.updateCoverageUi();
     });
     this.requireElement<HTMLInputElement>("fill-mode-toggle").addEventListener("change", (event) => {
       if (this.toolSelection.selectedToolId !== "spray-can") return;
       this.finishActiveStroke();
-      this.setSettings({ type: "fill-mode", value: (event.target as HTMLInputElement).checked });
+      this.setSettings({
+        type: "spray-property",
+        capId: this.toolSelection.sprayCapId,
+        patch: { fillMode: (event.target as HTMLInputElement).checked },
+      });
       this.updateFillModeUi();
     });
     this.requireElement<HTMLSelectElement>("background-preset").addEventListener("change", (event) => {
@@ -765,7 +782,7 @@ class SpatialSpraypaintApp {
       this.requireElement("radius-val").textContent = this.baseRadius.toString();
     }
     const parameter = getDrawingTool(this.toolSelection.selectedToolId).parameterLabel;
-    this.requireElement("radius-reset").textContent = this.settings.radiusOverride === null
+    this.requireElement("radius-reset").textContent = this.sprayOverrideFor(this.toolSelection.sprayCapId).size === undefined
       ? `Using ${parameter.toLowerCase()} default`
       : `Use ${parameter.toLowerCase()} default`;
     this.updateCoverageUi();
@@ -780,10 +797,11 @@ class SpatialSpraypaintApp {
       badge.hidden = true;
       return;
     }
-    const coveragePercent = Math.round((this.settings.coverageOverride ?? 1) * 100);
+    const override = this.sprayOverrideFor(this.toolSelection.sprayCapId);
+    const coveragePercent = Math.round(this.effectiveSprayStyle(this.toolSelection.sprayCapId).coverage * 100);
     this.requireElement<HTMLInputElement>("spray-coverage").value = coveragePercent.toString();
     this.requireElement("coverage-val").textContent = coveragePercent.toString();
-    this.requireElement("coverage-reset").textContent = this.settings.coverageOverride === null
+    this.requireElement("coverage-reset").textContent = override.coverage === undefined
       ? "Using full coverage"
       : "Use full coverage";
     badge.hidden = coveragePercent >= 100;
@@ -795,13 +813,64 @@ class SpatialSpraypaintApp {
     const spraySelected = this.toolSelection.selectedToolId === "spray-can";
     this.requireElement("fill-mode-setting").toggleAttribute("hidden", !spraySelected);
     if (!spraySelected) return;
-    this.requireElement<HTMLInputElement>("fill-mode-toggle").checked = this.settings.fillModeEnabled;
+    this.requireElement<HTMLInputElement>("fill-mode-toggle").checked =
+      this.effectiveSprayStyle(this.toolSelection.sprayCapId).fillMode;
+  }
+
+  /** PRESET DEFAULT -> SESSION/USER MODIFICATION -> EFFECTIVE VALUE for one Spray brush's Size/Coverage/Fill. */
+  private sprayOverrideFor(capId: string) {
+    return getSprayOverride(this.settings.sprayOverrides, capId);
+  }
+
+  private effectiveSprayStyle(capId: string) {
+    return resolveEffectiveSprayStyle(getSprayCapPreset(capId), this.sprayOverrideFor(capId));
   }
 
   private selectedToolDefaultSize(): number {
     return this.toolSelection.selectedToolId === "spray-can"
       ? getSprayCapPreset(this.toolSelection.sprayCapId).baseRadius
       : this.markerWidths[this.toolSelection.markerVariantId];
+  }
+
+  /**
+   * Shared selection path for Tool/Cap/Marker changes — driven by BOTH the
+   * compact chooser and Brush Studio, so the two UIs can never drift apart.
+   * `closeChoosers` is false from Brush Studio (switching brushes there must
+   * not close the editor) and true from the compact popover (selecting a
+   * brush there closes it so the user can paint).
+   */
+  private applyToolSelection(toolId: DrawingToolId, options: { closeChoosers?: boolean } = {}): void {
+    this.finishActiveStroke();
+    this.toolSelection = selectDrawingTool(this.toolSelection, toolId);
+    this.baseRadius = toolId === "spray-can"
+      ? this.effectiveSprayStyle(this.toolSelection.sprayCapId).size
+      : this.markerWidths[this.toolSelection.markerVariantId];
+    this.updateToolUi();
+    this.updateRadiusUi();
+    if (options.closeChoosers) this.closeToolChoosers();
+    this.brushStudio.render();
+  }
+
+  private applySprayCapSelection(capId: string, options: { closeChoosers?: boolean } = {}): void {
+    this.finishActiveStroke();
+    const cap = getSprayCapPreset(capId);
+    this.toolSelection = selectSprayCap(this.toolSelection, cap.id);
+    this.baseRadius = this.effectiveSprayStyle(cap.id).size;
+    this.updateToolUi();
+    this.updateRadiusUi();
+    if (options.closeChoosers) this.closeToolChoosers();
+    this.brushStudio.render();
+  }
+
+  private applyMarkerSelection(markerId: MarkerVariantId, options: { closeChoosers?: boolean } = {}): void {
+    const marker = getMarkerVariant(markerId);
+    this.finishActiveStroke();
+    this.toolSelection = selectMarkerVariant(this.toolSelection, marker.id);
+    this.baseRadius = this.markerWidths[marker.id];
+    this.updateToolUi();
+    this.updateRadiusUi();
+    if (options.closeChoosers) this.closeToolChoosers();
+    this.brushStudio.render();
   }
 
   private renderMarkerWidthPresets(): void {
@@ -894,11 +963,12 @@ class SpatialSpraypaintApp {
   }
 
   private currentToolStyle(): ToolStrokeStyle {
+    const sprayStyle = this.effectiveSprayStyle(this.toolSelection.sprayCapId);
     const shared = {
       color: this.selectedColor,
       size: this.baseRadius,
-      coverage: this.settings.coverageOverride ?? 1,
-      fillMode: this.settings.fillModeEnabled,
+      coverage: sprayStyle.coverage,
+      fillMode: sprayStyle.fillMode,
     };
     return this.toolSelection.selectedToolId === "spray-can"
       ? { ...shared, toolId: "spray-can", variantId: this.toolSelection.sprayCapId }

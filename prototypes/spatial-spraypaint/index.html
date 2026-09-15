@@ -287,12 +287,58 @@
     #tracking-quality-warning { position:absolute; z-index:8; left:16px; top:96px; width:min(270px, calc(100vw - 32px)); padding:9px 11px; border:1px solid rgba(255,205,94,.28); border-radius:10px; background:rgba(14,14,19,.86); color:#e8d9ad; font-size:10px; line-height:1.45; opacity:0; transform:translateX(-8px); pointer-events:none; transition:opacity 160ms ease, transform 160ms ease; }
     #tracking-quality-warning.visible { opacity:1; transform:none; }
 
+    /* Brush Studio — a three-region editor: TOOL (never scrolls) | BRUSHES
+       (scrolls independently) | PROPERTIES (its own header stays visible
+       while only the property list scrolls below it). Reuses the existing
+       .island / button / input language; adds only its own layout classes. */
+    #open-brush-studio { width: 100%; margin-top: 8px; font-size: 10px; }
+    .brush-studio-overlay { position: fixed; inset: 0; z-index: 30; display: none; align-items: center; justify-content: center; background: rgba(3,3,6,.62); backdrop-filter: blur(6px); padding: 16px; }
+    .brush-studio-overlay.open { display: flex; }
+    .brush-studio-frame { width: min(1000px, 100%); height: min(660px, calc(100vh - 32px)); display: flex; flex-direction: column; overflow: hidden; }
+    .brush-studio-header { display: flex; align-items: center; justify-content: space-between; padding: 13px 16px; border-bottom: 1px solid rgba(255,255,255,.12); flex: 0 0 auto; }
+    .brush-studio-title { font-size: 12px; font-weight: 900; letter-spacing: 1px; text-transform: uppercase; }
+    #brush-studio-close { width: 34px; height: 34px; min-height: 34px; padding: 0; font-size: 20px; line-height: 1; }
+    .brush-studio-body { flex: 1 1 auto; display: grid; grid-template-columns: 110px 250px 1fr; min-height: 0; }
+
+    .brush-studio-tools { border-right: 1px solid rgba(255,255,255,.12); padding: 12px 8px; display: flex; flex-direction: column; gap: 6px; overflow: hidden; }
+    .brush-studio-tools .tool-choice { min-width: 0; grid-template-columns: 1fr; justify-items: center; text-align: center; padding: 10px 4px; }
+
+    .brush-studio-brushes { border-right: 1px solid rgba(255,255,255,.12); padding: 10px; overflow-y: auto; min-height: 0; }
+    .brush-studio-brushes[hidden] { display: none; }
+    .brush-studio-row { min-width: 0; width: 100%; display: grid; grid-template-columns: 44px 1fr; align-items: center; gap: 8px; text-align: left; font-size: 11px; margin-bottom: 3px; }
+    .brush-studio-row.selected { border-color: #ff6a83; color: #ff91a7; }
+    .brush-studio-row-preview { width: 44px; height: 18px; border-radius: 4px; background: rgba(0,0,0,.32); }
+    .brush-studio-provenance { display: inline-block; margin-top: 2px; padding: 1px 5px; border-radius: 999px; font-size: 8px; font-weight: 800; letter-spacing: .4px; text-transform: uppercase; }
+    .brush-studio-provenance[data-provenance="physical-reference"] { color: #9ed7ff; background: rgba(89,184,255,.14); }
+    .brush-studio-provenance[data-provenance="digital-effect"] { color: #ffd36d; background: rgba(255,211,109,.14); }
+    .brush-studio-provenance[data-provenance="custom-studio-brush"] { color: #8dffb0; background: rgba(65,233,145,.14); }
+
+    .brush-studio-properties { display: flex; flex-direction: column; min-height: 0; }
+    .brush-studio-selected-header { flex: 0 0 auto; padding: 12px 14px 0; }
+    .brush-studio-selected-title { display: flex; align-items: center; gap: 8px; }
+    #brush-studio-selected-name { font-size: 13px; font-weight: 800; }
+    #brush-studio-custom-note { margin-top: 4px; color: #8f8e99; font-size: 9px; line-height: 1.4; }
+    #brush-studio-custom-note[hidden] { display: none; }
+    #brush-studio-preview { width: 100%; height: 150px; display: block; border-radius: 10px; background: rgba(0,0,0,.32); margin: 10px 0; }
+    .brush-studio-property-scroll { flex: 1 1 auto; overflow-y: auto; padding: 0 14px 8px; min-height: 0; }
+    .brush-studio-property-row { display: grid; grid-template-columns: 100px 1fr auto auto; align-items: center; gap: 8px; font-size: 11px; padding: 5px 0; color: #d1d0d7; }
+    .brush-studio-property-row.readonly { grid-template-columns: 140px 1fr; color: #9b9aa5; }
+    .brush-studio-property-row input[type="range"] { width: 100%; min-width: 0; }
+    .brush-studio-property-value { font-variant-numeric: tabular-nums; font-size: 10px; color: #f4f3f0; white-space: nowrap; }
+    .brush-studio-modified-dot { width: 6px; height: 6px; border-radius: 50%; background: #ff365f; justify-self: center; }
+    .brush-studio-property-reset { min-height: 24px; padding: 2px 7px; font-size: 9px; }
+    .brush-studio-actions { display: flex; gap: 6px; padding: 10px 14px; border-top: 1px solid rgba(255,255,255,.12); flex: 0 0 auto; }
+    .brush-studio-actions button { flex: 1; font-size: 10px; }
+
     @media (max-width: 760px) {
       #bottom-bar { left:10px; right:10px; bottom:10px; gap:8px; }
       #player-island { width:auto; }
       .swatch { width: 22px; height: 22px; min-height: 22px; }
       #brand-mark { display: none; }
       .status-chip { display: none; }
+      .brush-studio-frame { height: calc(100vh - 20px); }
+      .brush-studio-body { grid-template-columns: 84px 1fr; }
+      .brush-studio-properties { grid-column: 1 / -1; border-top: 1px solid rgba(255,255,255,.12); }
     }
   </style>
 </head>
@@ -392,7 +438,41 @@
           <label class="wet-control-row"><span>Viscosity</span><select id="wet-viscosity"><option value="thick">Thick</option><option value="balanced" selected>Balanced</option><option value="runny">Runny</option></select></label>
         </div>
       </div>
+      <button id="open-brush-studio">Edit Brush →</button>
     </div>
+
+    <div id="brush-studio-overlay" class="brush-studio-overlay" aria-label="Brush Studio" role="dialog" aria-modal="true">
+      <div class="brush-studio-frame island">
+        <header class="brush-studio-header">
+          <div class="brush-studio-title">Brush Studio</div>
+          <button id="brush-studio-close" aria-label="Close Brush Studio" title="Close · Esc">×</button>
+        </header>
+        <div class="brush-studio-body">
+          <div class="brush-studio-tools" aria-label="Tool">
+            <button class="tool-choice selected" data-tool="spray-can" aria-pressed="true"><span class="tool-sample">SPRAY</span><span>Spray Can</span></button>
+            <button class="tool-choice" data-tool="paint-marker" aria-pressed="false"><span class="tool-sample">MARK</span><span>Paint Marker</span></button>
+          </div>
+          <div id="brush-studio-brushes-spray" class="brush-studio-brushes" aria-label="Spray brushes"></div>
+          <div id="brush-studio-brushes-marker" class="brush-studio-brushes" aria-label="Marker brushes" hidden></div>
+          <div class="brush-studio-properties" aria-label="Properties">
+            <div class="brush-studio-selected-header">
+              <div class="brush-studio-selected-title">
+                <span id="brush-studio-selected-name">New York Fat</span>
+                <span id="brush-studio-selected-provenance" class="brush-studio-provenance" data-provenance="physical-reference">Physical reference</span>
+              </div>
+              <div id="brush-studio-custom-note" hidden>Custom brushes preview live here. Painting with them on the Wall is a follow-up integration step — see checkpoint doc.</div>
+              <canvas id="brush-studio-preview" width="420" height="150"></canvas>
+            </div>
+            <div id="brush-studio-property-groups" class="brush-studio-property-scroll"></div>
+            <div class="brush-studio-actions">
+              <button id="brush-studio-reset-brush">Reset brush</button>
+              <button id="brush-studio-duplicate">Duplicate brush…</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div id="color-chooser" class="tool-popover" aria-label="Color chooser">
       <div class="color-current-row">
         <span id="palette-current" aria-hidden="true"></span>

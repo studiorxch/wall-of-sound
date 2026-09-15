@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { renderMarkerPreviewToContext, renderSprayCapPreviewToContext } from "./BrushPreview";
+import {
+  renderMarkerBrushStudioPreview,
+  renderMarkerPreviewToContext,
+  renderSprayBrushStudioPreview,
+  renderSprayCapPreviewToContext,
+} from "./BrushPreview";
+import { getSprayCapPreset } from "./SprayCapPresets";
 
 function recordingContext(): { ctx: CanvasRenderingContext2D; log: string[] } {
   const log: string[] = [];
@@ -112,6 +118,53 @@ describe("brush preview rendering", () => {
     expect(slot.log.some((entry) => entry.startsWith("rotate("))).toBe(true);
     expect(slot.log.some((entry) => entry.startsWith("ellipse("))).toBe(false);
     expect(oval.log).not.toEqual(slot.log);
+  });
+
+  it("renders Brush Studio's larger Spray preview deterministically, using the real engine", () => {
+    const first = recordingContext();
+    const second = recordingContext();
+    renderSprayBrushStudioPreview(first.ctx, 320, 150, getSprayCapPreset("astro-fat"));
+    renderSprayBrushStudioPreview(second.ctx, 320, 150, getSprayCapPreset("astro-fat"));
+    expect(first.log).toEqual(second.log);
+    expect(first.log.length).toBeGreaterThan(0);
+  });
+
+  it("reflects live Size/Coverage/Fill overrides in the Brush Studio Spray preview immediately", () => {
+    const cap = getSprayCapPreset("new-york-fat");
+    const base = recordingContext();
+    renderSprayBrushStudioPreview(base.ctx, 320, 150, cap);
+    const resized = recordingContext();
+    renderSprayBrushStudioPreview(resized.ctx, 320, 150, cap, { size: 60 });
+    const lightCoverage = recordingContext();
+    renderSprayBrushStudioPreview(lightCoverage.ctx, 320, 150, cap, { coverage: 0.3 });
+    const filled = recordingContext();
+    renderSprayBrushStudioPreview(filled.ctx, 320, 150, cap, { fillMode: true });
+    expect(resized.log).not.toEqual(base.log);
+    expect(lightCoverage.log).not.toEqual(base.log);
+    expect(filled.log).not.toEqual(base.log);
+  });
+
+  it("gives Oval Calligraphy and Rectangular Transversal visibly distinct Brush Studio previews", () => {
+    const oval = recordingContext();
+    const slot = recordingContext();
+    renderSprayBrushStudioPreview(oval.ctx, 320, 150, getSprayCapPreset("calligraphy"));
+    renderSprayBrushStudioPreview(slot.ctx, 320, 150, getSprayCapPreset("transversal-slot"));
+    expect(oval.log.some((entry) => entry.startsWith("ellipse("))).toBe(true);
+    expect(slot.log.some((entry) => entry.startsWith("rotate("))).toBe(true);
+    expect(oval.log).not.toEqual(slot.log);
+  });
+
+  it("renders Brush Studio's larger Marker preview deterministically and reflects a size override", () => {
+    const first = recordingContext();
+    const second = recordingContext();
+    renderMarkerBrushStudioPreview(first.ctx, 320, 150, "mop");
+    renderMarkerBrushStudioPreview(second.ctx, 320, 150, "mop");
+    expect(first.log).toEqual(second.log);
+    expect(first.log.length).toBeGreaterThan(0);
+
+    const resized = recordingContext();
+    renderMarkerBrushStudioPreview(resized.ctx, 320, 150, "mop", 20);
+    expect(resized.log).not.toEqual(first.log);
   });
 
   it("distinguishes every Chisel and Mop family sub-preset from its siblings", () => {

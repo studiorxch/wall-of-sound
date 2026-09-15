@@ -1,0 +1,499 @@
+import {
+  getSprayPropertyGroups,
+  isSprayBrushModified,
+  resolveEffectiveSprayStyle,
+  type SprayPropertyKey,
+  type SprayPropertyOverride,
+} from "./BrushProperties";
+import { renderMarkerBrushStudioPreview, renderSprayBrushStudioPreview } from "./BrushPreview";
+import {
+  duplicateSprayBrush,
+  renameCustomSprayBrush,
+  type BrushProvenance,
+  type CustomSprayBrush,
+  type CustomSprayBrushRegistry,
+  classifySprayCapId,
+  createCustomSprayBrushId,
+} from "./CustomBrush";
+import { type DrawingToolId, type MarkerVariantId } from "./DrawingTool";
+import { getMarkerVariant, MARKER_VARIANTS, type MarkerVariantDefinition } from "./PaintMarkerEngine";
+import { getSprayCapPreset, SPRAY_CAP_PRESETS, type SprayCapFamily, type SprayCapId, type SprayCapPreset } from "./SprayCapPresets";
+
+/**
+ * Pure list/grouping/labeling logic for Brush Studio's middle (Brushes)
+ * column. Kept separate from DOM wiring (`BrushStudioController` below) so
+ * the actual data shape — which brushes exist, how they're grouped, what
+ * they're called — is unit-testable without a DOM environment, matching how
+ * the rest of this codebase tests logic and leaves DOM glue to live
+ * verification.
+ */
+
+export interface SprayFamilyGroup {
+  family: SprayCapFamily;
+  label: string;
+  presets: readonly SprayCapPreset[];
+}
+
+const SPRAY_FAMILY_ORDER: ReadonlyArray<{ family: SprayCapFamily; label: string }> = [
+  { family: "fat", label: "Fat" },
+  { family: "thin", label: "Thin" },
+  { family: "specialty", label: "Specialty" },
+];
+
+export function groupSprayPresetsByFamily(presets: readonly SprayCapPreset[]): SprayFamilyGroup[] {
+  return SPRAY_FAMILY_ORDER
+    .map(({ family, label }) => ({ family, label, presets: presets.filter((preset) => preset.family === family) }))
+    .filter((group) => group.presets.length > 0);
+}
+
+export type MarkerFamily = "round" | "chisel" | "mop";
+
+export function markerFamilyFor(id: MarkerVariantId): MarkerFamily {
+  if (id === "round") return "round";
+  if (id === "mop" || id === "drip-mop") return "mop";
+  return "chisel";
+}
+
+export interface MarkerFamilyGroup {
+  family: MarkerFamily;
+  label: string;
+  variants: readonly MarkerVariantDefinition[];
+}
+
+const MARKER_FAMILY_ORDER: ReadonlyArray<{ family: MarkerFamily; label: string }> = [
+  { family: "round", label: "Round" },
+  { family: "chisel", label: "Chisel" },
+  { family: "mop", label: "Mop" },
+];
+
+export function groupMarkerVariantsByFamily(
+  variants: readonly MarkerVariantDefinition[] = MARKER_VARIANTS,
+): MarkerFamilyGroup[] {
+  return MARKER_FAMILY_ORDER
+    .map(({ family, label }) => ({
+      family,
+      label,
+      variants: variants.filter((variant) => markerFamilyFor(variant.id) === family),
+    }))
+    .filter((group) => group.variants.length > 0);
+}
+
+export function provenanceLabel(provenance: BrushProvenance): string {
+  switch (provenance) {
+    case "physical-reference": return "Physical reference";
+    case "digital-effect": return "Digital effect";
+    case "custom-studio-brush": return "Custom brush";
+  }
+}
+
+export interface SprayBrushListEntry {
+  id: string;
+  preset: SprayCapPreset | CustomSprayBrush["preset"];
+  provenance: BrushProvenance;
+  isCustom: boolean;
+}
+
+export interface SprayBrushListGroup {
+  key: string;
+  label: string;
+  entries: SprayBrushListEntry[];
+}
+
+/**
+ * The full Spray brush list for Brush Studio's Brushes column: every
+ * built-in cap grouped Fat/Thin/Specialty (unchanged from the compact
+ * chooser's existing groups), plus a trailing "Custom" group only when the
+ * user has actually duplicated a brush this session — never an empty group.
+ */
+export function buildSprayBrushList(
+  builtIns: readonly SprayCapPreset[],
+  customRegistry: CustomSprayBrushRegistry,
+): SprayBrushListGroup[] {
+  const groups: SprayBrushListGroup[] = groupSprayPresetsByFamily(builtIns).map((group) => ({
+    key: group.family,
+    label: group.label,
+    entries: group.presets.map((preset) => ({
+      id: preset.id,
+      preset,
+      provenance: classifySprayCapId(preset.id),
+      isCustom: false,
+    })),
+  }));
+  if (customRegistry.length > 0) {
+    groups.push({
+      key: "custom",
+      label: "Custom",
+      entries: customRegistry.map((brush) => ({
+        id: brush.preset.id,
+        preset: brush.preset,
+        provenance: "custom-studio-brush",
+        isCustom: true,
+      })),
+    });
+  }
+  return groups;
+}
+
+/** Finds a Spray preset by id across both the built-in array and the custom registry. */
+export function findSprayBrushPreset(
+  builtIns: readonly SprayCapPreset[],
+  customRegistry: CustomSprayBrushRegistry,
+  id: string,
+): SprayCapPreset | CustomSprayBrush["preset"] | undefined {
+  return builtIns.find((preset) => preset.id === id) ?? customRegistry.find((brush) => brush.preset.id === id)?.preset;
+}
+
+// ---------------------------------------------------------------------------
+// DOM controller. Deliberately thin — every decision above this point (which
+// brushes exist, how they group, what a brush's effective properties are) is
+// pure and unit-tested; this class only wires that data to elements and
+// events, exercised by live browser verification like the rest of this
+// codebase's DOM-wiring layer (main.ts itself has no unit tests either).
+
+export interface BrushStudioDeps {
+  getToolSelection: () => { selectedToolId: DrawingToolId; sprayCapId: SprayCapId; markerVariantId: MarkerVariantId };
+  getSprayOverrides: () => Record<string, SprayPropertyOverride>;
+  getMarkerWidths: () => Record<MarkerVariantId, number>;
+  getCustomSprayRegistry: () => CustomSprayBrushRegistry;
+  selectTool: (toolId: DrawingToolId) => void;
+  selectSprayCap: (capId: SprayCapId) => void;
+  selectMarkerVariant: (id: MarkerVariantId) => void;
+  setSprayProperty: (capId: string, patch: SprayPropertyOverride) => void;
+  resetSprayProperty: (capId: string, key: SprayPropertyKey) => void;
+  resetSprayBrush: (capId: string) => void;
+  setMarkerWidth: (id: MarkerVariantId, width: number) => void;
+  setCustomSprayRegistry: (registry: CustomSprayBrushRegistry) => void;
+}
+
+const PROPERTY_GROUP_LABELS: ReadonlyArray<{ key: "general" | "shape" | "paint" | "motion"; label: string }> = [
+  { key: "general", label: "General" },
+  { key: "shape", label: "Shape" },
+  { key: "paint", label: "Paint" },
+  { key: "motion", label: "Motion" },
+];
+
+export class BrushStudioController {
+  private readonly deps: BrushStudioDeps;
+  /** The Studio's OWN browsing selection — independent of live-paint selection while looking at a custom brush (see selectSprayRow). */
+  private selectedSprayCapId: string;
+  private isOpenState = false;
+
+  constructor(deps: BrushStudioDeps) {
+    this.deps = deps;
+    this.selectedSprayCapId = deps.getToolSelection().sprayCapId;
+  }
+
+  private el<T extends HTMLElement = HTMLElement>(id: string): T {
+    const found = document.getElementById(id);
+    if (!found) throw new Error(`Brush Studio: missing element #${id}`);
+    return found as T;
+  }
+
+  public isOpen(): boolean {
+    return this.isOpenState;
+  }
+
+  public open(): void {
+    this.isOpenState = true;
+    this.selectedSprayCapId = this.deps.getToolSelection().sprayCapId;
+    this.el("brush-studio-overlay").classList.add("open");
+    this.render();
+  }
+
+  public close(): void {
+    this.isOpenState = false;
+    this.el("brush-studio-overlay").classList.remove("open");
+  }
+
+  /** Full rebuild: tool state, brush list, property panel, preview. Call after any selection/tool change. */
+  public render(): void {
+    if (!this.isOpenState) return;
+    const selection = this.deps.getToolSelection();
+    const spraySelected = selection.selectedToolId === "spray-can";
+    this.el("brush-studio-brushes-spray").toggleAttribute("hidden", !spraySelected);
+    this.el("brush-studio-brushes-marker").toggleAttribute("hidden", spraySelected);
+    if (spraySelected) this.renderSprayBrushList();
+    else this.renderMarkerBrushList();
+    this.renderPropertiesPanel();
+  }
+
+  private renderSprayBrushList(): void {
+    const registry = this.deps.getCustomSprayRegistry();
+    const groups = buildSprayBrushList(SPRAY_CAP_PRESETS, registry);
+    const container = this.el("brush-studio-brushes-spray");
+    container.replaceChildren(...groups.flatMap((group) => [
+      this.buildFamilyLabel(group.label),
+      ...group.entries.map((entry) => this.buildSprayRow(entry)),
+    ]));
+  }
+
+  private buildFamilyLabel(label: string): HTMLElement {
+    const el = document.createElement("div");
+    el.className = "brush-family-label";
+    el.textContent = label;
+    return el;
+  }
+
+  private buildSprayRow(entry: SprayBrushListEntry): HTMLButtonElement {
+    const button = document.createElement("button");
+    button.className = "brush-studio-row";
+    button.classList.toggle("selected", entry.id === this.selectedSprayCapId);
+    button.setAttribute("aria-pressed", (entry.id === this.selectedSprayCapId).toString());
+
+    const canvas = document.createElement("canvas");
+    canvas.className = "brush-studio-row-preview";
+    canvas.width = 44;
+    canvas.height = 18;
+    const ctx = canvas.getContext("2d");
+    if (ctx) renderSprayBrushStudioPreview(ctx, 44, 18, entry.preset as SprayCapPreset);
+
+    const text = document.createElement("span");
+    text.className = "brush-row-text";
+    const name = document.createElement("span");
+    name.className = "brush-row-name";
+    name.textContent = entry.preset.name;
+    const badge = document.createElement("span");
+    badge.className = "brush-studio-provenance";
+    badge.dataset.provenance = entry.provenance;
+    badge.textContent = provenanceLabel(entry.provenance);
+    text.append(name, badge);
+
+    button.append(canvas, text);
+    button.addEventListener("click", () => this.selectSprayRow(entry));
+    return button;
+  }
+
+  /**
+   * Selecting a built-in brush drives BOTH the live paint selection and the
+   * Studio's own browsing state. Selecting a custom brush only drives the
+   * Studio's browsing/preview state — custom brushes aren't wired into the
+   * live paint pipeline yet (SprayCapId stays a closed union on purpose; see
+   * checkpoint doc for why painting-integration is the documented next step
+   * rather than a silent fallback to the wrong cap).
+   */
+  private selectSprayRow(entry: SprayBrushListEntry): void {
+    this.selectedSprayCapId = entry.id;
+    if (!entry.isCustom) this.deps.selectSprayCap(entry.id as SprayCapId);
+    this.render();
+  }
+
+  private renderMarkerBrushList(): void {
+    const groups = groupMarkerVariantsByFamily(MARKER_VARIANTS);
+    const selection = this.deps.getToolSelection();
+    const container = this.el("brush-studio-brushes-marker");
+    container.replaceChildren(...groups.flatMap((group) => [
+      this.buildFamilyLabel(group.label),
+      ...group.variants.map((variant) => this.buildMarkerRow(variant, variant.id === selection.markerVariantId)),
+    ]));
+  }
+
+  private buildMarkerRow(variant: MarkerVariantDefinition, selected: boolean): HTMLButtonElement {
+    const button = document.createElement("button");
+    button.className = "brush-studio-row";
+    button.classList.toggle("selected", selected);
+    button.setAttribute("aria-pressed", selected.toString());
+
+    const canvas = document.createElement("canvas");
+    canvas.className = "brush-studio-row-preview";
+    canvas.width = 44;
+    canvas.height = 18;
+    const ctx = canvas.getContext("2d");
+    if (ctx) renderMarkerBrushStudioPreview(ctx, 44, 18, variant.id, this.deps.getMarkerWidths()[variant.id]);
+
+    const text = document.createElement("span");
+    text.className = "brush-row-text";
+    const name = document.createElement("span");
+    name.className = "brush-row-name";
+    name.textContent = variant.name;
+    text.append(name);
+
+    button.append(canvas, text);
+    button.addEventListener("click", () => {
+      this.deps.selectMarkerVariant(variant.id);
+      this.render();
+    });
+    return button;
+  }
+
+  private renderPropertiesPanel(): void {
+    const selection = this.deps.getToolSelection();
+    if (selection.selectedToolId === "spray-can") this.renderSprayProperties();
+    else this.renderMarkerProperties();
+  }
+
+  private renderSprayProperties(): void {
+    const registry = this.deps.getCustomSprayRegistry();
+    const preset = findSprayBrushPreset(SPRAY_CAP_PRESETS, registry, this.selectedSprayCapId)
+      ?? getSprayCapPreset(this.deps.getToolSelection().sprayCapId);
+    const isCustom = classifySprayCapId(preset.id) === "custom-studio-brush";
+    const override = isCustom ? {} : this.deps.getSprayOverrides()[preset.id] ?? {};
+    const effective = resolveEffectiveSprayStyle(preset as SprayCapPreset, override);
+    const provenance = classifySprayCapId(preset.id);
+
+    this.el("brush-studio-selected-name").textContent = preset.name;
+    const badge = this.el("brush-studio-selected-provenance");
+    badge.textContent = provenanceLabel(provenance);
+    badge.dataset.provenance = provenance;
+    this.el("brush-studio-custom-note").toggleAttribute("hidden", !isCustom);
+
+    const canvas = this.el<HTMLCanvasElement>("brush-studio-preview");
+    const ctx = canvas.getContext("2d");
+    if (ctx) renderSprayBrushStudioPreview(ctx, canvas.width, canvas.height, preset as SprayCapPreset, effective);
+
+    const groups = getSprayPropertyGroups(preset as SprayCapPreset, effective, override);
+    const body = this.el("brush-studio-property-groups");
+    body.replaceChildren(...PROPERTY_GROUP_LABELS.flatMap(({ key, label }) => {
+      const rows = groups[key];
+      if (rows.length === 0) return [];
+      return [this.buildFamilyLabel(label), ...rows.map((row) => this.buildSprayPropertyRow(preset.id, row, isCustom))];
+    }));
+
+    this.el<HTMLButtonElement>("brush-studio-reset-brush").disabled = isCustom || !isSprayBrushModified(override);
+    this.el<HTMLButtonElement>("brush-studio-reset-brush").onclick = () => {
+      this.deps.resetSprayBrush(preset.id);
+      this.render();
+    };
+    this.el<HTMLButtonElement>("brush-studio-duplicate").disabled = false;
+    this.el<HTMLButtonElement>("brush-studio-duplicate").onclick = () => this.duplicateSelectedSprayBrush(preset);
+  }
+
+  private buildSprayPropertyRow(capId: string, row: ReturnType<typeof getSprayPropertyGroups>["general"][number], isCustom: boolean): HTMLElement {
+    const wrap = document.createElement("div");
+    wrap.className = `brush-studio-property-row${row.kind === "readonly" ? " readonly" : ""}`;
+
+    const label = document.createElement("span");
+    label.className = "brush-studio-property-label";
+    label.textContent = row.label;
+    wrap.append(label);
+
+    if (row.kind === "readonly") {
+      const value = document.createElement("span");
+      value.className = "brush-studio-property-value";
+      value.textContent = `${row.value}${row.unit ? ` ${row.unit}` : ""}`;
+      wrap.append(value);
+      return wrap;
+    }
+
+    if (row.kind === "editable-boolean") {
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.checked = row.value === true;
+      input.disabled = isCustom;
+      input.addEventListener("change", () => {
+        this.deps.setSprayProperty(capId, { fillMode: input.checked });
+        this.render();
+      });
+      wrap.append(input);
+    } else {
+      const input = document.createElement("input");
+      input.type = "range";
+      input.disabled = isCustom;
+      if (row.key === "size") { input.min = "4"; input.max = "72"; input.step = "1"; }
+      if (row.key === "coverage") { input.min = "20"; input.max = "100"; input.step = "5"; }
+      input.value = String(row.value);
+      const readout = document.createElement("span");
+      readout.className = "brush-studio-property-value";
+      readout.textContent = `${row.value}${row.unit ? row.unit : ""}`;
+      input.addEventListener("input", () => {
+        const numeric = Number.parseFloat(input.value);
+        readout.textContent = `${numeric}${row.unit ? row.unit : ""}`;
+        const patch: SprayPropertyOverride = row.key === "size"
+          ? { size: numeric }
+          : { coverage: numeric / 100 };
+        this.deps.setSprayProperty(capId, patch);
+        const canvas = this.el<HTMLCanvasElement>("brush-studio-preview");
+        const ctx = canvas.getContext("2d");
+        const preset = getSprayCapPreset(capId);
+        if (ctx) {
+          renderSprayBrushStudioPreview(ctx, canvas.width, canvas.height, preset, resolveEffectiveSprayStyle(
+            preset,
+            this.deps.getSprayOverrides()[capId] ?? {},
+          ));
+        }
+      });
+      input.addEventListener("change", () => this.render());
+      wrap.append(input, readout);
+    }
+
+    if (row.modified) {
+      const dot = document.createElement("span");
+      dot.className = "brush-studio-modified-dot";
+      dot.title = "Modified from brush default";
+      wrap.append(dot);
+      const resetButton = document.createElement("button");
+      resetButton.className = "brush-studio-property-reset";
+      resetButton.textContent = "Reset";
+      resetButton.addEventListener("click", () => {
+        this.deps.resetSprayProperty(capId, row.key as SprayPropertyKey);
+        this.render();
+      });
+      wrap.append(resetButton);
+    }
+
+    return wrap;
+  }
+
+  private duplicateSelectedSprayBrush(source: SprayCapPreset | CustomSprayBrush["preset"]): void {
+    const name = window.prompt("Name for the new custom brush", `${source.name} Copy`);
+    if (!name) return;
+    const custom = duplicateSprayBrush(source as SprayCapPreset, name, createCustomSprayBrushId());
+    this.deps.setCustomSprayRegistry([...this.deps.getCustomSprayRegistry(), custom]);
+    this.selectedSprayCapId = custom.preset.id;
+    this.render();
+  }
+
+  private renderMarkerProperties(): void {
+    const selection = this.deps.getToolSelection();
+    const variant = getMarkerVariant(selection.markerVariantId);
+    const width = this.deps.getMarkerWidths()[variant.id];
+
+    this.el("brush-studio-selected-name").textContent = variant.name;
+    const badge = this.el("brush-studio-selected-provenance");
+    badge.textContent = "Physical reference";
+    badge.dataset.provenance = "physical-reference";
+    this.el("brush-studio-custom-note").toggleAttribute("hidden", true);
+
+    const canvas = this.el<HTMLCanvasElement>("brush-studio-preview");
+    const ctx = canvas.getContext("2d");
+    if (ctx) renderMarkerBrushStudioPreview(ctx, canvas.width, canvas.height, variant.id, width);
+
+    const body = this.el("brush-studio-property-groups");
+    const rows: HTMLElement[] = [this.buildFamilyLabel("General")];
+
+    const sizeRow = document.createElement("div");
+    sizeRow.className = "brush-studio-property-row";
+    const sizeLabel = document.createElement("span");
+    sizeLabel.textContent = "Size";
+    const sizeInput = document.createElement("input");
+    sizeInput.type = "range";
+    sizeInput.min = "4";
+    sizeInput.max = "72";
+    sizeInput.value = String(width);
+    const sizeReadout = document.createElement("span");
+    sizeReadout.className = "brush-studio-property-value";
+    sizeReadout.textContent = `${width} wall units`;
+    sizeInput.addEventListener("input", () => {
+      const numeric = Number.parseInt(sizeInput.value, 10);
+      sizeReadout.textContent = `${numeric} wall units`;
+      this.deps.setMarkerWidth(variant.id, numeric);
+      const ctx2 = canvas.getContext("2d");
+      if (ctx2) renderMarkerBrushStudioPreview(ctx2, canvas.width, canvas.height, variant.id, numeric);
+    });
+    sizeRow.append(sizeLabel, sizeInput, sizeReadout);
+    rows.push(sizeRow);
+
+    rows.push(this.buildFamilyLabel("Tip"));
+    const materialRow = document.createElement("div");
+    materialRow.className = "brush-studio-property-row readonly";
+    materialRow.innerHTML = `<span>Material</span><span class="brush-studio-property-value">${variant.material}</span>`;
+    rows.push(materialRow);
+    const dripRow = document.createElement("div");
+    dripRow.className = "brush-studio-property-row readonly";
+    dripRow.innerHTML = `<span>Drip tendency</span><span class="brush-studio-property-value">${variant.dripTendency}</span>`;
+    rows.push(dripRow);
+
+    body.replaceChildren(...rows);
+    this.el<HTMLButtonElement>("brush-studio-reset-brush").disabled = true;
+    this.el<HTMLButtonElement>("brush-studio-duplicate").disabled = true;
+  }
+}
