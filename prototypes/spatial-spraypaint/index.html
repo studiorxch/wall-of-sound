@@ -340,6 +340,45 @@
       .brush-studio-body { grid-template-columns: 84px 1fr; }
       .brush-studio-properties { grid-column: 1 / -1; border-top: 1px solid rgba(255,255,255,.12); }
     }
+
+    /* Calibration Bench — reuses .brush-studio-overlay/.brush-studio-frame/
+       .island/button/select language; adds only its own layout classes. */
+    .calibration-bench-frame { width: min(1120px, 100%); height: min(720px, calc(100vh - 32px)); }
+    .calibration-bench-toolbar { display: flex; align-items: center; justify-content: center; gap: 14px; padding: 10px 16px; border-bottom: 1px solid rgba(255,255,255,.12); flex: 0 0 auto; flex-wrap: wrap; }
+    .calibration-bench-side { display: flex; align-items: center; gap: 8px; }
+    .calibration-bench-width-toggle { display: flex; gap: 4px; }
+    .calibration-status { display: inline-block; padding: 2px 7px; border-radius: 999px; font-size: 8px; font-weight: 800; letter-spacing: .4px; text-transform: uppercase; white-space: nowrap; }
+    .calibration-status[data-status="VERIFIED"] { color: #8dffb0; background: rgba(65,233,145,.14); }
+    .calibration-status[data-status="PROVISIONAL"] { color: #ffd36d; background: rgba(255,211,109,.14); }
+    .calibration-status[data-status="NEEDS_CALIBRATION"] { color: #ff9d7a; background: rgba(255,141,89,.16); }
+    .calibration-status[data-status="DIGITAL_EFFECT"] { color: #9ed7ff; background: rgba(89,184,255,.14); }
+
+    .calibration-bench-body { flex: 1 1 auto; display: grid; grid-template-columns: 1fr 300px; min-height: 0; }
+    .calibration-bench-matrix { overflow-y: auto; padding: 10px 14px; border-right: 1px solid rgba(255,255,255,.12); min-height: 0; }
+    .calibration-matrix-row { display: grid; grid-template-columns: 78px 1fr 1fr; align-items: center; gap: 8px; padding: 5px 0; }
+    .calibration-matrix-header { position: sticky; top: 0; background: rgba(12,12,17,.94); font-size: 10px; font-weight: 800; letter-spacing: .4px; text-transform: uppercase; color: #cfcedb; padding-bottom: 6px; z-index: 1; }
+    .calibration-matrix-label { font-size: 10px; color: #9b9aa5; }
+    .calibration-sample-canvas { width: 100%; height: auto; aspect-ratio: 240 / 130; display: block; border-radius: 8px; background: rgba(0,0,0,.32); }
+
+    .calibration-bench-side-panel { overflow-y: auto; min-height: 0; padding: 10px 14px; display: flex; flex-direction: column; gap: 14px; }
+    .calibration-property-row, .calibration-diff-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 10px; padding: 3px 0; color: #d1d0d7; }
+    .calibration-property-row { grid-template-columns: 108px 1fr 1fr; }
+    .calibration-property-header { font-weight: 800; color: #cfcedb; text-transform: uppercase; letter-spacing: .3px; font-size: 9px; border-bottom: 1px solid rgba(255,255,255,.1); padding-bottom: 4px; }
+    .calibration-diff-row span:last-child { font-variant-numeric: tabular-nums; text-align: right; color: #f4f3f0; }
+    .calibration-diff-row span.positive { color: #ff9d7a; }
+    .calibration-diff-row span.negative { color: #9ed7ff; }
+    .calibration-bench-notes { display: flex; flex-direction: column; gap: 6px; }
+    .calibration-note-field { display: flex; flex-direction: column; gap: 3px; font-size: 9px; color: #9b9aa5; }
+    .calibration-note-field textarea { font: inherit; font-size: 10px; resize: vertical; border: 1px solid rgba(255,255,255,.16); border-radius: 6px; background: rgba(24,24,31,.94); color: #f4f3f0; padding: 5px 7px; }
+    .calibration-bench-actions { display: flex; align-items: center; gap: 8px; }
+    #calibration-copy-snapshot { font-size: 10px; }
+    #calibration-snapshot-status { font-size: 9px; color: #9b9aa5; }
+
+    @media (max-width: 760px) {
+      .calibration-bench-body { grid-template-columns: 1fr; }
+      .calibration-bench-side-panel { border-top: 1px solid rgba(255,255,255,.12); }
+      .calibration-matrix-row { grid-template-columns: 60px 1fr 1fr; }
+    }
   </style>
 </head>
 <body>
@@ -469,6 +508,42 @@
             <div class="brush-studio-actions">
               <button id="brush-studio-reset-brush">Reset brush</button>
               <button id="brush-studio-duplicate">Duplicate brush…</button>
+              <button id="brush-studio-calibrate">Calibrate…</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="calibration-bench-overlay" class="brush-studio-overlay" aria-label="Spray Cap Calibration Bench" role="dialog" aria-modal="true">
+      <div class="brush-studio-frame calibration-bench-frame island">
+        <header class="brush-studio-header">
+          <div class="brush-studio-title">Spray Cap Calibration Bench</div>
+          <button id="calibration-bench-close" aria-label="Close Calibration Bench" title="Close · Esc">×</button>
+        </header>
+        <div class="calibration-bench-toolbar">
+          <div class="calibration-bench-side">
+            <select id="calibration-left-select" aria-label="Left brush"></select>
+            <span id="calibration-left-status" class="calibration-status"></span>
+          </div>
+          <div class="calibration-bench-width-toggle" role="group" aria-label="Width comparison mode">
+            <button id="calibration-width-native" class="tool-choice" aria-pressed="true">Native</button>
+            <button id="calibration-width-matched" class="tool-choice" aria-pressed="false">Matched Width</button>
+          </div>
+          <div class="calibration-bench-side">
+            <select id="calibration-right-select" aria-label="Right brush"></select>
+            <span id="calibration-right-status" class="calibration-status"></span>
+          </div>
+        </div>
+        <div class="calibration-bench-body">
+          <div id="calibration-matrix" class="calibration-bench-matrix"></div>
+          <div class="calibration-bench-side-panel">
+            <div id="calibration-property-table"></div>
+            <div id="calibration-diff-table"></div>
+            <div id="calibration-notes" class="calibration-bench-notes"></div>
+            <div class="calibration-bench-actions">
+              <button id="calibration-copy-snapshot">Copy Calibration Snapshot</button>
+              <span id="calibration-snapshot-status" aria-live="polite"></span>
             </div>
           </div>
         </div>

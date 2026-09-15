@@ -274,6 +274,32 @@ Fixes the next queued P0 item: Astro Fat read as "New York Fat scaled up with mo
 
 **Files:** `SprayCapPresets.ts` (Astro Fat numeric correction only), `SprayCapProfile.ts` (Astro Fat calibration notes), plus tests in `SprayCapPresets.test.ts` and `SprayBrushEngine.test.ts`.
 
+## Spray Cap Calibration Bench V1
+
+Ad hoc wall scribbles stopped being sufficient once Spray accumulated enough distinct behaviors (Ring/Donut, Dry/Streak, Halo, shaped stamps) to compare — this adds dedicated calibration/authoring infrastructure, not another cap-tuning pass. It never retunes any preset.
+
+**What it is.** A side-by-side Left/Right comparison view inside Brush Studio, reached via a new "Calibrate…" action next to Reset/Duplicate on the selected Spray brush's panel (disabled on the Marker tab — V1 is Spray-focused, matching the brief). Either side can be switched to any built-in or custom Spray brush without leaving the Bench. Both sides render through the real `SprayBrushEngine` — no fake preview imagery anywhere in this feature.
+
+**The deterministic matrix.** Ten fixed samples (A. Quick dot, B. Short dwell, C. Long dwell, D. Slow straight, E. Fast straight, F. Curve, G. Start/stop, H. Fill — one sweep, I. Fill — three passes, J. Diagonal) render identically-timed, identically-positioned strokes for both caps — only the resolved radius fed to the engine differs. Fill samples reuse the exact same `fillLocalSaturation` ceiling mechanism as every other Fill stroke (Start/stop uses three genuinely separate `beginStroke()` sessions so real endpoint behavior shows at each cut; Fill — three passes replays the identical sweep across three separate released strokes, matching how repeated Fill passes already compose elsewhere in the app).
+
+**Native vs. Matched Width.** Native renders each cap at its own `baseRadius` — "Astro is physically much bigger." Matched Width renders both at `min(leftPreset.baseRadius, rightPreset.baseRadius)` — "at equal apparent size, does Astro still read hotter/broader?" Matched Width is Bench-local only: it is computed at render time and never writes back to `SPRAY_CAP_PRESETS` or any preset object (a dedicated test suite proves no preset is ever mutated by any Bench operation, including repeated open/switch/close cycles).
+
+**Property readout and difference summary.** A merged side-by-side table of the real preset fields relevant to visual comparison (size, core density/opacity, edge falloff, overspray amount/spread/opacity, flow/accumulation rate, velocity response, endpoint behavior, shape, halo/ring/streak fields only where the cap actually has them, Fill default), plus a compact percentage-difference row per numeric field and a plain Left-vs-Right pairing for categorical fields (endpoint behavior, deposition shape). Every number is a real computed difference — the Bench never emits a subjective judgement like "more authentic."
+
+**Calibration status.** Each side shows its classification (VERIFIED / PROVISIONAL / NEEDS CALIBRATION / DIGITAL EFFECT) from a new hand-maintained lookup (`SprayCapCalibrationStatus.ts`) mirroring the Visual Audit doc's own per-cap "Classification:" line. The Bench only displays this — it has no logic path that promotes a cap's status; that stays a human decision made after real physical-reference comparison, updated in both places by hand.
+
+**Reference-evidence area.** Eight session-only text fields (source description, observed dot shape, observed line character, apparent width, overspray notes, dwell notes, confidence, calibration conclusions) for notes while comparing against a real reference. In-memory only, like the Custom Brush registry — no persistence of any kind, and no image-attachment mechanism yet (see Known Limitations).
+
+**Snapshot.** "Copy Calibration Snapshot" copies a plain-text summary (cap names, width mode, classification, every difference row, any filled-in notes) to the clipboard. A composited PNG of all twenty sample canvases plus both side panels was judged too invasive for V1 given this codebase's existing patterns (no multi-canvas compositing/export utility exists anywhere else in the app yet) — deferred, not attempted; the text snapshot covers the same informational content.
+
+**Astro Fat vs. New York Fat, first live proof.** Native mode: Astro Fat visibly larger with genuine atmospheric bloom past its core at every dwell length; New York Fat stays small and controlled. Matched Width: both render at New York Fat's own 32 wall units, and Astro Fat's hotter/denser core and softer edge stay clearly visible — confirming the differentiation work in the section above survives width normalization, not just raw size. Switching the Right side live to Pink Dot Fat updated the whole matrix/readout/status without leaving the Bench, and returning to New York Fat and Native mode reproduced the exact original comparison — no preset drift across the session.
+
+**German/Hardcore Fat.** Untouched. The Bench makes it directly comparable against any other cap the moment real reference evidence arrives; no parameters were changed this pass.
+
+**Files:** `CalibrationBench.ts` (new — pure matrix/width/readout/diff/snapshot logic), `CalibrationBench.test.ts` (new), `SprayCapCalibrationStatus.ts` (new — classification lookup), `CalibrationBenchController.ts` (new — thin DOM controller, live-verified only per this codebase's established BrushStudio split), `BrushStudio.ts` (new `openCalibrationBench` dep + "Calibrate…" button wiring, disabled on Marker), `main.ts` (controller wiring, Escape-key routing), `index.html` (new overlay markup + `.calibration-bench-*` CSS, reusing `.brush-studio-overlay`/`.island`/button/select language, no app-shell redesign).
+
+**Known limitations / next step.** No image/PNG snapshot export and no reference-photo import yet — both explicitly deferred rather than half-built; a future pass could add a dedicated multi-canvas capture utility if repeated manual comparison against photos proves the bottleneck. Matched Width's target is always `min(left, right)` with no manual override input in V1 — sufficient for every comparison run so far, but a numeric override could be added if a specific calibration session needs a width outside that range.
+
 ## Stable Mop Attachment And Clear Authority
 
 The latest Mop attachment work is complete and physically verified:

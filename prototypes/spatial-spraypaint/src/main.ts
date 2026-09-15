@@ -7,6 +7,7 @@ import { getSprayBackground, type SprayBackground } from "./Backgrounds";
 import { renderAllBrushPreviews } from "./BrushPreview";
 import { getSprayOverride, resolveEffectiveSprayStyle } from "./BrushProperties";
 import { BrushStudioController } from "./BrushStudio";
+import { CalibrationBenchController } from "./CalibrationBenchController";
 import { EMPTY_CUSTOM_SPRAY_REGISTRY, type CustomSprayBrushRegistry } from "./CustomBrush";
 import { CameraLuminanceSampler } from "./CameraLuminance";
 import { CanonicalStrokeManager } from "./CanonicalStroke";
@@ -175,8 +176,12 @@ class SpatialSpraypaintApp {
   private audioObjectUrl: string | null = null;
   private customSprayRegistry: CustomSprayBrushRegistry = EMPTY_CUSTOM_SPRAY_REGISTRY;
   private readonly brushStudio: BrushStudioController;
+  private readonly calibrationBench: CalibrationBenchController;
 
   constructor() {
+    this.calibrationBench = new CalibrationBenchController({
+      getCustomSprayRegistry: () => this.customSprayRegistry,
+    });
     this.brushStudio = new BrushStudioController({
       getToolSelection: () => this.toolSelection,
       getSprayOverrides: () => this.settings.sprayOverrides,
@@ -194,6 +199,7 @@ class SpatialSpraypaintApp {
         this.updateRadiusUi();
       },
       setCustomSprayRegistry: (registry) => { this.customSprayRegistry = registry; },
+      openCalibrationBench: (capId) => this.calibrationBench.open(capId),
     });
     this.compositeCanvas = this.requireElement<HTMLCanvasElement>("composite-canvas");
     this.compositeCtx = this.compositeCanvas.getContext("2d")!;
@@ -302,7 +308,9 @@ class SpatialSpraypaintApp {
       if (event.target === event.currentTarget) this.brushStudio.close();
     });
     window.addEventListener("keydown", (event) => {
-      if (event.key === "Escape" && this.brushStudio.isOpen()) this.brushStudio.close();
+      if (event.key !== "Escape") return;
+      if (this.calibrationBench.isOpen()) this.calibrationBench.close();
+      else if (this.brushStudio.isOpen()) this.brushStudio.close();
     });
 
     this.requireElement<HTMLSelectElement>("palette-select").addEventListener("change", (event) => {

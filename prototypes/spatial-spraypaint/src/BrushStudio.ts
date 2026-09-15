@@ -163,6 +163,8 @@ export interface BrushStudioDeps {
   resetSprayBrush: (capId: string) => void;
   setMarkerWidth: (id: MarkerVariantId, width: number) => void;
   setCustomSprayRegistry: (registry: CustomSprayBrushRegistry) => void;
+  /** Opens the Spray Cap Calibration Bench with the given cap as its Left brush. Spray-only — see `renderMarkerProperties`, which disables the button entirely. */
+  openCalibrationBench: (capId: string) => void;
 }
 
 const PROPERTY_GROUP_LABELS: ReadonlyArray<{ key: "general" | "shape" | "paint" | "motion"; label: string }> = [
@@ -355,6 +357,8 @@ export class BrushStudioController {
     };
     this.el<HTMLButtonElement>("brush-studio-duplicate").disabled = false;
     this.el<HTMLButtonElement>("brush-studio-duplicate").onclick = () => this.duplicateSelectedSprayBrush(preset);
+    this.el<HTMLButtonElement>("brush-studio-calibrate").disabled = false;
+    this.el<HTMLButtonElement>("brush-studio-calibrate").onclick = () => this.deps.openCalibrationBench(preset.id);
   }
 
   private buildSprayPropertyRow(capId: string, row: ReturnType<typeof getSprayPropertyGroups>["general"][number], isCustom: boolean): HTMLElement {
@@ -495,5 +499,7 @@ export class BrushStudioController {
     body.replaceChildren(...rows);
     this.el<HTMLButtonElement>("brush-studio-reset-brush").disabled = true;
     this.el<HTMLButtonElement>("brush-studio-duplicate").disabled = true;
+    // Calibration Bench V1 is Spray-focused (see checkpoint doc); disabled rather than hidden so the action row's layout stays stable when switching tools.
+    this.el<HTMLButtonElement>("brush-studio-calibrate").disabled = true;
   }
 }

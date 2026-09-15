@@ -12,7 +12,8 @@ Status: Originally documentation-only as of commit `31fc282`. **Updated (still s
 - `src/main.ts` — how `baseRadius` actually reaches a live stroke.
 - `0911_SPATIAL_SPRAYPAINT_V0.6.3_CURRENT.md` — prior audit findings, including "Needle Correction + Calligraphy Split (P0)", "Brush Studio V1", and "Ring/Donut + Dry/Streak Output Archetypes".
 - Commit `31fc282` (cap personalities), the Needle/Calligraphy P0 build, Brush Studio V1, and the Ring/Donut + Dry/Streak P0 build — all live-verified in-browser.
-- `SprayCapPresets.test.ts` / `SprayCapProfile.test.ts` / `SprayBrushEngine.test.ts` / `BrushPreview.test.ts` / `BrushProperties.test.ts` / `BrushStudio.test.ts` / `CustomBrush.test.ts` / `DrawingCursor.test.ts` for what is actually regression-locked today.
+- `SprayCapPresets.test.ts` / `SprayCapProfile.test.ts` / `SprayBrushEngine.test.ts` / `BrushPreview.test.ts` / `BrushProperties.test.ts` / `BrushStudio.test.ts` / `CustomBrush.test.ts` / `DrawingCursor.test.ts` / `CalibrationBench.test.ts` for what is actually regression-locked today.
+- `src/CalibrationBench.ts` / `src/SprayCapCalibrationStatus.ts` — the Spray Cap Calibration Bench V1 (see its own section below) and the classification lookup mirroring this doc's own "Classification:" lines per cap.
 
 ## Classification legend
 
@@ -393,6 +394,14 @@ None of the following correspond to a confirmed physical cap. They are named her
 
 ---
 
+## Spray Cap Calibration Bench V1 (infrastructure, not a calibration pass)
+
+Every "magnitude unverified against a real reference" note throughout this doc now has a dedicated tool: Brush Studio's "Calibrate…" action opens a Left/Right side-by-side comparison of the real `SprayBrushEngine` output for any two Spray caps, across a fixed deterministic ten-sample matrix (quick dot, short/long dwell, slow/fast straight, curve, start/stop, Fill one-sweep, Fill three-pass, diagonal). It supports Native width (each cap's own `baseRadius` — shows raw size difference) and Matched Width (`min` of the two selected `baseRadius` values, Bench-local only, never written back to a preset) so size and deposition-character differences can be judged separately. A property readout and a percentage difference table (real field values only, no subjective wording) sit alongside the matrix, along with each cap's classification from this doc (surfaced, never promoted by the Bench itself) and an eight-field session-only reference-notes area for logging observations against a real photo once one is available.
+
+This is the physical-reference workflow every "Exact next calibration test" line below now has infrastructure for: open the Bench, put the digital cap on one side, describe the reference photo/video in the notes fields on the other, and use the matrix + difference table to judge the gap. It does not itself move any cap from PROVISIONAL/NEEDS CALIBRATION to VERIFIED — that stays a human decision, made after an actual reference comparison, updated in both `SprayCapCalibrationStatus.ts` and this doc together.
+
+First live proof: Astro Fat vs. New York Fat (see cap #3 / #1 above) in both Native and Matched Width — confirmed the P0 differentiation work above survives width normalization (Astro's hotter core and softer bloom stay visible even at New York Fat's own 32-unit size), not just a raw-size difference. See `0911_SPATIAL_SPRAYPAINT_V0.6.3_CURRENT.md`'s "Spray Cap Calibration Bench V1" section for full build detail. German/Hardcore Fat was not touched by this build; the Bench makes it directly comparable the moment reference evidence arrives, per this doc's own P2 item below.
+
 ## Prioritized calibration queue
 
 ### P0 (as directed)
@@ -401,8 +410,10 @@ None of the following correspond to a confirmed physical cap. They are named her
 3. ~~**Ring archetype**~~ — **DONE.** See cap #15, "Ring / Donut" — a genuine annular gradient mechanism (`resolveRingProfile`), live-verified structurally distinct from Pink Dot/New York Fat/Soft-Fade.
 4. ~~**Dry/Streak archetype**~~ — **DONE.** See cap #16, "Dry / Streak" — deterministic multi-lane gated core (`resolveStreakGate`), live-verified structurally distinct from Fuzz Fat and normal fat caps, Fill-mode interaction confirmed.
 5. ~~**Astro / New York Fat differentiation**~~ — **DONE.** Astro Fat's `coreDensity`/`coreOpacity`/`flowRate`/`accumulationRate`/`particleCount`/`particleSpread`/`particleOpacity`/`edgeFalloff`/`endpointBehavior` corrected (see cap #3); New York Fat left unchanged as the reference baseline (see cap #1); live-verified visibly and behaviorally distinct at every tested dwell length, stroke speed, and Fill sweep. **German/Hardcore Fat differentiation remains explicitly blocked** on reference-evidence acquisition — no change this pass, still the top remaining open item within this line.
+6. ~~**Calibration Bench V1**~~ — **DONE.** See the "Spray Cap Calibration Bench V1 (infrastructure)" section above — a deterministic Left/Right comparison tool (Native + Matched Width, property/difference readout, classification display, session-only reference notes, text snapshot) reached from Brush Studio's "Calibrate…" action. Infrastructure only — moves no cap's classification and retunes nothing; first live proof run against Astro Fat vs. New York Fat. German/Hardcore Fat untouched, now directly comparable via the Bench the moment reference evidence arrives.
 
 ### P1
+- Every "magnitude verification" item below can now be run through the Calibration Bench (Left = the digital cap, Right = whichever built-in cap is the nearest useful comparison, reference notes logged alongside) — the Bench does not replace acquiring the reference evidence itself, only the comparison workflow once it exists.
 - **Pink Dot halo physical calibration** — tune `haloRadius`/`haloOpacity` magnitude against a real loaded-dot reference once available (cap #2's exact next test).
 - **Thin-cap family differentiation pass** — Lego Thin / Universal Thin / Level 1 vs. New York Thin's already-verified baseline (caps #5–7's shared next test).
 - **Oval vs. Rectangular Transversal magnitude verification** — both caps' aspect ratios (2.4 vs. 3.9) and Rectangular's corner radius were judgment calls; check against the reference sketch's actual proportions.
