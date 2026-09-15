@@ -5,7 +5,7 @@ import { getSprayCapPreset, resolveSprayDynamics, SPRAY_CAP_PRESETS } from "./Sp
 describe("spray cap calibration profile", () => {
   it("describes every existing cap without adding a second deposition authority", () => {
     const profiles = SPRAY_CAP_PRESETS.map(({ id }) => getSprayCapProfile(id));
-    expect(profiles).toHaveLength(13);
+    expect(profiles).toHaveLength(14);
     expect(profiles.map(({ id }) => id)).toEqual(SPRAY_CAP_PRESETS.map(({ id }) => id));
     for (const profile of profiles) {
       expect(profile.deposition).toBe(getSprayCapPreset(profile.id));
@@ -78,6 +78,7 @@ describe("spray cap calibration profile", () => {
 
   it("keeps aerosol calligraphy physically distinct from a marker nib", () => {
     const calligraphy = getSprayCapProfile("calligraphy");
+    expect(calligraphy.name).toBe("Oval Calligraphy");
     expect(calligraphy.coneShape).toBe("fan");
     expect(calligraphy.orientationBehavior).toBe("fixed-transversal");
     expect(calligraphy.calibrationNotes).toContain("aerosol");
@@ -87,5 +88,24 @@ describe("spray cap calibration profile", () => {
       aspectRatio: 0.32,
       orientationBehavior: "fixed-transversal",
     });
+  });
+
+  it("gives Rectangular Transversal its own profile entry, distinct from Oval Calligraphy but sharing the fixed-transversal orientation", () => {
+    const slot = getSprayCapProfile("transversal-slot");
+    expect(slot.id).toBe("transversal-slot");
+    expect(slot.name).toBe("Rectangular Transversal");
+    expect(slot.family).toBe("specialty");
+    expect(slot.orientationBehavior).toBe("fixed-transversal");
+    expect(slot.calibrationNotes).not.toBe(getSprayCapProfile("calligraphy").calibrationNotes);
+    expect(slot.cursorFootprint).toMatchObject({ shape: "ellipse", orientationBehavior: "fixed-transversal" });
+    // Stronger squash than Oval Calligraphy's 0.32.
+    expect(slot.cursorFootprint.aspectRatio).toBeLessThan(0.32);
+  });
+
+  it("documents Needle's correction and Wiggly Needle's inheritance of it in their calibration notes", () => {
+    const needle = getSprayCapProfile("needle");
+    const wiggly = getSprayCapProfile("wiggly-needle");
+    expect(needle.calibrationNotes.toLowerCase()).toContain("concentrated");
+    expect(wiggly.calibrationNotes.toLowerCase()).toContain("corrected needle");
   });
 });

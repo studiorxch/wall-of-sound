@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { SprayBrushEngine, createStrokeRandom, resolveOverspraySquashAngle, TRANSVERSAL_AXIS_ANGLE } from "./SprayBrushEngine";
+import {
+  SprayBrushEngine,
+  createStrokeRandom,
+  resolveOverspraySquashAngle,
+  resolveShapedStampGeometry,
+  shapedStampWidthAlongTravel,
+  TRANSVERSAL_AXIS_ANGLE,
+} from "./SprayBrushEngine";
 import { getSprayCapPreset, resolveSprayDynamics } from "./SprayCapPresets";
 import { type StrokePoint } from "./types";
 
@@ -24,9 +31,14 @@ function segmentRecordingContext(): {
     save: () => undefined,
     restore: () => undefined,
     beginPath: () => undefined,
+    closePath: () => undefined,
     moveTo: () => undefined,
     lineTo: () => undefined,
     arc: () => undefined,
+    arcTo: () => undefined,
+    ellipse: () => undefined,
+    translate: () => undefined,
+    rotate: () => undefined,
     stroke: () => strokeStyles.push(strokeStyle),
     fill: () => fillStyles.push(fillStyle),
     createRadialGradient: (x0: number, y0: number, r0: number, x1: number, y1: number, r1: number) => {
@@ -267,21 +279,21 @@ describe("spray fill-mode per-stroke opacity ceiling", () => {
     expect(cumulativeAlpha(fuzzBefore)).toBeGreaterThan(0.9);
   });
 
-  it("keeps Calligraphy's directional width fix independent of fillMode", () => {
+  it("keeps Oval Calligraphy's shaped-stamp geometry independent of fillMode — fillMode changes alpha, not shape", () => {
     const cap = getSprayCapPreset("calligraphy");
-    const axisAngle = (-25 * Math.PI) / 180;
-    const perpendicularAngle = axisAngle + Math.PI / 2;
-    const point = (angle: number): StrokePoint => ({
-      x: Math.cos(angle) * 100, y: Math.sin(angle) * 100, timestamp: 0, velocity: 0.3, width: 25, opacity: 1,
-    });
     const start: StrokePoint = { x: 0, y: 0, timestamp: 0, velocity: 0.3, width: 25, opacity: 1 };
+    const point: StrokePoint = { x: 100, y: 0, timestamp: 0, velocity: 0.3, width: 25, opacity: 1 };
 
-    const alongAxis = lineWidthRecordingContext();
-    new SprayBrushEngine().renderSegment(alongAxis.ctx, start, point(axisAngle), "#fff", cap, createStrokeRandom(1), 1, true);
-    const perpendicular = lineWidthRecordingContext();
-    new SprayBrushEngine().renderSegment(perpendicular.ctx, start, point(perpendicularAngle), "#fff", cap, createStrokeRandom(1), 1, true);
+    const withFill = segmentRecordingContext();
+    new SprayBrushEngine().renderSegment(withFill.ctx, start, point, "#fff", cap, createStrokeRandom(1), 1, true);
+    const withoutFill = segmentRecordingContext();
+    new SprayBrushEngine().renderSegment(withoutFill.ctx, start, point, "#fff", cap, createStrokeRandom(1), 1, false);
 
-    expect(Math.max(...perpendicular.lineWidths)).toBeGreaterThan(Math.max(...alongAxis.lineWidths));
+    expect(withFill.fillStyles.length).toBeGreaterThan(0);
+    expect(withFill.fillStyles.length).toBe(withoutFill.fillStyles.length);
+    // Fill mode's own ceiling still bounds cumulative alpha for a shaped cap exactly as it does for line caps.
+    const cumulative = (alphas: number[]) => 1 - alphas.reduce((remaining, a) => remaining * (1 - a), 1);
+    expect(cumulative(withFill.fillStyles.map(alphaOf))).toBeLessThan(cumulative(withoutFill.fillStyles.map(alphaOf)));
   });
 
   it("composes coherently with the Spray coverage multiplier — lower coverage still yields lower cumulative fill", () => {
@@ -500,30 +512,112 @@ describe("spray brush replay randomness", () => {
     negative.strokeStyles.forEach((rgba) => expect(alphaOf(rgba)).toBe(0));
   });
 
-  it("gives Calligraphy genuine direction-dependent wide/thin width, not just a uniform thinning", () => {
+  it("gives Oval Calligraphy genuine direction-dependent wide/thin swept width from fixed shape geometry, not a line-width trick", () => {
     const cap = getSprayCapPreset("calligraphy");
-    const axisAngle = (-25 * Math.PI) / 180;
-    const perpendicularAngle = axisAngle + Math.PI / 2;
-    const along = (angle: number) => ({ x: Math.cos(angle) * 100, y: Math.sin(angle) * 100 });
+    expect(cap.depositionShape).toBe("oval");
+    const dynamics = resolveSprayDynamics(cap, 0.3, 25);
+    const geometry = resolveShapedStampGeometry(cap.depositionShape, dynamics.radius);
+    expect(geometry).not.toBeNull();
+    if (!geometry) return;
 
-    const point = (angle: number): StrokePoint => {
-      const { x, y } = along(angle);
-      return { x, y, timestamp: 0, velocity: 0.3, width: 25, opacity: 1 };
+    // The pure geometry math: no travel angle is even an input to resolveShapedStampGeometry,
+    // so the shape/rotation cannot rotate with the stroke by construction.
+    expect(geometry.rotation).toBe(TRANSVERSAL_AXIS_ANGLE);
+    const alongWidth = shapedStampWidthAlongTravel(geometry, TRANSVERSAL_AXIS_ANGLE);
+    const perpendicularWidth = shapedStampWidthAlongTravel(geometry, TRANSVERSAL_AXIS_ANGLE + Math.PI / 2);
+    expect(perpendicularWidth).toBeGreaterThan(alongWidth);
+
+    // Integration: renderSegment actually stamps an ellipse at exactly that fixed rotation,
+    // regardless of which direction this particular segment happens to travel.
+    const captureEllipseRotations = (travelAngle: number) => {
+      const rotations: number[] = [];
+      const { ctx } = segmentRecordingContext();
+      (ctx as unknown as { ellipse: (...args: number[]) => void }).ellipse = (_x, _y, _rx, _ry, rotation) =>
+        rotations.push(rotation);
+      const start: StrokePoint = { x: 0, y: 0, timestamp: 0, velocity: 0.3, width: 25, opacity: 1 };
+      const point: StrokePoint = {
+        x: Math.cos(travelAngle) * 100, y: Math.sin(travelAngle) * 100, timestamp: 0, velocity: 0.3, width: 25, opacity: 1,
+      };
+      new SprayBrushEngine().renderSegment(ctx, start, point, "#ffffff", cap, createStrokeRandom(1));
+      return rotations;
     };
+    const rotationsAlong = captureEllipseRotations(TRANSVERSAL_AXIS_ANGLE);
+    const rotationsAcross = captureEllipseRotations(TRANSVERSAL_AXIS_ANGLE + Math.PI / 2);
+    expect(rotationsAlong.length).toBeGreaterThan(0);
+    expect(rotationsAcross.length).toBeGreaterThan(0);
+    [...rotationsAlong, ...rotationsAcross].forEach((rotation) => expect(rotation).toBe(TRANSVERSAL_AXIS_ANGLE));
+  });
 
-    const alongAxis = lineWidthRecordingContext();
-    new SprayBrushEngine().renderSegment(
-      alongAxis.ctx, { x: 0, y: 0, timestamp: 0, velocity: 0.3, width: 25, opacity: 1 },
-      point(axisAngle), "#ffffff", cap, createStrokeRandom(1),
-    );
-    const perpendicular = lineWidthRecordingContext();
-    new SprayBrushEngine().renderSegment(
-      perpendicular.ctx, { x: 0, y: 0, timestamp: 0, velocity: 0.3, width: 25, opacity: 1 },
-      point(perpendicularAngle), "#ffffff", cap, createStrokeRandom(1),
-    );
+  it("gives Rectangular Transversal a genuinely rectangular/slot deposition, fixed orientation, and stronger wide/narrow contrast than Oval Calligraphy", () => {
+    const slot = getSprayCapPreset("transversal-slot");
+    const oval = getSprayCapPreset("calligraphy");
+    expect(slot.depositionShape).toBe("slot");
 
-    expect(alongAxis.lineWidths.length).toBeGreaterThan(0);
-    expect(Math.max(...perpendicular.lineWidths)).toBeGreaterThan(Math.max(...alongAxis.lineWidths));
+    const slotDynamics = resolveSprayDynamics(slot, 0.3, 25);
+    const ovalDynamics = resolveSprayDynamics(oval, 0.3, 25);
+    const slotGeometry = resolveShapedStampGeometry(slot.depositionShape, slotDynamics.radius);
+    const ovalGeometry = resolveShapedStampGeometry(oval.depositionShape, ovalDynamics.radius);
+    expect(slotGeometry).not.toBeNull();
+    expect(ovalGeometry).not.toBeNull();
+    if (!slotGeometry || !ovalGeometry) return;
+
+    expect(slotGeometry.rotation).toBe(TRANSVERSAL_AXIS_ANGLE);
+    expect(slotGeometry.cornerRadius).toBeGreaterThan(0);
+
+    const slotAspect = slotGeometry.halfLength / slotGeometry.halfWidth;
+    const ovalAspect = ovalGeometry.halfLength / ovalGeometry.halfWidth;
+    expect(slotAspect).toBeGreaterThan(ovalAspect);
+
+    const slotAlong = shapedStampWidthAlongTravel(slotGeometry, TRANSVERSAL_AXIS_ANGLE);
+    const slotAcross = shapedStampWidthAlongTravel(slotGeometry, TRANSVERSAL_AXIS_ANGLE + Math.PI / 2);
+    expect(slotAcross).toBeGreaterThan(slotAlong);
+    // The wide/narrow swing itself is stronger for the slot than the oval.
+    const ovalAlong = shapedStampWidthAlongTravel(ovalGeometry, TRANSVERSAL_AXIS_ANGLE);
+    const ovalAcross = shapedStampWidthAlongTravel(ovalGeometry, TRANSVERSAL_AXIS_ANGLE + Math.PI / 2);
+    expect(slotAcross / slotAlong).toBeGreaterThan(ovalAcross / ovalAlong);
+
+    // Integration: renderSegment actually builds a rotated rect path (translate + rotate), not an ellipse.
+    const translations: Array<{ x: number; y: number }> = [];
+    const rotations: number[] = [];
+    const { ctx } = segmentRecordingContext();
+    (ctx as unknown as { translate: (x: number, y: number) => void }).translate = (x, y) => translations.push({ x, y });
+    (ctx as unknown as { rotate: (angle: number) => void }).rotate = (angle) => rotations.push(angle);
+    (ctx as unknown as { ellipse: (...args: number[]) => void }).ellipse = () => {
+      throw new Error("Rectangular Transversal must not use ctx.ellipse");
+    };
+    const start: StrokePoint = { x: 0, y: 0, timestamp: 0, velocity: 0.3, width: 25, opacity: 1 };
+    const point: StrokePoint = { x: 100, y: 0, timestamp: 0, velocity: 0.3, width: 25, opacity: 1 };
+    new SprayBrushEngine().renderSegment(ctx, start, point, "#ffffff", slot, createStrokeRandom(1));
+    expect(rotations.length).toBeGreaterThan(0);
+    rotations.forEach((rotation) => expect(rotation).toBe(TRANSVERSAL_AXIS_ANGLE));
+    expect(translations.length).toBe(rotations.length);
+  });
+
+  it("corrects Needle's rendering to a tighter overspray footprint than its old wide-spread baseline, at the actual rendering layer", () => {
+    const needle = getSprayCapPreset("needle");
+    const dynamics = resolveSprayDynamics(needle, 0.3, 5);
+    // The dominant fuzziness driver was overspray, not the core: particleSpread
+    // used to be the widest of ANY cap (2.05x radius). It must now read tight.
+    expect(dynamics.particleSpread).toBeLessThan(dynamics.radius);
+    // Old baseline resolved to ~0.38 at this velocity; corrected value sits well below it.
+    expect(dynamics.particleOpacity).toBeLessThan(0.25);
+  });
+
+  it("makes Wiggly Needle's rendering track Needle's corrected core/overspray exactly, differing only in the wiggle offset", () => {
+    const needle = getSprayCapPreset("needle");
+    const wiggly = getSprayCapPreset("wiggly-needle");
+    const point: StrokePoint = { x: 40, y: 40, timestamp: 0, velocity: 0.05, width: 32, opacity: 1 };
+
+    const needleRun = segmentRecordingContext();
+    new SprayBrushEngine().renderSegment(needleRun.ctx, null, point, "#ffffff", needle, createStrokeRandom(4));
+    const wigglyRun = segmentRecordingContext();
+    new SprayBrushEngine().renderSegment(wigglyRun.ctx, null, point, "#ffffff", wiggly, createStrokeRandom(4));
+
+    // Same seed, same stationary point, same corrected deposition parameters —
+    // at zero travel distance there's no wiggle offset yet, so the two must
+    // render byte-identically here (proving the deposition itself is shared).
+    expect(wigglyRun.strokeStyles).toEqual(needleRun.strokeStyles);
+    expect(wigglyRun.fillStyles).toEqual(needleRun.fillStyles);
   });
 
   it("keeps symmetric caps direction-independent — the transversal fix only touches anisotropic caps", () => {

@@ -60,6 +60,67 @@ export function resolveOverspraySquashAngle(anisotropy: number, travelAngle: num
   return anisotropy < 1 ? TRANSVERSAL_AXIS_ANGLE : travelAngle;
 }
 
+/**
+ * Elongation ratios (relative to the resolved deposition radius) for the two
+ * shaped-stamp deposition modes. Slot is deliberately MORE elongated than
+ * oval (bigger length:width aspect ratio) — "more obvious wide/narrow
+ * contrast" than Oval Calligraphy, per the physical-reference brief.
+ */
+const OVAL_STAMP_LENGTH_RATIO = 1.3;
+const OVAL_STAMP_WIDTH_RATIO = 0.55;
+const SLOT_STAMP_LENGTH_RATIO = 1.55;
+const SLOT_STAMP_WIDTH_RATIO = 0.4;
+/** Slot corner radius as a fraction of the stamp's own half-width — enough to soften the rectangle for aerosol realism without reading as an oval. */
+const SLOT_STAMP_CORNER_RATIO = 0.22;
+
+export interface ShapedStampGeometry {
+  shape: "oval" | "slot";
+  halfLength: number;
+  halfWidth: number;
+  rotation: number;
+  cornerRadius: number;
+}
+
+/**
+ * Pure geometry for one shaped core stamp. Notably takes NO travel-direction
+ * input at all — the shape's dimensions and rotation are fixed regardless of
+ * how the path moves, which is the actual fix for "must not rotate with the
+ * stroke tangent": there is nothing here for travel direction to influence.
+ * Returns null for "line" caps, which keep the original stroked-line path.
+ */
+export function resolveShapedStampGeometry(
+  depositionShape: SprayCapPreset["depositionShape"],
+  scale: number,
+): ShapedStampGeometry | null {
+  if (depositionShape === "line") return null;
+  const lengthRatio = depositionShape === "oval" ? OVAL_STAMP_LENGTH_RATIO : SLOT_STAMP_LENGTH_RATIO;
+  const widthRatio = depositionShape === "oval" ? OVAL_STAMP_WIDTH_RATIO : SLOT_STAMP_WIDTH_RATIO;
+  const halfWidth = scale * widthRatio;
+  return {
+    shape: depositionShape,
+    halfLength: scale * lengthRatio,
+    halfWidth,
+    rotation: TRANSVERSAL_AXIS_ANGLE,
+    cornerRadius: depositionShape === "slot" ? halfWidth * SLOT_STAMP_CORNER_RATIO : 0,
+  };
+}
+
+/**
+ * The apparent stroke width a fixed-rotation shaped stamp produces when swept
+ * along a given travel direction — the standard "support width" of an
+ * ellipse/rounded-rect in the direction perpendicular to travel. This is a
+ * pure consequence of the stamp's own fixed geometry, not a separate
+ * width-modulation rule: travel parallel to the shape's long axis yields
+ * ~2*halfWidth (narrow); travel perpendicular yields ~2*halfLength (wide).
+ */
+export function shapedStampWidthAlongTravel(geometry: ShapedStampGeometry, travelAngle: number): number {
+  const perpendicular = travelAngle + Math.PI / 2;
+  const local = perpendicular - geometry.rotation;
+  return 2 * Math.sqrt(
+    (geometry.halfLength * Math.cos(local)) ** 2 + (geometry.halfWidth * Math.sin(local)) ** 2,
+  );
+}
+
 export function createStrokeRandom(seed: number): () => number {
   let state = (seed || 1) >>> 0;
   return () => {
@@ -195,12 +256,26 @@ export class SprayBrushEngine {
         drawnAlpha = priorVisible >= 1 ? 0 : (nextVisible - priorVisible) / (1 - priorVisible);
         this.fillLocalSaturation.set(cellKey, nextVirtual);
       }
-      ctx.strokeStyle = this.hexToRgba(colorHex, drawnAlpha);
-      ctx.lineWidth = Math.max(0.7, dynamics.radius * 2 * directionalAnisotropy * edgeExpansion * endpointScale);
-      ctx.beginPath();
-      ctx.moveTo(drawStart.x + jitterX, drawStart.y + jitterY);
-      ctx.lineTo(drawPoint.x + jitterX, drawPoint.y + jitterY);
-      ctx.stroke();
+      const stampGeometry = resolveShapedStampGeometry(cap.depositionShape, dynamics.radius * edgeExpansion * endpointScale);
+      if (stampGeometry) {
+        // A genuinely elongated, fixed-orientation stamp — not a width trick.
+        // Stamped at both segment endpoints (like renderHalo above) so fine
+        // interpolation spacing tiles into a continuous swept band; the
+        // wide/narrow response is a pure consequence of this fixed shape's
+        // own geometry as it's swept through different travel directions.
+        const fillStyle = this.hexToRgba(colorHex, drawnAlpha);
+        this.drawShapedStamp(ctx, drawStart.x + jitterX, drawStart.y + jitterY, stampGeometry, fillStyle);
+        if (drawStart.x !== drawPoint.x || drawStart.y !== drawPoint.y) {
+          this.drawShapedStamp(ctx, drawPoint.x + jitterX, drawPoint.y + jitterY, stampGeometry, fillStyle);
+        }
+      } else {
+        ctx.strokeStyle = this.hexToRgba(colorHex, drawnAlpha);
+        ctx.lineWidth = Math.max(0.7, dynamics.radius * 2 * directionalAnisotropy * edgeExpansion * endpointScale);
+        ctx.beginPath();
+        ctx.moveTo(drawStart.x + jitterX, drawStart.y + jitterY);
+        ctx.lineTo(drawPoint.x + jitterX, drawPoint.y + jitterY);
+        ctx.stroke();
+      }
     }
 
     ctx.restore();
@@ -242,6 +317,48 @@ export class SprayBrushEngine {
     };
     drawHaloAt(start.x, start.y);
     if (start.x !== point.x || start.y !== point.y) drawHaloAt(point.x, point.y);
+  }
+
+  /**
+   * Draws one fixed-orientation shaped core stamp (oval or rounded slot),
+   * centered at (cx, cy). This is the actual "genuinely elongated deposition"
+   * mechanism — an ellipse or rotated rounded-rectangle path, not a stroked
+   * line with a width trick. See `resolveShapedStampGeometry` for why the
+   * fixed rotation alone (no travel-direction input) is what keeps this from
+   * rotating with the stroke tangent.
+   */
+  private drawShapedStamp(
+    ctx: CanvasRenderingContext2D,
+    cx: number,
+    cy: number,
+    geometry: ShapedStampGeometry,
+    fillStyle: string,
+  ): void {
+    ctx.fillStyle = fillStyle;
+    if (geometry.shape === "oval") {
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, geometry.halfLength, geometry.halfWidth, geometry.rotation, 0, Math.PI * 2);
+      ctx.fill();
+      return;
+    }
+    const { halfLength: hl, halfWidth: hw, rotation, cornerRadius } = geometry;
+    const r = Math.max(0, Math.min(cornerRadius, hl, hw));
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(rotation);
+    ctx.beginPath();
+    ctx.moveTo(-hl + r, -hw);
+    ctx.lineTo(hl - r, -hw);
+    ctx.arcTo(hl, -hw, hl, -hw + r, r);
+    ctx.lineTo(hl, hw - r);
+    ctx.arcTo(hl, hw, hl - r, hw, r);
+    ctx.lineTo(-hl + r, hw);
+    ctx.arcTo(-hl, hw, -hl, hw - r, r);
+    ctx.lineTo(-hl, -hw + r);
+    ctx.arcTo(-hl, -hw, -hl + r, -hw, r);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
   }
 
   public startDrip(seed: DripSeed, color: string, now = performance.now()): void {

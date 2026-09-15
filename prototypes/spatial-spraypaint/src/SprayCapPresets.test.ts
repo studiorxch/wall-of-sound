@@ -2,12 +2,12 @@ import { describe, expect, it } from "vitest";
 import { getSprayCapPreset, mapVelocityToDensity, resolveSprayDynamics, SPRAY_CAP_PRESETS } from "./SprayCapPresets";
 
 describe("spray cap presets", () => {
-  it("defines all eleven graffiti cap families plus the Fuzz Fat and Wiggly Needle effect caps", () => {
-    expect(SPRAY_CAP_PRESETS).toHaveLength(13);
+  it("defines all eleven graffiti cap families plus Rectangular Transversal, Fuzz Fat, and Wiggly Needle", () => {
+    expect(SPRAY_CAP_PRESETS).toHaveLength(14);
     expect(SPRAY_CAP_PRESETS.map((preset) => preset.id)).toEqual([
       "new-york-fat", "pink-dot-fat", "astro-fat", "german-fat",
       "lego-thin", "universal-thin", "level-1", "new-york-thin",
-      "calligraphy", "needle", "wiggly-needle", "soft-fade", "fuzz-fat",
+      "calligraphy", "transversal-slot", "needle", "wiggly-needle", "soft-fade", "fuzz-fat",
     ]);
     expect(new Set(SPRAY_CAP_PRESETS.map((preset) => preset.family))).toEqual(new Set(["fat", "thin", "specialty"]));
   });
@@ -80,5 +80,58 @@ describe("spray cap presets", () => {
     const { wiggleAmplitude: _wigglyWiggle, wiggleFrequency: _wigglyFreq, id: _wigglyId, name: _wigglyName, family: _wigglyFamily, ...wigglyRest } = wiggly;
     expect(wigglyRest).toEqual(needleRest);
     expect(resolveSprayDynamics(wiggly, 0.3, 5)).toEqual(resolveSprayDynamics(needle, 0.3, 5));
+  });
+
+  it("corrects Needle to a concentrated pinline jet: tight mist, hot core, not the old wide-spread fuzz", () => {
+    const needle = getSprayCapPreset("needle");
+    // The old fuzzy baseline: particleSpread 2.05 (the widest of any cap),
+    // particleOpacity 0.3, particleCount 15, endpointBehavior "raw".
+    expect(needle.particleSpread).toBeLessThan(1);
+    expect(needle.particleOpacity).toBeLessThan(0.2);
+    expect(needle.particleCount).toBeLessThan(15);
+    expect(needle.endpointBehavior).not.toBe("raw");
+    // Core stays hot/dense — this was never the problem, and should not regress.
+    expect(needle.coreOpacity).toBeGreaterThanOrEqual(0.42);
+    expect(needle.coreDensity).toBeGreaterThanOrEqual(1.58);
+    // Normal Needle must not wiggle.
+    expect(needle.wiggleAmplitude).toBe(0);
+  });
+
+  it("makes corrected Needle clearly distinct from Fuzz Fat and Soft/Fade, not just narrower", () => {
+    const needle = getSprayCapPreset("needle");
+    const fuzzFat = getSprayCapPreset("fuzz-fat");
+    const softFade = getSprayCapPreset("soft-fade");
+
+    // Fuzz Fat: raw/splattery dry-brush effect. Needle should no longer share its "raw" endpoint identity.
+    expect(needle.endpointBehavior).not.toBe(fuzzFat.endpointBehavior);
+    expect(needle.coreOpacity).toBeGreaterThan(fuzzFat.coreOpacity);
+    expect(needle.particleSpread).toBeLessThan(fuzzFat.particleSpread);
+
+    // Soft/Fade: weak center, broad mist — the opposite personality from a hot concentrated jet.
+    expect(needle.coreOpacity).toBeGreaterThan(softFade.coreOpacity * 2);
+    expect(needle.particleSpread).toBeLessThan(softFade.particleSpread);
+    expect(needle.particleCount).toBeLessThan(softFade.particleCount);
+  });
+
+  it("gives Rectangular Transversal its own canonical id, stamped-slot deposition, and a stronger contrast than Oval Calligraphy", () => {
+    const oval = getSprayCapPreset("calligraphy");
+    const slot = getSprayCapPreset("transversal-slot");
+
+    expect(oval.name).toBe("Oval Calligraphy");
+    expect(oval.depositionShape).toBe("oval");
+    expect(slot.id).toBe("transversal-slot");
+    expect(slot.name).toBe("Rectangular Transversal");
+    expect(slot.family).toBe("specialty");
+    expect(slot.depositionShape).toBe("slot");
+
+    // Both stay directional (anisotropy < 1); slot's overspray squash is stronger (lower anisotropy).
+    expect(oval.anisotropy).toBeLessThan(1);
+    expect(slot.anisotropy).toBeLessThan(oval.anisotropy);
+    // Slot reads harder-edged / more mechanical than the oval's softer character.
+    expect(slot.edgeFalloff).toBeGreaterThan(oval.edgeFalloff);
+
+    // Never collapsed into one preset, and the old id was never renamed out from under replay.
+    expect(oval.id).toBe("calligraphy");
+    expect(getSprayCapPreset("calligraphy").id).toBe("calligraphy");
   });
 });

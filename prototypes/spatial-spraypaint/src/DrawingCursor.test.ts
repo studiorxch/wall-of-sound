@@ -8,7 +8,10 @@ describe("shared Drawing cursor authority", () => {
     const needle = resolveDrawingCursorGeometry({ toolId: "spray-can", variantId: "needle", color: "#f00", size: 5 }, 1);
     expect(fat.shape).toBe("circle");
     expect(fat.width).toBeGreaterThan(64);
-    expect(needle.width).toBeGreaterThan(10);
+    // Corrected Needle's tight particleSpread (0.65, below the coverageScale
+    // clamp floor of 1) means its cursor no longer inflates beyond base size —
+    // an accurate reflection of its now-minimal mist field, not a regression.
+    expect(needle.width).toBe(10);
   });
 
   it("makes Round and both Mop contacts circular but materially different", () => {

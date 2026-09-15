@@ -2,16 +2,17 @@
 
 Date: 2026-09-15
 
-Status: DOCUMENTATION ONLY. No runtime code, presets, or UI were modified to produce this audit. It is the canonical inventory of every currently defined Spray cap plus every currently identified (not yet built) future cap-output archetype, as of commit `31fc282` (`feat: Spray cap personalities — Pink Dot halo, fixed-axis Calligraphy overspray, Wiggly Needle`).
+Status: Originally documentation-only as of commit `31fc282`. **Updated (still same date) after the P0 build that followed this audit** — Needle correction and the Calligraphy→Oval/Rectangular split are now implemented; this revision reflects the 14-cap inventory that resulted. It is the canonical inventory of every currently defined Spray cap plus every currently identified (not yet built) future cap-output archetype.
 
 ## Sources used
 
-- `src/SprayCapPresets.ts` — `SPRAY_CAP_PRESETS` (13 entries) and `resolveSprayDynamics`.
+- `src/SprayCapPresets.ts` — `SPRAY_CAP_PRESETS` (14 entries) and `resolveSprayDynamics`.
 - `src/SprayCapProfile.ts` — `CAP_PROFILE_DETAILS` (coneShape, edge/overspray/output character, orientation behavior, calibration notes, `nominalWidthRange`).
+- `src/SprayBrushEngine.ts` — `resolveShapedStampGeometry`/`shapedStampWidthAlongTravel`/`drawShapedStamp` (the new true-shaped-deposition mechanism for Oval Calligraphy and Rectangular Transversal).
 - `src/main.ts` — how `baseRadius` actually reaches a live stroke.
-- `0911_SPATIAL_SPRAYPAINT_V0.6.3_CURRENT.md` — prior audit findings ("V0.6 Visual Calibration Pass", "Throwie Fill Deposition V1", "V1.1 — Spatial Correctness Fix", "Spray Cap Personality + Specialty Cap Correction").
-- Commit `31fc282` and its live-verification results (Pink Dot vs New York Fat dwell dots, Calligraphy zigzag, Needle vs Wiggly Needle drag, Throwie Fill overlap).
-- `SprayCapPresets.test.ts` / `SprayCapProfile.test.ts` / `SprayBrushEngine.test.ts` for what is actually regression-locked today.
+- `0911_SPATIAL_SPRAYPAINT_V0.6.3_CURRENT.md` — prior audit findings, including the new "Needle Correction + Calligraphy Split (P0)" section.
+- Commit `31fc282` (cap personalities / Pink Dot halo / Calligraphy overspray fix / Wiggly Needle) and the P0 build that followed it (Needle correction, Oval/Rectangular split, live-verified in-browser).
+- `SprayCapPresets.test.ts` / `SprayCapProfile.test.ts` / `SprayBrushEngine.test.ts` / `BrushPreview.test.ts` / `DrawingCursor.test.ts` for what is actually regression-locked today.
 
 ## Classification legend
 
@@ -182,7 +183,7 @@ Below, "documented width/range" quotes `nominalWidthRange` (display-only, unmeas
 - **Physical vs. digital:** represents the real "NY Thin" cap category. Explicitly audited against real reference photos in the prior "V0.6 Visual Calibration Pass" and found already correct — the one thin cap with a completed evidence-based check.
 - **Documented width/range:** 6–14 (unmeasured).
 - **Digital Wall-space width:** `baseRadius` 9.
-- **Dot profile:** `coreDensity` 1.2 (highest of the thin family), `coreOpacity` 0.38 (highest of the thin family), `stationaryDotBehavior` "loaded" (shared only with Pink Dot Fat among all 13).
+- **Dot profile:** `coreDensity` 1.2 (highest of the thin family), `coreOpacity` 0.38 (highest of the thin family), `stationaryDotBehavior` "loaded" (shared only with Pink Dot Fat among all 14).
 - **Moving stroke profile:** `velocityResponse` 0.86, `endpointBehavior` "punchy".
 - **Core/body character:** confident, controlled line — directly the language of the prior audit finding.
 - **Edge character:** hard, with "appropriately soft aerosol edge" per audit language (`edgeFalloff` 0.82).
@@ -196,94 +197,117 @@ Below, "documented width/range" quotes `nominalWidthRange` (display-only, unmeas
 - **Target behavior:** no change — already matches reference.
 - **Exact next calibration test:** none required unless new reference evidence emerges; optional re-confirmation only if a future thin-cap differentiation pass touches shared code paths.
 
-### 9. Calligraphy / Transversal
-- **ID:** `calligraphy` · **Family:** specialty
-- **Classification:** NEEDS CALIBRATION
-- **Physical vs. digital:** represents a real rectangular/slot-outlet transversal cap. This task's new physical reference states the real cap uses a rectangular/slot-like outlet; the current implementation is a width-modulated line-stroke approximation, not a true rectangular footprint.
+### 9. Oval Calligraphy
+- **ID:** `calligraphy` (unchanged — see Compatibility note below) · **Family:** specialty
+- **Classification:** NEEDS CALIBRATION (the specific "round-capped line, not a real footprint" defect is now RESOLVED at the mechanism level; magnitude/shape ratios remain unverified against a real reference — see below)
+- **Physical vs. digital:** represents the softer/rounder half of a real rectangular/slot-outlet transversal cap family. As of the P0 build, genuinely stamped as an elongated **oval**, not a width-modulated line.
 - **Documented width/range:** 14–34 (unmeasured).
 - **Digital Wall-space width:** `baseRadius` 25.
-- **Dot profile:** `coreDensity` 1.02, `coreOpacity` 0.33, `anisotropy` 0.32 — the only cap below 1, defining its elongated identity.
-- **Moving stroke profile:** `coneShape` "fan" (unique among all caps) — core width now varies by travel angle relative to a fixed axis (`TRANSVERSAL_AXIS_ANGLE`, matching the Marker Chisel's own nib-angle convention).
-- **Core/body character:** direction-dependent width — wide crossing the axis, narrow along it — chisel-nib-like, not a uniform line.
-- **Edge character:** balanced (`edgeFalloff` 0.74).
-- **Overspray character:** as of commit `31fc282`, anchored to the fixed axis via `resolveOverspraySquashAngle` instead of rotating with travel — the specific fix for the "rotating ribbon" complaint.
+- **Dot profile:** `coreDensity` 1.02, `coreOpacity` 0.33, `anisotropy` 0.32, `depositionShape` "oval" — a genuine ellipse stamp (`ctx.ellipse`), not a line.
+- **Moving stroke profile:** `coneShape` "fan" — core deposition is now `resolveShapedStampGeometry("oval", scale)`: a fixed-rotation ellipse (half-length ≈1.3×radius, half-width ≈0.55×radius, aspect ratio ≈2.4) stamped at both segment endpoints, tiling into a continuous swept band. The wide/narrow response is a geometric consequence of sweeping this fixed shape, not a separately-computed line-width multiplier.
+- **Core/body character:** direction-dependent width via real shape geometry — wide crossing the axis, narrow along it — chisel-nib-like, softer and rounder than its Rectangular Transversal sibling.
+- **Edge character:** balanced (`edgeFalloff` 0.74) — the softer of the two transversal caps.
+- **Overspray character:** anchored to the fixed axis via `resolveOverspraySquashAngle` (unchanged from commit `31fc282`).
 - **Motion/speed response:** medium (`velocityResponse` 0.72).
-- **Orientation behavior:** `orientationBehavior` "fixed-transversal" — the only cap with this designation; orientation stays constant regardless of travel direction (both core width and, as of this pass, overspray).
+- **Orientation behavior:** `orientationBehavior` "fixed-transversal" — `resolveShapedStampGeometry` takes **no travel-angle input at all**, so the shape's rotation cannot follow the stroke tangent by construction, not just by convention.
 - **Dwell behavior:** settled; no halo.
 - **Drip status:** `dripTendency` 0.22.
-- **Current visual strengths:** live-verified this pass — a zigzag stroke reads as one coherent chisel-like sweep with no visible plume rotation; direction-dependent width (parallel = narrow, perpendicular = wide) reconfirmed live, matching standard broad-nib calligraphy-pen physics.
-- **Known visual defects:** the deposition footprint is still a width-modulated **round-capped line stroke**, not a true rectangular/slot polygon — a genuine chisel nib leaves a parallelogram with slanted ends at the fixed axis angle when traveling diagonally; the current approximation only varies perpendicular width, so a diagonal stroke's end caps stay round/butt rather than slanted. Transversal's own configurable rotation control does not exist yet — still one shared cap identity with a fixed axis (see Unassigned Archetypes #3–4).
-- **Target behavior:** rectangular/elongated deposition footprint, fixed orientation, default angled axis, broad when crossing / narrow when aligned, no wiggle — width/orientation/no-wiggle now hold; true rectangular-footprint geometry does not yet exist.
-- **Exact next calibration test:** a diagonal-travel stroke inspected specifically for end-cap shape (slanted parallelogram vs. round/butt) against the new rectangular-outlet reference sketch, to decide whether a true polygon-footprint renderer is warranted or the line-stroke approximation is visually sufficient.
+- **Current visual strengths:** live-verified in the P0 build — horizontal/vertical/diagonal/loop matrix shows thin-parallel/thick-perpendicular width with a smooth, rounded, soft-edged loop outline and zero rotation-with-stroke artifact across every direction change.
+- **Known visual defects:** the oval's exact aspect ratio (2.4, i.e. length:width ≈1.3:0.55) was chosen by screenshot judgment against the supplied references, not measured or derived from the reference photo's actual proportions.
+- **Target behavior:** elongated oval footprint, rounded ends, fixed stable angle, softer/smoother character, no wiggle — all now hold at the mechanism level; magnitude unverified.
+- **Exact next calibration test:** side-by-side against the rectangular-outlet reference sketch to judge whether 2.4:1 is the right aspect ratio for "oval," or should shift closer to/further from Rectangular Transversal's 3.9:1.
 
-### 10. Needle
+### 10. Rectangular Transversal
+- **ID:** `transversal-slot` (new canonical id, added in the P0 build — never overwrote `calligraphy`) · **Family:** specialty
+- **Classification:** NEEDS CALIBRATION (new cap; mechanism-complete, magnitude/shape unverified against a real reference)
+- **Physical vs. digital:** represents the harder-edged, more mechanical half of the real rectangular/slot-outlet transversal cap family described in the P0 brief's new physical reference.
+- **Documented width/range:** 14–34 (same range text as Oval Calligraphy — shares its `baseRadius`/scale family; unmeasured).
+- **Digital Wall-space width:** `baseRadius` 25.
+- **Dot profile:** `coreDensity` 1.02, `coreOpacity` 0.33, `anisotropy` 0.22 (lower than Oval's 0.32 — a stronger overspray squash too), `depositionShape` "slot" — a rotated rounded-rectangle path (`translate`+`rotate`+`arcTo` corners), not an ellipse and not a line.
+- **Moving stroke profile:** `resolveShapedStampGeometry("slot", scale)`: half-length ≈1.55×radius, half-width ≈0.4×radius (aspect ratio ≈3.9 — more elongated than Oval's 2.4), plus a small softened corner radius (≈0.22×half-width) "for aerosol realism" per the brief, without reading as an oval.
+- **Core/body character:** stronger side definition, more obvious wide/narrow contrast than Oval Calligraphy — confirmed both mathematically (`shapedStampWidthAlongTravel`'s swing ratio is larger for slot than oval) and visually (live-verified loop shows a visibly more angular/faceted outline than Oval's smooth roundness).
+- **Edge character:** hard (`edgeFalloff` 0.85, vs. Oval's 0.74) — reads more mechanical/nozzle-like, per "should read more like a spray chisel/slot nozzle."
+- **Overspray character:** anchored to the fixed axis (same mechanism as Oval), with a stronger squash from the lower `anisotropy`.
+- **Motion/speed response:** medium (`velocityResponse` 0.72, same as Oval).
+- **Orientation behavior:** `orientationBehavior` "fixed-transversal" — same no-travel-angle-input geometry guarantee as Oval Calligraphy.
+- **Dwell behavior:** settled; no halo.
+- **Drip status:** `dripTendency` 0.22 (same as Oval).
+- **Current visual strengths:** live-verified in the P0 build — same directional matrix as Oval shows the same fixed-axis stability, with a visibly flatter/harder-edged, more contrasty result.
+- **Known visual defects:** the slot's corner radius, aspect ratio, and `edgeFalloff` bump were all chosen by judgment, not measured against the reference photo's actual slot-outlet proportions. A genuine chisel nib traveling diagonally would show slanted-parallelogram end caps; this stamped-rounded-rect approach approximates that better than the old line-stroke did, but the corner rounding softens the true sharp-rectangular character somewhat.
+- **Target behavior:** flatter rectangular/slot-like footprint, stronger side definition, more obvious wide/narrow contrast, stable fixed orientation, no automatic rotation with path tangent, no wiggle — all now hold at the mechanism level; exact proportions unverified.
+- **Exact next calibration test:** diagonal-travel stroke inspected specifically for end-cap shape against the rectangular-outlet reference sketch, and a direct side-by-side with Oval Calligraphy at matched width to judge whether the contrast difference reads as intended at real drawing scale.
+
+**Compatibility note (both caps above):** per the P0 brief's own suggested strategy, `calligraphy` was never renamed or forked — it keeps its exact id, only its display name changed ("Calligraphy / Transversal" → "Oval Calligraphy") and its rendering mechanism changed in place (line → oval stamp). This is safe under the Standing Rule in the checkpoint doc specifically because no artwork persistence exists yet (the same reasoning already used for german-fat's pre-fork numbers). `transversal-slot` is an entirely new id, additive only. `getSprayCapPreset("calligraphy")` continues to resolve correctly; no alias table changes were needed.
+
+### 11. Needle
 - **ID:** `needle` · **Family:** specialty
-- **Classification:** NEEDS CALIBRATION (per this task's explicit instruction — supersedes the prior pass's "no change needed" finding)
+- **Classification:** NEEDS CALIBRATION (the specific "fuzzy" defect is now RESOLVED — corrected in the P0 build; exact magnitude unverified against a real reference)
 - **Physical vs. digital:** represents the real "Needle" ultra-fine, high-pressure cap category.
 - **Documented width/range:** 3–10 (tied narrowest with Wiggly Needle; unmeasured).
 - **Digital Wall-space width:** `baseRadius` 5.
-- **Dot profile:** `coreDensity` 1.58 (highest of all 13 caps), `coreOpacity` 0.42 (highest of all 13 caps), no halo.
-- **Moving stroke profile:** `particleSpread` 2.05 (highest of all caps, by a wide margin), `splatterProbability` 0.24 (second-highest of all caps), `edgeFalloff` 0.92 (highest of all caps — most pass-to-pass expansion), `jitter` 0.12, `endpointBehavior` "raw".
-- **Core/body character:** extremely concentrated core (highest density/opacity of any cap) surrounded by the widest, splatteriest overspray field of any cap.
-- **Edge character:** raw.
-- **Overspray character:** splattery, very wide.
-- **Motion/speed response:** high (`velocityResponse` 0.9).
-- **Orientation behavior:** symmetric.
-- **Dwell behavior:** "loaded" stationary dot.
-- **Drip status:** `dripTendency` 0.94 — highest of all caps (matches Wiggly Needle, its numeric twin).
-- **Current visual strengths:** a genuinely hot, concentrated core — highest `coreDensity`/`coreOpacity` in the set. The "jet" character is present at the core level.
-- **Known visual defects:** the combination of maximal `edgeFalloff` (0.92) and maximal `particleSpread` (2.05) means both the core's own multi-pass expansion and its overspray push outward aggressively — very likely what reads as "fuzzy" rather than a tight concentrated jet. This task explicitly flags Needle as needing correction away from that fuzzy read.
-- **Target behavior:** a tighter, more concentrated jet character — reduced edge expansion and/or narrower particle spread while preserving the hot core, without merging into Wiggly Needle's separate wander behavior.
-- **Exact next calibration test:** Needle vs. a "Concentrated Needle Jet" candidate (see Unassigned Archetypes #6) side by side at matched width, varying `edgeFalloff` and `particleSpread` in isolation first, to identify which one actually drives the fuzzy read before touching both at once.
+- **Dot profile:** `coreDensity` 1.58 (highest of all 14 caps, unchanged), `coreOpacity` 0.48 (raised from 0.42 — hotter, highest of all 14 caps), no halo.
+- **Moving stroke profile (corrected):** `particleSpread` 0.65 (was 2.05, the widest of any cap — now one of the *tightest*), `particleOpacity` 0.16 (was 0.3, the highest — now well below New York Fat's 0.25), `particleCount` 9 (was 15), `edgeFalloff` 0.94 (was 0.92 — already near-tightest by this formula, nudged tighter still), `endpointBehavior` "tapered" (was "raw" — no longer shares Fuzz Fat/German Fat's identity), `jitter`/`velocityResponse`/`splatterProbability`/`dripTendency`/`flowRate`/`accumulationRate` unchanged (not in the audited field list, not identified as causes).
+- **Core/body character:** extremely concentrated core (highest density/opacity of any cap) now paired with a genuinely tight, sparse overspray field — a real "pinline jet," not a hot core drowned in mist.
+- **Edge character:** hard (was raw) — refined, not rough.
+- **Overspray character:** restrained (was splattery) — sparse, faint specks read as authentic occasional sputter (`splatterProbability` 0.24 unchanged) rather than a bold cloud.
+- **Motion/speed response:** high (`velocityResponse` 0.9, unchanged — audited, judged already correct).
+- **Orientation behavior:** symmetric. Does **not** wiggle (`wiggleAmplitude` 0) — explicit requirement, unaffected by this correction.
+- **Dwell behavior:** "loaded" stationary dot — still hot, no longer surrounded by a wide mist halo.
+- **Drip status:** `dripTendency` 0.94 — highest of all caps (matches Wiggly Needle, its numeric twin), unchanged.
+- **Root cause finding (corrects this audit's own earlier diagnosis):** `edgeFalloff` is *inversely* related to pass-to-pass core bloom (`edgeExpansion = 1 + passRatio*(1-edgeFalloff)*0.72`), so the old 0.92 value actually gave Needle one of the *tightest* cores already — the core was never the problem, contrary to this document's original (superseded) analysis. The actual fuzziness driver was overspray: `particleSpread` 2.05 (widest of any cap) × `particleOpacity` 0.3 (highest of any cap) × `particleCount` 15 produced a visible wide mist cloud around an already-hot core.
+- **Current visual strengths:** live-verified in the P0 build — a drag reads as a tight, clean line with minimal visible mist, a clear departure from the old wide fuzzy halo. Distinct from Fuzz Fat (no longer shares "raw" endpoint identity; hotter core, tighter spread) and from Soft/Fade (opposite personality: hot/tight vs. weak/diffuse) — both confirmed by dedicated tests.
+- **Known visual defects:** the corrected magnitudes (how tight, how hot) were chosen by screenshot judgment against the supplied references, not measured.
+- **Target behavior:** concentrated pinline jet, tight dense core, much lower bloom, minimal mist compared with normal thin caps, optional sparse sputter, clean straight behavior — now holds at the mechanism level.
+- **Exact next calibration test:** side-by-side against a real Needle reference photo/video to confirm the corrected magnitude (not just direction) is right — is 0.65 particleSpread too tight, too loose, or about right relative to a real high-pressure jet's actual mist?
 
-### 11. Wiggly Needle
+### 12. Wiggly Needle
 - **ID:** `wiggly-needle` · **Family:** specialty
 - **Classification:** DIGITAL EFFECT
-- **Physical vs. digital:** StudioRich digital specialty behavior — not a physical-cap target. Its deposition numbers are Needle's, byte-for-byte (same fork discipline as Fuzz Fat), so any physical-calibration work on Needle should be explicitly mirrored here or explicitly forked away — see Preserved Distinctions.
+- **Physical vs. digital:** StudioRich digital specialty behavior — not a physical-cap target. Its deposition numbers are the *corrected* Needle's, byte-for-byte (re-forked in the P0 build specifically so it wouldn't silently retain the old fuzzy numbers — see Preserved Distinctions and the checkpoint doc).
 - **Documented width/range:** 3–10 (identical display text to Needle; unmeasured).
 - **Digital Wall-space width:** `baseRadius` 5.
-- **Dot profile:** identical to Needle's (same `coreDensity`/`coreOpacity`, no halo) — the wiggle only affects the *drawn path*, not the dot itself: at zero travel distance there is no defined travel angle, so a pure dwell dot is presently indistinguishable from Needle's.
-- **Moving stroke profile:** same core/overspray numbers as Needle, plus a deterministic perpendicular lateral offset — amplitude 0.6× resolved radius, frequency 0.02 rad/ms against each point's own stored timestamp.
-- **Core/body character:** identical to Needle's (whatever Needle's fuzzy-vs.-jet state is, Wiggly Needle inherits it directly, by design).
-- **Edge character:** same as Needle (raw).
-- **Overspray character:** same as Needle (splattery, wide).
+- **Dot profile:** identical to corrected Needle's (same `coreDensity` 1.58/`coreOpacity` 0.48, no halo) — the wiggle only affects the *drawn path*, not the dot itself: at zero travel distance there is no defined travel angle, so a pure dwell dot is byte-identical to Needle's (confirmed by a dedicated test).
+- **Moving stroke profile:** same corrected core/overspray numbers as Needle (tight `particleSpread` 0.65, faint `particleOpacity` 0.16, `particleCount` 9), plus a deterministic perpendicular lateral offset — amplitude 0.6× resolved radius, frequency 0.02 rad/ms against each point's own stored timestamp.
+- **Core/body character:** identical to corrected Needle's — a clean, tight jet, now wandering instead of straight, not the old fuzzy cloud with a wiggle on top.
+- **Edge character:** same as corrected Needle (hard/tapered, not raw).
+- **Overspray character:** same as corrected Needle (restrained, tight).
 - **Motion/speed response:** same as Needle (0.9).
 - **Orientation behavior:** specialty oscillating — the only cap in this category by *behavior*. **Note:** the code's `orientationBehavior` enum (`SprayCapProfile.ts`) currently only distinguishes `"symmetric" | "fixed-transversal"`; Wiggly Needle's `CAP_PROFILE_DETAILS` entry is technically `"symmetric"` even though its actual behavior oscillates. This is a taxonomy gap, not a bug — nothing currently branches on this value for Wiggly Needle specifically — but it means the code's own metadata cannot yet distinguish "oscillating" from "symmetric" the way this audit's requested ORIENTATION taxonomy (symmetric / fixed elongated / rotated elongated / specialty oscillating) can.
 - **Dwell behavior:** same as Needle (no distinct wiggle behavior at zero distance).
 - **Drip status:** 0.94, same as Needle.
-- **Current visual strengths:** live-verified this pass — a straight drag reads as a clean, smooth, bounded sine wave, clearly distinct from Needle's straight line at identical settings; deterministic (timestamp-driven, not `Math.random`), so it replays identically.
-- **Known visual defects:** none against its own target; it directly inherits whatever "fuzzy" defect Needle has, since the deposition numbers are shared.
-- **Target behavior:** narrow output, intentionally oscillating/wavering trajectory, expressive instability — met at the mechanism level; amplitude/frequency were chosen by screenshot judgment, not tuned against any reference.
-- **Exact next calibration test:** once Needle's own core/overspray correction is done, explicitly decide whether to mirror that fix into Wiggly Needle or intentionally fork it — do not let the two silently diverge or silently stay coupled without a decision. Separately, check amplitude/frequency at real hand-drawing speed for "expressive but controlled" vs. "distractingly jittery."
+- **Current visual strengths:** live-verified in the P0 build (via timed synthetic pointer dispatch, since a single fast automated drag doesn't advance real elapsed time enough for the sine wave's phase to show) — reads as a smooth, bounded wave with the same tight, clean character as corrected Needle, clearly distinct from both the straight Needle line and the old fuzzy baseline.
+- **Known visual defects:** none against its own target; wiggle amplitude/frequency remain judgment calls, not tuned against any reference.
+- **Target behavior:** narrow output, intentionally oscillating/wavering trajectory, expressive instability, inheriting the corrected (not fuzzy) Needle personality — now holds fully.
+- **Exact next calibration test:** amplitude/frequency checked at real hand-drawing speed for "expressive but controlled" vs. "distractingly jittery," now that the underlying deposition character is correct.
 
-### 12. Soft / Fade
+### 13. Soft / Fade
 - **ID:** `soft-fade` · **Family:** specialty
 - **Classification:** VERIFIED
 - **Physical vs. digital:** no single named real cap maps to this as cleanly as the others — `LEGACY_CAP_ALIASES` maps both `"soft"` and `"dust-fog"` to this id, suggesting it represents a general low-pressure/dust-cap-style diffuse output rather than one specific named physical cap. Audited against real reference photos in the prior pass and found already correct.
 - **Documented width/range:** 34–68 (unmeasured).
 - **Digital Wall-space width:** `baseRadius` 50.
-- **Dot profile:** `coreDensity` 0.36 (lowest of all 13 caps), `coreOpacity` 0.13 (lowest of all 13 caps), no halo — weak center by design.
-- **Moving stroke profile:** `particleCount` 42 (highest of all 13 caps), `particleSpread` 1.6, `particleOpacity` 0.14 (low) — broad, misty, low-density field rather than a dense core.
+- **Dot profile:** `coreDensity` 0.36 (lowest of all 14 caps), `coreOpacity` 0.13 (lowest of all 14 caps), no halo — weak center by design.
+- **Moving stroke profile:** `particleCount` 42 (highest of all 14 caps), `particleSpread` 1.6, `particleOpacity` 0.14 (low) — broad, misty, low-density field rather than a dense core.
 - **Core/body character:** weak center, broad mist — matches prior audit language "broad/diffuse."
-- **Edge character:** soft (`edgeFalloff` 0.28 — lowest of all 13 caps, i.e. the most pass-to-pass spread/softening).
+- **Edge character:** soft (`edgeFalloff` 0.28 — lowest of all 14 caps, i.e. the most pass-to-pass spread/softening).
 - **Overspray character:** wide, high particle count, low per-particle opacity — genuinely diffuse rather than a fat cap with blur.
 - **Motion/speed response:** `velocityResponse` 0.82.
 - **Orientation behavior:** symmetric.
 - **Dwell behavior:** settled, gradual accumulation (matches target, confirmed already correct).
-- **Drip status:** `dripTendency` 0.04 — lowest of all 13 caps (a diffuse mist cap shouldn't drip).
+- **Drip status:** `dripTendency` 0.04 — lowest of all 14 caps (a diffuse mist cap shouldn't drip).
 - **Current visual strengths:** confirmed by direct photo audit — "clearly different from a fat cap with blur," matches target already, no changes made.
 - **Known visual defects:** none identified.
 - **Target behavior:** no change.
 - **Exact next calibration test:** none required unless new reference evidence emerges.
 
-### 13. Fuzz Fat
+### 14. Fuzz Fat
 - **ID:** `fuzz-fat` · **Family:** specialty
 - **Classification:** DIGITAL EFFECT
 - **Physical vs. digital:** explicitly not a physical-cap target — a permanent StudioRich digital effect, forked verbatim from German/Hardcore Fat's pre-calibration numbers specifically so German/Hardcore Fat could later be recalibrated toward a real reference without disturbing this effect.
 - **Documented width/range:** 28–50 (identical text to German/Hardcore Fat, inherited from the fork; unmeasured).
 - **Digital Wall-space width:** `baseRadius` 38 (identical to German/Hardcore Fat).
 - **Dot profile:** identical to German/Hardcore Fat's (`coreDensity` 1.06, `coreOpacity` 0.27, no halo).
-- **Moving stroke profile:** identical to German/Hardcore Fat's (`edgeFalloff` 0.54, `jitter` 0.18, `splatterProbability` 0.28 — highest of all 13 caps, `endpointBehavior` "raw").
+- **Moving stroke profile:** identical to German/Hardcore Fat's (`edgeFalloff` 0.54, `jitter` 0.18, `splatterProbability` 0.28 — highest of all 14 caps, `endpointBehavior` "raw").
 - **Core/body character:** fuzzy/hairy/dry-brush texture — its defining, intentional character.
 - **Edge character:** raw.
 - **Overspray character:** splattery, highest `splatterProbability` of any cap.
@@ -302,46 +326,47 @@ Below, "documented width/range" quotes `nominalWidthRange` (display-only, unmeas
 
 None of the following correspond to a confirmed physical cap. They are named here as identified behavioral targets only, per the reference evidence and gaps surfaced by this and prior passes — **do not claim a specific physical-cap correspondence for any of these until real reference evidence supports it.**
 
-1. **Ring / Donut** — a hollow ring/donut-shaped deposition (dense ring, lighter or empty center) instead of a filled dot. No current mechanism produces this — every cap's core is a filled stroke/dot. Would need either an inverse-alpha center mask or a stroked (unfilled) ring drawn per point. Not started.
+1. **Ring / Donut** — a hollow ring/donut-shaped deposition (dense ring, lighter or empty center) instead of a filled dot. No current mechanism produces this — every cap's core is a filled stroke/dot. Would need either an inverse-alpha center mask or a stroked (unfilled) ring drawn per point. Not started. Explicitly NOT implemented in the P0 build that resolved archetypes #3–4 below — still open.
 
-2. **Dry / Streak** — an under-loaded/dry-cap output: streaky, broken, textured coverage with visible gaps, rather than the continuous coverage every current cap produces. Closer to a real cap running low on paint or held too far from the surface. Would need a texture/gap mechanism (e.g. probabilistic per-pass alpha dropout or a noise-masked core) that doesn't exist in the engine today. Not started.
+2. **Dry / Streak** — an under-loaded/dry-cap output: streaky, broken, textured coverage with visible gaps, rather than the continuous coverage every current cap produces. Closer to a real cap running low on paint or held too far from the surface. Would need a texture/gap mechanism (e.g. probabilistic per-pass alpha dropout or a noise-masked core) that doesn't exist in the engine today. Not started. Also explicitly out of scope for the P0 build below — still open.
 
-3. **Rounded Oval Calligraphy** — an elongated-but-*rounded* (oval, not rectangular) fixed-orientation footprint. Worth naming explicitly because it may already be closer to what the *current* Calligraphy cap effectively produces today (a width-modulated round-capped line reads more "oval" than "rectangular") — flagged here as a decision point: is today's Calligraphy actually this archetype under a different name, or should it become archetype #4 below and this stay a distinct, softer alternative?
+3. ~~Rounded Oval Calligraphy~~ — **RESOLVED, now built** as cap #9, "Oval Calligraphy" (`calligraphy` id, `depositionShape: "oval"`). No longer a future archetype.
 
-4. **Rectangular / Slot Transversal** — the true rectangular/slot-outlet footprint described in this task's new physical reference: fixed orientation, slanted-parallelogram end caps on diagonal travel, sharp rectangular corners rather than round ones. Does not exist yet. Current Calligraphy is a round-capped-line approximation of this target (see cap #9 above).
+4. ~~Rectangular / Slot Transversal~~ — **RESOLVED, now built** as cap #10, "Rectangular Transversal" (new `transversal-slot` id, `depositionShape: "slot"`). No longer a future archetype.
 
-5. **Loaded Dot / Halo (as a general trait)** — generalizing Pink Dot Fat's new `haloRadius`/`haloOpacity` mechanism as a trait any cap could opt into, not just Pink Dot Fat. The mechanism exists in the engine now (`SprayBrushEngine.renderHalo`); it is not yet exposed as an independent, reusable trait beyond the one cap it was built for.
+5. **Loaded Dot / Halo (as a general trait)** — generalizing Pink Dot Fat's `haloRadius`/`haloOpacity` mechanism as a trait any cap could opt into, not just Pink Dot Fat. The mechanism exists in the engine now (`SprayBrushEngine.renderHalo`); it is not yet exposed as an independent, reusable trait beyond the one cap it was built for. Still open — untouched by the P0 build.
 
-6. **Concentrated Needle Jet** — a corrected Needle variant with the same hot, dense core but a much tighter edge/overspray field (lower `edgeFalloff`, narrower `particleSpread`) than today's Needle. The direct target of Needle's P0 correction item (see queue below); listed as its own archetype because the corrected result may end up warranting a distinct identity from both "fixed Needle" and "Wiggly Needle," depending on how much the correction changes its character.
+6. ~~Concentrated Needle Jet~~ — **RESOLVED, now built** directly into cap #11, "Needle" itself (not a separate identity — the corrected Needle *is* the concentrated jet). No separate archetype needed.
 
 ---
 
 ## Preserved distinctions (explicit, do not blur)
 
-- **Fuzz Fat** is a StudioRich digital effect and must not be overwritten by German/Hardcore Fat calibration — enforced today by `SprayCapPresets.test.ts`'s byte-identical fork test, which must keep passing through any future German/Hardcore Fat recalibration.
-- **Calligraphy** should trend toward stable elongated output, not wiggle — the fixed-axis core width (prior pass) and fixed-axis overspray (commit `31fc282`) both hold today; the remaining gap is footprint shape (line-stroke approximation vs. true rectangular polygon), not orientation stability.
-- **Transversal** should eventually be treated as the orientation/rotation-capable variation of this elongated family — does not exist as a separate identity yet; Calligraphy currently has one shared fixed axis with no rotation control.
-- **Needle** currently requires correction away from fuzzy behavior — flagged NEEDS CALIBRATION above (cap #10), P0 in the queue below.
-- **Wiggly Needle** is a separate intentional specialty behavior and a future Waveformer candidate — its deposition numbers are shared with Needle today by deliberate fork, not by accident; a decision is needed on whether Needle's upcoming correction should be mirrored into it.
-- **Pink Dot** now has core+halo behavior but remains physically unverified — mechanism-complete (cap #2 above), magnitude unverified against a real reference.
-- **Throwie Fill mode** is usage/deposition behavior (`ToolStrokeStyle.fillMode`, `SprayBrushEngine.fillLocalSaturation`), not a cap identity — it layers on top of whichever cap is active and is unaffected by this audit or by any cap-personality work above it.
+- **Fuzz Fat** is a StudioRich digital effect and must not be overwritten by German/Hardcore Fat calibration — enforced today by `SprayCapPresets.test.ts`'s byte-identical fork test, which must keep passing through any future German/Hardcore Fat recalibration. Untouched by the P0 build (still numerically identical to German/Hardcore Fat, confirmed passing).
+- **Calligraphy trends toward stable elongated output, not wiggle** — now holds via genuine shape geometry (`resolveShapedStampGeometry` takes no travel-angle input at all), not just a fixed-axis width multiplier. Split into Oval Calligraphy (`calligraphy` id, softer/rounder) and Rectangular Transversal (`transversal-slot` id, harder/more contrasty) — see caps #9–10.
+- **Transversal is now its own identity** (`transversal-slot`, "Rectangular Transversal") with a real shape distinction from Oval Calligraphy — the orientation/rotation-capable *control* (letting a user pick a different fixed axis, not just choose between Oval and Slot shapes) still does not exist; remains P1.
+- **Needle no longer requires correction away from fuzzy behavior** — corrected in the P0 build (cap #11); root cause was overspray spread/opacity/count, not the core. Still needs physical-magnitude verification, but the reported defect is resolved.
+- **Wiggly Needle is a separate intentional specialty behavior and a future Waveformer candidate** — re-forked from the *corrected* Needle in the same P0 build (verified byte-identical to Needle at zero travel distance), so it does not silently retain the old fuzzy personality.
+- **Pink Dot** still has core+halo behavior but remains physically unverified — unchanged by this build (cap #2 above), magnitude unverified against a real reference.
+- **Throwie Fill mode** is usage/deposition behavior (`ToolStrokeStyle.fillMode`, `SprayBrushEngine.fillLocalSaturation`), not a cap identity — it layers on top of whichever cap is active and remains unaffected; re-verified live after this build's changes (a partially-overlapping fill still shows denser overlap regions and lighter-but-present fresh territory, no fade-to-zero).
 
 ---
 
 ## Prioritized calibration queue
 
 ### P0 (as directed)
-1. **Needle correction** — reduce the fuzzy read (see cap #10) without disturbing Wiggly Needle's shared numbers without a decision.
-2. **Calligraphy split/correction** — resolve the Rounded-Oval-vs-Rectangular-Slot question (archetypes #3–4) and decide whether a true polygon footprint is warranted.
-3. **Ring archetype** — no current mechanism; earliest of the wholly-new archetypes to scope.
-4. **Dry/Streak archetype** — no current mechanism; second new archetype to scope.
-5. **Astro / New York Fat / German-Hardcore differentiation** — Astro-vs-NY-Fat live comparison is overdue (never run as a dedicated test); German/Hardcore is blocked on reference evidence acquisition specifically.
+1. ~~**Needle correction**~~ — **DONE.** See cap #11; root cause corrected (overspray, not core), Wiggly Needle re-forked from the corrected result.
+2. ~~**Calligraphy split/correction**~~ — **DONE.** Split into Oval Calligraphy (cap #9) and Rectangular Transversal (cap #10), both with genuine fixed-orientation shape geometry, not a line-width trick.
+3. **Ring archetype** — no current mechanism; earliest of the remaining wholly-new archetypes to scope. Still open.
+4. **Dry/Streak archetype** — no current mechanism; second new archetype to scope. Still open.
+5. **Astro / New York Fat / German-Hardcore differentiation** — Astro-vs-NY-Fat live comparison is still overdue (never run as a dedicated test); German/Hardcore is still blocked on reference evidence acquisition specifically. Still open.
 
 ### P1
 - **Pink Dot halo physical calibration** — tune `haloRadius`/`haloOpacity` magnitude against a real loaded-dot reference once available (cap #2's exact next test).
 - **Thin-cap family differentiation pass** — Lego Thin / Universal Thin / Level 1 vs. New York Thin's already-verified baseline (caps #5–7's shared next test).
-- **Transversal configurable rotation control** — the deferred item from commit `31fc282`; needs a new cap identity plus a minimal UI control.
-- **Wiggly Needle fork-or-mirror decision** — must be made explicitly once Needle's P0 correction lands, not left implicit.
+- **Oval vs. Rectangular Transversal magnitude verification** — both caps' aspect ratios (2.4 vs. 3.9) and Rectangular's corner radius were judgment calls; check against the reference sketch's actual proportions.
+- **Needle's corrected magnitude verification** — direction is now right (tight, hot); exact numbers (how tight, how hot) are still a judgment call pending a real Needle reference.
+- **Transversal configurable rotation control** — a genuinely new item now: letting a user pick a different fixed axis (not just choose Oval vs. Slot shape). Needs a UI control beyond this build's scope.
 
 ### P2
 - **Loaded Dot/Halo as a general reusable trait** (archetype #5) — speculative until a second cap besides Pink Dot Fat is identified as needing it.

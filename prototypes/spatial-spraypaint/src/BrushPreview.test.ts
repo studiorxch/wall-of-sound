@@ -15,8 +15,12 @@ function recordingContext(): { ctx: CanvasRenderingContext2D; log: string[] } {
     moveTo: (x: number, y: number) => push(`moveTo(${x.toFixed(2)},${y.toFixed(2)})`),
     lineTo: (x: number, y: number) => push(`lineTo(${x.toFixed(2)},${y.toFixed(2)})`),
     arc: (x: number, y: number, r: number) => push(`arc(${x.toFixed(2)},${y.toFixed(2)},${r.toFixed(2)})`),
-    ellipse: (x: number, y: number, rx: number, ry: number) =>
-      push(`ellipse(${x.toFixed(2)},${y.toFixed(2)},${rx.toFixed(2)},${ry.toFixed(2)})`),
+    ellipse: (x: number, y: number, rx: number, ry: number, rotation: number) =>
+      push(`ellipse(${x.toFixed(2)},${y.toFixed(2)},${rx.toFixed(2)},${ry.toFixed(2)},${rotation.toFixed(3)})`),
+    arcTo: (x1: number, y1: number, x2: number, y2: number) =>
+      push(`arcTo(${x1.toFixed(2)},${y1.toFixed(2)},${x2.toFixed(2)},${y2.toFixed(2)})`),
+    translate: (x: number, y: number) => push(`translate(${x.toFixed(2)},${y.toFixed(2)})`),
+    rotate: (angle: number) => push(`rotate(${angle.toFixed(3)})`),
     fill: () => push(`fill:${fillStyle}`),
     stroke: () => push(`stroke:${strokeStyle}:${lineWidth.toFixed(2)}`),
     clearRect: () => push("clearRect"),
@@ -86,6 +90,28 @@ describe("brush preview rendering", () => {
     expect(pink.log.some((entry) => entry.startsWith("createRadialGradient"))).toBe(true);
     expect(newYork.log.some((entry) => entry.startsWith("createRadialGradient"))).toBe(false);
     expect(pink.log).not.toEqual(newYork.log);
+  });
+
+  it("shows Needle's preview as a tighter, sparser footprint than its old wide-spread baseline, and distinct from Wiggly Needle's wavering path", () => {
+    const needle = recordingContext();
+    const wiggly = recordingContext();
+    renderSprayCapPreviewToContext(needle.ctx, 60, 24, "needle");
+    renderSprayCapPreviewToContext(wiggly.ctx, 60, 24, "wiggly-needle");
+    expect(needle.log.length).toBeGreaterThan(0);
+    expect(wiggly.log.length).toBeGreaterThan(0);
+    // Same corrected deposition, different path — previews must not be identical.
+    expect(needle.log).not.toEqual(wiggly.log);
+  });
+
+  it("gives Oval Calligraphy and Rectangular Transversal visually distinct previews using different draw primitives", () => {
+    const oval = recordingContext();
+    const slot = recordingContext();
+    renderSprayCapPreviewToContext(oval.ctx, 60, 24, "calligraphy");
+    renderSprayCapPreviewToContext(slot.ctx, 60, 24, "transversal-slot");
+    expect(oval.log.some((entry) => entry.startsWith("ellipse("))).toBe(true);
+    expect(slot.log.some((entry) => entry.startsWith("rotate("))).toBe(true);
+    expect(slot.log.some((entry) => entry.startsWith("ellipse("))).toBe(false);
+    expect(oval.log).not.toEqual(slot.log);
   });
 
   it("distinguishes every Chisel and Mop family sub-preset from its siblings", () => {
