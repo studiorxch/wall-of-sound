@@ -26,6 +26,17 @@ interface ActiveDrip extends DripSeed {
  */
 const TRANSVERSAL_AXIS_ANGLE = (-25 * Math.PI) / 180;
 
+/**
+ * Fill mode's per-stroke core-opacity ceiling. A single continuous stroke's
+ * own densely-overlapping segments asymptote toward this value instead of
+ * ~100%, leaving real headroom for a physically separate stroke (mouse/pen
+ * lifted and pressed again) to build further coverage on top via ordinary
+ * canvas compositing — which is untouched and already does this correctly.
+ * Only applies when the caller opts in per-stroke; normal Spray behavior
+ * (fillMode falsy) is completely unaffected.
+ */
+const FILL_MODE_CORE_CEILING = 0.45;
+
 export function createStrokeRandom(seed: number): () => number {
   let state = (seed || 1) >>> 0;
   return () => {
@@ -39,6 +50,15 @@ export function createStrokeRandom(seed: number): () => number {
 
 export class SprayBrushEngine {
   private activeDrips: ActiveDrip[] = [];
+  /**
+   * Uncapped virtual saturation [0,1] this stroke would reach with standard
+   * compositing, tracked only while fillMode is active. Remapped into
+   * [0, FILL_MODE_CORE_CEILING] to derive the alpha actually drawn. Reset at
+   * the start of every stroke (live or replayed), so a new stroke always
+   * starts fresh and composites normally on top of whatever a prior stroke
+   * already deposited.
+   */
+  private fillStrokeVirtualSaturation = 0;
 
   public resize(_width: number, _height: number): void {
     // The brush deposits directly into the persistent paint canvas.
@@ -46,6 +66,10 @@ export class SprayBrushEngine {
 
   public clear(): void {
     this.activeDrips = [];
+  }
+
+  public beginStroke(): void {
+    this.fillStrokeVirtualSaturation = 0;
   }
 
   public renderSegment(
@@ -56,6 +80,7 @@ export class SprayBrushEngine {
     cap: SprayCapPreset,
     random: () => number = Math.random,
     coverage: number = 1,
+    fillMode: boolean = false,
   ): void {
     const dynamics = resolveSprayDynamics(cap, point.velocity, point.width);
     const coverageFactor = Math.max(0, Math.min(1, coverage));
@@ -84,7 +109,28 @@ export class SprayBrushEngine {
       const jitterX = (random() - 0.5) * dynamics.jitter;
       const jitterY = (random() - 0.5) * dynamics.jitter;
       const endpointScale = previous ? 1 : cap.endpointBehavior === "punchy" ? 0.82 : 0.68;
-      ctx.strokeStyle = this.hexToRgba(colorHex, passOpacity * (1 - passRatio * 0.48));
+      const nominalPassAlpha = passOpacity * (1 - passRatio * 0.48);
+      // Fill mode: cap this stroke's OWN cumulative core opacity, without
+      // touching how a physically separate stroke composites on top of it.
+      // Tracked per actual draw call (every corePasses sub-layer counts, not
+      // just once per segment) so the true composited result — corePasses
+      // stack on each other too — asymptotes to the ceiling, not just the
+      // segment-level estimate. Track what this draw's coverage would be
+      // under ordinary compositing (`nextVirtual`), remap into the ceiling
+      // band, then solve for the alpha this draw must actually use so the
+      // canvas moves from the previous remapped coverage to the next one
+      // exactly — the definition of standard "source-over" compositing,
+      // just aimed at a lower asymptote.
+      let drawnAlpha = nominalPassAlpha;
+      if (fillMode) {
+        const priorVirtual = this.fillStrokeVirtualSaturation;
+        const nextVirtual = 1 - (1 - priorVirtual) * (1 - nominalPassAlpha);
+        const priorVisible = FILL_MODE_CORE_CEILING * priorVirtual;
+        const nextVisible = FILL_MODE_CORE_CEILING * nextVirtual;
+        drawnAlpha = priorVisible >= 1 ? 0 : (nextVisible - priorVisible) / (1 - priorVisible);
+        this.fillStrokeVirtualSaturation = nextVirtual;
+      }
+      ctx.strokeStyle = this.hexToRgba(colorHex, drawnAlpha);
       ctx.lineWidth = Math.max(0.7, dynamics.radius * 2 * directionalAnisotropy * edgeExpansion * endpointScale);
       ctx.beginPath();
       ctx.moveTo(start.x + jitterX, start.y + jitterY);

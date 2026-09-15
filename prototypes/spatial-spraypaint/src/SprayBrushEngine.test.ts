@@ -54,6 +54,116 @@ function lineWidthRecordingContext(): { ctx: CanvasRenderingContext2D; lineWidth
   return { ctx, lineWidths };
 }
 
+function cumulativeAlpha(alphas: readonly number[]): number {
+  return 1 - alphas.reduce((remaining, alpha) => remaining * (1 - alpha), 1);
+}
+
+/** Draws a straight `segments`-segment stroke through one engine instance and returns every recorded core strokeStyle alpha, in order. */
+function drawFillStroke(
+  engine: SprayBrushEngine,
+  capId: string,
+  options: { segments?: number; fillMode?: boolean; coverage?: number; velocity?: number; seed?: number } = {},
+): number[] {
+  const { segments = 20, fillMode = false, coverage = 1, velocity = 0.3, seed = 7 } = options;
+  const cap = getSprayCapPreset(capId);
+  const { ctx, strokeStyles } = segmentRecordingContext();
+  const random = createStrokeRandom(seed);
+  engine.beginStroke();
+  let previous: StrokePoint | null = null;
+  for (let i = 0; i <= segments; i += 1) {
+    const point: StrokePoint = { x: i * 4, y: 0, timestamp: i * 16, velocity, width: 32, opacity: 1 };
+    engine.renderSegment(ctx, previous, point, "#ffffff", cap, random, coverage, fillMode);
+    previous = point;
+  }
+  return strokeStyles.map(alphaOf);
+}
+
+describe("spray fill-mode per-stroke opacity ceiling", () => {
+  it("leaves normal (fillMode off) Spray behavior completely unchanged", () => {
+    const withDefault = drawFillStroke(new SprayBrushEngine(), "new-york-fat");
+    const withExplicitOff = drawFillStroke(new SprayBrushEngine(), "new-york-fat", { fillMode: false });
+    expect(withDefault).toEqual(withExplicitOff);
+    // Confirms the pre-existing, already-diagnosed saturation: normal mode
+    // still climbs close to fully opaque within one continuous stroke.
+    expect(cumulativeAlpha(withDefault)).toBeGreaterThan(0.9);
+  });
+
+  it("keeps one long Fill-mode sweep well below normal mode's near-total saturation", () => {
+    const normal = cumulativeAlpha(drawFillStroke(new SprayBrushEngine(), "new-york-fat", { fillMode: false }));
+    const fill = cumulativeAlpha(drawFillStroke(new SprayBrushEngine(), "new-york-fat", { fillMode: true }));
+    expect(fill).toBeLessThan(0.75);
+    expect(fill).toBeLessThan(normal);
+  });
+
+  it("lets a second separate sweep build cumulative coverage on top of the first, and a third build further", () => {
+    const engine = new SprayBrushEngine();
+    const sweep1 = drawFillStroke(engine, "new-york-fat", { fillMode: true, seed: 1 });
+    const sweep2 = drawFillStroke(engine, "new-york-fat", { fillMode: true, seed: 2 });
+    const sweep3 = drawFillStroke(engine, "new-york-fat", { fillMode: true, seed: 3 });
+
+    const after1 = cumulativeAlpha(sweep1);
+    const after2 = cumulativeAlpha([...sweep1, ...sweep2]);
+    const after3 = cumulativeAlpha([...sweep1, ...sweep2, ...sweep3]);
+
+    // Monotonic...
+    expect(after2).toBeGreaterThan(after1);
+    expect(after3).toBeGreaterThan(after2);
+    // ...but bounded — never approaches fully opaque within just three sweeps.
+    expect(after3).toBeLessThan(0.97);
+  });
+
+  it("makes a fast Fill sweep lighter than a slow one, same as normal mode already does", () => {
+    const slow = cumulativeAlpha(drawFillStroke(new SprayBrushEngine(), "new-york-fat", { fillMode: true, velocity: 0.05 }));
+    const fast = cumulativeAlpha(drawFillStroke(new SprayBrushEngine(), "new-york-fat", { fillMode: true, velocity: 1.2 }));
+    expect(fast).toBeLessThan(slow);
+  });
+
+  it("scales its per-segment correction smoothly, with no erratic jumps that would read as seams", () => {
+    const alphas = drawFillStroke(new SprayBrushEngine(), "new-york-fat", { fillMode: true, segments: 30 });
+    for (let i = 1; i < alphas.length; i += 1) {
+      // Each new segment's own alpha should decay smoothly toward the ceiling,
+      // never spike back up or swing wildly relative to its neighbor.
+      expect(alphas[i]).toBeLessThanOrEqual(alphas[i - 1] + 0.02);
+    }
+  });
+
+  it("leaves Fuzz Fat's own rendering byte-identical (fillMode defaults off)", () => {
+    const fuzzBefore = drawFillStroke(new SprayBrushEngine(), "fuzz-fat");
+    const fuzzAgain = drawFillStroke(new SprayBrushEngine(), "fuzz-fat");
+    expect(fuzzBefore).toEqual(fuzzAgain);
+    expect(cumulativeAlpha(fuzzBefore)).toBeGreaterThan(0.9);
+  });
+
+  it("keeps Calligraphy's directional width fix independent of fillMode", () => {
+    const cap = getSprayCapPreset("calligraphy");
+    const axisAngle = (-25 * Math.PI) / 180;
+    const perpendicularAngle = axisAngle + Math.PI / 2;
+    const point = (angle: number): StrokePoint => ({
+      x: Math.cos(angle) * 100, y: Math.sin(angle) * 100, timestamp: 0, velocity: 0.3, width: 25, opacity: 1,
+    });
+    const start: StrokePoint = { x: 0, y: 0, timestamp: 0, velocity: 0.3, width: 25, opacity: 1 };
+
+    const alongAxis = lineWidthRecordingContext();
+    new SprayBrushEngine().renderSegment(alongAxis.ctx, start, point(axisAngle), "#fff", cap, createStrokeRandom(1), 1, true);
+    const perpendicular = lineWidthRecordingContext();
+    new SprayBrushEngine().renderSegment(perpendicular.ctx, start, point(perpendicularAngle), "#fff", cap, createStrokeRandom(1), 1, true);
+
+    expect(Math.max(...perpendicular.lineWidths)).toBeGreaterThan(Math.max(...alongAxis.lineWidths));
+  });
+
+  it("composes coherently with the Spray coverage multiplier — lower coverage still yields lower cumulative fill", () => {
+    const fullCoverage = cumulativeAlpha(
+      drawFillStroke(new SprayBrushEngine(), "new-york-fat", { fillMode: true, coverage: 1 }),
+    );
+    const lowCoverage = cumulativeAlpha(
+      drawFillStroke(new SprayBrushEngine(), "new-york-fat", { fillMode: true, coverage: 0.4 }),
+    );
+    expect(lowCoverage).toBeLessThan(fullCoverage);
+    // Fill mode's ceiling still bounds the high-coverage case well below normal-mode saturation.
+    expect(fullCoverage).toBeLessThan(0.75);
+  });
+});
+
 describe("spray brush replay randomness", () => {
   it("replays a canonical stroke with the same stable random sequence", () => {
     const firstReplay = createStrokeRandom(42);

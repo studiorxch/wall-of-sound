@@ -22,6 +22,14 @@ describe("settings state", () => {
     expect(cleared.coverageOverride).toBeNull();
   });
 
+  it("tracks Fill mode independently, defaulting off", () => {
+    expect(INITIAL_SETTINGS_STATE.fillModeEnabled).toBe(false);
+    const enabled = reduceSettingsState(INITIAL_SETTINGS_STATE, { type: "fill-mode", value: true });
+    expect(enabled).toMatchObject({ fillModeEnabled: true, coverageOverride: null, radiusOverride: null });
+    const disabled = reduceSettingsState(enabled, { type: "fill-mode", value: false });
+    expect(disabled.fillModeEnabled).toBe(false);
+  });
+
   it("keeps the performer hidden across Physical and Hand modes", () => {
     expect(cameraTreatmentForInputMode("spatial", "clean")).toBe("hidden");
     expect(cameraTreatmentForInputMode("mouse", "ghost")).toBe("hidden");

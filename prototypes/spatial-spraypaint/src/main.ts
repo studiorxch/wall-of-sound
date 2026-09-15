@@ -367,6 +367,12 @@ class SpatialSpraypaintApp {
       this.setSettings({ type: "coverage", value: null });
       this.updateCoverageUi();
     });
+    this.requireElement<HTMLInputElement>("fill-mode-toggle").addEventListener("change", (event) => {
+      if (this.toolSelection.selectedToolId !== "spray-can") return;
+      this.finishActiveStroke();
+      this.setSettings({ type: "fill-mode", value: (event.target as HTMLInputElement).checked });
+      this.updateFillModeUi();
+    });
     this.requireElement<HTMLSelectElement>("background-preset").addEventListener("change", (event) => {
       this.selectedBackground = getSprayBackground((event.target as HTMLSelectElement).value);
     });
@@ -782,6 +788,14 @@ class SpatialSpraypaintApp {
       : "Use full coverage";
     badge.hidden = coveragePercent >= 100;
     badge.textContent = `${coveragePercent}%`;
+    this.updateFillModeUi();
+  }
+
+  private updateFillModeUi(): void {
+    const spraySelected = this.toolSelection.selectedToolId === "spray-can";
+    this.requireElement("fill-mode-setting").toggleAttribute("hidden", !spraySelected);
+    if (!spraySelected) return;
+    this.requireElement<HTMLInputElement>("fill-mode-toggle").checked = this.settings.fillModeEnabled;
   }
 
   private selectedToolDefaultSize(): number {
@@ -884,6 +898,7 @@ class SpatialSpraypaintApp {
       color: this.selectedColor,
       size: this.baseRadius,
       coverage: this.settings.coverageOverride ?? 1,
+      fillMode: this.settings.fillModeEnabled,
     };
     return this.toolSelection.selectedToolId === "spray-can"
       ? { ...shared, toolId: "spray-can", variantId: this.toolSelection.sprayCapId }

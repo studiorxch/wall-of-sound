@@ -7,6 +7,7 @@ export interface SettingsState {
   dripsEnabled: boolean;
   radiusOverride: number | null;
   coverageOverride: number | null;
+  fillModeEnabled: boolean;
   trackingDebugVisible: boolean;
 }
 
@@ -18,6 +19,7 @@ export type SettingsAction =
   | { type: "drips"; value: boolean }
   | { type: "radius"; value: number | null }
   | { type: "coverage"; value: number | null }
+  | { type: "fill-mode"; value: boolean }
   | { type: "tracking-debug"; value: boolean };
 
 export const INITIAL_SETTINGS_STATE: SettingsState = {
@@ -26,6 +28,7 @@ export const INITIAL_SETTINGS_STATE: SettingsState = {
   dripsEnabled: true,
   radiusOverride: null,
   coverageOverride: null,
+  fillModeEnabled: false,
   trackingDebugVisible: false,
 };
 
@@ -45,6 +48,7 @@ export function reduceSettingsState(state: SettingsState, action: SettingsAction
     case "drips": return { ...state, dripsEnabled: action.value };
     case "radius": return { ...state, radiusOverride: action.value };
     case "coverage": return { ...state, coverageOverride: action.value };
+    case "fill-mode": return { ...state, fillModeEnabled: action.value };
     case "tracking-debug": return { ...state, trackingDebugVisible: action.value };
   }
 }

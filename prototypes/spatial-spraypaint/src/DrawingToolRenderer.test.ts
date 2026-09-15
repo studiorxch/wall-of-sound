@@ -74,6 +74,28 @@ describe("shared Drawing Tool renderer", () => {
     });
   });
 
+  it("threads Fill mode through beginStroke so a long sweep stays bounded, off by default", () => {
+    const cumulativeAlpha = (alphas: readonly number[]) =>
+      1 - alphas.reduce((remaining, a) => remaining * (1 - a), 1);
+    const sweep = (fillMode?: boolean) => {
+      const renderer = new DrawingToolRenderer();
+      const style: ToolStrokeStyle = { toolId: "spray-can", variantId: "new-york-fat", color: "#ffffff", size: 32, fillMode };
+      renderer.beginStroke(style);
+      const { ctx, strokeStyles } = alphaRecordingContext();
+      let previous: StrokePoint | null = null;
+      for (let i = 0; i <= 20; i += 1) {
+        const p = { ...point(i * 4), velocity: 0.3 };
+        renderer.renderSegment(ctx, previous, p, style, createStrokeRandom(3));
+        previous = p;
+      }
+      return cumulativeAlpha(strokeStyles.map((rgba) => Number.parseFloat(rgba.split(",")[3])));
+    };
+
+    expect(sweep(undefined)).toBeGreaterThan(0.9);
+    expect(sweep(false)).toBeGreaterThan(0.9);
+    expect(sweep(true)).toBeLessThan(0.75);
+  });
+
   it("omits coverage for Paint Marker without affecting its render calls", () => {
     const style: ToolStrokeStyle = { toolId: "paint-marker", variantId: "chisel", color: "#e92f3d", size: 24 };
     const recording = recordingContext();

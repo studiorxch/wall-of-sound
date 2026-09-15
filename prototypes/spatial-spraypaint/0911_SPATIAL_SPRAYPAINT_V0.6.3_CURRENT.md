@@ -162,6 +162,18 @@ Audited against two supplied real-world graffiti photos (a bubble throwie, a red
 
 **Audited, no change needed:** thin-cap tag/outline (New York Thin) already reads as a confident, controlled line with appropriately soft aerosol edge and low overspray — matches the target already. Needle and Soft/Fade both already read as intended (thin/directional-with-splatter; broad/diffuse) — no changes made.
 
+## Throwie Fill Deposition V1 — Resolves The Prior Throwie-Fill Deferral
+
+Implements the previously-deferred per-stroke opacity ceiling, as an explicit opt-in **Fill mode** toggle — not a global Spray change, and not a new cap identity ("a cap is still a cap; Fill describes how it is being used").
+
+**Mechanism:** `SprayBrushEngine` tracks a per-stroke scalar (`fillStrokeVirtualSaturation`, reset in a new `beginStroke()` called from `DrawingToolRenderer.beginStroke` — already invoked once per gesture for both live drawing and replay, so this is deterministic and replay-safe with no new lifecycle plumbing). While Fill mode is on, every individual draw call (every `corePasses` sub-layer, not just once per segment — corePasses stack on each other too, so this had to be tracked at the same granularity as the real draws to hit the intended ceiling precisely) computes what its nominal contribution would move an *uncapped* virtual saturation to, remaps that into `[0, FILL_MODE_CORE_CEILING]` (0.45), and solves for the actual alpha needed to move the canvas from the previous remapped value to the next one — the definition of standard "source-over" compositing, just aimed at a lower asymptote. A brand-new stroke (pointer lifted and pressed again) resets the scalar to 0 and composites normally on top of whatever is already on the canvas, so separate sweeps still accumulate via completely ordinary, untouched canvas compositing — only a single stroke's *own* internal segment density is capped. Overspray is untouched.
+
+**Activation:** a "Fill mode (throwie)" checkbox in the Cap chooser's Spray property controls (`SettingsState.fillModeEnabled`, default off — normal Spray/tag/outline behavior is provably byte-identical whether the field is absent, `false`, or the setting has never been touched). Stored per-stroke in `RecordedStroke` (already flows through `ToolStrokeStyle`), so replay/Undo/Clear reproduce exactly which strokes were fill-mode and which weren't.
+
+**Live-verified calibration matrix** (one popover toggle, five rows, no new UI beyond the checkbox): one sweep reads clearly translucent/textured; two separate sweeps over the same path are visibly more solid than one; four sweeps more solid still while still showing a graduated, textured core (never flat); a fast back-and-forth throwie-style pass shows visible directional banding/ribbing; a normal outline stroke drawn with Fill mode off stays fully dense and solid, confirming zero leakage into ordinary Spray behavior.
+
+Deliberately not attempted in V1 (matches the task's own "do not overbuild" scope): per-pixel/local saturation (this is a per-gesture scalar, not a spatial map — looping back over the same area *within one continuous stroke* keeps climbing toward the same ceiling rather than being tracked per-pixel; separate sweeps require actually lifting the pointer between them), automatic back-and-forth detection, and any physical paint simulation.
+
 ## Stable Mop Attachment And Clear Authority
 
 The latest Mop attachment work is complete and physically verified:

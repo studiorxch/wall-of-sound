@@ -12,6 +12,8 @@ interface BaseToolStrokeStyle {
   size: number;
   /** Spray-only build-up authority, independent of velocity. 1 preserves current default density. */
   coverage?: number;
+  /** Spray-only per-stroke fill ceiling. Falsy/absent preserves current default behavior exactly. */
+  fillMode?: boolean;
 }
 
 export type ToolStrokeStyle = BaseToolStrokeStyle & (
@@ -26,6 +28,7 @@ export class DrawingToolRenderer {
 
   public beginStroke(style: ToolStrokeStyle): void {
     if (style.toolId === "paint-marker") this.marker.beginStroke(style.variantId);
+    else this.spray.beginStroke();
   }
 
   public endStroke(ctx?: CanvasRenderingContext2D): void {
@@ -58,6 +61,7 @@ export class DrawingToolRenderer {
         getSprayCapProfile(style.variantId).deposition,
         random,
         style.coverage ?? 1,
+        style.fillMode ?? false,
       );
       return;
     }
