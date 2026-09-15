@@ -115,7 +115,8 @@
     .wet-control-row { display:grid; grid-template-columns:58px 1fr; align-items:center; gap:8px; color:#aaa9b2; font-size:10px; }
     .wet-control-row select { min-width:0; font-size:10px; }
     #marker-width-controls { margin-top:7px; padding-top:8px; border-top:1px solid rgba(255,255,255,.12); }
-    #radius-slider-setting[hidden] { display:none; }
+    #spray-property-controls { margin-top:7px; padding-top:8px; border-top:1px solid rgba(255,255,255,.12); display:grid; gap:8px; }
+    #radius-slider-setting[hidden], #coverage-slider-setting[hidden] { display:none; }
     .marker-width-label { margin-bottom:6px; color:#8f8e99; font-size:9px; font-weight:800; letter-spacing:.8px; text-transform:uppercase; }
     #marker-width-presets { display:grid; grid-template-columns:repeat(5, 1fr); gap:4px; }
     .marker-width-choice { min-width:0; padding:6px 4px; font-size:9px; }
@@ -281,6 +282,10 @@
       <button class="cap-choice" data-cap="needle"><span class="cap-sample" style="--sample-width:1px"></span><span>Needle</span></button>
       <button class="cap-choice" data-cap="soft-fade"><span class="cap-sample" style="--sample-width:15px;opacity:.32"></span><span>Soft / Fade</span></button>
       <button class="cap-choice" data-cap="fuzz-fat"><span class="cap-sample" style="--sample-width:11px"></span><span>Fuzz Fat</span></button>
+      <div id="spray-property-controls" aria-label="Spray size and coverage">
+        <div id="radius-slider-setting" class="setting-stack"><span>Spray size override · <strong id="radius-val">32</strong> wall units</span><input type="range" id="brush-radius" min="4" max="72" value="32" /><button id="radius-reset">Use cap default</button></div>
+        <div id="coverage-slider-setting" class="setting-stack"><span>Spray coverage override · <strong id="coverage-val">100</strong>%</span><input type="range" id="spray-coverage" min="20" max="100" step="5" value="100" /><button id="coverage-reset">Use full coverage</button></div>
+      </div>
     </div>
     <div id="marker-chooser" class="tool-popover" aria-label="Marker and nib chooser">
       <button class="marker-choice selected" data-marker="round" aria-pressed="true"><span class="marker-sample" style="--sample-width:8px"></span><span>Round Marker</span></button>
@@ -339,8 +344,6 @@
         <h2>Drawing</h2>
         <label class="setting-row"><span>Smoothing</span><select id="smoothing-level"><option value="off">Off</option><option value="low">Low</option><option value="medium" selected>Medium</option><option value="high">High</option></select></label>
         <label class="setting-row"><span>Stationary drips</span><input id="drips-enabled" type="checkbox" checked /></label>
-        <div id="radius-slider-setting" class="setting-stack"><span>Spray size override · <strong id="radius-val">32</strong> wall units</span><input type="range" id="brush-radius" min="4" max="72" value="32" /><button id="radius-reset">Use cap default</button></div>
-        <div id="coverage-slider-setting" class="setting-stack"><span>Spray coverage override · <strong id="coverage-val">100</strong>%</span><input type="range" id="spray-coverage" min="20" max="100" step="5" value="100" /><button id="coverage-reset">Use full coverage</button></div>
         <label class="setting-row"><span>Environment</span><select id="wall-environment"><option value="wall" selected>Wall / Default</option><option value="solid">Solid background</option><option value="image">Image background</option></select></label>
         <label id="wall-surface-row" class="setting-row wall-environment-dependent"><span>Wall surface</span><select id="background-preset"><option value="black">Black</option><option value="charcoal">Charcoal Wall</option><option value="mid-gray">Mid Gray</option><option value="off-white">Off-White Wall</option></select></label>
         <label id="wall-solid-row" class="setting-row wall-environment-dependent" hidden><span>Background color</span><input id="wall-solid-color" type="color" value="#171822" aria-label="Solid wall background color" /></label>
