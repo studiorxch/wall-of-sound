@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { SprayBrushEngine, createStrokeRandom } from "./SprayBrushEngine";
-import { getSprayCapPreset } from "./SprayCapPresets";
+import { getSprayCapPreset, resolveSprayDynamics } from "./SprayCapPresets";
 import { type StrokePoint } from "./types";
 
 function segmentRecordingContext(): { ctx: CanvasRenderingContext2D; strokeStyles: string[]; fillStyles: string[] } {
@@ -58,7 +58,14 @@ function cumulativeAlpha(alphas: readonly number[]): number {
   return 1 - alphas.reduce((remaining, alpha) => remaining * (1 - alpha), 1);
 }
 
-/** Draws a straight `segments`-segment stroke through one engine instance and returns every recorded core strokeStyle alpha, in order. */
+/**
+ * Draws a `segments`-segment stroke confined to ONE location (a short,
+ * sub-cell-sized wobble, not a real cross-canvas sweep) through one engine
+ * instance and returns every recorded core strokeStyle alpha, in order. Used
+ * to test the per-location ceiling itself — whether ONE spot's own build-up
+ * stays bounded — as distinct from `drawFillPath`, which tests correctness
+ * ACROSS locations (see the "spatial correctness" describe block above).
+ */
 function drawFillStroke(
   engine: SprayBrushEngine,
   capId: string,
@@ -71,12 +78,116 @@ function drawFillStroke(
   engine.beginStroke();
   let previous: StrokePoint | null = null;
   for (let i = 0; i <= segments; i += 1) {
-    const point: StrokePoint = { x: i * 4, y: 0, timestamp: i * 16, velocity, width: 32, opacity: 1 };
+    const point: StrokePoint = { x: i * 0.3, y: 0, timestamp: i * 16, velocity, width: 32, opacity: 1 };
     engine.renderSegment(ctx, previous, point, "#ffffff", cap, random, coverage, fillMode);
     previous = point;
   }
   return strokeStyles.map(alphaOf);
 }
+
+/**
+ * Draws an explicit sequence of points through one engine instance (all in the
+ * SAME beginStroke() session, i.e. one continuous gesture) and returns each
+ * segment's own composited alpha (its corePasses sub-layers combined into one
+ * number), so per-location coverage along the path can be inspected directly.
+ */
+function drawFillPath(
+  engine: SprayBrushEngine,
+  capId: string,
+  points: ReadonlyArray<{ x: number; y: number; velocity?: number }>,
+  fillMode: boolean,
+  seed = 7,
+): number[] {
+  const cap = getSprayCapPreset(capId);
+  const { ctx, strokeStyles } = segmentRecordingContext();
+  const random = createStrokeRandom(seed);
+  let previous: StrokePoint | null = null;
+  const segmentAlphas: number[] = [];
+  for (let i = 0; i < points.length; i += 1) {
+    const raw = points[i];
+    const velocity = raw.velocity ?? 0.3;
+    const strokePoint: StrokePoint = { x: raw.x, y: raw.y, timestamp: i * 16, velocity, width: 32, opacity: 1 };
+    const before = strokeStyles.length;
+    engine.renderSegment(ctx, previous, strokePoint, "#ffffff", cap, random, 1, fillMode);
+    if (i > 0) {
+      const corePasses = resolveSprayDynamics(cap, velocity, strokePoint.width).corePasses;
+      const thisSegment = strokeStyles.slice(before, before + corePasses).map(alphaOf);
+      segmentAlphas.push(cumulativeAlpha(thisSegment));
+    }
+    previous = strokePoint;
+  }
+  return segmentAlphas;
+}
+
+describe("spray fill-mode spatial correctness (local vs global saturation)", () => {
+  it("A — a long single sweep over never-revisited territory keeps roughly consistent first-pass coverage start to end", () => {
+    const points = Array.from({ length: 40 }, (_, i) => ({ x: i * 6, y: 0 }));
+    const segments = drawFillPath(new SprayBrushEngine(), "new-york-fat", points, true);
+    const start = segments.slice(0, 3);
+    const end = segments.slice(-3);
+    const avg = (values: number[]) => values.reduce((sum, v) => sum + v, 0) / values.length;
+    // Same tolerance either way; the point is start and end should be close to
+    // EACH OTHER, not that either is a magic number.
+    expect(avg(end)).toBeGreaterThan(avg(start) * 0.7);
+    expect(avg(end)).toBeLessThan(avg(start) * 1.3);
+  });
+
+  it("B — painting a fresh, never-touched region later in the same continuous gesture gets the same first-pass coverage as the first region did", () => {
+    const engine = new SprayBrushEngine();
+    // Region A: x 0-100. A long "travel" jump to a distant, untouched region B: x 2000-2100.
+    const regionA = Array.from({ length: 15 }, (_, i) => ({ x: i * 7, y: 0 }));
+    const travel = [{ x: 2000, y: 0 }];
+    const regionB = Array.from({ length: 15 }, (_, i) => ({ x: 2000 + i * 7, y: 0 }));
+    const path = [...regionA, ...travel, ...regionB];
+    const allSegments = drawFillPath(engine, "new-york-fat", path, true);
+    const regionASegments = allSegments.slice(0, regionA.length - 1);
+    // Skip the travel segment itself (index regionA.length-1) — it's a real
+    // paint stroke across empty space, not representative of either region.
+    const regionBSegments = allSegments.slice(regionA.length + 1);
+
+    const avg = (values: number[]) => values.reduce((sum, v) => sum + v, 0) / values.length;
+    const firstOfA = avg(regionASegments.slice(0, 3));
+    const firstOfB = avg(regionBSegments.slice(0, 3));
+    expect(firstOfB).toBeGreaterThan(firstOfA * 0.7);
+    expect(firstOfB).toBeLessThan(firstOfA * 1.3);
+  });
+
+  it("C — continuous back-and-forth over the SAME pixels (no pointer release) still builds visible coverage across traversals", () => {
+    const engine = new SprayBrushEngine();
+    const rightward = Array.from({ length: 15 }, (_, i) => ({ x: i * 7, y: 0 }));
+    const leftward = Array.from({ length: 15 }, (_, i) => ({ x: (14 - i) * 7, y: 0 }));
+    const firstPass = drawFillPath(engine, "new-york-fat", rightward, true);
+    const secondPass = drawFillPath(engine, "new-york-fat", leftward, true);
+    const thirdPass = drawFillPath(engine, "new-york-fat", rightward, true);
+
+    const cumulativeAt = (passes: number[][]) => cumulativeAlpha(passes.flat());
+    const after1 = cumulativeAt([firstPass]);
+    const after2 = cumulativeAt([firstPass, secondPass]);
+    const after3 = cumulativeAt([firstPass, secondPass, thirdPass]);
+
+    expect(after2).toBeGreaterThan(after1);
+    expect(after3).toBeGreaterThan(after2);
+    expect(after3).toBeLessThan(0.98);
+  });
+
+  it("D — released-stroke accumulation still holds: 1 sweep < 2 released sweeps < 4 released sweeps", () => {
+    const alpha1 = cumulativeAlpha(drawFillStroke(new SprayBrushEngine(), "new-york-fat", { fillMode: true, seed: 1 }));
+    const engine2 = new SprayBrushEngine();
+    const alpha2 = cumulativeAlpha([
+      ...drawFillStroke(engine2, "new-york-fat", { fillMode: true, seed: 1 }),
+      ...drawFillStroke(engine2, "new-york-fat", { fillMode: true, seed: 2 }),
+    ]);
+    const engine4 = new SprayBrushEngine();
+    const alpha4 = cumulativeAlpha([
+      ...drawFillStroke(engine4, "new-york-fat", { fillMode: true, seed: 1 }),
+      ...drawFillStroke(engine4, "new-york-fat", { fillMode: true, seed: 2 }),
+      ...drawFillStroke(engine4, "new-york-fat", { fillMode: true, seed: 3 }),
+      ...drawFillStroke(engine4, "new-york-fat", { fillMode: true, seed: 4 }),
+    ]);
+    expect(alpha2).toBeGreaterThan(alpha1);
+    expect(alpha4).toBeGreaterThan(alpha2);
+  });
+});
 
 describe("spray fill-mode per-stroke opacity ceiling", () => {
   it("leaves normal (fillMode off) Spray behavior completely unchanged", () => {

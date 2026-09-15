@@ -37,6 +37,15 @@ const TRANSVERSAL_AXIS_ANGLE = (-25 * Math.PI) / 180;
  */
 const FILL_MODE_CORE_CEILING = 0.45;
 
+/**
+ * Fill mode's local-saturation grid cell size is derived from the cap's own
+ * radius (see usage below) rather than a single fixed constant, so the
+ * granularity scales sensibly across thin and fat caps. This factor sets that
+ * relationship: smaller than the radius so a fat cap's sweep still spans
+ * several cells along its travel direction.
+ */
+const FILL_MODE_CELL_SIZE_RATIO = 0.6;
+
 export function createStrokeRandom(seed: number): () => number {
   let state = (seed || 1) >>> 0;
   return () => {
@@ -51,14 +60,17 @@ export function createStrokeRandom(seed: number): () => number {
 export class SprayBrushEngine {
   private activeDrips: ActiveDrip[] = [];
   /**
-   * Uncapped virtual saturation [0,1] this stroke would reach with standard
-   * compositing, tracked only while fillMode is active. Remapped into
-   * [0, FILL_MODE_CORE_CEILING] to derive the alpha actually drawn. Reset at
-   * the start of every stroke (live or replayed), so a new stroke always
-   * starts fresh and composites normally on top of whatever a prior stroke
-   * already deposited.
+   * Uncapped virtual saturation [0,1] a given map cell would reach with
+   * standard compositing, tracked only while fillMode is active and keyed by
+   * a coarse grid cell so saturation is LOCAL to painted space, not global to
+   * the whole gesture — a cell a stroke has never visited starts at 0 even
+   * deep into a long continuous sweep, and revisiting the same cell (a
+   * back-and-forth pass with no pointer release) keeps accumulating there
+   * specifically. Reset at the start of every stroke (live or replayed), so
+   * a new stroke always starts every cell fresh and composites normally on
+   * top of whatever a prior stroke already deposited.
    */
-  private fillStrokeVirtualSaturation = 0;
+  private fillLocalSaturation = new Map<string, number>();
 
   public resize(_width: number, _height: number): void {
     // The brush deposits directly into the persistent paint canvas.
@@ -69,7 +81,11 @@ export class SprayBrushEngine {
   }
 
   public beginStroke(): void {
-    this.fillStrokeVirtualSaturation = 0;
+    this.fillLocalSaturation.clear();
+  }
+
+  private fillCellKey(x: number, y: number, cellSize: number): string {
+    return `${Math.round(x / cellSize)},${Math.round(y / cellSize)}`;
   }
 
   public renderSegment(
@@ -103,6 +119,17 @@ export class SprayBrushEngine {
     ctx.lineCap = cap.endpointBehavior === "raw" ? "butt" : "round";
     ctx.lineJoin = "round";
 
+    // Fill mode's saturation ceiling must be LOCAL to where paint is actually
+    // landing, not global to the whole gesture — otherwise a long sweep fades
+    // to nothing by its own end, and a fresh area painted later in the same
+    // continuous stroke wrongly inherits an already-spent budget from
+    // wherever the stroke has been before. Segments are short relative to a
+    // cap's own radius, so the segment's midpoint is a good stand-in for the
+    // whole segment; the cell size scales with cap radius so thin and fat
+    // caps both get sensible granularity.
+    const cellSize = Math.max(1, dynamics.radius * FILL_MODE_CELL_SIZE_RATIO);
+    const cellKey = fillMode ? this.fillCellKey((start.x + point.x) / 2, (start.y + point.y) / 2, cellSize) : null;
+
     for (let pass = dynamics.corePasses - 1; pass >= 0; pass -= 1) {
       const passRatio = dynamics.corePasses === 1 ? 0 : pass / (dynamics.corePasses - 1);
       const edgeExpansion = 1 + passRatio * (1 - cap.edgeFalloff) * 0.72;
@@ -110,25 +137,25 @@ export class SprayBrushEngine {
       const jitterY = (random() - 0.5) * dynamics.jitter;
       const endpointScale = previous ? 1 : cap.endpointBehavior === "punchy" ? 0.82 : 0.68;
       const nominalPassAlpha = passOpacity * (1 - passRatio * 0.48);
-      // Fill mode: cap this stroke's OWN cumulative core opacity, without
-      // touching how a physically separate stroke composites on top of it.
-      // Tracked per actual draw call (every corePasses sub-layer counts, not
-      // just once per segment) so the true composited result — corePasses
-      // stack on each other too — asymptotes to the ceiling, not just the
-      // segment-level estimate. Track what this draw's coverage would be
-      // under ordinary compositing (`nextVirtual`), remap into the ceiling
-      // band, then solve for the alpha this draw must actually use so the
-      // canvas moves from the previous remapped coverage to the next one
-      // exactly — the definition of standard "source-over" compositing,
-      // just aimed at a lower asymptote.
+      // Cap this LOCATION's own cumulative core opacity, without touching how
+      // a physically separate stroke composites on top of it. Tracked per
+      // actual draw call (every corePasses sub-layer counts, not just once
+      // per segment) so the true composited result — corePasses stack on
+      // each other too — asymptotes to the ceiling, not just the segment-
+      // level estimate. Track what this draw's coverage would be under
+      // ordinary compositing (`nextVirtual`), remap into the ceiling band,
+      // then solve for the alpha this draw must actually use so the canvas
+      // moves from the previous remapped coverage to the next one exactly —
+      // the definition of standard "source-over" compositing, just aimed at
+      // a lower asymptote.
       let drawnAlpha = nominalPassAlpha;
-      if (fillMode) {
-        const priorVirtual = this.fillStrokeVirtualSaturation;
+      if (fillMode && cellKey !== null) {
+        const priorVirtual = this.fillLocalSaturation.get(cellKey) ?? 0;
         const nextVirtual = 1 - (1 - priorVirtual) * (1 - nominalPassAlpha);
         const priorVisible = FILL_MODE_CORE_CEILING * priorVirtual;
         const nextVisible = FILL_MODE_CORE_CEILING * nextVirtual;
         drawnAlpha = priorVisible >= 1 ? 0 : (nextVisible - priorVisible) / (1 - priorVisible);
-        this.fillStrokeVirtualSaturation = nextVirtual;
+        this.fillLocalSaturation.set(cellKey, nextVirtual);
       }
       ctx.strokeStyle = this.hexToRgba(colorHex, drawnAlpha);
       ctx.lineWidth = Math.max(0.7, dynamics.radius * 2 * directionalAnisotropy * edgeExpansion * endpointScale);

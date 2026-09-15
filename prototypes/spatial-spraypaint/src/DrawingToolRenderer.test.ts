@@ -74,7 +74,7 @@ describe("shared Drawing Tool renderer", () => {
     });
   });
 
-  it("threads Fill mode through beginStroke so a long sweep stays bounded, off by default", () => {
+  it("threads Fill mode through beginStroke so one location's own build-up stays bounded, off by default", () => {
     const cumulativeAlpha = (alphas: readonly number[]) =>
       1 - alphas.reduce((remaining, a) => remaining * (1 - a), 1);
     const sweep = (fillMode?: boolean) => {
@@ -83,8 +83,12 @@ describe("shared Drawing Tool renderer", () => {
       renderer.beginStroke(style);
       const { ctx, strokeStyles } = alphaRecordingContext();
       let previous: StrokePoint | null = null;
+      // A tight, sub-cell-sized wobble — not a real cross-canvas sweep — so
+      // every draw call lands in the same fill-mode saturation cell. Spatial
+      // correctness ACROSS locations is covered separately in
+      // SprayBrushEngine.test.ts's "spatial correctness" suite.
       for (let i = 0; i <= 20; i += 1) {
-        const p = { ...point(i * 4), velocity: 0.3 };
+        const p = { ...point(i * 0.3), velocity: 0.3 };
         renderer.renderSegment(ctx, previous, p, style, createStrokeRandom(3));
         previous = p;
       }
