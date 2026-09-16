@@ -8,11 +8,11 @@ import {
   resolveHaloFlareRatio,
   resolveHaloGradientStops,
   resolveMouseSprayInput,
-  resolveOuterFieldTexture,
   resolveOverspraySquashAngle,
   resolvePinkDotDualPlume,
   resolvePinkDotDwellScale,
-  resolvePinkDotOuterFieldShells,
+  resolvePinkDotOuterFieldBands,
+  resolvePinkDotOuterFieldStops,
   resolveRingProfile,
   resolveShapedStampGeometry,
   resolveStreakGate,
@@ -27,6 +27,14 @@ interface RecordedGradient {
   stops: Array<{ offset: number; color: string }>;
 }
 
+interface RecordedStroke {
+  x0: number; y0: number; x1: number; y1: number; lineWidth: number; alpha: number;
+}
+
+interface RecordedArc {
+  x: number; y: number; r: number; alpha: number;
+}
+
 function segmentRecordingContext(): {
   ctx: CanvasRenderingContext2D;
   strokeStyles: string[];
@@ -34,30 +42,46 @@ function segmentRecordingContext(): {
   gradients: RecordedGradient[];
   rotateCalls: number[];
   scaleCalls: Array<{ x: number; y: number }>;
+  strokes: RecordedStroke[];
+  arcs: RecordedArc[];
 } {
   const strokeStyles: string[] = [];
   const fillStyles: string[] = [];
   const gradients: RecordedGradient[] = [];
   const rotateCalls: number[] = [];
   const scaleCalls: Array<{ x: number; y: number }> = [];
+  const strokes: RecordedStroke[] = [];
+  const arcs: RecordedArc[] = [];
   let strokeStyle = "";
   let fillStyle = "";
   let activeGradient: RecordedGradient | null = null;
+  let lineWidth = 0;
+  let firstPoint: { x: number; y: number } | null = null;
+  let lastPoint: { x: number; y: number } | null = null;
+  let lastArc: { x: number; y: number; r: number } | null = null;
   const ctx = {
     save: () => undefined,
     restore: () => undefined,
-    beginPath: () => undefined,
+    beginPath: () => { firstPoint = null; lastPoint = null; },
     closePath: () => undefined,
-    moveTo: () => undefined,
-    lineTo: () => undefined,
-    arc: () => undefined,
+    moveTo: (x: number, y: number) => { firstPoint = { x, y }; lastPoint = { x, y }; },
+    lineTo: (x: number, y: number) => { lastPoint = { x, y }; },
+    arc: (x: number, y: number, r: number) => { lastArc = { x, y, r }; },
     arcTo: () => undefined,
     ellipse: () => undefined,
     translate: () => undefined,
     rotate: (angle: number) => rotateCalls.push(angle),
     scale: (x: number, y: number) => scaleCalls.push({ x, y }),
-    stroke: () => strokeStyles.push(strokeStyle),
-    fill: () => fillStyles.push(fillStyle),
+    stroke: () => {
+      strokeStyles.push(strokeStyle);
+      if (firstPoint && lastPoint) {
+        strokes.push({ x0: firstPoint.x, y0: firstPoint.y, x1: lastPoint.x, y1: lastPoint.y, lineWidth, alpha: alphaOf(strokeStyle) });
+      }
+    },
+    fill: () => {
+      fillStyles.push(fillStyle);
+      if (lastArc) arcs.push({ ...lastArc, alpha: alphaOf(fillStyle) });
+    },
     createRadialGradient: (x0: number, y0: number, r0: number, x1: number, y1: number, r1: number) => {
       const gradient: RecordedGradient = { x0, y0, r0, x1, y1, r1, stops: [] };
       gradients.push(gradient);
@@ -74,9 +98,10 @@ function segmentRecordingContext(): {
     },
     lineCap: "round",
     lineJoin: "round",
-    lineWidth: 0,
+    get lineWidth() { return lineWidth; },
+    set lineWidth(value: number) { lineWidth = value; },
   } as unknown as CanvasRenderingContext2D;
-  return { ctx, strokeStyles, fillStyles, gradients, rotateCalls, scaleCalls };
+  return { ctx, strokeStyles, fillStyles, gradients, rotateCalls, scaleCalls, strokes, arcs };
 }
 
 function alphaOf(rgba: string): number {
@@ -488,6 +513,32 @@ describe("Pink Dot Fat dual-plume — one resolver, two coordinated CONTINUOUS l
   const pink = getSprayCapPreset("pink-dot-fat");
   const nativeDynamics = resolveSprayDynamics(pink, 0.3, pink.baseRadius);
 
+  /**
+   * A size proxy for the outer field's current render, working for BOTH
+   * rendering techniques: a dwell point's radial-gradient stamp (its own
+   * `r1`) and a moving segment's offset-rail bands (their `lineWidth`,
+   * which scales proportionally with the whole field exactly like `r1`
+   * does — rail strokes are picked out by matching their recorded alpha
+   * against the analytically-resolved ring/mist band alphas for this
+   * exact point, which is robust regardless of world-vs-local coordinates
+   * (unlike position, alpha is never touched by ctx transforms), so it
+   * never confuses a rail stroke with one of the inner core's own passes.
+   */
+  function outerFieldSizeProxy(engine: SprayBrushEngine, point: StrokePoint, previous: StrokePoint | null, random: () => number): number {
+    const { ctx, gradients, strokes } = segmentRecordingContext();
+    engine.renderSegment(ctx, previous, point, "#ffffff", pink, random);
+    if (gradients.length) return Math.max(...gradients.map((g) => g.r1));
+    const dynamics = resolveSprayDynamics(pink, point.velocity, point.width);
+    const input = resolveMouseSprayInput(point, pink, 1, 0);
+    const state = resolvePinkDotDualPlume(pink, input, point.velocity, dynamics);
+    const knownAlphas = resolvePinkDotOuterFieldBands(state.outer).map((b) => b.alpha);
+    // hexToRgba formats alpha with toFixed(3), so the recorded value can be
+    // off from the analytically-resolved one by up to ~0.0005 — the
+    // tolerance must clear that rounding, not chase exact equality.
+    const railStrokes = strokes.filter((s) => knownAlphas.some((a) => Math.abs(a - s.alpha) < 0.002));
+    return railStrokes.length ? Math.max(...railStrokes.map((s) => s.lineWidth)) : 0;
+  }
+
   describe("resolveMouseSprayInput — mouse V1's mapping into the input-neutral canonical state (unchanged API)", () => {
     it("bounds sprayAngle to PLUME_MAX_ANGLE_DEGREES and converts to radians", () => {
       const point: StrokePoint = { x: 0, y: 0, timestamp: 0, velocity: 0.3, width: 42, opacity: 1 };
@@ -597,32 +648,32 @@ describe("Pink Dot Fat dual-plume — one resolver, two coordinated CONTINUOUS l
   });
 
   describe("rendered dual-plume — continuity, no coarse whole-plume gating, reversals stay connected", () => {
-    it("draws the inner core, and every outer-field shell, on EVERY segment — no dab-spacing gate skips any of them", () => {
+    it("draws the inner core AND the outer field's own rails on EVERY moving segment — no dab-spacing gate skips any of them", () => {
       const engine = new SprayBrushEngine();
-      const { ctx, strokeStyles } = segmentRecordingContext();
+      const { ctx, strokeStyles, gradients } = segmentRecordingContext();
       const random = createStrokeRandom(9);
       engine.beginStroke();
       let previous: StrokePoint | null = null;
       const segments = 20;
       for (let i = 0; i <= segments; i += 1) {
         // x steps by 4 world units per segment, well above the dwell-distance
-        // gate (a fraction of the ~42 radius), so every one of these is a
+        // gate (a fraction of the ~42 radius) AND velocity 0.3 is above the
+        // stationary threshold, so every one of these (after the first) is a
         // genuine moving segment, not a dwell point.
         const point: StrokePoint = { x: i * 4, y: 0, timestamp: i * 16, velocity: 0.3, width: 42, opacity: 1 };
         engine.renderSegment(ctx, previous, point, "#ffffff", pink, random);
         previous = point;
       }
-      // Every one of the `segments` non-first calls strokes several outer-field
-      // shells + N inner passes; the FIRST call strokes only once each
-      // (start===point). At minimum, 2 outer strokes/segment across
-      // `segments` segments proves no gating dropped any — the outer field
-      // resolves at least that many shells at native strength.
+      // Inner core strokes several passes per segment; outer field adds its
+      // own rail strokes on top of that for every one of the `segments`
+      // moving segments, proving no gating dropped the outer field. Only the
+      // stroke's bare first point stamps a gradient.
       const dynamics = resolveSprayDynamics(pink, 0.3, 42);
-      const minimumOuterStrokes = segments * 2;
-      expect(strokeStyles.length).toBeGreaterThanOrEqual(minimumOuterStrokes + segments * dynamics.corePasses);
+      expect(strokeStyles.length).toBeGreaterThan(segments * dynamics.corePasses);
+      expect(gradients.length).toBeGreaterThanOrEqual(1);
     });
 
-    it("is deterministic — identical points/seed always render the identical draw sequence", () => {
+    it("is deterministic — identical points/seed always render the identical draw sequence for both layers", () => {
       const engine1 = new SprayBrushEngine();
       const first = segmentRecordingContext();
       const engine2 = new SprayBrushEngine();
@@ -638,41 +689,71 @@ describe("Pink Dot Fat dual-plume — one resolver, two coordinated CONTINUOUS l
         }
       }
       expect(second.strokeStyles).toEqual(first.strokeStyles);
+      expect(second.gradients).toEqual(first.gradients);
     });
 
-    it("keeps drawing (never silently drops) through a sharp zigzag, a closed loop, and a backtrack/reversal", () => {
+    it("keeps drawing (never silently drops) through a sharp zigzag, a closed loop, and a backtrack/reversal — both layers", () => {
       const engine = new SprayBrushEngine();
-      const { ctx, strokeStyles } = segmentRecordingContext();
+      const { ctx, strokeStyles, gradients } = segmentRecordingContext();
       const random = createStrokeRandom(5);
       engine.beginStroke();
       const zigzag: StrokePoint[] = [
-        { x: 0, y: 0, timestamp: 0, velocity: 0.4, width: 42, opacity: 1 },
+        { x: 0, y: 0, timestamp: 0, velocity: 0.4, width: 42, opacity: 1 }, // previous === null: the one true dwell point in this sequence
         { x: 50, y: 50, timestamp: 16, velocity: 0.4, width: 42, opacity: 1 },
         { x: 100, y: 0, timestamp: 32, velocity: 0.4, width: 42, opacity: 1 },
         { x: 60, y: -40, timestamp: 48, velocity: 0.4, width: 42, opacity: 1 }, // sharp corner
         { x: 20, y: 0, timestamp: 64, velocity: 0.4, width: 42, opacity: 1 }, // backtrack toward start
         { x: 0, y: 0, timestamp: 80, velocity: 0.4, width: 42, opacity: 1 }, // closes the loop
       ];
+      const corePasses = resolveSprayDynamics(pink, 0.4, 42).corePasses;
       let previous: StrokePoint | null = null;
       for (const point of zigzag) {
-        const before = strokeStyles.length;
+        const strokesBefore = strokeStyles.length;
+        const gradientsBefore = gradients.length;
         expect(() => engine.renderSegment(ctx, previous, point, "#ffffff", pink, random)).not.toThrow();
-        expect(strokeStyles.length).toBeGreaterThan(before); // every segment, including the sharp corner and the reversal, actually draws something
+        expect(strokeStyles.length).toBeGreaterThan(strokesBefore); // inner core: every segment, including the sharp corner and the reversal, actually draws something
+        if (previous === null) {
+          expect(gradients.length).toBeGreaterThan(gradientsBefore); // the one dwell point: a radial-gradient bullseye stamp
+        } else {
+          // every other (moving) segment: the outer field's own offset rails add MORE strokes beyond the inner core's own passes
+          expect(strokeStyles.length - strokesBefore).toBeGreaterThan(corePasses);
+        }
         previous = point;
       }
     });
 
-    it("uses genuine continuous strokes for the outer bands (lineTo, not arc/stamp draws) — proving the envelope is a swept line, not discrete circles", () => {
+    it("sweeps the outer field's ring/mist as offset bands spanning the WHOLE segment on a long moving jump, not just stamps at its two endpoints", () => {
       const engine = new SprayBrushEngine();
-      const lineToCalls: number[][] = [];
-      const { ctx } = segmentRecordingContext();
-      (ctx as unknown as { lineTo: (x: number, y: number) => void }).lineTo = (x: number, y: number) => lineToCalls.push([x, y]);
+      const { ctx, strokes } = segmentRecordingContext();
       const random = createStrokeRandom(3);
       engine.beginStroke();
       const start: StrokePoint = { x: 0, y: 0, timestamp: 0, velocity: 0.3, width: 42, opacity: 1 };
-      const point: StrokePoint = { x: 120, y: 0, timestamp: 16, velocity: 0.3, width: 42, opacity: 1 };
+      const point: StrokePoint = { x: 400, y: 0, timestamp: 16, velocity: 0.3, width: 42, opacity: 1 };
       engine.renderSegment(ctx, start, point, "#ffffff", pink, random);
-      expect(lineToCalls.length).toBeGreaterThan(0);
+      // 2 bands (ring, mist) x 2 sides (above/below) = 4 offset-rail strokes, each spanning the full 400-unit segment.
+      const wideRails = strokes.filter((s) => Math.abs(s.x1 - s.x0) > 300);
+      expect(wideRails.length).toBeGreaterThanOrEqual(4);
+    });
+
+    it("keeps sweeping offset rails through a SLOW but genuinely continuous stroke, even though fine curve-smoothing sub-sampling makes many individual segments shorter than the plain dwell-distance gate — it must not repeatedly stamp a bullseye along the way", () => {
+      const engine = new SprayBrushEngine();
+      const { ctx, gradients } = segmentRecordingContext();
+      const random = createStrokeRandom(7);
+      engine.beginStroke();
+      let previous: StrokePoint | null = null;
+      // Many small (~2 world unit) steps with real, sustained, non-trivial
+      // velocity — well above the stationary threshold — reproducing a
+      // deliberate slow drag sampled finely by the app's own smoothing
+      // pipeline, not a pause.
+      for (let i = 0; i <= 80; i += 1) {
+        const point: StrokePoint = { x: i * 2, y: 0, timestamp: i * 25, velocity: 0.3, width: 42, opacity: 1 };
+        engine.renderSegment(ctx, previous, point, "#ffffff", pink, random);
+        previous = point;
+      }
+      // Only the stroke's own bare first point (previous === null) may stamp
+      // a radial gradient; every other segment, however short, must use the
+      // rail technique instead.
+      expect(gradients.length).toBe(1);
     });
   });
 
@@ -689,10 +770,10 @@ describe("Pink Dot Fat dual-plume — one resolver, two coordinated CONTINUOUS l
       expect(Math.max(...alphas)).toBeLessThan(0.6);
     });
 
-    it("lets three overlapping Fill sweeps build MORE cumulative outer-band coverage than one sweep — dusty buildup, not a flat bucket fill", () => {
+    it("lets three overlapping Fill sweeps build MORE cumulative outer-field coverage than one sweep — dusty buildup, not a flat bucket fill", () => {
       const random = createStrokeRandom(3);
       const sweep = (passes: number) => {
-        const { ctx, strokeStyles } = segmentRecordingContext();
+        const { ctx, gradients } = segmentRecordingContext();
         const engine = new SprayBrushEngine();
         for (let pass = 0; pass < passes; pass += 1) {
           engine.beginStroke();
@@ -703,67 +784,59 @@ describe("Pink Dot Fat dual-plume — one resolver, two coordinated CONTINUOUS l
             previous = point;
           }
         }
-        return strokeStyles.length;
+        return gradients.length;
       };
       expect(sweep(3)).toBeGreaterThan(sweep(1));
     });
   });
 
-  describe("resolvePinkDotOuterFieldShells — outer atmosphere as a density field, not a second solid tube", () => {
+  describe("resolvePinkDotOuterFieldStops — a TRUE four-zone radial profile: core-edge -> moat -> ring peak -> mist, with a genuine density minimum (not blur)", () => {
     const state = resolvePinkDotDualPlume(pink, { sprayAngle: 0, sprayDistance: 1, sprayOutput: 1 }, 0.05, nativeDynamics);
+    const stopAt = (stops: readonly { offset: number; alpha: number }[], targetOffset: number) =>
+      [...stops].sort((a, b) => Math.abs(a.offset - targetOffset) - Math.abs(b.offset - targetOffset))[0];
 
-    it("resolves several concentric shells, not just two flat bands", () => {
-      const shells = resolvePinkDotOuterFieldShells(state.outer);
-      expect(shells.length).toBeGreaterThan(2);
+    it("gives the moat a density strictly BELOW the core-edge zone right next to it", () => {
+      const stops = resolvePinkDotOuterFieldStops(state.outer);
+      const coreEdge = stopAt(stops, 0);
+      const moat = stopAt(stops, 0.55);
+      expect(moat.alpha).toBeLessThan(coreEdge.alpha);
     });
 
-    it("gives shells a genuine annular bias — opacity is not flat/uniform across radius", () => {
-      const shells = resolvePinkDotOuterFieldShells(state.outer);
-      const opacities = shells.map((shell) => shell.opacity);
-      expect(new Set(opacities.map((o) => o.toFixed(6))).size).toBeGreaterThan(1);
+    it("gives the moat a density strictly BELOW the outer ring peak", () => {
+      const stops = resolvePinkDotOuterFieldStops(state.outer);
+      const moat = stopAt(stops, 0.55);
+      const ring = stopAt(stops, 0.8);
+      expect(moat.alpha).toBeLessThan(ring.alpha);
     });
 
-    it("peaks density near the ring radius rather than monotonically fading from center outward", () => {
-      const shells = resolvePinkDotOuterFieldShells(state.outer);
-      const nearestToRing = [...shells].sort(
-        (a, b) => Math.abs(a.radius - state.outer.ringRadius) - Math.abs(b.radius - state.outer.ringRadius),
-      )[0];
-      const farthest = [...shells].sort((a, b) => b.radius - a.radius)[0];
-      expect(nearestToRing.opacity).toBeGreaterThan(farthest.opacity);
+    it("keeps the mist tail strictly below the ring peak", () => {
+      const stops = resolvePinkDotOuterFieldStops(state.outer);
+      const ring = stopAt(stops, 0.8);
+      const mist = stopAt(stops, 0.9);
+      expect(mist.alpha).toBeLessThan(ring.alpha);
     });
 
-    it("keeps every shell strictly within the mist radius — the field never extends past its own distance-sensitive envelope", () => {
-      const shells = resolvePinkDotOuterFieldShells(state.outer);
-      for (const shell of shells) expect(shell.radius).toBeLessThanOrEqual(state.outer.mistRadius);
+    it("fades all the way to zero at the field's own outer edge (offset 1) — a clean taper, not an abrupt clip", () => {
+      const stops = resolvePinkDotOuterFieldStops(state.outer);
+      expect(stops[stops.length - 1].offset).toBe(1);
+      expect(stops[stops.length - 1].alpha).toBe(0);
     });
 
-    it("returns no shells when the outer layer has collapsed to zero mist radius", () => {
-      const collapsed = { ...state.outer, mistRadius: 0 };
-      expect(resolvePinkDotOuterFieldShells(collapsed)).toHaveLength(0);
-    });
-  });
-
-  describe("resolveOuterFieldTexture — deterministic mist grain, never a literal gap", () => {
-    it("is a pure function of its inputs — identical inputs always produce the identical factor", () => {
-      const a = resolveOuterFieldTexture(40, 2, 137);
-      const b = resolveOuterFieldTexture(40, 2, 137);
-      expect(a).toBe(b);
-    });
-
-    it("varies along the travel direction — the whole point of a 'grain,' not a flat multiplier", () => {
-      const samples = Array.from({ length: 12 }, (_, i) => resolveOuterFieldTexture(40, 0, i * 15));
-      expect(new Set(samples.map((v) => v.toFixed(6))).size).toBeGreaterThan(1);
+    it("holds the moat-below-both-neighbors invariant across a range of tuned ring opacities, not just the current preset value", () => {
+      for (const ringOpacity of [0.05, 0.24, 0.6, 1]) {
+        const outer = { ...state.outer, ringOpacity };
+        const stops = resolvePinkDotOuterFieldStops(outer);
+        const coreEdge = stopAt(stops, 0);
+        const moat = stopAt(stops, 0.55);
+        const ring = stopAt(stops, 0.8);
+        expect(moat.alpha).toBeLessThan(coreEdge.alpha);
+        expect(moat.alpha).toBeLessThan(ring.alpha);
+      }
     });
 
-    it("never reaches zero — the spatial envelope stays continuous even though density varies", () => {
-      const samples = Array.from({ length: 40 }, (_, i) => resolveOuterFieldTexture(40, 1, i * 7));
-      for (const value of samples) expect(value).toBeGreaterThan(0);
-    });
-
-    it("gives different shells a different phase, so they don't all pulse in sync", () => {
-      const shellA = Array.from({ length: 10 }, (_, i) => resolveOuterFieldTexture(40, 0, i * 15));
-      const shellB = Array.from({ length: 10 }, (_, i) => resolveOuterFieldTexture(40, 1, i * 15));
-      expect(shellA).not.toEqual(shellB);
+    it("returns no stops when the outer layer has collapsed to zero mist radius or zero ring opacity", () => {
+      expect(resolvePinkDotOuterFieldStops({ ...state.outer, mistRadius: 0 })).toHaveLength(0);
+      expect(resolvePinkDotOuterFieldStops({ ...state.outer, ringOpacity: 0 })).toHaveLength(0);
     });
   });
 
@@ -788,33 +861,26 @@ describe("Pink Dot Fat dual-plume — one resolver, two coordinated CONTINUOUS l
   });
 
   describe("rendered dwell-driven endpoints — no giant bulb from a bare click, progressive buildup from a real hold", () => {
-    function widestOuterLineWidth(engine: SprayBrushEngine, point: StrokePoint, previous: StrokePoint | null, random: () => number): number {
-      const { ctx } = lineWidthRecordingContext();
-      const widths: number[] = [];
-      (ctx as unknown as { stroke: () => void }).stroke = () => widths.push((ctx as unknown as { lineWidth: number }).lineWidth);
-      engine.renderSegment(ctx, previous, point, "#ffffff", pink, random);
-      return widths.length ? Math.max(...widths) : 0;
-    }
 
     it("draws a bare click (single point, no prior dwell) far smaller than a sustained hold at the same spot", () => {
       const clickEngine = new SprayBrushEngine();
       clickEngine.beginStroke();
       const clickPoint: StrokePoint = { x: 0, y: 0, timestamp: 0, velocity: 0, width: 42, opacity: 1 };
-      const clickWidth = widestOuterLineWidth(clickEngine, clickPoint, null, createStrokeRandom(1));
+      const clickRadius = outerFieldSizeProxy(clickEngine, clickPoint, null, createStrokeRandom(1));
 
       const heldEngine = new SprayBrushEngine();
       heldEngine.beginStroke();
       let previous: StrokePoint | null = null;
-      let heldWidth = 0;
+      let heldRadius = 0;
       const random = createStrokeRandom(1);
       // Repeated near-zero-distance points at increasing real timestamps —
       // exactly how the app's own render loop deposits a genuine held dwell.
       for (let i = 0; i <= 60; i += 1) {
         const point: StrokePoint = { x: 0, y: 0, timestamp: i * 16, velocity: 0, width: 42, opacity: 1 };
-        heldWidth = widestOuterLineWidth(heldEngine, point, previous, random);
+        heldRadius = outerFieldSizeProxy(heldEngine, point, previous, random);
         previous = point;
       }
-      expect(heldWidth).toBeGreaterThan(clickWidth * 2);
+      expect(heldRadius).toBeGreaterThan(clickRadius * 2);
     });
 
     it("does not let dwell strength carry into the very next segment once real movement starts", () => {
@@ -825,18 +891,17 @@ describe("Pink Dot Fat dual-plume — one resolver, two coordinated CONTINUOUS l
       // Dwell for ~600ms first, building up real dwell strength.
       for (let i = 0; i <= 40; i += 1) {
         const point: StrokePoint = { x: 0, y: 0, timestamp: i * 16, velocity: 0, width: 42, opacity: 1 };
-        widestOuterLineWidth(engine, point, previous, random);
+        outerFieldSizeProxy(engine, point, previous, random);
         previous = point;
       }
       // Now move immediately and substantially — this segment must render at
-      // full/native width, not shrunk by leftover dwell scaling.
+      // full/native size, not shrunk by leftover dwell scaling.
       const movedPoint: StrokePoint = { x: 200, y: 0, timestamp: 640 + 16, velocity: 0.4, width: 42, opacity: 1 };
-      const movedWidth = widestOuterLineWidth(engine, movedPoint, previous, random);
+      const movedSize = outerFieldSizeProxy(engine, movedPoint, previous, random);
       const dynamics = resolveSprayDynamics(pink, 0.4, 42);
       const state = resolvePinkDotDualPlume(pink, { sprayAngle: 0, sprayDistance: 1, sprayOutput: 1 }, 0.4, dynamics);
-      const shells = resolvePinkDotOuterFieldShells(state.outer);
-      const nativeMaxWidth = Math.max(...shells.map((s) => s.radius * 2));
-      expect(movedWidth).toBeGreaterThan(nativeMaxWidth * 0.9);
+      const nativeMaxBandWidth = Math.max(...resolvePinkDotOuterFieldBands(state.outer).map((b) => b.width));
+      expect(movedSize).toBeGreaterThan(nativeMaxBandWidth * 0.9);
     });
 
     it("resets and rebuilds dwell strength for a mid-stroke pause, not just the stroke's literal first/last point", () => {
@@ -847,22 +912,151 @@ describe("Pink Dot Fat dual-plume — one resolver, two coordinated CONTINUOUS l
       // Move for a while first (interior of the stroke, not an endpoint).
       for (let i = 0; i <= 10; i += 1) {
         const point: StrokePoint = { x: i * 10, y: 0, timestamp: i * 16, velocity: 0.4, width: 42, opacity: 1 };
-        widestOuterLineWidth(engine, point, previous, random);
+        outerFieldSizeProxy(engine, point, previous, random);
         previous = point;
       }
       // Pause in place, right after — the very FIRST stationary sample after
       // movement should be minimal, exactly like the stroke's own start.
       const pauseStart: StrokePoint = { x: 100, y: 0, timestamp: 176, velocity: 0, width: 42, opacity: 1 };
-      const firstPauseWidth = widestOuterLineWidth(engine, pauseStart, previous, random);
+      const firstPauseRadius = outerFieldSizeProxy(engine, pauseStart, previous, random);
       previous = pauseStart;
       // Keep pausing at the same spot for real elapsed time.
-      let lastPauseWidth = firstPauseWidth;
+      let lastPauseRadius = firstPauseRadius;
       for (let i = 1; i <= 40; i += 1) {
         const point: StrokePoint = { x: 100, y: 0, timestamp: 176 + i * 16, velocity: 0, width: 42, opacity: 1 };
-        lastPauseWidth = widestOuterLineWidth(engine, point, previous, random);
+        lastPauseRadius = outerFieldSizeProxy(engine, point, previous, random);
         previous = point;
       }
-      expect(lastPauseWidth).toBeGreaterThan(firstPauseWidth * 2);
+      expect(lastPauseRadius).toBeGreaterThan(firstPauseRadius * 2);
+    });
+  });
+
+  describe("moving cross-section — the moat survives movement, distance changes continuously, flare transforms all zones together", () => {
+    it("leaves a genuine unpainted gap between the inner core and the ring band on a MOVING segment — the moat is real space, not an alpha dip", () => {
+      const dynamics = resolveSprayDynamics(pink, 0.3, 42);
+      const state = resolvePinkDotDualPlume(pink, { sprayAngle: 0, sprayDistance: 1, sprayOutput: 1 }, 0.3, dynamics);
+      const bands = resolvePinkDotOuterFieldBands(state.outer);
+      expect(bands.length).toBe(2);
+      const ringBand = [...bands].sort((a, b) => a.offset - b.offset)[0]; // the nearer-to-center band is the ring
+      const ringInnerEdge = ringBand.offset - ringBand.width / 2;
+      // A real gap: the ring band's own inner edge sits meaningfully beyond
+      // the inner core's own radius — nothing (no stroke, no gradient) is
+      // ever drawn in between them for a moving segment.
+      expect(ringInnerEdge).toBeGreaterThan(state.inner.radius);
+    });
+
+    it("renders the outer field's ring/mist rails strictly outside the inner core's own radius on an actual MOVING render call", () => {
+      const point: StrokePoint = { x: 60, y: 0, timestamp: 16, velocity: 0.1, width: 42, opacity: 1 };
+      const start: StrokePoint = { x: 0, y: 0, timestamp: 0, velocity: 0.1, width: 42, opacity: 1 };
+      const { ctx, strokes } = segmentRecordingContext();
+      new SprayBrushEngine().renderSegment(ctx, start, point, "#ffffff", pink, createStrokeRandom(1));
+      const dynamics = resolveSprayDynamics(pink, 0.1, 42);
+      const state = resolvePinkDotDualPlume(pink, { sprayAngle: 0, sprayDistance: 1, sprayOutput: 1 }, 0.1, dynamics);
+      const knownAlphas = resolvePinkDotOuterFieldBands(state.outer).map((b) => b.alpha);
+      // Picked out by alpha (never touched by jitter or ctx transforms),
+      // not by position — a small jitter offset can occasionally push an
+      // inner-core pass's own |y0| past a naive position threshold too.
+      const railStrokes = strokes.filter((s) => knownAlphas.some((a) => Math.abs(a - s.alpha) < 0.002));
+      expect(railStrokes.length).toBeGreaterThan(0);
+      // This segment is horizontal (angle 0), so a rail's own perpendicular
+      // offset from the centerline is simply its recorded |y0|.
+      for (const s of railStrokes) expect(Math.abs(s.y0) - s.lineWidth / 2).toBeGreaterThan(dynamics.radius * 0.9);
+    });
+
+    it("evolves the resolved outer-field geometry smoothly (no discontinuities) as canonical distance changes continuously: narrow -> wide -> narrow", () => {
+      // A pure-math test of resolvePinkDotDualPlume itself — the actual
+      // property under test ("no discontinuities as distance changes") is a
+      // property of this resolver, not of any particular rendering
+      // technique, so testing it here is both more direct and immune to
+      // any ambiguity in picking specific strokes back out of a mocked
+      // canvas recording.
+      const steps = 20;
+      const distanceFactorAt = (i: number) => {
+        const t = i / steps; // 0..1
+        const triangle = t <= 0.5 ? t * 2 : (1 - t) * 2; // 0 -> 1 -> 0
+        return 0.15 + (0.9 - 0.15) * triangle;
+      };
+      const mistRadii: number[] = [];
+      for (let i = 0; i <= steps; i += 1) {
+        const distanceFactor = distanceFactorAt(i);
+        const dynamics = resolveSprayDynamics(pink, 0.3, pink.baseRadius * distanceFactor);
+        const state = resolvePinkDotDualPlume(pink, { sprayAngle: 0, sprayDistance: distanceFactor, sprayOutput: 1 }, 0.3, dynamics);
+        mistRadii.push(state.outer.mistRadius);
+      }
+      const peakIndex = mistRadii.indexOf(Math.max(...mistRadii));
+      // The peak sits near the middle of the ramp (where distance peaks at
+      // 0.9), not at either end — a genuine narrow->wide->narrow arc, not a
+      // flat line, a one-sided ramp, or a random jump.
+      expect(peakIndex).toBeGreaterThan(steps * 0.25);
+      expect(peakIndex).toBeLessThan(steps * 0.75);
+      expect(mistRadii[peakIndex]).toBeGreaterThan(mistRadii[0] * 1.5);
+      expect(mistRadii[peakIndex]).toBeGreaterThan(mistRadii[steps] * 1.3);
+      // Rises monotonically to the peak, falls monotonically from it — what
+      // "no discontinuity" actually means for a densely sampled continuous
+      // ramp: no reversals or sudden jumps against the input's own
+      // direction of travel.
+      for (let i = 1; i <= peakIndex; i += 1) expect(mistRadii[i]).toBeGreaterThanOrEqual(mistRadii[i - 1]);
+      for (let i = peakIndex + 1; i <= steps; i += 1) expect(mistRadii[i]).toBeLessThanOrEqual(mistRadii[i - 1]);
+    });
+
+    it("keeps rendering every step (never breaks the stream) as a real render call sweeps through the same narrow -> wide -> narrow distance ramp", () => {
+      const engine = new SprayBrushEngine();
+      const { ctx, strokeStyles } = segmentRecordingContext();
+      const random = createStrokeRandom(4);
+      engine.beginStroke();
+      const steps = 20;
+      const distanceFactorAt = (i: number) => {
+        const t = i / steps;
+        const triangle = t <= 0.5 ? t * 2 : (1 - t) * 2;
+        return 0.15 + (0.9 - 0.15) * triangle;
+      };
+      let previous: StrokePoint | null = null;
+      for (let i = 0; i <= steps; i += 1) {
+        const point: StrokePoint = { x: i * 15, y: 0, timestamp: i * 16, velocity: 0.1, width: pink.baseRadius * distanceFactorAt(i), opacity: 1 };
+        const before = strokeStyles.length;
+        expect(() => engine.renderSegment(ctx, previous, point, "#ffffff", pink, random)).not.toThrow();
+        expect(strokeStyles.length).toBeGreaterThan(before); // every step still deposits something, stream never breaks
+        previous = point;
+      }
+    });
+
+    it("transforms core-edge/moat/ring/mist together under flare — the gradient's own stops are identical regardless of anisotropy; only the geometric squash differs", () => {
+      const flat = resolvePinkDotDualPlume(pink, { sprayAngle: 0, sprayDistance: 1, sprayOutput: 1 }, 0, nativeDynamics);
+      const flared = resolvePinkDotDualPlume(pink, { sprayAngle: (40 * Math.PI) / 180, sprayDistance: 1, sprayOutput: 1 }, 0, nativeDynamics);
+      expect(flared.outer.anisotropy).toBeLessThan(1);
+      const flatStops = resolvePinkDotOuterFieldStops(flat.outer);
+      const flaredStops = resolvePinkDotOuterFieldStops(flared.outer);
+      // Same zone structure (offsets), same relative alpha bias — flare never
+      // re-shapes the density profile itself, only stretches it geometrically.
+      expect(flaredStops.map((s) => s.offset)).toEqual(flatStops.map((s) => s.offset));
+    });
+
+    it("scales the whole field's radius as distance grows, so the moat/ring/mist zones (fixed fractions of it) expand together with the field", () => {
+      const near = resolvePinkDotDualPlume(pink, { sprayAngle: 0, sprayDistance: 0.3, sprayOutput: 1 }, 0.3, nativeDynamics);
+      const far = resolvePinkDotDualPlume(pink, { sprayAngle: 0, sprayDistance: 1.7, sprayOutput: 1 }, 0.3, nativeDynamics);
+      expect(far.outer.mistRadius).toBeGreaterThan(near.outer.mistRadius);
+    });
+
+    it("keeps overspray speckle out of the moat too, on a real moving render call — a structured gap the eye can register as empty, not one stray particles quietly refill", () => {
+      const engine = new SprayBrushEngine();
+      const { ctx, arcs } = segmentRecordingContext();
+      const random = createStrokeRandom(2);
+      let previous: StrokePoint | null = null;
+      // A long slow stroke, matching the live "moving line" scenario — many
+      // segments, plenty of overspray particles, real chance to refill a gap
+      // if the exclusion were missing.
+      for (let i = 0; i <= 40; i += 1) {
+        const point: StrokePoint = { x: i * 3, y: 0, timestamp: i * 25, velocity: 0.3, width: 42, opacity: 1 };
+        engine.renderSegment(ctx, previous, point, "#ffffff", pink, random);
+        previous = point;
+      }
+      const dynamics = resolveSprayDynamics(pink, 0.3, 42);
+      const state = resolvePinkDotDualPlume(pink, { sprayAngle: 0, sprayDistance: 1, sprayOutput: 1 }, 0.3, dynamics);
+      const moatRadius = state.outer.mistRadius * 0.55; // RADIAL_MOAT_END_T
+      expect(arcs.length).toBeGreaterThan(0);
+      // Steady-state samples only (away from the stroke's own start/end).
+      const steadyState = arcs.filter((a) => a.x > 40 && a.x < 80);
+      for (const a of steadyState) expect(Math.abs(a.y) - a.r).toBeGreaterThan(moatRadius * 0.8);
     });
   });
 
