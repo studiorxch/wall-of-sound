@@ -308,13 +308,17 @@ export function resolveMouseSprayInput(
  * inputs so distance/angle/velocity respond coherently across both. Not
  * independent tools: `inner` is a normal continuous line core (see
  * `renderPinkDotInnerCore`); `outer` is a TRUE four-zone radial density
- * field — core-edge, a genuine low-density moat, a raised ring band, a
- * fading mist (see `resolvePinkDotOuterFieldStops`) — swept continuously
- * along the path under it every segment (see `renderPinkDotOuterField`),
- * with no distance-based gating. An earlier version stamped the whole
- * plume at gated intervals, which read as lumpy/scalloped on a moving
- * line; continuous sweeping fixed that. See `SprayCapPresets.ts`'s
- * `plume*` field docs for what each input field controls.
+ * field — a genuine low-density (literally unpainted) moat between the
+ * core and a raised outer ring, then a fading mist beyond it (see
+ * `resolvePinkDotOuterFieldZones`) — swept continuously along the path
+ * under it every segment (see `renderPinkDotOuterField`) via ONE
+ * geometric construction that handles a stationary point and a moving
+ * segment identically (no per-segment velocity branch, no repeated
+ * stamping). Both `sprayDistance` (geometry: how big) and dwell time
+ * (density: how opaque) feed the SAME resolver, but only the latter is
+ * ever applied outside it — radius never changes with dwell duration. See
+ * `SprayCapPresets.ts`'s `plume*` field docs for what each input field
+ * controls.
  */
 export interface PinkDotInnerState {
   radius: number;
@@ -400,148 +404,102 @@ export function resolvePinkDotDualPlume(
 
 /**
  * Pink Dot's outer atmosphere as a TRUE four-zone radial density profile —
- * core-edge, then a genuine low-density MOAT, then a raised ring band, then
- * a fading mist — expressed as `createRadialGradient` stops (offsets are
- * fractions of `outer.mistRadius`, the field's own full extent). A radial
- * gradient is evaluated natively per-pixel by the canvas, so the moat is a
- * real mathematical minimum in the density function itself (see the ratio
- * constants below: the moat's alpha is a small fraction of the ring's,
- * independent of the cap's own tuned opacity values) — NOT an appearance
- * faked by blur, and not washed out by any stacking/accumulation the way
- * concentric solid-disk strokes would (a disk of radius R always covers
- * everything from 0 to R, so stacking several of them can never produce a
- * pixel-level dip; a single gradient can). Rendered later (see
- * `renderPinkDotOuterField`) as this same gradient stamped densely along
- * the travel path, not one static circle — so the whole four-zone
- * cross-section sweeps continuously with the stroke.
+ * a real low-density MOAT between the inner core and a raised outer RING,
+ * then a fading MIST beyond it — expressed as pure geometry (radii, as
+ * fractions of `outer.mistRadius`) rather than a gradient or a per-point
+ * stamp. The moat is not a low alpha value, it is a region where NOTHING is
+ * painted at all: `density(moat) = 0` structurally, strictly below any
+ * positive core/ring/mist density, by construction rather than tuning.
+ *
+ * Both the ring and mist zones render as one continuous swept shape — the
+ * Minkowski sum of the segment (or, for a true dwell, a single point) with
+ * a disk of the zone's own radius, minus the same sum at the zone's inner
+ * radius (see `tracePinkDotCapsule` / `drawPinkDotOuterFieldBand`). This
+ * ONE geometric construction is what a stationary bullseye and a moving
+ * band actually are: a point's "distance <= r" region is a circle; a
+ * segment's "distance <= r" region is a capsule (stadium). There is no
+ * separate "dot" vs. "line" renderer and no per-segment velocity branch —
+ * the same call always produces the correct shape for whatever `start`/
+ * `point` happen to be, including the degenerate `start === point` case.
  */
-const RADIAL_CORE_END_T = 0.35;
 const RADIAL_MOAT_END_T = 0.55;
 const RADIAL_RING_END_T = 0.8;
-/** The zone immediately outside the inner core — clearly below the ring peak (so the drop into the moat still reads), but not literally zero either. */
-const CORE_EDGE_DENSITY_RATIO = 0.4;
+
+export interface PinkDotOuterFieldZones {
+  moatRadius: number;
+  ringOuterRadius: number;
+  mistOuterRadius: number;
+  ringAlpha: number;
+  mistAlpha: number;
+}
+
+export function resolvePinkDotOuterFieldZones(outer: PinkDotOuterState): PinkDotOuterFieldZones | null {
+  if (outer.mistRadius <= 0 || outer.ringOpacity <= 0) return null;
+  return {
+    moatRadius: outer.mistRadius * RADIAL_MOAT_END_T,
+    ringOuterRadius: outer.mistRadius * RADIAL_RING_END_T,
+    mistOuterRadius: outer.mistRadius,
+    ringAlpha: outer.ringOpacity,
+    // Structurally guaranteed below the ring peak regardless of how
+    // mistOpacity/ringOpacity happen to be tuned.
+    mistAlpha: Math.min(outer.mistOpacity, outer.ringOpacity * 0.85),
+  };
+}
+
 /**
- * How suppressed the moat's minimum is relative to the ring peak. Small
- * enough that density(moat) < density(core-edge) and density(moat) <
- * density(ring) hold structurally for any ring opacity the cap resolves
- * to — AND small enough that the moat's per-draw alpha stays low even
- * under a long stationary dwell, where every zone is redrawn every frame
- * and composites via ordinary source-over: a per-draw alpha much above
- * ~0.05 would asymptote to full opacity within well under a second of
- * real dwell time (1-(1-a)^n -> 1 as draws accumulate), erasing the gap
- * exactly the way blur would. Kept low enough that the moat still reads
- * as a genuine dark channel through a full 1s dwell, not just an instant.
+ * How strongly Pink Dot's own resolved `width` AND `velocity` each lag
+ * their raw per-point values (see `SprayBrushEngine.pinkDotSmoothedWidth`
+ * / `pinkDotSmoothedVelocity`) — the fraction of the gap to the new raw
+ * value closed on each segment. 1 would mean no smoothing at all; smaller
+ * values suppress more frame-to-frame jitter but take longer to track a
+ * genuine, deliberate distance/speed ramp. Chosen to average out normal
+ * per-point noise within a couple of segments while still following a
+ * real ramp within a handful of them — segments are short relative to the
+ * cap's own radius, so a few segments' lag is imperceptible against a
+ * deliberate change.
  */
-const MOAT_SUPPRESSION_RATIO = 0.045;
-
-export function resolvePinkDotOuterFieldStops(outer: PinkDotOuterState): readonly HaloGradientStop[] {
-  if (outer.mistRadius <= 0 || outer.ringOpacity <= 0) return [];
-  const ringAlpha = outer.ringOpacity;
-  const coreEdgeAlpha = ringAlpha * CORE_EDGE_DENSITY_RATIO;
-  const moatAlpha = ringAlpha * MOAT_SUPPRESSION_RATIO;
-  // Structurally guaranteed below the ring peak (see resolvePinkDotOuterFieldStops'
-  // own doc) regardless of how mistOpacity/ringOpacity happen to be tuned.
-  const mistAlpha = Math.min(outer.mistOpacity, ringAlpha * 0.85);
-  return [
-    { offset: 0, alpha: coreEdgeAlpha },
-    { offset: RADIAL_CORE_END_T, alpha: coreEdgeAlpha },
-    { offset: RADIAL_MOAT_END_T, alpha: moatAlpha },
-    { offset: RADIAL_RING_END_T, alpha: ringAlpha },
-    { offset: Math.min(0.999, RADIAL_RING_END_T + (1 - RADIAL_RING_END_T) * 0.5), alpha: mistAlpha },
-    { offset: 1, alpha: 0 },
-  ];
-}
+const PINK_DOT_WIDTH_SMOOTHING = 0.05;
 
 /**
- * Pink Dot's outer atmosphere for a genuinely MOVING segment — the ring and
- * mist zones as two OFFSET PARALLEL bands (a fixed perpendicular distance
- * from the travel path, not a radius from any single point). This is the
- * fix for a real trap: stamping the four-zone radial gradient repeatedly
- * along a path (one circle per sample point) looks correct for a single
- * stationary dot, but the UNION of many overlapping full disks swept along
- * a line inevitably fills its own moat back in — a point in one stamp's
- * moat sits inside a NEIGHBORING stamp's ring, because the moat is a
- * radial (point-centered) concept while a swept cross-section needs a
- * PATH-relative (perpendicular-distance) one. An offset stroke's own
- * Minkowski-sum shape is exactly "constant perpendicular distance from the
- * path," which is what a moving ring/mist band actually is — so it stays a
- * genuine offset band instead of collapsing into a solid tube. The moat
- * itself is simply left unpainted between the inner core and the ring
- * band: reduced deposition, not blur, and not a "hole" punched through
- * whatever else is already on the canvas. See `renderPinkDotOuterField` for
- * how this is stamped as a proper radial gradient instead for a true
- * (near-zero-distance) dwell point, where a circular bullseye is correct.
- */
-export interface PinkDotOuterFieldBand {
-  /** Perpendicular distance from the path centerline to this band's own centerline, in world units. */
-  offset: number;
-  /** This band's own stroke thickness, in world units. */
-  width: number;
-  alpha: number;
-}
-
-export function resolvePinkDotOuterFieldBands(outer: PinkDotOuterState): readonly PinkDotOuterFieldBand[] {
-  if (outer.mistRadius <= 0 || outer.ringOpacity <= 0) return [];
-  const moatRadius = outer.mistRadius * RADIAL_MOAT_END_T;
-  const ringOuterRadius = outer.mistRadius * RADIAL_RING_END_T;
-  const mistOuterRadius = outer.mistRadius;
-  const mistAlpha = Math.min(outer.mistOpacity, outer.ringOpacity * 0.85);
-  return [
-    // Mist first (drawn under), ring on top — same layering convention as
-    // every other Pink Dot layer in this file: widest/faintest first.
-    { offset: (ringOuterRadius + mistOuterRadius) / 2, width: Math.max(1, mistOuterRadius - ringOuterRadius), alpha: mistAlpha },
-    { offset: (moatRadius + ringOuterRadius) / 2, width: Math.max(1, ringOuterRadius - moatRadius), alpha: outer.ringOpacity },
-  ];
-}
-
-/**
- * A Pink Dot segment counts as "dwelling in place" (for endpoint-sizing
- * purposes) when it travels less than this fraction of the resolved
- * radius. Distance-based, not velocity-based: the actual failure mode (a
- * near-zero-length stroke's round line-cap degenerating into a full-
- * diameter circle) is a distance phenomenon, not a speed one — a slow but
- * genuinely moving line must NOT be treated as a dwell point.
+ * A Pink Dot segment counts as "dwelling in place" when it travels less
+ * than this fraction of the resolved radius AND its velocity is at or
+ * below the stationary threshold — distance alone is not enough, because
+ * real curve-smoothing can subdivide genuine, deliberate slow movement
+ * into many segments individually shorter than this ratio without the
+ * pointer having paused at all; velocity (the pipeline's own smoothed
+ * speed estimate) is immune to that per-segment sampling noise. This gate
+ * controls ONLY how much real elapsed time counts toward
+ * `resolvePinkDotDwellScale`'s OPACITY ramp below — it never changes which
+ * geometry gets drawn or how large it is. Geometry is a pure function of
+ * `sprayDistance` (see `resolvePinkDotDualPlume`); dwell/time affects
+ * density only, never radius.
  */
 const PLUME_DWELL_DISTANCE_RATIO = 0.15;
 /**
- * Minimum ACCUMULATED real dwell time (ms) before the outer field switches
- * to the stationary radial-gradient bullseye stamp — one of TWO conditions
- * that must both hold (see the gate at its call site, alongside
- * `point.velocity <= PLUME_VELOCITY_FLARE_THRESHOLD`). Real curve-smoothing
- * sub-sampling can subdivide even genuine, deliberate slow movement into
- * many segments individually shorter than `PLUME_DWELL_DISTANCE_RATIO`,
- * without the pointer actually having paused; switching render technique
- * for those would stamp circles all along a moving line, reintroducing the
- * "union of overlapping circles fills in the moat" problem the offset-rail
- * technique exists to avoid. Distance and velocity together (not either
- * alone) tell an actual pause apart from a slow-but-continuous stroke,
- * while a genuine brief pause is still caught almost immediately. The
- * stroke's own very first point (no `previous`) is exempt from both — a
- * bare touch is always a dot, never a rail.
- */
-const PLUME_DWELL_STAMP_MIN_MS = 30;
-/**
  * Real elapsed stationary time (ms) a Pink Dot dwell point needs to reach
- * full, un-scaled endpoint size. Chosen so growth stays visibly progressive
- * across the 0.2s/0.5s/1s live-test points rather than saturating almost
+ * full, un-scaled OPACITY. Chosen so buildup stays visibly progressive
+ * across the 0.2s/0.5s/1s/2s live-test points rather than saturating almost
  * immediately.
  */
 export const PLUME_DWELL_FULL_MS = 900;
 /**
  * A brand-new dwell point — zero accumulated stationary time, whether from
  * a bare click or the instant real movement stops — never draws at literal
- * zero size; this floor keeps it a small visible dot rather than invisible.
+ * zero opacity; this floor keeps it faintly visible rather than invisible.
  */
 const PLUME_DWELL_MIN_SCALE = 0.22;
 
 /**
- * How large a Pink Dot dwell point should draw right now, given how long it
- * has genuinely been stationary. 0ms (a fresh pointerdown, or the instant
- * after real movement stops) returns the floor scale — a small dot, not a
- * full bulb; ramps linearly to 1 (full size) by `PLUME_DWELL_FULL_MS`. Pure
- * function of elapsed time only, directly testable without engine state —
- * only meaningful for a genuinely stationary point (see `renderSegment`'s
- * distance-based dwell gate); a moving segment never calls this at all.
+ * How strongly a Pink Dot dwell point should paint right now, given how
+ * long it has genuinely been stationary at the SAME `sprayDistance` — an
+ * OPACITY multiplier only, never a size one: 0ms (a fresh pointerdown, or
+ * the instant after real movement stops) returns the floor scale — faint,
+ * not a full bulb; ramps linearly to 1 (full density) by
+ * `PLUME_DWELL_FULL_MS`. A 1s dwell and a 2s dwell both resolve to 1 here
+ * (density then keeps building only through ordinary repeated-draw
+ * compositing, exactly like any other cap's dwell) — the FOOTPRINT itself
+ * never grows. Pure function of elapsed time only, directly testable
+ * without engine state; a moving segment never calls this at all.
  */
 export function resolvePinkDotDwellScale(dwellMs: number): number {
   const ramped = Math.max(0, Math.min(1, dwellMs / PLUME_DWELL_FULL_MS));
@@ -582,6 +540,20 @@ export class SprayBrushEngine {
    * of how the stroke got there. Reset at the start of every stroke.
    */
   private pinkDotDwellMs = 0;
+  /**
+   * Exponentially-lagged `point.width` fed into Pink Dot's plume resolver
+   * (see `PINK_DOT_WIDTH_SMOOTHING`) — suppresses the frame-to-frame width
+   * jitter CanonicalStrokeManager deliberately applies (linking width to
+   * instantaneous velocity) so the outer field's moat, a genuine geometric
+   * hole, stays consistent across consecutive segments instead of a
+   * handful of lower-jitter segments silently painting into a gap their
+   * higher-jitter neighbors intended to leave empty. -1 means "not yet
+   * initialized this stroke" — the very first segment adopts the raw width
+   * outright rather than lagging from a stale value.
+   */
+  private pinkDotSmoothedWidth = -1;
+  /** Same lag as `pinkDotSmoothedWidth`, for `point.velocity` — see its doc and the flare-anisotropy jitter it otherwise causes in the outer field's geometry. -1 means "not yet initialized this stroke." */
+  private pinkDotSmoothedVelocity = -1;
 
   public resize(_width: number, _height: number): void {
     // The brush deposits directly into the persistent paint canvas.
@@ -595,6 +567,8 @@ export class SprayBrushEngine {
     this.fillLocalSaturation.clear();
     this.haloTravelSinceLastDab = 0;
     this.pinkDotDwellMs = 0;
+    this.pinkDotSmoothedWidth = -1;
+    this.pinkDotSmoothedVelocity = -1;
   }
 
   private fillCellKey(x: number, y: number, cellSize: number): string {
@@ -687,41 +661,54 @@ export class SprayBrushEngine {
       // — see renderPinkDotDualPlume below. Both drawn every segment, no
       // distance-based gating, so the line body and its atmosphere stay
       // connected through corners, reversals, and loops.
+      //
+      // The outer field's moat is a genuine geometric hole (see
+      // renderPinkDotOuterField), which makes it uniquely sensitive to
+      // frame-to-frame noise in whatever drives its geometry — invisible
+      // for every other cap's solid stroke, but enough for a handful of
+      // segments along a long line to land on a slightly different radius
+      // than their neighbors and silently paint into (or squash the shape
+      // of) the gap the rest leave empty. Two PRE-EXISTING, app-wide
+      // sources of that noise both feed Pink Dot's geometry and both get
+      // smoothed (a short exponential lag, reset each stroke) before use:
+      // CanonicalStrokeManager deliberately links each point's resolved
+      // `width` to its instantaneous velocity ("restrained so starts/stops
+      // do not form oversized bulbs"), and velocity itself (real mouse
+      // movement is never perfectly even) drives the flare anisotropy that
+      // squashes the whole band shape. Smoothing both still tracks a
+      // genuine, deliberate sprayDistance/speed change within a handful of
+      // segments — short relative to the cap's own radius.
+      this.pinkDotSmoothedWidth = this.pinkDotSmoothedWidth < 0
+        ? point.width
+        : this.pinkDotSmoothedWidth + (point.width - this.pinkDotSmoothedWidth) * PINK_DOT_WIDTH_SMOOTHING;
+      this.pinkDotSmoothedVelocity = this.pinkDotSmoothedVelocity < 0
+        ? point.velocity
+        : this.pinkDotSmoothedVelocity + (point.velocity - this.pinkDotSmoothedVelocity) * PINK_DOT_WIDTH_SMOOTHING;
+      const plumeDynamics = resolveSprayDynamics(cap, this.pinkDotSmoothedVelocity, this.pinkDotSmoothedWidth);
       const input = resolveMouseSprayInput(point, cap, coverageFactor, sprayAngleDegrees);
-      dualPlumeState = resolvePinkDotDualPlume(cap, input, point.velocity, dynamics);
+      dualPlumeState = resolvePinkDotDualPlume(cap, input, this.pinkDotSmoothedVelocity, plumeDynamics);
 
-      // Dwell-driven endpoint sizing (see resolvePinkDotDwellScale): a
-      // segment that barely traveled relative to the cap's own radius
-      // counts as "dwelling in place." Real elapsed time accumulates while
-      // consecutive segments stay dwell-type and resets the instant real
-      // movement occurs, so a bare click or an immediate release never
-      // deposits a full-size bulb, while a genuine hold (or a mid-stroke
-      // pause) progressively strengthens instead.
-      const isDwellPoint = distance <= dynamics.radius * PLUME_DWELL_DISTANCE_RATIO;
+      // Dwell-driven OPACITY (see resolvePinkDotDwellScale) — NEVER radius.
+      // A segment counts as "dwelling in place" only when it barely
+      // traveled AND its velocity is at or below the stationary threshold
+      // (both together — see PLUME_DWELL_DISTANCE_RATIO's own doc for why
+      // distance alone misclassifies genuine slow continuous movement).
+      // Real elapsed time accumulates while consecutive segments stay
+      // dwell-type and resets the instant real movement occurs, so a bare
+      // click or an immediate release never paints at full strength, while
+      // a genuine hold (or a mid-stroke pause) progressively strengthens —
+      // the footprint's SIZE is set below by resolvePinkDotDualPlume from
+      // sprayDistance alone and never touched here.
+      const isDwellPoint = distance <= dynamics.radius * PLUME_DWELL_DISTANCE_RATIO
+        && point.velocity <= PLUME_VELOCITY_FLARE_THRESHOLD;
       if (isDwellPoint) {
         this.pinkDotDwellMs += previous ? Math.max(0, point.timestamp - previous.timestamp) : 0;
       } else {
         this.pinkDotDwellMs = 0;
       }
-      const dwellScale = isDwellPoint ? resolvePinkDotDwellScale(this.pinkDotDwellMs) : 1;
+      const dwellOpacityScale = isDwellPoint ? resolvePinkDotDwellScale(this.pinkDotDwellMs) : 1;
 
-      // Outer-field RENDERING TECHNIQUE gate (see PLUME_DWELL_STAMP_MIN_MS).
-      // Deliberately stricter than the size gate above, and on a DIFFERENT
-      // axis: real curve-smoothing/reconstruction can subdivide even
-      // genuine, deliberate slow movement into many fine sub-segments whose
-      // individual distances fall below PLUME_DWELL_DISTANCE_RATIO despite
-      // the pointer clearly still moving — a raw per-segment distance check
-      // alone cannot tell that apart from an actual pause, and switching to
-      // the stamp technique for a whole slow stroke would reintroduce the
-      // "overlapping circles fill the moat" problem across its entire
-      // length, not just at one spot. `point.velocity` is the pipeline's
-      // own smoothed speed estimate, immune to that per-segment noise, so
-      // it — not raw distance — decides whether the pointer has actually
-      // stopped. The stroke's bare first point is exempt (always a dot).
-      const useDwellStamp = previous === null
-        || (isDwellPoint && point.velocity <= PLUME_VELOCITY_FLARE_THRESHOLD && this.pinkDotDwellMs >= PLUME_DWELL_STAMP_MIN_MS);
-
-      this.renderPinkDotDualPlume(ctx, drawStart, drawPoint, colorHex, cap, dualPlumeState, angle, dwellScale, useDwellStamp, random, fillMode, cellKey);
+      this.renderPinkDotDualPlume(ctx, drawStart, drawPoint, colorHex, cap, dualPlumeState, angle, dwellOpacityScale, random, fillMode, cellKey);
     } else if (cap.depositionShape === "streak") {
       // Dry/Streak replaces the concentric-pass core entirely with
       // deterministic parallel lanes — see renderStreakCore below.
@@ -871,15 +858,14 @@ export class SprayBrushEngine {
 
   /**
    * Pink Dot Fat's dual-plume — TWO coordinated CONTINUOUS layers drawn
-   * every segment (no distance-based gating anywhere in this method), so
-   * the line body and its atmosphere stay connected through corners,
-   * reversals, and loops. Draws the outer atmosphere field FIRST, then the
-   * inner core on top — the core's own opaque passes cover the field's
-   * inner portion, which is how the bullseye/ring read emerges from
-   * stacked continuous layers rather than a moat-gradient trick or discrete
-   * stamps. `dwellScale` (see `resolvePinkDotDwellScale`) shrinks BOTH
-   * layers together for a genuinely fresh dwell point, so a bare click or
-   * an immediate release never deposits a full-size bulb.
+   * every segment (no distance-based gating anywhere in this method, and
+   * no branching on velocity or dwell state either — see
+   * `renderPinkDotOuterField`), so the line body and its atmosphere stay
+   * connected through corners, reversals, and loops, and a stationary
+   * point renders through the exact same call path as a moving one.
+   * `dwellOpacityScale` (see `resolvePinkDotDwellScale`) scales BOTH
+   * layers' DENSITY together for a genuinely fresh dwell point — never
+   * their geometry, which is fixed by `sprayDistance` alone.
    */
   private renderPinkDotDualPlume(
     ctx: CanvasRenderingContext2D,
@@ -889,40 +875,30 @@ export class SprayBrushEngine {
     cap: SprayCapPreset,
     state: PinkDotDualPlumeState,
     angle: number,
-    dwellScale: number,
-    useDwellStamp: boolean,
+    dwellOpacityScale: number,
     random: () => number,
     fillMode: boolean,
     cellKey: string | null,
   ): void {
-    this.renderPinkDotOuterField(ctx, start, point, colorHex, state.outer, angle, dwellScale, useDwellStamp);
-    this.renderPinkDotInnerCore(ctx, start, point, colorHex, cap, state.inner, angle, dwellScale, random, fillMode, cellKey);
+    this.renderPinkDotOuterField(ctx, start, point, colorHex, state.outer, angle, dwellOpacityScale);
+    this.renderPinkDotInnerCore(ctx, start, point, colorHex, cap, state.inner, angle, dwellOpacityScale, random, fillMode, cellKey);
   }
 
   /**
    * The outer/atmosphere layer — a TRUE four-zone radial cross-section:
-   * core-edge -> a genuine low-density moat -> a raised ring band -> a
-   * fading mist. Two different techniques depending on `useDwellStamp`
-   * (see `PLUME_DWELL_STAMP_MIN_MS` — deliberately stricter than the plain
-   * per-segment dwell gate, so a single short segment from curve-smoothing
-   * sub-sampling amid otherwise-continuous slow movement never switches
-   * technique on its own):
-   *
-   * - A true dwell (the stroke's bare first point, or a few consecutive
-   *   frames of genuine real stillness) stamps ONE
-   *   `createRadialGradient`-filled circle (`resolvePinkDotOuterFieldStops`)
-   *   — the correct shape for a stationary bullseye, an ellipse under flare
-   *   since the whole gradient squashes as one transformed unit.
-   * - A genuinely moving segment instead sweeps the ring and mist zones as
-   *   two OFFSET PARALLEL bands (`resolvePinkDotOuterFieldBands`) at a
-   *   fixed perpendicular distance from the path. This is deliberate, not
-   *   an inconsistency: stamping the same radial gradient repeatedly along
-   *   a moving path would union many overlapping full disks together,
-   *   which fills the moat right back in (a point in one stamp's moat
-   *   falls inside a neighboring stamp's ring) — the very blur this
-   *   profile exists to avoid. An offset stroke's own shape is exactly
-   *   "constant perpendicular distance from the path," which is what a
-   *   swept ring/mist band actually is.
+   * core-edge -> a genuine low-density (literally unpainted) moat -> a
+   * raised ring band -> a fading mist. ONE geometric construction handles
+   * every case — a stationary bullseye is not a special case of a moving
+   * line, it is what this same construction produces when `start === point`
+   * (see `tracePinkDotCapsule`): the ring and mist bands are each the
+   * Minkowski-sum "distance from the segment is between these two radii"
+   * region, filled via one evenodd path combining the band's outer and
+   * inner boundary capsules (`drawPinkDotOuterFieldBand`). A point's
+   * distance region is a circle; a segment's is a capsule (stadium) — the
+   * SAME call produces the right shape for both, continuously, with no
+   * per-segment velocity branch and no repeated stamping: every call
+   * paints one physically continuous slice of the swept plume, exactly
+   * like the inner core's own stroke already does.
    */
   private renderPinkDotOuterField(
     ctx: CanvasRenderingContext2D,
@@ -931,83 +907,109 @@ export class SprayBrushEngine {
     colorHex: string,
     outer: PinkDotOuterState,
     angle: number,
-    dwellScale: number,
-    useDwellStamp: boolean,
+    dwellOpacityScale: number,
   ): void {
-    if (useDwellStamp) {
-      const stops = resolvePinkDotOuterFieldStops(outer);
-      if (stops.length === 0) return;
-      const radius = outer.mistRadius * dwellScale;
-      if (radius <= 0) return;
-      this.drawPinkDotOuterFieldStamp(ctx, start.x, start.y, colorHex, stops, radius, angle, outer.anisotropy);
-      return;
-    }
-
-    const bands = resolvePinkDotOuterFieldBands(outer);
-    if (bands.length === 0) return;
-    const perpAngle = angle + Math.PI / 2;
-    const perpX = Math.cos(perpAngle);
-    const perpY = Math.sin(perpAngle);
-    for (const band of bands) {
-      const offset = band.offset * dwellScale * outer.anisotropy;
-      const width = Math.max(1, band.width * dwellScale);
-      if (band.alpha <= 0) continue;
-      for (const side of [1, -1]) {
-        const ox = perpX * offset * side;
-        const oy = perpY * offset * side;
-        this.drawPinkDotOuterFieldRail(ctx, start.x + ox, start.y + oy, point.x + ox, point.y + oy, colorHex, band.alpha, width);
-      }
-    }
+    const zones = resolvePinkDotOuterFieldZones(outer);
+    if (!zones) return;
+    // Mist first (drawn under), ring on top — same layering convention as
+    // every other Pink Dot layer in this file.
+    this.drawPinkDotOuterFieldBand(
+      ctx, start, point, colorHex, zones.mistOuterRadius, zones.ringOuterRadius,
+      zones.mistAlpha * dwellOpacityScale, angle, outer.anisotropy,
+    );
+    this.drawPinkDotOuterFieldBand(
+      ctx, start, point, colorHex, zones.ringOuterRadius, zones.moatRadius,
+      zones.ringAlpha * dwellOpacityScale, angle, outer.anisotropy,
+    );
   }
 
-  /** One four-zone radial-gradient stamp for a true Pink Dot dwell point — see `renderPinkDotOuterField`. */
-  private drawPinkDotOuterFieldStamp(
+  /**
+   * One annular band (ring or mist) of the outer field, swept continuously
+   * along `start`->`point`: the region whose perpendicular distance from
+   * the (possibly zero-length) segment lies between `innerRadius` and
+   * `outerRadius`. Built from two `tracePinkDotCapsule` subpaths (outer
+   * boundary, then inner boundary) filled together with the "evenodd" rule
+   * in one `fill()` call — a hole cut by winding, not by destination-out
+   * compositing, so it can never erase anything else already painted on
+   * the canvas. Flare (anisotropy < 1) squashes the whole band as one unit
+   * via the same translate/rotate/scale technique the inner core already
+   * uses, so a stationary dwell flares into a genuine ellipse and a moving
+   * band's perpendicular extent narrows coherently with it.
+   */
+  private drawPinkDotOuterFieldBand(
     ctx: CanvasRenderingContext2D,
-    x: number,
-    y: number,
+    start: StrokePoint,
+    point: StrokePoint,
     colorHex: string,
-    stops: readonly HaloGradientStop[],
-    radius: number,
+    outerRadius: number,
+    innerRadius: number,
+    alpha: number,
     angle: number,
     anisotropy: number,
   ): void {
+    if (alpha <= 0 || outerRadius <= 0) return;
     ctx.save();
-    ctx.translate(x, y);
+    ctx.beginPath();
     if (anisotropy < 1) {
+      const midX = (start.x + point.x) / 2;
+      const midY = (start.y + point.y) / 2;
+      const halfLength = Math.hypot(point.x - start.x, point.y - start.y) / 2;
+      ctx.translate(midX, midY);
       ctx.rotate(angle);
       ctx.scale(1, anisotropy);
+      this.tracePinkDotCapsule(ctx, -halfLength, 0, halfLength, 0, outerRadius);
+      if (innerRadius > 0) this.tracePinkDotCapsule(ctx, -halfLength, 0, halfLength, 0, innerRadius);
+    } else {
+      this.tracePinkDotCapsule(ctx, start.x, start.y, point.x, point.y, outerRadius);
+      if (innerRadius > 0) this.tracePinkDotCapsule(ctx, start.x, start.y, point.x, point.y, innerRadius);
     }
-    const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, radius);
-    for (const stop of stops) gradient.addColorStop(stop.offset, this.hexToRgba(colorHex, stop.alpha));
-    ctx.fillStyle = gradient;
-    ctx.beginPath();
-    ctx.arc(0, 0, radius, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.fillStyle = this.hexToRgba(colorHex, alpha);
+    ctx.fill("evenodd");
     ctx.restore();
   }
 
-  /** One offset-parallel band segment (ring or mist) for a moving Pink Dot segment — see `renderPinkDotOuterField`. */
-  private drawPinkDotOuterFieldRail(
-    ctx: CanvasRenderingContext2D,
-    x0: number,
-    y0: number,
-    x1: number,
-    y1: number,
-    colorHex: string,
-    alpha: number,
-    width: number,
-  ): void {
-    if (alpha <= 0 || width <= 0) return;
-    ctx.save();
-    ctx.strokeStyle = this.hexToRgba(colorHex, alpha);
-    ctx.lineWidth = width;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-    ctx.beginPath();
-    ctx.moveTo(x0, y0);
-    ctx.lineTo(x1, y1);
-    ctx.stroke();
-    ctx.restore();
+  /**
+   * Traces one swept-band subpath into the current path: the region within
+   * `radius` of segment `(x0,y0)`-`(x1,y1)`, measured PERPENDICULAR to
+   * travel — a flat-ended (butt-capped) rectangle, not a rounded stadium.
+   * When the segment has zero length (`x0===x1 && y0===y1`, a true
+   * stationary point) this degenerates to a plain circle, preserving the
+   * stationary bullseye.
+   *
+   * Every moving stroke is rendered as many short per-segment sub-paths
+   * (one per interpolated point, only a few px long), each independently
+   * drawing this outer-field band. A ROUNDED cap on every one of those short
+   * segments is itself a repeated circular stamp — each joint's cap bulges
+   * a full `radius` past its own segment, and because that radius (the ring/
+   * mist zone) is far larger than the few-px segment spacing, a joint's
+   * round cap reaches diagonally into a NEIGHBORING segment's moat, where —
+   * measured from that far segment's own short capsule — the point sits
+   * inside its ring/mist zone rather than its moat. Stacked over dozens of
+   * overlapping segments along one stroke, those diagonal bulges fully
+   * paint over the moat gap even though each segment's own exclusion is
+   * geometrically correct in isolation (confirmed by isolated single-fill
+   * tests). Flat (butt) caps on every interior segment tile edge-to-edge
+   * with no radius-driven bulge, so the moat stays a true unbroken gap along
+   * the whole continuous path — the brief's "swept structure," not stamps.
+   */
+  private tracePinkDotCapsule(ctx: CanvasRenderingContext2D, x0: number, y0: number, x1: number, y1: number, radius: number): void {
+    const dx = x1 - x0;
+    const dy = y1 - y0;
+    const dist = Math.hypot(dx, dy);
+    if (dist < 1e-6) {
+      ctx.moveTo(x0 + radius, y0);
+      ctx.arc(x0, y0, radius, 0, Math.PI * 2);
+      return;
+    }
+    const travelAngle = Math.atan2(dy, dx);
+    const sideAngle = travelAngle - Math.PI / 2;
+    const sx = Math.cos(sideAngle) * radius;
+    const sy = Math.sin(sideAngle) * radius;
+    ctx.moveTo(x0 + sx, y0 + sy);
+    ctx.lineTo(x1 + sx, y1 + sy);
+    ctx.lineTo(x1 - sx, y1 - sy);
+    ctx.lineTo(x0 - sx, y0 - sy);
+    ctx.closePath();
   }
 
   /**
@@ -1017,9 +1019,10 @@ export class SprayBrushEngine {
    * just parameterized by the resolved `inner` state and carrying its own
    * (moderate) flare anisotropy. This is what guarantees clean connected
    * line continuity through straight segments, curves, sharp corners,
-   * reversals, and loops — it is never gated or stamped. `endpointScale`
-   * (see `resolvePinkDotDwellScale`) shrinks the drawn width only for a
-   * genuinely fresh dwell point; a real moving segment always passes 1.
+   * reversals, and loops — it is never gated or stamped. `dwellOpacityScale`
+   * (see `resolvePinkDotDwellScale`) scales the drawn ALPHA only for a
+   * genuinely fresh dwell point — never the line's width/radius, which is
+   * fixed by `sprayDistance` alone; a real moving segment always passes 1.
    */
   private renderPinkDotInnerCore(
     ctx: CanvasRenderingContext2D,
@@ -1029,7 +1032,7 @@ export class SprayBrushEngine {
     cap: SprayCapPreset,
     inner: PinkDotInnerState,
     angle: number,
-    endpointScale: number,
+    dwellOpacityScale: number,
     random: () => number,
     fillMode: boolean,
     cellKey: string | null,
@@ -1038,7 +1041,7 @@ export class SprayBrushEngine {
     for (let pass = inner.density - 1; pass >= 0; pass -= 1) {
       const passRatio = inner.density <= 1 ? 0 : pass / (inner.density - 1);
       const edgeExpansion = 1 + passRatio * (1 - inner.falloff) * 0.72;
-      const nominalPassAlpha = (inner.opacity * (1 - passRatio * 0.48)) / Math.sqrt(inner.density);
+      const nominalPassAlpha = (inner.opacity * (1 - passRatio * 0.48) * dwellOpacityScale) / Math.sqrt(inner.density);
       let drawnAlpha = nominalPassAlpha;
       if (fillMode && cellKey !== null) {
         const priorVirtual = this.fillLocalSaturation.get(cellKey) ?? 0;
@@ -1050,7 +1053,7 @@ export class SprayBrushEngine {
       }
       const jitterX = (random() - 0.5) * cap.jitter * inner.radius;
       const jitterY = (random() - 0.5) * cap.jitter * inner.radius;
-      const diameter = Math.max(0.7, inner.radius * 2 * edgeExpansion * endpointScale);
+      const diameter = Math.max(0.7, inner.radius * 2 * edgeExpansion);
 
       ctx.save();
       ctx.strokeStyle = this.hexToRgba(colorHex, drawnAlpha);
