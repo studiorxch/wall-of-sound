@@ -1713,6 +1713,80 @@ describe("spray brush replay randomness", () => {
     expect(Math.max(...lines.map(({ values }) => values[1]))).toBeGreaterThan(160);
   });
 
+  it("tapers a drip with sourceOpacityCeiling toward near-zero along its own length, instead of a flat fill — depletes visually rather than reading as an independent bright vector line", () => {
+    const gradients: Array<{ x0: number; y0: number; x1: number; y1: number; stops: Array<{ offset: number; color: string }> }> = [];
+    const fillStyles: unknown[] = [];
+    const ctx = {
+      save: () => undefined,
+      restore: () => undefined,
+      beginPath: () => undefined,
+      arc: () => undefined,
+      fill: () => undefined,
+      moveTo: () => undefined,
+      lineTo: () => undefined,
+      closePath: () => undefined,
+      stroke: () => undefined,
+      createLinearGradient: (x0: number, y0: number, x1: number, y1: number) => {
+        const gradient = { x0, y0, x1, y1, stops: [] as Array<{ offset: number; color: string }> };
+        gradients.push(gradient);
+        return { addColorStop: (offset: number, color: string) => gradient.stops.push({ offset, color }) } as unknown as CanvasGradient;
+      },
+      lineCap: "round",
+      strokeStyle: "",
+      set fillStyle(value: unknown) { fillStyles.push(value); },
+      get fillStyle() { return fillStyles[fillStyles.length - 1]; },
+      lineWidth: 0,
+    } as unknown as CanvasRenderingContext2D;
+
+    new SprayBrushEngine().renderCompletedDrip(ctx, {
+      x: 20, y: 30, width: 8, length: 140, opacity: 0.34, bend: 12, tipWidthRatio: 0.3, originPoolRadius: 10,
+      sourceOpacityCeiling: 0.34,
+    }, "#ff0000");
+
+    expect(gradients.length).toBe(1);
+    const [gradient] = gradients;
+    expect(gradient.x0).toBe(20);
+    expect(gradient.y0).toBe(30);
+    expect(gradient.x1).toBe(20 + 12); // drip.x + bend
+    expect(gradient.y1).toBe(30 + 140); // drip.y + length
+    expect(gradient.stops.length).toBe(2);
+    const alphaOf = (rgba: string) => Number.parseFloat(rgba.split(",")[3]);
+    const topAlpha = alphaOf(gradient.stops[0].color);
+    const tipAlpha = alphaOf(gradient.stops[1].color);
+    expect(topAlpha).toBeGreaterThan(tipAlpha); // fades DOWNWARD — depletes, doesn't stay bright
+    expect(tipAlpha).toBeGreaterThanOrEqual(0);
+    expect(topAlpha).toBeLessThanOrEqual(0.34); // never exceeds the ceiling-clamped opacity
+  });
+
+  it("keeps a flat (non-gradient) fill for a drip with no sourceOpacityCeiling — every existing cap's drip look is unaffected", () => {
+    const gradientCalls: unknown[] = [];
+    const fillStyles: unknown[] = [];
+    const ctx = {
+      save: () => undefined,
+      restore: () => undefined,
+      beginPath: () => undefined,
+      arc: () => undefined,
+      fill: () => undefined,
+      moveTo: () => undefined,
+      lineTo: () => undefined,
+      closePath: () => undefined,
+      stroke: () => undefined,
+      createLinearGradient: (...args: unknown[]) => { gradientCalls.push(args); return { addColorStop: () => undefined } as unknown as CanvasGradient; },
+      lineCap: "round",
+      strokeStyle: "",
+      set fillStyle(value: unknown) { fillStyles.push(value); },
+      get fillStyle() { return fillStyles[fillStyles.length - 1]; },
+      lineWidth: 0,
+    } as unknown as CanvasRenderingContext2D;
+
+    new SprayBrushEngine().renderCompletedDrip(ctx, {
+      x: 20, y: 30, width: 8, length: 140, opacity: 0.8, bend: 12, tipWidthRatio: 0.3, originPoolRadius: 10,
+    }, "#ff0000");
+
+    expect(gradientCalls.length).toBe(0);
+    expect(fillStyles.some((value) => typeof value === "string" && value.startsWith("rgba"))).toBe(true);
+  });
+
   it("defaults renderSegment coverage to full density, preserving current Spray behavior", () => {
     const point: StrokePoint = { x: 30, y: 20, timestamp: 30, velocity: 0.7, width: 24, opacity: 1 };
     const cap = getSprayCapPreset("new-york-fat");

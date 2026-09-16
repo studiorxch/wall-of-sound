@@ -46,6 +46,61 @@ describe("DripAccumulator", () => {
       enabled: false,
     })).toBeNull();
   });
+
+  it("drip load never exceeds sourceOpacityCeiling when one is supplied — a drip cannot gain paint from nowhere", () => {
+    const accumulator = new DripAccumulator();
+    let drip = null;
+    for (let time = 0; time <= 900; time += 50) {
+      drip = accumulator.observe({
+        x: 100 + (time % 2),
+        y: 120,
+        radius: 30,
+        timestamp: time,
+        dripTendency: 1, // the highest nominal tendency, so without a ceiling opacity would be at its max
+        enabled: true,
+        sourceOpacityCeiling: 0.2, // far below the nominal 0.48-0.78 range
+      }) ?? drip;
+    }
+    expect(drip).not.toBeNull();
+    expect(drip!.opacity).toBeLessThanOrEqual(0.2);
+    expect(drip!.sourceOpacityCeiling).toBe(0.2);
+  });
+
+  it("leaves opacity at its normal (uncapped) value when no sourceOpacityCeiling is supplied — every other cap's drip is unaffected", () => {
+    const accumulator = new DripAccumulator();
+    let drip = null;
+    for (let time = 0; time <= 900; time += 50) {
+      drip = accumulator.observe({
+        x: 100 + (time % 2),
+        y: 120,
+        radius: 30,
+        timestamp: time,
+        dripTendency: 1,
+        enabled: true,
+      }) ?? drip;
+    }
+    expect(drip).not.toBeNull();
+    expect(drip!.opacity).toBeCloseTo(0.78, 5); // 0.48 + 1 * 0.3, the pre-existing formula, untouched
+    expect(drip!.sourceOpacityCeiling).toBeUndefined();
+  });
+
+  it("a ceiling ABOVE the nominal formula never inflates opacity beyond what the formula would already give", () => {
+    const accumulator = new DripAccumulator();
+    let drip = null;
+    for (let time = 0; time <= 900; time += 50) {
+      drip = accumulator.observe({
+        x: 100 + (time % 2),
+        y: 120,
+        radius: 30,
+        timestamp: time,
+        dripTendency: 0.5,
+        enabled: true,
+        sourceOpacityCeiling: 0.99, // well above the nominal 0.48 + 0.5*0.3 = 0.63
+      }) ?? drip;
+    }
+    expect(drip).not.toBeNull();
+    expect(drip!.opacity).toBeCloseTo(0.63, 5);
+  });
 });
 
 describe("continuous wet drip geometry", () => {

@@ -877,18 +877,35 @@ export class SprayBrushEngine {
     }
 
     ctx.restore();
-    // Pink Dot's overspray follows travel direction and flares with the
-    // SAME outer anisotropy as the atmosphere bands, for one coherent
-    // "whole plume flares together" read — resolveOverspraySquashAngle's
-    // fixed-transversal-axis branch is for a genuinely fixed-orientation cap
-    // (Calligraphy) and does not apply to Pink Dot's travel-following flare.
-    const oversprayAngle = dualPlumeState ? angle : resolveOverspraySquashAngle(dynamics.anisotropy, angle);
-    const oversprayDynamics = dualPlumeState ? { ...dynamics, anisotropy: dualPlumeState.outer.anisotropy } : dynamics;
-    // Pink Dot's own moat must stay clear of overspray speckle too — a
-    // structured gap the eye can register as empty, not one the core/ring
-    // bands leave alone only for stray particles to quietly refill.
-    const oversprayMinSpread = dualPlumeState ? dualPlumeState.outer.mistRadius * RADIAL_MOAT_END_T : 0;
-    this.renderOverspray(ctx, drawStart, drawPoint, colorHex, oversprayDynamics, oversprayAngle, distance, random, coverageFactor, oversprayMinSpread);
+    // The generic overspray layer's "along-travel vs perpendicular" particle
+    // distribution (see `renderOverspray`'s `minSpreadRadius` branch) was
+    // built for the swept-RAIL outer field (still track-marks' own
+    // identity): it deliberately scatters particles WIDE along the travel
+    // axis and CONSTRAINED perpendicular to it, outside the moat. Pink Dot
+    // Fat's unified stochastic field (`renderPinkDotStochasticOuterField`)
+    // already deposits its own organic mist/moat/ring texture at every
+    // sub-sample, circularly, with no notion of a "travel axis" at all — so
+    // for a stationary dwell (`angle` defaults to 0, i.e. horizontal, purely
+    // as a fallback, not a real direction) this same logic instead reads as
+    // two literal horizontal bars of overspray sitting outside the moat,
+    // above and below the dot. Skipping the separate overspray call entirely
+    // for a `plumeStochasticStationary` cap removes both the redundant
+    // texture and this artifact; every other cap (including track-marks) is
+    // unaffected.
+    if (!cap.plumeStochasticStationary) {
+      // Pink Dot's overspray follows travel direction and flares with the
+      // SAME outer anisotropy as the atmosphere bands, for one coherent
+      // "whole plume flares together" read — resolveOverspraySquashAngle's
+      // fixed-transversal-axis branch is for a genuinely fixed-orientation cap
+      // (Calligraphy) and does not apply to Pink Dot's travel-following flare.
+      const oversprayAngle = dualPlumeState ? angle : resolveOverspraySquashAngle(dynamics.anisotropy, angle);
+      const oversprayDynamics = dualPlumeState ? { ...dynamics, anisotropy: dualPlumeState.outer.anisotropy } : dynamics;
+      // Pink Dot's own moat must stay clear of overspray speckle too — a
+      // structured gap the eye can register as empty, not one the core/ring
+      // bands leave alone only for stray particles to quietly refill.
+      const oversprayMinSpread = dualPlumeState ? dualPlumeState.outer.mistRadius * RADIAL_MOAT_END_T : 0;
+      this.renderOverspray(ctx, drawStart, drawPoint, colorHex, oversprayDynamics, oversprayAngle, distance, random, coverageFactor, oversprayMinSpread);
+    }
   }
 
   /**
@@ -1425,9 +1442,12 @@ export class SprayBrushEngine {
         drip.poolRendered = true;
       }
       if (drip.tipWidthRatio !== undefined) {
-        // A stable alpha prevents visible bands where progressive wet-strip
-        // sections meet on the persistent paint layer.
-        ctx.fillStyle = this.hexToRgba(drip.color, drip.opacity * 0.82);
+        // A stable alpha (or, when `sourceOpacityCeiling` is set, a stable
+        // gradient anchored to the drip's own fixed x/y/bend/length) avoids
+        // visible bands where progressive wet-strip sections meet on the
+        // persistent paint layer — the gradient's own coordinates never
+        // change frame to frame, only which small slice of it gets painted.
+        ctx.fillStyle = this.dripFillStyle(ctx, drip, drip.color, drip.opacity * 0.82);
         this.fillDripStrip(ctx, [
           resolveDripStripSection(drip, drip.lastProgress),
           resolveDripStripSection(drip, progress),
@@ -1467,7 +1487,7 @@ export class SprayBrushEngine {
       ctx.fill();
     }
     if (drip.tipWidthRatio !== undefined) {
-      ctx.fillStyle = this.hexToRgba(color, drip.opacity * 0.82);
+      ctx.fillStyle = this.dripFillStyle(ctx, drip, color, drip.opacity * 0.82);
       const strip = buildContinuousDripStrip(drip);
       this.fillDripStrip(ctx, strip);
       if (drip.terminalBulbRatio) {
@@ -1490,6 +1510,23 @@ export class SprayBrushEngine {
       ctx.stroke();
     }
     ctx.restore();
+  }
+
+  /**
+   * A drip carrying `sourceOpacityCeiling` (see `DripLogic.DripObservation`)
+   * fades from its (already ceiling-clamped, see `DripAccumulator.observe`)
+   * peak alpha down toward near-zero along its own length instead of a flat
+   * fill — visually depleting/tapering as it travels downward, the way a
+   * real trail of paint running out of wet load would, rather than reading
+   * as an independent, uniformly bright vector line. Every other drip
+   * (this field absent) keeps its exact prior flat-fill look.
+   */
+  private dripFillStyle(ctx: CanvasRenderingContext2D, drip: DripSeed, color: string, baseAlpha: number): string | CanvasGradient {
+    if (drip.sourceOpacityCeiling === undefined) return this.hexToRgba(color, baseAlpha);
+    const gradient = ctx.createLinearGradient(drip.x, drip.y, drip.x + (drip.bend ?? 0), drip.y + drip.length);
+    gradient.addColorStop(0, this.hexToRgba(color, baseAlpha));
+    gradient.addColorStop(1, this.hexToRgba(color, baseAlpha * 0.15));
+    return gradient;
   }
 
   private fillDripStrip(

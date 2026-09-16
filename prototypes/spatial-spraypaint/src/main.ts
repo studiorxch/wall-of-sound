@@ -103,6 +103,8 @@ import {
 } from "./WallView";
 
 const MIN_DEPOSIT_INTERVAL_MS = 16;
+/** Wall units of simulated spray size per screen pixel of Alt-held vertical drag — see `adjustSimulatedSprayDistance`. Tuned so the near/reference/far anchors (~25/32/42) are each a comfortable, deliberate drag apart, not a hair-trigger. */
+const SIMULATED_DISTANCE_DRAG_SENSITIVITY = 0.15;
 class SpatialSpraypaintApp {
   private readonly compositeCanvas: HTMLCanvasElement;
   private readonly compositeCtx: CanvasRenderingContext2D;
@@ -152,6 +154,8 @@ class SpatialSpraypaintApp {
   private handEdgeMotion: HandEdgeMotionState = resetHandEdgeMotion();
   private lastRenderTimestamp = 0;
   private lastScreenPoint: WallPoint | null = null;
+  /** Previous frame's screen Y while the temporary Alt+vertical-drag simulated-distance gesture is active (see `adjustSimulatedSprayDistance`) — null whenever that gesture isn't currently running, so the very first Alt-held move of a drag contributes no jump. */
+  private simulatedDistanceDragLastY: number | null = null;
   private drawingCursorAim: DrawingCursorAimState = { point: null, angle: 0 };
   private physicalCursorVisible = false;
   private panInteraction: PanInteractionState = resetPanInteraction();
@@ -477,6 +481,7 @@ class SpatialSpraypaintApp {
       this.strokeSmoother.reset();
       this.curveReconstructor.reset();
       this.dripAccumulator.reset();
+      this.simulatedDistanceDragLastY = null;
       this.activeWallPoint = screenToWall(this.wallView, screenPoint);
       this.lastDepositTimestamp = 0;
       this.setDrawingActive(true);
@@ -502,6 +507,20 @@ class SpatialSpraypaintApp {
         this.updateDrawingCursor(screenPoint, true);
       }
       if (this.inputMode === "mouse" && this.isDrawing) {
+        if (event.altKey && this.toolSelection.selectedToolId === "spray-can") {
+          // Temporary desktop Z-control (build brief section 4): Option/Alt
+          // held + vertical mouse motion continuously simulates wall
+          // distance while the spray stays active, evaluated through the
+          // SAME unified deposition field as any other size — see
+          // `adjustSimulatedSprayDistance`. Normal (non-Alt) pointer motion
+          // is untouched and still drives X/Y below, unconditionally.
+          if (this.simulatedDistanceDragLastY !== null) {
+            this.adjustSimulatedSprayDistance(screenPoint.y - this.simulatedDistanceDragLastY);
+          }
+          this.simulatedDistanceDragLastY = screenPoint.y;
+        } else {
+          this.simulatedDistanceDragLastY = null;
+        }
         this.activeWallPoint = screenToWall(this.wallView, screenPoint);
       }
     });
@@ -856,6 +875,30 @@ class SpatialSpraypaintApp {
     const next = Math.max(0, Math.min(PLUME_MAX_ANGLE_DEGREES, current + step));
     this.setSettings({ type: "spray-property", capId, patch: { sprayAngle: next } });
     this.updateSprayAngleUi();
+  }
+
+  /**
+   * Option/Alt + vertical mouse drag: the temporary desktop shortcut for
+   * live simulated wall-distance adjustment while the spray stays active
+   * (Pink Dot Flare V1 build brief). Reuses the exact same per-brush "size"
+   * override the `#brush-radius` slider and `radius-reset` already write to
+   * — one underlying state, now three ways to reach it — so the live change
+   * flows through the SAME `sprayDistance = width / baseRadius` path every
+   * other size change already does; no separate flare renderer or distance
+   * model. Moving the mouse DOWN simulates pulling back from the wall
+   * (larger footprint); moving UP simulates pushing in closer (smaller
+   * footprint). Time/dwell never reaches this — only real vertical screen
+   * movement does.
+   */
+  private adjustSimulatedSprayDistance(deltaScreenY: number): void {
+    if (this.toolSelection.selectedToolId !== "spray-can") return;
+    const capId = this.toolSelection.sprayCapId;
+    const current = this.effectiveSprayStyle(capId).size;
+    const next = Math.max(4, Math.min(72, current + deltaScreenY * SIMULATED_DISTANCE_DRAG_SENSITIVITY));
+    if (next === current) return;
+    this.baseRadius = next;
+    this.setSettings({ type: "spray-property", capId, patch: { size: next } });
+    this.updateRadiusUi();
   }
 
   /** PRESET DEFAULT -> SESSION/USER MODIFICATION -> EFFECTIVE VALUE for one Spray brush's Size/Coverage/Fill. */
@@ -1436,6 +1479,7 @@ class SpatialSpraypaintApp {
     this.curveReconstructor.reset();
     this.dripAccumulator.reset();
     this.wetPaintAccumulator.reset();
+    this.simulatedDistanceDragLastY = null;
     if (clearActivePoint) this.activeWallPoint = null;
   }
 
@@ -1459,6 +1503,7 @@ class SpatialSpraypaintApp {
       this.requireElement("hand-first-use-cue").classList.remove("visible");
     }
     if (this.activeStrokeStyle?.toolId === "spray-can") {
+      const activeSprayPreset = getSprayCapPreset(this.activeStrokeStyle.variantId);
       const drip = this.dripAccumulator.observe({
         x: point?.x ?? smoothed.x,
         y: point?.y ?? smoothed.y,
@@ -1466,6 +1511,15 @@ class SpatialSpraypaintApp {
         timestamp: now,
         dripTendency: this.toolRenderer.dripTendency(this.activeStrokeStyle),
         enabled: this.settings.dripsEnabled,
+        // Pink Dot Fat's stochastic deposition field lays down real paint
+        // much more thinly than the drip system's old flat opacity formula
+        // assumed (see DripLogic's own DripObservation.sourceOpacityCeiling
+        // doc) — a drip must not read as MORE opaque than the paint region
+        // that produced it. `coreOpacity` is the cap's own ceiling on how
+        // dense one exposure of its core actually is; every other cap is
+        // unaffected (this stays undefined for them, preserving their
+        // exact prior drip look).
+        sourceOpacityCeiling: activeSprayPreset.plumeStochasticStationary ? activeSprayPreset.coreOpacity : undefined,
       });
       if (drip) {
         this.toolRenderer.startDrip(drip, this.activeStrokeStyle.color, now);

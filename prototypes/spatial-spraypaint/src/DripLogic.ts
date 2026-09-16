@@ -5,6 +5,16 @@ export interface DripObservation {
   timestamp: number;
   dripTendency: number;
   enabled: boolean;
+  /**
+   * An upper bound on how opaque a drip triggered from this spot may be,
+   * standing in for "how much ink this cap actually lays down per
+   * exposure" (a cap's own `coreOpacity`, not a real per-pixel canvas
+   * readback — see the caller). Optional and undefined by default, which
+   * preserves every existing cap's drip opacity exactly as before; only
+   * callers that pass it get a drip clamped to it. A drip must not gain
+   * paint from nowhere: `drip load <= source accumulated wet load`.
+   */
+  sourceOpacityCeiling?: number;
 }
 
 export interface DripSeed {
@@ -22,6 +32,8 @@ export interface DripSeed {
   terminalBulbRatio?: number;
   renderAsOverlay?: boolean;
   attachmentUnderlap?: number;
+  /** Same meaning as `DripObservation.sourceOpacityCeiling` — carried through so the renderer can also taper toward it rather than a fixed peak. */
+  sourceOpacityCeiling?: number;
 }
 
 export interface DripStripSection {
@@ -131,12 +143,17 @@ export class DripAccumulator {
 
     this.lastDripTimestamp = now;
     this.dwellMilliseconds = threshold * 0.28;
+    const nominalOpacity = 0.48 + tendency * 0.3;
+    const opacity = observation.sourceOpacityCeiling !== undefined
+      ? Math.min(nominalOpacity, observation.sourceOpacityCeiling)
+      : nominalOpacity;
     return {
       x: this.anchor.x,
       y: this.anchor.y + observation.radius * 0.35,
       width: Math.max(1.2, observation.radius * (0.045 + tendency * 0.035)),
       length: observation.radius * (0.9 + tendency * 2.2),
-      opacity: 0.48 + tendency * 0.3,
+      opacity,
+      sourceOpacityCeiling: observation.sourceOpacityCeiling,
     };
   }
 
