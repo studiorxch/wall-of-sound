@@ -36,6 +36,7 @@ function segmentRecordingContext(): { ctx: CanvasRenderingContext2D; strokeStyle
     ellipse: () => undefined,
     translate: () => undefined,
     rotate: () => undefined,
+    scale: () => undefined,
     clearRect: () => undefined,
     stroke: () => strokeStyles.push(strokeStyle),
     fill: () => fillStyles.push(fillStyle),

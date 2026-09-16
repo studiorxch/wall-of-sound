@@ -458,7 +458,7 @@ export function resolvePinkDotOuterFieldZones(outer: PinkDotOuterState): PinkDot
  * cap's own radius, so a few segments' lag is imperceptible against a
  * deliberate change.
  */
-const PINK_DOT_WIDTH_SMOOTHING = 0.05;
+export const PINK_DOT_WIDTH_SMOOTHING = 0.05;
 
 /**
  * A Pink Dot segment counts as "dwelling in place" when it travels less
@@ -887,18 +887,12 @@ export class SprayBrushEngine {
   /**
    * The outer/atmosphere layer — a TRUE four-zone radial cross-section:
    * core-edge -> a genuine low-density (literally unpainted) moat -> a
-   * raised ring band -> a fading mist. ONE geometric construction handles
-   * every case — a stationary bullseye is not a special case of a moving
-   * line, it is what this same construction produces when `start === point`
-   * (see `tracePinkDotCapsule`): the ring and mist bands are each the
-   * Minkowski-sum "distance from the segment is between these two radii"
-   * region, filled via one evenodd path combining the band's outer and
-   * inner boundary capsules (`drawPinkDotOuterFieldBand`). A point's
-   * distance region is a circle; a segment's is a capsule (stadium) — the
-   * SAME call produces the right shape for both, continuously, with no
-   * per-segment velocity branch and no repeated stamping: every call
-   * paints one physically continuous slice of the swept plume, exactly
-   * like the inner core's own stroke already does.
+   * raised ring band -> a fading mist. Each band is drawn as a STROKE, not
+   * a filled-and-holed shape (see `strokePinkDotOuterFieldBand`) — the same
+   * "many short segments, round joins" technique the inner core already
+   * uses successfully, applied to a pair of rails offset to either side of
+   * the centerline instead of the centerline itself. The moat is simply
+   * the radius nothing is offset into — a real gap by omission, not a cut.
    */
   private renderPinkDotOuterField(
     ctx: CanvasRenderingContext2D,
@@ -913,103 +907,93 @@ export class SprayBrushEngine {
     if (!zones) return;
     // Mist first (drawn under), ring on top — same layering convention as
     // every other Pink Dot layer in this file.
-    this.drawPinkDotOuterFieldBand(
-      ctx, start, point, colorHex, zones.mistOuterRadius, zones.ringOuterRadius,
+    this.strokePinkDotOuterFieldBand(
+      ctx, start, point, colorHex, zones.ringOuterRadius, zones.mistOuterRadius,
       zones.mistAlpha * dwellOpacityScale, angle, outer.anisotropy,
     );
-    this.drawPinkDotOuterFieldBand(
-      ctx, start, point, colorHex, zones.ringOuterRadius, zones.moatRadius,
+    this.strokePinkDotOuterFieldBand(
+      ctx, start, point, colorHex, zones.moatRadius, zones.ringOuterRadius,
       zones.ringAlpha * dwellOpacityScale, angle, outer.anisotropy,
     );
   }
 
   /**
    * One annular band (ring or mist) of the outer field, swept continuously
-   * along `start`->`point`: the region whose perpendicular distance from
-   * the (possibly zero-length) segment lies between `innerRadius` and
-   * `outerRadius`. Built from two `tracePinkDotCapsule` subpaths (outer
-   * boundary, then inner boundary) filled together with the "evenodd" rule
-   * in one `fill()` call — a hole cut by winding, not by destination-out
-   * compositing, so it can never erase anything else already painted on
-   * the canvas. Flare (anisotropy < 1) squashes the whole band as one unit
-   * via the same translate/rotate/scale technique the inner core already
-   * uses, so a stationary dwell flares into a genuine ellipse and a moving
-   * band's perpendicular extent narrows coherently with it.
+   * along `start`->`point` — as a STROKE, never a filled-and-holed shape.
+   *
+   * The previous construction filled the region between an outer and inner
+   * boundary capsule via `evenodd`, one independent fill per short segment.
+   * That is exactly the "repeated stamps" failure the brief rejects: each
+   * segment's own cap (round OR flat) is a hard edge whose geometry is
+   * decided in isolation from its neighbors, so on anything but a perfectly
+   * straight line adjacent segments' caps either gap or overlap at the
+   * joint — round caps bulge a full band-radius past their own segment
+   * (bridging a neighbor's moat, the original bug); flat caps instead leave
+   * angular notches wherever the path bends even slightly (the "hairy/
+   * spiky" artifact on curves, and — because those notches accumulate
+   * differently near the true stroke ends than along a long interior run —
+   * the ring reading fine at endpoints but corrupted at the midpoint).
+   *
+   * A stroked line's join is not decided per-segment at all: `lineJoin:
+   * "round"` is native canvas geometry connecting THIS segment's stroke
+   * outline directly to the NEXT one, continuously, for any path built from
+   * many short `lineTo`s — exactly how `renderPinkDotInnerCore`'s solid
+   * line already sweeps corners and curves with no visible joints. This
+   * band reuses that same primitive: instead of filling a region between
+   * two capsules, it strokes TWO offset "rails" (one on each side of the
+   * centerline, at the band's own mid-radius) with `lineWidth` equal to the
+   * band's thickness. Nothing is ever drawn inside the mid-radius minus
+   * half the band width, so the moat stays a real, continuous gap — by
+   * omission, not by cutting a hole out of a bigger shape.
+   *
+   * A true stationary dwell (`start === point`) has no travel direction to
+   * offset a rail from, so it draws the band as one full circular
+   * arc-stroke at the band's mid-radius instead — the same "ring/donut"
+   * shape as before, and the exact zero-length-path limit of the swept
+   * rail construction. Flare (anisotropy < 1) squashes the whole band via
+   * the same translate/rotate/scale technique the inner core uses, so both
+   * the rail offset and the stroke width shrink together consistently.
    */
-  private drawPinkDotOuterFieldBand(
+  private strokePinkDotOuterFieldBand(
     ctx: CanvasRenderingContext2D,
     start: StrokePoint,
     point: StrokePoint,
     colorHex: string,
-    outerRadius: number,
     innerRadius: number,
+    outerRadius: number,
     alpha: number,
     angle: number,
     anisotropy: number,
   ): void {
-    if (alpha <= 0 || outerRadius <= 0) return;
+    if (alpha <= 0 || outerRadius <= innerRadius) return;
+    const midRadius = (innerRadius + outerRadius) / 2;
+    const bandWidth = outerRadius - innerRadius;
+    const halfLength = Math.hypot(point.x - start.x, point.y - start.y) / 2;
     ctx.save();
-    ctx.beginPath();
-    if (anisotropy < 1) {
-      const midX = (start.x + point.x) / 2;
-      const midY = (start.y + point.y) / 2;
-      const halfLength = Math.hypot(point.x - start.x, point.y - start.y) / 2;
-      ctx.translate(midX, midY);
-      ctx.rotate(angle);
-      ctx.scale(1, anisotropy);
-      this.tracePinkDotCapsule(ctx, -halfLength, 0, halfLength, 0, outerRadius);
-      if (innerRadius > 0) this.tracePinkDotCapsule(ctx, -halfLength, 0, halfLength, 0, innerRadius);
+    ctx.strokeStyle = this.hexToRgba(colorHex, alpha);
+    ctx.lineWidth = bandWidth;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    const midX = (start.x + point.x) / 2;
+    const midY = (start.y + point.y) / 2;
+    ctx.translate(midX, midY);
+    ctx.rotate(angle);
+    ctx.scale(1, anisotropy);
+    if (halfLength < 1e-6) {
+      ctx.beginPath();
+      ctx.arc(0, 0, midRadius, 0, Math.PI * 2);
+      ctx.stroke();
     } else {
-      this.tracePinkDotCapsule(ctx, start.x, start.y, point.x, point.y, outerRadius);
-      if (innerRadius > 0) this.tracePinkDotCapsule(ctx, start.x, start.y, point.x, point.y, innerRadius);
+      ctx.beginPath();
+      ctx.moveTo(-halfLength, midRadius);
+      ctx.lineTo(halfLength, midRadius);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(-halfLength, -midRadius);
+      ctx.lineTo(halfLength, -midRadius);
+      ctx.stroke();
     }
-    ctx.fillStyle = this.hexToRgba(colorHex, alpha);
-    ctx.fill("evenodd");
     ctx.restore();
-  }
-
-  /**
-   * Traces one swept-band subpath into the current path: the region within
-   * `radius` of segment `(x0,y0)`-`(x1,y1)`, measured PERPENDICULAR to
-   * travel — a flat-ended (butt-capped) rectangle, not a rounded stadium.
-   * When the segment has zero length (`x0===x1 && y0===y1`, a true
-   * stationary point) this degenerates to a plain circle, preserving the
-   * stationary bullseye.
-   *
-   * Every moving stroke is rendered as many short per-segment sub-paths
-   * (one per interpolated point, only a few px long), each independently
-   * drawing this outer-field band. A ROUNDED cap on every one of those short
-   * segments is itself a repeated circular stamp — each joint's cap bulges
-   * a full `radius` past its own segment, and because that radius (the ring/
-   * mist zone) is far larger than the few-px segment spacing, a joint's
-   * round cap reaches diagonally into a NEIGHBORING segment's moat, where —
-   * measured from that far segment's own short capsule — the point sits
-   * inside its ring/mist zone rather than its moat. Stacked over dozens of
-   * overlapping segments along one stroke, those diagonal bulges fully
-   * paint over the moat gap even though each segment's own exclusion is
-   * geometrically correct in isolation (confirmed by isolated single-fill
-   * tests). Flat (butt) caps on every interior segment tile edge-to-edge
-   * with no radius-driven bulge, so the moat stays a true unbroken gap along
-   * the whole continuous path — the brief's "swept structure," not stamps.
-   */
-  private tracePinkDotCapsule(ctx: CanvasRenderingContext2D, x0: number, y0: number, x1: number, y1: number, radius: number): void {
-    const dx = x1 - x0;
-    const dy = y1 - y0;
-    const dist = Math.hypot(dx, dy);
-    if (dist < 1e-6) {
-      ctx.moveTo(x0 + radius, y0);
-      ctx.arc(x0, y0, radius, 0, Math.PI * 2);
-      return;
-    }
-    const travelAngle = Math.atan2(dy, dx);
-    const sideAngle = travelAngle - Math.PI / 2;
-    const sx = Math.cos(sideAngle) * radius;
-    const sy = Math.sin(sideAngle) * radius;
-    ctx.moveTo(x0 + sx, y0 + sy);
-    ctx.lineTo(x1 + sx, y1 + sy);
-    ctx.lineTo(x1 - sx, y1 - sy);
-    ctx.lineTo(x0 - sx, y0 - sy);
-    ctx.closePath();
   }
 
   /**
