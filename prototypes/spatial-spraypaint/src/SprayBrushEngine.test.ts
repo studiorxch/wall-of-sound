@@ -728,27 +728,26 @@ describe("Pink Dot Fat dual-plume — one resolver, two coordinated CONTINUOUS l
   });
 
   describe("rendered dual-plume — ONE continuous construction, no dot-vs-line branching, no repeated stamps", () => {
-    it("draws the inner core AND the outer field's two bands on EVERY segment (moving or stationary alike) — no dab-spacing gate skips any of them", () => {
+    it("draws the inner core AND the outer field's stochastic deposition on EVERY segment (moving or stationary alike) — no dab-spacing gate skips any of them", () => {
+      // Pink Dot Fat's outer field is the SAME continuous deposition field
+      // for every segment now, moving or stationary — no swept-rail
+      // technique to switch to (that's trackMarks' job; see its own
+      // coverage elsewhere in this file).
       const engine = new SprayBrushEngine();
-      const { ctx, strokeStyles, strokes } = segmentRecordingContext();
+      const { ctx, strokeStyles, arcs } = segmentRecordingContext();
       const random = createStrokeRandom(9);
       engine.beginStroke();
       let previous: StrokePoint | null = null;
       const segments = 20;
       for (let i = 0; i <= segments; i += 1) {
         const point: StrokePoint = { x: i * 4, y: 0, timestamp: i * 16, velocity: 0.3, width: 42, opacity: 1 };
+        const arcsBefore = arcs.length;
         engine.renderSegment(ctx, previous, point, "#ffffff", pink, random);
+        expect(arcs.length).toBeGreaterThan(arcsBefore); // outer field deposited particles THIS segment
         previous = point;
       }
       const dynamics = resolveSprayDynamics(pink, 0.3, 42);
       expect(strokeStyles.length).toBeGreaterThan(segments * dynamics.corePasses);
-      // Each band (mist, ring) draws at least one stroke per segment — one
-      // arc for the first (stationary) point, two rails for every moving one.
-      const zones = resolvePinkDotOuterFieldZones(resolvePinkDotDualPlume(pink, { sprayAngle: 0, sprayDistance: 1, sprayOutput: 1 }, 0.3, dynamics).outer);
-      expect(zones).not.toBeNull();
-      if (!zones) return;
-      const bandStrokes = pinkDotBandStrokes(strokes, zones);
-      expect(bandStrokes.length).toBeGreaterThanOrEqual(segments * 2);
     });
 
     it("never calls createRadialGradient for Pink Dot — no gradient-stamp technique remains anywhere", () => {
@@ -820,15 +819,19 @@ describe("Pink Dot Fat dual-plume — one resolver, two coordinated CONTINUOUS l
       }
     });
 
-    it("draws exactly one mist band and one ring band per segment — never additional stamps at endpoints on top of the continuous sweep", () => {
+    it("(track-marks) draws exactly one mist band and one ring band per segment — never additional stamps at endpoints on top of the continuous sweep", () => {
+      // track-marks: the swept-rail construction's own single-stamp-per-band
+      // guarantee. Pink Dot Fat itself no longer draws rails at all — see
+      // the "unifying moving and stationary" describe block below for its
+      // own equivalent (sub-sampled, not rail) coverage guarantee.
       const engine = new SprayBrushEngine();
       const { ctx, strokes } = segmentRecordingContext();
       const random = createStrokeRandom(3);
       engine.beginStroke();
       const start: StrokePoint = { x: 0, y: 0, timestamp: 0, velocity: 0.3, width: 42, opacity: 1 };
       const point: StrokePoint = { x: 400, y: 0, timestamp: 16, velocity: 0.3, width: 42, opacity: 1 };
-      engine.renderSegment(ctx, start, point, "#ffffff", pink, random);
-      const zones = resolvePinkDotOuterFieldZones(resolvePinkDotDualPlume(pink, { sprayAngle: 0, sprayDistance: 1, sprayOutput: 1 }, 0.3, resolveSprayDynamics(pink, 0.3, 42)).outer);
+      engine.renderSegment(ctx, start, point, "#ffffff", trackMarks, random);
+      const zones = resolvePinkDotOuterFieldZones(resolvePinkDotDualPlume(trackMarks, { sprayAngle: 0, sprayDistance: 1, sprayOutput: 1 }, 0.3, resolveSprayDynamics(trackMarks, 0.3, 42)).outer);
       expect(zones).not.toBeNull();
       if (!zones) return;
       const bandStrokes = pinkDotBandStrokes(strokes, zones);
@@ -855,9 +858,8 @@ describe("Pink Dot Fat dual-plume — one resolver, two coordinated CONTINUOUS l
 
     it("lets three overlapping Fill sweeps build MORE cumulative outer-field coverage than one sweep — dusty buildup, not a flat bucket fill", () => {
       const random = createStrokeRandom(3);
-      const sweepZones = resolvePinkDotOuterFieldZones(resolvePinkDotDualPlume(pink, { sprayAngle: 0, sprayDistance: 1, sprayOutput: 1 }, 0.3, resolveSprayDynamics(pink, 0.3, 42)).outer);
       const sweep = (passes: number) => {
-        const { ctx, strokes } = segmentRecordingContext();
+        const { ctx, arcs } = segmentRecordingContext();
         const engine = new SprayBrushEngine();
         for (let pass = 0; pass < passes; pass += 1) {
           engine.beginStroke();
@@ -868,8 +870,7 @@ describe("Pink Dot Fat dual-plume — one resolver, two coordinated CONTINUOUS l
             previous = point;
           }
         }
-        if (!sweepZones) return 0;
-        return pinkDotBandStrokes(strokes, sweepZones).length;
+        return arcs.length;
       };
       expect(sweep(3)).toBeGreaterThan(sweep(1));
     });
@@ -926,12 +927,15 @@ describe("Pink Dot Fat dual-plume — one resolver, two coordinated CONTINUOUS l
       for (const stroke of bandStrokes) expect(stroke.ops.some((op) => op.type === "arc")).toBe(true);
     });
 
-    it("sweeps a moving segment into two straight offset rails — the SAME construction, just a different `start`/`point` relationship, not a different technique", () => {
+    it("(track-marks) sweeps a moving segment into two straight offset rails — the SAME construction, just a different `start`/`point` relationship, not a different technique", () => {
+      // track-marks: Pink Dot Fat's own moving segment no longer sweeps
+      // rails at all — see the "unifying moving and stationary" describe
+      // block below.
       const start: StrokePoint = { x: 0, y: 0, timestamp: 0, velocity: 0.3, width: 42, opacity: 1 };
       const point: StrokePoint = { x: 120, y: 0, timestamp: 16, velocity: 0.3, width: 42, opacity: 1 };
       const { ctx, strokes } = segmentRecordingContext();
-      new SprayBrushEngine().renderSegment(ctx, start, point, "#ffffff", pink, createStrokeRandom(1));
-      const zones = resolvePinkDotOuterFieldZones(resolvePinkDotDualPlume(pink, { sprayAngle: 0, sprayDistance: 1, sprayOutput: 1 }, 0.3, resolveSprayDynamics(pink, 0.3, 42)).outer);
+      new SprayBrushEngine().renderSegment(ctx, start, point, "#ffffff", trackMarks, createStrokeRandom(1));
+      const zones = resolvePinkDotOuterFieldZones(resolvePinkDotDualPlume(trackMarks, { sprayAngle: 0, sprayDistance: 1, sprayOutput: 1 }, 0.3, resolveSprayDynamics(trackMarks, 0.3, 42)).outer);
       expect(zones).not.toBeNull();
       if (!zones) return;
       const bandStrokes = pinkDotBandStrokes(strokes, zones);
@@ -1092,15 +1096,20 @@ describe("Pink Dot Fat dual-plume — one resolver, two coordinated CONTINUOUS l
       expect(densityAt(-((state.inner.radius + zones.moatRadius) / 2) * -1)).toBe(moat);
     });
 
-    it("confirms the rendered moat is a genuine gap — no band stroke's own footprint ever covers the region strictly between the core and the ring on a moving stroke", () => {
+    it("(track-marks) confirms the rendered moat is a genuine gap — no band stroke's own footprint ever covers the region strictly between the core and the ring on a moving stroke", () => {
+      // track-marks: Pink Dot Fat's own moving-stroke moat is now a
+      // density MINIMUM sampled from the same continuous curve as its
+      // stationary dot, not a hard-excluded region a rail leaves alone —
+      // see "moving-stroke particles follow the same low-density-moat
+      // profile as a stationary dot" in the unify block below.
       const engine = new SprayBrushEngine();
       const { ctx, strokes } = segmentRecordingContext();
       const random = createStrokeRandom(2);
       const start: StrokePoint = { x: 0, y: 0, timestamp: 0, velocity: 0.3, width: 42, opacity: 1 };
       const point: StrokePoint = { x: 300, y: 0, timestamp: 16, velocity: 0.3, width: 42, opacity: 1 };
-      engine.renderSegment(ctx, start, point, "#ffffff", pink, random);
-      const dynamics = resolveSprayDynamics(pink, 0.3, 42);
-      const state = resolvePinkDotDualPlume(pink, { sprayAngle: 0, sprayDistance: 1, sprayOutput: 1 }, 0.3, dynamics);
+      engine.renderSegment(ctx, start, point, "#ffffff", trackMarks, random);
+      const dynamics = resolveSprayDynamics(trackMarks, 0.3, 42);
+      const state = resolvePinkDotDualPlume(trackMarks, { sprayAngle: 0, sprayDistance: 1, sprayOutput: 1 }, 0.3, dynamics);
       const zones = resolvePinkDotOuterFieldZones(state.outer);
       expect(zones).not.toBeNull();
       if (!zones) return;
@@ -1318,6 +1327,122 @@ describe("Pink Dot Fat dual-plume — one resolver, two coordinated CONTINUOUS l
       expect(zones).not.toBeNull();
       if (!zones) return;
       expect(pinkDotBandStrokes(strokes, zones).length).toBe(2);
+    });
+  });
+
+  describe("unifying moving and stationary — one continuous deposition field, no separate line technique", () => {
+    it("never draws a single stroke() call for Pink Dot Fat's outer field on a moving segment — no rails, no bands, at any segment length", () => {
+      const lengths = [10, 60, 400];
+      for (const length of lengths) {
+        const engine = new SprayBrushEngine();
+        const { ctx, strokes } = segmentRecordingContext();
+        const start: StrokePoint = { x: 0, y: 0, timestamp: 0, velocity: 0.3, width: 42, opacity: 1 };
+        const point: StrokePoint = { x: length, y: 0, timestamp: 16, velocity: 0.3, width: 42, opacity: 1 };
+        engine.renderSegment(ctx, start, point, "#ffffff", pink, createStrokeRandom(4));
+        // The inner core still legitimately strokes a short line (untouched,
+        // in scope of an EARLIER turn) — what must be absent is any stroke
+        // shaped like the old rail construction: a lineWidth matching a
+        // band width at all. Reuse the same zones-based band-width check
+        // the rail-specific tests use, just asserting zero matches instead
+        // of some.
+        const zones = resolvePinkDotOuterFieldZones(resolvePinkDotDualPlume(pink, { sprayAngle: 0, sprayDistance: 1, sprayOutput: 1 }, 0.3, resolveSprayDynamics(pink, 0.3, 42)).outer);
+        expect(zones).not.toBeNull();
+        if (!zones) continue;
+        expect(pinkDotBandStrokes(strokes, zones).length).toBe(0);
+      }
+    });
+
+    it("sub-samples a long segment into MANY deposits spread across its whole length, not one stamp at each end", () => {
+      const engine = new SprayBrushEngine();
+      const { ctx, arcs } = segmentRecordingContext();
+      const start: StrokePoint = { x: 0, y: 0, timestamp: 0, velocity: 0.3, width: 42, opacity: 1 };
+      const point: StrokePoint = { x: 500, y: 0, timestamp: 16, velocity: 0.3, width: 42, opacity: 1 };
+      engine.renderSegment(ctx, start, point, "#ffffff", pink, createStrokeRandom(4));
+      expect(arcs.length).toBeGreaterThan(20); // far more than "one stamp per end" would produce
+      // Particles land across a real spread of x-positions along the
+      // segment, not clustered only near x=0 or x=500.
+      const xs = arcs.map((a) => a.x).sort((a, b) => a - b);
+      const midCount = xs.filter((x) => x > 150 && x < 350).length;
+      expect(midCount).toBeGreaterThan(arcs.length * 0.15); // a real share lands in the MIDDLE third too
+    });
+
+    it("a fast, coarsely-sampled drag (few, widely-spaced renderSegment calls) still deposits continuously — sub-sample spacing comes from the footprint, not from how far apart the calls happen to land", () => {
+      const engine = new SprayBrushEngine();
+      engine.beginStroke();
+      const { ctx, arcs } = segmentRecordingContext();
+      // One single call covering 600px in one jump — the kind of gap a
+      // fast real drag leaves between two consecutive pointermove events.
+      const start: StrokePoint = { x: 0, y: 0, timestamp: 0, velocity: 1.2, width: 42, opacity: 1 };
+      const point: StrokePoint = { x: 600, y: 0, timestamp: 16, velocity: 1.2, width: 42, opacity: 1 };
+      engine.renderSegment(ctx, start, point, "#ffffff", pink, createStrokeRandom(5));
+      // Sort accepted particles by x and check no gap between consecutive
+      // ones is much wider than the footprint itself — i.e. no visible
+      // empty stretch a "stamped only at the ends" renderer would leave.
+      const xs = arcs.map((a) => a.x).sort((a, b) => a - b);
+      expect(xs.length).toBeGreaterThan(30);
+      let maxGap = 0;
+      for (let i = 1; i < xs.length; i += 1) maxGap = Math.max(maxGap, xs[i] - xs[i - 1]);
+      // Individual particles scatter across a full circle around each
+      // sub-sample (angular jitter, not just lateral spacing), so raw x
+      // gaps carry real sampling noise — generous relative to the
+      // footprint's own scale, but a "stamped only at both ends" regressed
+      // renderer would leave a gap on the order of the FULL 600px segment,
+      // not a small multiple of one radius.
+      const dynamics = resolveSprayDynamics(pink, 1.2, 42);
+      expect(maxGap).toBeLessThan(dynamics.radius * 3);
+    });
+
+    it("a true stationary dwell and the FIRST segment of a moving stroke draw through the exact same per-exposure particle budget — no separate, larger 'endpoint bulb' construction", () => {
+      const stationaryEngine = new SprayBrushEngine();
+      stationaryEngine.beginStroke();
+      const stationaryPoint: StrokePoint = { x: 0, y: 0, timestamp: 0, velocity: 0, width: 42, opacity: 1 };
+      const { ctx: stationaryCtx, arcs: stationaryArcs } = segmentRecordingContext();
+      stationaryEngine.renderSegment(stationaryCtx, null, stationaryPoint, "#ffffff", pink, createStrokeRandom(7));
+
+      // A short first segment (a real drag's very first renderSegment call,
+      // previous === null but already slightly moved) uses the SAME
+      // resolver/budget logic — same order of magnitude of particles, not
+      // an inflated one-time "start bulb."
+      const movingEngine = new SprayBrushEngine();
+      movingEngine.beginStroke();
+      const movingPoint: StrokePoint = { x: 3, y: 0, timestamp: 16, velocity: 0.3, width: 42, opacity: 1 };
+      const { ctx: movingCtx, arcs: movingArcs } = segmentRecordingContext();
+      movingEngine.renderSegment(movingCtx, null, movingPoint, "#ffffff", pink, createStrokeRandom(7));
+
+      expect(stationaryArcs.length).toBeGreaterThan(0);
+      expect(movingArcs.length).toBeGreaterThan(0);
+      const ratio = movingArcs.length / stationaryArcs.length;
+      expect(ratio).toBeGreaterThan(0.5);
+      expect(ratio).toBeLessThan(2); // same order of magnitude, not a multi-x bulb
+    });
+
+    it("a moving stroke's accepted particles still favor the ring radius over the moat radius — the SAME density curve as a stationary dot, not a flattened one", () => {
+      const engine = new SprayBrushEngine();
+      const { ctx, arcs } = segmentRecordingContext();
+      const start: StrokePoint = { x: 0, y: 0, timestamp: 0, velocity: 0.3, width: 42, opacity: 1 };
+      const point: StrokePoint = { x: 300, y: 0, timestamp: 16, velocity: 0.3, width: 42, opacity: 1 };
+      engine.renderSegment(ctx, start, point, "#ffffff", pink, createStrokeRandom(8));
+      const dynamics = resolveSprayDynamics(pink, 0.3, 42);
+      const state = resolvePinkDotDualPlume(pink, { sprayAngle: 0, sprayDistance: 1, sprayOutput: 1 }, 0.3, dynamics);
+      const profile = resolvePinkDotStationaryProfile(state.inner, state.outer);
+      expect(profile).not.toBeNull();
+      if (!profile) return;
+      // Sample perpendicular offset from the (horizontal) centerline for
+      // every accepted particle whose x lands well inside the segment,
+      // away from either end — this app's own "nowhere near an endpoint"
+      // midpoint convention.
+      const midParticles = arcs.filter((a) => a.x > 100 && a.x < 200);
+      expect(midParticles.length).toBeGreaterThan(15);
+      const offsets = midParticles.map((a) => Math.abs(a.y));
+      const moatBand = offsets.filter((o) => o < profile.moatRadius * 0.9).length;
+      const ringBand = offsets.filter((o) => o > profile.ringRadius * 0.85 && o < profile.ringRadius * 1.15).length;
+      // Normalize by each band's own radial width (an annulus's AREA, and
+      // so its "room" for particles at a uniform density, grows with
+      // radius) so this compares DENSITY, not raw counts in differently-
+      // sized bands.
+      const moatDensity = moatBand / Math.max(1, profile.moatRadius * 0.9);
+      const ringDensity = ringBand / Math.max(1, profile.ringRadius * 0.3);
+      expect(ringDensity).toBeGreaterThan(moatDensity);
     });
   });
 

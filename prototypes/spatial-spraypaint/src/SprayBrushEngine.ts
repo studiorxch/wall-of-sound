@@ -490,6 +490,17 @@ const PINK_DOT_STATIONARY_RING_WIDTH_RATIO = 0.22;
 /** The mist tail's exponential decay length, as a fraction of the gap between the ring and mist radii already resolved by `resolvePinkDotDualPlume`. */
 const PINK_DOT_STATIONARY_MIST_DECAY_RATIO = 0.6;
 
+/**
+ * How closely `renderPinkDotStochasticOuterField` sub-samples a moving
+ * segment, as a fraction of the footprint's own core DIAMETER — the
+ * brief's own "spacing <= small_fraction_of(coreDiameter)". Small enough
+ * that consecutive exposures overlap heavily and merge into one continuous
+ * field at any realistic drag speed; derived from the footprint itself
+ * (which shrinks and grows with distance) rather than a fixed pixel value,
+ * so a tiny close-up dot and a huge far-away one both stay seamless.
+ */
+const PINK_DOT_STOCHASTIC_SPACING_RATIO = 0.18;
+
 export function resolvePinkDotStationaryProfile(inner: PinkDotInnerState, outer: PinkDotOuterState): PinkDotStationaryProfile | null {
   if (outer.ringRadius <= 0 || outer.ringOpacity <= 0 || outer.mistRadius <= outer.ringRadius) return null;
   const ringWidth = Math.max(1, outer.ringRadius * PINK_DOT_STATIONARY_RING_WIDTH_RATIO);
@@ -950,22 +961,21 @@ export class SprayBrushEngine {
   /**
    * Pink Dot Fat's dual-plume — TWO coordinated CONTINUOUS layers drawn
    * every segment (no distance-based gating anywhere in this method, and
-   * no branching on velocity or dwell state either — see
-   * `renderPinkDotOuterField`), so the line body and its atmosphere stay
-   * connected through corners, reversals, and loops, and a stationary
-   * point renders through the exact same call path as a moving one.
-   * `dwellOpacityScale` (see `resolvePinkDotDwellScale`) scales BOTH
-   * layers' DENSITY together for a genuinely fresh dwell point — never
+   * no branching on velocity or dwell state either), so the line body and
+   * its atmosphere stay connected through corners, reversals, and loops,
+   * and a stationary point renders through the exact same call path as a
+   * moving one. `dwellOpacityScale` (see `resolvePinkDotDwellScale`) scales
+   * BOTH layers' DENSITY together for a genuinely fresh dwell point — never
    * their geometry, which is fixed by `sprayDistance` alone.
    *
-   * The ONE exception: a cap with `plumeStochasticStationary` set (Pink Dot
-   * Fat, not its temporary `track-marks` twin) renders a TRUE stationary
-   * dwell (`start === point`) through the new organic aerosol deposition
-   * field (`renderPinkDotStochasticOuterField`) instead of the swept-rail
-   * arc-stroke every `"plume"` cap otherwise uses. A moving segment always
-   * takes the untouched `renderPinkDotOuterField` path either way — this
-   * branch can only ever change what a genuinely stationary point looks
-   * like.
+   * A cap with `plumeStochasticStationary` set (Pink Dot Fat, not its
+   * temporary `track-marks` twin) renders its OUTER field through the
+   * organic aerosol deposition field (`renderPinkDotStochasticOuterField`)
+   * for EVERY segment, moving or stationary alike — there is no separate
+   * "moving" technique to switch to once velocity becomes nonzero. A
+   * `track-marks` segment always takes the untouched swept-rail
+   * `renderPinkDotOuterField` path instead, preserving that cap's own
+   * identity unchanged.
    */
   private renderPinkDotDualPlume(
     ctx: CanvasRenderingContext2D,
@@ -980,9 +990,8 @@ export class SprayBrushEngine {
     fillMode: boolean,
     cellKey: string | null,
   ): void {
-    const isStationary = start.x === point.x && start.y === point.y;
-    if (isStationary && cap.plumeStochasticStationary) {
-      this.renderPinkDotStochasticOuterField(ctx, point, colorHex, cap, state.inner, state.outer, dwellOpacityScale, random);
+    if (cap.plumeStochasticStationary) {
+      this.renderPinkDotStochasticOuterField(ctx, start, point, colorHex, cap, state.inner, state.outer, dwellOpacityScale, random);
     } else {
       this.renderPinkDotOuterField(ctx, start, point, colorHex, state.outer, angle, dwellOpacityScale);
     }
@@ -990,23 +999,41 @@ export class SprayBrushEngine {
   }
 
   /**
-   * Pink Dot's stationary aerosol deposition field — scattered dabs sampled
-   * from `resolvePinkDotStationaryProfile`'s continuous density curve, not
-   * stroked arcs. Each candidate particle's radius is drawn uniformly over
-   * the field's span and accepted via rejection sampling proportional to
-   * `densityAt(r)`, so particles naturally cluster where the ring peaks,
-   * thin out (without ever fully vanishing — the profile's own floor keeps
-   * a few landing there) through the moat, and fade out through the mist
-   * at whatever density the curve itself has fallen to, never stopping at
-   * a fixed radius. Each accepted particle also gets its own angular AND
-   * radial jitter, so the ring reads as a real aerosol edge breaking up
-   * around its own circumference — never a perfect vector circle. Flare
-   * (angle-driven anisotropy) is out of scope for this stationary-only
-   * reset — see the brief this shipped under — so this field is always
-   * circularly symmetric.
+   * Pink Dot's aerosol deposition field — ONE continuous field, sampled the
+   * same way whether `start === point` (a true stationary dwell) or they're
+   * far apart (a fast, coarsely-sampled drag). There is no separate line
+   * primitive: a moving segment is the SAME instantaneous radial density
+   * curve (`resolvePinkDotStationaryProfile`, unchanged from a stationary
+   * dwell's own) swept along `start`->`point` by depositing it at closely-
+   * spaced sub-samples, not by drawing rails, bands, or capsule geometry.
+   *
+   * Sub-sample SPACING derives from the footprint's own core diameter (a
+   * small fraction of it — see `PINK_DOT_STOCHASTIC_SPACING_RATIO`), never
+   * from how far apart real pointer events happen to land, so a fast drag
+   * (few, widely-spaced `renderSegment` calls) still deposits a visually
+   * continuous field instead of revealing individual exposures — the
+   * critical "sampling density relative to footprint size" requirement.
+   *
+   * Each call's particle budget (`totalCandidates`, the SAME figure a
+   * single stationary dwell's one exposure already used) is split across
+   * however many sub-samples that spacing requires, not multiplied by it —
+   * covering a given distance in MORE, smaller `renderSegment` calls (a
+   * slower drag) naturally deposits more total exposure over that distance
+   * than covering it in FEWER, larger ones (a faster drag) would, which is
+   * exactly "dwell/time accumulates density" at the level of a whole moving
+   * stroke, not just a literal stationary point. A true dwell (repeated
+   * zero-distance points) still layers additional full-budget exposures on
+   * top via `dwellOpacityScale`, same as before.
+   *
+   * Each accepted particle gets its own angular AND radial jitter, so the
+   * ring reads as a real aerosol edge breaking up around its own
+   * circumference — never a perfect vector circle or rail. Flare
+   * (angle-driven anisotropy) remains out of scope — this field is always
+   * circularly symmetric at every sub-sample.
    */
   private renderPinkDotStochasticOuterField(
     ctx: CanvasRenderingContext2D,
+    start: StrokePoint,
     point: StrokePoint,
     colorHex: string,
     cap: SprayCapPreset,
@@ -1021,27 +1048,45 @@ export class SprayBrushEngine {
     const innerBound = Math.max(0, profile.coreRadius * 0.85);
     const outerBound = profile.mistRadius + (profile.mistRadius - profile.ringRadius) * 1.5;
     if (outerBound <= innerBound) return;
+
+    const dx = point.x - start.x;
+    const dy = point.y - start.y;
+    const segmentLength = Math.hypot(dx, dy);
+    const spacing = Math.max(1, profile.coreRadius * 2 * PINK_DOT_STOCHASTIC_SPACING_RATIO);
+    const steps = Math.max(1, Math.ceil(segmentLength / spacing));
+
     // Scaled off the cap's own particleCount so a sparser/denser cap's
     // overspray character carries over into this field's own texture,
     // rather than a fixed magic number every plume cap would share.
-    const candidateCount = Math.round(180 * (cap.particleCount / 26));
+    const totalCandidates = Math.round(180 * (cap.particleCount / 26));
+    const perStepCandidates = Math.max(3, Math.round(totalCandidates / steps));
     const baseAlpha = Math.min(0.5, 0.17 * dwellOpacityScale);
 
-    for (let i = 0; i < candidateCount; i += 1) {
-      const r = innerBound + random() * (outerBound - innerBound);
-      const density = profile.densityAt(r);
-      if (random() * peakDensity > density) continue; // denser radii accept more often
-      const theta = random() * Math.PI * 2;
-      const radialJitter = (random() - 0.5) * Math.max(2, profile.ringRadius * 0.12);
-      const rr = Math.max(0, r + radialJitter);
-      const x = point.x + Math.cos(theta) * rr;
-      const y = point.y + Math.sin(theta) * rr;
-      const dabAlpha = Math.max(0, Math.min(1, baseAlpha * (0.5 + random() * 0.9) * (0.15 + density / peakDensity)));
-      const dabSize = Math.max(0.5, cap.particleSize * (1.5 + random() * 1.6));
-      ctx.fillStyle = this.hexToRgba(colorHex, dabAlpha);
-      ctx.beginPath();
-      ctx.arc(x, y, dabSize, 0, Math.PI * 2);
-      ctx.fill();
+    for (let s = 0; s < steps; s += 1) {
+      // t excludes 0 (already deposited as the PREVIOUS segment's own
+      // endpoint) and always includes 1 (this segment's own new tip) — so
+      // consecutive renderSegment calls along one stroke neither skip nor
+      // double-deposit their shared joint point. For a true stationary
+      // point (steps === 1, start === point), t === 1 lands exactly on it.
+      const t = (s + 1) / steps;
+      const cx = start.x + dx * t;
+      const cy = start.y + dy * t;
+      for (let i = 0; i < perStepCandidates; i += 1) {
+        const r = innerBound + random() * (outerBound - innerBound);
+        const density = profile.densityAt(r);
+        if (random() * peakDensity > density) continue; // denser radii accept more often
+        const theta = random() * Math.PI * 2;
+        const radialJitter = (random() - 0.5) * Math.max(2, profile.ringRadius * 0.12);
+        const rr = Math.max(0, r + radialJitter);
+        const x = cx + Math.cos(theta) * rr;
+        const y = cy + Math.sin(theta) * rr;
+        const dabAlpha = Math.max(0, Math.min(1, baseAlpha * (0.5 + random() * 0.9) * (0.15 + density / peakDensity)));
+        const dabSize = Math.max(0.5, cap.particleSize * (1.5 + random() * 1.6));
+        ctx.fillStyle = this.hexToRgba(colorHex, dabAlpha);
+        ctx.beginPath();
+        ctx.arc(x, y, dabSize, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
   }
 
