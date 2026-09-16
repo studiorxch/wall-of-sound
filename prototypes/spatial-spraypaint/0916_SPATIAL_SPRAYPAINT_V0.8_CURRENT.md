@@ -83,4 +83,4 @@ New: `src/FlairCurves.ts`, `src/FlairCurves.test.ts`. Modified: `src/main.ts` (r
 
 ## Commit
 
-`<pending — see final report>` — "feat: Spatial Spraypaint Flair Behavior Spec V1 — deterministic curves, Track Marks sandbox runtime hook"
+`47cf87c` — "feat: Spatial Spraypaint Flair Behavior Spec V1 — deterministic curves, Track Marks sandbox runtime hook"
