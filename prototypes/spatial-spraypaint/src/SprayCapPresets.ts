@@ -167,17 +167,20 @@ export interface SprayCapPreset {
    * TWO coordinated CONTINUOUS deposition layers, not a sequence of stamped
    * dabs: an inner/core brush (a normal continuous stroked line, same
    * technique as every other cap's core — see `renderPinkDotInnerCore`) and
-   * an outer/atmosphere brush (continuous stroked mist+ring bands drawn
-   * UNDER the core every segment, same travel path, no distance-based
-   * gating at all — see `renderPinkDotOuterBand`). Both derive from the
-   * SAME `resolvePinkDotDualPlume` call, so distance/angle/velocity respond
+   * an outer/atmosphere brush — a continuous aerosol DENSITY FIELD, not a
+   * second solid tube (several concentric shells with a deterministic mist
+   * grain, drawn UNDER the core every segment, same travel path, no
+   * distance-based gating at all — see `renderPinkDotOuterField` and
+   * `resolvePinkDotOuterFieldShells`). Both derive from the SAME
+   * `resolvePinkDotDualPlume` call, so distance/angle/velocity respond
    * coherently across both layers. All 0 on every cap except Pink Dot Fat,
    * and each field is independently a no-op at 0. There is no dab-spacing
    * field anymore — an earlier version gated the whole stamp by travel
    * distance, which produced a lumpy/scalloped moving line; continuous
-   * per-segment strokes (never gated) fixed that, and the "dusty" texture
-   * comes from the existing overspray particle mechanism layered on top,
-   * not from gaps in the envelope itself.
+   * per-segment strokes (never gated) fixed that. The outer field's own
+   * mist grain plus the existing overspray particle mechanism layered on
+   * top give the "dusty" texture; endpoint size is separately dwell-driven
+   * (see `SprayBrushEngine.resolvePinkDotDwellScale`), not automatic.
    *
    * `plumeRingRadius`/`plumeRingThickness`/`plumeRingOpacity` — the ring
    * band's stroke radius (a multiplier of the resolved core radius), how
@@ -240,31 +243,32 @@ export const SPRAY_CAP_PRESETS: readonly SprayCapPreset[] = [
   // changes what a freshly-selected fat brush's Fill toggle starts at; the
   // artist can still switch Fill OFF per brush for dense outline work.
   { id: "new-york-fat", name: "New York Fat", family: "fat", baseRadius: 32, coreDensity: 1.14, coreOpacity: 0.29, edgeFalloff: 0.7, particleCount: 18, particleSpread: 1.08, particleSize: 0.65, particleOpacity: 0.25, flowRate: 1.2, accumulationRate: 1.16, velocityResponse: 0.58, jitter: 0.08, endpointBehavior: "settled", splatterProbability: 0.08, dripTendency: 0.48, anisotropy: 1, haloRadius: 0, haloOpacity: 0, wiggleAmplitude: 0, wiggleFrequency: 0, depositionShape: "line", defaultFillMode: true, ringRadius: 0, ringThickness: 0, ringOpacity: 0, centerOpacity: 0, streakLanes: 0, haloDistanceGain: 0, haloFlareAnisotropy: 0, haloDabSpacing: 0, haloRingBias: 0, plumeRingRadius: 0, plumeRingThickness: 0, plumeRingOpacity: 0, plumeMistRadius: 0, plumeMistOpacity: 0, plumeDistanceGain: 0, plumeFlareStrength: 0 },
-  // Pink Dot Fat — dual-plume. The prior "unified plume" (one resolved state,
-  // but drawn as a single dab-gated STAMP — core+ring+mist as circles at
-  // spaced intervals) fixed the stationary dot but made moving strokes
-  // lumpy/scalloped: the stamp spacing fought line continuity. Replaced with
-  // TWO CONTINUOUS layers sharing one resolver (resolvePinkDotDualPlume):
-  // an inner/core brush (a normal continuous stroked line every segment —
-  // renderPinkDotInnerCore, same multi-pass/edgeExpansion/Fill-ceiling
-  // technique every other line cap already uses, just with its own flare
-  // anisotropy) and an outer/atmosphere brush (continuous stroked mist+ring
-  // bands every segment, no distance-based gating at all —
-  // renderPinkDotOuterBand, drawn UNDER the core so the core's own opaque
-  // passes cover the ring's inner portion — the bullseye/ring read falls
-  // out of stacked continuous bands, not a moat-gradient trick or discrete
-  // stamps). plumeDistanceGain amplifies ONLY the outer bands beyond their
-  // own proportional Size-driven scaling — the core gets none of it, so
-  // outer always grows faster than inner with distance (close -> clean hot
-  // line; far -> pronounced center+ring+mist bloom, inner still present).
-  // plumeFlareStrength elongates BOTH layers via the same flareFactor
-  // (stronger of a simulated spray angle or point velocity, not stacked) —
-  // outer gets the full stretch, inner gets half, keeping the line body
-  // legible while the atmosphere flares more. Texture/"dusty" character
-  // comes from the existing overspray mechanism (now flare-coherent too,
-  // squashed by the outer layer's own anisotropy for Pink Dot specifically)
-  // rather than gaps in the envelope. Core physics (coreDensity/coreOpacity/
-  // edgeFalloff/velocityResponse) and every other cap's rendering untouched.
+  // Pink Dot Fat — dual-plume, refined. The prior dual-plume pass fixed line
+  // continuity but left two artifacts: the outer layer rendered as a second
+  // flat, smooth translucent tube (not an aerosol), and any near-zero-
+  // distance point (a bare click, an immediate release) deposited a
+  // full-size bulb regardless of real dwell time. Both fixed without
+  // touching the dual-plume architecture itself — still ONE resolver
+  // (resolvePinkDotDualPlume), still TWO CONTINUOUS layers: an inner/core
+  // brush (unchanged — renderPinkDotInnerCore, the same multi-pass/
+  // edgeExpansion/Fill-ceiling technique every other line cap uses) and an
+  // outer/atmosphere brush that is now a genuine DENSITY FIELD
+  // (renderPinkDotOuterField / resolvePinkDotOuterFieldShells) — several
+  // concentric shells with a low, radially-biased opacity (peaking near the
+  // ring radius, fading toward the mist edge) and a deterministic sine-based
+  // mist grain along the travel direction, drawn UNDER the core every
+  // segment with no distance-based gating, so the envelope stays continuous
+  // while its density visibly varies instead of reading as a flat hose.
+  // plumeDistanceGain/plumeFlareStrength still shape that field exactly as
+  // before (outer grows/flares more than inner) — only HOW the outer field
+  // is painted changed, not what drives its size. Endpoint size is now
+  // genuinely dwell-driven (resolvePinkDotDwellScale, engine-tracked
+  // pinkDotDwellMs): a near-zero-distance point starts at a small floor
+  // size and ramps to full size over real elapsed stationary time, resetting
+  // the instant real movement occurs — a click or an immediate release never
+  // bulges, a genuine hold (or a mid-stroke pause) progressively builds a
+  // bullseye. Core physics (coreDensity/coreOpacity/edgeFalloff/
+  // velocityResponse) and every other cap's rendering untouched.
   { id: "pink-dot-fat", name: "Pink Dot Fat", family: "fat", baseRadius: 42, coreDensity: 1.46, coreOpacity: 0.34, edgeFalloff: 0.76, particleCount: 26, particleSpread: 1.2, particleSize: 0.72, particleOpacity: 0.29, flowRate: 1.48, accumulationRate: 1.38, velocityResponse: 0.42, jitter: 0.06, endpointBehavior: "punchy", splatterProbability: 0.14, dripTendency: 0.72, anisotropy: 1, haloRadius: 0, haloOpacity: 0, wiggleAmplitude: 0, wiggleFrequency: 0, depositionShape: "plume", defaultFillMode: true, ringRadius: 0, ringThickness: 0, ringOpacity: 0, centerOpacity: 0, streakLanes: 0, haloDistanceGain: 0, haloFlareAnisotropy: 0, haloDabSpacing: 0, haloRingBias: 0, plumeRingRadius: 1.7, plumeRingThickness: 0.55, plumeRingOpacity: 0.24, plumeMistRadius: 2.6, plumeMistOpacity: 0.07, plumeDistanceGain: 0.85, plumeFlareStrength: 0.55 },
   // Astro Fat — corrected. At default velocity the OLD numbers resolved to a
   // core opacity only ~9% denser than New York Fat's despite nearly 2x the

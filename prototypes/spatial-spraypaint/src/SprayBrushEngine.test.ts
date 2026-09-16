@@ -2,13 +2,17 @@ import { describe, expect, it } from "vitest";
 import {
   SprayBrushEngine,
   createStrokeRandom,
+  PLUME_DWELL_FULL_MS,
   PLUME_MAX_ANGLE_DEGREES,
   resolveHaloDistanceGain,
   resolveHaloFlareRatio,
   resolveHaloGradientStops,
   resolveMouseSprayInput,
+  resolveOuterFieldTexture,
   resolveOverspraySquashAngle,
   resolvePinkDotDualPlume,
+  resolvePinkDotDwellScale,
+  resolvePinkDotOuterFieldShells,
   resolveRingProfile,
   resolveShapedStampGeometry,
   resolveStreakGate,
@@ -86,9 +90,16 @@ function lineWidthRecordingContext(): { ctx: CanvasRenderingContext2D; lineWidth
     save: () => undefined,
     restore: () => undefined,
     beginPath: () => undefined,
+    closePath: () => undefined,
     moveTo: () => undefined,
     lineTo: () => undefined,
     arc: () => undefined,
+    arcTo: () => undefined,
+    ellipse: () => undefined,
+    translate: () => undefined,
+    rotate: () => undefined,
+    scale: () => undefined,
+    createRadialGradient: () => ({ addColorStop: () => undefined }) as unknown as CanvasGradient,
     stroke: () => lineWidths.push(lineWidth),
     fill: () => undefined,
     strokeStyle: "",
@@ -586,7 +597,7 @@ describe("Pink Dot Fat dual-plume — one resolver, two coordinated CONTINUOUS l
   });
 
   describe("rendered dual-plume — continuity, no coarse whole-plume gating, reversals stay connected", () => {
-    it("draws the inner core, and both outer bands, on EVERY segment — no dab-spacing gate skips any of them", () => {
+    it("draws the inner core, and every outer-field shell, on EVERY segment — no dab-spacing gate skips any of them", () => {
       const engine = new SprayBrushEngine();
       const { ctx, strokeStyles } = segmentRecordingContext();
       const random = createStrokeRandom(9);
@@ -594,14 +605,20 @@ describe("Pink Dot Fat dual-plume — one resolver, two coordinated CONTINUOUS l
       let previous: StrokePoint | null = null;
       const segments = 20;
       for (let i = 0; i <= segments; i += 1) {
+        // x steps by 4 world units per segment, well above the dwell-distance
+        // gate (a fraction of the ~42 radius), so every one of these is a
+        // genuine moving segment, not a dwell point.
         const point: StrokePoint = { x: i * 4, y: 0, timestamp: i * 16, velocity: 0.3, width: 42, opacity: 1 };
         engine.renderSegment(ctx, previous, point, "#ffffff", pink, random);
         previous = point;
       }
-      // Every one of the `segments` non-first calls strokes 2 outer bands + N inner passes; the FIRST call strokes only once each (start===point).
-      // At minimum: 2 outer strokes/segment across `segments` segments proves no gating dropped any.
+      // Every one of the `segments` non-first calls strokes several outer-field
+      // shells + N inner passes; the FIRST call strokes only once each
+      // (start===point). At minimum, 2 outer strokes/segment across
+      // `segments` segments proves no gating dropped any — the outer field
+      // resolves at least that many shells at native strength.
       const dynamics = resolveSprayDynamics(pink, 0.3, 42);
-      const minimumOuterStrokes = segments * 2; // mist + ring, every one of the `segments` moving segments (excludes the very first zero-distance call)
+      const minimumOuterStrokes = segments * 2;
       expect(strokeStyles.length).toBeGreaterThanOrEqual(minimumOuterStrokes + segments * dynamics.corePasses);
     });
 
@@ -692,6 +709,163 @@ describe("Pink Dot Fat dual-plume — one resolver, two coordinated CONTINUOUS l
     });
   });
 
+  describe("resolvePinkDotOuterFieldShells — outer atmosphere as a density field, not a second solid tube", () => {
+    const state = resolvePinkDotDualPlume(pink, { sprayAngle: 0, sprayDistance: 1, sprayOutput: 1 }, 0.05, nativeDynamics);
+
+    it("resolves several concentric shells, not just two flat bands", () => {
+      const shells = resolvePinkDotOuterFieldShells(state.outer);
+      expect(shells.length).toBeGreaterThan(2);
+    });
+
+    it("gives shells a genuine annular bias — opacity is not flat/uniform across radius", () => {
+      const shells = resolvePinkDotOuterFieldShells(state.outer);
+      const opacities = shells.map((shell) => shell.opacity);
+      expect(new Set(opacities.map((o) => o.toFixed(6))).size).toBeGreaterThan(1);
+    });
+
+    it("peaks density near the ring radius rather than monotonically fading from center outward", () => {
+      const shells = resolvePinkDotOuterFieldShells(state.outer);
+      const nearestToRing = [...shells].sort(
+        (a, b) => Math.abs(a.radius - state.outer.ringRadius) - Math.abs(b.radius - state.outer.ringRadius),
+      )[0];
+      const farthest = [...shells].sort((a, b) => b.radius - a.radius)[0];
+      expect(nearestToRing.opacity).toBeGreaterThan(farthest.opacity);
+    });
+
+    it("keeps every shell strictly within the mist radius — the field never extends past its own distance-sensitive envelope", () => {
+      const shells = resolvePinkDotOuterFieldShells(state.outer);
+      for (const shell of shells) expect(shell.radius).toBeLessThanOrEqual(state.outer.mistRadius);
+    });
+
+    it("returns no shells when the outer layer has collapsed to zero mist radius", () => {
+      const collapsed = { ...state.outer, mistRadius: 0 };
+      expect(resolvePinkDotOuterFieldShells(collapsed)).toHaveLength(0);
+    });
+  });
+
+  describe("resolveOuterFieldTexture — deterministic mist grain, never a literal gap", () => {
+    it("is a pure function of its inputs — identical inputs always produce the identical factor", () => {
+      const a = resolveOuterFieldTexture(40, 2, 137);
+      const b = resolveOuterFieldTexture(40, 2, 137);
+      expect(a).toBe(b);
+    });
+
+    it("varies along the travel direction — the whole point of a 'grain,' not a flat multiplier", () => {
+      const samples = Array.from({ length: 12 }, (_, i) => resolveOuterFieldTexture(40, 0, i * 15));
+      expect(new Set(samples.map((v) => v.toFixed(6))).size).toBeGreaterThan(1);
+    });
+
+    it("never reaches zero — the spatial envelope stays continuous even though density varies", () => {
+      const samples = Array.from({ length: 40 }, (_, i) => resolveOuterFieldTexture(40, 1, i * 7));
+      for (const value of samples) expect(value).toBeGreaterThan(0);
+    });
+
+    it("gives different shells a different phase, so they don't all pulse in sync", () => {
+      const shellA = Array.from({ length: 10 }, (_, i) => resolveOuterFieldTexture(40, 0, i * 15));
+      const shellB = Array.from({ length: 10 }, (_, i) => resolveOuterFieldTexture(40, 1, i * 15));
+      expect(shellA).not.toEqual(shellB);
+    });
+  });
+
+  describe("resolvePinkDotDwellScale — endpoints are dwell-driven, not automatic", () => {
+    it("returns a small floor scale, not 1, at zero accumulated dwell time (a bare click)", () => {
+      expect(resolvePinkDotDwellScale(0)).toBeLessThan(0.3);
+      expect(resolvePinkDotDwellScale(0)).toBeGreaterThan(0);
+    });
+
+    it("ramps up monotonically as dwell time accumulates", () => {
+      const early = resolvePinkDotDwellScale(150); // ~0.2s territory
+      const mid = resolvePinkDotDwellScale(400); // ~0.5s territory
+      const late = resolvePinkDotDwellScale(900); // ~1s territory
+      expect(mid).toBeGreaterThan(early);
+      expect(late).toBeGreaterThan(mid);
+    });
+
+    it("reaches exactly full (1) scale by PLUME_DWELL_FULL_MS and stays capped at 1 beyond it", () => {
+      expect(resolvePinkDotDwellScale(PLUME_DWELL_FULL_MS)).toBeCloseTo(1, 5);
+      expect(resolvePinkDotDwellScale(PLUME_DWELL_FULL_MS * 3)).toBeCloseTo(1, 5);
+    });
+  });
+
+  describe("rendered dwell-driven endpoints — no giant bulb from a bare click, progressive buildup from a real hold", () => {
+    function widestOuterLineWidth(engine: SprayBrushEngine, point: StrokePoint, previous: StrokePoint | null, random: () => number): number {
+      const { ctx } = lineWidthRecordingContext();
+      const widths: number[] = [];
+      (ctx as unknown as { stroke: () => void }).stroke = () => widths.push((ctx as unknown as { lineWidth: number }).lineWidth);
+      engine.renderSegment(ctx, previous, point, "#ffffff", pink, random);
+      return widths.length ? Math.max(...widths) : 0;
+    }
+
+    it("draws a bare click (single point, no prior dwell) far smaller than a sustained hold at the same spot", () => {
+      const clickEngine = new SprayBrushEngine();
+      clickEngine.beginStroke();
+      const clickPoint: StrokePoint = { x: 0, y: 0, timestamp: 0, velocity: 0, width: 42, opacity: 1 };
+      const clickWidth = widestOuterLineWidth(clickEngine, clickPoint, null, createStrokeRandom(1));
+
+      const heldEngine = new SprayBrushEngine();
+      heldEngine.beginStroke();
+      let previous: StrokePoint | null = null;
+      let heldWidth = 0;
+      const random = createStrokeRandom(1);
+      // Repeated near-zero-distance points at increasing real timestamps —
+      // exactly how the app's own render loop deposits a genuine held dwell.
+      for (let i = 0; i <= 60; i += 1) {
+        const point: StrokePoint = { x: 0, y: 0, timestamp: i * 16, velocity: 0, width: 42, opacity: 1 };
+        heldWidth = widestOuterLineWidth(heldEngine, point, previous, random);
+        previous = point;
+      }
+      expect(heldWidth).toBeGreaterThan(clickWidth * 2);
+    });
+
+    it("does not let dwell strength carry into the very next segment once real movement starts", () => {
+      const engine = new SprayBrushEngine();
+      engine.beginStroke();
+      const random = createStrokeRandom(2);
+      let previous: StrokePoint | null = null;
+      // Dwell for ~600ms first, building up real dwell strength.
+      for (let i = 0; i <= 40; i += 1) {
+        const point: StrokePoint = { x: 0, y: 0, timestamp: i * 16, velocity: 0, width: 42, opacity: 1 };
+        widestOuterLineWidth(engine, point, previous, random);
+        previous = point;
+      }
+      // Now move immediately and substantially — this segment must render at
+      // full/native width, not shrunk by leftover dwell scaling.
+      const movedPoint: StrokePoint = { x: 200, y: 0, timestamp: 640 + 16, velocity: 0.4, width: 42, opacity: 1 };
+      const movedWidth = widestOuterLineWidth(engine, movedPoint, previous, random);
+      const dynamics = resolveSprayDynamics(pink, 0.4, 42);
+      const state = resolvePinkDotDualPlume(pink, { sprayAngle: 0, sprayDistance: 1, sprayOutput: 1 }, 0.4, dynamics);
+      const shells = resolvePinkDotOuterFieldShells(state.outer);
+      const nativeMaxWidth = Math.max(...shells.map((s) => s.radius * 2));
+      expect(movedWidth).toBeGreaterThan(nativeMaxWidth * 0.9);
+    });
+
+    it("resets and rebuilds dwell strength for a mid-stroke pause, not just the stroke's literal first/last point", () => {
+      const engine = new SprayBrushEngine();
+      engine.beginStroke();
+      const random = createStrokeRandom(3);
+      let previous: StrokePoint | null = null;
+      // Move for a while first (interior of the stroke, not an endpoint).
+      for (let i = 0; i <= 10; i += 1) {
+        const point: StrokePoint = { x: i * 10, y: 0, timestamp: i * 16, velocity: 0.4, width: 42, opacity: 1 };
+        widestOuterLineWidth(engine, point, previous, random);
+        previous = point;
+      }
+      // Pause in place, right after — the very FIRST stationary sample after
+      // movement should be minimal, exactly like the stroke's own start.
+      const pauseStart: StrokePoint = { x: 100, y: 0, timestamp: 176, velocity: 0, width: 42, opacity: 1 };
+      const firstPauseWidth = widestOuterLineWidth(engine, pauseStart, previous, random);
+      previous = pauseStart;
+      // Keep pausing at the same spot for real elapsed time.
+      let lastPauseWidth = firstPauseWidth;
+      for (let i = 1; i <= 40; i += 1) {
+        const point: StrokePoint = { x: 100, y: 0, timestamp: 176 + i * 16, velocity: 0, width: 42, opacity: 1 };
+        lastPauseWidth = widestOuterLineWidth(engine, point, previous, random);
+        previous = point;
+      }
+      expect(lastPauseWidth).toBeGreaterThan(firstPauseWidth * 2);
+    });
+  });
+
   describe("regression — every OTHER cap is unaffected by the dual-plume rework", () => {
     it("gives every other cap all plume fields at 0 and depositionShape !== 'plume'", () => {
       for (const id of [
@@ -707,7 +881,7 @@ describe("Pink Dot Fat dual-plume — one resolver, two coordinated CONTINUOUS l
       }
     });
 
-    it("renders every other cap through the ordinary generic core loop, unaffected by renderPinkDotDualPlume/renderPinkDotOuterBand/renderPinkDotInnerCore", () => {
+    it("renders every other cap through the ordinary generic core loop, unaffected by renderPinkDotDualPlume/renderPinkDotOuterField/renderPinkDotInnerCore", () => {
       const point: StrokePoint = { x: 40, y: 40, timestamp: 0, velocity: 1.2, width: 32, opacity: 1 };
       const nyFat = getSprayCapPreset("new-york-fat");
       const rec = segmentRecordingContext();
