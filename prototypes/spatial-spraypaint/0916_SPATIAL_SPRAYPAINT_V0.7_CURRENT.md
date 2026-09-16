@@ -60,4 +60,4 @@ New: `src/ToolTaxonomy.ts`, `src/ToolTaxonomy.test.ts`. No other files touched.
 
 ## Commit
 
-`4d5c47c` — "feat: Spatial Spraypaint tool taxonomy — Physical Graffiti / Experimental Creative / Ink Gonzo Expressive families, Flair modes, surface context, parameter groups"
+`407c4d0` — "feat: Spatial Spraypaint tool taxonomy — Physical Graffiti / Experimental Creative / Ink Gonzo Expressive families, Flair modes, surface context, parameter groups"
