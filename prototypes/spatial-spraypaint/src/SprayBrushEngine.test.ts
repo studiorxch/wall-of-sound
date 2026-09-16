@@ -13,6 +13,7 @@ import {
   resolvePinkDotDualPlume,
   resolvePinkDotDwellScale,
   resolvePinkDotOuterFieldZones,
+  resolvePinkDotStationaryProfile,
   resolveRingProfile,
   resolveShapedStampGeometry,
   resolveStreakGate,
@@ -606,6 +607,15 @@ describe("generic halo mechanism (dormant, preserved infrastructure — no built
 
 describe("Pink Dot Fat dual-plume — one resolver, two coordinated CONTINUOUS layers (inner core + outer atmosphere)", () => {
   const pink = getSprayCapPreset("pink-dot-fat");
+  // Track Marks is a byte-for-byte numeric twin of Pink Dot Fat except for
+  // plumeStochasticStationary (see SprayCapPresets.ts) — the TEMPORARY
+  // preservation cap that still renders a true stationary dwell through
+  // the swept-rail arc-stroke construction Pink Dot Fat itself moved off
+  // of. Tests that specifically exercise THAT construction at a stationary
+  // point use trackMarks so they keep covering it; tests about the MOVING
+  // rail system (unaffected by this cap's stationary-only change) or about
+  // Pink Dot Fat's own NEW stochastic field still use `pink`.
+  const trackMarks = getSprayCapPreset("track-marks");
   const nativeDynamics = resolveSprayDynamics(pink, 0.3, pink.baseRadius);
 
 
@@ -780,6 +790,10 @@ describe("Pink Dot Fat dual-plume — one resolver, two coordinated CONTINUOUS l
     });
 
     it("keeps drawing (never silently drops) through a sharp zigzag, a closed loop, and a backtrack/reversal — both layers", () => {
+      // Uses trackMarks: the first segment here is a true stationary point
+      // (previous === null), and this test is about the swept-rail MOVING
+      // system's continuity, not Pink Dot Fat's own new stochastic
+      // stationary field — see the `trackMarks` doc comment above.
       const engine = new SprayBrushEngine();
       const { ctx, strokeStyles, strokes } = segmentRecordingContext();
       const random = createStrokeRandom(5);
@@ -792,14 +806,14 @@ describe("Pink Dot Fat dual-plume — one resolver, two coordinated CONTINUOUS l
         { x: 20, y: 0, timestamp: 64, velocity: 0.4, width: 42, opacity: 1 }, // backtrack toward start
         { x: 0, y: 0, timestamp: 80, velocity: 0.4, width: 42, opacity: 1 }, // closes the loop
       ];
-      const zigzagZones = resolvePinkDotOuterFieldZones(resolvePinkDotDualPlume(pink, { sprayAngle: 0, sprayDistance: 1, sprayOutput: 1 }, 0.4, resolveSprayDynamics(pink, 0.4, 42)).outer);
+      const zigzagZones = resolvePinkDotOuterFieldZones(resolvePinkDotDualPlume(trackMarks, { sprayAngle: 0, sprayDistance: 1, sprayOutput: 1 }, 0.4, resolveSprayDynamics(trackMarks, 0.4, 42)).outer);
       expect(zigzagZones).not.toBeNull();
       if (!zigzagZones) return;
       let previous: StrokePoint | null = null;
       for (const point of zigzag) {
         const strokesBefore = strokeStyles.length;
         const bandStrokesBefore = pinkDotBandStrokes(strokes, zigzagZones).length;
-        expect(() => engine.renderSegment(ctx, previous, point, "#ffffff", pink, random)).not.toThrow();
+        expect(() => engine.renderSegment(ctx, previous, point, "#ffffff", trackMarks, random)).not.toThrow();
         expect(strokeStyles.length).toBeGreaterThan(strokesBefore); // inner core
         expect(pinkDotBandStrokes(strokes, zigzagZones).length).toBeGreaterThan(bandStrokesBefore); // outer field's own bands
         previous = point;
@@ -897,10 +911,14 @@ describe("Pink Dot Fat dual-plume — one resolver, two coordinated CONTINUOUS l
 
   describe("strokePinkDotOuterFieldBand — ONE geometric construction, correct for a stationary point AND a moving segment", () => {
     it("degenerates a stationary point (start === point) into a plain circle-stroke via arc — no rail lineTo, no special-cased 'dot' path", () => {
+      // trackMarks: this is specifically the swept-rail construction's own
+      // stationary case, which Pink Dot Fat itself no longer uses (see
+      // `plumeStochasticStationary` and the new "Pink Dot's stationary
+      // aerosol deposition field" describe block below).
       const point: StrokePoint = { x: 40, y: 40, timestamp: 0, velocity: 0, width: 42, opacity: 1 };
       const { ctx, strokes } = segmentRecordingContext();
-      new SprayBrushEngine().renderSegment(ctx, null, point, "#ffffff", pink, createStrokeRandom(1));
-      const zones = resolvePinkDotOuterFieldZones(resolvePinkDotDualPlume(pink, { sprayAngle: 0, sprayDistance: 1, sprayOutput: 1 }, 0, resolveSprayDynamics(pink, 0, 42)).outer);
+      new SprayBrushEngine().renderSegment(ctx, null, point, "#ffffff", trackMarks, createStrokeRandom(1));
+      const zones = resolvePinkDotOuterFieldZones(resolvePinkDotDualPlume(trackMarks, { sprayAngle: 0, sprayDistance: 1, sprayOutput: 1 }, 0, resolveSprayDynamics(trackMarks, 0, 42)).outer);
       expect(zones).not.toBeNull();
       if (!zones) return;
       const bandStrokes = pinkDotBandStrokes(strokes, zones);
@@ -922,11 +940,13 @@ describe("Pink Dot Fat dual-plume — one resolver, two coordinated CONTINUOUS l
     });
 
     it("strokes the ring band's two rails at exactly the mid-radius between the moat and the ring's own outer radius, with lineWidth spanning that whole gap", () => {
+      // trackMarks: a true stationary point again (previous === null) — see
+      // the comment on the "degenerates a stationary point" test above.
       const point: StrokePoint = { x: 40, y: 40, timestamp: 0, velocity: 0.05, width: 42, opacity: 1 };
       const { ctx, strokes } = segmentRecordingContext();
-      new SprayBrushEngine().renderSegment(ctx, null, point, "#ffffff", pink, createStrokeRandom(1));
-      const dynamics = resolveSprayDynamics(pink, 0.05, 42);
-      const state = resolvePinkDotDualPlume(pink, { sprayAngle: 0, sprayDistance: 1, sprayOutput: 1 }, 0.05, dynamics);
+      new SprayBrushEngine().renderSegment(ctx, null, point, "#ffffff", trackMarks, createStrokeRandom(1));
+      const dynamics = resolveSprayDynamics(trackMarks, 0.05, 42);
+      const state = resolvePinkDotDualPlume(trackMarks, { sprayAngle: 0, sprayDistance: 1, sprayOutput: 1 }, 0.05, dynamics);
       const zones = resolvePinkDotOuterFieldZones(state.outer);
       expect(zones).not.toBeNull();
       if (!zones) return;
@@ -946,12 +966,15 @@ describe("Pink Dot Fat dual-plume — one resolver, two coordinated CONTINUOUS l
 
   describe("distance controls GEOMETRY; dwell controls DENSITY ONLY — mandatory dwell test", () => {
     it("gives a 0.2s, 0.5s, 1.0s, and 2.0s dwell at the SAME sprayDistance the exact same footprint radii — only opacity may increase", () => {
+      // trackMarks: the swept-rail construction's own dwell invariant (Pink
+      // Dot Fat's OWN dwell behavior, now through the stochastic field, is
+      // covered separately below).
       const engine = new SprayBrushEngine();
       const random = createStrokeRandom(4);
       engine.beginStroke();
       const point = (t: number): StrokePoint => ({ x: 0, y: 0, timestamp: t, velocity: 0, width: 42, opacity: 1 });
       const checkpoints = [200, 500, 1000, 2000];
-      const dwellZones = resolvePinkDotOuterFieldZones(resolvePinkDotDualPlume(pink, { sprayAngle: 0, sprayDistance: 1, sprayOutput: 1 }, 0, resolveSprayDynamics(pink, 0, 42)).outer);
+      const dwellZones = resolvePinkDotOuterFieldZones(resolvePinkDotDualPlume(trackMarks, { sprayAngle: 0, sprayDistance: 1, sprayOutput: 1 }, 0, resolveSprayDynamics(trackMarks, 0, 42)).outer);
       expect(dwellZones).not.toBeNull();
       if (!dwellZones) return;
       let previous: StrokePoint | null = null;
@@ -960,7 +983,7 @@ describe("Pink Dot Fat dual-plume — one resolver, two coordinated CONTINUOUS l
       for (const t of checkpoints) {
         const { ctx, strokes } = segmentRecordingContext();
         const p = point(t);
-        engine.renderSegment(ctx, previous, p, "#ffffff", pink, random);
+        engine.renderSegment(ctx, previous, p, "#ffffff", trackMarks, random);
         previous = p;
         const bandStrokes = pinkDotBandStrokes(strokes, dwellZones);
         const allRadii = [...new Set(bandStrokes.map(pinkDotBandRadius))].sort((a, b) => a - b);
@@ -995,6 +1018,11 @@ describe("Pink Dot Fat dual-plume — one resolver, two coordinated CONTINUOUS l
 
   describe("variable width during ONE continuous stroke — distance ramps 0.15 -> 0.30 -> 0.60 -> 1.00 -> 0.60 -> 0.30 -> 0.15, pointer down throughout", () => {
     it("evolves smoothly (thin -> wider -> wide flare -> narrower), no throw, no stream interruption", () => {
+      // trackMarks: this is the swept-rail MOVING system's own width-ramp
+      // response — untouched by Pink Dot Fat's stationary-only change, and
+      // this ramp's first point (previous === null) is itself a true
+      // stationary point, which trackMarks still renders through that
+      // same swept-rail construction.
       const engine = new SprayBrushEngine();
       const random = createStrokeRandom(6);
       engine.beginStroke();
@@ -1006,18 +1034,18 @@ describe("Pink Dot Fat dual-plume — one resolver, two coordinated CONTINUOUS l
       // used to identify band strokes below match what actually gets drawn.
       let smoothedWidth = -1;
       for (let i = 0; i < distanceFactors.length; i += 1) {
-        const width = pink.baseRadius * distanceFactors[i];
+        const width = trackMarks.baseRadius * distanceFactors[i];
         const point: StrokePoint = { x: i * 20, y: 0, timestamp: i * 16, velocity: 0.4, width, opacity: 1 };
         smoothedWidth = smoothedWidth < 0 ? width : smoothedWidth + (width - smoothedWidth) * PINK_DOT_WIDTH_SMOOTHING;
         // sprayDistance (which drives outer/mist GAIN) comes from the RAW
         // point width via resolveMouseSprayInput, same as production — only
         // the `dynamics` radius argument itself uses the smoothed width.
-        const input = resolveMouseSprayInput(point, pink, 1, 0);
-        const zones = resolvePinkDotOuterFieldZones(resolvePinkDotDualPlume(pink, input, 0.4, resolveSprayDynamics(pink, 0.4, smoothedWidth)).outer);
+        const input = resolveMouseSprayInput(point, trackMarks, 1, 0);
+        const zones = resolvePinkDotOuterFieldZones(resolvePinkDotDualPlume(trackMarks, input, 0.4, resolveSprayDynamics(trackMarks, 0.4, smoothedWidth)).outer);
         expect(zones).not.toBeNull();
         if (!zones) return;
         const { ctx, strokes } = segmentRecordingContext();
-        expect(() => engine.renderSegment(ctx, previous, point, "#ffffff", pink, random)).not.toThrow();
+        expect(() => engine.renderSegment(ctx, previous, point, "#ffffff", trackMarks, random)).not.toThrow();
         const bandStrokes = pinkDotBandStrokes(strokes, zones);
         expect(bandStrokes.length).toBeGreaterThan(0); // the stream never breaks
         mistRadii.push(Math.max(...bandStrokes.map(pinkDotBandRadius)));
@@ -1089,20 +1117,23 @@ describe("Pink Dot Fat dual-plume — one resolver, two coordinated CONTINUOUS l
 
   describe("flare emerges from continuously changing angle/velocity — not a separate visual effect", () => {
     it("squashes the outer field's SAME band-stroke construction via translate/rotate/scale — no alternate 'flared' rendering path", () => {
+      // trackMarks: a true stationary point (previous === null), so this
+      // exercises the swept-rail construction's own flare-squash path,
+      // still fully intact on the preservation cap.
       const point: StrokePoint = { x: 40, y: 40, timestamp: 0, velocity: 0, width: 42, opacity: 1 };
-      const flatZones = resolvePinkDotOuterFieldZones(resolvePinkDotDualPlume(pink, { sprayAngle: 0, sprayDistance: 1, sprayOutput: 1 }, 0, resolveSprayDynamics(pink, 0, 42)).outer);
+      const flatZones = resolvePinkDotOuterFieldZones(resolvePinkDotDualPlume(trackMarks, { sprayAngle: 0, sprayDistance: 1, sprayOutput: 1 }, 0, resolveSprayDynamics(trackMarks, 0, 42)).outer);
       expect(flatZones).not.toBeNull();
       if (!flatZones) return;
       const flat = segmentRecordingContext();
-      new SprayBrushEngine().renderSegment(flat.ctx, null, point, "#ffffff", pink, createStrokeRandom(1), 1, false, 0);
+      new SprayBrushEngine().renderSegment(flat.ctx, null, point, "#ffffff", trackMarks, createStrokeRandom(1), 1, false, 0);
       const flatBandStrokes = pinkDotBandStrokes(flat.strokes, flatZones);
       expect(flatBandStrokes.length).toBe(2); // same construction, zero rotate/scale calls at zero angle
 
-      const flaredZones = resolvePinkDotOuterFieldZones(resolvePinkDotDualPlume(pink, { sprayAngle: (40 * Math.PI) / 180, sprayDistance: 1, sprayOutput: 1 }, 0, resolveSprayDynamics(pink, 0, 42)).outer);
+      const flaredZones = resolvePinkDotOuterFieldZones(resolvePinkDotDualPlume(trackMarks, { sprayAngle: (40 * Math.PI) / 180, sprayDistance: 1, sprayOutput: 1 }, 0, resolveSprayDynamics(trackMarks, 0, 42)).outer);
       expect(flaredZones).not.toBeNull();
       if (!flaredZones) return;
       const flared = segmentRecordingContext();
-      new SprayBrushEngine().renderSegment(flared.ctx, null, point, "#ffffff", pink, createStrokeRandom(1), 1, false, 40);
+      new SprayBrushEngine().renderSegment(flared.ctx, null, point, "#ffffff", trackMarks, createStrokeRandom(1), 1, false, 40);
       const flaredBandStrokes = pinkDotBandStrokes(flared.strokes, flaredZones);
       expect(flaredBandStrokes.length).toBe(2); // the SAME two-band construction, just transformed
       expect(flared.scaleCalls.length).toBeGreaterThan(0);
@@ -1114,6 +1145,179 @@ describe("Pink Dot Fat dual-plume — one resolver, two coordinated CONTINUOUS l
       expect(flared.outer.anisotropy).toBeLessThan(1);
       expect(flared.outer.ringRadius).toBeCloseTo(flat.outer.ringRadius, 5);
       expect(flared.outer.mistRadius).toBeCloseTo(flat.outer.mistRadius, 5);
+    });
+  });
+
+  describe("Pink Dot's stationary aerosol deposition field — resolvePinkDotStationaryProfile / renderPinkDotStochasticOuterField", () => {
+    // Three reference distances, matching the brief's own close/medium/far
+    // bounded prototype — one normalized model (resolvePinkDotStationaryProfile)
+    // is reused unchanged for every one of them; only the resolved
+    // width/dynamics fed into it (a proxy for sprayDistance, same as the
+    // rest of this app) differ.
+    // 0.6, not the raw 0.15 minimum — at very close distance the outer
+    // ring/mist bands (which shrink FASTER than the core with distance, by
+    // design — see resolvePinkDotDualPlume's outerGain) can shrink inside
+    // the core radius itself, an existing, untouched property of that
+    // resolver this stationary-only reset isn't chartered to change.
+    const closeState = resolvePinkDotDualPlume(pink, { sprayAngle: 0, sprayDistance: 0.6, sprayOutput: 1 }, 0, resolveSprayDynamics(pink, 0, pink.baseRadius * 0.6));
+    const mediumState = resolvePinkDotDualPlume(pink, { sprayAngle: 0, sprayDistance: 1, sprayOutput: 1 }, 0, resolveSprayDynamics(pink, 0, pink.baseRadius));
+    const farState = resolvePinkDotDualPlume(pink, { sprayAngle: 0, sprayDistance: 1.6, sprayOutput: 1 }, 0, resolveSprayDynamics(pink, 0, pink.baseRadius * 1.6));
+
+    it("returns a real profile at close, medium, and far distance", () => {
+      for (const state of [closeState, mediumState, farState]) {
+        const profile = resolvePinkDotStationaryProfile(state.inner, state.outer);
+        expect(profile).not.toBeNull();
+      }
+    });
+
+    it("A. footprint radius changes with distance — core, ring, and mist all grow from close to medium to far", () => {
+      const close = resolvePinkDotStationaryProfile(closeState.inner, closeState.outer);
+      const medium = resolvePinkDotStationaryProfile(mediumState.inner, mediumState.outer);
+      const far = resolvePinkDotStationaryProfile(farState.inner, farState.outer);
+      expect(close).not.toBeNull();
+      expect(medium).not.toBeNull();
+      expect(far).not.toBeNull();
+      if (!close || !medium || !far) return;
+      expect(medium.coreRadius).toBeGreaterThan(close.coreRadius);
+      expect(far.coreRadius).toBeGreaterThan(medium.coreRadius);
+      expect(medium.ringRadius).toBeGreaterThan(close.ringRadius);
+      expect(far.ringRadius).toBeGreaterThan(medium.ringRadius);
+      expect(medium.mistRadius).toBeGreaterThan(close.mistRadius);
+      expect(far.mistRadius).toBeGreaterThan(medium.mistRadius);
+    });
+
+    it("D. a nonzero density minimum (the moat) exists strictly between the core and the outer ring peak", () => {
+      for (const state of [closeState, mediumState, farState]) {
+        const profile = resolvePinkDotStationaryProfile(state.inner, state.outer);
+        expect(profile).not.toBeNull();
+        if (!profile) continue;
+        expect(profile.moatDensity).toBeGreaterThan(0); // a real minimum, never a literal hole
+        expect(profile.moatDensity).toBeLessThan(profile.ringDensity);
+        expect(profile.moatDensity).toBeLessThan(profile.coreDensity);
+        expect(profile.moatRadius).toBeGreaterThan(profile.coreRadius * 0.5);
+        expect(profile.moatRadius).toBeLessThan(profile.ringRadius);
+      }
+    });
+
+    it("E. the outer mist fades continuously — no radius where the curve just stops, and it never rises again once past the ring", () => {
+      const profile = resolvePinkDotStationaryProfile(mediumState.inner, mediumState.outer);
+      expect(profile).not.toBeNull();
+      if (!profile) return;
+      // Sample a long run outward from the ring peak: strictly non-increasing,
+      // and every step's own drop is small relative to the ring's peak
+      // density — a smooth fade, not a cliff.
+      const samples: number[] = [];
+      const span = (profile.mistRadius - profile.ringRadius) * 3;
+      const steps = 60;
+      for (let i = 0; i <= steps; i += 1) samples.push(profile.densityAt(profile.ringRadius + (span * i) / steps));
+      for (let i = 1; i < samples.length; i += 1) {
+        expect(samples[i]).toBeLessThanOrEqual(samples[i - 1] + 1e-9);
+        expect(samples[i - 1] - samples[i]).toBeLessThan(profile.ringDensity * 0.15);
+      }
+      // Never reaches exactly zero within this span — a continuous decay, not a hard cutoff.
+      expect(samples[samples.length - 1]).toBeGreaterThan(0);
+    });
+
+    it("resolvePinkDotStationaryProfile takes no dwell/time input — dwell is applied only outside it, structurally guaranteeing the render-level dwell test below", () => {
+      const a = resolvePinkDotStationaryProfile(mediumState.inner, mediumState.outer);
+      const b = resolvePinkDotStationaryProfile(mediumState.inner, mediumState.outer);
+      expect(a).not.toBeNull();
+      if (!a || !b) return;
+      expect(a.coreRadius).toBe(b.coreRadius);
+      expect(a.moatRadius).toBe(b.moatRadius);
+      expect(a.ringRadius).toBe(b.ringRadius);
+      expect(a.mistRadius).toBe(b.mistRadius);
+      expect(a.moatDensity).toBe(b.moatDensity);
+      expect(a.ringDensity).toBe(b.ringDensity);
+    });
+
+    it("B/C. render-level dwell test: 0.2s/0.5s/1.0s/2.0s dwell place particles at the EXACT same radii (same seeded random, dwell doesn't affect accept/reject) while total drawn density rises monotonically", () => {
+      const checkpoints = [200, 500, 1000, 2000];
+      const radiiAtCheckpoint: number[][] = [];
+      const totalAlphaAtCheckpoint: number[] = [];
+      for (const t of checkpoints) {
+        const engine = new SprayBrushEngine();
+        engine.beginStroke();
+        // Distance-based dwell detection doesn't care about step size (only
+        // `point.timestamp - previous.timestamp`), so ONE warm-up call at
+        // t=0 (establishing `previous`, contributing 0 dwell time since
+        // `previous` was null for it) followed by ONE measured call at
+        // t=`t` accumulates exactly `t` ms of dwell — same total the
+        // swept-rail dwell test above reaches by walking straight to each
+        // checkpoint. The warm-up's own particles are drawn into a
+        // throwaway context so only the MEASURED call's particles get
+        // compared below.
+        const warmup: StrokePoint = { x: 0, y: 0, timestamp: 0, velocity: 0, width: 42, opacity: 1 };
+        engine.renderSegment(segmentRecordingContext().ctx, null, warmup, "#ffffff", pink, createStrokeRandom(1));
+        const point: StrokePoint = { x: 0, y: 0, timestamp: t, velocity: 0, width: 42, opacity: 1 };
+        const { ctx, arcs } = segmentRecordingContext();
+        // A FRESH seeded random for every checkpoint's measured call, so
+        // the accept/reject and placement sequence it drives is identical
+        // regardless of how much dwell time has accumulated — only
+        // `dwellOpacityScale` (and therefore drawn alpha) differs between
+        // checkpoints, never the geometry.
+        engine.renderSegment(ctx, warmup, point, "#ffffff", pink, createStrokeRandom(9));
+        expect(arcs.length).toBeGreaterThan(0); // the field actually drew particles
+        radiiAtCheckpoint.push(arcs.map((a) => Math.hypot(a.x, a.y)).sort((x, y) => x - y));
+        totalAlphaAtCheckpoint.push(arcs.reduce((sum, a) => sum + a.alpha, 0));
+      }
+      // Same seeded random sequence drives BOTH accept/reject AND particle
+      // placement/size every single call, and none of that depends on
+      // dwell — only the drawn alpha does — so the exact radii drawn must
+      // match at every checkpoint.
+      for (let i = 1; i < radiiAtCheckpoint.length; i += 1) {
+        expect(radiiAtCheckpoint[i].length).toBe(radiiAtCheckpoint[0].length);
+        for (let j = 0; j < radiiAtCheckpoint[0].length; j += 1) {
+          expect(radiiAtCheckpoint[i][j]).toBeCloseTo(radiiAtCheckpoint[0][j], 5);
+        }
+      }
+      // Density (here, total accumulated particle alpha) rises monotonically with dwell.
+      for (let i = 1; i < totalAlphaAtCheckpoint.length; i += 1) {
+        expect(totalAlphaAtCheckpoint[i]).toBeGreaterThanOrEqual(totalAlphaAtCheckpoint[i - 1]);
+      }
+      expect(totalAlphaAtCheckpoint[totalAlphaAtCheckpoint.length - 1]).toBeGreaterThan(totalAlphaAtCheckpoint[0]);
+    });
+
+    it("stochastic field particles land at a real spread of radii, not concentrated at one exact digital-circle radius — a live proxy for 'not a perfectly circular ring'", () => {
+      const engine = new SprayBrushEngine();
+      engine.beginStroke();
+      const { ctx, arcs } = segmentRecordingContext();
+      const point: StrokePoint = { x: 100, y: 100, timestamp: 0, velocity: 0, width: 42, opacity: 1 };
+      engine.renderSegment(ctx, null, point, "#ffffff", pink, createStrokeRandom(2));
+      expect(arcs.length).toBeGreaterThan(15);
+      const radii = arcs.map((a) => Math.hypot(a.x - 100, a.y - 100));
+      const distinctRadii = new Set(radii.map((r) => Math.round(r * 10) / 10));
+      expect(distinctRadii.size).toBeGreaterThan(5); // real spread, not one repeated exact radius
+      // Not every particle sits at the exact same angle either.
+      const angles = arcs.map((a) => Math.round((Math.atan2(a.y - 100, a.x - 100) * 180) / Math.PI));
+      expect(new Set(angles).size).toBeGreaterThan(5);
+    });
+
+    it("never draws through renderPinkDotDualPlume's OLD arc-stroke rail construction for a stationary Pink Dot Fat dwell", () => {
+      const engine = new SprayBrushEngine();
+      const { ctx, strokes } = segmentRecordingContext();
+      const point: StrokePoint = { x: 40, y: 40, timestamp: 0, velocity: 0, width: 42, opacity: 1 };
+      engine.renderSegment(ctx, null, point, "#ffffff", pink, createStrokeRandom(1));
+      const zones = resolvePinkDotOuterFieldZones(mediumState.outer);
+      expect(zones).not.toBeNull();
+      if (!zones) return;
+      expect(pinkDotBandStrokes(strokes, zones).length).toBe(0);
+    });
+
+    it("track-marks (plumeStochasticStationary: false) still renders a true stationary dwell through the OLD arc-stroke construction, unaffected", () => {
+      // Note: `arcs` isn't asserted to be empty here — Pink Dot's (untouched)
+      // overspray particle layer also draws via arc+fill regardless of cap,
+      // so it alone would populate `arcs` even with the stochastic field
+      // fully absent. The band-stroke count is what actually distinguishes
+      // "still using the old construction" from Pink Dot Fat's new one.
+      const engine = new SprayBrushEngine();
+      const { ctx, strokes } = segmentRecordingContext();
+      const point: StrokePoint = { x: 40, y: 40, timestamp: 0, velocity: 0, width: 42, opacity: 1 };
+      engine.renderSegment(ctx, null, point, "#ffffff", trackMarks, createStrokeRandom(1));
+      const zones = resolvePinkDotOuterFieldZones(resolvePinkDotDualPlume(trackMarks, { sprayAngle: 0, sprayDistance: 1, sprayOutput: 1 }, 0, resolveSprayDynamics(trackMarks, 0, 42)).outer);
+      expect(zones).not.toBeNull();
+      if (!zones) return;
+      expect(pinkDotBandStrokes(strokes, zones).length).toBe(2);
     });
   });
 

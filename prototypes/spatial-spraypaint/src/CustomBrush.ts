@@ -18,6 +18,10 @@ export type BrushProvenance = "physical-reference" | "digital-effect" | "custom-
 const BUILT_IN_PROVENANCE: Record<SprayCapId, BrushProvenance> = {
   "new-york-fat": "physical-reference",
   "pink-dot-fat": "physical-reference",
+  // Temporary preservation cap (see SprayCapPresets.ts's own comment on the
+  // "track-marks" entry) — a digital snapshot of a prior build, not itself
+  // a physical-cap reference.
+  "track-marks": "digital-effect",
   "astro-fat": "physical-reference",
   "german-fat": "physical-reference",
   "lego-thin": "physical-reference",

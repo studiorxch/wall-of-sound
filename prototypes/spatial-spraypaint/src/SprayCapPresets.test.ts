@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest";
 import { getSprayCapPreset, mapVelocityToDensity, resolveSprayDynamics, SPRAY_CAP_PRESETS } from "./SprayCapPresets";
 
 describe("spray cap presets", () => {
-  it("defines all eleven graffiti cap families plus Rectangular Transversal, Fuzz Fat, Wiggly Needle, Ring/Donut, and Dry/Streak", () => {
-    expect(SPRAY_CAP_PRESETS).toHaveLength(16);
+  it("defines all eleven graffiti cap families plus Rectangular Transversal, Fuzz Fat, Wiggly Needle, Ring/Donut, Dry/Streak, and the temporary Track Marks preservation cap", () => {
+    expect(SPRAY_CAP_PRESETS).toHaveLength(17);
     expect(SPRAY_CAP_PRESETS.map((preset) => preset.id)).toEqual([
-      "new-york-fat", "pink-dot-fat", "astro-fat", "german-fat",
+      "new-york-fat", "pink-dot-fat", "track-marks", "astro-fat", "german-fat",
       "lego-thin", "universal-thin", "level-1", "new-york-thin",
       "calligraphy", "transversal-slot", "needle", "wiggly-needle", "soft-fade", "fuzz-fat",
       "ring-donut", "dry-streak",
@@ -213,9 +213,9 @@ describe("Pink Dot Fat dual-plume fields", () => {
     expect(pink.plumeFlareStrength).toBeGreaterThan(0);
   });
 
-  it("gives every other cap all seven plume fields at exactly 0, and depositionShape 'plume' only on Pink Dot Fat", () => {
+  it("gives every other cap all seven plume fields at exactly 0, and depositionShape 'plume' only on Pink Dot Fat and its temporary track-marks twin", () => {
     for (const preset of SPRAY_CAP_PRESETS) {
-      if (preset.id === "pink-dot-fat") continue;
+      if (preset.id === "pink-dot-fat" || preset.id === "track-marks") continue;
       expect(preset.depositionShape).not.toBe("plume");
       expect(preset.plumeRingRadius).toBe(0);
       expect(preset.plumeRingThickness).toBe(0);
@@ -225,6 +225,16 @@ describe("Pink Dot Fat dual-plume fields", () => {
       expect(preset.plumeDistanceGain).toBe(0);
       expect(preset.plumeFlareStrength).toBe(0);
     }
+  });
+
+  it("keeps track-marks a byte-for-byte numeric twin of Pink Dot Fat except for plumeStochasticStationary — the temporary preservation cap must not drift", () => {
+    const pink = getSprayCapPreset("pink-dot-fat");
+    const trackMarks = getSprayCapPreset("track-marks");
+    const { id: _pinkId, name: _pinkName, plumeStochasticStationary: _pinkFlag, ...pinkRest } = pink;
+    const { id: _tmId, name: _tmName, plumeStochasticStationary: _tmFlag, ...trackMarksRest } = trackMarks;
+    expect(trackMarksRest).toEqual(pinkRest);
+    expect(pink.plumeStochasticStationary).toBe(true);
+    expect(trackMarks.plumeStochasticStationary).toBe(false);
   });
 
   it("retires Pink Dot Fat from the generic (dormant) halo mechanism entirely — every halo field is now 0, same as every other cap", () => {

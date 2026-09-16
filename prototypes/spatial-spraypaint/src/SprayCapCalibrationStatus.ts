@@ -19,6 +19,7 @@ export type CalibrationClassification = "VERIFIED" | "PROVISIONAL" | "NEEDS_CALI
 const SPRAY_CAP_CLASSIFICATION: Record<SprayCapId, CalibrationClassification> = {
   "new-york-fat": "PROVISIONAL",
   "pink-dot-fat": "NEEDS_CALIBRATION",
+  "track-marks": "DIGITAL_EFFECT",
   "astro-fat": "PROVISIONAL",
   "german-fat": "NEEDS_CALIBRATION",
   "lego-thin": "PROVISIONAL",

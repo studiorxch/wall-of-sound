@@ -447,6 +447,97 @@ export function resolvePinkDotOuterFieldZones(outer: PinkDotOuterState): PinkDot
 }
 
 /**
+ * Pink Dot's TRUE stationary aerosol deposition field — a real physical
+ * radial DENSITY CURVE, not four hard-edged vector zones. `densityAt(r)`
+ * is `moatFloor + ringBump(r) + mistTail(r)`: a small constant floor (the
+ * separation is a genuine density MINIMUM, never literal zero — a real can
+ * always deposits a FEW stray particles there), a gaussian bump centered
+ * on the ring's own radius, and a one-sided exponential tail starting at
+ * the ring's outer edge that decays continuously outward with no radius
+ * where it just stops. This is ONE continuous model, reused unchanged for
+ * close/medium/far — the only thing that varies between distances is
+ * `outer.ringRadius`/`outer.mistRadius`/`outer.ringOpacity`/
+ * `outer.mistOpacity`, already resolved by `resolvePinkDotDualPlume` from
+ * `sprayDistance` alone (dwell/time never reaches this function at all,
+ * structurally — see `renderPinkDotStochasticOuterField`, which is the
+ * only caller and applies dwell as a density multiplier outside this pure
+ * curve, the same discipline `resolvePinkDotOuterFieldZones` already
+ * uses).
+ *
+ * `moatRadius`/`moatDensity` are read directly off this curve (a numeric
+ * search for its own local minimum between the core's edge and the ring's
+ * peak) rather than independently chosen, so a retune of the ring/mist
+ * bump shapes below can never silently desync the reported moat from what
+ * actually renders.
+ */
+export interface PinkDotStationaryProfile {
+  coreRadius: number;
+  coreDensity: number;
+  moatRadius: number;
+  moatDensity: number;
+  ringRadius: number;
+  ringDensity: number;
+  mistRadius: number;
+  mistDensity: number;
+  /** The full continuous radial density curve — the SAME function driving both the numeric readout above and where `renderPinkDotStochasticOuterField` places its particles. */
+  densityAt: (r: number) => number;
+}
+
+/** Baseline density inside the separation gap, as a fraction of the ring's own peak — small but structurally nonzero. */
+const PINK_DOT_STATIONARY_MOAT_FLOOR_RATIO = 0.05;
+/** The ring bump's gaussian sigma, as a fraction of its own radius — wide enough to read as a band, narrow enough to stay a distinct peak from the core. */
+const PINK_DOT_STATIONARY_RING_WIDTH_RATIO = 0.22;
+/** The mist tail's exponential decay length, as a fraction of the gap between the ring and mist radii already resolved by `resolvePinkDotDualPlume`. */
+const PINK_DOT_STATIONARY_MIST_DECAY_RATIO = 0.6;
+
+export function resolvePinkDotStationaryProfile(inner: PinkDotInnerState, outer: PinkDotOuterState): PinkDotStationaryProfile | null {
+  if (outer.ringRadius <= 0 || outer.ringOpacity <= 0 || outer.mistRadius <= outer.ringRadius) return null;
+  const ringWidth = Math.max(1, outer.ringRadius * PINK_DOT_STATIONARY_RING_WIDTH_RATIO);
+  const ringOuterEdge = outer.ringRadius + ringWidth;
+  const mistDecay = Math.max(1, (outer.mistRadius - outer.ringRadius) * PINK_DOT_STATIONARY_MIST_DECAY_RATIO);
+  const moatFloor = outer.ringOpacity * PINK_DOT_STATIONARY_MOAT_FLOOR_RATIO;
+
+  const densityAt = (r: number): number => {
+    const fromRing = r - outer.ringRadius;
+    const ringBump = outer.ringOpacity * Math.exp(-(fromRing * fromRing) / (2 * ringWidth * ringWidth));
+    const beyondRing = r - ringOuterEdge;
+    // A smooth sigmoid gate (not a hard `beyondRing > 0` step) blends the
+    // mist term in continuously around the ring's own outer edge — a hard
+    // step would jump the curve from 0 straight to `mistOpacity` at one
+    // exact radius, which is itself the kind of "ends at a hard radius"
+    // discontinuity this field is meant to avoid.
+    const gate = 1 / (1 + Math.exp((-4 * beyondRing) / ringWidth));
+    const mistTail = outer.mistOpacity * Math.exp(-Math.max(0, beyondRing) / mistDecay) * gate;
+    return moatFloor + ringBump + mistTail;
+  };
+
+  // Numeric search, not a closed form — stays correct however the bump
+  // shapes above get retuned, same reasoning `resolvePinkDotOuterFieldZones`
+  // documents for the moving-rail system's own (differently-built) moat.
+  let moatRadius = inner.radius;
+  let moatDensity = densityAt(inner.radius);
+  const steps = 48;
+  for (let i = 1; i <= steps; i += 1) {
+    const r = inner.radius + ((outer.ringRadius - inner.radius) * i) / steps;
+    const d = densityAt(r);
+    if (d < moatDensity) { moatDensity = d; moatRadius = r; }
+  }
+
+  const mistRadius = ringOuterEdge + mistDecay; // one decay-length beyond the ring's own outer edge
+  return {
+    coreRadius: inner.radius,
+    coreDensity: inner.opacity,
+    moatRadius,
+    moatDensity,
+    ringRadius: outer.ringRadius,
+    ringDensity: densityAt(outer.ringRadius),
+    mistRadius,
+    mistDensity: densityAt(mistRadius),
+    densityAt,
+  };
+}
+
+/**
  * How strongly Pink Dot's own resolved `width` AND `velocity` each lag
  * their raw per-point values (see `SprayBrushEngine.pinkDotSmoothedWidth`
  * / `pinkDotSmoothedVelocity`) — the fraction of the gap to the new raw
@@ -866,6 +957,15 @@ export class SprayBrushEngine {
    * `dwellOpacityScale` (see `resolvePinkDotDwellScale`) scales BOTH
    * layers' DENSITY together for a genuinely fresh dwell point — never
    * their geometry, which is fixed by `sprayDistance` alone.
+   *
+   * The ONE exception: a cap with `plumeStochasticStationary` set (Pink Dot
+   * Fat, not its temporary `track-marks` twin) renders a TRUE stationary
+   * dwell (`start === point`) through the new organic aerosol deposition
+   * field (`renderPinkDotStochasticOuterField`) instead of the swept-rail
+   * arc-stroke every `"plume"` cap otherwise uses. A moving segment always
+   * takes the untouched `renderPinkDotOuterField` path either way — this
+   * branch can only ever change what a genuinely stationary point looks
+   * like.
    */
   private renderPinkDotDualPlume(
     ctx: CanvasRenderingContext2D,
@@ -880,8 +980,69 @@ export class SprayBrushEngine {
     fillMode: boolean,
     cellKey: string | null,
   ): void {
-    this.renderPinkDotOuterField(ctx, start, point, colorHex, state.outer, angle, dwellOpacityScale);
+    const isStationary = start.x === point.x && start.y === point.y;
+    if (isStationary && cap.plumeStochasticStationary) {
+      this.renderPinkDotStochasticOuterField(ctx, point, colorHex, cap, state.inner, state.outer, dwellOpacityScale, random);
+    } else {
+      this.renderPinkDotOuterField(ctx, start, point, colorHex, state.outer, angle, dwellOpacityScale);
+    }
     this.renderPinkDotInnerCore(ctx, start, point, colorHex, cap, state.inner, angle, dwellOpacityScale, random, fillMode, cellKey);
+  }
+
+  /**
+   * Pink Dot's stationary aerosol deposition field — scattered dabs sampled
+   * from `resolvePinkDotStationaryProfile`'s continuous density curve, not
+   * stroked arcs. Each candidate particle's radius is drawn uniformly over
+   * the field's span and accepted via rejection sampling proportional to
+   * `densityAt(r)`, so particles naturally cluster where the ring peaks,
+   * thin out (without ever fully vanishing — the profile's own floor keeps
+   * a few landing there) through the moat, and fade out through the mist
+   * at whatever density the curve itself has fallen to, never stopping at
+   * a fixed radius. Each accepted particle also gets its own angular AND
+   * radial jitter, so the ring reads as a real aerosol edge breaking up
+   * around its own circumference — never a perfect vector circle. Flare
+   * (angle-driven anisotropy) is out of scope for this stationary-only
+   * reset — see the brief this shipped under — so this field is always
+   * circularly symmetric.
+   */
+  private renderPinkDotStochasticOuterField(
+    ctx: CanvasRenderingContext2D,
+    point: StrokePoint,
+    colorHex: string,
+    cap: SprayCapPreset,
+    inner: PinkDotInnerState,
+    outer: PinkDotOuterState,
+    dwellOpacityScale: number,
+    random: () => number,
+  ): void {
+    const profile = resolvePinkDotStationaryProfile(inner, outer);
+    if (!profile) return;
+    const peakDensity = Math.max(profile.ringDensity, profile.moatDensity, profile.mistDensity, 1e-6);
+    const innerBound = Math.max(0, profile.coreRadius * 0.85);
+    const outerBound = profile.mistRadius + (profile.mistRadius - profile.ringRadius) * 1.5;
+    if (outerBound <= innerBound) return;
+    // Scaled off the cap's own particleCount so a sparser/denser cap's
+    // overspray character carries over into this field's own texture,
+    // rather than a fixed magic number every plume cap would share.
+    const candidateCount = Math.round(180 * (cap.particleCount / 26));
+    const baseAlpha = Math.min(0.5, 0.17 * dwellOpacityScale);
+
+    for (let i = 0; i < candidateCount; i += 1) {
+      const r = innerBound + random() * (outerBound - innerBound);
+      const density = profile.densityAt(r);
+      if (random() * peakDensity > density) continue; // denser radii accept more often
+      const theta = random() * Math.PI * 2;
+      const radialJitter = (random() - 0.5) * Math.max(2, profile.ringRadius * 0.12);
+      const rr = Math.max(0, r + radialJitter);
+      const x = point.x + Math.cos(theta) * rr;
+      const y = point.y + Math.sin(theta) * rr;
+      const dabAlpha = Math.max(0, Math.min(1, baseAlpha * (0.5 + random() * 0.9) * (0.15 + density / peakDensity)));
+      const dabSize = Math.max(0.5, cap.particleSize * (1.5 + random() * 1.6));
+      ctx.fillStyle = this.hexToRgba(colorHex, dabAlpha);
+      ctx.beginPath();
+      ctx.arc(x, y, dabSize, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
 
   /**
