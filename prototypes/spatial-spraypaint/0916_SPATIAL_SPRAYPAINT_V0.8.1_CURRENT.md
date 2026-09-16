@@ -86,4 +86,4 @@ If a future pass wants Flair on more than one brush, the smallest correct next s
 
 ## Commit
 
-`<pending — see final report>` — "feat: Spatial Spraypaint Brush Studio Flair controls — mode selector, per-(brush,mode) session overrides, live-preview, extended-range readout, Track Marks only"
+`ee911e6` — "feat: Spatial Spraypaint Brush Studio Flair controls — mode selector, per-(brush,mode) session overrides, live-preview, extended-range readout, Track Marks only"
