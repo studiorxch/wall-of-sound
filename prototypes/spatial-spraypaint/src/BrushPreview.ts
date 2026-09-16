@@ -4,6 +4,12 @@ import { createStrokeRandom, SprayBrushEngine } from "./SprayBrushEngine";
 import { getSprayCapPreset, type SprayCapId, type SprayCapPreset } from "./SprayCapPresets";
 import { getMarkerVariant } from "./PaintMarkerEngine";
 import { type StrokePoint } from "./types";
+import {
+  denormalizeTrackMarksFlairWidth,
+  resolveFlairModulationWithParams,
+  type EffectiveFlairParams,
+} from "./FlairCurves";
+import { type FlairModeId } from "./ToolTaxonomy";
 
 /**
  * Deterministic brush/cap preview rendering. Reuses the real SprayBrushEngine /
@@ -131,6 +137,51 @@ export function renderSprayBrushStudioPreview(
   engine.renderSegment(ctx, null, points[0], PREVIEW_COLOR, preset, random, coverage, fillMode, sprayAngle);
   for (let i = 1; i < points.length; i += 1) {
     engine.renderSegment(ctx, points[i - 1], points[i], PREVIEW_COLOR, preset, random, coverage, fillMode, sprayAngle);
+  }
+}
+
+/**
+ * Brush Studio's Track-Marks-only Flair preview (Brush Studio Flair Controls
+ * build brief, section 5). Sweeps simulated distance near -> far -> near
+ * ACROSS the preview stroke's own points — a real, deterministic call to
+ * `resolveFlairModulationWithParams`, the exact function the live Alt-drag
+ * routing hook in `main.ts` also calls — so one static preview image shows
+ * the thick<->thin/output modulation directly, with no animation loop and
+ * no faked preview. Still the real `SprayBrushEngine`.
+ */
+export function renderTrackMarksFlairPreview(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  preset: SprayCapPreset,
+  mode: FlairModeId,
+  params: EffectiveFlairParams,
+): void {
+  ctx.clearRect(0, 0, width, height);
+  const basePoints = buildStudioPreviewPoints(width, height, clampStrokeWidth(preset.baseRadius * 2, height, 0.16));
+  const points: StrokePoint[] = basePoints.map((point, index) => {
+    const progress = index / Math.max(1, basePoints.length - 1);
+    // Triangle wave: near (0) -> far (1) -> near (0) across the stroke's own length.
+    const distance01 = progress <= 0.5 ? progress * 2 : (1 - progress) * 2;
+    const modulation = resolveFlairModulationWithParams(mode, params, {
+      distance01,
+      output: point.opacity,
+      velocity: point.velocity,
+      angle: 0,
+    });
+    const resolvedSize = denormalizeTrackMarksFlairWidth(modulation.width01);
+    return {
+      ...point,
+      width: clampStrokeWidth(resolvedSize * 2, height, 0.16),
+      opacity: Math.max(0, Math.min(1, modulation.output)),
+    };
+  });
+  const engine = new SprayBrushEngine();
+  const random = createStrokeRandom(PREVIEW_SEED);
+  engine.beginStroke();
+  engine.renderSegment(ctx, null, points[0], PREVIEW_COLOR, preset, random);
+  for (let i = 1; i < points.length; i += 1) {
+    engine.renderSegment(ctx, points[i - 1], points[i], PREVIEW_COLOR, preset, random);
   }
 }
 

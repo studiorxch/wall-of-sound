@@ -5,7 +5,18 @@ import {
   type SprayPropertyKey,
   type SprayPropertyOverride,
 } from "./BrushProperties";
-import { renderMarkerBrushStudioPreview, renderSprayBrushStudioPreview } from "./BrushPreview";
+import { renderMarkerBrushStudioPreview, renderSprayBrushStudioPreview, renderTrackMarksFlairPreview } from "./BrushPreview";
+import {
+  getFlairPropertyRows,
+  isFlairModeModified,
+  resolveEffectiveFlairParams,
+  type FlairOverrideStore,
+  type FlairParameterOverride,
+  type FlairPropertyKey,
+  type FlairPropertyRow,
+} from "./FlairProperties";
+import { resolveTrackMarksFlairSizeRange } from "./FlairCurves";
+import { type FlairModeId } from "./ToolTaxonomy";
 import {
   duplicateSprayBrush,
   renameCustomSprayBrush,
@@ -162,6 +173,21 @@ export interface BrushStudioDeps {
   setSprayProperty: (capId: string, patch: SprayPropertyOverride) => void;
   resetSprayProperty: (capId: string, key: SprayPropertyKey) => void;
   resetSprayBrush: (capId: string) => void;
+  /**
+   * Track Marks' own Flair session state (Brush Studio Flair Controls build
+   * brief). `getTrackMarksFlairMode`/`setTrackMarksFlairMode` are a single
+   * current-mode pointer (not per-cap — only Track Marks consumes Flair at
+   * runtime in this pass, see the checkpoint doc); `getFlairOverrides` and
+   * the three mutators below key by BOTH cap id and mode (see
+   * `FlairProperties.ts`) so one mode's session tweaks never leak into
+   * another mode's defaults.
+   */
+  getFlairOverrides: () => FlairOverrideStore;
+  getTrackMarksFlairMode: () => FlairModeId;
+  setTrackMarksFlairMode: (mode: FlairModeId) => void;
+  setFlairProperty: (capId: string, mode: FlairModeId, patch: FlairParameterOverride) => void;
+  resetFlairProperty: (capId: string, mode: FlairModeId, key: FlairPropertyKey) => void;
+  resetFlairMode: (capId: string, mode: FlairModeId) => void;
   setMarkerWidth: (id: MarkerVariantId, width: number) => void;
   setCustomSprayRegistry: (registry: CustomSprayBrushRegistry) => void;
   /** Opens the Spray Cap Calibration Bench with the given cap as its Left brush. Spray-only — see `renderMarkerProperties`, which disables the button entirely. */
@@ -173,6 +199,14 @@ const PROPERTY_GROUP_LABELS: ReadonlyArray<{ key: "general" | "shape" | "paint" 
   { key: "shape", label: "Shape" },
   { key: "paint", label: "Paint" },
   { key: "motion", label: "Motion" },
+];
+
+/** Section 8 of the build brief: Brush Studio's Mode selector is the primary way to change Flair, not the "F" shortcut (kept only as a secondary accelerator — see `main.ts`'s `cycleTrackMarksFlairMode`). */
+const FLAIR_MODE_SELECT_OPTIONS: ReadonlyArray<{ id: FlairModeId; label: string }> = [
+  { id: "off", label: "Off" },
+  { id: "wall", label: "Wall" },
+  { id: "blackbook", label: "Blackbook" },
+  { id: "wild", label: "Wild" },
 ];
 
 export class BrushStudioController {
@@ -339,17 +373,26 @@ export class BrushStudioController {
     badge.dataset.provenance = provenance;
     this.el("brush-studio-custom-note").toggleAttribute("hidden", !isCustom);
 
-    const canvas = this.el<HTMLCanvasElement>("brush-studio-preview");
-    const ctx = canvas.getContext("2d");
-    if (ctx) renderSprayBrushStudioPreview(ctx, canvas.width, canvas.height, preset as SprayCapPreset, effective);
+    this.renderPreviewCanvas(preset as SprayCapPreset, effective);
 
     const groups = getSprayPropertyGroups(preset as SprayCapPreset, effective, override);
     const body = this.el("brush-studio-property-groups");
-    body.replaceChildren(...PROPERTY_GROUP_LABELS.flatMap(({ key, label }) => {
+    // FLAIR (Track Marks only — see `buildFlairSection`) is inserted right
+    // after General and before Shape/Paint/Motion, per the build brief's
+    // "dedicated FLAIR group." Every other cap's panel is byte-identical to
+    // before this pass: `buildFlairSection` returns an empty array for them.
+    const [generalLabel, ...restLabels] = PROPERTY_GROUP_LABELS;
+    const generalRows = groups[generalLabel.key].length === 0 ? [] : [
+      this.buildFamilyLabel(generalLabel.label),
+      ...groups[generalLabel.key].map((row) => this.buildSprayPropertyRow(preset.id, row, isCustom)),
+    ];
+    const flairRows = preset.id === "track-marks" && !isCustom ? this.buildFlairSection(preset.id, preset as SprayCapPreset) : [];
+    const restRows = restLabels.flatMap(({ key, label }) => {
       const rows = groups[key];
       if (rows.length === 0) return [];
       return [this.buildFamilyLabel(label), ...rows.map((row) => this.buildSprayPropertyRow(preset.id, row, isCustom))];
-    }));
+    });
+    body.replaceChildren(...generalRows, ...flairRows, ...restRows);
 
     this.el<HTMLButtonElement>("brush-studio-reset-brush").disabled = isCustom || !isSprayBrushModified(override);
     this.el<HTMLButtonElement>("brush-studio-reset-brush").onclick = () => {
@@ -360,6 +403,158 @@ export class BrushStudioController {
     this.el<HTMLButtonElement>("brush-studio-duplicate").onclick = () => this.duplicateSelectedSprayBrush(preset);
     this.el<HTMLButtonElement>("brush-studio-calibrate").disabled = false;
     this.el<HTMLButtonElement>("brush-studio-calibrate").onclick = () => this.deps.openCalibrationBench(preset.id);
+  }
+
+  /**
+   * Renders the live preview canvas — the real `SprayBrushEngine` either
+   * way. Track Marks with an active (non-off) Flair mode gets the
+   * Flair-aware sweep (`renderTrackMarksFlairPreview`, build brief section
+   * 5); every other cap, and Track Marks with Flair off, gets the exact
+   * same `renderSprayBrushStudioPreview` call as before this pass.
+   */
+  private renderPreviewCanvas(preset: SprayCapPreset, effective: ReturnType<typeof resolveEffectiveSprayStyle>): void {
+    const canvas = this.el<HTMLCanvasElement>("brush-studio-preview");
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const mode = this.deps.getTrackMarksFlairMode();
+    if (preset.id === "track-marks" && mode !== "off") {
+      const override = this.deps.getFlairOverrides()[preset.id]?.[mode] ?? {};
+      const params = resolveEffectiveFlairParams(mode, override);
+      renderTrackMarksFlairPreview(ctx, canvas.width, canvas.height, preset, mode, params);
+      return;
+    }
+    renderSprayBrushStudioPreview(ctx, canvas.width, canvas.height, preset, effective);
+  }
+
+  /**
+   * The FLAIR group — Track Marks only (build brief section 4/1). Returns an
+   * empty array for a custom duplicate of Track Marks too (custom brushes
+   * have no live-paint identity of their own yet — see `CustomBrush.ts` —
+   * so Flair, which is keyed to the live `sprayCapId`, would have nothing
+   * real to attach to). A Mode selector is always shown; the five session
+   * controls and the Effective Range readout only render once a non-off
+   * mode is active, keeping `off`'s panel quiet (Creative Interface
+   * Doctrine: normal state stays visually quiet).
+   */
+  private buildFlairSection(capId: string, preset: SprayCapPreset): HTMLElement[] {
+    const mode = this.deps.getTrackMarksFlairMode();
+    const elements: HTMLElement[] = [this.buildFamilyLabel("Flair")];
+
+    const modeRow = document.createElement("div");
+    modeRow.className = "brush-studio-property-row";
+    const modeLabel = document.createElement("span");
+    modeLabel.className = "brush-studio-property-label";
+    modeLabel.textContent = "Mode";
+    const modeSelect = document.createElement("select");
+    modeSelect.className = "flair-mode-select";
+    modeSelect.setAttribute("aria-label", "Flair mode");
+    for (const option of FLAIR_MODE_SELECT_OPTIONS) {
+      const opt = document.createElement("option");
+      opt.value = option.id;
+      opt.textContent = option.label;
+      opt.selected = option.id === mode;
+      modeSelect.append(opt);
+    }
+    modeSelect.addEventListener("change", () => {
+      this.deps.setTrackMarksFlairMode(modeSelect.value as FlairModeId);
+      this.render();
+    });
+    modeRow.append(modeLabel, modeSelect);
+    elements.push(modeRow);
+
+    if (mode === "off") return elements;
+
+    const override = this.deps.getFlairOverrides()[capId]?.[mode] ?? {};
+    const effective = resolveEffectiveFlairParams(mode, override);
+    for (const row of getFlairPropertyRows(effective, override)) {
+      elements.push(this.buildFlairPropertyRow(capId, mode, preset, row));
+    }
+
+    const range = resolveTrackMarksFlairSizeRange(mode, effective);
+    const rangeRow = document.createElement("div");
+    rangeRow.className = "brush-studio-property-row readonly";
+    const rangeLabel = document.createElement("span");
+    rangeLabel.className = "brush-studio-property-label";
+    rangeLabel.textContent = "Effective Range";
+    const rangeValue = document.createElement("span");
+    rangeValue.className = "brush-studio-property-value";
+    rangeValue.textContent = `${Math.round(range.min)}–${Math.round(range.max)} wall units`;
+    rangeRow.append(rangeLabel, rangeValue);
+    elements.push(rangeRow);
+    // Build brief section 7: "ensure Brush Studio displays the true
+    // effective Track Marks width/range without lying/clamping." The
+    // compact `#brush-radius` slider's own max="72" HTML attribute still
+    // visually clamps its display for Wild (a shared control every physical
+    // cap also uses, correctly, at 72 — see the checkpoint doc for why it
+    // wasn't widened); this readout, and Duplicate/Reset above it, are
+    // never bound to that slider, so they show the true value regardless.
+    if (range.max > 72) {
+      const note = document.createElement("div");
+      note.className = "fill-mode-note";
+      note.textContent = "Exceeds the compact Size slider's own 72-unit display — this is the true value used when painting.";
+      elements.push(note);
+    }
+
+    const resetFlairButton = document.createElement("button");
+    resetFlairButton.className = "brush-studio-property-reset";
+    resetFlairButton.textContent = "Reset Flair";
+    resetFlairButton.disabled = !isFlairModeModified(override);
+    resetFlairButton.addEventListener("click", () => {
+      this.deps.resetFlairMode(capId, mode);
+      this.render();
+    });
+    elements.push(resetFlairButton);
+
+    return elements;
+  }
+
+  private buildFlairPropertyRow(capId: string, mode: FlairModeId, preset: SprayCapPreset, row: FlairPropertyRow): HTMLElement {
+    const wrap = document.createElement("div");
+    wrap.className = "brush-studio-property-row";
+
+    const label = document.createElement("span");
+    label.className = "brush-studio-property-label";
+    label.textContent = row.label;
+    wrap.append(label);
+
+    const input = document.createElement("input");
+    input.type = "range";
+    input.min = String(row.min);
+    input.max = String(row.max);
+    input.step = String(row.step);
+    input.value = String(row.value);
+    const readout = document.createElement("span");
+    readout.className = "brush-studio-property-value";
+    readout.textContent = row.value.toFixed(2);
+    input.addEventListener("input", () => {
+      const numeric = Number.parseFloat(input.value);
+      readout.textContent = numeric.toFixed(2);
+      this.deps.setFlairProperty(capId, mode, { [row.key]: numeric });
+      const override = this.deps.getFlairOverrides()[capId]?.[mode] ?? {};
+      const params = resolveEffectiveFlairParams(mode, override);
+      const canvas = this.el<HTMLCanvasElement>("brush-studio-preview");
+      const ctx = canvas.getContext("2d");
+      if (ctx) renderTrackMarksFlairPreview(ctx, canvas.width, canvas.height, preset, mode, params);
+    });
+    input.addEventListener("change", () => this.render());
+    wrap.append(input, readout);
+
+    if (row.modified) {
+      const dot = document.createElement("span");
+      dot.className = "brush-studio-modified-dot";
+      dot.title = "Modified from mode default";
+      wrap.append(dot);
+      const resetButton = document.createElement("button");
+      resetButton.className = "brush-studio-property-reset";
+      resetButton.textContent = "Reset";
+      resetButton.addEventListener("click", () => {
+        this.deps.resetFlairProperty(capId, mode, row.key);
+        this.render();
+      });
+      wrap.append(resetButton);
+    }
+
+    return wrap;
   }
 
   private buildSprayPropertyRow(capId: string, row: ReturnType<typeof getSprayPropertyGroups>["general"][number], isCustom: boolean): HTMLElement {

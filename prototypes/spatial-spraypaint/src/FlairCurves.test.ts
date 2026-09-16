@@ -2,10 +2,15 @@ import { describe, expect, it } from "vitest";
 import {
   FLAIR_CURVES,
   applyFlairOutputToPoint,
+  denormalizeTrackMarksFlairWidth,
   getFlairProControlMetadata,
+  inverseEffectiveWidthExpansion,
   inverseWidthExpansion,
+  normalizeTrackMarksFlairWidth,
   resolveDefaultFlairMode,
   resolveFlairModulation,
+  resolveFlairModulationWithParams,
+  resolveTrackMarksFlairSizeRange,
 } from "./FlairCurves";
 import type { StrokePoint } from "./types";
 
@@ -170,5 +175,86 @@ describe("pro-control metadata", () => {
     expect(metadata.flairRange).toBe(1);
     expect(metadata.bloomResponse).toBe(0);
     expect(metadata.outputFalloff).toBe(0);
+  });
+});
+
+describe("resolveFlairModulationWithParams -- Brush Studio Flair controls math", () => {
+  it("matches resolveFlairModulation exactly when params equal the mode's own canonical defaults (no override applied)", () => {
+    for (const mode of ["off", "wall", "blackbook", "wild"] as const) {
+      const params = getFlairProControlMetadata(mode);
+      for (const t of SAMPLE_T) {
+        const input = { distance01: t, output: 1, velocity: 0, angle: 0 };
+        const plain = resolveFlairModulation(mode, input);
+        const withParams = resolveFlairModulationWithParams(mode, params, input);
+        expect(withParams.width01).toBeCloseTo(plain.width01, 10);
+        expect(withParams.bloom01).toBeCloseTo(plain.bloom01, 10);
+        expect(withParams.output).toBeCloseTo(plain.output, 10);
+      }
+    }
+  });
+
+  it("scales the width range proportionally when flairRange is overridden, preserving the canonical curve's SHAPE (not a new equation)", () => {
+    const defaults = getFlairProControlMetadata("wall");
+    const doubledRange = { ...defaults, flairRange: defaults.flairRange * 2 };
+    for (const t of [0.25, 0.5, 0.75, 1]) {
+      const canonical = resolveFlairModulationWithParams("wall", defaults, { distance01: t, output: 1, velocity: 0, angle: 0 });
+      const scaled = resolveFlairModulationWithParams("wall", doubledRange, { distance01: t, output: 1, velocity: 0, angle: 0 });
+      expect(scaled.width01).toBeCloseTo(canonical.width01 * 2, 6);
+    }
+  });
+
+  it("uses flairAmount/flairSmoothing directly -- these were already exactly distanceSensitivity/transitionSmoothing, no scaling needed", () => {
+    const defaults = getFlairProControlMetadata("blackbook");
+    expect(defaults.flairAmount).toBe(FLAIR_CURVES.blackbook.distanceSensitivity);
+    expect(defaults.flairSmoothing).toBe(FLAIR_CURVES.blackbook.transitionSmoothing);
+  });
+
+  it("scales output falloff proportionally for wall (which has a real canonical falloff shape to scale)", () => {
+    const defaults = getFlairProControlMetadata("wall");
+    const halvedFalloff = { ...defaults, outputFalloff: defaults.outputFalloff / 2 };
+    const full = resolveFlairModulationWithParams("wall", defaults, { distance01: 1, output: 1, velocity: 0, angle: 0 });
+    const half = resolveFlairModulationWithParams("wall", halvedFalloff, { distance01: 1, output: 1, velocity: 0, angle: 0 });
+    expect(1 - half.output).toBeCloseTo((1 - full.output) / 2, 6);
+  });
+
+  it("leaves wild's output un-attenuated even with an overridden outputFalloff -- wild's canonical shape has no falloff to scale (honest, not faked)", () => {
+    const defaults = getFlairProControlMetadata("wild");
+    const boostedFalloff = { ...defaults, outputFalloff: 0.9 };
+    const result = resolveFlairModulationWithParams("wild", boostedFalloff, { distance01: 1, output: 1, velocity: 0, angle: 0 });
+    expect(result.output).toBe(1);
+  });
+});
+
+describe("inverseEffectiveWidthExpansion -- seeding under an overridden Range", () => {
+  it("round-trips through resolveFlairModulationWithParams's own width01 for a rescaled range", () => {
+    const defaults = getFlairProControlMetadata("wall");
+    const params = { ...defaults, flairRange: defaults.flairRange * 1.5 };
+    for (const target of [0, 0.3, 0.9, params.flairRange]) {
+      const seededT = inverseEffectiveWidthExpansion("wall", params, target);
+      const result = resolveFlairModulationWithParams("wall", params, { distance01: seededT, output: 1, velocity: 0, angle: 0 });
+      expect(result.width01).toBeCloseTo(target, 3);
+    }
+  });
+});
+
+describe("Track Marks size denormalization", () => {
+  it("normalize/denormalize round-trip", () => {
+    for (const width01 of [0, 0.4, 1, 1.6]) {
+      const size = denormalizeTrackMarksFlairWidth(width01);
+      expect(normalizeTrackMarksFlairWidth(size)).toBeCloseTo(width01, 8);
+    }
+  });
+
+  it("Wild's default effective range genuinely exceeds the generic 72-unit display boundary, with no clamping in the resolved value", () => {
+    const params = getFlairProControlMetadata("wild");
+    const range = resolveTrackMarksFlairSizeRange("wild", params);
+    expect(range.max).toBeGreaterThan(72);
+    // The exact unclamped value denormalizeTrackMarksFlairWidth produces at width01=1.6 -- proves nothing along the way silently clamps to 72.
+    expect(range.max).toBeCloseTo(denormalizeTrackMarksFlairWidth(1.6), 6);
+  });
+
+  it("Wall and Blackbook's default effective ranges stay within the generic 72-unit boundary", () => {
+    expect(resolveTrackMarksFlairSizeRange("wall", getFlairProControlMetadata("wall")).max).toBeLessThanOrEqual(72);
+    expect(resolveTrackMarksFlairSizeRange("blackbook", getFlairProControlMetadata("blackbook")).max).toBeLessThanOrEqual(72);
   });
 });

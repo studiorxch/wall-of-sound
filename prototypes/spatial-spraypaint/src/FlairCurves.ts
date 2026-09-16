@@ -212,3 +212,110 @@ export function getFlairProControlMetadata(mode: FlairModeId): FlairProControlMe
     outputFalloff: 1 - curves.outputAttenuation(1),
   };
 }
+
+// ---------------------------------------------------------------------------
+// Brush Studio Flair controls (V0.8.1) — the FIVE pro-control scalars above
+// are not just readouts, they're the EDITABLE surface a Brush Studio session
+// override can move. Critically, this does NOT change any curve's equation
+// or shape: `resolveFlairModulationWithParams` reuses each mode's own
+// `widthExpansion`/`textureBloom`/`outputAttenuation` SHAPE unmodified and
+// only rescales its MAGNITUDE by the ratio between the effective (possibly
+// overridden) scalar and that mode's own canonical scalar — "control
+// surface, not new physics," per the build brief. `flairAmount` and
+// `flairSmoothing` map directly (they were already exactly these scalars —
+// `distanceSensitivity`/`transitionSmoothing` — with no curve shape to
+// preserve).
+
+/** `EffectiveFlairParams` is structurally `FlairProControlMetadata` — the same five scalars, just possibly overridden rather than read straight off a mode's canonical curve. One shape, two roles (baseline vs. effective), kept as a type alias so the two are always interchangeable. */
+export type EffectiveFlairParams = FlairProControlMetadata;
+
+/** Ratio-scale one canonical curve shape by how far `effective` has moved from `baseline`; 1 (no-op) when the baseline itself is 0 (nothing to scale against) and the effective value is also 0. */
+function scaleRatio(effective: number, baseline: number): number {
+  if (baseline === 0) return effective === 0 ? 1 : effective;
+  return effective / baseline;
+}
+
+/** The effective, possibly-rescaled `widthExpansion` curve for a mode + params — used by both `resolveFlairModulationWithParams` and `inverseEffectiveWidthExpansion` so seeding and live modulation always agree on the same shape. */
+function resolveEffectiveWidthExpansionCurve(mode: FlairModeId, params: EffectiveFlairParams): (t: number) => number {
+  const baseline = getFlairProControlMetadata(mode);
+  const rangeScale = scaleRatio(params.flairRange, baseline.flairRange);
+  return (t: number) => FLAIR_CURVES[mode].widthExpansion(t) * rangeScale;
+}
+
+/**
+ * Same role as `resolveFlairModulation`, but driven by an explicit
+ * `EffectiveFlairParams` bundle (a mode default merged with a Brush Studio
+ * session override — see `FlairProperties.ts`) instead of reading the mode's
+ * canonical scalars directly. `off` is unaffected regardless of `params`: it
+ * is never editable in Brush Studio and its own canonical shape already
+ * ignores every scalar (see module doc).
+ */
+export function resolveFlairModulationWithParams(
+  mode: FlairModeId,
+  params: EffectiveFlairParams,
+  input: FlairModulationInput,
+): FlairModulationResult {
+  const baseline = getFlairProControlMetadata(mode);
+  const base = FLAIR_CURVES[mode];
+  const t = clamp01(input.distance01);
+  const bloomScale = scaleRatio(params.bloomResponse, baseline.bloomResponse);
+  const falloffScale = scaleRatio(params.outputFalloff, baseline.outputFalloff);
+  const widthExpansion = resolveEffectiveWidthExpansionCurve(mode, params);
+  const attenuation = 1 - (1 - base.outputAttenuation(t)) * falloffScale;
+  return {
+    ...input,
+    width01: widthExpansion(t),
+    bloom01: base.textureBloom(t) * bloomScale,
+    endpointAuthority: base.endpointShapingAuthority,
+    output: input.output * attenuation,
+  };
+}
+
+/** Numeric inverse of `resolveEffectiveWidthExpansionCurve` — same binary-search technique as `inverseWidthExpansion`, generalized to an overridden `flairRange`. Used to seed a fresh drag from the cap's current size under whatever Range is currently in effect for this brush + mode. */
+export function inverseEffectiveWidthExpansion(mode: FlairModeId, params: EffectiveFlairParams, targetWidth01: number): number {
+  const curve = resolveEffectiveWidthExpansionCurve(mode, params);
+  let lo = 0;
+  let hi = 1;
+  for (let i = 0; i < 24; i++) {
+    const mid = (lo + hi) / 2;
+    if (curve(mid) < targetWidth01) lo = mid; else hi = mid;
+  }
+  return (lo + hi) / 2;
+}
+
+/**
+ * Track Marks' own wall-unit size range for Flair's normalized `width01` —
+ * a floor plus a span, shared by the live routing hook (`main.ts`) and
+ * Brush Studio's preview/readouts so both denormalize identically. The floor
+ * matches the legacy Alt-drag clamp's own floor (see `main.ts`) so toggling
+ * Flair on/off never jumps the resolved size range.
+ */
+export const TRACK_MARKS_FLAIR_MIN_SIZE = 4;
+export const TRACK_MARKS_FLAIR_SIZE_SPAN = 60;
+
+export function denormalizeTrackMarksFlairWidth(width01: number): number {
+  return TRACK_MARKS_FLAIR_MIN_SIZE + width01 * TRACK_MARKS_FLAIR_SIZE_SPAN;
+}
+
+export function normalizeTrackMarksFlairWidth(size: number): number {
+  return Math.max(0, (size - TRACK_MARKS_FLAIR_MIN_SIZE) / TRACK_MARKS_FLAIR_SIZE_SPAN);
+}
+
+/**
+ * Track Marks' TRUE resolved size range (wall units) at the given mode +
+ * effective params — for display only (Brush Studio's "Effective Range"
+ * readout, build brief section 7: "ensure Brush Studio displays the true
+ * effective Track Marks width/range without lying/clamping"). Unlike the
+ * compact `#brush-radius` slider (a shared control with its own `max="72"`
+ * HTML attribute, correct for every physical cap but cosmetically clamped
+ * for Wild — see the checkpoint doc), this reads directly off the same
+ * curve `resolveFlairModulationWithParams` itself uses, so it can never
+ * under-report Wild's genuinely extended range.
+ */
+export function resolveTrackMarksFlairSizeRange(mode: FlairModeId, params: EffectiveFlairParams): { min: number; max: number } {
+  const curve = resolveEffectiveWidthExpansionCurve(mode, params);
+  return {
+    min: denormalizeTrackMarksFlairWidth(curve(0)),
+    max: denormalizeTrackMarksFlairWidth(curve(1)),
+  };
+}

@@ -68,12 +68,15 @@ import { createStrokeRandom, PLUME_MAX_ANGLE_DEGREES } from "./SprayBrushEngine"
 import { SprayCanAudio } from "./SprayCanAudio";
 import { getSprayCapPreset } from "./SprayCapPresets";
 import {
-  FLAIR_CURVES,
   applyFlairOutputToPoint,
-  inverseWidthExpansion,
+  denormalizeTrackMarksFlairWidth,
+  inverseEffectiveWidthExpansion,
+  normalizeTrackMarksFlairWidth,
   resolveDefaultFlairMode,
-  resolveFlairModulation,
+  resolveFlairModulationWithParams,
+  type EffectiveFlairParams,
 } from "./FlairCurves";
+import { getFlairOverride, resolveEffectiveFlairParams } from "./FlairProperties";
 import { type FlairModeId, type SurfaceContextId } from "./ToolTaxonomy";
 import { StrokeHistory, type RecordedStroke } from "./StrokeHistory";
 import { StrokeSmoother } from "./StrokeSmoother";
@@ -113,11 +116,7 @@ import {
 const MIN_DEPOSIT_INTERVAL_MS = 16;
 /** Wall units of simulated spray size per screen pixel of Alt-held vertical drag — see `adjustSimulatedSprayDistance`. Tuned so the near/reference/far anchors (~25/32/42) are each a comfortable, deliberate drag apart, not a hair-trigger. */
 const SIMULATED_DISTANCE_DRAG_SENSITIVITY = 0.15;
-/** Track Marks' own Flair-driven size floor — matches the legacy Alt-drag clamp's own floor (see `adjustSimulatedSprayDistance`) so toggling Flair on/off never jumps the resolved size range. */
-const TRACK_MARKS_FLAIR_MIN_SIZE = 4;
-/** Wall units per whole unit of a Flair mode's `widthExpansion(1)` — e.g. wall's max (1.0) resolves to MIN + 1 * this constant; wild's larger max (1.6) reaches a genuinely larger absolute size, matching "extended range" beyond wall/blackbook. */
-const TRACK_MARKS_FLAIR_SIZE_SPAN = 60;
-/** Screen pixels of Alt-held vertical drag that cross Flair's full normalized 0-1 simulated-distance range at `distanceSensitivity` 1 — see `adjustTrackMarksFlairDistance`. */
+/** Screen pixels of Alt-held vertical drag that cross Flair's full normalized 0-1 simulated-distance range at `distanceSensitivity` 1 — see `adjustTrackMarksFlairDistance`. Track Marks' size floor/span themselves live in `FlairCurves.ts` (`TRACK_MARKS_FLAIR_MIN_SIZE`/`_SIZE_SPAN`), shared with Brush Studio's preview/readouts. */
 const TRACK_MARKS_FLAIR_DRAG_RANGE_PX = 260;
 /** off -> wall -> blackbook -> wild -> off, cycled by the small Flair keyboard shortcut (see `cycleTrackMarksFlairMode`) — never a toolbar redesign, just a temporary desktop testing control matching the existing Alt+scroll/Alt+drag precedent. */
 const FLAIR_MODE_CYCLE: readonly FlairModeId[] = ["off", "wall", "blackbook", "wild"];
@@ -221,6 +220,12 @@ class SpatialSpraypaintApp {
       setSprayProperty: (capId, patch) => this.setSettings({ type: "spray-property", capId, patch }),
       resetSprayProperty: (capId, key) => this.setSettings({ type: "reset-spray-property", capId, key }),
       resetSprayBrush: (capId) => this.setSettings({ type: "reset-spray-brush", capId }),
+      getFlairOverrides: () => this.settings.flairOverrides,
+      getTrackMarksFlairMode: () => this.trackMarksFlairMode,
+      setTrackMarksFlairMode: (mode) => this.setTrackMarksFlairMode(mode),
+      setFlairProperty: (capId, mode, patch) => this.setSettings({ type: "flair-property", capId, mode, patch }),
+      resetFlairProperty: (capId, mode, key) => this.setSettings({ type: "reset-flair-property", capId, mode, key }),
+      resetFlairMode: (capId, mode) => this.setSettings({ type: "reset-flair-mode", capId, mode }),
       setMarkerWidth: (id, width) => {
         this.markerWidths = selectMarkerWidth(this.markerWidths, id, width);
         if (this.toolSelection.markerVariantId === id) this.baseRadius = width;
@@ -943,8 +948,18 @@ class SpatialSpraypaintApp {
   private beginSimulatedDistanceDrag(): void {
     if (this.toolSelection.selectedToolId !== "spray-can") return;
     if (this.toolSelection.sprayCapId !== "track-marks" || this.trackMarksFlairMode === "off") return;
-    const currentWidth01 = Math.max(0, (this.baseRadius - TRACK_MARKS_FLAIR_MIN_SIZE) / TRACK_MARKS_FLAIR_SIZE_SPAN);
-    this.trackMarksFlairDistance01 = inverseWidthExpansion(this.trackMarksFlairMode, currentWidth01);
+    const currentWidth01 = normalizeTrackMarksFlairWidth(this.baseRadius);
+    this.trackMarksFlairDistance01 = inverseEffectiveWidthExpansion(
+      this.trackMarksFlairMode,
+      this.effectiveFlairParams(this.trackMarksFlairMode),
+      currentWidth01,
+    );
+  }
+
+  /** MODE DEFAULT merged with Brush Studio's SESSION MODIFICATION (see `FlairProperties.ts`) for Track Marks' Flair, at the given mode. Always the same `getFlairOverride`/`resolveEffectiveFlairParams` pair Brush Studio itself reads, so live painting and the Studio preview can never disagree. */
+  private effectiveFlairParams(mode: FlairModeId): EffectiveFlairParams {
+    const capId = this.toolSelection.sprayCapId;
+    return resolveEffectiveFlairParams(mode, getFlairOverride(this.settings.flairOverrides, capId, mode));
   }
 
   private adjustSimulatedSprayDistance(deltaScreenY: number): void {
@@ -994,17 +1009,17 @@ class SpatialSpraypaintApp {
    */
   private adjustTrackMarksFlairDistance(deltaScreenY: number): void {
     const capId = this.toolSelection.sprayCapId;
-    const curves = FLAIR_CURVES[this.trackMarksFlairMode];
-    const rawStep = (deltaScreenY / TRACK_MARKS_FLAIR_DRAG_RANGE_PX) * curves.distanceSensitivity;
+    const params = this.effectiveFlairParams(this.trackMarksFlairMode);
+    const rawStep = (deltaScreenY / TRACK_MARKS_FLAIR_DRAG_RANGE_PX) * params.flairAmount;
     const target = Math.max(0, Math.min(1, this.trackMarksFlairDistance01 + rawStep));
-    this.trackMarksFlairDistance01 += (target - this.trackMarksFlairDistance01) * curves.transitionSmoothing;
-    const modulation = resolveFlairModulation(this.trackMarksFlairMode, {
+    this.trackMarksFlairDistance01 += (target - this.trackMarksFlairDistance01) * params.flairSmoothing;
+    const modulation = resolveFlairModulationWithParams(this.trackMarksFlairMode, params, {
       distance01: this.trackMarksFlairDistance01,
       output: 1,
       velocity: 0,
       angle: 0,
     });
-    const next = TRACK_MARKS_FLAIR_MIN_SIZE + modulation.width01 * TRACK_MARKS_FLAIR_SIZE_SPAN;
+    const next = denormalizeTrackMarksFlairWidth(modulation.width01);
     this.baseRadius = next;
     this.trackMarksFlairOutputMultiplier = modulation.output;
     this.setSettings({ type: "spray-property", capId, patch: { size: next } });
@@ -1013,35 +1028,47 @@ class SpatialSpraypaintApp {
   }
 
   /**
-   * The small keyboard shortcut (section 5/6 of the build brief) cycling
-   * Track Marks' own Flair mode off -> wall -> blackbook -> wild -> off — no
-   * toolbar redesign, matching the existing Alt+scroll/Alt+drag precedent of
-   * a temporary desktop-only testing control. No-op for every other cap, so
-   * it cannot be triggered accidentally while painting with a physical cap.
+   * The small keyboard shortcut (section 5/6 of the Flair Behavior Spec V1
+   * brief) cycling Track Marks' own Flair mode off -> wall -> blackbook ->
+   * wild -> off — a secondary accelerator now that Brush Studio's own Mode
+   * selector (section 8 of the Brush Studio Flair Controls brief) is the
+   * primary way to change it. No-op for every other cap.
    */
   private cycleTrackMarksFlairMode(): void {
     if (this.toolSelection.selectedToolId !== "spray-can" || this.toolSelection.sprayCapId !== "track-marks") return;
-    const capId = this.toolSelection.sprayCapId;
     const index = FLAIR_MODE_CYCLE.indexOf(this.trackMarksFlairMode);
-    this.trackMarksFlairMode = FLAIR_MODE_CYCLE[(index + 1) % FLAIR_MODE_CYCLE.length];
-    // A deliberate mode switch, unlike a live drag, is free to re-center the
-    // depth dial: each mode has its own width RANGE (see FlairCurves.ts —
-    // blackbook's max is well below wall's own resting size), so carrying
-    // over the previous mode's absolute distance01 verbatim could leave the
-    // new mode already pinned at its own ceiling before the user ever drags
-    // again. Resetting to a neutral 0.5 "reference" every switch keeps each
-    // mode's own near<->far range fully available immediately.
+    this.setTrackMarksFlairMode(FLAIR_MODE_CYCLE[(index + 1) % FLAIR_MODE_CYCLE.length]);
+  }
+
+  /**
+   * Sets Track Marks' active Flair mode directly — shared by the keyboard
+   * cycle above and Brush Studio's Mode selector, so both drive the exact
+   * same re-centering behavior. A deliberate mode switch, unlike a live
+   * drag, is free to re-center the depth dial: each mode has its own width
+   * RANGE (see `FlairCurves.ts` — blackbook's max is well below wall's own
+   * resting size), so carrying over the previous mode's absolute distance01
+   * verbatim could leave the new mode already pinned at its own ceiling
+   * before the user ever drags again. Resetting to a neutral 0.5
+   * "reference" every switch keeps each mode's own near<->far range fully
+   * available immediately, and reflects that mode's OWN session
+   * modifications (Brush Studio Flair Controls section 3) rather than the
+   * canonical default.
+   */
+  private setTrackMarksFlairMode(mode: FlairModeId): void {
+    if (this.toolSelection.selectedToolId !== "spray-can" || this.toolSelection.sprayCapId !== "track-marks") return;
+    const capId = this.toolSelection.sprayCapId;
+    this.trackMarksFlairMode = mode;
     this.trackMarksFlairDistance01 = 0.5;
-    if (this.trackMarksFlairMode === "off") {
+    if (mode === "off") {
       this.trackMarksFlairOutputMultiplier = 1;
     } else {
-      const modulation = resolveFlairModulation(this.trackMarksFlairMode, {
+      const modulation = resolveFlairModulationWithParams(mode, this.effectiveFlairParams(mode), {
         distance01: this.trackMarksFlairDistance01,
         output: 1,
         velocity: 0,
         angle: 0,
       });
-      const next = TRACK_MARKS_FLAIR_MIN_SIZE + modulation.width01 * TRACK_MARKS_FLAIR_SIZE_SPAN;
+      const next = denormalizeTrackMarksFlairWidth(modulation.width01);
       this.baseRadius = next;
       this.trackMarksFlairOutputMultiplier = modulation.output;
       this.setSettings({ type: "spray-property", capId, patch: { size: next } });

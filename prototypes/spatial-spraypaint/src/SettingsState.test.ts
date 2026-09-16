@@ -42,6 +42,36 @@ describe("settings state", () => {
     expect(INITIAL_SETTINGS_STATE.sprayOverrides).toEqual({});
   });
 
+  it("tracks per-(brush, mode) Flair overrides independently of Spray overrides", () => {
+    const state = reduceSettingsState(INITIAL_SETTINGS_STATE, {
+      type: "flair-property", capId: "track-marks", mode: "wall", patch: { flairAmount: 2 },
+    });
+    expect(state.flairOverrides).toEqual({ "track-marks": { wall: { flairAmount: 2 } } });
+    expect(state.sprayOverrides).toEqual({});
+  });
+
+  it("keeps Flair overrides for different modes of the SAME brush independent — changing Wall never mutates Blackbook", () => {
+    let state = reduceSettingsState(INITIAL_SETTINGS_STATE, {
+      type: "flair-property", capId: "track-marks", mode: "wall", patch: { flairAmount: 2 },
+    });
+    state = reduceSettingsState(state, {
+      type: "flair-property", capId: "track-marks", mode: "blackbook", patch: { flairSmoothing: 0.9 },
+    });
+    expect(state.flairOverrides).toEqual({
+      "track-marks": { wall: { flairAmount: 2 }, blackbook: { flairSmoothing: 0.9 } },
+    });
+  });
+
+  it("reset-flair-property clears one property and reset-flair-mode clears a whole mode bundle", () => {
+    let state = reduceSettingsState(INITIAL_SETTINGS_STATE, {
+      type: "flair-property", capId: "track-marks", mode: "wild", patch: { flairAmount: 2, bloomResponse: 0.5 },
+    });
+    state = reduceSettingsState(state, { type: "reset-flair-property", capId: "track-marks", mode: "wild", key: "flairAmount" });
+    expect(state.flairOverrides).toEqual({ "track-marks": { wild: { bloomResponse: 0.5 } } });
+    state = reduceSettingsState(state, { type: "reset-flair-mode", capId: "track-marks", mode: "wild" });
+    expect(state.flairOverrides).toEqual({});
+  });
+
   it("keeps the performer hidden across Physical and Hand modes", () => {
     expect(cameraTreatmentForInputMode("spatial", "clean")).toBe("hidden");
     expect(cameraTreatmentForInputMode("mouse", "ghost")).toBe("hidden");
