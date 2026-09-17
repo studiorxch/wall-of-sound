@@ -71,4 +71,4 @@ No changes to `SprayCapPresets.ts`, `SprayCapProfile.ts`, `SprayBrushEngine.ts`,
 
 ## Commit
 
-(pending — see next commit)
+`24793e3` — "fix: Spatial Spraypaint Flair -- disprove reported direction inversion, couple mist into core deposition density"
