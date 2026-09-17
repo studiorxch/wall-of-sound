@@ -148,11 +148,14 @@ describe("WetDripEngine", () => {
     expect(recording.arcs).toHaveLength(2);
     expect(recording.calls.filter((call) => call === "fill")).toHaveLength(1);
 
-    // The root (progress 0) is at the full pooled shoulder width...
-    expect(strip[0].width).toBeCloseTo(drip.originPoolRadius * 2, 5);
+    // V0.10.17: the root shoulder is capped at 1.7x the column's own
+    // resolvedBodyWidth -- here originPoolRadius*2 (34) exceeds that cap
+    // (12 * 1.7 = 20.4), so the cap applies rather than the raw pooled
+    // value (see `resolveDripWidth`'s attachment-region doc).
+    expect(strip[0].width).toBeCloseTo(Math.min(drip.originPoolRadius * 2, drip.width * 1.7), 5);
     // ...visibly wider than the body a bit further down the run...
     const bodySection = strip[Math.round(strip.length * 0.4)];
-    expect(strip[0].width).toBeGreaterThan(bodySection.width * 1.5);
+    expect(strip[0].width).toBeGreaterThan(bodySection.width * 1.2);
     // ...width decreases monotonically over the whole run (progressive
     // narrowing, not a flat plateau followed by a sudden drop)...
     expect(strip.every((section, index) => (

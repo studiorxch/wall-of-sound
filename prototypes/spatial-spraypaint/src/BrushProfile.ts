@@ -44,13 +44,78 @@ export interface BrushFootprintDescriptor {
 export interface BrushDripProperties {
   /** 0-1: how readily this brush forms drips at all. */
   tendency: number;
-  /** Drip body width as a fraction of the brush's own `size`. */
+  /**
+   * V0.10.17 width-authority trace (per the pass's own explicit questions
+   * -- answered here once, not re-derived per call site):
+   *
+   * - "Relative to what?" -- the SOURCE STROKE's own width at the exact
+   *   point/node the drip spawns from (`point.width` for Spray/Round/
+   *   Chisel's `DripAccumulator`; `size`/`point.width` for Mop's pool
+   *   channel -- both are the live stroke geometry, never a fixed
+   *   constant).
+   * - "Where converted to wall/canvas width?" -- at the SPAWN SITE only
+   *   (`DripAccumulator.observe` in DripLogic.ts; `spawnPoolChannel` in
+   *   WetPaintModel.ts). Both compute `resolvedBodyWidth = sourceStrokeWidth
+   *   * this.bodyWidth` and put the RESULT directly into `DripSeed.width`.
+   *   Nothing downstream re-derives it from a ratio again.
+   * - "What modifies it afterward?" -- `DripLogic.ts`'s
+   *   `resolveDripWidth` treats `DripSeed.width` as the fixed reference
+   *   (region B, "the column") for the rest of the drip's life. Taper
+   *   (region B's own deviation) and the terminal bead (region C) are
+   *   both DEVIATIONS computed relative to that same fixed reference, not
+   *   redefinitions of it -- see `resolveDripWidth`'s own doc.
+   * - "Does origin pooling modify it?" -- NO. Origin pooling (region A,
+   *   the attachment) is capped at 1.7x `resolvedBodyWidth` and blended
+   *   away entirely by 18% progress; it never changes what `resolvedBodyWidth`
+   *   itself is.
+   * - "Does taper modify it?" -- taper narrows the COLUMN away from
+   *   `resolvedBodyWidth` (floored at 55% of it), it does not change the
+   *   reference value taper is measured against.
+   * - "Does terminal bead modify it?" -- no, same reasoning: the bead
+   *   target is `(column width at the bead zone's own start) * terminalBead`,
+   *   never a multiple of a DIFFERENT quantity.
+   * - "Does source stroke width modify it?" -- yes, by definition
+   *   (`resolvedBodyWidth = sourceStrokeWidth * bodyWidth`) -- this is the
+   *   ONE place stroke width enters the drip system.
+   * - "Does Squeeze indirectly modify it?" -- for Mop, yes: Squeeze raises
+   *   the pool node's accumulated load, which raises `loadFactor` in
+   *   `spawnPoolChannel`, which adds up to `stemWidthLoadRatio` on top of
+   *   `stemWidthBaseRatio` before that sum is multiplied by the source
+   *   stroke width -- a real, intentional "heavier pooling under Squeeze"
+   *   effect (see WetPaintModel.ts), not a bug, but worth naming here so
+   *   it isn't mistaken for `bodyWidth` itself drifting unpredictably. A
+   *   per-drip `widthVarianceLow/High` random multiplier ALSO applies at
+   *   the Mop spawn site; V0.10.17 tightened its range from a 2.5x spread
+   *   (0.85-2.1) to a narrow 0.92-1.12 specifically so `bodyWidth`
+   *   settings stay visually predictable rather than being swamped by
+   *   per-drip randomness.
+   * - "Do different renderers interpret it differently?" -- no: both
+   *   `WetDripEngine` (Mop) and `SprayBrushEngine` (Spray/Round/Chisel)
+   *   call the exact same `resolveDripStripSection`/`resolveDripWidth`
+   *   from DripLogic.ts. One geometry function, two callers.
+   *
+   * `bodyWidth` itself is expressed as a fraction of the brush's own
+   * `size` at the BrushProfile level (for display/editing purposes); the
+   * actual `resolvedBodyWidth` used at runtime is this ratio times the
+   * LIVE source stroke width at the drip's spawn point, which can differ
+   * slightly from the brush's nominal `size` (pressure/geometry variation
+   * along a real stroke).
+   */
   bodyWidth: number;
-  /** 0-1: how much a drip narrows from root to tip. Lower = gentler taper, more liquid mass held through the run. */
+  /** 0-1: how much a drip narrows from root to tip, DEVIATING from resolvedBodyWidth -- never redefining it. Lower = gentler taper, more liquid mass held through the run. Floored at runtime so even the strongest taper never converges to a needle. */
   taper: number;
-  /** Relative size of the rounded terminal bead, as a multiple of the drip's own tip width. 0 disables the bead. */
+  /**
+   * Subtle terminal accumulation (region C), as a multiple of the
+   * column's own width at the moment the bead zone begins -- NOT the
+   * drip's full base width, and never a large multiple. 1 = NONE (no
+   * intentional enlargement; the column just ends in its own natural
+   * rounded cap). Recommended range when enabled: ~1.03-1.08 (LOW),
+   * ~1.08-1.18 (MEDIUM), ~1.18-1.35 (HIGH) -- clamped to [1, 1.35] at
+   * runtime regardless of what a caller passes, so a bead can never
+   * become 2-4x the column (the "match head"/"thermometer" defect).
+   */
   terminalBead: number;
-  /** Relative size of the rounded root/origin pooling, as a multiple of the drip's own body width. 0 disables pooling. */
+  /** Relative size of the rounded root/origin pooling (region A, the attachment), as a multiple of the drip's own resolvedBodyWidth -- capped at runtime so a wide pooled reservoir can never balloon into a shape wider than the column it feeds. 0 disables pooling (the attachment then reads as the column's own natural start). */
   originPooling: number;
   /** Hard invariant: no drip spawned from this brush may render more opaque than this. Always <= the brush's own `opacity`. */
   sourceOpacityCeiling: number;
@@ -162,7 +227,7 @@ function resolveSprayProfile(capId: string, override: BrushProfilePropertyOverri
       // dripBodyWidth.
       bodyWidth: override.dripBodyWidth ?? (0.11 + tendency * 0.05),
       taper: override.dripTaper ?? 0.28,
-      terminalBead: override.dripTerminalBead ?? 1.15,
+      terminalBead: override.dripTerminalBead ?? 1.08,
       originPooling: override.dripOriginPooling ?? 0,
       // A drip must never read as more opaque than the wash that produced
       // it -- Spray's own coreOpacity IS the ceiling, tracking any live
@@ -215,7 +280,7 @@ function resolveDryMarkerProfile(
       tendency,
       bodyWidth: override.dripBodyWidth ?? (0.11 + tendency * 0.05),
       taper: override.dripTaper ?? 0.28,
-      terminalBead: override.dripTerminalBead ?? (tendency > 0 ? 1.15 : 0),
+      terminalBead: override.dripTerminalBead ?? (tendency > 0 ? 1.08 : 1),
       originPooling: override.dripOriginPooling ?? 0,
       sourceOpacityCeiling: opacity,
     },
@@ -252,7 +317,7 @@ function resolveWetMarkerProfile(
       // pool-channel renderer actually uses.
       bodyWidth: override.dripBodyWidth ?? pool.stemWidthBaseRatio,
       taper: override.dripTaper ?? (1 - pool.tipWidthRatio),
-      terminalBead: override.dripTerminalBead ?? 1.15,
+      terminalBead: override.dripTerminalBead ?? 1.08,
       originPooling: override.dripOriginPooling ?? pool.originPoolRatio,
       sourceOpacityCeiling: opacity,
     },

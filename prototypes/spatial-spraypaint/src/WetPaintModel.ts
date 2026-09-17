@@ -123,8 +123,15 @@ const WET_VARIANT_PROFILES: Record<WetMarkerVariantId, WetVariantProfile> = {
     dramaticChance: 0.22,
     dramaticLengthBonus: 3.4,
     settleDripCount: 5,
-    widthVarianceLow: 0.85,
-    widthVarianceHigh: 2.1,
+    // V0.10.17: tightened from 0.85-2.1 (a 2.5x spread) so `resolvedBodyWidth`
+    // (source stroke width * profile.drip.bodyWidth) is actually a
+    // predictable, testable quantity -- a "20% body width" setting must
+    // not silently become anywhere from 17% to 42% of the source stroke
+    // because of this per-drip random multiplier. Small variety remains
+    // (a real cluster of drips shouldn't all read as identical gauges),
+    // it just no longer dominates the resolved width.
+    widthVarianceLow: 0.92,
+    widthVarianceHigh: 1.12,
     // Gravity dominates now -- these are deliberately restrained versus the
     // prior pass (which over-corrected into "decorative curly hair"). Most
     // runs get at most one small kink; a second is the exception, not the
@@ -184,8 +191,9 @@ const WET_VARIANT_PROFILES: Record<WetMarkerVariantId, WetVariantProfile> = {
     dramaticChance: 0.28,
     dramaticLengthBonus: 4.5,
     settleDripCount: 7,
-    widthVarianceLow: 0.9,
-    widthVarianceHigh: 2,
+    // Same predictability fix as Mop above.
+    widthVarianceLow: 0.92,
+    widthVarianceHigh: 1.12,
     kinkChance: 0.45,
     kink2Chance: 0.15,
     kinkAmplitudeRatio: 0.035,

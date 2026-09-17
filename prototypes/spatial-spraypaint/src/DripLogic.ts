@@ -46,6 +46,18 @@ export interface DripSeed {
   kink2?: number;
   kinkAt2?: number;
   /**
+   * V0.10.17: the explicit gravity vector this drip falls along -- NOT a
+   * hardcoded vertical line with lateral offsets bolted on. Defaults to
+   * `{ x: 0, y: 1 }` (straight down a flat upright wall) when unset, which
+   * is byte-identical to every prior caller's behavior. `bend`/`kink`/
+   * `kink2`/`wander` are all perturbations measured perpendicular to THIS
+   * vector, not raw x-offsets -- so a future non-vertical gravity (wall
+   * tilt, a substrate groove/channel) rotates the whole drip's lateral
+   * wobble along with it instead of fighting it. Does not need to be
+   * pre-normalized; every consumer normalizes it.
+   */
+  gravity?: { x: number; y: number };
+  /**
    * A single, gentle low-frequency S-curve across the WHOLE run (see
    * `resolveDripStripSection`'s own doc) -- `wanderRatio` is the amplitude
    * as a fraction of `length` (default 0.03, deliberately small: gravity
@@ -79,56 +91,70 @@ function smooth01(t: number): number {
 }
 
 /**
- * The drip's width as a single continuous function of progress -- root
- * shoulder, neck, body, and terminal bead are all ONE curve, never
- * independent primitives (no stamped root circle/rectangle, no separate
- * terminal circle drawn on top -- see `resolveDripStripSection`'s own doc
- * and, for the renderers, `renderContinuousDripSilhouette`).
+ * V0.10.17: the drip's width as a single continuous function of progress,
+ * built from THREE independently-understood regions that a caller sets
+ * independently -- never one region's parameter silently redefining
+ * another's:
  *
- * Shape, low to high progress:
- * - [0, shoulderSpan]: an already-pooled origin (Mop's `originPoolRadius`)
- *   blends smoothly (smoothstep, C1-continuous, no flat plateau) down into
- *   the body's own near-full width -- liquid sagging out of the stroke,
- *   not a shape stamped on top of it.
- * - (shoulderSpan, ~0.86): the body holds close to full width, narrowing
- *   only mildly and late (`progress**3` easing keeps almost all of the
- *   loss in the final stretch) -- a liquid column, not a triangle.
- * - (~0.86, 1]: instead of continuing to the point a stamped bead used to
- *   cover up, the width itself smoothly WIDENS back out toward
- *   `terminalBulbRatio * drip.width` -- the accumulated terminal bead
- *   emerges from the same curve, no separate circle.
+ * A. ATTACHMENT (`drip.originPoolRadius`, [0, attachmentSpan]): the neck
+ *    emerging from the wet source. Capped at `attachmentCapRatio` (1.7x)
+ *    of `drip.width` regardless of how large `originPoolRadius` itself is
+ *    -- a wide pooled reservoir must not balloon the drip's own visible
+ *    root into a "match head"/"ear spoon"; most of a real pool's mass
+ *    reads through the SOURCE MARK it sits on top of (see
+ *    `attachmentUnderlap`, which tucks the seam under that mark), not
+ *    through this drip's own silhouette.
+ * B. COLUMN (`drip.width`, the resolvedBodyWidth every caller computes as
+ *    `sourceStrokeWidth * profile.drip.bodyWidth` -- see BrushProfile.ts
+ *    and DripAccumulator/WetPaintModel's own spawn sites): the stable
+ *    reference width for the falling liquid. `drip.tipWidthRatio` is a
+ *    DEVIATION from this reference (floored at 0.55 -- even the strongest
+ *    taper never converges to a needle), not a redefinition of it.
+ * C. TERMINATION (`drip.terminalBulbRatio`, the final ~8% of progress):
+ *    SUBTLE terminal accumulation relative to the column width AT THAT
+ *    POINT, not the drip's full base width -- 1.0 (the default) means
+ *    "no intentional enlargement, just the natural rounded cap every drip
+ *    already gets from `traceDripSilhouettePath`'s own arc," and even the
+ *    top of the allowed range (1.35) is a subtle bead, never 2-4x wider
+ *    than the column next to it (the "match head"/"thermometer" defect).
  */
-function resolveDripWidth(drip: DripSeed, safeProgress: number): number {
-  const tipWidthRatio = drip.tipWidthRatio ?? 0.58;
-  const taperAmount = 1 - tipWidthRatio;
-  // Narrowing arrives late -- a cubic ease keeps the body within a few
-  // percent of full width through roughly the first 70-80% of the run.
-  const taperEase = safeProgress ** 3;
-  const narrowedWidth = drip.width * (1 - taperAmount * taperEase);
+const BEAD_ZONE_START = 0.92;
 
-  // Terminal bead: the last stretch smoothly widens back out toward
-  // `terminalBulbRatio * drip.width` instead of narrowing all the way to
-  // a point -- the bead emerges from this same curve, never a separate
-  // circle. `terminalBulbRatio` at/under 0 (a caller that never sets it)
-  // leaves this stage a no-op, same as before.
-  const terminalBulbRatio = drip.terminalBulbRatio ?? 0;
-  let stemWidth = narrowedWidth;
-  if (terminalBulbRatio > 0) {
-    const beadZoneStart = 0.86;
-    const beadBlend = smooth01((safeProgress - beadZoneStart) / (1 - beadZoneStart));
-    const beadTargetWidth = drip.width * terminalBulbRatio;
-    stemWidth = narrowedWidth + (beadTargetWidth - narrowedWidth) * beadBlend;
+function resolveDripWidth(drip: DripSeed, safeProgress: number): number {
+  const resolvedBodyWidth = drip.width;
+  const tipWidthRatio = Math.min(1, Math.max(0.55, drip.tipWidthRatio ?? 1));
+  const taperAmount = 1 - tipWidthRatio;
+  // Narrowing arrives late -- a cubic ease keeps the column within a few
+  // percent of full width through roughly the first 70-80% of the run.
+  const taperEase = (p: number) => p ** 3;
+  const columnWidthAt = (p: number) => resolvedBodyWidth * (1 - taperAmount * taperEase(p));
+  const columnWidth = columnWidthAt(safeProgress);
+
+  // C. Termination -- a SMALL late-stage modulation relative to the
+  // column's OWN width at the moment the bead zone begins (frozen, not
+  // still-declining), so the bead reads as genuine accumulation on top of
+  // wherever the taper had gotten to -- not a race between two competing
+  // downward/upward curves that can net out to no visible bump at all.
+  // 1.0 (or undefined) is a true no-op: the column's own natural rounded
+  // cap is the only "termination" a caller gets by default.
+  const terminalBulbRatio = Math.min(1.35, Math.max(1, drip.terminalBulbRatio ?? 1));
+  let width = columnWidth;
+  if (terminalBulbRatio > 1 && safeProgress > BEAD_ZONE_START) {
+    const beadBlend = smooth01((safeProgress - BEAD_ZONE_START) / (1 - BEAD_ZONE_START));
+    const columnAtBeadStart = columnWidthAt(BEAD_ZONE_START);
+    const beadTarget = columnAtBeadStart * terminalBulbRatio;
+    width = columnAtBeadStart + (beadTarget - columnAtBeadStart) * beadBlend;
   }
 
-  // Root shoulder: independent of the bead stage above -- applies at the
-  // OTHER end of the run (low progress) regardless of whether this drip
-  // has a terminal bead at all.
+  // A. Attachment -- capped relative to the column's own reference width,
+  // regardless of how the caller computed `originPoolRadius`.
+  const attachmentCapRatio = 1.7;
   const shoulderWidth = drip.renderAsOverlay && drip.originPoolRadius
-    ? Math.max(stemWidth, drip.originPoolRadius * 2)
-    : stemWidth;
-  const shoulderSpan = 0.22;
-  const neckBlend = 1 - smooth01(safeProgress / shoulderSpan);
-  return Math.max(0.8, stemWidth + (shoulderWidth - stemWidth) * neckBlend);
+    ? Math.min(Math.max(width, drip.originPoolRadius * 2), resolvedBodyWidth * attachmentCapRatio)
+    : width;
+  const attachmentSpan = 0.18;
+  const neckBlend = 1 - smooth01(safeProgress / attachmentSpan);
+  return Math.max(0.8, width + (shoulderWidth - width) * neckBlend);
 }
 
 export function resolveDripStripSection(
@@ -156,15 +182,27 @@ export function resolveDripStripSection(
   const wanderPhase = drip.wanderSeed ?? 0;
   const wander = (localProgress: number) =>
     Math.sin(localProgress * Math.PI + wanderPhase) * wanderAmplitude * localProgress;
+  // The explicit gravity vector this drip falls along (see `DripSeed.gravity`'s
+  // own doc) -- `bend`/`kink`/`wander` are all lateral perturbations
+  // measured along `gravityNormal` (perpendicular to gravity), not raw
+  // x-offsets, so the whole drip rotates consistently with gravity instead
+  // of assuming a vertical wall.
+  const rawGravity = drip.gravity ?? { x: 0, y: 1 };
+  const gravityMagnitude = Math.max(0.0001, Math.hypot(rawGravity.x, rawGravity.y));
+  const gravity = { x: rawGravity.x / gravityMagnitude, y: rawGravity.y / gravityMagnitude };
+  // Rotated so the default `gravity = (0, 1)` reproduces the exact prior
+  // behavior (lateral offset added straight onto x) byte-for-byte.
+  const gravityNormal = { x: gravity.y, y: -gravity.x };
   const resolveCenter = (value: number) => {
     const localProgress = Math.min(1, Math.max(0, value));
     const localEased = localProgress * localProgress;
+    const lateral = bend * localEased
+      + wander(localProgress)
+      + kinkOffset(drip.kink, drip.kinkAt, localProgress)
+      + kinkOffset(drip.kink2, drip.kinkAt2, localProgress);
     return {
-      x: drip.x + bend * localEased
-        + wander(localProgress)
-        + kinkOffset(drip.kink, drip.kinkAt, localProgress)
-        + kinkOffset(drip.kink2, drip.kinkAt2, localProgress),
-      y: drip.y + drip.length * localEased,
+      x: drip.x + gravity.x * drip.length * localEased + gravityNormal.x * lateral,
+      y: drip.y + gravity.y * drip.length * localEased + gravityNormal.y * lateral,
     };
   };
   const center = resolveCenter(safeProgress);
