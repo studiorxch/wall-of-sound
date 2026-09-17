@@ -633,4 +633,42 @@ describe("applyFlairDensityToCap -- coupled deposition response (live-report fix
     applyFlairDensityToCap(trackMarksCap, "track-marks", "wall", 1);
     expect(trackMarksCap).toEqual(before);
   });
+
+  describe("particle-vs-veil rebalance (follow-up: 'too particle-heavy, reads like a dirty/sputtering cap')", () => {
+    it("cuts discrete particle count substantially as bloom rises, but never to exactly zero -- 'subtle particle breakup at the extreme edge' must survive", () => {
+      const low = applyFlairDensityToCap(trackMarksCap, "track-marks", "wall", 0.2);
+      const high = applyFlairDensityToCap(trackMarksCap, "track-marks", "wall", 1);
+      expect(low.particleCount).toBeLessThan(trackMarksCap.particleCount);
+      expect(high.particleCount).toBeLessThan(low.particleCount);
+      expect(high.particleCount).toBeGreaterThan(0);
+    });
+
+    it("also dims the particles that do survive, so remaining specks blend into the veil rather than popping as separate flecks", () => {
+      const high = applyFlairDensityToCap(trackMarksCap, "track-marks", "wall", 1);
+      expect(high.particleOpacity).toBeLessThan(trackMarksCap.particleOpacity);
+      expect(high.particleOpacity).toBeGreaterThan(0);
+    });
+
+    it("particle reduction is monotonic across a full bloom sweep, mirroring every other density channel", () => {
+      const samples = [0.1, 0.3, 0.5, 0.7, 0.9, 1].map((b) => applyFlairDensityToCap(trackMarksCap, "track-marks", "wall", b));
+      for (let i = 1; i < samples.length; i++) {
+        expect(samples[i].particleCount).toBeLessThanOrEqual(samples[i - 1].particleCount);
+        expect(samples[i].particleOpacity).toBeLessThanOrEqual(samples[i - 1].particleOpacity);
+      }
+    });
+
+    it("the continuous mist channel gains more (proportionally) than particles lose lose weight, matching the reference: a coherent translucent mass carries the read, not confetti", () => {
+      const high = applyFlairDensityToCap(trackMarksCap, "track-marks", "wall", 1);
+      const particleCountRatio = high.particleCount / trackMarksCap.particleCount;
+      const mistOpacityRatio = high.plumeMistOpacity / trackMarksCap.plumeMistOpacity;
+      expect(mistOpacityRatio).toBeGreaterThan(particleCountRatio);
+    });
+
+    it("leaves the canonical preset's own particleCount/particleOpacity completely untouched -- the heavy-particle baseline is preserved, not deleted, for a possible future Dirty/Sputter cap", () => {
+      const before = { particleCount: trackMarksCap.particleCount, particleOpacity: trackMarksCap.particleOpacity };
+      applyFlairDensityToCap(trackMarksCap, "track-marks", "wall", 1);
+      expect(trackMarksCap.particleCount).toBe(before.particleCount);
+      expect(trackMarksCap.particleOpacity).toBe(before.particleOpacity);
+    });
+  });
 });

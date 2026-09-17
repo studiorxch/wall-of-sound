@@ -234,15 +234,37 @@ export function applyFlairOutputToPoint(
  *     doc comment in `SprayCapPresets.ts` -- so the core-to-edge transition
  *     gets genuinely softer, not just smaller/fainter)
  *   - `plumeMistOpacity`/`plumeMistRadius` raised (more, and more far-
- *     reaching, aerosol mist)
+ *     reaching, CONTINUOUS aerosol mist -- a smooth radial gradient, not
+ *     discrete dabs; see `renderPinkDotOuterField`)
  *   - `plumeRingOpacity` reduced (the mid-density ring band -- otherwise a
  *     literal ring is exactly the "hard edge around an opaque center" read
  *     the brief calls a failure -- must not stay crisp as the body opens)
+ *   - `particleCount`/`particleOpacity` reduced (Real Spray Pass follow-up
+ *     correction: "too particle-heavy, reads like a dirty/sputtering cap").
+ *     `renderOverspray`'s discrete stippled dabs are a SEPARATE mechanism
+ *     from the continuous mist band above -- raising mist while leaving
+ *     particle count untouched compounded into exactly the "solid tube
+ *     surrounded by confetti" look the reference flare tag does NOT have.
+ *     The real reference reads as one continuous translucent mass with only
+ *     a little discrete breakup at the very outer edge, so as bloom rises,
+ *     discrete particle count is cut sharply (down to ~15% at bloom01=1)
+ *     while the continuous mist band (above) carries the visual weight
+ *     instead -- never the other way around. A LOWER, not zero, floor is
+ *     kept deliberately: "retain only subtle particle breakup at the
+ *     extreme edge" rules out silently deleting the mechanism.
  *
  * A real physics coupling, not a post-render overlay: every value this
  * returns flows into the SAME `resolveSprayDynamics`/`resolvePinkDotDualPlume`
  * math every cap already uses, so the wider/lighter/softer response comes
  * from the same deposition model, not a second effect layered on top.
+ *
+ * The cap's own canonical `particleCount`/`particleOpacity` constants are
+ * NEVER changed by this function's existence -- only Track Marks' own
+ * Flair-active copy is scaled down. This deliberately preserves the current
+ * heavy-particle look as a candidate baseline for a future dedicated
+ * Dirty/Sputter cap character (not implemented here -- no new cap, no new
+ * control surface, per "do not add more Flair features"), rather than
+ * deleting or renaming the mechanism.
  *
  * Scoped to Track Marks only, exactly like `applyFlairOutputToPoint`: any
  * other cap id, Track Marks with Flair `off`, or a zero/negative `bloom01`
@@ -256,6 +278,10 @@ const FLAIR_MIST_OPACITY_GAIN_RATIO = 1.5;
 const FLAIR_MIST_RADIUS_GAIN_RATIO = 0.9;
 const FLAIR_RING_OPACITY_LOSS_RATIO = 0.55;
 const FLAIR_EDGE_FALLOFF_FLOOR = 0.05;
+/** Discrete overspray dab count falls to (1 - 0.85) = 15% of the cap's own canonical count at bloom01=1 -- "reduce discrete overspray particle count substantially" while never fully zeroing it ("only limited discrete particles" / "subtle particle breakup at the extreme edge" are still explicitly wanted). */
+const FLAIR_PARTICLE_COUNT_LOSS_RATIO = 0.85;
+/** The particles that DO remain also blend in rather than pop as separate flecks -- a lighter, more restrained loss than count's, so the few survivors still read as "breakup," not as erased. */
+const FLAIR_PARTICLE_OPACITY_LOSS_RATIO = 0.4;
 
 export function applyFlairDensityToCap(
   cap: SprayCapPreset,
@@ -273,6 +299,8 @@ export function applyFlairDensityToCap(
     plumeMistOpacity: cap.plumeMistOpacity * (1 + b * FLAIR_MIST_OPACITY_GAIN_RATIO),
     plumeMistRadius: cap.plumeMistRadius * (1 + b * FLAIR_MIST_RADIUS_GAIN_RATIO),
     plumeRingOpacity: cap.plumeRingOpacity * (1 - b * FLAIR_RING_OPACITY_LOSS_RATIO),
+    particleCount: Math.max(0, Math.round(cap.particleCount * (1 - b * FLAIR_PARTICLE_COUNT_LOSS_RATIO))),
+    particleOpacity: cap.particleOpacity * (1 - b * FLAIR_PARTICLE_OPACITY_LOSS_RATIO),
   };
 }
 
