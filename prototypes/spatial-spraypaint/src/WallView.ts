@@ -183,7 +183,7 @@ export interface ZoomStepWindow {
 export function resolveZoomStepWindow(
   zoom: number,
   presets: readonly number[] = WALL_ZOOM_PRESETS,
-  windowSize = 5,
+  windowSize = 7,
 ): ZoomStepWindow {
   if (presets.length <= windowSize) {
     return { steps: presets, currentSlotIndex: nearestPresetIndex(zoom, presets) };

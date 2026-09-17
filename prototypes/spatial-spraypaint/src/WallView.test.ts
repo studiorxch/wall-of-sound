@@ -187,40 +187,40 @@ describe("wall view transforms", () => {
     ]);
   });
 
-  it("windows the zoom steps symmetrically around 100%", () => {
+  it("windows 7 zoom steps around 100%, spanning 25% through 200%", () => {
     expect(resolveZoomStepWindow(1)).toEqual({
-      steps: [0.5, 0.75, 1, 1.25, 1.5],
-      currentSlotIndex: 2,
+      steps: [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2],
+      currentSlotIndex: 3,
     });
   });
 
   it("clamps the zoom step window at the low end of the preset range", () => {
     expect(resolveZoomStepWindow(0.25)).toEqual({
-      steps: [0.25, 0.5, 0.75, 1, 1.25],
+      steps: [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2],
       currentSlotIndex: 0,
     });
     expect(resolveZoomStepWindow(MIN_ZOOM)).toEqual({
-      steps: [0.25, 0.5, 0.75, 1, 1.25],
+      steps: [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2],
       currentSlotIndex: 0,
     });
   });
 
   it("clamps the zoom step window at the high end of the preset range", () => {
     expect(resolveZoomStepWindow(4)).toEqual({
-      steps: [1.25, 1.5, 2, 3, 4],
-      currentSlotIndex: 4,
+      steps: [0.75, 1, 1.25, 1.5, 2, 3, 4],
+      currentSlotIndex: 6,
     });
     expect(resolveZoomStepWindow(MAX_ZOOM)).toEqual({
-      steps: [1.25, 1.5, 2, 3, 4],
-      currentSlotIndex: 4,
+      steps: [0.75, 1, 1.25, 1.5, 2, 3, 4],
+      currentSlotIndex: 6,
     });
   });
 
   it("centers the window on the nearest preset when zoom doesn't exactly match one", () => {
     const window = resolveZoomStepWindow(0.9);
-    expect(window.steps).toEqual([0.5, 0.75, 1, 1.25, 1.5]);
-    expect(window.currentSlotIndex).toBe(2);
-    expect(window.steps).toHaveLength(5);
+    expect(window.steps).toEqual([0.25, 0.5, 0.75, 1, 1.25, 1.5, 2]);
+    expect(window.currentSlotIndex).toBe(3);
+    expect(window.steps).toHaveLength(7);
   });
 
   it("returns the full preset list unwindowed when it fits within windowSize", () => {

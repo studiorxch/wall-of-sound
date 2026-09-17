@@ -20,6 +20,8 @@ import { type FlairModeId } from "./ToolTaxonomy";
 import { type SmoothingLevel } from "./StrokeSmoother";
 import { type AnonymityMode, type InputSourceMode } from "./types";
 
+export type GridStyle = "solid" | "dotted";
+
 export interface SettingsState {
   isOpen: boolean;
   smoothing: SmoothingLevel;
@@ -43,6 +45,8 @@ export interface SettingsState {
   trackingDebugVisible: boolean;
   /** Section C of the Pencil Prep build brief: a temporary/diagnostic-only raw pointer readout (pointerType/pressure/tilt/twist/velocity/coalesced count). Off by default (Creative Interface Doctrine — normal state stays quiet); shows nothing about rendering or Flair, only raw hardware values. */
   pencilDiagnosticsVisible: boolean;
+  /** Reference-line style for the wall's spacing grid. Fresh sessions default to "dotted"; a saved preference (persisted outside this module, in main.ts) overrides this default at startup. */
+  gridStyle: GridStyle;
 }
 
 export type SettingsAction =
@@ -58,7 +62,8 @@ export type SettingsAction =
   | { type: "reset-flair-property"; capId: string; mode: FlairModeId; key: FlairPropertyKey }
   | { type: "reset-flair-mode"; capId: string; mode: FlairModeId }
   | { type: "tracking-debug"; value: boolean }
-  | { type: "pencil-diagnostics"; value: boolean };
+  | { type: "pencil-diagnostics"; value: boolean }
+  | { type: "grid-style"; value: GridStyle };
 
 export const INITIAL_SETTINGS_STATE: SettingsState = {
   isOpen: false,
@@ -68,6 +73,7 @@ export const INITIAL_SETTINGS_STATE: SettingsState = {
   flairOverrides: EMPTY_FLAIR_OVERRIDES,
   trackingDebugVisible: false,
   pencilDiagnosticsVisible: false,
+  gridStyle: "dotted",
 };
 
 export function cameraTreatmentForInputMode(
@@ -98,5 +104,6 @@ export function reduceSettingsState(state: SettingsState, action: SettingsAction
       return { ...state, flairOverrides: resetFlairMode(state.flairOverrides, action.capId, action.mode) };
     case "tracking-debug": return { ...state, trackingDebugVisible: action.value };
     case "pencil-diagnostics": return { ...state, pencilDiagnosticsVisible: action.value };
+    case "grid-style": return { ...state, gridStyle: action.value };
   }
 }

@@ -63,7 +63,7 @@ import {
 } from "./MarkerWidthPresets";
 import { resolveInteractionAuthority, type InteractionAuthority } from "./InteractionAuthority";
 import { INITIAL_PLAYER_STATE, reducePlayerState, type PlayerAction, type PlayerState } from "./PlayerState";
-import { INITIAL_SETTINGS_STATE, reduceSettingsState, type SettingsAction, type SettingsState } from "./SettingsState";
+import { INITIAL_SETTINGS_STATE, reduceSettingsState, type GridStyle, type SettingsAction, type SettingsState } from "./SettingsState";
 import { createStrokeRandom, PLUME_MAX_ANGLE_DEGREES } from "./SprayBrushEngine";
 import { SprayCanAudio } from "./SprayCanAudio";
 import { getSprayCapPreset } from "./SprayCapPresets";
@@ -130,6 +130,25 @@ const SIMULATED_DISTANCE_DRAG_SENSITIVITY = 0.15;
 const FLAIR_DRAG_RANGE_PX = 260;
 /** off -> wall -> blackbook -> wild -> off, cycled by the small Flair keyboard shortcut (see `cycleActiveFlairMode`) — never a toolbar redesign, just a temporary desktop testing control matching the existing Alt+scroll/Alt+drag precedent. */
 const FLAIR_MODE_CYCLE: readonly FlairModeId[] = ["off", "wall", "blackbook", "wild"];
+const GRID_STYLE_STORAGE_KEY = "spatial-spraypaint:grid-style";
+
+function loadSavedGridStyle(): GridStyle {
+  try {
+    const saved = window.localStorage.getItem(GRID_STYLE_STORAGE_KEY);
+    return saved === "solid" || saved === "dotted" ? saved : INITIAL_SETTINGS_STATE.gridStyle;
+  } catch {
+    return INITIAL_SETTINGS_STATE.gridStyle;
+  }
+}
+
+function saveGridStyle(value: GridStyle): void {
+  try {
+    window.localStorage.setItem(GRID_STYLE_STORAGE_KEY, value);
+  } catch {
+    // Best-effort persistence only — a private-browsing/quota failure should never block switching the setting.
+  }
+}
+
 class SpatialSpraypaintApp {
   private readonly compositeCanvas: HTMLCanvasElement;
   private readonly compositeCtx: CanvasRenderingContext2D;
@@ -167,7 +186,7 @@ class SpatialSpraypaintApp {
   private wetPaintControls: WetPaintControlState = { ...INITIAL_WET_PAINT_CONTROLS };
   private markerWidths: MarkerWidthState = { ...INITIAL_MARKER_WIDTHS };
   private selectedBackground: SprayBackground = getSprayBackground("black");
-  private settings: SettingsState = { ...INITIAL_SETTINGS_STATE };
+  private settings: SettingsState = { ...INITIAL_SETTINGS_STATE, gridStyle: loadSavedGridStyle() };
   private player: PlayerState = { ...INITIAL_PLAYER_STATE };
   private baseRadius = getSprayCapPreset(INITIAL_DRAWING_TOOL_SELECTION.sprayCapId).baseRadius;
   private isDrawing = false;
@@ -435,10 +454,16 @@ class SpatialSpraypaintApp {
     this.requireElement<HTMLInputElement>("pencil-diagnostics-visible").addEventListener("change", (event) => {
       this.setSettings({ type: "pencil-diagnostics", value: (event.target as HTMLInputElement).checked });
     });
+    this.requireElement<HTMLSelectElement>("grid-style").addEventListener("change", (event) => {
+      const value = (event.target as HTMLSelectElement).value as GridStyle;
+      this.setSettings({ type: "grid-style", value });
+      saveGridStyle(value);
+    });
 
     this.requireElement("physical-input").addEventListener("click", () => void this.selectInputMode("mouse"));
-    this.requireElement("hand-input").addEventListener("click", () => {
+    this.requireElement("hand-tracking-toggle").addEventListener("click", () => {
       void this.selectInputMode(this.inputMode === "spatial" ? "mouse" : "spatial");
+      this.closeToolChoosers();
     });
 
     this.requireElement<HTMLInputElement>("audio-file").addEventListener("change", (event) => {
@@ -914,6 +939,7 @@ class SpatialSpraypaintApp {
     this.requireElement<HTMLInputElement>("tracking-debug-visible").checked = this.settings.trackingDebugVisible;
     this.requireElement<HTMLInputElement>("pencil-diagnostics-visible").checked = this.settings.pencilDiagnosticsVisible;
     this.requireElement("pencil-diagnostics-panel").classList.toggle("visible", this.settings.pencilDiagnosticsVisible);
+    this.requireElement<HTMLSelectElement>("grid-style").value = this.settings.gridStyle;
     this.updateWallEnvironmentUi();
     this.updateRadiusUi();
     this.updateTrackingVisibility();
@@ -1509,7 +1535,7 @@ class SpatialSpraypaintApp {
       return;
     }
 
-    const handButton = this.requireElement<HTMLButtonElement>("hand-input");
+    const handButton = this.requireElement<HTMLButtonElement>("hand-tracking-toggle");
     handButton.disabled = true;
     try {
       this.resetTrackingDiagnostics();
@@ -1532,12 +1558,18 @@ class SpatialSpraypaintApp {
 
   private updateInputModeUi(status: string, error = false): void {
     const physical = this.requireElement("physical-input");
-    const hand = this.requireElement("hand-input");
+    const hand = this.requireElement<HTMLButtonElement>("hand-tracking-toggle");
     const isHand = this.inputMode === "spatial";
     physical.classList.toggle("selected", !isHand);
     hand.classList.toggle("selected", isHand);
     physical.setAttribute("aria-pressed", (!isHand).toString());
     hand.setAttribute("aria-pressed", isHand.toString());
+    hand.title = `Hand tracking (camera): ${isHand ? "on" : "off"} — ${isHand ? "Hand tracking" : "Physical input"} active`;
+    hand.setAttribute(
+      "aria-label",
+      `Toggle Hand tracking. Currently ${isHand ? "on" : "off"}, ${isHand ? "Hand tracking" : "Physical input"} active`,
+    );
+    this.requireElement("hand-tracking-status").textContent = isHand ? "On" : "Off";
     const statusElement = this.requireElement("input-status");
     statusElement.textContent = status;
     statusElement.classList.toggle("on", status === "CAMERA ON");
@@ -2116,6 +2148,9 @@ class SpatialSpraypaintApp {
       ? "rgba(20, 20, 24, 0.045)"
       : "rgba(255, 255, 255, 0.045)";
     this.compositeCtx.lineWidth = 1 / this.wallView.zoom;
+    this.compositeCtx.setLineDash(
+      this.settings.gridStyle === "dotted" ? [1 / this.wallView.zoom, 5 / this.wallView.zoom] : [],
+    );
     this.compositeCtx.beginPath();
     for (let x = minX; x <= maxX; x += spacing) {
       this.compositeCtx.moveTo(x, minY);

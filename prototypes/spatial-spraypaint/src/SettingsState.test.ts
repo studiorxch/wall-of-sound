@@ -78,6 +78,13 @@ describe("settings state", () => {
     expect(state.trackingDebugVisible).toBe(false);
   });
 
+  it("defaults fresh sessions to a dotted grid style and switches independently of other settings", () => {
+    expect(INITIAL_SETTINGS_STATE.gridStyle).toBe("dotted");
+    const state = reduceSettingsState(INITIAL_SETTINGS_STATE, { type: "grid-style", value: "solid" });
+    expect(state.gridStyle).toBe("solid");
+    expect(state.smoothing).toBe("medium");
+  });
+
   it("keeps the performer hidden across Physical and Hand modes", () => {
     expect(cameraTreatmentForInputMode("spatial", "clean")).toBe("hidden");
     expect(cameraTreatmentForInputMode("mouse", "ghost")).toBe("hidden");
