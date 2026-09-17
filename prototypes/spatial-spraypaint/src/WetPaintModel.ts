@@ -689,7 +689,15 @@ export class WetPaintAccumulator {
         0.16,
         0.68,
       ),
-      originPoolRadius: node.radius * profile.originPoolRatio,
+      // Only the FIRST channel drawn from a node carries the full pooled
+      // shoulder -- later channels from the SAME node are siblings peeling
+      // off an already-established pool, not each their own independent
+      // puddle. Without this, several channels sharing one node (all
+      // starting at the same y, each stamping its own full-width shoulder)
+      // union into a flat-topped shelf with hard corners -- a root-profile
+      // defect, not a pool-architecture one, so it's fixed here rather than
+      // by changing how/where channels are triggered or spaced.
+      originPoolRadius: node.radius * profile.originPoolRatio * (node.channelsSpawned === 0 ? 1 : 0.45),
       terminalBulbRatio: this.variant === "drip-mop" ? 0.58 : 0.48,
       renderAsOverlay: true,
       attachmentUnderlap: size * 0.28,

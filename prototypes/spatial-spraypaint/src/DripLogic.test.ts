@@ -133,6 +133,25 @@ describe("continuous wet drip geometry", () => {
     expect(first.slice(1).every((section, index) => section.width <= first[index].width)).toBe(true);
   });
 
+  it("shapes a Mop overlay drip's root as a wide shoulder narrowing into a neck via width interpolation -- never a flat plateau or a separate circle", () => {
+    const pooledDrip = { ...wetDrip, renderAsOverlay: true, originPoolRadius: 22 };
+    const strip = buildContinuousDripStrip(pooledDrip, 40);
+    // Root starts at the full pooled shoulder width...
+    expect(strip[0].width).toBeCloseTo(pooledDrip.originPoolRadius * 2, 5);
+    // ...decreases STRICTLY (progressively, not a plateau) through the
+    // shoulder/neck region...
+    const shoulderSection = strip.filter((section) => section.progress <= 0.22);
+    expect(shoulderSection.length).toBeGreaterThan(2);
+    for (let index = 1; index < shoulderSection.length; index += 1) {
+      expect(shoulderSection[index].width).toBeLessThan(shoulderSection[index - 1].width);
+    }
+    // ...and has fully joined the ordinary body taper by the end of the
+    // shoulder span (no residual bulge past the neck).
+    const stemWidthAtSpanEnd = pooledDrip.width * (1 - (1 - pooledDrip.tipWidthRatio) * 0.22);
+    const afterNeck = strip.find((section) => section.progress > 0.22);
+    expect(afterNeck!.width).toBeCloseTo(stemWidthAtSpanEnd, 1);
+  });
+
   it("keeps deterministic subtle kinks connected to the same gravity run", () => {
     const strip = buildContinuousDripStrip(wetDrip, 20);
     expect(strip[0].center).toEqual({ x: wetDrip.x, y: wetDrip.y });

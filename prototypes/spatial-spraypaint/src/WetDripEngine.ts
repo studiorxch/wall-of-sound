@@ -69,7 +69,6 @@ export class WetDripEngine {
     const strip = prependHiddenDripUnderlap(drip, buildContinuousDripStrip(drip, 24));
     ctx.save();
     ctx.fillStyle = this.createGradient(ctx, drip, color);
-    this.fillRoundedRoot(ctx, drip);
     this.fillStrip(ctx, strip);
     this.fillRoundedTip(ctx, strip[strip.length - 1], drip.terminalBulbRatio);
     ctx.restore();
@@ -87,27 +86,9 @@ export class WetDripEngine {
     );
     ctx.save();
     ctx.fillStyle = this.createGradient(ctx, drip, drip.color);
-    this.fillRoundedRoot(ctx, drip);
     this.fillStrip(ctx, strip);
     this.fillRoundedTip(ctx, strip[strip.length - 1], drip.terminalBulbRatio);
     ctx.restore();
-  }
-
-  /**
-   * The strip's own top edge (progress 0) is a flat straight line across
-   * the pooled shoulder width -- fine once it flows into the tapering body
-   * below, but the flat corners at either end of that top edge are exactly
-   * what read as a sharp spike/pinch where a drip meets the mark. A filled
-   * circle at the drip's true origin, sized to the same pooled radius,
-   * rounds those corners off so the transition from stroke body -> wet pool
-   * -> gravity run is smooth all the way through.
-   */
-  private fillRoundedRoot(ctx: CanvasRenderingContext2D, drip: DripSeed): void {
-    const radius = drip.originPoolRadius ?? drip.width * 0.5;
-    if (radius <= 0) return;
-    ctx.beginPath();
-    ctx.arc(drip.x, drip.y, radius, 0, Math.PI * 2);
-    ctx.fill();
   }
 
   private createGradient(

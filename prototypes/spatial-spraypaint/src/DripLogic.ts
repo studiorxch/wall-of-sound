@@ -94,9 +94,17 @@ export function resolveDripStripSection(
   const shoulderWidth = drip.renderAsOverlay && drip.originPoolRadius
     ? Math.max(stemWidth, drip.originPoolRadius * 2)
     : stemWidth;
-  const shoulderProgress = Math.min(1, safeProgress / 0.18);
-  const shoulderBlend = 1 - shoulderProgress * shoulderProgress * (3 - shoulderProgress * 2);
-  const width = Math.max(0.8, stemWidth + (shoulderWidth - stemWidth) * shoulderBlend);
+  // The root's shape comes ENTIRELY from width interpolation along the
+  // strip -- never a separate circle primitive layered on top (an earlier
+  // pass added one; removed -- see WetDripEngine.ts). A short, smooth
+  // (C1-continuous, no flat plateau and no hard corners) ease from the
+  // pooled shoulder width down to the ordinary body/stem width over a
+  // compact span reads as a short "neck" pulling out of the pool, without
+  // the flat-topped wedge a longer or asymmetric-holding curve produces.
+  const shoulderSpan = 0.14;
+  const shoulderProgress = Math.min(1, safeProgress / shoulderSpan);
+  const neckBlend = 1 - shoulderProgress * shoulderProgress * (3 - shoulderProgress * 2);
+  const width = Math.max(0.8, stemWidth + (shoulderWidth - stemWidth) * neckBlend);
   return {
     progress: safeProgress,
     center,

@@ -48,7 +48,7 @@ describe("WetDripEngine", () => {
     expect(underpainted[0].width).toBeGreaterThanOrEqual(drip.width);
   });
 
-  it("redraws a growing Mop drip as one gradient strip with a rounded root and a rounded tip", () => {
+  it("redraws a growing Mop drip as one gradient strip -- the root's shape comes from width interpolation, not a separate circle", () => {
     const persistent = recordingContext();
     const overlay = recordingContext();
     const engine = new WetDripEngine();
@@ -79,13 +79,13 @@ describe("WetDripEngine", () => {
 
     engine.advanceDrips(persistent.ctx, overlay.ctx, 1000);
     expect(persistent.calls.filter((call) => call === "closePath")).toHaveLength(1);
-    // One rounded root (pools the flat top edge into the mark -- the fix
-    // for a drip origin reading as a sharp spike/pinch) and one rounded
-    // terminal tip -- not a separate free-floating circular origin stamp.
-    expect(persistent.calls.filter((call) => call === "arc")).toHaveLength(2);
+    // Exactly one arc: the rounded terminal tip. The root is carried
+    // entirely by the strip's own width interpolation (shoulder -> neck ->
+    // taper) -- never a standalone circle primitive at the origin.
+    expect(persistent.calls.filter((call) => call === "arc")).toHaveLength(1);
   });
 
-  it("replays the same connected final geometry with a rounded root, no free-floating origin node", () => {
+  it("replays the same connected final geometry with no origin circle", () => {
     const drip = {
       x: 40,
       y: 50,
@@ -111,11 +111,11 @@ describe("WetDripEngine", () => {
     expect(first.calls).toEqual(second.calls);
     expect(first.colorStops).toEqual(second.colorStops);
     expect(first.calls.filter((call) => call === "closePath")).toHaveLength(1);
-    expect(first.calls.filter((call) => call === "arc")).toHaveLength(2);
+    expect(first.calls.filter((call) => call === "arc")).toHaveLength(1);
     expect(first.moveTos[0][1]).toBe(36);
   });
 
-  it("rounds the root at the drip's true origin, sized to its pooled radius -- not the mark's own flat-cut shoulder edge", () => {
+  it("shapes the root from progressive width interpolation -- wide shoulder narrowing into a neck, then the body taper, never a stamped disk", () => {
     const drip = {
       x: 40,
       y: 50,
@@ -129,9 +129,23 @@ describe("WetDripEngine", () => {
       renderAsOverlay: true,
       attachmentUnderlap: 14,
     };
+    const strip = buildContinuousDripStrip(drip, 40);
+    // No circle at the root -- the only arc drawn is the terminal tip.
     const recording = recordingContext();
     new WetDripEngine().renderCompletedDrip(recording.ctx, drip, "#e92f3d");
-    const [rootArc] = recording.arcs;
-    expect(rootArc).toEqual([drip.x, drip.y, drip.originPoolRadius]);
+    expect(recording.arcs).toHaveLength(1);
+
+    // The root (progress 0) is at the full pooled shoulder width...
+    expect(strip[0].width).toBeCloseTo(drip.originPoolRadius * 2, 5);
+    // ...visibly wider than the body a bit further down the run...
+    const bodySection = strip[Math.round(strip.length * 0.4)];
+    expect(strip[0].width).toBeGreaterThan(bodySection.width * 1.5);
+    // ...width decreases monotonically over the whole run (progressive
+    // narrowing, not a flat plateau followed by a sudden drop)...
+    expect(strip.every((section, index) => (
+      index === 0 || section.width <= strip[index - 1].width
+    ))).toBe(true);
+    // ...and the taper is still visibly present all the way to the tail.
+    expect(strip[strip.length - 1].width).toBeLessThan(bodySection.width);
   });
 });
