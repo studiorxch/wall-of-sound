@@ -88,4 +88,4 @@ All four items were already satisfied by existing code (traced, not modified):
 4. **Firewall/macOS prompt to expect**: the first time a `node`/`vite` process binds to all interfaces and accepts an incoming connection, macOS's own firewall (System Settings → Network → Firewall, if enabled) may show "Do you want the application 'node' to accept incoming network connections?" — click **Allow**. If the firewall is off, no prompt appears.
 5. **Known Safari/iPad limitations**: hand-tracking (camera-based "spatial" input) will not start over a plain LAN `http://` URL — `getUserMedia` requires a secure context (`https:` or `localhost`), out of scope to fix here (see E). Finger touches are not currently distinguished from Pencil for drawing purposes (no palm rejection) — see D.
 6. **Pencil diagnostic steps**: Settings → Input → check "Pencil diagnostics" → draw with Pencil → panel shows live pointerType/pressure/tilt/twist/velocity/coalesced values.
-7. **Commit hash**: (pending — see next commit)
+7. **Commit hash**: `eec9c0d` — "feat: Spatial Spraypaint -- enable LAN access for iPad Pencil testing"
