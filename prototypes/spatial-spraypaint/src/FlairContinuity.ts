@@ -1,4 +1,4 @@
-import { applyFlairOutputToPoint } from "./FlairCurves";
+import { applyFlairOutputToPoint, isFlairEligibleCap } from "./FlairCurves";
 import { type FlairModeId } from "./ToolTaxonomy";
 import { type StrokePoint } from "./types";
 
@@ -18,7 +18,8 @@ import { type StrokePoint } from "./types";
  * widths/opacities, reading as stitched capsule sections instead of one
  * continuously tapering sprayed gesture.
  *
- * Fix: for Track Marks with an active (non-off) Flair mode ONLY, densify —
+ * Fix: for an `isFlairEligibleCap` cap with an active (non-off) Flair mode
+ * ONLY, densify —
  * resample the segment from the previous rendered point to the new one at a
  * small FIXED arclength step (independent of `baseRadius`, so it stays
  * dense even at Wild's extended sizes), linearly interpolating every field
@@ -34,8 +35,8 @@ import { type StrokePoint } from "./types";
 // still being coarse enough, at a fast drag, to leave a faint facet at
 // sharp direction changes. Denser sampling costs more render calls per
 // batch but stays well within frame budget at typical stroke lengths.
-const TRACK_MARKS_FLAIR_RESAMPLE_STEP_WALL_UNITS = 0.7;
-const TRACK_MARKS_FLAIR_MIN_RESAMPLE_STEPS = 6;
+const FLAIR_RESAMPLE_STEP_WALL_UNITS = 0.7;
+const FLAIR_MIN_RESAMPLE_STEPS = 6;
 
 function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
@@ -107,15 +108,15 @@ function applyMistToOpacity(baseOpacity: number, bloom01: number, jitterSeed: nu
  * behavior). `previous === null` (a stroke's very first point) returns just
  * `[target]`, matching every other cap's existing start-of-stroke behavior.
  */
-export function resampleTrackMarksFlairSegment(previous: StrokePoint | null, target: StrokePoint, bloom01 = 0): StrokePoint[] {
+export function resampleFlairSegment(previous: StrokePoint | null, target: StrokePoint, bloom01 = 0): StrokePoint[] {
   if (!previous) return [target];
   const dx = target.x - previous.x;
   const dy = target.y - previous.y;
   const dist = Math.hypot(dx, dy);
   if (dist === 0) return [target];
   const steps = Math.max(
-    TRACK_MARKS_FLAIR_MIN_RESAMPLE_STEPS,
-    Math.ceil(dist / TRACK_MARKS_FLAIR_RESAMPLE_STEP_WALL_UNITS),
+    FLAIR_MIN_RESAMPLE_STEPS,
+    Math.ceil(dist / FLAIR_RESAMPLE_STEP_WALL_UNITS),
   );
   const previousZ = previous.z ?? 0;
   const targetZ = target.z ?? 0;
@@ -140,15 +141,16 @@ export function resampleTrackMarksFlairSegment(previous: StrokePoint | null, tar
 /**
  * The Flair Continuity fix's single call site from `main.ts`. Applies the
  * existing output multiplier first (`applyFlairOutputToPoint`, unchanged),
- * then — ONLY for Track Marks with an active Flair mode — replaces the
- * batch's `segmentEnds` with the dense continuity resample above, ramping
- * from the previous RENDERED point (already carrying the correct prior
- * Flair-adjusted width/opacity, since `main.ts` always passes its own
- * `segmentStart` chain here, not `CanonicalStrokeManager`'s raw internal
- * one) to this batch's true final target. Every other cap, and Track Marks
- * with Flair off, gets back `segmentEnds` with the output multiplier
- * applied and otherwise byte-identical to before this fix (`.map` over an
- * identity function preserves every value, only wraps a fresh array).
+ * then — ONLY for an `isFlairEligibleCap` cap with an active Flair mode —
+ * replaces the batch's `segmentEnds` with the dense continuity resample
+ * above, ramping from the previous RENDERED point (already carrying the
+ * correct prior Flair-adjusted width/opacity, since `main.ts` always passes
+ * its own `segmentStart` chain here, not `CanonicalStrokeManager`'s raw
+ * internal one) to this batch's true final target. Every ineligible cap,
+ * and an eligible cap with Flair off, gets back `segmentEnds` with the
+ * output multiplier applied and otherwise byte-identical to before this fix
+ * (`.map` over an identity function preserves every value, only wraps a
+ * fresh array).
  */
 export function buildContinuousSegmentEnds(
   previous: StrokePoint | null,
@@ -159,6 +161,6 @@ export function buildContinuousSegmentEnds(
   bloom01 = 0,
 ): StrokePoint[] {
   const applied = segmentEnds.map((point) => applyFlairOutputToPoint(point, capId, mode, outputMultiplier));
-  if (capId !== "track-marks" || mode === "off" || applied.length === 0) return applied;
-  return resampleTrackMarksFlairSegment(previous, applied[applied.length - 1], bloom01);
+  if (!isFlairEligibleCap(capId) || mode === "off" || applied.length === 0) return applied;
+  return resampleFlairSegment(previous, applied[applied.length - 1], bloom01);
 }

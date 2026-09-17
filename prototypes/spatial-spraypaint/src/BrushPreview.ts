@@ -141,7 +141,8 @@ export function renderSprayBrushStudioPreview(
 }
 
 /**
- * Brush Studio's Track-Marks-only Flair preview (Brush Studio Flair Controls
+ * Brush Studio's Flair preview, for the real accessible caps (Pink Dot Fat,
+ * New York Fat -- see `isFlairEligibleCap` in `FlairCurves.ts`; Brush Studio Flair Controls
  * build brief, section 5). Sweeps simulated distance near -> far -> near
  * ACROSS the preview stroke's own points — a real, deterministic call to
  * `resolveFlairModulationWithParams`, the exact function the live Alt-drag
@@ -149,7 +150,7 @@ export function renderSprayBrushStudioPreview(
  * the thick<->thin/output modulation directly, with no animation loop and
  * no faked preview. Still the real `SprayBrushEngine`.
  */
-export function renderTrackMarksFlairPreview(
+export function renderFlairPreview(
   ctx: CanvasRenderingContext2D,
   width: number,
   height: number,

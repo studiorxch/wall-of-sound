@@ -5,7 +5,7 @@ import {
   type SprayPropertyKey,
   type SprayPropertyOverride,
 } from "./BrushProperties";
-import { renderMarkerBrushStudioPreview, renderSprayBrushStudioPreview, renderTrackMarksFlairPreview } from "./BrushPreview";
+import { renderMarkerBrushStudioPreview, renderSprayBrushStudioPreview, renderFlairPreview } from "./BrushPreview";
 import {
   getFlairPropertyRows,
   isFlairModeModified,
@@ -17,6 +17,7 @@ import {
   type FlairPropertyRow,
 } from "./FlairProperties";
 import {
+  isFlairEligibleCap,
   resolveFlairModulationWithParams,
   resolveFlairSize,
   resolveFlairStartDistance,
@@ -180,17 +181,17 @@ export interface BrushStudioDeps {
   resetSprayProperty: (capId: string, key: SprayPropertyKey) => void;
   resetSprayBrush: (capId: string) => void;
   /**
-   * Track Marks' own Flair session state (Brush Studio Flair Controls build
-   * brief). `getTrackMarksFlairMode`/`setTrackMarksFlairMode` are a single
-   * current-mode pointer (not per-cap — only Track Marks consumes Flair at
-   * runtime in this pass, see the checkpoint doc); `getFlairOverrides` and
-   * the three mutators below key by BOTH cap id and mode (see
+   * The selected `isFlairEligibleCap` cap's own Flair session state (Brush
+   * Studio Flair Controls build brief). `getActiveFlairMode`/
+   * `setActiveFlairMode` are a single current-mode pointer (not per-cap —
+   * see `main.ts`'s own field doc for why); `getFlairOverrides` and the
+   * three mutators below key by BOTH cap id and mode (see
    * `FlairProperties.ts`) so one mode's session tweaks never leak into
-   * another mode's defaults.
+   * another mode's defaults, and each eligible cap keeps its own envelope.
    */
   getFlairOverrides: () => FlairOverrideStore;
-  getTrackMarksFlairMode: () => FlairModeId;
-  setTrackMarksFlairMode: (mode: FlairModeId) => void;
+  getActiveFlairMode: () => FlairModeId;
+  setActiveFlairMode: (mode: FlairModeId) => void;
   setFlairProperty: (capId: string, mode: FlairModeId, patch: FlairParameterOverride) => void;
   resetFlairProperty: (capId: string, mode: FlairModeId, key: FlairPropertyKey) => void;
   resetFlairMode: (capId: string, mode: FlairModeId) => void;
@@ -207,7 +208,7 @@ const PROPERTY_GROUP_LABELS: ReadonlyArray<{ key: "general" | "shape" | "paint" 
   { key: "motion", label: "Motion" },
 ];
 
-/** Section 8 of the build brief: Brush Studio's Mode selector is the primary way to change Flair, not the "F" shortcut (kept only as a secondary accelerator — see `main.ts`'s `cycleTrackMarksFlairMode`). */
+/** Section 8 of the build brief: Brush Studio's Mode selector is the primary way to change Flair, not the "F" shortcut (kept only as a secondary accelerator — see `main.ts`'s `cycleActiveFlairMode`). */
 const FLAIR_MODE_SELECT_OPTIONS: ReadonlyArray<{ id: FlairModeId; label: string }> = [
   { id: "off", label: "Off" },
   { id: "wall", label: "Wall" },
@@ -396,16 +397,18 @@ export class BrushStudioController {
 
     const groups = getSprayPropertyGroups(preset as SprayCapPreset, effective, override);
     const body = this.el("brush-studio-property-groups");
-    // FLAIR (Track Marks only — see `buildFlairSection`) is inserted right
-    // after General and before Shape/Paint/Motion, per the build brief's
-    // "dedicated FLAIR group." Every other cap's panel is byte-identical to
-    // before this pass: `buildFlairSection` returns an empty array for them.
+    // FLAIR (the real, user-reachable caps only — Pink Dot Fat, New York
+    // Fat; see `isFlairEligibleCap` and `buildFlairSection`) is inserted
+    // right after General and before Shape/Paint/Motion, per the build
+    // brief's "dedicated FLAIR group." Every ineligible cap's panel is
+    // byte-identical to before this pass: `buildFlairSection` returns an
+    // empty array for them.
     const [generalLabel, ...restLabels] = PROPERTY_GROUP_LABELS;
     const generalRows = groups[generalLabel.key].length === 0 ? [] : [
       this.buildFamilyLabel(generalLabel.label),
       ...groups[generalLabel.key].map((row) => this.buildSprayPropertyRow(preset.id, row, isCustom)),
     ];
-    const flairRows = preset.id === "track-marks" && !isCustom ? this.buildFlairSection(preset.id, preset as SprayCapPreset) : [];
+    const flairRows = isFlairEligibleCap(preset.id) && !isCustom ? this.buildFlairSection(preset.id, preset as SprayCapPreset) : [];
     const restRows = restLabels.flatMap(({ key, label }) => {
       const rows = groups[key];
       if (rows.length === 0) return [];
@@ -426,37 +429,38 @@ export class BrushStudioController {
 
   /**
    * Renders the live preview canvas — the real `SprayBrushEngine` either
-   * way. Track Marks with an active (non-off) Flair mode gets the
-   * Flair-aware sweep (`renderTrackMarksFlairPreview`, build brief section
-   * 5); every other cap, and Track Marks with Flair off, gets the exact
-   * same `renderSprayBrushStudioPreview` call as before this pass.
+   * way. An `isFlairEligibleCap` cap with an active (non-off) Flair mode
+   * gets the Flair-aware sweep (`renderFlairPreview`, build brief section
+   * 5); every ineligible cap, and an eligible cap with Flair off, gets the
+   * exact same `renderSprayBrushStudioPreview` call as before this pass.
    */
   private renderPreviewCanvas(preset: SprayCapPreset, effective: ReturnType<typeof resolveEffectiveSprayStyle>): void {
     const canvas = this.el<HTMLCanvasElement>("brush-studio-preview");
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    const mode = this.deps.getTrackMarksFlairMode();
-    if (preset.id === "track-marks" && mode !== "off") {
+    const mode = this.deps.getActiveFlairMode();
+    if (isFlairEligibleCap(preset.id) && mode !== "off") {
       const override = this.deps.getFlairOverrides()[preset.id]?.[mode] ?? {};
       const params = resolveEffectiveFlairParams(mode, preset.id, preset.baseRadius, override);
-      renderTrackMarksFlairPreview(ctx, canvas.width, canvas.height, preset, mode, params);
+      renderFlairPreview(ctx, canvas.width, canvas.height, preset, mode, params);
       return;
     }
     renderSprayBrushStudioPreview(ctx, canvas.width, canvas.height, preset, effective);
   }
 
   /**
-   * The FLAIR group — Track Marks only (build brief section 4/1). Returns an
-   * empty array for a custom duplicate of Track Marks too (custom brushes
-   * have no live-paint identity of their own yet — see `CustomBrush.ts` —
-   * so Flair, which is keyed to the live `sprayCapId`, would have nothing
+   * The FLAIR group — the real, user-reachable caps only (Pink Dot Fat, New
+   * York Fat; see `isFlairEligibleCap`). Returns an empty array for a
+   * custom duplicate of an eligible cap too (custom brushes have no
+   * live-paint identity of their own yet — see `CustomBrush.ts` — so
+   * Flair, which is keyed to the live `sprayCapId`, would have nothing
    * real to attach to). A Mode selector is always shown; the five session
    * controls and the Effective Range readout only render once a non-off
    * mode is active, keeping `off`'s panel quiet (Creative Interface
    * Doctrine: normal state stays visually quiet).
    */
   private buildFlairSection(capId: string, preset: SprayCapPreset): HTMLElement[] {
-    const mode = this.deps.getTrackMarksFlairMode();
+    const mode = this.deps.getActiveFlairMode();
     const elements: HTMLElement[] = [this.buildFamilyLabel("Flair")];
 
     const modeRow = document.createElement("div");
@@ -475,7 +479,7 @@ export class BrushStudioController {
       modeSelect.append(opt);
     }
     modeSelect.addEventListener("change", () => {
-      this.deps.setTrackMarksFlairMode(modeSelect.value as FlairModeId);
+      this.deps.setActiveFlairMode(modeSelect.value as FlairModeId);
       this.render();
     });
     modeRow.append(modeLabel, modeSelect);
@@ -608,7 +612,7 @@ export class BrushStudioController {
       const params = resolveEffectiveFlairParams(mode, preset.id, preset.baseRadius, nextOverride);
       const canvas = this.el<HTMLCanvasElement>("brush-studio-preview");
       const ctx = canvas.getContext("2d");
-      if (ctx) renderTrackMarksFlairPreview(ctx, canvas.width, canvas.height, preset, mode, params);
+      if (ctx) renderFlairPreview(ctx, canvas.width, canvas.height, preset, mode, params);
       this.render();
     });
     wrap.append(select);
@@ -712,7 +716,7 @@ export class BrushStudioController {
       const params = resolveEffectiveFlairParams(mode, preset.id, preset.baseRadius, override);
       const canvas = this.el<HTMLCanvasElement>("brush-studio-preview");
       const ctx = canvas.getContext("2d");
-      if (ctx) renderTrackMarksFlairPreview(ctx, canvas.width, canvas.height, preset, mode, params);
+      if (ctx) renderFlairPreview(ctx, canvas.width, canvas.height, preset, mode, params);
     });
     input.addEventListener("change", () => this.render());
     wrap.append(input, readout);

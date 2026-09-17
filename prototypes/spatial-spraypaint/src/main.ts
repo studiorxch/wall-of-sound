@@ -70,6 +70,7 @@ import { getSprayCapPreset } from "./SprayCapPresets";
 import {
   FLAIR_STROKE_START_POLICY,
   inverseEffectiveFlairDistance,
+  isFlairEligibleCap,
   resolveDefaultFlairMode,
   resolveFlairModulationWithParams,
   resolveFlairSize,
@@ -124,9 +125,9 @@ import {
 const MIN_DEPOSIT_INTERVAL_MS = 16;
 /** Wall units of simulated spray size per screen pixel of Alt-held vertical drag — see `adjustSimulatedSprayDistance`. Tuned so the near/reference/far anchors (~25/32/42) are each a comfortable, deliberate drag apart, not a hair-trigger. */
 const SIMULATED_DISTANCE_DRAG_SENSITIVITY = 0.15;
-/** Screen pixels of Alt-held vertical drag that cross Flair's full normalized 0-1 simulated-distance range at `distanceSensitivity` 1 — see `adjustTrackMarksFlairDistance`. Track Marks' size floor/span themselves live in `FlairCurves.ts` (`TRACK_MARKS_FLAIR_MIN_SIZE`/`_SIZE_SPAN`), shared with Brush Studio's preview/readouts. */
-const TRACK_MARKS_FLAIR_DRAG_RANGE_PX = 260;
-/** off -> wall -> blackbook -> wild -> off, cycled by the small Flair keyboard shortcut (see `cycleTrackMarksFlairMode`) — never a toolbar redesign, just a temporary desktop testing control matching the existing Alt+scroll/Alt+drag precedent. */
+/** Screen pixels of Alt-held vertical drag that cross Flair's full normalized 0-1 simulated-distance range at `distanceSensitivity` 1 — see `adjustActiveFlairDistance`. Each eligible cap's own size floor/span comes from its own `getFlairSizeDefaults(mode, capBaseRadius, tier)` in `FlairCurves.ts`, shared with Brush Studio's preview/readouts. */
+const FLAIR_DRAG_RANGE_PX = 260;
+/** off -> wall -> blackbook -> wild -> off, cycled by the small Flair keyboard shortcut (see `cycleActiveFlairMode`) — never a toolbar redesign, just a temporary desktop testing control matching the existing Alt+scroll/Alt+drag precedent. */
 const FLAIR_MODE_CYCLE: readonly FlairModeId[] = ["off", "wall", "blackbook", "wild"];
 class SpatialSpraypaintApp {
   private readonly compositeCanvas: HTMLCanvasElement;
@@ -181,16 +182,16 @@ class SpatialSpraypaintApp {
   private simulatedDistanceDragLastY: number | null = null;
   /** Previous raw pointer sample from the current pointer sequence — velocity's own "previous" for `normalizePointerSample` (see `PencilInput.ts`), independent of stroke/drawing state so diagnostics work on hover too. Reset to null on every `pointerdown`. */
   private lastRawPointerSample: RawPointerSample | null = null;
-  /** Section 3 of the Flair build brief: routing/default authority only — no UI selects this yet, and it never hard-codes screen position as depth. Track Marks' own Flair-mode cycle (see `cycleTrackMarksFlairMode`) is this pass's live-testable surface. */
+  /** Section 3 of the Flair build brief: routing/default authority only — no UI selects this yet, and it never hard-codes screen position as depth. The selected cap's own Flair-mode cycle (see `cycleActiveFlairMode`) is this pass's live-testable surface. */
   private surfaceContext: SurfaceContextId = "neutral";
-  /** Track Marks' own active Flair mode — the brief's "safe creative sandbox." Every other cap ignores this field entirely (see `applyFlairOutputToPoint`/`adjustSimulatedSprayDistance`'s own cap-id gate). */
-  private trackMarksFlairMode: FlairModeId = resolveDefaultFlairMode(this.surfaceContext);
-  /** Normalized (0-1) simulated distance driving Track Marks' Flair curves — persists across strokes like a live depth dial (only the per-drag `simulatedDistanceDragLastY` anchor above resets each gesture). Starts at a neutral mid-point. */
-  private trackMarksFlairDistance01 = 0.5;
-  /** The output/opacity multiplier resolved from `trackMarksFlairDistance01` — recomputed on every `adjustTrackMarksFlairDistance` call, consumed once per deposited point via `applyFlairOutputToPoint`. Always 1 while Flair is off. */
-  private trackMarksFlairOutputMultiplier = 1;
+  /** The currently-selected `isFlairEligibleCap` cap's active Flair mode — the brief's "safe creative sandbox," now covering both real, user-reachable Fat caps (Pink Dot Fat, New York Fat). Every ineligible cap ignores this field entirely (see `applyFlairOutputToPoint`/`adjustSimulatedSprayDistance`'s own cap-id gate). A single shared field, not per-cap memory: switching caps keeps whatever mode is set, exactly like every prior pass's single-cap behavior. */
+  private activeFlairMode: FlairModeId = resolveDefaultFlairMode(this.surfaceContext);
+  /** Normalized (0-1) simulated distance driving the selected eligible cap's Flair curves — persists across strokes like a live depth dial (only the per-drag `simulatedDistanceDragLastY` anchor above resets each gesture). Starts at a neutral mid-point. */
+  private activeFlairDistance01 = 0.5;
+  /** The output/opacity multiplier resolved from `activeFlairDistance01` — recomputed on every `adjustActiveFlairDistance` call, consumed once per deposited point via `applyFlairOutputToPoint`. Always 1 while Flair is off. */
+  private activeFlairOutputMultiplier = 1;
   /** Real Spray Pass build brief, section 3: the resolved `bloom01` (mist/translucency magnitude) from the same modulation call that resolves width/output — consumed once per deposit batch by `buildContinuousSegmentEnds`'s mist treatment (see `FlairContinuity.ts`). Always 0 while Flair is off. */
-  private trackMarksFlairBloom01 = 0;
+  private activeFlairBloom01 = 0;
   private drawingCursorAim: DrawingCursorAimState = { point: null, angle: 0 };
   private physicalCursorVisible = false;
   private panInteraction: PanInteractionState = resetPanInteraction();
@@ -233,8 +234,8 @@ class SpatialSpraypaintApp {
       resetSprayProperty: (capId, key) => this.setSettings({ type: "reset-spray-property", capId, key }),
       resetSprayBrush: (capId) => this.setSettings({ type: "reset-spray-brush", capId }),
       getFlairOverrides: () => this.settings.flairOverrides,
-      getTrackMarksFlairMode: () => this.trackMarksFlairMode,
-      setTrackMarksFlairMode: (mode) => this.setTrackMarksFlairMode(mode),
+      getActiveFlairMode: () => this.activeFlairMode,
+      setActiveFlairMode: (mode) => this.setActiveFlairMode(mode),
       setFlairProperty: (capId, mode, patch) => this.setSettings({ type: "flair-property", capId, mode, patch }),
       resetFlairProperty: (capId, mode, key) => this.setSettings({ type: "reset-flair-property", capId, mode, key }),
       resetFlairMode: (capId, mode) => this.setSettings({ type: "reset-flair-mode", capId, mode }),
@@ -357,17 +358,17 @@ class SpatialSpraypaintApp {
       if (this.calibrationBench.isOpen()) this.calibrationBench.close();
       else if (this.brushStudio.isOpen()) this.brushStudio.close();
     });
-    // Flair Behavior Spec V1 (build brief section 5/6): "F" cycles Track
-    // Marks' own Flair mode off -> wall -> blackbook -> wild -> off. A
-    // temporary desktop-only shortcut, matching the existing Alt+scroll
+    // Flair Behavior Spec V1 (build brief section 5/6): "F" cycles the
+    // selected cap's own Flair mode off -> wall -> blackbook -> wild -> off.
+    // A temporary desktop-only shortcut, matching the existing Alt+scroll
     // (Spray Angle) / Alt+drag (simulated distance) precedent — no toolbar
     // redesign. Ignored while typing in any text field, and a complete no-op
-    // for every tool/cap other than Track Marks (see `cycleTrackMarksFlairMode`).
+    // for every tool/cap that isn't `isFlairEligibleCap` (see `cycleActiveFlairMode`).
     window.addEventListener("keydown", (event) => {
       if (event.key.toLowerCase() !== "f" || event.altKey || event.metaKey || event.ctrlKey) return;
       const target = event.target;
       if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement) return;
-      this.cycleTrackMarksFlairMode();
+      this.cycleActiveFlairMode();
     });
 
     this.requireElement<HTMLSelectElement>("palette-select").addEventListener("change", (event) => {
@@ -542,10 +543,10 @@ class SpatialSpraypaintApp {
       // Flair Stroke Envelope Stabilization build brief, section 1 — THE
       // FIX: every new stroke's Flair state is explicitly reset here, at
       // pointerdown, BEFORE the first point is ever deposited. See
-      // `resetTrackMarksFlairForNewStroke`'s own doc for the full root-
+      // `resetActiveFlairForNewStroke`'s own doc for the full root-
       // cause explanation of why this couldn't just happen lazily on first
       // Alt-drag sample the way it used to.
-      this.resetTrackMarksFlairForNewStroke();
+      this.resetActiveFlairForNewStroke();
       this.activeWallPoint = screenToWall(this.wallView, screenPoint);
       this.lastDepositTimestamp = 0;
       this.setDrawingActive(true);
@@ -1010,21 +1011,22 @@ class SpatialSpraypaintApp {
    * Called once, right as a fresh Alt-held drag GESTURE begins (the very
    * first Alt-held pointermove within an already-active stroke, before any
    * delta has been applied — see the pointermove listener above). This is
-   * NOT the stroke-start fix (see `resetTrackMarksFlairForNewStroke`,
+   * NOT the stroke-start fix (see `resetActiveFlairForNewStroke`,
    * called at `pointerdown` instead) — it only keeps a drag that begins
    * PARTWAY THROUGH an already-reset stroke continuous with whatever size
    * the stroke is already at, by inverse-mapping the CURRENT absolute size
    * back to a `distance01` ("no sudden jumps," build brief section 5). No-op
-   * for every cap except Track Marks with an active (non-off) Flair mode.
+   * for every cap except an `isFlairEligibleCap` cap with an active
+   * (non-off) Flair mode.
    */
   private beginSimulatedDistanceDrag(): void {
     if (this.toolSelection.selectedToolId !== "spray-can") return;
-    if (this.toolSelection.sprayCapId !== "track-marks" || this.trackMarksFlairMode === "off") return;
-    const params = this.effectiveFlairParams(this.trackMarksFlairMode);
-    this.trackMarksFlairDistance01 = inverseEffectiveFlairDistance(this.trackMarksFlairMode, params, this.baseRadius);
+    if (!isFlairEligibleCap(this.toolSelection.sprayCapId) || this.activeFlairMode === "off") return;
+    const params = this.effectiveFlairParams(this.activeFlairMode);
+    this.activeFlairDistance01 = inverseEffectiveFlairDistance(this.activeFlairMode, params, this.baseRadius);
   }
 
-  /** MODE DEFAULT merged with Brush Studio's SESSION MODIFICATION (see `FlairProperties.ts`) for Track Marks' Flair, at the given mode. Always the same `getFlairOverride`/`resolveEffectiveFlairParams` pair Brush Studio itself reads, so live painting and the Studio preview can never disagree. `capBaseRadius` is always the CAP'S OWN preset default (never the live/overridden size) — see `FlairProperties.ts`'s own doc for why that distinction is load-bearing. */
+  /** MODE DEFAULT merged with Brush Studio's SESSION MODIFICATION (see `FlairProperties.ts`) for the selected cap's Flair, at the given mode. Always the same `getFlairOverride`/`resolveEffectiveFlairParams` pair Brush Studio itself reads, so live painting and the Studio preview can never disagree. `capBaseRadius` is always the CAP'S OWN preset default (never the live/overridden size) — see `FlairProperties.ts`'s own doc for why that distinction is load-bearing. */
   private effectiveFlairParams(mode: FlairModeId): EffectiveFlairParams {
     const capId = this.toolSelection.sprayCapId;
     const capBaseRadius = getSprayCapPreset(capId).baseRadius;
@@ -1034,15 +1036,16 @@ class SpatialSpraypaintApp {
   private adjustSimulatedSprayDistance(deltaScreenY: number): void {
     if (this.toolSelection.selectedToolId !== "spray-can") return;
     const capId = this.toolSelection.sprayCapId;
-    // Flair Behavior Spec V1 (Track Marks Sandbox build brief): ONLY Track
-    // Marks, and ONLY once its own Flair mode is something other than
-    // `off`, is routed through the curve-driven path below. Every other cap
-    // — Pink Dot Fat included — keeps this exact prior linear
+    // Real Spray Pass build brief (accessible-cap move): ONLY an
+    // `isFlairEligibleCap` cap (Pink Dot Fat, New York Fat — the real,
+    // user-reachable caps), and ONLY once its own Flair mode is something
+    // other than `off`, is routed through the curve-driven path below.
+    // Every ineligible cap keeps this exact prior linear
     // `current + delta*SENSITIVITY` mapping, byte-for-byte, regardless of
-    // `surfaceContext`/`trackMarksFlairMode`, since those fields are never
+    // `surfaceContext`/`activeFlairMode`, since those fields are never
     // read on this branch.
-    if (capId === "track-marks" && this.trackMarksFlairMode !== "off") {
-      this.adjustTrackMarksFlairDistance(deltaScreenY);
+    if (isFlairEligibleCap(capId) && this.activeFlairMode !== "off") {
+      this.adjustActiveFlairDistance(deltaScreenY);
       return;
     }
     const current = this.effectiveSprayStyle(capId).size;
@@ -1054,14 +1057,17 @@ class SpatialSpraypaintApp {
   }
 
   /**
-   * Track Marks' own Flair-driven distance control — the "safe creative
-   * sandbox" runtime proof (build brief section 4). Still the SAME Alt+drag
+   * The selected `isFlairEligibleCap` cap's own Flair-driven distance
+   * control — the "safe creative sandbox" runtime proof (build brief
+   * section 4), now on the real accessible cap path (Pink Dot Fat, New
+   * York Fat), never Track Marks (no longer wired — see
+   * `isFlairEligibleCap`'s own doc for why). Still the SAME Alt+drag
    * gesture and the SAME underlying `size` override every other cap's Z
    * control writes to (`adjustSimulatedSprayDistance` above); only how a
    * drag delta maps to the resolved size differs, via `FLAIR_CURVES`
    * (`FlairCurves.ts`) instead of the flat linear formula. Two effects:
    *
-   * 1. `trackMarksFlairDistance01` — a persistent normalized 0-1 "depth
+   * 1. `activeFlairDistance01` — a persistent normalized 0-1 "depth
    *    dial" — is nudged by the drag delta scaled by the active mode's
    *    `distanceSensitivity`, then EASED toward that target by the mode's
    *    own `transitionSmoothing` rate rather than jumping straight to it —
@@ -1074,24 +1080,25 @@ class SpatialSpraypaintApp {
    *    every cap already uses — no new renderer), and the resolved `output`
    *    multiplier is cached for `depositReconstructedPath` to apply via
    *    `applyFlairOutputToPoint` (see there) — Flair transforms canonical
-   *    output, it never invents Track Marks' own geometry.
+   *    output, it never invents a new cap's geometry; each eligible cap
+   *    keeps rendering through its OWN cap identity.
    */
-  private adjustTrackMarksFlairDistance(deltaScreenY: number): void {
+  private adjustActiveFlairDistance(deltaScreenY: number): void {
     const capId = this.toolSelection.sprayCapId;
-    const params = this.effectiveFlairParams(this.trackMarksFlairMode);
-    const rawStep = (deltaScreenY / TRACK_MARKS_FLAIR_DRAG_RANGE_PX) * params.flairAmount;
-    const target = Math.max(0, Math.min(1, this.trackMarksFlairDistance01 + rawStep));
-    this.trackMarksFlairDistance01 += (target - this.trackMarksFlairDistance01) * params.flairSmoothing;
-    const modulation = resolveFlairModulationWithParams(this.trackMarksFlairMode, params, {
-      distance01: this.trackMarksFlairDistance01,
+    const params = this.effectiveFlairParams(this.activeFlairMode);
+    const rawStep = (deltaScreenY / FLAIR_DRAG_RANGE_PX) * params.flairAmount;
+    const target = Math.max(0, Math.min(1, this.activeFlairDistance01 + rawStep));
+    this.activeFlairDistance01 += (target - this.activeFlairDistance01) * params.flairSmoothing;
+    const modulation = resolveFlairModulationWithParams(this.activeFlairMode, params, {
+      distance01: this.activeFlairDistance01,
       output: 1,
       velocity: 0,
       angle: 0,
     });
     const next = resolveFlairSize(modulation.width01, params);
     this.baseRadius = next;
-    this.trackMarksFlairOutputMultiplier = modulation.output;
-    this.trackMarksFlairBloom01 = modulation.bloom01;
+    this.activeFlairOutputMultiplier = modulation.output;
+    this.activeFlairBloom01 = modulation.bloom01;
     this.setSettings({ type: "spray-property", capId, patch: { size: next } });
     this.updateRadiusUi();
     this.updateFlairStatusUi();
@@ -1099,32 +1106,33 @@ class SpatialSpraypaintApp {
 
   /**
    * The small keyboard shortcut (section 5/6 of the Flair Behavior Spec V1
-   * brief) cycling Track Marks' own Flair mode off -> wall -> blackbook ->
-   * wild -> off — a secondary accelerator now that Brush Studio's own Mode
-   * selector (section 8 of the Brush Studio Flair Controls brief) is the
-   * primary way to change it. No-op for every other cap.
+   * brief) cycling the selected cap's own Flair mode off -> wall ->
+   * blackbook -> wild -> off — a secondary accelerator now that Brush
+   * Studio's own Mode selector (section 8 of the Brush Studio Flair
+   * Controls brief) is the primary way to change it. No-op for every
+   * ineligible cap (see `isFlairEligibleCap`).
    */
-  private cycleTrackMarksFlairMode(): void {
-    if (this.toolSelection.selectedToolId !== "spray-can" || this.toolSelection.sprayCapId !== "track-marks") return;
-    const index = FLAIR_MODE_CYCLE.indexOf(this.trackMarksFlairMode);
-    this.setTrackMarksFlairMode(FLAIR_MODE_CYCLE[(index + 1) % FLAIR_MODE_CYCLE.length]);
+  private cycleActiveFlairMode(): void {
+    if (this.toolSelection.selectedToolId !== "spray-can" || !isFlairEligibleCap(this.toolSelection.sprayCapId)) return;
+    const index = FLAIR_MODE_CYCLE.indexOf(this.activeFlairMode);
+    this.setActiveFlairMode(FLAIR_MODE_CYCLE[(index + 1) % FLAIR_MODE_CYCLE.length]);
   }
 
   /**
-   * Sets Track Marks' active Flair mode directly — shared by the keyboard
-   * cycle above and Brush Studio's Mode selector. A deliberate mode switch
-   * re-initializes to that mode's own explicit start position (section 2/6
-   * of the Flair Stroke Envelope Stabilization build brief — see
-   * `applyTrackMarksFlairStartSize`), for the same reason a fresh stroke
+   * Sets the selected cap's active Flair mode directly — shared by the
+   * keyboard cycle above and Brush Studio's Mode selector. A deliberate
+   * mode switch re-initializes to that mode's own explicit start position
+   * (section 2/6 of the Flair Stroke Envelope Stabilization build brief —
+   * see `applyActiveFlairStartSize`), for the same reason a fresh stroke
    * does: each mode has its own `[flairMinSize, flairMaxSize]` envelope, so
    * carrying over the previous mode's absolute distance01 verbatim could
    * leave the new mode already pinned at its own ceiling before the user
    * ever drags again.
    */
-  private setTrackMarksFlairMode(mode: FlairModeId): void {
-    if (this.toolSelection.selectedToolId !== "spray-can" || this.toolSelection.sprayCapId !== "track-marks") return;
-    this.trackMarksFlairMode = mode;
-    this.applyTrackMarksFlairStartSize(mode);
+  private setActiveFlairMode(mode: FlairModeId): void {
+    if (this.toolSelection.selectedToolId !== "spray-can" || !isFlairEligibleCap(this.toolSelection.sprayCapId)) return;
+    this.activeFlairMode = mode;
+    this.applyActiveFlairStartSize(mode);
     this.updateFlairStatusUi();
   }
 
@@ -1133,7 +1141,7 @@ class SpatialSpraypaintApp {
    *
    * Root cause of the reported bug: `this.baseRadius` (the live resolved
    * size fed into every deposited point, see `depositReconstructedPath`) and
-   * `trackMarksFlairDistance01` (the internal depth dial) were both plain
+   * `activeFlairDistance01` (the internal depth dial) were both plain
    * persistent instance fields with no reset boundary at `pointerdown` — the
    * ONLY place either was ever re-seeded was lazily, on the FIRST Alt-drag
    * sample of a gesture (`beginSimulatedDistanceDrag`), and only the dial,
@@ -1146,61 +1154,62 @@ class SpatialSpraypaintApp {
    * The fix: an explicit stroke-start policy (`FLAIR_STROKE_START_POLICY`,
    * `FlairCurves.ts` — `"reset-to-start"` in this pass, per the brief's own
    * "for now, default to reset-to-start") applied HERE, unconditionally, at
-   * the top of every `pointerdown` for Track Marks with an active Flair
-   * mode — not lazily on first drag. Every new stroke now resolves its own
-   * starting `distance01` fresh from `params.flairStartPosition` (min/
-   * center/max) via `resolveFlairStartDistance`, and immediately writes the
-   * resulting size to BOTH `this.baseRadius` and the generic `size` override
-   * — so even a stroke that never touches Alt-drag still begins at the
-   * mode's own explicit start size, never the previous stroke's terminal
-   * one. Shared with `setTrackMarksFlairMode` (a mode switch is the same
-   * "re-initialize the envelope state" event, just triggered differently)
-   * via `applyTrackMarksFlairStartSize`.
+   * the top of every `pointerdown` for an `isFlairEligibleCap` cap with an
+   * active Flair mode — not lazily on first drag. Every new stroke now
+   * resolves its own starting `distance01` fresh from
+   * `params.flairStartPosition` (min/center/max) via
+   * `resolveFlairStartDistance`, and immediately writes the resulting size
+   * to BOTH `this.baseRadius` and the generic `size` override — so even a
+   * stroke that never touches Alt-drag still begins at the mode's own
+   * explicit start size, never the previous stroke's terminal one. Shared
+   * with `setActiveFlairMode` (a mode switch is the same "re-initialize the
+   * envelope state" event, just triggered differently) via
+   * `applyActiveFlairStartSize`.
    */
-  private resetTrackMarksFlairForNewStroke(): void {
-    if (this.toolSelection.selectedToolId !== "spray-can" || this.toolSelection.sprayCapId !== "track-marks") return;
-    if (this.trackMarksFlairMode === "off") return;
+  private resetActiveFlairForNewStroke(): void {
+    if (this.toolSelection.selectedToolId !== "spray-can" || !isFlairEligibleCap(this.toolSelection.sprayCapId)) return;
+    if (this.activeFlairMode === "off") return;
     if (FLAIR_STROKE_START_POLICY !== "reset-to-start") return; // only value implemented this pass
-    this.applyTrackMarksFlairStartSize(this.trackMarksFlairMode);
+    this.applyActiveFlairStartSize(this.activeFlairMode);
   }
 
-  /** Shared by `setTrackMarksFlairMode` and `resetTrackMarksFlairForNewStroke` — resolves `mode`'s own start position (or, for `off`, just resets the internal dial/multiplier to neutral, since `off` never reads them) and writes it through the SAME `baseRadius`/`size`-override channel every other Flair size change already uses. */
-  private applyTrackMarksFlairStartSize(mode: FlairModeId): void {
+  /** Shared by `setActiveFlairMode` and `resetActiveFlairForNewStroke` — resolves `mode`'s own start position (or, for `off`, just resets the internal dial/multiplier to neutral, since `off` never reads them) and writes it through the SAME `baseRadius`/`size`-override channel every other Flair size change already uses. */
+  private applyActiveFlairStartSize(mode: FlairModeId): void {
     const capId = this.toolSelection.sprayCapId;
     if (mode === "off") {
-      this.trackMarksFlairDistance01 = 0.5;
-      this.trackMarksFlairOutputMultiplier = 1;
-      this.trackMarksFlairBloom01 = 0;
+      this.activeFlairDistance01 = 0.5;
+      this.activeFlairOutputMultiplier = 1;
+      this.activeFlairBloom01 = 0;
       return;
     }
     const params = this.effectiveFlairParams(mode);
-    this.trackMarksFlairDistance01 = resolveFlairStartDistance(mode, params);
+    this.activeFlairDistance01 = resolveFlairStartDistance(mode, params);
     const modulation = resolveFlairModulationWithParams(mode, params, {
-      distance01: this.trackMarksFlairDistance01,
+      distance01: this.activeFlairDistance01,
       output: 1,
       velocity: 0,
       angle: 0,
     });
     const next = resolveFlairSize(modulation.width01, params);
     this.baseRadius = next;
-    this.trackMarksFlairOutputMultiplier = modulation.output;
-    this.trackMarksFlairBloom01 = modulation.bloom01;
+    this.activeFlairOutputMultiplier = modulation.output;
+    this.activeFlairBloom01 = modulation.bloom01;
     this.setSettings({ type: "spray-property", capId, patch: { size: next } });
     this.updateRadiusUi();
   }
 
   /**
-   * Compact status readout for Track Marks' live Flair mode — quiet by
-   * default (Creative Interface Doctrine), shown only while Track Marks is
-   * selected AND a non-off Flair mode is active, mirroring
-   * `updateSprayAngleUi`'s exact existing pattern/markup.
+   * Compact status readout for the selected cap's live Flair mode — quiet
+   * by default (Creative Interface Doctrine), shown only while an
+   * `isFlairEligibleCap` cap is selected AND a non-off Flair mode is
+   * active, mirroring `updateSprayAngleUi`'s exact existing pattern/markup.
    */
   private updateFlairStatusUi(): void {
-    const trackMarksSelected = this.toolSelection.selectedToolId === "spray-can" && this.toolSelection.sprayCapId === "track-marks";
-    const active = trackMarksSelected && this.trackMarksFlairMode !== "off";
+    const flairCapSelected = this.toolSelection.selectedToolId === "spray-can" && isFlairEligibleCap(this.toolSelection.sprayCapId);
+    const active = flairCapSelected && this.activeFlairMode !== "off";
     this.requireElement("flair-status").toggleAttribute("hidden", !active);
     if (!active) return;
-    this.requireElement("flair-status-val").textContent = this.trackMarksFlairMode;
+    this.requireElement("flair-status-val").textContent = this.activeFlairMode;
   }
 
   /** PRESET DEFAULT -> SESSION/USER MODIFICATION -> EFFECTIVE VALUE for one Spray brush's Size/Coverage/Fill. */
@@ -1884,22 +1893,23 @@ class SpatialSpraypaintApp {
           sample.timestamp,
         );
         let segmentStart = previous;
-        // Flair Continuity fix: for every cap except Track Marks with an
-        // active Flair mode, this is exactly `[...interpolated, point]`
-        // (byte-identical values, see `buildContinuousSegmentEnds`'s own
-        // doc). For Track Marks + active Flair, it REPLACES that batch with
-        // a much denser arclength resample from the previous rendered point
-        // to this batch's true target — the fix for the reported
-        // segmented/capsule regression (see `FlairContinuity.ts`'s module
+        // Flair Continuity fix: for every ineligible cap, or an eligible
+        // cap (Pink Dot Fat, New York Fat) with Flair off, this is exactly
+        // `[...interpolated, point]` (byte-identical values, see
+        // `buildContinuousSegmentEnds`'s own doc). For an eligible cap with
+        // active Flair, it REPLACES that batch with a much denser arclength
+        // resample from the previous rendered point to this batch's true
+        // target — the fix for the reported segmented/capsule regression
+        // (see `FlairContinuity.ts`'s module
         // doc for the full root-cause analysis). `applyFlairOutputToPoint`
         // (output multiplier) is still applied first, same as before.
         const segmentEnds = buildContinuousSegmentEnds(
           segmentStart,
           [...interpolated, point],
           style.variantId,
-          this.trackMarksFlairMode,
-          this.trackMarksFlairOutputMultiplier,
-          this.trackMarksFlairBloom01,
+          this.activeFlairMode,
+          this.activeFlairOutputMultiplier,
+          this.activeFlairBloom01,
         );
         for (const [segmentIndex, segmentEnd] of segmentEnds.entries()) {
           let renderedPoint = segmentEnd;
@@ -1922,8 +1932,8 @@ class SpatialSpraypaintApp {
             renderedPoint,
             style,
             this.activeStrokeRandom ?? Math.random,
-            this.trackMarksFlairMode,
-            this.trackMarksFlairBloom01,
+            this.activeFlairMode,
+            this.activeFlairBloom01,
           );
           this.strokeHistory.appendPoint(renderedPoint);
           segmentStart = renderedPoint;

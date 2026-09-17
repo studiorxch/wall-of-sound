@@ -3,6 +3,26 @@ import type { FlairModeId, SurfaceContextId } from "./ToolTaxonomy";
 import type { SprayCapPreset } from "./SprayCapPresets";
 
 /**
+ * The real, user-reachable cap path for Flair (build brief: "move the Flair
+ * system onto the real accessible cap path... the user cannot access
+ * `track-marks`"). `track-marks` is deliberately NOT in this set any more —
+ * it was always a hidden/internal cap with no cap-picker entry (see
+ * `SprayCapProfile.ts`'s own "TEMPORARY preservation cap" doc), so every
+ * pass validated against it was unknowingly testing a path no real user, on
+ * iPad or otherwise, could ever reach. Pink Dot Fat and New York Fat are
+ * both real, visible entries in the normal cap picker. This is the SINGLE
+ * place that list lives — every Flair gate in this codebase (`FlairCurves.ts`,
+ * `FlairContinuity.ts`, `main.ts`, `BrushStudio.ts`) calls this function
+ * rather than hand-checking a cap id, so the eligible set can never drift
+ * between call sites.
+ */
+const FLAIR_ELIGIBLE_CAP_IDS = new Set(["pink-dot-fat", "new-york-fat"]);
+
+export function isFlairEligibleCap(capId: string): boolean {
+  return FLAIR_ELIGIBLE_CAP_IDS.has(capId);
+}
+
+/**
  * Flair, concretely: for each `FlairModeId` (see `ToolTaxonomy.ts`), a set of
  * deterministic, pure, normalized 0-1 curves — no `Math.random`, no wall-
  * clock reads, no DOM. Every curve is a function of `t` (a normalized
@@ -194,10 +214,12 @@ export function resolveDefaultFlairMode(surfaceContext: SurfaceContextId): Flair
  * The ONLY point a Flair-resolved value reaches a `StrokePoint` -- and it
  * only ever multiplies the existing generic `opacity` channel
  * (`SprayBrushEngine` already reads this as `sprayOutput`/core-pass alpha
- * for every cap). Scoped to Track Marks only, per the brief's "safe creative
- * sandbox" instruction: any other cap id, or Track Marks with Flair `off`,
- * returns `point` completely untouched (identity), so every physical cap and
- * every non-Alt-drag stroke stays byte-identical to its pre-Flair behavior.
+ * for every cap). Scoped to `isFlairEligibleCap` (Pink Dot Fat, New York
+ * Fat -- the real, user-reachable caps; see that function's own doc for why
+ * `track-marks` was removed from this set): any other cap id, or an eligible
+ * cap with Flair `off`, returns `point` completely untouched (identity), so
+ * every ineligible cap and every non-Alt-drag stroke stays byte-identical to
+ * its pre-Flair behavior.
  */
 export function applyFlairOutputToPoint(
   point: StrokePoint,
@@ -205,7 +227,7 @@ export function applyFlairOutputToPoint(
   mode: FlairModeId,
   outputMultiplier: number,
 ): StrokePoint {
-  if (capId !== "track-marks" || mode === "off") return point;
+  if (!isFlairEligibleCap(capId) || mode === "off") return point;
   return { ...point, opacity: point.opacity * outputMultiplier };
 }
 
@@ -259,18 +281,18 @@ export function applyFlairOutputToPoint(
  * from the same deposition model, not a second effect layered on top.
  *
  * The cap's own canonical `particleCount`/`particleOpacity` constants are
- * NEVER changed by this function's existence -- only Track Marks' own
- * Flair-active copy is scaled down. This deliberately preserves the current
- * heavy-particle look as a candidate baseline for a future dedicated
+ * NEVER changed by this function's existence -- only an eligible cap's
+ * Flair-active copy is scaled down. This deliberately preserves each cap's
+ * current heavy-particle look as a candidate baseline for a future dedicated
  * Dirty/Sputter cap character (not implemented here -- no new cap, no new
  * control surface, per "do not add more Flair features"), rather than
  * deleting or renaming the mechanism.
  *
- * Scoped to Track Marks only, exactly like `applyFlairOutputToPoint`: any
- * other cap id, Track Marks with Flair `off`, or a zero/negative `bloom01`
- * returns `cap` completely untouched (the identical object, no copy) --
- * Pink Dot Fat (which shares this same `depositionShape: "plume"` renderer)
- * and every other cap stay byte-identical to their pre-Flair behavior.
+ * Scoped to `isFlairEligibleCap` (Pink Dot Fat, New York Fat), exactly like
+ * `applyFlairOutputToPoint`: any other cap id, an eligible cap with Flair
+ * `off`, or a zero/negative `bloom01` returns `cap` completely untouched
+ * (the identical object, no copy) -- every ineligible cap stays byte-
+ * identical to its pre-Flair behavior.
  */
 const FLAIR_CORE_DENSITY_LOSS_RATIO = 0.62;
 const FLAIR_EDGE_SOFTENING_RATIO = 0.55;
@@ -289,7 +311,7 @@ export function applyFlairDensityToCap(
   mode: FlairModeId,
   bloom01: number,
 ): SprayCapPreset {
-  if (capId !== "track-marks" || mode === "off" || bloom01 <= 0) return cap;
+  if (!isFlairEligibleCap(capId) || mode === "off" || bloom01 <= 0) return cap;
   const b = clamp01(bloom01);
   return {
     ...cap,
@@ -403,16 +425,19 @@ export interface FlairSizeEnvelope {
  * a soft/translucent flare body; MID caps widen moderately; THIN caps widen
  * only a little and lean on texture/mist degradation instead, preserving a
  * skinny cap's identity rather than "suddenly behaving like a giant fat
- * cap." `getFlairCapTier` is the only place a cap id maps to a tier — Track
- * Marks is the only cap with a real runtime mapping (still the only Flair
- * consumer at runtime, per every prior brief's own "Track Marks only"
- * scope); every other id defaults to `"mid"` for schema completeness should
- * a future cap ever be wired in, never wiring anything new itself.
+ * cap." `getFlairCapTier` is the only place a cap id maps to a tier. Both of
+ * `isFlairEligibleCap`'s real, user-reachable caps (Pink Dot Fat, New York
+ * Fat) are true Fat-family caps (`SprayCapPreset.family === "fat"`), so both
+ * map to `"fat"` here -- each still gets its OWN absolute min/max envelope
+ * from `getFlairSizeDefaults`, since that scales off the CALLER's own
+ * `capBaseRadius` (Pink Dot 42, New York Fat 32), never a shared constant.
+ * Every other id defaults to `"mid"` for schema completeness should a future
+ * cap ever be wired in -- this function alone never wires anything new.
  */
 export type FlairCapTier = "fat" | "mid" | "thin";
 
 export function getFlairCapTier(capId: string): FlairCapTier {
-  if (capId === "track-marks") return "fat";
+  if (isFlairEligibleCap(capId)) return "fat";
   return "mid";
 }
 

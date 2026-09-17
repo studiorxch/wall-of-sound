@@ -126,48 +126,47 @@ describe("blackbook transitions respond faster than wall", () => {
   });
 });
 
-describe("Track Marks alone consumes Flair at runtime", () => {
+describe("Pink Dot Fat and New York Fat -- the real, user-reachable caps -- consume Flair at runtime", () => {
   const baselinePoint: StrokePoint = { x: 0, y: 0, timestamp: 0, velocity: 0, width: 10, opacity: 0.8 };
 
-  it("modulates opacity for track-marks with a non-off mode", () => {
-    const result = applyFlairOutputToPoint(baselinePoint, "track-marks", "wall", 0.5);
+  it("modulates opacity for pink-dot-fat with a non-off mode", () => {
+    const result = applyFlairOutputToPoint(baselinePoint, "pink-dot-fat", "wall", 0.5);
     expect(result.opacity).toBeCloseTo(0.4, 10);
     expect(result).not.toBe(baselinePoint);
   });
 
-  it("leaves every other cap id completely untouched, regardless of mode or multiplier", () => {
-    const otherCapIds = ["pink-dot-fat", "new-york-fat", "astro-fat", "german-fat", "lego-thin", "needle", "soft-fade"];
-    for (const capId of otherCapIds) {
+  it("modulates opacity for new-york-fat too -- both real caps are wired, not just one", () => {
+    const result = applyFlairOutputToPoint(baselinePoint, "new-york-fat", "wall", 0.5);
+    expect(result.opacity).toBeCloseTo(0.4, 10);
+    expect(result).not.toBe(baselinePoint);
+  });
+
+  it("leaves every ineligible cap id completely untouched, regardless of mode or multiplier -- track-marks (no longer user-reachable, no longer wired) explicitly included", () => {
+    const ineligibleCapIds = ["track-marks", "astro-fat", "german-fat", "lego-thin", "needle", "soft-fade"];
+    for (const capId of ineligibleCapIds) {
       const result = applyFlairOutputToPoint(baselinePoint, capId, "wild", 0.1);
       expect(result).toBe(baselinePoint);
       expect(result.opacity).toBe(0.8);
     }
   });
 
-  it("leaves Track Marks untouched when its own Flair mode is off", () => {
-    const result = applyFlairOutputToPoint(baselinePoint, "track-marks", "off", 0.1);
-    expect(result).toBe(baselinePoint);
-    expect(result.opacity).toBe(0.8);
+  it("leaves Pink Dot Fat / New York Fat untouched when their own Flair mode is off", () => {
+    expect(applyFlairOutputToPoint(baselinePoint, "pink-dot-fat", "off", 0.1)).toBe(baselinePoint);
+    expect(applyFlairOutputToPoint(baselinePoint, "new-york-fat", "off", 0.1)).toBe(baselinePoint);
   });
 });
 
-describe("Pink Dot and other physical caps are unaffected by Flair", () => {
+describe("Track Marks and other ineligible caps are unaffected by Flair", () => {
   const baselinePoint: StrokePoint = { x: 5, y: 5, timestamp: 100, velocity: 0.1, width: 40, opacity: 0.6 };
 
-  it("pink-dot-fat's opacity is never modified by applyFlairOutputToPoint under any mode", () => {
+  it("track-marks's opacity is never modified by applyFlairOutputToPoint under any mode -- it is no longer a user-reachable cap and is no longer wired", () => {
     for (const mode of ["off", "wall", "blackbook", "wild"] as const) {
-      const result = applyFlairOutputToPoint(baselinePoint, "pink-dot-fat", mode, 0.01);
+      const result = applyFlairOutputToPoint(baselinePoint, "track-marks", mode, 0.01);
       expect(result).toBe(baselinePoint);
     }
   });
 
-  it("Pink Dot's own size/coverage math never touches any Flair envelope function", () => {
-    // Pink Dot's Flare V1 sizing lives entirely in main.ts's legacy linear
-    // path (adjustSimulatedSprayDistance); nothing in FlairCurves.ts is ever
-    // called with capId "pink-dot-fat" for width resolution. This test
-    // simply documents/locks that `resolveFlairSize` and friends are
-    // cap-agnostic pure math -- callers are what gate Pink Dot out, not this
-    // module -- consistent with `applyFlairOutputToPoint`'s own gate above.
+  it("resolveFlairSize and friends remain cap-agnostic pure math -- callers (via isFlairEligibleCap) are what gate a cap in or out, not this module", () => {
     const params = fullParams("wall", TRACK_MARKS_BASE_RADIUS);
     expect(() => resolveFlairSize(0.5, params)).not.toThrow();
   });
@@ -527,9 +526,10 @@ describe("Needle-shaped envelope validation -- math/schema only, no runtime wiri
 });
 
 describe("cap-family response tiers (Real Spray Pass build brief, sections 4/5/B)", () => {
-  it("getFlairCapTier maps Track Marks to fat, and any other cap id to mid (no runtime wiring for anything else)", () => {
-    expect(getFlairCapTier("track-marks")).toBe("fat");
-    expect(getFlairCapTier("pink-dot-fat")).toBe("mid");
+  it("getFlairCapTier maps both real, user-reachable caps (Pink Dot Fat, New York Fat) to fat, and every other cap id -- track-marks included, no longer wired -- to mid", () => {
+    expect(getFlairCapTier("pink-dot-fat")).toBe("fat");
+    expect(getFlairCapTier("new-york-fat")).toBe("fat");
+    expect(getFlairCapTier("track-marks")).toBe("mid");
     expect(getFlairCapTier("needle")).toBe("mid");
   });
 
@@ -577,50 +577,58 @@ describe("cap-family response tiers (Real Spray Pass build brief, sections 4/5/B
 });
 
 describe("applyFlairDensityToCap -- coupled deposition response (live-report fix #2: 'wide flair body is too opaque')", () => {
-  const trackMarksCap = getSprayCapPreset("track-marks");
   const pinkDotCap = getSprayCapPreset("pink-dot-fat");
+  const newYorkFatCap = getSprayCapPreset("new-york-fat");
+  const trackMarksCap = getSprayCapPreset("track-marks");
 
-  it("is a strict identity (same object) for any non-Track-Marks cap, regardless of mode/bloom", () => {
-    expect(applyFlairDensityToCap(pinkDotCap, "pink-dot-fat", "wall", 0.9)).toBe(pinkDotCap);
-    expect(applyFlairDensityToCap(pinkDotCap, "new-york-fat", "wild", 1)).toBe(pinkDotCap);
+  it("is a strict identity (same object) for any ineligible cap (track-marks -- no longer user-reachable, no longer wired -- and a sample of others), regardless of mode/bloom", () => {
+    expect(applyFlairDensityToCap(trackMarksCap, "track-marks", "wall", 0.9)).toBe(trackMarksCap);
+    expect(applyFlairDensityToCap(trackMarksCap, "astro-fat", "wild", 1)).toBe(trackMarksCap);
   });
 
-  it("is a strict identity (same object) for Track Marks with Flair off, regardless of bloom", () => {
-    expect(applyFlairDensityToCap(trackMarksCap, "track-marks", "off", 0.9)).toBe(trackMarksCap);
+  it("is a strict identity (same object) for Pink Dot Fat OR New York Fat with Flair off, regardless of bloom", () => {
+    expect(applyFlairDensityToCap(pinkDotCap, "pink-dot-fat", "off", 0.9)).toBe(pinkDotCap);
+    expect(applyFlairDensityToCap(newYorkFatCap, "new-york-fat", "off", 0.9)).toBe(newYorkFatCap);
   });
 
-  it("is a strict identity (same object) for Track Marks with an active mode but bloom01 <= 0", () => {
-    expect(applyFlairDensityToCap(trackMarksCap, "track-marks", "wall", 0)).toBe(trackMarksCap);
-    expect(applyFlairDensityToCap(trackMarksCap, "track-marks", "wall", -0.2)).toBe(trackMarksCap);
+  it("is a strict identity (same object) for an eligible cap with an active mode but bloom01 <= 0", () => {
+    expect(applyFlairDensityToCap(pinkDotCap, "pink-dot-fat", "wall", 0)).toBe(pinkDotCap);
+    expect(applyFlairDensityToCap(pinkDotCap, "pink-dot-fat", "wall", -0.2)).toBe(pinkDotCap);
   });
 
-  it("reduces core density (coreOpacity, coreDensity) as bloom rises -- the core must lose density, not just dim uniformly", () => {
-    const low = applyFlairDensityToCap(trackMarksCap, "track-marks", "wall", 0.2);
-    const high = applyFlairDensityToCap(trackMarksCap, "track-marks", "wall", 0.9);
-    expect(low.coreOpacity).toBeLessThan(trackMarksCap.coreOpacity);
+  it("reduces core density (coreOpacity, coreDensity) as bloom rises for Pink Dot Fat -- the core must lose density, not just dim uniformly", () => {
+    const low = applyFlairDensityToCap(pinkDotCap, "pink-dot-fat", "wall", 0.2);
+    const high = applyFlairDensityToCap(pinkDotCap, "pink-dot-fat", "wall", 0.9);
+    expect(low.coreOpacity).toBeLessThan(pinkDotCap.coreOpacity);
     expect(high.coreOpacity).toBeLessThan(low.coreOpacity);
-    expect(high.coreDensity).toBeLessThan(trackMarksCap.coreDensity);
+    expect(high.coreDensity).toBeLessThan(pinkDotCap.coreDensity);
+  });
+
+  it("reduces core density for New York Fat too -- both real, user-reachable caps get the fix, not just one", () => {
+    const high = applyFlairDensityToCap(newYorkFatCap, "new-york-fat", "wall", 0.9);
+    expect(high.coreOpacity).toBeLessThan(newYorkFatCap.coreOpacity);
+    expect(high.coreDensity).toBeLessThan(newYorkFatCap.coreDensity);
   });
 
   it("softens the edge (LOWER edgeFalloff = softer, per its own doc) as bloom rises, never below the floor", () => {
-    const high = applyFlairDensityToCap(trackMarksCap, "track-marks", "wall", 1);
-    expect(high.edgeFalloff).toBeLessThan(trackMarksCap.edgeFalloff);
+    const high = applyFlairDensityToCap(pinkDotCap, "pink-dot-fat", "wall", 1);
+    expect(high.edgeFalloff).toBeLessThan(pinkDotCap.edgeFalloff);
     expect(high.edgeFalloff).toBeGreaterThan(0);
   });
 
   it("increases mist reach and strength (plumeMistOpacity, plumeMistRadius) as bloom rises", () => {
-    const high = applyFlairDensityToCap(trackMarksCap, "track-marks", "wall", 1);
-    expect(high.plumeMistOpacity).toBeGreaterThan(trackMarksCap.plumeMistOpacity);
-    expect(high.plumeMistRadius).toBeGreaterThan(trackMarksCap.plumeMistRadius);
+    const high = applyFlairDensityToCap(pinkDotCap, "pink-dot-fat", "wall", 1);
+    expect(high.plumeMistOpacity).toBeGreaterThan(pinkDotCap.plumeMistOpacity);
+    expect(high.plumeMistRadius).toBeGreaterThan(pinkDotCap.plumeMistRadius);
   });
 
   it("softens the ring band (plumeRingOpacity down) -- a crisp ring would itself read as a hard balloon edge", () => {
-    const high = applyFlairDensityToCap(trackMarksCap, "track-marks", "wall", 1);
-    expect(high.plumeRingOpacity).toBeLessThan(trackMarksCap.plumeRingOpacity);
+    const high = applyFlairDensityToCap(pinkDotCap, "pink-dot-fat", "wall", 1);
+    expect(high.plumeRingOpacity).toBeLessThan(pinkDotCap.plumeRingOpacity);
   });
 
   it("every adjustment is monotonic in bloom01 across a full sweep -- no reversal partway through opening", () => {
-    const samples = [0.1, 0.3, 0.5, 0.7, 0.9, 1].map((b) => applyFlairDensityToCap(trackMarksCap, "track-marks", "wall", b));
+    const samples = [0.1, 0.3, 0.5, 0.7, 0.9, 1].map((b) => applyFlairDensityToCap(pinkDotCap, "pink-dot-fat", "wall", b));
     for (let i = 1; i < samples.length; i++) {
       expect(samples[i].coreOpacity).toBeLessThanOrEqual(samples[i - 1].coreOpacity);
       expect(samples[i].edgeFalloff).toBeLessThanOrEqual(samples[i - 1].edgeFalloff);
@@ -629,46 +637,46 @@ describe("applyFlairDensityToCap -- coupled deposition response (live-report fix
   });
 
   it("never mutates the canonical preset object itself (SPRAY_CAP_PRESETS stays untouched)", () => {
-    const before = { ...trackMarksCap };
-    applyFlairDensityToCap(trackMarksCap, "track-marks", "wall", 1);
-    expect(trackMarksCap).toEqual(before);
+    const before = { ...pinkDotCap };
+    applyFlairDensityToCap(pinkDotCap, "pink-dot-fat", "wall", 1);
+    expect(pinkDotCap).toEqual(before);
   });
 
   describe("particle-vs-veil rebalance (follow-up: 'too particle-heavy, reads like a dirty/sputtering cap')", () => {
     it("cuts discrete particle count substantially as bloom rises, but never to exactly zero -- 'subtle particle breakup at the extreme edge' must survive", () => {
-      const low = applyFlairDensityToCap(trackMarksCap, "track-marks", "wall", 0.2);
-      const high = applyFlairDensityToCap(trackMarksCap, "track-marks", "wall", 1);
-      expect(low.particleCount).toBeLessThan(trackMarksCap.particleCount);
+      const low = applyFlairDensityToCap(pinkDotCap, "pink-dot-fat", "wall", 0.2);
+      const high = applyFlairDensityToCap(pinkDotCap, "pink-dot-fat", "wall", 1);
+      expect(low.particleCount).toBeLessThan(pinkDotCap.particleCount);
       expect(high.particleCount).toBeLessThan(low.particleCount);
       expect(high.particleCount).toBeGreaterThan(0);
     });
 
     it("also dims the particles that do survive, so remaining specks blend into the veil rather than popping as separate flecks", () => {
-      const high = applyFlairDensityToCap(trackMarksCap, "track-marks", "wall", 1);
-      expect(high.particleOpacity).toBeLessThan(trackMarksCap.particleOpacity);
+      const high = applyFlairDensityToCap(pinkDotCap, "pink-dot-fat", "wall", 1);
+      expect(high.particleOpacity).toBeLessThan(pinkDotCap.particleOpacity);
       expect(high.particleOpacity).toBeGreaterThan(0);
     });
 
     it("particle reduction is monotonic across a full bloom sweep, mirroring every other density channel", () => {
-      const samples = [0.1, 0.3, 0.5, 0.7, 0.9, 1].map((b) => applyFlairDensityToCap(trackMarksCap, "track-marks", "wall", b));
+      const samples = [0.1, 0.3, 0.5, 0.7, 0.9, 1].map((b) => applyFlairDensityToCap(pinkDotCap, "pink-dot-fat", "wall", b));
       for (let i = 1; i < samples.length; i++) {
         expect(samples[i].particleCount).toBeLessThanOrEqual(samples[i - 1].particleCount);
         expect(samples[i].particleOpacity).toBeLessThanOrEqual(samples[i - 1].particleOpacity);
       }
     });
 
-    it("the continuous mist channel gains more (proportionally) than particles lose lose weight, matching the reference: a coherent translucent mass carries the read, not confetti", () => {
-      const high = applyFlairDensityToCap(trackMarksCap, "track-marks", "wall", 1);
-      const particleCountRatio = high.particleCount / trackMarksCap.particleCount;
-      const mistOpacityRatio = high.plumeMistOpacity / trackMarksCap.plumeMistOpacity;
+    it("the continuous mist channel gains more (proportionally) than particles lose weight, matching the reference: a coherent translucent mass carries the read, not confetti", () => {
+      const high = applyFlairDensityToCap(pinkDotCap, "pink-dot-fat", "wall", 1);
+      const particleCountRatio = high.particleCount / pinkDotCap.particleCount;
+      const mistOpacityRatio = high.plumeMistOpacity / pinkDotCap.plumeMistOpacity;
       expect(mistOpacityRatio).toBeGreaterThan(particleCountRatio);
     });
 
     it("leaves the canonical preset's own particleCount/particleOpacity completely untouched -- the heavy-particle baseline is preserved, not deleted, for a possible future Dirty/Sputter cap", () => {
-      const before = { particleCount: trackMarksCap.particleCount, particleOpacity: trackMarksCap.particleOpacity };
-      applyFlairDensityToCap(trackMarksCap, "track-marks", "wall", 1);
-      expect(trackMarksCap.particleCount).toBe(before.particleCount);
-      expect(trackMarksCap.particleOpacity).toBe(before.particleOpacity);
+      const before = { particleCount: pinkDotCap.particleCount, particleOpacity: pinkDotCap.particleOpacity };
+      applyFlairDensityToCap(pinkDotCap, "pink-dot-fat", "wall", 1);
+      expect(pinkDotCap.particleCount).toBe(before.particleCount);
+      expect(pinkDotCap.particleOpacity).toBe(before.particleOpacity);
     });
   });
 });
