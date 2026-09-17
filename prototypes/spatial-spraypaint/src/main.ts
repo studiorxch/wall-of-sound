@@ -201,6 +201,7 @@ class SpatialSpraypaintApp {
   private webcamActive = false;
   private lastHandResult: HandTrackingResult | null = null;
   private activeWallPoint: WallPoint | null = null;
+  private activePhysicalPointerType: "mouse" | "pen" | "touch" = "mouse";
   private wallView: WallViewState = resetWallView();
   private quickZoomRestore: WallViewState | null = null;
   private handEdgeMotion: HandEdgeMotionState = resetHandEdgeMotion();
@@ -554,6 +555,9 @@ class SpatialSpraypaintApp {
         return;
       }
       if (this.inputMode !== "mouse" || event.button !== 0) return;
+      this.activePhysicalPointerType = event.pointerType === "pen"
+        ? "pen"
+        : event.pointerType === "touch" ? "touch" : "mouse";
       this.physicalCursorVisible = true;
       this.updateDrawingCursor(screenPoint, true);
       this.closeToolChoosers();
@@ -1980,7 +1984,13 @@ class SpatialSpraypaintApp {
       || (!force && now - this.lastDepositTimestamp < MIN_DEPOSIT_INTERVAL_MS)
     ) return;
     this.lastDepositTimestamp = now;
-    const smoothed = this.strokeSmoother.smooth(this.activeWallPoint, this.settings.smoothing);
+    const inputKind = this.inputMode === "spatial" ? "hand" : this.activePhysicalPointerType;
+    const smoothed = this.strokeSmoother.smoothInput(
+      this.activeWallPoint,
+      this.settings.smoothing,
+      inputKind,
+      force,
+    );
     const reconstructed = this.curveReconstructor.push(
       { ...smoothed, timestamp: now },
       this.currentCurveOptions(),

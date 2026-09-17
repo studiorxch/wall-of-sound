@@ -27,4 +27,34 @@ describe("StrokeSmoother", () => {
       high.smooth({ x: 30, y: 0 }, "high").x,
     );
   });
+
+  it("moderately suppresses mouse jitter while smoothing off is an exact A/B bypass", () => {
+    const enabled = new StrokeSmoother();
+    const disabled = new StrokeSmoother();
+    enabled.smoothInput({ x: 0, y: 0 }, "medium", "mouse");
+    disabled.smoothInput({ x: 0, y: 0 }, "off", "mouse");
+    const filtered = enabled.smoothInput({ x: 20, y: 6 }, "medium", "mouse");
+    expect(filtered.x).toBeGreaterThan(0);
+    expect(filtered.x).toBeLessThan(20);
+    expect(Math.abs(filtered.y)).toBeLessThan(6);
+    expect(disabled.smoothInput({ x: 20, y: 6 }, "off", "mouse")).toEqual({ x: 20, y: 6 });
+  });
+
+  it("leaves Pencil smoothing behavior unchanged", () => {
+    const legacy = new StrokeSmoother();
+    const inputAware = new StrokeSmoother();
+    const points = [{ x: 0, y: 0 }, { x: 16, y: 4 }, { x: 38, y: 10 }];
+    expect(points.map((point) => inputAware.smoothInput(point, "medium", "pen"))).toEqual(
+      points.map((point) => legacy.smooth(point, "medium")),
+    );
+  });
+
+  it("preserves deliberate corners and flushes the exact mouse endpoint", () => {
+    const smoother = new StrokeSmoother();
+    smoother.smoothInput({ x: 0, y: 0 }, "medium", "mouse");
+    smoother.smoothInput({ x: 30, y: 0 }, "medium", "mouse");
+    const corner = smoother.smoothInput({ x: 30, y: 30 }, "medium", "mouse");
+    expect(corner.y).toBeGreaterThan(20);
+    expect(smoother.smoothInput({ x: 40, y: 40 }, "medium", "mouse", true)).toEqual({ x: 40, y: 40 });
+  });
 });

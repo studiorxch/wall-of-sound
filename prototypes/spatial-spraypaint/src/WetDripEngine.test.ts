@@ -48,6 +48,23 @@ describe("WetDripEngine", () => {
     expect(underpainted[0].width).toBeGreaterThanOrEqual(drip.width);
   });
 
+  it("keeps the deeper width-relative underlap hidden without widening or changing the visible strip", () => {
+    const drip = {
+      x: 80,
+      y: 100,
+      width: 9,
+      length: 210,
+      opacity: 0.8,
+      bend: -5,
+      attachmentUnderlap: 32,
+    };
+    const visible = buildContinuousDripStrip(drip, 24);
+    const underpainted = prependHiddenDripUnderlap(drip, visible);
+    expect(underpainted[0].center).toEqual({ x: 80, y: 68 });
+    expect(underpainted[0].width).toBe(visible[0].width);
+    expect(underpainted.slice(1)).toEqual(visible);
+  });
+
   it("redraws a growing Mop drip as one gradient strip -- the root's shape comes from width interpolation, not a separate circle", () => {
     const persistent = recordingContext();
     const overlay = recordingContext();

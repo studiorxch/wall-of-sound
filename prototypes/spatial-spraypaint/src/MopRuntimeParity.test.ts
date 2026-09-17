@@ -74,7 +74,7 @@ function runIncrementalStroke(strokeId: number, rawPoints: readonly CurveInputSa
   marker.beginStroke("drip-mop");
 
   rawPoints.forEach((raw, rawIndex) => {
-    const smoothed = smoother.smooth(raw, "medium");
+    const smoothed = smoother.smoothInput(raw, "medium", "mouse");
     const reconstructed = reconstructor.push(
       { ...smoothed, timestamp: raw.timestamp },
       { baseRadius, cornerAngleDegrees: 125 },

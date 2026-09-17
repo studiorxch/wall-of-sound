@@ -191,6 +191,10 @@ describe("wet paint load authority", () => {
     expect(average(dripMopDrips.map(({ length }) => length))).toBeGreaterThan(average(mopDrips.map(({ length }) => length)) * 2);
     expect(dripMopDrips.every(({ originPoolRadius, tipWidthRatio }) => Boolean(originPoolRadius) && Boolean(tipWidthRatio))).toBe(true);
     expect(dripMopDrips.every(({ renderAsOverlay }) => renderAsOverlay)).toBe(true);
+    expect(dripMopDrips.every(({ attachmentUnderlap, width }) => (
+      (attachmentUnderlap ?? 0) >= 50 * 0.38
+      && (attachmentUnderlap ?? 0) >= width * 0.85
+    ))).toBe(true);
     expect(dripMopDrips.every(({ bend, length }) => Math.abs(bend ?? 0) <= length * 0.028)).toBe(true);
     // Drip Mop stays chunky on average, not that literally every drip is
     // wide (width still varies with per-channel flux/randomness).

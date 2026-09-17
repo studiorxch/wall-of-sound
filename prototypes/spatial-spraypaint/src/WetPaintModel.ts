@@ -815,11 +815,13 @@ export class WetPaintAccumulator {
       originPoolRadius: node.radius * profile.originPoolRatio * (node.channelsSpawned === 0 ? 1 : 0.45),
       terminalBulbRatio: this.variant === "drip-mop" ? 1.3 : 1.2,
       renderAsOverlay: true,
-      // Kept modest on purpose: it only needs to tuck the seam under the
-      // mark, not reach deep into the body -- a larger value risks poking
-      // back OUT of the body on a tightly curved section, especially for a
-      // sibling channel whose offset sits away from the node's own center.
-      attachmentUnderlap: size * 0.16,
+      // V0.10.19: pool/dwell channels use the same safely hidden underlap
+      // as travel-generated Mop drips. The dedicated drip layer is below
+      // the opaque source paint, so this extra straight root is masked while
+      // curvature/width changes can no longer expose its lower seam. Its
+      // depth is deliberately bounded so a rising diagonal cannot expose the
+      // root through the opposite edge of the same stroke.
+      attachmentUnderlap: Math.max(size * 0.38, width * 0.85),
     };
   }
 
@@ -923,7 +925,12 @@ export class WetPaintAccumulator {
         terminalBulbRatio: this.variant === "drip-mop" ? 1.3 : 1.2,
         renderAsOverlay: this.variant === "mop" || this.variant === "drip-mop",
         attachmentUnderlap: this.variant === "mop" || this.variant === "drip-mop"
-          ? size * 0.28
+          // V0.10.19: the drip is an UNDERLAY, so its flat root can safely
+          // start inside the opaque Mop footprint. A moderate fraction
+          // of source/drip width survives live curvature/width changes without
+          // crossing the opposite edge of a diagonal or altering the visible
+          // strip with any root cap, shelf, bulb, or extra width.
+          ? Math.max(size * 0.38, width * 0.85)
           : undefined,
       });
     }
