@@ -92,4 +92,4 @@ Ship the math/behavior changes as-is — they're well-tested and live-verified, 
 
 ## Commit
 
-(pending — see next commit)
+`62beae0` — "feat: Spatial Spraypaint Real Spray Pass -- flair start-position fix, cap-family tiers, aerosol mist wiring"
