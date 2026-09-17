@@ -212,7 +212,26 @@ export function resolveDripStripSection(
   const tangentX = tangentEnd.x - tangentStart.x;
   const tangentY = tangentEnd.y - tangentStart.y;
   const tangentLength = Math.max(0.0001, Math.hypot(tangentX, tangentY));
-  const normal = { x: -tangentY / tangentLength, y: tangentX / tangentLength };
+  const naturalNormal = { x: -tangentY / tangentLength, y: tangentX / tangentLength };
+  // V0.10.18: `gravity`'s own eased motion (`localEased = localProgress**2`)
+  // has a ~zero derivative right at progress 0, so the finite-differenced
+  // tangent there is dominated by whatever small `wander`/`kink` derivative
+  // exists at that instant instead -- which can rotate the root's own
+  // cross-section noticeably away from perpendicular-to-gravity. Physically
+  // a drip must leave the source mark travelling straight along gravity
+  // before any lateral wander has had room to act, so the cross-section's
+  // normal is blended toward `gravityNormal` near progress 0 and released
+  // back to the natural curve-following normal by ~10% progress -- well
+  // inside the existing attachment span, so this only touches the root seam
+  // and does not alter the column/taper/termination curve itself.
+  const rootNormalBlend = 1 - smooth01(safeProgress / 0.1);
+  let normal = naturalNormal;
+  if (rootNormalBlend > 0) {
+    const blendedX = gravityNormal.x * rootNormalBlend + naturalNormal.x * (1 - rootNormalBlend);
+    const blendedY = gravityNormal.y * rootNormalBlend + naturalNormal.y * (1 - rootNormalBlend);
+    const blendedLength = Math.max(0.0001, Math.hypot(blendedX, blendedY));
+    normal = { x: blendedX / blendedLength, y: blendedY / blendedLength };
+  }
   const width = resolveDripWidth(drip, safeProgress);
   return {
     progress: safeProgress,
@@ -261,12 +280,15 @@ export function traceDripSilhouettePath(
 
   for (let i = sections.length - 2; i >= 0; i -= 1) ctx.lineTo(sections[i].right.x, sections[i].right.y);
 
-  const rootRadius = root.width * 0.5;
-  if (rootRadius > 0.4) {
-    // Same technique at the root, swept the other way so the cap bulges
-    // backward (away from the body) instead of biting into it.
-    ctx.arc(root.center.x, root.center.y, rootRadius, angleOf(root.right, root.center), angleOf(root.left, root.center), true);
-  }
+  // V0.10.18: no root cap of any kind (no arc/circle/bulb) -- the root is
+  // meant to sit UNDER the source mark and be masked by it (see
+  // `attachmentUnderlap`), never rendered as its own visible rounded/flat
+  // shoulder shape. A rounded root cap here was one contributor to the
+  // "match head"/seam-glitch defects this and the prior pass removed; a
+  // plain closed edge is invisible once tucked under the source paint and
+  // reads correctly on the rare occasion the underlap isn't deep enough to
+  // fully hide it (a straight edge, not an extra bulge, is the safer
+  // failure mode).
   ctx.closePath();
   ctx.fill();
 }

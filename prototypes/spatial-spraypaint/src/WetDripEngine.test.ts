@@ -83,13 +83,14 @@ describe("WetDripEngine", () => {
 
     engine.advanceDrips(persistent.ctx, overlay.ctx, 1000);
     // ONE continuous path, ONE fill -- V0.10.16's `traceDripSilhouettePath`
-    // fuses a rounded cap at BOTH ends (root and terminal bead) into the
-    // SAME path/fill call, never a second, independently-stamped circle
-    // primitive drawn afterward. Two `arc()` calls are the two fused caps
-    // of that one path, not two separate shapes.
+    // fuses a rounded cap at the TIP into the SAME path/fill call, never a
+    // separate, independently-stamped circle primitive drawn afterward.
+    // V0.10.18 removed the root's own arc cap entirely (no root
+    // circle/shelf/bulb) -- the root is meant to sit under the source mark
+    // and be masked by it, so only ONE `arc()` call (the tip) remains.
     expect(persistent.calls.filter((call) => call === "closePath")).toHaveLength(1);
     expect(persistent.calls.filter((call) => call === "fill")).toHaveLength(1);
-    expect(persistent.calls.filter((call) => call === "arc")).toHaveLength(2);
+    expect(persistent.calls.filter((call) => call === "arc")).toHaveLength(1);
   });
 
   it("replays the same connected final geometry with no origin circle", () => {
@@ -117,11 +118,11 @@ describe("WetDripEngine", () => {
     const second = render();
     expect(first.calls).toEqual(second.calls);
     expect(first.colorStops).toEqual(second.colorStops);
-    // One continuous path/fill with two fused rounded caps (root + terminal
-    // bead) -- see the equivalent assertion above for the full rationale.
+    // One continuous path/fill with a fused rounded cap at the tip only --
+    // see the equivalent assertion above for the full rationale.
     expect(first.calls.filter((call) => call === "closePath")).toHaveLength(1);
     expect(first.calls.filter((call) => call === "fill")).toHaveLength(1);
-    expect(first.calls.filter((call) => call === "arc")).toHaveLength(2);
+    expect(first.calls.filter((call) => call === "arc")).toHaveLength(1);
     expect(first.moveTos[0][1]).toBe(36);
   });
 
@@ -140,12 +141,14 @@ describe("WetDripEngine", () => {
       attachmentUnderlap: 14,
     };
     const strip = buildContinuousDripStrip(drip, 40);
-    // No STAMPED circle at the root or tip -- both `arc()` calls are
-    // rounded caps fused into the SAME single continuous path/fill (see
-    // `traceDripSilhouettePath`), not a separate primitive drawn on top.
+    // No STAMPED circle at the root or tip -- the tip's `arc()` call is a
+    // rounded cap fused into the SAME single continuous path/fill (see
+    // `traceDripSilhouettePath`), not a separate primitive drawn on top. The
+    // root (V0.10.18) has no cap of its own at all -- it's meant to be
+    // masked by the source mark it sits under.
     const recording = recordingContext();
     new WetDripEngine().renderCompletedDrip(recording.ctx, drip, "#e92f3d");
-    expect(recording.arcs).toHaveLength(2);
+    expect(recording.arcs).toHaveLength(1);
     expect(recording.calls.filter((call) => call === "fill")).toHaveLength(1);
 
     // V0.10.17: the root shoulder is capped at 1.7x the column's own

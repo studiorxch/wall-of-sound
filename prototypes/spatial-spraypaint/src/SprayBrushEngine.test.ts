@@ -1710,10 +1710,11 @@ describe("spray brush replay randomness", () => {
     // This fixture sets `originPoolRadius` WITHOUT `renderAsOverlay` (the
     // dedicated stand-alone pool-circle stamp path, unreachable from any
     // real caller today -- DripAccumulator never sets `originPoolRadius`
-    // for Spray/Round/Chisel) plus the two rounded caps V0.10.16's
+    // for Spray/Round/Chisel) plus the ONE rounded cap V0.10.16's
     // `traceDripSilhouettePath` fuses into the strip's own single
-    // continuous fill (root + terminal bead) -- 1 + 2 = 3.
-    expect(first.filter(({ operation }) => operation === "arc")).toHaveLength(3);
+    // continuous fill at the tip (V0.10.18 removed the root's own cap
+    // entirely) -- 1 + 1 = 2.
+    expect(first.filter(({ operation }) => operation === "arc")).toHaveLength(2);
     const lines = first.filter(({ operation }) => operation === "lineTo");
     // The pool-circle stamp above never calls closePath (it's a standalone
     // arc+fill) -- the strip's own single continuous silhouette fill is
