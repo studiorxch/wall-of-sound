@@ -133,6 +133,30 @@ describe("continuous wet drip geometry", () => {
     expect(first.slice(1).every((section, index) => section.width <= first[index].width)).toBe(true);
   });
 
+  it("holds body width for most of the run and delays taper into the final stretch -- a liquid line, not an icicle", () => {
+    const strip = buildContinuousDripStrip(wetDrip, 200);
+    const at = (progress: number) => strip.reduce((best, section) => (
+      Math.abs(section.progress - progress) < Math.abs(best.progress - progress) ? section : best
+    ));
+    const root = at(0).width;
+    const body25 = at(0.25).width;
+    const body50 = at(0.5).width;
+    const body75 = at(0.75).width;
+    const terminal = at(1).width;
+    // Body at 50% stays materially closer to the root than to the tail --
+    // most of each drip reads as a stable line, not a steady triangle.
+    expect(Math.abs(body50 - root)).toBeLessThan(Math.abs(body50 - terminal));
+    // The 25%/50% points have barely tapered at all yet...
+    expect(body25).toBeGreaterThan(root * 0.97);
+    expect(body50).toBeGreaterThan(root * 0.9);
+    // ...while the taper is clearly visible by 75% and finishes at the tip
+    // -- narrowing is concentrated in the final quarter to third, not
+    // spread linearly across the whole run.
+    expect(body75).toBeLessThan(body50);
+    expect(terminal).toBeLessThan(body75);
+    expect(body50 - body75).toBeLessThan(body75 - terminal);
+  });
+
   it("shapes a Mop overlay drip's root as a wide shoulder narrowing into a neck via width interpolation -- never a flat plateau or a separate circle", () => {
     const pooledDrip = { ...wetDrip, renderAsOverlay: true, originPoolRadius: 22 };
     const strip = buildContinuousDripStrip(pooledDrip, 40);
@@ -145,11 +169,13 @@ describe("continuous wet drip geometry", () => {
     for (let index = 1; index < shoulderSection.length; index += 1) {
       expect(shoulderSection[index].width).toBeLessThan(shoulderSection[index - 1].width);
     }
-    // ...and has fully joined the ordinary body taper by the end of the
-    // shoulder span (no residual bulge past the neck).
-    const stemWidthAtSpanEnd = pooledDrip.width * (1 - (1 - pooledDrip.tipWidthRatio) * 0.22);
-    const afterNeck = strip.find((section) => section.progress > 0.22);
-    expect(afterNeck!.width).toBeCloseTo(stemWidthAtSpanEnd, 1);
+    // ...and has fully joined the ordinary (delayed-taper) body width by
+    // the end of the shoulder span (no residual bulge past the neck).
+    const afterNeck = strip.find((section) => section.progress > 0.22)!;
+    const stemWidthAtSpanEnd = pooledDrip.width * (
+      1 - (1 - pooledDrip.tipWidthRatio) * afterNeck.progress ** 4
+    );
+    expect(afterNeck.width).toBeCloseTo(stemWidthAtSpanEnd, 1);
   });
 
   it("keeps deterministic subtle kinks connected to the same gravity run", () => {

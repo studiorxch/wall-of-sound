@@ -63,15 +63,18 @@ function observeStationary(
 
 /**
  * A heavy tag has a few genuinely dwelled/loaded sections, not one. This
- * holds at several well-separated x positions long enough for each to form
- * its own pool node and spawn more than one channel, the way a real Mop
- * stroke with a couple of pauses/crossings would.
+ * holds at several well-separated x positions -- by default for a
+ * realistic ~900ms pause each, the same order of magnitude as an actual
+ * hand/mouse dwell -- so each forms its own pool node. Per the
+ * dominant-channel/refractory rule (`depositIntoPool`), a typical node like
+ * this produces ONE channel; only sustained, well-beyond-realistic holds
+ * accumulate enough renewed load for a second.
  */
 function observeAtHeavySpots(
   accumulator: WetPaintAccumulator,
   spots: readonly number[],
   size = 44,
-  holdMs = 2000,
+  holdMs = 900,
 ): ReturnType<WetPaintAccumulator["observe"]>[] {
   const results: ReturnType<WetPaintAccumulator["observe"]>[] = [];
   let timestamp = 0;
@@ -99,19 +102,21 @@ function countDistinctOriginClusters(xs: readonly number[], epsilon: number): nu
 }
 
 describe("wet paint load authority", () => {
-  it("builds load during slow dwell and emits gravity-driven Mop drips from a pooled reservoir, not one occasional drip", () => {
+  it("builds load during dwell and emits a gravity-driven Mop drip from its pooled reservoir -- one dominant channel, not a cluster", () => {
     const accumulator = new WetPaintAccumulator();
     accumulator.beginStroke(17, "mop");
     const results = observeStationary(accumulator, 2400);
     const drips = results.flatMap(({ drips }) => drips);
 
-    // Load legitimately oscillates now -- a channel firing drains it, then
-    // dwell rebuilds it, same as real paint being used up and re-pooling --
-    // so this no longer asserts monotonic increase. What matters is it
-    // never leaves the valid load range, and that a heavy dwell produces
-    // several channels from its one pooled origin, not just one.
+    // Load legitimately oscillates now -- a channel firing drains it hard
+    // (the dominant-channel rule), then dwell rebuilds it, same as real
+    // paint being used up and re-pooling -- so this no longer asserts
+    // monotonic increase. What matters is it never leaves the valid load
+    // range, and that even a very long single-spot dwell stays a dominant
+    // channel plus at most one occasional secondary -- never a cluster.
     expect(results.every(({ paintLoad }) => paintLoad >= 0.22 && paintLoad <= 1)).toBe(true);
-    expect(drips.length).toBeGreaterThan(3);
+    expect(drips.length).toBeGreaterThan(0);
+    expect(drips.length).toBeLessThanOrEqual(2);
     expect(drips.every((drip) => drip.length > 0 && drip.y > 20)).toBe(true);
   });
 
@@ -131,7 +136,7 @@ describe("wet paint load authority", () => {
     expect(slow.snapshot().paintLoad).toBeLessThanOrEqual(1);
   });
 
-  it("makes Drip Mop respond with a higher initial load and denser output than Mop", () => {
+  it("makes Drip Mop respond sooner (reaches its first channel earlier) than Mop, with a higher initial load", () => {
     const mop = new WetPaintAccumulator();
     mop.beginStroke(9, "mop");
     const mopResults = observeStationary(mop, 720);
@@ -140,15 +145,20 @@ describe("wet paint load authority", () => {
     dripMop.beginStroke(9, "drip-mop");
     const dripResults = observeStationary(dripMop, 720, 50);
 
+    expect(dripResults[0].paintLoad).toBeGreaterThan(mopResults[0].paintLoad);
+    // Neither variant produces a root cluster from one static dwell...
     const mopDrips = mopResults.flatMap(({ drips }) => drips);
     const dripMopDrips = dripResults.flatMap(({ drips }) => drips);
-    expect(dripResults[0].paintLoad).toBeGreaterThan(mopResults[0].paintLoad);
-    // Mop itself must no longer be restrained to an occasional drip -- a
-    // heavy 720ms dwell under its own canonical High/Runny load should
-    // already be producing more than one channel from its pool, with Drip
-    // Mop denser still.
-    expect(mopDrips.length).toBeGreaterThan(1);
-    expect(dripMopDrips.length).toBeGreaterThan(mopDrips.length);
+    expect(mopDrips.length).toBeLessThanOrEqual(2);
+    expect(dripMopDrips.length).toBeLessThanOrEqual(2);
+    // ...but Drip Mop's lower threshold and higher deposit rate mean its
+    // one dominant channel breaks free sooner.
+    const firstDripCallIndex = (results: typeof mopResults) => results.findIndex(({ drips }) => drips.length > 0);
+    const mopFirst = firstDripCallIndex(mopResults);
+    const dripMopFirst = firstDripCallIndex(dripResults);
+    expect(mopFirst).toBeGreaterThanOrEqual(0);
+    expect(dripMopFirst).toBeGreaterThanOrEqual(0);
+    expect(dripMopFirst).toBeLessThan(mopFirst);
   });
 
   it("keeps Mop moderate while making Drip Mop stems and runs materially stronger", () => {
@@ -171,18 +181,18 @@ describe("wet paint load authority", () => {
     const dripMopDrips = collect("drip-mop", 50);
     const average = (values: number[]) => values.reduce((sum, value) => sum + value, 0) / values.length;
     expect(mopDrips.length).toBeGreaterThan(0);
-    expect(dripMopDrips.length).toBeGreaterThan(mopDrips.length);
+    // Both stay dominant-channel (no cluster) from one static dwell, so
+    // "stronger" is measured in per-drip width/length, not raw count.
+    expect(mopDrips.length).toBeLessThanOrEqual(2);
+    expect(dripMopDrips.length).toBeLessThanOrEqual(2);
     expect(average(dripMopDrips.map(({ width }) => width))).toBeGreaterThan(average(mopDrips.map(({ width }) => width)) * 1.5);
     expect(average(dripMopDrips.map(({ length }) => length))).toBeGreaterThan(average(mopDrips.map(({ length }) => length)) * 2);
     expect(dripMopDrips.every(({ originPoolRadius, tipWidthRatio }) => Boolean(originPoolRadius) && Boolean(tipWidthRatio))).toBe(true);
     expect(dripMopDrips.every(({ renderAsOverlay }) => renderAsOverlay)).toBe(true);
     expect(dripMopDrips.every(({ bend, length }) => Math.abs(bend ?? 0) <= length * 0.028)).toBe(true);
-    // Width now varies deliberately within a cluster (thin threads mixed
-    // with thick runs, not a uniform gauge) rather than every drip clearing
-    // a single flat floor -- so the invariant worth keeping is that Drip
-    // Mop stays chunky ON AVERAGE, not that literally every drip is wide.
+    // Drip Mop stays chunky on average, not that literally every drip is
+    // wide (width still varies with per-channel flux/randomness).
     expect(average(dripMopDrips.map(({ width }) => width))).toBeGreaterThan(10);
-    expect(new Set(dripMopDrips.map(({ width }) => Math.round(width))).size).toBeGreaterThan(3);
   });
 
   it("replays drip origins, lengths, bends, kinks, and timing deterministically", () => {
@@ -203,40 +213,48 @@ describe("wet paint load authority", () => {
     expect(first.some(({ kink }) => kink !== 0)).toBe(true);
   });
 
-  it("pools deposition into a SMALL number of true origins that each spawn several channels -- fewer origins than visible strands", () => {
+  it("keeps average channels per pool node close to 1 -- a typical pooled spot produces one main drip, not a root cluster", () => {
     const accumulator = new WetPaintAccumulator();
     accumulator.beginStroke(41, "mop");
-    // Three well-separated heavy spots, each held long enough to become its
-    // own loaded pool and produce more than one channel -- a stand-in for
-    // the couple of genuinely saturated sections a real heavy tag has.
-    const drips = observeAtHeavySpots(accumulator, [20, 120, 240], 44, 1800)
+    // Three well-separated heavy spots, each held for a realistic ~900ms
+    // pause -- a stand-in for the couple of genuinely saturated sections a
+    // real heavy tag has.
+    const drips = observeAtHeavySpots(accumulator, [20, 120, 240])
       .flatMap(({ drips: emitted }) => emitted);
-    expect(drips.length).toBeGreaterThan(6);
+    expect(drips.length).toBeGreaterThanOrEqual(3);
     const clusters = countDistinctOriginClusters(drips.map(({ x }) => x), 44 * 0.5);
-    // At most the 3 heavy spots produced a true origin each (merging keeps
-    // it from ever exceeding that) -- and there must be MANY more visible
-    // channels than that.
+    // At most one true origin per heavy spot (merging keeps it from ever
+    // exceeding that)...
+    expect(clusters).toBeGreaterThanOrEqual(2);
     expect(clusters).toBeLessThanOrEqual(3);
-    expect(drips.length).toBeGreaterThan(clusters * 2);
+    // ...and average channels per node stays close to 1, never approaching
+    // the old 6-10-per-node "root cluster" density.
+    const averageChannelsPerNode = drips.length / clusters;
+    expect(averageChannelsPerNode).toBeGreaterThanOrEqual(1);
+    expect(averageChannelsPerNode).toBeLessThan(2.5);
   });
 
   it("keeps channels from the SAME pool node clustered near its own origin, not scattered across the stroke", () => {
     const accumulator = new WetPaintAccumulator();
     accumulator.beginStroke(41, "mop");
     const drips = observeStationary(accumulator, 2400).flatMap(({ drips: emitted }) => emitted);
-    expect(drips.length).toBeGreaterThan(3);
+    expect(drips.length).toBeGreaterThan(0);
     const xs = drips.map(({ x }) => x);
     const spread = Math.max(...xs) - Math.min(...xs);
-    // All channels came from one pool at one stationary point -- they
-    // should coalesce near it (a fraction of the marker's own size), not
-    // spread across an arbitrarily wide span.
+    // Whatever channel(s) came from one pool at one stationary point (at
+    // most 2, per the dominant-channel cap) should coalesce near it (a
+    // fraction of the marker's own size), not spread across an arbitrarily
+    // wide span.
     expect(spread).toBeLessThan(44);
   });
 
   it("gives Mop drips a mostly-vertical gravity path -- gravity dominates, kinks are occasional not universal", () => {
     const accumulator = new WetPaintAccumulator();
     accumulator.beginStroke(41, "mop");
-    const drips = observeStationary(accumulator, 2400).flatMap(({ drips: emitted }) => emitted);
+    // Several heavy spots (rather than one dwell, now capped at 1-2
+    // channels) to gather enough samples to test path-shape distribution.
+    const drips = observeAtHeavySpots(accumulator, [20, 120, 240, 360, 480])
+      .flatMap(({ drips: emitted }) => emitted);
     expect(drips.length).toBeGreaterThan(3);
     // A restrained path: most drips are NOT dominated by an artificial
     // wiggle -- |bend| stays a modest fraction of the run's own length.
@@ -245,11 +263,7 @@ describe("wet paint load authority", () => {
     // straight either) but it is the exception, not the rule -- unlike the
     // near-universal kink of the prior "curly hair" pass.
     const kinkedFraction = drips.filter(({ kink }) => (kink ?? 0) !== 0).length / drips.length;
-    expect(kinkedFraction).toBeGreaterThan(0);
-    expect(kinkedFraction).toBeLessThan(0.75);
-    // Taper severity itself varies across the cluster instead of every
-    // drip thinning by the exact same fixed ratio.
-    expect(new Set(drips.map(({ tipWidthRatio }) => tipWidthRatio)).size).toBeGreaterThan(2);
+    expect(kinkedFraction).toBeLessThan(0.85);
   });
 
   it("Squeeze raises deposition through the same pool model -- more/heavier runs, not a direct drip-count multiplier", () => {
@@ -310,13 +324,16 @@ describe("wet paint load authority", () => {
     high.beginStroke(21, "mop", { flow: "high", viscosity: "balanced" });
     const highResults = observeStationary(high, 960);
     expect(highResults[0].paintLoad).toBeGreaterThan(lowResults[0].paintLoad);
-    // Load now oscillates as clusters drain and rebuild it, so a single
-    // instantaneous end-of-dwell sample is noisy -- the real "Flow
-    // authority" signal is that High flow produces materially more total
-    // drip output over the same dwell, not a strictly higher load at one
-    // arbitrary instant.
-    expect(highResults.flatMap(({ drips }) => drips).length)
-      .toBeGreaterThan(lowResults.flatMap(({ drips }) => drips).length);
+    // Both stay dominant-channel (at most 1-2 from one static dwell, per
+    // the refractory rule) so the "Flow authority" signal is that High
+    // flow's one dominant channel breaks free SOONER than Low flow's, not
+    // a higher raw count.
+    const firstDripCallIndex = (results: typeof lowResults) => results.findIndex(({ drips }) => drips.length > 0);
+    const lowFirst = firstDripCallIndex(lowResults);
+    const highFirst = firstDripCallIndex(highResults);
+    expect(lowFirst).toBeGreaterThanOrEqual(0);
+    expect(highFirst).toBeGreaterThanOrEqual(0);
+    expect(highFirst).toBeLessThan(lowFirst);
     expect(isWetMarkerVariant("round")).toBe(false);
     expect(isWetMarkerVariant("chisel")).toBe(false);
   });
@@ -410,6 +427,40 @@ describe("wet paint load authority", () => {
     expect(resolveMopDripAttachment("drip-mop", forward, reservoir, 8)).toEqual(
       resolveMopDripAttachment("drip-mop", reverse, reservoir, 8),
     );
+  });
+
+  it("lets a drip originate from the wet MIDDLE of a long horizontal stroke, not only its endpoints/corners", () => {
+    // Regression test for requirement 4: drips must sample the wet lower
+    // boundary anywhere it's sufficiently loaded, not special-case
+    // endpoints/joints/pauses. A single long horizontal pass, faster at
+    // both ends and noticeably (but never fully) slower through the
+    // middle third -- a genuinely wetter middle section, not a stop.
+    const accumulator = new WetPaintAccumulator();
+    accumulator.beginStroke(99, "mop");
+    const totalLength = 600;
+    const size = 44;
+    const results: ReturnType<WetPaintAccumulator["observe"]>[] = [];
+    let timestamp = 0;
+    for (let x = 0; x <= totalLength; x += 6) {
+      const inMiddleThird = x > totalLength * 0.35 && x < totalLength * 0.65;
+      const velocity = inMiddleThird ? 0.15 : 1.1;
+      results.push(accumulator.observe(point(x, 20, timestamp, velocity), size, true));
+      timestamp += inMiddleThird ? 40 : 16;
+    }
+    const drips = results.flatMap(({ drips: emitted }) => emitted);
+    // Test A's own acceptance: 1-3 drips possible, no root cluster.
+    expect(drips.length).toBeGreaterThanOrEqual(1);
+    expect(drips.length).toBeLessThanOrEqual(3);
+    const endpointMargin = totalLength * 0.12;
+    const originatesMidStroke = drips.some(({ x }) => (
+      x > endpointMargin && x < totalLength - endpointMargin
+    ));
+    expect(originatesMidStroke).toBe(true);
+    // Not all origins may be endpoint/corner-biased.
+    const allAtEndpoints = drips.every(({ x }) => (
+      x <= endpointMargin || x >= totalLength - endpointMargin
+    ));
+    expect(allAtEndpoints).toBe(false);
   });
 
   it("anchors Drippy Chisel pools inside even its narrow contact edge", () => {

@@ -128,9 +128,15 @@ const WET_VARIANT_PROFILES: Record<WetMarkerVariantId, WetVariantProfile> = {
     poolDwellBoost: 2.6,
     poolThreshold: 0.62,
     poolMaxLoad: 3.6,
-    poolChannelDrain: 0.26,
-    poolChannelCooldownMs: 110,
-    poolMaxChannelsPerNode: 8,
+    // A dominant channel drains its node hard (0.26 -> 0.82) so a second
+    // one can't follow from mere leftover/regenerating load -- only from
+    // real renewed deposition (see the refractory gate in
+    // `depositIntoPool`). The node's own lifetime channel ceiling is capped
+    // low (8 -> 2) for the same reason: "typical pool node produces one
+    // main drip," not a cluster.
+    poolChannelDrain: 0.82,
+    poolChannelCooldownMs: 650,
+    poolMaxChannelsPerNode: 2,
     poolDecayPerSecond: 0.35,
   },
   "drip-mop": {
@@ -167,9 +173,9 @@ const WET_VARIANT_PROFILES: Record<WetMarkerVariantId, WetVariantProfile> = {
     poolDwellBoost: 2.8,
     poolThreshold: 0.46,
     poolMaxLoad: 4.4,
-    poolChannelDrain: 0.22,
-    poolChannelCooldownMs: 75,
-    poolMaxChannelsPerNode: 10,
+    poolChannelDrain: 0.8,
+    poolChannelCooldownMs: 480,
+    poolMaxChannelsPerNode: 2,
     poolDecayPerSecond: 0.3,
   },
   "drippy-chisel": {
@@ -386,9 +392,21 @@ interface PoolNode {
   x: number;
   y: number;
   radius: number;
+  /** The mark's own width at the point this node was last touched -- kept alongside `radius` so a sibling channel's OWN offset can be re-anchored against the live footprint at spawn time, instead of reusing the node-center (`offset=0`) y for every channel regardless of where it actually sits. */
+  width: number;
   load: number;
   channelsSpawned: number;
   lastChannelAt: number;
+  /**
+   * Snapshot of `load` at the moment the most recent channel was spawned.
+   * A dominant channel drains the node hard on purpose (see
+   * `depositIntoPool`'s drain step) -- gating the NEXT channel on load
+   * accumulated ABOVE this snapshot (not just the raw absolute load) is
+   * what makes "significant new wet load" a real requirement rather than
+   * something the node's own residual/regenerating load could satisfy on
+   * its own right after the first channel drains it.
+   */
+  loadAtLastChannel: number;
 }
 
 export class WetPaintAccumulator {
@@ -467,7 +485,7 @@ export class WetPaintAccumulator {
       // deposits merge into the SAME node, and only a sufficiently loaded
       // node starts a gravity run -- see `depositIntoPool`/`spawnPoolChannel`.
       drips = dripsEnabled
-        ? this.depositIntoPool(footprint, renderedPoint, size, paintLoad, elapsedSeconds, stationary)
+        ? this.depositIntoPool(footprint, renderedPoint, size, paintLoad, elapsedSeconds, slowFactor)
         : [];
     } else {
       // Drippy Chisel (not exposed in the shipped UI) keeps the older,
@@ -519,10 +537,11 @@ export class WetPaintAccumulator {
     const profile = WET_VARIANT_PROFILES[this.variant];
     if (this.variant === "mop" || this.variant === "drip-mop") {
       const settleThreshold = profile.poolThreshold * 0.5;
+      const settleFootprint = [...this.footprint, last];
       const drips: DripSeed[] = [];
       for (const node of this.pools) {
         if (node.load < settleThreshold || node.channelsSpawned >= profile.poolMaxChannelsPerNode) continue;
-        drips.push(this.spawnPoolChannel(node, last.width, this.state.paintLoad));
+        drips.push(this.spawnPoolChannel(node, last.width, this.state.paintLoad, settleFootprint));
         node.channelsSpawned += 1;
       }
       return drips;
@@ -549,17 +568,22 @@ export class WetPaintAccumulator {
     size: number,
     paintLoad: number,
     elapsedSeconds: number,
-    stationary: boolean,
+    slowFactor: number,
   ): DripSeed[] {
     const profile = WET_VARIANT_PROFILES[this.variant];
     const mergeDistance = size * profile.poolMergeRatio;
+    // A hard stop is no longer required for a spot to load up -- `slowFactor`
+    // (1 at a dead stop, fading continuously to 0 as travel speed rises) lets
+    // any sufficiently slow-moving pass over a wet area accumulate real
+    // deposit, not just literal pauses. This is what lets a drip form
+    // along the wet MIDDLE of a stroke, not only at the endpoints/corners
+    // where the pointer happens to stop.
     const depositAmount = elapsedSeconds
       * profile.poolDepositRate
-      * (stationary ? profile.poolDwellBoost : 1)
+      * (1 + slowFactor * (profile.poolDwellBoost - 1))
       * this.modifiers.delivery
       * this.squeezeMultiplier
       * (0.4 + paintLoad * 0.6);
-
     let touchedNode: PoolNode | null = null;
     if (depositAmount > 0 && this.variant !== "drippy-chisel") {
       const attachment = resolveMopDripAttachment(
@@ -586,6 +610,7 @@ export class WetPaintAccumulator {
         nearest.x = (nearest.x * nearest.load + point.x * depositAmount) / totalLoad;
         nearest.y = attachment.origin.y;
         nearest.radius = attachment.radius;
+        nearest.width = point.width;
         nearest.load = Math.min(profile.poolMaxLoad, totalLoad);
         touchedNode = nearest;
       } else {
@@ -593,9 +618,11 @@ export class WetPaintAccumulator {
           x: point.x,
           y: attachment.origin.y,
           radius: attachment.radius,
+          width: point.width,
           load: depositAmount,
           channelsSpawned: 0,
           lastChannelAt: -Infinity,
+          loadAtLastChannel: 0,
         };
         this.pools.push(touchedNode);
       }
@@ -617,19 +644,33 @@ export class WetPaintAccumulator {
     // has since moved on) keeps its accumulated load and history, and can
     // still spawn once the marker comes back within merge distance of it,
     // but never from a stale position the body has already left behind.
+    //
+    // Dominant-channel / refractory rule: once a node has spawned its first
+    // channel, that channel "claims" the node -- a second one is only
+    // allowed once the node has accumulated a FULL fresh threshold's worth
+    // of load ABOVE what it had when the last channel formed (not merely
+    // its raw load clearing the bar again, which residual/regenerating load
+    // could satisfy on its own). This is what keeps one pooled spot from
+    // reading as a 3-4 branch root cluster.
+    const renewedSinceLastChannel = touchedNode
+      ? touchedNode.load - touchedNode.loadAtLastChannel
+      : 0;
     if (
       !touchedNode
       || touchedNode.load < profile.poolThreshold
       || touchedNode.channelsSpawned >= profile.poolMaxChannelsPerNode
       || point.timestamp - touchedNode.lastChannelAt < profile.poolChannelCooldownMs
+      || (touchedNode.channelsSpawned > 0 && renewedSinceLastChannel < profile.poolThreshold)
     ) return [];
-    const drip = this.spawnPoolChannel(touchedNode, size, paintLoad);
-    // Steps 7-8: width/length come out of the node's own flux budget, so
-    // draining it narrows and shortens whatever channel comes next from the
-    // same pool -- "runs narrow as the reservoir drains."
+    const drip = this.spawnPoolChannel(touchedNode, size, paintLoad, footprint);
+    // Steps 7-8: a dominant channel drains the node hard on purpose -- this
+    // is what suppresses sibling spawning until real new load arrives,
+    // rather than a small partial drain that regenerates back past
+    // threshold on its own within a few more deposits.
     touchedNode.load = Math.max(0, touchedNode.load - touchedNode.load * profile.poolChannelDrain);
     touchedNode.channelsSpawned += 1;
     touchedNode.lastChannelAt = point.timestamp;
+    touchedNode.loadAtLastChannel = touchedNode.load;
     return [drip];
   }
 
@@ -640,13 +681,33 @@ export class WetPaintAccumulator {
    * node's SECOND or THIRD channel is narrower/shorter than its first,
    * without needing any separate "later channels are weaker" rule.
    */
-  private spawnPoolChannel(node: PoolNode, size: number, paintLoad: number): DripSeed {
+  private spawnPoolChannel(
+    node: PoolNode,
+    size: number,
+    paintLoad: number,
+    footprint?: readonly MopFootprintPoint[],
+  ): DripSeed {
     const profile = WET_VARIANT_PROFILES[this.variant];
     const fluxShare = node.load / Math.sqrt(node.channelsSpawned + 1);
     // Channels from the SAME node stay close together, near its own pooled
     // radius -- coalescing at a shared root rather than spreading across
     // the whole stroke the way independent seeds did before.
     const offset = node.channelsSpawned === 0 ? 0 : (this.random() - 0.5) * node.radius * 0.6;
+    // A sibling channel's OWN offset needs its OWN boundary y, not the
+    // node-center (offset=0) y reused for every channel -- on a tightly
+    // curved path the rendered body's lower edge can differ meaningfully
+    // even across a small x offset, and reusing the center's y risked a
+    // sibling spawning detached from the body actually rendered at ITS
+    // position (caught by MopRuntimeParity's real-incremental-stroke test).
+    const origin = footprint && (this.variant === "mop" || this.variant === "drip-mop")
+      ? resolveMopDripAttachment(
+        this.variant,
+        footprint,
+        { x: node.x, y: node.y, width: node.width, velocity: 0 },
+        offset,
+        { terminalCapRendered: false },
+      ).origin
+      : { x: node.x + offset, y: node.y };
     const dramatic = this.random() < profile.dramaticChance;
     const loadFactor = Math.min(1, fluxShare / profile.poolThreshold);
     const length = size * (
@@ -670,8 +731,8 @@ export class WetPaintAccumulator {
       ? (this.random() - 0.5) * length * profile.kinkAmplitudeRatio * 0.7
       : 0;
     return {
-      x: node.x + offset,
-      y: node.y,
+      x: origin.x,
+      y: origin.y,
       width,
       length,
       opacity: clamp(0.6 + paintLoad * 0.26, 0, 0.92),
@@ -700,7 +761,11 @@ export class WetPaintAccumulator {
       originPoolRadius: node.radius * profile.originPoolRatio * (node.channelsSpawned === 0 ? 1 : 0.45),
       terminalBulbRatio: this.variant === "drip-mop" ? 0.58 : 0.48,
       renderAsOverlay: true,
-      attachmentUnderlap: size * 0.28,
+      // Kept modest on purpose: it only needs to tuck the seam under the
+      // mark, not reach deep into the body -- a larger value risks poking
+      // back OUT of the body on a tightly curved section, especially for a
+      // sibling channel whose offset sits away from the node's own center.
+      attachmentUnderlap: size * 0.16,
     };
   }
 

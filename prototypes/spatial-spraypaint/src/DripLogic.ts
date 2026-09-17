@@ -90,18 +90,29 @@ export function resolveDripStripSection(
   const tangentLength = Math.max(0.0001, Math.hypot(tangentX, tangentY));
   const normal = { x: -tangentY / tangentLength, y: tangentX / tangentLength };
   const tipWidthRatio = drip.tipWidthRatio ?? 0.58;
-  const stemWidth = drip.width * (1 - (1 - tipWidthRatio) * safeProgress);
+  // Ink/paint drips hold their body width for most of their length and
+  // only taper meaningfully near the end -- a near-linear taper (the old
+  // formula) reads as an icicle/triangle instead of a liquid line. Easing
+  // PROGRESS itself (not just the width delta) through a rising power
+  // curve delays almost all of the narrowing into roughly the final
+  // quarter to third of the run: at 65% of the way down a drip is still
+  // within a fraction of a percent of its full body width, and by 85% only
+  // about half the total taper has happened.
+  const taperEase = safeProgress ** 4;
+  const stemWidth = drip.width * (1 - (1 - tipWidthRatio) * taperEase);
   const shoulderWidth = drip.renderAsOverlay && drip.originPoolRadius
     ? Math.max(stemWidth, drip.originPoolRadius * 2)
     : stemWidth;
   // The root's shape comes ENTIRELY from width interpolation along the
-  // strip -- never a separate circle primitive layered on top (an earlier
-  // pass added one; removed -- see WetDripEngine.ts). A short, smooth
-  // (C1-continuous, no flat plateau and no hard corners) ease from the
-  // pooled shoulder width down to the ordinary body/stem width over a
-  // compact span reads as a short "neck" pulling out of the pool, without
-  // the flat-topped wedge a longer or asymmetric-holding curve produces.
-  const shoulderSpan = 0.14;
+  // strip -- never a separate circle or rectangle primitive layered on top
+  // (an earlier pass added a circle; removed -- see WetDripEngine.ts). A
+  // smooth (C1-continuous, no flat plateau, no hard corners) ease from the
+  // pooled shoulder width down into the body reads as liquid sagging out
+  // of the stroke rather than a stamped shape. Because the body taper
+  // above is now delayed (stays close to full width through the early
+  // run), the target this eases TOWARD is itself still wide here, so the
+  // transition is gentle without needing a very short/steep span.
+  const shoulderSpan = 0.22;
   const shoulderProgress = Math.min(1, safeProgress / shoulderSpan);
   const neckBlend = 1 - shoulderProgress * shoulderProgress * (3 - shoulderProgress * 2);
   const width = Math.max(0.8, stemWidth + (shoulderWidth - stemWidth) * neckBlend);
