@@ -68,7 +68,6 @@ import { createStrokeRandom, PLUME_MAX_ANGLE_DEGREES } from "./SprayBrushEngine"
 import { SprayCanAudio } from "./SprayCanAudio";
 import { getSprayCapPreset } from "./SprayCapPresets";
 import {
-  applyFlairOutputToPoint,
   denormalizeTrackMarksFlairWidth,
   inverseEffectiveWidthExpansion,
   normalizeTrackMarksFlairWidth,
@@ -76,6 +75,7 @@ import {
   resolveFlairModulationWithParams,
   type EffectiveFlairParams,
 } from "./FlairCurves";
+import { buildContinuousSegmentEnds } from "./FlairContinuity";
 import { getFlairOverride, resolveEffectiveFlairParams } from "./FlairProperties";
 import { type FlairModeId, type SurfaceContextId } from "./ToolTaxonomy";
 import { StrokeHistory, type RecordedStroke } from "./StrokeHistory";
@@ -1772,7 +1772,22 @@ class SpatialSpraypaintApp {
           sample.timestamp,
         );
         let segmentStart = previous;
-        const segmentEnds = [...interpolated, point];
+        // Flair Continuity fix: for every cap except Track Marks with an
+        // active Flair mode, this is exactly `[...interpolated, point]`
+        // (byte-identical values, see `buildContinuousSegmentEnds`'s own
+        // doc). For Track Marks + active Flair, it REPLACES that batch with
+        // a much denser arclength resample from the previous rendered point
+        // to this batch's true target — the fix for the reported
+        // segmented/capsule regression (see `FlairContinuity.ts`'s module
+        // doc for the full root-cause analysis). `applyFlairOutputToPoint`
+        // (output multiplier) is still applied first, same as before.
+        const segmentEnds = buildContinuousSegmentEnds(
+          segmentStart,
+          [...interpolated, point],
+          style.variantId,
+          this.trackMarksFlairMode,
+          this.trackMarksFlairOutputMultiplier,
+        );
         for (const [segmentIndex, segmentEnd] of segmentEnds.entries()) {
           let renderedPoint = segmentEnd;
           if (style.toolId === "paint-marker" && isWetMarkerVariant(style.variantId)) {
@@ -1787,20 +1802,6 @@ class SpatialSpraypaintApp {
               this.toolRenderer.startDrip(drip, style.color, segmentEnd.timestamp);
               this.strokeHistory.appendDrip(drip);
             }
-          }
-          if (style.toolId === "spray-can") {
-            // Flair Behavior Spec V1: the ONLY place a Flair value reaches a
-            // rendered point (see `applyFlairOutputToPoint`'s own doc for why
-            // this is safe for every cap) — it returns `renderedPoint`
-            // completely untouched unless `style.variantId` is
-            // `"track-marks"` AND `trackMarksFlairMode` is not `"off"`, so
-            // Pink Dot and every other cap take this branch as a no-op.
-            renderedPoint = applyFlairOutputToPoint(
-              renderedPoint,
-              style.variantId,
-              this.trackMarksFlairMode,
-              this.trackMarksFlairOutputMultiplier,
-            );
           }
           this.toolRenderer.renderSegment(
             this.paintCtx,
