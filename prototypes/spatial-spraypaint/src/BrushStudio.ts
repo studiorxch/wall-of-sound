@@ -16,7 +16,12 @@ import {
   type FlairPropertyKey,
   type FlairPropertyRow,
 } from "./FlairProperties";
-import { type FlairStartPositionId } from "./FlairCurves";
+import {
+  resolveFlairModulationWithParams,
+  resolveFlairSize,
+  resolveFlairStartDistance,
+  type FlairStartPositionId,
+} from "./FlairCurves";
 import { type FlairModeId } from "./ToolTaxonomy";
 import {
   duplicateSprayBrush,
@@ -433,7 +438,7 @@ export class BrushStudioController {
     const mode = this.deps.getTrackMarksFlairMode();
     if (preset.id === "track-marks" && mode !== "off") {
       const override = this.deps.getFlairOverrides()[preset.id]?.[mode] ?? {};
-      const params = resolveEffectiveFlairParams(mode, preset.baseRadius, override);
+      const params = resolveEffectiveFlairParams(mode, preset.id, preset.baseRadius, override);
       renderTrackMarksFlairPreview(ctx, canvas.width, canvas.height, preset, mode, params);
       return;
     }
@@ -479,7 +484,7 @@ export class BrushStudioController {
     if (mode === "off") return elements;
 
     const override = this.deps.getFlairOverrides()[capId]?.[mode] ?? {};
-    const effective = resolveEffectiveFlairParams(mode, preset.baseRadius, override);
+    const effective = resolveEffectiveFlairParams(mode, preset.id, preset.baseRadius, override);
 
     elements.push(this.buildDepthResponseRow(capId, mode, preset, effective, override));
     elements.push(this.buildStartPositionRow(capId, mode, preset, effective, override));
@@ -487,6 +492,45 @@ export class BrushStudioController {
     for (const row of getFlairPropertyRows(effective, override)) {
       elements.push(this.buildFlairPropertyRow(capId, mode, preset, row));
     }
+
+    // Real Spray Pass build brief, section A/1: "there should be a clean way
+    // to define start width and end width for a flair stroke." Min/Max +
+    // Start Position + Depth Response together already ARE that (more
+    // general — Start Position can be min/center/max, not just an
+    // endpoint) — this readout translates the combination into the exact
+    // mental model the brief asks for: what a stroke ACTUALLY starts at and
+    // what it opens to at full simulated distance, computed live from the
+    // same functions the runtime routing hook itself calls (`resolveFlairStartDistance`
+    // + `resolveFlairModulationWithParams` + `resolveFlairSize`), so it can
+    // never drift from the true resolved behavior.
+    const startDistance01 = resolveFlairStartDistance(mode, effective);
+    const startSize = resolveFlairSize(
+      resolveFlairModulationWithParams(mode, effective, { distance01: startDistance01, output: 1, velocity: 0, angle: 0 }).width01,
+      effective,
+    );
+    // "Opens to" = the size at the OPPOSITE raw simulated-distance sample
+    // from the resolved start (correct for the common/default min<->max
+    // Start Position cases under either Depth Response polarity — the
+    // literal "other end" of the sweep). For an explicit "center" Start
+    // Position this shows the same value both ways, which is honest: center
+    // has no single directional "opens to," it can move either way from the
+    // same resting point. Distinct from "Effective Range" below (the
+    // abstract [Min, Max] without indicating which end a stroke actually
+    // starts from).
+    const openSize = resolveFlairSize(
+      resolveFlairModulationWithParams(mode, effective, { distance01: 1 - startDistance01, output: 1, velocity: 0, angle: 0 }).width01,
+      effective,
+    );
+    const startRow = document.createElement("div");
+    startRow.className = "brush-studio-property-row readonly";
+    const startLabel = document.createElement("span");
+    startLabel.className = "brush-studio-property-label";
+    startLabel.textContent = "Starts at / Opens to";
+    const startValue = document.createElement("span");
+    startValue.className = "brush-studio-property-value";
+    startValue.textContent = `${Math.round(startSize)} → ${Math.round(openSize)} wall units`;
+    startRow.append(startLabel, startValue);
+    elements.push(startRow);
 
     // Flair Stroke Envelope Stabilization build brief, section 2/6: Min/Max
     // ARE the effective range now (no separate curve evaluation needed — see
@@ -561,7 +605,7 @@ export class BrushStudioController {
     select.addEventListener("change", () => {
       this.deps.setFlairProperty(capId, mode, { depthResponse: select.value as "far-wide" | "near-wide" });
       const nextOverride = this.deps.getFlairOverrides()[capId]?.[mode] ?? {};
-      const params = resolveEffectiveFlairParams(mode, preset.baseRadius, nextOverride);
+      const params = resolveEffectiveFlairParams(mode, preset.id, preset.baseRadius, nextOverride);
       const canvas = this.el<HTMLCanvasElement>("brush-studio-preview");
       const ctx = canvas.getContext("2d");
       if (ctx) renderTrackMarksFlairPreview(ctx, canvas.width, canvas.height, preset, mode, params);
@@ -665,7 +709,7 @@ export class BrushStudioController {
       readout.textContent = numeric.toFixed(2);
       this.deps.setFlairProperty(capId, mode, { [row.key]: numeric });
       const override = this.deps.getFlairOverrides()[capId]?.[mode] ?? {};
-      const params = resolveEffectiveFlairParams(mode, preset.baseRadius, override);
+      const params = resolveEffectiveFlairParams(mode, preset.id, preset.baseRadius, override);
       const canvas = this.el<HTMLCanvasElement>("brush-studio-preview");
       const ctx = canvas.getContext("2d");
       if (ctx) renderTrackMarksFlairPreview(ctx, canvas.width, canvas.height, preset, mode, params);

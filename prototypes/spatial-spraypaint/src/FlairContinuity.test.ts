@@ -140,3 +140,58 @@ describe("smooth taper envelope (Flair Stabilization build brief, section A1)", 
     }
   });
 });
+
+describe("aerosol mist -- bloom01 wiring (Real Spray Pass build brief, section 3)", () => {
+  it("bloom01=0 (the default) is a complete no-op -- identical opacity to the pre-mist smooth taper", () => {
+    const previous = { ...near(0, 0), width: 20, opacity: 0.9 };
+    const target = { ...near(60, 0), width: 40, opacity: 0.5 };
+    const withoutBloomArg = resampleTrackMarksFlairSegment(previous, target);
+    const explicitZero = resampleTrackMarksFlairSegment(previous, target, 0);
+    expect(withoutBloomArg).toEqual(explicitZero);
+  });
+
+  it("bloom01>0 dims and varies opacity -- never touches width (the smooth taper stays exactly as continuous as before)", () => {
+    const previous = { ...near(0, 0), width: 20, opacity: 0.9 };
+    const target = { ...near(60, 0), width: 40, opacity: 0.9 };
+    const clean = resampleTrackMarksFlairSegment(previous, target, 0);
+    const misty = resampleTrackMarksFlairSegment(previous, target, 0.8);
+    for (let i = 0; i < clean.length; i += 1) {
+      expect(misty[i].width).toBeCloseTo(clean[i].width, 10); // width UNCHANGED by mist
+    }
+    // At least one interior point must actually differ in opacity -- mist is visible, not a no-op.
+    const anyOpacityDiffers = misty.some((point, i) => Math.abs(point.opacity - clean[i].opacity) > 1e-6);
+    expect(anyOpacityDiffers).toBe(true);
+  });
+
+  it("higher bloom01 dims the average opacity further -- 'lighter/more translucent as it opens', not just noisier", () => {
+    const previous = { ...near(0, 0), width: 20, opacity: 1 };
+    const target = { ...near(80, 0), width: 20, opacity: 1 };
+    const low = resampleTrackMarksFlairSegment(previous, target, 0.2);
+    const high = resampleTrackMarksFlairSegment(previous, target, 0.9);
+    const average = (points: typeof low) => points.reduce((sum, p) => sum + p.opacity, 0) / points.length;
+    expect(average(high)).toBeLessThan(average(low));
+  });
+
+  it("mist never produces negative opacity even at bloom01=1 with an unlucky jitter draw", () => {
+    const previous = { ...near(0, 0), width: 20, opacity: 0.05 };
+    const target = { ...near(200, 0), width: 20, opacity: 0.05 };
+    const run = resampleTrackMarksFlairSegment(previous, target, 1);
+    expect(run.every((point) => point.opacity >= 0)).toBe(true);
+  });
+
+  it("mist is deterministic -- the exact same inputs always produce the exact same grain (live paint and replay must match)", () => {
+    const previous = { ...near(3, 7), width: 20, opacity: 0.8 };
+    const target = { ...near(90, 40), width: 55, opacity: 0.3 };
+    const first = resampleTrackMarksFlairSegment(previous, target, 0.6);
+    const second = resampleTrackMarksFlairSegment(previous, target, 0.6);
+    expect(first).toEqual(second);
+  });
+
+  it("buildContinuousSegmentEnds defaults bloom01 to 0 when omitted -- every existing call site (and every non-Track-Marks/off case) is unaffected by this change", () => {
+    const previous = near(-10, 0);
+    const rawSegmentEnds = [near(0, 0), near(10, 0), near(20, 0)];
+    const withDefault = buildContinuousSegmentEnds(previous, rawSegmentEnds, "track-marks", "wall", 1);
+    const withExplicitZero = buildContinuousSegmentEnds(previous, rawSegmentEnds, "track-marks", "wall", 1, 0);
+    expect(withDefault).toEqual(withExplicitZero);
+  });
+});

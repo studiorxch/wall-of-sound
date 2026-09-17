@@ -29,8 +29,13 @@ import { type StrokePoint } from "./types";
  * many more, much shorter segments. This does not reduce Flair's range —
  * the final point in the resampled run is always the true target value.
  */
-const TRACK_MARKS_FLAIR_RESAMPLE_STEP_WALL_UNITS = 1.2;
-const TRACK_MARKS_FLAIR_MIN_RESAMPLE_STEPS = 4;
+// Real Spray Pass build brief, section 2: tightened from 1.2/4 (prior pass)
+// -- the reported "still sometimes steps" complaint was traced to these
+// still being coarse enough, at a fast drag, to leave a faint facet at
+// sharp direction changes. Denser sampling costs more render calls per
+// batch but stays well within frame budget at typical stroke lengths.
+const TRACK_MARKS_FLAIR_RESAMPLE_STEP_WALL_UNITS = 0.7;
+const TRACK_MARKS_FLAIR_MIN_RESAMPLE_STEPS = 6;
 
 function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
@@ -54,8 +59,55 @@ function smoothstep(t: number): number {
   return clamped * clamped * (3 - 2 * clamped);
 }
 
-/** Pure: resamples every field from `previous` to `target` at a small fixed arclength step. Position/timestamp/velocity interpolate linearly (the true physical path); width/opacity ease via `smoothstep` for a continuous, non-piecewise taper. `previous === null` (a stroke's very first point) returns just `[target]`, matching every other cap's existing start-of-stroke behavior. */
-export function resampleTrackMarksFlairSegment(previous: StrokePoint | null, target: StrokePoint): StrokePoint[] {
+/**
+ * Deterministic pseudo-random 0..1 hash — NOT `Math.random()`, so live
+ * painting and replay always draw the exact same "grain" for the exact same
+ * path (this codebase's existing per-stroke seeded-random precedent — e.g.
+ * `createStrokeRandom` — is for `SprayBrushEngine`'s own particle scatter;
+ * this is the same idea at the continuity-resample level, cheap enough not
+ * to need threading a seeded generator through this pure module).
+ */
+function deterministicJitter(seed: number): number {
+  const x = Math.sin(seed * 12.9898) * 43758.5453;
+  return x - Math.floor(x);
+}
+
+/**
+ * Real Spray Pass build brief, section 3: "real flares are not only width
+ * changes... lighter/more translucent paint as it opens... more aerosol
+ * texture/mist... less hard solid fill at the outer flare region." `bloom01`
+ * (from `resolveFlairModulationWithParams`, previously computed and
+ * discarded — schema-only since it was first introduced) now does two
+ * things to a resampled point's OPACITY ONLY (never width — the smooth
+ * taper from `smoothstep` stays exactly as continuous as before this
+ * change; mist must not reintroduce a geometry artifact):
+ *   1. a smooth overall dimming (`1 - bloom01*0.3`) — the flare genuinely
+ *      gets more translucent, not just wider;
+ *   2. a per-point deterministic grain (`1 - bloom01*0.45*jitter`) — the
+ *      "aerosol mist" read, a broken-up translucent bloom rather than a
+ *      flat, evenly dimmed tube (the "vector marker" failure mode this
+ *      build brief explicitly calls out).
+ * Both scale to ZERO at `bloom01 = 0` (a stroke/mode with no bloom response
+ * configured renders byte-identical to before this change).
+ */
+function applyMistToOpacity(baseOpacity: number, bloom01: number, jitterSeed: number): number {
+  if (bloom01 <= 0) return baseOpacity;
+  const dim = 1 - bloom01 * 0.3;
+  const grain = 1 - bloom01 * 0.45 * deterministicJitter(jitterSeed);
+  return Math.max(0, baseOpacity * dim * grain);
+}
+
+/**
+ * Pure: resamples every field from `previous` to `target` at a small fixed
+ * arclength step. Position/timestamp/velocity interpolate linearly (the true
+ * physical path); width eases via `smoothstep` for a continuous, non-
+ * piecewise taper; opacity eases via `smoothstep` THEN receives the mist
+ * treatment above, scaled by `bloom01` (0 by default — every call site that
+ * doesn't pass it, or passes 0, gets the exact prior smooth-taper-only
+ * behavior). `previous === null` (a stroke's very first point) returns just
+ * `[target]`, matching every other cap's existing start-of-stroke behavior.
+ */
+export function resampleTrackMarksFlairSegment(previous: StrokePoint | null, target: StrokePoint, bloom01 = 0): StrokePoint[] {
   if (!previous) return [target];
   const dx = target.x - previous.x;
   const dy = target.y - previous.y;
@@ -71,6 +123,7 @@ export function resampleTrackMarksFlairSegment(previous: StrokePoint | null, tar
   for (let i = 1; i <= steps; i += 1) {
     const t = i / steps;
     const eased = smoothstep(t);
+    const baseOpacity = lerp(previous.opacity, target.opacity, eased);
     result.push({
       x: lerp(previous.x, target.x, t),
       y: lerp(previous.y, target.y, t),
@@ -78,7 +131,7 @@ export function resampleTrackMarksFlairSegment(previous: StrokePoint | null, tar
       timestamp: lerp(previous.timestamp, target.timestamp, t),
       velocity: lerp(previous.velocity, target.velocity, t),
       width: lerp(previous.width, target.width, eased),
-      opacity: lerp(previous.opacity, target.opacity, eased),
+      opacity: applyMistToOpacity(baseOpacity, bloom01, previous.x * 7.13 + previous.y * 3.71 + i * 1.37),
     });
   }
   return result;
@@ -103,8 +156,9 @@ export function buildContinuousSegmentEnds(
   capId: string,
   mode: FlairModeId,
   outputMultiplier: number,
+  bloom01 = 0,
 ): StrokePoint[] {
   const applied = segmentEnds.map((point) => applyFlairOutputToPoint(point, capId, mode, outputMultiplier));
   if (capId !== "track-marks" || mode === "off" || applied.length === 0) return applied;
-  return resampleTrackMarksFlairSegment(previous, applied[applied.length - 1]);
+  return resampleTrackMarksFlairSegment(previous, applied[applied.length - 1], bloom01);
 }

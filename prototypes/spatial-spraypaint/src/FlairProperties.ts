@@ -1,4 +1,6 @@
 import {
+  getFlairBloomTierMultiplier,
+  getFlairCapTier,
   getFlairProControlMetadata,
   getFlairSizeDefaults,
   getFlairStartPositionDefault,
@@ -104,11 +106,15 @@ function writeModeEntry(
  * `baseRadius` — e.g. `getSprayCapPreset(capId).baseRadius`, never the live/
  * overridden session size) is required to resolve the size envelope's own
  * cap-relative defaults (`getFlairSizeDefaults`) — passing the live size
- * here would reintroduce exactly the carryover bug this pass fixes.
+ * here would reintroduce exactly the carryover bug the prior pass fixed.
+ * `capId` resolves the cap's response TIER (`getFlairCapTier` — fat/mid/thin,
+ * see `FlairCurves.ts`), which scales both the size envelope's own ratios and
+ * (in `resolveFlairModulationWithParams`) the bloom/mist response.
  */
-export function resolveEffectiveFlairParams(mode: FlairModeId, capBaseRadius: number, override: FlairParameterOverride): EffectiveFlairParams {
+export function resolveEffectiveFlairParams(mode: FlairModeId, capId: string, capBaseRadius: number, override: FlairParameterOverride): EffectiveFlairParams {
   const defaults = getFlairProControlMetadata(mode);
-  const sizeDefaults = getFlairSizeDefaults(mode, capBaseRadius);
+  const tier = getFlairCapTier(capId);
+  const sizeDefaults = getFlairSizeDefaults(mode, capBaseRadius, tier);
   const flairMinSize = override.flairMinSize ?? sizeDefaults.min;
   // Section 7: "no minimum-width collapse." An inverted/degenerate override
   // (Max dragged below Min) never reaches the math as a zero-or-negative
@@ -116,13 +122,19 @@ export function resolveEffectiveFlairParams(mode: FlairModeId, capBaseRadius: nu
   // downstream lerp/normalize well-defined without silently discarding the
   // user's Min edit.
   const flairMaxSize = Math.max(flairMinSize + 0.5, override.flairMaxSize ?? sizeDefaults.max);
+  // Section 5/B: THIN caps trade width growth for MORE texture/mist emphasis
+  // — folded into the tier-adjusted DEFAULT bloomResponse here (once), so an
+  // explicit user override still means exactly what it says (an absolute
+  // bloomResponse value), while the untouched default reflects the cap's own
+  // tier character.
+  const tierBloomDefault = defaults.bloomResponse * getFlairBloomTierMultiplier(tier);
   return {
     flairAmount: override.flairAmount ?? defaults.flairAmount,
     flairMinSize,
     flairMaxSize,
     flairStartPosition: override.flairStartPosition ?? getFlairStartPositionDefault(mode),
     flairSmoothing: override.flairSmoothing ?? defaults.flairSmoothing,
-    bloomResponse: override.bloomResponse ?? defaults.bloomResponse,
+    bloomResponse: override.bloomResponse ?? tierBloomDefault,
     outputFalloff: override.outputFalloff ?? defaults.outputFalloff,
     depthResponse: override.depthResponse ?? defaults.depthResponse,
   };

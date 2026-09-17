@@ -22,28 +22,36 @@ describe("FlairOverrideStore -- MODE DEFAULT -> SESSION MODIFICATION -> EFFECTIV
 
   it("resolveEffectiveFlairParams merges an override on top of the mode's own canonical defaults, including the cap-relative size envelope", () => {
     const store = setFlairOverride(EMPTY_FLAIR_OVERRIDES, "track-marks", "wall", { flairAmount: 2 });
-    const effective = resolveEffectiveFlairParams("wall", TRACK_MARKS_BASE_RADIUS, getFlairOverride(store, "track-marks", "wall"));
+    const effective = resolveEffectiveFlairParams("wall", "track-marks", TRACK_MARKS_BASE_RADIUS, getFlairOverride(store, "track-marks", "wall"));
     const defaults = getFlairProControlMetadata("wall");
-    const sizeDefaults = getFlairSizeDefaults("wall", TRACK_MARKS_BASE_RADIUS);
+    const sizeDefaults = getFlairSizeDefaults("wall", TRACK_MARKS_BASE_RADIUS, "fat");
     expect(effective.flairAmount).toBe(2);
     expect(effective.flairMinSize).toBeCloseTo(sizeDefaults.min, 6);
     expect(effective.flairMaxSize).toBeCloseTo(sizeDefaults.max, 6);
-    expect(effective.flairStartPosition).toBe("center");
+    // Real Spray Pass build brief, section 1/A: every real mode now defaults
+    // to a thin "min" start, so an untouched stroke opens as it flares
+    // rather than resting near its max.
+    expect(effective.flairStartPosition).toBe("min");
     expect(effective.flairSmoothing).toBe(defaults.flairSmoothing);
-    expect(effective.bloomResponse).toBe(defaults.bloomResponse);
     expect(effective.outputFalloff).toBe(defaults.outputFalloff);
   });
 
-  it("size envelope defaults are cap-relative -- a smaller cap baseRadius yields a smaller envelope", () => {
-    const trackMarksEffective = resolveEffectiveFlairParams("wall", 42, {});
-    const needleLikeEffective = resolveEffectiveFlairParams("wall", 5, {});
+  it("size envelope defaults are cap-relative -- a smaller cap baseRadius yields a smaller envelope, same tier", () => {
+    const trackMarksEffective = resolveEffectiveFlairParams("wall", "track-marks", 42, {});
+    const needleLikeEffective = resolveEffectiveFlairParams("wall", "track-marks", 5, {});
     expect(needleLikeEffective.flairMinSize).toBeLessThan(trackMarksEffective.flairMinSize);
     expect(needleLikeEffective.flairMaxSize).toBeLessThan(trackMarksEffective.flairMaxSize);
   });
 
+  it("cap TIER changes the envelope even at the SAME baseRadius -- fat (Track Marks) widens further than mid (any other cap id, default tier)", () => {
+    const fatEffective = resolveEffectiveFlairParams("wall", "track-marks", 42, {});
+    const midEffective = resolveEffectiveFlairParams("wall", "some-future-cap", 42, {});
+    expect(fatEffective.flairMaxSize).toBeGreaterThan(midEffective.flairMaxSize);
+  });
+
   it("an inverted Min/Max override (Max below Min) never collapses to a zero-or-negative span", () => {
     const store = setFlairOverride(EMPTY_FLAIR_OVERRIDES, "track-marks", "wall", { flairMinSize: 20, flairMaxSize: 10 });
-    const effective = resolveEffectiveFlairParams("wall", TRACK_MARKS_BASE_RADIUS, getFlairOverride(store, "track-marks", "wall"));
+    const effective = resolveEffectiveFlairParams("wall", "track-marks", TRACK_MARKS_BASE_RADIUS, getFlairOverride(store, "track-marks", "wall"));
     expect(effective.flairMaxSize).toBeGreaterThan(effective.flairMinSize);
   });
 
@@ -57,8 +65,8 @@ describe("FlairOverrideStore -- MODE DEFAULT -> SESSION MODIFICATION -> EFFECTIV
   it("per-mode session modifications do not leak -- changing Wall parameters never mutates Blackbook's defaults for the same brush", () => {
     const store = setFlairOverride(EMPTY_FLAIR_OVERRIDES, "track-marks", "wall", { flairAmount: 2, flairMaxSize: 90 });
     expect(getFlairOverride(store, "track-marks", "blackbook")).toEqual({});
-    const blackbookEffective = resolveEffectiveFlairParams("blackbook", TRACK_MARKS_BASE_RADIUS, getFlairOverride(store, "track-marks", "blackbook"));
-    const blackbookDefaultEffective = resolveEffectiveFlairParams("blackbook", TRACK_MARKS_BASE_RADIUS, {});
+    const blackbookEffective = resolveEffectiveFlairParams("blackbook", "track-marks", TRACK_MARKS_BASE_RADIUS, getFlairOverride(store, "track-marks", "blackbook"));
+    const blackbookDefaultEffective = resolveEffectiveFlairParams("blackbook", "track-marks", TRACK_MARKS_BASE_RADIUS, {});
     expect(blackbookEffective).toEqual(blackbookDefaultEffective);
   });
 
@@ -103,7 +111,7 @@ describe("FlairOverrideStore -- MODE DEFAULT -> SESSION MODIFICATION -> EFFECTIV
 
 describe("getFlairPropertyRows -- pure row descriptors for Brush Studio's FLAIR group", () => {
   it("returns exactly the six numeric controls (Min/Max Size replacing the removed Range), each carrying its effective value and modified flag", () => {
-    const effective = resolveEffectiveFlairParams("wall", TRACK_MARKS_BASE_RADIUS, { flairAmount: 2 });
+    const effective = resolveEffectiveFlairParams("wall", "track-marks", TRACK_MARKS_BASE_RADIUS, { flairAmount: 2 });
     const rows = getFlairPropertyRows(effective, { flairAmount: 2 });
     expect(rows.map((row) => row.key).sort()).toEqual(
       ["bloomResponse", "flairAmount", "flairMaxSize", "flairMinSize", "flairSmoothing", "outputFalloff"].sort(),
@@ -117,7 +125,7 @@ describe("getFlairPropertyRows -- pure row descriptors for Brush Studio's FLAIR 
 
   it("every row's value stays within its own declared min/max bounds for every mode's canonical defaults", () => {
     for (const mode of ["wall", "blackbook", "wild"] as const) {
-      const effective = resolveEffectiveFlairParams(mode, TRACK_MARKS_BASE_RADIUS, {});
+      const effective = resolveEffectiveFlairParams(mode, "track-marks", TRACK_MARKS_BASE_RADIUS, {});
       for (const row of getFlairPropertyRows(effective, {})) {
         expect(row.value).toBeGreaterThanOrEqual(row.min);
         expect(row.value).toBeLessThanOrEqual(row.max);

@@ -189,6 +189,8 @@ class SpatialSpraypaintApp {
   private trackMarksFlairDistance01 = 0.5;
   /** The output/opacity multiplier resolved from `trackMarksFlairDistance01` — recomputed on every `adjustTrackMarksFlairDistance` call, consumed once per deposited point via `applyFlairOutputToPoint`. Always 1 while Flair is off. */
   private trackMarksFlairOutputMultiplier = 1;
+  /** Real Spray Pass build brief, section 3: the resolved `bloom01` (mist/translucency magnitude) from the same modulation call that resolves width/output — consumed once per deposit batch by `buildContinuousSegmentEnds`'s mist treatment (see `FlairContinuity.ts`). Always 0 while Flair is off. */
+  private trackMarksFlairBloom01 = 0;
   private drawingCursorAim: DrawingCursorAimState = { point: null, angle: 0 };
   private physicalCursorVisible = false;
   private panInteraction: PanInteractionState = resetPanInteraction();
@@ -1026,7 +1028,7 @@ class SpatialSpraypaintApp {
   private effectiveFlairParams(mode: FlairModeId): EffectiveFlairParams {
     const capId = this.toolSelection.sprayCapId;
     const capBaseRadius = getSprayCapPreset(capId).baseRadius;
-    return resolveEffectiveFlairParams(mode, capBaseRadius, getFlairOverride(this.settings.flairOverrides, capId, mode));
+    return resolveEffectiveFlairParams(mode, capId, capBaseRadius, getFlairOverride(this.settings.flairOverrides, capId, mode));
   }
 
   private adjustSimulatedSprayDistance(deltaScreenY: number): void {
@@ -1089,6 +1091,7 @@ class SpatialSpraypaintApp {
     const next = resolveFlairSize(modulation.width01, params);
     this.baseRadius = next;
     this.trackMarksFlairOutputMultiplier = modulation.output;
+    this.trackMarksFlairBloom01 = modulation.bloom01;
     this.setSettings({ type: "spray-property", capId, patch: { size: next } });
     this.updateRadiusUi();
     this.updateFlairStatusUi();
@@ -1167,6 +1170,7 @@ class SpatialSpraypaintApp {
     if (mode === "off") {
       this.trackMarksFlairDistance01 = 0.5;
       this.trackMarksFlairOutputMultiplier = 1;
+      this.trackMarksFlairBloom01 = 0;
       return;
     }
     const params = this.effectiveFlairParams(mode);
@@ -1180,6 +1184,7 @@ class SpatialSpraypaintApp {
     const next = resolveFlairSize(modulation.width01, params);
     this.baseRadius = next;
     this.trackMarksFlairOutputMultiplier = modulation.output;
+    this.trackMarksFlairBloom01 = modulation.bloom01;
     this.setSettings({ type: "spray-property", capId, patch: { size: next } });
     this.updateRadiusUi();
   }
@@ -1894,6 +1899,7 @@ class SpatialSpraypaintApp {
           style.variantId,
           this.trackMarksFlairMode,
           this.trackMarksFlairOutputMultiplier,
+          this.trackMarksFlairBloom01,
         );
         for (const [segmentIndex, segmentEnd] of segmentEnds.entries()) {
           let renderedPoint = segmentEnd;

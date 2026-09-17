@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   FLAIR_CURVES,
   applyFlairOutputToPoint,
+  getFlairBloomTierMultiplier,
+  getFlairCapTier,
   getFlairProControlMetadata,
   getFlairSizeDefaults,
   getFlairStartPositionDefault,
@@ -519,5 +521,55 @@ describe("Needle-shaped envelope validation -- math/schema only, no runtime wiri
       expect(Number.isFinite(size)).toBe(true);
       expect(Number.isNaN(size)).toBe(false);
     }
+  });
+});
+
+describe("cap-family response tiers (Real Spray Pass build brief, sections 4/5/B)", () => {
+  it("getFlairCapTier maps Track Marks to fat, and any other cap id to mid (no runtime wiring for anything else)", () => {
+    expect(getFlairCapTier("track-marks")).toBe("fat");
+    expect(getFlairCapTier("pink-dot-fat")).toBe("mid");
+    expect(getFlairCapTier("needle")).toBe("mid");
+  });
+
+  it("fat's max ratio exceeds mid's, which exceeds thin's, for every real mode -- fat opens up the most, thin the least", () => {
+    for (const mode of ["wall", "blackbook", "wild"] as const) {
+      const fat = getFlairSizeDefaults(mode, TRACK_MARKS_BASE_RADIUS, "fat");
+      const mid = getFlairSizeDefaults(mode, TRACK_MARKS_BASE_RADIUS, "mid");
+      const thin = getFlairSizeDefaults(mode, TRACK_MARKS_BASE_RADIUS, "thin");
+      expect(fat.max).toBeGreaterThan(mid.max);
+      expect(mid.max).toBeGreaterThan(thin.max);
+    }
+  });
+
+  it("thin's own minimum stays proportionately usable (a larger fraction of its own baseRadius than fat's) -- never a collapsed sliver", () => {
+    // A slightly larger reference radius than NEEDLE_LIKE_BASE_RADIUS (5) so
+    // the ratio difference shows before both tiers hit the same shared
+    // absolute floor (2 wall units) -- at radius 5, fat's own ratio (0.1 ->
+    // 0.5) is already below the floor, so it and thin's (0.35 -> 1.75, also
+    // below the floor) would tie at exactly 2, which is a floor artifact,
+    // not evidence the ratios themselves are ordered correctly.
+    const referenceRadius = 12;
+    const fat = getFlairSizeDefaults("wall", referenceRadius, "fat");
+    const thin = getFlairSizeDefaults("wall", referenceRadius, "thin");
+    expect(thin.min).toBeGreaterThan(fat.min);
+    expect(thin.min).toBeGreaterThan(0);
+    // At the genuinely tiny Needle-like radius, the shared floor still keeps
+    // thin usable (never a collapsed sliver, per section 7's own wording) —
+    // this is the actual invariant that matters, not the tier ordering.
+    const thinAtNeedleRadius = getFlairSizeDefaults("wall", NEEDLE_LIKE_BASE_RADIUS, "thin");
+    expect(thinAtNeedleRadius.min).toBeGreaterThan(0);
+  });
+
+  it("thin caps get a STRONGER bloom multiplier than fat -- texture/mist compensates for their deliberately modest width growth", () => {
+    expect(getFlairBloomTierMultiplier("thin")).toBeGreaterThan(getFlairBloomTierMultiplier("fat"));
+    expect(getFlairBloomTierMultiplier("fat")).toBeGreaterThan(getFlairBloomTierMultiplier("mid"));
+  });
+
+  it("thin's own width growth, relative to its own baseRadius, is genuinely modest -- it does not 'suddenly behave like a giant fat cap'", () => {
+    const thin = getFlairSizeDefaults("wild", NEEDLE_LIKE_BASE_RADIUS, "thin");
+    const fat = getFlairSizeDefaults("wild", NEEDLE_LIKE_BASE_RADIUS, "fat");
+    const thinGrowthRatio = thin.max / NEEDLE_LIKE_BASE_RADIUS;
+    const fatGrowthRatio = fat.max / NEEDLE_LIKE_BASE_RADIUS;
+    expect(thinGrowthRatio).toBeLessThan(fatGrowthRatio);
   });
 });

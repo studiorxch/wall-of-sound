@@ -77,8 +77,12 @@ export const FLAIR_CURVES: Record<FlairModeId, FlairCurveSet> = {
     transitionSmoothing: 0.12,
     // Rises with distance, per the brief's own table.
     textureBloom: (t) => clamp01(t),
-    // Real attenuation: output at full distance is 60% of output at rest.
-    outputAttenuation: (t) => 1 - 0.4 * clamp01(t),
+    // Real Spray Pass build brief, section 3: "real flares are not only
+    // width changes... lighter/more translucent as it opens." Raised from
+    // 0.4 (prior pass) to 0.55 -- output at full distance is now 45% of
+    // output at rest, a visibly translucent aerosol bloom rather than a
+    // still-fairly-solid wide tube, matching the reference "balloon" read.
+    outputAttenuation: (t) => 1 - 0.55 * clamp01(t),
     endpointShapingAuthority: 0.4,
   },
   blackbook: {
@@ -88,8 +92,10 @@ export const FLAIR_CURVES: Record<FlairModeId, FlairCurveSet> = {
     transitionSmoothing: 0.4,
     // Restrained -- a small fraction of wall's bloom at any given distance.
     textureBloom: (t) => 0.25 * clamp01(t),
-    // Mild attenuation only.
-    outputAttenuation: (t) => 1 - 0.15 * clamp01(t),
+    // Mild attenuation, raised slightly (0.15->0.2) alongside Wall's for the
+    // same "not just width" reason -- still deliberately restrained relative
+    // to Wall, matching Blackbook's own controlled/calligraphic character.
+    outputAttenuation: (t) => 1 - 0.2 * clamp01(t),
     endpointShapingAuthority: 0.2,
   },
   wild: {
@@ -296,35 +302,98 @@ export interface FlairSizeEnvelope {
 }
 
 /**
+ * Cap-family response tier (Flair Stroke Envelope Stabilization -- Real
+ * Spray Pass build brief, sections 4/5/B): FAT caps can widen strongly with
+ * a soft/translucent flare body; MID caps widen moderately; THIN caps widen
+ * only a little and lean on texture/mist degradation instead, preserving a
+ * skinny cap's identity rather than "suddenly behaving like a giant fat
+ * cap." `getFlairCapTier` is the only place a cap id maps to a tier — Track
+ * Marks is the only cap with a real runtime mapping (still the only Flair
+ * consumer at runtime, per every prior brief's own "Track Marks only"
+ * scope); every other id defaults to `"mid"` for schema completeness should
+ * a future cap ever be wired in, never wiring anything new itself.
+ */
+export type FlairCapTier = "fat" | "mid" | "thin";
+
+export function getFlairCapTier(capId: string): FlairCapTier {
+  if (capId === "track-marks") return "fat";
+  return "mid";
+}
+
+/**
  * Default envelope ratios, expressed relative to the CAP'S OWN preset
  * `baseRadius` (never the live/overridden session size — using the live size
- * would reintroduce exactly the carryover bug this pass fixes, since the
- * live size already reflects wherever a previous stroke or drag left off).
- * "Keep the model cap-relative where possible" (section 2): a thin cap like
- * Needle (`baseRadius` 5) and a fat cap like Track Marks (`baseRadius` 42)
- * each get a sensible, proportionate envelope from the SAME ratios — see
- * `FlairCurves.test.ts`'s dedicated Needle-shaped validation (section 7:
- * "very small minimum remains usable... maximum can expand significantly...
- * no minimum-width collapse").
+ * would reintroduce exactly the carryover bug the prior pass fixed, since
+ * the live size already reflects wherever a previous stroke or drag left
+ * off). "Keep the model cap-relative where possible": a thin cap like Needle
+ * (`baseRadius` 5) and a fat cap like Track Marks (`baseRadius` 42) each get
+ * a sensible, proportionate envelope from ratios scaled by their own TIER —
+ * see `FlairCurves.test.ts`'s dedicated Needle-shaped (tier "thin")
+ * validation: very small minimum remains usable, only a MODEST maximum
+ * expansion (unlike fat's dramatic one), no minimum-width collapse.
+ *
+ * FAT's own max ratios were raised from the prior pass (wall 1.5->1.8, wild
+ * 2.4->2.8) — real headroom to open up, per section 4's "evaluate whether
+ * Flair should work relative to a smaller base so the stroke can actually
+ * expand." Track Marks' own resting `baseRadius` (42, Flair OFF) is
+ * deliberately UNTOUCHED — every "Flair off unchanged" test/behavior this
+ * whole arc has locked stays true; the extra headroom instead comes from
+ * widening the FAT tier's own max ratio, which only ever multiplies the
+ * FLAIR envelope, never the cap's own canonical size.
  */
-const FLAIR_SIZE_MIN_RATIO = 0.12;
+const FLAIR_SIZE_MIN_RATIO_BY_TIER: Record<FlairCapTier, number> = {
+  fat: 0.1,
+  mid: 0.14,
+  thin: 0.35,
+};
 const FLAIR_SIZE_MIN_FLOOR = 2;
-const FLAIR_SIZE_MAX_RATIO_BY_MODE: Record<FlairModeId, number> = {
-  off: 1,
-  wall: 1.5,
-  blackbook: 0.9,
-  wild: 2.4,
+const FLAIR_SIZE_MAX_RATIO_BY_TIER_MODE: Record<FlairCapTier, Record<FlairModeId, number>> = {
+  fat: { off: 1, wall: 1.8, blackbook: 1.1, wild: 2.8 },
+  mid: { off: 1, wall: 1.4, blackbook: 0.9, wild: 2.0 },
+  // THIN: minimal width growth by design (section 5 — "less dramatic width
+  // expansion... preserve the identity of a skinny cap"). The compensating
+  // "more ugly spray/diffusion/mist" lives in `FLAIR_BLOOM_TIER_MULTIPLIER`
+  // below, not in extra width.
+  thin: { off: 1, wall: 1.15, blackbook: 0.75, wild: 1.35 },
 };
 
-export function getFlairSizeDefaults(mode: FlairModeId, capBaseRadius: number): { min: number; max: number } {
-  const min = Math.max(FLAIR_SIZE_MIN_FLOOR, capBaseRadius * FLAIR_SIZE_MIN_RATIO);
-  const max = Math.max(min + 1, capBaseRadius * FLAIR_SIZE_MAX_RATIO_BY_MODE[mode]);
+/**
+ * Section 5: thin caps trade width growth for MORE texture/mist emphasis at
+ * the same `bloom01` value — a genuinely different response character, not
+ * just a scaled-down fat cap. Applied once, in `resolveFlairModulationWithParams`
+ * below, as a tier-aware multiplier on `bloom01` alongside the existing
+ * user-editable `bloomResponse` override.
+ */
+const FLAIR_BLOOM_TIER_MULTIPLIER: Record<FlairCapTier, number> = {
+  fat: 1,
+  mid: 0.85,
+  thin: 1.4,
+};
+
+export function getFlairBloomTierMultiplier(tier: FlairCapTier): number {
+  return FLAIR_BLOOM_TIER_MULTIPLIER[tier];
+}
+
+export function getFlairSizeDefaults(mode: FlairModeId, capBaseRadius: number, tier: FlairCapTier = "fat"): { min: number; max: number } {
+  const min = Math.max(FLAIR_SIZE_MIN_FLOOR, capBaseRadius * FLAIR_SIZE_MIN_RATIO_BY_TIER[tier]);
+  const max = Math.max(min + 1, capBaseRadius * FLAIR_SIZE_MAX_RATIO_BY_TIER_MODE[tier][mode]);
   return { min, max };
 }
 
-/** Section 2's suggested start-position values, uniformly defaulted to `center` (the least surprising choice — the brief names no per-mode default table for this one, unlike Depth Response's). Fully overridable per (cap, mode), same as every other Flair property. */
-export function getFlairStartPositionDefault(_mode: FlairModeId): FlairStartPositionId {
-  return "center";
+/**
+ * Real Spray Pass build brief, section 1/A: "Wall flare = typically small ->
+ * wide as the can moves away / opens up... there should be a clean way to
+ * define start width and end width." Every real mode now defaults to
+ * `"min"` — a stroke starts thin/controlled and OPENS as the user pulls back
+ * (far-wide) or presses in (near-wide, Blackbook's own polarity — "small ->
+ * wide" still holds, just triggered by the opposite physical motion). This
+ * replaces the prior pass's `"center"` default, which — combined with each
+ * mode's own resolved size already sitting fairly close to its max — left
+ * too little PERCEIVED room to open and made a light near-drag read as
+ * "narrowing the wrong way" rather than "returning to a thin default."
+ */
+export function getFlairStartPositionDefault(mode: FlairModeId): FlairStartPositionId {
+  return mode === "off" ? "center" : "min";
 }
 
 // ---------------------------------------------------------------------------
