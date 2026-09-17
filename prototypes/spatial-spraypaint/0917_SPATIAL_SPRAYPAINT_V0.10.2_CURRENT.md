@@ -76,4 +76,4 @@ No changes to `SprayBrushEngine.ts`, `PaintMarkerEngine.ts`, `WetPaintModel.ts`,
 
 ## Commit
 
-(pending — see next commit)
+`5de48db` — "feat: Spatial Spraypaint V0.10.2 -- visual marker size samples, remove chemistry/override controls from normal UI"
