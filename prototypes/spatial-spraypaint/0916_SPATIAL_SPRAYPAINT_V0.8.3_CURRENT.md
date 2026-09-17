@@ -98,7 +98,7 @@ Modified: `src/FlairCurves.ts` (Depth Response type/defaults/guard, `resolveFlai
 
 ## I. Commit
 
-`<pending — see final report>` — "feat: Spatial Spraypaint Flair Stabilization (smooth taper, Depth Response) + Apple Pencil V1 prep (diagnostics, Track Marks mapping)"
+`873a000` — "feat: Spatial Spraypaint Flair Stabilization (smooth taper, Depth Response) + Apple Pencil V1 prep (diagnostics, Track Marks mapping)"
 
 ## J. What Should Be Tested Physically on iPad Next
 
