@@ -1922,6 +1922,8 @@ class SpatialSpraypaintApp {
             renderedPoint,
             style,
             this.activeStrokeRandom ?? Math.random,
+            this.trackMarksFlairMode,
+            this.trackMarksFlairBloom01,
           );
           this.strokeHistory.appendPoint(renderedPoint);
           segmentStart = renderedPoint;

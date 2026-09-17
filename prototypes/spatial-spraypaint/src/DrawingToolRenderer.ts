@@ -6,6 +6,8 @@ import { getSprayCapProfile } from "./SprayCapProfile";
 import { type StrokePoint } from "./types";
 import { type DripSeed } from "./DripLogic";
 import { WetDripEngine } from "./WetDripEngine";
+import { applyFlairDensityToCap } from "./FlairCurves";
+import { type FlairModeId } from "./ToolTaxonomy";
 
 interface BaseToolStrokeStyle {
   color: string;
@@ -53,14 +55,29 @@ export class DrawingToolRenderer {
     point: StrokePoint,
     style: ToolStrokeStyle,
     random: () => number = Math.random,
+    // Real Spray Pass correction (task 2, "wide flair body is too opaque"):
+    // the same batch-level Flair state `buildContinuousSegmentEnds` already
+    // used to mist this segment's OPACITY, now also coupled into the cap's
+    // own deposition density/softness/mist via `applyFlairDensityToCap`.
+    // Defaults to identity (0, "off") for every existing caller — the
+    // replay path (`replayStrokes`) and every non-spray/non-Track-Marks
+    // call site are unaffected.
+    trackMarksFlairMode: FlairModeId = "off",
+    trackMarksFlairBloom01: number = 0,
   ): void {
     if (style.toolId === "spray-can") {
+      const deposition = applyFlairDensityToCap(
+        getSprayCapProfile(style.variantId).deposition,
+        style.variantId,
+        trackMarksFlairMode,
+        trackMarksFlairBloom01,
+      );
       this.spray.renderSegment(
         ctx,
         previous,
         point,
         style.color,
-        getSprayCapProfile(style.variantId).deposition,
+        deposition,
         random,
         style.coverage ?? 1,
         style.fillMode ?? false,

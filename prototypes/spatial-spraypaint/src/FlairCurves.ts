@@ -1,5 +1,6 @@
 import type { StrokePoint } from "./types";
 import type { FlairModeId, SurfaceContextId } from "./ToolTaxonomy";
+import type { SprayCapPreset } from "./SprayCapPresets";
 
 /**
  * Flair, concretely: for each `FlairModeId` (see `ToolTaxonomy.ts`), a set of
@@ -206,6 +207,73 @@ export function applyFlairOutputToPoint(
 ): StrokePoint {
   if (capId !== "track-marks" || mode === "off") return point;
   return { ...point, opacity: point.opacity * outputMultiplier };
+}
+
+/**
+ * Real Spray Pass correction (reported live: "wide flair body is too
+ * opaque... still looks like a solid vector/marker body surrounded by
+ * particles"). Root cause: `applyFlairOutputToPoint` above only ever
+ * multiplies the finished `point.opacity` — a flat post-render alpha scale
+ * applied AFTER the renderer has already decided how dense its core is and
+ * how sharply it falls off to the edge. `SprayBrushEngine`'s own density
+ * math (`resolveSprayDynamics`, `resolvePinkDotDualPlume`) reads
+ * `coreOpacity`/`edgeFalloff`/`plumeMistOpacity`/`plumeMistRadius`/
+ * `plumeRingOpacity` straight off the CAP PRESET, with zero dependency on
+ * distance or width — so a wide-open flare kept exactly the same core
+ * density and exactly the same crisp core-to-edge falloff as a thin one,
+ * just scaled up geometrically and dimmed uniformly. That reads as a
+ * solid, evenly-dimmed marker body, not paint thinning out as it opens.
+ *
+ * This function couples Flair's own `bloom01` (already 0 at the stroke's
+ * start and rising toward 1 as the flare opens — the exact same signal
+ * `applyMistToOpacity` already uses for the per-point mist grain) directly
+ * into the DEPOSITION PARAMETERS a renderer actually reads, by returning a
+ * shallow-copied cap preset with:
+ *   - `coreOpacity`/`coreDensity` reduced (core loses density as it opens)
+ *   - `edgeFalloff` reduced (LOWER is softer/more diffuse -- see its own
+ *     doc comment in `SprayCapPresets.ts` -- so the core-to-edge transition
+ *     gets genuinely softer, not just smaller/fainter)
+ *   - `plumeMistOpacity`/`plumeMistRadius` raised (more, and more far-
+ *     reaching, aerosol mist)
+ *   - `plumeRingOpacity` reduced (the mid-density ring band -- otherwise a
+ *     literal ring is exactly the "hard edge around an opaque center" read
+ *     the brief calls a failure -- must not stay crisp as the body opens)
+ *
+ * A real physics coupling, not a post-render overlay: every value this
+ * returns flows into the SAME `resolveSprayDynamics`/`resolvePinkDotDualPlume`
+ * math every cap already uses, so the wider/lighter/softer response comes
+ * from the same deposition model, not a second effect layered on top.
+ *
+ * Scoped to Track Marks only, exactly like `applyFlairOutputToPoint`: any
+ * other cap id, Track Marks with Flair `off`, or a zero/negative `bloom01`
+ * returns `cap` completely untouched (the identical object, no copy) --
+ * Pink Dot Fat (which shares this same `depositionShape: "plume"` renderer)
+ * and every other cap stay byte-identical to their pre-Flair behavior.
+ */
+const FLAIR_CORE_DENSITY_LOSS_RATIO = 0.62;
+const FLAIR_EDGE_SOFTENING_RATIO = 0.55;
+const FLAIR_MIST_OPACITY_GAIN_RATIO = 1.5;
+const FLAIR_MIST_RADIUS_GAIN_RATIO = 0.9;
+const FLAIR_RING_OPACITY_LOSS_RATIO = 0.55;
+const FLAIR_EDGE_FALLOFF_FLOOR = 0.05;
+
+export function applyFlairDensityToCap(
+  cap: SprayCapPreset,
+  capId: string,
+  mode: FlairModeId,
+  bloom01: number,
+): SprayCapPreset {
+  if (capId !== "track-marks" || mode === "off" || bloom01 <= 0) return cap;
+  const b = clamp01(bloom01);
+  return {
+    ...cap,
+    coreOpacity: cap.coreOpacity * (1 - b * FLAIR_CORE_DENSITY_LOSS_RATIO),
+    coreDensity: cap.coreDensity * (1 - b * FLAIR_CORE_DENSITY_LOSS_RATIO * 0.6),
+    edgeFalloff: Math.max(FLAIR_EDGE_FALLOFF_FLOOR, cap.edgeFalloff * (1 - b * FLAIR_EDGE_SOFTENING_RATIO)),
+    plumeMistOpacity: cap.plumeMistOpacity * (1 + b * FLAIR_MIST_OPACITY_GAIN_RATIO),
+    plumeMistRadius: cap.plumeMistRadius * (1 + b * FLAIR_MIST_RADIUS_GAIN_RATIO),
+    plumeRingOpacity: cap.plumeRingOpacity * (1 - b * FLAIR_RING_OPACITY_LOSS_RATIO),
+  };
 }
 
 /**

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   FLAIR_CURVES,
+  applyFlairDensityToCap,
   applyFlairOutputToPoint,
   getFlairBloomTierMultiplier,
   getFlairCapTier,
@@ -17,6 +18,7 @@ import {
   resolveFlairStartDistance,
   type EffectiveFlairParams,
 } from "./FlairCurves";
+import { getSprayCapPreset } from "./SprayCapPresets";
 import type { FlairModeId } from "./ToolTaxonomy";
 import type { StrokePoint } from "./types";
 
@@ -571,5 +573,64 @@ describe("cap-family response tiers (Real Spray Pass build brief, sections 4/5/B
     const thinGrowthRatio = thin.max / NEEDLE_LIKE_BASE_RADIUS;
     const fatGrowthRatio = fat.max / NEEDLE_LIKE_BASE_RADIUS;
     expect(thinGrowthRatio).toBeLessThan(fatGrowthRatio);
+  });
+});
+
+describe("applyFlairDensityToCap -- coupled deposition response (live-report fix #2: 'wide flair body is too opaque')", () => {
+  const trackMarksCap = getSprayCapPreset("track-marks");
+  const pinkDotCap = getSprayCapPreset("pink-dot-fat");
+
+  it("is a strict identity (same object) for any non-Track-Marks cap, regardless of mode/bloom", () => {
+    expect(applyFlairDensityToCap(pinkDotCap, "pink-dot-fat", "wall", 0.9)).toBe(pinkDotCap);
+    expect(applyFlairDensityToCap(pinkDotCap, "new-york-fat", "wild", 1)).toBe(pinkDotCap);
+  });
+
+  it("is a strict identity (same object) for Track Marks with Flair off, regardless of bloom", () => {
+    expect(applyFlairDensityToCap(trackMarksCap, "track-marks", "off", 0.9)).toBe(trackMarksCap);
+  });
+
+  it("is a strict identity (same object) for Track Marks with an active mode but bloom01 <= 0", () => {
+    expect(applyFlairDensityToCap(trackMarksCap, "track-marks", "wall", 0)).toBe(trackMarksCap);
+    expect(applyFlairDensityToCap(trackMarksCap, "track-marks", "wall", -0.2)).toBe(trackMarksCap);
+  });
+
+  it("reduces core density (coreOpacity, coreDensity) as bloom rises -- the core must lose density, not just dim uniformly", () => {
+    const low = applyFlairDensityToCap(trackMarksCap, "track-marks", "wall", 0.2);
+    const high = applyFlairDensityToCap(trackMarksCap, "track-marks", "wall", 0.9);
+    expect(low.coreOpacity).toBeLessThan(trackMarksCap.coreOpacity);
+    expect(high.coreOpacity).toBeLessThan(low.coreOpacity);
+    expect(high.coreDensity).toBeLessThan(trackMarksCap.coreDensity);
+  });
+
+  it("softens the edge (LOWER edgeFalloff = softer, per its own doc) as bloom rises, never below the floor", () => {
+    const high = applyFlairDensityToCap(trackMarksCap, "track-marks", "wall", 1);
+    expect(high.edgeFalloff).toBeLessThan(trackMarksCap.edgeFalloff);
+    expect(high.edgeFalloff).toBeGreaterThan(0);
+  });
+
+  it("increases mist reach and strength (plumeMistOpacity, plumeMistRadius) as bloom rises", () => {
+    const high = applyFlairDensityToCap(trackMarksCap, "track-marks", "wall", 1);
+    expect(high.plumeMistOpacity).toBeGreaterThan(trackMarksCap.plumeMistOpacity);
+    expect(high.plumeMistRadius).toBeGreaterThan(trackMarksCap.plumeMistRadius);
+  });
+
+  it("softens the ring band (plumeRingOpacity down) -- a crisp ring would itself read as a hard balloon edge", () => {
+    const high = applyFlairDensityToCap(trackMarksCap, "track-marks", "wall", 1);
+    expect(high.plumeRingOpacity).toBeLessThan(trackMarksCap.plumeRingOpacity);
+  });
+
+  it("every adjustment is monotonic in bloom01 across a full sweep -- no reversal partway through opening", () => {
+    const samples = [0.1, 0.3, 0.5, 0.7, 0.9, 1].map((b) => applyFlairDensityToCap(trackMarksCap, "track-marks", "wall", b));
+    for (let i = 1; i < samples.length; i++) {
+      expect(samples[i].coreOpacity).toBeLessThanOrEqual(samples[i - 1].coreOpacity);
+      expect(samples[i].edgeFalloff).toBeLessThanOrEqual(samples[i - 1].edgeFalloff);
+      expect(samples[i].plumeMistOpacity).toBeGreaterThanOrEqual(samples[i - 1].plumeMistOpacity);
+    }
+  });
+
+  it("never mutates the canonical preset object itself (SPRAY_CAP_PRESETS stays untouched)", () => {
+    const before = { ...trackMarksCap };
+    applyFlairDensityToCap(trackMarksCap, "track-marks", "wall", 1);
+    expect(trackMarksCap).toEqual(before);
   });
 });
