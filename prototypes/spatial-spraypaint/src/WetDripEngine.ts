@@ -102,7 +102,10 @@ export class WetDripEngine {
       drip.x + (drip.bend ?? 0),
       drip.y + drip.length,
     );
-    gradient.addColorStop(0, hexToRgba(color, 1));
+    // The root must never render more opaque than the drip's own source-
+    // limited opacity (a hardcoded peak of 1 here previously stamped every
+    // Mop root fully opaque regardless of `drip.opacity`).
+    gradient.addColorStop(0, hexToRgba(color, Math.min(1, drip.opacity + 0.08)));
     gradient.addColorStop(0.16, hexToRgba(color, Math.min(0.96, drip.opacity + 0.08)));
     gradient.addColorStop(1, hexToRgba(color, drip.opacity * 0.82));
     return gradient;

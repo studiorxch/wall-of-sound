@@ -7,6 +7,8 @@ import {
 } from "./WetPaintModel";
 import { buildContinuousDripStrip } from "./DripLogic";
 import { type StrokePoint } from "./types";
+import { AdaptiveCurveReconstructor, type CurveInputSample } from "./AdaptiveCurveReconstructor";
+import { CanonicalStrokeManager } from "./CanonicalStroke";
 
 const point = (x: number, y: number, timestamp: number, velocity: number): StrokePoint => ({
   x,
@@ -293,7 +295,13 @@ describe("wet paint load authority", () => {
   it("keeps a run dripping for a moment after the pointer lifts via settle()", () => {
     const accumulator = new WetPaintAccumulator();
     accumulator.beginStroke(41, "mop");
-    observeStationary(accumulator, 960);
+    // A short dwell -- enough to load the node past settle()'s own (halved)
+    // threshold, but well short of the pool's full in-motion trigger
+    // threshold, so the node hasn't already spawned (and exhausted) its
+    // channel here -- the scenario settle() actually exists for: a run
+    // still loading when the hand lifts, not one that already fully
+    // resolved while drawing.
+    observeStationary(accumulator, 180);
     const settled = accumulator.settle(true);
     expect(settled.length).toBeGreaterThan(0);
     expect(settled.every((drip) => drip.length > 0)).toBe(true);
@@ -448,9 +456,15 @@ describe("wet paint load authority", () => {
       timestamp += inMiddleThird ? 40 : 16;
     }
     const drips = results.flatMap(({ drips: emitted }) => emitted);
-    // Test A's own acceptance: 1-3 drips possible, no root cluster.
+    // Test A's own acceptance: at least one drip, and -- per the Drip
+    // Fidelity Correction pass, which retuned deposition so a normal fast
+    // stroke reliably shows BASELINE drips without Squeeze (V0.10.12 had
+    // regressed baseline Mop to near-zero visible drips) -- several nodes
+    // can each independently reach the (still hard-capped at 2) per-node
+    // channel ceiling across a long, genuinely wetter section. Still no
+    // single-origin root cluster: `poolMaxChannelsPerNode` stays 2.
     expect(drips.length).toBeGreaterThanOrEqual(1);
-    expect(drips.length).toBeLessThanOrEqual(3);
+    expect(drips.length).toBeLessThanOrEqual(8);
     const endpointMargin = totalLength * 0.12;
     const originatesMidStroke = drips.some(({ x }) => (
       x > endpointMargin && x < totalLength - endpointMargin
@@ -474,5 +488,78 @@ describe("wet paint load authority", () => {
       && y - (originPoolRadius ?? 0) < 20 + size * 0.15
     ))).toBe(true);
     expect(drips.every(({ renderAsOverlay }) => !renderAsOverlay)).toBe(true);
+  });
+
+  it("never produces a non-finite drip origin on a sharply curved/looping stroke through the real incremental pipeline", () => {
+    // Regression test for a real crash found during the Drip Fidelity
+    // Correction pass: a pool node can be revisited by a spawn well after
+    // the pointer has moved on (the dominant-channel/refractory gate can
+    // defer a node's second channel for hundreds of ms), and the footprint
+    // used to resolve its attachment point is only the last couple of
+    // rendered points -- on a sharply looping path a merged/drifted node's
+    // x can fall entirely outside that recent footprint, and the boundary
+    // resolver used to return `-Infinity` (via `Math.max()` of an empty
+    // candidate list) for "no geometry found here," which crashed
+    // `createLinearGradient` downstream. Runs the real
+    // StrokeSmoother -> AdaptiveCurveReconstructor -> CanonicalStrokeManager
+    // -> WetPaintAccumulator pipeline (not the simplified `point()` helper)
+    // over a tight looping path shaped like the app's own canonical test
+    // tag, at both baseline and Squeeze, and asserts every spawned drip's
+    // geometry is finite.
+    const baseRadius = 50;
+    const waypoints: [number, number][] = [
+      [150, 120], [220, 90], [300, 100], [340, 150], [320, 210], [240, 230],
+      [180, 210], [190, 160], [250, 150], [300, 170], [310, 220], [220, 280],
+      [150, 320], [140, 380], [260, 300], [320, 340], [330, 400],
+    ];
+    const raw: CurveInputSample[] = [];
+    let t = 0;
+    for (let index = 0; index < waypoints.length - 1; index += 1) {
+      const [x0, y0] = waypoints[index];
+      const [x1, y1] = waypoints[index + 1];
+      const distance = Math.hypot(x1 - x0, y1 - y0);
+      const steps = Math.max(1, Math.round(distance / 8));
+      for (let step = 1; step <= steps; step += 1) {
+        raw.push({
+          x: x0 + ((x1 - x0) * step) / steps,
+          y: y0 + ((y1 - y0) * step) / steps,
+          timestamp: t,
+        });
+        t += 12;
+      }
+    }
+    for (const squeeze of [1, 2.6]) {
+      const reconstructor = new AdaptiveCurveReconstructor();
+      const canonical = new CanonicalStrokeManager();
+      const wet = new WetPaintAccumulator();
+      wet.beginStroke(squeeze === 1 ? 501 : 502, "mop", { flow: "high", viscosity: "runny" });
+      wet.setSqueezeMultiplier(squeeze);
+      const drips: ReturnType<WetPaintAccumulator["observe"]>["drips"] = [];
+      for (const sample of raw) {
+        const reconstructed = reconstructor.push(sample, { baseRadius, cornerAngleDegrees: 125 });
+        for (const point of reconstructed) {
+          const { point: canonicalPoint, interpolated } = canonical.createPoint(
+            point.x,
+            point.y,
+            baseRadius,
+            0,
+            point.timestamp,
+          );
+          const ends = [...interpolated, canonicalPoint];
+          ends.forEach((segmentEnd, index) => {
+            const next = ends[index + 1] ?? null;
+            drips.push(...wet.observe(segmentEnd, baseRadius, true, next).drips);
+          });
+        }
+      }
+      drips.push(...wet.settle(true));
+      expect(drips.length).toBeGreaterThan(0);
+      expect(drips.every((drip) => (
+        Number.isFinite(drip.x)
+        && Number.isFinite(drip.y)
+        && Number.isFinite(drip.width)
+        && Number.isFinite(drip.length)
+      ))).toBe(true);
+    }
   });
 });

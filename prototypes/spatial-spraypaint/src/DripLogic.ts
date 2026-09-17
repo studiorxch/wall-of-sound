@@ -182,13 +182,33 @@ export class DripAccumulator {
     const opacity = observation.sourceOpacityCeiling !== undefined
       ? Math.min(nominalOpacity, observation.sourceOpacityCeiling)
       : nominalOpacity;
+    const length = observation.radius * (0.9 + tendency * 2.2);
     return {
       x: this.anchor.x,
       y: this.anchor.y + observation.radius * 0.35,
-      width: Math.max(1.2, observation.radius * (0.045 + tendency * 0.035)),
-      length: observation.radius * (0.9 + tendency * 2.2),
+      // Widened substantially (from ~0.045-0.08x radius, which read as
+      // hair-thin threads) so a Spray drip reads as a real body of liquid,
+      // not a line. `tipWidthRatio` close to 1 (rather than the wet-strip
+      // default of 0.58) keeps the body MOSTLY STABLE width, narrowing only
+      // moderately toward the tip -- no strong triangular/icicle taper --
+      // and `terminalBulbRatio` restores a small rounded bead at the very
+      // end, formed from the load remaining in the run rather than a
+      // stamped shape (the same width-interpolation + rounded-tip strip
+      // renderer Mop already uses, via `resolveDripStripSection`'s own
+      // `taperEase = progress**4`, which keeps almost all of the narrowing
+      // in the final stretch).
+      width: Math.max(2.4, observation.radius * (0.11 + tendency * 0.05)),
+      length,
       opacity,
       sourceOpacityCeiling: observation.sourceOpacityCeiling,
+      tipWidthRatio: 0.72,
+      terminalBulbRatio: 1.15,
+      // Gravity dominates a real drip -- only a small, restrained lateral
+      // lean from surface irregularity, never a large diagonal launch. Kept
+      // well below the strip renderer's own quadratic easing (which is
+      // already tangent-to-vertical at the root), so even the eventual
+      // total lateral drift by the tip stays subtle.
+      bend: (Math.random() - 0.5) * length * 0.05,
     };
   }
 

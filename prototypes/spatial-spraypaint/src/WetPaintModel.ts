@@ -123,10 +123,10 @@ const WET_VARIANT_PROFILES: Record<WetMarkerVariantId, WetVariantProfile> = {
     bendRatio: 0.075,
     tipWidthJitter: 0.08,
     tightNeighborChance: 0.32,
-    poolMergeRatio: 0.5,
-    poolDepositRate: 0.85,
-    poolDwellBoost: 2.6,
-    poolThreshold: 0.62,
+    poolMergeRatio: 0.9,
+    poolDepositRate: 2.6,
+    poolDwellBoost: 1.1,
+    poolThreshold: 0.5,
     poolMaxLoad: 3.6,
     // A dominant channel drains its node hard (0.26 -> 0.82) so a second
     // one can't follow from mere leftover/regenerating load -- only from
@@ -135,7 +135,7 @@ const WET_VARIANT_PROFILES: Record<WetMarkerVariantId, WetVariantProfile> = {
     // low (8 -> 2) for the same reason: "typical pool node produces one
     // main drip," not a cluster.
     poolChannelDrain: 0.82,
-    poolChannelCooldownMs: 650,
+    poolChannelCooldownMs: 660,
     poolMaxChannelsPerNode: 2,
     poolDecayPerSecond: 0.35,
   },
@@ -270,6 +270,7 @@ export function resolveMopDripAttachment(
     footprint,
     x,
     options.terminalCapRendered ?? true,
+    reservoir.y,
   );
   return {
     origin: { x, y: boundaryY - overlap },
@@ -291,6 +292,7 @@ function resolveMopFootprintLowerBoundaryY(
   footprint: readonly MopFootprintPoint[],
   x: number,
   terminalCapRendered: boolean,
+  fallbackY: number,
 ): number {
   const candidates: number[] = [];
   const addCircle = (center: Pick<StrokePoint, "x" | "y">, radius: number) => {
@@ -353,7 +355,15 @@ function resolveMopFootprintLowerBoundaryY(
     }
   }
 
-  return Math.max(...candidates);
+  // A node that has drifted (via weighted spatial merging) away from the
+  // handful of most-recent footprint points passed in here -- e.g. it kept
+  // accumulating load while the pointer moved on, then only crossed
+  // threshold and got revisited well after the fact -- may find no
+  // rendered geometry actually under its x at all. `Math.max()` of an empty
+  // candidate list is `-Infinity`, which would otherwise crash the canvas
+  // gradient call downstream; falling back to the reservoir's own last
+  // known y keeps the channel anchored to a sane, finite position instead.
+  return candidates.length > 0 ? Math.max(...candidates) : fallbackY;
 }
 
 function addPolygonVerticalIntersections(

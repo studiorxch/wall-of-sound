@@ -73,8 +73,12 @@ describe("WetDripEngine", () => {
     expect(overlay.calls.filter((call) => call === "closePath")).toHaveLength(2);
     expect(overlay.moveTos[0][1]).toBe(16);
     expect(overlay.moveTos[1][1]).toBe(16);
+    // The root's peak alpha is source-limited to the drip's own opacity
+    // (plus the same small +0.08 boost every stop-0.16 highlight gets) --
+    // never a hardcoded full 1.0 regardless of how opaque the drip actually
+    // is, which would read as darker than the wet paint that produced it.
     expect(overlay.colorStops.filter(([offset]) => offset === 0).every(([, color]) => (
-      color.endsWith(", 1.000)")
+      color.endsWith(", 0.880)")
     ))).toBe(true);
 
     engine.advanceDrips(persistent.ctx, overlay.ctx, 1000);

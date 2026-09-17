@@ -1970,15 +1970,16 @@ class SpatialSpraypaintApp {
         timestamp: now,
         dripTendency: this.toolRenderer.dripTendency(dripStyle),
         enabled: this.settings.dripsEnabled,
-        // Pink Dot Fat's stochastic deposition field lays down real paint
-        // much more thinly than the drip system's old flat opacity formula
-        // assumed (see DripLogic's own DripObservation.sourceOpacityCeiling
-        // doc) — a drip must not read as MORE opaque than the paint region
-        // that produced it. `coreOpacity` is the cap's own ceiling on how
-        // dense one exposure of its core actually is; every other cap is
-        // unaffected (this stays undefined for them, preserving their
-        // exact prior drip look).
-        sourceOpacityCeiling: activeSprayPreset?.plumeStochasticStationary ? activeSprayPreset.coreOpacity : undefined,
+        // A drip must never read as MORE opaque than the paint region that
+        // produced it (see DripLogic's own DripObservation.sourceOpacityCeiling
+        // doc). This was previously only enforced for Pink Dot Fat's
+        // stochastic field, which left every other cap's drips free to hit
+        // the old flat nominal-opacity formula (up to 0.78) even though
+        // most caps' own `coreOpacity` (how dense one exposure of their
+        // core actually is) sits well below that -- a drip could and did
+        // read visibly darker than the wash it dripped from. `coreOpacity`
+        // is applied as the ceiling for every Spray cap now, not just one.
+        sourceOpacityCeiling: activeSprayPreset?.coreOpacity,
       });
       if (drip) {
         this.toolRenderer.startDrip(drip, dripStyle.color, now);
