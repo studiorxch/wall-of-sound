@@ -42,4 +42,4 @@ No changes to menu contents, `#more-toggle` itself, Record/Settings/Hand Tracker
 
 ## Commit
 
-(pending — see next commit)
+`2cd7a22` — "fix: Spatial Spraypaint -- anchor the ... menu to its own button instead of centering it"
