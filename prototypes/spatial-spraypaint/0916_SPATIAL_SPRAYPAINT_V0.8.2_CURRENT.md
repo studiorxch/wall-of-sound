@@ -68,4 +68,4 @@ Modified: `src/main.ts` (`depositReconstructedPath`'s `segmentEnds` construction
 
 ## Commit
 
-`<pending — see final report>` — "fix: Spatial Spraypaint Flair continuity — dense arclength resample removes segmented/capsule artifacts, Track Marks only"
+`57f6498` — "fix: Spatial Spraypaint Flair continuity — dense arclength resample removes segmented/capsule artifacts, Track Marks only"
