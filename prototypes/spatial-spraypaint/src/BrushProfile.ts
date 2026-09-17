@@ -4,22 +4,18 @@ import { getWetPaintProfile, isWetMarkerVariant, type WetMarkerVariantId } from 
 import { type DrawingToolId, type MarkerVariantId } from "./DrawingTool";
 
 /**
- * The single centralized brush-property model every drawing tool resolves
- * from — Spray caps, Round Marker, Chisel Marker, and Mop. Before this
- * module, each tool read its own scattered shape: Spray from
- * `SprayCapPreset`, Round/Chisel from `MarkerVariantDefinition`, Mop from
- * `WetVariantProfile`, each with its own field names and no shared surface
- * a UI (picker, Brush Studio, preview) could treat uniformly. This module
- * does not replace those underlying per-tool data sources (Spray's particle
- * physics, Mop's pool-reservoir tuning, etc. stay exactly as they are, and
- * this pass does not touch their calibrated values) — it is the read layer
- * every tool, and every piece of shared UI, now goes through to ask "what
- * are this brush's core properties," so the answer is structurally the same
- * shape (and the same resolver function) for all four families.
- *
- * `resolveBrushProfile` is the one entry point. Everything else in this file
- * is either the shared interface it returns or the per-family mapping
- * functions it dispatches to.
+ * The single canonical brush-property schema every drawing tool resolves
+ * from and every edit writes through — Spray caps, Round Marker, Chisel
+ * Marker, and Mop. `resolveBrushProfile(toolId, id, overrides?)` is the one
+ * authority function: it reads each family's underlying calibrated data
+ * (Spray's `SprayCapPreset` particle physics, Mop's `WetVariantProfile`
+ * pool-reservoir tuning, etc. — none of that per-family data is duplicated
+ * or re-derived, it stays the single source for ITS OWN calibrated values)
+ * and merges any live user edit from a `BrushProfileOverrideStore` on top,
+ * producing the ONE effective profile every renderer, Brush Studio panel,
+ * and preview reads. An edit updates the store; the very next resolve call
+ * (which every render path makes fresh, not from a cached copy) reflects
+ * it — there is no second, independently-writable settings surface.
  */
 
 export type BrushFootprintShape = "round" | "chisel" | "mop" | "spray";
@@ -33,46 +29,80 @@ export interface BrushFootprintDescriptor {
   softness: number;
 }
 
-/**
- * The properties every brush family owns, regardless of tool. Required on
- * every profile -- a picker, a preview, or Brush Studio can read these for
- * ANY brush without a tool-specific branch.
- */
-export interface BrushCoreProperties {
-  /** Nominal stroke radius/width, wall units. */
-  size: number;
-  /** Peak/core opacity this brush's own mark reaches at full load -- the same ceiling drips must never exceed. */
-  opacity: number;
+export interface BrushDripProperties {
   /** 0-1: how readily this brush forms drips at all. */
-  dripTendency: number;
-  /** Drip body width as a fraction of the brush's own `size` -- "thicker initial body" scales from here. */
-  dripBodyWidthRatio: number;
+  tendency: number;
+  /** Drip body width as a fraction of the brush's own `size`. */
+  bodyWidth: number;
   /** 0-1: how much a drip narrows from root to tip. Lower = gentler taper, more liquid mass held through the run. */
-  taperAmount: number;
+  taper: number;
   /** Relative size of the rounded terminal bead, as a multiple of the drip's own tip width. 0 disables the bead. */
-  terminalBeadRatio: number;
+  terminalBead: number;
   /** Relative size of the rounded root/origin pooling, as a multiple of the drip's own body width. 0 disables pooling. */
-  originPoolingRatio: number;
-  /** The real filled shape a preview should stamp for this brush -- never an outline. */
-  previewFootprint: BrushFootprintDescriptor;
+  originPooling: number;
+  /** Hard invariant: no drip spawned from this brush may render more opaque than this. Always <= the brush's own `opacity`. */
+  sourceOpacityCeiling: number;
 }
 
-/** Wet-only properties: present and editable only for a wet-capable brush (Mop today). Never shown/edited for a dry brush. */
+/** Wet-only properties: present and editable only for a wet-capable brush (Mop today). `null` on every dry brush -- that absence IS the hide/disable signal for the UI. */
 export interface BrushWetProperties {
   flow: "low" | "balanced" | "high";
   viscosity: "thick" | "balanced" | "runny";
-  /** How strongly Squeeze raises deposition for this brush -- 1 = no response (the dry-brush default when this block is absent entirely). */
+  /** How strongly Squeeze raises deposition for this brush -- 1 = no response. */
   squeezeResponse: number;
 }
 
 export type BrushFamily = "spray" | "round" | "chisel" | "mop";
 
-export interface BrushProfile extends BrushCoreProperties {
+export interface BrushProfile {
   family: BrushFamily;
   id: string;
   name: string;
-  /** Present only for a wet-capable brush -- see `BrushWetProperties`. Absence IS the "hide/disable wet-only controls" signal for the UI. */
-  wet?: BrushWetProperties;
+  size: number;
+  /** Peak/core opacity this brush's own mark reaches at full load. */
+  opacity: number;
+  drip: BrushDripProperties;
+  wet: BrushWetProperties | null;
+  footprint: BrushFootprintDescriptor;
+}
+
+// ---------------------------------------------------------------------------
+// The single writable truth. Every live edit to a shared property (Opacity,
+// Drip tendency, ...) goes through this store, keyed by `${toolId}:${id}` --
+// never a second, per-family override state.
+
+export interface BrushProfilePropertyOverride {
+  opacity?: number;
+  dripTendency?: number;
+  dripBodyWidth?: number;
+  dripTaper?: number;
+}
+
+export type BrushProfileOverrideStore = Readonly<Record<string, BrushProfilePropertyOverride>>;
+
+export const EMPTY_BRUSH_PROFILE_OVERRIDES: BrushProfileOverrideStore = {};
+
+function overrideKey(toolId: DrawingToolId, id: string): string {
+  return `${toolId}:${id}`;
+}
+
+export function getBrushProfileOverride(
+  store: BrushProfileOverrideStore,
+  toolId: DrawingToolId,
+  id: string,
+): BrushProfilePropertyOverride {
+  return store[overrideKey(toolId, id)] ?? {};
+}
+
+/** Pure: returns a NEW store. Every other brush's entry is untouched (same object references). */
+export function setBrushProfileOverride(
+  store: BrushProfileOverrideStore,
+  toolId: DrawingToolId,
+  id: string,
+  patch: BrushProfilePropertyOverride,
+): BrushProfileOverrideStore {
+  const key = overrideKey(toolId, id);
+  return { ...store, [key]: { ...(store[key] ?? {}), ...patch } };
 }
 
 const MOP_SQUEEZE_RESPONSE = 2.6;
@@ -83,24 +113,33 @@ function spraySoftness(preset: SprayCapPreset): number {
   return Math.max(0, Math.min(1, preset.edgeFalloff));
 }
 
-function resolveSprayProfile(capId: string): BrushProfile {
+function resolveSprayProfile(capId: string, override: BrushProfilePropertyOverride): BrushProfile {
   const preset = getSprayCapPreset(capId);
+  const opacity = clamp01(override.opacity ?? preset.coreOpacity);
+  const tendency = clamp01(override.dripTendency ?? preset.dripTendency);
   return {
     family: "spray",
     id: preset.id,
     name: preset.name,
     size: preset.baseRadius,
-    opacity: preset.coreOpacity,
-    dripTendency: preset.dripTendency,
-    // Matches the width formula DripAccumulator.observe now derives a
-    // Spray drip's own body width from (see DripLogic.ts) -- expressed
-    // here as size-relative so it reads on the same axis as every other
-    // family's dripBodyWidthRatio.
-    dripBodyWidthRatio: 0.11 + preset.dripTendency * 0.05,
-    taperAmount: 0.28,
-    terminalBeadRatio: 1.15,
-    originPoolingRatio: 0,
-    previewFootprint: {
+    opacity,
+    drip: {
+      tendency,
+      // Matches the width formula DripAccumulator.observe derives a Spray
+      // drip's own body width from (see DripLogic.ts) -- expressed here as
+      // size-relative so it reads on the same axis as every other family's
+      // dripBodyWidth.
+      bodyWidth: override.dripBodyWidth ?? (0.11 + tendency * 0.05),
+      taper: override.dripTaper ?? 0.28,
+      terminalBead: 1.15,
+      originPooling: 0,
+      // A drip must never read as more opaque than the wash that produced
+      // it -- Spray's own coreOpacity IS the ceiling, tracking any live
+      // opacity edit rather than the unedited preset default.
+      sourceOpacityCeiling: opacity,
+    },
+    wet: null,
+    footprint: {
       shape: "spray",
       aspectRatio: preset.anisotropy < 1 ? 1 / preset.anisotropy : 1,
       softness: spraySoftness(preset),
@@ -117,72 +156,103 @@ function resolveMarkerFootprint(variantId: MarkerVariantId): BrushFootprintDescr
   return { shape: "chisel", aspectRatio: 2.4, softness: 0.1 };
 }
 
-function resolveDryMarkerProfile(variant: MarkerVariantDefinition): BrushProfile {
+function resolveDryMarkerProfile(
+  variant: MarkerVariantDefinition,
+  override: BrushProfilePropertyOverride,
+): BrushProfile {
   const family: BrushFamily = variant.id === "round" ? "round" : "chisel";
+  // Dry markers lay down a dense mark rendered fully opaque today (see
+  // PaintMarkerEngine's `ctx.fillStyle = color`, no alpha channel) -- 1 is
+  // the true structural ceiling; 0.95 is the profile's own editable
+  // DEFAULT peak, deliberately just under that hard ceiling.
+  const opacity = clamp01(override.opacity ?? 0.95);
+  const tendency = clamp01(override.dripTendency ?? variant.dripTendency);
   return {
     family,
     id: variant.id,
     name: variant.name,
     size: variant.defaultSize,
-    // Dry markers lay down a dense, near-opaque mark -- there is no
-    // per-variant opacity dial for them today (see MarkerVariantDefinition),
-    // so this is the same ceiling `DripAccumulator` already treats a
-    // tendency-driven nominal opacity against for every non-Spray-preset
-    // caller (no `sourceOpacityCeiling` supplied -- see main.ts).
-    opacity: 0.95,
-    dripTendency: variant.dripTendency,
-    dripBodyWidthRatio: 0.11 + variant.dripTendency * 0.05,
-    taperAmount: 0.28,
-    terminalBeadRatio: variant.dripTendency > 0 ? 1.15 : 0,
-    originPoolingRatio: 0,
-    previewFootprint: resolveMarkerFootprint(variant.id),
+    opacity,
+    drip: {
+      tendency,
+      bodyWidth: override.dripBodyWidth ?? (0.11 + tendency * 0.05),
+      taper: override.dripTaper ?? 0.28,
+      terminalBead: tendency > 0 ? 1.15 : 0,
+      originPooling: 0,
+      sourceOpacityCeiling: opacity,
+    },
+    wet: null,
+    footprint: resolveMarkerFootprint(variant.id),
   };
 }
 
-function resolveWetMarkerProfile(variant: MarkerVariantDefinition, variantId: WetMarkerVariantId): BrushProfile {
+function resolveWetMarkerProfile(
+  variant: MarkerVariantDefinition,
+  variantId: WetMarkerVariantId,
+  override: BrushProfilePropertyOverride,
+): BrushProfile {
   const pool = getWetPaintProfile(variantId);
+  const opacity = clamp01(override.opacity ?? 0.95);
+  const tendency = clamp01(override.dripTendency ?? variant.dripTendency);
   return {
     family: "mop",
     id: variant.id,
     name: variant.name,
     size: variant.defaultSize,
-    opacity: 0.95,
-    dripTendency: variant.dripTendency,
-    // Mop's own pool model already owns real, hard-won width/taper/pooling
-    // tuning (`stemWidthBaseRatio`/`tipWidthRatio`/`originPoolRatio` -- see
-    // WetPaintModel.ts) -- this profile surfaces those exact values rather
-    // than re-deriving new ones, so Brush Studio and any preview read the
-    // SAME numbers the live pool-channel renderer actually uses.
-    dripBodyWidthRatio: pool.stemWidthBaseRatio,
-    taperAmount: 1 - pool.tipWidthRatio,
-    terminalBeadRatio: 1.15,
-    originPoolingRatio: pool.originPoolRatio,
-    previewFootprint: resolveMarkerFootprint(variant.id),
+    opacity,
+    drip: {
+      tendency,
+      // Mop's own pool model already owns real, hard-won width/taper/
+      // pooling tuning (`stemWidthBaseRatio`/`tipWidthRatio`/
+      // `originPoolRatio` -- see WetPaintModel.ts) -- this profile
+      // surfaces those exact values rather than re-deriving new ones, so
+      // Brush Studio and any preview read the SAME numbers the live
+      // pool-channel renderer actually uses.
+      bodyWidth: override.dripBodyWidth ?? pool.stemWidthBaseRatio,
+      taper: override.dripTaper ?? (1 - pool.tipWidthRatio),
+      terminalBead: 1.15,
+      originPooling: pool.originPoolRatio,
+      sourceOpacityCeiling: opacity,
+    },
     wet: {
       flow: "balanced",
       viscosity: "balanced",
       squeezeResponse: MOP_SQUEEZE_RESPONSE,
     },
+    footprint: resolveMarkerFootprint(variant.id),
   };
 }
 
-function resolveMarkerProfile(variantId: MarkerVariantId): BrushProfile {
+function resolveMarkerProfile(variantId: MarkerVariantId, override: BrushProfilePropertyOverride): BrushProfile {
   const variant = getMarkerVariant(variantId);
-  if (isWetMarkerVariant(variantId)) return resolveWetMarkerProfile(variant, variantId);
-  return resolveDryMarkerProfile(variant);
+  if (isWetMarkerVariant(variantId)) return resolveWetMarkerProfile(variant, variantId, override);
+  return resolveDryMarkerProfile(variant, override);
+}
+
+function clamp01(value: number): number {
+  return Math.max(0, Math.min(1, value));
 }
 
 /**
  * The one resolver every tool, and every piece of shared brush UI, calls.
  * `toolId` selects which underlying family to resolve `id` against --
  * "spray-can" reads Spray cap presets, "paint-marker" reads marker variants
- * (dispatching internally to the wet or dry shape depending on the variant).
+ * (dispatching internally to the wet or dry shape depending on the
+ * variant). `overrides`, when supplied, is merged on top of that family's
+ * computed defaults for every shared property a user can edit -- this is
+ * what makes the profile the live, editable authority rather than a
+ * read-only snapshot.
  */
-export function resolveBrushProfile(toolId: DrawingToolId, id: string): BrushProfile {
-  if (toolId === "spray-can") return resolveSprayProfile(id);
-  return resolveMarkerProfile(id as MarkerVariantId);
+export function resolveBrushProfile(
+  toolId: DrawingToolId,
+  id: string,
+  overrides: BrushProfileOverrideStore = EMPTY_BRUSH_PROFILE_OVERRIDES,
+): BrushProfile {
+  const override = getBrushProfileOverride(overrides, toolId, id);
+  if (toolId === "spray-can") return resolveSprayProfile(id, override);
+  return resolveMarkerProfile(id as MarkerVariantId, override);
 }
 
 export function isWetBrushProfile(profile: BrushProfile): boolean {
-  return profile.wet !== undefined;
+  return profile.wet !== null;
 }

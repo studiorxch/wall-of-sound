@@ -18,6 +18,8 @@ interface BaseToolStrokeStyle {
   fillMode?: boolean;
   /** Spray-only: degrees, 0-PLUME_MAX_ANGLE_DEGREES. Mouse V1's input into `SprayInputState.sprayAngle` — see `resolveMouseSprayInput`. Absent/0 preserves current default behavior exactly on every cap. */
   sprayAngle?: number;
+  /** The centralized BrushProfile's effective `opacity` for this tool/variant (see BrushProfile.ts) — applied as the mark's own peak alpha for every tool. Absent preserves each tool's prior unscaled default exactly (every preview/replay caller that doesn't pass it). */
+  opacityOverride?: number;
 }
 
 export type ToolStrokeStyle = BaseToolStrokeStyle & (
@@ -66,12 +68,19 @@ export class DrawingToolRenderer {
     trackMarksFlairBloom01: number = 0,
   ): void {
     if (style.toolId === "spray-can") {
-      const deposition = applyFlairDensityToCap(
+      const baseDeposition = applyFlairDensityToCap(
         getSprayCapProfile(style.variantId).deposition,
         style.variantId,
         trackMarksFlairMode,
         trackMarksFlairBloom01,
       );
+      // The centralized BrushProfile's `opacity` (default: the cap's own
+      // coreOpacity, or a live Brush Studio edit) is the effective peak
+      // opacity actually rendered -- same authority Round/Chisel/Mop below
+      // now read too, not a Spray-only path.
+      const deposition = style.opacityOverride !== undefined
+        ? { ...baseDeposition, coreOpacity: style.opacityOverride }
+        : baseDeposition;
       this.spray.renderSegment(
         ctx,
         previous,
@@ -85,7 +94,7 @@ export class DrawingToolRenderer {
       );
       return;
     }
-    this.marker.renderSegment(ctx, previous, point, style.color, style.variantId);
+    this.marker.renderSegment(ctx, previous, point, style.color, style.variantId, style.opacityOverride);
   }
 
   public dripTendency(style: ToolStrokeStyle): number {

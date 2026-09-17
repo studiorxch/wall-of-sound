@@ -6,7 +6,12 @@ import {
 import { getSprayBackground, type SprayBackground } from "./Backgrounds";
 import { renderAllBrushPreviews, renderMarkerSizeSample } from "./BrushPreview";
 import { getSprayOverride, resolveEffectiveSprayStyle } from "./BrushProperties";
-import { resolveBrushProfile } from "./BrushProfile";
+import {
+  resolveBrushProfile,
+  setBrushProfileOverride,
+  EMPTY_BRUSH_PROFILE_OVERRIDES,
+  type BrushProfileOverrideStore,
+} from "./BrushProfile";
 import { BrushStudioController, markerFamilyFor } from "./BrushStudio";
 import { CalibrationBenchController } from "./CalibrationBenchController";
 import { EMPTY_CUSTOM_SPRAY_REGISTRY, type CustomSprayBrushRegistry } from "./CustomBrush";
@@ -246,6 +251,13 @@ class SpatialSpraypaintApp {
   private audioElement: HTMLAudioElement | null = null;
   private audioObjectUrl: string | null = null;
   private customSprayRegistry: CustomSprayBrushRegistry = EMPTY_CUSTOM_SPRAY_REGISTRY;
+  // The one writable truth for every shared BrushProfile property a user
+  // edits (Opacity, Drip tendency, ...) across all four families -- see
+  // BrushProfile.ts. `resolveBrushProfile` merges this on top of each
+  // family's computed defaults everywhere a profile is read, so an edit
+  // here is what "the same control mechanism affects that selected brush"
+  // actually means at runtime, not a second parallel settings surface.
+  private brushProfileOverrides: BrushProfileOverrideStore = EMPTY_BRUSH_PROFILE_OVERRIDES;
   private readonly brushStudio: BrushStudioController;
   private readonly calibrationBench: CalibrationBenchController;
 
@@ -276,6 +288,10 @@ class SpatialSpraypaintApp {
         this.updateRadiusUi();
       },
       setCustomSprayRegistry: (registry) => { this.customSprayRegistry = registry; },
+      getBrushProfileOverrides: () => this.brushProfileOverrides,
+      setBrushProfileProperty: (toolId, id, patch) => {
+        this.brushProfileOverrides = setBrushProfileOverride(this.brushProfileOverrides, toolId, id, patch);
+      },
       openCalibrationBench: (capId) => this.calibrationBench.open(capId),
       getWetPaintControls: () => this.wetPaintControls,
       setWetPaintControls: (patch) => {
@@ -1472,12 +1488,24 @@ class SpatialSpraypaintApp {
 
   private currentToolStyle(): ToolStrokeStyle {
     const sprayStyle = this.effectiveSprayStyle(this.toolSelection.sprayCapId);
+    const variantId = this.toolSelection.selectedToolId === "spray-can"
+      ? this.toolSelection.sprayCapId
+      : this.toolSelection.markerVariantId;
+    // The centralized brush profile's own `opacity` (including any live
+    // Brush Studio edit -- see `brushProfileOverrides`) is what actually
+    // reaches the renderer here, for every tool, not just Spray.
+    const opacityOverride = resolveBrushProfile(
+      this.toolSelection.selectedToolId,
+      variantId,
+      this.brushProfileOverrides,
+    ).opacity;
     const shared = {
       color: this.selectedColor,
       size: this.baseRadius,
       coverage: sprayStyle.coverage,
       fillMode: sprayStyle.fillMode,
       sprayAngle: sprayStyle.sprayAngle,
+      opacityOverride,
     };
     return this.toolSelection.selectedToolId === "spray-can"
       ? { ...shared, toolId: "spray-can", variantId: this.toolSelection.sprayCapId }
@@ -1963,33 +1991,30 @@ class SpatialSpraypaintApp {
     const dripEligible = dripStyle?.toolId === "spray-can"
       || (dripStyle?.toolId === "paint-marker" && !isWetMarkerVariant(dripStyle.variantId));
     if (dripStyle && dripEligible) {
-      const activeSprayPreset = dripStyle.toolId === "spray-can" ? getSprayCapPreset(dripStyle.variantId) : null;
-      // Every drip-eligible tool (Spray caps, Round, Chisel) resolves its
-      // drip shape from the SAME centralized brush profile Mop's own pool
-      // model and Brush Studio also read (see BrushProfile.ts) -- brush-
-      // specific tuning (Round lighter than Chisel, both far lighter than
-      // Mop) lives in one place, not duplicated per call site.
-      const brushProfile = resolveBrushProfile(dripStyle.toolId, dripStyle.variantId);
+      // Every drip-eligible tool (Spray caps, Round, Chisel) resolves EVERY
+      // drip property -- tendency, body width, taper, terminal bead, and
+      // the source-opacity ceiling -- from the SAME centralized brush
+      // profile Mop's own pool model and Brush Studio also read (see
+      // BrushProfile.ts). This is the single authority call, including any
+      // live user edit from `this.brushProfileOverrides`; nothing here
+      // reads a raw preset/variant field directly any more.
+      const brushProfile = resolveBrushProfile(dripStyle.toolId, dripStyle.variantId, this.brushProfileOverrides);
       const drip = this.dripAccumulator.observe({
         x: point?.x ?? smoothed.x,
         y: point?.y ?? smoothed.y,
         radius: point?.width ?? this.baseRadius,
         timestamp: now,
-        dripTendency: this.toolRenderer.dripTendency(dripStyle),
+        dripTendency: brushProfile.drip.tendency,
         enabled: this.settings.dripsEnabled,
         // A drip must never read as MORE opaque than the paint region that
-        // produced it (see DripLogic's own DripObservation.sourceOpacityCeiling
-        // doc). This was previously only enforced for Pink Dot Fat's
-        // stochastic field, which left every other cap's drips free to hit
-        // the old flat nominal-opacity formula (up to 0.78) even though
-        // most caps' own `coreOpacity` (how dense one exposure of their
-        // core actually is) sits well below that -- a drip could and did
-        // read visibly darker than the wash it dripped from. `coreOpacity`
-        // is applied as the ceiling for every Spray cap now, not just one.
-        sourceOpacityCeiling: activeSprayPreset?.coreOpacity,
-        bodyWidthRatio: brushProfile.dripBodyWidthRatio,
-        taperAmount: brushProfile.taperAmount,
-        terminalBeadRatio: brushProfile.terminalBeadRatio,
+        // produced it -- `sourceOpacityCeiling` is the profile's own
+        // invariant field (see DripLogic's own
+        // DripObservation.sourceOpacityCeiling doc), tracking any live
+        // opacity edit for every drip-eligible tool, not just Spray.
+        sourceOpacityCeiling: brushProfile.drip.sourceOpacityCeiling,
+        bodyWidthRatio: brushProfile.drip.bodyWidth,
+        taperAmount: brushProfile.drip.taper,
+        terminalBeadRatio: brushProfile.drip.terminalBead,
       });
       if (drip) {
         this.toolRenderer.startDrip(drip, dripStyle.color, now);

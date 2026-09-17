@@ -198,10 +198,16 @@ describe("wet paint load authority", () => {
   });
 
   it("replays drip origins, lengths, bends, kinks, and timing deterministically", () => {
+    // V0.10.15 Pool Ownership Rule: one reservoir now produces AT MOST one
+    // channel (see `poolMaxChannelsPerNode: 1`), so this test's variety
+    // assertions need genuinely distinct spots (real, separate reservoirs),
+    // not one stationary point held long enough to force a second channel
+    // out of the SAME node -- that behavior is exactly what this pass
+    // removed (the "double dagger" defect).
     const run = () => {
       const accumulator = new WetPaintAccumulator();
       accumulator.beginStroke(314, "drip-mop");
-      return observeStationary(accumulator, 2640, 50).flatMap(({ drips }) => drips);
+      return observeAtHeavySpots(accumulator, [20, 140, 260], 50).flatMap(({ drips }) => drips);
     };
     const first = run();
     const second = run();
@@ -268,7 +274,13 @@ describe("wet paint load authority", () => {
     expect(kinkedFraction).toBeLessThan(0.85);
   });
 
-  it("Squeeze raises deposition through the same pool model -- more/heavier runs, not a direct drip-count multiplier", () => {
+  it("Squeeze raises deposition through the same pool model -- a heavier/longer single dominant run, never a second channel from one reservoir", () => {
+    // V0.10.15 Pool Ownership Rule: one stationary reservoir produces AT
+    // MOST one channel, full stop -- Squeeze on a single dot must NOT
+    // produce a second ("double dagger") channel. Its effect has to show
+    // through that one channel being wider/longer (see the `loadFactor`
+    // ceiling raised from 1.0 to 2.2 in `spawnPoolChannel`, specifically so
+    // Squeeze isn't silently a no-op once channel count is capped).
     const baseline = new WetPaintAccumulator();
     baseline.beginStroke(7, "mop");
     const baselineDrips = observeStationary(baseline, 900).flatMap(({ drips }) => drips);
@@ -278,9 +290,11 @@ describe("wet paint load authority", () => {
     squeezed.setSqueezeMultiplier(2.6);
     const squeezedDrips = observeStationary(squeezed, 900).flatMap(({ drips }) => drips);
 
-    expect(squeezedDrips.length).toBeGreaterThan(baselineDrips.length);
+    expect(baselineDrips.length).toBe(1);
+    expect(squeezedDrips.length).toBe(1);
     const totalWidth = (drips: typeof baselineDrips) => drips.reduce((sum, drip) => sum + drip.width, 0);
     expect(totalWidth(squeezedDrips)).toBeGreaterThan(totalWidth(baselineDrips));
+    expect(squeezedDrips[0].length).toBeGreaterThan(baselineDrips[0].length);
 
     // Releasing Squeeze (multiplier back to 1, the default) returns to
     // ordinary baseline deposition -- not a lingering elevated state.
@@ -561,5 +575,109 @@ describe("wet paint load authority", () => {
         && Number.isFinite(drip.length)
       ))).toBe(true);
     }
+  });
+
+  describe("V0.10.15 Pool Ownership Rule -- one reservoir, at most one dominant channel", () => {
+    it("a single ordinary stationary dot never produces more than one channel ('the double dagger defect')", () => {
+      const accumulator = new WetPaintAccumulator();
+      accumulator.beginStroke(1, "mop");
+      const drips = observeStationary(accumulator, 900).flatMap(({ drips: emitted }) => emitted);
+      expect(drips.length).toBeLessThanOrEqual(1);
+    });
+
+    it("a longer dwell on the same dot still never produces a second channel", () => {
+      const accumulator = new WetPaintAccumulator();
+      accumulator.beginStroke(2, "mop");
+      const drips = observeStationary(accumulator, 4000).flatMap(({ drips: emitted }) => emitted);
+      expect(drips.length).toBeLessThanOrEqual(1);
+    });
+
+    it("heavy dwell WITH Squeeze on the same dot still never produces a second channel -- Squeeze must not create a double dagger", () => {
+      const accumulator = new WetPaintAccumulator();
+      accumulator.beginStroke(3, "mop");
+      accumulator.setSqueezeMultiplier(2.6);
+      const drips = observeStationary(accumulator, 4000).flatMap(({ drips: emitted }) => emitted);
+      expect(drips.length).toBeLessThanOrEqual(1);
+    });
+
+    it("repeated deposition into the SAME reservoir does not automatically create another channel, even far beyond the old renewed-load bar", () => {
+      const accumulator = new WetPaintAccumulator();
+      accumulator.beginStroke(4, "mop");
+      // Ten times the profile's own threshold worth of dwell time -- if a
+      // second channel were still reachable via "enough renewed load," this
+      // would trigger it. It must not: `poolMaxChannelsPerNode: 1` blocks a
+      // second spawn from this node unconditionally, structurally, not by
+      // a probability or a load bar that a long-enough dwell can still
+      // clear.
+      const drips = observeStationary(accumulator, 9000).flatMap(({ drips: emitted }) => emitted);
+      expect(drips.length).toBeLessThanOrEqual(1);
+    });
+
+    it("a slow horizontal stroke and a curved continuous stroke still keep every individual pool node's channel count at 1", () => {
+      const horizontal = new WetPaintAccumulator();
+      horizontal.beginStroke(5, "mop");
+      const horizontalDrips: ReturnType<WetPaintAccumulator["observe"]>["drips"] = [];
+      for (let x = 0; x <= 400; x += 4) {
+        horizontalDrips.push(...horizontal.observe(point(x, 20, x * 30, 0.2), 44, true).drips);
+      }
+      const curved = new WetPaintAccumulator();
+      curved.beginStroke(6, "mop");
+      const curvedDrips: ReturnType<WetPaintAccumulator["observe"]>["drips"] = [];
+      let t = 0;
+      for (let a = 0; a <= Math.PI * 2; a += 0.05) {
+        curvedDrips.push(...curved.observe(
+          point(200 + Math.cos(a) * 120, 200 + Math.sin(a) * 120, t, 0.25),
+          44,
+          true,
+        ).drips);
+        t += 30;
+      }
+      // Genuinely distinct spatial reservoirs along a long path DO each
+      // legitimately spawn their own channel -- the rule is per-node, not
+      // "the whole stroke gets one drip total." A node's own (x, y) can
+      // drift slightly as it keeps merging touches even after it has
+      // already spawned its one allowed channel, so exact-cluster-count
+      // equality is too strict a proxy; the bound here is instead "no
+      // single reservoir-sized neighborhood contains more than a couple of
+      // origins" -- nowhere close to the old double/triple-branch root
+      // cluster this pass removes, while tolerating the node-drift edge
+      // case above.
+      const assertNoRootCluster = (drips: readonly { x: number }[]) => {
+        const xs = [...drips.map((d) => d.x)].sort((a, b) => a - b);
+        const mergeDistance = 44 * 0.9;
+        for (let i = 0; i < xs.length; i += 1) {
+          const neighbors = xs.filter((x) => Math.abs(x - xs[i]) <= mergeDistance);
+          expect(neighbors.length).toBeLessThanOrEqual(2);
+        }
+      };
+      assertNoRootCluster(horizontalDrips);
+      assertNoRootCluster(curvedDrips);
+    });
+
+    it("terminal bead reads as wider than the drip's own terminal body where enabled (never a giant separate circle, never invisible)", () => {
+      const accumulator = new WetPaintAccumulator();
+      accumulator.beginStroke(7, "mop");
+      const drips = observeStationary(accumulator, 900).flatMap(({ drips: emitted }) => emitted);
+      expect(drips.length).toBe(1);
+      const [drip] = drips;
+      expect(drip.terminalBulbRatio).toBeDefined();
+      // Bead DIAMETER = tip.width * terminalBulbRatio; for the bead to read
+      // as wider than the terminal body, that must exceed 1x the tip
+      // width -- i.e. terminalBulbRatio itself must be > 1.
+      expect(drip.terminalBulbRatio!).toBeGreaterThan(1);
+      // ...but still restrained, not a giant primitive.
+      expect(drip.terminalBulbRatio!).toBeLessThan(2);
+    });
+
+    it("drip opacity never exceeds the source paint's own opacity ceiling", () => {
+      const accumulator = new WetPaintAccumulator();
+      accumulator.beginStroke(8, "mop");
+      const drips = observeAtHeavySpots(accumulator, [20, 140, 260]).flatMap(({ drips: emitted }) => emitted);
+      expect(drips.length).toBeGreaterThan(0);
+      // Mop's own mark renders fully opaque (PaintMarkerEngine's
+      // `ctx.fillStyle = color`, no alpha channel) -- 1 is the true
+      // structural source-opacity ceiling every Mop drip must respect.
+      expect(drips.every((drip) => drip.opacity <= 1)).toBe(true);
+    });
   });
 });

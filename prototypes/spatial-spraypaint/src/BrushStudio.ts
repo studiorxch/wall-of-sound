@@ -35,7 +35,12 @@ import {
 } from "./CustomBrush";
 import { type DrawingToolId, type MarkerVariantId } from "./DrawingTool";
 import { getMarkerVariant, MARKER_VARIANTS, type MarkerVariantDefinition } from "./PaintMarkerEngine";
-import { resolveBrushProfile } from "./BrushProfile";
+import {
+  resolveBrushProfile,
+  type BrushProfile,
+  type BrushProfileOverrideStore,
+  type BrushProfilePropertyOverride,
+} from "./BrushProfile";
 import { getSprayCapPreset, SPRAY_CAP_PRESETS, type SprayCapFamily, type SprayCapId, type SprayCapPreset } from "./SprayCapPresets";
 import { PLUME_MAX_ANGLE_DEGREES } from "./SprayBrushEngine";
 import { isWetMarkerVariant } from "./WetPaintModel";
@@ -211,6 +216,15 @@ export interface BrushStudioDeps {
    */
   getWetPaintControls: () => WetPaintControlState;
   setWetPaintControls: (patch: Partial<WetPaintControlState>) => void;
+  /**
+   * The one writable BrushProfile override store (see BrushProfile.ts) --
+   * every family's shared property edits (Opacity, Drip tendency) go
+   * through `setBrushProfileProperty`, keyed by (toolId, id), and every
+   * profile read (`resolveBrushProfile`) merges it back in. Not a second,
+   * per-family override surface.
+   */
+  getBrushProfileOverrides: () => BrushProfileOverrideStore;
+  setBrushProfileProperty: (toolId: DrawingToolId, id: string, patch: BrushProfilePropertyOverride) => void;
 }
 
 const PROPERTY_GROUP_LABELS: ReadonlyArray<{ key: "general" | "shape" | "paint" | "motion"; label: string }> = [
@@ -306,6 +320,95 @@ export class BrushStudioController {
     return el;
   }
 
+  /**
+   * The ONE shared property-panel renderer for every brush family's
+   * centralized properties (see BrushProfile.ts) -- called identically by
+   * Spray, Round, Chisel, and Mop's own panel builders. There is no
+   * `renderRoundSettings`/`renderChiselSettings`/`renderMopSettings`/
+   * `renderSpraySettings` with duplicated controls; a shared property is
+   * represented by the exact same control here regardless of which tool is
+   * selected. Opacity and Drip tendency are REAL editable controls: each
+   * `input` writes through `this.deps.setBrushProfileProperty` (the one
+   * writable BrushProfile override store -- see main.ts) and re-resolves
+   * the profile so the change reaches the actual rendering authority on
+   * the very next stroke, not just this panel's own readout. Drip body
+   * width/taper/terminal bead/origin pooling remain readonly diagnostics
+   * this pass (see the V0.10.15 checkpoint doc's honest gap list) -- they
+   * still come from the same profile, just aren't independently editable
+   * yet.
+   */
+  private renderSharedBrushProperties(
+    toolId: DrawingToolId,
+    id: string,
+    profile: BrushProfile,
+    onEdited: (updated: BrushProfile) => void,
+  ): HTMLElement[] {
+    const rows: HTMLElement[] = [this.buildFamilyLabel("Tip")];
+
+    const slider = (
+      label: string,
+      value: number,
+      min: number,
+      max: number,
+      step: number,
+      format: (v: number) => string,
+      apply: (numeric: number) => BrushProfilePropertyOverride,
+    ) => {
+      const row = document.createElement("div");
+      row.className = "brush-studio-property-row";
+      const labelEl = document.createElement("span");
+      labelEl.textContent = label;
+      const input = document.createElement("input");
+      input.type = "range";
+      input.min = String(min);
+      input.max = String(max);
+      input.step = String(step);
+      input.value = String(value);
+      const readout = document.createElement("span");
+      readout.className = "brush-studio-property-value";
+      readout.textContent = format(value);
+      input.addEventListener("input", () => {
+        const numeric = Number.parseFloat(input.value);
+        readout.textContent = format(numeric);
+        this.deps.setBrushProfileProperty(toolId, id, apply(numeric));
+        onEdited(resolveBrushProfile(toolId, id, this.deps.getBrushProfileOverrides()));
+      });
+      row.append(labelEl, input, readout);
+      return row;
+    };
+
+    rows.push(slider(
+      "Opacity",
+      profile.opacity,
+      0.1,
+      1,
+      0.01,
+      (v) => `${Math.round(v * 100)}%`,
+      (numeric) => ({ opacity: numeric }),
+    ));
+    rows.push(slider(
+      "Drip tendency",
+      profile.drip.tendency,
+      0,
+      1,
+      0.01,
+      (v) => v.toFixed(2),
+      (numeric) => ({ dripTendency: numeric }),
+    ));
+
+    const readonlyRow = (label: string, value: string) => {
+      const row = document.createElement("div");
+      row.className = "brush-studio-property-row readonly";
+      row.innerHTML = `<span>${label}</span><span class="brush-studio-property-value">${value}</span>`;
+      return row;
+    };
+    rows.push(readonlyRow("Drip body width", `${Math.round(profile.drip.bodyWidth * 100)}%`));
+    rows.push(readonlyRow("Taper amount", `${Math.round(profile.drip.taper * 100)}%`));
+    rows.push(readonlyRow("Terminal bead", profile.drip.terminalBead > 0 ? `${profile.drip.terminalBead.toFixed(2)}x` : "None"));
+    rows.push(readonlyRow("Origin pooling", profile.drip.originPooling > 0 ? `${profile.drip.originPooling.toFixed(2)}x` : "None"));
+    return rows;
+  }
+
   private renderPropertiesPanel(): void {
     const selection = this.deps.getToolSelection();
     if (selection.selectedToolId === "spray-can") this.renderSprayProperties();
@@ -327,7 +430,12 @@ export class BrushStudioController {
     badge.dataset.provenance = provenance;
     this.el("brush-studio-custom-note").toggleAttribute("hidden", !isCustom);
 
-    this.renderPreviewCanvas(preset as SprayCapPreset, effective);
+    // The live preview's peak opacity comes from the centralized
+    // BrushProfile (default: this cap's own coreOpacity, or a live edit
+    // via the shared "Tip" Opacity control below) -- not the raw preset.
+    const brushProfileForPreview = resolveBrushProfile("spray-can", preset.id, this.deps.getBrushProfileOverrides());
+    const previewPreset: SprayCapPreset = { ...(preset as SprayCapPreset), coreOpacity: brushProfileForPreview.opacity };
+    this.renderPreviewCanvas(previewPreset, effective);
 
     const groups = getSprayPropertyGroups(preset as SprayCapPreset, effective, override);
     const body = this.el("brush-studio-property-groups");
@@ -342,13 +450,20 @@ export class BrushStudioController {
       this.buildFamilyLabel(generalLabel.label),
       ...groups[generalLabel.key].map((row) => this.buildSprayPropertyRow(preset.id, row, isCustom)),
     ];
+    // Same shared "Tip" property renderer Round/Chisel/Mop's panel calls
+    // (see `renderSharedBrushProperties`) -- Spray's Opacity and Drip
+    // tendency are the SAME control mechanism, reading/writing the SAME
+    // BrushProfile override store, not a Spray-only duplicate.
+    const sharedRows = this.renderSharedBrushProperties("spray-can", preset.id, brushProfileForPreview, (updated) => {
+      this.renderPreviewCanvas({ ...(preset as SprayCapPreset), coreOpacity: updated.opacity }, effective);
+    });
     const flairRows = isFlairEligibleCap(preset.id) && !isCustom ? this.buildFlairSection(preset.id, preset as SprayCapPreset) : [];
     const restRows = restLabels.flatMap(({ key, label }) => {
       const rows = groups[key];
       if (rows.length === 0) return [];
       return [this.buildFamilyLabel(label), ...rows.map((row) => this.buildSprayPropertyRow(preset.id, row, isCustom))];
     });
-    body.replaceChildren(...generalRows, ...flairRows, ...restRows);
+    body.replaceChildren(...generalRows, ...sharedRows, ...flairRows, ...restRows);
 
     this.el<HTMLButtonElement>("brush-studio-reset-brush").disabled = isCustom || !isSprayBrushModified(override);
     this.el<HTMLButtonElement>("brush-studio-reset-brush").onclick = () => {
@@ -772,9 +887,17 @@ export class BrushStudioController {
     badge.dataset.provenance = "physical-reference";
     this.el("brush-studio-custom-note").toggleAttribute("hidden", true);
 
+    // Every row/preview below comes from the SAME centralized brush
+    // profile Spray, Round, Chisel, and Mop all resolve from (see
+    // BrushProfile.ts), built by the ONE shared renderer
+    // (`renderSharedBrushProperties`) every family's panel calls --
+    // Round/Chisel now get the same "Tip" surface Spray's own panel also
+    // builds from, not a smaller, duplicated one.
+    let profile = resolveBrushProfile("paint-marker", variant.id, this.deps.getBrushProfileOverrides());
+
     const canvas = this.el<HTMLCanvasElement>("brush-studio-preview");
     const ctx = canvas.getContext("2d");
-    if (ctx) renderMarkerBrushStudioPreview(ctx, canvas.width, canvas.height, variant.id, width);
+    if (ctx) renderMarkerBrushStudioPreview(ctx, canvas.width, canvas.height, variant.id, width, profile.opacity);
 
     const body = this.el("brush-studio-property-groups");
     const rows: HTMLElement[] = [this.buildFamilyLabel("General")];
@@ -796,30 +919,15 @@ export class BrushStudioController {
       sizeReadout.textContent = `${numeric}`;
       this.deps.setMarkerWidth(variant.id, numeric);
       const ctx2 = canvas.getContext("2d");
-      if (ctx2) renderMarkerBrushStudioPreview(ctx2, canvas.width, canvas.height, variant.id, numeric);
+      if (ctx2) renderMarkerBrushStudioPreview(ctx2, canvas.width, canvas.height, variant.id, numeric, profile.opacity);
     });
     sizeRow.append(sizeLabel, sizeInput, sizeReadout);
     rows.push(sizeRow);
-
-    // Every readonly row below comes from the SAME centralized brush
-    // profile Spray, Round, Chisel, and Mop all resolve from (see
-    // BrushProfile.ts) -- Round/Chisel now get the same "Tip" surface
-    // Spray's Shape/Paint/Motion groups already exposed, not a smaller,
-    // duplicated one.
-    const profile = resolveBrushProfile("paint-marker", variant.id);
-    rows.push(this.buildFamilyLabel("Tip"));
-    const readonlyRow = (label: string, value: string) => {
-      const row = document.createElement("div");
-      row.className = "brush-studio-property-row readonly";
-      row.innerHTML = `<span>${label}</span><span class="brush-studio-property-value">${value}</span>`;
-      return row;
-    };
-    rows.push(readonlyRow("Opacity", `${Math.round(profile.opacity * 100)}%`));
-    rows.push(readonlyRow("Drip tendency", `${profile.dripTendency}`));
-    rows.push(readonlyRow("Drip body width", `${Math.round(profile.dripBodyWidthRatio * 100)}%`));
-    rows.push(readonlyRow("Taper amount", `${Math.round(profile.taperAmount * 100)}%`));
-    rows.push(readonlyRow("Terminal bead", profile.terminalBeadRatio > 0 ? `${profile.terminalBeadRatio.toFixed(2)}x` : "None"));
-    rows.push(readonlyRow("Origin pooling", profile.originPoolingRatio > 0 ? `${profile.originPoolingRatio.toFixed(2)}x` : "None"));
+    rows.push(...this.renderSharedBrushProperties("paint-marker", variant.id, profile, (updated) => {
+      profile = updated;
+      const ctx2 = canvas.getContext("2d");
+      if (ctx2) renderMarkerBrushStudioPreview(ctx2, canvas.width, canvas.height, variant.id, width, updated.opacity);
+    }));
 
     // V0.10.2: Flow/Viscosity ("paint chemistry") live here now, not the
     // normal picker -- only shown for a variant that actually reads them
@@ -827,7 +935,10 @@ export class BrushStudioController {
     if (isWetMarkerVariant(variant.id)) {
       rows.push(this.buildFamilyLabel("Paint"));
       if (profile.wet) {
-        rows.push(readonlyRow("Squeeze response", `${profile.wet.squeezeResponse.toFixed(1)}x`));
+        const squeezeRow = document.createElement("div");
+        squeezeRow.className = "brush-studio-property-row readonly";
+        squeezeRow.innerHTML = `<span>Squeeze response</span><span class="brush-studio-property-value">${profile.wet.squeezeResponse.toFixed(1)}x</span>`;
+        rows.push(squeezeRow);
       }
       const wet = this.deps.getWetPaintControls();
       const flowRow = document.createElement("div");

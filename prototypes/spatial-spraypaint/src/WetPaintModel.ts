@@ -99,9 +99,14 @@ const WET_VARIANT_PROFILES: Record<WetMarkerVariantId, WetVariantProfile> = {
     // named failure. A substantial pooled root + upper body, tapering down
     // to a genuinely fine tail, needs both a bigger base/load width AND a
     // much lower tip ratio (more taper contrast) than before.
-    stemWidthBaseRatio: 0.12,
-    stemWidthLoadRatio: 0.09,
-    tipWidthRatio: 0.22,
+    // V0.10.15: thicker sustained body (0.12 -> 0.16 base) and a much
+    // gentler root-to-tip taper contrast (0.22 -> 0.4 -- the tip is now
+    // 40%, not 22%, of the body's own width) -- a liquid column that holds
+    // substantial width through most of its length, tapering only modestly
+    // near the very end, not an icicle.
+    stemWidthBaseRatio: 0.16,
+    stemWidthLoadRatio: 0.1,
+    tipWidthRatio: 0.4,
     originPoolRatio: 1.2,
     originOffsetRatio: 0.56,
     originSpanRatio: 0.54,
@@ -136,7 +141,19 @@ const WET_VARIANT_PROFILES: Record<WetMarkerVariantId, WetVariantProfile> = {
     // main drip," not a cluster.
     poolChannelDrain: 0.82,
     poolChannelCooldownMs: 660,
-    poolMaxChannelsPerNode: 2,
+    // V0.10.15 Pool Ownership Rule: a single localized reservoir (one pool
+    // node) may spawn AT MOST one gravity channel, full stop -- the "double
+    // dagger" defect (two narrow triangular channels forking from one
+    // stationary dot) was this cap allowing a SECOND channel from the SAME
+    // node once cooldown + a renewed-load bar cleared, which a sustained or
+    // squeezed dwell reached routinely. A genuinely distinct pooled area
+    // still gets its own channel -- that's a DIFFERENT node (see the
+    // mergeDistance-gated node search in `depositIntoPool`), not a second
+    // channel from this one. This is the structural fix, not a lowered
+    // probability: `channelsSpawned >= poolMaxChannelsPerNode` blocks a
+    // second spawn unconditionally once the first has fired, for the
+    // lifetime of this node.
+    poolMaxChannelsPerNode: 1,
     poolDecayPerSecond: 0.35,
   },
   "drip-mop": {
@@ -175,7 +192,8 @@ const WET_VARIANT_PROFILES: Record<WetMarkerVariantId, WetVariantProfile> = {
     poolMaxLoad: 4.4,
     poolChannelDrain: 0.8,
     poolChannelCooldownMs: 480,
-    poolMaxChannelsPerNode: 2,
+    // Same Pool Ownership Rule as Mop (V0.10.15): one reservoir, one channel.
+    poolMaxChannelsPerNode: 1,
     poolDecayPerSecond: 0.3,
   },
   "drippy-chisel": {
@@ -719,7 +737,17 @@ export class WetPaintAccumulator {
       ).origin
       : { x: node.x + offset, y: node.y };
     const dramatic = this.random() < profile.dramaticChance;
-    const loadFactor = Math.min(1, fluxShare / profile.poolThreshold);
+    // V0.10.15: with the Pool Ownership Rule capping a node at ONE channel
+    // (see `poolMaxChannelsPerNode`), Squeeze's own visible effect can no
+    // longer come from a second channel -- it has to come from THIS one
+    // channel being heavier/longer, which needs `loadFactor` to actually
+    // track how far the node overshot threshold at spawn time, not just
+    // whether it crossed it. Raised from a hard 1.0 clamp (which made
+    // Squeeze and baseline produce an IDENTICAL single channel, since any
+    // overshoot amount collapsed to the same loadFactor=1) to a 2.2
+    // ceiling -- still bounded, but wide enough for a heavier/squeezed
+    // deposit to spawn a visibly wider, longer dominant run.
+    const loadFactor = Math.min(2.2, fluxShare / profile.poolThreshold);
     const length = size * (
       profile.lengthMin
       + this.random() * profile.lengthRange * (0.4 + loadFactor * 0.6)
@@ -769,7 +797,7 @@ export class WetPaintAccumulator {
       // defect, not a pool-architecture one, so it's fixed here rather than
       // by changing how/where channels are triggered or spaced.
       originPoolRadius: node.radius * profile.originPoolRatio * (node.channelsSpawned === 0 ? 1 : 0.45),
-      terminalBulbRatio: this.variant === "drip-mop" ? 0.58 : 0.48,
+      terminalBulbRatio: this.variant === "drip-mop" ? 1.3 : 1.2,
       renderAsOverlay: true,
       // Kept modest on purpose: it only needs to tuck the seam under the
       // mark, not reach deep into the body -- a larger value risks poking
@@ -875,7 +903,7 @@ export class WetPaintAccumulator {
           0.68,
         ),
         originPoolRadius: width * profile.originPoolRatio,
-        terminalBulbRatio: this.variant === "drip-mop" ? 0.58 : 0.48,
+        terminalBulbRatio: this.variant === "drip-mop" ? 1.3 : 1.2,
         renderAsOverlay: this.variant === "mop" || this.variant === "drip-mop",
         attachmentUnderlap: this.variant === "mop" || this.variant === "drip-mop"
           ? size * 0.28

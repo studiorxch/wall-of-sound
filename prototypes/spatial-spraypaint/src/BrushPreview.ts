@@ -187,13 +187,14 @@ export function renderFlairPreview(
   }
 }
 
-/** Same richer path, for Paint Marker — real PaintMarkerEngine, optional live size override. */
+/** Same richer path, for Paint Marker — real PaintMarkerEngine, optional live size/opacity override (the centralized BrushProfile's own effective values). */
 export function renderMarkerBrushStudioPreview(
   ctx: CanvasRenderingContext2D,
   width: number,
   height: number,
   variantId: MarkerVariantId,
   sizeOverride?: number,
+  opacityOverride?: number,
 ): void {
   const variant = getMarkerVariant(variantId);
   ctx.clearRect(0, 0, width, height);
@@ -201,22 +202,30 @@ export function renderMarkerBrushStudioPreview(
   const points = buildStudioPreviewPoints(width, height, strokeWidth);
   const engine = new PaintMarkerEngine();
   engine.beginStroke(variantId);
-  engine.renderSegment(ctx, null, points[0], PREVIEW_COLOR, variantId);
+  engine.renderSegment(ctx, null, points[0], PREVIEW_COLOR, variantId, opacityOverride);
   for (let i = 1; i < points.length; i += 1) {
-    engine.renderSegment(ctx, points[i - 1], points[i], PREVIEW_COLOR, variantId);
+    engine.renderSegment(ctx, points[i - 1], points[i], PREVIEW_COLOR, variantId, opacityOverride);
   }
   engine.endStroke(ctx);
 }
 
+/**
+ * The picker card preview. Size and peak opacity are read from the
+ * centralized `BrushProfile` (not the raw preset) -- a real filled spray
+ * deposit through the actual engine, but the SAME authority Brush Studio
+ * and the drip system now also read, so a live opacity edit shows up here
+ * too, not just a second, independently-sourced picker.
+ */
 export function renderSprayCapPreviewToContext(
   ctx: CanvasRenderingContext2D,
   width: number,
   height: number,
   capId: SprayCapId | string,
 ): SprayCapPreset {
-  const preset = getSprayCapPreset(capId);
+  const profile = resolveBrushProfile("spray-can", capId);
+  const preset: SprayCapPreset = { ...getSprayCapPreset(capId), coreOpacity: profile.opacity };
   ctx.clearRect(0, 0, width, height);
-  const strokeWidth = clampStrokeWidth(preset.baseRadius * 2, height, 0.16);
+  const strokeWidth = clampStrokeWidth(profile.size * 2, height, 0.16);
   const points = buildPreviewPoints(width, height, strokeWidth);
   const engine = new SprayBrushEngine();
   const random = createStrokeRandom(PREVIEW_SEED);
@@ -227,21 +236,22 @@ export function renderSprayCapPreviewToContext(
   return preset;
 }
 
+/** Same authority as above, for the marker picker cards -- size/opacity read from `resolveBrushProfile`. */
 export function renderMarkerPreviewToContext(
   ctx: CanvasRenderingContext2D,
   width: number,
   height: number,
   variantId: MarkerVariantId,
 ): void {
-  const variant = getMarkerVariant(variantId);
+  const profile = resolveBrushProfile("paint-marker", variantId);
   ctx.clearRect(0, 0, width, height);
-  const strokeWidth = clampStrokeWidth(variant.defaultSize, height, 0.4);
+  const strokeWidth = clampStrokeWidth(profile.size, height, 0.4);
   const points = buildPreviewPoints(width, height, strokeWidth);
   const engine = new PaintMarkerEngine();
   engine.beginStroke(variantId);
-  engine.renderSegment(ctx, null, points[0], PREVIEW_COLOR, variantId);
+  engine.renderSegment(ctx, null, points[0], PREVIEW_COLOR, variantId, profile.opacity);
   for (let i = 1; i < points.length; i += 1) {
-    engine.renderSegment(ctx, points[i - 1], points[i], PREVIEW_COLOR, variantId);
+    engine.renderSegment(ctx, points[i - 1], points[i], PREVIEW_COLOR, variantId, profile.opacity);
   }
   engine.endStroke(ctx);
 }
@@ -277,7 +287,7 @@ export function renderMarkerSizeSample(
   variantId: MarkerVariantId,
   sizePx: number,
 ): void {
-  const footprint = resolveBrushProfile("paint-marker", variantId).previewFootprint;
+  const footprint = resolveBrushProfile("paint-marker", variantId).footprint;
   renderFootprintSample(ctx, width, height, footprint, sizePx);
 }
 

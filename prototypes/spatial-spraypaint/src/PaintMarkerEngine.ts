@@ -252,6 +252,11 @@ export class PaintMarkerEngine {
     point: StrokePoint,
     color: string,
     variantId: MarkerVariantId,
+    // The centralized BrushProfile's effective `opacity` (see
+    // BrushProfile.ts / DrawingToolRenderer.ts) -- undefined preserves the
+    // exact prior fully-opaque fill for every caller that doesn't pass it
+    // (every preview renderer, the replay path).
+    opacityOverride?: number,
   ): void {
     if (!this.stroke || this.stroke.variantId !== variantId || !previous) this.beginStroke(variantId);
     const stroke = this.stroke!;
@@ -271,8 +276,9 @@ export class PaintMarkerEngine {
     const geometry = targetGeometry;
 
     ctx.save();
-    ctx.fillStyle = color;
-    ctx.strokeStyle = color;
+    const effectiveColor = opacityOverride === undefined ? color : hexToRgba(color, opacityOverride);
+    ctx.fillStyle = effectiveColor;
+    ctx.strokeStyle = effectiveColor;
     ctx.lineJoin = "round";
     ctx.lineCap = "round";
 
@@ -440,4 +446,14 @@ function normalizeAngle(value: number): number {
   while (normalized > Math.PI) normalized -= Math.PI * 2;
   while (normalized < -Math.PI) normalized += Math.PI * 2;
   return normalized;
+}
+
+function hexToRgba(hex: string, alpha: number): string {
+  let value = hex.replace("#", "");
+  if (value.length === 3) value = value.split("").map((channel) => channel + channel).join("");
+  const numeric = Number.parseInt(value, 16);
+  const red = (numeric >> 16) & 255;
+  const green = (numeric >> 8) & 255;
+  const blue = numeric & 255;
+  return `rgba(${red}, ${green}, ${blue}, ${Math.max(0, Math.min(1, alpha)).toFixed(3)})`;
 }

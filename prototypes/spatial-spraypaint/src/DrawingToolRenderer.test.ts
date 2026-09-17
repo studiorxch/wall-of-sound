@@ -130,6 +130,53 @@ describe("shared Drawing Tool renderer", () => {
     expect(recording.calls).toContain("stroke");
   });
 
+  it("V0.10.15: the centralized BrushProfile's opacityOverride reaches actual rendering for BOTH Spray and Paint Marker -- proof a shared-panel edit changes the real mark, not just a readout", () => {
+    const spray = (opacityOverride?: number) => {
+      const style: ToolStrokeStyle = { toolId: "spray-can", variantId: "new-york-fat", color: "#e92f3d", size: 24, opacityOverride };
+      const recording = alphaRecordingContext();
+      new DrawingToolRenderer().renderSegment(recording.ctx, point(0), point(30), style, createStrokeRandom(9));
+      return recording.strokeStyles;
+    };
+    const full = spray(0.9);
+    const dim = spray(0.15);
+    expect(full.length).toBeGreaterThan(0);
+    expect(dim.length).toBe(full.length);
+    full.forEach((rgba, index) => {
+      const fullAlpha = Number.parseFloat(rgba.split(",")[3]);
+      const dimAlpha = Number.parseFloat(dim[index].split(",")[3]);
+      expect(dimAlpha).toBeLessThan(fullAlpha);
+    });
+
+    const markerFillStyle = (opacityOverride?: number) => {
+      const style: ToolStrokeStyle = { toolId: "paint-marker", variantId: "round", color: "#e92f3d", size: 24, opacityOverride };
+      let fillStyle = "";
+      const ctx = {
+        save: () => undefined,
+        restore: () => undefined,
+        beginPath: () => undefined,
+        moveTo: () => undefined,
+        lineTo: () => undefined,
+        closePath: () => undefined,
+        arc: () => undefined,
+        fill: () => undefined,
+        get fillStyle() { return fillStyle; },
+        set fillStyle(value: string | CanvasGradient | CanvasPattern) { fillStyle = String(value); },
+        strokeStyle: "",
+        lineJoin: "round",
+        lineCap: "round",
+        lineWidth: 0,
+      } as unknown as CanvasRenderingContext2D;
+      const renderer = new DrawingToolRenderer();
+      renderer.beginStroke(style);
+      renderer.renderSegment(ctx, null, point(0), style);
+      return fillStyle;
+    };
+    expect(markerFillStyle(undefined)).toBe("#e92f3d");
+    const dimMarker = markerFillStyle(0.2);
+    expect(dimMarker).not.toBe("#e92f3d");
+    expect(Number.parseFloat(dimMarker.split(",")[3])).toBeCloseTo(0.2, 2);
+  });
+
   it("dispatches Paint Marker without aerosol particles", () => {
     const style: ToolStrokeStyle = {
       toolId: "paint-marker",
