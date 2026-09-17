@@ -27,12 +27,17 @@ describe("BrushProfile", () => {
     }
   });
 
-  it("only exposes wet-only properties (flow/viscosity/squeeze response) on a wet-capable brush -- null everywhere else", () => {
+  it("every brush has a value for Flow/Viscosity (capability-based, not a second architecture); Squeeze Response is the one capability-gated property", () => {
     const round = resolveBrushProfile("paint-marker", "round");
     const chisel = resolveBrushProfile("paint-marker", "chisel");
     const spray = resolveBrushProfile("spray-can", "new-york-fat");
     const mop = resolveBrushProfile("paint-marker", "mop");
     const dripMop = resolveBrushProfile("paint-marker", "drip-mop");
+
+    for (const profile of [round, chisel, spray, mop, dripMop]) {
+      expect(["low", "balanced", "high"]).toContain(profile.paint.flow);
+      expect(["thick", "balanced", "runny"]).toContain(profile.paint.viscosity);
+    }
 
     expect(isWetBrushProfile(round)).toBe(false);
     expect(isWetBrushProfile(chisel)).toBe(false);
@@ -40,10 +45,12 @@ describe("BrushProfile", () => {
     expect(isWetBrushProfile(mop)).toBe(true);
     expect(isWetBrushProfile(dripMop)).toBe(true);
 
-    expect(mop.wet?.squeezeResponse).toBeGreaterThan(1);
-    expect(round.wet).toBeNull();
-    expect(chisel.wet).toBeNull();
-    expect(spray.wet).toBeNull();
+    expect(mop.squeeze.supported).toBe(true);
+    expect(mop.squeeze.response).toBeGreaterThan(1);
+    expect(round.squeeze.supported).toBe(false);
+    expect(chisel.squeeze.supported).toBe(false);
+    expect(spray.squeeze.supported).toBe(false);
+    expect(round.squeeze.response).toBe(1);
   });
 
   it("orders brush-specific drip tendency Round < Chisel < Mop, per the required default tuning", () => {

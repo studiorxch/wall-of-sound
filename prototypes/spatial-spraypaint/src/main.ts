@@ -99,13 +99,6 @@ import { TrackingQualityMonitor, type TrackingQualityAssessment } from "./Tracki
 import { resolveToolFeedback } from "./ToolFeedback";
 import { type InputSourceMode, type StrokePoint } from "./types";
 import { WetPaintAccumulator, isWetMarkerVariant } from "./WetPaintModel";
-import {
-  INITIAL_WET_PAINT_CONTROLS,
-  updateWetPaintControls,
-  type WetPaintControlState,
-  type WetPaintFlow,
-  type WetPaintViscosity,
-} from "./WetPaintControls";
 import { resolveWallComposition, type WallEnvironmentMode } from "./WallComposition";
 import {
   applyPan,
@@ -191,7 +184,6 @@ class SpatialSpraypaintApp {
     ...INITIAL_COLOR_PALETTE_STATE,
     recentColors: [...INITIAL_COLOR_PALETTE_STATE.recentColors],
   };
-  private wetPaintControls: WetPaintControlState = { ...INITIAL_WET_PAINT_CONTROLS };
   private markerWidths: MarkerWidthState = { ...INITIAL_MARKER_WIDTHS };
   private selectedBackground: SprayBackground = getSprayBackground("black");
   private settings: SettingsState = { ...INITIAL_SETTINGS_STATE, gridStyle: loadSavedGridStyle() };
@@ -283,6 +275,14 @@ class SpatialSpraypaintApp {
       resetFlairProperty: (capId, mode, key) => this.setSettings({ type: "reset-flair-property", capId, mode, key }),
       resetFlairMode: (capId, mode) => this.setSettings({ type: "reset-flair-mode", capId, mode }),
       setMarkerWidth: (id, width) => {
+        // BrushProfile's override store is the canonical write target for
+        // `size` (see BrushProfile.ts); `this.markerWidths` is kept as a
+        // synchronized compatibility mirror for the several other direct
+        // readers of it elsewhere in this file (the normal picker's size
+        // row, Flair's own size-restore path, etc. -- none of those are
+        // touched this pass). `setMarkerWidth` is the ONLY writer of
+        // either, in this order, so there is one real source of truth.
+        this.brushProfileOverrides = setBrushProfileOverride(this.brushProfileOverrides, "paint-marker", id, { size: width });
         this.markerWidths = selectMarkerWidth(this.markerWidths, id, width);
         if (this.toolSelection.markerVariantId === id) this.baseRadius = width;
         this.updateRadiusUi();
@@ -293,10 +293,6 @@ class SpatialSpraypaintApp {
         this.brushProfileOverrides = setBrushProfileOverride(this.brushProfileOverrides, toolId, id, patch);
       },
       openCalibrationBench: (capId) => this.calibrationBench.open(capId),
-      getWetPaintControls: () => this.wetPaintControls,
-      setWetPaintControls: (patch) => {
-        this.wetPaintControls = updateWetPaintControls(this.wetPaintControls, patch);
-      },
     });
     this.compositeCanvas = this.requireElement<HTMLCanvasElement>("composite-canvas");
     this.compositeCtx = this.compositeCanvas.getContext("2d")!;
@@ -1333,7 +1329,12 @@ class SpatialSpraypaintApp {
   }
 
   private effectiveSprayStyle(capId: string) {
-    return resolveEffectiveSprayStyle(getSprayCapPreset(capId), this.sprayOverrideFor(capId));
+    const legacy = resolveEffectiveSprayStyle(getSprayCapPreset(capId), this.sprayOverrideFor(capId));
+    // `size` is canonically owned by BrushProfile now (see
+    // BrushProfile.ts) -- authoritative here over the legacy
+    // `SprayPropertyOverride.size` mirror `resolveEffectiveSprayStyle`
+    // itself still reads.
+    return { ...legacy, size: resolveBrushProfile("spray-can", capId, this.brushProfileOverrides).size };
   }
 
   private selectedToolDefaultSize(): number {
@@ -1912,7 +1913,15 @@ class SpatialSpraypaintApp {
       this.activeStrokeRandom = createStrokeRandom(strokeId);
       this.toolRenderer.beginStroke(style);
       if (style.toolId === "paint-marker" && isWetMarkerVariant(style.variantId)) {
-        this.wetPaintAccumulator.beginStroke(strokeId, style.variantId, this.wetPaintControls);
+        // Flow/Viscosity are now centralized BrushProfile properties (see
+        // BrushProfile.ts) -- the canonical resolved profile's own
+        // `paint` block is what actually drives Mop's wet-paint physics
+        // here, not a separate `wetPaintControls` authority. The old
+        // standalone `wetPaintControls` state is kept only as a
+        // compatibility mirror (see `setBrushProfileProperty`'s dep
+        // below) so any other direct reader stays in sync.
+        const paint = resolveBrushProfile("paint-marker", style.variantId, this.brushProfileOverrides).paint;
+        this.wetPaintAccumulator.beginStroke(strokeId, style.variantId, paint);
       }
     } else {
       this.strokeHistory.finalize();

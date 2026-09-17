@@ -107,7 +107,14 @@ const WET_VARIANT_PROFILES: Record<WetMarkerVariantId, WetVariantProfile> = {
     stemWidthBaseRatio: 0.16,
     stemWidthLoadRatio: 0.1,
     tipWidthRatio: 0.4,
-    originPoolRatio: 1.2,
+    // V0.10.16: reduced from 1.2 -- at 1.2, the pooled shoulder's own
+    // diameter (2 * node.radius * ratio) exceeded the mark's own rendered
+    // width, so the root's flat starting edge stuck out sideways past the
+    // body's silhouette as a pair of horizontal "wings"/a shelf. At 0.85
+    // the shoulder stays within (or just at) the mark's own width -- reads
+    // as liquid pooling at the edge of the stroke, not a wider primitive
+    // stamped on top of it.
+    originPoolRatio: 0.85,
     originOffsetRatio: 0.56,
     originSpanRatio: 0.54,
     durationMinMs: 1050,
@@ -775,6 +782,7 @@ export class WetPaintAccumulator {
       length,
       opacity: clamp(0.6 + paintLoad * 0.26, 0, 0.92),
       bend: (this.random() - 0.5) * length * profile.bendRatio,
+      wanderSeed: this.random() * Math.PI * 2,
       kink,
       kinkAt: kink === 0 ? undefined : 0.3 + this.random() * 0.25,
       kink2,
@@ -888,6 +896,7 @@ export class WetPaintAccumulator {
         length,
         opacity: clamp(0.58 + paintLoad * 0.28, 0, 0.92),
         bend: (this.random() - 0.5) * length * profile.bendRatio,
+      wanderSeed: this.random() * Math.PI * 2,
         kink,
         kinkAt: kink === 0 ? undefined : 0.22 + this.random() * 0.24,
         kink2,

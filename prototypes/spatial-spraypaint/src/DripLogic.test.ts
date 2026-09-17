@@ -157,6 +157,40 @@ describe("continuous wet drip geometry", () => {
     expect(body50 - body75).toBeLessThan(body75 - terminal);
   });
 
+  it("V0.10.16: narrows only mildly and late, then the SAME continuous width curve widens smoothly into the terminal bead -- no separate circle, no long triangular taper to zero", () => {
+    const beadedDrip = { ...wetDrip, terminalBulbRatio: 1.2 };
+    const strip = buildContinuousDripStrip(beadedDrip, 200);
+    const at = (progress: number) => strip.reduce((best, section) => (
+      Math.abs(section.progress - progress) < Math.abs(best.progress - progress) ? section : best
+    ));
+    const root = at(0).width;
+    const body70 = at(0.7).width;
+    const narrowestPoint = at(0.86).width;
+    const terminal = at(1).width;
+    // The body carries most of its width through 70% of the run -- far
+    // gentler than a linear taper would give at this fixture's own (fairly
+    // aggressive) tipWidthRatio (a linear taper would already be down to
+    // ~51% of root by 70%; the delayed-narrowing curve stays well above
+    // that).
+    expect(body70).toBeGreaterThan(root * 0.7);
+    // The narrowest point of the whole curve sits late (around the bead
+    // zone's own start), never all the way down near zero -- no long
+    // triangular taper.
+    expect(narrowestPoint).toBeGreaterThan(root * 0.4);
+    // Terminal bead: the curve widens back out past its own narrowest
+    // point, ending visibly wider than the body immediately before it --
+    // the bead "emerges" from the same continuous curve.
+    expect(terminal).toBeGreaterThan(narrowestPoint);
+    expect(terminal).toBeGreaterThan(body70);
+    // Continuity: no discontinuous jump anywhere along the curve (the
+    // widest single-step change between adjacent samples stays a small
+    // fraction of the drip's own base width -- proof this is one smooth
+    // field, not primitives glued together).
+    const widths = strip.map((section) => section.width);
+    const maxStep = Math.max(...widths.slice(1).map((w, i) => Math.abs(w - widths[i])));
+    expect(maxStep).toBeLessThan(beadedDrip.width * 0.05);
+  });
+
   it("shapes a Mop overlay drip's root as a wide shoulder narrowing into a neck via width interpolation -- never a flat plateau or a separate circle", () => {
     const pooledDrip = { ...wetDrip, renderAsOverlay: true, originPoolRadius: 22 };
     const strip = buildContinuousDripStrip(pooledDrip, 40);
@@ -173,7 +207,7 @@ describe("continuous wet drip geometry", () => {
     // the end of the shoulder span (no residual bulge past the neck).
     const afterNeck = strip.find((section) => section.progress > 0.22)!;
     const stemWidthAtSpanEnd = pooledDrip.width * (
-      1 - (1 - pooledDrip.tipWidthRatio) * afterNeck.progress ** 4
+      1 - (1 - pooledDrip.tipWidthRatio) * afterNeck.progress ** 3
     );
     expect(afterNeck.width).toBeCloseTo(stemWidthAtSpanEnd, 1);
   });

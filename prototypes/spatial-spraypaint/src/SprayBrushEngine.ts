@@ -1,6 +1,7 @@
 import {
   buildContinuousDripStrip,
   resolveDripStripSection,
+  traceDripSilhouettePath,
   type DripSeed,
   type DripStripSection,
 } from "./DripLogic";
@@ -1447,16 +1448,16 @@ export class SprayBrushEngine {
         // visible bands where progressive wet-strip sections meet on the
         // persistent paint layer — the gradient's own coordinates never
         // change frame to frame, only which small slice of it gets painted.
+        // Incremental sliver painting (this frame's small new segment onto
+        // the PERSISTENT layer) -- the terminal bead is no longer a
+        // separate circle stamped on the last frame; `resolveDripStripSection`'s
+        // own width field already widens smoothly into the bead by
+        // progress 1, so this sliver's own end is already the right shape.
         ctx.fillStyle = this.dripFillStyle(ctx, drip, drip.color, drip.opacity * 0.82);
         this.fillDripStrip(ctx, [
           resolveDripStripSection(drip, drip.lastProgress),
           resolveDripStripSection(drip, progress),
         ]);
-        if (progress === 1 && drip.terminalBulbRatio) {
-          ctx.beginPath();
-          ctx.arc(endX, endY, Math.max(0.7, drip.width * drip.terminalBulbRatio * 0.5), 0, Math.PI * 2);
-          ctx.fill();
-        }
       } else {
         ctx.strokeStyle = this.hexToRgba(drip.color, drip.opacity * (1 - progress * 0.24));
         ctx.lineWidth = Math.max(0.8, drip.width * (1 - progress * 0.42));
@@ -1489,19 +1490,10 @@ export class SprayBrushEngine {
     if (drip.tipWidthRatio !== undefined) {
       ctx.fillStyle = this.dripFillStyle(ctx, drip, color, drip.opacity * 0.82);
       const strip = buildContinuousDripStrip(drip);
-      this.fillDripStrip(ctx, strip);
-      if (drip.terminalBulbRatio) {
-        const tip = strip[strip.length - 1];
-        ctx.beginPath();
-        ctx.arc(
-          tip.center.x,
-          tip.center.y,
-          Math.max(0.7, drip.width * drip.terminalBulbRatio * 0.5),
-          0,
-          Math.PI * 2,
-        );
-        ctx.fill();
-      }
+      // ONE continuous silhouette (root, body, and terminal bead) traced
+      // and filled in a single path -- no separate circle stamped at
+      // either end (see `traceDripSilhouettePath`'s own doc).
+      traceDripSilhouettePath(ctx, strip);
     } else {
       ctx.lineWidth = Math.max(0.8, drip.width * 0.72);
       ctx.beginPath();

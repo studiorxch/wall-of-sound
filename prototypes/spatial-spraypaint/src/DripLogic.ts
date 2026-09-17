@@ -45,6 +45,15 @@ export interface DripSeed {
    */
   kink2?: number;
   kinkAt2?: number;
+  /**
+   * A single, gentle low-frequency S-curve across the WHOLE run (see
+   * `resolveDripStripSection`'s own doc) -- `wanderRatio` is the amplitude
+   * as a fraction of `length` (default 0.03, deliberately small: gravity
+   * must still visibly dominate), `wanderSeed` phase-shifts it per drip
+   * (0-2π) so neighboring drips don't wander in lockstep.
+   */
+  wanderRatio?: number;
+  wanderSeed?: number;
   durationMs?: number;
   tipWidthRatio?: number;
   originPoolRadius?: number;
@@ -63,12 +72,70 @@ export interface DripStripSection {
   width: number;
 }
 
+/** Smoothstep, clamped to [0, 1] input. */
+function smooth01(t: number): number {
+  const clamped = Math.min(1, Math.max(0, t));
+  return clamped * clamped * (3 - clamped * 2);
+}
+
+/**
+ * The drip's width as a single continuous function of progress -- root
+ * shoulder, neck, body, and terminal bead are all ONE curve, never
+ * independent primitives (no stamped root circle/rectangle, no separate
+ * terminal circle drawn on top -- see `resolveDripStripSection`'s own doc
+ * and, for the renderers, `renderContinuousDripSilhouette`).
+ *
+ * Shape, low to high progress:
+ * - [0, shoulderSpan]: an already-pooled origin (Mop's `originPoolRadius`)
+ *   blends smoothly (smoothstep, C1-continuous, no flat plateau) down into
+ *   the body's own near-full width -- liquid sagging out of the stroke,
+ *   not a shape stamped on top of it.
+ * - (shoulderSpan, ~0.86): the body holds close to full width, narrowing
+ *   only mildly and late (`progress**3` easing keeps almost all of the
+ *   loss in the final stretch) -- a liquid column, not a triangle.
+ * - (~0.86, 1]: instead of continuing to the point a stamped bead used to
+ *   cover up, the width itself smoothly WIDENS back out toward
+ *   `terminalBulbRatio * drip.width` -- the accumulated terminal bead
+ *   emerges from the same curve, no separate circle.
+ */
+function resolveDripWidth(drip: DripSeed, safeProgress: number): number {
+  const tipWidthRatio = drip.tipWidthRatio ?? 0.58;
+  const taperAmount = 1 - tipWidthRatio;
+  // Narrowing arrives late -- a cubic ease keeps the body within a few
+  // percent of full width through roughly the first 70-80% of the run.
+  const taperEase = safeProgress ** 3;
+  const narrowedWidth = drip.width * (1 - taperAmount * taperEase);
+
+  // Terminal bead: the last stretch smoothly widens back out toward
+  // `terminalBulbRatio * drip.width` instead of narrowing all the way to
+  // a point -- the bead emerges from this same curve, never a separate
+  // circle. `terminalBulbRatio` at/under 0 (a caller that never sets it)
+  // leaves this stage a no-op, same as before.
+  const terminalBulbRatio = drip.terminalBulbRatio ?? 0;
+  let stemWidth = narrowedWidth;
+  if (terminalBulbRatio > 0) {
+    const beadZoneStart = 0.86;
+    const beadBlend = smooth01((safeProgress - beadZoneStart) / (1 - beadZoneStart));
+    const beadTargetWidth = drip.width * terminalBulbRatio;
+    stemWidth = narrowedWidth + (beadTargetWidth - narrowedWidth) * beadBlend;
+  }
+
+  // Root shoulder: independent of the bead stage above -- applies at the
+  // OTHER end of the run (low progress) regardless of whether this drip
+  // has a terminal bead at all.
+  const shoulderWidth = drip.renderAsOverlay && drip.originPoolRadius
+    ? Math.max(stemWidth, drip.originPoolRadius * 2)
+    : stemWidth;
+  const shoulderSpan = 0.22;
+  const neckBlend = 1 - smooth01(safeProgress / shoulderSpan);
+  return Math.max(0.8, stemWidth + (shoulderWidth - stemWidth) * neckBlend);
+}
+
 export function resolveDripStripSection(
   drip: DripSeed,
   progress: number,
 ): DripStripSection {
   const safeProgress = Math.min(1, Math.max(0, progress));
-  const eased = safeProgress * safeProgress;
   const bend = drip.bend ?? 0;
   const kinkOffset = (offset: number | undefined, at: number | undefined, localProgress: number) => {
     if (!offset) return 0;
@@ -80,11 +147,21 @@ export function resolveDripStripSection(
       : 0;
     return offset * kinkEnvelope;
   };
+  // A real drip's gravity path isn't a perfectly straight vertical strip --
+  // it wanders slightly. One gentle low-frequency S-curve (never a zigzag:
+  // a single sine period across the WHOLE run, tiny amplitude relative to
+  // `length`) layered under the existing bend/kink system, so gravity
+  // still visibly dominates the overall direction.
+  const wanderAmplitude = (drip.wanderRatio ?? 0.03) * drip.length;
+  const wanderPhase = drip.wanderSeed ?? 0;
+  const wander = (localProgress: number) =>
+    Math.sin(localProgress * Math.PI + wanderPhase) * wanderAmplitude * localProgress;
   const resolveCenter = (value: number) => {
     const localProgress = Math.min(1, Math.max(0, value));
     const localEased = localProgress * localProgress;
     return {
       x: drip.x + bend * localEased
+        + wander(localProgress)
         + kinkOffset(drip.kink, drip.kinkAt, localProgress)
         + kinkOffset(drip.kink2, drip.kinkAt2, localProgress),
       y: drip.y + drip.length * localEased,
@@ -98,33 +175,7 @@ export function resolveDripStripSection(
   const tangentY = tangentEnd.y - tangentStart.y;
   const tangentLength = Math.max(0.0001, Math.hypot(tangentX, tangentY));
   const normal = { x: -tangentY / tangentLength, y: tangentX / tangentLength };
-  const tipWidthRatio = drip.tipWidthRatio ?? 0.58;
-  // Ink/paint drips hold their body width for most of their length and
-  // only taper meaningfully near the end -- a near-linear taper (the old
-  // formula) reads as an icicle/triangle instead of a liquid line. Easing
-  // PROGRESS itself (not just the width delta) through a rising power
-  // curve delays almost all of the narrowing into roughly the final
-  // quarter to third of the run: at 65% of the way down a drip is still
-  // within a fraction of a percent of its full body width, and by 85% only
-  // about half the total taper has happened.
-  const taperEase = safeProgress ** 4;
-  const stemWidth = drip.width * (1 - (1 - tipWidthRatio) * taperEase);
-  const shoulderWidth = drip.renderAsOverlay && drip.originPoolRadius
-    ? Math.max(stemWidth, drip.originPoolRadius * 2)
-    : stemWidth;
-  // The root's shape comes ENTIRELY from width interpolation along the
-  // strip -- never a separate circle or rectangle primitive layered on top
-  // (an earlier pass added a circle; removed -- see WetDripEngine.ts). A
-  // smooth (C1-continuous, no flat plateau, no hard corners) ease from the
-  // pooled shoulder width down into the body reads as liquid sagging out
-  // of the stroke rather than a stamped shape. Because the body taper
-  // above is now delayed (stays close to full width through the early
-  // run), the target this eases TOWARD is itself still wide here, so the
-  // transition is gentle without needing a very short/steep span.
-  const shoulderSpan = 0.22;
-  const shoulderProgress = Math.min(1, safeProgress / shoulderSpan);
-  const neckBlend = 1 - shoulderProgress * shoulderProgress * (3 - shoulderProgress * 2);
-  const width = Math.max(0.8, stemWidth + (shoulderWidth - stemWidth) * neckBlend);
+  const width = resolveDripWidth(drip, safeProgress);
   return {
     progress: safeProgress,
     center,
@@ -132,6 +183,54 @@ export function resolveDripStripSection(
     right: { x: center.x - normal.x * width * 0.5, y: center.y - normal.y * width * 0.5 },
     width,
   };
+}
+
+/**
+ * Traces ONE continuous silhouette for a drip strip -- root, body, and
+ * terminal bead are all part of the SAME path and the SAME `fill()` call,
+ * capped at both ends by a true rounded arc (not a separate circle drawn
+ * afterward, and not a flat mechanical crossbar). The width field itself
+ * already carries the bead bulge (see `resolveDripWidth`); this function's
+ * only job is to close that shape off smoothly at both ends instead of
+ * with a straight line.
+ *
+ * Callers (`WetDripEngine`, `SprayBrushEngine`) call this in place of their
+ * old separate `fillStrip` + `fillRoundedTip` pair.
+ */
+export function traceDripSilhouettePath(
+  ctx: CanvasRenderingContext2D,
+  sections: readonly DripStripSection[],
+): void {
+  if (sections.length < 2) return;
+  const angleOf = (point: { x: number; y: number }, center: { x: number; y: number }) =>
+    Math.atan2(point.y - center.y, point.x - center.x);
+
+  ctx.beginPath();
+  const root = sections[0];
+  ctx.moveTo(root.left.x, root.left.y);
+  for (const section of sections.slice(1)) ctx.lineTo(section.left.x, section.left.y);
+
+  const tip = sections[sections.length - 1];
+  const tipRadius = tip.width * 0.5;
+  if (tipRadius > 0.4) {
+    // Sweeps from the tip's left point, through the forward (downward)
+    // tangent direction, to its right point -- a true rounded cap fused
+    // into the same path, not a circle stamped on afterward.
+    ctx.arc(tip.center.x, tip.center.y, tipRadius, angleOf(tip.left, tip.center), angleOf(tip.right, tip.center), true);
+  } else {
+    ctx.lineTo(tip.right.x, tip.right.y);
+  }
+
+  for (let i = sections.length - 2; i >= 0; i -= 1) ctx.lineTo(sections[i].right.x, sections[i].right.y);
+
+  const rootRadius = root.width * 0.5;
+  if (rootRadius > 0.4) {
+    // Same technique at the root, swept the other way so the cap bulges
+    // backward (away from the body) instead of biting into it.
+    ctx.arc(root.center.x, root.center.y, rootRadius, angleOf(root.right, root.center), angleOf(root.left, root.center), true);
+  }
+  ctx.closePath();
+  ctx.fill();
 }
 
 export function buildContinuousDripStrip(
@@ -218,6 +317,7 @@ export class DripAccumulator {
       // already tangent-to-vertical at the root), so even the eventual
       // total lateral drift by the tip stays subtle.
       bend: (Math.random() - 0.5) * length * 0.05,
+      wanderSeed: Math.random() * Math.PI * 2,
     };
   }
 

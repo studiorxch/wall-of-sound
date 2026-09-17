@@ -1,4 +1,4 @@
-import { buildContinuousDripStrip, type DripSeed, type DripStripSection } from "./DripLogic";
+import { buildContinuousDripStrip, traceDripSilhouettePath, type DripSeed, type DripStripSection } from "./DripLogic";
 
 interface ActiveWetDrip extends DripSeed {
   color: string;
@@ -69,8 +69,7 @@ export class WetDripEngine {
     const strip = prependHiddenDripUnderlap(drip, buildContinuousDripStrip(drip, 24));
     ctx.save();
     ctx.fillStyle = this.createGradient(ctx, drip, color);
-    this.fillStrip(ctx, strip);
-    this.fillRoundedTip(ctx, strip[strip.length - 1], drip.terminalBulbRatio);
+    traceDripSilhouettePath(ctx, strip);
     ctx.restore();
   }
 
@@ -86,8 +85,7 @@ export class WetDripEngine {
     );
     ctx.save();
     ctx.fillStyle = this.createGradient(ctx, drip, drip.color);
-    this.fillStrip(ctx, strip);
-    this.fillRoundedTip(ctx, strip[strip.length - 1], drip.terminalBulbRatio);
+    traceDripSilhouettePath(ctx, strip);
     ctx.restore();
   }
 
@@ -111,34 +109,6 @@ export class WetDripEngine {
     return gradient;
   }
 
-  private fillStrip(
-    ctx: CanvasRenderingContext2D,
-    sections: readonly DripStripSection[],
-  ): void {
-    if (sections.length < 2) return;
-    ctx.beginPath();
-    ctx.moveTo(sections[0].left.x, sections[0].left.y);
-    for (const section of sections.slice(1)) ctx.lineTo(section.left.x, section.left.y);
-    for (const section of [...sections].reverse()) ctx.lineTo(section.right.x, section.right.y);
-    ctx.closePath();
-    ctx.fill();
-  }
-
-  private fillRoundedTip(
-    ctx: CanvasRenderingContext2D,
-    tip: DripStripSection,
-    terminalBulbRatio = 0.5,
-  ): void {
-    ctx.beginPath();
-    ctx.arc(
-      tip.center.x,
-      tip.center.y,
-      Math.max(0.7, tip.width * terminalBulbRatio * 0.5),
-      0,
-      Math.PI * 2,
-    );
-    ctx.fill();
-  }
 }
 
 function hexToRgba(hex: string, alpha: number): string {

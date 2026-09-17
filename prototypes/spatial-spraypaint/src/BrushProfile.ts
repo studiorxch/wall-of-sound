@@ -2,6 +2,7 @@ import { getSprayCapPreset, type SprayCapPreset } from "./SprayCapPresets";
 import { getMarkerVariant, type MarkerVariantDefinition } from "./PaintMarkerEngine";
 import { getWetPaintProfile, isWetMarkerVariant, type WetMarkerVariantId } from "./WetPaintModel";
 import { type DrawingToolId, type MarkerVariantId } from "./DrawingTool";
+import { type WetPaintFlow, type WetPaintViscosity } from "./WetPaintControls";
 
 /**
  * The single canonical brush-property schema every drawing tool resolves
@@ -15,7 +16,18 @@ import { type DrawingToolId, type MarkerVariantId } from "./DrawingTool";
  * producing the ONE effective profile every renderer, Brush Studio panel,
  * and preview reads. An edit updates the store; the very next resolve call
  * (which every render path makes fresh, not from a cached copy) reflects
- * it — there is no second, independently-writable settings surface.
+ * it — there is no second, independently-writable settings surface for any
+ * field this schema owns.
+ *
+ * V0.10.16: `paint.flow`/`paint.viscosity` moved from a Mop-only
+ * `WetPaintControlState` island into this universal schema -- EVERY brush
+ * now has a value for them (a capability/applicability question, not a
+ * second architecture), even though today only the wet-marker rendering
+ * path (`WetPaintAccumulator`) actually consumes them for its physics; a
+ * dry brush's flow/viscosity are descriptive/centralized but not yet wired
+ * into a dry-ink physics model of their own. `squeeze.supported` is the
+ * capability flag the UI uses to show/hide the Squeeze Response control,
+ * replacing the old "wet is null" pattern for that one property.
  */
 
 export type BrushFootprintShape = "round" | "chisel" | "mop" | "spray";
@@ -44,12 +56,17 @@ export interface BrushDripProperties {
   sourceOpacityCeiling: number;
 }
 
-/** Wet-only properties: present and editable only for a wet-capable brush (Mop today). `null` on every dry brush -- that absence IS the hide/disable signal for the UI. */
-export interface BrushWetProperties {
-  flow: "low" | "balanced" | "high";
-  viscosity: "thick" | "balanced" | "runny";
-  /** How strongly Squeeze raises deposition for this brush -- 1 = no response. */
-  squeezeResponse: number;
+/** Deposition/paint properties every brush owns a value for -- not just wet markers. */
+export interface BrushPaintProperties {
+  flow: WetPaintFlow;
+  viscosity: WetPaintViscosity;
+}
+
+/** Input-response capability: whether Squeeze applies to this brush, and how strongly. */
+export interface BrushSqueezeProperties {
+  supported: boolean;
+  /** How strongly Squeeze raises deposition for this brush -- 1 = no response (the value when `supported` is false). */
+  response: number;
 }
 
 export type BrushFamily = "spray" | "round" | "chisel" | "mop";
@@ -61,21 +78,28 @@ export interface BrushProfile {
   size: number;
   /** Peak/core opacity this brush's own mark reaches at full load. */
   opacity: number;
+  paint: BrushPaintProperties;
   drip: BrushDripProperties;
-  wet: BrushWetProperties | null;
+  squeeze: BrushSqueezeProperties;
   footprint: BrushFootprintDescriptor;
 }
 
 // ---------------------------------------------------------------------------
-// The single writable truth. Every live edit to a shared property (Opacity,
-// Drip tendency, ...) goes through this store, keyed by `${toolId}:${id}` --
-// never a second, per-family override state.
+// The single writable truth. Every live edit to a shared property (Size,
+// Opacity, Flow, Viscosity, Drip tendency, Drip body width, Taper, Terminal
+// bead, Origin pooling) goes through this store, keyed by `${toolId}:${id}`
+// -- never a second, per-family override state for any of these fields.
 
 export interface BrushProfilePropertyOverride {
+  size?: number;
   opacity?: number;
+  flow?: WetPaintFlow;
+  viscosity?: WetPaintViscosity;
   dripTendency?: number;
   dripBodyWidth?: number;
   dripTaper?: number;
+  dripTerminalBead?: number;
+  dripOriginPooling?: number;
 }
 
 export type BrushProfileOverrideStore = Readonly<Record<string, BrushProfilePropertyOverride>>;
@@ -121,8 +145,15 @@ function resolveSprayProfile(capId: string, override: BrushProfilePropertyOverri
     family: "spray",
     id: preset.id,
     name: preset.name,
-    size: preset.baseRadius,
+    size: override.size ?? preset.baseRadius,
     opacity,
+    // Spray has no per-cap flow/viscosity physics model of its own -- "cap
+    // output" reads as a high, fairly runny aerosol by default, distinct
+    // from the flat "balanced" placeholder a dry marker gets.
+    paint: {
+      flow: override.flow ?? "high",
+      viscosity: override.viscosity ?? "runny",
+    },
     drip: {
       tendency,
       // Matches the width formula DripAccumulator.observe derives a Spray
@@ -131,14 +162,14 @@ function resolveSprayProfile(capId: string, override: BrushProfilePropertyOverri
       // dripBodyWidth.
       bodyWidth: override.dripBodyWidth ?? (0.11 + tendency * 0.05),
       taper: override.dripTaper ?? 0.28,
-      terminalBead: 1.15,
-      originPooling: 0,
+      terminalBead: override.dripTerminalBead ?? 1.15,
+      originPooling: override.dripOriginPooling ?? 0,
       // A drip must never read as more opaque than the wash that produced
       // it -- Spray's own coreOpacity IS the ceiling, tracking any live
       // opacity edit rather than the unedited preset default.
       sourceOpacityCeiling: opacity,
     },
-    wet: null,
+    squeeze: { supported: false, response: 1 },
     footprint: {
       shape: "spray",
       aspectRatio: preset.anisotropy < 1 ? 1 / preset.anisotropy : 1,
@@ -171,17 +202,24 @@ function resolveDryMarkerProfile(
     family,
     id: variant.id,
     name: variant.name,
-    size: variant.defaultSize,
+    size: override.size ?? variant.defaultSize,
     opacity,
+    // A dry marker's own "ink chemistry" defaults: lower flow, thicker
+    // than Mop's runny wash -- centralized here even though no dry-ink
+    // physics model reads them yet (see this file's own module doc).
+    paint: {
+      flow: override.flow ?? "low",
+      viscosity: override.viscosity ?? "thick",
+    },
     drip: {
       tendency,
       bodyWidth: override.dripBodyWidth ?? (0.11 + tendency * 0.05),
       taper: override.dripTaper ?? 0.28,
-      terminalBead: tendency > 0 ? 1.15 : 0,
-      originPooling: 0,
+      terminalBead: override.dripTerminalBead ?? (tendency > 0 ? 1.15 : 0),
+      originPooling: override.dripOriginPooling ?? 0,
       sourceOpacityCeiling: opacity,
     },
-    wet: null,
+    squeeze: { supported: false, response: 1 },
     footprint: resolveMarkerFootprint(variant.id),
   };
 }
@@ -198,8 +236,12 @@ function resolveWetMarkerProfile(
     family: "mop",
     id: variant.id,
     name: variant.name,
-    size: variant.defaultSize,
+    size: override.size ?? variant.defaultSize,
     opacity,
+    paint: {
+      flow: override.flow ?? "high",
+      viscosity: override.viscosity ?? "runny",
+    },
     drip: {
       tendency,
       // Mop's own pool model already owns real, hard-won width/taper/
@@ -210,15 +252,11 @@ function resolveWetMarkerProfile(
       // pool-channel renderer actually uses.
       bodyWidth: override.dripBodyWidth ?? pool.stemWidthBaseRatio,
       taper: override.dripTaper ?? (1 - pool.tipWidthRatio),
-      terminalBead: 1.15,
-      originPooling: pool.originPoolRatio,
+      terminalBead: override.dripTerminalBead ?? 1.15,
+      originPooling: override.dripOriginPooling ?? pool.originPoolRatio,
       sourceOpacityCeiling: opacity,
     },
-    wet: {
-      flow: "balanced",
-      viscosity: "balanced",
-      squeezeResponse: MOP_SQUEEZE_RESPONSE,
-    },
+    squeeze: { supported: true, response: MOP_SQUEEZE_RESPONSE },
     footprint: resolveMarkerFootprint(variant.id),
   };
 }
@@ -254,5 +292,5 @@ export function resolveBrushProfile(
 }
 
 export function isWetBrushProfile(profile: BrushProfile): boolean {
-  return profile.wet !== null;
+  return profile.squeeze.supported;
 }

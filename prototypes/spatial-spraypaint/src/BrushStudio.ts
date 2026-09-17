@@ -43,8 +43,6 @@ import {
 } from "./BrushProfile";
 import { getSprayCapPreset, SPRAY_CAP_PRESETS, type SprayCapFamily, type SprayCapId, type SprayCapPreset } from "./SprayCapPresets";
 import { PLUME_MAX_ANGLE_DEGREES } from "./SprayBrushEngine";
-import { isWetMarkerVariant } from "./WetPaintModel";
-import { type WetPaintControlState } from "./WetPaintControls";
 
 /**
  * Pure list/grouping/labeling logic for Brush Studio's middle (Brushes)
@@ -208,20 +206,14 @@ export interface BrushStudioDeps {
   /** Opens the Spray Cap Calibration Bench with the given cap as its Left brush. Spray-only — see `renderMarkerProperties`, which disables the button entirely. */
   openCalibrationBench: (capId: string) => void;
   /**
-   * V0.10.2 Marker + Spray Control Reduction: Flow/Viscosity are "paint
-   * chemistry" — removed from the normal marker picker entirely, but they
-   * still need a live home per the brief's own "they belong to the brush
-   * definition / Brush Studio." Global (not per-marker-variant) state, same
-   * as before this pass — only where it's editable changed, not its shape.
-   */
-  getWetPaintControls: () => WetPaintControlState;
-  setWetPaintControls: (patch: Partial<WetPaintControlState>) => void;
-  /**
    * The one writable BrushProfile override store (see BrushProfile.ts) --
-   * every family's shared property edits (Opacity, Drip tendency) go
+   * every family's shared property edits (Size, Opacity, Flow, Viscosity,
+   * Drip tendency/body width/taper/terminal bead/origin pooling) go
    * through `setBrushProfileProperty`, keyed by (toolId, id), and every
-   * profile read (`resolveBrushProfile`) merges it back in. Not a second,
-   * per-family override surface.
+   * profile read (`resolveBrushProfile`) merges it back in. V0.10.16
+   * folded Flow/Viscosity into this store too (previously a separate
+   * `WetPaintControlState` global, Mop-only) -- not a second, per-family
+   * override surface for any shared property.
    */
   getBrushProfileOverrides: () => BrushProfileOverrideStore;
   setBrushProfileProperty: (toolId: DrawingToolId, id: string, patch: BrushProfilePropertyOverride) => void;
@@ -327,15 +319,13 @@ export class BrushStudioController {
    * `renderRoundSettings`/`renderChiselSettings`/`renderMopSettings`/
    * `renderSpraySettings` with duplicated controls; a shared property is
    * represented by the exact same control here regardless of which tool is
-   * selected. Opacity and Drip tendency are REAL editable controls: each
-   * `input` writes through `this.deps.setBrushProfileProperty` (the one
-   * writable BrushProfile override store -- see main.ts) and re-resolves
-   * the profile so the change reaches the actual rendering authority on
-   * the very next stroke, not just this panel's own readout. Drip body
-   * width/taper/terminal bead/origin pooling remain readonly diagnostics
-   * this pass (see the V0.10.15 checkpoint doc's honest gap list) -- they
-   * still come from the same profile, just aren't independently editable
-   * yet.
+   * selected. Every row here is a REAL editable control: each `input`
+   * writes through `this.deps.setBrushProfileProperty` (the one writable
+   * BrushProfile override store -- see main.ts) and re-resolves the
+   * profile so the change reaches the actual rendering authority on the
+   * very next stroke, not a second UI-only value. Squeeze Response is the
+   * one property gated by capability (`profile.squeeze.supported`) rather
+   * than shown as an inert control for a brush it doesn't apply to.
    */
   private renderSharedBrushProperties(
     toolId: DrawingToolId,
@@ -343,7 +333,7 @@ export class BrushStudioController {
     profile: BrushProfile,
     onEdited: (updated: BrushProfile) => void,
   ): HTMLElement[] {
-    const rows: HTMLElement[] = [this.buildFamilyLabel("Tip")];
+    const rows: HTMLElement[] = [];
 
     const slider = (
       label: string,
@@ -377,6 +367,33 @@ export class BrushStudioController {
       return row;
     };
 
+    const select = <T extends string>(
+      label: string,
+      value: T,
+      options: readonly T[],
+      apply: (chosen: T) => BrushProfilePropertyOverride,
+    ) => {
+      const row = document.createElement("div");
+      row.className = "brush-studio-property-row";
+      const labelEl = document.createElement("span");
+      labelEl.textContent = label;
+      const input = document.createElement("select");
+      for (const option of options) {
+        const optionEl = document.createElement("option");
+        optionEl.value = option;
+        optionEl.textContent = option[0].toUpperCase() + option.slice(1);
+        optionEl.selected = option === value;
+        input.append(optionEl);
+      }
+      input.addEventListener("change", () => {
+        this.deps.setBrushProfileProperty(toolId, id, apply(input.value as T));
+        onEdited(resolveBrushProfile(toolId, id, this.deps.getBrushProfileOverrides()));
+      });
+      row.append(labelEl, input);
+      return row;
+    };
+
+    rows.push(this.buildFamilyLabel("General"));
     rows.push(slider(
       "Opacity",
       profile.opacity,
@@ -386,6 +403,12 @@ export class BrushStudioController {
       (v) => `${Math.round(v * 100)}%`,
       (numeric) => ({ opacity: numeric }),
     ));
+
+    rows.push(this.buildFamilyLabel("Deposition"));
+    rows.push(select("Flow", profile.paint.flow, ["low", "balanced", "high"] as const, (chosen) => ({ flow: chosen })));
+    rows.push(select("Viscosity", profile.paint.viscosity, ["thick", "balanced", "runny"] as const, (chosen) => ({ viscosity: chosen })));
+
+    rows.push(this.buildFamilyLabel("Drip"));
     rows.push(slider(
       "Drip tendency",
       profile.drip.tendency,
@@ -395,17 +418,55 @@ export class BrushStudioController {
       (v) => v.toFixed(2),
       (numeric) => ({ dripTendency: numeric }),
     ));
+    rows.push(slider(
+      "Drip body width",
+      profile.drip.bodyWidth,
+      0.04,
+      0.4,
+      0.01,
+      (v) => `${Math.round(v * 100)}%`,
+      (numeric) => ({ dripBodyWidth: numeric }),
+    ));
+    rows.push(slider(
+      "Taper amount",
+      profile.drip.taper,
+      0.05,
+      0.9,
+      0.01,
+      (v) => `${Math.round(v * 100)}%`,
+      (numeric) => ({ dripTaper: numeric }),
+    ));
+    rows.push(slider(
+      "Terminal bead",
+      profile.drip.terminalBead,
+      0,
+      2,
+      0.05,
+      (v) => (v > 0 ? `${v.toFixed(2)}x` : "None"),
+      (numeric) => ({ dripTerminalBead: numeric }),
+    ));
+    rows.push(slider(
+      "Origin pooling",
+      profile.drip.originPooling,
+      0,
+      2,
+      0.05,
+      (v) => (v > 0 ? `${v.toFixed(2)}x` : "None"),
+      (numeric) => ({ dripOriginPooling: numeric }),
+    ));
 
-    const readonlyRow = (label: string, value: string) => {
+    if (profile.squeeze.supported) {
+      rows.push(this.buildFamilyLabel("Input Response"));
+      // Read-only by design, not by omission: Squeeze Response is a fixed
+      // per-variant physical constant (how hard this brush's own reservoir
+      // responds to the Squeeze input), not a per-session tuning dial --
+      // shown here, gated by `profile.squeeze.supported`, so it's still
+      // part of the one shared panel rather than a separate island.
       const row = document.createElement("div");
       row.className = "brush-studio-property-row readonly";
-      row.innerHTML = `<span>${label}</span><span class="brush-studio-property-value">${value}</span>`;
-      return row;
-    };
-    rows.push(readonlyRow("Drip body width", `${Math.round(profile.drip.bodyWidth * 100)}%`));
-    rows.push(readonlyRow("Taper amount", `${Math.round(profile.drip.taper * 100)}%`));
-    rows.push(readonlyRow("Terminal bead", profile.drip.terminalBead > 0 ? `${profile.drip.terminalBead.toFixed(2)}x` : "None"));
-    rows.push(readonlyRow("Origin pooling", profile.drip.originPooling > 0 ? `${profile.drip.originPooling.toFixed(2)}x` : "None"));
+      row.innerHTML = `<span>Squeeze response</span><span class="brush-studio-property-value">${profile.squeeze.response.toFixed(1)}x</span>`;
+      rows.push(row);
+    }
     return rows;
   }
 
@@ -835,6 +896,17 @@ export class BrushStudioController {
           ? { coverage: numeric / 100 }
           : { sprayAngle: numeric };
         this.deps.setSprayProperty(capId, patch);
+        if (row.key === "size") {
+          // `size` is a canonical BrushProfile property (see
+          // BrushProfile.ts) -- written here too so the profile's own
+          // `resolveBrushProfile(...).size` (what the drip system and
+          // Brush Studio's shared panel read) stays in sync with this
+          // legacy Spray control. `SprayPropertyOverride.size` above is
+          // kept only as a compatibility mirror for `resolveEffectiveSprayStyle`'s
+          // other direct readers; BrushProfile is the one a caller should
+          // treat as authoritative going forward.
+          this.deps.setBrushProfileProperty("spray-can", capId, { size: numeric });
+        }
         const canvas = this.el<HTMLCanvasElement>("brush-studio-preview");
         const ctx = canvas.getContext("2d");
         const preset = getSprayCapPreset(capId);
@@ -928,55 +1000,6 @@ export class BrushStudioController {
       const ctx2 = canvas.getContext("2d");
       if (ctx2) renderMarkerBrushStudioPreview(ctx2, canvas.width, canvas.height, variant.id, width, updated.opacity);
     }));
-
-    // V0.10.2: Flow/Viscosity ("paint chemistry") live here now, not the
-    // normal picker -- only shown for a variant that actually reads them
-    // (see `isWetMarkerVariant`; a dry variant like Round ignores both).
-    if (isWetMarkerVariant(variant.id)) {
-      rows.push(this.buildFamilyLabel("Paint"));
-      if (profile.wet) {
-        const squeezeRow = document.createElement("div");
-        squeezeRow.className = "brush-studio-property-row readonly";
-        squeezeRow.innerHTML = `<span>Squeeze response</span><span class="brush-studio-property-value">${profile.wet.squeezeResponse.toFixed(1)}x</span>`;
-        rows.push(squeezeRow);
-      }
-      const wet = this.deps.getWetPaintControls();
-      const flowRow = document.createElement("div");
-      flowRow.className = "brush-studio-property-row";
-      const flowLabel = document.createElement("span");
-      flowLabel.textContent = "Flow";
-      const flowSelect = document.createElement("select");
-      for (const value of ["low", "balanced", "high"] as const) {
-        const option = document.createElement("option");
-        option.value = value;
-        option.textContent = value[0].toUpperCase() + value.slice(1);
-        option.selected = wet.flow === value;
-        flowSelect.append(option);
-      }
-      flowSelect.addEventListener("change", () => {
-        this.deps.setWetPaintControls({ flow: flowSelect.value as WetPaintControlState["flow"] });
-      });
-      flowRow.append(flowLabel, flowSelect);
-      rows.push(flowRow);
-
-      const viscosityRow = document.createElement("div");
-      viscosityRow.className = "brush-studio-property-row";
-      const viscosityLabel = document.createElement("span");
-      viscosityLabel.textContent = "Viscosity";
-      const viscositySelect = document.createElement("select");
-      for (const value of ["thick", "balanced", "runny"] as const) {
-        const option = document.createElement("option");
-        option.value = value;
-        option.textContent = value[0].toUpperCase() + value.slice(1);
-        option.selected = wet.viscosity === value;
-        viscositySelect.append(option);
-      }
-      viscositySelect.addEventListener("change", () => {
-        this.deps.setWetPaintControls({ viscosity: viscositySelect.value as WetPaintControlState["viscosity"] });
-      });
-      viscosityRow.append(viscosityLabel, viscositySelect);
-      rows.push(viscosityRow);
-    }
 
     body.replaceChildren(...rows);
     this.el<HTMLButtonElement>("brush-studio-reset-brush").disabled = true;
