@@ -79,4 +79,4 @@ No changes to `SprayCapPresets.ts`, `SprayCapProfile.ts`, `SprayBrushEngine.ts`,
 
 ## Commit
 
-(pending — see next commit)
+`b146230` — "feat: Spatial Spraypaint Flair -- move onto the real accessible cap path (Pink Dot Fat, New York Fat)"
