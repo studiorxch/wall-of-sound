@@ -62,14 +62,19 @@ function observeStationary(
 }
 
 describe("wet paint load authority", () => {
-  it("builds load during slow dwell and emits gravity-driven Mop drips", () => {
+  it("builds load during slow dwell and emits gravity-driven Mop drips, several of them -- not one occasional drip", () => {
     const accumulator = new WetPaintAccumulator();
     accumulator.beginStroke(17, "mop");
     const results = observeStationary(accumulator, 1440);
     const drips = results.flatMap(({ drips }) => drips);
 
-    expect(results[results.length - 1].paintLoad).toBeGreaterThan(results[0].paintLoad);
-    expect(drips.length).toBeGreaterThan(0);
+    // Load legitimately oscillates now -- a cluster firing drains it, then
+    // dwell rebuilds it, same as real paint being used up and re-pooling --
+    // so this no longer asserts monotonic increase. What matters is it
+    // never leaves the valid load range, and that a heavy dwell produces
+    // MANY drips, not just one.
+    expect(results.every(({ paintLoad }) => paintLoad >= 0.22 && paintLoad <= 1)).toBe(true);
+    expect(drips.length).toBeGreaterThan(5);
     expect(drips.every((drip) => drip.length > 0 && drip.y > 20)).toBe(true);
   });
 
@@ -89,7 +94,7 @@ describe("wet paint load authority", () => {
     expect(slow.snapshot().paintLoad).toBeLessThanOrEqual(1);
   });
 
-  it("makes Drip Mop respond sooner and with a higher initial load than Mop", () => {
+  it("makes Drip Mop respond with a higher initial load and denser output than Mop", () => {
     const mop = new WetPaintAccumulator();
     mop.beginStroke(9, "mop");
     const mopResults = observeStationary(mop, 720);
@@ -98,9 +103,14 @@ describe("wet paint load authority", () => {
     dripMop.beginStroke(9, "drip-mop");
     const dripResults = observeStationary(dripMop, 720, 50);
 
+    const mopDrips = mopResults.flatMap(({ drips }) => drips);
+    const dripMopDrips = dripResults.flatMap(({ drips }) => drips);
     expect(dripResults[0].paintLoad).toBeGreaterThan(mopResults[0].paintLoad);
-    expect(dripResults.flatMap(({ drips }) => drips).length).toBeGreaterThan(0);
-    expect(mopResults.flatMap(({ drips }) => drips)).toHaveLength(0);
+    // Mop itself must no longer be restrained to an occasional drip -- a
+    // heavy 720ms dwell under its own canonical High/Runny load should
+    // already be producing several, with Drip Mop denser still.
+    expect(mopDrips.length).toBeGreaterThan(3);
+    expect(dripMopDrips.length).toBeGreaterThan(mopDrips.length);
   });
 
   it("keeps Mop moderate while making Drip Mop stems and runs materially stronger", () => {
@@ -148,6 +158,43 @@ describe("wet paint load authority", () => {
     expect(new Set(first.map(({ durationMs }) => durationMs)).size).toBeGreaterThan(1);
     expect(first.some(({ bend }) => bend !== 0)).toBe(true);
     expect(first.some(({ kink }) => kink !== 0)).toBe(true);
+  });
+
+  it("spawns several simultaneous drips from one heavily-loaded Mop trigger, not just one", () => {
+    const accumulator = new WetPaintAccumulator();
+    accumulator.beginStroke(41, "mop");
+    // A single stationary dwell long enough to guarantee at least one
+    // cluster fires, then inspect that one cluster in isolation.
+    accumulator.observe(point(20, 20, 0, 0), 44, true);
+    let clusterSize = 0;
+    for (let timestamp = 120; timestamp <= 960 && clusterSize === 0; timestamp += 120) {
+      clusterSize = accumulator.observe(point(20, 20, timestamp, 0), 44, true).drips.length;
+    }
+    expect(clusterSize).toBeGreaterThanOrEqual(1);
+    // Over a full heavy dwell, Mop must be able to reach a moment where
+    // more than one drip breaks free at once -- the direct fix for "only
+    // ever one drip per trigger."
+    const second = new WetPaintAccumulator();
+    second.beginStroke(41, "mop");
+    const clusterSizes = observeStationary(second, 2400).map(({ drips }) => drips.length);
+    expect(Math.max(...clusterSizes)).toBeGreaterThan(1);
+  });
+
+  it("keeps a run dripping for a moment after the pointer lifts via settle()", () => {
+    const accumulator = new WetPaintAccumulator();
+    accumulator.beginStroke(41, "mop");
+    observeStationary(accumulator, 960);
+    const settled = accumulator.settle(true);
+    expect(settled.length).toBeGreaterThan(0);
+    expect(settled.every((drip) => drip.length > 0)).toBe(true);
+
+    // No accumulated load (never began a stroke) -> nothing to settle.
+    expect(new WetPaintAccumulator().settle(true)).toHaveLength(0);
+    // dripsEnabled=false must suppress settle() drips too.
+    const disabled = new WetPaintAccumulator();
+    disabled.beginStroke(41, "mop");
+    observeStationary(disabled, 960);
+    expect(disabled.settle(false)).toHaveLength(0);
   });
 
   it("suppresses wet drips when stationary drips are disabled", () => {
@@ -203,7 +250,12 @@ describe("wet paint load authority", () => {
     accumulator.beginStroke(314, "drip-mop", { flow: "high", viscosity: "runny" });
     const drips = observeStationary(accumulator, 2400, 50).flatMap(({ drips: emitted }) => emitted);
     expect(drips.length).toBeGreaterThan(0);
-    expect(drips.every(({ x, y }) => y > 45 && y < 52 && Math.abs(x - 20) <= 15.5)).toBe(true);
+    // Origins are now sampled across the full contact width (stratified,
+    // not just near the tip), including near its edges, where the mark's
+    // own circular footprint is naturally shallower -- so the y-window
+    // widens versus a single-drip sample, while the x-span stays exactly
+    // bounded by the contact width used to place it.
+    expect(drips.every(({ x, y }) => y > 20 && y < 55 && Math.abs(x - 20) <= 15.5 + 1e-6)).toBe(true);
   });
 
   const attachmentCases = [

@@ -1857,6 +1857,18 @@ class SpatialSpraypaintApp {
     } else {
       this.strokeHistory.finalize();
       this.withWallPaintTransform(() => this.toolRenderer.endStroke(this.paintCtx));
+      const endedStyle = this.activeStrokeStyle;
+      if (endedStyle?.toolId === "paint-marker" && isWetMarkerVariant(endedStyle.variantId)) {
+        // Accumulated wet paint keeps dripping for a moment after the hand
+        // lifts -- a run in progress does not simply vanish the instant the
+        // pointer stops moving. See WetPaintAccumulator.settle().
+        const settleNow = performance.now();
+        const settleDrips = this.wetPaintAccumulator.settle(this.settings.dripsEnabled);
+        for (const drip of settleDrips) {
+          this.toolRenderer.startDrip(drip, endedStyle.color, settleNow);
+          this.strokeHistory.appendDrip(drip);
+        }
+      }
       this.wetPaintAccumulator.reset();
       this.activeStrokeRandom = null;
       this.updateUndoControl();

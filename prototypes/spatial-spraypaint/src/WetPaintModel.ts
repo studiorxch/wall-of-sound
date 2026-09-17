@@ -33,8 +33,7 @@ export interface WetVariantProfile {
   dwellGainPerSecond: number;
   speedDrain: number;
   dripLoadThreshold: number;
-  dwellThresholdMs: number;
-  travelThreshold: number;
+  /** Minimum spacing between CLUSTER trigger events (not between individual drips -- a single trigger can spawn several at once). Short by design: with the dwell/travel readiness gate removed, the wet load itself is what paces drip formation now, not a stopwatch. */
   cooldownMs: number;
   lengthMin: number;
   lengthRange: number;
@@ -46,6 +45,13 @@ export interface WetVariantProfile {
   originSpanRatio: number;
   durationMinMs: number;
   durationRangeMs: number;
+  /** How many independent gravity runs one wet-load crossing can spawn at once -- density scales toward this as paintLoad rises further past the threshold, which is what produces "several simultaneous drips across a single wet section" instead of one drip at a time. */
+  maxSimultaneousDrips: number;
+  /** Chance any one drip in a spawned cluster becomes a dramatic long run -- the "some very long runs" variety, mixed in with ordinary short/medium ones from the same cluster. */
+  dramaticChance: number;
+  dramaticLengthBonus: number;
+  /** Drips spawned once from the stroke's remaining wet load right as the pointer lifts -- a run in progress persists a moment after the hand moves away instead of stopping dead. */
+  settleDripCount: number;
 }
 
 const WET_VARIANT_PROFILES: Record<WetMarkerVariantId, WetVariantProfile> = {
@@ -54,12 +60,10 @@ const WET_VARIANT_PROFILES: Record<WetMarkerVariantId, WetVariantProfile> = {
     slowGainPerSecond: 0.22,
     dwellGainPerSecond: 0.34,
     speedDrain: 0.13,
-    dripLoadThreshold: 0.82,
-    dwellThresholdMs: 880,
-    travelThreshold: 3.2,
-    cooldownMs: 1150,
-    lengthMin: 1.35,
-    lengthRange: 2.05,
+    dripLoadThreshold: 0.58,
+    cooldownMs: 220,
+    lengthMin: 1.1,
+    lengthRange: 3.2,
     stemWidthBaseRatio: 0.055,
     stemWidthLoadRatio: 0.05,
     tipWidthRatio: 0.5,
@@ -68,16 +72,18 @@ const WET_VARIANT_PROFILES: Record<WetMarkerVariantId, WetVariantProfile> = {
     originSpanRatio: 0.54,
     durationMinMs: 1050,
     durationRangeMs: 850,
+    maxSimultaneousDrips: 3,
+    dramaticChance: 0.22,
+    dramaticLengthBonus: 3.2,
+    settleDripCount: 3,
   },
   "drip-mop": {
     initialLoad: 0.68,
     slowGainPerSecond: 0.36,
     dwellGainPerSecond: 0.58,
     speedDrain: 0.08,
-    dripLoadThreshold: 0.66,
-    dwellThresholdMs: 380,
-    travelThreshold: 1.8,
-    cooldownMs: 680,
+    dripLoadThreshold: 0.5,
+    cooldownMs: 140,
     lengthMin: 5.7,
     lengthRange: 8.6,
     stemWidthBaseRatio: 0.16,
@@ -88,16 +94,18 @@ const WET_VARIANT_PROFILES: Record<WetMarkerVariantId, WetVariantProfile> = {
     originSpanRatio: 0.62,
     durationMinMs: 1450,
     durationRangeMs: 1650,
+    maxSimultaneousDrips: 4,
+    dramaticChance: 0.3,
+    dramaticLengthBonus: 4.5,
+    settleDripCount: 5,
   },
   "drippy-chisel": {
     initialLoad: 0.58,
     slowGainPerSecond: 0.28,
     dwellGainPerSecond: 0.44,
     speedDrain: 0.11,
-    dripLoadThreshold: 0.76,
-    dwellThresholdMs: 620,
-    travelThreshold: 2.6,
-    cooldownMs: 860,
+    dripLoadThreshold: 0.7,
+    cooldownMs: 320,
     lengthMin: 2.7,
     lengthRange: 4.35,
     stemWidthBaseRatio: 0.08,
@@ -108,6 +116,10 @@ const WET_VARIANT_PROFILES: Record<WetMarkerVariantId, WetVariantProfile> = {
     originSpanRatio: 0.42,
     durationMinMs: 1250,
     durationRangeMs: 1050,
+    maxSimultaneousDrips: 2,
+    dramaticChance: 0.12,
+    dramaticLengthBonus: 2,
+    settleDripCount: 2,
   },
 };
 
@@ -314,18 +326,24 @@ export class WetPaintAccumulator {
     const dwellMs = stationary ? this.state.dwellMs + elapsed : Math.max(0, this.state.dwellMs - elapsed * 1.8);
     const distanceSinceDrip = this.state.distanceSinceDrip + distance;
     const timeSinceDrip = point.timestamp - this.state.lastDripTimestamp;
-    const dwellReady = dwellMs >= profile.dwellThresholdMs;
-    const travelReady = distanceSinceDrip >= size * profile.travelThreshold && slowFactor >= 0.7;
+    // Deposition -> local wet load -> threshold -> gravity run, with NO
+    // separate dwell/travel readiness gate: the old version required ~1s of
+    // holding still (or a long travel distance) on top of the load already
+    // being high enough, which is what made drips feel rare and decorative
+    // rather than a natural consequence of paint saturation. Load crossing
+    // the threshold is now sufficient by itself; `cooldownMs` only paces how
+    // often a new CLUSTER of drips can break free (see `createDrips`), not
+    // how long the marker must sit still first.
     const canDrip = dripsEnabled
       && paintLoad >= Math.min(0.98, profile.dripLoadThreshold * this.modifiers.threshold)
-      && timeSinceDrip >= profile.cooldownMs
-      && (dwellReady || travelReady);
+      && timeSinceDrip >= profile.cooldownMs;
     const renderedPoint = { ...point, paintLoad };
     const footprint = [...this.footprint, renderedPoint, ...(nextPoint ? [nextPoint] : [])];
     const drips = canDrip ? this.createDrips(footprint, renderedPoint, size, paintLoad) : [];
+    const drainPerDrip = this.variant === "drip-mop" ? 0.09 : this.variant === "mop" ? 0.12 : 0.16;
 
     this.state = {
-      paintLoad: clamp(paintLoad - drips.length * (this.variant === "drip-mop" ? 0.13 : 0.2), 0.22, 1),
+      paintLoad: clamp(paintLoad - drips.length * drainPerDrip, 0.22, 1),
       dwellMs: drips.length > 0 ? dwellMs * 0.28 : dwellMs,
       distanceSinceDrip: drips.length > 0 ? 0 : distanceSinceDrip,
       lastPoint: { ...point, paintLoad },
@@ -348,24 +366,58 @@ export class WetPaintAccumulator {
     this.footprint = [];
   }
 
+  /**
+   * A run in progress does not vanish the instant the pointer lifts. If the
+   * stroke ends still carrying real wet load, spawn one final cluster from
+   * it (bypassing the cooldown, since drawing has already stopped and there
+   * is nothing left to pace against) so the accumulated paint keeps
+   * dripping for a moment after the hand moves away, the way it would
+   * physically settle under gravity.
+   */
+  public settle(dripsEnabled: boolean): DripSeed[] {
+    const last = this.state.lastPoint;
+    if (!dripsEnabled || !last) return [];
+    const profile = WET_VARIANT_PROFILES[this.variant];
+    const effectiveThreshold = Math.min(0.98, profile.dripLoadThreshold * this.modifiers.threshold);
+    if (this.state.paintLoad < effectiveThreshold * 0.75) return [];
+    const footprint = [...this.footprint, last];
+    return this.createDrips(footprint, last, last.width, this.state.paintLoad, profile.settleDripCount);
+  }
+
   private createDrips(
     footprint: readonly MopFootprintPoint[],
     point: StrokePoint,
     size: number,
     paintLoad: number,
+    forceCount?: number,
   ): DripSeed[] {
     const profile = WET_VARIANT_PROFILES[this.variant];
-    const firstRandom = this.random();
-    const additionalDrip = this.variant === "drip-mop" && paintLoad > 0.84 && firstRandom > 0.58 ? 1 : 0;
-    const count = 1 + additionalDrip;
+    const effectiveThreshold = Math.min(0.98, profile.dripLoadThreshold * this.modifiers.threshold);
+    // How far the load exceeds threshold drives how many independent runs
+    // break free AT ONCE -- this is the direct fix for "only one drip per
+    // trigger": a heavily loaded pass can spawn several simultaneous drips
+    // in the same cluster, up to the variant's own ceiling.
+    const overload = clamp((paintLoad - effectiveThreshold) / Math.max(0.01, 1 - effectiveThreshold), 0, 1);
+    let count = forceCount ?? 1;
+    if (forceCount === undefined) {
+      for (let index = 0; index < profile.maxSimultaneousDrips - 1; index += 1) {
+        if (this.random() < 0.35 + overload * 0.5) count += 1;
+      }
+    }
     const drips: DripSeed[] = [];
+    const span = size * profile.originSpanRatio;
     for (let index = 0; index < count; index += 1) {
-      const offset = (this.random() - 0.5) * size * profile.originSpanRatio;
-      const dramatic = this.variant === "drip-mop" && this.random() > 0.8;
+      // Stratified offsets across the wet contact width: distinct,
+      // neighboring origins rather than either stacking on one pixel or
+      // reading as evenly-spaced stamps.
+      const slot = count === 1 ? 0 : index / (count - 1) - 0.5;
+      const jitter = (this.random() - 0.5) * (span / Math.max(1, count));
+      const offset = clamp(slot * span + jitter, -span / 2, span / 2);
+      const dramatic = this.random() < profile.dramaticChance;
       const length = size * (
         profile.lengthMin
         + this.random() * profile.lengthRange
-        + (dramatic ? 5.2 : 0)
+        + (dramatic ? profile.dramaticLengthBonus : 0)
       ) * this.modifiers.length;
       const width = Math.max(
         1.4,
