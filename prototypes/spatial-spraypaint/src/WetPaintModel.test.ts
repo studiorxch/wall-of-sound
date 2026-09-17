@@ -252,6 +252,30 @@ describe("wet paint load authority", () => {
     expect(new Set(drips.map(({ tipWidthRatio }) => tipWidthRatio)).size).toBeGreaterThan(2);
   });
 
+  it("Squeeze raises deposition through the same pool model -- more/heavier runs, not a direct drip-count multiplier", () => {
+    const baseline = new WetPaintAccumulator();
+    baseline.beginStroke(7, "mop");
+    const baselineDrips = observeStationary(baseline, 900).flatMap(({ drips }) => drips);
+
+    const squeezed = new WetPaintAccumulator();
+    squeezed.beginStroke(7, "mop");
+    squeezed.setSqueezeMultiplier(2.6);
+    const squeezedDrips = observeStationary(squeezed, 900).flatMap(({ drips }) => drips);
+
+    expect(squeezedDrips.length).toBeGreaterThan(baselineDrips.length);
+    const totalWidth = (drips: typeof baselineDrips) => drips.reduce((sum, drip) => sum + drip.width, 0);
+    expect(totalWidth(squeezedDrips)).toBeGreaterThan(totalWidth(baselineDrips));
+
+    // Releasing Squeeze (multiplier back to 1, the default) returns to
+    // ordinary baseline deposition -- not a lingering elevated state.
+    const released = new WetPaintAccumulator();
+    released.beginStroke(7, "mop");
+    released.setSqueezeMultiplier(2.6);
+    released.setSqueezeMultiplier(1);
+    const releasedDrips = observeStationary(released, 900).flatMap(({ drips }) => drips);
+    expect(releasedDrips.length).toBe(baselineDrips.length);
+  });
+
   it("keeps a run dripping for a moment after the pointer lifts via settle()", () => {
     const accumulator = new WetPaintAccumulator();
     accumulator.beginStroke(41, "mop");

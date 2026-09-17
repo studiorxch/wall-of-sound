@@ -95,10 +95,14 @@ const WET_VARIANT_PROFILES: Record<WetMarkerVariantId, WetVariantProfile> = {
     cooldownMs: 110,
     lengthMin: 1.1,
     lengthRange: 3.2,
-    stemWidthBaseRatio: 0.055,
-    stemWidthLoadRatio: 0.05,
-    tipWidthRatio: 0.5,
-    originPoolRatio: 1.05,
+    // Widened substantially (this pass): thin, thread-like drips were a
+    // named failure. A substantial pooled root + upper body, tapering down
+    // to a genuinely fine tail, needs both a bigger base/load width AND a
+    // much lower tip ratio (more taper contrast) than before.
+    stemWidthBaseRatio: 0.12,
+    stemWidthLoadRatio: 0.09,
+    tipWidthRatio: 0.22,
+    originPoolRatio: 1.2,
     originOffsetRatio: 0.56,
     originSpanRatio: 0.54,
     durationMinMs: 1050,
@@ -107,8 +111,8 @@ const WET_VARIANT_PROFILES: Record<WetMarkerVariantId, WetVariantProfile> = {
     dramaticChance: 0.22,
     dramaticLengthBonus: 3.4,
     settleDripCount: 5,
-    widthVarianceLow: 0.55,
-    widthVarianceHigh: 1.45,
+    widthVarianceLow: 0.85,
+    widthVarianceHigh: 2.1,
     // Gravity dominates now -- these are deliberately restrained versus the
     // prior pass (which over-corrected into "decorative curly hair"). Most
     // runs get at most one small kink; a second is the exception, not the
@@ -117,7 +121,7 @@ const WET_VARIANT_PROFILES: Record<WetMarkerVariantId, WetVariantProfile> = {
     kink2Chance: 0.12,
     kinkAmplitudeRatio: 0.04,
     bendRatio: 0.075,
-    tipWidthJitter: 0.14,
+    tipWidthJitter: 0.08,
     tightNeighborChance: 0.32,
     poolMergeRatio: 0.5,
     poolDepositRate: 0.85,
@@ -138,8 +142,8 @@ const WET_VARIANT_PROFILES: Record<WetMarkerVariantId, WetVariantProfile> = {
     cooldownMs: 70,
     lengthMin: 5.7,
     lengthRange: 8.6,
-    stemWidthBaseRatio: 0.16,
-    stemWidthLoadRatio: 0.12,
+    stemWidthBaseRatio: 0.24,
+    stemWidthLoadRatio: 0.18,
     tipWidthRatio: 0.62,
     originPoolRatio: 0.9,
     originOffsetRatio: 0.62,
@@ -150,8 +154,8 @@ const WET_VARIANT_PROFILES: Record<WetMarkerVariantId, WetVariantProfile> = {
     dramaticChance: 0.28,
     dramaticLengthBonus: 4.5,
     settleDripCount: 7,
-    widthVarianceLow: 0.75,
-    widthVarianceHigh: 1.4,
+    widthVarianceLow: 0.9,
+    widthVarianceHigh: 2,
     kinkChance: 0.45,
     kink2Chance: 0.15,
     kinkAmplitudeRatio: 0.035,

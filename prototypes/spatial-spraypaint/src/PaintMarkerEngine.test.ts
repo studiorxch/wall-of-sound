@@ -292,8 +292,12 @@ describe("Paint Marker renderer", () => {
   it("keeps wet bulge out of ordinary travel and reserves it for pooled dwell", () => {
     expect(resolveWetContactBulgeScale(1, 0.45)).toBe(1);
     expect(resolveWetContactBulgeScale(0.7, 0)).toBe(1);
-    expect(resolveWetContactBulgeScale(1, 0)).toBeGreaterThan(1.08);
-    expect(resolveWetContactBulgeScale(1, 0)).toBeLessThanOrEqual(1.1);
+    expect(resolveWetContactBulgeScale(1, 0)).toBeGreaterThan(1.03);
+    expect(resolveWetContactBulgeScale(1, 0)).toBeLessThanOrEqual(1.045);
+    // A merely slow (not truly stopped) moment along an ordinary continuous
+    // stroke must not register as a pooled dwell -- that over-triggering is
+    // what produced visible knots along an otherwise-moving Mop pass.
+    expect(resolveWetContactBulgeScale(1, 0.06)).toBe(1);
   });
 });
 

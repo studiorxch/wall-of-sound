@@ -128,9 +128,16 @@ export function resolveWetContactBulgeScale(
   velocity: number,
 ): number {
   const safeLoad = Math.max(0.22, Math.min(1, paintLoad));
-  const dwellContact = 1 - Math.min(1, Math.max(0, velocity) / 0.1);
+  // A real hand/mouse stroke's velocity naturally dips well below "fully
+  // stopped" at many points along an otherwise continuous pass -- the prior
+  // 0.1 threshold treated most of those ordinary micro-decelerations as a
+  // genuine dwell/pause, so this bulge (plus the join circle already drawn
+  // at every point) kept firing across a normally-moving stroke and read as
+  // a chain of small round knots. Tightened so only a real, near-total stop
+  // registers as pooled contact, and the bulge itself is more subtle.
+  const dwellContact = 1 - Math.min(1, Math.max(0, velocity) / 0.025);
   const pooledLoad = Math.max(0, (safeLoad - 0.76) / 0.24);
-  return 1 + pooledLoad * dwellContact * 0.1;
+  return 1 + pooledLoad * dwellContact * 0.045;
 }
 
 export function buildSweptRibbonSegment(

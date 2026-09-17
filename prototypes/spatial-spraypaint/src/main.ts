@@ -131,6 +131,8 @@ const FLAIR_DRAG_RANGE_PX = 260;
 /** off -> wall -> blackbook -> wild -> off, cycled by the small Flair keyboard shortcut (see `cycleActiveFlairMode`) — never a toolbar redesign, just a temporary desktop testing control matching the existing Alt+scroll/Alt+drag precedent. */
 const FLAIR_MODE_CYCLE: readonly FlairModeId[] = ["off", "wall", "blackbook", "wild"];
 const GRID_STYLE_STORAGE_KEY = "spatial-spraypaint:grid-style";
+/** Mop Squeeze's deposition multiplier while held -- see `WetPaintAccumulator.setSqueezeMultiplier`. */
+const MOP_SQUEEZE_MULTIPLIER = 2.6;
 
 function loadSavedGridStyle(): GridStyle {
   try {
@@ -190,6 +192,14 @@ class SpatialSpraypaintApp {
   private player: PlayerState = { ...INITIAL_PLAYER_STATE };
   private baseRadius = getSprayCapPreset(INITIAL_DRAWING_TOOL_SELECTION.sprayCapId).baseRadius;
   private isDrawing = false;
+  /**
+   * Mop Squeeze (hold ArrowDown, or S as an alternate) -- desktop-only,
+   * keyboard-only expressive input for this pass, matching the existing
+   * Alt+scroll/Alt+drag/F-key precedent. Only ever read at the
+   * `wetPaintAccumulator.observe()` call site to scale DEPOSITION for the
+   * current instant; it never spawns a drip directly.
+   */
+  private squeezeHeld = false;
   private webcamActive = false;
   private lastHandResult: HandTrackingResult | null = null;
   private activeWallPoint: WallPoint | null = null;
@@ -398,6 +408,27 @@ class SpatialSpraypaintApp {
       if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement) return;
       this.cycleActiveFlairMode();
     });
+    // Mop Squeeze (build brief: keyboard-only for this pass, no permanent
+    // UI). Holding ArrowDown (or S) raises deposition into the SAME pool
+    // model while held; releasing returns to baseline. `isSqueezeKey` /
+    // `this.squeezeHeld` are read only where deposition happens
+    // (`depositReconstructedPath`), never used to spawn a drip directly.
+    const isSqueezeKey = (event: KeyboardEvent) => (
+      (event.key === "ArrowDown" || event.key.toLowerCase() === "s")
+      && !event.altKey && !event.metaKey && !event.ctrlKey
+    );
+    window.addEventListener("keydown", (event) => {
+      if (!isSqueezeKey(event)) return;
+      const target = event.target;
+      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement) return;
+      if (event.key === "ArrowDown") event.preventDefault();
+      this.squeezeHeld = true;
+    });
+    window.addEventListener("keyup", (event) => {
+      if (!isSqueezeKey(event)) return;
+      this.squeezeHeld = false;
+    });
+    window.addEventListener("blur", () => { this.squeezeHeld = false; });
 
     this.requireElement<HTMLSelectElement>("palette-select").addEventListener("change", (event) => {
       this.finishActiveStroke();
@@ -2031,6 +2062,13 @@ class SpatialSpraypaintApp {
         for (const [segmentIndex, segmentEnd] of segmentEnds.entries()) {
           let renderedPoint = segmentEnd;
           if (style.toolId === "paint-marker" && isWetMarkerVariant(style.variantId)) {
+            // Squeeze only ever raises DEPOSITION for the current instant --
+            // the pool model's own merging/threshold/channel logic (already
+            // exercised at baseline) decides whether that turns into more or
+            // heavier gravity runs. It never spawns a drip directly.
+            this.wetPaintAccumulator.setSqueezeMultiplier(
+              this.squeezeHeld && style.variantId === "mop" ? MOP_SQUEEZE_MULTIPLIER : 1,
+            );
             const wetPaint = this.wetPaintAccumulator.observe(
               segmentEnd,
               style.size,

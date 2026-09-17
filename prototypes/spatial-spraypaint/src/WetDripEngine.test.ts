@@ -7,15 +7,17 @@ function recordingContext(): {
   calls: string[];
   colorStops: Array<[number, string]>;
   moveTos: Array<[number, number]>;
+  arcs: Array<[number, number, number]>;
 } {
   const calls: string[] = [];
   const colorStops: Array<[number, string]> = [];
   const moveTos: Array<[number, number]> = [];
+  const arcs: Array<[number, number, number]> = [];
   const ctx = {
     save: () => undefined,
     restore: () => undefined,
     beginPath: () => undefined,
-    arc: () => calls.push("arc"),
+    arc: (x: number, y: number, radius: number) => { calls.push("arc"); arcs.push([x, y, radius]); },
     fill: () => calls.push("fill"),
     moveTo: (x: number, y: number) => moveTos.push([x, y]),
     lineTo: () => undefined,
@@ -25,7 +27,7 @@ function recordingContext(): {
     }),
     fillStyle: "",
   } as unknown as CanvasRenderingContext2D;
-  return { ctx, calls, colorStops, moveTos };
+  return { ctx, calls, colorStops, moveTos, arcs };
 }
 
 describe("WetDripEngine", () => {
@@ -46,7 +48,7 @@ describe("WetDripEngine", () => {
     expect(underpainted[0].width).toBeGreaterThanOrEqual(drip.width);
   });
 
-  it("redraws a growing Mop drip as one gradient strip without circular origin stamps", () => {
+  it("redraws a growing Mop drip as one gradient strip with a rounded root and a rounded tip", () => {
     const persistent = recordingContext();
     const overlay = recordingContext();
     const engine = new WetDripEngine();
@@ -77,10 +79,13 @@ describe("WetDripEngine", () => {
 
     engine.advanceDrips(persistent.ctx, overlay.ctx, 1000);
     expect(persistent.calls.filter((call) => call === "closePath")).toHaveLength(1);
-    expect(persistent.calls.filter((call) => call === "arc")).toHaveLength(1);
+    // One rounded root (pools the flat top edge into the mark -- the fix
+    // for a drip origin reading as a sharp spike/pinch) and one rounded
+    // terminal tip -- not a separate free-floating circular origin stamp.
+    expect(persistent.calls.filter((call) => call === "arc")).toHaveLength(2);
   });
 
-  it("replays the same connected final geometry without an origin node", () => {
+  it("replays the same connected final geometry with a rounded root, no free-floating origin node", () => {
     const drip = {
       x: 40,
       y: 50,
@@ -106,7 +111,27 @@ describe("WetDripEngine", () => {
     expect(first.calls).toEqual(second.calls);
     expect(first.colorStops).toEqual(second.colorStops);
     expect(first.calls.filter((call) => call === "closePath")).toHaveLength(1);
-    expect(first.calls.filter((call) => call === "arc")).toHaveLength(1);
+    expect(first.calls.filter((call) => call === "arc")).toHaveLength(2);
     expect(first.moveTos[0][1]).toBe(36);
+  });
+
+  it("rounds the root at the drip's true origin, sized to its pooled radius -- not the mark's own flat-cut shoulder edge", () => {
+    const drip = {
+      x: 40,
+      y: 50,
+      width: 12,
+      length: 220,
+      opacity: 0.84,
+      bend: 8,
+      tipWidthRatio: 0.62,
+      originPoolRadius: 17,
+      terminalBulbRatio: 0.58,
+      renderAsOverlay: true,
+      attachmentUnderlap: 14,
+    };
+    const recording = recordingContext();
+    new WetDripEngine().renderCompletedDrip(recording.ctx, drip, "#e92f3d");
+    const [rootArc] = recording.arcs;
+    expect(rootArc).toEqual([drip.x, drip.y, drip.originPoolRadius]);
   });
 });
