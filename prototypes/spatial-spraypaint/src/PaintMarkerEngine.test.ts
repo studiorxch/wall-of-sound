@@ -171,6 +171,16 @@ describe("Paint Marker renderer", () => {
     expect(getMarkerVariant("drip-mop").material).toBe("high-flow");
   });
 
+  it("gives every exposed marker (Round, Chisel, Mop) some non-zero drip tendency, strongest on Mop", () => {
+    const round = getMarkerVariant("round").dripTendency;
+    const chisel = getMarkerVariant("chisel").dripTendency;
+    const mop = getMarkerVariant("mop").dripTendency;
+    expect(round).toBeGreaterThan(0);
+    expect(chisel).toBeGreaterThan(0);
+    expect(mop).toBeGreaterThan(round);
+    expect(mop).toBeGreaterThan(chisel);
+  });
+
   it("renders one clean Mop ribbon without ordinary-travel wet edge passes", () => {
     const recording = recordingContext();
     const engine = new PaintMarkerEngine();

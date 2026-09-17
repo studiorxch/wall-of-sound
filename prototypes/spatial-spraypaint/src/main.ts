@@ -1909,14 +1909,23 @@ class SpatialSpraypaintApp {
       this.hasPinchDrawn = true;
       this.requireElement("hand-first-use-cue").classList.remove("visible");
     }
-    if (this.activeStrokeStyle?.toolId === "spray-can") {
-      const activeSprayPreset = getSprayCapPreset(this.activeStrokeStyle.variantId);
+    const dripStyle = this.activeStrokeStyle;
+    // Round and Chisel are dry markers (not `isWetMarkerVariant`) with no
+    // wet-paint accumulator of their own — Mop's wet drip architecture is
+    // untouched. They share the Spray tool's generic dwell-triggered
+    // DripAccumulator/startDrip pipeline instead, the same mechanism that
+    // already renders real drips for every Spray cap, driven by their own
+    // light `dripTendency` (see PaintMarkerEngine.MARKER_VARIANTS).
+    const dripEligible = dripStyle?.toolId === "spray-can"
+      || (dripStyle?.toolId === "paint-marker" && !isWetMarkerVariant(dripStyle.variantId));
+    if (dripStyle && dripEligible) {
+      const activeSprayPreset = dripStyle.toolId === "spray-can" ? getSprayCapPreset(dripStyle.variantId) : null;
       const drip = this.dripAccumulator.observe({
         x: point?.x ?? smoothed.x,
         y: point?.y ?? smoothed.y,
         radius: point?.width ?? this.baseRadius,
         timestamp: now,
-        dripTendency: this.toolRenderer.dripTendency(this.activeStrokeStyle),
+        dripTendency: this.toolRenderer.dripTendency(dripStyle),
         enabled: this.settings.dripsEnabled,
         // Pink Dot Fat's stochastic deposition field lays down real paint
         // much more thinly than the drip system's old flat opacity formula
@@ -1926,10 +1935,10 @@ class SpatialSpraypaintApp {
         // dense one exposure of its core actually is; every other cap is
         // unaffected (this stays undefined for them, preserving their
         // exact prior drip look).
-        sourceOpacityCeiling: activeSprayPreset.plumeStochasticStationary ? activeSprayPreset.coreOpacity : undefined,
+        sourceOpacityCeiling: activeSprayPreset?.plumeStochasticStationary ? activeSprayPreset.coreOpacity : undefined,
       });
       if (drip) {
-        this.toolRenderer.startDrip(drip, this.activeStrokeStyle.color, now);
+        this.toolRenderer.startDrip(drip, dripStyle.color, now);
         this.strokeHistory.appendDrip(drip);
       }
     }

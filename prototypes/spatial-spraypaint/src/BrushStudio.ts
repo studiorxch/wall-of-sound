@@ -465,7 +465,7 @@ export class BrushStudioController {
     startLabel.textContent = "Starts at / Opens to";
     const startValue = document.createElement("span");
     startValue.className = "brush-studio-property-value";
-    startValue.textContent = `${Math.round(startSize)} → ${Math.round(openSize)} wall units`;
+    startValue.textContent = `${Math.round(startSize)} → ${Math.round(openSize)}`;
     startRow.append(startLabel, startValue);
     elements.push(startRow);
 
@@ -485,13 +485,13 @@ export class BrushStudioController {
     rangeLabel.textContent = "Effective Range";
     const rangeValue = document.createElement("span");
     rangeValue.className = "brush-studio-property-value";
-    rangeValue.textContent = `${Math.round(effective.flairMinSize)}–${Math.round(effective.flairMaxSize)} wall units`;
+    rangeValue.textContent = `${Math.round(effective.flairMinSize)}–${Math.round(effective.flairMaxSize)}`;
     rangeRow.append(rangeLabel, rangeValue);
     elements.push(rangeRow);
     if (effective.flairMaxSize > 72) {
       const note = document.createElement("div");
       note.className = "fill-mode-note";
-      note.textContent = "Exceeds the compact Size slider's own 72-unit display — this is the true value used when painting.";
+      note.textContent = "Exceeds the compact Size slider's own max of 72 — this is the true value used when painting.";
       elements.push(note);
     }
 
@@ -789,10 +789,10 @@ export class BrushStudioController {
     sizeInput.value = String(width);
     const sizeReadout = document.createElement("span");
     sizeReadout.className = "brush-studio-property-value";
-    sizeReadout.textContent = `${width} wall units`;
+    sizeReadout.textContent = `${width}`;
     sizeInput.addEventListener("input", () => {
       const numeric = Number.parseInt(sizeInput.value, 10);
-      sizeReadout.textContent = `${numeric} wall units`;
+      sizeReadout.textContent = `${numeric}`;
       this.deps.setMarkerWidth(variant.id, numeric);
       const ctx2 = canvas.getContext("2d");
       if (ctx2) renderMarkerBrushStudioPreview(ctx2, canvas.width, canvas.height, variant.id, numeric);
@@ -801,10 +801,6 @@ export class BrushStudioController {
     rows.push(sizeRow);
 
     rows.push(this.buildFamilyLabel("Tip"));
-    const materialRow = document.createElement("div");
-    materialRow.className = "brush-studio-property-row readonly";
-    materialRow.innerHTML = `<span>Material</span><span class="brush-studio-property-value">${variant.material}</span>`;
-    rows.push(materialRow);
     const dripRow = document.createElement("div");
     dripRow.className = "brush-studio-property-row readonly";
     dripRow.innerHTML = `<span>Drip tendency</span><span class="brush-studio-property-value">${variant.dripTendency}</span>`;

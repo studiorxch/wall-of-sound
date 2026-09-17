@@ -36,8 +36,14 @@ export type MarkerJoinPolygon = readonly [
 ];
 
 export const MARKER_VARIANTS: readonly MarkerVariantDefinition[] = [
-  { id: "round", name: "Round", defaultSize: 28, dripTendency: 0, material: "dense" },
-  { id: "chisel", name: "Chisel · Classic", defaultSize: 34, dripTendency: 0, material: "calligraphy" },
+  // Round and Chisel are dry markers with no wet-paint accumulator of
+  // their own (see `isWetMarkerVariant` in WetPaintModel.ts) — they share
+  // Spray's generic dwell-triggered drip pipeline instead (main.ts,
+  // `depositActivePoint`), so these light, non-zero values are what
+  // actually produce their occasional/subtle rendered drips, not unused
+  // metadata. Mop stays the strongest at 0.68 (canonical, unchanged).
+  { id: "round", name: "Round", defaultSize: 28, dripTendency: 0.12, material: "dense" },
+  { id: "chisel", name: "Chisel · Classic", defaultSize: 34, dripTendency: 0.15, material: "calligraphy" },
   { id: "clean-chisel", name: "Chisel · Clean", defaultSize: 34, dripTendency: 0, material: "calligraphy" },
   { id: "drippy-chisel", name: "Chisel · Wet", defaultSize: 38, dripTendency: 0.48, material: "wet-calligraphy" },
   { id: "mop", name: "Mop · Balanced", defaultSize: 44, dripTendency: 0.68, material: "wet" },
