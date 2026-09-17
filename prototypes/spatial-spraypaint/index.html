@@ -149,11 +149,17 @@
     .recent-grid { grid-template-columns:repeat(6, 30px); }
     #palette-swatches { max-height:min(320px, calc(100vh - 240px)); overflow-y:auto; padding:3px; }
     #recent-colors[hidden], #recent-colors-label[hidden] { display:none; }
-    #mode-chooser { gap:0; max-height:min(560px, calc(100vh - 110px)); overflow-y:auto; }
+    /* V0.10.1 Compact Drawing Controls: the popover itself no longer
+       scrolls as one block -- only the browsable cap/marker LIST does (see
+       #cap-list-scroll below). Size/Coverage/Fill/Edit Brush always sit
+       below that list, unscrolled, so reaching them never depends on how
+       far down the list the user has to browse. */
+    #mode-chooser { gap:0; max-height:calc(100vh - 110px); }
     .mode-row { display:flex; gap:6px; padding-bottom:8px; margin-bottom:8px; border-bottom:1px solid rgba(255,255,255,.12); }
     .mode-row .tool-choice { min-width:0; flex:1; grid-template-columns:1fr; justify-items:center; text-align:center; padding:8px 6px; }
     .brush-panel { display:grid; gap:4px; }
     .brush-panel[hidden] { display:none; }
+    #cap-list-scroll { display:grid; gap:4px; max-height:min(260px, calc(100vh - 380px)); overflow-y:auto; }
     .tool-choice, .cap-choice, .marker-choice { min-width:210px; display:grid; grid-template-columns:66px 1fr; align-items:center; gap:10px; text-align:left; font-size:11px; }
     .tool-choice.selected, .cap-choice.selected, .marker-choice.selected { border-color:#ff6a83; color:#ff91a7; }
     .tool-sample { display:grid; place-items:center; height:20px; color:#fff; font-size:10px; font-weight:900; }
@@ -168,10 +174,20 @@
     .wet-control-row { display:grid; grid-template-columns:58px 1fr; align-items:center; gap:8px; color:#aaa9b2; font-size:10px; }
     .wet-control-row select { min-width:0; font-size:10px; }
     #marker-width-controls { margin-top:7px; padding-top:8px; border-top:1px solid rgba(255,255,255,.12); }
-    #spray-property-controls { margin-top:7px; padding-top:8px; border-top:1px solid rgba(255,255,255,.12); display:grid; gap:8px; }
+    #spray-property-controls { margin-top:6px; padding-top:6px; border-top:1px solid rgba(255,255,255,.12); display:grid; gap:5px; }
     #radius-slider-setting[hidden], #coverage-slider-setting[hidden], #fill-mode-setting[hidden], #spray-angle-status[hidden], #flair-status[hidden] { display:none; }
-    .fill-mode-row { grid-template-columns:1fr auto; font-size:11px; }
-    .fill-mode-note { display:block; margin-top:2px; color:#8f8e99; font-size:9px; font-weight:600; line-height:1.35; }
+    /* V0.10.1 Compact Drawing Controls: one dense row per control -- label,
+       slider, value, and an inline reset icon that only occupies space
+       (via [hidden]) while the value is actually overridden. Replaces the
+       old two-row "label+value" then "full-width Using X default" button
+       pattern, which is exactly the redundant vertical space this pass
+       removes. */
+    .compact-slider-row { display:grid; grid-template-columns:52px 1fr 34px auto; align-items:center; gap:7px; color:#d1d0d7; font-size:11px; }
+    .compact-slider-label { font-weight:600; color:#aaa9b2; }
+    .compact-slider-value { font-variant-numeric:tabular-nums; text-align:right; color:#f4f3f0; }
+    .compact-reset { width:30px; height:30px; min-height:30px; padding:0; display:grid; place-items:center; font-size:14px; line-height:1; border-radius:8px; }
+    .compact-reset[hidden] { display:none; }
+    .fill-mode-row { grid-template-columns:1fr auto; font-size:11px; padding:1px 0; }
     #spray-angle-status { display:flex; align-items:center; justify-content:space-between; font-size:10px; color:#aaa9b2; padding:4px 0 0; }
     #spray-angle-status strong { color:#f4f3f0; font-variant-numeric:tabular-nums; }
     #flair-status { display:flex; align-items:center; justify-content:space-between; font-size:10px; color:#aaa9b2; padding:4px 0 0; }
@@ -432,29 +448,41 @@
         <button class="tool-choice" data-tool="paint-marker" aria-pressed="false"><span>Marker</span></button>
       </div>
       <div id="cap-chooser" class="brush-panel" aria-label="Spray cap">
-        <div class="brush-family-label">Fat</div>
-        <button class="cap-choice selected" data-cap="new-york-fat"><canvas class="brush-preview" width="56" height="22" data-preview-cap="new-york-fat"></canvas><span class="brush-row-text"><span class="brush-row-name">New York Fat</span></span></button>
-        <button class="cap-choice" data-cap="pink-dot-fat"><canvas class="brush-preview" width="56" height="22" data-preview-cap="pink-dot-fat"></canvas><span class="brush-row-text"><span class="brush-row-name">Pink Dot Fat</span></span></button>
-        <button class="cap-choice" data-cap="astro-fat"><canvas class="brush-preview" width="56" height="22" data-preview-cap="astro-fat"></canvas><span class="brush-row-text"><span class="brush-row-name">Astro Fat</span></span></button>
-        <button class="cap-choice" data-cap="german-fat"><canvas class="brush-preview" width="56" height="22" data-preview-cap="german-fat"></canvas><span class="brush-row-text"><span class="brush-row-name">German / Hardcore Fat</span></span></button>
-        <div class="brush-family-label">Thin</div>
-        <button class="cap-choice" data-cap="lego-thin"><canvas class="brush-preview" width="56" height="22" data-preview-cap="lego-thin"></canvas><span class="brush-row-text"><span class="brush-row-name">Lego Thin</span></span></button>
-        <button class="cap-choice" data-cap="universal-thin"><canvas class="brush-preview" width="56" height="22" data-preview-cap="universal-thin"></canvas><span class="brush-row-text"><span class="brush-row-name">Universal Thin</span></span></button>
-        <button class="cap-choice" data-cap="level-1"><canvas class="brush-preview" width="56" height="22" data-preview-cap="level-1"></canvas><span class="brush-row-text"><span class="brush-row-name">Level 1 / Skinny Cream</span></span></button>
-        <button class="cap-choice" data-cap="new-york-thin"><canvas class="brush-preview" width="56" height="22" data-preview-cap="new-york-thin"></canvas><span class="brush-row-text"><span class="brush-row-name">New York Thin</span></span></button>
-        <div class="brush-family-label">Specialty</div>
-        <button class="cap-choice" data-cap="calligraphy"><canvas class="brush-preview" width="56" height="22" data-preview-cap="calligraphy"></canvas><span class="brush-row-text"><span class="brush-row-name">Oval Calligraphy</span></span></button>
-        <button class="cap-choice" data-cap="transversal-slot"><canvas class="brush-preview" width="56" height="22" data-preview-cap="transversal-slot"></canvas><span class="brush-row-text"><span class="brush-row-name">Rectangular Transversal</span></span></button>
-        <button class="cap-choice" data-cap="needle"><canvas class="brush-preview" width="56" height="22" data-preview-cap="needle"></canvas><span class="brush-row-text"><span class="brush-row-name">Needle</span></span></button>
-        <button class="cap-choice" data-cap="wiggly-needle"><canvas class="brush-preview" width="56" height="22" data-preview-cap="wiggly-needle"></canvas><span class="brush-row-text"><span class="brush-row-name">Wiggly Needle</span></span></button>
-        <button class="cap-choice" data-cap="soft-fade"><canvas class="brush-preview" width="56" height="22" data-preview-cap="soft-fade"></canvas><span class="brush-row-text"><span class="brush-row-name">Soft / Fade</span></span></button>
-        <button class="cap-choice" data-cap="fuzz-fat"><canvas class="brush-preview" width="56" height="22" data-preview-cap="fuzz-fat"></canvas><span class="brush-row-text"><span class="brush-row-name">Fuzz Fat</span></span></button>
-        <button class="cap-choice" data-cap="ring-donut"><canvas class="brush-preview" width="56" height="22" data-preview-cap="ring-donut"></canvas><span class="brush-row-text"><span class="brush-row-name">Ring / Donut</span></span></button>
-        <button class="cap-choice" data-cap="dry-streak"><canvas class="brush-preview" width="56" height="22" data-preview-cap="dry-streak"></canvas><span class="brush-row-text"><span class="brush-row-name">Dry / Streak</span></span></button>
+        <div id="cap-list-scroll">
+          <div class="brush-family-label">Fat</div>
+          <button class="cap-choice selected" data-cap="new-york-fat"><canvas class="brush-preview" width="56" height="22" data-preview-cap="new-york-fat"></canvas><span class="brush-row-text"><span class="brush-row-name">New York Fat</span></span></button>
+          <button class="cap-choice" data-cap="pink-dot-fat"><canvas class="brush-preview" width="56" height="22" data-preview-cap="pink-dot-fat"></canvas><span class="brush-row-text"><span class="brush-row-name">Pink Dot Fat</span></span></button>
+          <button class="cap-choice" data-cap="astro-fat"><canvas class="brush-preview" width="56" height="22" data-preview-cap="astro-fat"></canvas><span class="brush-row-text"><span class="brush-row-name">Astro Fat</span></span></button>
+          <button class="cap-choice" data-cap="german-fat"><canvas class="brush-preview" width="56" height="22" data-preview-cap="german-fat"></canvas><span class="brush-row-text"><span class="brush-row-name">German / Hardcore Fat</span></span></button>
+          <div class="brush-family-label">Thin</div>
+          <button class="cap-choice" data-cap="lego-thin"><canvas class="brush-preview" width="56" height="22" data-preview-cap="lego-thin"></canvas><span class="brush-row-text"><span class="brush-row-name">Lego Thin</span></span></button>
+          <button class="cap-choice" data-cap="universal-thin"><canvas class="brush-preview" width="56" height="22" data-preview-cap="universal-thin"></canvas><span class="brush-row-text"><span class="brush-row-name">Universal Thin</span></span></button>
+          <button class="cap-choice" data-cap="level-1"><canvas class="brush-preview" width="56" height="22" data-preview-cap="level-1"></canvas><span class="brush-row-text"><span class="brush-row-name">Level 1 / Skinny Cream</span></span></button>
+          <button class="cap-choice" data-cap="new-york-thin"><canvas class="brush-preview" width="56" height="22" data-preview-cap="new-york-thin"></canvas><span class="brush-row-text"><span class="brush-row-name">New York Thin</span></span></button>
+          <div class="brush-family-label">Specialty</div>
+          <button class="cap-choice" data-cap="calligraphy"><canvas class="brush-preview" width="56" height="22" data-preview-cap="calligraphy"></canvas><span class="brush-row-text"><span class="brush-row-name">Oval Calligraphy</span></span></button>
+          <button class="cap-choice" data-cap="transversal-slot"><canvas class="brush-preview" width="56" height="22" data-preview-cap="transversal-slot"></canvas><span class="brush-row-text"><span class="brush-row-name">Rectangular Transversal</span></span></button>
+          <button class="cap-choice" data-cap="needle"><canvas class="brush-preview" width="56" height="22" data-preview-cap="needle"></canvas><span class="brush-row-text"><span class="brush-row-name">Needle</span></span></button>
+          <button class="cap-choice" data-cap="wiggly-needle"><canvas class="brush-preview" width="56" height="22" data-preview-cap="wiggly-needle"></canvas><span class="brush-row-text"><span class="brush-row-name">Wiggly Needle</span></span></button>
+          <button class="cap-choice" data-cap="soft-fade"><canvas class="brush-preview" width="56" height="22" data-preview-cap="soft-fade"></canvas><span class="brush-row-text"><span class="brush-row-name">Soft / Fade</span></span></button>
+          <button class="cap-choice" data-cap="fuzz-fat"><canvas class="brush-preview" width="56" height="22" data-preview-cap="fuzz-fat"></canvas><span class="brush-row-text"><span class="brush-row-name">Fuzz Fat</span></span></button>
+          <button class="cap-choice" data-cap="ring-donut"><canvas class="brush-preview" width="56" height="22" data-preview-cap="ring-donut"></canvas><span class="brush-row-text"><span class="brush-row-name">Ring / Donut</span></span></button>
+          <button class="cap-choice" data-cap="dry-streak"><canvas class="brush-preview" width="56" height="22" data-preview-cap="dry-streak"></canvas><span class="brush-row-text"><span class="brush-row-name">Dry / Streak</span></span></button>
+        </div>
         <div id="spray-property-controls" aria-label="Spray size and coverage">
-          <div id="radius-slider-setting" class="setting-stack"><span>Size · <strong id="radius-val">32</strong></span><input type="range" id="brush-radius" min="4" max="72" value="32" /><button id="radius-reset">Use cap default</button></div>
-          <div id="coverage-slider-setting" class="setting-stack"><span>Spray coverage override · <strong id="coverage-val">100</strong>%</span><input type="range" id="spray-coverage" min="20" max="100" step="5" value="100" /><button id="coverage-reset">Use full coverage</button></div>
-          <label id="fill-mode-setting" class="setting-row fill-mode-row"><span>Fill mode (throwie)<span class="fill-mode-note">caps one sweep's build-up; lift and sweep again for fuller coverage</span></span><input type="checkbox" id="fill-mode-toggle" /></label>
+          <div id="radius-slider-setting" class="compact-slider-row">
+            <span class="compact-slider-label">Size</span>
+            <input type="range" id="brush-radius" min="4" max="72" value="32" />
+            <strong id="radius-val" class="compact-slider-value">32</strong>
+            <button id="radius-reset" class="compact-reset" title="Use cap default" aria-label="Reset size to cap default">↺</button>
+          </div>
+          <div id="coverage-slider-setting" class="compact-slider-row">
+            <span class="compact-slider-label">Coverage</span>
+            <input type="range" id="spray-coverage" min="20" max="100" step="5" value="100" />
+            <strong id="coverage-val" class="compact-slider-value">100%</strong>
+            <button id="coverage-reset" class="compact-reset" title="Use full coverage" aria-label="Reset coverage to full">↺</button>
+          </div>
+          <label id="fill-mode-setting" class="setting-row fill-mode-row" title="Fill caps one sweep's build-up; lift and sweep again for fuller coverage"><span>Fill</span><input type="checkbox" id="fill-mode-toggle" /></label>
           <div id="spray-angle-status" hidden title="Alt + scroll wheel over the wall to adjust"><span>Spray angle (Alt + scroll)</span><strong id="spray-angle-val">0°</strong></div>
           <div id="flair-status" hidden title="F cycles Flair mode · Alt + drag over the wall to adjust"><span>Flair (F to cycle)</span><strong id="flair-status-val">off</strong></div>
         </div>

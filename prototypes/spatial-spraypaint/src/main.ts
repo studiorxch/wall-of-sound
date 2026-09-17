@@ -915,10 +915,14 @@ class SpatialSpraypaintApp {
       this.requireElement<HTMLInputElement>("brush-radius").value = this.baseRadius.toString();
       this.requireElement("radius-val").textContent = roundedRadius.toString();
     }
-    const parameter = getDrawingTool(this.toolSelection.selectedToolId).parameterLabel;
-    this.requireElement("radius-reset").textContent = this.sprayOverrideFor(this.toolSelection.sprayCapId).size === undefined
-      ? `Using ${parameter.toLowerCase()} default`
-      : `Use ${parameter.toLowerCase()} default`;
+    // V0.10.1 Compact Drawing Controls: the reset affordance is a small
+    // inline icon, shown ONLY while a value is actually overridden --
+    // "Using cap default" as a permanent full-width row is gone. Nothing
+    // to reset, nothing shown; the control itself is enough.
+    this.requireElement("radius-reset").toggleAttribute(
+      "hidden",
+      this.sprayOverrideFor(this.toolSelection.sprayCapId).size === undefined,
+    );
     this.updateCoverageUi();
     this.refreshDrawingCursor();
   }
@@ -930,10 +934,8 @@ class SpatialSpraypaintApp {
       const override = this.sprayOverrideFor(this.toolSelection.sprayCapId);
       const coveragePercent = Math.round(this.effectiveSprayStyle(this.toolSelection.sprayCapId).coverage * 100);
       this.requireElement<HTMLInputElement>("spray-coverage").value = coveragePercent.toString();
-      this.requireElement("coverage-val").textContent = coveragePercent.toString();
-      this.requireElement("coverage-reset").textContent = override.coverage === undefined
-        ? "Using full coverage"
-        : "Use full coverage";
+      this.requireElement("coverage-val").textContent = `${coveragePercent}%`;
+      this.requireElement("coverage-reset").toggleAttribute("hidden", override.coverage === undefined);
     }
     this.updateFillModeUi();
     this.updateCustomizedBadge();
