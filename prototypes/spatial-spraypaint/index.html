@@ -219,7 +219,15 @@
     #member-placeholder { color:#8f8e99; border-radius:50%; }
 
     #more-toggle { font-size:20px; line-height:1; }
-    #more-menu { width:190px; gap:2px; }
+    /* Anchored to the `...` button itself (see `positionMoreMenu` in
+       main.ts), not centered over the bottom bar like the other
+       `.tool-popover`s -- `position:fixed` with `top`/`left` set in JS from
+       the button's own live `getBoundingClientRect()`, so it always opens
+       attached to that button regardless of viewport size. The `left`/
+       `bottom`/`transform` from the shared `.tool-popover` rule are
+       cancelled here (an id selector beats a class selector, no `!important`
+       needed) so JS's own inline `top`/`left`/`right`/`bottom` are what win. */
+    #more-menu { position:fixed; width:190px; gap:2px; left:auto; right:auto; top:auto; bottom:auto; transform:none; }
     .more-section-label { padding:6px 8px 2px; color:#8f8e99; font-size:9px; font-weight:800; letter-spacing:.8px; text-transform:uppercase; }
     .more-item { display:flex; align-items:center; gap:9px; width:100%; min-width:0; text-align:left; font-size:12px; font-weight:600; border:1px solid transparent; background:transparent; padding:8px; border-radius:8px; }
     .more-item:hover { border-color:rgba(255,255,255,.14); background:rgba(255,255,255,.06); }

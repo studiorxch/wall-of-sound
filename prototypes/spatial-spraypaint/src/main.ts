@@ -318,6 +318,10 @@ class SpatialSpraypaintApp {
       this.toolRenderer.resize(window.innerWidth, window.innerHeight);
       this.replayStrokes(this.strokeHistory.snapshot());
       this.refreshDrawingCursor();
+      // Keep the `...` menu attached to its button through any
+      // resize/reflow (e.g. rotating an iPad) rather than drifting toward
+      // a now-stale, no-longer-correct position.
+      if (this.requireElement("more-menu").classList.contains("open")) this.positionMoreMenu();
     };
     window.addEventListener("resize", handleResize);
     handleResize();
@@ -807,7 +811,60 @@ class SpatialSpraypaintApp {
       this.requireElement("mode-brush-control").setAttribute("aria-expanded", shouldOpen.toString());
     } else if (id === "more-menu") {
       this.requireElement("more-toggle").setAttribute("aria-expanded", shouldOpen.toString());
+      if (shouldOpen) this.positionMoreMenu();
     }
+  }
+
+  /**
+   * Anchors `#more-menu` to the live on-screen position of the `...`
+   * (`#more-toggle`) button, rather than the shared `.tool-popover`
+   * centered-over-the-bottom-bar placement every other popover still uses.
+   * `#more-toggle` sits at the trailing (right) end of the bottom bar, so
+   * the default anchor is above-and-right-aligned with it (opening upward,
+   * its right edge flush with the button's right edge) -- attached to the
+   * control, never centered or mid-screen.
+   *
+   * Viewport-bounds checks then flip that anchor only if it would actually
+   * overflow: right-aligned would push the menu off the LEFT edge on a
+   * narrow/iPad-portrait layout -> flips to left-aligned (anchored to the
+   * button's own left edge instead); opening upward would push the menu off
+   * the TOP edge -> flips to opening downward, below the button. Both
+   * checks are independent, so either or both can flip depending on actual
+   * menu size and viewport — never assumed once and hard-coded.
+   */
+  private positionMoreMenu(): void {
+    const menu = this.requireElement<HTMLDivElement>("more-menu");
+    const button = this.requireElement("more-toggle");
+    const gap = 10;
+    const edgeMargin = 8;
+    const buttonRect = button.getBoundingClientRect();
+    const menuWidth = menu.offsetWidth;
+    const menuHeight = menu.offsetHeight;
+
+    // Horizontal: default right-aligned to the button's own right edge.
+    let right = window.innerWidth - buttonRect.right;
+    let left = window.innerWidth - right - menuWidth;
+    if (left < edgeMargin) {
+      // Right-aligned would overflow the left edge -- flip to left-aligned
+      // on the button's own left edge instead.
+      left = buttonRect.left;
+      right = window.innerWidth - left - menuWidth;
+    }
+
+    // Vertical: default opens upward, its bottom edge `gap` above the button.
+    let bottom = window.innerHeight - buttonRect.top + gap;
+    let top = window.innerHeight - bottom - menuHeight;
+    if (top < edgeMargin) {
+      // Opening upward would overflow the top edge -- flip to opening
+      // downward, below the button, instead.
+      top = buttonRect.bottom + gap;
+      bottom = window.innerHeight - top - menuHeight;
+    }
+
+    menu.style.left = `${Math.max(edgeMargin, left)}px`;
+    menu.style.right = "auto";
+    menu.style.top = `${Math.max(edgeMargin, top)}px`;
+    menu.style.bottom = "auto";
   }
 
   private closeToolChoosers(): void {
