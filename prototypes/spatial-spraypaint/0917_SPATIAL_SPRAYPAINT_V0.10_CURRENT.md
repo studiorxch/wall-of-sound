@@ -72,4 +72,4 @@ No changes to `SprayBrushEngine.ts`, `PaintMarkerEngine.ts`, `WetPaintModel.ts`,
 
 ## Commit
 
-(pending — see next commit)
+`3619b07` — "feat: Spatial Spraypaint V0.10 UI Reset -- reduce duplication, remove Brush Studio catalog, consolidate markers"
