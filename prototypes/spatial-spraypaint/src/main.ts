@@ -112,6 +112,7 @@ import {
   resetWallView,
   resolveWheelPan,
   resolveWheelZoom,
+  resolveZoomStepWindow,
   screenToWall,
   setSpacePanHeld,
   shouldPanPointer,
@@ -395,13 +396,6 @@ class SpatialSpraypaintApp {
     this.requireElement("clear-strokes").addEventListener("click", () => this.clearAllStrokes());
     this.requireElement("scale-control").addEventListener("click", () => {
       this.toggleToolChooser("scale-chooser");
-    });
-    document.querySelectorAll<HTMLButtonElement>(".scale-choice[data-zoom]").forEach((choice) => {
-      choice.addEventListener("click", () => {
-        const zoom = Number.parseFloat(choice.dataset.zoom ?? "1");
-        this.setZoomLevel(zoom);
-        this.closeToolChoosers();
-      });
     });
     this.requireElement("scale-reset").addEventListener("click", () => {
       this.resetView();
@@ -770,17 +764,42 @@ class SpatialSpraypaintApp {
     control.setAttribute("aria-label", `Choose wall scale. Current scale ${percentage}`);
     control.setAttribute("title", `Wall scale ${percentage} · click for presets · 0 resets view`);
     control.classList.toggle("quick", this.quickZoomRestore !== null);
-    document.querySelectorAll<HTMLButtonElement>(".scale-choice[data-zoom]").forEach((choice) => {
-      const selected = Math.abs(Number.parseFloat(choice.dataset.zoom ?? "0") - this.wallView.zoom) < 0.001;
-      choice.classList.toggle("selected", selected);
-      choice.setAttribute("aria-pressed", selected.toString());
-    });
+    this.renderZoomStepper();
     const island = this.requireElement("navigation-island");
     island.dataset.zoom = this.wallView.zoom.toString();
     island.dataset.panX = this.wallView.panX.toString();
     island.dataset.panY = this.wallView.panY.toString();
     island.dataset.quickZoom = (this.quickZoomRestore !== null).toString();
     this.refreshDrawingCursor();
+  }
+
+  private renderZoomStepper(): void {
+    const stepper = this.requireElement("zoom-stepper");
+    const { steps, currentSlotIndex } = resolveZoomStepWindow(this.wallView.zoom);
+    stepper.innerHTML = "";
+    [...steps].reverse().forEach((step, reversedIndex) => {
+      const index = steps.length - 1 - reversedIndex;
+      const isCurrent = index === currentSlotIndex;
+      const percentage = Math.round(step * 100);
+      const mark = document.createElement("button");
+      mark.type = "button";
+      mark.className = isCurrent ? "zoom-mark current" : "zoom-mark";
+      mark.setAttribute("role", "option");
+      mark.setAttribute("aria-selected", isCurrent.toString());
+      mark.setAttribute("aria-label", `${percentage}%`);
+      mark.title = `${percentage}%`;
+      const label = document.createElement("span");
+      label.className = "zoom-mark-label";
+      label.textContent = isCurrent ? formatZoomPercentage(this.wallView) : `${percentage}%`;
+      mark.append(label);
+      if (!isCurrent) {
+        mark.addEventListener("click", () => {
+          this.setZoomLevel(step);
+          this.closeToolChoosers();
+        });
+      }
+      stepper.append(mark);
+    });
   }
 
   private renderShortcutReference(): void {

@@ -163,6 +163,58 @@ export function formatZoomPercentage(view: Pick<WallViewState, "zoom">): string 
   return `${Math.round(view.zoom * 100)}%`;
 }
 
+export interface ZoomStepWindow {
+  /** A fixed-length (up to `windowSize`, fewer only if `presets` itself is shorter) slice of `presets`, in ascending order — the discrete steps to show as marks. */
+  steps: readonly number[];
+  /** Index within `steps` closest to the live `zoom` passed in — the slot the current-state marker (the bullet, not a preset button) occupies. Never assumes `zoom` exactly equals a preset (wheel/pinch zoom rarely lands on one). */
+  currentSlotIndex: number;
+}
+
+/**
+ * Minimal stepped zoom selector support (replaces the prior large
+ * percentage-button grid): rather than showing all of `WALL_ZOOM_PRESETS`
+ * at once, this returns a small, fixed-size WINDOW of steps centered on
+ * whichever preset is closest to the live zoom — "surrounding marks
+ * represent discrete zoom steps" without ever growing into a big grid or
+ * needing to scroll. Clamped at either end of `presets` so the window
+ * always has exactly `windowSize` entries (never fewer) unless `presets`
+ * itself is shorter than that.
+ */
+export function resolveZoomStepWindow(
+  zoom: number,
+  presets: readonly number[] = WALL_ZOOM_PRESETS,
+  windowSize = 5,
+): ZoomStepWindow {
+  if (presets.length <= windowSize) {
+    return { steps: presets, currentSlotIndex: nearestPresetIndex(zoom, presets) };
+  }
+  const nearestIndex = nearestPresetIndex(zoom, presets);
+  const half = Math.floor(windowSize / 2);
+  let start = nearestIndex - half;
+  let end = start + windowSize - 1;
+  if (start < 0) {
+    start = 0;
+    end = windowSize - 1;
+  } else if (end > presets.length - 1) {
+    end = presets.length - 1;
+    start = end - windowSize + 1;
+  }
+  return { steps: presets.slice(start, end + 1), currentSlotIndex: nearestIndex - start };
+}
+
+function nearestPresetIndex(zoom: number, presets: readonly number[]): number {
+  let bestIndex = 0;
+  let bestDiff = Infinity;
+  presets.forEach((preset, index) => {
+    const diff = Math.abs(preset - zoom);
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      bestIndex = index;
+    }
+  });
+  return bestIndex;
+}
+
 export function toggleQuickZoom(
   state: QuickZoomState,
   screenAnchor: WallPoint,
