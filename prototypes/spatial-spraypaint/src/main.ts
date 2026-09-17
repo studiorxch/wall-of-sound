@@ -77,6 +77,13 @@ import {
 } from "./FlairCurves";
 import { buildContinuousSegmentEnds } from "./FlairContinuity";
 import { getFlairOverride, resolveEffectiveFlairParams } from "./FlairProperties";
+import {
+  normalizePointerSample,
+  resolvePencilCoverage,
+  resolvePencilSprayAngle,
+  type NormalizedPointerSample,
+  type RawPointerSample,
+} from "./PencilInput";
 import { type FlairModeId, type SurfaceContextId } from "./ToolTaxonomy";
 import { StrokeHistory, type RecordedStroke } from "./StrokeHistory";
 import { StrokeSmoother } from "./StrokeSmoother";
@@ -171,6 +178,8 @@ class SpatialSpraypaintApp {
   private lastScreenPoint: WallPoint | null = null;
   /** Previous frame's screen Y while the temporary Alt+vertical-drag simulated-distance gesture is active (see `adjustSimulatedSprayDistance`) — null whenever that gesture isn't currently running, so the very first Alt-held move of a drag contributes no jump. */
   private simulatedDistanceDragLastY: number | null = null;
+  /** Previous raw pointer sample from the current pointer sequence — velocity's own "previous" for `normalizePointerSample` (see `PencilInput.ts`), independent of stroke/drawing state so diagnostics work on hover too. Reset to null on every `pointerdown`. */
+  private lastRawPointerSample: RawPointerSample | null = null;
   /** Section 3 of the Flair build brief: routing/default authority only — no UI selects this yet, and it never hard-codes screen position as depth. Track Marks' own Flair-mode cycle (see `cycleTrackMarksFlairMode`) is this pass's live-testable surface. */
   private surfaceContext: SurfaceContextId = "neutral";
   /** Track Marks' own active Flair mode — the brief's "safe creative sandbox." Every other cap ignores this field entirely (see `applyFlairOutputToPoint`/`adjustSimulatedSprayDistance`'s own cap-id gate). */
@@ -464,6 +473,9 @@ class SpatialSpraypaintApp {
       this.setSettings({ type: "tracking-debug", value: (event.target as HTMLInputElement).checked });
       this.updateTrackingVisibility();
     });
+    this.requireElement<HTMLInputElement>("pencil-diagnostics-visible").addEventListener("change", (event) => {
+      this.setSettings({ type: "pencil-diagnostics", value: (event.target as HTMLInputElement).checked });
+    });
 
     this.requireElement("physical-input").addEventListener("click", () => void this.selectInputMode("mouse"));
     this.requireElement("hand-input").addEventListener("click", () => {
@@ -523,6 +535,7 @@ class SpatialSpraypaintApp {
       this.curveReconstructor.reset();
       this.dripAccumulator.reset();
       this.simulatedDistanceDragLastY = null;
+      this.lastRawPointerSample = null;
       this.activeWallPoint = screenToWall(this.wallView, screenPoint);
       this.lastDepositTimestamp = 0;
       this.setDrawingActive(true);
@@ -531,6 +544,14 @@ class SpatialSpraypaintApp {
     window.addEventListener("pointermove", (event) => {
       const screenPoint = this.pointerScreenPoint(event);
       this.lastScreenPoint = screenPoint;
+      // Section C of the Pencil Prep build brief: raw diagnostic capture,
+      // always on (cheap — only DOM writes when the panel is toggled
+      // visible, see `updatePencilDiagnosticsUi`), independent of drawing
+      // state so values are visible on hover too, and independent of any
+      // Flair/mapping decision below.
+      const pointerSample = normalizePointerSample(event, this.lastRawPointerSample);
+      this.lastRawPointerSample = pointerSample;
+      this.updatePencilDiagnosticsUi(pointerSample);
       const authority = this.synchronizeInteractionAuthority(this.currentDrawingIntent());
       if (authority.panGestureActive && event.pointerId === this.panPointerId && this.lastPanScreen) {
         event.preventDefault();
@@ -564,6 +585,7 @@ class SpatialSpraypaintApp {
         } else {
           this.simulatedDistanceDragLastY = null;
         }
+        this.applyPencilTrackMarksMapping(pointerSample);
         this.activeWallPoint = screenToWall(this.wallView, screenPoint);
       }
     });
@@ -846,9 +868,28 @@ class SpatialSpraypaintApp {
     this.requireElement<HTMLSelectElement>("smoothing-level").value = this.settings.smoothing;
     this.requireElement<HTMLInputElement>("drips-enabled").checked = this.settings.dripsEnabled;
     this.requireElement<HTMLInputElement>("tracking-debug-visible").checked = this.settings.trackingDebugVisible;
+    this.requireElement<HTMLInputElement>("pencil-diagnostics-visible").checked = this.settings.pencilDiagnosticsVisible;
+    this.requireElement("pencil-diagnostics-panel").classList.toggle("visible", this.settings.pencilDiagnosticsVisible);
     this.updateWallEnvironmentUi();
     this.updateRadiusUi();
     this.updateTrackingVisibility();
+  }
+
+  /**
+   * Section C of the build brief: a temporary/diagnostic-only readout of
+   * ACTUAL `PointerEvent` values — never a guess at device support. Updated
+   * on every pointermove regardless of drawing state (so the values are
+   * visible just by moving a Pencil near the canvas, even before touching
+   * down), but only writes to the DOM while the panel is toggled visible.
+   */
+  private updatePencilDiagnosticsUi(sample: NormalizedPointerSample): void {
+    if (!this.settings.pencilDiagnosticsVisible) return;
+    this.requireElement("pencil-diagnostics-type").textContent = sample.pointerType.toUpperCase();
+    this.requireElement("pencil-diagnostics-pressure").textContent = sample.pressure.toFixed(2);
+    this.requireElement("pencil-diagnostics-tilt").textContent = `${Math.round(sample.tiltX)}° / ${Math.round(sample.tiltY)}°`;
+    this.requireElement("pencil-diagnostics-twist").textContent = `${Math.round(sample.twist)}°`;
+    this.requireElement("pencil-diagnostics-velocity").textContent = sample.velocity.toFixed(3);
+    this.requireElement("pencil-diagnostics-coalesced").textContent = String(sample.coalescedCount);
   }
 
   private updateRadiusUi(): void {
@@ -934,6 +975,27 @@ class SpatialSpraypaintApp {
    * footprint). Time/dwell never reaches this — only real vertical screen
    * movement does.
    */
+  /**
+   * Pencil Mapping V1 (Pencil Prep build brief, section E) — Track Marks
+   * ONLY, exactly like every other Flair sandbox mechanism in this file.
+   * Reuses two EXISTING generic per-brush override channels rather than
+   * inventing rendering: pressure -> `coverage` (already a generic 0-1
+   * deposition control), tilt -> `sprayAngle` (already a generic per-brush
+   * property). `distance`/`baseRadius` are never touched here — Flair's own
+   * distance dial stays fully independent, per the brief's explicit "do not
+   * map pressure to distance." A no-op for a mouse (`isPencil === false`)
+   * or any cap other than Track Marks, so Pink Dot's own `sprayAngle`
+   * (its plume-flare control) can never be moved by Pencil input.
+   */
+  private applyPencilTrackMarksMapping(sample: NormalizedPointerSample): void {
+    if (!sample.isPencil) return;
+    if (this.toolSelection.selectedToolId !== "spray-can" || this.toolSelection.sprayCapId !== "track-marks") return;
+    const capId = this.toolSelection.sprayCapId;
+    const coverage = resolvePencilCoverage(sample.pressure);
+    const sprayAngle = resolvePencilSprayAngle(sample.tiltX, sample.tiltY, PLUME_MAX_ANGLE_DEGREES);
+    this.setSettings({ type: "spray-property", capId, patch: { coverage, sprayAngle } });
+  }
+
   /**
    * Called once, right as a fresh Alt-held drag gesture begins (the very
    * first Alt-held pointermove, before any delta has been applied — see the

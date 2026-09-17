@@ -72,6 +72,12 @@ describe("settings state", () => {
     expect(state.flairOverrides).toEqual({});
   });
 
+  it("toggles pencil diagnostics visibility independently of tracking debug", () => {
+    const state = reduceSettingsState(INITIAL_SETTINGS_STATE, { type: "pencil-diagnostics", value: true });
+    expect(state.pencilDiagnosticsVisible).toBe(true);
+    expect(state.trackingDebugVisible).toBe(false);
+  });
+
   it("keeps the performer hidden across Physical and Hand modes", () => {
     expect(cameraTreatmentForInputMode("spatial", "clean")).toBe("hidden");
     expect(cameraTreatmentForInputMode("mouse", "ghost")).toBe("hidden");

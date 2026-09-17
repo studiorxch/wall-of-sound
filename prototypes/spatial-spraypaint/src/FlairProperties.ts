@@ -1,14 +1,18 @@
-import { getFlairProControlMetadata, type EffectiveFlairParams } from "./FlairCurves";
+import { getFlairProControlMetadata, type EffectiveFlairParams, type FlairDepthResponseId } from "./FlairCurves";
 import { type FlairModeId } from "./ToolTaxonomy";
 
 /**
- * MODE DEFAULT -> SESSION MODIFICATION -> EFFECTIVE VALUE for Flair's five
- * Brush Studio controls — the same override pattern `BrushProperties.ts`
- * already established for Size/Coverage/Fill/Spray Angle, generalized one
- * level: a Flair override is keyed by BOTH cap id AND mode, because the
- * brief requires "changing Wall parameters must not silently mutate
- * Blackbook defaults" — the same brush's Wall tweaks and Blackbook tweaks
- * are independent session state, not one shared bundle.
+ * MODE DEFAULT -> SESSION MODIFICATION -> EFFECTIVE VALUE for Flair's Brush
+ * Studio controls — the same override pattern `BrushProperties.ts` already
+ * established for Size/Coverage/Fill/Spray Angle, generalized one level: a
+ * Flair override is keyed by BOTH cap id AND mode, because the brief
+ * requires "changing Wall parameters must not silently mutate Blackbook
+ * defaults" — the same brush's Wall tweaks and Blackbook tweaks are
+ * independent session state, not one shared bundle. `depthResponse` (Flair
+ * Stabilization build brief, section A2) joins the five numeric scalars as
+ * a sixth, non-numeric overridable field — same store, same reset
+ * machinery, its own dedicated two-option control in Brush Studio (not a
+ * slider row — see `getFlairPropertyRows`, which stays numeric-only).
  */
 export interface FlairParameterOverride {
   flairAmount?: number;
@@ -16,6 +20,7 @@ export interface FlairParameterOverride {
   flairSmoothing?: number;
   bloomResponse?: number;
   outputFalloff?: number;
+  depthResponse?: FlairDepthResponseId;
 }
 
 export type FlairPropertyKey = keyof FlairParameterOverride;
@@ -86,6 +91,7 @@ export function resolveEffectiveFlairParams(mode: FlairModeId, override: FlairPa
     flairSmoothing: override.flairSmoothing ?? defaults.flairSmoothing,
     bloomResponse: override.bloomResponse ?? defaults.bloomResponse,
     outputFalloff: override.outputFalloff ?? defaults.outputFalloff,
+    depthResponse: override.depthResponse ?? defaults.depthResponse,
   };
 }
 
@@ -102,8 +108,11 @@ export function isFlairModeModified(override: FlairParameterOverride): boolean {
 // data shape (which controls exist, their bounds, their modified state) is
 // unit-testable, matching `BrushProperties.ts`'s `getSprayPropertyGroups`.
 
+/** The five NUMERIC slider controls only — `depthResponse` is a separate two-option control in Brush Studio, not a slider row (see module doc). */
+export type NumericFlairPropertyKey = Exclude<FlairPropertyKey, "depthResponse">;
+
 export interface FlairPropertyRow {
-  key: FlairPropertyKey;
+  key: NumericFlairPropertyKey;
   label: string;
   value: number;
   min: number;
@@ -113,7 +122,7 @@ export interface FlairPropertyRow {
   modified: boolean;
 }
 
-const FLAIR_PROPERTY_BOUNDS: ReadonlyArray<{ key: FlairPropertyKey; label: string; min: number; max: number; step: number; unit?: string }> = [
+const FLAIR_PROPERTY_BOUNDS: ReadonlyArray<{ key: NumericFlairPropertyKey; label: string; min: number; max: number; step: number; unit?: string }> = [
   { key: "flairAmount", label: "Flair Amount", min: 0.1, max: 3, step: 0.05 },
   { key: "flairRange", label: "Flair Range", min: 0.1, max: 3, step: 0.05 },
   { key: "flairSmoothing", label: "Flair Smoothing", min: 0.02, max: 1, step: 0.02 },

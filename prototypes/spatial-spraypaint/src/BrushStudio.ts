@@ -9,6 +9,7 @@ import { renderMarkerBrushStudioPreview, renderSprayBrushStudioPreview, renderTr
 import {
   getFlairPropertyRows,
   isFlairModeModified,
+  isFlairPropertyModified,
   resolveEffectiveFlairParams,
   type FlairOverrideStore,
   type FlairParameterOverride,
@@ -207,6 +208,12 @@ const FLAIR_MODE_SELECT_OPTIONS: ReadonlyArray<{ id: FlairModeId; label: string 
   { id: "wall", label: "Wall" },
   { id: "blackbook", label: "Blackbook" },
   { id: "wild", label: "Wild" },
+];
+
+/** Flair Stabilization build brief, section A2: which simulated-distance direction produces a WIDER spray. */
+const FLAIR_DEPTH_RESPONSE_SELECT_OPTIONS: ReadonlyArray<{ id: "far-wide" | "near-wide"; label: string }> = [
+  { id: "far-wide", label: "Far → Wide" },
+  { id: "near-wide", label: "Near → Wide" },
 ];
 
 export class BrushStudioController {
@@ -466,6 +473,9 @@ export class BrushStudioController {
 
     const override = this.deps.getFlairOverrides()[capId]?.[mode] ?? {};
     const effective = resolveEffectiveFlairParams(mode, override);
+
+    elements.push(this.buildDepthResponseRow(capId, mode, preset, effective, override));
+
     for (const row of getFlairPropertyRows(effective, override)) {
       elements.push(this.buildFlairPropertyRow(capId, mode, preset, row));
     }
@@ -506,6 +516,66 @@ export class BrushStudioController {
     elements.push(resetFlairButton);
 
     return elements;
+  }
+
+  /**
+   * Depth Response (Flair Stabilization build brief, section A2/B) — a
+   * mapping POLARITY select, not a numeric slider, so it gets its own row
+   * rather than joining `getFlairPropertyRows`'s five sliders. Same
+   * modified-dot + per-property Reset pattern as every other Flair row.
+   */
+  private buildDepthResponseRow(
+    capId: string,
+    mode: FlairModeId,
+    preset: SprayCapPreset,
+    effective: ReturnType<typeof resolveEffectiveFlairParams>,
+    override: FlairParameterOverride,
+  ): HTMLElement {
+    const wrap = document.createElement("div");
+    wrap.className = "brush-studio-property-row";
+
+    const label = document.createElement("span");
+    label.className = "brush-studio-property-label";
+    label.textContent = "Depth Response";
+    wrap.append(label);
+
+    const select = document.createElement("select");
+    select.className = "flair-depth-response-select";
+    select.setAttribute("aria-label", "Flair depth response");
+    for (const option of FLAIR_DEPTH_RESPONSE_SELECT_OPTIONS) {
+      const opt = document.createElement("option");
+      opt.value = option.id;
+      opt.textContent = option.label;
+      opt.selected = option.id === effective.depthResponse;
+      select.append(opt);
+    }
+    select.addEventListener("change", () => {
+      this.deps.setFlairProperty(capId, mode, { depthResponse: select.value as "far-wide" | "near-wide" });
+      const nextOverride = this.deps.getFlairOverrides()[capId]?.[mode] ?? {};
+      const params = resolveEffectiveFlairParams(mode, nextOverride);
+      const canvas = this.el<HTMLCanvasElement>("brush-studio-preview");
+      const ctx = canvas.getContext("2d");
+      if (ctx) renderTrackMarksFlairPreview(ctx, canvas.width, canvas.height, preset, mode, params);
+      this.render();
+    });
+    wrap.append(select);
+
+    if (isFlairPropertyModified(override, "depthResponse")) {
+      const dot = document.createElement("span");
+      dot.className = "brush-studio-modified-dot";
+      dot.title = "Modified from mode default";
+      wrap.append(dot);
+      const resetButton = document.createElement("button");
+      resetButton.className = "brush-studio-property-reset";
+      resetButton.textContent = "Reset";
+      resetButton.addEventListener("click", () => {
+        this.deps.resetFlairProperty(capId, mode, "depthResponse");
+        this.render();
+      });
+      wrap.append(resetButton);
+    }
+
+    return wrap;
   }
 
   private buildFlairPropertyRow(capId: string, mode: FlairModeId, preset: SprayCapPreset, row: FlairPropertyRow): HTMLElement {

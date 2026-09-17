@@ -278,6 +278,8 @@
     #hand-first-use-cue.visible { opacity:1; transform:translateX(-50%); }
     #tracking-debug-panel { position:absolute; top:96px; right:16px; width:272px; display:none; padding:14px; border:1px solid rgba(255,255,255,.16); border-radius:12px; background:rgba(7,8,13,.9); box-shadow:0 8px 32px rgba(0,0,0,.45); }
     #tracking-debug-panel.visible { display:block; }
+    #pencil-diagnostics-panel { position:absolute; top:96px; left:16px; width:220px; display:none; padding:14px; border:1px solid rgba(255,255,255,.16); border-radius:12px; background:rgba(7,8,13,.9); box-shadow:0 8px 32px rgba(0,0,0,.45); }
+    #pencil-diagnostics-panel.visible { display:block; }
     .tracking-debug-title,.tracking-metric,.tracking-stage { display:flex; align-items:center; justify-content:space-between; gap:10px; }
     .tracking-debug-title { padding-bottom:9px; margin-bottom:8px; border-bottom:1px solid rgba(255,255,255,.12); font-size:10px; font-weight:800; color:#aaa9b4; }
     #hand-detection-status.detected,.tracking-stage[data-state="pass"] .tracking-stage-value { color:#00ff80; }
@@ -604,6 +606,7 @@
         <h2>Input</h2>
         <p class="setting-note">Hand uses the camera privately as a tracking sensor. The performer is not shown or recorded.</p>
         <label class="setting-row"><span>Tracking diagnostics</span><input id="tracking-debug-visible" type="checkbox" /></label>
+        <label class="setting-row"><span>Pencil diagnostics</span><input id="pencil-diagnostics-visible" type="checkbox" /></label>
         <div id="tracking-error" role="alert"></div>
       </section>
       <section class="settings-section">
@@ -622,6 +625,15 @@
     </aside>
 
     <div id="tracking-quality-warning" role="status">💡 Hand tracking is struggling. Improve lighting or increase hand/background contrast.</div>
+
+    <div id="pencil-diagnostics-panel" aria-live="polite">
+      <div class="tracking-debug-title"><span>POINTER DIAGNOSTICS</span><span id="pencil-diagnostics-type">—</span></div>
+      <div class="tracking-metric"><span>Pressure</span><strong id="pencil-diagnostics-pressure">—</strong></div>
+      <div class="tracking-metric"><span>Tilt X / Y</span><strong id="pencil-diagnostics-tilt">—</strong></div>
+      <div class="tracking-metric"><span>Twist</span><strong id="pencil-diagnostics-twist">—</strong></div>
+      <div class="tracking-metric"><span>Velocity</span><strong id="pencil-diagnostics-velocity">—</strong></div>
+      <div class="tracking-metric"><span>Coalesced</span><strong id="pencil-diagnostics-coalesced">—</strong></div>
+    </div>
 
     <div id="tracking-overlay" aria-live="polite">
       <div id="hand-first-use-cue">Pinch thumb + index finger to use Spray Can</div>

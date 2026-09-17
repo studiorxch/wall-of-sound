@@ -36,7 +36,25 @@ function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
 }
 
-/** Pure: linearly resamples every field (x/y/z/timestamp/velocity/width/opacity) from `previous` to `target` at a small fixed arclength step. `previous === null` (a stroke's very first point) returns just `[target]`, matching every other cap's existing start-of-stroke behavior. */
+/**
+ * Cubic smoothstep, `3t²-2t³`: zero derivative at both t=0 and t=1. Flair
+ * Stabilization build brief, section A1 — the density fix in this module
+ * already removed the segmented/capsule artifact, but a LINEAR ramp within
+ * each resampled run still meets the next run's own linear ramp at a sharp
+ * angle (a "kink") wherever the target width/opacity itself changes
+ * direction (e.g. right at a near→far→near turnaround). Easing width/output
+ * specifically (never x/y/z/timestamp/velocity, which must stay physically
+ * linear along the actual path) makes every run start and end tangent to
+ * flat, so consecutive runs blend instead of kinking — a true taper, not a
+ * piecewise one. `smoothstep(0)=0` and `smoothstep(1)=1` exactly, so this
+ * never changes the true endpoint values — Flair's full range is preserved.
+ */
+function smoothstep(t: number): number {
+  const clamped = Math.max(0, Math.min(1, t));
+  return clamped * clamped * (3 - 2 * clamped);
+}
+
+/** Pure: resamples every field from `previous` to `target` at a small fixed arclength step. Position/timestamp/velocity interpolate linearly (the true physical path); width/opacity ease via `smoothstep` for a continuous, non-piecewise taper. `previous === null` (a stroke's very first point) returns just `[target]`, matching every other cap's existing start-of-stroke behavior. */
 export function resampleTrackMarksFlairSegment(previous: StrokePoint | null, target: StrokePoint): StrokePoint[] {
   if (!previous) return [target];
   const dx = target.x - previous.x;
@@ -52,14 +70,15 @@ export function resampleTrackMarksFlairSegment(previous: StrokePoint | null, tar
   const result: StrokePoint[] = [];
   for (let i = 1; i <= steps; i += 1) {
     const t = i / steps;
+    const eased = smoothstep(t);
     result.push({
       x: lerp(previous.x, target.x, t),
       y: lerp(previous.y, target.y, t),
       z: lerp(previousZ, targetZ, t),
       timestamp: lerp(previous.timestamp, target.timestamp, t),
       velocity: lerp(previous.velocity, target.velocity, t),
-      width: lerp(previous.width, target.width, t),
-      opacity: lerp(previous.opacity, target.opacity, t),
+      width: lerp(previous.width, target.width, eased),
+      opacity: lerp(previous.opacity, target.opacity, eased),
     });
   }
   return result;

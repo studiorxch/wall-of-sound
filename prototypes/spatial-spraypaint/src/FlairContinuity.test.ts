@@ -104,3 +104,39 @@ describe("buildContinuousSegmentEnds -- gating and pass-through", () => {
     expect(buildContinuousSegmentEnds(near(0, 0), [], "track-marks", "wild", 1)).toEqual([]);
   });
 });
+
+describe("smooth taper envelope (Flair Stabilization build brief, section A1)", () => {
+  it("width does not ramp linearly -- early and late steps change less than the midpoint (ease-in-ease-out, not a straight ramp)", () => {
+    const previous = { ...near(0, 0), width: 20, opacity: 0.9 };
+    const target = { ...near(60, 0), width: 100, opacity: 0.9 };
+    const run = resampleTrackMarksFlairSegment(previous, target);
+    const firstStepDelta = run[0].width - previous.width;
+    const midIndex = Math.floor(run.length / 2);
+    const midStepDelta = run[midIndex].width - run[midIndex - 1].width;
+    // A linear ramp would give every step the identical delta; smoothstep's
+    // first step (near t=0, near-zero slope) must be clearly smaller than
+    // its steepest, near-the-midpoint step.
+    expect(firstStepDelta).toBeLessThan(midStepDelta);
+  });
+
+  it("still reaches the exact true endpoint values -- easing the path never reduces Flair's range", () => {
+    const previous = { ...near(0, 0), width: 20, opacity: 0.9 };
+    const target = { ...near(60, 0), width: 100, opacity: 0.1 };
+    const run = resampleTrackMarksFlairSegment(previous, target);
+    const last = run[run.length - 1];
+    expect(last.width).toBeCloseTo(100, 6);
+    expect(last.opacity).toBeCloseTo(0.1, 6);
+  });
+
+  it("position/timestamp/velocity stay physically linear along the path -- only width/opacity are eased", () => {
+    const previous = { ...near(0, 0), timestamp: 0, velocity: 0.2 };
+    const target = { ...near(60, 0), timestamp: 600, velocity: 1.2 };
+    const run = resampleTrackMarksFlairSegment(previous, target);
+    const steps = run.length;
+    for (const [index, point] of run.entries()) {
+      const t = (index + 1) / steps;
+      expect(point.x).toBeCloseTo(previous.x + (target.x - previous.x) * t, 6);
+      expect(point.timestamp).toBeCloseTo(previous.timestamp + (target.timestamp - previous.timestamp) * t, 6);
+    }
+  });
+});

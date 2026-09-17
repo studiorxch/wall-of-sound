@@ -41,6 +41,8 @@ export interface SettingsState {
    */
   flairOverrides: FlairOverrideStore;
   trackingDebugVisible: boolean;
+  /** Section C of the Pencil Prep build brief: a temporary/diagnostic-only raw pointer readout (pointerType/pressure/tilt/twist/velocity/coalesced count). Off by default (Creative Interface Doctrine — normal state stays quiet); shows nothing about rendering or Flair, only raw hardware values. */
+  pencilDiagnosticsVisible: boolean;
 }
 
 export type SettingsAction =
@@ -55,7 +57,8 @@ export type SettingsAction =
   | { type: "flair-property"; capId: string; mode: FlairModeId; patch: FlairParameterOverride }
   | { type: "reset-flair-property"; capId: string; mode: FlairModeId; key: FlairPropertyKey }
   | { type: "reset-flair-mode"; capId: string; mode: FlairModeId }
-  | { type: "tracking-debug"; value: boolean };
+  | { type: "tracking-debug"; value: boolean }
+  | { type: "pencil-diagnostics"; value: boolean };
 
 export const INITIAL_SETTINGS_STATE: SettingsState = {
   isOpen: false,
@@ -64,6 +67,7 @@ export const INITIAL_SETTINGS_STATE: SettingsState = {
   sprayOverrides: EMPTY_SPRAY_OVERRIDES,
   flairOverrides: EMPTY_FLAIR_OVERRIDES,
   trackingDebugVisible: false,
+  pencilDiagnosticsVisible: false,
 };
 
 export function cameraTreatmentForInputMode(
@@ -93,5 +97,6 @@ export function reduceSettingsState(state: SettingsState, action: SettingsAction
     case "reset-flair-mode":
       return { ...state, flairOverrides: resetFlairMode(state.flairOverrides, action.capId, action.mode) };
     case "tracking-debug": return { ...state, trackingDebugVisible: action.value };
+    case "pencil-diagnostics": return { ...state, pencilDiagnosticsVisible: action.value };
   }
 }

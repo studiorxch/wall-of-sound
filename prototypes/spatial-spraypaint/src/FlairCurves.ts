@@ -130,7 +130,12 @@ export interface FlairModulationResult extends FlairModulationInput {
  */
 export function resolveFlairModulation(mode: FlairModeId, input: FlairModulationInput): FlairModulationResult {
   const curves = FLAIR_CURVES[mode];
-  const t = clamp01(input.distance01);
+  // Applies this mode's own DEFAULT Depth Response (section A2) — keeps this
+  // canonical-only evaluation consistent with what
+  // `resolveFlairModulationWithParams(mode, canonicalDefaults, input)` would
+  // produce. `off`'s default is `far-wide`, but its curves ignore polarity
+  // entirely (identity either way), so this changes nothing for `off`.
+  const t = resolveDepthResponseCurveInput(input.distance01, FLAIR_MODE_DEFAULT_DEPTH_RESPONSE[mode]);
   return {
     ...input,
     width01: curves.widthExpansion(t),
@@ -200,6 +205,34 @@ export interface FlairProControlMetadata {
   flairRange: number;
   bloomResponse: number;
   outputFalloff: number;
+  /** See `FlairDepthResponseId` below — a mapping POLARITY, not a new curve. */
+  depthResponse: FlairDepthResponseId;
+}
+
+/**
+ * Flair Stabilization build brief, section A2: which physical direction of
+ * simulated-distance change produces a WIDER spray. `far-wide` (the
+ * pre-existing, only prior behavior): moving farther/outward widens.
+ * `near-wide`: moving nearer widens instead. This is a mapping POLARITY
+ * only — see `resolveDepthResponseCurveInput` below, the single place it is
+ * applied. It never creates a second renderer or a second curve family;
+ * every mode's `widthExpansion`/`textureBloom`/`outputAttenuation` SHAPE is
+ * reused completely unmodified, just fed a (possibly) mirrored input.
+ */
+export type FlairDepthResponseId = "far-wide" | "near-wide";
+
+/** Section A2's defaults table. `off` is listed for completeness only — `applyFlairOutputToPoint`/the `off` branch everywhere else never reaches this, since `off` is always identity regardless of polarity. */
+export const FLAIR_MODE_DEFAULT_DEPTH_RESPONSE: Record<FlairModeId, FlairDepthResponseId> = {
+  off: "far-wide",
+  wall: "far-wide",
+  blackbook: "near-wide",
+  wild: "far-wide",
+};
+
+/** Mirrors normalized simulated distance around its own midpoint when the polarity is `near-wide`; identity for `far-wide`. Self-inverse (`flip(flip(t)) === t`), which is what lets `inverseEffectiveWidthExpansion` below reuse it directly. */
+function resolveDepthResponseCurveInput(distance01: number, depthResponse: FlairDepthResponseId): number {
+  const t = clamp01(distance01);
+  return depthResponse === "near-wide" ? 1 - t : t;
 }
 
 export function getFlairProControlMetadata(mode: FlairModeId): FlairProControlMetadata {
@@ -210,6 +243,7 @@ export function getFlairProControlMetadata(mode: FlairModeId): FlairProControlMe
     flairRange: curves.widthExpansion(1),
     bloomResponse: curves.textureBloom(1),
     outputFalloff: 1 - curves.outputAttenuation(1),
+    depthResponse: FLAIR_MODE_DEFAULT_DEPTH_RESPONSE[mode],
   };
 }
 
@@ -257,21 +291,41 @@ export function resolveFlairModulationWithParams(
 ): FlairModulationResult {
   const baseline = getFlairProControlMetadata(mode);
   const base = FLAIR_CURVES[mode];
-  const t = clamp01(input.distance01);
+  // Depth Response (section A2): the SAME curve shapes, fed a mirrored input
+  // when the polarity is `near-wide` — applied once, here, so width, bloom,
+  // and output attenuation all reinterpret "distance" consistently rather
+  // than each channel picking its own polarity. `off`'s own curve is the
+  // plain identity `t => t` (not direction-symmetric), so unlike every real
+  // mode it is NOT depth-response-invariant by construction — `off` must
+  // stay a hard identity regardless of any `depthResponse` override, so it
+  // is excluded here explicitly rather than relying on the curve shape.
+  const curveT = mode === "off" ? clamp01(input.distance01) : resolveDepthResponseCurveInput(input.distance01, params.depthResponse);
   const bloomScale = scaleRatio(params.bloomResponse, baseline.bloomResponse);
   const falloffScale = scaleRatio(params.outputFalloff, baseline.outputFalloff);
   const widthExpansion = resolveEffectiveWidthExpansionCurve(mode, params);
-  const attenuation = 1 - (1 - base.outputAttenuation(t)) * falloffScale;
+  const attenuation = 1 - (1 - base.outputAttenuation(curveT)) * falloffScale;
   return {
     ...input,
-    width01: widthExpansion(t),
-    bloom01: base.textureBloom(t) * bloomScale,
+    width01: widthExpansion(curveT),
+    bloom01: base.textureBloom(curveT) * bloomScale,
     endpointAuthority: base.endpointShapingAuthority,
     output: input.output * attenuation,
   };
 }
 
-/** Numeric inverse of `resolveEffectiveWidthExpansionCurve` — same binary-search technique as `inverseWidthExpansion`, generalized to an overridden `flairRange`. Used to seed a fresh drag from the cap's current size under whatever Range is currently in effect for this brush + mode. */
+/**
+ * Numeric inverse of `resolveEffectiveWidthExpansionCurve`, POLARITY-AWARE:
+ * finds the `distance01` that would produce `targetWidth01` under this
+ * mode+params' Depth Response, not just the raw curve argument. Binary
+ * search always runs against the pure (monotonic-increasing) curve — never
+ * against the mirrored input directly, since a `near-wide` combination is
+ * monotonic-DECREASING in `distance01` and would break the search's own
+ * increasing-function assumption — then un-mirrors the result.
+ * `resolveDepthResponseCurveInput` is self-inverse, so applying it a second
+ * time to its own output correctly reverses it. Used to seed a fresh drag
+ * from the cap's current size under whatever Range/Depth-Response is
+ * currently in effect for this brush + mode.
+ */
 export function inverseEffectiveWidthExpansion(mode: FlairModeId, params: EffectiveFlairParams, targetWidth01: number): number {
   const curve = resolveEffectiveWidthExpansionCurve(mode, params);
   let lo = 0;
@@ -280,7 +334,8 @@ export function inverseEffectiveWidthExpansion(mode: FlairModeId, params: Effect
     const mid = (lo + hi) / 2;
     if (curve(mid) < targetWidth01) lo = mid; else hi = mid;
   }
-  return (lo + hi) / 2;
+  const curveT = (lo + hi) / 2;
+  return mode === "off" ? curveT : resolveDepthResponseCurveInput(curveT, params.depthResponse);
 }
 
 /**

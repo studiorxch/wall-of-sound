@@ -165,7 +165,7 @@ describe("pro-control metadata", () => {
     for (const mode of ["off", "wall", "blackbook", "wild"] as const) {
       const metadata = getFlairProControlMetadata(mode);
       expect(Object.keys(metadata).sort()).toEqual(
-        ["bloomResponse", "flairAmount", "flairRange", "flairSmoothing", "outputFalloff"].sort(),
+        ["bloomResponse", "depthResponse", "flairAmount", "flairRange", "flairSmoothing", "outputFalloff"].sort(),
       );
     }
   });
@@ -256,5 +256,79 @@ describe("Track Marks size denormalization", () => {
   it("Wall and Blackbook's default effective ranges stay within the generic 72-unit boundary", () => {
     expect(resolveTrackMarksFlairSizeRange("wall", getFlairProControlMetadata("wall")).max).toBeLessThanOrEqual(72);
     expect(resolveTrackMarksFlairSizeRange("blackbook", getFlairProControlMetadata("blackbook")).max).toBeLessThanOrEqual(72);
+  });
+});
+
+describe("Depth Response -- mapping polarity (Flair Stabilization build brief, section A2)", () => {
+  it("Wall's default polarity is far-wide", () => {
+    expect(getFlairProControlMetadata("wall").depthResponse).toBe("far-wide");
+  });
+
+  it("Blackbook's default polarity is near-wide", () => {
+    expect(getFlairProControlMetadata("blackbook").depthResponse).toBe("near-wide");
+  });
+
+  it("Wild defaults to far-wide but is editable (accepts an explicit near-wide override)", () => {
+    expect(getFlairProControlMetadata("wild").depthResponse).toBe("far-wide");
+    const params = { ...getFlairProControlMetadata("wild"), depthResponse: "near-wide" as const };
+    const near0 = resolveFlairModulationWithParams("wild", params, { distance01: 0, output: 1, velocity: 0, angle: 0 });
+    const far1 = resolveFlairModulationWithParams("wild", params, { distance01: 1, output: 1, velocity: 0, angle: 0 });
+    expect(near0.width01).toBeGreaterThan(far1.width01); // near-wide: near (0) is WIDER than far (1)
+  });
+
+  it("far-wide gives thin -> broad -> thin as distance sweeps near -> far -> near", () => {
+    const params = { ...getFlairProControlMetadata("wall"), depthResponse: "far-wide" as const };
+    const near = resolveFlairModulationWithParams("wall", params, { distance01: 0, output: 1, velocity: 0, angle: 0 });
+    const far = resolveFlairModulationWithParams("wall", params, { distance01: 1, output: 1, velocity: 0, angle: 0 });
+    const nearAgain = resolveFlairModulationWithParams("wall", params, { distance01: 0, output: 1, velocity: 0, angle: 0 });
+    expect(near.width01).toBeLessThan(far.width01);
+    expect(nearAgain.width01).toBeLessThan(far.width01);
+    expect(nearAgain.width01).toBeCloseTo(near.width01, 10);
+  });
+
+  it("near-wide gives broad -> thin -> broad for the exact same near -> far -> near input", () => {
+    const params = { ...getFlairProControlMetadata("wall"), depthResponse: "near-wide" as const };
+    const near = resolveFlairModulationWithParams("wall", params, { distance01: 0, output: 1, velocity: 0, angle: 0 });
+    const far = resolveFlairModulationWithParams("wall", params, { distance01: 1, output: 1, velocity: 0, angle: 0 });
+    const nearAgain = resolveFlairModulationWithParams("wall", params, { distance01: 0, output: 1, velocity: 0, angle: 0 });
+    expect(near.width01).toBeGreaterThan(far.width01);
+    expect(nearAgain.width01).toBeGreaterThan(far.width01);
+    expect(nearAgain.width01).toBeCloseTo(near.width01, 10);
+  });
+
+  it("transitions are smooth across the polarity, not piecewise -- width is monotonic across the full sampled sweep in both directions", () => {
+    const farWide = { ...getFlairProControlMetadata("wall"), depthResponse: "far-wide" as const };
+    const nearWide = { ...getFlairProControlMetadata("wall"), depthResponse: "near-wide" as const };
+    const sample = [0, 0.25, 0.5, 0.75, 1];
+    const farWideWidths = sample.map((t) => resolveFlairModulationWithParams("wall", farWide, { distance01: t, output: 1, velocity: 0, angle: 0 }).width01);
+    const nearWideWidths = sample.map((t) => resolveFlairModulationWithParams("wall", nearWide, { distance01: t, output: 1, velocity: 0, angle: 0 }).width01);
+    expect(farWideWidths.every((v, i) => i === 0 || v >= farWideWidths[i - 1])).toBe(true); // non-decreasing
+    expect(nearWideWidths.every((v, i) => i === 0 || v <= nearWideWidths[i - 1])).toBe(true); // non-increasing
+  });
+
+  it("one continuous arc's own achievable width range is identical under both polarities -- polarity flips DIRECTION, not RANGE", () => {
+    const farWide = { ...getFlairProControlMetadata("wall"), depthResponse: "far-wide" as const };
+    const nearWide = { ...getFlairProControlMetadata("wall"), depthResponse: "near-wide" as const };
+    const farWideRange = resolveTrackMarksFlairSizeRange("wall", farWide);
+    const nearWideRange = resolveTrackMarksFlairSizeRange("wall", nearWide);
+    expect(nearWideRange).toEqual(farWideRange);
+  });
+
+  it("off remains identity regardless of any depthResponse override", () => {
+    for (const depthResponse of ["far-wide", "near-wide"] as const) {
+      const params = { ...getFlairProControlMetadata("off"), depthResponse };
+      const result = resolveFlairModulationWithParams("off", params, { distance01: 0.7, output: 0.8, velocity: 0, angle: 0 });
+      expect(result.width01).toBeCloseTo(0.7, 10);
+      expect(result.output).toBeCloseTo(0.8, 10);
+    }
+  });
+
+  it("inverseEffectiveWidthExpansion correctly seeds distance01 under near-wide too (polarity-aware round trip)", () => {
+    const params = { ...getFlairProControlMetadata("wall"), depthResponse: "near-wide" as const };
+    for (const targetWidth of [0, 0.3, 0.6, 1]) {
+      const seededT = inverseEffectiveWidthExpansion("wall", params, targetWidth);
+      const result = resolveFlairModulationWithParams("wall", params, { distance01: seededT, output: 1, velocity: 0, angle: 0 });
+      expect(result.width01).toBeCloseTo(targetWidth, 3);
+    }
   });
 });
