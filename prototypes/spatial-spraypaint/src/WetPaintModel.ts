@@ -65,6 +65,24 @@ export interface WetVariantProfile {
   tipWidthJitter: number;
   /** Chance a non-first drip in a cluster snaps in close to the previous one's origin instead of its own evenly-stratified slot -- tight neighboring pairs and near-merging, not perfectly separated runs every time. */
   tightNeighborChance: number;
+  /** Mop/Drip Mop only (see `PoolNode`): merge distance between two deposits, as a ratio of `size` -- neighboring deposits within this land in the SAME pool node instead of starting a new one, which is what keeps the number of true origins far below the number of visible runs. */
+  poolMergeRatio: number;
+  /** Wet load deposited into the pool field per second of normal travel. */
+  poolDepositRate: number;
+  /** Multiplier on deposit rate while the marker is holding still -- dwelling over one spot floods that pool faster. */
+  poolDwellBoost: number;
+  /** A pool node must accumulate at least this much load before it is a "sufficiently loaded point" allowed to start a gravity run. */
+  poolThreshold: number;
+  /** Ceiling on how much load a single pool node can hold. */
+  poolMaxLoad: number;
+  /** Fraction of a node's current load consumed by each channel it spawns -- later channels drawn from an already-drained node come out narrower and shorter, the literal "runs narrow as the reservoir drains." */
+  poolChannelDrain: number;
+  /** Minimum time between two channels spawned from the SAME node (channels from DIFFERENT nodes are not paced against each other, which is how several simultaneous runs still happen). */
+  poolChannelCooldownMs: number;
+  /** How many separate channels one pool node may ever spawn over its lifetime -- "fewer true origins than visible strands" depends on this staying small relative to how many nodes form. */
+  poolMaxChannelsPerNode: number;
+  /** Load lost per second by a node the marker has moved away from -- an abandoned, never-revisited pool doesn't stay loaded forever. */
+  poolDecayPerSecond: number;
 }
 
 const WET_VARIANT_PROFILES: Record<WetMarkerVariantId, WetVariantProfile> = {
@@ -86,17 +104,30 @@ const WET_VARIANT_PROFILES: Record<WetMarkerVariantId, WetVariantProfile> = {
     durationMinMs: 1050,
     durationRangeMs: 850,
     maxSimultaneousDrips: 6,
-    dramaticChance: 0.26,
+    dramaticChance: 0.22,
     dramaticLengthBonus: 3.4,
     settleDripCount: 5,
-    widthVarianceLow: 0.4,
-    widthVarianceHigh: 1.7,
-    kinkChance: 0.82,
-    kink2Chance: 0.5,
-    kinkAmplitudeRatio: 0.075,
-    bendRatio: 0.16,
-    tipWidthJitter: 0.16,
+    widthVarianceLow: 0.55,
+    widthVarianceHigh: 1.45,
+    // Gravity dominates now -- these are deliberately restrained versus the
+    // prior pass (which over-corrected into "decorative curly hair"). Most
+    // runs get at most one small kink; a second is the exception, not the
+    // rule.
+    kinkChance: 0.4,
+    kink2Chance: 0.12,
+    kinkAmplitudeRatio: 0.04,
+    bendRatio: 0.075,
+    tipWidthJitter: 0.14,
     tightNeighborChance: 0.32,
+    poolMergeRatio: 0.5,
+    poolDepositRate: 0.85,
+    poolDwellBoost: 2.6,
+    poolThreshold: 0.62,
+    poolMaxLoad: 3.6,
+    poolChannelDrain: 0.26,
+    poolChannelCooldownMs: 110,
+    poolMaxChannelsPerNode: 8,
+    poolDecayPerSecond: 0.35,
   },
   "drip-mop": {
     initialLoad: 0.68,
@@ -116,17 +147,26 @@ const WET_VARIANT_PROFILES: Record<WetMarkerVariantId, WetVariantProfile> = {
     durationMinMs: 1450,
     durationRangeMs: 1650,
     maxSimultaneousDrips: 8,
-    dramaticChance: 0.32,
+    dramaticChance: 0.28,
     dramaticLengthBonus: 4.5,
     settleDripCount: 7,
-    widthVarianceLow: 0.68,
-    widthVarianceHigh: 1.6,
-    kinkChance: 0.9,
-    kink2Chance: 0.6,
-    kinkAmplitudeRatio: 0.06,
+    widthVarianceLow: 0.75,
+    widthVarianceHigh: 1.4,
+    kinkChance: 0.45,
+    kink2Chance: 0.15,
+    kinkAmplitudeRatio: 0.035,
     bendRatio: 0.055,
     tipWidthJitter: 0.1,
     tightNeighborChance: 0.36,
+    poolMergeRatio: 0.55,
+    poolDepositRate: 1.15,
+    poolDwellBoost: 2.8,
+    poolThreshold: 0.46,
+    poolMaxLoad: 4.4,
+    poolChannelDrain: 0.22,
+    poolChannelCooldownMs: 75,
+    poolMaxChannelsPerNode: 10,
+    poolDecayPerSecond: 0.3,
   },
   "drippy-chisel": {
     initialLoad: 0.58,
@@ -151,12 +191,24 @@ const WET_VARIANT_PROFILES: Record<WetMarkerVariantId, WetVariantProfile> = {
     settleDripCount: 2,
     widthVarianceLow: 0.6,
     widthVarianceHigh: 1.35,
-    kinkChance: 0.7,
-    kink2Chance: 0.3,
-    kinkAmplitudeRatio: 0.052,
-    bendRatio: 0.1,
+    kinkChance: 0.4,
+    kink2Chance: 0.1,
+    kinkAmplitudeRatio: 0.03,
+    bendRatio: 0.06,
     tipWidthJitter: 0.12,
     tightNeighborChance: 0.22,
+    // Drippy Chisel keeps the older per-trigger cluster model (see
+    // `createDrips`), not the pool/reservoir model -- these fields exist
+    // only for type completeness and are unused by that code path.
+    poolMergeRatio: 0.4,
+    poolDepositRate: 0.3,
+    poolDwellBoost: 1.8,
+    poolThreshold: 1.1,
+    poolMaxLoad: 2,
+    poolChannelDrain: 0.5,
+    poolChannelCooldownMs: 400,
+    poolMaxChannelsPerNode: 2,
+    poolDecayPerSecond: 0.4,
   },
 };
 
@@ -315,6 +367,26 @@ function addPolygonVerticalIntersections(
   }
 }
 
+/**
+ * A discrete node in the spatial wet-paint field along the mark's lower
+ * boundary (Mop / Drip Mop only). This is the actual "source of truth"
+ * this model is built around: deposition accumulates INTO a small number of
+ * these (neighboring deposits merge into the same node instead of each
+ * starting its own), and only once a node itself is sufficiently loaded
+ * does it start a gravity run. A node's own `channelsSpawned` count stays
+ * far smaller than the number of runs it can produce over its lifetime, so
+ * "true origins" (pool nodes) end up well below "visible strands"
+ * (channels) -- the direct fix for one seed per strand reading as hair.
+ */
+interface PoolNode {
+  x: number;
+  y: number;
+  radius: number;
+  load: number;
+  channelsSpawned: number;
+  lastChannelAt: number;
+}
+
 export class WetPaintAccumulator {
   private state = resetWetPaintState();
   private variant: WetMarkerVariantId = "mop";
@@ -322,6 +394,16 @@ export class WetPaintAccumulator {
   private controls: WetPaintControlState = { ...INITIAL_WET_PAINT_CONTROLS };
   private modifiers: WetPaintControlModifiers = resolveWetPaintControlModifiers(this.controls);
   private footprint: StrokePoint[] = [];
+  private pools: PoolNode[] = [];
+  /**
+   * A future Squeeze input (`↓` while drawing, not implemented yet) should
+   * only need to raise this before deposition -- everything downstream
+   * (merging, thresholds, channel width/count) already scales off however
+   * much load lands in the pool field, so a bigger multiplier here alone
+   * produces a larger reservoir and more/larger gravity channels with no
+   * other wiring required.
+   */
+  private squeezeMultiplier = 1;
 
   public beginStroke(
     strokeId: number,
@@ -338,6 +420,15 @@ export class WetPaintAccumulator {
     ));
     this.random = createDeterministicRandom(strokeId * 2654435761);
     this.footprint = [];
+    this.pools = [];
+  }
+
+  /**
+   * A future Squeeze input multiplies deposition, not any individual drip
+   * parameter -- see the field's own doc. Unused until that input exists.
+   */
+  public setSqueezeMultiplier(value: number): void {
+    this.squeezeMultiplier = Math.max(0, value);
   }
 
   public observe(
@@ -362,22 +453,28 @@ export class WetPaintAccumulator {
     const paintLoad = clamp(this.state.paintLoad + gain - drain, 0.22, 1);
     const dwellMs = stationary ? this.state.dwellMs + elapsed : Math.max(0, this.state.dwellMs - elapsed * 1.8);
     const distanceSinceDrip = this.state.distanceSinceDrip + distance;
-    const timeSinceDrip = point.timestamp - this.state.lastDripTimestamp;
-    // Deposition -> local wet load -> threshold -> gravity run, with NO
-    // separate dwell/travel readiness gate: the old version required ~1s of
-    // holding still (or a long travel distance) on top of the load already
-    // being high enough, which is what made drips feel rare and decorative
-    // rather than a natural consequence of paint saturation. Load crossing
-    // the threshold is now sufficient by itself; `cooldownMs` only paces how
-    // often a new CLUSTER of drips can break free (see `createDrips`), not
-    // how long the marker must sit still first.
-    const canDrip = dripsEnabled
-      && paintLoad >= Math.min(0.98, profile.dripLoadThreshold * this.modifiers.threshold)
-      && timeSinceDrip >= profile.cooldownMs;
     const renderedPoint = { ...point, paintLoad };
     const footprint = [...this.footprint, renderedPoint, ...(nextPoint ? [nextPoint] : [])];
-    const drips = canDrip ? this.createDrips(footprint, renderedPoint, size, paintLoad) : [];
-    const drainPerDrip = this.variant === "drip-mop" ? 0.09 : this.variant === "mop" ? 0.12 : 0.16;
+
+    let drips: DripSeed[];
+    if (this.variant === "mop" || this.variant === "drip-mop") {
+      // The actual pooling model: deposition accumulates into a small
+      // spatial field of nodes along the mark's lower boundary, neighboring
+      // deposits merge into the SAME node, and only a sufficiently loaded
+      // node starts a gravity run -- see `depositIntoPool`/`spawnPoolChannel`.
+      drips = dripsEnabled
+        ? this.depositIntoPool(footprint, renderedPoint, size, paintLoad, elapsedSeconds, stationary)
+        : [];
+    } else {
+      // Drippy Chisel (not exposed in the shipped UI) keeps the older,
+      // simpler per-trigger cluster model -- see `createDrips`.
+      const timeSinceDrip = point.timestamp - this.state.lastDripTimestamp;
+      const canDrip = dripsEnabled
+        && paintLoad >= Math.min(0.98, profile.dripLoadThreshold * this.modifiers.threshold)
+        && timeSinceDrip >= profile.cooldownMs;
+      drips = canDrip ? this.createDrips(footprint, renderedPoint, size, paintLoad) : [];
+    }
+    const drainPerDrip = this.variant === "drip-mop" ? 0.05 : this.variant === "mop" ? 0.06 : 0.16;
 
     this.state = {
       paintLoad: clamp(paintLoad - drips.length * drainPerDrip, 0.22, 1),
@@ -401,24 +498,198 @@ export class WetPaintAccumulator {
     this.state = resetWetPaintState();
     this.random = createDeterministicRandom(1);
     this.footprint = [];
+    this.pools = [];
   }
 
   /**
-   * A run in progress does not vanish the instant the pointer lifts. If the
-   * stroke ends still carrying real wet load, spawn one final cluster from
-   * it (bypassing the cooldown, since drawing has already stopped and there
-   * is nothing left to pace against) so the accumulated paint keeps
-   * dripping for a moment after the hand moves away, the way it would
-   * physically settle under gravity.
+   * A run in progress does not vanish the instant the pointer lifts. Any
+   * pool node still carrying enough load spawns one final channel from it
+   * (bypassing the node's own per-channel cooldown, since drawing has
+   * already stopped) so the accumulated reservoir keeps dripping for a
+   * moment after the hand moves away, the way it would physically settle
+   * under gravity.
    */
   public settle(dripsEnabled: boolean): DripSeed[] {
     const last = this.state.lastPoint;
     if (!dripsEnabled || !last) return [];
     const profile = WET_VARIANT_PROFILES[this.variant];
+    if (this.variant === "mop" || this.variant === "drip-mop") {
+      const settleThreshold = profile.poolThreshold * 0.5;
+      const drips: DripSeed[] = [];
+      for (const node of this.pools) {
+        if (node.load < settleThreshold || node.channelsSpawned >= profile.poolMaxChannelsPerNode) continue;
+        drips.push(this.spawnPoolChannel(node, last.width, this.state.paintLoad));
+        node.channelsSpawned += 1;
+      }
+      return drips;
+    }
     const effectiveThreshold = Math.min(0.98, profile.dripLoadThreshold * this.modifiers.threshold);
     if (this.state.paintLoad < effectiveThreshold * 0.55) return [];
     const footprint = [...this.footprint, last];
     return this.createDrips(footprint, last, last.width, this.state.paintLoad, profile.settleDripCount);
+  }
+
+  /**
+   * Steps 1-3 of the pooling model: deposit wet load at the current point,
+   * merging into whichever existing pool node is close enough (the
+   * "neighboring deposits overlap and accumulate" / "connected reservoir"
+   * behavior) rather than always starting a new one. Then steps 4-5: any
+   * node that is now sufficiently loaded (a "downward extremum" of the
+   * discretized boundary) starts a gravity run, paced per-node so a single
+   * node can go on to spawn a FEW MORE channels later as it keeps getting
+   * fed, rather than exhausting itself in one trigger.
+   */
+  private depositIntoPool(
+    footprint: readonly MopFootprintPoint[],
+    point: StrokePoint,
+    size: number,
+    paintLoad: number,
+    elapsedSeconds: number,
+    stationary: boolean,
+  ): DripSeed[] {
+    const profile = WET_VARIANT_PROFILES[this.variant];
+    const mergeDistance = size * profile.poolMergeRatio;
+    const depositAmount = elapsedSeconds
+      * profile.poolDepositRate
+      * (stationary ? profile.poolDwellBoost : 1)
+      * this.modifiers.delivery
+      * this.squeezeMultiplier
+      * (0.4 + paintLoad * 0.6);
+
+    let touchedNode: PoolNode | null = null;
+    if (depositAmount > 0 && this.variant !== "drippy-chisel") {
+      const attachment = resolveMopDripAttachment(
+        this.variant,
+        footprint,
+        point,
+        0,
+        { terminalCapRendered: false },
+      );
+      let nearest: PoolNode | null = null;
+      let nearestDistance = Infinity;
+      for (const node of this.pools) {
+        const nodeDistance = Math.abs(node.x - point.x);
+        if (nodeDistance < mergeDistance && nodeDistance < nearestDistance) {
+          nearest = node;
+          nearestDistance = nodeDistance;
+        }
+      }
+      if (nearest) {
+        // Weighted merge: the node drifts toward wherever paint keeps
+        // landing and its recorded boundary/radius track the freshest
+        // deposit, exactly the "neighboring wet regions merge" step.
+        const totalLoad = nearest.load + depositAmount;
+        nearest.x = (nearest.x * nearest.load + point.x * depositAmount) / totalLoad;
+        nearest.y = attachment.origin.y;
+        nearest.radius = attachment.radius;
+        nearest.load = Math.min(profile.poolMaxLoad, totalLoad);
+        touchedNode = nearest;
+      } else {
+        touchedNode = {
+          x: point.x,
+          y: attachment.origin.y,
+          radius: attachment.radius,
+          load: depositAmount,
+          channelsSpawned: 0,
+          lastChannelAt: -Infinity,
+        };
+        this.pools.push(touchedNode);
+      }
+    }
+
+    // A pool the marker has moved away from and never revisited slowly
+    // drains rather than staying loaded forever.
+    for (const node of this.pools) {
+      if (node !== touchedNode && Math.abs(node.x - point.x) >= mergeDistance) {
+        node.load = Math.max(0, node.load - profile.poolDecayPerSecond * elapsedSeconds);
+      }
+    }
+    this.pools = this.pools.filter((node) => node.load > 0.01 || node.channelsSpawned > 0);
+
+    // Only the node just touched by THIS deposit is eligible to spawn --
+    // its recorded (x, y, radius) come from the footprint passed in on this
+    // very call, so a spawned channel is always anchored to the body as
+    // rendered THIS frame. An idle node elsewhere in the field (the marker
+    // has since moved on) keeps its accumulated load and history, and can
+    // still spawn once the marker comes back within merge distance of it,
+    // but never from a stale position the body has already left behind.
+    if (
+      !touchedNode
+      || touchedNode.load < profile.poolThreshold
+      || touchedNode.channelsSpawned >= profile.poolMaxChannelsPerNode
+      || point.timestamp - touchedNode.lastChannelAt < profile.poolChannelCooldownMs
+    ) return [];
+    const drip = this.spawnPoolChannel(touchedNode, size, paintLoad);
+    // Steps 7-8: width/length come out of the node's own flux budget, so
+    // draining it narrows and shortens whatever channel comes next from the
+    // same pool -- "runs narrow as the reservoir drains."
+    touchedNode.load = Math.max(0, touchedNode.load - touchedNode.load * profile.poolChannelDrain);
+    touchedNode.channelsSpawned += 1;
+    touchedNode.lastChannelAt = point.timestamp;
+    return [drip];
+  }
+
+  /**
+   * One gravity run breaking free from a loaded pool node (step 5-9). Width
+   * and length both scale with the flux actually available at this node
+   * right now, divided down as more channels already draw from it -- a
+   * node's SECOND or THIRD channel is narrower/shorter than its first,
+   * without needing any separate "later channels are weaker" rule.
+   */
+  private spawnPoolChannel(node: PoolNode, size: number, paintLoad: number): DripSeed {
+    const profile = WET_VARIANT_PROFILES[this.variant];
+    const fluxShare = node.load / Math.sqrt(node.channelsSpawned + 1);
+    // Channels from the SAME node stay close together, near its own pooled
+    // radius -- coalescing at a shared root rather than spreading across
+    // the whole stroke the way independent seeds did before.
+    const offset = node.channelsSpawned === 0 ? 0 : (this.random() - 0.5) * node.radius * 0.6;
+    const dramatic = this.random() < profile.dramaticChance;
+    const loadFactor = Math.min(1, fluxShare / profile.poolThreshold);
+    const length = size * (
+      profile.lengthMin
+      + this.random() * profile.lengthRange * (0.4 + loadFactor * 0.6)
+      + (dramatic ? profile.dramaticLengthBonus : 0)
+    ) * this.modifiers.length;
+    const widthMultiplier = profile.widthVarianceLow
+      + Math.pow(this.random(), 1.4) * (profile.widthVarianceHigh - profile.widthVarianceLow);
+    const width = Math.max(
+      1.4,
+      size
+        * (profile.stemWidthBaseRatio + loadFactor * profile.stemWidthLoadRatio)
+        * widthMultiplier
+        * this.modifiers.width,
+    );
+    const kink = this.random() < profile.kinkChance
+      ? (this.random() - 0.5) * length * profile.kinkAmplitudeRatio
+      : 0;
+    const kink2 = this.random() < profile.kink2Chance
+      ? (this.random() - 0.5) * length * profile.kinkAmplitudeRatio * 0.7
+      : 0;
+    return {
+      x: node.x + offset,
+      y: node.y,
+      width,
+      length,
+      opacity: clamp(0.6 + paintLoad * 0.26, 0, 0.92),
+      bend: (this.random() - 0.5) * length * profile.bendRatio,
+      kink,
+      kinkAt: kink === 0 ? undefined : 0.3 + this.random() * 0.25,
+      kink2,
+      kinkAt2: kink2 === 0 ? undefined : 0.65 + this.random() * 0.25,
+      durationMs: (
+        profile.durationMinMs
+        + this.random() * profile.durationRangeMs
+      ) * this.modifiers.gravityDuration,
+      tipWidthRatio: clamp(
+        profile.tipWidthRatio + (this.random() - 0.5) * profile.tipWidthJitter,
+        0.16,
+        0.68,
+      ),
+      originPoolRadius: node.radius * profile.originPoolRatio,
+      terminalBulbRatio: this.variant === "drip-mop" ? 0.58 : 0.48,
+      renderAsOverlay: true,
+      attachmentUnderlap: size * 0.28,
+    };
   }
 
   private createDrips(
