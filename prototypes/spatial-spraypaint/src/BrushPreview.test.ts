@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   renderMarkerBrushStudioPreview,
   renderMarkerPreviewToContext,
+  renderMarkerSizeSample,
   renderSprayBrushStudioPreview,
   renderSprayCapPreviewToContext,
 } from "./BrushPreview";
@@ -207,6 +208,24 @@ describe("brush preview rendering", () => {
     const resized = recordingContext();
     renderMarkerBrushStudioPreview(resized.ctx, 320, 150, "mop", 20);
     expect(resized.log).not.toEqual(first.log);
+  });
+
+  it("renders the marker size-row sample as a real filled footprint (fill, never stroke-only/outline), sourced from the centralized BrushProfile", () => {
+    const round = recordingContext();
+    const chisel = recordingContext();
+    const mop = recordingContext();
+    renderMarkerSizeSample(round.ctx, 40, 40, "round", 20);
+    renderMarkerSizeSample(chisel.ctx, 40, 40, "chisel", 20);
+    renderMarkerSizeSample(mop.ctx, 40, 40, "mop", 20);
+    for (const { log } of [round, chisel, mop]) {
+      expect(log.some((entry) => entry.startsWith("fill:"))).toBe(true);
+      expect(log.some((entry) => entry.startsWith("stroke:"))).toBe(false);
+    }
+    // Round is a circle (arc/ellipse), Chisel is a flat elongated rect (arcTo) -- distinct primitives, never the same shape.
+    expect(round.log.some((entry) => entry.startsWith("arc(") || entry.startsWith("ellipse("))).toBe(true);
+    expect(chisel.log.some((entry) => entry.startsWith("arcTo("))).toBe(true);
+    expect(round.log).not.toEqual(chisel.log);
+    expect(round.log).not.toEqual(mop.log);
   });
 
   it("distinguishes every Chisel and Mop family sub-preset from its siblings", () => {

@@ -6,6 +6,7 @@ import {
 import { getSprayBackground, type SprayBackground } from "./Backgrounds";
 import { renderAllBrushPreviews, renderMarkerSizeSample } from "./BrushPreview";
 import { getSprayOverride, resolveEffectiveSprayStyle } from "./BrushProperties";
+import { resolveBrushProfile } from "./BrushProfile";
 import { BrushStudioController, markerFamilyFor } from "./BrushStudio";
 import { CalibrationBenchController } from "./CalibrationBenchController";
 import { EMPTY_CUSTOM_SPRAY_REGISTRY, type CustomSprayBrushRegistry } from "./CustomBrush";
@@ -1963,6 +1964,12 @@ class SpatialSpraypaintApp {
       || (dripStyle?.toolId === "paint-marker" && !isWetMarkerVariant(dripStyle.variantId));
     if (dripStyle && dripEligible) {
       const activeSprayPreset = dripStyle.toolId === "spray-can" ? getSprayCapPreset(dripStyle.variantId) : null;
+      // Every drip-eligible tool (Spray caps, Round, Chisel) resolves its
+      // drip shape from the SAME centralized brush profile Mop's own pool
+      // model and Brush Studio also read (see BrushProfile.ts) -- brush-
+      // specific tuning (Round lighter than Chisel, both far lighter than
+      // Mop) lives in one place, not duplicated per call site.
+      const brushProfile = resolveBrushProfile(dripStyle.toolId, dripStyle.variantId);
       const drip = this.dripAccumulator.observe({
         x: point?.x ?? smoothed.x,
         y: point?.y ?? smoothed.y,
@@ -1980,6 +1987,9 @@ class SpatialSpraypaintApp {
         // read visibly darker than the wash it dripped from. `coreOpacity`
         // is applied as the ceiling for every Spray cap now, not just one.
         sourceOpacityCeiling: activeSprayPreset?.coreOpacity,
+        bodyWidthRatio: brushProfile.dripBodyWidthRatio,
+        taperAmount: brushProfile.taperAmount,
+        terminalBeadRatio: brushProfile.terminalBeadRatio,
       });
       if (drip) {
         this.toolRenderer.startDrip(drip, dripStyle.color, now);

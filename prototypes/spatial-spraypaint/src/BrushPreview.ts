@@ -1,4 +1,5 @@
 import { type MarkerVariantId } from "./DrawingTool";
+import { resolveBrushProfile, type BrushFootprintDescriptor } from "./BrushProfile";
 import { PaintMarkerEngine } from "./PaintMarkerEngine";
 import { createStrokeRandom, SprayBrushEngine } from "./SprayBrushEngine";
 import { getSprayCapPreset, type SprayCapId, type SprayCapPreset } from "./SprayCapPresets";
@@ -261,11 +262,31 @@ export function renderMarkerPreviewToContext(
  * as its own tiny local copy rather than an import so this module (already
  * imported BY `BrushStudio.ts`) never imports back from it.
  */
+/**
+ * Driven by the centralized `BrushProfile`'s own `previewFootprint` (see
+ * BrushProfile.ts) rather than a hardcoded per-variant-id branch -- the
+ * shape/aspect-ratio/softness drawn here are the SAME values Brush Studio
+ * and any other footprint preview read, not a second, independently
+ * maintained guess at what each tip looks like. Still a real filled
+ * footprint stamp, never an outline.
+ */
 export function renderMarkerSizeSample(
   ctx: CanvasRenderingContext2D,
   width: number,
   height: number,
   variantId: MarkerVariantId,
+  sizePx: number,
+): void {
+  const footprint = resolveBrushProfile("paint-marker", variantId).previewFootprint;
+  renderFootprintSample(ctx, width, height, footprint, sizePx);
+}
+
+/** Shared filled-footprint stamp renderer for any `BrushFootprintDescriptor` (Spray, Round, Chisel, Mop). */
+export function renderFootprintSample(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  footprint: BrushFootprintDescriptor,
   sizePx: number,
 ): void {
   ctx.clearRect(0, 0, width, height);
@@ -274,24 +295,24 @@ export function renderMarkerSizeSample(
   const maxDiameter = Math.min(width, height) - 4;
   const diameter = Math.max(3, Math.min(sizePx, maxDiameter));
   ctx.fillStyle = "rgba(244,243,240,0.94)";
-  if (variantId === "round") {
+  ctx.globalAlpha = 1 - footprint.softness * 0.25;
+  if (footprint.shape === "round" || footprint.shape === "spray") {
     ctx.beginPath();
-    ctx.arc(cx, cy, diameter / 2, 0, Math.PI * 2);
+    ctx.ellipse(cx, cy, diameter / 2, (diameter / 2) / footprint.aspectRatio, 0, 0, Math.PI * 2);
     ctx.fill();
-  } else if (variantId === "mop" || variantId === "drip-mop") {
+  } else if (footprint.shape === "mop") {
     // Broad, soft round footprint -- same circular shape as Round, but
     // deliberately lower-opacity/wider to read as the softer, wetter Mop
     // tip rather than a crisp round nib.
-    ctx.globalAlpha = 0.8;
+    ctx.globalAlpha *= 0.8;
     ctx.beginPath();
     ctx.arc(cx, cy, diameter / 2, 0, Math.PI * 2);
     ctx.fill();
-    ctx.globalAlpha = 1;
   } else {
-    // Chisel family: a flat, elongated rectangular footprint -- the
+    // Chisel: a flat, elongated rectangular footprint -- the
     // characteristic cross-section of a chisel tip, never a circle.
     const rectWidth = diameter;
-    const rectHeight = Math.max(3, diameter * 0.4);
+    const rectHeight = Math.max(3, diameter / footprint.aspectRatio);
     const radius = Math.min(3, rectHeight / 2);
     const left = cx - rectWidth / 2;
     const top = cy - rectHeight / 2;
@@ -304,6 +325,7 @@ export function renderMarkerSizeSample(
     ctx.closePath();
     ctx.fill();
   }
+  ctx.globalAlpha = 1;
 }
 
 /** Wires every `<canvas data-preview-cap>` / `<canvas data-preview-marker>` under `root` to a rendered preview. */

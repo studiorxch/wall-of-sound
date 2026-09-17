@@ -35,6 +35,7 @@ import {
 } from "./CustomBrush";
 import { type DrawingToolId, type MarkerVariantId } from "./DrawingTool";
 import { getMarkerVariant, MARKER_VARIANTS, type MarkerVariantDefinition } from "./PaintMarkerEngine";
+import { resolveBrushProfile } from "./BrushProfile";
 import { getSprayCapPreset, SPRAY_CAP_PRESETS, type SprayCapFamily, type SprayCapId, type SprayCapPreset } from "./SprayCapPresets";
 import { PLUME_MAX_ANGLE_DEGREES } from "./SprayBrushEngine";
 import { isWetMarkerVariant } from "./WetPaintModel";
@@ -800,17 +801,34 @@ export class BrushStudioController {
     sizeRow.append(sizeLabel, sizeInput, sizeReadout);
     rows.push(sizeRow);
 
+    // Every readonly row below comes from the SAME centralized brush
+    // profile Spray, Round, Chisel, and Mop all resolve from (see
+    // BrushProfile.ts) -- Round/Chisel now get the same "Tip" surface
+    // Spray's Shape/Paint/Motion groups already exposed, not a smaller,
+    // duplicated one.
+    const profile = resolveBrushProfile("paint-marker", variant.id);
     rows.push(this.buildFamilyLabel("Tip"));
-    const dripRow = document.createElement("div");
-    dripRow.className = "brush-studio-property-row readonly";
-    dripRow.innerHTML = `<span>Drip tendency</span><span class="brush-studio-property-value">${variant.dripTendency}</span>`;
-    rows.push(dripRow);
+    const readonlyRow = (label: string, value: string) => {
+      const row = document.createElement("div");
+      row.className = "brush-studio-property-row readonly";
+      row.innerHTML = `<span>${label}</span><span class="brush-studio-property-value">${value}</span>`;
+      return row;
+    };
+    rows.push(readonlyRow("Opacity", `${Math.round(profile.opacity * 100)}%`));
+    rows.push(readonlyRow("Drip tendency", `${profile.dripTendency}`));
+    rows.push(readonlyRow("Drip body width", `${Math.round(profile.dripBodyWidthRatio * 100)}%`));
+    rows.push(readonlyRow("Taper amount", `${Math.round(profile.taperAmount * 100)}%`));
+    rows.push(readonlyRow("Terminal bead", profile.terminalBeadRatio > 0 ? `${profile.terminalBeadRatio.toFixed(2)}x` : "None"));
+    rows.push(readonlyRow("Origin pooling", profile.originPoolingRatio > 0 ? `${profile.originPoolingRatio.toFixed(2)}x` : "None"));
 
     // V0.10.2: Flow/Viscosity ("paint chemistry") live here now, not the
     // normal picker -- only shown for a variant that actually reads them
     // (see `isWetMarkerVariant`; a dry variant like Round ignores both).
     if (isWetMarkerVariant(variant.id)) {
       rows.push(this.buildFamilyLabel("Paint"));
+      if (profile.wet) {
+        rows.push(readonlyRow("Squeeze response", `${profile.wet.squeezeResponse.toFixed(1)}x`));
+      }
       const wet = this.deps.getWetPaintControls();
       const flowRow = document.createElement("div");
       flowRow.className = "brush-studio-property-row";

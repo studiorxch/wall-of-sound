@@ -15,6 +15,15 @@ export interface DripObservation {
    * paint from nowhere: `drip load <= source accumulated wet load`.
    */
   sourceOpacityCeiling?: number;
+  /**
+   * Brush-profile-driven drip shape overrides (see `BrushProfile.ts`'s
+   * `dripBodyWidthRatio`/`taperAmount`/`terminalBeadRatio`). All optional
+   * and undefined by default, which preserves the prior built-in formula
+   * exactly for any caller that doesn't pass them.
+   */
+  bodyWidthRatio?: number;
+  taperAmount?: number;
+  terminalBeadRatio?: number;
 }
 
 export interface DripSeed {
@@ -197,12 +206,12 @@ export class DripAccumulator {
       // renderer Mop already uses, via `resolveDripStripSection`'s own
       // `taperEase = progress**4`, which keeps almost all of the narrowing
       // in the final stretch).
-      width: Math.max(2.4, observation.radius * (0.11 + tendency * 0.05)),
+      width: Math.max(2.4, observation.radius * (observation.bodyWidthRatio ?? (0.11 + tendency * 0.05))),
       length,
       opacity,
       sourceOpacityCeiling: observation.sourceOpacityCeiling,
-      tipWidthRatio: 0.72,
-      terminalBulbRatio: 1.15,
+      tipWidthRatio: 1 - (observation.taperAmount ?? 0.28),
+      terminalBulbRatio: observation.terminalBeadRatio ?? 1.15,
       // Gravity dominates a real drip -- only a small, restrained lateral
       // lean from surface irregularity, never a large diagonal launch. Kept
       // well below the strip renderer's own quadratic easing (which is
