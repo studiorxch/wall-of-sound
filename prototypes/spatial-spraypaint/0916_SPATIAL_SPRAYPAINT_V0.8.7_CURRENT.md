@@ -48,4 +48,4 @@ No changes to `SprayCapPresets.ts`, `SprayBrushEngine.ts`, `DrawingToolRenderer.
 
 ## Commit
 
-(pending — see next commit)
+`b0bc28b` — "fix: Spatial Spraypaint Flair -- rebalance mist from particle cloud to continuous veil"
