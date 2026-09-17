@@ -41,7 +41,25 @@ function manufacturerSwatches(data: readonly ManufacturerPaletteRecord[]): Color
   }));
 }
 
+/**
+ * Order matters here: it drives the palette selector's own listing order in
+ * the UI. V0.10 UI Reset, "Color": full manufacturer palettes lead, with
+ * StudioRich last -- "StudioRich remains an optional palette only," never
+ * the thing a user browses into first.
+ */
 export const COLOR_PALETTES: readonly ColorPaletteDefinition[] = [
+  {
+    id: "montana-gold",
+    name: "Montana Gold",
+    source: "canonical-manufacturer-data",
+    colors: manufacturerSwatches(montanaGold400mlPaletteData as ManufacturerPaletteRecord[]),
+  },
+  {
+    id: "black-400ml",
+    name: "BLACK 400ML",
+    source: "canonical-manufacturer-data",
+    colors: manufacturerSwatches(black400mlPaletteData as ManufacturerPaletteRecord[]),
+  },
   {
     id: "studiorich",
     name: "StudioRich",
@@ -60,25 +78,22 @@ export const COLOR_PALETTES: readonly ColorPaletteDefinition[] = [
       { name: "Pink", hex: "#ff3f8f", code: null },
     ],
   },
-  {
-    id: "montana-gold",
-    name: "Montana Gold",
-    source: "canonical-manufacturer-data",
-    colors: manufacturerSwatches(montanaGold400mlPaletteData as ManufacturerPaletteRecord[]),
-  },
-  {
-    id: "black-400ml",
-    name: "BLACK 400ML",
-    source: "canonical-manufacturer-data",
-    colors: manufacturerSwatches(black400mlPaletteData as ManufacturerPaletteRecord[]),
-  },
 ] as const;
 
+/**
+ * V0.10 UI Reset, "Color": a fresh session must not default into the
+ * limited 11-swatch StudioRich set -- the browsing default is a real
+ * manufacturer palette (Montana Gold), with StudioRich remaining reachable
+ * as one optional palette among others via the same palette selector.
+ * `currentColor`/the loaded ink itself is unaffected by which palette is
+ * being BROWSED -- a plain, legible starting ink, not tied to either
+ * palette's own swatch set.
+ */
 export const INITIAL_COLOR_PALETTE_STATE: ColorPaletteState = {
-  paletteId: "studiorich",
+  paletteId: "montana-gold",
   currentColor: "#e92f3d",
   recentColors: [],
-  selectedSwatchName: "Red",
+  selectedSwatchName: null,
   selectedSwatchCode: null,
 };
 

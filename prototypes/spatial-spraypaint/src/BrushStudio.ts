@@ -262,26 +262,29 @@ export class BrushStudioController {
     this.el("brush-studio-overlay").classList.remove("open");
   }
 
-  /** Full rebuild: tool state, brush list, property panel, preview. Call after any selection/tool change. */
+  /**
+   * Full rebuild: property panel + preview only. Brush Studio no longer
+   * carries its own browsing/catalog state — it always opens directly on
+   * whatever brush is currently live-selected (`open()` below re-syncs
+   * `selectedSprayCapId` from live selection every time), per the V0.10 UI
+   * Reset build brief: "Brush Studio should open directly on the currently
+   * selected brush... Remove the duplicate brush catalog." Switching WHICH
+   * brush is active is the primary tool/cap picker's job alone now, not a
+   * second in-dialog picker.
+   */
   public render(): void {
     if (!this.isOpenState) return;
-    const selection = this.deps.getToolSelection();
-    const spraySelected = selection.selectedToolId === "spray-can";
-    this.el("brush-studio-brushes-spray").toggleAttribute("hidden", !spraySelected);
-    this.el("brush-studio-brushes-marker").toggleAttribute("hidden", spraySelected);
-    if (spraySelected) this.renderSprayBrushList();
-    else this.renderMarkerBrushList();
+    // Re-sync every render, not just at open() -- the primary cap picker
+    // (the only place a built-in Spray cap can be chosen now) can change
+    // the live selection while this dialog happens to already be open, and
+    // this dialog must always reflect that, never a stale in-dialog choice.
+    // Skipped while previewing a just-duplicated CUSTOM brush (never itself
+    // the live selection -- see `duplicateSelectedSprayBrush`'s own doc) so
+    // that preview isn't immediately stomped back to the live built-in cap.
+    if (classifySprayCapId(this.selectedSprayCapId) !== "custom-studio-brush") {
+      this.selectedSprayCapId = this.deps.getToolSelection().sprayCapId;
+    }
     this.renderPropertiesPanel();
-  }
-
-  private renderSprayBrushList(): void {
-    const registry = this.deps.getCustomSprayRegistry();
-    const groups = buildSprayBrushList(SPRAY_CAP_PRESETS, registry);
-    const container = this.el("brush-studio-brushes-spray");
-    container.replaceChildren(...groups.flatMap((group) => [
-      this.buildFamilyLabel(group.label),
-      ...group.entries.map((entry) => this.buildSprayRow(entry)),
-    ]));
   }
 
   private buildFamilyLabel(label: string): HTMLElement {
@@ -289,87 +292,6 @@ export class BrushStudioController {
     el.className = "brush-family-label";
     el.textContent = label;
     return el;
-  }
-
-  private buildSprayRow(entry: SprayBrushListEntry): HTMLButtonElement {
-    const button = document.createElement("button");
-    button.className = "brush-studio-row";
-    button.classList.toggle("selected", entry.id === this.selectedSprayCapId);
-    button.setAttribute("aria-pressed", (entry.id === this.selectedSprayCapId).toString());
-
-    const canvas = document.createElement("canvas");
-    canvas.className = "brush-studio-row-preview";
-    canvas.width = 44;
-    canvas.height = 18;
-    const ctx = canvas.getContext("2d");
-    if (ctx) renderSprayBrushStudioPreview(ctx, 44, 18, entry.preset as SprayCapPreset);
-
-    const text = document.createElement("span");
-    text.className = "brush-row-text";
-    const name = document.createElement("span");
-    name.className = "brush-row-name";
-    name.textContent = entry.preset.name;
-    const badge = document.createElement("span");
-    badge.className = "brush-studio-provenance";
-    badge.dataset.provenance = entry.provenance;
-    badge.textContent = provenanceLabel(entry.provenance);
-    text.append(name, badge);
-
-    button.append(canvas, text);
-    button.addEventListener("click", () => this.selectSprayRow(entry));
-    return button;
-  }
-
-  /**
-   * Selecting a built-in brush drives BOTH the live paint selection and the
-   * Studio's own browsing state. Selecting a custom brush only drives the
-   * Studio's browsing/preview state — custom brushes aren't wired into the
-   * live paint pipeline yet (SprayCapId stays a closed union on purpose; see
-   * checkpoint doc for why painting-integration is the documented next step
-   * rather than a silent fallback to the wrong cap).
-   */
-  private selectSprayRow(entry: SprayBrushListEntry): void {
-    this.selectedSprayCapId = entry.id;
-    if (!entry.isCustom) this.deps.selectSprayCap(entry.id as SprayCapId);
-    this.render();
-  }
-
-  private renderMarkerBrushList(): void {
-    const groups = groupMarkerVariantsByFamily(MARKER_VARIANTS);
-    const selection = this.deps.getToolSelection();
-    const container = this.el("brush-studio-brushes-marker");
-    container.replaceChildren(...groups.flatMap((group) => [
-      this.buildFamilyLabel(group.label),
-      ...group.variants.map((variant) => this.buildMarkerRow(variant, variant.id === selection.markerVariantId)),
-    ]));
-  }
-
-  private buildMarkerRow(variant: MarkerVariantDefinition, selected: boolean): HTMLButtonElement {
-    const button = document.createElement("button");
-    button.className = "brush-studio-row";
-    button.classList.toggle("selected", selected);
-    button.setAttribute("aria-pressed", selected.toString());
-
-    const canvas = document.createElement("canvas");
-    canvas.className = "brush-studio-row-preview";
-    canvas.width = 44;
-    canvas.height = 18;
-    const ctx = canvas.getContext("2d");
-    if (ctx) renderMarkerBrushStudioPreview(ctx, 44, 18, variant.id, this.deps.getMarkerWidths()[variant.id]);
-
-    const text = document.createElement("span");
-    text.className = "brush-row-text";
-    const name = document.createElement("span");
-    name.className = "brush-row-name";
-    name.textContent = variant.name;
-    text.append(name);
-
-    button.append(canvas, text);
-    button.addEventListener("click", () => {
-      this.deps.selectMarkerVariant(variant.id);
-      this.render();
-    });
-    return button;
   }
 
   private renderPropertiesPanel(): void {

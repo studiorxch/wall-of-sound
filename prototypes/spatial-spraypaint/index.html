@@ -300,20 +300,13 @@
     #open-brush-studio { width: 100%; margin-top: 8px; font-size: 10px; }
     .brush-studio-overlay { position: fixed; inset: 0; z-index: 30; display: none; align-items: center; justify-content: center; background: rgba(3,3,6,.62); backdrop-filter: blur(6px); padding: 16px; }
     .brush-studio-overlay.open { display: flex; }
-    .brush-studio-frame { width: min(1000px, 100%); height: min(660px, calc(100vh - 32px)); display: flex; flex-direction: column; overflow: hidden; }
+    .brush-studio-frame { width: min(520px, 100%); height: min(660px, calc(100vh - 32px)); display: flex; flex-direction: column; overflow: hidden; }
     .brush-studio-header { display: flex; align-items: center; justify-content: space-between; padding: 13px 16px; border-bottom: 1px solid rgba(255,255,255,.12); flex: 0 0 auto; }
-    .brush-studio-title { font-size: 12px; font-weight: 900; letter-spacing: 1px; text-transform: uppercase; }
+    .brush-studio-title { font-size: 12px; font-weight: 900; letter-spacing: 1px; text-transform: uppercase; display: flex; align-items: baseline; gap: 8px; }
+    .brush-studio-title-note { font-size: 9px; font-weight: 600; letter-spacing: .2px; text-transform: none; color: #8f8e99; }
     #brush-studio-close { width: 34px; height: 34px; min-height: 34px; padding: 0; font-size: 20px; line-height: 1; }
-    .brush-studio-body { flex: 1 1 auto; display: grid; grid-template-columns: 110px 250px 1fr; min-height: 0; }
+    .brush-studio-body { flex: 1 1 auto; display: grid; grid-template-columns: 1fr; min-height: 0; }
 
-    .brush-studio-tools { border-right: 1px solid rgba(255,255,255,.12); padding: 12px 8px; display: flex; flex-direction: column; gap: 6px; overflow: hidden; }
-    .brush-studio-tools .tool-choice { min-width: 0; grid-template-columns: 1fr; justify-items: center; text-align: center; padding: 10px 4px; }
-
-    .brush-studio-brushes { border-right: 1px solid rgba(255,255,255,.12); padding: 10px; overflow-y: auto; min-height: 0; }
-    .brush-studio-brushes[hidden] { display: none; }
-    .brush-studio-row { min-width: 0; width: 100%; display: grid; grid-template-columns: 44px 1fr; align-items: center; gap: 8px; text-align: left; font-size: 11px; margin-bottom: 3px; }
-    .brush-studio-row.selected { border-color: #ff6a83; color: #ff91a7; }
-    .brush-studio-row-preview { width: 44px; height: 18px; border-radius: 4px; background: rgba(0,0,0,.32); }
     .brush-studio-provenance { display: inline-block; margin-top: 2px; padding: 1px 5px; border-radius: 999px; font-size: 8px; font-weight: 800; letter-spacing: .4px; text-transform: uppercase; }
     .brush-studio-provenance[data-provenance="physical-reference"] { color: #9ed7ff; background: rgba(89,184,255,.14); }
     .brush-studio-provenance[data-provenance="digital-effect"] { color: #ffd36d; background: rgba(255,211,109,.14); }
@@ -343,8 +336,6 @@
       #brand-mark { display: none; }
       .status-chip { display: none; }
       .brush-studio-frame { height: calc(100vh - 20px); }
-      .brush-studio-body { grid-template-columns: 84px 1fr; }
-      .brush-studio-properties { grid-column: 1 / -1; border-top: 1px solid rgba(255,255,255,.12); }
     }
 
     /* Calibration Bench — reuses .brush-studio-overlay/.brush-studio-frame/
@@ -436,48 +427,42 @@
     </div>
 
     <div id="mode-chooser" class="tool-popover" aria-label="Mode and brush chooser">
-      <div id="tool-chooser" class="mode-row" aria-label="Mode">
-        <button class="tool-choice selected" data-tool="spray-can" aria-pressed="true"><span class="tool-sample">SPRAY</span><span>Spray Can</span></button>
-        <button class="tool-choice" data-tool="paint-marker" aria-pressed="false"><span class="tool-sample">MARK</span><span>Paint Marker</span></button>
+      <div id="tool-chooser" class="mode-row" aria-label="Tool">
+        <button class="tool-choice selected" data-tool="spray-can" aria-pressed="true"><span>Spray</span></button>
+        <button class="tool-choice" data-tool="paint-marker" aria-pressed="false"><span>Marker</span></button>
       </div>
       <div id="cap-chooser" class="brush-panel" aria-label="Spray cap">
         <div class="brush-family-label">Fat</div>
-        <button class="cap-choice selected" data-cap="new-york-fat"><canvas class="brush-preview" width="56" height="22" data-preview-cap="new-york-fat"></canvas><span class="brush-row-text"><span class="brush-row-name">New York Fat</span><span class="brush-row-meta">24–42 · digital baseline</span></span></button>
-        <button class="cap-choice" data-cap="pink-dot-fat"><canvas class="brush-preview" width="56" height="22" data-preview-cap="pink-dot-fat"></canvas><span class="brush-row-text"><span class="brush-row-name">Pink Dot Fat</span><span class="brush-row-meta">34–54 · digital baseline</span></span></button>
-        <button class="cap-choice" data-cap="astro-fat"><canvas class="brush-preview" width="56" height="22" data-preview-cap="astro-fat"></canvas><span class="brush-row-text"><span class="brush-row-name">Astro Fat</span><span class="brush-row-meta">48–78 · digital baseline</span></span></button>
-        <button class="cap-choice" data-cap="german-fat"><canvas class="brush-preview" width="56" height="22" data-preview-cap="german-fat"></canvas><span class="brush-row-text"><span class="brush-row-name">German / Hardcore Fat</span><span class="brush-row-meta">28–50 · digital baseline</span></span></button>
+        <button class="cap-choice selected" data-cap="new-york-fat"><canvas class="brush-preview" width="56" height="22" data-preview-cap="new-york-fat"></canvas><span class="brush-row-text"><span class="brush-row-name">New York Fat</span></span></button>
+        <button class="cap-choice" data-cap="pink-dot-fat"><canvas class="brush-preview" width="56" height="22" data-preview-cap="pink-dot-fat"></canvas><span class="brush-row-text"><span class="brush-row-name">Pink Dot Fat</span></span></button>
+        <button class="cap-choice" data-cap="astro-fat"><canvas class="brush-preview" width="56" height="22" data-preview-cap="astro-fat"></canvas><span class="brush-row-text"><span class="brush-row-name">Astro Fat</span></span></button>
+        <button class="cap-choice" data-cap="german-fat"><canvas class="brush-preview" width="56" height="22" data-preview-cap="german-fat"></canvas><span class="brush-row-text"><span class="brush-row-name">German / Hardcore Fat</span></span></button>
         <div class="brush-family-label">Thin</div>
-        <button class="cap-choice" data-cap="lego-thin"><canvas class="brush-preview" width="56" height="22" data-preview-cap="lego-thin"></canvas><span class="brush-row-text"><span class="brush-row-name">Lego Thin</span><span class="brush-row-meta">10–19 · digital baseline</span></span></button>
-        <button class="cap-choice" data-cap="universal-thin"><canvas class="brush-preview" width="56" height="22" data-preview-cap="universal-thin"></canvas><span class="brush-row-text"><span class="brush-row-name">Universal Thin</span><span class="brush-row-meta">8–16 · digital baseline</span></span></button>
-        <button class="cap-choice" data-cap="level-1"><canvas class="brush-preview" width="56" height="22" data-preview-cap="level-1"></canvas><span class="brush-row-text"><span class="brush-row-name">Level 1 / Skinny Cream</span><span class="brush-row-meta">4–9 · digital baseline</span></span></button>
-        <button class="cap-choice" data-cap="new-york-thin"><canvas class="brush-preview" width="56" height="22" data-preview-cap="new-york-thin"></canvas><span class="brush-row-text"><span class="brush-row-name">New York Thin</span><span class="brush-row-meta">6–14 · digital baseline</span></span></button>
+        <button class="cap-choice" data-cap="lego-thin"><canvas class="brush-preview" width="56" height="22" data-preview-cap="lego-thin"></canvas><span class="brush-row-text"><span class="brush-row-name">Lego Thin</span></span></button>
+        <button class="cap-choice" data-cap="universal-thin"><canvas class="brush-preview" width="56" height="22" data-preview-cap="universal-thin"></canvas><span class="brush-row-text"><span class="brush-row-name">Universal Thin</span></span></button>
+        <button class="cap-choice" data-cap="level-1"><canvas class="brush-preview" width="56" height="22" data-preview-cap="level-1"></canvas><span class="brush-row-text"><span class="brush-row-name">Level 1 / Skinny Cream</span></span></button>
+        <button class="cap-choice" data-cap="new-york-thin"><canvas class="brush-preview" width="56" height="22" data-preview-cap="new-york-thin"></canvas><span class="brush-row-text"><span class="brush-row-name">New York Thin</span></span></button>
         <div class="brush-family-label">Specialty</div>
-        <button class="cap-choice" data-cap="calligraphy"><canvas class="brush-preview" width="56" height="22" data-preview-cap="calligraphy"></canvas><span class="brush-row-text"><span class="brush-row-name">Oval Calligraphy</span><span class="brush-row-meta">14–34 · digital baseline</span></span></button>
-        <button class="cap-choice" data-cap="transversal-slot"><canvas class="brush-preview" width="56" height="22" data-preview-cap="transversal-slot"></canvas><span class="brush-row-text"><span class="brush-row-name">Rectangular Transversal</span><span class="brush-row-meta">14–34 · digital baseline</span></span></button>
-        <button class="cap-choice" data-cap="needle"><canvas class="brush-preview" width="56" height="22" data-preview-cap="needle"></canvas><span class="brush-row-text"><span class="brush-row-name">Needle</span><span class="brush-row-meta">3–10 · digital baseline</span></span></button>
-        <button class="cap-choice" data-cap="wiggly-needle"><canvas class="brush-preview" width="56" height="22" data-preview-cap="wiggly-needle"></canvas><span class="brush-row-text"><span class="brush-row-name">Wiggly Needle</span><span class="brush-row-meta">3–10 · effect cap, not physical</span></span></button>
-        <button class="cap-choice" data-cap="soft-fade"><canvas class="brush-preview" width="56" height="22" data-preview-cap="soft-fade"></canvas><span class="brush-row-text"><span class="brush-row-name">Soft / Fade</span><span class="brush-row-meta">34–68 · digital baseline</span></span></button>
-        <button class="cap-choice" data-cap="fuzz-fat"><canvas class="brush-preview" width="56" height="22" data-preview-cap="fuzz-fat"></canvas><span class="brush-row-text"><span class="brush-row-name">Fuzz Fat</span><span class="brush-row-meta">28–50 · effect cap, not physical</span></span></button>
-        <button class="cap-choice" data-cap="ring-donut"><canvas class="brush-preview" width="56" height="22" data-preview-cap="ring-donut"></canvas><span class="brush-row-text"><span class="brush-row-name">Ring / Donut</span><span class="brush-row-meta">36–62 · digital archetype, not physical</span></span></button>
-        <button class="cap-choice" data-cap="dry-streak"><canvas class="brush-preview" width="56" height="22" data-preview-cap="dry-streak"></canvas><span class="brush-row-text"><span class="brush-row-name">Dry / Streak</span><span class="brush-row-meta">28–48 · digital archetype, not physical</span></span></button>
+        <button class="cap-choice" data-cap="calligraphy"><canvas class="brush-preview" width="56" height="22" data-preview-cap="calligraphy"></canvas><span class="brush-row-text"><span class="brush-row-name">Oval Calligraphy</span></span></button>
+        <button class="cap-choice" data-cap="transversal-slot"><canvas class="brush-preview" width="56" height="22" data-preview-cap="transversal-slot"></canvas><span class="brush-row-text"><span class="brush-row-name">Rectangular Transversal</span></span></button>
+        <button class="cap-choice" data-cap="needle"><canvas class="brush-preview" width="56" height="22" data-preview-cap="needle"></canvas><span class="brush-row-text"><span class="brush-row-name">Needle</span></span></button>
+        <button class="cap-choice" data-cap="wiggly-needle"><canvas class="brush-preview" width="56" height="22" data-preview-cap="wiggly-needle"></canvas><span class="brush-row-text"><span class="brush-row-name">Wiggly Needle</span></span></button>
+        <button class="cap-choice" data-cap="soft-fade"><canvas class="brush-preview" width="56" height="22" data-preview-cap="soft-fade"></canvas><span class="brush-row-text"><span class="brush-row-name">Soft / Fade</span></span></button>
+        <button class="cap-choice" data-cap="fuzz-fat"><canvas class="brush-preview" width="56" height="22" data-preview-cap="fuzz-fat"></canvas><span class="brush-row-text"><span class="brush-row-name">Fuzz Fat</span></span></button>
+        <button class="cap-choice" data-cap="ring-donut"><canvas class="brush-preview" width="56" height="22" data-preview-cap="ring-donut"></canvas><span class="brush-row-text"><span class="brush-row-name">Ring / Donut</span></span></button>
+        <button class="cap-choice" data-cap="dry-streak"><canvas class="brush-preview" width="56" height="22" data-preview-cap="dry-streak"></canvas><span class="brush-row-text"><span class="brush-row-name">Dry / Streak</span></span></button>
         <div id="spray-property-controls" aria-label="Spray size and coverage">
-          <div id="radius-slider-setting" class="setting-stack"><span>Spray size override · <strong id="radius-val">32</strong> wall units</span><input type="range" id="brush-radius" min="4" max="72" value="32" /><button id="radius-reset">Use cap default</button></div>
+          <div id="radius-slider-setting" class="setting-stack"><span>Size · <strong id="radius-val">32</strong></span><input type="range" id="brush-radius" min="4" max="72" value="32" /><button id="radius-reset">Use cap default</button></div>
           <div id="coverage-slider-setting" class="setting-stack"><span>Spray coverage override · <strong id="coverage-val">100</strong>%</span><input type="range" id="spray-coverage" min="20" max="100" step="5" value="100" /><button id="coverage-reset">Use full coverage</button></div>
           <label id="fill-mode-setting" class="setting-row fill-mode-row"><span>Fill mode (throwie)<span class="fill-mode-note">caps one sweep's build-up; lift and sweep again for fuller coverage</span></span><input type="checkbox" id="fill-mode-toggle" /></label>
           <div id="spray-angle-status" hidden title="Alt + scroll wheel over the wall to adjust"><span>Spray angle (Alt + scroll)</span><strong id="spray-angle-val">0°</strong></div>
           <div id="flair-status" hidden title="F cycles Flair mode · Alt + drag over the wall to adjust"><span>Flair (F to cycle)</span><strong id="flair-status-val">off</strong></div>
         </div>
       </div>
-      <div id="marker-chooser" class="brush-panel" aria-label="Marker / nib" hidden>
-        <div class="brush-family-label">Round</div>
-        <button class="marker-choice selected" data-marker="round" aria-pressed="true"><canvas class="brush-preview" width="56" height="22" data-preview-marker="round"></canvas><span class="brush-row-text"><span class="brush-row-name">Round</span></span></button>
-        <div class="brush-family-label">Chisel</div>
-        <button class="marker-choice" data-marker="chisel" aria-pressed="false"><canvas class="brush-preview" width="56" height="22" data-preview-marker="chisel"></canvas><span class="brush-row-text"><span class="brush-row-name">Classic</span></span></button>
-        <button class="marker-choice" data-marker="clean-chisel" aria-pressed="false"><canvas class="brush-preview" width="56" height="22" data-preview-marker="clean-chisel"></canvas><span class="brush-row-text"><span class="brush-row-name">Clean</span></span></button>
-        <button class="marker-choice" data-marker="drippy-chisel" aria-pressed="false"><canvas class="brush-preview" width="56" height="22" data-preview-marker="drippy-chisel"></canvas><span class="brush-row-text"><span class="brush-row-name">Wet</span></span></button>
-        <div class="brush-family-label">Mop</div>
-        <button class="marker-choice" data-marker="mop" aria-pressed="false"><canvas class="brush-preview" width="56" height="22" data-preview-marker="mop"></canvas><span class="brush-row-text"><span class="brush-row-name">Balanced</span></span></button>
-        <button class="marker-choice" data-marker="drip-mop" aria-pressed="false"><canvas class="brush-preview" width="56" height="22" data-preview-marker="drip-mop"></canvas><span class="brush-row-text"><span class="brush-row-name">Drippy</span></span></button>
+      <div id="marker-chooser" class="brush-panel" aria-label="Marker" hidden>
+        <button class="marker-choice selected" data-marker="round" aria-pressed="true"><canvas class="brush-preview" width="56" height="22" data-preview-marker="round"></canvas><span class="brush-row-text"><span class="brush-row-name">Round Marker</span></span></button>
+        <button class="marker-choice" data-marker="chisel" aria-pressed="false"><canvas class="brush-preview" width="56" height="22" data-preview-marker="chisel"></canvas><span class="brush-row-text"><span class="brush-row-name">Chisel Marker</span></span></button>
+        <button class="marker-choice" data-marker="mop" aria-pressed="false"><canvas class="brush-preview" width="56" height="22" data-preview-marker="mop"></canvas><span class="brush-row-text"><span class="brush-row-name">Mop</span></span></button>
         <div id="marker-width-controls" aria-label="Marker width presets">
           <div class="marker-width-label">Width · <span id="marker-width-value">28</span></div>
           <div id="marker-width-presets"></div>
@@ -493,16 +478,10 @@
     <div id="brush-studio-overlay" class="brush-studio-overlay" aria-label="Brush Studio" role="dialog" aria-modal="true">
       <div class="brush-studio-frame island">
         <header class="brush-studio-header">
-          <div class="brush-studio-title">Brush Studio</div>
+          <div class="brush-studio-title">Brush Studio <span class="brush-studio-title-note">Advanced — not required to draw</span></div>
           <button id="brush-studio-close" aria-label="Close Brush Studio" title="Close · Esc">×</button>
         </header>
         <div class="brush-studio-body">
-          <div class="brush-studio-tools" aria-label="Tool">
-            <button class="tool-choice selected" data-tool="spray-can" aria-pressed="true"><span class="tool-sample">SPRAY</span><span>Spray Can</span></button>
-            <button class="tool-choice" data-tool="paint-marker" aria-pressed="false"><span class="tool-sample">MARK</span><span>Paint Marker</span></button>
-          </div>
-          <div id="brush-studio-brushes-spray" class="brush-studio-brushes" aria-label="Spray brushes"></div>
-          <div id="brush-studio-brushes-marker" class="brush-studio-brushes" aria-label="Marker brushes" hidden></div>
           <div class="brush-studio-properties" aria-label="Properties">
             <div class="brush-studio-selected-header">
               <div class="brush-studio-selected-title">

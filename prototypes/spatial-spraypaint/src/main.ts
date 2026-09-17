@@ -6,7 +6,7 @@ import {
 import { getSprayBackground, type SprayBackground } from "./Backgrounds";
 import { renderAllBrushPreviews } from "./BrushPreview";
 import { getSprayOverride, resolveEffectiveSprayStyle } from "./BrushProperties";
-import { BrushStudioController } from "./BrushStudio";
+import { BrushStudioController, markerFamilyFor } from "./BrushStudio";
 import { CalibrationBenchController } from "./CalibrationBenchController";
 import { EMPTY_CUSTOM_SPRAY_REGISTRY, type CustomSprayBrushRegistry } from "./CustomBrush";
 import { CameraLuminanceSampler } from "./CameraLuminance";
@@ -907,8 +907,13 @@ class SpatialSpraypaintApp {
     const spraySelected = this.toolSelection.selectedToolId === "spray-can";
     this.requireElement("radius-slider-setting").toggleAttribute("hidden", !spraySelected);
     if (spraySelected) {
+      // V0.10 UI Reset: the primary drawing UI never shows a raw internal
+      // decimal (e.g. a Flair-resolved size like `4.2195766379361705`) --
+      // round for display only; the slider's own underlying value and every
+      // actual paint/physics computation still use the true float.
+      const roundedRadius = Math.round(this.baseRadius);
       this.requireElement<HTMLInputElement>("brush-radius").value = this.baseRadius.toString();
-      this.requireElement("radius-val").textContent = this.baseRadius.toString();
+      this.requireElement("radius-val").textContent = roundedRadius.toString();
     }
     const parameter = getDrawingTool(this.toolSelection.selectedToolId).parameterLabel;
     this.requireElement("radius-reset").textContent = this.sprayOverrideFor(this.toolSelection.sprayCapId).size === undefined
@@ -921,21 +926,46 @@ class SpatialSpraypaintApp {
   private updateCoverageUi(): void {
     const spraySelected = this.toolSelection.selectedToolId === "spray-can";
     this.requireElement("coverage-slider-setting").toggleAttribute("hidden", !spraySelected);
+    if (spraySelected) {
+      const override = this.sprayOverrideFor(this.toolSelection.sprayCapId);
+      const coveragePercent = Math.round(this.effectiveSprayStyle(this.toolSelection.sprayCapId).coverage * 100);
+      this.requireElement<HTMLInputElement>("spray-coverage").value = coveragePercent.toString();
+      this.requireElement("coverage-val").textContent = coveragePercent.toString();
+      this.requireElement("coverage-reset").textContent = override.coverage === undefined
+        ? "Using full coverage"
+        : "Use full coverage";
+    }
+    this.updateFillModeUi();
+    this.updateCustomizedBadge();
+  }
+
+  /**
+   * V0.10 UI Reset, "Live state": the primary toolbar chip's badge is no
+   * longer coverage-only -- it now lights up whenever ANY setting that
+   * materially changes the next stroke differs from the selected brush's
+   * own defaults (size, coverage, fill mode, spray angle, or an active
+   * Flair mode), so a customized brush can never silently paint differently
+   * than what the UI implies. Session-only overrides live in Brush Studio
+   * (advanced/calibration), but their EFFECT must always surface here.
+   */
+  private updateCustomizedBadge(): void {
     const badge = this.requireElement("coverage-badge");
-    if (!spraySelected) {
+    if (this.toolSelection.selectedToolId !== "spray-can") {
       badge.hidden = true;
       return;
     }
-    const override = this.sprayOverrideFor(this.toolSelection.sprayCapId);
-    const coveragePercent = Math.round(this.effectiveSprayStyle(this.toolSelection.sprayCapId).coverage * 100);
-    this.requireElement<HTMLInputElement>("spray-coverage").value = coveragePercent.toString();
-    this.requireElement("coverage-val").textContent = coveragePercent.toString();
-    this.requireElement("coverage-reset").textContent = override.coverage === undefined
-      ? "Using full coverage"
-      : "Use full coverage";
-    badge.hidden = coveragePercent >= 100;
-    badge.textContent = `${coveragePercent}%`;
-    this.updateFillModeUi();
+    const capId = this.toolSelection.sprayCapId;
+    const override = this.sprayOverrideFor(capId);
+    const flairActive = isFlairEligibleCap(capId) && this.activeFlairMode !== "off";
+    const customized = override.size !== undefined
+      || override.coverage !== undefined
+      || override.fillMode !== undefined
+      || override.sprayAngle !== undefined
+      || flairActive;
+    badge.hidden = !customized;
+    if (!customized) return;
+    const coveragePercent = Math.round(this.effectiveSprayStyle(capId).coverage * 100);
+    badge.textContent = flairActive ? "Flair" : override.coverage !== undefined ? `${coveragePercent}%` : "Custom";
   }
 
   private updateFillModeUi(): void {
@@ -1208,8 +1238,8 @@ class SpatialSpraypaintApp {
     const flairCapSelected = this.toolSelection.selectedToolId === "spray-can" && isFlairEligibleCap(this.toolSelection.sprayCapId);
     const active = flairCapSelected && this.activeFlairMode !== "off";
     this.requireElement("flair-status").toggleAttribute("hidden", !active);
-    if (!active) return;
-    this.requireElement("flair-status-val").textContent = this.activeFlairMode;
+    if (active) this.requireElement("flair-status-val").textContent = this.activeFlairMode;
+    this.updateCustomizedBadge();
   }
 
   /** PRESET DEFAULT -> SESSION/USER MODIFICATION -> EFFECTIVE VALUE for one Spray brush's Size/Coverage/Fill. */
@@ -1289,7 +1319,7 @@ class SpatialSpraypaintApp {
       return button;
     });
     this.requireElement("marker-width-presets").replaceChildren(...buttons);
-    this.requireElement("marker-width-value").textContent = `${selectedWidth} wall units`;
+    this.requireElement("marker-width-value").textContent = `${selectedWidth}`;
   }
 
   private renderColorPalette(): void {
@@ -1376,7 +1406,13 @@ class SpatialSpraypaintApp {
     const presentation = resolveDrawingToolPresentation(
       this.toolSelection,
       (id) => getSprayCapPreset(id).name,
-      (id) => getMarkerVariant(id).name,
+      // V0.10 UI Reset, "Markers": the live state label must match the
+      // 3 consolidated identities the picker itself shows (Round Marker /
+      // Chisel Marker / Mop) -- never the internal variant's own name
+      // (e.g. "Mop · Balanced"), which would surface exactly the
+      // Classic/Clean/Wet/Balanced/Drippy terminology this pass removed
+      // from the picker, just through a different label instead.
+      (id) => this.markerDisplayName(id),
     );
     const modeBrushControl = this.requireElement<HTMLButtonElement>("mode-brush-control");
     modeBrushControl.dataset.tool = tool.id;
@@ -1418,6 +1454,14 @@ class SpatialSpraypaintApp {
     this.requireElement("hand-first-use-cue").textContent = `Pinch thumb + index finger to use ${tool.name}`;
     this.requireElement("tracking-delivery-label").textContent = `7 · ${tool.name} delivery`;
     this.refreshDrawingCursor();
+  }
+
+  /** The 3 consolidated marker identities the picker exposes (Round Marker / Chisel Marker / Mop) -- see `updateToolUi`'s own doc for why this, not the internal variant's raw name, is what the live-state label shows. */
+  private markerDisplayName(id: MarkerVariantId): string {
+    const family = markerFamilyFor(id);
+    if (family === "round") return "Round Marker";
+    if (family === "chisel") return "Chisel Marker";
+    return "Mop";
   }
 
   private async selectInputMode(mode: InputSourceMode): Promise<void> {

@@ -9,9 +9,16 @@ import {
 
 describe("color palette authority", () => {
   it("keeps one canonical current palette and color state", () => {
-    expect(getColorPalette(INITIAL_COLOR_PALETTE_STATE.paletteId).name).toBe("StudioRich");
     expect(INITIAL_COLOR_PALETTE_STATE.currentColor).toBe("#e92f3d");
     expect(COLOR_PALETTES).toHaveLength(3);
+  });
+
+  it("V0.10 UI Reset: does not default into the limited StudioRich palette -- browsing defaults to a full manufacturer palette instead", () => {
+    const defaultPalette = getColorPalette(INITIAL_COLOR_PALETTE_STATE.paletteId);
+    expect(defaultPalette.name).not.toBe("StudioRich");
+    expect(defaultPalette.source).toBe("canonical-manufacturer-data");
+    // StudioRich must still exist and remain fully selectable -- "optional palette only", never removed.
+    expect(getColorPalette("studiorich").name).toBe("StudioRich");
   });
 
   it("changes active color and retains a bounded deduplicated recent list", () => {
