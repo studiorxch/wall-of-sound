@@ -26,6 +26,16 @@ export interface DripSeed {
   bend?: number;
   kink?: number;
   kinkAt?: number;
+  /**
+   * A second, independent wobble point, purely additive to `kink`/`kinkAt`
+   * and defaulting to no contribution when unset — existing callers (every
+   * Spray cap, which never sets either kink field) are byte-identical.
+   * Two staggered kinks at different points along the run read as a small
+   * gravity-driven correction partway down and another lower, rather than
+   * one single bump — closer to how a real drip's path wanders.
+   */
+  kink2?: number;
+  kinkAt2?: number;
   durationMs?: number;
   tipWidthRatio?: number;
   originPoolRadius?: number;
@@ -51,17 +61,23 @@ export function resolveDripStripSection(
   const safeProgress = Math.min(1, Math.max(0, progress));
   const eased = safeProgress * safeProgress;
   const bend = drip.bend ?? 0;
-  const resolveCenter = (value: number) => {
-    const localProgress = Math.min(1, Math.max(0, value));
-    const localEased = localProgress * localProgress;
-    const kinkAt = drip.kinkAt ?? 0.55;
+  const kinkOffset = (offset: number | undefined, at: number | undefined, localProgress: number) => {
+    if (!offset) return 0;
+    const kinkAt = at ?? 0.55;
     const kinkRadius = 0.3;
     const kinkDistance = Math.abs(localProgress - kinkAt) / kinkRadius;
     const kinkEnvelope = kinkDistance < 1
       ? 0.5 + Math.cos(Math.PI * kinkDistance) * 0.5
       : 0;
+    return offset * kinkEnvelope;
+  };
+  const resolveCenter = (value: number) => {
+    const localProgress = Math.min(1, Math.max(0, value));
+    const localEased = localProgress * localProgress;
     return {
-      x: drip.x + bend * localEased + (drip.kink ?? 0) * kinkEnvelope,
+      x: drip.x + bend * localEased
+        + kinkOffset(drip.kink, drip.kinkAt, localProgress)
+        + kinkOffset(drip.kink2, drip.kinkAt2, localProgress),
       y: drip.y + drip.length * localEased,
     };
   };

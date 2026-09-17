@@ -139,7 +139,12 @@ describe("wet paint load authority", () => {
     expect(dripMopDrips.every(({ originPoolRadius, tipWidthRatio }) => Boolean(originPoolRadius) && Boolean(tipWidthRatio))).toBe(true);
     expect(dripMopDrips.every(({ renderAsOverlay }) => renderAsOverlay)).toBe(true);
     expect(dripMopDrips.every(({ bend, length }) => Math.abs(bend ?? 0) <= length * 0.028)).toBe(true);
-    expect(dripMopDrips.every(({ width }) => width > 10)).toBe(true);
+    // Width now varies deliberately within a cluster (thin threads mixed
+    // with thick runs, not a uniform gauge) rather than every drip clearing
+    // a single flat floor -- so the invariant worth keeping is that Drip
+    // Mop stays chunky ON AVERAGE, not that literally every drip is wide.
+    expect(average(dripMopDrips.map(({ width }) => width))).toBeGreaterThan(10);
+    expect(new Set(dripMopDrips.map(({ width }) => Math.round(width))).size).toBeGreaterThan(3);
   });
 
   it("replays drip origins, lengths, bends, kinks, and timing deterministically", () => {
@@ -180,6 +185,28 @@ describe("wet paint load authority", () => {
     expect(Math.max(...clusterSizes)).toBeGreaterThan(1);
   });
 
+  it("gives Mop drips a wandering gravity path -- two independent kinks, a bend, and per-drip taper -- not a straight stick", () => {
+    const accumulator = new WetPaintAccumulator();
+    accumulator.beginStroke(41, "mop");
+    const drips = observeStationary(accumulator, 2400).flatMap(({ drips: emitted }) => emitted);
+    expect(drips.length).toBeGreaterThan(10);
+    // A single straight-line drip would have kink undefined/0. Most drips
+    // in a heavy cluster should carry a primary kink, and a meaningful
+    // share a second, independent one further down the run.
+    expect(drips.filter(({ kink }) => (kink ?? 0) !== 0).length).toBeGreaterThan(drips.length * 0.5);
+    expect(drips.some(({ kink2 }) => (kink2 ?? 0) !== 0)).toBe(true);
+    // The two kinks sit at different points along the run (early vs. late),
+    // not stacked at the same spot -- a wandering path, not one bump.
+    const bothKinked = drips.filter(({ kink, kink2 }) => (kink ?? 0) !== 0 && (kink2 ?? 0) !== 0);
+    expect(bothKinked.length).toBeGreaterThan(0);
+    expect(bothKinked.every(({ kinkAt, kinkAt2 }) => (kinkAt2 ?? 0) > (kinkAt ?? 0))).toBe(true);
+    // Taper severity itself varies across the cluster instead of every
+    // drip thinning by the exact same fixed ratio.
+    expect(new Set(drips.map(({ tipWidthRatio }) => tipWidthRatio)).size).toBeGreaterThan(3);
+    // Thickness varies within one cluster -- not every drip the same gauge.
+    expect(new Set(drips.map(({ width }) => Math.round(width * 10))).size).toBeGreaterThan(5);
+  });
+
   it("keeps a run dripping for a moment after the pointer lifts via settle()", () => {
     const accumulator = new WetPaintAccumulator();
     accumulator.beginStroke(41, "mop");
@@ -214,7 +241,13 @@ describe("wet paint load authority", () => {
     high.beginStroke(21, "mop", { flow: "high", viscosity: "balanced" });
     const highResults = observeStationary(high, 960);
     expect(highResults[0].paintLoad).toBeGreaterThan(lowResults[0].paintLoad);
-    expect(highResults[highResults.length - 1].paintLoad).toBeGreaterThan(lowResults[lowResults.length - 1].paintLoad);
+    // Load now oscillates as clusters drain and rebuild it, so a single
+    // instantaneous end-of-dwell sample is noisy -- the real "Flow
+    // authority" signal is that High flow produces materially more total
+    // drip output over the same dwell, not a strictly higher load at one
+    // arbitrary instant.
+    expect(highResults.flatMap(({ drips }) => drips).length)
+      .toBeGreaterThan(lowResults.flatMap(({ drips }) => drips).length);
     expect(isWetMarkerVariant("round")).toBe(false);
     expect(isWetMarkerVariant("chisel")).toBe(false);
   });

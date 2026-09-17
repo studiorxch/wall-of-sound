@@ -52,6 +52,19 @@ export interface WetVariantProfile {
   dramaticLengthBonus: number;
   /** Drips spawned once from the stroke's remaining wet load right as the pointer lifts -- a run in progress persists a moment after the hand moves away instead of stopping dead. */
   settleDripCount: number;
+  /** Random width multiplier range [low, high] -- wide on purpose so a cluster mixes thin threads with noticeably thicker runs, rather than every drip reading the same gauge. */
+  widthVarianceLow: number;
+  widthVarianceHigh: number;
+  /** Chance a drip gets a primary / secondary lateral kink, each independently placed and each a fraction of `length` in amplitude -- two staggered, restrained corrections read as a wandering gravity path, not a straight stick and not a decorative squiggle. */
+  kinkChance: number;
+  kink2Chance: number;
+  kinkAmplitudeRatio: number;
+  /** Max |bend| as a fraction of `length` -- the smooth, one-directional lean every drip gets (on top of, not instead of, the kinks). */
+  bendRatio: number;
+  /** ± range applied to `tipWidthRatio` per drip, so taper severity itself varies across a cluster instead of every run thinning by the exact same amount. */
+  tipWidthJitter: number;
+  /** Chance a non-first drip in a cluster snaps in close to the previous one's origin instead of its own evenly-stratified slot -- tight neighboring pairs and near-merging, not perfectly separated runs every time. */
+  tightNeighborChance: number;
 }
 
 const WET_VARIANT_PROFILES: Record<WetMarkerVariantId, WetVariantProfile> = {
@@ -60,8 +73,8 @@ const WET_VARIANT_PROFILES: Record<WetMarkerVariantId, WetVariantProfile> = {
     slowGainPerSecond: 0.22,
     dwellGainPerSecond: 0.34,
     speedDrain: 0.13,
-    dripLoadThreshold: 0.58,
-    cooldownMs: 220,
+    dripLoadThreshold: 0.52,
+    cooldownMs: 110,
     lengthMin: 1.1,
     lengthRange: 3.2,
     stemWidthBaseRatio: 0.055,
@@ -72,18 +85,26 @@ const WET_VARIANT_PROFILES: Record<WetMarkerVariantId, WetVariantProfile> = {
     originSpanRatio: 0.54,
     durationMinMs: 1050,
     durationRangeMs: 850,
-    maxSimultaneousDrips: 3,
-    dramaticChance: 0.22,
-    dramaticLengthBonus: 3.2,
-    settleDripCount: 3,
+    maxSimultaneousDrips: 6,
+    dramaticChance: 0.26,
+    dramaticLengthBonus: 3.4,
+    settleDripCount: 5,
+    widthVarianceLow: 0.4,
+    widthVarianceHigh: 1.7,
+    kinkChance: 0.82,
+    kink2Chance: 0.5,
+    kinkAmplitudeRatio: 0.075,
+    bendRatio: 0.16,
+    tipWidthJitter: 0.16,
+    tightNeighborChance: 0.32,
   },
   "drip-mop": {
     initialLoad: 0.68,
     slowGainPerSecond: 0.36,
     dwellGainPerSecond: 0.58,
     speedDrain: 0.08,
-    dripLoadThreshold: 0.5,
-    cooldownMs: 140,
+    dripLoadThreshold: 0.44,
+    cooldownMs: 70,
     lengthMin: 5.7,
     lengthRange: 8.6,
     stemWidthBaseRatio: 0.16,
@@ -94,10 +115,18 @@ const WET_VARIANT_PROFILES: Record<WetMarkerVariantId, WetVariantProfile> = {
     originSpanRatio: 0.62,
     durationMinMs: 1450,
     durationRangeMs: 1650,
-    maxSimultaneousDrips: 4,
-    dramaticChance: 0.3,
+    maxSimultaneousDrips: 8,
+    dramaticChance: 0.32,
     dramaticLengthBonus: 4.5,
-    settleDripCount: 5,
+    settleDripCount: 7,
+    widthVarianceLow: 0.68,
+    widthVarianceHigh: 1.6,
+    kinkChance: 0.9,
+    kink2Chance: 0.6,
+    kinkAmplitudeRatio: 0.06,
+    bendRatio: 0.055,
+    tipWidthJitter: 0.1,
+    tightNeighborChance: 0.36,
   },
   "drippy-chisel": {
     initialLoad: 0.58,
@@ -116,10 +145,18 @@ const WET_VARIANT_PROFILES: Record<WetMarkerVariantId, WetVariantProfile> = {
     originSpanRatio: 0.42,
     durationMinMs: 1250,
     durationRangeMs: 1050,
-    maxSimultaneousDrips: 2,
-    dramaticChance: 0.12,
+    maxSimultaneousDrips: 3,
+    dramaticChance: 0.14,
     dramaticLengthBonus: 2,
     settleDripCount: 2,
+    widthVarianceLow: 0.6,
+    widthVarianceHigh: 1.35,
+    kinkChance: 0.7,
+    kink2Chance: 0.3,
+    kinkAmplitudeRatio: 0.052,
+    bendRatio: 0.1,
+    tipWidthJitter: 0.12,
+    tightNeighborChance: 0.22,
   },
 };
 
@@ -379,7 +416,7 @@ export class WetPaintAccumulator {
     if (!dripsEnabled || !last) return [];
     const profile = WET_VARIANT_PROFILES[this.variant];
     const effectiveThreshold = Math.min(0.98, profile.dripLoadThreshold * this.modifiers.threshold);
-    if (this.state.paintLoad < effectiveThreshold * 0.75) return [];
+    if (this.state.paintLoad < effectiveThreshold * 0.55) return [];
     const footprint = [...this.footprint, last];
     return this.createDrips(footprint, last, last.width, this.state.paintLoad, profile.settleDripCount);
   }
@@ -401,34 +438,53 @@ export class WetPaintAccumulator {
     let count = forceCount ?? 1;
     if (forceCount === undefined) {
       for (let index = 0; index < profile.maxSimultaneousDrips - 1; index += 1) {
-        if (this.random() < 0.35 + overload * 0.5) count += 1;
+        if (this.random() < 0.5 + overload * 0.65) count += 1;
       }
     }
     const drips: DripSeed[] = [];
     const span = size * profile.originSpanRatio;
+    let previousOffset: number | null = null;
     for (let index = 0; index < count; index += 1) {
-      // Stratified offsets across the wet contact width: distinct,
-      // neighboring origins rather than either stacking on one pixel or
-      // reading as evenly-spaced stamps.
+      // Stratified offsets across the wet contact width by default --
+      // distinct, neighboring origins rather than stacking on one pixel or
+      // reading as evenly-spaced stamps. But real wet paint doesn't space
+      // itself out politely: some runs break free right beside a run that
+      // just formed, so a fraction of the time a later drip in the cluster
+      // snaps in tight to the PREVIOUS one instead of its own slot --
+      // close/overlapping neighbors and occasional near-merging.
       const slot = count === 1 ? 0 : index / (count - 1) - 0.5;
       const jitter = (this.random() - 0.5) * (span / Math.max(1, count));
-      const offset = clamp(slot * span + jitter, -span / 2, span / 2);
+      const stratifiedOffset = clamp(slot * span + jitter, -span / 2, span / 2);
+      const offset: number = previousOffset !== null && this.random() < profile.tightNeighborChance
+        ? clamp(previousOffset + (this.random() - 0.5) * size * 0.16, -span / 2, span / 2)
+        : stratifiedOffset;
+      previousOffset = offset;
       const dramatic = this.random() < profile.dramaticChance;
       const length = size * (
         profile.lengthMin
         + this.random() * profile.lengthRange
         + (dramatic ? profile.dramaticLengthBonus : 0)
       ) * this.modifiers.length;
+      // A power curve biases the multiplier toward the thin end with
+      // occasional noticeably thick outliers, instead of every drip in a
+      // cluster reading as roughly the same gauge.
+      const widthMultiplier = profile.widthVarianceLow
+        + Math.pow(this.random(), 1.6) * (profile.widthVarianceHigh - profile.widthVarianceLow);
       const width = Math.max(
         1.4,
         size
           * (profile.stemWidthBaseRatio + paintLoad * profile.stemWidthLoadRatio)
-          * (0.84 + this.random() * 0.34)
+          * widthMultiplier
           * this.modifiers.width,
       );
-      const kinkSample = this.random();
-      const kink = kinkSample > 0.64
-        ? (this.random() - 0.5) * length * (this.variant === "drippy-chisel" ? 0.052 : 0.038)
+      // Two independent, staggered kinks (early-run and late-run) plus a
+      // smooth one-directional bend -- a restrained wandering path under
+      // gravity, not a straight stick and not a decorative noodle.
+      const kink = this.random() < profile.kinkChance
+        ? (this.random() - 0.5) * length * profile.kinkAmplitudeRatio
+        : 0;
+      const kink2 = this.random() < profile.kink2Chance
+        ? (this.random() - 0.5) * length * profile.kinkAmplitudeRatio * 0.8
         : 0;
       const origin = this.variant === "mop" || this.variant === "drip-mop"
         ? resolveMopDripAttachment(
@@ -445,15 +501,21 @@ export class WetPaintAccumulator {
         width,
         length,
         opacity: clamp(0.58 + paintLoad * 0.28, 0, 0.92),
-        bend: (this.random() - 0.5) * length * (this.variant === "drip-mop" ? 0.055 : 0.1),
+        bend: (this.random() - 0.5) * length * profile.bendRatio,
         kink,
-        kinkAt: kink === 0 ? undefined : 0.32 + this.random() * 0.36,
+        kinkAt: kink === 0 ? undefined : 0.22 + this.random() * 0.24,
+        kink2,
+        kinkAt2: kink2 === 0 ? undefined : 0.62 + this.random() * 0.28,
         durationMs: (
           profile.durationMinMs
           + (1 - paintLoad) * 420
           + this.random() * profile.durationRangeMs
         ) * this.modifiers.gravityDuration,
-        tipWidthRatio: profile.tipWidthRatio,
+        tipWidthRatio: clamp(
+          profile.tipWidthRatio + (this.random() - 0.5) * profile.tipWidthJitter,
+          0.16,
+          0.68,
+        ),
         originPoolRadius: width * profile.originPoolRatio,
         terminalBulbRatio: this.variant === "drip-mop" ? 0.58 : 0.48,
         renderAsOverlay: this.variant === "mop" || this.variant === "drip-mop",

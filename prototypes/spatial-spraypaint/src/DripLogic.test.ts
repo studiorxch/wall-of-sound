@@ -144,6 +144,24 @@ describe("continuous wet drip geometry", () => {
     expect(strip.every((section, index) => index === 0 || section.center.y >= strip[index - 1].center.y)).toBe(true);
   });
 
+  it("adds a second, independent kink for a wandering gravity path -- purely additive, no effect on callers that never set it", () => {
+    const withoutSecondKink = buildContinuousDripStrip(wetDrip, 20);
+    const withSecondKink = buildContinuousDripStrip({ ...wetDrip, kink2: 9, kinkAt2: 0.8 }, 20);
+    // Every existing Spray drip never sets kink2 -- confirm the field
+    // defaulting to undefined leaves the path byte-identical to before.
+    expect(buildContinuousDripStrip({ ...wetDrip, kink2: undefined }, 20)).toEqual(withoutSecondKink);
+    // With it set, the path near kinkAt2 diverges from the single-kink
+    // version, and the two kinks land at different points along the run.
+    const divergedNearSecondKink = withSecondKink.some((section, index) => (
+      Math.abs(section.progress - 0.8) < 0.08
+      && Math.abs(section.center.x - withoutSecondKink[index].center.x) > 1
+    ));
+    expect(divergedNearSecondKink).toBe(true);
+    expect(withSecondKink.every((section, index) => (
+      index === 0 || section.center.y >= withSecondKink[index - 1].center.y
+    ))).toBe(true);
+  });
+
   it("blends a Mop origin shoulder into one continuous strip without a node", () => {
     const strip = buildContinuousDripStrip({ ...wetDrip, renderAsOverlay: true }, 20);
     expect(strip[0].width).toBe((wetDrip.originPoolRadius ?? 0) * 2);
