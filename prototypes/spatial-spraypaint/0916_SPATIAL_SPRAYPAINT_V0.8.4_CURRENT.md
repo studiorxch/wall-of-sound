@@ -66,4 +66,4 @@ No new files this pass. No changes to `SprayBrushEngine.ts`, `FlairContinuity.ts
 
 ## Commit
 
-`<pending — see final report>` — "fix: Spatial Spraypaint Flair stroke-envelope stabilization — explicit Min/Max/Start-Position, reset-to-start policy fixes width carryover"
+`b5df408` — "fix: Spatial Spraypaint Flair stroke-envelope stabilization — explicit Min/Max/Start-Position, reset-to-start policy fixes width carryover"
