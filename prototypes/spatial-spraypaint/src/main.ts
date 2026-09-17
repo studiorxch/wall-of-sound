@@ -4,7 +4,7 @@ import {
   type CurveReconstructionOptions,
 } from "./AdaptiveCurveReconstructor";
 import { getSprayBackground, type SprayBackground } from "./Backgrounds";
-import { renderAllBrushPreviews } from "./BrushPreview";
+import { renderAllBrushPreviews, renderMarkerSizeSample } from "./BrushPreview";
 import { getSprayOverride, resolveEffectiveSprayStyle } from "./BrushProperties";
 import { BrushStudioController, markerFamilyFor } from "./BrushStudio";
 import { CalibrationBenchController } from "./CalibrationBenchController";
@@ -246,6 +246,10 @@ class SpatialSpraypaintApp {
       },
       setCustomSprayRegistry: (registry) => { this.customSprayRegistry = registry; },
       openCalibrationBench: (capId) => this.calibrationBench.open(capId),
+      getWetPaintControls: () => this.wetPaintControls,
+      setWetPaintControls: (patch) => {
+        this.wetPaintControls = updateWetPaintControls(this.wetPaintControls, patch);
+      },
     });
     this.compositeCanvas = this.requireElement<HTMLCanvasElement>("composite-canvas");
     this.compositeCtx = this.compositeCanvas.getContext("2d")!;
@@ -382,18 +386,6 @@ class SpatialSpraypaintApp {
     this.requireElement<HTMLInputElement>("palette-search").addEventListener("input", () => {
       this.renderColorPalette();
     });
-    this.requireElement<HTMLSelectElement>("wet-flow").addEventListener("change", (event) => {
-      this.finishActiveStroke();
-      this.wetPaintControls = updateWetPaintControls(this.wetPaintControls, {
-        flow: (event.target as HTMLSelectElement).value as WetPaintFlow,
-      });
-    });
-    this.requireElement<HTMLSelectElement>("wet-viscosity").addEventListener("change", (event) => {
-      this.finishActiveStroke();
-      this.wetPaintControls = updateWetPaintControls(this.wetPaintControls, {
-        viscosity: (event.target as HTMLSelectElement).value as WetPaintViscosity,
-      });
-    });
 
     this.requireElement("undo-stroke").addEventListener("click", () => this.undoLastStroke());
     this.requireElement("clear-strokes").addEventListener("click", () => this.clearAllStrokes());
@@ -420,41 +412,6 @@ class SpatialSpraypaintApp {
     this.requireElement<HTMLInputElement>("drips-enabled").addEventListener("change", (event) => {
       this.setSettings({ type: "drips", value: (event.target as HTMLInputElement).checked });
       this.dripAccumulator.reset();
-    });
-    this.requireElement<HTMLInputElement>("brush-radius").addEventListener("input", (event) => {
-      if (this.toolSelection.selectedToolId !== "spray-can") return;
-      const value = Number.parseInt((event.target as HTMLInputElement).value, 10);
-      this.baseRadius = value;
-      this.setSettings({ type: "spray-property", capId: this.toolSelection.sprayCapId, patch: { size: value } });
-      this.updateRadiusUi();
-    });
-    this.requireElement("radius-reset").addEventListener("click", () => {
-      if (this.toolSelection.selectedToolId !== "spray-can") return;
-      this.finishActiveStroke();
-      this.setSettings({ type: "reset-spray-property", capId: this.toolSelection.sprayCapId, key: "size" });
-      this.baseRadius = this.selectedToolDefaultSize();
-      this.updateRadiusUi();
-    });
-    this.requireElement<HTMLInputElement>("spray-coverage").addEventListener("input", (event) => {
-      if (this.toolSelection.selectedToolId !== "spray-can") return;
-      const value = Number.parseInt((event.target as HTMLInputElement).value, 10) / 100;
-      this.setSettings({ type: "spray-property", capId: this.toolSelection.sprayCapId, patch: { coverage: value } });
-      this.updateCoverageUi();
-    });
-    this.requireElement("coverage-reset").addEventListener("click", () => {
-      if (this.toolSelection.selectedToolId !== "spray-can") return;
-      this.setSettings({ type: "reset-spray-property", capId: this.toolSelection.sprayCapId, key: "coverage" });
-      this.updateCoverageUi();
-    });
-    this.requireElement<HTMLInputElement>("fill-mode-toggle").addEventListener("change", (event) => {
-      if (this.toolSelection.selectedToolId !== "spray-can") return;
-      this.finishActiveStroke();
-      this.setSettings({
-        type: "spray-property",
-        capId: this.toolSelection.sprayCapId,
-        patch: { fillMode: (event.target as HTMLInputElement).checked },
-      });
-      this.updateFillModeUi();
     });
     this.requireElement<HTMLSelectElement>("background-preset").addEventListener("change", (event) => {
       this.selectedBackground = getSprayBackground((event.target as HTMLSelectElement).value);
@@ -903,41 +860,26 @@ class SpatialSpraypaintApp {
     this.requireElement("pencil-diagnostics-coalesced").textContent = String(sample.coalescedCount);
   }
 
+  /**
+   * V0.10.2 Marker + Spray Control Reduction: the normal panel no longer has
+   * a Size slider of its own (Size/Coverage/Fill overrides moved to Brush
+   * Studio entirely). `this.baseRadius` still has to stay in sync with the
+   * cap's EFFECTIVE size — default, or a Brush Studio override — since it's
+   * still what every actual paint/physics computation reads; this is now
+   * the only place that keeps it current, replacing the removed slider's
+   * own `input` handler.
+   */
   private updateRadiusUi(): void {
     const spraySelected = this.toolSelection.selectedToolId === "spray-can";
-    this.requireElement("radius-slider-setting").toggleAttribute("hidden", !spraySelected);
     if (spraySelected) {
-      // V0.10 UI Reset: the primary drawing UI never shows a raw internal
-      // decimal (e.g. a Flair-resolved size like `4.2195766379361705`) --
-      // round for display only; the slider's own underlying value and every
-      // actual paint/physics computation still use the true float.
-      const roundedRadius = Math.round(this.baseRadius);
-      this.requireElement<HTMLInputElement>("brush-radius").value = this.baseRadius.toString();
-      this.requireElement("radius-val").textContent = roundedRadius.toString();
+      this.baseRadius = this.effectiveSprayStyle(this.toolSelection.sprayCapId).size;
     }
-    // V0.10.1 Compact Drawing Controls: the reset affordance is a small
-    // inline icon, shown ONLY while a value is actually overridden --
-    // "Using cap default" as a permanent full-width row is gone. Nothing
-    // to reset, nothing shown; the control itself is enough.
-    this.requireElement("radius-reset").toggleAttribute(
-      "hidden",
-      this.sprayOverrideFor(this.toolSelection.sprayCapId).size === undefined,
-    );
     this.updateCoverageUi();
     this.refreshDrawingCursor();
   }
 
   private updateCoverageUi(): void {
-    const spraySelected = this.toolSelection.selectedToolId === "spray-can";
-    this.requireElement("coverage-slider-setting").toggleAttribute("hidden", !spraySelected);
-    if (spraySelected) {
-      const override = this.sprayOverrideFor(this.toolSelection.sprayCapId);
-      const coveragePercent = Math.round(this.effectiveSprayStyle(this.toolSelection.sprayCapId).coverage * 100);
-      this.requireElement<HTMLInputElement>("spray-coverage").value = coveragePercent.toString();
-      this.requireElement("coverage-val").textContent = `${coveragePercent}%`;
-      this.requireElement("coverage-reset").toggleAttribute("hidden", override.coverage === undefined);
-    }
-    this.updateFillModeUi();
+    this.updateSprayAngleUi();
     this.updateCustomizedBadge();
   }
 
@@ -968,15 +910,6 @@ class SpatialSpraypaintApp {
     if (!customized) return;
     const coveragePercent = Math.round(this.effectiveSprayStyle(capId).coverage * 100);
     badge.textContent = flairActive ? "Flair" : override.coverage !== undefined ? `${coveragePercent}%` : "Custom";
-  }
-
-  private updateFillModeUi(): void {
-    const spraySelected = this.toolSelection.selectedToolId === "spray-can";
-    this.requireElement("fill-mode-setting").toggleAttribute("hidden", !spraySelected);
-    if (!spraySelected) return;
-    this.requireElement<HTMLInputElement>("fill-mode-toggle").checked =
-      this.effectiveSprayStyle(this.toolSelection.sprayCapId).fillMode;
-    this.updateSprayAngleUi();
   }
 
   /**
@@ -1300,15 +1233,30 @@ class SpatialSpraypaintApp {
     this.brushStudio.render();
   }
 
+  /**
+   * V0.10.2: size is chosen through an actual visual sample of the nib/
+   * footprint (`renderMarkerSizeSample`) at its real relative size and
+   * shape, never an abstract XS/S/M/L/XL letter or a raw wall-unit number
+   * -- the description words below exist only as the accessible name for
+   * screen readers, never rendered as visible button text.
+   */
+  private readonly MARKER_SIZE_DESCRIPTIONS = ["Smallest", "Small", "Medium", "Large", "Largest"] as const;
+
   private renderMarkerWidthPresets(): void {
     const variantId = this.toolSelection.markerVariantId;
     const selectedWidth = this.markerWidths[variantId];
-    const buttons = getMarkerWidthPresets(variantId).map((preset) => {
+    const buttons = getMarkerWidthPresets(variantId).map((preset, index) => {
+      const description = this.MARKER_SIZE_DESCRIPTIONS[index] ?? preset.label;
       const button = document.createElement("button");
       button.className = "marker-width-choice";
-      button.textContent = preset.label;
-      button.title = `${preset.label} · ${preset.width} wall units`;
-      button.setAttribute("aria-label", `${getMarkerVariant(variantId).name} width ${preset.width}`);
+      const canvas = document.createElement("canvas");
+      canvas.width = 40;
+      canvas.height = 40;
+      const ctx = canvas.getContext("2d");
+      if (ctx) renderMarkerSizeSample(ctx, canvas.width, canvas.height, variantId, preset.width * 0.5);
+      button.append(canvas);
+      button.title = `${description} ${getMarkerVariant(variantId).name}`;
+      button.setAttribute("aria-label", `${description} ${getMarkerVariant(variantId).name}`);
       button.setAttribute("aria-pressed", (preset.width === selectedWidth).toString());
       button.classList.toggle("selected", preset.width === selectedWidth);
       button.addEventListener("click", () => {
@@ -1321,7 +1269,6 @@ class SpatialSpraypaintApp {
       return button;
     });
     this.requireElement("marker-width-presets").replaceChildren(...buttons);
-    this.requireElement("marker-width-value").textContent = `${selectedWidth}`;
   }
 
   private renderColorPalette(): void {
@@ -1443,11 +1390,6 @@ class SpatialSpraypaintApp {
       choice.classList.toggle("selected", selected);
       choice.setAttribute("aria-pressed", selected.toString());
     });
-    const wetControlsVisible = tool.id === "paint-marker"
-      && isWetMarkerVariant(this.toolSelection.markerVariantId);
-    this.requireElement("wet-controls").toggleAttribute("hidden", !wetControlsVisible);
-    this.requireElement<HTMLSelectElement>("wet-flow").value = this.wetPaintControls.flow;
-    this.requireElement<HTMLSelectElement>("wet-viscosity").value = this.wetPaintControls.viscosity;
     this.renderMarkerWidthPresets();
     this.updateRadiusUi();
     const rattle = this.requireElement<HTMLButtonElement>("shake-can");

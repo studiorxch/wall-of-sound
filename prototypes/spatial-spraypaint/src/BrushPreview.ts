@@ -245,6 +245,67 @@ export function renderMarkerPreviewToContext(
   engine.endStroke(ctx);
 }
 
+/**
+ * V0.10.2 Marker + Spray Control Reduction: replaces the abstract XS/S/M/L/
+ * XL size-preset labels with an actual visual sample of the nib/footprint
+ * at its real relative size and shape -- "the user should be able to choose
+ * size visually without guessing what a letter means." A deliberately
+ * simple, static footprint glyph (not a live `PaintMarkerEngine` stroke
+ * sample like `renderMarkerBrushStudioPreview` above) -- the shape alone is
+ * what needs to read at a glance across 5 small buttons in a row, and a
+ * dynamic stroke render there would visually compete with the SELECTED
+ * size's own live preview shown just above the row. Purely a UI selector
+ * glyph; the actual live-paint renderer (`PaintMarkerEngine`) is untouched.
+ *
+ * Family mapping mirrors `markerFamilyFor` (`BrushStudio.ts`) exactly, kept
+ * as its own tiny local copy rather than an import so this module (already
+ * imported BY `BrushStudio.ts`) never imports back from it.
+ */
+export function renderMarkerSizeSample(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  variantId: MarkerVariantId,
+  sizePx: number,
+): void {
+  ctx.clearRect(0, 0, width, height);
+  const cx = width / 2;
+  const cy = height / 2;
+  const maxDiameter = Math.min(width, height) - 4;
+  const diameter = Math.max(3, Math.min(sizePx, maxDiameter));
+  ctx.fillStyle = "rgba(244,243,240,0.94)";
+  if (variantId === "round") {
+    ctx.beginPath();
+    ctx.arc(cx, cy, diameter / 2, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (variantId === "mop" || variantId === "drip-mop") {
+    // Broad, soft round footprint -- same circular shape as Round, but
+    // deliberately lower-opacity/wider to read as the softer, wetter Mop
+    // tip rather than a crisp round nib.
+    ctx.globalAlpha = 0.8;
+    ctx.beginPath();
+    ctx.arc(cx, cy, diameter / 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  } else {
+    // Chisel family: a flat, elongated rectangular footprint -- the
+    // characteristic cross-section of a chisel tip, never a circle.
+    const rectWidth = diameter;
+    const rectHeight = Math.max(3, diameter * 0.4);
+    const radius = Math.min(3, rectHeight / 2);
+    const left = cx - rectWidth / 2;
+    const top = cy - rectHeight / 2;
+    ctx.beginPath();
+    ctx.moveTo(left + radius, top);
+    ctx.arcTo(left + rectWidth, top, left + rectWidth, top + rectHeight, radius);
+    ctx.arcTo(left + rectWidth, top + rectHeight, left, top + rectHeight, radius);
+    ctx.arcTo(left, top + rectHeight, left, top, radius);
+    ctx.arcTo(left, top, left + rectWidth, top, radius);
+    ctx.closePath();
+    ctx.fill();
+  }
+}
+
 /** Wires every `<canvas data-preview-cap>` / `<canvas data-preview-marker>` under `root` to a rendered preview. */
 export function renderAllBrushPreviews(root: ParentNode): void {
   root.querySelectorAll<HTMLCanvasElement>("canvas[data-preview-cap]").forEach((canvas) => {

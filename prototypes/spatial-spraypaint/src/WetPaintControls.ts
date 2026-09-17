@@ -15,9 +15,21 @@ export interface WetPaintControlModifiers {
   gravityDuration: number;
 }
 
+/**
+ * V0.10.2 Marker + Spray Control Reduction: Mop's canonical/default paint
+ * chemistry is High flow / Runny viscosity -- Mop is currently the only
+ * wet-capable marker variant reachable through the shipped UI (see
+ * `BrushStudio.ts`'s `markerFamilyFor`/the V0.10 marker consolidation), so
+ * this single global default IS Mop's own default in practice. Session
+ * changes (now made from Brush Studio, not the normal picker) still start
+ * from here; Mop's own deposition/drip physics (`PaintMarkerEngine.ts`'s
+ * `MARKER_VARIANTS` entry, `dripTendency`, etc.) are untouched by this --
+ * Flow/Viscosity only scale delivery/threshold/width/length, never the
+ * variant's own canonical identity.
+ */
 export const INITIAL_WET_PAINT_CONTROLS: WetPaintControlState = {
-  flow: "balanced",
-  viscosity: "balanced",
+  flow: "high",
+  viscosity: "runny",
 };
 
 export function resolveWetPaintControlModifiers(

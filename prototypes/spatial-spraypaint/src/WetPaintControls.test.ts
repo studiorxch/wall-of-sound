@@ -25,10 +25,15 @@ describe("wet paint control authority", () => {
   });
 
   it("updates one contextual dimension without mutating the other", () => {
-    expect(updateWetPaintControls(INITIAL_WET_PAINT_CONTROLS, { flow: "high" })).toEqual({
+    const base = { flow: "balanced", viscosity: "balanced" } as const;
+    expect(updateWetPaintControls(base, { flow: "high" })).toEqual({
       flow: "high",
       viscosity: "balanced",
     });
-    expect(INITIAL_WET_PAINT_CONTROLS).toEqual({ flow: "balanced", viscosity: "balanced" });
+    expect(base).toEqual({ flow: "balanced", viscosity: "balanced" });
+  });
+
+  it("V0.10.2: defaults to High flow / Runny viscosity -- Mop's own canonical behavior, since Mop is currently the only wet-capable variant reachable through the UI", () => {
+    expect(INITIAL_WET_PAINT_CONTROLS).toEqual({ flow: "high", viscosity: "runny" });
   });
 });

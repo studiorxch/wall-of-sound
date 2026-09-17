@@ -37,6 +37,8 @@ import { type DrawingToolId, type MarkerVariantId } from "./DrawingTool";
 import { getMarkerVariant, MARKER_VARIANTS, type MarkerVariantDefinition } from "./PaintMarkerEngine";
 import { getSprayCapPreset, SPRAY_CAP_PRESETS, type SprayCapFamily, type SprayCapId, type SprayCapPreset } from "./SprayCapPresets";
 import { PLUME_MAX_ANGLE_DEGREES } from "./SprayBrushEngine";
+import { isWetMarkerVariant } from "./WetPaintModel";
+import { type WetPaintControlState } from "./WetPaintControls";
 
 /**
  * Pure list/grouping/labeling logic for Brush Studio's middle (Brushes)
@@ -199,6 +201,15 @@ export interface BrushStudioDeps {
   setCustomSprayRegistry: (registry: CustomSprayBrushRegistry) => void;
   /** Opens the Spray Cap Calibration Bench with the given cap as its Left brush. Spray-only — see `renderMarkerProperties`, which disables the button entirely. */
   openCalibrationBench: (capId: string) => void;
+  /**
+   * V0.10.2 Marker + Spray Control Reduction: Flow/Viscosity are "paint
+   * chemistry" — removed from the normal marker picker entirely, but they
+   * still need a live home per the brief's own "they belong to the brush
+   * definition / Brush Studio." Global (not per-marker-variant) state, same
+   * as before this pass — only where it's editable changed, not its shape.
+   */
+  getWetPaintControls: () => WetPaintControlState;
+  setWetPaintControls: (patch: Partial<WetPaintControlState>) => void;
 }
 
 const PROPERTY_GROUP_LABELS: ReadonlyArray<{ key: "general" | "shape" | "paint" | "motion"; label: string }> = [
@@ -798,6 +809,49 @@ export class BrushStudioController {
     dripRow.className = "brush-studio-property-row readonly";
     dripRow.innerHTML = `<span>Drip tendency</span><span class="brush-studio-property-value">${variant.dripTendency}</span>`;
     rows.push(dripRow);
+
+    // V0.10.2: Flow/Viscosity ("paint chemistry") live here now, not the
+    // normal picker -- only shown for a variant that actually reads them
+    // (see `isWetMarkerVariant`; a dry variant like Round ignores both).
+    if (isWetMarkerVariant(variant.id)) {
+      rows.push(this.buildFamilyLabel("Paint"));
+      const wet = this.deps.getWetPaintControls();
+      const flowRow = document.createElement("div");
+      flowRow.className = "brush-studio-property-row";
+      const flowLabel = document.createElement("span");
+      flowLabel.textContent = "Flow";
+      const flowSelect = document.createElement("select");
+      for (const value of ["low", "balanced", "high"] as const) {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = value[0].toUpperCase() + value.slice(1);
+        option.selected = wet.flow === value;
+        flowSelect.append(option);
+      }
+      flowSelect.addEventListener("change", () => {
+        this.deps.setWetPaintControls({ flow: flowSelect.value as WetPaintControlState["flow"] });
+      });
+      flowRow.append(flowLabel, flowSelect);
+      rows.push(flowRow);
+
+      const viscosityRow = document.createElement("div");
+      viscosityRow.className = "brush-studio-property-row";
+      const viscosityLabel = document.createElement("span");
+      viscosityLabel.textContent = "Viscosity";
+      const viscositySelect = document.createElement("select");
+      for (const value of ["thick", "balanced", "runny"] as const) {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = value[0].toUpperCase() + value.slice(1);
+        option.selected = wet.viscosity === value;
+        viscositySelect.append(option);
+      }
+      viscositySelect.addEventListener("change", () => {
+        this.deps.setWetPaintControls({ viscosity: viscositySelect.value as WetPaintControlState["viscosity"] });
+      });
+      viscosityRow.append(viscosityLabel, viscositySelect);
+      rows.push(viscosityRow);
+    }
 
     body.replaceChildren(...rows);
     this.el<HTMLButtonElement>("brush-studio-reset-brush").disabled = true;
