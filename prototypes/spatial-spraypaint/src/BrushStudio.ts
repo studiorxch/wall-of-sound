@@ -16,7 +16,7 @@ import {
   type FlairPropertyKey,
   type FlairPropertyRow,
 } from "./FlairProperties";
-import { resolveTrackMarksFlairSizeRange } from "./FlairCurves";
+import { type FlairStartPositionId } from "./FlairCurves";
 import { type FlairModeId } from "./ToolTaxonomy";
 import {
   duplicateSprayBrush,
@@ -214,6 +214,13 @@ const FLAIR_MODE_SELECT_OPTIONS: ReadonlyArray<{ id: FlairModeId; label: string 
 const FLAIR_DEPTH_RESPONSE_SELECT_OPTIONS: ReadonlyArray<{ id: "far-wide" | "near-wide"; label: string }> = [
   { id: "far-wide", label: "Far → Wide" },
   { id: "near-wide", label: "Near → Wide" },
+];
+
+/** Flair Stroke Envelope Stabilization build brief, section 2: where within [Min, Max] a fresh stroke begins. */
+const FLAIR_START_POSITION_SELECT_OPTIONS: ReadonlyArray<{ id: FlairStartPositionId; label: string }> = [
+  { id: "min", label: "Min" },
+  { id: "center", label: "Center" },
+  { id: "max", label: "Max" },
 ];
 
 export class BrushStudioController {
@@ -426,7 +433,7 @@ export class BrushStudioController {
     const mode = this.deps.getTrackMarksFlairMode();
     if (preset.id === "track-marks" && mode !== "off") {
       const override = this.deps.getFlairOverrides()[preset.id]?.[mode] ?? {};
-      const params = resolveEffectiveFlairParams(mode, override);
+      const params = resolveEffectiveFlairParams(mode, preset.baseRadius, override);
       renderTrackMarksFlairPreview(ctx, canvas.width, canvas.height, preset, mode, params);
       return;
     }
@@ -472,15 +479,24 @@ export class BrushStudioController {
     if (mode === "off") return elements;
 
     const override = this.deps.getFlairOverrides()[capId]?.[mode] ?? {};
-    const effective = resolveEffectiveFlairParams(mode, override);
+    const effective = resolveEffectiveFlairParams(mode, preset.baseRadius, override);
 
     elements.push(this.buildDepthResponseRow(capId, mode, preset, effective, override));
+    elements.push(this.buildStartPositionRow(capId, mode, preset, effective, override));
 
     for (const row of getFlairPropertyRows(effective, override)) {
       elements.push(this.buildFlairPropertyRow(capId, mode, preset, row));
     }
 
-    const range = resolveTrackMarksFlairSizeRange(mode, effective);
+    // Flair Stroke Envelope Stabilization build brief, section 2/6: Min/Max
+    // ARE the effective range now (no separate curve evaluation needed — see
+    // `FlairCurves.ts`'s `FlairSizeEnvelope` doc for why this replaced the
+    // old relative "Flair Range" control entirely), so this readout just
+    // echoes them directly. Kept as its own explicit row — not bound to the
+    // compact `#brush-radius` slider's own max="72" HTML attribute (correct
+    // for every physical cap, cosmetically clamped for Wild) — so it, and
+    // Duplicate/Reset above it, always show the TRUE value used when
+    // painting (build brief section 7 of the prior Brush Studio pass).
     const rangeRow = document.createElement("div");
     rangeRow.className = "brush-studio-property-row readonly";
     const rangeLabel = document.createElement("span");
@@ -488,17 +504,10 @@ export class BrushStudioController {
     rangeLabel.textContent = "Effective Range";
     const rangeValue = document.createElement("span");
     rangeValue.className = "brush-studio-property-value";
-    rangeValue.textContent = `${Math.round(range.min)}–${Math.round(range.max)} wall units`;
+    rangeValue.textContent = `${Math.round(effective.flairMinSize)}–${Math.round(effective.flairMaxSize)} wall units`;
     rangeRow.append(rangeLabel, rangeValue);
     elements.push(rangeRow);
-    // Build brief section 7: "ensure Brush Studio displays the true
-    // effective Track Marks width/range without lying/clamping." The
-    // compact `#brush-radius` slider's own max="72" HTML attribute still
-    // visually clamps its display for Wild (a shared control every physical
-    // cap also uses, correctly, at 72 — see the checkpoint doc for why it
-    // wasn't widened); this readout, and Duplicate/Reset above it, are
-    // never bound to that slider, so they show the true value regardless.
-    if (range.max > 72) {
+    if (effective.flairMaxSize > 72) {
       const note = document.createElement("div");
       note.className = "fill-mode-note";
       note.textContent = "Exceeds the compact Size slider's own 72-unit display — this is the true value used when painting.";
@@ -552,7 +561,7 @@ export class BrushStudioController {
     select.addEventListener("change", () => {
       this.deps.setFlairProperty(capId, mode, { depthResponse: select.value as "far-wide" | "near-wide" });
       const nextOverride = this.deps.getFlairOverrides()[capId]?.[mode] ?? {};
-      const params = resolveEffectiveFlairParams(mode, nextOverride);
+      const params = resolveEffectiveFlairParams(mode, preset.baseRadius, nextOverride);
       const canvas = this.el<HTMLCanvasElement>("brush-studio-preview");
       const ctx = canvas.getContext("2d");
       if (ctx) renderTrackMarksFlairPreview(ctx, canvas.width, canvas.height, preset, mode, params);
@@ -570,6 +579,61 @@ export class BrushStudioController {
       resetButton.textContent = "Reset";
       resetButton.addEventListener("click", () => {
         this.deps.resetFlairProperty(capId, mode, "depthResponse");
+        this.render();
+      });
+      wrap.append(resetButton);
+    }
+
+    return wrap;
+  }
+
+  /**
+   * Start Position (Flair Stroke Envelope Stabilization build brief, section
+   * 2/6) — where within `[flairMinSize, flairMaxSize]` a fresh stroke begins
+   * (`reset-to-start`, section 1). Same select-control pattern as Depth
+   * Response, its own row and reset.
+   */
+  private buildStartPositionRow(
+    capId: string,
+    mode: FlairModeId,
+    preset: SprayCapPreset,
+    effective: ReturnType<typeof resolveEffectiveFlairParams>,
+    override: FlairParameterOverride,
+  ): HTMLElement {
+    const wrap = document.createElement("div");
+    wrap.className = "brush-studio-property-row";
+
+    const label = document.createElement("span");
+    label.className = "brush-studio-property-label";
+    label.textContent = "Start Position";
+    wrap.append(label);
+
+    const select = document.createElement("select");
+    select.className = "flair-start-position-select";
+    select.setAttribute("aria-label", "Flair start position");
+    for (const option of FLAIR_START_POSITION_SELECT_OPTIONS) {
+      const opt = document.createElement("option");
+      opt.value = option.id;
+      opt.textContent = option.label;
+      opt.selected = option.id === effective.flairStartPosition;
+      select.append(opt);
+    }
+    select.addEventListener("change", () => {
+      this.deps.setFlairProperty(capId, mode, { flairStartPosition: select.value as FlairStartPositionId });
+      this.render();
+    });
+    wrap.append(select);
+
+    if (isFlairPropertyModified(override, "flairStartPosition")) {
+      const dot = document.createElement("span");
+      dot.className = "brush-studio-modified-dot";
+      dot.title = "Modified from mode default";
+      wrap.append(dot);
+      const resetButton = document.createElement("button");
+      resetButton.className = "brush-studio-property-reset";
+      resetButton.textContent = "Reset";
+      resetButton.addEventListener("click", () => {
+        this.deps.resetFlairProperty(capId, mode, "flairStartPosition");
         this.render();
       });
       wrap.append(resetButton);
@@ -601,7 +665,7 @@ export class BrushStudioController {
       readout.textContent = numeric.toFixed(2);
       this.deps.setFlairProperty(capId, mode, { [row.key]: numeric });
       const override = this.deps.getFlairOverrides()[capId]?.[mode] ?? {};
-      const params = resolveEffectiveFlairParams(mode, override);
+      const params = resolveEffectiveFlairParams(mode, preset.baseRadius, override);
       const canvas = this.el<HTMLCanvasElement>("brush-studio-preview");
       const ctx = canvas.getContext("2d");
       if (ctx) renderTrackMarksFlairPreview(ctx, canvas.width, canvas.height, preset, mode, params);

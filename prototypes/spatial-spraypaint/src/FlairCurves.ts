@@ -99,8 +99,17 @@ export const FLAIR_CURVES: Record<FlairModeId, FlairCurveSet> = {
     transitionSmoothing: 0.75,
     // Strong -- rises faster and higher than wall at every distance.
     textureBloom: (t) => Math.min(1.4, 1.4 * clamp01(t)),
-    // "Optional/stylized" -- deliberately no physical falloff.
-    outputAttenuation: () => 1,
+    // Flair Stroke Envelope Stabilization build brief, section 4: every real
+    // mode must be ABLE to produce "wider while lighter" (a cap should be
+    // able to, "depending on mode/preset" — not every mode is required to
+    // default to strong falloff, but a mode with literally NO attenuation
+    // shape has nothing for the `outputFalloff` control to scale, per
+    // `scaleRatio`'s own baseline-zero branch — confirmed dead by a V0.8.3
+    // test). A small, genuine default (10% at full distance, "optional/
+    // stylized" in character, not a real physical claim) replaces the prior
+    // flat `() => 1`, giving Wild's own Output Falloff control real range to
+    // work with while staying its own default near-imperceptible.
+    outputAttenuation: (t) => 1 - 0.1 * clamp01(t),
     endpointShapingAuthority: 0.85,
   },
 };
@@ -198,11 +207,21 @@ export function applyFlairOutputToPoint(
  * hand-duplicated) from each mode's own curve constants. Labels only, no new
  * editor UI in this pass -- see the checkpoint doc for why Brush Studio
  * integration was deferred.
+ *
+ * NOTE (Flair Stroke Envelope Stabilization build brief): `flairRange` — a
+ * relative multiplier of each mode's own curve magnitude — has been REMOVED
+ * from this bundle. It is replaced by explicit `flairMinSize`/`flairMaxSize`
+ * (absolute wall units, see `FlairSizeEnvelope` below), which is now the
+ * SOLE size-envelope authority. Keeping both would have meant two controls
+ * fighting over the same thing (Range scaled a relative shape magnitude that
+ * only ever mattered THROUGH denormalization into absolute size — once
+ * Min/Max own that denormalization directly, Range has nothing left to
+ * govern). See the checkpoint doc's "state model" section for the full
+ * reasoning.
  */
 export interface FlairProControlMetadata {
   flairAmount: number;
   flairSmoothing: number;
-  flairRange: number;
   bloomResponse: number;
   outputFalloff: number;
   /** See `FlairDepthResponseId` below — a mapping POLARITY, not a new curve. */
@@ -229,7 +248,7 @@ export const FLAIR_MODE_DEFAULT_DEPTH_RESPONSE: Record<FlairModeId, FlairDepthRe
   wild: "far-wide",
 };
 
-/** Mirrors normalized simulated distance around its own midpoint when the polarity is `near-wide`; identity for `far-wide`. Self-inverse (`flip(flip(t)) === t`), which is what lets `inverseEffectiveWidthExpansion` below reuse it directly. */
+/** Mirrors normalized simulated distance around its own midpoint when the polarity is `near-wide`; identity for `far-wide`. Self-inverse (`flip(flip(t)) === t`), which is what lets `inverseEffectiveFlairDistance` below reuse it directly. */
 function resolveDepthResponseCurveInput(distance01: number, depthResponse: FlairDepthResponseId): number {
   const t = clamp01(distance01);
   return depthResponse === "near-wide" ? 1 - t : t;
@@ -240,11 +259,72 @@ export function getFlairProControlMetadata(mode: FlairModeId): FlairProControlMe
   return {
     flairAmount: curves.distanceSensitivity,
     flairSmoothing: curves.transitionSmoothing,
-    flairRange: curves.widthExpansion(1),
     bloomResponse: curves.textureBloom(1),
     outputFalloff: 1 - curves.outputAttenuation(1),
     depthResponse: FLAIR_MODE_DEFAULT_DEPTH_RESPONSE[mode],
   };
+}
+
+// ---------------------------------------------------------------------------
+// Explicit size envelope (Flair Stroke Envelope Stabilization build brief,
+// sections 1-2) — the fix for "Flair inherits the previous stroke's
+// terminal size." A stroke's width no longer floats free as whatever the
+// generic `size` override happens to hold; it is always resolved from an
+// EXPLICIT `[flairMinSize, flairMaxSize]` envelope plus a `flairStartPosition`
+// policy, both stated here rather than implied by leftover session state.
+
+export type FlairStartPositionId = "min" | "max" | "center";
+
+/**
+ * Section 1's stroke-start policy. `reset-to-start` (the only implemented
+ * value in this pass, per the brief's own "for now, default to
+ * reset-to-start") means every new stroke's starting width is resolved fresh
+ * from `flairStartPosition`, never inherited from wherever the previous
+ * stroke's transient modulation left off. `continue-from-last` is named here
+ * as the documented future option but has no resolution logic yet — see
+ * `main.ts`'s `resetTrackMarksFlairForNewStroke`, the single place this
+ * policy is applied.
+ */
+export type FlairStrokeStartPolicy = "reset-to-start" | "continue-from-last";
+
+export const FLAIR_STROKE_START_POLICY: FlairStrokeStartPolicy = "reset-to-start";
+
+export interface FlairSizeEnvelope {
+  flairMinSize: number;
+  flairMaxSize: number;
+  flairStartPosition: FlairStartPositionId;
+}
+
+/**
+ * Default envelope ratios, expressed relative to the CAP'S OWN preset
+ * `baseRadius` (never the live/overridden session size — using the live size
+ * would reintroduce exactly the carryover bug this pass fixes, since the
+ * live size already reflects wherever a previous stroke or drag left off).
+ * "Keep the model cap-relative where possible" (section 2): a thin cap like
+ * Needle (`baseRadius` 5) and a fat cap like Track Marks (`baseRadius` 42)
+ * each get a sensible, proportionate envelope from the SAME ratios — see
+ * `FlairCurves.test.ts`'s dedicated Needle-shaped validation (section 7:
+ * "very small minimum remains usable... maximum can expand significantly...
+ * no minimum-width collapse").
+ */
+const FLAIR_SIZE_MIN_RATIO = 0.12;
+const FLAIR_SIZE_MIN_FLOOR = 2;
+const FLAIR_SIZE_MAX_RATIO_BY_MODE: Record<FlairModeId, number> = {
+  off: 1,
+  wall: 1.5,
+  blackbook: 0.9,
+  wild: 2.4,
+};
+
+export function getFlairSizeDefaults(mode: FlairModeId, capBaseRadius: number): { min: number; max: number } {
+  const min = Math.max(FLAIR_SIZE_MIN_FLOOR, capBaseRadius * FLAIR_SIZE_MIN_RATIO);
+  const max = Math.max(min + 1, capBaseRadius * FLAIR_SIZE_MAX_RATIO_BY_MODE[mode]);
+  return { min, max };
+}
+
+/** Section 2's suggested start-position values, uniformly defaulted to `center` (the least surprising choice — the brief names no per-mode default table for this one, unlike Depth Response's). Fully overridable per (cap, mode), same as every other Flair property. */
+export function getFlairStartPositionDefault(_mode: FlairModeId): FlairStartPositionId {
+  return "center";
 }
 
 // ---------------------------------------------------------------------------
@@ -260,8 +340,8 @@ export function getFlairProControlMetadata(mode: FlairModeId): FlairProControlMe
 // `distanceSensitivity`/`transitionSmoothing` — with no curve shape to
 // preserve).
 
-/** `EffectiveFlairParams` is structurally `FlairProControlMetadata` — the same five scalars, just possibly overridden rather than read straight off a mode's canonical curve. One shape, two roles (baseline vs. effective), kept as a type alias so the two are always interchangeable. */
-export type EffectiveFlairParams = FlairProControlMetadata;
+/** `EffectiveFlairParams` = the mode-scalar bundle PLUS the explicit size envelope (min/max/start) — one merged shape covering every Brush Studio Flair control, baseline or overridden. */
+export type EffectiveFlairParams = FlairProControlMetadata & FlairSizeEnvelope;
 
 /** Ratio-scale one canonical curve shape by how far `effective` has moved from `baseline`; 1 (no-op) when the baseline itself is 0 (nothing to scale against) and the effective value is also 0. */
 function scaleRatio(effective: number, baseline: number): number {
@@ -269,11 +349,37 @@ function scaleRatio(effective: number, baseline: number): number {
   return effective / baseline;
 }
 
-/** The effective, possibly-rescaled `widthExpansion` curve for a mode + params — used by both `resolveFlairModulationWithParams` and `inverseEffectiveWidthExpansion` so seeding and live modulation always agree on the same shape. */
-function resolveEffectiveWidthExpansionCurve(mode: FlairModeId, params: EffectiveFlairParams): (t: number) => number {
-  const baseline = getFlairProControlMetadata(mode);
-  const rangeScale = scaleRatio(params.flairRange, baseline.flairRange);
-  return (t: number) => FLAIR_CURVES[mode].widthExpansion(t) * rangeScale;
+/**
+ * The mode's own `widthExpansion` shape, normalized to [0,1] by its own
+ * magnitude at t=1 — pure SHAPE (physically-bounded/tight/extended curvature
+ * personality), with the magnitude itself cancelled out. Section 3: "map
+ * normalized depth strictly into [Flair Min Size ... Flair Max Size] rather
+ * than mutating generic brush size state directly" — this is the piece that
+ * makes that possible: width is now always a clean 0-1 fraction of the way
+ * from Min to Max, with the mode's shape governing ONLY where along that
+ * fraction a given distance lands, never the absolute endpoints themselves.
+ */
+function widthShapeNormalized(mode: FlairModeId, curveT: number): number {
+  const base = FLAIR_CURVES[mode];
+  const shapeMax = base.widthExpansion(1) || 1;
+  return clamp01(base.widthExpansion(clamp01(curveT)) / shapeMax);
+}
+
+/**
+ * Numeric inverse of `widthShapeNormalized` — mode-only (no envelope
+ * involved, since the shape is pure/normalized now), binary search against
+ * the always-monotonic-increasing raw curve.
+ */
+function inverseWidthShapeNormalized(mode: FlairModeId, targetNormalized: number): number {
+  const base = FLAIR_CURVES[mode];
+  const shapeMax = base.widthExpansion(1) || 1;
+  let lo = 0;
+  let hi = 1;
+  for (let i = 0; i < 24; i++) {
+    const mid = (lo + hi) / 2;
+    if (base.widthExpansion(mid) / shapeMax < targetNormalized) lo = mid; else hi = mid;
+  }
+  return (lo + hi) / 2;
 }
 
 /**
@@ -282,7 +388,12 @@ function resolveEffectiveWidthExpansionCurve(mode: FlairModeId, params: Effectiv
  * session override — see `FlairProperties.ts`) instead of reading the mode's
  * canonical scalars directly. `off` is unaffected regardless of `params`: it
  * is never editable in Brush Studio and its own canonical shape already
- * ignores every scalar (see module doc).
+ * ignores every scalar (see module doc). `width01` is now ALWAYS a clean
+ * [0,1] shape fraction (see `widthShapeNormalized`) — denormalize it into an
+ * absolute size with `resolveFlairSize` below, using the SAME `params` this
+ * call received, so a given `width01` always means the same absolute size
+ * for a given envelope ("the same depth gesture should produce a
+ * deterministic width every time," section 3).
  */
 export function resolveFlairModulationWithParams(
   mode: FlairModeId,
@@ -302,75 +413,58 @@ export function resolveFlairModulationWithParams(
   const curveT = mode === "off" ? clamp01(input.distance01) : resolveDepthResponseCurveInput(input.distance01, params.depthResponse);
   const bloomScale = scaleRatio(params.bloomResponse, baseline.bloomResponse);
   const falloffScale = scaleRatio(params.outputFalloff, baseline.outputFalloff);
-  const widthExpansion = resolveEffectiveWidthExpansionCurve(mode, params);
   const attenuation = 1 - (1 - base.outputAttenuation(curveT)) * falloffScale;
   return {
     ...input,
-    width01: widthExpansion(curveT),
+    width01: mode === "off" ? curveT : widthShapeNormalized(mode, curveT),
     bloom01: base.textureBloom(curveT) * bloomScale,
     endpointAuthority: base.endpointShapingAuthority,
     output: input.output * attenuation,
   };
 }
 
+/** Denormalizes a [0,1] `width01` (from `resolveFlairModulationWithParams`) into an absolute wall-unit size within `params`' own `[flairMinSize, flairMaxSize]` envelope — the ONLY place that envelope is consumed to produce a real size. */
+export function resolveFlairSize(width01: number, params: FlairSizeEnvelope): number {
+  return params.flairMinSize + clamp01(width01) * (params.flairMaxSize - params.flairMinSize);
+}
+
+/** Inverse of `resolveFlairSize` — an absolute size back to its [0,1] fraction of `params`' envelope. Degenerates to 0 for a zero-width envelope (`flairMaxSize === flairMinSize`) rather than dividing by zero. */
+export function normalizeFlairSize(size: number, params: FlairSizeEnvelope): number {
+  const span = params.flairMaxSize - params.flairMinSize;
+  if (span <= 0) return 0;
+  return clamp01((size - params.flairMinSize) / span);
+}
+
 /**
- * Numeric inverse of `resolveEffectiveWidthExpansionCurve`, POLARITY-AWARE:
- * finds the `distance01` that would produce `targetWidth01` under this
- * mode+params' Depth Response, not just the raw curve argument. Binary
- * search always runs against the pure (monotonic-increasing) curve — never
- * against the mirrored input directly, since a `near-wide` combination is
- * monotonic-DECREASING in `distance01` and would break the search's own
- * increasing-function assumption — then un-mirrors the result.
+ * POLARITY-AWARE numeric inverse: finds the `distance01` that would produce
+ * `targetSize` (an ABSOLUTE wall-unit size) under this mode+params' envelope
+ * and Depth Response. Always inverts the pure normalized SHAPE (monotonic-
+ * increasing by construction) and un-mirrors the result afterward —
  * `resolveDepthResponseCurveInput` is self-inverse, so applying it a second
- * time to its own output correctly reverses it. Used to seed a fresh drag
- * from the cap's current size under whatever Range/Depth-Response is
- * currently in effect for this brush + mode.
+ * time correctly reverses it; inverting the mirrored combination directly
+ * would break a `near-wide` mode's own binary search, since it is monotonic-
+ * DECREASING in `distance01`. Used to seed a fresh drag, AND to resolve
+ * section 1's stroke-start policy (`resolveFlairStartDistance` below) from
+ * an explicit target size instead of the cap's live/leftover one.
  */
-export function inverseEffectiveWidthExpansion(mode: FlairModeId, params: EffectiveFlairParams, targetWidth01: number): number {
-  const curve = resolveEffectiveWidthExpansionCurve(mode, params);
-  let lo = 0;
-  let hi = 1;
-  for (let i = 0; i < 24; i++) {
-    const mid = (lo + hi) / 2;
-    if (curve(mid) < targetWidth01) lo = mid; else hi = mid;
-  }
-  const curveT = (lo + hi) / 2;
+export function inverseEffectiveFlairDistance(mode: FlairModeId, params: EffectiveFlairParams, targetSize: number): number {
+  const targetNormalized = normalizeFlairSize(targetSize, params);
+  const curveT = mode === "off" ? targetNormalized : inverseWidthShapeNormalized(mode, targetNormalized);
   return mode === "off" ? curveT : resolveDepthResponseCurveInput(curveT, params.depthResponse);
 }
 
 /**
- * Track Marks' own wall-unit size range for Flair's normalized `width01` —
- * a floor plus a span, shared by the live routing hook (`main.ts`) and
- * Brush Studio's preview/readouts so both denormalize identically. The floor
- * matches the legacy Alt-drag clamp's own floor (see `main.ts`) so toggling
- * Flair on/off never jumps the resolved size range.
+ * Section 1/5's stroke-start resolution: the `distance01` a fresh stroke
+ * should begin at, given `params.flairStartPosition` ("min" | "max" |
+ * "center") and the CURRENT envelope + Depth Response — so `reset-to-start`
+ * always initializes deterministically regardless of session history. Pure;
+ * `main.ts`'s `resetTrackMarksFlairForNewStroke` is the only caller, invoked
+ * unconditionally at every `pointerdown` (the actual bug fix — see the
+ * checkpoint doc's root-cause section for why seeding on first Alt-drag
+ * sample alone was insufficient).
  */
-export const TRACK_MARKS_FLAIR_MIN_SIZE = 4;
-export const TRACK_MARKS_FLAIR_SIZE_SPAN = 60;
-
-export function denormalizeTrackMarksFlairWidth(width01: number): number {
-  return TRACK_MARKS_FLAIR_MIN_SIZE + width01 * TRACK_MARKS_FLAIR_SIZE_SPAN;
-}
-
-export function normalizeTrackMarksFlairWidth(size: number): number {
-  return Math.max(0, (size - TRACK_MARKS_FLAIR_MIN_SIZE) / TRACK_MARKS_FLAIR_SIZE_SPAN);
-}
-
-/**
- * Track Marks' TRUE resolved size range (wall units) at the given mode +
- * effective params — for display only (Brush Studio's "Effective Range"
- * readout, build brief section 7: "ensure Brush Studio displays the true
- * effective Track Marks width/range without lying/clamping"). Unlike the
- * compact `#brush-radius` slider (a shared control with its own `max="72"`
- * HTML attribute, correct for every physical cap but cosmetically clamped
- * for Wild — see the checkpoint doc), this reads directly off the same
- * curve `resolveFlairModulationWithParams` itself uses, so it can never
- * under-report Wild's genuinely extended range.
- */
-export function resolveTrackMarksFlairSizeRange(mode: FlairModeId, params: EffectiveFlairParams): { min: number; max: number } {
-  const curve = resolveEffectiveWidthExpansionCurve(mode, params);
-  return {
-    min: denormalizeTrackMarksFlairWidth(curve(0)),
-    max: denormalizeTrackMarksFlairWidth(curve(1)),
-  };
+export function resolveFlairStartDistance(mode: FlairModeId, params: EffectiveFlairParams): number {
+  const targetNormalized = params.flairStartPosition === "min" ? 0 : params.flairStartPosition === "max" ? 1 : 0.5;
+  const targetSize = params.flairMinSize + targetNormalized * (params.flairMaxSize - params.flairMinSize);
+  return inverseEffectiveFlairDistance(mode, params, targetSize);
 }

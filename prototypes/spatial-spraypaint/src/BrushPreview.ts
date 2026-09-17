@@ -5,8 +5,8 @@ import { getSprayCapPreset, type SprayCapId, type SprayCapPreset } from "./Spray
 import { getMarkerVariant } from "./PaintMarkerEngine";
 import { type StrokePoint } from "./types";
 import {
-  denormalizeTrackMarksFlairWidth,
   resolveFlairModulationWithParams,
+  resolveFlairSize,
   type EffectiveFlairParams,
 } from "./FlairCurves";
 import { type FlairModeId } from "./ToolTaxonomy";
@@ -169,7 +169,7 @@ export function renderTrackMarksFlairPreview(
       velocity: point.velocity,
       angle: 0,
     });
-    const resolvedSize = denormalizeTrackMarksFlairWidth(modulation.width01);
+    const resolvedSize = resolveFlairSize(modulation.width01, params);
     return {
       ...point,
       width: clampStrokeWidth(resolvedSize * 2, height, 0.16),

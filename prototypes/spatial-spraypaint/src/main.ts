@@ -68,11 +68,12 @@ import { createStrokeRandom, PLUME_MAX_ANGLE_DEGREES } from "./SprayBrushEngine"
 import { SprayCanAudio } from "./SprayCanAudio";
 import { getSprayCapPreset } from "./SprayCapPresets";
 import {
-  denormalizeTrackMarksFlairWidth,
-  inverseEffectiveWidthExpansion,
-  normalizeTrackMarksFlairWidth,
+  FLAIR_STROKE_START_POLICY,
+  inverseEffectiveFlairDistance,
   resolveDefaultFlairMode,
   resolveFlairModulationWithParams,
+  resolveFlairSize,
+  resolveFlairStartDistance,
   type EffectiveFlairParams,
 } from "./FlairCurves";
 import { buildContinuousSegmentEnds } from "./FlairContinuity";
@@ -536,6 +537,13 @@ class SpatialSpraypaintApp {
       this.dripAccumulator.reset();
       this.simulatedDistanceDragLastY = null;
       this.lastRawPointerSample = null;
+      // Flair Stroke Envelope Stabilization build brief, section 1 — THE
+      // FIX: every new stroke's Flair state is explicitly reset here, at
+      // pointerdown, BEFORE the first point is ever deposited. See
+      // `resetTrackMarksFlairForNewStroke`'s own doc for the full root-
+      // cause explanation of why this couldn't just happen lazily on first
+      // Alt-drag sample the way it used to.
+      this.resetTrackMarksFlairForNewStroke();
       this.activeWallPoint = screenToWall(this.wallView, screenPoint);
       this.lastDepositTimestamp = 0;
       this.setDrawingActive(true);
@@ -997,31 +1005,28 @@ class SpatialSpraypaintApp {
   }
 
   /**
-   * Called once, right as a fresh Alt-held drag gesture begins (the very
-   * first Alt-held pointermove, before any delta has been applied — see the
-   * pointermove listener above). No-op for every cap except Track Marks with
-   * an active (non-off) Flair mode: for that one case, it SEEDS
-   * `trackMarksFlairDistance01` by inverse-mapping the cap's CURRENT
-   * absolute size through the active mode's own width curve, so the very
-   * first modulated sample of the new gesture continues smoothly from
-   * wherever the size already sits instead of snapping toward a stale prior
-   * simulated-distance value ("no sudden jumps," build brief section 5).
+   * Called once, right as a fresh Alt-held drag GESTURE begins (the very
+   * first Alt-held pointermove within an already-active stroke, before any
+   * delta has been applied — see the pointermove listener above). This is
+   * NOT the stroke-start fix (see `resetTrackMarksFlairForNewStroke`,
+   * called at `pointerdown` instead) — it only keeps a drag that begins
+   * PARTWAY THROUGH an already-reset stroke continuous with whatever size
+   * the stroke is already at, by inverse-mapping the CURRENT absolute size
+   * back to a `distance01` ("no sudden jumps," build brief section 5). No-op
+   * for every cap except Track Marks with an active (non-off) Flair mode.
    */
   private beginSimulatedDistanceDrag(): void {
     if (this.toolSelection.selectedToolId !== "spray-can") return;
     if (this.toolSelection.sprayCapId !== "track-marks" || this.trackMarksFlairMode === "off") return;
-    const currentWidth01 = normalizeTrackMarksFlairWidth(this.baseRadius);
-    this.trackMarksFlairDistance01 = inverseEffectiveWidthExpansion(
-      this.trackMarksFlairMode,
-      this.effectiveFlairParams(this.trackMarksFlairMode),
-      currentWidth01,
-    );
+    const params = this.effectiveFlairParams(this.trackMarksFlairMode);
+    this.trackMarksFlairDistance01 = inverseEffectiveFlairDistance(this.trackMarksFlairMode, params, this.baseRadius);
   }
 
-  /** MODE DEFAULT merged with Brush Studio's SESSION MODIFICATION (see `FlairProperties.ts`) for Track Marks' Flair, at the given mode. Always the same `getFlairOverride`/`resolveEffectiveFlairParams` pair Brush Studio itself reads, so live painting and the Studio preview can never disagree. */
+  /** MODE DEFAULT merged with Brush Studio's SESSION MODIFICATION (see `FlairProperties.ts`) for Track Marks' Flair, at the given mode. Always the same `getFlairOverride`/`resolveEffectiveFlairParams` pair Brush Studio itself reads, so live painting and the Studio preview can never disagree. `capBaseRadius` is always the CAP'S OWN preset default (never the live/overridden size) — see `FlairProperties.ts`'s own doc for why that distinction is load-bearing. */
   private effectiveFlairParams(mode: FlairModeId): EffectiveFlairParams {
     const capId = this.toolSelection.sprayCapId;
-    return resolveEffectiveFlairParams(mode, getFlairOverride(this.settings.flairOverrides, capId, mode));
+    const capBaseRadius = getSprayCapPreset(capId).baseRadius;
+    return resolveEffectiveFlairParams(mode, capBaseRadius, getFlairOverride(this.settings.flairOverrides, capId, mode));
   }
 
   private adjustSimulatedSprayDistance(deltaScreenY: number): void {
@@ -1081,7 +1086,7 @@ class SpatialSpraypaintApp {
       velocity: 0,
       angle: 0,
     });
-    const next = denormalizeTrackMarksFlairWidth(modulation.width01);
+    const next = resolveFlairSize(modulation.width01, params);
     this.baseRadius = next;
     this.trackMarksFlairOutputMultiplier = modulation.output;
     this.setSettings({ type: "spray-property", capId, patch: { size: next } });
@@ -1104,39 +1109,79 @@ class SpatialSpraypaintApp {
 
   /**
    * Sets Track Marks' active Flair mode directly — shared by the keyboard
-   * cycle above and Brush Studio's Mode selector, so both drive the exact
-   * same re-centering behavior. A deliberate mode switch, unlike a live
-   * drag, is free to re-center the depth dial: each mode has its own width
-   * RANGE (see `FlairCurves.ts` — blackbook's max is well below wall's own
-   * resting size), so carrying over the previous mode's absolute distance01
-   * verbatim could leave the new mode already pinned at its own ceiling
-   * before the user ever drags again. Resetting to a neutral 0.5
-   * "reference" every switch keeps each mode's own near<->far range fully
-   * available immediately, and reflects that mode's OWN session
-   * modifications (Brush Studio Flair Controls section 3) rather than the
-   * canonical default.
+   * cycle above and Brush Studio's Mode selector. A deliberate mode switch
+   * re-initializes to that mode's own explicit start position (section 2/6
+   * of the Flair Stroke Envelope Stabilization build brief — see
+   * `applyTrackMarksFlairStartSize`), for the same reason a fresh stroke
+   * does: each mode has its own `[flairMinSize, flairMaxSize]` envelope, so
+   * carrying over the previous mode's absolute distance01 verbatim could
+   * leave the new mode already pinned at its own ceiling before the user
+   * ever drags again.
    */
   private setTrackMarksFlairMode(mode: FlairModeId): void {
     if (this.toolSelection.selectedToolId !== "spray-can" || this.toolSelection.sprayCapId !== "track-marks") return;
-    const capId = this.toolSelection.sprayCapId;
     this.trackMarksFlairMode = mode;
-    this.trackMarksFlairDistance01 = 0.5;
-    if (mode === "off") {
-      this.trackMarksFlairOutputMultiplier = 1;
-    } else {
-      const modulation = resolveFlairModulationWithParams(mode, this.effectiveFlairParams(mode), {
-        distance01: this.trackMarksFlairDistance01,
-        output: 1,
-        velocity: 0,
-        angle: 0,
-      });
-      const next = denormalizeTrackMarksFlairWidth(modulation.width01);
-      this.baseRadius = next;
-      this.trackMarksFlairOutputMultiplier = modulation.output;
-      this.setSettings({ type: "spray-property", capId, patch: { size: next } });
-      this.updateRadiusUi();
-    }
+    this.applyTrackMarksFlairStartSize(mode);
     this.updateFlairStatusUi();
+  }
+
+  /**
+   * Flair Stroke Envelope Stabilization build brief, section 1 — THE FIX.
+   *
+   * Root cause of the reported bug: `this.baseRadius` (the live resolved
+   * size fed into every deposited point, see `depositReconstructedPath`) and
+   * `trackMarksFlairDistance01` (the internal depth dial) were both plain
+   * persistent instance fields with no reset boundary at `pointerdown` — the
+   * ONLY place either was ever re-seeded was lazily, on the FIRST Alt-drag
+   * sample of a gesture (`beginSimulatedDistanceDrag`), and only the dial,
+   * not `baseRadius` itself. A stroke that painted without immediately
+   * Alt-dragging (or a stroke begun anywhere after a previous stroke had
+   * changed the size) therefore started painting at whatever `baseRadius`
+   * the PREVIOUS stroke happened to leave behind — an implicit, silent
+   * "continue-from-last" behavior no policy ever chose.
+   *
+   * The fix: an explicit stroke-start policy (`FLAIR_STROKE_START_POLICY`,
+   * `FlairCurves.ts` — `"reset-to-start"` in this pass, per the brief's own
+   * "for now, default to reset-to-start") applied HERE, unconditionally, at
+   * the top of every `pointerdown` for Track Marks with an active Flair
+   * mode — not lazily on first drag. Every new stroke now resolves its own
+   * starting `distance01` fresh from `params.flairStartPosition` (min/
+   * center/max) via `resolveFlairStartDistance`, and immediately writes the
+   * resulting size to BOTH `this.baseRadius` and the generic `size` override
+   * — so even a stroke that never touches Alt-drag still begins at the
+   * mode's own explicit start size, never the previous stroke's terminal
+   * one. Shared with `setTrackMarksFlairMode` (a mode switch is the same
+   * "re-initialize the envelope state" event, just triggered differently)
+   * via `applyTrackMarksFlairStartSize`.
+   */
+  private resetTrackMarksFlairForNewStroke(): void {
+    if (this.toolSelection.selectedToolId !== "spray-can" || this.toolSelection.sprayCapId !== "track-marks") return;
+    if (this.trackMarksFlairMode === "off") return;
+    if (FLAIR_STROKE_START_POLICY !== "reset-to-start") return; // only value implemented this pass
+    this.applyTrackMarksFlairStartSize(this.trackMarksFlairMode);
+  }
+
+  /** Shared by `setTrackMarksFlairMode` and `resetTrackMarksFlairForNewStroke` — resolves `mode`'s own start position (or, for `off`, just resets the internal dial/multiplier to neutral, since `off` never reads them) and writes it through the SAME `baseRadius`/`size`-override channel every other Flair size change already uses. */
+  private applyTrackMarksFlairStartSize(mode: FlairModeId): void {
+    const capId = this.toolSelection.sprayCapId;
+    if (mode === "off") {
+      this.trackMarksFlairDistance01 = 0.5;
+      this.trackMarksFlairOutputMultiplier = 1;
+      return;
+    }
+    const params = this.effectiveFlairParams(mode);
+    this.trackMarksFlairDistance01 = resolveFlairStartDistance(mode, params);
+    const modulation = resolveFlairModulationWithParams(mode, params, {
+      distance01: this.trackMarksFlairDistance01,
+      output: 1,
+      velocity: 0,
+      angle: 0,
+    });
+    const next = resolveFlairSize(modulation.width01, params);
+    this.baseRadius = next;
+    this.trackMarksFlairOutputMultiplier = modulation.output;
+    this.setSettings({ type: "spray-property", capId, patch: { size: next } });
+    this.updateRadiusUi();
   }
 
   /**
