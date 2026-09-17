@@ -51,4 +51,4 @@ No changes to `SprayBrushEngine.ts`, `PaintMarkerEngine.ts`, `WetPaintModel.ts`,
 
 ## Commit
 
-(pending — see next commit)
+`09a22ce` — "feat: Spatial Spraypaint V0.10.1 -- compact Spray/Marker drawing controls, no vertical scroll"
