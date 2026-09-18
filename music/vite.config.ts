@@ -55,6 +55,7 @@ import type { StemRole } from './src/data/trackStemTypes'
 // file" can never disagree between what the UI shows and what the server
 // actually serves.
 import { importSunoLibraryManifests } from './src/logic/sunoLibrary/manifestAdapter'
+import { parseSunoSongPage } from './src/logic/sunoImport/sunoFlightPayload'
 import {
   resolvePlaybackLocation,
   indexEncodedLocationsById,
@@ -229,6 +230,24 @@ const SUNO_LIBRARY_MANIFEST_NAMES = new Set([
   'suno-sync-checkpoint.json',
 ])
 
+// 0904A_MUSIC_Track_Inspector_Final_Consolidation §8 — a SEPARATE, older,
+// unrelated local archive: a personal Puppeteer-based Suno DOM scraper
+// (github/local project "suno-scraper", NOT the sunoLibrary/manifest
+// system above), whose output is a handful of local JSON snapshots of
+// individual song metadata (title/prompt/style/genres/image/duration/
+// created_at/version), scraped from suno.com's rendered pages while
+// logged in via a real Chrome profile. No live/authenticated Suno client
+// exists in THIS repo — this only reads those already-saved JSON files
+// from disk, exactly like the sunoLibrary manifests above read theirs.
+const SUNO_SCRAPER_ARCHIVE_ROOT = process.env.SUNO_SCRAPER_ARCHIVE_ROOT
+  ? path.resolve(process.env.SUNO_SCRAPER_ARCHIVE_ROOT)
+  : path.resolve(process.cwd(), '../../suno-scraper/archive/oct')
+// Deliberately narrow: the two richest/cleanest snapshots found during
+// this build's audit, not every JSON file in that project. Earlier in
+// priority = preferred when the same UUID appears in more than one file
+// (suno-library-all.json's fields were cleaner in spot-checks).
+const SUNO_SCRAPER_ARCHIVE_FILES = ['suno-library-all.json', 'playlist-2025-09.enriched.json']
+
 const SUPPORTED_AUDIO = new Set(['.mp3', '.wav', '.aiff', '.aif', '.flac', '.m4a', '.ogg', '.opus'])
 const MIME: Record<string, string> = {
   '.mp3': 'audio/mpeg',
@@ -291,6 +310,85 @@ function loadSunoManifestIndex(): SunoManifestIndex | null {
   }
   return sunoManifestIndexCache
 }
+
+// 0904A_MUSIC_Track_Inspector_Final_Consolidation §8 — lazily-built,
+// server-lifetime cache over the suno-scraper archive JSON files (see
+// SUNO_SCRAPER_ARCHIVE_ROOT above). Each file's own shape differs slightly
+// (the two known shapes: {id,title,version,prompt,genres[],url,image,
+// duration,created_at,plays,likes_count} and {id,title,duration_seconds,
+// genres[],prompt,style,created_at,version,image,url}) — normalized into
+// one SunoHistoricalRecord shape here, never inventing a field the source
+// file didn't actually have. Static local files; like the sunoLibrary
+// manifest cache above, no file-watching invalidation — restart the dev
+// server after replacing an archive file.
+interface SunoScraperHistoricalRecord {
+  sunoUuid: string
+  title?: string
+  prompt?: string
+  style?: string
+  tags: string[]
+  imageUrl?: string
+  durationSeconds?: number
+  createdAt?: string
+  model?: string
+  sunoUrl?: string
+  plays?: number
+  likesCount?: number
+  sourceArchiveFile: string
+  source: 'local_archive'
+}
+let sunoScraperArchiveIndexCache: Map<string, SunoScraperHistoricalRecord> | null = null
+
+function loadSunoScraperArchiveIndex(): Map<string, SunoScraperHistoricalRecord> {
+  if (sunoScraperArchiveIndexCache) return sunoScraperArchiveIndexCache
+  const index = new Map<string, SunoScraperHistoricalRecord>()
+  for (const fileName of SUNO_SCRAPER_ARCHIVE_FILES) {
+    const filePath = path.join(SUNO_SCRAPER_ARCHIVE_ROOT, fileName)
+    if (!fs.existsSync(filePath)) continue
+    let parsed: any
+    try {
+      parsed = JSON.parse(fs.readFileSync(filePath, 'utf-8'))
+    } catch {
+      continue
+    }
+    const tracks: any[] = Array.isArray(parsed?.tracks) ? parsed.tracks : Array.isArray(parsed) ? parsed : []
+    for (const t of tracks) {
+      const id = typeof t?.id === 'string' ? t.id : ''
+      if (!id || index.has(id)) continue // earlier files in priority order win
+      index.set(id, {
+        sunoUuid: id,
+        title: typeof t.title === 'string' ? t.title : undefined,
+        prompt: typeof t.prompt === 'string' ? t.prompt : undefined,
+        style: typeof t.style === 'string' ? t.style : undefined,
+        tags: Array.isArray(t.genres) ? t.genres.filter((g: unknown) => typeof g === 'string') : [],
+        imageUrl: typeof t.image === 'string' ? t.image : undefined,
+        durationSeconds: typeof t.duration === 'number' ? t.duration : typeof t.duration_seconds === 'number' ? t.duration_seconds : undefined,
+        createdAt: typeof t.created_at === 'string' ? t.created_at : undefined,
+        model: typeof t.version === 'string' ? t.version : undefined,
+        sunoUrl: typeof t.url === 'string' ? t.url : (id ? `https://suno.com/song/${id}` : undefined),
+        plays: typeof t.plays === 'number' ? t.plays : typeof t.play_count === 'number' ? t.play_count : undefined,
+        likesCount: typeof t.likes_count === 'number' ? t.likes_count : undefined,
+        sourceArchiveFile: fileName,
+        source: 'local_archive',
+      })
+    }
+  }
+  sunoScraperArchiveIndexCache = index
+  return index
+}
+
+// 0904G_MUSIC_Suno_Bridge_Cleanup — 0904D's Part 2 recovery-signal helpers
+// (historical-archive title index, cross-checksum sha256 index) lived
+// here as one-off forensic audit code for that build's own investigation
+// of the 350 matched-but-no-UUID records; that investigation is complete
+// and reported, so they were removed rather than kept as dead weight.
+// 0904D's REUSABLE Part 1 matching primitive (Catalog title/filename →
+// Song Library canonical recording, via the real canonical-identity
+// pipeline) was NOT deleted — it now lives as a proper, tested module:
+// src/logic/sunoLibrary/catalogSunoIdentityBridge.ts
+// (buildCatalogSunoStemIndex/classifyCatalogTrackAgainstSongLibrary/
+// summarizeCatalogSunoMatches), ready to import into a real route again
+// if a future build needs per-track Suno identity classification.
 
 function readJsonBody(req: IncomingMessage): Promise<unknown> {
   return new Promise((resolve, reject) => {
@@ -930,6 +1028,111 @@ export default defineConfig({
             const result = await revealDirectoryInFinder(realCandidate)
             radioJson(res, 200, result)
           }).catch(() => radioJson(res, 400, { ok: false, error: 'invalid_json_body' }))
+        })
+
+        // GET /suno-historical-lookup?uuid=<uuid> — 0904A §8's local,
+        // unauthenticated lookup path. Looks up a UUID in the cached local
+        // suno-scraper archive index (see loadSunoScraperArchiveIndex
+        // above) and returns it verbatim if found — never fabricates a
+        // value the source archive didn't have.
+        // 0904F_MUSIC_Rich_Suno_Metadata_Fetch_Path_Repair — response
+        // shape migrated from found/reason to the explicit status contract
+        // (SunoHistoricalLookupResult) shared across all three lookup
+        // routes.
+        server.middlewares.use('/suno-historical-lookup', (req: IncomingMessage, res: ServerResponse) => {
+          if (req.method !== 'GET') { radioJson(res, 405, { status: 'error', detail: 'method_not_allowed' }); return }
+          const url = new URL(req.url ?? '', 'http://localhost')
+          const uuid = (url.searchParams.get('uuid') ?? '').trim()
+          if (!uuid) { radioJson(res, 400, { status: 'not_found' }); return }
+          const index = loadSunoScraperArchiveIndex()
+          const record = index.get(uuid)
+          if (!record) { radioJson(res, 200, { status: 'not_found' }); return }
+          radioJson(res, 200, { status: 'local_archive', record })
+        })
+
+        // GET /suno-public-page-lookup?uuid=<uuid> —
+        // 0904H_MUSIC_Suno_RSC_Flight_Metadata_Source. Replaces
+        // 0904F's authenticated-Studio-API path (`/api/clips/{id}` with
+        // Bearer JWT + browser-token + device-id) — re-verified live during
+        // this build and confirmed HTTP 404: Suno's current web app no
+        // longer serves rich metadata from that endpoint at all. The
+        // CURRENT authority, verified live against two real songs (one
+        // whose prompt is inlined directly, one where it's a deferred
+        // Flight reference — see sunoFlightPayload.test.ts), is the public
+        // https://suno.com/song/{uuid} page itself: Next.js embeds the
+        // full clip record (title, metadata.prompt, metadata.tags,
+        // metadata.duration, created_at, model version, image) directly in
+        // its React Server Components payload, and — critically — this
+        // page needs NO authentication at all. No SUNO_JWT/BROWSER_TOKEN/
+        // DEVICE_ID env vars are read anywhere anymore.
+        server.middlewares.use('/suno-public-page-lookup', (req: IncomingMessage, res: ServerResponse) => {
+          if (req.method !== 'GET') { radioJson(res, 405, { status: 'error', detail: 'method_not_allowed' }); return }
+          const url = new URL(req.url ?? '', 'http://localhost')
+          const uuid = (url.searchParams.get('uuid') ?? '').trim()
+          if (!/^[0-9a-fA-F-]{10,80}$/.test(uuid)) { radioJson(res, 400, { status: 'not_found' }); return }
+
+          const controller = new AbortController()
+          const timeout = setTimeout(() => controller.abort(), 10000)
+          fetch(`https://suno.com/song/${encodeURIComponent(uuid)}`, {
+            signal: controller.signal,
+            headers: {
+              accept: 'text/html',
+              'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36',
+            },
+          })
+            .then(async (r) => {
+              if (!r.ok) { radioJson(res, 200, { status: 'not_found' }); return }
+              const html = await r.text()
+              const record = parseSunoSongPage(html, uuid)
+              if (!record) { radioJson(res, 200, { status: 'not_found' }); return }
+              radioJson(res, 200, { status: 'live_public', record: { ...record, source: 'live_public' } })
+            })
+            .catch((err) => radioJson(res, 200, { status: 'error', detail: err instanceof Error ? err.message : 'network_error' }))
+            .finally(() => clearTimeout(timeout))
+        })
+
+        // GET /suno-live-lookup?uuid=<uuid> — 0904C_MUSIC_Catalog_Suno_
+        // Identity_Audit_Unified_Link_Live_Fetch_Recovery §3/§4/§5. Only
+        // called when both local archive AND the public-page path (see
+        // /suno-public-page-lookup above) don't produce rich metadata
+        // (see sunoHistoricalLookup.ts's lookupSunoMetadataByUuid).
+        //
+        // What this recovers, and why not more: verified live against the
+        // real UUID 0621a15e-7e51-4fa1-b1e8-c0f289db5ef9 ("Night Still
+        // On") while building 0904C: Suno's own public oEmbed endpoint,
+        // the same one a page embedding a Suno song link would call for a
+        // title/iframe preview. It reliably confirms real Suno identity
+        // and returns `title` — nothing else (no prompt/style/tags/model/
+        // createdAt/image; those stayed 403/empty even reading the public
+        // song page's own OG tags directly, which are themselves signed/
+        // proxied for social-media crawlers in a way a plain server-side
+        // fetch can't replicate). This is genuinely identity confirmation
+        // only — never reported or displayed as if metadata were fetched
+        // (0904F's whole point). Never upgraded to a richer response by
+        // guessing — only the fields Suno's own oEmbed JSON actually
+        // returns are ever set.
+        server.middlewares.use('/suno-live-lookup', (req: IncomingMessage, res: ServerResponse) => {
+          if (req.method !== 'GET') { radioJson(res, 405, { status: 'error', detail: 'method_not_allowed' }); return }
+          const url = new URL(req.url ?? '', 'http://localhost')
+          const uuid = (url.searchParams.get('uuid') ?? '').trim()
+          if (!/^[0-9a-fA-F-]{10,80}$/.test(uuid)) { radioJson(res, 400, { status: 'not_found' }); return }
+          const songUrl = `https://suno.com/song/${uuid}`
+          const oembedUrl = `https://studio-api-prod.suno.com/api/oembed?url=${encodeURIComponent(songUrl)}`
+          const controller = new AbortController()
+          const timeout = setTimeout(() => controller.abort(), 8000)
+          fetch(oembedUrl, { signal: controller.signal, headers: { accept: 'application/json' } })
+            .then(async (r) => {
+              if (!r.ok) { radioJson(res, 200, { status: 'not_found' }); return }
+              const data: any = await r.json().catch(() => null)
+              const title = typeof data?.title === 'string' ? data.title : undefined
+              if (!title) { radioJson(res, 200, { status: 'not_found' }); return }
+              radioJson(res, 200, {
+                status: 'identity_only',
+                record: { sunoUuid: uuid, title, tags: [], sunoUrl: songUrl, source: 'identity_only' },
+              })
+            })
+            .catch(() => radioJson(res, 200, { status: 'error', detail: 'oEmbed request failed' }))
+            .finally(() => clearTimeout(timeout))
         })
 
         server.middlewares.use('/voice-generation/providers', (_req: IncomingMessage, res: ServerResponse) => {
@@ -1926,6 +2129,34 @@ export default defineConfig({
             if (!set) { radioJson(res, 404, { ok: false, error: 'stem_set_not_found' }); return }
             const dir = path.join(TRACK_STEM_LIBRARY_ROOT, set.archiveDirectory)
             const result = await revealDirectoryInFinder(dir)
+            radioJson(res, 200, result)
+          }).catch(() => radioJson(res, 400, { ok: false, error: 'invalid_json_body' }))
+        })
+
+        // POST /track-audio-reveal — body {audioRelPath}. 0902W Track
+        // Inspector Consolidation — "Find File in Finder" for a plain
+        // Catalog/External/Sounds track. Same reveal authority as every
+        // other reveal control (revealDirectoryInFinder); adds no new
+        // implementation, just a resolution path from the track's own
+        // portable audioRelPath (the same field getTrackPlayUrl already
+        // uses to build its /music-audio/<path> URL) to a real file,
+        // confined to LIBRARY_ROOT exactly like /music-audio itself.
+        // Deliberately narrow: a track with only a legacy absolute
+        // `filePath` or a session-only `objectUrl` (no audioRelPath) has
+        // no route here — there is no safe/meaningful "reveal" for an
+        // in-browser blob, and broadening this to arbitrary absolute paths
+        // was judged out of scope for this pass (see completion report).
+        server.middlewares.use('/track-audio-reveal', (req, res) => {
+          if (req.method !== 'POST') { radioJson(res, 405, { ok: false, error: 'method_not_allowed' }); return }
+          readJsonBody(req).then(async (rawBody) => {
+            const body = rawBody as { audioRelPath?: unknown }
+            const audioRelPath = String(body?.audioRelPath ?? '')
+            if (!audioRelPath) { radioJson(res, 400, { ok: false, reason: 'not_found' }); return }
+            const candidate = path.join(LIBRARY_ROOT, audioRelPath)
+            if (!isPathConfinedTo(LIBRARY_ROOT, candidate) || !fs.existsSync(candidate)) {
+              radioJson(res, 200, { ok: false, reason: 'not_found' }); return
+            }
+            const result = await revealDirectoryInFinder(candidate)
             radioJson(res, 200, result)
           }).catch(() => radioJson(res, 400, { ok: false, error: 'invalid_json_body' }))
         })
