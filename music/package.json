@@ -10,7 +10,8 @@
     "lint": "eslint .",
     "test": "vitest run",
     "preview": "vite preview",
-    "publish:sites": "node scripts/publish-radio-to-sites.mjs"
+    "publish:sites": "node scripts/publish-radio-to-sites.mjs",
+    "build:release": "vite build"
   },
   "dependencies": {
     "@material-symbols/svg-400": "^0.45.8",
