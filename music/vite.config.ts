@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite'
+import { defineConfig, Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import fs from 'fs'
 import path from 'path'
@@ -377,19 +377,6 @@ function loadSunoScraperArchiveIndex(): Map<string, SunoScraperHistoricalRecord>
   return index
 }
 
-// 0904G_MUSIC_Suno_Bridge_Cleanup — 0904D's Part 2 recovery-signal helpers
-// (historical-archive title index, cross-checksum sha256 index) lived
-// here as one-off forensic audit code for that build's own investigation
-// of the 350 matched-but-no-UUID records; that investigation is complete
-// and reported, so they were removed rather than kept as dead weight.
-// 0904D's REUSABLE Part 1 matching primitive (Catalog title/filename →
-// Song Library canonical recording, via the real canonical-identity
-// pipeline) was NOT deleted — it now lives as a proper, tested module:
-// src/logic/sunoLibrary/catalogSunoIdentityBridge.ts
-// (buildCatalogSunoStemIndex/classifyCatalogTrackAgainstSongLibrary/
-// summarizeCatalogSunoMatches), ready to import into a real route again
-// if a future build needs per-track Suno identity classification.
-
 function readJsonBody(req: IncomingMessage): Promise<unknown> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = []
@@ -402,10 +389,6 @@ function readJsonBody(req: IncomingMessage): Promise<unknown> {
   })
 }
 
-// Correction (plan review): bounded request-size guard for binary uploads
-// (WAV bytes posted to /radio-encode-opus). 300MB is far beyond any
-// realistic lossless loop WAV; this exists purely as a defensive ceiling,
-// not a tuned limit.
 const RADIO_MAX_UPLOAD_BYTES = 300 * 1024 * 1024
 
 function readBoundedBinaryBody(req: IncomingMessage, maxBytes: number): Promise<Buffer> {
@@ -436,6 +419,33 @@ function radioJson(res: ServerResponse, status: number, body: unknown) {
   res.end(JSON.stringify(body))
 }
 
+function copyRecursiveSync(src: string, dest: string) {
+  if (!fs.existsSync(src)) return
+  const stats = fs.statSync(src)
+  if (stats.isDirectory()) {
+    fs.mkdirSync(dest, { recursive: true })
+    for (const child of fs.readdirSync(src)) {
+      copyRecursiveSync(path.join(src, child), path.join(dest, child))
+    }
+  } else {
+    fs.mkdirSync(path.dirname(dest), { recursive: true })
+    fs.copyFileSync(src, dest)
+  }
+}
+
+function copyWallAppPublicPlugin(): Plugin {
+  return {
+    name: 'copy-wall-app-public',
+    closeBundle() {
+      const wallSrc = path.resolve(process.cwd(), '../wall')
+      const wallDest = path.resolve(process.cwd(), 'dist/wall-app')
+      if (fs.existsSync(wallSrc)) {
+        copyRecursiveSync(wallSrc, wallDest)
+      }
+    },
+  }
+}
+
 // https://vite.dev/config/
 export default defineConfig({
   define: {
@@ -461,6 +471,7 @@ export default defineConfig({
   },
   plugins: [
     react(),
+    copyWallAppPublicPlugin(),
     {
       name: 'local-media-server',
       configureServer(server) {
@@ -554,16 +565,6 @@ export default defineConfig({
           }
         })
 
-        // POST /track-asset-probe — 0827 Catalog Technical Format
-        // Verification, foundation only. Body {filePath} (the same
-        // library-relative convention as /music-audio's path). Read-only:
-        // runs ffprobe against the EXISTING file at its EXISTING path,
-        // returns raw + normalized evidence. Never writes, renames, or
-        // moves anything; never touches TrackAsset.format or any identity
-        // field — that only happens client-side, and only once a caller
-        // explicitly asks (no consumer does yet). Same traversal/
-        // confinement checks as /music-audio, reused verbatim, not
-        // reimplemented looser.
         server.middlewares.use('/track-asset-probe', (req: IncomingMessage, res: ServerResponse) => {
           if (req.method !== 'POST') { radioJson(res, 405, { ok: false, error: 'method_not_allowed' }); return }
           readJsonBody(req).then(async (rawBody) => {
@@ -587,15 +588,6 @@ export default defineConfig({
           }).catch(() => radioJson(res, 400, { ok: false, error: 'invalid_json_body' }))
         })
 
-        // RADIO Web Playback Vertical Slice — /radio-web-export/<slug>/v<N>/<...>
-        // Static, path-confined serving of an already-exported, immutable
-        // Web Bundle (radioWebBundleWriter.ts's own output under
-        // RADIO_WEB_EXPORT_ROOT). This is the one missing connection
-        // between "Export Web Bundle" and any page that wants to actually
-        // play a published RADIO station: the export route only ever wrote
-        // to local disk; nothing served those files over HTTP before this.
-        // Same traversal/confinement/Range handling as /music-audio above,
-        // extended with JSON for the manifest/playlist/checksums files.
         server.middlewares.use('/radio-web-export', (req: IncomingMessage, res: ServerResponse) => {
           const method = req.method
           const rawPath = (req.url ?? '/').replace(/^\/radio-web-export/, '') || '/'
@@ -678,17 +670,6 @@ export default defineConfig({
           res.end(JSON.stringify({ root: LIBRARY_ROOT, exists: fs.existsSync(LIBRARY_ROOT) }))
         })
 
-        // 0811_MACHINE-LIFE_MUSIC-Research-Workspace-Handoff_v1.0.0 ---------
-        // Read-only routes confined to MACHINE_LIFE_MIRROR_ROOT. Manifest
-        // text and directory listings reuse the existing unconfined
-        // /library-data and /library-ls routes above (no change needed —
-        // both already accept any resolved path); only binary proxy audio
-        // needs a new route, since /music-audio is confined to LIBRARY_ROOT.
-        // GET only; never writes, deletes, or modifies anything under
-        // MACHINE_LIFE_MIRROR_ROOT.
-
-        // GET /machine-life-mirror-root — same "resolved root for one-time
-        // client use, never persisted" pattern as /library-root above.
         server.middlewares.use('/machine-life-mirror-root', (_req, res) => {
           res.statusCode = 200
           res.setHeader('Content-Type', 'application/json')
@@ -696,10 +677,6 @@ export default defineConfig({
           res.end(JSON.stringify({ root: MACHINE_LIFE_MIRROR_ROOT, exists: fs.existsSync(MACHINE_LIFE_MIRROR_ROOT) }))
         })
 
-        // GET /machine-life-evidence-data?path=<absolute path under MACHINE_LIFE_MIRROR_ROOT>
-        // Serves waveform/spectrogram PNG evidence, confined the same way as
-        // /machine-life-audio-data below. Read-only; no Range support needed
-        // for small evidence images.
         server.middlewares.use('/machine-life-evidence-data', (req, res) => {
           const method = (req as any).method as string
           if (method !== 'GET' && method !== 'HEAD') {
@@ -736,11 +713,6 @@ export default defineConfig({
           stream.pipe(res)
         })
 
-        // GET /machine-life-audio-data?path=<absolute path under MACHINE_LIFE_MIRROR_ROOT>
-        // Range-aware binary streaming, same Content-Range handling as
-        // /music-audio, confined to MACHINE_LIFE_MIRROR_ROOT instead of
-        // LIBRARY_ROOT. Used only to preview/fetch a Machine Life MP3 proxy
-        // for re-upload through the existing /library-import endpoint.
         server.middlewares.use('/machine-life-audio-data', (req, res) => {
           const method = (req as any).method as string
           if (method !== 'GET' && method !== 'HEAD') {
@@ -809,24 +781,6 @@ export default defineConfig({
           }
         })
 
-        // 0812_MUSIC_Suno-Library-Manifest-Integration_v1.0.0 ---------------
-        // Three read-only routes. /suno-library-audio is the security-
-        // sensitive one (spec §9.1): it accepts ONLY an opaque, manifest-
-        // authorized archive asset ID — never a filesystem path from the
-        // browser — and resolves the real file server-side through the same
-        // resolvePlaybackLocation() the client and its tests use. Every
-        // extractedRelativePath this can ever serve already comes from a
-        // SunoEncodedLocation whose path was populated only from
-        // zip-batch-member manifest records rooted under
-        // 01_EXTRACTED_MIRROR/ — there is no code path here that can
-        // construct or resolve to anything under 00_ACQUISITION/.
-
-        // GET /suno-archive-availability — is 01_EXTRACTED_MIRROR/ reachable
-        // right now. Never returns the raw archive root path (unlike
-        // /library-root/ /machine-life-mirror-root's "resolved root for
-        // one-time client use" convention) — the UI only needs online/
-        // offline, not the filesystem location, and the audio route below
-        // never needs the client to know it either.
         server.middlewares.use('/suno-archive-availability', (_req, res) => {
           const online = fs.existsSync(SUNO_EXTRACTED_MIRROR_ROOT)
           res.statusCode = 200
@@ -835,10 +789,6 @@ export default defineConfig({
           res.end(JSON.stringify({ state: online ? 'online' : 'offline', checkedAt: new Date().toISOString() }))
         })
 
-        // GET /suno-library-manifest/<name> — streams one of the five
-        // whitelisted WOS Share authority manifests verbatim (never an
-        // arbitrary filename, never anything from REPORTS/ or SPECS/, which
-        // spec §4 explicitly says must not be parsed as application data).
         server.middlewares.use('/suno-library-manifest', (req: IncomingMessage, res: ServerResponse) => {
           const method = req.method
           if (method !== 'GET' && method !== 'HEAD') {
@@ -868,12 +818,6 @@ export default defineConfig({
           stream.pipe(res)
         })
 
-        // GET /suno-library-audio/<archiveAssetId> — see route-family
-        // comment above. Range-capable, same streaming shape as
-        // /music-audio, with an added realpath-based symlink-escape guard
-        // that isPathConfinedTo alone does not provide (confirmed during
-        // preflight research: isPathConfinedTo is a plain string-prefix
-        // check with no fs.realpathSync step anywhere in this codebase).
         server.middlewares.use('/suno-library-audio', (req: IncomingMessage, res: ServerResponse) => {
           const method = req.method
           if (method !== 'GET' && method !== 'HEAD') {
@@ -882,9 +826,6 @@ export default defineConfig({
 
           const rawPath = (req.url ?? '/').replace(/^\/suno-library-audio/, '') || '/'
           const requestedId = decodeURIComponent(rawPath.split('?')[0].replace(/^\/+/, ''))
-          // A valid archive asset ID is a single opaque path segment. Any
-          // slash, backslash, or traversal token means this is not an ID at
-          // all — reject outright rather than let it reach path resolution.
           if (!requestedId || /[\\/]/.test(requestedId) || requestedId === '.' || requestedId === '..') {
             mediaError(res, 400, 'INVALID_ASSET_ID', 'Invalid archive asset ID')
             return
@@ -943,11 +884,6 @@ export default defineConfig({
           res.setHeader('Access-Control-Allow-Origin', '*')
           res.setHeader('Access-Control-Expose-Headers', 'X-Suno-Playback-Fallback, X-Suno-Playback-Fallback-For')
           if (resolution.kind === 'fallback') {
-            // Discloses substitution in the same response the audio comes
-            // back on, so the UI doesn't need a second round-trip to know
-            // playback used an equivalent encoded location (spec: "The UI
-            // must disclose when playback uses an equivalent encoded
-            // location").
             res.setHeader('X-Suno-Playback-Fallback', 'true')
             res.setHeader('X-Suno-Playback-Fallback-For', resolution.requestedArchiveAssetId)
           }
@@ -980,18 +916,6 @@ export default defineConfig({
           }
         })
 
-        // POST /suno-asset-reveal — Suno Archive Readiness Dashboard (MUSIC
-        // Suno Phase 1). Body {archiveAssetId}. Same reveal authority as
-        // /stem-set-reveal — resolves the real file server-side from a
-        // validated, manifest-authorized archive asset ID (never a
-        // client-supplied path) and calls the one shared
-        // revealDirectoryInFinder() (works on a file path exactly as it does
-        // on a directory — `open -R` selects either). Reveals the EXACT
-        // requested location's own file (no playback-style fallback
-        // substitution — clicking a present WAV/Opus pill must reveal that
-        // asset or nothing, never a different encoded location standing in
-        // for it). A location with no extracted copy returns not_found; this
-        // never pretends a missing asset exists.
         server.middlewares.use('/suno-asset-reveal', (req: IncomingMessage, res: ServerResponse) => {
           if (req.method !== 'POST') { radioJson(res, 405, { ok: false, error: 'method_not_allowed' }); return }
           readJsonBody(req).then(async (rawBody) => {
@@ -1030,15 +954,6 @@ export default defineConfig({
           }).catch(() => radioJson(res, 400, { ok: false, error: 'invalid_json_body' }))
         })
 
-        // GET /suno-historical-lookup?uuid=<uuid> — 0904A §8's local,
-        // unauthenticated lookup path. Looks up a UUID in the cached local
-        // suno-scraper archive index (see loadSunoScraperArchiveIndex
-        // above) and returns it verbatim if found — never fabricates a
-        // value the source archive didn't have.
-        // 0904F_MUSIC_Rich_Suno_Metadata_Fetch_Path_Repair — response
-        // shape migrated from found/reason to the explicit status contract
-        // (SunoHistoricalLookupResult) shared across all three lookup
-        // routes.
         server.middlewares.use('/suno-historical-lookup', (req: IncomingMessage, res: ServerResponse) => {
           if (req.method !== 'GET') { radioJson(res, 405, { status: 'error', detail: 'method_not_allowed' }); return }
           const url = new URL(req.url ?? '', 'http://localhost')
@@ -1050,21 +965,6 @@ export default defineConfig({
           radioJson(res, 200, { status: 'local_archive', record })
         })
 
-        // GET /suno-public-page-lookup?uuid=<uuid> —
-        // 0904H_MUSIC_Suno_RSC_Flight_Metadata_Source. Replaces
-        // 0904F's authenticated-Studio-API path (`/api/clips/{id}` with
-        // Bearer JWT + browser-token + device-id) — re-verified live during
-        // this build and confirmed HTTP 404: Suno's current web app no
-        // longer serves rich metadata from that endpoint at all. The
-        // CURRENT authority, verified live against two real songs (one
-        // whose prompt is inlined directly, one where it's a deferred
-        // Flight reference — see sunoFlightPayload.test.ts), is the public
-        // https://suno.com/song/{uuid} page itself: Next.js embeds the
-        // full clip record (title, metadata.prompt, metadata.tags,
-        // metadata.duration, created_at, model version, image) directly in
-        // its React Server Components payload, and — critically — this
-        // page needs NO authentication at all. No SUNO_JWT/BROWSER_TOKEN/
-        // DEVICE_ID env vars are read anywhere anymore.
         server.middlewares.use('/suno-public-page-lookup', (req: IncomingMessage, res: ServerResponse) => {
           if (req.method !== 'GET') { radioJson(res, 405, { status: 'error', detail: 'method_not_allowed' }); return }
           const url = new URL(req.url ?? '', 'http://localhost')
@@ -1091,26 +991,6 @@ export default defineConfig({
             .finally(() => clearTimeout(timeout))
         })
 
-        // GET /suno-live-lookup?uuid=<uuid> — 0904C_MUSIC_Catalog_Suno_
-        // Identity_Audit_Unified_Link_Live_Fetch_Recovery §3/§4/§5. Only
-        // called when both local archive AND the public-page path (see
-        // /suno-public-page-lookup above) don't produce rich metadata
-        // (see sunoHistoricalLookup.ts's lookupSunoMetadataByUuid).
-        //
-        // What this recovers, and why not more: verified live against the
-        // real UUID 0621a15e-7e51-4fa1-b1e8-c0f289db5ef9 ("Night Still
-        // On") while building 0904C: Suno's own public oEmbed endpoint,
-        // the same one a page embedding a Suno song link would call for a
-        // title/iframe preview. It reliably confirms real Suno identity
-        // and returns `title` — nothing else (no prompt/style/tags/model/
-        // createdAt/image; those stayed 403/empty even reading the public
-        // song page's own OG tags directly, which are themselves signed/
-        // proxied for social-media crawlers in a way a plain server-side
-        // fetch can't replicate). This is genuinely identity confirmation
-        // only — never reported or displayed as if metadata were fetched
-        // (0904F's whole point). Never upgraded to a richer response by
-        // guessing — only the fields Suno's own oEmbed JSON actually
-        // returns are ever set.
         server.middlewares.use('/suno-live-lookup', (req: IncomingMessage, res: ServerResponse) => {
           if (req.method !== 'GET') { radioJson(res, 405, { status: 'error', detail: 'method_not_allowed' }); return }
           const url = new URL(req.url ?? '', 'http://localhost')
@@ -1228,7 +1108,6 @@ export default defineConfig({
           }).catch(() => radioJson(res, 400, { ok: false, error: 'invalid_json_body' }))
         })
 
-        // /library-data?path=... — read a text file (CSV) from the local filesystem
         server.middlewares.use('/library-data', (req, res) => {
           const url = new URL(req.url ?? '/', 'http://localhost')
           const filePath = url.searchParams.get('path')
@@ -1248,7 +1127,6 @@ export default defineConfig({
           }
         })
 
-        // /library-ls?path=... — list audio files in a directory, returns JSON array
         server.middlewares.use('/library-ls', (req, res) => {
           const url = new URL(req.url ?? '/', 'http://localhost')
           const dirPath = url.searchParams.get('path')
@@ -1279,7 +1157,6 @@ export default defineConfig({
           }
         })
 
-        // /library-ls-text?path=...&ext=.md — list text files in a directory (non-recursive, shallow)
         server.middlewares.use('/library-ls-text', (req, res) => {
           const url = new URL(req.url ?? '/', 'http://localhost')
           const dirPath = url.searchParams.get('path')
@@ -1302,7 +1179,6 @@ export default defineConfig({
           }
         })
 
-        // /library-write?path=... — write JSON to a file (POST body = JSON text)
         server.middlewares.use('/library-write', (req, res) => {
           if ((req as any).method !== 'POST') {
             res.statusCode = 405; res.end('Method Not Allowed'); return
@@ -1313,7 +1189,6 @@ export default defineConfig({
           res.setHeader('Access-Control-Allow-Origin', '*')
           if (!filePath) { res.statusCode = 400; res.end('{"ok":false}'); return }
           const resolved = resolveFsPath(filePath)
-          // Only allow writes inside LIBRARY_ROOT for safety
           if (!resolved.startsWith(LIBRARY_ROOT)) {
             res.statusCode = 403; res.end('{"ok":false}'); return
           }
@@ -1322,7 +1197,6 @@ export default defineConfig({
           req.on('end', () => {
             try {
               const body = Buffer.concat(chunks).toString('utf-8')
-              // Validate it's valid JSON before writing
               JSON.parse(body)
               fs.mkdirSync(path.dirname(resolved), { recursive: true })
               fs.writeFileSync(resolved, body, 'utf-8')
@@ -1335,20 +1209,6 @@ export default defineConfig({
           })
         })
 
-        // 0812D_MUSIC_Autosave-Integrity-Repair_v1.0.0 — dedicated,
-        // validated write route for the one shared filesystem authority
-        // file that /library-write's generic "write any JSON to any path"
-        // contract cannot safely protect: library/music/sampler-banks/
-        // banks.json is a single, absolute-path file every browser
-        // session/tab shares (unlike IndexedDB, which is naturally
-        // per-origin/per-profile) — so an unrelated, unhydrated, or
-        // deliberately-non-persisting session could previously overwrite
-        // it with empty content via the generic route with zero
-        // resistance. This route is the server-side half of that repair:
-        // final-authority validation (matches the client's own
-        // evaluateSamplerBankWrite gate — see samplerBankPersistence.ts —
-        // so a client bug can never bypass it) plus an atomic
-        // temp-file-and-rename write, never a direct in-place overwrite.
         server.middlewares.use('/sampler-banks-write', (req: IncomingMessage, res: ServerResponse) => {
           if (req.method !== 'POST') {
             res.statusCode = 405; res.end(JSON.stringify({ ok: false, error: 'Method Not Allowed' })); return
@@ -1374,9 +1234,6 @@ export default defineConfig({
               return
             }
 
-            // Determine what is actually on disk right now — never trust the
-            // client's belief alone (that belief is exactly what a stale or
-            // unrelated session gets wrong).
             let currentOnDiskCount: number
             if (!fs.existsSync(banksPath)) {
               currentOnDiskCount = 0
@@ -1387,10 +1244,6 @@ export default defineConfig({
                 if (!Array.isArray(parsed)) throw new Error('on-disk banks.json is not an array')
                 currentOnDiskCount = parsed.length
               } catch (e) {
-                // Explicit error instead of destructive fallback (spec §Logic
-                // layer item 8): if the on-disk file itself can't be read as
-                // a valid array, refuse to write over it blindly rather than
-                // guessing its count.
                 res.statusCode = 500
                 res.end(JSON.stringify({ ok: false, error: `Existing banks.json is unreadable/corrupt: ${String(e)}`, reason: 'unreadable-authority' }))
                 return
@@ -1407,11 +1260,6 @@ export default defineConfig({
             try {
               const dir = path.dirname(banksPath)
               fs.mkdirSync(dir, { recursive: true })
-              // Atomic temp-write-and-replace (spec §Logic layer item 4): a
-              // crash or interruption mid-write leaves the temp file, never
-              // a truncated/corrupt banks.json — fs.renameSync is atomic on
-              // the same filesystem, which the temp file always is (same
-              // parent directory).
               const tmpPath = path.join(dir, `.banks.json.tmp-${randomUUID()}`)
               fs.writeFileSync(tmpPath, JSON.stringify(banks), 'utf-8')
               fs.renameSync(tmpPath, banksPath)
@@ -1424,16 +1272,6 @@ export default defineConfig({
           })
         })
 
-        // 0813_MUSIC_P0_Clean_Library_Foundation — dedicated, validated
-        // write route for library.index.json (external/reference), the
-        // other shared filesystem-authority file /library-write's generic
-        // "write any JSON to any path" contract couldn't safely protect.
-        // Same pattern as /sampler-banks-write above: final-authority
-        // revalidation against what's actually on disk (never trusts the
-        // client's belief alone — that's exactly what a bad scan path or a
-        // second concurrent tab gets wrong) via the same domain-agnostic
-        // evaluateServerSideBankWrite count check, plus an atomic
-        // temp-file-and-rename write, never a direct in-place overwrite.
         server.middlewares.use('/library-index-write', (req: IncomingMessage, res: ServerResponse) => {
           if (req.method !== 'POST') {
             res.statusCode = 405; res.end(JSON.stringify({ ok: false, error: 'Method Not Allowed' })); return
@@ -1504,7 +1342,6 @@ export default defineConfig({
           })
         })
 
-        // /library-import?filename=<name>&dest=catalog/audio — copy uploaded binary to LIBRARY_ROOT/dest/filename
         server.middlewares.use('/library-import', (req, res) => {
           if ((req as any).method !== 'POST') {
             res.statusCode = 405; res.end('Method Not Allowed'); return
@@ -1515,7 +1352,6 @@ export default defineConfig({
           res.setHeader('Content-Type', 'application/json')
           res.setHeader('Access-Control-Allow-Origin', '*')
           if (!filename) { res.statusCode = 400; res.end('{"ok":false,"error":"missing filename"}'); return }
-          // Sanitise: no path traversal
           const safeName = path.basename(filename)
           if (!SUPPORTED_AUDIO.has(path.extname(safeName).toLowerCase())) {
             res.statusCode = 415; res.end('{"ok":false,"error":"unsupported extension"}'); return
@@ -1524,16 +1360,6 @@ export default defineConfig({
           if (!destDir.startsWith(LIBRARY_ROOT)) {
             res.statusCode = 403; res.end('{"ok":false,"error":"forbidden path"}'); return
           }
-          // 0813_MUSIC_P0_Clean_Library_Foundation — the `existed` signal
-          // used to be computed and then discarded: a same-filename upload
-          // silently overwrote whatever physical file was already there,
-          // before the app-level Track duplicate check even ran. A
-          // filename collision is no longer treated as identity — that's
-          // classifyIncomingAsset's job, working from content (checksum)
-          // and metadata, not the accident of what name a download used.
-          // This route's only job is guaranteeing the physical byte data
-          // is never destroyed: on a collision, write to a disambiguated
-          // filename instead and report the real name actually used.
           const existed = fs.existsSync(path.join(destDir, safeName))
           let finalName = safeName
           if (existed) {
@@ -1564,14 +1390,6 @@ export default defineConfig({
           })
         })
 
-        // --- RadioLoop Library Foundation (0716B) routes -----------------
-        // Same guard conventions as /library-write /library-import above:
-        // all filesystem access confined to RADIO_LIBRARY_ROOT, JSON
-        // validated before use, binary uploads size-capped.
-
-        // GET /radio-library-status — writability only, never the path
-        // itself (guardrail: no developer-only filesystem detail in the
-        // primary interface).
         server.middlewares.use('/radio-library-status', (_req, res) => {
           let writable: boolean
           try {
@@ -1582,7 +1400,6 @@ export default defineConfig({
           radioJson(res, 200, { writable })
         })
 
-        // POST /radio-staging-create — body {sourceTrackId, sourceLoopId}
         server.middlewares.use('/radio-staging-create', (req, res) => {
           if (req.method !== 'POST') { radioJson(res, 405, { ok: false, error: 'method_not_allowed' }); return }
           readJsonBody(req).then(async (rawBody) => {
@@ -1597,7 +1414,6 @@ export default defineConfig({
           }).catch(() => radioJson(res, 400, { ok: false, error: 'invalid_json_body' }))
         })
 
-        // POST /radio-encode-opus?operationId=&target=core|stem:<name> — body = WAV bytes
         server.middlewares.use('/radio-encode-opus', (req, res) => {
           if (req.method !== 'POST') { radioJson(res, 405, { ok: false, error: 'method_not_allowed' }); return }
           const url = new URL(req.url ?? '/', 'http://localhost')
@@ -1639,7 +1455,6 @@ export default defineConfig({
           })
         })
 
-        // POST /radio-package-finalize — body {operationId, radioLoopId, packageVersion, sourceReference, musical, arrangement, approval}
         server.middlewares.use('/radio-package-finalize', (req, res) => {
           if (req.method !== 'POST') { radioJson(res, 405, { ok: false, error: 'method_not_allowed' }); return }
           readJsonBody(req).then(async (rawBody) => {
@@ -1662,20 +1477,17 @@ export default defineConfig({
           }).catch(() => radioJson(res, 400, { ok: false, error: 'invalid_json_body' }))
         })
 
-        // POST /radio-manifest-rebuild — standalone, idempotent reconciliation
         server.middlewares.use('/radio-manifest-rebuild', (req, res) => {
           if (req.method !== 'POST') { radioJson(res, 405, { ok: false, error: 'method_not_allowed' }); return }
           const result = regenerateManifestOnDisk(RADIO_LIBRARY_ROOT, new Date().toISOString())
           radioJson(res, 200, { ok: result.ok, entryCount: result.manifest?.entries.length ?? 0, issues: result.issues })
         })
 
-        // GET /radio-manifest
         server.middlewares.use('/radio-manifest', (_req, res) => {
           const manifest = readCurrentManifest(RADIO_LIBRARY_ROOT)
           radioJson(res, 200, manifest ?? { schemaVersion: '1.0.0', generatedAt: null, entries: [] })
         })
 
-        // POST /radio-staging-cleanup?operationId=
         server.middlewares.use('/radio-staging-cleanup', (req, res) => {
           if (req.method !== 'POST') { radioJson(res, 405, { ok: false, error: 'method_not_allowed' }); return }
           const url = new URL(req.url ?? '/', 'http://localhost')
@@ -1685,12 +1497,6 @@ export default defineConfig({
           releaseReservation(RADIO_LIBRARY_ROOT, operationId).then(() => radioJson(res, 200, { ok: true }))
         })
 
-        // --- RadioLoop Library Workspace (0717A) routes ------------------
-        // Same guard conventions as the 0716B /radio-* routes above.
-
-        // GET /radio-package-asset?radioLoopId=&packageVersion=&asset=core|stem:<name>
-        // Path-confined, status-checked, byte-range-capable — mirrors
-        // /music-audio's Content-Range handling above.
         server.middlewares.use('/radio-package-asset', (req, res) => {
           const url = new URL(req.url ?? '/', 'http://localhost')
           const radioLoopId = url.searchParams.get('radioLoopId') ?? ''
@@ -1731,7 +1537,6 @@ export default defineConfig({
           }
         })
 
-        // POST /radio-package-reveal — body {radioLoopId, packageVersion}
         server.middlewares.use('/radio-package-reveal', (req, res) => {
           if (req.method !== 'POST') { radioJson(res, 405, { ok: false, error: 'method_not_allowed' }); return }
           readJsonBody(req).then(async (rawBody) => {
@@ -1744,7 +1549,6 @@ export default defineConfig({
           }).catch(() => radioJson(res, 400, { ok: false, error: 'invalid_json_body' }))
         })
 
-        // POST /radio-package-revise-metadata — body: MetadataEditRequest fields
         server.middlewares.use('/radio-package-revise-metadata', (req, res) => {
           if (req.method !== 'POST') { radioJson(res, 405, { ok: false, error: 'method_not_allowed' }); return }
           readJsonBody(req).then(async (rawBody) => {
@@ -1763,15 +1567,12 @@ export default defineConfig({
               transitionOut: body?.transitionOut,
               publicUseApproved: Boolean(body?.publicUseApproved),
             }
-            // Fresh operationId per request — never client-supplied, never
-            // reused across attempts (see radioMetadataRevisionOrchestrator.ts).
             const operationId = randomUUID()
             const result = await reviseRadioLoopMetadata(RADIO_LIBRARY_ROOT, operationId, request)
             radioJson(res, 200, result)
           }).catch(() => radioJson(res, 400, { ok: false, error: 'invalid_json_body' }))
         })
 
-        // POST /radio-package-retire — body {radioLoopId, reason} (whole-RadioLoop scope only)
         server.middlewares.use('/radio-package-retire', (req, res) => {
           if (req.method !== 'POST') { radioJson(res, 405, { ok: false, error: 'method_not_allowed' }); return }
           readJsonBody(req).then(async (rawBody) => {
@@ -1785,7 +1586,6 @@ export default defineConfig({
           }).catch(() => radioJson(res, 400, { ok: false, error: 'invalid_json_body' }))
         })
 
-        // GET /radio-package-versions?radioLoopId= — complete version history, retired included
         server.middlewares.use('/radio-package-versions', (req, res) => {
           const url = new URL(req.url ?? '/', 'http://localhost')
           const radioLoopId = url.searchParams.get('radioLoopId') ?? ''
@@ -1793,13 +1593,6 @@ export default defineConfig({
           radioJson(res, 200, { versions: scanRadioLoopVersions(RADIO_LIBRARY_ROOT, radioLoopId) })
         })
 
-        // GET /radio-package?radioLoopId=&packageVersion= — portable metadata.json
-        // only. Deliberately registered AFTER every longer /radio-package-*
-        // route above: connect's mount-path matching requires the character
-        // right after a matched mount path to be '/' or '.' (a hyphen does
-        // not qualify), so registration order shouldn't matter here — kept
-        // this way anyway as a zero-cost defensive measure against relying
-        // on that exact matching detail.
         server.middlewares.use('/radio-package', (req, res) => {
           const url = new URL(req.url ?? '/', 'http://localhost')
           const radioLoopId = url.searchParams.get('radioLoopId') ?? ''
@@ -1810,20 +1603,10 @@ export default defineConfig({
           radioJson(res, 200, metadata)
         })
 
-        // GET /radio-library-index — one entry per RadioLoop ID, session-independent, retired included
         server.middlewares.use('/radio-library-index', (_req, res) => {
           radioJson(res, 200, { entries: scanLibraryIndex(RADIO_LIBRARY_ROOT) })
         })
 
-        // --- RADIO Web Publication Asset Export Bridge (0718B) routes ---
-        // Same guard conventions as every /radio-* route above: all
-        // filesystem access confined to its own library root, JSON
-        // validated before use, browser never executes ffmpeg, UI never
-        // touches the filesystem directly.
-
-        // POST /radio-track-source-hash — body {audioRelPath}. Confines the
-        // path under LIBRARY_ROOT and returns only its sha256 — never a
-        // filesystem detail, same guardrail as /radio-library-status.
         server.middlewares.use('/radio-track-source-hash', (req, res) => {
           if (req.method !== 'POST') { radioJson(res, 405, { ok: false, error: 'method_not_allowed' }); return }
           readJsonBody(req).then((rawBody) => {
@@ -1837,10 +1620,6 @@ export default defineConfig({
           }).catch(() => radioJson(res, 400, { ok: false, error: 'invalid_json_body' }))
         })
 
-        // POST /radio-track-prepare — body: RadioTrackPrepareRequest. One
-        // request per track — the full pipeline (hash/decode/encode/
-        // probe/decode-verify/finalize) runs and either fully succeeds or
-        // fully rolls back inside this single call.
         server.middlewares.use('/radio-track-prepare', (req, res) => {
           if (req.method !== 'POST') { radioJson(res, 405, { ok: false, error: 'method_not_allowed' }); return }
           readJsonBody(req).then(async (rawBody) => {
@@ -1854,8 +1633,6 @@ export default defineConfig({
           }).catch(() => radioJson(res, 400, { ok: false, reused: false, issues: [{ code: 'RADIO_TRACK_PREPARE_INVALID_BODY', message: 'invalid_json_body', severity: 'error' }] }))
         })
 
-        // GET /radio-track-verify?radioTrackId=&packageVersion=&sourceAssetHash=&packageManifestHash=
-        // Reports facts only — never regenerates or rebinds anything.
         server.middlewares.use('/radio-track-verify', (req, res) => {
           const url = new URL(req.url ?? '/', 'http://localhost')
           const radioTrackId = url.searchParams.get('radioTrackId') ?? ''
@@ -1869,8 +1646,6 @@ export default defineConfig({
           radioJson(res, 200, result)
         })
 
-        // GET /radio-track-package?radioTrackId=&packageVersion= — portable
-        // metadata.json only (mirrors /radio-package for loops).
         server.middlewares.use('/radio-track-package', (req, res) => {
           const url = new URL(req.url ?? '/', 'http://localhost')
           const radioTrackId = url.searchParams.get('radioTrackId') ?? ''
@@ -1885,16 +1660,11 @@ export default defineConfig({
           }
         })
 
-        // GET /radio-track-manifest — aggregate RadioTrack catalog manifest
         server.middlewares.use('/radio-track-manifest', (_req, res) => {
           const manifest = readCurrentTrackManifest(RADIO_TRACK_LIBRARY_ROOT)
           radioJson(res, 200, manifest ?? { schemaVersion: '1.0.0', generatedAt: null, entries: [] })
         })
 
-        // POST /radio-web-bundle-export — body: RadioWebBundleExportRequest.
-        // Every payload is read server-side from the bound immutable
-        // RadioTrack package manifests — client-supplied display/musical/
-        // section fields are never trusted for bundle content.
         server.middlewares.use('/radio-web-bundle-export', (req, res) => {
           if (req.method !== 'POST') { radioJson(res, 405, { ok: false, issues: [{ code: 'method_not_allowed', message: 'POST required', severity: 'error' }] }); return }
           readJsonBody(req).then(async (rawBody) => {
@@ -1908,8 +1678,6 @@ export default defineConfig({
           }).catch(() => radioJson(res, 400, { ok: false, issues: [{ code: 'RADIO_WEB_BUNDLE_INVALID_BODY', message: 'invalid_json_body', severity: 'error' }] }))
         })
 
-        // GET /radio-web-bundle-versions?slug= — every existing local
-        // bundle version for one station slug, ascending.
         server.middlewares.use('/radio-web-bundle-versions', (req, res) => {
           const url = new URL(req.url ?? '/', 'http://localhost')
           const slug = url.searchParams.get('slug') ?? ''
@@ -1917,9 +1685,6 @@ export default defineConfig({
           radioJson(res, 200, { versions: listBundleVersions(RADIO_WEB_EXPORT_ROOT, slug) })
         })
 
-        // POST /radio-web-bundle-validate — body {slug, bundleVersion}.
-        // Resolves the root server-side from validated identifiers only —
-        // never a client-supplied path.
         server.middlewares.use('/radio-web-bundle-validate', (req, res) => {
           if (req.method !== 'POST') { radioJson(res, 405, { ok: false, issues: [{ code: 'method_not_allowed', message: 'POST required', severity: 'error' }] }); return }
           readJsonBody(req).then((rawBody) => {
@@ -1933,7 +1698,6 @@ export default defineConfig({
           }).catch(() => radioJson(res, 400, { ok: false, issues: [{ code: 'invalid_json_body', message: 'invalid_json_body', severity: 'error' }] }))
         })
 
-        // POST /radio-web-bundle-reveal — body {slug, bundleVersion}
         server.middlewares.use('/radio-web-bundle-reveal', (req, res) => {
           if (req.method !== 'POST') { radioJson(res, 405, { ok: false, error: 'method_not_allowed' }); return }
           readJsonBody(req).then(async (rawBody) => {
@@ -1947,17 +1711,10 @@ export default defineConfig({
           }).catch(() => radioJson(res, 400, { ok: false, error: 'invalid_json_body' }))
         })
 
-        // --- 0722C_MUSIC_Production_Stem_Export routes -------------------
-        // Same guard conventions as the RadioLoop/RadioTrack routes above:
-        // all filesystem access confined to TRACK_STEM_LIBRARY_ROOT/
-        // LIBRARY_ROOT, JSON validated before use, binary uploads streamed
-        // to disk (never buffered whole in memory).
-
         server.middlewares.use('/stem-engine-status', (_req, res) => {
           checkStemEngine().then((result) => radioJson(res, 200, result))
         })
 
-        // POST /stem-export-start — body {trackId, audioRelPath}
         server.middlewares.use('/stem-export-start', (req, res) => {
           if (req.method !== 'POST') { radioJson(res, 405, { ok: false, error: 'method_not_allowed' }); return }
           readJsonBody(req).then(async (rawBody) => {
@@ -1969,9 +1726,6 @@ export default defineConfig({
             if (!isPathConfinedTo(LIBRARY_ROOT, sourcePath) || !fs.existsSync(sourcePath)) {
               radioJson(res, 404, { ok: false, error: 'source_not_found' }); return
             }
-            // Dedupe key uses a cheap raw-file hash, never a full decode —
-            // "the same parent, unchanged since the last request" must not
-            // spawn a second job just to compute a fingerprint.
             const parentFingerprintHint = sha256FileForStems(sourcePath)
             const { jobId, focused } = stemJobRegistry.startJob(trackId, audioRelPath, parentFingerprintHint, 'htdemucs', TRACK_STEM_LIBRARY_ROOT, LIBRARY_ROOT)
             radioJson(res, 200, { ok: true, jobId, focused })
@@ -1997,9 +1751,6 @@ export default defineConfig({
           }).catch(() => radioJson(res, 400, { ok: false, error: 'invalid_json_body' }))
         })
 
-        // GET /stem-sets?trackId=&audioRelPath= — the filesystem-scanned,
-        // live-classified index. Never cached client-side as a persisted
-        // "hasStems" flag; callers re-fetch whenever they need current state.
         server.middlewares.use('/stem-sets', (req, res) => {
           const url = new URL(req.url ?? '/', 'http://localhost')
           const trackId = url.searchParams.get('trackId') ?? ''
@@ -2019,13 +1770,6 @@ export default defineConfig({
           })
         })
 
-        // GET /stem-set-asset?trackId=&audioRelPath=&stemSetId=&role= —
-        // ONLY serves when this specific set's LIVE-recomputed lifecycle is
-        // "current" — never "archived" (an archived set may still match a
-        // parent's audio in principle, but this build never feeds one
-        // through synchronized parent-linked playback; archived sets are
-        // Finder-inspectable only). This is the concrete mechanism behind
-        // "revalidate CURRENT before load and before start."
         server.middlewares.use('/stem-set-asset', (req, res) => {
           const url = new URL(req.url ?? '/', 'http://localhost')
           const trackId = url.searchParams.get('trackId') ?? ''
@@ -2079,11 +1823,6 @@ export default defineConfig({
           })
         })
 
-        // POST /stem-badges — body {tracks:[{trackId,audioRelPath}]}. Cheap
-        // batch status for the Library grid's "S" badge: skips
-        // classification entirely for tracks with no stem-set directory at
-        // all (the overwhelming majority), and only runs the fast
-        // stat-tier revalidation (never a decode) for tracks that do.
         server.middlewares.use('/stem-badges', (req, res) => {
           if (req.method !== 'POST') { radioJson(res, 405, { ok: false, error: 'method_not_allowed' }); return }
           readJsonBody(req).then(async (rawBody) => {
@@ -2102,8 +1841,6 @@ export default defineConfig({
                 scratchWavPathFor: (id) => path.join(stemStagingOperationDir(TRACK_STEM_LIBRARY_ROOT, scratchOpId), `${id}.wav`),
               })
               cleanupStemStagingOperation(TRACK_STEM_LIBRARY_ROOT, scratchOpId)
-              // Prefer reporting "current" if any set is current; otherwise
-              // the newest set's own state (sets is already newest-first).
               const current = sets.find((s) => lifecycles.get(s.id)?.lifecycle === 'current')
               const chosen = current ? lifecycles.get(current.id) : (sets[0] ? lifecycles.get(sets[0].id) : undefined)
               badges[t.trackId] = chosen ?? null
@@ -2112,10 +1849,6 @@ export default defineConfig({
           }).catch(() => radioJson(res, 400, { ok: false, error: 'invalid_json_body' }))
         })
 
-        // POST /stem-set-reveal — body {trackId, stemSetId}. Any lifecycle
-        // may be revealed in Finder (that's the sanctioned way to inspect
-        // an archived/outdated/orphaned set) — only synchronized playback
-        // is CURRENT-gated.
         server.middlewares.use('/stem-set-reveal', (req, res) => {
           if (req.method !== 'POST') { radioJson(res, 405, { ok: false, error: 'method_not_allowed' }); return }
           readJsonBody(req).then(async (rawBody) => {
@@ -2133,19 +1866,6 @@ export default defineConfig({
           }).catch(() => radioJson(res, 400, { ok: false, error: 'invalid_json_body' }))
         })
 
-        // POST /track-audio-reveal — body {audioRelPath}. 0902W Track
-        // Inspector Consolidation — "Find File in Finder" for a plain
-        // Catalog/External/Sounds track. Same reveal authority as every
-        // other reveal control (revealDirectoryInFinder); adds no new
-        // implementation, just a resolution path from the track's own
-        // portable audioRelPath (the same field getTrackPlayUrl already
-        // uses to build its /music-audio/<path> URL) to a real file,
-        // confined to LIBRARY_ROOT exactly like /music-audio itself.
-        // Deliberately narrow: a track with only a legacy absolute
-        // `filePath` or a session-only `objectUrl` (no audioRelPath) has
-        // no route here — there is no safe/meaningful "reveal" for an
-        // in-browser blob, and broadening this to arbitrary absolute paths
-        // was judged out of scope for this pass (see completion report).
         server.middlewares.use('/track-audio-reveal', (req, res) => {
           if (req.method !== 'POST') { radioJson(res, 405, { ok: false, error: 'method_not_allowed' }); return }
           readJsonBody(req).then(async (rawBody) => {
@@ -2161,19 +1881,12 @@ export default defineConfig({
           }).catch(() => radioJson(res, 400, { ok: false, error: 'invalid_json_body' }))
         })
 
-        // POST /stem-salvage-stage — creates a fresh staging operation for
-        // "Register Existing Stem Set…" and returns its operationId.
         server.middlewares.use('/stem-salvage-stage', (_req, res) => {
           const operationId = randomUUID()
           createStemStagingOperation(TRACK_STEM_LIBRARY_ROOT, operationId)
           radioJson(res, 200, { ok: true, operationId })
         })
 
-        // POST /stem-salvage-upload?operationId=&role=&filename= — the raw
-        // request body IS the file's bytes, streamed directly to disk via
-        // fs.createWriteStream (never buffered whole in application
-        // memory — a real transfer mechanism, not a hand-wave). One call
-        // per file (browser File objects are valid fetch() bodies).
         server.middlewares.use('/stem-salvage-upload', (req, res) => {
           if (req.method !== 'POST') { radioJson(res, 405, { ok: false, error: 'method_not_allowed' }); return }
           const url = new URL(req.url ?? '/', 'http://localhost')
@@ -2197,9 +1910,6 @@ export default defineConfig({
           return fs.existsSync(stemStagingOperationDir(TRACK_STEM_LIBRARY_ROOT, operationId))
         }
 
-        // POST /stem-register-existing — validates+promotes the already-
-        // staged files (shared by the salvage dialog and the Legacy Stem
-        // Migration panel).
         server.middlewares.use('/stem-register-existing', (req, res) => {
           if (req.method !== 'POST') { radioJson(res, 405, { ok: false, error: 'method_not_allowed' }); return }
           readJsonBody(req).then(async (rawBody) => {
@@ -2227,10 +1937,6 @@ export default defineConfig({
           }).catch(() => radioJson(res, 400, { ok: false, error: 'invalid_json_body' }))
         })
 
-        // POST /stem-legacy-migrate — copies the 4 already-known legacy
-        // derived-stem audio files (no browser upload needed, they're
-        // already on disk under LIBRARY_ROOT) into staging, then runs the
-        // exact same validate+promote pipeline as manual salvage.
         server.middlewares.use('/stem-legacy-migrate', (req, res) => {
           if (req.method !== 'POST') { radioJson(res, 405, { ok: false, error: 'method_not_allowed' }); return }
           readJsonBody(req).then(async (rawBody) => {
@@ -2303,7 +2009,6 @@ export default defineConfig({
           res.setHeader('Cache-Control', 'no-cache')
           res.setHeader('Access-Control-Allow-Origin', '*')
 
-          // HEAD request — just confirm existence
           if (method === 'HEAD') {
             res.setHeader('Content-Length', stat.size)
             res.statusCode = 200
@@ -2340,10 +2045,6 @@ export default defineConfig({
   ],
   build: {
     rollupOptions: {
-      // RADIO Web Playback Vertical Slice — a second, standalone HTML
-      // entry point alongside the main MUSIC app. Vite only builds
-      // index.html by default; this adds radio-player.html so `npm run
-      // build` emits a self-contained, deployable public player bundle.
       input: {
         main: path.resolve(__dirname, 'index.html'),
         radioPlayer: path.resolve(__dirname, 'radio-player.html'),
