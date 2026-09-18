@@ -50,6 +50,23 @@ function assertFile(file, description, failures) {
   }
 }
 
+function assertGeneratedMapboxToken(file, failures) {
+  assertFile(file, "missing generated Wall Mapbox environment", failures);
+  if (!fs.existsSync(file) || !fs.statSync(file).isFile()) return;
+
+  const source = fs.readFileSync(file, "utf8");
+  const assignment = source.match(/\bvar token = ("(?:[^"\\]|\\.)*");/);
+  let token = "";
+  try {
+    token = assignment ? JSON.parse(assignment[1]) : "";
+  } catch {
+    token = "";
+  }
+  if (!token.trim()) {
+    failures.push("generated Wall Mapbox runtime token is empty");
+  }
+}
+
 export function validateWallRuntimeBundle() {
   const failures = [];
   const sourceFiles = listFiles(wallSourceRoot);
@@ -87,6 +104,7 @@ export function validateWallRuntimeBundle() {
     "missing shared Wall palette dependency",
     failures,
   );
+  assertGeneratedMapboxToken(path.join(wallDistRoot, "mapbox-env.js"), failures);
 
   if (failures.length > 0) {
     throw new Error(`[wall-runtime] production bundle is incomplete:\n- ${failures.join("\n- ")}`);
