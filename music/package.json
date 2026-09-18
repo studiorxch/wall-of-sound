@@ -11,7 +11,8 @@
     "test": "vitest run",
     "preview": "vite preview",
     "publish:sites": "node scripts/publish-radio-to-sites.mjs",
-    "build:release": "vite build"
+    "build:release": "vite build",
+    "validate:wall-runtime": "node scripts/validate-wall-runtime.mjs"
   },
   "dependencies": {
     "@material-symbols/svg-400": "^0.45.8",

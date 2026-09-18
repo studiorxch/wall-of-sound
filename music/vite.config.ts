@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react'
 import fs from 'fs'
 import path from 'path'
 import { randomUUID } from 'node:crypto'
+import { execFileSync } from 'node:child_process'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { reserveRadioLoopId, releaseReservation } from './server/radio/radioIdAssigner'
 import { createStagingOperation, cleanupStagingOperation, stagingOperationExists, stagingOperationDir } from './server/radio/radioStagingFs'
@@ -437,11 +438,34 @@ function copyWallAppPublicPlugin(): Plugin {
   return {
     name: 'copy-wall-app-public',
     closeBundle() {
-      const wallSrc = path.resolve(process.cwd(), '../wall')
-      const wallDest = path.resolve(process.cwd(), 'dist/wall-app')
-      if (fs.existsSync(wallSrc)) {
-        copyRecursiveSync(wallSrc, wallDest)
+      // Resolve from this config, never the caller's cwd. Cloud build systems
+      // may invoke Vite from the repository root even when this config lives
+      // under music/, and the old cwd-relative lookup silently skipped the
+      // copy in that case while still reporting a successful build.
+      const wallSrc = path.resolve(__dirname, '../wall')
+      const wallDest = path.resolve(__dirname, 'dist/wall-app')
+      const sharedDataSrc = path.resolve(__dirname, '../shared/data')
+      const sharedDataDest = path.resolve(__dirname, 'dist/shared/data')
+      if (!fs.existsSync(path.join(wallSrc, 'index.html'))) {
+        throw new Error(`[wall-runtime] canonical Wall source is unavailable: ${wallSrc}`)
       }
+      fs.rmSync(wallDest, { recursive: true, force: true })
+      copyRecursiveSync(wallSrc, wallDest)
+      copyRecursiveSync(sharedDataSrc, sharedDataDest)
+
+      // mapbox-env.js is intentionally gitignored because a developer's
+      // local file may contain a token. Production gets the safe empty-token
+      // bridge, never an ignored local secret and never an SPA fallback.
+      fs.copyFileSync(
+        path.join(wallSrc, 'mapbox-env.template.js'),
+        path.join(wallDest, 'mapbox-env.js'),
+      )
+
+      // Fail the build before deployment if any Wall source file or any
+      // local asset referenced by the copied HTML is absent from dist.
+      execFileSync(process.execPath, [
+        path.resolve(__dirname, 'scripts/validate-wall-runtime.mjs'),
+      ], { cwd: __dirname, stdio: 'inherit' })
     },
   }
 }
