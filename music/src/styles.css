@@ -7676,7 +7676,7 @@ body.broadcast-clean-capture .app {
 }
 
 /* 0827_MUSIC_Library_Workspace_Track_Inspector_Rearchitecture — the
-   .ti-*/.te-* rules above styled the retired docked-panel Track Inspector
+   .ti-* and .te-* rules above styled the retired docked-panel Track Inspector
    (no longer mounted anywhere); left in place rather than hunted down and
    removed, since other legacy call sites in this stylesheet may still
    reference individual .te-* primitives (te-textarea etc.). New Track
