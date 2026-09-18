@@ -201,9 +201,9 @@ import {
   applyAnalysisFailure as applySunoAnalysisFailurePure,
   resetOrphanedSunoAnalysis,
   type SunoAnalysisResultInput,
+} from "./logic/sunoLibrary/analysisRecords";
 import type { VoiceAsset, VoiceGroup, VoiceLibraryPreferences, VoiceProfile } from "./data/voiceLibraryTypes";
 import { defaultVoiceLibraryPreferences } from "./logic/voice/voiceLibraryState";
-} from "./logic/sunoLibrary/analysisRecords";
 // 0812D_MUSIC_Autosave-Integrity-Repair_v1.0.0 — closes the gap that let
 // unhydrated/empty/temporary-session state overwrite the shared, absolute-
 // path library/music/sampler-banks/banks.json. See samplerBankPersistence.ts
@@ -480,6 +480,9 @@ export default function App() {
   );
   const loopBinViewStateRef = useRef<LoopBinViewState>(loopBinViewState);
   const [libraryGridPreferences, setLibraryGridPreferences] = useState<LibraryGridPreferencesBySource>(
+    () => loadPlayProject()?.libraryGridPreferences ?? {},
+  );
+  const libraryGridPreferencesRef = useRef<LibraryGridPreferencesBySource>(libraryGridPreferences);
   const [voiceAssets, setVoiceAssets] = useState<VoiceAsset[]>(() => loadPlayProject()?.voiceAssets ?? []);
   const voiceAssetsRef = useRef<VoiceAsset[]>([]);
   const [voiceGroups, setVoiceGroups] = useState<VoiceGroup[]>(() => loadPlayProject()?.voiceGroups ?? []);
@@ -490,9 +493,6 @@ export default function App() {
     () => loadPlayProject()?.voiceLibraryPreferences ?? defaultVoiceLibraryPreferences(),
   );
   const voiceLibraryPreferencesRef = useRef<VoiceLibraryPreferences>(voiceLibraryPreferences);
-    () => loadPlayProject()?.libraryGridPreferences ?? {},
-  );
-  const libraryGridPreferencesRef = useRef<LibraryGridPreferencesBySource>(libraryGridPreferences);
   // Carried through unchanged into every save — this marker only ever
   // advances inside migrateApprovedLoopsToRevisionsV1 at LOAD time, never
   // here, so a save must not silently reset it to undefined.
@@ -783,13 +783,13 @@ export default function App() {
     // Do not autosave before hydration — otherwise the default boot state
     // overwrites the user's saved project in localStorage on first mount.
     if (!hasHydratedProject) return;
+    savePlayProject(makeProj(playlistsRef.current, libraryTracksRef.current, excludedTrackIdsRef.current));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trackPlaybackIssues, hasHydratedProject]);
   useEffect(() => { voiceAssetsRef.current = voiceAssets; }, [voiceAssets]);
   useEffect(() => { voiceGroupsRef.current = voiceGroups; }, [voiceGroups]);
   useEffect(() => { voiceProfilesRef.current = voiceProfiles; }, [voiceProfiles]);
   useEffect(() => { voiceLibraryPreferencesRef.current = voiceLibraryPreferences; }, [voiceLibraryPreferences]);
-    savePlayProject(makeProj(playlistsRef.current, libraryTracksRef.current, excludedTrackIdsRef.current));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [trackPlaybackIssues, hasHydratedProject]);
   useEffect(() => { activePlaylistIdRef.current = activePlaylistId; }, [activePlaylistId]);
   useEffect(() => { scheduleRef.current = schedule; }, [schedule]);
   useEffect(() => { broadcastEventsRef.current = broadcastEvents; }, [broadcastEvents]);
@@ -904,12 +904,12 @@ export default function App() {
 
   // ── Project helpers ──────────────────────────────────────────────────────
   function makeProj(pls: PlaylistRecord[], lib?: Track[], excl?: Set<string>, activePLId?: string): PlayProject {
+    return {
+      schemaVersion: "play-project-v2",
       voiceAssets: voiceAssetsRef.current.length ? voiceAssetsRef.current : undefined,
       voiceGroups: voiceGroupsRef.current.length ? voiceGroupsRef.current : undefined,
       voiceProfiles: voiceProfilesRef.current.length ? voiceProfilesRef.current : undefined,
       voiceLibraryPreferences: voiceLibraryPreferencesRef.current,
-    return {
-      schemaVersion: "play-project-v2",
       libraryTracks: lib ?? libraryTracksRef.current,
       activePlaylistId: activePLId ?? activePlaylistIdRef.current,
       playlists: pls,
@@ -7217,7 +7217,6 @@ export default function App() {
           resolvedSchedule={resolvedSchedule}
         />
       )}
-          voiceAssetCount={voiceAssets.length}
 
       {/* Scheduler / TV Guide Mode */}
       {workspaceMode === "scheduler" && (
@@ -7642,6 +7641,8 @@ export default function App() {
               ensureSongAnalysisReady={ensureSongAnalysisReady}
               cancelSongAnalysis={cancelSongAnalysis}
               recomputeSongAnalysisStatus={recomputeSongAnalysisStatus}
+              songAnalysisProgress={songAnalysisProgress}
+            />
           ) : viewMode === "voice_library" ? (
             <VoiceLibraryWorkspace
               assets={voiceAssets}
@@ -7657,8 +7658,6 @@ export default function App() {
               onAuditionExternal={handleAuditionExternal}
               onPauseTrack={handlePause}
               onResumeTrack={handlePlay}
-            />
-              songAnalysisProgress={songAnalysisProgress}
             />
           ) : viewMode === "glyph_audio" ? (
             <GlyphWorkspace
