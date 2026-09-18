@@ -86,7 +86,7 @@ function CarSurfaceRow({ car, onCreateArtwork }: { car: LogicalCar; onCreateArtw
     refreshPlacements(surfaces);
   }
 
-  function retire(placementId: string, surfaceId: string) {
+  function retire(placementId: string) {
     bridge.retirePlacement(placementId);
     refreshPlacements(surfaces);
   }
@@ -110,6 +110,10 @@ function CarSurfaceRow({ car, onCreateArtwork }: { car: LogicalCar; onCreateArtw
             const info = placementsBySurface[s.id];
             const active = info?.active ?? null;
             const history = info?.history ?? [];
+            const exteriorSurfaceType: "exterior_side_a" | "exterior_side_b" | null =
+              s.surfaceType === "exterior_side_a" || s.surfaceType === "exterior_side_b"
+                ? s.surfaceType
+                : null;
             return (
               <tr key={s.id} className="geo-row">
                 <td className="geo-row-hex">{s.surfaceType}</td>
@@ -141,13 +145,13 @@ function CarSurfaceRow({ car, onCreateArtwork }: { car: LogicalCar; onCreateArtw
                   )}
                 </td>
                 <td>
-                  {(s.surfaceType === "exterior_side_a" || s.surfaceType === "exterior_side_b") && (
+                  {exteriorSurfaceType && (
                     <button
                       className="station-detail-sibling-link"
                       onClick={(e) => {
                         e.stopPropagation();
                         onCreateArtwork({
-                          kind: "car_surface", surfaceId: s.id, surfaceType: s.surfaceType,
+                          kind: "car_surface", surfaceId: s.id, surfaceType: exteriorSurfaceType,
                           logicalCarId: car.id, consistId: car.consistId, logicalTrainId: car.logicalTrainId, routeId: car.routeId,
                         });
                       }}
@@ -159,7 +163,7 @@ function CarSurfaceRow({ car, onCreateArtwork }: { car: LogicalCar; onCreateArtw
                     {active ? "Cover with seed artwork" : "Place seed artwork"}
                   </button>
                   {active && (
-                    <button className="station-detail-sibling-link" onClick={(e) => { e.stopPropagation(); retire(active.id, s.id); }}>
+                    <button className="station-detail-sibling-link" onClick={(e) => { e.stopPropagation(); retire(active.id); }}>
                       Retire
                     </button>
                   )}

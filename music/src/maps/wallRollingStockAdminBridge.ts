@@ -36,7 +36,15 @@ type CarSurfaceGlobal = {
   subscribe: (fn: () => void) => () => void;
 };
 type ArtworkGlobal = {
-  createArtwork: (input: { creatorType: ArtworkCreatorType; title?: string; sourceType?: string; metadata?: Record<string, unknown> }) => MutationResult<Artwork>;
+  createArtwork: (input: {
+    creatorType: ArtworkCreatorType;
+    creatorId?: string | null;
+    title?: string;
+    sourceType?: string;
+    sourceRef?: string;
+    metadata?: Record<string, unknown>;
+  }) => MutationResult<Artwork>;
+  updateArtworkStatus: (id: string, status: "draft" | "active" | "archived") => MutationResult<Artwork>;
   getArtwork: (id: string) => Artwork | null;
   getAllArtworks: () => Artwork[];
   getDiagnostics: () => { artworkCount: number };

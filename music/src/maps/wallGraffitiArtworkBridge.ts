@@ -10,29 +10,12 @@
 // into the already-proven authorities from the prior build.
 
 import type { SerializedArtworkPayload } from "../graffiti/graffitiTypes";
-import type { Artwork, ArtworkPlacement, PlacementTargetType } from "../data/subwayRollingStockAdminTypes";
-
-type MutationResult<T> = { ok: boolean; reason?: string; data?: T };
-type ArtworkCreatorType = "system" | "user" | "resident" | "invited_artist" | "unknown";
-type ArtworkGlobal = {
-  createArtwork: (input: { creatorType: ArtworkCreatorType; creatorId?: string | null; title?: string; sourceType?: string; sourceRef?: string; metadata?: Record<string, unknown> }) => MutationResult<Artwork>;
-  updateArtworkStatus: (id: string, status: "draft" | "active" | "archived") => MutationResult<Artwork>;
-};
-type PlacementGlobal = {
-  createPlacement: (input: { artworkId: string; surfaceId: string; targetType: PlacementTargetType; targetId: string }) => MutationResult<ArtworkPlacement> & { covered?: string | null };
-};
-
-declare global {
-  interface WallSBE {
-    SubwayArtworkAuthority?: ArtworkGlobal;
-    SubwayArtworkPlacementAuthority?: PlacementGlobal;
-  }
-}
+import type { Artwork, ArtworkCreatorType, ArtworkPlacement } from "../data/subwayRollingStockAdminTypes";
 
 export type BridgeResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
-function artworkAuthority(): ArtworkGlobal | null { return window.SBE?.SubwayArtworkAuthority ?? null; }
-function placementAuthority(): PlacementGlobal | null { return window.SBE?.SubwayArtworkPlacementAuthority ?? null; }
+function artworkAuthority() { return window.SBE?.SubwayArtworkAuthority ?? null; }
+function placementAuthority() { return window.SBE?.SubwayArtworkPlacementAuthority ?? null; }
 
 // Save Artwork (BUILD §25 "Save Artwork" — creates sr-art-*, never
 // sr-placement-*). `rasterPreviewDataUrl` is optional (BUILD §9: "an
@@ -47,7 +30,7 @@ export function saveDrawingAsArtwork(input: {
   // App's existing "user" behavior; a Resident create-and-place flow
   // passes creatorType:"resident" + its own stable sr-resident-* id here,
   // reusing this exact save path rather than a parallel one (BUILD §8).
-  creatorType?: "system" | "user" | "resident" | "invited_artist" | "unknown";
+  creatorType?: ArtworkCreatorType;
   creatorId?: string;
 }): BridgeResult<Artwork> {
   const authority = artworkAuthority();
