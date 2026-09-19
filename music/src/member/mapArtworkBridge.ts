@@ -1,7 +1,12 @@
-import type { GeographicArtworkStroke } from "@studiorich/member-identity";
+import type {
+  ArtworkRepository,
+  GeographicArtworkStroke,
+} from "@studiorich/member-identity";
 
-interface WallStroke {
+export interface WallStroke {
   readonly id?: string;
+  artworkId?: string;
+  creatorId?: string;
   readonly points?: readonly {
     readonly longitude?: number | null;
     readonly latitude?: number | null;
@@ -11,6 +16,16 @@ interface WallStroke {
     readonly width?: number;
     readonly opacity?: number;
   };
+}
+
+interface ArtworkBindingRuntime {
+  bindArtwork(stroke: WallStroke, artworkId: string, creatorId: string): boolean;
+}
+
+interface MapArtworkPersistenceBridgeOptions {
+  readonly repository: ArtworkRepository;
+  readonly drawing: ArtworkBindingRuntime;
+  readonly getAuthenticatedMemberId: () => string | null;
 }
 
 export function toGeographicArtworkStroke(stroke: WallStroke): GeographicArtworkStroke {
@@ -33,5 +48,43 @@ export function toGeographicArtworkStroke(stroke: WallStroke): GeographicArtwork
     id: stroke.id,
     points,
     style: { color, width: width as number, opacity: opacity as number },
+  };
+}
+
+export function createMapArtworkPersistenceBridge({
+  repository,
+  drawing,
+  getAuthenticatedMemberId,
+}: MapArtworkPersistenceBridgeOptions) {
+  const removedBeforeSave = new WeakSet<WallStroke>();
+
+  return {
+    async persistStroke(stroke: WallStroke): Promise<void> {
+      const memberId = getAuthenticatedMemberId();
+      if (!memberId) return;
+      const artwork = await repository.createMapArtwork({
+        creatorId: memberId,
+        stroke: toGeographicArtworkStroke(stroke),
+      });
+      if (removedBeforeSave.has(stroke)) {
+        removedBeforeSave.delete(stroke);
+        await repository.deleteOwnedArtwork(artwork.id, memberId);
+        return;
+      }
+      if (!drawing.bindArtwork(stroke, artwork.id, memberId)) {
+        await repository.deleteOwnedArtwork(artwork.id, memberId);
+      }
+    },
+
+    async removeStroke(stroke: WallStroke): Promise<void> {
+      const memberId = getAuthenticatedMemberId();
+      if (!memberId) return;
+      if (!stroke.artworkId) {
+        removedBeforeSave.add(stroke);
+        return;
+      }
+      if (stroke.creatorId !== memberId) return;
+      await repository.deleteOwnedArtwork(stroke.artworkId, memberId);
+    },
   };
 }

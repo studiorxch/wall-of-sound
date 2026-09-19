@@ -260,8 +260,10 @@
     return _overlayObjects(surf).filter(function (obj) { return obj && obj.type === "stroke"; });
   }
 
-  function bindArtwork(strokeId, artworkId, creatorId) {
-    var stroke = getStrokes().find(function (item) { return item.id === strokeId; });
+  function bindArtwork(strokeOrId, artworkId, creatorId) {
+    var stroke = typeof strokeOrId === "object" && strokeOrId
+      ? strokeOrId
+      : getStrokes().find(function (item) { return item.id === strokeOrId; });
     if (!stroke) return false;
     stroke.artworkId = artworkId;
     stroke.creatorId = creatorId;

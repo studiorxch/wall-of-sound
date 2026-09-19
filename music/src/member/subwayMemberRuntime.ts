@@ -4,12 +4,15 @@ import {
   serializePublicMember,
   type MemberIdentityState,
 } from "@studiorich/member-identity";
-import { toGeographicArtworkStroke } from "./mapArtworkBridge";
+import {
+  createMapArtworkPersistenceBridge,
+  type WallStroke,
+} from "./mapArtworkBridge";
 
 type WallRuntime = {
   Workspace?: { getActiveSurface(): unknown };
   SurfaceDrawingRuntime?: {
-    bindArtwork(strokeId: string, artworkId: string, creatorId: string): boolean;
+    bindArtwork(stroke: WallStroke, artworkId: string, creatorId: string): boolean;
     hydrateArtwork(artwork: unknown): number;
     removePersistedStrokes(): number;
   };
@@ -27,13 +30,24 @@ root.SBE.MemberIdentityAuthority = memberIdentity;
 
 let state: MemberIdentityState = memberIdentity.getState();
 let hydratedMemberId: string | null = null;
-const removedBeforeSave = new Set<string>();
 let dialog: HTMLDialogElement | null = null;
 let statusElement: HTMLElement | null = null;
 
 function drawingRuntime() {
   return root.SBE?.SurfaceDrawingRuntime ?? null;
 }
+
+const artworkPersistence = createMapArtworkPersistenceBridge({
+  repository: artworkRepository,
+  drawing: {
+    bindArtwork(stroke, artworkId, creatorId) {
+      return drawingRuntime()?.bindArtwork(stroke, artworkId, creatorId) ?? false;
+    },
+  },
+  getAuthenticatedMemberId() {
+    return state.status === "signedIn" ? state.member.uid : null;
+  },
+});
 
 function setMessage(message: string, isError = false): void {
   if (!statusElement) return;
@@ -119,19 +133,9 @@ async function hydrateOwnedArtwork(memberId: string): Promise<void> {
 
 document.addEventListener("surface-drawing:stroke-committed", (event) => {
   if (state.status !== "signedIn") return;
-  const detail = (event as CustomEvent).detail as { stroke?: Parameters<typeof toGeographicArtworkStroke>[0] };
+  const detail = (event as CustomEvent).detail as { stroke?: WallStroke };
   if (!detail?.stroke) return;
-  const memberId = state.member.uid;
-  void artworkRepository.createMapArtwork({
-    creatorId: memberId,
-    stroke: toGeographicArtworkStroke(detail.stroke),
-  }).then((artwork) => {
-    const strokeId = detail.stroke!.id!;
-    if (removedBeforeSave.delete(strokeId)) {
-      return artworkRepository.deleteOwnedArtwork(artwork.id, memberId);
-    }
-    drawingRuntime()?.bindArtwork(strokeId, artwork.id, memberId);
-  }).catch((error: unknown) => {
+  void artworkPersistence.persistStroke(detail.stroke).catch((error: unknown) => {
     console.error("[SubwayMemberRuntime] Artwork save failed", error);
     setMessage("Artwork could not be saved.", true);
   });
@@ -139,15 +143,9 @@ document.addEventListener("surface-drawing:stroke-committed", (event) => {
 
 document.addEventListener("surface-drawing:stroke-removed", (event) => {
   if (state.status !== "signedIn") return;
-  const stroke = (event as CustomEvent).detail?.stroke as { artworkId?: string; creatorId?: string } | undefined;
+  const stroke = (event as CustomEvent).detail?.stroke as WallStroke | undefined;
   if (!stroke) return;
-  if (!stroke.artworkId) {
-    const strokeId = (stroke as { id?: string }).id;
-    if (strokeId) removedBeforeSave.add(strokeId);
-    return;
-  }
-  if (stroke.creatorId !== state.member.uid) return;
-  void artworkRepository.deleteOwnedArtwork(stroke.artworkId, state.member.uid).catch((error: unknown) => {
+  void artworkPersistence.removeStroke(stroke).catch((error: unknown) => {
     console.error("[SubwayMemberRuntime] Artwork delete failed", error);
   });
 });
