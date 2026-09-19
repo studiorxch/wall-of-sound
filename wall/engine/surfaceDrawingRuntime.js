@@ -135,8 +135,10 @@
         type:      "stroke",
         points:    _livePoints.slice(),
         style:     Object.assign({}, _brush),
+        surface:   { type: "map", surfaceId: surf.surfaceId || surf.id },
         createdAt: Date.now(),
       });
+      if (_ws() && _ws().markModified) _ws().markModified(surf.id);
     }
     _livePoints = [];
     _renderAll();
@@ -223,6 +225,30 @@
     _renderAll();
   }
 
+  function undo(surfaceId) {
+    var surf = surfaceId
+      ? (_ws() && _ws().getSurfaceById(surfaceId))
+      : _activeSurface();
+    if (!surf) return null;
+    var objects = _overlayObjects(surf);
+    for (var i = objects.length - 1; i >= 0; i--) {
+      if (objects[i] && objects[i].type === "stroke") {
+        var removed = objects.splice(i, 1)[0];
+        if (_ws() && _ws().markModified) _ws().markModified(surf.id);
+        _renderAll();
+        return removed;
+      }
+    }
+    return null;
+  }
+
+  function getStrokes(surfaceId) {
+    var surf = surfaceId
+      ? (_ws() && _ws().getSurfaceById(surfaceId))
+      : _activeSurface();
+    return _overlayObjects(surf).filter(function (obj) { return obj && obj.type === "stroke"; });
+  }
+
   // Force a re-render (called externally after camera change)
   function renderOverlay() { _renderAll(); }
 
@@ -233,6 +259,17 @@
     renderOverlay:  renderOverlay,
     syncCanvasSize: syncCanvasSize,
     clearSurface:   clearSurface,
+    undo:           undo,
+    getStrokes:     getStrokes,
+    __test: {
+      capturePoint: function (clientX, clientY) {
+        return _capturePoint({ clientX: clientX, clientY: clientY });
+      },
+      commitPoints: function (points) {
+        _livePoints = (points || []).slice();
+        _commitStroke();
+      },
+    },
   };
 
 })(window);

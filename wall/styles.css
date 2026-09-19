@@ -1094,6 +1094,43 @@ body.subway-public .subway-ribbon-sunroof-exit {
   display: none !important;
 }
 
+.subway-map-paint-controls {
+  position: fixed;
+  left: 50%;
+  bottom: 22px;
+  z-index: 60;
+  display: flex;
+  gap: 6px;
+  padding: 6px;
+  transform: translateX(-50%);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 9px;
+  background: rgba(12, 14, 17, 0.88);
+  backdrop-filter: blur(8px);
+}
+.subway-map-paint-controls[hidden] { display: none !important; }
+.subway-map-paint-controls button {
+  min-width: 58px;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  background: transparent;
+  color: rgba(238, 242, 246, 0.78);
+  font: 600 10px/1 inherit;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+}
+.subway-map-paint-controls button.is-active {
+  border-color: rgba(255, 78, 132, 0.72);
+  color: #ff4e84;
+  background: rgba(255, 78, 132, 0.12);
+}
+.subway-map-paint-controls button:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
 /* ── Design tokens — scoped to .racetrack-overlay only, never :root.
    RACETRACK's premium dark/orange aesthetic is deliberately separate from
    WALL's global chrome tokens (--accent: teal) so nothing bleeds into
