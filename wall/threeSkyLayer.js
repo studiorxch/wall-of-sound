@@ -183,6 +183,19 @@
   var _map      = null;
   var _active   = false;
   var _initErr  = null;
+  var _suppressedReason = null;
+
+  function _isSubwayMode(search) {
+    var query = search;
+    if (query === undefined) {
+      query = global.location && global.location.search || '';
+    }
+    try {
+      return new URLSearchParams(query).get('mode') === 'subway';
+    } catch (e) {
+      return false;
+    }
+  }
 
   function _compileShader(gl, type, src) {
     var s = gl.createShader(type);
@@ -319,8 +332,19 @@
   // ── Mount ─────────────────────────────────────────────────────────────────────
   // Called after map + style are ready. Adds sky layer before fill-extrusion
   // (3D buildings) so sky renders behind world geometry.
-  function mount(map) {
+  function mount(map, search) {
     if (!map || typeof map.addLayer !== 'function') return;
+    // SUBWAY is a geographic/system view, not a sky presentation. This custom
+    // layer is a fullscreen quad inserted immediately before the first 3D
+    // building extrusion: at pitched camera angles its view-direction alpha
+    // can cover streets/land while buildings remain visible above it. Keep the
+    // independent building layers, routes, and geographic style intact by not
+    // adding only this misplaced sky quad to the Subway layer stack.
+    if (_isSubwayMode(search)) {
+      _suppressedReason = 'subway-geographic-view';
+      return false;
+    }
+    _suppressedReason = null;
     if (map.getLayer && map.getLayer('wall-three-sky')) return; // idempotent
 
     function _addLayer() {
@@ -358,6 +382,7 @@
   // ── Status (queried by PLAY postMessage bridge) ───────────────────────────────
   function getStatus() {
     if (_active)  return { renderer: 'three-sky', blockReason: null };
+    if (_suppressedReason) return { renderer: 'suppressed', blockReason: _suppressedReason };
     if (_initErr) return { renderer: 'sky-bridge', blockReason: 'WALL SHADER ERROR: ' + _initErr };
     return { renderer: 'sky-bridge', blockReason: 'WALL THREE SKY NOT MOUNTED' };
   }
@@ -398,6 +423,7 @@
     VERSION: '1.0.0',
     mount:   mount,
     getStatus: getStatus,
+    __test: Object.freeze({ isSubwayMode: _isSubwayMode }),
   });
 
 })(window);
