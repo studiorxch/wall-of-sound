@@ -23,6 +23,7 @@
   var VERSION = '1.0.0';
 
   var PRESENTATION_CLASS = 'subway-presentation';
+  var PUBLIC_CLASS = 'subway-public';
   var POLL_MS = 250;
 
   function _isSubwayActive() {
@@ -32,7 +33,12 @@
 
   function _apply() {
     try {
-      global.document.body.classList.toggle(PRESENTATION_CLASS, _isSubwayActive());
+      var active = _isSubwayActive();
+      global.document.body.classList.toggle(PRESENTATION_CLASS, active);
+      // The public maps entry is the canonical ?mode=subway surface. Keep
+      // the underlying Wall authorities loaded, but remove creator, ride,
+      // diagnostic, and destructive controls from the public presentation.
+      global.document.body.classList.toggle(PUBLIC_CLASS, active);
     } catch (e) { /* DOM not ready yet — next poll tick retries */ }
   }
 
@@ -46,6 +52,7 @@
   SBE.SubwayPresentationSurface = Object.freeze({
     VERSION: VERSION,
     PRESENTATION_CLASS: PRESENTATION_CLASS,
+    PUBLIC_CLASS: PUBLIC_CLASS,
     isActive: _isSubwayActive,
     // Test-only — never used by production code.
     __test: { applyNow: _apply },

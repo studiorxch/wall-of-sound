@@ -42,6 +42,7 @@
       layer.activate();
       surface.__test.applyNow();
       results.push(_assert('subway-presentation class present once SUBWAY is active', global.document.body.classList.contains(surface.PRESENTATION_CLASS)));
+      results.push(_assert('public Subway class is present once SUBWAY is active', global.document.body.classList.contains(surface.PUBLIC_CLASS)));
 
       if (driveHud) {
         results.push(_assert('§24.1 DRIVE HUD (#wos-hud) is force-hidden while SUBWAY is active', _computedDisplay(driveHud) === 'none'));
@@ -62,6 +63,7 @@
       layer.deactivate();
       surface.__test.applyNow();
       results.push(_assert('subway-presentation class removed once SUBWAY deactivates', !global.document.body.classList.contains(surface.PRESENTATION_CLASS)));
+      results.push(_assert('public Subway class is removed once SUBWAY deactivates', !global.document.body.classList.contains(surface.PUBLIC_CLASS)));
       if (driveHud) {
         results.push(_assert('§24.2 DRIVE HUD returns to its own pre-subway visibility state once SUBWAY deactivates (control returns to DRIVE/RACETRACK\'s own logic, not forced by this module either way)',
           _computedDisplay(driveHud) === driveHudBaseline, { baseline: driveHudBaseline, after: _computedDisplay(driveHud) }));

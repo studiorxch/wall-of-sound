@@ -1064,6 +1064,36 @@ body.subway-presentation .wt-reality {
   display: none !important;
 }
 
+/* SUBWAY beta public boundary. The Wall runtime and read-only Subway
+   authorities remain intact; only non-public presentation and mutation
+   surfaces are suppressed. Map interaction, station/train selection,
+   arrivals, weather, and RADIO remain available. */
+body.subway-public .app-body {
+  grid-template-columns: 0 minmax(0, 1fr) 0 !important;
+}
+body.subway-public #left-rail,
+body.subway-public #left-panel,
+body.subway-public #right-panel,
+body.subway-public #launcher-rail,
+body.subway-public #drawer-panel,
+body.subway-public #overlay-panel,
+body.subway-public #canvas-tool-subbar,
+body.subway-public #viewport-controls,
+body.subway-public #note-section,
+body.subway-public #keyboard-help-btn,
+body.subway-public #shortcut-hud,
+body.subway-public #system-hud-toggle,
+body.subway-public #system-hud,
+body.subway-public #wos-subway-hud,
+body.subway-public #itinerary-execution-diagnostics-hud,
+body.subway-public #subway-ride-hud,
+body.subway-public .subway-station-your-trip,
+body.subway-public .subway-ribbon-sunroof-toggle,
+body.subway-public .subway-ribbon-sunroof-controls,
+body.subway-public .subway-ribbon-sunroof-exit {
+  display: none !important;
+}
+
 /* ── Design tokens — scoped to .racetrack-overlay only, never :root.
    RACETRACK's premium dark/orange aesthetic is deliberately separate from
    WALL's global chrome tokens (--accent: teal) so nothing bleeds into
