@@ -44,6 +44,34 @@
       overlay && overlay.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 91, clientX: 20, clientY: 20 }));
       results.push(assertion("Pan mode does not create strokes", drawing.getStrokes().length === countBeforePan));
       results.push(assertion("Undo removes the newest map stroke", !!ui.undo() && drawing.getStrokes().length === 0));
+
+      var hydratedArtwork = {
+        id: "artwork-test-1",
+        creatorId: "member-test-1",
+        createdAt: new Date(1000),
+        surface: { type: "map" },
+        geometry: {
+          format: "geographic-strokes-v1",
+          strokes: [{
+            id: "hydrated-stroke-1",
+            points: [
+              { longitude: -73.99, latitude: 40.72 },
+              { longitude: -73.98, latitude: 40.73 },
+            ],
+            style: { color: "#ff4488", width: 4, opacity: 0.88 },
+          }],
+        },
+      };
+      results.push(assertion("persisted Artwork hydrates through SurfaceDrawingRuntime", drawing.hydrateArtwork(hydratedArtwork) === 1));
+      var hydratedStroke = drawing.getStrokes()[0];
+      results.push(assertion("hydrated Artwork retains ownership and geographic coordinates",
+        hydratedStroke && hydratedStroke.artworkId === hydratedArtwork.id
+          && hydratedStroke.creatorId === hydratedArtwork.creatorId
+          && hydratedStroke.points[0].longitude === -73.99
+          && hydratedStroke.points[0].latitude === 40.72,
+        hydratedStroke));
+      results.push(assertion("repeated hydration does not duplicate Artwork", drawing.hydrateArtwork(hydratedArtwork) === 0 && drawing.getStrokes().length === 1));
+      results.push(assertion("Undo still removes hydrated Artwork", !!ui.undo() && drawing.getStrokes().length === 0));
     } finally {
       surface.overlayObjects = originalObjects;
       workspace.setInteractionMode(originalMode);

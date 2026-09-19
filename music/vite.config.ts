@@ -2089,6 +2089,12 @@ export default defineConfig({
       input: {
         main: path.resolve(__dirname, 'index.html'),
         radioPlayer: path.resolve(__dirname, 'radio-player.html'),
+        subwayMemberRuntime: path.resolve(__dirname, 'src/member/subwayMemberRuntime.ts'),
+      },
+      output: {
+        entryFileNames: (chunk) => chunk.name === 'subwayMemberRuntime'
+          ? 'assets/subway-member-runtime.js'
+          : 'assets/[name]-[hash].js',
       },
     },
   },

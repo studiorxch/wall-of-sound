@@ -46,6 +46,64 @@ service cloud.firestore {
         && data.onboardingVersion >= 1;
     }
 
+    function hasValidArtworkStyle(style) {
+      return style is map
+        && style.keys().hasAll(['color', 'width', 'opacity'])
+        && style.keys().hasOnly(['color', 'width', 'opacity'])
+        && style.color is string
+        && style.width is number
+        && style.width > 0
+        && style.opacity is number
+        && style.opacity >= 0
+        && style.opacity <= 1;
+    }
+
+    function hasValidArtworkStroke(stroke) {
+      return stroke is map
+        && stroke.keys().hasAll(['id', 'points', 'style'])
+        && stroke.keys().hasOnly(['id', 'points', 'style'])
+        && stroke.id is string
+        && stroke.points is list
+        && stroke.points.size() >= 2
+        && hasValidArtworkStyle(stroke.style);
+    }
+
+    function hasValidArtworkShape(data) {
+      return data.keys().hasAll([
+          'creatorId',
+          'createdAt',
+          'updatedAt',
+          'surface',
+          'geometry',
+          'state',
+          'visibility'
+        ])
+        && data.keys().hasOnly([
+          'creatorId',
+          'createdAt',
+          'updatedAt',
+          'surface',
+          'geometry',
+          'state',
+          'visibility'
+        ])
+        && data.creatorId is string
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp
+        && data.surface is map
+        && data.surface.keys().hasOnly(['type'])
+        && data.surface.type == 'map'
+        && data.geometry is map
+        && data.geometry.keys().hasAll(['format', 'strokes'])
+        && data.geometry.keys().hasOnly(['format', 'strokes'])
+        && data.geometry.format == 'geographic-strokes-v1'
+        && data.geometry.strokes is list
+        && data.geometry.strokes.size() == 1
+        && hasValidArtworkStroke(data.geometry.strokes[0])
+        && data.state in ['draft', 'archived']
+        && data.visibility == 'private';
+    }
+
     match /members/{uid} {
       allow read: if isOwnMember(uid);
 
@@ -70,6 +128,33 @@ service cloud.firestore {
         && request.resource.data.lastSeenAt == request.time;
 
       allow delete: if false;
+    }
+
+    match /artworks/{artworkId} {
+      allow read: if isSignedIn() && resource.data.creatorId == request.auth.uid;
+
+      allow create: if isSignedIn()
+        && hasValidArtworkShape(request.resource.data)
+        && request.resource.data.creatorId == request.auth.uid
+        && request.resource.data.state == 'draft'
+        && request.resource.data.visibility == 'private'
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+
+      allow update: if isSignedIn()
+        && resource.data.creatorId == request.auth.uid
+        && request.resource.data.creatorId == request.auth.uid
+        && hasValidArtworkShape(request.resource.data)
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'geometry',
+          'updatedAt',
+          'state',
+          'visibility'
+        ])
+        && request.resource.data.updatedAt == request.time;
+
+      allow delete: if isSignedIn() && resource.data.creatorId == request.auth.uid;
     }
   }
 }

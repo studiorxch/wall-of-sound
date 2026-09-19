@@ -43,6 +43,11 @@
     return _ws() && _ws().getInteractionMode() === "draw";
   }
 
+  function _notify(name, detail) {
+    if (!global.document || typeof global.CustomEvent !== "function") return;
+    global.document.dispatchEvent(new global.CustomEvent(name, { detail: detail }));
+  }
+
   // ── Init ───────────────────────────────────────────────────────────────────
   function init(overlayCanvas) {
     _canvas = overlayCanvas;
@@ -130,15 +135,20 @@
     }
     var surf = _activeSurface();
     if (surf) {
-      _overlayObjects(surf).push({
+      var stroke = {
         id:        "stroke-" + (_nextId++),
         type:      "stroke",
         points:    _livePoints.slice(),
         style:     Object.assign({}, _brush),
         surface:   { type: "map", surfaceId: surf.surfaceId || surf.id },
         createdAt: Date.now(),
-      });
+      };
+      _overlayObjects(surf).push(stroke);
       if (_ws() && _ws().markModified) _ws().markModified(surf.id);
+      _notify("surface-drawing:stroke-committed", {
+        stroke: stroke,
+        surfaceId: surf.surfaceId || surf.id,
+      });
     }
     _livePoints = [];
     _renderAll();
@@ -236,6 +246,7 @@
         var removed = objects.splice(i, 1)[0];
         if (_ws() && _ws().markModified) _ws().markModified(surf.id);
         _renderAll();
+        _notify("surface-drawing:stroke-removed", { stroke: removed });
         return removed;
       }
     }
@@ -247,6 +258,52 @@
       ? (_ws() && _ws().getSurfaceById(surfaceId))
       : _activeSurface();
     return _overlayObjects(surf).filter(function (obj) { return obj && obj.type === "stroke"; });
+  }
+
+  function bindArtwork(strokeId, artworkId, creatorId) {
+    var stroke = getStrokes().find(function (item) { return item.id === strokeId; });
+    if (!stroke) return false;
+    stroke.artworkId = artworkId;
+    stroke.creatorId = creatorId;
+    return true;
+  }
+
+  function hydrateArtwork(artwork) {
+    if (!artwork || !artwork.id || !artwork.geometry || !Array.isArray(artwork.geometry.strokes)) return 0;
+    var surf = _activeSurface();
+    if (!surf) return 0;
+    var objects = _overlayObjects(surf);
+    if (objects.some(function (item) { return item.artworkId === artwork.id; })) return 0;
+    var added = 0;
+    artwork.geometry.strokes.forEach(function (storedStroke) {
+      if (!storedStroke || !Array.isArray(storedStroke.points) || storedStroke.points.length < 2) return;
+      objects.push({
+        id: storedStroke.id || ("artwork-stroke-" + artwork.id),
+        artworkId: artwork.id,
+        creatorId: artwork.creatorId,
+        type: "stroke",
+        points: storedStroke.points.map(function (point) {
+          return { x: 0, y: 0, longitude: point.longitude, latitude: point.latitude };
+        }),
+        style: Object.assign({}, storedStroke.style),
+        surface: { type: "map", surfaceId: surf.surfaceId || surf.id },
+        createdAt: artwork.createdAt instanceof Date ? artwork.createdAt.getTime() : Date.parse(artwork.createdAt),
+      });
+      added += 1;
+    });
+    _renderAll();
+    return added;
+  }
+
+  function removePersistedStrokes() {
+    var surf = _activeSurface();
+    if (!surf) return 0;
+    var objects = _overlayObjects(surf);
+    var retained = objects.filter(function (item) { return !item.artworkId; });
+    var removed = objects.length - retained.length;
+    surf.overlayObjects = retained;
+    _renderAll();
+    return removed;
   }
 
   // Force a re-render (called externally after camera change)
@@ -261,6 +318,9 @@
     clearSurface:   clearSurface,
     undo:           undo,
     getStrokes:     getStrokes,
+    bindArtwork:    bindArtwork,
+    hydrateArtwork: hydrateArtwork,
+    removePersistedStrokes: removePersistedStrokes,
     __test: {
       capturePoint: function (clientX, clientY) {
         return _capturePoint({ clientX: clientX, clientY: clientY });
