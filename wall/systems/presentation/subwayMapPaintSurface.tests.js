@@ -48,25 +48,24 @@
       var hydratedArtwork = {
         id: "artwork-test-1",
         creatorId: "member-test-1",
+        surfaceId: "map:new-york",
         createdAt: new Date(1000),
-        surface: { type: "map" },
-        geometry: {
-          format: "geographic-strokes-v1",
-          strokes: [{
-            id: "hydrated-stroke-1",
-            points: [
+        marks: [{
+            id: "hydrated-mark-1",
+            type: "stroke",
+            geometry: { format: "geographic-stroke-v1", points: [
               { longitude: -73.99, latitude: 40.72 },
               { longitude: -73.98, latitude: 40.73 },
-            ],
+            ] },
             style: { color: "#ff4488", width: 4, opacity: 0.88 },
           }],
-        },
       };
       results.push(assertion("persisted Artwork hydrates through SurfaceDrawingRuntime", drawing.hydrateArtwork(hydratedArtwork) === 1));
       var hydratedStroke = drawing.getStrokes()[0];
       results.push(assertion("hydrated Artwork retains ownership and geographic coordinates",
         hydratedStroke && hydratedStroke.artworkId === hydratedArtwork.id
           && hydratedStroke.creatorId === hydratedArtwork.creatorId
+          && hydratedStroke.markId === "hydrated-mark-1"
           && hydratedStroke.points[0].longitude === -73.99
           && hydratedStroke.points[0].latitude === 40.72,
         hydratedStroke));

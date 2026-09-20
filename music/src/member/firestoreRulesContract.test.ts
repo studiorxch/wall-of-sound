@@ -21,4 +21,12 @@ describe("Firestore Member and Artwork ownership contract", () => {
     expect(rules).toContain("request.resource.data.visibility == 'private'");
     expect(rules).not.toMatch(/match \/\{document=\*\*\}[\s\S]*allow/);
   });
+
+  it("accepts the embedded Mark composition shape while preserving legacy compatibility", () => {
+    expect(rules).toContain("hasValidArtworkV1Shape");
+    expect(rules).toContain("hasValidStrokeMark");
+    expect(rules).toContain("data.marks.size() >= 1");
+    expect(rules).toContain("request.resource.data.surfaceId == resource.data.surfaceId");
+    expect(rules).toContain("hasValidArtworkShape(request.resource.data) || hasValidArtworkV1Shape(request.resource.data)");
+  });
 });

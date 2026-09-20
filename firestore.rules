@@ -104,6 +104,49 @@ service cloud.firestore {
         && data.visibility == 'private';
     }
 
+    function hasValidStrokeMark(mark) {
+      return mark is map
+        && mark.keys().hasAll(['id', 'type', 'createdAt', 'geometry', 'style'])
+        && mark.keys().hasOnly(['id', 'type', 'createdAt', 'geometry', 'style'])
+        && mark.id is string
+        && mark.type == 'stroke'
+        && mark.createdAt is timestamp
+        && mark.geometry is map
+        && mark.geometry.keys().hasAll(['format', 'points'])
+        && mark.geometry.keys().hasOnly(['format', 'points'])
+        && mark.geometry.format == 'geographic-stroke-v1'
+        && mark.geometry.points is list
+        && mark.geometry.points.size() >= 2
+        && hasValidArtworkStyle(mark.style);
+    }
+
+    function hasValidArtworkV1Shape(data) {
+      return data.keys().hasAll(['creatorId', 'surfaceId', 'createdAt', 'updatedAt', 'composition', 'marks', 'state', 'visibility'])
+        && data.keys().hasOnly(['creatorId', 'surfaceId', 'createdAt', 'updatedAt', 'composition', 'marks', 'state', 'visibility'])
+        && data.creatorId is string
+        && data.surfaceId is string
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp
+        && data.composition is map
+        && data.composition.keys().hasAll(['bounds', 'startedAt', 'lastEditedAt'])
+        && data.composition.keys().hasOnly(['bounds', 'startedAt', 'lastEditedAt'])
+        && data.composition.bounds is map
+        && data.composition.bounds.keys().hasAll(['west', 'south', 'east', 'north'])
+        && data.composition.bounds.keys().hasOnly(['west', 'south', 'east', 'north'])
+        && data.composition.bounds.west is number
+        && data.composition.bounds.south is number
+        && data.composition.bounds.east is number
+        && data.composition.bounds.north is number
+        && data.composition.startedAt is timestamp
+        && data.composition.lastEditedAt is timestamp
+        && data.marks is list
+        && data.marks.size() >= 1
+        && data.marks.size() <= 500
+        && hasValidStrokeMark(data.marks[0])
+        && data.state in ['draft', 'archived']
+        && data.visibility == 'private';
+    }
+
     match /members/{uid} {
       allow read: if isOwnMember(uid);
 
@@ -134,24 +177,33 @@ service cloud.firestore {
       allow read: if isSignedIn() && resource.data.creatorId == request.auth.uid;
 
       allow create: if isSignedIn()
-        && hasValidArtworkShape(request.resource.data)
+        && (hasValidArtworkShape(request.resource.data) || hasValidArtworkV1Shape(request.resource.data))
         && request.resource.data.creatorId == request.auth.uid
         && request.resource.data.state == 'draft'
         && request.resource.data.visibility == 'private'
         && request.resource.data.createdAt == request.time
+        && (!request.resource.data.keys().hasAny(['composition'])
+          || (request.resource.data.composition.startedAt == request.time
+            && request.resource.data.composition.lastEditedAt == request.time))
         && request.resource.data.updatedAt == request.time;
 
       allow update: if isSignedIn()
         && resource.data.creatorId == request.auth.uid
         && request.resource.data.creatorId == request.auth.uid
-        && hasValidArtworkShape(request.resource.data)
+        && (hasValidArtworkShape(request.resource.data) || hasValidArtworkV1Shape(request.resource.data))
         && request.resource.data.createdAt == resource.data.createdAt
+        && (!resource.data.keys().hasAny(['surfaceId']) || request.resource.data.surfaceId == resource.data.surfaceId)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'geometry',
+          'surface',
+          'surfaceId',
+          'composition',
+          'marks',
           'updatedAt',
           'state',
           'visibility'
         ])
+        && (!request.resource.data.keys().hasAny(['composition']) || request.resource.data.composition.lastEditedAt == request.time)
         && request.resource.data.updatedAt == request.time;
 
       allow delete: if isSignedIn() && resource.data.creatorId == request.auth.uid;

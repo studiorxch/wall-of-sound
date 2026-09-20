@@ -8,11 +8,15 @@ export type {
 } from "./data/memberTypes.js";
 export type {
   ArtworkRepository,
+  ArtworkMark,
   CreateMapArtworkInput,
   GeographicArtworkPoint,
+  GeographicBounds,
   GeographicArtworkStroke,
   MapArtwork,
+  StrokeMark,
 } from "./data/artworkTypes.js";
+export { ARTWORK_GROUPING_PROXIMITY_DEGREES, boundsForMarks, selectArtworkForMark } from "./logic/artworkDocument.js";
 export {
   serializePublicMember,
   type PublicStudioRichMember,

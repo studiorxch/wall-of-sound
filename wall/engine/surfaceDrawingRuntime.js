@@ -260,34 +260,38 @@
     return _overlayObjects(surf).filter(function (obj) { return obj && obj.type === "stroke"; });
   }
 
-  function bindArtwork(strokeOrId, artworkId, creatorId) {
+  function bindArtwork(strokeOrId, artworkId, markId, creatorId, surfaceId) {
     var stroke = typeof strokeOrId === "object" && strokeOrId
       ? strokeOrId
       : getStrokes().find(function (item) { return item.id === strokeOrId; });
     if (!stroke) return false;
     stroke.artworkId = artworkId;
+    stroke.markId = markId;
     stroke.creatorId = creatorId;
+    stroke.surfaceId = surfaceId;
     return true;
   }
 
   function hydrateArtwork(artwork) {
-    if (!artwork || !artwork.id || !artwork.geometry || !Array.isArray(artwork.geometry.strokes)) return 0;
+    if (!artwork || !artwork.id || !Array.isArray(artwork.marks)) return 0;
     var surf = _activeSurface();
     if (!surf) return 0;
     var objects = _overlayObjects(surf);
-    if (objects.some(function (item) { return item.artworkId === artwork.id; })) return 0;
     var added = 0;
-    artwork.geometry.strokes.forEach(function (storedStroke) {
-      if (!storedStroke || !Array.isArray(storedStroke.points) || storedStroke.points.length < 2) return;
+    artwork.marks.forEach(function (mark) {
+      if (!mark || mark.type !== "stroke" || !mark.geometry || !Array.isArray(mark.geometry.points) || mark.geometry.points.length < 2) return;
+      if (objects.some(function (item) { return item.artworkId === artwork.id && item.markId === mark.id; })) return;
       objects.push({
-        id: storedStroke.id || ("artwork-stroke-" + artwork.id),
+        id: "artwork-mark-" + mark.id,
         artworkId: artwork.id,
+        markId: mark.id,
         creatorId: artwork.creatorId,
+        surfaceId: artwork.surfaceId,
         type: "stroke",
-        points: storedStroke.points.map(function (point) {
+        points: mark.geometry.points.map(function (point) {
           return { x: 0, y: 0, longitude: point.longitude, latitude: point.latitude };
         }),
-        style: Object.assign({}, storedStroke.style),
+        style: Object.assign({}, mark.style),
         surface: { type: "map", surfaceId: surf.surfaceId || surf.id },
         createdAt: artwork.createdAt instanceof Date ? artwork.createdAt.getTime() : Date.parse(artwork.createdAt),
       });

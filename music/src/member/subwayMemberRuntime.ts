@@ -12,7 +12,7 @@ import {
 type WallRuntime = {
   Workspace?: { getActiveSurface(): unknown };
   SurfaceDrawingRuntime?: {
-    bindArtwork(stroke: WallStroke, artworkId: string, creatorId: string): boolean;
+    bindArtwork(stroke: WallStroke, artworkId: string, markId: string, creatorId: string, surfaceId: string): boolean;
     hydrateArtwork(artwork: unknown): number;
     removePersistedStrokes(): number;
   };
@@ -40,8 +40,8 @@ function drawingRuntime() {
 const artworkPersistence = createMapArtworkPersistenceBridge({
   repository: artworkRepository,
   drawing: {
-    bindArtwork(stroke, artworkId, creatorId) {
-      return drawingRuntime()?.bindArtwork(stroke, artworkId, creatorId) ?? false;
+    bindArtwork(stroke, artworkId, markId, creatorId, surfaceId) {
+      return drawingRuntime()?.bindArtwork(stroke, artworkId, markId, creatorId, surfaceId) ?? false;
     },
   },
   getAuthenticatedMemberId() {
@@ -127,6 +127,7 @@ async function hydrateOwnedArtwork(memberId: string): Promise<void> {
   if (!drawing) return;
   drawing.removePersistedStrokes();
   const artworks = await artworkRepository.listOwnedMapArtwork(memberId);
+  artworkPersistence.replaceKnownArtworks(artworks);
   artworks.filter((artwork) => artwork.state === "draft").forEach((artwork) => drawing.hydrateArtwork(artwork));
   hydratedMemberId = memberId;
 }
