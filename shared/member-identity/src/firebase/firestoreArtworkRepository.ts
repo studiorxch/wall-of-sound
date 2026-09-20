@@ -16,9 +16,12 @@ import {
 } from "firebase/firestore";
 import type {
   ArtworkRepository,
+  Artwork,
   ArtworkMark,
+  CreateArtworkInput,
   CreateMapArtworkInput,
   GeographicArtworkPoint,
+  LocalArtworkPoint,
   MapArtwork,
 } from "../data/artworkTypes.js";
 import { boundsForMarks, createMapArtworkDocument, validateArtworkMark } from "../logic/artworkDocument.js";
@@ -43,22 +46,32 @@ function decodePoint(value: unknown): GeographicArtworkPoint {
   return { longitude: point.longitude as number, latitude: point.latitude as number };
 }
 
+function decodeLocalPoint(value: unknown): LocalArtworkPoint {
+  if (!value || typeof value !== "object") throw new Error("invalid_artwork_point");
+  const point = value as Record<string, unknown>;
+  if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) throw new Error("invalid_artwork_point");
+  return { x: point.x as number, y: point.y as number };
+}
+
 function decodeMark(value: unknown): ArtworkMark {
   if (!value || typeof value !== "object") throw new Error("invalid_artwork_stroke");
   const stroke = value as Record<string, unknown>;
   const style = stroke.style as Record<string, unknown> | null;
   const geometry = stroke.geometry as Record<string, unknown> | null;
-  const decoded: ArtworkMark = {
+  const format = geometry?.format;
+  const base = {
     id: String(stroke.id ?? ""),
-    type: "stroke",
+    type: "stroke" as const,
     createdAt: stroke.createdAt instanceof Timestamp ? stroke.createdAt.toDate() : new Date(0),
-    geometry: { format: "geographic-stroke-v1", points: Array.isArray(geometry?.points) ? geometry.points.map(decodePoint) : [] },
     style: {
       color: String(style?.color ?? ""),
       width: Number(style?.width),
       opacity: Number(style?.opacity),
     },
   };
+  const decoded: ArtworkMark = format === "local-2d-stroke-v1"
+    ? { ...base, geometry: { format, points: Array.isArray(geometry?.points) ? geometry.points.map(decodeLocalPoint) : [] } }
+    : { ...base, geometry: { format: "geographic-stroke-v1", points: Array.isArray(geometry?.points) ? geometry.points.map(decodePoint) : [] } };
   validateArtworkMark(decoded);
   return decoded;
 }
@@ -96,18 +109,22 @@ function decodeArtwork(snapshot: DocumentSnapshot<DocumentData>): MapArtwork {
   return decodeArtworkData(snapshot.id, snapshot.data());
 }
 
-function storedArtwork(artwork: MapArtwork, updatedAt: ReturnType<typeof serverTimestamp>) {
+function storedArtwork(artwork: Artwork, updatedAt: ReturnType<typeof serverTimestamp>) {
   return { creatorId: artwork.creatorId, surfaceId: artwork.surfaceId, createdAt: Timestamp.fromDate(artwork.createdAt), updatedAt, composition: { bounds: boundsForMarks(artwork.marks), startedAt: Timestamp.fromDate(artwork.composition.startedAt), lastEditedAt: updatedAt }, marks: artwork.marks, state: artwork.state, visibility: artwork.visibility };
 }
 
 export class FirestoreArtworkRepository implements ArtworkRepository {
   constructor(private readonly firestore: Firestore) {}
 
-  async createMapArtwork(input: CreateMapArtworkInput): Promise<MapArtwork> {
+  async createArtwork(input: CreateArtworkInput): Promise<Artwork> {
     assertIdentifier(input.creatorId, "member_uid");
     const reference = doc(collection(this.firestore, ARTWORK_COLLECTION_PATH));
     await setDoc(reference, createMapArtworkDocument(input, serverTimestamp()));
     return decodeArtwork(await getDoc(reference));
+  }
+
+  async createMapArtwork(input: CreateMapArtworkInput): Promise<MapArtwork> {
+    return this.createArtwork(input);
   }
 
   async appendOwnedArtworkMark(artworkId: string, creatorId: string, mark: ArtworkMark): Promise<MapArtwork> {
@@ -138,6 +155,10 @@ export class FirestoreArtworkRepository implements ArtworkRepository {
   }
 
   async listOwnedMapArtwork(creatorId: string): Promise<readonly MapArtwork[]> {
+    return this.listOwnedArtwork(creatorId);
+  }
+
+  async listOwnedArtwork(creatorId: string): Promise<readonly Artwork[]> {
     assertIdentifier(creatorId, "member_uid");
     const snapshot = await getDocs(query(
       collection(this.firestore, ARTWORK_COLLECTION_PATH),

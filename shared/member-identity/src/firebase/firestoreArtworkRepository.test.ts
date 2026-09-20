@@ -16,4 +16,18 @@ describe("legacy Artwork compatibility", () => {
     expect(artwork.marks[0]).toMatchObject({ id: "stroke-1", type: "stroke", geometry: { format: "geographic-stroke-v1" } });
     expect(artwork.composition.bounds).toEqual({ west: -73.99, south: 40.72, east: -73.98, north: 40.73 });
   });
+
+  it("hydrates canonical local Blackbook Marks with stable identities", () => {
+    const time = Timestamp.fromDate(new Date("2026-01-01T00:00:00Z"));
+    const artwork = decodeArtworkData("blackbook-art-1", {
+      creatorId: "member-1", createdAt: time, updatedAt: time,
+      surfaceId: "blackbook:studio-rich-main:page:page-1",
+      composition: { bounds: { minX: 0.1, minY: 0.2, maxX: 0.3, maxY: 0.4 }, startedAt: time, lastEditedAt: time },
+      marks: [{ id: "blackbook-mark-1", type: "stroke", createdAt: time, geometry: { format: "local-2d-stroke-v1", points: [{ x: 0.1, y: 0.2 }, { x: 0.3, y: 0.4 }] }, style: { color: "#171412", width: 7, opacity: 0.9 } }],
+      state: "draft", visibility: "private",
+    });
+    expect(artwork.id).toBe("blackbook-art-1");
+    expect(artwork.surfaceId).toBe("blackbook:studio-rich-main:page:page-1");
+    expect(artwork.marks[0]).toMatchObject({ id: "blackbook-mark-1", geometry: { format: "local-2d-stroke-v1" } });
+  });
 });

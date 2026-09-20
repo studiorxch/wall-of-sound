@@ -1,5 +1,7 @@
 import type {
   ArtworkRepository,
+  Artwork,
+  ArtworkMark,
   MapArtwork,
   StrokeMark,
 } from "@studiorich/member-identity";
@@ -24,14 +26,16 @@ export interface WallStroke {
   };
 }
 
-interface ArtworkBindingRuntime {
-  bindArtwork(stroke: WallStroke, artworkId: string, markId: string, creatorId: string, surfaceId: string): boolean;
+export interface ArtworkBindingRuntime<TStroke extends object> {
+  bindArtwork(stroke: TStroke, artworkId: string, markId: string, creatorId: string, surfaceId: string): boolean;
 }
 
-interface MapArtworkPersistenceBridgeOptions {
+export interface ArtworkPersistenceBridgeOptions<TStroke extends object> {
   readonly repository: ArtworkRepository;
-  readonly drawing: ArtworkBindingRuntime;
+  readonly drawing: ArtworkBindingRuntime<TStroke>;
   readonly getAuthenticatedMemberId: () => string | null;
+  readonly surfaceId: string;
+  readonly toMark: (stroke: TStroke, markId: string) => ArtworkMark;
   readonly createMarkId?: () => string;
 }
 
@@ -60,38 +64,40 @@ export function toStrokeMark(stroke: WallStroke, markId: string): StrokeMark {
   };
 }
 
-export function createMapArtworkPersistenceBridge({
+export function createArtworkPersistenceBridge<TStroke extends { artworkId?: string; markId?: string; creatorId?: string; surfaceId?: string }>({
   repository,
   drawing,
   getAuthenticatedMemberId,
+  surfaceId,
+  toMark,
   createMarkId = () => crypto.randomUUID(),
-}: MapArtworkPersistenceBridgeOptions) {
-  const removedBeforeSave = new WeakSet<WallStroke>();
-  const artworks = new Map<string, MapArtwork>();
+}: ArtworkPersistenceBridgeOptions<TStroke>) {
+  const removedBeforeSave = new WeakSet<TStroke>();
+  const artworks = new Map<string, Artwork>();
   let persistenceQueue = Promise.resolve();
 
-  function retain(artwork: MapArtwork | null, removedId?: string) {
+  function retain(artwork: Artwork | null, removedId?: string) {
     if (removedId) artworks.delete(removedId);
     if (artwork) artworks.set(artwork.id, artwork);
   }
 
   return {
-    replaceKnownArtworks(known: readonly MapArtwork[]): void {
+    replaceKnownArtworks(known: readonly Artwork[]): void {
       artworks.clear();
       known.forEach((artwork) => artworks.set(artwork.id, artwork));
     },
 
-    persistStroke(stroke: WallStroke): Promise<void> {
+    persistStroke(stroke: TStroke): Promise<void> {
       const memberId = getAuthenticatedMemberId();
       if (!memberId) return Promise.resolve();
       const markId = stroke.markId ?? createMarkId();
       stroke.markId = markId;
-      const mark = toStrokeMark(stroke, markId);
+      const mark = toMark(stroke, markId);
       const operation = persistenceQueue.then(async () => {
-        const candidate = selectArtworkForMark([...artworks.values()], memberId, SUBWAY_MAP_SURFACE_ID, mark);
+        const candidate = selectArtworkForMark([...artworks.values()], memberId, surfaceId, mark);
         const artwork = candidate
           ? await repository.appendOwnedArtworkMark(candidate.id, memberId, mark)
-          : await repository.createMapArtwork({ creatorId: memberId, surfaceId: SUBWAY_MAP_SURFACE_ID, mark });
+          : await (repository.createArtwork ?? repository.createMapArtwork).call(repository, { creatorId: memberId, surfaceId, mark });
         retain(artwork);
         if (removedBeforeSave.has(stroke)) {
           removedBeforeSave.delete(stroke);
@@ -99,7 +105,7 @@ export function createMapArtworkPersistenceBridge({
           retain(remaining, remaining ? undefined : artwork.id);
           return;
         }
-        if (!drawing.bindArtwork(stroke, artwork.id, markId, memberId, SUBWAY_MAP_SURFACE_ID)) {
+        if (!drawing.bindArtwork(stroke, artwork.id, markId, memberId, surfaceId)) {
           const remaining = await repository.removeOwnedArtworkMark(artwork.id, memberId, markId);
           retain(remaining, remaining ? undefined : artwork.id);
         }
@@ -108,7 +114,7 @@ export function createMapArtworkPersistenceBridge({
       return operation;
     },
 
-    async removeStroke(stroke: WallStroke): Promise<void> {
+    async removeStroke(stroke: TStroke): Promise<void> {
       const memberId = getAuthenticatedMemberId();
       if (!memberId) return;
       if (!stroke.artworkId) {
@@ -121,4 +127,8 @@ export function createMapArtworkPersistenceBridge({
       retain(remaining, remaining ? undefined : stroke.artworkId);
     },
   };
+}
+
+export function createMapArtworkPersistenceBridge(options: Omit<ArtworkPersistenceBridgeOptions<WallStroke>, "surfaceId" | "toMark">) {
+  return createArtworkPersistenceBridge({ ...options, surfaceId: SUBWAY_MAP_SURFACE_ID, toMark: toStrokeMark });
 }

@@ -29,4 +29,10 @@ describe("Firestore Member and Artwork ownership contract", () => {
     expect(rules).toContain("request.resource.data.surfaceId == resource.data.surfaceId");
     expect(rules).toContain("hasValidArtworkShape(request.resource.data) || hasValidArtworkV1Shape(request.resource.data)");
   });
+
+  it("accepts local Blackbook geometry and local bounds without weakening ownership", () => {
+    expect(rules).toContain("'local-2d-stroke-v1'");
+    expect(rules).toContain("['minX', 'minY', 'maxX', 'maxY']");
+    expect(rules).toContain("allow read: if isSignedIn() && resource.data.creatorId == request.auth.uid");
+  });
 });

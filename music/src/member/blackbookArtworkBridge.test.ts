@@ -1,0 +1,45 @@
+import { describe, expect, it, vi } from "vitest";
+import { selectArtworkForMark, type Artwork, type ArtworkRepository } from "@studiorich/member-identity";
+import { BLACKBOOK_PAGE_SURFACE_ID, createBlackbookArtworkPersistenceBridge, toLocalStrokeMark, type BlackbookStroke } from "./blackbookArtworkBridge";
+
+function stroke(id: string, offset = 0): BlackbookStroke {
+  return { id, points: [{ x: 0.1 + offset, y: 0.2 }, { x: 0.2 + offset, y: 0.3 }], style: { color: "#171412", width: 7, opacity: 0.9 } };
+}
+
+function artwork(id: string, marks = [toLocalStrokeMark(stroke("a"), "mark-a", new Date(0))]): Artwork {
+  return { id, creatorId: "member-1", surfaceId: BLACKBOOK_PAGE_SURFACE_ID, createdAt: new Date(0), updatedAt: new Date(0), composition: { bounds: { minX: 0.1, minY: 0.2, maxX: 0.2, maxY: 0.3 }, startedAt: new Date(0), lastEditedAt: new Date(0) }, marks, state: "draft", visibility: "private" };
+}
+
+describe("Blackbook Artwork Surface bridge", () => {
+  it("uses a stable Blackbook page Surface identity and local normalized points", () => {
+    expect(BLACKBOOK_PAGE_SURFACE_ID).toBe("blackbook:studio-rich-main:page:page-1");
+    const mark = toLocalStrokeMark(stroke("stroke-a"), "mark-a", new Date(0));
+    expect(mark.geometry).toEqual({ format: "local-2d-stroke-v1", points: [{ x: 0.1, y: 0.2 }, { x: 0.2, y: 0.3 }] });
+  });
+
+  it("composes nearby Marks, removes one Mark, then deletes the Artwork on final Mark", async () => {
+    const first = artwork("art-1");
+    const secondMark = toLocalStrokeMark(stroke("b", 0.01), "mark-b", new Date(1));
+    const twoMarks = artwork("art-1", [...first.marks, secondMark]);
+    expect(selectArtworkForMark([first], "member-1", BLACKBOOK_PAGE_SURFACE_ID, secondMark)?.id).toBe("art-1");
+    const repository: ArtworkRepository = {
+      createArtwork: vi.fn(async () => first), listOwnedArtwork: vi.fn(async () => [first]),
+      createMapArtwork: vi.fn(async () => first), listOwnedMapArtwork: vi.fn(async () => [first]),
+      appendOwnedArtworkMark: vi.fn(async () => twoMarks),
+      removeOwnedArtworkMark: vi.fn().mockResolvedValueOnce(first).mockResolvedValueOnce(null),
+      deleteOwnedArtwork: vi.fn(),
+    };
+    const bindArtwork = vi.fn((item: BlackbookStroke, artworkId: string, markId: string, creatorId: string, surfaceId: string) => Boolean(Object.assign(item, { artworkId, markId, creatorId, surfaceId })));
+    const bridge = createBlackbookArtworkPersistenceBridge({ repository, drawing: { bindArtwork }, getAuthenticatedMemberId: () => "member-1", createMarkId: () => "mark-b" });
+    bridge.replaceKnownArtworks([first]);
+    const second = stroke("b", 0.01);
+    await bridge.persistStroke(second);
+    await bridge.removeStroke(second);
+    expect(repository.appendOwnedArtworkMark).toHaveBeenCalledWith("art-1", "member-1", expect.objectContaining({ id: "mark-b" }));
+    expect(repository.removeOwnedArtworkMark).toHaveBeenCalledWith("art-1", "member-1", "mark-b");
+
+    const hydratedFirst = Object.assign(stroke("a"), { artworkId: "art-1", markId: "mark-a", creatorId: "member-1", surfaceId: BLACKBOOK_PAGE_SURFACE_ID });
+    await bridge.removeStroke(hydratedFirst);
+    expect(repository.removeOwnedArtworkMark).toHaveBeenLastCalledWith("art-1", "member-1", "mark-a");
+  });
+});

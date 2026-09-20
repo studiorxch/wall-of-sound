@@ -12,6 +12,14 @@ const mark = {
   style: { color: "#ff4488", width: 4, opacity: 0.88 },
 } as const;
 
+const localMark = {
+  id: "local-mark-1",
+  type: "stroke" as const,
+  createdAt: new Date("2026-01-01T00:00:00Z"),
+  geometry: { format: "local-2d-stroke-v1" as const, points: [{ x: 0.1, y: 0.2 }, { x: 0.2, y: 0.3 }] },
+  style: { color: "#171412", width: 7, opacity: 0.9 },
+} as const;
+
 describe("createMapArtworkDocument", () => {
   it("creates private draft map artwork owned by the authenticated member", () => {
     expect(createMapArtworkDocument({ creatorId: "member-uid", surfaceId: "map:new-york", mark }, "server-time")).toEqual({
@@ -47,5 +55,20 @@ describe("createMapArtworkDocument", () => {
   it("expands bounds across all marks", () => {
     const other = { ...mark, id: "mark-2", geometry: { ...mark.geometry, points: [{ longitude: -74.1, latitude: 40.6 }, { longitude: -73.8, latitude: 40.9 }] } };
     expect(boundsForMarks([mark, other])).toEqual({ west: -74.1, south: 40.6, east: -73.8, north: 40.9 });
+  });
+
+  it("supports local page coordinates without treating them as geography", () => {
+    expect(createMapArtworkDocument({ creatorId: "member-uid", surfaceId: "blackbook:book-1:page:page-1", mark: localMark }, "server-time").composition.bounds)
+      .toEqual({ minX: 0.1, minY: 0.2, maxX: 0.2, maxY: 0.3 });
+    expect(() => createMapArtworkDocument({ creatorId: "member-uid", surfaceId: "blackbook:book-1:page:page-1", mark: { ...localMark, geometry: { ...localMark.geometry, points: [{ x: 1.2, y: 0.2 }, localMark.geometry.points[1]] } } }, "server-time"))
+      .toThrow("invalid_artwork_local_points");
+  });
+
+  it("groups related local Marks only on the same local Surface and format", () => {
+    const base = { id: "local-art", creatorId: "member-uid", surfaceId: "blackbook:book-1:page:page-1", createdAt: new Date(0), updatedAt: new Date(0), composition: { bounds: boundsForMarks([localMark]), startedAt: new Date(0), lastEditedAt: new Date(0) }, marks: [localMark], state: "draft" as const, visibility: "private" as const };
+    const nearby = { ...localMark, id: "local-mark-2", geometry: { ...localMark.geometry, points: [{ x: 0.21, y: 0.3 }, { x: 0.3, y: 0.4 }] } };
+    expect(selectArtworkForMark([base], "member-uid", base.surfaceId, nearby)?.id).toBe("local-art");
+    expect(selectArtworkForMark([base], "member-uid", "blackbook:book-1:page:page-2", nearby)).toBeNull();
+    expect(selectArtworkForMark([base], "member-uid", base.surfaceId, mark)).toBeNull();
   });
 });

@@ -8,15 +8,22 @@ export type {
 } from "./data/memberTypes.js";
 export type {
   ArtworkRepository,
+  Artwork,
+  ArtworkBounds,
   ArtworkMark,
+  CreateArtworkInput,
   CreateMapArtworkInput,
   GeographicArtworkPoint,
   GeographicBounds,
   GeographicArtworkStroke,
+  GeographicStrokeMark,
+  LocalArtworkPoint,
+  LocalBounds,
+  LocalStrokeMark,
   MapArtwork,
   StrokeMark,
 } from "./data/artworkTypes.js";
-export { ARTWORK_GROUPING_PROXIMITY_DEGREES, boundsForMarks, selectArtworkForMark } from "./logic/artworkDocument.js";
+export { ARTWORK_GROUPING_PROXIMITY_DEGREES, ARTWORK_GROUPING_PROXIMITY_LOCAL, boundsForMarks, selectArtworkForMark } from "./logic/artworkDocument.js";
 export {
   serializePublicMember,
   type PublicStudioRichMember,

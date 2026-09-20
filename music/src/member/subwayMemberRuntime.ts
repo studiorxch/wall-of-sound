@@ -126,7 +126,7 @@ async function hydrateOwnedArtwork(memberId: string): Promise<void> {
   const drawing = drawingRuntime();
   if (!drawing) return;
   drawing.removePersistedStrokes();
-  const artworks = await artworkRepository.listOwnedMapArtwork(memberId);
+  const artworks = (await (artworkRepository.listOwnedArtwork ?? artworkRepository.listOwnedMapArtwork).call(artworkRepository, memberId)).filter((artwork) => artwork.surfaceId === "map:new-york");
   artworkPersistence.replaceKnownArtworks(artworks);
   artworks.filter((artwork) => artwork.state === "draft").forEach((artwork) => drawing.hydrateArtwork(artwork));
   hydratedMemberId = memberId;

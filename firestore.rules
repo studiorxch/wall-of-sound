@@ -114,7 +114,7 @@ service cloud.firestore {
         && mark.geometry is map
         && mark.geometry.keys().hasAll(['format', 'points'])
         && mark.geometry.keys().hasOnly(['format', 'points'])
-        && mark.geometry.format == 'geographic-stroke-v1'
+        && mark.geometry.format in ['geographic-stroke-v1', 'local-2d-stroke-v1']
         && mark.geometry.points is list
         && mark.geometry.points.size() >= 2
         && hasValidArtworkStyle(mark.style);
@@ -131,12 +131,18 @@ service cloud.firestore {
         && data.composition.keys().hasAll(['bounds', 'startedAt', 'lastEditedAt'])
         && data.composition.keys().hasOnly(['bounds', 'startedAt', 'lastEditedAt'])
         && data.composition.bounds is map
-        && data.composition.bounds.keys().hasAll(['west', 'south', 'east', 'north'])
-        && data.composition.bounds.keys().hasOnly(['west', 'south', 'east', 'north'])
-        && data.composition.bounds.west is number
-        && data.composition.bounds.south is number
-        && data.composition.bounds.east is number
-        && data.composition.bounds.north is number
+        && ((data.composition.bounds.keys().hasAll(['west', 'south', 'east', 'north'])
+            && data.composition.bounds.keys().hasOnly(['west', 'south', 'east', 'north'])
+            && data.composition.bounds.west is number
+            && data.composition.bounds.south is number
+            && data.composition.bounds.east is number
+            && data.composition.bounds.north is number)
+          || (data.composition.bounds.keys().hasAll(['minX', 'minY', 'maxX', 'maxY'])
+            && data.composition.bounds.keys().hasOnly(['minX', 'minY', 'maxX', 'maxY'])
+            && data.composition.bounds.minX is number
+            && data.composition.bounds.minY is number
+            && data.composition.bounds.maxX is number
+            && data.composition.bounds.maxY is number))
         && data.composition.startedAt is timestamp
         && data.composition.lastEditedAt is timestamp
         && data.marks is list
