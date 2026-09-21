@@ -21,6 +21,18 @@ const localMark = {
 } as const;
 
 describe("createMapArtworkDocument", () => {
+  it("composes Pencil and graphite-erasure Marks on a local Surface without coupling supply identity to coordinates", () => {
+    const pencil = { ...localMark, material: { supplyId: "pencil" as const, materialId: "graphite" as const } };
+    const erase = { id: "erase-1", type: "material-erasure" as const, createdAt: new Date(1), geometry: { format: "local-2d-erasure-v1" as const, points: [{ x: 0.22, y: 0.3 }, { x: 0.25, y: 0.35 }] }, targetMaterialId: "graphite" as const, width: 20 };
+    const base = { id: "local-art", creatorId: "member-uid", surfaceId: "blackbook:book-1:page:page-1", createdAt: new Date(0), updatedAt: new Date(0), composition: { bounds: boundsForMarks([pencil]), startedAt: new Date(0), lastEditedAt: new Date(0) }, marks: [pencil], state: "draft" as const, visibility: "private" as const };
+    expect(selectArtworkForMark([base], base.creatorId, base.surfaceId, erase)?.id).toBe("local-art");
+    expect(boundsForMarks([pencil, erase])).toEqual({ minX: 0.1, minY: 0.2, maxX: 0.25, maxY: 0.35 });
+  });
+
+  it("allows Pencil material identity on geographic Marks without a Map-specific supply", () => {
+    const pencil = { ...mark, material: { supplyId: "pencil" as const, materialId: "graphite" as const } };
+    expect(createMapArtworkDocument({ creatorId: "member-uid", surfaceId: "map:new-york", mark: pencil }, "server-time").marks[0]).toMatchObject({ material: { supplyId: "pencil", materialId: "graphite" }, geometry: { format: "geographic-stroke-v1" } });
+  });
   it("creates private draft map artwork owned by the authenticated member", () => {
     expect(createMapArtworkDocument({ creatorId: "member-uid", surfaceId: "map:new-york", mark }, "server-time")).toEqual({
       creatorId: "member-uid",

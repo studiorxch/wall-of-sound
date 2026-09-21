@@ -43,15 +43,23 @@ function finiteLocalCoordinate(point: LocalArtworkPoint): boolean {
 
 export function validateArtworkMark(mark: ArtworkMark): void {
   assertIdentifier(mark.id, "mark_id");
-  if (mark.type !== "stroke" || !Array.isArray(mark.geometry.points) || mark.geometry.points.length < 2) {
+  if (!Array.isArray(mark.geometry.points) || mark.geometry.points.length < 2) {
     throw new Error("invalid_artwork_points");
   }
-  if (mark.geometry.format === "geographic-stroke-v1") {
+  if (mark.geometry.format === "geographic-stroke-v1" || mark.geometry.format === "geographic-erasure-v1") {
     if (!mark.geometry.points.every(finiteGeographicCoordinate)) throw new Error("invalid_artwork_geographic_points");
-  } else if (mark.geometry.format === "local-2d-stroke-v1") {
+  } else if (mark.geometry.format === "local-2d-stroke-v1" || mark.geometry.format === "local-2d-erasure-v1") {
     if (!mark.geometry.points.every(finiteLocalCoordinate)) throw new Error("invalid_artwork_local_points");
   } else {
     throw new Error("invalid_artwork_geometry_format");
+  }
+  if (mark.type === "material-erasure") {
+    if (mark.targetMaterialId !== "graphite" || !Number.isFinite(mark.width) || mark.width <= 0) throw new Error("invalid_artwork_erasure");
+    return;
+  }
+  if (mark.type !== "stroke") throw new Error("invalid_artwork_mark_type");
+  if (mark.material && (mark.material.supplyId !== "pencil" || mark.material.materialId !== "graphite")) {
+    throw new Error("invalid_artwork_material");
   }
   if (!mark.style || typeof mark.style.color !== "string" || !mark.style.color.trim()) {
     throw new Error("invalid_artwork_style_color");
@@ -66,13 +74,13 @@ export function validateArtworkMark(mark: ArtworkMark): void {
 
 export function boundsForMarks(marks: readonly ArtworkMark[]): ArtworkBounds {
   if (!marks.length) throw new Error("artwork_requires_mark");
-  const format = marks[0].geometry.format;
-  if (!marks.every((mark) => mark.geometry.format === format)) throw new Error("artwork_mixed_coordinate_formats");
-  if (format === "geographic-stroke-v1") {
-    const points = marks.flatMap((mark) => mark.geometry.format === format ? [...mark.geometry.points] : []);
+  const geographic = marks[0].geometry.format.startsWith("geographic-");
+  if (!marks.every((mark) => mark.geometry.format.startsWith(geographic ? "geographic-" : "local-2d-"))) throw new Error("artwork_mixed_coordinate_formats");
+  if (geographic) {
+    const points: GeographicArtworkPoint[] = marks.flatMap((mark) => "longitude" in mark.geometry.points[0] ? [...mark.geometry.points] as GeographicArtworkPoint[] : []);
     return { west: Math.min(...points.map((p) => p.longitude)), south: Math.min(...points.map((p) => p.latitude)), east: Math.max(...points.map((p) => p.longitude)), north: Math.max(...points.map((p) => p.latitude)) };
   }
-  const points = marks.flatMap((mark) => mark.geometry.format === format ? [...mark.geometry.points] : []);
+  const points: LocalArtworkPoint[] = marks.flatMap((mark) => "x" in mark.geometry.points[0] ? [...mark.geometry.points] as LocalArtworkPoint[] : []);
   return { minX: Math.min(...points.map((p) => p.x)), minY: Math.min(...points.map((p) => p.y)), maxX: Math.max(...points.map((p) => p.x)), maxY: Math.max(...points.map((p) => p.y)) };
 }
 
@@ -111,8 +119,9 @@ function boundsGap(a: ArtworkBounds, b: ArtworkBounds): number {
 
 export function selectArtworkForMark(artworks: readonly MapArtwork[], creatorId: string, surfaceId: string, mark: ArtworkMark): MapArtwork | null {
   const bounds = boundsForMarks([mark]);
-  const threshold = mark.geometry.format === "local-2d-stroke-v1" ? ARTWORK_GROUPING_PROXIMITY_LOCAL : ARTWORK_GROUPING_PROXIMITY_DEGREES;
-  return artworks.filter((artwork) => artwork.creatorId === creatorId && artwork.surfaceId === surfaceId && artwork.state === "draft" && artwork.marks[0]?.geometry.format === mark.geometry.format)
+  const local = mark.geometry.format.startsWith("local-2d-");
+  const threshold = local ? ARTWORK_GROUPING_PROXIMITY_LOCAL : ARTWORK_GROUPING_PROXIMITY_DEGREES;
+  return artworks.filter((artwork) => artwork.creatorId === creatorId && artwork.surfaceId === surfaceId && artwork.state === "draft" && artwork.marks[0]?.geometry.format.startsWith(local ? "local-2d-" : "geographic-"))
     .map((artwork) => ({ artwork, distance: boundsGap(artwork.composition.bounds, bounds) }))
     .filter(({ distance }) => distance <= threshold)
     .sort((a, b) => a.distance - b.distance || b.artwork.composition.lastEditedAt.getTime() - a.artwork.composition.lastEditedAt.getTime())[0]?.artwork ?? null;

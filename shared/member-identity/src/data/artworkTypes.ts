@@ -9,6 +9,7 @@ export interface LocalArtworkPoint {
 export interface GeographicBounds { readonly west: number; readonly south: number; readonly east: number; readonly north: number }
 export interface LocalBounds { readonly minX: number; readonly minY: number; readonly maxX: number; readonly maxY: number }
 export type ArtworkBounds = GeographicBounds | LocalBounds;
+import type { ArtMaterialId, MarkMaterialIdentity } from "./artSupplyTypes.js";
 
 export interface GeographicArtworkStroke {
   readonly id: string;
@@ -19,10 +20,13 @@ export interface GeographicArtworkStroke {
     readonly opacity: number;
   };
 }
-export interface GeographicStrokeMark { readonly id: string; readonly type: "stroke"; readonly createdAt: Date; readonly geometry: { readonly format: "geographic-stroke-v1"; readonly points: readonly GeographicArtworkPoint[] }; readonly style: GeographicArtworkStroke["style"] }
-export interface LocalStrokeMark { readonly id: string; readonly type: "stroke"; readonly createdAt: Date; readonly geometry: { readonly format: "local-2d-stroke-v1"; readonly points: readonly LocalArtworkPoint[] }; readonly style: GeographicArtworkStroke["style"] }
+export interface GeographicStrokeMark { readonly id: string; readonly type: "stroke"; readonly createdAt: Date; readonly geometry: { readonly format: "geographic-stroke-v1"; readonly points: readonly GeographicArtworkPoint[] }; readonly style: GeographicArtworkStroke["style"]; readonly material?: MarkMaterialIdentity }
+export interface LocalStrokeMark { readonly id: string; readonly type: "stroke"; readonly createdAt: Date; readonly geometry: { readonly format: "local-2d-stroke-v1"; readonly points: readonly LocalArtworkPoint[] }; readonly style: GeographicArtworkStroke["style"]; readonly material?: MarkMaterialIdentity }
 export type StrokeMark = GeographicStrokeMark | LocalStrokeMark;
-export type ArtworkMark = StrokeMark;
+export interface LocalMaterialErasureMark { readonly id: string; readonly type: "material-erasure"; readonly createdAt: Date; readonly geometry: { readonly format: "local-2d-erasure-v1"; readonly points: readonly LocalArtworkPoint[] }; readonly targetMaterialId: ArtMaterialId; readonly width: number }
+export interface GeographicMaterialErasureMark { readonly id: string; readonly type: "material-erasure"; readonly createdAt: Date; readonly geometry: { readonly format: "geographic-erasure-v1"; readonly points: readonly GeographicArtworkPoint[] }; readonly targetMaterialId: ArtMaterialId; readonly width: number }
+export type MaterialErasureMark = LocalMaterialErasureMark | GeographicMaterialErasureMark;
+export type ArtworkMark = StrokeMark | MaterialErasureMark;
 
 export interface Artwork {
   readonly id: string;

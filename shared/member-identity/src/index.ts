@@ -22,7 +22,12 @@ export type {
   LocalStrokeMark,
   MapArtwork,
   StrokeMark,
+  MaterialErasureMark,
+  LocalMaterialErasureMark,
+  GeographicMaterialErasureMark,
 } from "./data/artworkTypes.js";
+export type { ArtMaterialId, ArtSupplyId, MarkMaterialIdentity, PencilSupplySettings } from "./data/artSupplyTypes.js";
+export { PENCIL_SUPPLY, PENCIL_ERASER_SUPPLY, canEraseMaterial } from "./data/artSupplyTypes.js";
 export { ARTWORK_GROUPING_PROXIMITY_DEGREES, ARTWORK_GROUPING_PROXIMITY_LOCAL, boundsForMarks, selectArtworkForMark } from "./logic/artworkDocument.js";
 export {
   serializePublicMember,

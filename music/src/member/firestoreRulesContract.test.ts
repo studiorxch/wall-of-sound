@@ -30,6 +30,13 @@ describe("Firestore Member and Artwork ownership contract", () => {
     expect(rules).toContain("hasValidArtworkShape(request.resource.data) || hasValidArtworkV1Shape(request.resource.data)");
   });
 
+  it("allows Pencil material metadata and graphite-only authored Eraser Marks", () => {
+    expect(rules).toContain("'material'");
+    expect(rules).toContain("hasValidMaterialErasureMark");
+    expect(rules).toContain("mark.targetMaterialId == 'graphite'");
+    expect(rules).toContain("hasValidStrokeMark(mark) || hasValidMaterialErasureMark(mark)");
+  });
+
   it("accepts local Blackbook geometry and local bounds without weakening ownership", () => {
     expect(rules).toContain("'local-2d-stroke-v1'");
     expect(rules).toContain("['minX', 'minY', 'maxX', 'maxY']");

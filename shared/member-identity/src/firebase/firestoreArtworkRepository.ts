@@ -59,15 +59,25 @@ function decodeMark(value: unknown): ArtworkMark {
   const style = stroke.style as Record<string, unknown> | null;
   const geometry = stroke.geometry as Record<string, unknown> | null;
   const format = geometry?.format;
+  const createdAt = stroke.createdAt instanceof Timestamp ? stroke.createdAt.toDate() : new Date(0);
+  if (stroke.type === "material-erasure") {
+    const decoded: ArtworkMark = format === "local-2d-erasure-v1"
+      ? { id: String(stroke.id ?? ""), type: "material-erasure", createdAt, geometry: { format, points: Array.isArray(geometry?.points) ? geometry.points.map(decodeLocalPoint) : [] }, targetMaterialId: String(stroke.targetMaterialId ?? "") as "graphite", width: Number(stroke.width) }
+      : { id: String(stroke.id ?? ""), type: "material-erasure", createdAt, geometry: { format: "geographic-erasure-v1", points: Array.isArray(geometry?.points) ? geometry.points.map(decodePoint) : [] }, targetMaterialId: String(stroke.targetMaterialId ?? "") as "graphite", width: Number(stroke.width) };
+    validateArtworkMark(decoded);
+    return decoded;
+  }
+  const material = stroke.material && typeof stroke.material === "object" ? stroke.material as Record<string, unknown> : null;
   const base = {
     id: String(stroke.id ?? ""),
     type: "stroke" as const,
-    createdAt: stroke.createdAt instanceof Timestamp ? stroke.createdAt.toDate() : new Date(0),
+    createdAt,
     style: {
       color: String(style?.color ?? ""),
       width: Number(style?.width),
       opacity: Number(style?.opacity),
     },
+    ...(material ? { material: { supplyId: String(material.supplyId) as "pencil", materialId: String(material.materialId) as "graphite" } } : {}),
   };
   const decoded: ArtworkMark = format === "local-2d-stroke-v1"
     ? { ...base, geometry: { format, points: Array.isArray(geometry?.points) ? geometry.points.map(decodeLocalPoint) : [] } }

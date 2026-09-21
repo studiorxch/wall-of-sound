@@ -1,53 +1,83 @@
 import {
   createFirebaseArtworkRepository,
   createFirebaseMemberIdentityAuthority,
+  PENCIL_ERASER_SUPPLY,
+  PENCIL_SUPPLY,
   type Artwork,
   type MemberIdentityState,
 } from "@studiorich/member-identity";
 import {
   BLACKBOOK_PAGE_SURFACE_ID,
   createBlackbookArtworkPersistenceBridge,
-  type BlackbookStroke,
+  type BlackbookOperation,
 } from "./blackbookArtworkBridge";
 
-const canvas = document.querySelector<HTMLCanvasElement>("#blackbook-page");
-const undoButton = document.querySelector<HTMLButtonElement>("#blackbook-undo");
-const memberButton = document.querySelector<HTMLButtonElement>("#blackbook-member");
-const status = document.querySelector<HTMLElement>("#blackbook-status");
-if (!canvas || !undoButton || !memberButton || !status) throw new Error("blackbook_surface_missing");
+function required<T>(value: T | null, error: string): T { if (!value) throw new Error(error); return value; }
+const canvas = required(document.querySelector<HTMLCanvasElement>("#blackbook-page"), "blackbook_surface_missing");
+const undoButton = required(document.querySelector<HTMLButtonElement>("#blackbook-undo"), "blackbook_surface_missing");
+const memberButton = required(document.querySelector<HTMLButtonElement>("#blackbook-member"), "blackbook_surface_missing");
+const status = required(document.querySelector<HTMLElement>("#blackbook-status"), "blackbook_surface_missing");
+const pencilButton = required(document.querySelector<HTMLButtonElement>("#blackbook-pencil"), "blackbook_surface_missing");
+const eraserButton = required(document.querySelector<HTMLButtonElement>("#blackbook-eraser"), "blackbook_surface_missing");
+const widthControl = required(document.querySelector<HTMLInputElement>("#blackbook-width"), "blackbook_surface_missing");
+const opacityControl = required(document.querySelector<HTMLInputElement>("#blackbook-opacity"), "blackbook_surface_missing");
 
-const ctx = canvas.getContext("2d");
-if (!ctx) throw new Error("blackbook_canvas_unavailable");
+const ctx = required(canvas.getContext("2d"), "blackbook_canvas_unavailable");
 
 const memberIdentity = createFirebaseMemberIdentityAuthority(import.meta.env);
 const repository = createFirebaseArtworkRepository(import.meta.env);
 let memberState: MemberIdentityState = memberIdentity.getState();
-let strokes: BlackbookStroke[] = [];
+const materialCanvas = document.createElement("canvas");
+materialCanvas.width = canvas.width; materialCanvas.height = canvas.height;
+const materialCtx = required(materialCanvas.getContext("2d"), "blackbook_material_canvas_unavailable");
+let operations: BlackbookOperation[] = [];
 let activePoints: { x: number; y: number }[] = [];
-let nextStrokeId = 1;
+let nextOperationId = 1;
+let activeSupply: "pencil" | "eraser" = "pencil";
 
 function render(): void {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.fillStyle = "#f3eee4";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-  for (const stroke of strokes) drawStroke(stroke.points, stroke.style);
-  if (activePoints.length > 1) drawStroke(activePoints, { color: "#171412", width: 7, opacity: 0.9 });
-  undoButton.disabled = memberState.status !== "signedIn" || strokes.length === 0;
+  materialCtx.clearRect(0, 0, canvas.width, canvas.height);
+  for (const operation of operations) drawOperation(operation);
+  if (activePoints.length > 1) drawOperation(activeOperation(activePoints));
+  ctx.drawImage(materialCanvas, 0, 0);
+  undoButton.disabled = memberState.status !== "signedIn" || operations.length === 0;
+  pencilButton.dataset.active = String(activeSupply === "pencil");
+  eraserButton.dataset.active = String(activeSupply === "eraser");
 }
 
-function drawStroke(points: readonly { x: number; y: number }[], style: BlackbookStroke["style"]): void {
+function path(points: readonly { x: number; y: number }[]): void {
+  materialCtx.beginPath();
+  materialCtx.moveTo(points[0].x * canvas.width, points[0].y * canvas.height);
+  for (const point of points.slice(1)) materialCtx.lineTo(point.x * canvas.width, point.y * canvas.height);
+}
+
+function drawOperation(operation: BlackbookOperation): void {
+  const { points } = operation;
   if (points.length < 2) return;
-  ctx.save();
-  ctx.strokeStyle = style.color;
-  ctx.lineWidth = style.width;
-  ctx.globalAlpha = style.opacity;
-  ctx.lineCap = "round";
-  ctx.lineJoin = "round";
-  ctx.beginPath();
-  ctx.moveTo(points[0].x * canvas.width, points[0].y * canvas.height);
-  for (const point of points.slice(1)) ctx.lineTo(point.x * canvas.width, point.y * canvas.height);
-  ctx.stroke();
-  ctx.restore();
+  materialCtx.save();
+  materialCtx.lineCap = "round"; materialCtx.lineJoin = "round";
+  path(points);
+  if (operation.operation === "eraser") {
+    materialCtx.globalCompositeOperation = "destination-out";
+    materialCtx.lineWidth = operation.width;
+    materialCtx.globalAlpha = 1;
+    materialCtx.strokeStyle = "#000";
+  } else {
+    materialCtx.globalCompositeOperation = "source-over";
+    materialCtx.lineWidth = operation.style.width;
+    materialCtx.globalAlpha = operation.style.opacity;
+    materialCtx.strokeStyle = operation.style.color;
+  }
+  materialCtx.stroke(); materialCtx.restore();
+}
+
+function activeOperation(points: readonly { x: number; y: number }[]): BlackbookOperation {
+  return activeSupply === "eraser"
+    ? { operation: "eraser", id: "active", points, width: PENCIL_ERASER_SUPPLY.defaultWidth }
+    : { operation: "pencil", id: "active", points, style: { color: "#171412", width: Number(widthControl.value), opacity: Number(opacityControl.value) } };
 }
 
 function point(event: PointerEvent) {
@@ -60,16 +90,17 @@ const persistence = createBlackbookArtworkPersistenceBridge({
   drawing: {
     bindArtwork(stroke, artworkId, markId, creatorId, surfaceId) {
       Object.assign(stroke, { artworkId, markId, creatorId, surfaceId });
-      return strokes.includes(stroke);
+      return operations.includes(stroke);
     },
   },
   getAuthenticatedMemberId: () => memberState.status === "signedIn" ? memberState.member.uid : null,
 });
 
 function hydrate(artworks: readonly Artwork[]): void {
-  strokes = artworks
+  operations = artworks
     .filter((artwork) => artwork.surfaceId === BLACKBOOK_PAGE_SURFACE_ID && artwork.state === "draft")
-    .flatMap((artwork) => artwork.marks.flatMap((mark) => mark.geometry.format === "local-2d-stroke-v1" ? [{
+    .flatMap((artwork) => artwork.marks.flatMap((mark): BlackbookOperation[] => mark.geometry.format === "local-2d-stroke-v1" ? [{
+      operation: "pencil",
       id: `blackbook-mark-${mark.id}`,
       artworkId: artwork.id,
       markId: mark.id,
@@ -77,7 +108,7 @@ function hydrate(artworks: readonly Artwork[]): void {
       surfaceId: artwork.surfaceId,
       points: mark.geometry.points,
       style: mark.style,
-    }] : []));
+    }] : mark.geometry.format === "local-2d-erasure-v1" ? [{ operation: "eraser", id: `blackbook-mark-${mark.id}`, artworkId: artwork.id, markId: mark.id, creatorId: artwork.creatorId, surfaceId: artwork.surfaceId, points: mark.geometry.points, width: mark.width }] : []));
   persistence.replaceKnownArtworks(artworks.filter((artwork) => artwork.surfaceId === BLACKBOOK_PAGE_SURFACE_ID));
   render();
 }
@@ -97,20 +128,25 @@ canvas.addEventListener("pointerup", (event) => {
   if (!canvas.hasPointerCapture(event.pointerId)) return;
   canvas.releasePointerCapture(event.pointerId);
   if (activePoints.length > 1) {
-    const stroke: BlackbookStroke = { id: `blackbook-stroke-${nextStrokeId++}`, points: activePoints, style: { color: "#171412", width: 7, opacity: 0.9 } };
-    strokes.push(stroke);
-    void persistence.persistStroke(stroke).catch((error) => { status.textContent = error instanceof Error ? error.message : "Artwork save failed"; });
+    const operation = { ...activeOperation(activePoints), id: `blackbook-operation-${nextOperationId++}` } as BlackbookOperation;
+    operations.push(operation);
+    void persistence.persistStroke(operation).catch((error) => { status.textContent = error instanceof Error ? error.message : "Artwork save failed"; });
   }
   activePoints = [];
   render();
 });
 
 undoButton.addEventListener("click", () => {
-  const stroke = strokes.pop();
-  if (!stroke) return;
+  const operation = operations.pop();
+  if (!operation) return;
   render();
-  void persistence.removeStroke(stroke).catch((error) => { status.textContent = error instanceof Error ? error.message : "Undo failed"; });
+  void persistence.removeStroke(operation).catch((error) => { status.textContent = error instanceof Error ? error.message : "Undo failed"; });
 });
+
+pencilButton.addEventListener("click", () => { activeSupply = "pencil"; render(); });
+eraserButton.addEventListener("click", () => { activeSupply = "eraser"; render(); });
+widthControl.value = String(PENCIL_SUPPLY.defaultSettings.width);
+opacityControl.value = String(PENCIL_SUPPLY.defaultSettings.opacity);
 
 memberButton.addEventListener("click", () => {
   if (memberState.status === "signedIn") void memberIdentity.signOut();
@@ -125,7 +161,7 @@ memberIdentity.subscribe((state) => {
   if (state.status === "signedIn") {
     void (repository.listOwnedArtwork ?? repository.listOwnedMapArtwork).call(repository, state.member.uid).then(hydrate).catch((error) => { status.textContent = error instanceof Error ? error.message : "Artwork hydration failed"; });
   } else {
-    strokes = [];
+    operations = [];
     persistence.replaceKnownArtworks([]);
     render();
   }

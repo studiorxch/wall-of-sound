@@ -107,7 +107,7 @@ service cloud.firestore {
     function hasValidStrokeMark(mark) {
       return mark is map
         && mark.keys().hasAll(['id', 'type', 'createdAt', 'geometry', 'style'])
-        && mark.keys().hasOnly(['id', 'type', 'createdAt', 'geometry', 'style'])
+        && mark.keys().hasOnly(['id', 'type', 'createdAt', 'geometry', 'style', 'material'])
         && mark.id is string
         && mark.type == 'stroke'
         && mark.createdAt is timestamp
@@ -117,7 +117,35 @@ service cloud.firestore {
         && mark.geometry.format in ['geographic-stroke-v1', 'local-2d-stroke-v1']
         && mark.geometry.points is list
         && mark.geometry.points.size() >= 2
+        && (!('material' in mark)
+          || (mark.material is map
+            && mark.material.keys().hasAll(['supplyId', 'materialId'])
+            && mark.material.keys().hasOnly(['supplyId', 'materialId'])
+            && mark.material.supplyId == 'pencil'
+            && mark.material.materialId == 'graphite'))
         && hasValidArtworkStyle(mark.style);
+    }
+
+    function hasValidMaterialErasureMark(mark) {
+      return mark is map
+        && mark.keys().hasAll(['id', 'type', 'createdAt', 'geometry', 'targetMaterialId', 'width'])
+        && mark.keys().hasOnly(['id', 'type', 'createdAt', 'geometry', 'targetMaterialId', 'width'])
+        && mark.id is string
+        && mark.type == 'material-erasure'
+        && mark.createdAt is timestamp
+        && mark.geometry is map
+        && mark.geometry.keys().hasAll(['format', 'points'])
+        && mark.geometry.keys().hasOnly(['format', 'points'])
+        && mark.geometry.format in ['geographic-erasure-v1', 'local-2d-erasure-v1']
+        && mark.geometry.points is list
+        && mark.geometry.points.size() >= 2
+        && mark.targetMaterialId == 'graphite'
+        && mark.width is number
+        && mark.width > 0;
+    }
+
+    function hasValidArtworkMark(mark) {
+      return hasValidStrokeMark(mark) || hasValidMaterialErasureMark(mark);
     }
 
     function hasValidArtworkV1Shape(data) {
@@ -148,7 +176,7 @@ service cloud.firestore {
         && data.marks is list
         && data.marks.size() >= 1
         && data.marks.size() <= 500
-        && hasValidStrokeMark(data.marks[0])
+        && hasValidArtworkMark(data.marks[0])
         && data.state in ['draft', 'archived']
         && data.visibility == 'private';
     }

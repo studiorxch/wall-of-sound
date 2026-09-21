@@ -2,7 +2,6 @@ import type {
   ArtworkRepository,
   Artwork,
   ArtworkMark,
-  MapArtwork,
   StrokeMark,
 } from "@studiorich/member-identity";
 import { selectArtworkForMark } from "@studiorich/member-identity";
