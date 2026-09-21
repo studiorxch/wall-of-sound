@@ -1,4 +1,4 @@
-import type { ArtworkRepository, LocalMaterialErasureMark, LocalStrokeMark } from "@studiorich/member-identity";
+import type { ArtMaterialId, ArtworkRepository, LocalMaterialErasureMark, LocalStrokeMark } from "@studiorich/member-identity";
 import { createArtworkPersistenceBridge } from "./mapArtworkBridge";
 
 export const STUDIO_RICH_BLACKBOOK_ID = "studio-rich-main";
@@ -6,7 +6,7 @@ export const STUDIO_RICH_BLACKBOOK_PAGE_ID = "page-1";
 export const BLACKBOOK_PAGE_SURFACE_ID = `blackbook:${STUDIO_RICH_BLACKBOOK_ID}:page:${STUDIO_RICH_BLACKBOOK_PAGE_ID}`;
 
 export interface BlackbookStroke {
-  readonly operation: "pencil";
+  readonly operation: "pencil" | "pen" | "marker";
   readonly id: string;
   artworkId?: string;
   markId?: string;
@@ -28,6 +28,12 @@ export interface BlackbookErasure {
 }
 export type BlackbookOperation = BlackbookStroke | BlackbookErasure;
 
+const MATERIAL_BY_SUPPLY: Readonly<Record<BlackbookStroke["operation"], ArtMaterialId>> = Object.freeze({
+  pencil: "graphite",
+  pen: "ink",
+  marker: "marker",
+});
+
 export function toLocalStrokeMark(stroke: BlackbookStroke, markId: string, createdAt = new Date()): LocalStrokeMark {
   if (!stroke.id || stroke.points.length < 2) throw new Error("invalid_blackbook_stroke");
   return {
@@ -36,7 +42,7 @@ export function toLocalStrokeMark(stroke: BlackbookStroke, markId: string, creat
     createdAt,
     geometry: { format: "local-2d-stroke-v1", points: stroke.points.map(({ x, y }) => ({ x, y })) },
     style: { ...stroke.style },
-    material: { supplyId: "pencil", materialId: "graphite" },
+    material: { supplyId: stroke.operation, materialId: MATERIAL_BY_SUPPLY[stroke.operation] },
   };
 }
 

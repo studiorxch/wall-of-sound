@@ -121,8 +121,9 @@ service cloud.firestore {
           || (mark.material is map
             && mark.material.keys().hasAll(['supplyId', 'materialId'])
             && mark.material.keys().hasOnly(['supplyId', 'materialId'])
-            && mark.material.supplyId == 'pencil'
-            && mark.material.materialId == 'graphite'))
+            && ((mark.material.supplyId == 'pencil' && mark.material.materialId == 'graphite')
+              || (mark.material.supplyId == 'pen' && mark.material.materialId == 'ink')
+              || (mark.material.supplyId == 'marker' && mark.material.materialId == 'marker'))))
         && hasValidArtworkStyle(mark.style);
     }
 

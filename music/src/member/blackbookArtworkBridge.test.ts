@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
-import { selectArtworkForMark, type Artwork, type ArtworkRepository } from "@studiorich/member-identity";
+import { selectArtworkForMark, type Artwork, type ArtworkMark, type ArtworkRepository } from "@studiorich/member-identity";
 import { BLACKBOOK_PAGE_SURFACE_ID, createBlackbookArtworkPersistenceBridge, toLocalErasureMark, toLocalStrokeMark, type BlackbookOperation, type BlackbookStroke } from "./blackbookArtworkBridge";
 
 function stroke(id: string, offset = 0): BlackbookStroke {
   return { operation: "pencil", id, points: [{ x: 0.1 + offset, y: 0.2 }, { x: 0.2 + offset, y: 0.3 }], style: { color: "#171412", width: 7, opacity: 0.9 } };
 }
 
-function artwork(id: string, marks = [toLocalStrokeMark(stroke("a"), "mark-a", new Date(0))]): Artwork {
+function artwork(id: string, marks: readonly ArtworkMark[] = [toLocalStrokeMark(stroke("a"), "mark-a", new Date(0))]): Artwork {
   return { id, creatorId: "member-1", surfaceId: BLACKBOOK_PAGE_SURFACE_ID, createdAt: new Date(0), updatedAt: new Date(0), composition: { bounds: { minX: 0.1, minY: 0.2, maxX: 0.2, maxY: 0.3 }, startedAt: new Date(0), lastEditedAt: new Date(0) }, marks, state: "draft", visibility: "private" };
 }
 
@@ -21,6 +21,13 @@ describe("Blackbook Artwork Surface bridge", () => {
   it("authors material-specific erasure as a separate Mark rather than Undo", () => {
     const mark = toLocalErasureMark({ operation: "eraser", id: "erase-a", points: [{ x: 0.1, y: 0.2 }, { x: 0.2, y: 0.3 }], width: 28 }, "erase-mark", new Date(0));
     expect(mark).toMatchObject({ type: "material-erasure", targetMaterialId: "graphite", width: 28, geometry: { format: "local-2d-erasure-v1" } });
+  });
+
+  it("preserves Pen and Marker identity, width, and opacity in shared local Marks", () => {
+    const pen = toLocalStrokeMark({ ...stroke("pen"), operation: "pen", style: { color: "#101828", width: 4, opacity: 0.55 } }, "mark-pen", new Date(1));
+    const marker = toLocalStrokeMark({ ...stroke("marker"), operation: "marker", style: { color: "#d32852", width: 18, opacity: 0.7 } }, "mark-marker", new Date(2));
+    expect(pen).toMatchObject({ material: { supplyId: "pen", materialId: "ink" }, style: { width: 4, opacity: 0.55 } });
+    expect(marker).toMatchObject({ material: { supplyId: "marker", materialId: "marker" }, style: { width: 18, opacity: 0.7 } });
   });
 
   it("composes nearby Marks, removes one Mark, then deletes the Artwork on final Mark", async () => {

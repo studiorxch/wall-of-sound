@@ -77,7 +77,10 @@ function decodeMark(value: unknown): ArtworkMark {
       width: Number(style?.width),
       opacity: Number(style?.opacity),
     },
-    ...(material ? { material: { supplyId: String(material.supplyId) as "pencil", materialId: String(material.materialId) as "graphite" } } : {}),
+    ...(material ? { material: {
+      supplyId: String(material.supplyId) as "pencil" | "pen" | "marker",
+      materialId: String(material.materialId) as "graphite" | "ink" | "marker",
+    } } : {}),
   };
   const decoded: ArtworkMark = format === "local-2d-stroke-v1"
     ? { ...base, geometry: { format, points: Array.isArray(geometry?.points) ? geometry.points.map(decodeLocalPoint) : [] } }

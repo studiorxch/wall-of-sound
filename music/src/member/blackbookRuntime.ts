@@ -1,6 +1,8 @@
 import {
   createFirebaseArtworkRepository,
   createFirebaseMemberIdentityAuthority,
+  MARKER_SUPPLY,
+  PEN_SUPPLY,
   PENCIL_ERASER_SUPPLY,
   PENCIL_SUPPLY,
   type Artwork,
@@ -18,6 +20,8 @@ const undoButton = required(document.querySelector<HTMLButtonElement>("#blackboo
 const memberButton = required(document.querySelector<HTMLButtonElement>("#blackbook-member"), "blackbook_surface_missing");
 const status = required(document.querySelector<HTMLElement>("#blackbook-status"), "blackbook_surface_missing");
 const pencilButton = required(document.querySelector<HTMLButtonElement>("#blackbook-pencil"), "blackbook_surface_missing");
+const penButton = required(document.querySelector<HTMLButtonElement>("#blackbook-pen"), "blackbook_surface_missing");
+const markerButton = required(document.querySelector<HTMLButtonElement>("#blackbook-marker"), "blackbook_surface_missing");
 const eraserButton = required(document.querySelector<HTMLButtonElement>("#blackbook-eraser"), "blackbook_surface_missing");
 const widthControl = required(document.querySelector<HTMLInputElement>("#blackbook-width"), "blackbook_surface_missing");
 const opacityControl = required(document.querySelector<HTMLInputElement>("#blackbook-opacity"), "blackbook_surface_missing");
@@ -27,39 +31,52 @@ const ctx = required(canvas.getContext("2d"), "blackbook_canvas_unavailable");
 const memberIdentity = createFirebaseMemberIdentityAuthority(import.meta.env);
 const repository = createFirebaseArtworkRepository(import.meta.env);
 let memberState: MemberIdentityState = memberIdentity.getState();
-const materialCanvas = document.createElement("canvas");
-materialCanvas.width = canvas.width; materialCanvas.height = canvas.height;
-const materialCtx = required(materialCanvas.getContext("2d"), "blackbook_material_canvas_unavailable");
+const materialLayers = Object.fromEntries(["graphite", "ink", "marker"].map((materialId) => {
+  const layer = document.createElement("canvas");
+  layer.width = canvas.width; layer.height = canvas.height;
+  return [materialId, { canvas: layer, context: required(layer.getContext("2d"), "blackbook_material_canvas_unavailable") }];
+})) as Record<"graphite" | "ink" | "marker", { canvas: HTMLCanvasElement; context: CanvasRenderingContext2D }>;
 let operations: BlackbookOperation[] = [];
 let activePoints: { x: number; y: number }[] = [];
 let nextOperationId = 1;
-let activeSupply: "pencil" | "eraser" = "pencil";
+let activeSupply: "pencil" | "pen" | "marker" | "eraser" = "pencil";
+const supplySettings: Record<"pencil" | "pen" | "marker", { width: number; opacity: number }> = {
+  pencil: { ...PENCIL_SUPPLY.defaultSettings },
+  pen: { ...PEN_SUPPLY.defaultSettings },
+  marker: { ...MARKER_SUPPLY.defaultSettings },
+};
 
 function render(): void {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.fillStyle = "#f3eee4";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-  materialCtx.clearRect(0, 0, canvas.width, canvas.height);
+  for (const layer of Object.values(materialLayers)) layer.context.clearRect(0, 0, canvas.width, canvas.height);
   for (const operation of operations) drawOperation(operation);
   if (activePoints.length > 1) drawOperation(activeOperation(activePoints));
-  ctx.drawImage(materialCanvas, 0, 0);
+  ctx.drawImage(materialLayers.graphite.canvas, 0, 0);
+  ctx.drawImage(materialLayers.ink.canvas, 0, 0);
+  ctx.drawImage(materialLayers.marker.canvas, 0, 0);
   undoButton.disabled = memberState.status !== "signedIn" || operations.length === 0;
   pencilButton.dataset.active = String(activeSupply === "pencil");
+  penButton.dataset.active = String(activeSupply === "pen");
+  markerButton.dataset.active = String(activeSupply === "marker");
   eraserButton.dataset.active = String(activeSupply === "eraser");
 }
 
-function path(points: readonly { x: number; y: number }[]): void {
-  materialCtx.beginPath();
-  materialCtx.moveTo(points[0].x * canvas.width, points[0].y * canvas.height);
-  for (const point of points.slice(1)) materialCtx.lineTo(point.x * canvas.width, point.y * canvas.height);
+function path(context: CanvasRenderingContext2D, points: readonly { x: number; y: number }[]): void {
+  context.beginPath();
+  context.moveTo(points[0].x * canvas.width, points[0].y * canvas.height);
+  for (const point of points.slice(1)) context.lineTo(point.x * canvas.width, point.y * canvas.height);
 }
 
 function drawOperation(operation: BlackbookOperation): void {
   const { points } = operation;
   if (points.length < 2) return;
+  const materialId = operation.operation === "pencil" ? "graphite" : operation.operation === "pen" ? "ink" : operation.operation === "marker" ? "marker" : "graphite";
+  const materialCtx = materialLayers[materialId].context;
   materialCtx.save();
   materialCtx.lineCap = "round"; materialCtx.lineJoin = "round";
-  path(points);
+  path(materialCtx, points);
   if (operation.operation === "eraser") {
     materialCtx.globalCompositeOperation = "destination-out";
     materialCtx.lineWidth = operation.width;
@@ -75,9 +92,9 @@ function drawOperation(operation: BlackbookOperation): void {
 }
 
 function activeOperation(points: readonly { x: number; y: number }[]): BlackbookOperation {
-  return activeSupply === "eraser"
-    ? { operation: "eraser", id: "active", points, width: PENCIL_ERASER_SUPPLY.defaultWidth }
-    : { operation: "pencil", id: "active", points, style: { color: "#171412", width: Number(widthControl.value), opacity: Number(opacityControl.value) } };
+  if (activeSupply === "eraser") return { operation: "eraser", id: "active", points, width: PENCIL_ERASER_SUPPLY.defaultWidth };
+  const color = activeSupply === "pencil" ? "#171412" : activeSupply === "pen" ? "#101828" : "#d32852";
+  return { operation: activeSupply, id: "active", points, style: { color, width: Number(widthControl.value), opacity: Number(opacityControl.value) } };
 }
 
 function point(event: PointerEvent) {
@@ -99,8 +116,8 @@ const persistence = createBlackbookArtworkPersistenceBridge({
 function hydrate(artworks: readonly Artwork[]): void {
   operations = artworks
     .filter((artwork) => artwork.surfaceId === BLACKBOOK_PAGE_SURFACE_ID && artwork.state === "draft")
-    .flatMap((artwork) => artwork.marks.flatMap((mark): BlackbookOperation[] => mark.geometry.format === "local-2d-stroke-v1" ? [{
-      operation: "pencil",
+    .flatMap((artwork) => artwork.marks.flatMap((mark): BlackbookOperation[] => mark.type === "stroke" && mark.geometry.format === "local-2d-stroke-v1" ? [{
+      operation: mark.material?.supplyId === "pen" ? "pen" : mark.material?.supplyId === "marker" ? "marker" : "pencil",
       id: `blackbook-mark-${mark.id}`,
       artworkId: artwork.id,
       markId: mark.id,
@@ -108,7 +125,7 @@ function hydrate(artworks: readonly Artwork[]): void {
       surfaceId: artwork.surfaceId,
       points: mark.geometry.points,
       style: mark.style,
-    }] : mark.geometry.format === "local-2d-erasure-v1" ? [{ operation: "eraser", id: `blackbook-mark-${mark.id}`, artworkId: artwork.id, markId: mark.id, creatorId: artwork.creatorId, surfaceId: artwork.surfaceId, points: mark.geometry.points, width: mark.width }] : []));
+    }] : mark.type === "material-erasure" && mark.geometry.format === "local-2d-erasure-v1" ? [{ operation: "eraser", id: `blackbook-mark-${mark.id}`, artworkId: artwork.id, markId: mark.id, creatorId: artwork.creatorId, surfaceId: artwork.surfaceId, points: mark.geometry.points, width: mark.width }] : []));
   persistence.replaceKnownArtworks(artworks.filter((artwork) => artwork.surfaceId === BLACKBOOK_PAGE_SURFACE_ID));
   render();
 }
@@ -143,8 +160,27 @@ undoButton.addEventListener("click", () => {
   void persistence.removeStroke(operation).catch((error) => { status.textContent = error instanceof Error ? error.message : "Undo failed"; });
 });
 
-pencilButton.addEventListener("click", () => { activeSupply = "pencil"; render(); });
+function selectSupply(supply: "pencil" | "pen" | "marker" | "eraser"): void {
+  activeSupply = supply;
+  if (supply !== "eraser") {
+    widthControl.value = String(supplySettings[supply].width);
+    opacityControl.value = String(supplySettings[supply].opacity);
+  }
+  render();
+}
+
+function rememberSupplySettings(): void {
+  if (activeSupply === "eraser") return;
+  supplySettings[activeSupply].width = Number(widthControl.value);
+  supplySettings[activeSupply].opacity = Number(opacityControl.value);
+}
+
+pencilButton.addEventListener("click", () => selectSupply("pencil"));
+penButton.addEventListener("click", () => selectSupply("pen"));
+markerButton.addEventListener("click", () => selectSupply("marker"));
 eraserButton.addEventListener("click", () => { activeSupply = "eraser"; render(); });
+widthControl.addEventListener("input", rememberSupplySettings);
+opacityControl.addEventListener("input", rememberSupplySettings);
 widthControl.value = String(PENCIL_SUPPLY.defaultSettings.width);
 opacityControl.value = String(PENCIL_SUPPLY.defaultSettings.opacity);
 

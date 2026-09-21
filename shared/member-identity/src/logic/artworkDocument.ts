@@ -58,8 +58,11 @@ export function validateArtworkMark(mark: ArtworkMark): void {
     return;
   }
   if (mark.type !== "stroke") throw new Error("invalid_artwork_mark_type");
-  if (mark.material && (mark.material.supplyId !== "pencil" || mark.material.materialId !== "graphite")) {
-    throw new Error("invalid_artwork_material");
+  if (mark.material) {
+    const validMaterial = (mark.material.supplyId === "pencil" && mark.material.materialId === "graphite")
+      || (mark.material.supplyId === "pen" && mark.material.materialId === "ink")
+      || (mark.material.supplyId === "marker" && mark.material.materialId === "marker");
+    if (!validMaterial) throw new Error("invalid_artwork_material");
   }
   if (!mark.style || typeof mark.style.color !== "string" || !mark.style.color.trim()) {
     throw new Error("invalid_artwork_style_color");
