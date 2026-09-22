@@ -7276,6 +7276,7 @@ export default function App() {
           artistCount={17}
           radioPlaylistCount={radioPlaylists.length}
           radioBankCount={radioBanks.length}
+          voiceAssetCount={voiceAssets.length}
         />
 
         {/* Right column — playlist header, flow curve, and all workspace content */}
