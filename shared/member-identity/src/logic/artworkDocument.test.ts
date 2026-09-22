@@ -53,6 +53,19 @@ describe("createMapArtworkDocument", () => {
     expect(() => createMapArtworkDocument({ creatorId: "member-uid", surfaceId: "map:new-york", mark: geographicMop }, "server-time")).not.toThrow();
   });
 
+  it("keeps Spray as its own material -- coexists with graphite/ink/marker/mop, is not confused with Marker or Mop, and works on both local and geographic coordinate variants", () => {
+    const pencil = { ...localMark, id: "pencil", material: { supplyId: "pencil" as const, materialId: "graphite" as const } };
+    const spray = { ...localMark, id: "spray", material: { supplyId: "spray" as const, materialId: "spray" as const }, style: { color: "#e2572b", width: 24, opacity: 0.6 } };
+    const base = { id: "art", creatorId: "member-uid", surfaceId: "blackbook:book-1:page:page-1", createdAt: new Date(0), updatedAt: new Date(0), composition: { bounds: boundsForMarks([pencil]), startedAt: new Date(0), lastEditedAt: new Date(0) }, marks: [pencil], state: "draft" as const, visibility: "private" as const };
+    expect(selectArtworkForMark([base], base.creatorId, base.surfaceId, spray)?.id).toBe("art");
+    expect(spray.material.materialId).not.toBe("marker");
+    expect(spray.material.materialId).not.toBe("mop");
+    expect(() => createMapArtworkDocument({ creatorId: base.creatorId, surfaceId: base.surfaceId, mark: spray }, "server-time")).not.toThrow();
+
+    const geographicSpray = { ...mark, id: "spray-geo", material: { supplyId: "spray" as const, materialId: "spray" as const } };
+    expect(() => createMapArtworkDocument({ creatorId: "member-uid", surfaceId: "map:new-york", mark: geographicSpray }, "server-time")).not.toThrow();
+  });
+
   it("allows Pencil material identity on geographic Marks without a Map-specific supply", () => {
     const pencil = { ...mark, material: { supplyId: "pencil" as const, materialId: "graphite" as const } };
     expect(createMapArtworkDocument({ creatorId: "member-uid", surfaceId: "map:new-york", mark: pencil }, "server-time").marks[0]).toMatchObject({ material: { supplyId: "pencil", materialId: "graphite" }, geometry: { format: "geographic-stroke-v1" } });

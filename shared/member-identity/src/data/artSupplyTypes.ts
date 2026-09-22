@@ -1,5 +1,5 @@
-export type ArtMaterialId = "graphite" | "ink" | "marker" | "mop" | "legacy-neutral";
-export type ArtSupplyId = "pencil" | "pen" | "marker" | "mop" | "eraser" | "legacy-stroke";
+export type ArtMaterialId = "graphite" | "ink" | "marker" | "mop" | "spray" | "legacy-neutral";
+export type ArtSupplyId = "pencil" | "pen" | "marker" | "mop" | "spray" | "eraser" | "legacy-stroke";
 
 export interface MarkMaterialIdentity {
   readonly supplyId: ArtSupplyId;
@@ -44,6 +44,21 @@ export const MOP_SUPPLY = Object.freeze({
   id: "mop" as const,
   materialId: "mop" as const,
   defaultSettings: Object.freeze({ width: 34, opacity: 0.55 }),
+});
+
+/**
+ * V4: Spray's material is "spray" -- a coverage FIELD of many small
+ * deposited particles around the authored path (see the aerosol engine in
+ * `music/src/member/sprayDeposition.ts`), not a rendered path itself. The
+ * default width is a footprint radius scale (a creative control, not a
+ * physical nozzle dimension); opacity scales overall deposition strength,
+ * not a flat canvas-wide alpha wrapper, so repeated passes still visibly
+ * accumulate. Never represented as "marker" or "mop" material.
+ */
+export const SPRAY_SUPPLY = Object.freeze({
+  id: "spray" as const,
+  materialId: "spray" as const,
+  defaultSettings: Object.freeze({ width: 24, opacity: 0.6 }),
 });
 
 export const PENCIL_ERASER_SUPPLY = Object.freeze({

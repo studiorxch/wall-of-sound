@@ -94,4 +94,45 @@ describe("Blackbook Artwork Surface bridge", () => {
     expect(repository.removeOwnedArtworkMark).toHaveBeenCalledWith("art-mop", "member-1", "mark-mop");
     expect(repository.removeOwnedArtworkMark).not.toHaveBeenCalledWith("art-mop", "member-1", "mark-a");
   });
+
+  it("V4: gives Spray its own material identity, distinct from Marker and Mop, with Width/Opacity preserved", () => {
+    const spray = toLocalStrokeMark({ ...stroke("spray"), operation: "spray", style: { color: "#e2572b", width: 24, opacity: 0.6 } }, "mark-spray", new Date(4));
+    expect(spray).toMatchObject({ material: { supplyId: "spray", materialId: "spray" }, style: { width: 24, opacity: 0.6 } });
+    expect(spray.material?.materialId).not.toBe("marker");
+    expect(spray.material?.materialId).not.toBe("mop");
+    expect(spray.material?.supplyId).not.toBe("marker");
+    expect(spray.material?.supplyId).not.toBe("mop");
+  });
+
+  it("V4: Spray coexists with Graphite/Ink/Marker/Mop in one Artwork -- selecting Spray does not inherently split the Artwork when composition says the Marks belong together", () => {
+    const pencilMark = toLocalStrokeMark(stroke("pencil-a"), "mark-pencil", new Date(0));
+    const withPencil = artwork("art-multi", [pencilMark]);
+    const sprayMark = toLocalStrokeMark({ ...stroke("spray-a", 0.01), operation: "spray", style: { color: "#e2572b", width: 24, opacity: 0.6 } }, "mark-spray", new Date(1));
+    expect(selectArtworkForMark([withPencil], "member-1", BLACKBOOK_PAGE_SURFACE_ID, sprayMark)?.id).toBe("art-multi");
+  });
+
+  it("V4: Undo removes only the latest Spray operation (one authored Mark, regardless of how many deterministic particles it renders), leaving the Artwork and its other Marks untouched", async () => {
+    const pencilMark = toLocalStrokeMark(stroke("a"), "mark-a", new Date(0));
+    const first = artwork("art-spray", [pencilMark]);
+    const sprayStroke: BlackbookStroke = { operation: "spray", id: "spray-op", points: [{ x: 0.11, y: 0.21 }, { x: 0.21, y: 0.31 }], style: { color: "#e2572b", width: 24, opacity: 0.6 } };
+    const sprayMark = toLocalStrokeMark(sprayStroke, "mark-spray", new Date(1));
+    const withSpray = artwork("art-spray", [pencilMark, sprayMark]);
+    const repository: ArtworkRepository = {
+      createArtwork: vi.fn(async () => first), listOwnedArtwork: vi.fn(async () => [first]),
+      createMapArtwork: vi.fn(async () => first), listOwnedMapArtwork: vi.fn(async () => [first]),
+      appendOwnedArtworkMark: vi.fn(async () => withSpray),
+      removeOwnedArtworkMark: vi.fn(async () => first),
+      deleteOwnedArtwork: vi.fn(),
+    };
+    const bindArtwork = vi.fn((item: BlackbookOperation, artworkId: string, markId: string, creatorId: string, surfaceId: string) => Boolean(Object.assign(item, { artworkId, markId, creatorId, surfaceId })));
+    const bridge = createBlackbookArtworkPersistenceBridge({ repository, drawing: { bindArtwork }, getAuthenticatedMemberId: () => "member-1", createMarkId: () => "mark-spray" });
+    bridge.replaceKnownArtworks([first]);
+    await bridge.persistStroke(sprayStroke);
+    expect(repository.appendOwnedArtworkMark).toHaveBeenCalledWith("art-spray", "member-1", expect.objectContaining({ id: "mark-spray", material: { supplyId: "spray", materialId: "spray" } }));
+    await bridge.removeStroke(sprayStroke);
+    // Only the Spray Mark's own ID is removed as ONE operation -- there is
+    // no per-particle removal, and the neighboring Pencil Mark is untouched.
+    expect(repository.removeOwnedArtworkMark).toHaveBeenCalledWith("art-spray", "member-1", "mark-spray");
+    expect(repository.removeOwnedArtworkMark).not.toHaveBeenCalledWith("art-spray", "member-1", "mark-a");
+  });
 });

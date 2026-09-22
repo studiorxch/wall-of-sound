@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MARKER_SUPPLY, MOP_SUPPLY, PEN_SUPPLY, PENCIL_ERASER_SUPPLY, PENCIL_SUPPLY, canEraseMaterial } from "./artSupplyTypes.js";
+import { MARKER_SUPPLY, MOP_SUPPLY, PEN_SUPPLY, PENCIL_ERASER_SUPPLY, PENCIL_SUPPLY, SPRAY_SUPPLY, canEraseMaterial } from "./artSupplyTypes.js";
 
 describe("Art Supplies V1", () => {
   it("defines Pencil as a graphite-producing supply with editable performance settings", () => {
@@ -34,6 +34,21 @@ describe("Art Supplies V3 -- Mop", () => {
 
   it("keeps the graphite-only Eraser from targeting Mop -- no universal or Mop-specific eraser", () => {
     expect(canEraseMaterial("eraser", "mop")).toBe(false);
+    expect(canEraseMaterial("eraser", "graphite")).toBe(true);
+  });
+});
+
+describe("Art Supplies V4 -- Spray", () => {
+  it("defines Spray as an explicit reusable supply with its own material identity, distinct from Marker and Mop", () => {
+    expect(SPRAY_SUPPLY).toMatchObject({ id: "spray", materialId: "spray", defaultSettings: { width: 24, opacity: 0.6 } });
+    expect(SPRAY_SUPPLY.materialId).not.toBe(MARKER_SUPPLY.materialId);
+    expect(SPRAY_SUPPLY.materialId).not.toBe(MOP_SUPPLY.materialId);
+    expect(SPRAY_SUPPLY.id).not.toBe(MARKER_SUPPLY.id);
+    expect(SPRAY_SUPPLY.id).not.toBe(MOP_SUPPLY.id);
+  });
+
+  it("keeps the graphite-only Eraser from targeting Spray -- no universal or Spray-specific eraser", () => {
+    expect(canEraseMaterial("eraser", "spray")).toBe(false);
     expect(canEraseMaterial("eraser", "graphite")).toBe(true);
   });
 });

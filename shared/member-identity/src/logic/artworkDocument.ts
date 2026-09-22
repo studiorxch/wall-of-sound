@@ -62,7 +62,8 @@ export function validateArtworkMark(mark: ArtworkMark): void {
     const validMaterial = (mark.material.supplyId === "pencil" && mark.material.materialId === "graphite")
       || (mark.material.supplyId === "pen" && mark.material.materialId === "ink")
       || (mark.material.supplyId === "marker" && mark.material.materialId === "marker")
-      || (mark.material.supplyId === "mop" && mark.material.materialId === "mop");
+      || (mark.material.supplyId === "mop" && mark.material.materialId === "mop")
+      || (mark.material.supplyId === "spray" && mark.material.materialId === "spray");
     if (!validMaterial) throw new Error("invalid_artwork_material");
   }
   if (!mark.style || typeof mark.style.color !== "string" || !mark.style.color.trim()) {

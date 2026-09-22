@@ -87,4 +87,28 @@ describe("legacy Artwork compatibility", () => {
     expect(mopMark).toMatchObject({ material: { supplyId: "mop", materialId: "mop" }, style: { width: 34, opacity: 0.55 } });
     expect(mopMark.type === "stroke" ? mopMark.material?.materialId : undefined).not.toBe("marker");
   });
+
+  it("V4: hydrates Spray alongside Graphite/Ink/Marker/Mop with stable identity, Width/Opacity, and authored order preserved -- Spray is never decoded as Marker or Mop", () => {
+    const time = Timestamp.fromDate(new Date("2026-01-01T00:00:00Z"));
+    const points = [{ x: 0.1, y: 0.2 }, { x: 0.4, y: 0.5 }];
+    const artwork = decodeArtworkData("multi-material-with-spray", {
+      creatorId: "member-1", createdAt: time, updatedAt: time,
+      surfaceId: "blackbook:studio-rich-main:page:page-1",
+      composition: { bounds: { minX: 0.1, minY: 0.2, maxX: 0.4, maxY: 0.5 }, startedAt: time, lastEditedAt: time },
+      marks: [
+        { id: "pencil-1", type: "stroke", createdAt: time, geometry: { format: "local-2d-stroke-v1", points }, style: { color: "#171412", width: 5, opacity: 0.82 }, material: { supplyId: "pencil", materialId: "graphite" } },
+        { id: "ink-1", type: "stroke", createdAt: time, geometry: { format: "local-2d-stroke-v1", points }, style: { color: "#101828", width: 4, opacity: 0.55 }, material: { supplyId: "pen", materialId: "ink" } },
+        { id: "marker-1", type: "stroke", createdAt: time, geometry: { format: "local-2d-stroke-v1", points }, style: { color: "#d32852", width: 18, opacity: 0.7 }, material: { supplyId: "marker", materialId: "marker" } },
+        { id: "mop-1", type: "stroke", createdAt: time, geometry: { format: "local-2d-stroke-v1", points }, style: { color: "#1c6e6e", width: 34, opacity: 0.55 }, material: { supplyId: "mop", materialId: "mop" } },
+        { id: "spray-1", type: "stroke", createdAt: time, geometry: { format: "local-2d-stroke-v1", points }, style: { color: "#e2572b", width: 24, opacity: 0.6 }, material: { supplyId: "spray", materialId: "spray" } },
+      ],
+      state: "draft", visibility: "private",
+    });
+    expect(artwork.marks.map((mark) => mark.id)).toEqual(["pencil-1", "ink-1", "marker-1", "mop-1", "spray-1"]);
+    const sprayMark = artwork.marks[4];
+    expect(sprayMark).toMatchObject({ material: { supplyId: "spray", materialId: "spray" }, style: { width: 24, opacity: 0.6 } });
+    const sprayMaterialId = sprayMark.type === "stroke" ? sprayMark.material?.materialId : undefined;
+    expect(sprayMaterialId).not.toBe("marker");
+    expect(sprayMaterialId).not.toBe("mop");
+  });
 });

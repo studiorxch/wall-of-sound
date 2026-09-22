@@ -124,7 +124,8 @@ service cloud.firestore {
             && ((mark.material.supplyId == 'pencil' && mark.material.materialId == 'graphite')
               || (mark.material.supplyId == 'pen' && mark.material.materialId == 'ink')
               || (mark.material.supplyId == 'marker' && mark.material.materialId == 'marker')
-              || (mark.material.supplyId == 'mop' && mark.material.materialId == 'mop'))))
+              || (mark.material.supplyId == 'mop' && mark.material.materialId == 'mop')
+              || (mark.material.supplyId == 'spray' && mark.material.materialId == 'spray'))))
         && hasValidArtworkStyle(mark.style);
     }
 

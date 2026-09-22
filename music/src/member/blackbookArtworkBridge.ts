@@ -6,7 +6,7 @@ export const STUDIO_RICH_BLACKBOOK_PAGE_ID = "page-1";
 export const BLACKBOOK_PAGE_SURFACE_ID = `blackbook:${STUDIO_RICH_BLACKBOOK_ID}:page:${STUDIO_RICH_BLACKBOOK_PAGE_ID}`;
 
 export interface BlackbookStroke {
-  readonly operation: "pencil" | "pen" | "marker" | "mop";
+  readonly operation: "pencil" | "pen" | "marker" | "mop" | "spray";
   readonly id: string;
   artworkId?: string;
   markId?: string;
@@ -33,6 +33,7 @@ const MATERIAL_BY_SUPPLY: Readonly<Record<BlackbookStroke["operation"], ArtMater
   pen: "ink",
   marker: "marker",
   mop: "mop",
+  spray: "spray",
 });
 
 export function toLocalStrokeMark(stroke: BlackbookStroke, markId: string, createdAt = new Date()): LocalStrokeMark {
