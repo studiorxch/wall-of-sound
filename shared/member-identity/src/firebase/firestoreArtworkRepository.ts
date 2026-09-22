@@ -24,6 +24,7 @@ import type {
   LocalArtworkPoint,
   MapArtwork,
 } from "../data/artworkTypes.js";
+import type { ArtMaterialId, ArtSupplyId } from "../data/artSupplyTypes.js";
 import { boundsForMarks, createMapArtworkDocument, validateArtworkMark } from "../logic/artworkDocument.js";
 
 export const ARTWORK_COLLECTION_PATH = "artworks";
@@ -78,8 +79,8 @@ function decodeMark(value: unknown): ArtworkMark {
       opacity: Number(style?.opacity),
     },
     ...(material ? { material: {
-      supplyId: String(material.supplyId) as "pencil" | "pen" | "marker",
-      materialId: String(material.materialId) as "graphite" | "ink" | "marker",
+      supplyId: String(material.supplyId) as ArtSupplyId,
+      materialId: String(material.materialId) as ArtMaterialId,
     } } : {}),
   };
   const decoded: ArtworkMark = format === "local-2d-stroke-v1"

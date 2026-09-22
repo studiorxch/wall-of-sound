@@ -2,6 +2,7 @@ import {
   createFirebaseArtworkRepository,
   createFirebaseMemberIdentityAuthority,
   MARKER_SUPPLY,
+  MOP_SUPPLY,
   PEN_SUPPLY,
   PENCIL_ERASER_SUPPLY,
   PENCIL_SUPPLY,
@@ -13,6 +14,7 @@ import {
   createBlackbookArtworkPersistenceBridge,
   type BlackbookOperation,
 } from "./blackbookArtworkBridge";
+import { resolveMopDabPlan } from "./mopDeposition";
 
 function required<T>(value: T | null, error: string): T { if (!value) throw new Error(error); return value; }
 const canvas = required(document.querySelector<HTMLCanvasElement>("#blackbook-page"), "blackbook_surface_missing");
@@ -22,6 +24,7 @@ const status = required(document.querySelector<HTMLElement>("#blackbook-status")
 const pencilButton = required(document.querySelector<HTMLButtonElement>("#blackbook-pencil"), "blackbook_surface_missing");
 const penButton = required(document.querySelector<HTMLButtonElement>("#blackbook-pen"), "blackbook_surface_missing");
 const markerButton = required(document.querySelector<HTMLButtonElement>("#blackbook-marker"), "blackbook_surface_missing");
+const mopButton = required(document.querySelector<HTMLButtonElement>("#blackbook-mop"), "blackbook_surface_missing");
 const eraserButton = required(document.querySelector<HTMLButtonElement>("#blackbook-eraser"), "blackbook_surface_missing");
 const widthControl = required(document.querySelector<HTMLInputElement>("#blackbook-width"), "blackbook_surface_missing");
 const opacityControl = required(document.querySelector<HTMLInputElement>("#blackbook-opacity"), "blackbook_surface_missing");
@@ -31,19 +34,20 @@ const ctx = required(canvas.getContext("2d"), "blackbook_canvas_unavailable");
 const memberIdentity = createFirebaseMemberIdentityAuthority(import.meta.env);
 const repository = createFirebaseArtworkRepository(import.meta.env);
 let memberState: MemberIdentityState = memberIdentity.getState();
-const materialLayers = Object.fromEntries(["graphite", "ink", "marker"].map((materialId) => {
+const materialLayers = Object.fromEntries(["graphite", "ink", "marker", "mop"].map((materialId) => {
   const layer = document.createElement("canvas");
   layer.width = canvas.width; layer.height = canvas.height;
   return [materialId, { canvas: layer, context: required(layer.getContext("2d"), "blackbook_material_canvas_unavailable") }];
-})) as Record<"graphite" | "ink" | "marker", { canvas: HTMLCanvasElement; context: CanvasRenderingContext2D }>;
+})) as Record<"graphite" | "ink" | "marker" | "mop", { canvas: HTMLCanvasElement; context: CanvasRenderingContext2D }>;
 let operations: BlackbookOperation[] = [];
 let activePoints: { x: number; y: number }[] = [];
 let nextOperationId = 1;
-let activeSupply: "pencil" | "pen" | "marker" | "eraser" = "pencil";
-const supplySettings: Record<"pencil" | "pen" | "marker", { width: number; opacity: number }> = {
+let activeSupply: "pencil" | "pen" | "marker" | "mop" | "eraser" = "pencil";
+const supplySettings: Record<"pencil" | "pen" | "marker" | "mop", { width: number; opacity: number }> = {
   pencil: { ...PENCIL_SUPPLY.defaultSettings },
   pen: { ...PEN_SUPPLY.defaultSettings },
   marker: { ...MARKER_SUPPLY.defaultSettings },
+  mop: { ...MOP_SUPPLY.defaultSettings },
 };
 
 function render(): void {
@@ -54,12 +58,14 @@ function render(): void {
   for (const operation of operations) drawOperation(operation);
   if (activePoints.length > 1) drawOperation(activeOperation(activePoints));
   ctx.drawImage(materialLayers.graphite.canvas, 0, 0);
+  ctx.drawImage(materialLayers.mop.canvas, 0, 0);
   ctx.drawImage(materialLayers.ink.canvas, 0, 0);
   ctx.drawImage(materialLayers.marker.canvas, 0, 0);
   undoButton.disabled = memberState.status !== "signedIn" || operations.length === 0;
   pencilButton.dataset.active = String(activeSupply === "pencil");
   penButton.dataset.active = String(activeSupply === "pen");
   markerButton.dataset.active = String(activeSupply === "marker");
+  mopButton.dataset.active = String(activeSupply === "mop");
   eraserButton.dataset.active = String(activeSupply === "eraser");
 }
 
@@ -72,8 +78,16 @@ function path(context: CanvasRenderingContext2D, points: readonly { x: number; y
 function drawOperation(operation: BlackbookOperation): void {
   const { points } = operation;
   if (points.length < 2) return;
-  const materialId = operation.operation === "pencil" ? "graphite" : operation.operation === "pen" ? "ink" : operation.operation === "marker" ? "marker" : "graphite";
+  const materialId = operation.operation === "pencil" ? "graphite"
+    : operation.operation === "pen" ? "ink"
+    : operation.operation === "marker" ? "marker"
+    : operation.operation === "mop" ? "mop"
+    : "graphite"; // eraser targets graphite only
   const materialCtx = materialLayers[materialId].context;
+  if (operation.operation === "mop") {
+    drawMopStroke(materialCtx, points, operation.style);
+    return;
+  }
   materialCtx.save();
   materialCtx.lineCap = "round"; materialCtx.lineJoin = "round";
   path(materialCtx, points);
@@ -91,9 +105,49 @@ function drawOperation(operation: BlackbookOperation): void {
   materialCtx.stroke(); materialCtx.restore();
 }
 
+/**
+ * V3: Mop is deliberately NOT the same uniform-width polyline stroke every
+ * other supply uses. Two passes over the same recorded points:
+ * 1. A continuous rounded-cap stroke at slightly reduced opacity --
+ *    guarantees no gaps on a fast drag (path continuity) and reads as a
+ *    softer, less mechanically crisp pass than Marker's single solid line.
+ * 2. A layer of round "dabs" from `resolveMopDabPlan` (see mopDeposition.ts
+ *    for the full rationale) -- their radius responds to how closely the
+ *    points were recorded, so slower/dwelled sections of the same stroke
+ *    visibly bulge, and every dab is individually translucent so
+ *    overlapping dabs (within one stroke, or across repeated Mop passes on
+ *    this same persistent material layer) accumulate toward heavier
+ *    coverage instead of capping at one flat opacity.
+ */
+function drawMopStroke(
+  context: CanvasRenderingContext2D,
+  points: readonly { x: number; y: number }[],
+  style: { readonly color: string; readonly width: number; readonly opacity: number },
+): void {
+  const scaledPoints = points.map((point) => ({ x: point.x * canvas.width, y: point.y * canvas.height }));
+  context.save();
+  context.lineCap = "round"; context.lineJoin = "round";
+  context.globalCompositeOperation = "source-over";
+  path(context, points);
+  context.lineWidth = style.width;
+  context.globalAlpha = style.opacity * 0.7;
+  context.strokeStyle = style.color;
+  context.stroke();
+  context.fillStyle = style.color;
+  for (const dab of resolveMopDabPlan(scaledPoints, style.width * 0.5)) {
+    context.globalAlpha = style.opacity * dab.alphaScale;
+    context.beginPath();
+    context.arc(dab.x, dab.y, dab.radius, 0, Math.PI * 2);
+    context.fill();
+  }
+  context.restore();
+}
+
 function activeOperation(points: readonly { x: number; y: number }[]): BlackbookOperation {
   if (activeSupply === "eraser") return { operation: "eraser", id: "active", points, width: PENCIL_ERASER_SUPPLY.defaultWidth };
-  const color = activeSupply === "pencil" ? "#171412" : activeSupply === "pen" ? "#101828" : "#d32852";
+  // Mop's own muted wet-ink teal keeps it visually distinct from Marker's
+  // saturated pink at a glance, independent of width/opacity differences.
+  const color = activeSupply === "pencil" ? "#171412" : activeSupply === "pen" ? "#101828" : activeSupply === "mop" ? "#1c6e6e" : "#d32852";
   return { operation: activeSupply, id: "active", points, style: { color, width: Number(widthControl.value), opacity: Number(opacityControl.value) } };
 }
 
@@ -117,7 +171,7 @@ function hydrate(artworks: readonly Artwork[]): void {
   operations = artworks
     .filter((artwork) => artwork.surfaceId === BLACKBOOK_PAGE_SURFACE_ID && artwork.state === "draft")
     .flatMap((artwork) => artwork.marks.flatMap((mark): BlackbookOperation[] => mark.type === "stroke" && mark.geometry.format === "local-2d-stroke-v1" ? [{
-      operation: mark.material?.supplyId === "pen" ? "pen" : mark.material?.supplyId === "marker" ? "marker" : "pencil",
+      operation: mark.material?.supplyId === "pen" ? "pen" : mark.material?.supplyId === "marker" ? "marker" : mark.material?.supplyId === "mop" ? "mop" : "pencil",
       id: `blackbook-mark-${mark.id}`,
       artworkId: artwork.id,
       markId: mark.id,
@@ -160,7 +214,7 @@ undoButton.addEventListener("click", () => {
   void persistence.removeStroke(operation).catch((error) => { status.textContent = error instanceof Error ? error.message : "Undo failed"; });
 });
 
-function selectSupply(supply: "pencil" | "pen" | "marker" | "eraser"): void {
+function selectSupply(supply: "pencil" | "pen" | "marker" | "mop" | "eraser"): void {
   activeSupply = supply;
   if (supply !== "eraser") {
     widthControl.value = String(supplySettings[supply].width);
@@ -178,6 +232,7 @@ function rememberSupplySettings(): void {
 pencilButton.addEventListener("click", () => selectSupply("pencil"));
 penButton.addEventListener("click", () => selectSupply("pen"));
 markerButton.addEventListener("click", () => selectSupply("marker"));
+mopButton.addEventListener("click", () => selectSupply("mop"));
 eraserButton.addEventListener("click", () => { activeSupply = "eraser"; render(); });
 widthControl.addEventListener("input", rememberSupplySettings);
 opacityControl.addEventListener("input", rememberSupplySettings);

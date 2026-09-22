@@ -41,6 +41,18 @@ describe("createMapArtworkDocument", () => {
     for (const item of [pencil, pen, marker, erase]) expect(() => createMapArtworkDocument({ creatorId: base.creatorId, surfaceId: base.surfaceId, mark: item }, "server-time")).not.toThrow();
   });
 
+  it("keeps Mop as its own material -- coexists with graphite/ink/marker, is not confused with Marker, and works on both local and geographic coordinate variants", () => {
+    const pencil = { ...localMark, id: "pencil", material: { supplyId: "pencil" as const, materialId: "graphite" as const } };
+    const mop = { ...localMark, id: "mop", material: { supplyId: "mop" as const, materialId: "mop" as const }, style: { color: "#1c6e6e", width: 34, opacity: 0.55 } };
+    const base = { id: "art", creatorId: "member-uid", surfaceId: "blackbook:book-1:page:page-1", createdAt: new Date(0), updatedAt: new Date(0), composition: { bounds: boundsForMarks([pencil]), startedAt: new Date(0), lastEditedAt: new Date(0) }, marks: [pencil], state: "draft" as const, visibility: "private" as const };
+    expect(selectArtworkForMark([base], base.creatorId, base.surfaceId, mop)?.id).toBe("art");
+    expect(mop.material.materialId).not.toBe("marker");
+    expect(() => createMapArtworkDocument({ creatorId: base.creatorId, surfaceId: base.surfaceId, mark: mop }, "server-time")).not.toThrow();
+
+    const geographicMop = { ...mark, id: "mop-geo", material: { supplyId: "mop" as const, materialId: "mop" as const } };
+    expect(() => createMapArtworkDocument({ creatorId: "member-uid", surfaceId: "map:new-york", mark: geographicMop }, "server-time")).not.toThrow();
+  });
+
   it("allows Pencil material identity on geographic Marks without a Map-specific supply", () => {
     const pencil = { ...mark, material: { supplyId: "pencil" as const, materialId: "graphite" as const } };
     expect(createMapArtworkDocument({ creatorId: "member-uid", surfaceId: "map:new-york", mark: pencil }, "server-time").marks[0]).toMatchObject({ material: { supplyId: "pencil", materialId: "graphite" }, geometry: { format: "geographic-stroke-v1" } });

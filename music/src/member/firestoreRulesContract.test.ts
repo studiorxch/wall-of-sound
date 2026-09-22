@@ -43,6 +43,11 @@ describe("Firestore Member and Artwork ownership contract", () => {
     expect(rules).toContain("mark.targetMaterialId == 'graphite'");
   });
 
+  it("V3: allows the canonical Mop/Mop material pair without weakening ownership or the graphite-only Eraser target", () => {
+    expect(rules).toContain("mark.material.supplyId == 'mop' && mark.material.materialId == 'mop'");
+    expect(rules).toContain("mark.targetMaterialId == 'graphite'");
+  });
+
   it("accepts local Blackbook geometry and local bounds without weakening ownership", () => {
     expect(rules).toContain("'local-2d-stroke-v1'");
     expect(rules).toContain("['minX', 'minY', 'maxX', 'maxY']");
