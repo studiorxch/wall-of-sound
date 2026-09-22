@@ -3,7 +3,9 @@ import type { ArtworkRepository, MapArtwork } from "@studiorich/member-identity"
 import {
   createMapArtworkPersistenceBridge,
   SUBWAY_MAP_SURFACE_ID,
+  toGeographicErasureMark,
   toStrokeMark,
+  type WallErasure,
   type WallStroke,
 } from "./mapArtworkBridge";
 
@@ -183,5 +185,25 @@ describe("Artwork composition bridge", () => {
     await bridge.persistStroke(distantStroke);
     expect(repository.createMapArtwork).toHaveBeenCalledOnce();
     expect(repository.appendOwnedArtworkMark).not.toHaveBeenCalled();
+  });
+
+  it("Map Art Supplies V1: carries Mop and Spray material identity through geographic Marks -- the SAME supply ids Blackbook uses, never a Map-specific duplicate", () => {
+    const mop = toStrokeMark({ ...wallStroke("stroke-mop"), operation: "mop", style: { color: "#1c6e6e", width: 34, opacity: 0.55 } }, "mark-mop");
+    const spray = toStrokeMark({ ...wallStroke("stroke-spray"), operation: "spray", style: { color: "#e2572b", width: 24, opacity: 0.6 } }, "mark-spray");
+    expect(mop).toMatchObject({ material: { supplyId: "mop", materialId: "mop" }, style: { width: 34, opacity: 0.55 } });
+    expect(spray).toMatchObject({ material: { supplyId: "spray", materialId: "spray" }, style: { width: 24, opacity: 0.6 } });
+    expect(spray.material?.materialId).not.toBe("marker");
+    expect(spray.material?.materialId).not.toBe("mop");
+  });
+
+  it("Map Art Supplies V1: authors graphite-only material-erasure on geographic coordinates, the same Mark type Blackbook's Eraser produces", () => {
+    const erasure: WallErasure = { operation: "eraser", id: "erase-1", points: [{ longitude: -73.99, latitude: 40.72 }, { longitude: -73.98, latitude: 40.73 }], width: 28 };
+    const mark = toGeographicErasureMark(erasure, "erase-mark");
+    expect(mark).toMatchObject({ type: "material-erasure", targetMaterialId: "graphite", width: 28, geometry: { format: "geographic-erasure-v1" } });
+  });
+
+  it("rejects a geographic erasure with fewer than two points or non-geographic points", () => {
+    expect(() => toGeographicErasureMark({ operation: "eraser", id: "e", points: [{}], width: 20 } as unknown as WallErasure, "m")).toThrow();
+    expect(() => toGeographicErasureMark({ operation: "eraser", id: "e", points: [{ longitude: 1, latitude: 1 }, {}], width: 20 } as unknown as WallErasure, "m")).toThrow("wall_stroke_missing_geographic_coordinates");
   });
 });

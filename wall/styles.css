@@ -1100,6 +1100,8 @@ body.subway-public .subway-ribbon-sunroof-exit {
   bottom: 22px;
   z-index: 60;
   display: flex;
+  flex-direction: column;
+  align-items: center;
   gap: 6px;
   padding: 6px;
   transform: translateX(-50%);
@@ -1109,6 +1111,33 @@ body.subway-public .subway-ribbon-sunroof-exit {
   backdrop-filter: blur(8px);
 }
 .subway-map-paint-controls[hidden] { display: none !important; }
+/* Map Art Supplies Integration V1: Level 1 (persistent, compact) and Level 2
+   (contextual COLOR/WIDTH/OPACITY, shown only while a drawing supply is
+   active) each lay out as their own row inside the same floating panel. */
+.subway-map-paint-level1,
+.subway-map-paint-level2 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.subway-map-paint-level2[hidden] { display: none !important; }
+.subway-map-paint-level2 label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: rgba(238, 242, 246, 0.6);
+  font: 600 9px/1 inherit;
+  letter-spacing: 0.08em;
+}
+.subway-map-paint-level2 input[type="range"] { width: 90px; }
+.subway-map-paint-level2 input[type="color"] {
+  width: 26px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  background: transparent;
+}
 .subway-map-paint-controls button {
   min-width: 58px;
   min-height: 34px;

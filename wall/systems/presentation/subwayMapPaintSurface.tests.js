@@ -71,6 +71,59 @@
         hydratedStroke));
       results.push(assertion("repeated hydration does not duplicate Artwork", drawing.hydrateArtwork(hydratedArtwork) === 0 && drawing.getStrokes().length === 1));
       results.push(assertion("Undo still removes hydrated Artwork", !!ui.undo() && drawing.getStrokes().length === 0));
+
+      // ── Map Art Supplies Integration V1 ─────────────────────────────────
+      var supplies = SBE.ArtSupplies;
+      results.push(assertion("shared Art Supply definitions are published on window.SBE (no Map-specific duplicate)", !!supplies && !!supplies.MOP_SUPPLY && !!supplies.SPRAY_SUPPLY));
+
+      results.push(assertion("selectSupply(mop) both selects Mop and enters draw mode", ui.selectSupply("mop") && ui.getMode() === "draw" && drawing.getBrush().supplyId === "mop"));
+      if (point) {
+        var mopEnd = Object.assign({}, point, { x: point.x + 20, longitude: point.longitude + 0.0002 });
+        drawing.__test.commitPoints([point, mopEnd]);
+      }
+      var mopMark = drawing.getStrokes()[0];
+      results.push(assertion("committed Mop stroke carries the mop supply identity", mopMark && mopMark.operation === "mop", mopMark));
+
+      results.push(assertion("selectSupply(spray) selects Spray", ui.selectSupply("spray") && drawing.getBrush().supplyId === "spray"));
+      var sprayFirstPlan = null;
+      if (point) {
+        var sprayEnd = Object.assign({}, point, { x: point.x + 30, longitude: point.longitude + 0.0003 });
+        drawing.__test.commitPoints([point, sprayEnd]);
+        var sprayMark = drawing.getStrokes()[drawing.getStrokes().length - 1];
+        results.push(assertion("committed Spray stroke carries the spray supply identity", sprayMark && sprayMark.operation === "spray", sprayMark));
+        var deposition = SBE.ArtSupplyDeposition;
+        if (deposition && sprayMark) {
+          var reprojected = drawing.__test.reprojectPoints(sprayMark.points);
+          sprayFirstPlan = deposition.resolveSprayParticlePlan(reprojected, sprayMark.style.width * 0.5, deposition.hashSeed(sprayMark.markId || sprayMark.id));
+          var reprojectedAgain = drawing.__test.reprojectPoints(sprayMark.points);
+          var sprayPlanAfterReproject = deposition.resolveSprayParticlePlan(reprojectedAgain, sprayMark.style.width * 0.5, deposition.hashSeed(sprayMark.markId || sprayMark.id));
+          results.push(assertion("Spray deposition is deterministic across repeated reprojection (same Mark, same camera math -> identical plan)",
+            JSON.stringify(sprayFirstPlan) === JSON.stringify(sprayPlanAfterReproject)));
+        }
+      }
+
+      results.push(assertion("selectSupply(pencil) restores Pencil as the active supply", ui.selectSupply("pencil") && drawing.getBrush().supplyId === "pencil"));
+      if (point) {
+        var pencilEnd = Object.assign({}, point, { x: point.x + 5, longitude: point.longitude + 0.00005 });
+        drawing.__test.commitPoints([point, pencilEnd]);
+      }
+      var allStrokes = drawing.getStrokes();
+      results.push(assertion("Pencil/Mop/Spray Marks all coexist as ONE composed set (no forced split)", allStrokes.length === 3, allStrokes.map(function (s) { return s.operation; })));
+
+      results.push(assertion("selectSupply(eraser) selects Eraser with no contextual Width/Opacity/Color options", ui.selectSupply("eraser") && drawing.getBrush().supplyId === "eraser"));
+      var beforeErase = drawing.getStrokes().length;
+      if (point) {
+        var eraseEnd = Object.assign({}, point, { x: point.x + 6, longitude: point.longitude + 0.00006 });
+        drawing.__test.commitPoints([point, eraseEnd]);
+      }
+      var afterErase = drawing.getStrokes();
+      results.push(assertion("Eraser commits a graphite-only material-erasure Mark", afterErase.length === beforeErase + 1 && afterErase[afterErase.length - 1].type === "material-erasure" && afterErase[afterErase.length - 1].targetMaterialId === "graphite"));
+
+      var beforeUndoErase = drawing.getStrokes().length;
+      results.push(assertion("Undo removes the material-erasure Mark as one operation", !!ui.undo() && drawing.getStrokes().length === beforeUndoErase - 1));
+
+      var beforeUndoSpray = drawing.getStrokes().map(function (s) { return s.operation; });
+      results.push(assertion("latest Mark before further Undo is still Pencil (erasure undone cleanly)", beforeUndoSpray[beforeUndoSpray.length - 1] === "pencil"));
     } finally {
       surface.overlayObjects = originalObjects;
       workspace.setInteractionMode(originalMode);

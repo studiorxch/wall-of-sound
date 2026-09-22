@@ -2,27 +2,62 @@ import {
   createFirebaseArtworkRepository,
   createFirebaseMemberIdentityAuthority,
   serializePublicMember,
+  MARKER_SUPPLY,
+  MOP_SUPPLY,
+  PEN_SUPPLY,
+  PENCIL_ERASER_SUPPLY,
+  PENCIL_SUPPLY,
+  SPRAY_SUPPLY,
   type MemberIdentityState,
 } from "@studiorich/member-identity";
 import {
   createMapArtworkPersistenceBridge,
-  type WallStroke,
+  type WallOperation,
 } from "./mapArtworkBridge";
+import { resolveMopDabPlan } from "./mopDeposition";
+import { hashSeed, resolveSprayParticlePlan, STUDIORICH_STOCK_CAP } from "./sprayDeposition";
 
 type WallRuntime = {
   Workspace?: { getActiveSurface(): unknown };
   SurfaceDrawingRuntime?: {
-    bindArtwork(stroke: WallStroke, artworkId: string, markId: string, creatorId: string, surfaceId: string): boolean;
+    bindArtwork(stroke: WallOperation, artworkId: string, markId: string, creatorId: string, surfaceId: string): boolean;
     hydrateArtwork(artwork: unknown): number;
     removePersistedStrokes(): number;
   };
   MemberIdentityAuthority?: unknown;
   MemberIdentityState?: MemberIdentityState;
   PublicMember?: unknown;
+  /**
+   * Map Art Supplies Integration V1: the SAME supply defaults and aerosol/
+   * Mop deposition engines Blackbook already uses, published onto
+   * `window.SBE` so the plain-script Wall runtime (no module bundler) can
+   * call the real shared implementation instead of a second one. This
+   * module is the seam -- it already runs as a Vite-bundled ES module
+   * alongside Wall's classic scripts on the same page, sharing `window.SBE`
+   * (the same bridge pattern `SurfaceDrawingRuntime`/`Workspace` already
+   * use). No logic is duplicated: these are the exact same function
+   * references imported by blackbookRuntime.ts.
+   */
+  ArtSupplies?: {
+    PENCIL_SUPPLY: typeof PENCIL_SUPPLY;
+    PEN_SUPPLY: typeof PEN_SUPPLY;
+    MARKER_SUPPLY: typeof MARKER_SUPPLY;
+    MOP_SUPPLY: typeof MOP_SUPPLY;
+    SPRAY_SUPPLY: typeof SPRAY_SUPPLY;
+    PENCIL_ERASER_SUPPLY: typeof PENCIL_ERASER_SUPPLY;
+  };
+  ArtSupplyDeposition?: {
+    resolveMopDabPlan: typeof resolveMopDabPlan;
+    resolveSprayParticlePlan: typeof resolveSprayParticlePlan;
+    hashSeed: typeof hashSeed;
+    STUDIORICH_STOCK_CAP: typeof STUDIORICH_STOCK_CAP;
+  };
 };
 
 const root = window as typeof window & { SBE?: WallRuntime };
 root.SBE ??= {};
+root.SBE.ArtSupplies = { PENCIL_SUPPLY, PEN_SUPPLY, MARKER_SUPPLY, MOP_SUPPLY, SPRAY_SUPPLY, PENCIL_ERASER_SUPPLY };
+root.SBE.ArtSupplyDeposition = { resolveMopDabPlan, resolveSprayParticlePlan, hashSeed, STUDIORICH_STOCK_CAP };
 
 const memberIdentity = createFirebaseMemberIdentityAuthority(import.meta.env);
 const artworkRepository = createFirebaseArtworkRepository(import.meta.env);
@@ -134,7 +169,7 @@ async function hydrateOwnedArtwork(memberId: string): Promise<void> {
 
 document.addEventListener("surface-drawing:stroke-committed", (event) => {
   if (state.status !== "signedIn") return;
-  const detail = (event as CustomEvent).detail as { stroke?: WallStroke };
+  const detail = (event as CustomEvent).detail as { stroke?: WallOperation };
   if (!detail?.stroke) return;
   void artworkPersistence.persistStroke(detail.stroke).catch((error: unknown) => {
     console.error("[SubwayMemberRuntime] Artwork save failed", error);
@@ -144,7 +179,7 @@ document.addEventListener("surface-drawing:stroke-committed", (event) => {
 
 document.addEventListener("surface-drawing:stroke-removed", (event) => {
   if (state.status !== "signedIn") return;
-  const stroke = (event as CustomEvent).detail?.stroke as WallStroke | undefined;
+  const stroke = (event as CustomEvent).detail?.stroke as WallOperation | undefined;
   if (!stroke) return;
   void artworkPersistence.removeStroke(stroke).catch((error: unknown) => {
     console.error("[SubwayMemberRuntime] Artwork delete failed", error);

@@ -1,14 +1,37 @@
 import type {
+  ArtMaterialId,
   ArtworkRepository,
   Artwork,
   ArtworkMark,
+  GeographicMaterialErasureMark,
   StrokeMark,
 } from "@studiorich/member-identity";
 import { selectArtworkForMark } from "@studiorich/member-identity";
 
 export const SUBWAY_MAP_SURFACE_ID = "map:new-york";
 
+/**
+ * Map Art Supplies Integration V1: the SAME supply identities Blackbook
+ * already proves (see blackbookArtworkBridge.ts's identical map), applied
+ * to geographic Marks instead of local-2d ones. There is no MapPencil/
+ * MapPen/MapMarker/MapMop/MapSpray -- `operation` is one of the same five
+ * supply ids, and `MATERIAL_BY_SUPPLY` is the same lookup, just living here
+ * because this is the geographic-coordinate bridge rather than the local
+ * one. The material BEHAVIOR (deposition/rendering) stays wherever it
+ * already lived (mopDeposition.ts/sprayDeposition.ts) -- this bridge only
+ * carries identity through serialization, exactly like its Blackbook twin.
+ */
+export type WallSupplyId = "pencil" | "pen" | "marker" | "mop" | "spray";
+const MATERIAL_BY_SUPPLY: Readonly<Record<WallSupplyId, ArtMaterialId>> = Object.freeze({
+  pencil: "graphite",
+  pen: "ink",
+  marker: "marker",
+  mop: "mop",
+  spray: "spray",
+});
+
 export interface WallStroke {
+  readonly operation?: WallSupplyId;
   readonly id?: string;
   artworkId?: string;
   markId?: string;
@@ -24,6 +47,23 @@ export interface WallStroke {
     readonly opacity?: number;
   };
 }
+
+/** The same graphite-only authored erasure Mark Blackbook's Eraser produces (see blackbookArtworkBridge.ts's BlackbookErasure), on geographic coordinates instead of local ones. */
+export interface WallErasure {
+  readonly operation: "eraser";
+  readonly id?: string;
+  artworkId?: string;
+  markId?: string;
+  creatorId?: string;
+  surfaceId?: string;
+  readonly points?: readonly {
+    readonly longitude?: number | null;
+    readonly latitude?: number | null;
+  }[];
+  readonly width?: number;
+}
+
+export type WallOperation = WallStroke | WallErasure;
 
 export interface ArtworkBindingRuntime<TStroke extends object> {
   bindArtwork(stroke: TStroke, artworkId: string, markId: string, creatorId: string, surfaceId: string): boolean;
@@ -60,7 +100,36 @@ export function toStrokeMark(stroke: WallStroke, markId: string): StrokeMark {
     createdAt: new Date(),
     geometry: { format: "geographic-stroke-v1", points },
     style: { color, width: width as number, opacity: opacity as number },
+    ...(stroke.operation ? { material: { supplyId: stroke.operation, materialId: MATERIAL_BY_SUPPLY[stroke.operation] } } : {}),
   };
+}
+
+export function toGeographicErasureMark(erasure: WallErasure, markId: string): GeographicMaterialErasureMark {
+  if (!erasure.id || !Array.isArray(erasure.points) || erasure.points.length < 2) {
+    throw new Error("invalid_wall_erasure");
+  }
+  const points = erasure.points.map((point) => {
+    if (!Number.isFinite(point.longitude) || !Number.isFinite(point.latitude)) {
+      throw new Error("wall_stroke_missing_geographic_coordinates");
+    }
+    return { longitude: point.longitude as number, latitude: point.latitude as number };
+  });
+  if (!Number.isFinite(erasure.width) || (erasure.width as number) <= 0) {
+    throw new Error("invalid_wall_erasure_width");
+  }
+  return {
+    id: markId,
+    type: "material-erasure",
+    createdAt: new Date(),
+    geometry: { format: "geographic-erasure-v1", points },
+    targetMaterialId: "graphite",
+    width: erasure.width as number,
+  };
+}
+
+/** Routes to a Stroke or a graphite-only material-erasure Mark by `operation`, the same branch Blackbook's `toBlackbookMark` makes. */
+export function toGeographicMark(operation: WallOperation, markId: string): ArtworkMark {
+  return operation.operation === "eraser" ? toGeographicErasureMark(operation, markId) : toStrokeMark(operation, markId);
 }
 
 export function createArtworkPersistenceBridge<TStroke extends { artworkId?: string; markId?: string; creatorId?: string; surfaceId?: string }>({
@@ -128,6 +197,6 @@ export function createArtworkPersistenceBridge<TStroke extends { artworkId?: str
   };
 }
 
-export function createMapArtworkPersistenceBridge(options: Omit<ArtworkPersistenceBridgeOptions<WallStroke>, "surfaceId" | "toMark">) {
-  return createArtworkPersistenceBridge({ ...options, surfaceId: SUBWAY_MAP_SURFACE_ID, toMark: toStrokeMark });
+export function createMapArtworkPersistenceBridge(options: Omit<ArtworkPersistenceBridgeOptions<WallOperation>, "surfaceId" | "toMark">) {
+  return createArtworkPersistenceBridge({ ...options, surfaceId: SUBWAY_MAP_SURFACE_ID, toMark: toGeographicMark });
 }
