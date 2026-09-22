@@ -278,3 +278,36 @@ describe("Spray aerosol engine -- bounded performance", () => {
     expect(resolveSprayParticlePlan([{ x: 0, y: 0 }, { x: 1, y: 1 }], -5, hashSeed("x"))).toEqual([]);
   });
 });
+
+describe("Spray aerosol engine -- Revision 8 (a long zigzag's late-stage direction changes survive, not just its endpoints)", () => {
+  function buildZigzag(count: number, amplitude = 20): { x: number; y: number }[] {
+    return Array.from({ length: count }, (_, i) => ({ x: i % 2 === 0 ? -amplitude : amplitude, y: i * 4 }));
+  }
+
+  it("resolveSprayEmissionPoints keeps real oscillation near each checkpoint throughout the path, not flattened toward the centerline after some point (the straight-line-collapse bug) -- checked over a small window since gap-filling interpolation between preserved corners legitimately adds intermediate-x points", () => {
+    const amplitude = 20;
+    const points = buildZigzag(600, amplitude);
+    const emissions = resolveSprayEmissionPoints(points, 12);
+    const totalY = (points.length - 1) * 4;
+    const checkpoints = [0.25, 0.5, 0.75, 0.9, 0.97];
+    for (const fraction of checkpoints) {
+      const targetY = fraction * totalY;
+      const window = emissions.filter((e) => Math.abs(e.y - targetY) <= totalY * 0.05);
+      expect(window.length).toBeGreaterThan(0);
+      const maxAbsX = Math.max(...window.map((e) => Math.abs(e.x)));
+      expect(maxAbsX).toBeGreaterThan(amplitude * 0.6);
+    }
+  });
+
+  it("resolveSprayCorePlan's late-stage segments still follow the zigzag -- not a straight line to the endpoint", () => {
+    const amplitude = 20;
+    const points = buildZigzag(600, amplitude);
+    const plan = resolveSprayCorePlan(points, 12, hashSeed("zigzag-core"));
+    const pass = plan[0];
+    const lastQuarter = pass.points.filter((point) => point.y >= 0.75 * (points.length - 1) * 4);
+    expect(lastQuarter.length).toBeGreaterThan(1);
+    const xs = lastQuarter.map((point) => point.x);
+    const spread = Math.max(...xs) - Math.min(...xs);
+    expect(spread).toBeGreaterThan(amplitude); // real oscillation, not collapsed
+  });
+});

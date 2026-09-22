@@ -2666,9 +2666,50 @@
     if (SBE.ObservabilityCamera) {
       SBE.ObservabilityCamera.init();
     }
-    if (SBE.TiltProjectionRuntime) {
-      // Pass the Mapbox map instance so tilt can drive setPitch()
-      SBE.TiltProjectionRuntime.init(typeof map !== 'undefined' ? map : null);
+    if (SBE.CameraInteractionAuthority) {
+      // Calibration V1 Revision 13: must be initialized before
+      // TiltProjectionRuntime starts its evaluation interval below, so the
+      // very first tick already has a working yield check available. Uses
+      // SBE.MapboxViewportRuntime.getMap() (already initialized by
+      // WorkspaceUI.init() above) rather than the ambiguous bare `map`
+      // identifier this whole boot block used to rely on -- unlike Tilt,
+      // this authority has no later runtime fallback to re-resolve the map
+      // if it captures a stale/null reference here, so it needs the real
+      // instance up front.
+      var mbrForCameraAuthority = SBE.MapboxViewportRuntime;
+      SBE.CameraInteractionAuthority.init(mbrForCameraAuthority && mbrForCameraAuthority.getMap ? mbrForCameraAuthority.getMap() : null);
+    }
+    // Calibration V1 Revision 17 (Drawing Stability Closure, finding A): the
+    // Subway Map Paint surface is a working creation canvas -- human
+    // validation established the camera must NEVER move on its own while a
+    // person is composing, choosing a tool/color, or just looking at their
+    // work, no matter how long they pause. TiltProjectionRuntime itself is
+    // untouched (still fully intact for a future explicit ambient/attract
+    // experience -- see its own file) -- this simply never calls its
+    // init(), so its evaluation interval never starts and it never once
+    // calls map.setPitch() for this mode. Deliberately NOT
+    // TiltProjectionRuntime.setEnabled(false): that method also forces an
+    // immediate pitch-to-0 snap as part of its own designed toggle
+    // behavior, which is itself an unwanted autonomous camera movement here
+    // -- skipping init() entirely means the camera simply stays wherever
+    // the human last left it (or its authored starting pitch), forever,
+    // with zero snaps. Manual pitch/rotate/zoom/pan are untouched --
+    // Mapbox's own interaction handlers never went through Tilt at all.
+    // Every other Wall mode (harbor, etc.) is unaffected -- Tilt still
+    // initializes and runs exactly as before everywhere else.
+    var isSubwayMode = (function () {
+      try { return new URLSearchParams(global.location.search).get('mode') === 'subway'; }
+      catch (e) { return false; }
+    })();
+    if (SBE.TiltProjectionRuntime && !isSubwayMode) {
+      // Calibration V1 Revision 14: same reliable accessor as
+      // CameraInteractionAuthority above, replacing the ambiguous bare
+      // `map` identifier -- Tilt itself now also falls back to this same
+      // accessor internally (see tiltProjectionRuntime.js's init()), so
+      // this call site fix and that internal one are redundant-but-
+      // harmless belt-and-braces, not a behavior change either way.
+      var mbrForTilt = SBE.MapboxViewportRuntime;
+      SBE.TiltProjectionRuntime.init(mbrForTilt && mbrForTilt.getMap ? mbrForTilt.getMap() : null);
     }
     if (SBE.MarineRenderer) {
       SBE.MarineRenderer.init();

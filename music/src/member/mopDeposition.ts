@@ -23,6 +23,8 @@
  * plan. See the module doc below for the drip seam this stops short of.
  */
 
+import { simplifyPathToBudget } from "./pathSimplify";
+
 export interface MopPoint {
   readonly x: number;
   readonly y: number;
@@ -95,17 +97,22 @@ export function resolveMopEmissionPoints(
   // dropped the rest of the path from rendering. Measure total length
   // first and widen the step (never narrower than nominal) so the whole
   // path always fits within budget; short strokes are unaffected.
-  let totalLength = 0;
-  for (let index = 1; index < points.length; index += 1) {
-    totalLength += Math.hypot(points[index].x - points[index - 1].x, points[index].y - points[index - 1].y);
-  }
   const budget = Math.max(1, MOP_MAX_EMISSION_POINTS - 1);
+  // Revision 8: if raw point count alone could already overflow the
+  // budget (every segment emits >=1 point below regardless of step --
+  // see pathSimplify.ts's doc for the "collapses to a straight line" bug
+  // this fixes), simplify the raw points first via Douglas-Peucker.
+  const source = points.length - 1 > budget ? simplifyPathToBudget(points, budget + 1) : points;
+  let totalLength = 0;
+  for (let index = 1; index < source.length; index += 1) {
+    totalLength += Math.hypot(source[index].x - source[index - 1].x, source[index].y - source[index - 1].y);
+  }
   const maxStep = Math.max(nominalStep, totalLength / budget);
 
-  const emissions: MopEmissionPoint[] = [{ ...points[0], densityFactor: densityAt(0) }];
-  for (let index = 1; index < points.length; index += 1) {
-    const start = points[index - 1];
-    const end = points[index];
+  const emissions: MopEmissionPoint[] = [{ ...source[0], densityFactor: densityAt(0) }];
+  for (let index = 1; index < source.length; index += 1) {
+    const start = source[index - 1];
+    const end = source[index];
     const segmentLength = Math.hypot(end.x - start.x, end.y - start.y);
     const density = densityAt(segmentLength);
     const steps = Math.max(1, Math.ceil(segmentLength / maxStep));
@@ -114,10 +121,13 @@ export function resolveMopEmissionPoints(
       emissions.push({ x: start.x + (end.x - start.x) * t, y: start.y + (end.y - start.y) * t, densityFactor: density });
     }
   }
+  // Revision 8: geometry-aware simplification, not an index slice +
+  // forced endpoint jump -- see sprayDeposition.ts's identical fix (and
+  // pathSimplify.ts's module doc) for why the old version reproduced the
+  // straight-line-collapse bug at this second (post-interpolation) layer
+  // even after the raw points were correctly pre-simplified.
   if (emissions.length > MOP_MAX_EMISSION_POINTS) {
-    const trimmed = emissions.slice(0, MOP_MAX_EMISSION_POINTS);
-    trimmed[trimmed.length - 1] = emissions[emissions.length - 1];
-    return trimmed;
+    return simplifyPathToBudget(emissions, MOP_MAX_EMISSION_POINTS);
   }
   return emissions;
 }

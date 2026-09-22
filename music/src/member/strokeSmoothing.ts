@@ -85,6 +85,10 @@ export function fillSprayParticle(
 ): void {
   const centerAlpha = Math.min(1, Math.max(0, opacity * particle.alpha));
   if (centerAlpha <= 0 || particle.radius <= 0) return;
+  // Defensive: a non-finite position/radius (e.g. an edge-case reprojected
+  // point) throws hard inside createRadialGradient -- skip this one
+  // particle/dab rather than aborting the whole render pass.
+  if (!isFinite(particle.x) || !isFinite(particle.y) || !isFinite(particle.radius)) return;
   const gradient = ctx.createRadialGradient(particle.x, particle.y, 0, particle.x, particle.y, particle.radius);
   gradient.addColorStop(0, withAlpha(color, centerAlpha));
   gradient.addColorStop(0.7, withAlpha(color, centerAlpha * 0.85));
@@ -92,6 +96,46 @@ export function fillSprayParticle(
   ctx.fillStyle = gradient;
   ctx.beginPath();
   ctx.arc(particle.x, particle.y, particle.radius, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+/**
+ * Calibration V1 Revision 11: Mop's dabs used to reuse `fillSprayParticle`
+ * wholesale -- its soft aerosol falloff (opaque center fading gradually to
+ * zero well before the edge) is correct for Spray but made every Mop
+ * contact mark read as a diffuse blurred glow rather than a wet-applicator
+ * nib touching the surface, especially visible on a stationary dot where
+ * there's no surrounding texture to hide it.
+ *
+ * OPACITY != EDGE SOFTNESS: `centerAlpha` (from `opacity * dab.alpha`,
+ * identical math to `fillSprayParticle`) still controls overall
+ * translucency -- a low-opacity Mop pass is genuinely more see-through ink,
+ * not a blurrier one. What's different is the gradient's SHAPE: the fill
+ * stays at full `centerAlpha` all the way out to 88% of the dab's radius,
+ * then falls to zero only in that last thin band -- just enough to
+ * anti-alias the boundary (no jagged hard edge), never a soft halo. This
+ * keeps a comparatively crisp nib/contact boundary at any opacity, while
+ * still not a flat `ctx.arc().fill()` (the earlier "visible stamp" defect
+ * this replaced) -- the existing deterministic per-dab jitter/scatter
+ * (surfaceDrawingRuntime.js's `_drawMopPoints`, blackbookRuntime.ts's
+ * `drawMopStroke`) still provides the organic deposition variation.
+ */
+export function fillMopDab(
+  ctx: CanvasRenderingContext2D,
+  dab: { readonly x: number; readonly y: number; readonly radius: number; readonly alpha: number },
+  color: string,
+  opacity: number,
+): void {
+  const centerAlpha = Math.min(1, Math.max(0, opacity * dab.alpha));
+  if (centerAlpha <= 0 || dab.radius <= 0) return;
+  if (!isFinite(dab.x) || !isFinite(dab.y) || !isFinite(dab.radius)) return;
+  const gradient = ctx.createRadialGradient(dab.x, dab.y, 0, dab.x, dab.y, dab.radius);
+  gradient.addColorStop(0, withAlpha(color, centerAlpha));
+  gradient.addColorStop(0.88, withAlpha(color, centerAlpha));
+  gradient.addColorStop(1, withAlpha(color, 0));
+  ctx.fillStyle = gradient;
+  ctx.beginPath();
+  ctx.arc(dab.x, dab.y, dab.radius, 0, Math.PI * 2);
   ctx.fill();
 }
 

@@ -17,7 +17,7 @@ import {
 } from "./blackbookArtworkBridge";
 import { resolveMopDabPlan } from "./mopDeposition";
 import { hashSeed, resolveSprayCorePlan, resolveSprayParticlePlan } from "./sprayDeposition";
-import { fillSprayParticle, hash01, hashLateralUnit, traceSmoothedPath } from "./strokeSmoothing";
+import { fillMopDab, fillSprayParticle, hash01, hashLateralUnit, traceSmoothedPath } from "./strokeSmoothing";
 
 function required<T>(value: T | null, error: string): T { if (!value) throw new Error(error); return value; }
 const canvas = required(document.querySelector<HTMLCanvasElement>("#blackbook-page"), "blackbook_surface_missing");
@@ -118,7 +118,13 @@ function drawOperation(operation: BlackbookOperation): void {
     return;
   }
   if (operation.operation === "spray") {
-    drawSprayStroke(materialCtx, points, operation.style, operation.markId ?? operation.id);
+    // Calibration V1 Revision 11: `operation.id` alone, not
+    // `markId ?? id` -- see the identical fix (and full rationale) in
+    // surfaceDrawingRuntime.js's _drawStroke. `operation.id` is assigned
+    // once and never reassigned; `markId` is set later, asynchronously,
+    // once persistence completes, which would otherwise silently reroll
+    // this Mark's deterministic deposition the instant that happens.
+    drawSprayStroke(materialCtx, points, operation.style, operation.id);
     return;
   }
   materialCtx.save();
@@ -190,9 +196,15 @@ function drawMopStroke(
   context.stroke();
   const dabs = resolveMopDabPlan(scaledPoints, style.width * 0.5);
   const baseRadius = style.width * 0.5;
+  // Calibration V1 Revision 10 (dot-gesture fix, mirrored here for
+  // consistency with the Map's identical fix): the random inclusion
+  // probability and lateral scatter exist to break up a LONG stroke's
+  // regular rhythm; applied to a dot (1-3 dabs total) they instead make it
+  // a coin-flip whether the dab renders at all, and visibly off-center.
+  const isDotLike = dabs.length <= 3;
   for (let index = 0; index < dabs.length; index += 1) {
     const dab = dabs[index];
-    if (hash01(dab.x, dab.y, 4) > MOP_DAB_INCLUDE_PROBABILITY) continue;
+    if (!isDotLike && hash01(dab.x, dab.y, 4) > MOP_DAB_INCLUDE_PROBABILITY) continue;
     const prev = dabs[index - 1] ?? dab;
     const next = dabs[index + 1] ?? dab;
     const tangentX = next.x - prev.x;
@@ -201,10 +213,13 @@ function drawMopStroke(
     // Perpendicular to the local path direction -- rotate the tangent 90°.
     const perpX = -tangentY / tangentLength;
     const perpY = tangentX / tangentLength;
-    const lateral = hashLateralUnit(dab.x, dab.y) * baseRadius * MOP_DAB_LATERAL_SCALE;
+    const lateral = isDotLike ? 0 : hashLateralUnit(dab.x, dab.y) * baseRadius * MOP_DAB_LATERAL_SCALE;
     const radiusJitter = 1 + (hash01(dab.x, dab.y, 1) * 2 - 1) * MOP_DAB_RADIUS_JITTER_RANGE;
     const alphaJitter = 1 + (hash01(dab.x, dab.y, 2) * 2 - 1) * MOP_DAB_ALPHA_JITTER_RANGE;
-    fillSprayParticle(
+    // Calibration V1 Revision 11: `fillMopDab` (a comparatively crisp
+    // contact-edge fill), not `fillSprayParticle` (Spray's soft aerosol
+    // falloff) -- see strokeSmoothing.ts's doc for the full rationale.
+    fillMopDab(
       context,
       {
         x: dab.x + perpX * lateral,

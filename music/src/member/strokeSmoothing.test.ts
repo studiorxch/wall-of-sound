@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fillSprayParticle, hash01, hashLateralUnit, traceSmoothedPath, withAlpha } from "./strokeSmoothing";
+import { fillMopDab, fillSprayParticle, hash01, hashLateralUnit, traceSmoothedPath, withAlpha } from "./strokeSmoothing";
 
 function fakeContext() {
   const calls: string[] = [];
@@ -82,6 +82,14 @@ describe("fillSprayParticle -- soft radial-gradient fill, not a flat circle", ()
     expect(calls).toEqual([]);
   });
 
+  it("Revision 8: skips drawing (never throws) for a non-finite position or radius -- an edge-case reprojected point should never crash the render pass", () => {
+    const { ctx, calls } = fakeContext();
+    fillSprayParticle(ctx as never, { x: NaN, y: 5, radius: 2, alpha: 1 }, "#e2572b", 1);
+    fillSprayParticle(ctx as never, { x: 5, y: Infinity, radius: 2, alpha: 1 }, "#e2572b", 1);
+    fillSprayParticle(ctx as never, { x: 5, y: 5, radius: NaN, alpha: 1 }, "#e2572b", 1);
+    expect(calls).toEqual([]);
+  });
+
   it("fades the gradient's outer stop to fully transparent, never a hard edge", () => {
     const { ctx, gradientStops } = fakeContext();
     fillSprayParticle(ctx as never, { x: 5, y: 5, radius: 3, alpha: 0.8 }, "#e2572b", 0.6);
@@ -138,5 +146,45 @@ describe("hash01 -- Revision 6 salted deterministic hash", () => {
 
   it("hashLateralUnit is exactly hash01(x, y, 0) remapped to [-1, 1]", () => {
     expect(hashLateralUnit(5, 7)).toBeCloseTo(hash01(5, 7, 0) * 2 - 1, 10);
+  });
+});
+
+describe("fillMopDab -- Revision 11 crisp contact edge (opacity != edge softness)", () => {
+  it("skips drawing entirely for a zero-alpha, zero-radius, or non-finite dab", () => {
+    const { ctx, calls } = fakeContext();
+    fillMopDab(ctx as never, { x: 5, y: 5, radius: 0, alpha: 1 }, "#1c6e6e", 1);
+    fillMopDab(ctx as never, { x: 5, y: 5, radius: 2, alpha: 0 }, "#1c6e6e", 1);
+    fillMopDab(ctx as never, { x: NaN, y: 5, radius: 2, alpha: 1 }, "#1c6e6e", 1);
+    expect(calls).toEqual([]);
+  });
+
+  it("draws exactly one arc + fill per dab, same shape as fillSprayParticle", () => {
+    const { ctx, calls } = fakeContext();
+    fillMopDab(ctx as never, { x: 5, y: 5, radius: 3, alpha: 0.8 }, "#1c6e6e", 0.6);
+    expect(calls).toEqual(["beginPath", "arc(5,5,3)", "fill"]);
+  });
+
+  it("stays at FULL center alpha out to 88% of the radius -- a crisp contact edge, not a soft aerosol falloff", () => {
+    const { ctx, gradientStops } = fakeContext();
+    fillMopDab(ctx as never, { x: 0, y: 0, radius: 10, alpha: 1 }, "#1c6e6e", 0.5);
+    const centerStop = gradientStops[0];
+    const nearEdgeStop = gradientStops[1];
+    const edgeStop = gradientStops[2];
+    expect(centerStop[0]).toBe(0);
+    expect(nearEdgeStop[0]).toBe(0.88);
+    expect(nearEdgeStop[1]).toBe(centerStop[1]); // SAME alpha as center -- no gradual aerosol fade
+    expect(edgeStop[0]).toBe(1);
+    expect(edgeStop[1]).toContain(", 0)"); // fully transparent only in the last 12%
+  });
+
+  it("opacity scales overall translucency (center alpha), independent of the edge-softness shape -- low opacity is translucent ink, not blurrier ink", () => {
+    const { ctx: ctxLow, gradientStops: stopsLow } = fakeContext();
+    fillMopDab(ctxLow as never, { x: 0, y: 0, radius: 10, alpha: 1 }, "#1c6e6e", 0.2);
+    const { ctx: ctxHigh, gradientStops: stopsHigh } = fakeContext();
+    fillMopDab(ctxHigh as never, { x: 0, y: 0, radius: 10, alpha: 1 }, "#1c6e6e", 0.9);
+    // Both still have the SAME gradient SHAPE (offsets 0, 0.88, 1) -- only
+    // the alpha values at each offset differ with opacity.
+    expect(stopsLow.map((s) => s[0])).toEqual(stopsHigh.map((s) => s[0]));
+    expect(stopsLow[0][1]).not.toBe(stopsHigh[0][1]);
   });
 });

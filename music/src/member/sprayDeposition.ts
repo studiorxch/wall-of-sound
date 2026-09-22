@@ -32,6 +32,8 @@
  * profile (currently always the Stock Cap -- no per-Mark cap field yet).
  */
 
+import { simplifyPathToBudget } from "./pathSimplify";
+
 export interface SprayPoint {
   readonly x: number;
   readonly y: number;
@@ -197,23 +199,31 @@ export function resolveSprayEmissionPoints(
 ): readonly SprayEmissionPoint[] {
   if (points.length === 0 || baseRadius <= 0) return [];
   const nominalStep = Math.max(1e-6, baseRadius * MIN_STEP_RATIO);
-  let totalLength = 0;
-  for (let index = 1; index < points.length; index += 1) {
-    totalLength += Math.hypot(points[index].x - points[index - 1].x, points[index].y - points[index - 1].y);
-  }
   // Budget one fewer than the cap so the loop's own rounding can never push
   // the actual count past it -- correctness (whole-path coverage) over
   // hitting the bound exactly.
   const budget = Math.max(1, cap.maxEmissionPoints - 1);
+  // Revision 8: if the RAW point count alone would already exceed the
+  // budget (every segment contributes at least one output point below,
+  // regardless of step size -- a long zigzag/wavy gesture with many short
+  // segments hits this easily), simplify the raw points FIRST via
+  // Douglas-Peucker (preserves corners/extrema, unlike an index slice) so
+  // the per-segment interpolation below can never overflow. See
+  // pathSimplify.ts's module doc for the full bug this fixes.
+  const source = points.length - 1 > budget ? simplifyPathToBudget(points, budget + 1) : points;
+  let totalLength = 0;
+  for (let index = 1; index < source.length; index += 1) {
+    totalLength += Math.hypot(source[index].x - source[index - 1].x, source[index].y - source[index - 1].y);
+  }
   const maxStep = Math.max(nominalStep, totalLength / budget);
   const neutralSpacing = Math.max(1e-6, baseRadius * NEUTRAL_SPACING_RATIO);
   const densityAt = (spacing: number): number =>
     clamp(1 + (1 - spacing / neutralSpacing) * DENSITY_RESPONSE, MIN_DENSITY_FACTOR, MAX_DENSITY_FACTOR);
 
-  const emissions: SprayEmissionPoint[] = [{ ...points[0], densityFactor: densityAt(0) }];
-  for (let index = 1; index < points.length; index += 1) {
-    const start = points[index - 1];
-    const end = points[index];
+  const emissions: SprayEmissionPoint[] = [{ ...source[0], densityFactor: densityAt(0) }];
+  for (let index = 1; index < source.length; index += 1) {
+    const start = source[index - 1];
+    const end = source[index];
     const segmentLength = Math.hypot(end.x - start.x, end.y - start.y);
     const density = densityAt(segmentLength);
     const steps = Math.max(1, Math.ceil(segmentLength / maxStep));
@@ -222,15 +232,16 @@ export function resolveSprayEmissionPoints(
       emissions.push({ x: start.x + (end.x - start.x) * t, y: start.y + (end.y - start.y) * t, densityFactor: density });
     }
   }
-  // Belt-and-braces hard cap -- should never trigger given the adaptive
-  // step above, but guarantees the bound is never exceeded even under
-  // floating-point rounding on a pathological input, WITHOUT ever dropping
-  // the path's actual final point (swapped in explicitly if trimming did
-  // cut it off).
+  // Belt-and-braces hard cap -- the pre-simplified `source` above keeps
+  // segment COUNT within budget, but per-segment interpolation can still
+  // overflow the total (segment lengths vary around the average the
+  // adaptive step assumed). Revision 8: this used to be an index
+  // slice + force-jump-the-last-point, which silently reproduced the
+  // exact straight-line-collapse bug at this second layer even after the
+  // raw points were correctly pre-simplified. Uses the same geometry-aware
+  // simplifier as the raw-point pass, not a truncation.
   if (emissions.length > cap.maxEmissionPoints) {
-    const trimmed = emissions.slice(0, cap.maxEmissionPoints);
-    trimmed[trimmed.length - 1] = emissions[emissions.length - 1];
-    return trimmed;
+    return simplifyPathToBudget(emissions, cap.maxEmissionPoints);
   }
   return emissions;
 }
@@ -335,17 +346,20 @@ export function resolveSprayCoreSamplePoints(
 
   if (points.length === 1) return [{ ...points[0], densityFactor: densityAt(0) }];
 
-  let totalLength = 0;
-  for (let index = 1; index < points.length; index += 1) {
-    totalLength += Math.hypot(points[index].x - points[index - 1].x, points[index].y - points[index - 1].y);
-  }
   const budget = Math.max(1, CORE_MAX_SAMPLE_POINTS - 1);
+  // Revision 8: same fix as resolveSprayEmissionPoints -- simplify first
+  // (shape-preserving) if raw point count alone could overflow the budget.
+  const source = points.length - 1 > budget ? simplifyPathToBudget(points, budget + 1) : points;
+  let totalLength = 0;
+  for (let index = 1; index < source.length; index += 1) {
+    totalLength += Math.hypot(source[index].x - source[index - 1].x, source[index].y - source[index - 1].y);
+  }
   const step = Math.max(nominalStep, totalLength / budget);
 
-  const samples: SprayCorePoint[] = [{ ...points[0], densityFactor: densityAt(0) }];
-  for (let index = 1; index < points.length; index += 1) {
-    const start = points[index - 1];
-    const end = points[index];
+  const samples: SprayCorePoint[] = [{ ...source[0], densityFactor: densityAt(0) }];
+  for (let index = 1; index < source.length; index += 1) {
+    const start = source[index - 1];
+    const end = source[index];
     const segmentLength = Math.hypot(end.x - start.x, end.y - start.y);
     const density = densityAt(segmentLength);
     const steps = Math.max(1, Math.ceil(segmentLength / step));
@@ -354,10 +368,12 @@ export function resolveSprayCoreSamplePoints(
       samples.push({ x: start.x + (end.x - start.x) * t, y: start.y + (end.y - start.y) * t, densityFactor: density });
     }
   }
+  // Revision 8: geometry-aware simplification, not an index slice +
+  // forced endpoint jump -- see the doc above resolveSprayEmissionPoints'
+  // own belt-and-braces cap for why the old version reproduced the
+  // straight-line-collapse bug at this layer.
   if (samples.length > CORE_MAX_SAMPLE_POINTS) {
-    const trimmed = samples.slice(0, CORE_MAX_SAMPLE_POINTS);
-    trimmed[trimmed.length - 1] = samples[samples.length - 1];
-    return trimmed;
+    return simplifyPathToBudget(samples, CORE_MAX_SAMPLE_POINTS);
   }
   return samples;
 }

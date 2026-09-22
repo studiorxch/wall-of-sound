@@ -101,3 +101,20 @@ describe("Mop deposition -- Width and speed response are preserved through resam
     expect(resolveMopEmissionPoints([], 10)).toEqual([]);
   });
 });
+
+describe("Mop deposition -- Revision 8 (a long zigzag's late-stage direction changes survive)", () => {
+  it("resolveMopEmissionPoints keeps real oscillation near each checkpoint throughout the path, not flattened after some point -- checked over a small window since gap-filling interpolation between preserved corners legitimately adds intermediate-x points", () => {
+    const amplitude = 20;
+    const points = Array.from({ length: 600 }, (_, i) => ({ x: i % 2 === 0 ? -amplitude : amplitude, y: i * 4 }));
+    const emissions = resolveMopEmissionPoints(points, 17);
+    const totalY = (points.length - 1) * 4;
+    const checkpoints = [0.25, 0.5, 0.75, 0.9, 0.97];
+    for (const fraction of checkpoints) {
+      const targetY = fraction * totalY;
+      const window = emissions.filter((e) => Math.abs(e.y - targetY) <= totalY * 0.05);
+      expect(window.length).toBeGreaterThan(0);
+      const maxAbsX = Math.max(...window.map((e) => Math.abs(e.x)));
+      expect(maxAbsX).toBeGreaterThan(amplitude * 0.6);
+    }
+  });
+});

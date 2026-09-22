@@ -17,13 +17,21 @@ import {
 import { resolveMopDabPlan, resolveMopEmissionPoints } from "./mopDeposition";
 import { MAP_SURFACE_REFERENCE_ZOOM, resolveZoomScale } from "./mapZoomScale";
 import { hashSeed, resolveSprayCorePlan, resolveSprayParticlePlan, STUDIORICH_STOCK_CAP } from "./sprayDeposition";
-import { fillSprayParticle, hash01, hashLateralUnit, traceSmoothedPath, withAlpha } from "./strokeSmoothing";
+import { fillMopDab, fillSprayParticle, hash01, hashLateralUnit, traceSmoothedPath, withAlpha } from "./strokeSmoothing";
 
 type WallRuntime = {
   Workspace?: { getActiveSurface(): unknown };
   SurfaceDrawingRuntime?: {
     bindArtwork(stroke: WallOperation, artworkId: string, markId: string, creatorId: string, surfaceId: string): boolean;
     hydrateArtwork(artwork: unknown): number;
+    /**
+     * Calibration V1 Revision 11: bulk sign-in hydration -- decodes/pushes
+     * every given Artwork's Marks with a SINGLE render/cache rebuild at the
+     * end, instead of one per Artwork document (the O(n^2) cost that made
+     * sign-in Artwork restoration take ~30s with the current ~150-200
+     * Artwork dataset). See surfaceDrawingRuntime.js's own doc.
+     */
+    hydrateArtworks(artworks: readonly unknown[]): number;
     removePersistedStrokes(): number;
   };
   MemberIdentityAuthority?: unknown;
@@ -65,6 +73,7 @@ type WallRuntime = {
   ArtSupplyRendering?: {
     traceSmoothedPath: typeof traceSmoothedPath;
     fillSprayParticle: typeof fillSprayParticle;
+    fillMopDab: typeof fillMopDab;
     withAlpha: typeof withAlpha;
     hashLateralUnit: typeof hashLateralUnit;
     hash01: typeof hash01;
@@ -85,7 +94,7 @@ const root = window as typeof window & { SBE?: WallRuntime };
 root.SBE ??= {};
 root.SBE.ArtSupplies = { PENCIL_SUPPLY, PEN_SUPPLY, MARKER_SUPPLY, MOP_SUPPLY, SPRAY_SUPPLY, PENCIL_ERASER_SUPPLY };
 root.SBE.ArtSupplyDeposition = { resolveMopDabPlan, resolveMopEmissionPoints, resolveSprayParticlePlan, resolveSprayCorePlan, hashSeed, STUDIORICH_STOCK_CAP };
-root.SBE.ArtSupplyRendering = { traceSmoothedPath, fillSprayParticle, withAlpha, hashLateralUnit, hash01 };
+root.SBE.ArtSupplyRendering = { traceSmoothedPath, fillSprayParticle, fillMopDab, withAlpha, hashLateralUnit, hash01 };
 root.SBE.MapZoomScale = { resolveZoomScale, MAP_SURFACE_REFERENCE_ZOOM };
 
 const memberIdentity = createFirebaseMemberIdentityAuthority(import.meta.env);
@@ -192,7 +201,12 @@ async function hydrateOwnedArtwork(memberId: string): Promise<void> {
   drawing.removePersistedStrokes();
   const artworks = (await (artworkRepository.listOwnedArtwork ?? artworkRepository.listOwnedMapArtwork).call(artworkRepository, memberId)).filter((artwork) => artwork.surfaceId === "map:new-york");
   artworkPersistence.replaceKnownArtworks(artworks);
-  artworks.filter((artwork) => artwork.state === "draft").forEach((artwork) => drawing.hydrateArtwork(artwork));
+  // Calibration V1 Revision 11: ONE batch call, ONE render/cache rebuild --
+  // was previously one `hydrateArtwork` call (and therefore one full
+  // static-composite rebuild) PER Artwork document, an O(n^2) cost across
+  // this account's ~150-200 Map Artworks that measured close to the
+  // reported ~30s sign-in freeze.
+  drawing.hydrateArtworks(artworks.filter((artwork) => artwork.state === "draft"));
   hydratedMemberId = memberId;
 }
 

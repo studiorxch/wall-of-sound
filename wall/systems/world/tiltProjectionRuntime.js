@@ -108,7 +108,46 @@
 
   // ── Spring-dynamics pitch advance ─────────────────────────────────────────
 
+  // Calibration V1 Revision 13: true while the previous tick yielded to
+  // human camera ownership -- see _advancePitch's own doc for why this
+  // matters on the FIRST tick back.
+  var _wasYielding = false;
+
+  function _authority() {
+    return global.SBE && SBE.CameraInteractionAuthority;
+  }
+
   function _advancePitch() {
+    // Calibration V1 Revision 13 (Human Camera Ownership): a human actively
+    // dragging/zooming/rotating/pitching the map -- or within the short idle
+    // grace period right after -- has exclusive camera authority. Skip this
+    // tick's derivation AND application entirely: no setPitch(), and no
+    // internal bookkeeping update either, so a long interaction can't build
+    // up a stale target/delta that would cause a jump the moment ownership
+    // is released.
+    var authority = _authority();
+    if (authority && authority.shouldAmbientYield()) {
+      _wasYielding = true;
+      return;
+    }
+
+    if (_wasYielding) {
+      // Resuming after yielding: re-sync from the map's ACTUAL current
+      // pitch (wherever the human's gesture left it), not the stale
+      // `_currentPitch` this runtime was tracking before it yielded --
+      // otherwise the spring would ease from a position the map hasn't
+      // actually been at for as long as the interaction + grace period
+      // lasted, reading as an abrupt correction rather than a patient
+      // resume. This is what makes "do NOT immediately snap/reassert
+      // ambient pitch" hold even once the grace period elapses -- the very
+      // first tick back still starts its spring from truth, not memory.
+      var map = _mapRef || (global.SBE && SBE.map) || global.map || null;
+      if (map && typeof map.getPitch === "function") {
+        try { _currentPitch = map.getPitch(); } catch (e) {}
+      }
+      _wasYielding = false;
+    }
+
     _targetPitch = _deriveTargetPitch();
     var delta    = _targetPitch - _currentPitch;
 
@@ -129,7 +168,20 @@
            || null;
     if (!map || typeof map.setPitch !== 'function') return;
     try {
-      map.setPitch(pitch);
+      // Calibration V1 Revision 14: wrapped so CameraInteractionAuthority
+      // never mistakes THIS runtime's own ambient pitch change for human
+      // interaction -- see cameraInteractionAuthority.js's own doc for why
+      // event.originalEvent could not be used for this instead (verified
+      // live against real trusted input: it does not reliably distinguish
+      // every interaction type, so it was rejected in favor of this
+      // explicit wrapper). Falls back to a direct call if the authority
+      // hasn't loaded, matching every other optional-bridge check here.
+      var authority = _authority();
+      if (authority && authority.runAmbientCameraChange) {
+        authority.runAmbientCameraChange(function () { map.setPitch(pitch); });
+      } else {
+        map.setPitch(pitch);
+      }
     } catch (e) {
       // Map may not be ready — silently absorb
     }
@@ -146,7 +198,22 @@
   function init(mapInstance) {
     if (_initialized) return;
     _initialized = true;
-    if (mapInstance) _mapRef = mapInstance;
+    // Calibration V1 Revision 14: `mapInstance` has historically arrived
+    // null from at least one call site (a bare `map` identifier that wasn't
+    // reliably resolved at that point in boot -- the same root cause fixed
+    // for CameraInteractionAuthority.init() in Revision 13). This runtime
+    // never actually broke from that, because `_applyPitchToMap` already
+    // had its own `SBE.map || global.map` fallback -- but `_currentPitch`'s
+    // STARTING value below did not have an equivalent fallback, so it
+    // silently began easing from 0 instead of the map's real initial pitch
+    // whenever the injected argument was null. Falling back to
+    // MapboxViewportRuntime.getMap() here (a reliable accessor, not the
+    // ambiguous bare identifier) fixes that starting-value bug without
+    // changing any cinematic behavior otherwise -- the spring/mode/target
+    // math below is untouched.
+    var resolvedMap = mapInstance
+      || (global.SBE && SBE.MapboxViewportRuntime && SBE.MapboxViewportRuntime.getMap ? SBE.MapboxViewportRuntime.getMap() : null);
+    if (resolvedMap) _mapRef = resolvedMap;
     // Capture current map pitch as starting position
     if (_mapRef && typeof _mapRef.getPitch === 'function') {
       _currentPitch = _mapRef.getPitch();
