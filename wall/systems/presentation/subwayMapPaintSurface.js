@@ -22,6 +22,18 @@
 
   var DRAW_SUPPLIES = ["pencil", "pen", "marker", "mop", "spray"];
   var SUPPLY_LABELS = { pencil: "PENCIL", pen: "PEN", marker: "MARKER", mop: "MOP", spray: "SPRAY" };
+  // Calibration V1: WIDTH stores the same raw canvas-pixel/footprint number
+  // it always has (no persisted-value migration) -- only the SLIDER's own
+  // min/max are tool-specific, so the middle of the slider lands in each
+  // instrument's own useful everyday range instead of a member having to
+  // hunt at one extreme of a single 1-48 range shared by every supply.
+  var WIDTH_RANGE = {
+    pencil: { min: 2, max: 14 },
+    pen: { min: 1, max: 10 },
+    marker: { min: 6, max: 32 },
+    mop: { min: 14, max: 54 },
+    spray: { min: 8, max: 40 },
+  };
   // Per-supply remembered Width/Opacity/Color, mirroring Blackbook's
   // supplySettings map -- switching supplies restores that supply's own
   // last-used values instead of leaking one supply's settings into another.
@@ -189,7 +201,12 @@
         var widthInput = level2.querySelector('[data-map-paint-option="width"]');
         var opacityInput = level2.querySelector('[data-map-paint-option="opacity"]');
         if (colorInput && global.document.activeElement !== colorInput) colorInput.value = brush.color;
-        if (widthInput && global.document.activeElement !== widthInput) widthInput.value = String(brush.width);
+        if (widthInput && global.document.activeElement !== widthInput) {
+          var range = WIDTH_RANGE[supplyId] || { min: 1, max: 48 };
+          widthInput.min = String(range.min);
+          widthInput.max = String(range.max);
+          widthInput.value = String(brush.width);
+        }
         if (opacityInput && global.document.activeElement !== opacityInput) opacityInput.value = String(brush.opacity);
       }
     }

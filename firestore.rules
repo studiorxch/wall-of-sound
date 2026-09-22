@@ -104,10 +104,17 @@ service cloud.firestore {
         && data.visibility == 'private';
     }
 
+    function hasValidAuthoredZoom(mark) {
+      return !('authoredZoom' in mark)
+        || (mark.authoredZoom is number
+          && mark.authoredZoom >= 0
+          && mark.authoredZoom <= 24);
+    }
+
     function hasValidStrokeMark(mark) {
       return mark is map
         && mark.keys().hasAll(['id', 'type', 'createdAt', 'geometry', 'style'])
-        && mark.keys().hasOnly(['id', 'type', 'createdAt', 'geometry', 'style', 'material'])
+        && mark.keys().hasOnly(['id', 'type', 'createdAt', 'geometry', 'style', 'material', 'authoredZoom'])
         && mark.id is string
         && mark.type == 'stroke'
         && mark.createdAt is timestamp
@@ -126,13 +133,14 @@ service cloud.firestore {
               || (mark.material.supplyId == 'marker' && mark.material.materialId == 'marker')
               || (mark.material.supplyId == 'mop' && mark.material.materialId == 'mop')
               || (mark.material.supplyId == 'spray' && mark.material.materialId == 'spray'))))
+        && hasValidAuthoredZoom(mark)
         && hasValidArtworkStyle(mark.style);
     }
 
     function hasValidMaterialErasureMark(mark) {
       return mark is map
         && mark.keys().hasAll(['id', 'type', 'createdAt', 'geometry', 'targetMaterialId', 'width'])
-        && mark.keys().hasOnly(['id', 'type', 'createdAt', 'geometry', 'targetMaterialId', 'width'])
+        && mark.keys().hasOnly(['id', 'type', 'createdAt', 'geometry', 'targetMaterialId', 'width', 'authoredZoom'])
         && mark.id is string
         && mark.type == 'material-erasure'
         && mark.createdAt is timestamp
@@ -144,7 +152,8 @@ service cloud.firestore {
         && mark.geometry.points.size() >= 2
         && mark.targetMaterialId == 'graphite'
         && mark.width is number
-        && mark.width > 0;
+        && mark.width > 0
+        && hasValidAuthoredZoom(mark);
     }
 
     function hasValidArtworkMark(mark) {

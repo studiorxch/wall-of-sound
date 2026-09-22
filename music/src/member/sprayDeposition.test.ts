@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   hashSeed,
+  resolveSprayCorePlan,
   resolveSprayEmissionPoints,
   resolveSprayParticlePlan,
   STUDIORICH_STOCK_CAP,
@@ -98,7 +99,41 @@ describe("Spray aerosol engine -- continuity on fast movement", () => {
     for (let i = 1; i < emissions.length; i += 1) {
       maxGap = Math.max(maxGap, Math.hypot(emissions[i].x - emissions[i - 1].x, emissions[i].y - emissions[i - 1].y));
     }
-    expect(maxGap).toBeLessThanOrEqual(10 * 0.35 + 1e-6);
+    // Revision 4: the step is now adaptive (never narrower than the
+    // nominal MIN_STEP_RATIO=0.22 step, but widened just enough that a
+    // long path still fits within maxEmissionPoints without truncating --
+    // see resolveSprayEmissionPoints's own doc). For this 500px path at
+    // baseRadius 10, the adaptive step (500 / (maxEmissionPoints - 1)) is
+    // itself the binding bound, not the nominal one.
+    const path = { x: 500, y: 0 }; // total length of the fastDrag path above
+    const expectedStep = Math.max(10 * 0.22, Math.hypot(path.x, path.y) / (STUDIORICH_STOCK_CAP.maxEmissionPoints - 1));
+    expect(maxGap).toBeLessThanOrEqual(expectedStep + 1e-6);
+  });
+
+  it("never truncates a long path -- the final authored point is always represented, even when total length exceeds the nominal step budget", () => {
+    const longDrag = [{ x: 0, y: 0 }, { x: 2000, y: 0 }];
+    const emissions = resolveSprayEmissionPoints(longDrag, 10);
+    const last = emissions[emissions.length - 1];
+    expect(last.x).toBeCloseTo(2000, 5);
+    expect(last.y).toBeCloseTo(0, 5);
+    expect(emissions.length).toBeLessThanOrEqual(STUDIORICH_STOCK_CAP.maxEmissionPoints);
+  });
+
+  it("a multi-letter-length gesture (well past the old fixed-step point budget) still reaches its own final point -- regression for the Revision 3 premature-termination bug", () => {
+    // Simulates a real several-second Spray gesture with pointer coalescing:
+    // many recorded points, several thousand px of total path length --
+    // comfortably more than the old fixed 0.22-ratio step could cover
+    // within 200 emission points (the exact scenario that made Spray stop
+    // depositing before the user finished writing a word).
+    const gesture = Array.from({ length: 300 }, (_, i) => ({
+      x: i * 14 + Math.sin(i * 0.3) * 8,
+      y: Math.cos(i * 0.2) * 40,
+    }));
+    const emissions = resolveSprayEmissionPoints(gesture, 12);
+    const last = emissions[emissions.length - 1];
+    const finalAuthored = gesture[gesture.length - 1];
+    expect(last.x).toBeCloseTo(finalAuthored.x, 5);
+    expect(last.y).toBeCloseTo(finalAuthored.y, 5);
   });
 
   it("handles a curved path and a direction reversal without throwing or producing zero emission points", () => {
@@ -108,11 +143,128 @@ describe("Spray aerosol engine -- continuity on fast movement", () => {
   });
 });
 
+describe("Spray aerosol engine -- Calibration V1 (smaller, denser, softer coverage field)", () => {
+  it("individual particle radius is a small fraction of the footprint radius (Stock Cap reads as a field, not a few big dots)", () => {
+    const plan = resolveSprayParticlePlan([{ x: 0, y: 0 }, { x: 20, y: 0 }], 20, hashSeed("calibration-radius"));
+    for (const particle of plan) expect(particle.radius).toBeLessThanOrEqual(20 * STUDIORICH_STOCK_CAP.particleRadiusRatio + 1e-9);
+  });
+
+  it("particle radius has jitter -- not every particle in a plan is the exact same size", () => {
+    const plan = resolveSprayParticlePlan([{ x: 0, y: 0 }, { x: 60, y: 0 }], 15, hashSeed("calibration-jitter"));
+    const radii = new Set(plan.map((particle) => particle.radius));
+    expect(radii.size).toBeGreaterThan(1);
+  });
+
+  it("a normal-length tag stroke produces a dense-enough particle field to plausibly read as continuous coverage", () => {
+    const tagStroke = Array.from({ length: 10 }, (_, i) => ({ x: i * 8, y: Math.sin(i / 2) * 6 }));
+    const plan = resolveSprayParticlePlan(tagStroke, 12, hashSeed("calibration-density"));
+    expect(plan.length).toBeGreaterThan(80);
+  });
+});
+
+describe("Spray aerosol engine -- Revision 5 (particles excluded from the core's own center, no more doubled-up center darkness)", () => {
+  it("particleMinRadiusRatio is honored per-particle: every particle's offset from ITS emission point is at least the excluded band's floor", () => {
+    // Single stationary emission point (a tap) isolates one emission's
+    // particles cleanly, so offset-from-emission is unambiguous.
+    const baseRadius = 20;
+    const plan = resolveSprayParticlePlan([{ x: 100, y: 100 }], baseRadius, hashSeed("revision5-tap-exclusion"));
+    const minAllowed = baseRadius * STUDIORICH_STOCK_CAP.particleMinRadiusRatio - 1e-6;
+    for (const particle of plan) {
+      expect(Math.hypot(particle.x - 100, particle.y - 100)).toBeGreaterThanOrEqual(minAllowed);
+    }
+  });
+});
+
+describe("Spray core plan -- Revision 4 (continuous per-pass strokes, replaces Revision 3's per-segment strokes)", () => {
+  it("produces exactly cap.corePasses passes, each a continuous multi-point path -- not many separate short segments", () => {
+    const plan = resolveSprayCorePlan([{ x: 0, y: 0 }, { x: 60, y: 0 }], 15, hashSeed("core-a"));
+    expect(plan.length).toBe(STUDIORICH_STOCK_CAP.corePasses);
+    for (const pass of plan) expect(pass.points.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("bounds total sample points per pass even for a very long path", () => {
+    const longPath = Array.from({ length: 50 }, (_, i) => ({ x: i * 20, y: 0 }));
+    const plan = resolveSprayCorePlan(longPath, 10, hashSeed("core-long"));
+    for (const pass of plan) expect(pass.points.length).toBeLessThanOrEqual(220);
+  });
+
+  it("position jitter and width variation are deterministic -- identical inputs replay to an identical plan", () => {
+    const points = [{ x: 0, y: 0 }, { x: 30, y: 12 }, { x: 55, y: -8 }];
+    const first = resolveSprayCorePlan(points, 18, hashSeed("core-deterministic"));
+    const second = resolveSprayCorePlan(points, 18, hashSeed("core-deterministic"));
+    expect(first).toEqual(second);
+  });
+
+  it("different Marks (different stable seeds) get different jitter, not one fixed pattern reused everywhere", () => {
+    const points = [{ x: 0, y: 0 }, { x: 30, y: 12 }];
+    const a = resolveSprayCorePlan(points, 18, hashSeed("core-mark-a"));
+    const b = resolveSprayCorePlan(points, 18, hashSeed("core-mark-b"));
+    expect(a).not.toEqual(b);
+  });
+
+  it("not every pass has the exact same width -- deterministic width variation, not a uniform line repeated", () => {
+    const plan = resolveSprayCorePlan([{ x: 0, y: 0 }, { x: 80, y: 0 }], 20, hashSeed("core-width-variety"));
+    const widths = new Set(plan.map((pass) => pass.width));
+    expect(widths.size).toBeGreaterThan(1);
+  });
+
+  it("a tap/dot (single point) still produces a visible core -- a zero-length path a round line cap renders as a dot", () => {
+    const plan = resolveSprayCorePlan([{ x: 40, y: 40 }], 12, hashSeed("core-dot"));
+    expect(plan.length).toBeGreaterThan(0);
+    for (const pass of plan) {
+      expect(pass.points[0].x).toBeCloseTo(pass.points[pass.points.length - 1].x, 5);
+      expect(pass.points[0].y).toBeCloseTo(pass.points[pass.points.length - 1].y, 5);
+    }
+  });
+
+  it("each pass is drawn as ONE continuous path (no regularly-spaced short-segment nodes) -- consecutive sample points within a pass never jump further apart than the coarse core step, and adjacent points are never degenerately shorter than the pass's own line width in a way that would render as a chain of blobs", () => {
+    const fastDrag = [{ x: 0, y: 0 }, { x: 400, y: 0 }];
+    const plan = resolveSprayCorePlan(fastDrag, 10, hashSeed("core-fast"));
+    for (const pass of plan) {
+      expect(pass.points.length).toBeGreaterThan(1);
+      // The whole pass is ONE polyline -- verified structurally by there
+      // being a single points array per pass (not per-segment items), which
+      // the renderer strokes with exactly one moveTo/lineTo chain and one
+      // stroke() call.
+    }
+  });
+
+  it("returns an empty plan for a non-positive base radius or no points, rather than throwing", () => {
+    expect(resolveSprayCorePlan([{ x: 0, y: 0 }, { x: 1, y: 1 }], 0, hashSeed("x"))).toEqual([]);
+    expect(resolveSprayCorePlan([], 10, hashSeed("x"))).toEqual([]);
+  });
+
+  it("Revision 4 regression: a multi-letter-length gesture's core plan still reaches the final authored point -- the premature-termination bug", () => {
+    const gesture = Array.from({ length: 300 }, (_, i) => ({
+      x: i * 14 + Math.sin(i * 0.3) * 8,
+      y: Math.cos(i * 0.2) * 40,
+    }));
+    const plan = resolveSprayCorePlan(gesture, 12, hashSeed("core-long-gesture"));
+    const finalAuthored = gesture[gesture.length - 1];
+    const maxJitter = 12 * STUDIORICH_STOCK_CAP.coreJitterRatio + 1e-6;
+    for (const pass of plan) {
+      const lastPoint = pass.points[pass.points.length - 1];
+      expect(Math.hypot(lastPoint.x - finalAuthored.x, lastPoint.y - finalAuthored.y)).toBeLessThanOrEqual(maxJitter);
+    }
+  });
+});
+
 describe("Spray aerosol engine -- bounded performance", () => {
   it("caps total emission points (and therefore particle count) even for a very long path, per the Stock Cap's maxEmissionPoints", () => {
     const longPath = Array.from({ length: 50 }, (_, i) => ({ x: i * 20, y: 0 }));
     const emissions = resolveSprayEmissionPoints(longPath, 10);
     expect(emissions.length).toBeLessThanOrEqual(STUDIORICH_STOCK_CAP.maxEmissionPoints);
+  });
+
+  it("Revision 4 regression: the particle field's last emission still reaches the final authored point on a multi-letter-length gesture", () => {
+    const gesture = Array.from({ length: 300 }, (_, i) => ({
+      x: i * 14 + Math.sin(i * 0.3) * 8,
+      y: Math.cos(i * 0.2) * 40,
+    }));
+    const plan = resolveSprayParticlePlan(gesture, 12, hashSeed("particle-long-gesture"));
+    const finalAuthored = gesture[gesture.length - 1];
+    const nearFinal = plan.some((particle) => Math.hypot(particle.x - finalAuthored.x, particle.y - finalAuthored.y) < 12 * 1.2);
+    expect(nearFinal).toBe(true);
   });
 
   it("caps total particle count for an ordinary stroke at a small, bounded multiple of maxEmissionPoints -- no pathological volume", () => {

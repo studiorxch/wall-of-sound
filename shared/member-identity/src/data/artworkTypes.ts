@@ -20,11 +20,13 @@ export interface GeographicArtworkStroke {
     readonly opacity: number;
   };
 }
-export interface GeographicStrokeMark { readonly id: string; readonly type: "stroke"; readonly createdAt: Date; readonly geometry: { readonly format: "geographic-stroke-v1"; readonly points: readonly GeographicArtworkPoint[] }; readonly style: GeographicArtworkStroke["style"]; readonly material?: MarkMaterialIdentity }
+/** `authoredZoom`: the Mapbox camera zoom when this geographic Mark's gesture began (Map Art Supplies Calibration V1 Revision 7 -- see mapZoomScale.ts in music/src/member/). Geographic-only: a Blackbook/local-2d Mark has no camera zoom concept and never carries this field. Optional so legacy Marks (authored before this revision) remain valid -- render-time falls back to a shared reference zoom for those. */
+export interface GeographicStrokeMark { readonly id: string; readonly type: "stroke"; readonly createdAt: Date; readonly geometry: { readonly format: "geographic-stroke-v1"; readonly points: readonly GeographicArtworkPoint[] }; readonly style: GeographicArtworkStroke["style"]; readonly material?: MarkMaterialIdentity; readonly authoredZoom?: number }
 export interface LocalStrokeMark { readonly id: string; readonly type: "stroke"; readonly createdAt: Date; readonly geometry: { readonly format: "local-2d-stroke-v1"; readonly points: readonly LocalArtworkPoint[] }; readonly style: GeographicArtworkStroke["style"]; readonly material?: MarkMaterialIdentity }
 export type StrokeMark = GeographicStrokeMark | LocalStrokeMark;
 export interface LocalMaterialErasureMark { readonly id: string; readonly type: "material-erasure"; readonly createdAt: Date; readonly geometry: { readonly format: "local-2d-erasure-v1"; readonly points: readonly LocalArtworkPoint[] }; readonly targetMaterialId: ArtMaterialId; readonly width: number }
-export interface GeographicMaterialErasureMark { readonly id: string; readonly type: "material-erasure"; readonly createdAt: Date; readonly geometry: { readonly format: "geographic-erasure-v1"; readonly points: readonly GeographicArtworkPoint[] }; readonly targetMaterialId: ArtMaterialId; readonly width: number }
+/** See GeographicStrokeMark.authoredZoom's doc -- same semantics for the geographic Eraser Mark. */
+export interface GeographicMaterialErasureMark { readonly id: string; readonly type: "material-erasure"; readonly createdAt: Date; readonly geometry: { readonly format: "geographic-erasure-v1"; readonly points: readonly GeographicArtworkPoint[] }; readonly targetMaterialId: ArtMaterialId; readonly width: number; readonly authoredZoom?: number }
 export type MaterialErasureMark = LocalMaterialErasureMark | GeographicMaterialErasureMark;
 export type ArtworkMark = StrokeMark | MaterialErasureMark;
 

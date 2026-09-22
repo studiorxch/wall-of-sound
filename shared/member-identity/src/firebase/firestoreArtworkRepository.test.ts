@@ -112,3 +112,53 @@ describe("legacy Artwork compatibility", () => {
     expect(sprayMaterialId).not.toBe("mop");
   });
 });
+
+describe("Calibration V1 Revision 7 -- authoredZoom decode round trip", () => {
+  it("decodes a geographic stroke Mark's authoredZoom from Firestore data", () => {
+    const time = Timestamp.fromDate(new Date("2026-01-01T00:00:00Z"));
+    const artwork = decodeArtworkData("zoom-art-1", {
+      creatorId: "member-1", createdAt: time, updatedAt: time,
+      surfaceId: "map:new-york",
+      composition: { bounds: { west: -73.99, south: 40.72, east: -73.98, north: 40.73 }, startedAt: time, lastEditedAt: time },
+      marks: [{ id: "mark-zoom", type: "stroke", createdAt: time, geometry: { format: "geographic-stroke-v1", points: [{ longitude: -73.99, latitude: 40.72 }, { longitude: -73.98, latitude: 40.73 }] }, style: { color: "#1c6e6e", width: 34, opacity: 0.6 }, authoredZoom: 15.4 }],
+      state: "draft", visibility: "private",
+    });
+    expect(artwork.marks[0]).toMatchObject({ authoredZoom: 15.4 });
+  });
+
+  it("decodes a geographic material-erasure Mark's authoredZoom from Firestore data", () => {
+    const time = Timestamp.fromDate(new Date("2026-01-01T00:00:00Z"));
+    const artwork = decodeArtworkData("zoom-art-2", {
+      creatorId: "member-1", createdAt: time, updatedAt: time,
+      surfaceId: "map:new-york",
+      composition: { bounds: { west: -73.99, south: 40.72, east: -73.98, north: 40.73 }, startedAt: time, lastEditedAt: time },
+      marks: [{ id: "mark-erase-zoom", type: "material-erasure", createdAt: time, geometry: { format: "geographic-erasure-v1", points: [{ longitude: -73.99, latitude: 40.72 }, { longitude: -73.98, latitude: 40.73 }] }, targetMaterialId: "graphite", width: 28, authoredZoom: 9.1 }],
+      state: "draft", visibility: "private",
+    });
+    expect(artwork.marks[0]).toMatchObject({ authoredZoom: 9.1 });
+  });
+
+  it("a legacy Mark without authoredZoom decodes cleanly with no such property at all", () => {
+    const time = Timestamp.fromDate(new Date("2026-01-01T00:00:00Z"));
+    const artwork = decodeArtworkData("zoom-art-legacy", {
+      creatorId: "member-1", createdAt: time, updatedAt: time,
+      surfaceId: "map:new-york",
+      composition: { bounds: { west: -73.99, south: 40.72, east: -73.98, north: 40.73 }, startedAt: time, lastEditedAt: time },
+      marks: [{ id: "mark-legacy", type: "stroke", createdAt: time, geometry: { format: "geographic-stroke-v1", points: [{ longitude: -73.99, latitude: 40.72 }, { longitude: -73.98, latitude: 40.73 }] }, style: { color: "#171412", width: 5, opacity: 0.82 } }],
+      state: "draft", visibility: "private",
+    });
+    expect(artwork.marks[0]).not.toHaveProperty("authoredZoom");
+  });
+
+  it("a local-2d (Blackbook) Mark never carries authoredZoom, even if a stray value were present in the document", () => {
+    const time = Timestamp.fromDate(new Date("2026-01-01T00:00:00Z"));
+    const artwork = decodeArtworkData("zoom-art-blackbook", {
+      creatorId: "member-1", createdAt: time, updatedAt: time,
+      surfaceId: "blackbook:studio-rich-main:page:page-1",
+      composition: { bounds: { minX: 0.1, minY: 0.2, maxX: 0.3, maxY: 0.4 }, startedAt: time, lastEditedAt: time },
+      marks: [{ id: "mark-blackbook", type: "stroke", createdAt: time, geometry: { format: "local-2d-stroke-v1", points: [{ x: 0.1, y: 0.2 }, { x: 0.3, y: 0.4 }] }, style: { color: "#171412", width: 5, opacity: 0.82 }, authoredZoom: 15 }],
+      state: "draft", visibility: "private",
+    });
+    expect(artwork.marks[0]).not.toHaveProperty("authoredZoom");
+  });
+});

@@ -14,8 +14,10 @@ import {
   createMapArtworkPersistenceBridge,
   type WallOperation,
 } from "./mapArtworkBridge";
-import { resolveMopDabPlan } from "./mopDeposition";
-import { hashSeed, resolveSprayParticlePlan, STUDIORICH_STOCK_CAP } from "./sprayDeposition";
+import { resolveMopDabPlan, resolveMopEmissionPoints } from "./mopDeposition";
+import { MAP_SURFACE_REFERENCE_ZOOM, resolveZoomScale } from "./mapZoomScale";
+import { hashSeed, resolveSprayCorePlan, resolveSprayParticlePlan, STUDIORICH_STOCK_CAP } from "./sprayDeposition";
+import { fillSprayParticle, hash01, hashLateralUnit, traceSmoothedPath, withAlpha } from "./strokeSmoothing";
 
 type WallRuntime = {
   Workspace?: { getActiveSurface(): unknown };
@@ -48,16 +50,43 @@ type WallRuntime = {
   };
   ArtSupplyDeposition?: {
     resolveMopDabPlan: typeof resolveMopDabPlan;
+    resolveMopEmissionPoints: typeof resolveMopEmissionPoints;
     resolveSprayParticlePlan: typeof resolveSprayParticlePlan;
+    resolveSprayCorePlan: typeof resolveSprayCorePlan;
     hashSeed: typeof hashSeed;
     STUDIORICH_STOCK_CAP: typeof STUDIORICH_STOCK_CAP;
+  };
+  /**
+   * Map Art Supplies Calibration V1: the same rendering-quality helpers
+   * (path smoothing, soft Spray particle fill) blackbookRuntime.ts uses --
+   * see strokeSmoothing.ts. Pure canvas-drawing functions, never a second
+   * per-Surface implementation.
+   */
+  ArtSupplyRendering?: {
+    traceSmoothedPath: typeof traceSmoothedPath;
+    fillSprayParticle: typeof fillSprayParticle;
+    withAlpha: typeof withAlpha;
+    hashLateralUnit: typeof hashLateralUnit;
+    hash01: typeof hash01;
+  };
+  /**
+   * Map Art Supplies Calibration V1 Revision 7: authored-zoom Width scale
+   * correction -- see mapZoomScale.ts. Pure math, shared by every material
+   * layer's render call so an Artwork's internal proportions survive
+   * camera zoom.
+   */
+  MapZoomScale?: {
+    resolveZoomScale: typeof resolveZoomScale;
+    MAP_SURFACE_REFERENCE_ZOOM: typeof MAP_SURFACE_REFERENCE_ZOOM;
   };
 };
 
 const root = window as typeof window & { SBE?: WallRuntime };
 root.SBE ??= {};
 root.SBE.ArtSupplies = { PENCIL_SUPPLY, PEN_SUPPLY, MARKER_SUPPLY, MOP_SUPPLY, SPRAY_SUPPLY, PENCIL_ERASER_SUPPLY };
-root.SBE.ArtSupplyDeposition = { resolveMopDabPlan, resolveSprayParticlePlan, hashSeed, STUDIORICH_STOCK_CAP };
+root.SBE.ArtSupplyDeposition = { resolveMopDabPlan, resolveMopEmissionPoints, resolveSprayParticlePlan, resolveSprayCorePlan, hashSeed, STUDIORICH_STOCK_CAP };
+root.SBE.ArtSupplyRendering = { traceSmoothedPath, fillSprayParticle, withAlpha, hashLateralUnit, hash01 };
+root.SBE.MapZoomScale = { resolveZoomScale, MAP_SURFACE_REFERENCE_ZOOM };
 
 const memberIdentity = createFirebaseMemberIdentityAuthority(import.meta.env);
 const artworkRepository = createFirebaseArtworkRepository(import.meta.env);

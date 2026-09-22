@@ -206,4 +206,31 @@ describe("Artwork composition bridge", () => {
     expect(() => toGeographicErasureMark({ operation: "eraser", id: "e", points: [{}], width: 20 } as unknown as WallErasure, "m")).toThrow();
     expect(() => toGeographicErasureMark({ operation: "eraser", id: "e", points: [{ longitude: 1, latitude: 1 }, {}], width: 20 } as unknown as WallErasure, "m")).toThrow("wall_stroke_missing_geographic_coordinates");
   });
+
+  it("Calibration V1 Revision 7 (approved persistence): a finite authoredZoom IS included in the persisted stroke Mark now that the Firestore rules allow it", () => {
+    const stroke: WallStroke = { ...wallStroke("stroke-zoom"), authoredZoom: 15.4 };
+    const mark = toStrokeMark(stroke, "mark-zoom");
+    expect(mark).toMatchObject({ authoredZoom: 15.4 });
+    expect(Object.keys(mark).sort()).toEqual(["authoredZoom", "createdAt", "geometry", "id", "style", "type"]);
+  });
+
+  it("Calibration V1 Revision 7: authoredZoom is OMITTED (not written as null/undefined) when the stroke didn't capture one -- legacy-compatible round trip", () => {
+    const stroke: WallStroke = wallStroke("stroke-no-zoom");
+    const mark = toStrokeMark(stroke, "mark-no-zoom");
+    expect(mark).not.toHaveProperty("authoredZoom");
+    expect(Object.keys(mark).sort()).toEqual(["createdAt", "geometry", "id", "style", "type"]);
+  });
+
+  it("Calibration V1 Revision 7 (approved persistence): a finite authoredZoom IS included in the persisted erasure Mark", () => {
+    const erasure: WallErasure = { operation: "eraser", id: "erase-zoom", points: [{ longitude: -73.99, latitude: 40.72 }, { longitude: -73.98, latitude: 40.73 }], width: 28, authoredZoom: 15.4 };
+    const mark = toGeographicErasureMark(erasure, "erase-zoom-mark");
+    expect(mark).toMatchObject({ authoredZoom: 15.4 });
+    expect(Object.keys(mark).sort()).toEqual(["authoredZoom", "createdAt", "geometry", "id", "targetMaterialId", "type", "width"]);
+  });
+
+  it("Calibration V1 Revision 7: a non-finite authoredZoom (NaN/undefined) is omitted, never written as an invalid value", () => {
+    const erasure: WallErasure = { operation: "eraser", id: "erase-no-zoom", points: [{ longitude: -73.99, latitude: 40.72 }, { longitude: -73.98, latitude: 40.73 }], width: 28 };
+    const mark = toGeographicErasureMark(erasure, "erase-no-zoom-mark");
+    expect(mark).not.toHaveProperty("authoredZoom");
+  });
 });

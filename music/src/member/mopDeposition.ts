@@ -28,6 +28,11 @@ export interface MopPoint {
   readonly y: number;
 }
 
+export interface MopEmissionPoint extends MopPoint {
+  /** >1 in slow/dwelled sections, <1 in fast sections -- derived from the ORIGINAL recorded points' spacing (the same free, deterministic speed proxy the aerosol engine's `resolveSprayEmissionPoints` uses), then carried onto every interpolated point resampled from that same original segment. */
+  readonly densityFactor: number;
+}
+
 export interface MopDab {
   readonly x: number;
   readonly y: number;
@@ -42,30 +47,103 @@ const MAX_SPEED_FACTOR = 1.25;
 const SPEED_RESPONSE = 0.35;
 export const MOP_DAB_ALPHA_SCALE = 0.5;
 
+/**
+ * Calibration V1 Revision 3: `resolveMopDabPlan` used to place exactly one
+ * dab per RAW recorded point, with no interpolation. That worked fine when
+ * pointer samples happened to land close together, but a normal fast/broad
+ * gesture (routine on a large Map viewport) records points spaced well
+ * apart -- with no resampling, the dabs stopped overlapping and read as a
+ * chain of separate circles instead of a continuous wet body ("the user can
+ * clearly see the Mop as a repeated pattern of circular dabs"). This bound
+ * is the same fix Spray's `resolveSprayEmissionPoints` already has: no two
+ * consecutive dab centers can ever be further apart than
+ * `baseRadius * MOP_MIN_STEP_RATIO` -- comfortably under one dab radius, so
+ * neighboring dabs always overlap regardless of how sparse the ORIGINAL
+ * recorded points were. Bounded by `MOP_MAX_EMISSION_POINTS` so an
+ * arbitrarily long stroke still produces a bounded dab count.
+ */
+const MOP_MIN_STEP_RATIO = 0.45;
+export const MOP_MAX_EMISSION_POINTS = 260;
+
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+/**
+ * Resamples the authored path into a bounded, overlap-guaranteed list of
+ * emission points -- see the Revision 3 doc above. Mirrors
+ * `resolveSprayEmissionPoints`'s shape (bounded max-step interpolation +
+ * a density factor derived from the ORIGINAL point spacing) so the two
+ * materials share the same proven resampling principle without importing
+ * one material's module into the other's.
+ */
+export function resolveMopEmissionPoints(
+  points: readonly MopPoint[],
+  baseRadius: number,
+): readonly MopEmissionPoint[] {
+  if (points.length === 0 || baseRadius <= 0) return [];
+  const nominalStep = Math.max(1e-6, baseRadius * MOP_MIN_STEP_RATIO);
+  const neutralSpacing = Math.max(1e-6, baseRadius * NEUTRAL_SPACING_RATIO);
+  const densityAt = (spacing: number): number =>
+    clamp(1 + (1 - spacing / neutralSpacing) * SPEED_RESPONSE, MIN_SPEED_FACTOR, MAX_SPEED_FACTOR);
+
+  if (points.length === 1) return [{ ...points[0], densityFactor: densityAt(0) }];
+
+  // Revision 4: adaptive step, same fix as resolveSprayEmissionPoints --
+  // a fixed step size on a long real gesture needed more steps than
+  // MOP_MAX_EMISSION_POINTS allowed, and the old early-return silently
+  // dropped the rest of the path from rendering. Measure total length
+  // first and widen the step (never narrower than nominal) so the whole
+  // path always fits within budget; short strokes are unaffected.
+  let totalLength = 0;
+  for (let index = 1; index < points.length; index += 1) {
+    totalLength += Math.hypot(points[index].x - points[index - 1].x, points[index].y - points[index - 1].y);
+  }
+  const budget = Math.max(1, MOP_MAX_EMISSION_POINTS - 1);
+  const maxStep = Math.max(nominalStep, totalLength / budget);
+
+  const emissions: MopEmissionPoint[] = [{ ...points[0], densityFactor: densityAt(0) }];
+  for (let index = 1; index < points.length; index += 1) {
+    const start = points[index - 1];
+    const end = points[index];
+    const segmentLength = Math.hypot(end.x - start.x, end.y - start.y);
+    const density = densityAt(segmentLength);
+    const steps = Math.max(1, Math.ceil(segmentLength / maxStep));
+    for (let step = 1; step <= steps; step += 1) {
+      const t = step / steps;
+      emissions.push({ x: start.x + (end.x - start.x) * t, y: start.y + (end.y - start.y) * t, densityFactor: density });
+    }
+  }
+  if (emissions.length > MOP_MAX_EMISSION_POINTS) {
+    const trimmed = emissions.slice(0, MOP_MAX_EMISSION_POINTS);
+    trimmed[trimmed.length - 1] = emissions[emissions.length - 1];
+    return trimmed;
+  }
+  return emissions;
 }
 
 /**
  * `points` and `baseRadius` must be in the same coordinate space (both
  * normalized 0-1, or both already scaled to canvas pixels) -- the function
  * itself is coordinate-system agnostic, which is what keeps it reusable for
- * a future non-Blackbook Surface without redesign.
+ * a future non-Blackbook Surface without redesign. Internally resamples via
+ * `resolveMopEmissionPoints` before resolving one dab per emission point
+ * (Revision 3) -- the RETURNED dab count generally exceeds the recorded
+ * point count now; each dab's speed-response radius comes from the
+ * ORIGINAL segment's density factor, not the (now much more even)
+ * resampled spacing.
  */
 export function resolveMopDabPlan(
   points: readonly MopPoint[],
   baseRadius: number,
 ): readonly MopDab[] {
   if (points.length === 0 || baseRadius <= 0) return [];
-  const neutralSpacing = Math.max(1e-6, baseRadius * NEUTRAL_SPACING_RATIO);
-  return points.map((point, index) => {
-    const prev = points[index - 1] ?? point;
-    const next = points[index + 1] ?? point;
-    const spacing = (Math.hypot(point.x - prev.x, point.y - prev.y) + Math.hypot(next.x - point.x, next.y - point.y)) / 2;
-    const relativeSpacing = spacing / neutralSpacing;
-    const speedFactor = clamp(1 + (1 - relativeSpacing) * SPEED_RESPONSE, MIN_SPEED_FACTOR, MAX_SPEED_FACTOR);
-    return { x: point.x, y: point.y, radius: baseRadius * speedFactor, alphaScale: MOP_DAB_ALPHA_SCALE };
-  });
+  return resolveMopEmissionPoints(points, baseRadius).map((emission) => ({
+    x: emission.x,
+    y: emission.y,
+    radius: baseRadius * emission.densityFactor,
+    alphaScale: MOP_DAB_ALPHA_SCALE,
+  }));
 }
 
 /**

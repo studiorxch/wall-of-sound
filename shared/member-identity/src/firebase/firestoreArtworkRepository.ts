@@ -61,10 +61,20 @@ function decodeMark(value: unknown): ArtworkMark {
   const geometry = stroke.geometry as Record<string, unknown> | null;
   const format = geometry?.format;
   const createdAt = stroke.createdAt instanceof Timestamp ? stroke.createdAt.toDate() : new Date(0);
+  // Calibration V1 Revision 7: `authoredZoom` (see artworkTypes.ts's own
+  // doc) only exists on GEOGRAPHIC Marks -- never carried through for a
+  // local-2d (Blackbook) format, matching the canonical type. Omitted
+  // entirely (not written as undefined) when the stored document doesn't
+  // have it, so a legacy Mark decodes exactly as it did before this field
+  // existed.
+  const isGeographicFormat = format !== "local-2d-stroke-v1" && format !== "local-2d-erasure-v1";
+  const authoredZoom = isGeographicFormat && Number.isFinite(stroke.authoredZoom)
+    ? { authoredZoom: stroke.authoredZoom as number }
+    : {};
   if (stroke.type === "material-erasure") {
     const decoded: ArtworkMark = format === "local-2d-erasure-v1"
       ? { id: String(stroke.id ?? ""), type: "material-erasure", createdAt, geometry: { format, points: Array.isArray(geometry?.points) ? geometry.points.map(decodeLocalPoint) : [] }, targetMaterialId: String(stroke.targetMaterialId ?? "") as "graphite", width: Number(stroke.width) }
-      : { id: String(stroke.id ?? ""), type: "material-erasure", createdAt, geometry: { format: "geographic-erasure-v1", points: Array.isArray(geometry?.points) ? geometry.points.map(decodePoint) : [] }, targetMaterialId: String(stroke.targetMaterialId ?? "") as "graphite", width: Number(stroke.width) };
+      : { id: String(stroke.id ?? ""), type: "material-erasure", createdAt, geometry: { format: "geographic-erasure-v1", points: Array.isArray(geometry?.points) ? geometry.points.map(decodePoint) : [] }, targetMaterialId: String(stroke.targetMaterialId ?? "") as "graphite", width: Number(stroke.width), ...authoredZoom };
     validateArtworkMark(decoded);
     return decoded;
   }
@@ -85,7 +95,7 @@ function decodeMark(value: unknown): ArtworkMark {
   };
   const decoded: ArtworkMark = format === "local-2d-stroke-v1"
     ? { ...base, geometry: { format, points: Array.isArray(geometry?.points) ? geometry.points.map(decodeLocalPoint) : [] } }
-    : { ...base, geometry: { format: "geographic-stroke-v1", points: Array.isArray(geometry?.points) ? geometry.points.map(decodePoint) : [] } };
+    : { ...base, geometry: { format: "geographic-stroke-v1", points: Array.isArray(geometry?.points) ? geometry.points.map(decodePoint) : [] }, ...authoredZoom };
   validateArtworkMark(decoded);
   return decoded;
 }

@@ -46,6 +46,18 @@ export interface WallStroke {
     readonly width?: number;
     readonly opacity?: number;
   };
+  /**
+   * Calibration V1 Revision 7: the Mapbox camera zoom when this gesture
+   * began (see mapZoomScale.ts) -- used ONLY for local, in-session render
+   * scaling (`resolveZoomScale`). Deliberately NOT included in `toStrokeMark`
+   * below: the canonical Firestore stroke-Mark schema's rules use a strict
+   * `keys().hasOnly([...])` allowlist that does not list this field yet, so
+   * persisting it would reject the entire write. Until that rules change is
+   * explicitly approved and deployed, this value lives only in memory for
+   * the current session; after reload/hydration a Mark falls back to the
+   * shared `MAP_SURFACE_REFERENCE_ZOOM`, exactly like a true legacy Mark.
+   */
+  readonly authoredZoom?: number;
 }
 
 /** The same graphite-only authored erasure Mark Blackbook's Eraser produces (see blackbookArtworkBridge.ts's BlackbookErasure), on geographic coordinates instead of local ones. */
@@ -61,6 +73,8 @@ export interface WallErasure {
     readonly latitude?: number | null;
   }[];
   readonly width?: number;
+  /** See WallStroke.authoredZoom's doc -- same local-only, not-yet-persisted semantics. */
+  readonly authoredZoom?: number;
 }
 
 export type WallOperation = WallStroke | WallErasure;
@@ -101,6 +115,12 @@ export function toStrokeMark(stroke: WallStroke, markId: string): StrokeMark {
     geometry: { format: "geographic-stroke-v1", points },
     style: { color, width: width as number, opacity: opacity as number },
     ...(stroke.operation ? { material: { supplyId: stroke.operation, materialId: MATERIAL_BY_SUPPLY[stroke.operation] } } : {}),
+    // Calibration V1 Revision 7: now persisted (Firestore rules updated to
+    // allow this key -- see firestore.rules' hasValidAuthoredZoom) only
+    // when a finite value was actually captured; omitted entirely
+    // otherwise, so a stroke authored before this revision (or before the
+    // MapZoomScale bridge loaded) round-trips exactly as before.
+    ...(Number.isFinite(stroke.authoredZoom) ? { authoredZoom: stroke.authoredZoom as number } : {}),
   };
 }
 
@@ -124,6 +144,7 @@ export function toGeographicErasureMark(erasure: WallErasure, markId: string): G
     geometry: { format: "geographic-erasure-v1", points },
     targetMaterialId: "graphite",
     width: erasure.width as number,
+    ...(Number.isFinite(erasure.authoredZoom) ? { authoredZoom: erasure.authoredZoom as number } : {}),
   };
 }
 

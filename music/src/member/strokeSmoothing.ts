@@ -1,0 +1,123 @@
+/**
+ * Map Art Supplies Calibration V1: a small, pure rendering helper shared by
+ * every Surface that draws a continuous-line material (Pencil/Pen/Marker/
+ * Mop's own background pass) -- never a second per-Surface implementation.
+ *
+ * Problem: drawing a raw polyline (`moveTo` + `lineTo` per recorded pointer
+ * point) makes a fast handwritten gesture look like a crude, angular
+ * polygon, because consecutive pointer samples are rarely more than a few
+ * pixels apart in a straight line -- every sample becomes a visible kink.
+ *
+ * Fix: the classic "quadratic midpoint" smoothing technique. Each authored
+ * point becomes a quadratic curve's CONTROL point (not its endpoint) --
+ * the curve passes through the midpoint of each consecutive pair instead of
+ * through the recorded point itself. This removes the polygon kinks while
+ * still passing extremely close to every authored point (never further than
+ * half the local segment length), so intentional sharp corners and
+ * direction changes remain visible -- this is *rendering* smoothing of
+ * already-authored points, not a resampling or beautification of the
+ * authored geometry itself. The persisted Mark's points are never touched.
+ */
+
+export interface SmoothablePoint {
+  readonly x: number;
+  readonly y: number;
+}
+
+/**
+ * Traces the smoothed path into `ctx`'s current path (via `moveTo`/
+ * `quadraticCurveTo`) without stroking or setting any style -- the caller
+ * sets `strokeStyle`/`lineWidth`/`globalAlpha` and calls `stroke()` exactly
+ * as it already did for a raw polyline. A 0- or 1-point path draws nothing;
+ * a 2-point path falls back to a single straight `lineTo` (a curve needs at
+ * least 3 points to have a midpoint to aim at).
+ */
+export function traceSmoothedPath(ctx: CanvasRenderingContext2D, points: readonly SmoothablePoint[]): void {
+  if (points.length < 2) return;
+  ctx.moveTo(points[0].x, points[0].y);
+  if (points.length === 2) {
+    ctx.lineTo(points[1].x, points[1].y);
+    return;
+  }
+  for (let index = 1; index < points.length - 1; index += 1) {
+    const current = points[index];
+    const next = points[index + 1];
+    const midX = (current.x + next.x) / 2;
+    const midY = (current.y + next.y) / 2;
+    ctx.quadraticCurveTo(current.x, current.y, midX, midY);
+  }
+  const last = points[points.length - 1];
+  ctx.lineTo(last.x, last.y);
+}
+
+/**
+ * Builds an `rgba(...)` string from a `#rrggbb` hex color and an alpha in
+ * [0, 1] -- used by the Spray renderer to give each particle its own alpha
+ * within a radial gradient (two gradient stops need two different alphas at
+ * the SAME fill color, which `ctx.globalAlpha` alone cannot express).
+ * Falls back to the raw color string unchanged if it isn't `#rrggbb`.
+ */
+export function withAlpha(hexColor: string, alpha: number): string {
+  const match = /^#([0-9a-fA-F]{6})$/.exec(hexColor);
+  if (!match) return hexColor;
+  const value = match[1];
+  const r = parseInt(value.slice(0, 2), 16);
+  const g = parseInt(value.slice(2, 4), 16);
+  const b = parseInt(value.slice(4, 6), 16);
+  const clampedAlpha = Math.min(1, Math.max(0, alpha));
+  return `rgba(${r}, ${g}, ${b}, ${clampedAlpha})`;
+}
+
+/**
+ * Fills one Spray particle as a soft radial gradient (opaque-ish center
+ * fading to fully transparent at its own radius) instead of a flat,
+ * hard-edged circle -- the calibration fix for particles reading as
+ * individually visible "stamps" rather than blended aerosol coverage. Alpha
+ * at the particle's center is `opacity * particle.alpha` (unchanged from
+ * the flat-circle version); only the EDGE now fades to zero instead of
+ * cutting off sharply.
+ */
+export function fillSprayParticle(
+  ctx: CanvasRenderingContext2D,
+  particle: { readonly x: number; readonly y: number; readonly radius: number; readonly alpha: number },
+  color: string,
+  opacity: number,
+): void {
+  const centerAlpha = Math.min(1, Math.max(0, opacity * particle.alpha));
+  if (centerAlpha <= 0 || particle.radius <= 0) return;
+  const gradient = ctx.createRadialGradient(particle.x, particle.y, 0, particle.x, particle.y, particle.radius);
+  gradient.addColorStop(0, withAlpha(color, centerAlpha));
+  gradient.addColorStop(0.7, withAlpha(color, centerAlpha * 0.85));
+  gradient.addColorStop(1, withAlpha(color, 0));
+  ctx.fillStyle = gradient;
+  ctx.beginPath();
+  ctx.arc(particle.x, particle.y, particle.radius, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+/**
+ * Calibration V1 Revision 5/6: a deterministic pseudo-random value in
+ * [0, 1) from a 2D position plus a `salt` -- classic sine-hash, pure
+ * function, no seed or external state needed since a dab/point's own
+ * position is already stable per authored Mark. `salt` decorrelates
+ * multiple independent hashes of the SAME position (e.g. Mop's lateral
+ * offset, radius jitter, alpha jitter, and inclusion/skip decision all
+ * need their own independent-looking pseudo-random stream from the same
+ * (x, y), not the same value reused four times).
+ */
+export function hash01(x: number, y: number, salt = 0): number {
+  const h = Math.sin(x * 12.9898 + y * 78.233 + salt * 37.719) * 43758.5453;
+  return h - Math.floor(h);
+}
+
+/**
+ * A deterministic pseudo-random unit value in [-1, 1] -- see `hash01`.
+ * Used to scatter Mop's texture dabs laterally across the stroke's width
+ * instead of stacking them on its centerline (isolating Mop's body-only vs
+ * dabs-only render showed the dabs-alone layer was a second visible track
+ * running dead-center through the body -- this is what turns them into
+ * lateral "grain" instead).
+ */
+export function hashLateralUnit(x: number, y: number): number {
+  return hash01(x, y) * 2 - 1;
+}
