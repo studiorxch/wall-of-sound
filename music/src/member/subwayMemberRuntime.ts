@@ -15,6 +15,7 @@ import {
   SUBWAY_MAP_SURFACE_ID,
   type WallOperation,
 } from "./mapArtworkBridge";
+import { createAnonymousArtworkClaimer, type AnonymousArtworkClaimResult } from "./claimAnonymousArtwork";
 import { createMemberHomeController } from "./memberHomeUI";
 import { navigateToArtwork } from "./navigateToArtwork";
 import { createSessionArtworkLibrary } from "./sessionArtworkLibrary";
@@ -37,6 +38,8 @@ type WallRuntime = {
      */
     hydrateArtworks(artworks: readonly unknown[]): number;
     removePersistedStrokes(): number;
+    /** Member V1C -- a snapshot of this surface's real drawing operations that are not yet bound to a Firestore Artwork. Never the live internal array. */
+    getUnclaimedStrokes(): readonly WallOperation[];
   };
   MemberIdentityAuthority?: unknown;
   MemberIdentityState?: MemberIdentityState;
@@ -128,6 +131,9 @@ let saveStatusHideTimer: number | null = null;
 const sessionArtworkLibrary = createSessionArtworkLibrary();
 sessionArtworkLibrary.subscribe(() => memberHome.refresh());
 
+/** Member V1C -- promotes anonymous strokes into the signed-in Member's own Artwork by replaying them through the SAME persistence bridge below. See claimAnonymousArtwork.ts's own doc. */
+const anonymousClaimer = createAnonymousArtworkClaimer<WallOperation>();
+
 const memberHome = createMemberHomeController({
   authority: memberIdentity,
   getOwnedArtworks: () => sessionArtworkLibrary.getAll(),
@@ -213,6 +219,66 @@ function endSave(succeeded: boolean): void {
   }, 2000);
 }
 
+/**
+ * Member V1C -- ends the promotion batch's "Saving…" status. Unlike
+ * `endSave`, a batch can be truthfully "Saved" only when EVERY eligible
+ * anonymous operation attempted actually bound; if any remain unbound after
+ * the attempt, that is surfaced as "Save incomplete" (left visible, not
+ * auto-hidden) rather than a false global "Saved" or a silent blank.
+ */
+function endClaimBatch(result: AnonymousArtworkClaimResult): void {
+  pendingSaveCount = Math.max(0, pendingSaveCount - 1);
+  if (!saveStatusElement || pendingSaveCount > 0) return;
+  if (saveStatusHideTimer !== null) {
+    window.clearTimeout(saveStatusHideTimer);
+    saveStatusHideTimer = null;
+  }
+  if (result.attemptedCount === 0) {
+    saveStatusElement.textContent = "";
+    return;
+  }
+  if (result.complete) {
+    saveStatusElement.textContent = "Saved";
+    saveStatusHideTimer = window.setTimeout(() => {
+      if (saveStatusElement) saveStatusElement.textContent = "";
+      saveStatusHideTimer = null;
+    }, 2000);
+  } else {
+    saveStatusElement.textContent = "Save incomplete";
+  }
+}
+
+/**
+ * Member V1C -- runs only from the `signedIn` branch of the auth-state
+ * subscription below, i.e. only after authentication has genuinely
+ * succeeded. A cancelled/failed sign-in never reaches this function, so
+ * anonymous strokes are left completely untouched on any auth failure path
+ * -- there is no rollback to implement because nothing is ever attempted.
+ */
+function promoteAnonymousDrawing(): Promise<void> {
+  const drawing = drawingRuntime();
+  if (!drawing || drawing.getUnclaimedStrokes().length === 0) return Promise.resolve();
+  beginSave();
+  return anonymousClaimer
+    .claimAnonymousStrokes(drawing, artworkPersistence)
+    .then((result) => {
+      endClaimBatch(result);
+      if (!result.complete) {
+        console.error("[SubwayMemberRuntime] Some anonymous Artwork could not be saved", result);
+      }
+    })
+    .catch((error: unknown) => {
+      pendingSaveCount = Math.max(0, pendingSaveCount - 1);
+      console.error("[SubwayMemberRuntime] Anonymous Artwork claim failed", error);
+    });
+}
+
+/** Member V1C -- the button's label depends on whether eligible anonymous drawing currently exists; refreshed only at the existing drawing-committed/removed event points, never polled. */
+function hasEligibleAnonymousDrawing(): boolean {
+  const drawing = drawingRuntime();
+  return !!drawing && drawing.getUnclaimedStrokes().length > 0;
+}
+
 function ensureMemberUI(): void {
   const controls = document.getElementById("subway-map-paint-controls");
   if (!controls || controls.querySelector("[data-member-action]")) return;
@@ -269,7 +335,11 @@ function renderIdentityState(): void {
   const button = document.querySelector<HTMLButtonElement>("[data-member-action]");
   if (!button) return;
   button.disabled = state.status === "initializing";
-  button.textContent = state.status === "signedIn" ? "MEMBER" : state.status === "initializing" ? "…" : "SIGN IN";
+  button.textContent = state.status === "signedIn"
+    ? "MEMBER"
+    : state.status === "initializing"
+      ? "…"
+      : hasEligibleAnonymousDrawing() ? "SIGN IN TO SAVE" : "SIGN IN";
   button.setAttribute("aria-label", state.status === "signedIn" ? "Open StudioRich Member Home" : "StudioRich Member sign in");
   if (state.status === "signedIn") {
     dialog?.close();
@@ -301,7 +371,13 @@ async function hydrateOwnedArtwork(memberId: string): Promise<void> {
 }
 
 document.addEventListener("surface-drawing:stroke-committed", (event) => {
-  if (state.status !== "signedIn") return;
+  if (state.status !== "signedIn") {
+    // Member V1C: a new anonymous stroke may be the first eligible one --
+    // refresh the button label ("SIGN IN" -> "SIGN IN TO SAVE") from this
+    // existing event rather than polling the drawing runtime.
+    renderIdentityState();
+    return;
+  }
   const detail = (event as CustomEvent).detail as { stroke?: WallOperation };
   if (!detail?.stroke) return;
   beginSave();
@@ -316,7 +392,12 @@ document.addEventListener("surface-drawing:stroke-committed", (event) => {
 });
 
 document.addEventListener("surface-drawing:stroke-removed", (event) => {
-  if (state.status !== "signedIn") return;
+  if (state.status !== "signedIn") {
+    // Member V1C: undoing the last eligible anonymous stroke should return
+    // the button to plain "SIGN IN".
+    renderIdentityState();
+    return;
+  }
   const stroke = (event as CustomEvent).detail?.stroke as WallOperation | undefined;
   if (!stroke) return;
   void artworkPersistence.removeStroke(stroke).catch((error: unknown) => {
@@ -333,6 +414,10 @@ memberIdentity.subscribe((nextState) => {
       console.error("[SubwayMemberRuntime] Artwork hydration failed", error);
       setMessage("Saved artwork could not be loaded.", true);
     });
+    // Member V1C: promotion is independent of hydration (they operate on
+    // disjoint bound/unbound stroke sets) and only ever runs here, i.e.
+    // only after authentication has genuinely succeeded.
+    void promoteAnonymousDrawing();
   } else if (hydratedMemberId) {
     drawingRuntime()?.removePersistedStrokes();
     hydratedMemberId = null;

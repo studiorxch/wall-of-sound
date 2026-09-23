@@ -1223,6 +1223,21 @@
     return _overlayObjects(surf).filter(function (obj) { return obj && (obj.type === "stroke" || obj.type === "material-erasure"); });
   }
 
+  // Member V1C: the smallest read-only view a caller needs to offer
+  // "sign in to save" -- every drawing operation on this surface that is a
+  // real user Stroke/material-erasure Mark (not hydrated Member content,
+  // which already carries `artworkId`) and has never been bound to a
+  // Firestore Artwork. Returns a NEW array (never the live `overlayObjects`
+  // reference) so a caller cannot mutate this runtime's internal state --
+  // it may freely read/iterate the returned stroke objects and later pass
+  // them back to `bindArtwork`, exactly as the normal signed-in persistence
+  // path already does. This runtime has no concept of Firebase, Member
+  // identity, or persistence -- it only knows which of its own operations
+  // are, and are not, already tagged.
+  function getUnclaimedStrokes(surfaceId) {
+    return getStrokes(surfaceId).filter(function (item) { return !item.artworkId; });
+  }
+
   function bindArtwork(strokeOrId, artworkId, markId, creatorId, surfaceId) {
     var stroke = typeof strokeOrId === "object" && strokeOrId
       ? strokeOrId
@@ -1383,6 +1398,7 @@
     clearSurface:   clearSurface,
     undo:           undo,
     getStrokes:     getStrokes,
+    getUnclaimedStrokes: getUnclaimedStrokes,
     bindArtwork:    bindArtwork,
     hydrateArtwork: hydrateArtwork,
     hydrateArtworks: hydrateArtworks,
