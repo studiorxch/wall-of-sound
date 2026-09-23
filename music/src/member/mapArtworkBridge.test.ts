@@ -187,6 +187,85 @@ describe("Artwork composition bridge", () => {
     expect(repository.appendOwnedArtworkMark).not.toHaveBeenCalled();
   });
 
+  it("ARTWORK V1: getCurrentArtworkTarget kind 'none' leaves the stroke unbound -- no persistence attempted", async () => {
+    const createMapArtwork = vi.fn(async () => artwork("artwork-new"));
+    const repository: ArtworkRepository = {
+      createMapArtwork, listOwnedMapArtwork: vi.fn(async () => []),
+      appendOwnedArtworkMark: vi.fn(), removeOwnedArtworkMark: vi.fn(), deleteOwnedArtwork: vi.fn(),
+    };
+    const bindArtwork = vi.fn(() => true);
+    const bridge = createMapArtworkPersistenceBridge({
+      repository, drawing: { bindArtwork }, getAuthenticatedMemberId: () => "member-1",
+      getCurrentArtworkTarget: () => ({ kind: "none" }),
+    });
+
+    await bridge.persistStroke(wallStroke("stroke-1"));
+
+    expect(createMapArtwork).not.toHaveBeenCalled();
+    expect(bindArtwork).not.toHaveBeenCalled();
+  });
+
+  it("ARTWORK V1: 'pending' target creates a new Artwork and fires onCurrentArtworkEstablished exactly once", async () => {
+    const repository: ArtworkRepository = {
+      createMapArtwork: vi.fn(async () => artwork("artwork-new")),
+      listOwnedMapArtwork: vi.fn(async () => []),
+      appendOwnedArtworkMark: vi.fn(), removeOwnedArtworkMark: vi.fn(), deleteOwnedArtwork: vi.fn(),
+    };
+    const established: string[] = [];
+    const bridge = createMapArtworkPersistenceBridge({
+      repository, drawing: { bindArtwork: vi.fn(() => true) }, getAuthenticatedMemberId: () => "member-1",
+      getCurrentArtworkTarget: () => ({ kind: "pending" }),
+      onCurrentArtworkEstablished: (id) => established.push(id),
+    });
+
+    await bridge.persistStroke(wallStroke("stroke-1"));
+
+    expect(repository.createMapArtwork).toHaveBeenCalledOnce();
+    expect(established).toEqual(["artwork-new"]);
+  });
+
+  it("ARTWORK V1: an explicit artwork target appends directly, bypassing proximity, regardless of geographic distance", async () => {
+    const repository: ArtworkRepository = {
+      createMapArtwork: vi.fn(),
+      listOwnedMapArtwork: vi.fn(async () => []),
+      appendOwnedArtworkMark: vi.fn(async () => artwork("artwork-a")),
+      removeOwnedArtworkMark: vi.fn(), deleteOwnedArtwork: vi.fn(),
+    };
+    const farStroke: WallStroke = { ...wallStroke("stroke-far"), points: [{ longitude: -74.5, latitude: 40.1 }, { longitude: -74.49, latitude: 40.11 }] };
+    const bridge = createMapArtworkPersistenceBridge({
+      repository, drawing: { bindArtwork: vi.fn(() => true) }, getAuthenticatedMemberId: () => "member-1",
+      getCurrentArtworkTarget: () => ({ kind: "artwork", artworkId: "artwork-a" }),
+    });
+
+    await bridge.persistStroke(farStroke);
+
+    expect(repository.appendOwnedArtworkMark).toHaveBeenCalledWith("artwork-a", "member-1", expect.objectContaining({}));
+    expect(repository.createMapArtwork).not.toHaveBeenCalled();
+  });
+
+  it("ARTWORK V1: multiple strokes dispatched together under a 'pending' target converge onto the SAME newly-created Artwork", async () => {
+    let createCount = 0;
+    const repository: ArtworkRepository = {
+      createMapArtwork: vi.fn(async () => { createCount += 1; return artwork("artwork-batch"); }),
+      listOwnedMapArtwork: vi.fn(async () => []),
+      appendOwnedArtworkMark: vi.fn(async () => artwork("artwork-batch")),
+      removeOwnedArtworkMark: vi.fn(), deleteOwnedArtwork: vi.fn(),
+    };
+    let target: { kind: "pending" } | { kind: "artwork"; artworkId: string } = { kind: "pending" };
+    const bridge = createMapArtworkPersistenceBridge({
+      repository, drawing: { bindArtwork: vi.fn(() => true) }, getAuthenticatedMemberId: () => "member-1",
+      getCurrentArtworkTarget: () => target,
+      onCurrentArtworkEstablished: (id) => { target = { kind: "artwork", artworkId: id }; },
+    });
+    const near: WallStroke = { ...wallStroke("stroke-near"), points: [{ longitude: -73.99, latitude: 40.72 }, { longitude: -73.98, latitude: 40.73 }] };
+    const far: WallStroke = { ...wallStroke("stroke-far"), points: [{ longitude: -74.5, latitude: 40.1 }, { longitude: -74.49, latitude: 40.11 }] };
+
+    await Promise.all([bridge.persistStroke(near), bridge.persistStroke(far)]);
+
+    expect(createCount).toBe(1);
+    expect(repository.appendOwnedArtworkMark).toHaveBeenCalledWith("artwork-batch", "member-1", expect.objectContaining({}));
+  });
+
   it("Member V1B: onArtworkSaved fires with the authoritative Artwork only after persistence succeeds, never before", async () => {
     const saved: string[] = [];
     const repository: ArtworkRepository = {

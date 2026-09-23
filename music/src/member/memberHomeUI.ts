@@ -22,6 +22,8 @@ export interface MemberHomeOptions {
   readonly authority: MemberIdentityAuthority;
   readonly getOwnedArtworks: () => readonly Artwork[];
   readonly onOpenArtwork: (artwork: Artwork) => void;
+  /** ARTWORK V1 -- "+ NEW ARTWORK". For V1 there is only one creation type (Map Artwork); see currentArtworkSession.ts's doc for why this arms a `pending` state rather than creating an empty document. */
+  readonly onNewArtwork: () => void;
   /** Optional: wires the existing `deleteOwnedArtwork` behavior behind an explicit confirmation. Omitted entirely (no delete control rendered) if the caller cannot safely expose it. */
   readonly onDeleteArtwork?: (artwork: Artwork) => Promise<void>;
 }
@@ -40,7 +42,7 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, className?: string): 
   return node;
 }
 
-export function createMemberHomeController({ authority, getOwnedArtworks, onOpenArtwork, onDeleteArtwork }: MemberHomeOptions): MemberHomeController {
+export function createMemberHomeController({ authority, getOwnedArtworks, onOpenArtwork, onNewArtwork, onDeleteArtwork }: MemberHomeOptions): MemberHomeController {
   let screen: Screen = "home";
   let showAllArtwork = false;
   let profileEditing = false;
@@ -178,7 +180,11 @@ export function createMemberHomeController({ authority, getOwnedArtworks, onOpen
     const artworkSection = el("section", "member-home-section");
     const artworkHeading = el("h3");
     artworkHeading.textContent = "ARTWORK";
-    artworkSection.appendChild(artworkHeading);
+    const newArtwork = el("button", "member-home-link");
+    newArtwork.type = "button";
+    newArtwork.textContent = "+ NEW ARTWORK";
+    newArtwork.addEventListener("click", () => onNewArtwork());
+    artworkSection.append(artworkHeading, newArtwork);
     const artworks = sortArtworksByRecency(getOwnedArtworks());
     pruneThumbnailCache(new Set(artworks.map((item) => item.id)));
     if (!artworks.length) {
@@ -231,6 +237,11 @@ export function createMemberHomeController({ authority, getOwnedArtworks, onOpen
 
   function renderArtworkScreen(): void {
     dialog.replaceChildren(renderHeader("ARTWORK", true));
+    const newArtwork = el("button", "member-home-link");
+    newArtwork.type = "button";
+    newArtwork.textContent = "+ NEW ARTWORK";
+    newArtwork.addEventListener("click", () => onNewArtwork());
+    dialog.appendChild(newArtwork);
     const artworks = sortArtworksByRecency(getOwnedArtworks());
     const visible = showAllArtwork ? artworks : artworks.slice(0, RECENT_ARTWORK_LIMIT);
     const grid = el("div", "member-artwork-grid");

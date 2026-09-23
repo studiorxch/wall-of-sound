@@ -8,6 +8,7 @@ import {
   PENCIL_ERASER_SUPPLY,
   PENCIL_SUPPLY,
   SPRAY_SUPPLY,
+  type Artwork,
   type MemberIdentityState,
 } from "@studiorich/member-identity";
 import {
@@ -16,6 +17,7 @@ import {
   type WallOperation,
 } from "./mapArtworkBridge";
 import { createAnonymousArtworkClaimer, type AnonymousArtworkClaimResult } from "./claimAnonymousArtwork";
+import { createCurrentArtworkSession } from "./currentArtworkSession";
 import { createMemberHomeController } from "./memberHomeUI";
 import { navigateToArtwork } from "./navigateToArtwork";
 import { createSessionArtworkLibrary } from "./sessionArtworkLibrary";
@@ -131,7 +133,16 @@ let saveStatusHideTimer: number | null = null;
 const sessionArtworkLibrary = createSessionArtworkLibrary();
 sessionArtworkLibrary.subscribe(() => memberHome.refresh());
 
-/** Member V1C -- promotes anonymous strokes into the signed-in Member's own Artwork by replaying them through the SAME persistence bridge below. See claimAnonymousArtwork.ts's own doc. */
+/**
+ * ARTWORK V1 -- the explicit Current Artwork authority (see
+ * currentArtworkSession.ts's own doc). This is now what decides which
+ * Firestore document a new Mark belongs to, replacing geographic proximity
+ * for every Mark drawn through this runtime.
+ */
+const currentArtworkSession = createCurrentArtworkSession();
+currentArtworkSession.subscribe(() => renderCloseArtworkControl());
+
+/** Member V1C -- promotes anonymous/unbound strokes into the signed-in Member's Current Artwork by replaying them through the SAME persistence bridge below. See claimAnonymousArtwork.ts's own doc. Reused unmodified for both the sign-in-to-save path (V1C) and the signed-in-with-no-Current-Artwork path (ARTWORK V1, section 9). */
 const anonymousClaimer = createAnonymousArtworkClaimer<WallOperation>();
 
 const memberHome = createMemberHomeController({
@@ -139,18 +150,21 @@ const memberHome = createMemberHomeController({
   getOwnedArtworks: () => sessionArtworkLibrary.getAll(),
   onOpenArtwork(artwork) {
     memberHome.close();
-    navigateToArtwork(
-      { fitBounds: (bounds, options) => root.SBE?.MapboxViewportRuntime?.fitBounds(bounds, options) },
-      artwork,
-      { expectedSurfaceId: SUBWAY_MAP_SURFACE_ID },
-    );
+    openArtwork(artwork);
+  },
+  onNewArtwork() {
+    memberHome.close();
+    void startNewArtwork();
   },
   async onDeleteArtwork(artwork) {
     if (state.status !== "signedIn") return;
     await artworkRepository.deleteOwnedArtwork(artwork.id, state.member.uid);
     sessionArtworkLibrary.remove(artwork.id);
-    drawingRuntime()?.removePersistedStrokes();
-    drawingRuntime()?.hydrateArtworks(sessionArtworkLibrary.getAll().filter((item) => item.state === "draft"));
+    const current = currentArtworkSession.getState();
+    if (current.kind === "artwork" && current.artworkId === artwork.id) {
+      currentArtworkSession.clear();
+      drawingRuntime()?.removePersistedStrokes();
+    }
   },
 });
 
@@ -170,7 +184,55 @@ const artworkPersistence = createMapArtworkPersistenceBridge({
   },
   onArtworkSaved: (artwork) => sessionArtworkLibrary.upsert(artwork),
   onArtworkRemoved: (artworkId) => sessionArtworkLibrary.remove(artworkId),
+  getCurrentArtworkTarget: () => currentArtworkSession.getState(),
+  onCurrentArtworkEstablished: (artworkId) => currentArtworkSession.setCurrentArtwork(artworkId),
 });
+
+/**
+ * ARTWORK V1 -- OPEN ARTWORK: establishes explicit document-open semantics.
+ * Scoped hydration only -- this never touches Firestore beyond the normal
+ * read already in `sessionArtworkLibrary` (the `artwork` object passed in
+ * is already the full authoritative document). Any previously-open
+ * Artwork's Marks are removed from the overlay first so opening A never
+ * silently composites B/C/D just because they share a surfaceId.
+ */
+function openArtwork(artwork: Artwork): void {
+  const drawing = drawingRuntime();
+  drawing?.removePersistedStrokes();
+  currentArtworkSession.setCurrentArtwork(artwork.id);
+  if (artwork.state === "draft") drawing?.hydrateArtworks([artwork]);
+  navigateToArtwork(
+    { fitBounds: (bounds, options) => root.SBE?.MapboxViewportRuntime?.fitBounds(bounds, options) },
+    artwork,
+    { expectedSurfaceId: SUBWAY_MAP_SURFACE_ID },
+  );
+}
+
+/**
+ * ARTWORK V1 -- CLOSE ARTWORK: the smallest truthful way back to the
+ * ordinary shared Map state. Never deletes the Artwork or alters its
+ * persisted Marks -- only clears session-local state and the drawing
+ * overlay's in-memory copy of what was hydrated for editing.
+ */
+function closeCurrentArtwork(): void {
+  currentArtworkSession.clear();
+  drawingRuntime()?.removePersistedStrokes();
+}
+
+/**
+ * ARTWORK V1 -- "+ NEW ARTWORK": arms a `pending` Current Artwork (no
+ * Firestore document yet -- see currentArtworkSession.ts's doc on why).
+ * If any strokes are already unbound on screen (this is also the
+ * signed-in/no-Current-Artwork path from section 9), promote them
+ * immediately into the new Artwork via the same claim mechanism V1C uses.
+ */
+async function startNewArtwork(): Promise<void> {
+  if (state.status !== "signedIn") return;
+  const previouslyOpen = currentArtworkSession.getState().kind === "artwork";
+  currentArtworkSession.setPendingNewArtwork();
+  if (previouslyOpen) drawingRuntime()?.removePersistedStrokes();
+  await promoteUnboundDrawing();
+}
 
 function setMessage(message: string, isError = false): void {
   if (!statusElement) return;
@@ -249,13 +311,17 @@ function endClaimBatch(result: AnonymousArtworkClaimResult): void {
 }
 
 /**
- * Member V1C -- runs only from the `signedIn` branch of the auth-state
- * subscription below, i.e. only after authentication has genuinely
- * succeeded. A cancelled/failed sign-in never reaches this function, so
- * anonymous strokes are left completely untouched on any auth failure path
- * -- there is no rollback to implement because nothing is ever attempted.
+ * ARTWORK V1 -- promotes whatever strokes are currently unbound on screen
+ * into the Current Artwork target (armed by the caller first: `pending`
+ * for a brand-new Artwork, or an already-known id). Reused verbatim from
+ * V1C's anonymous-claim mechanism (see claimAnonymousArtwork.ts) for two
+ * distinct triggers: (1) sign-in-to-save, when anonymous strokes exist at
+ * the moment authentication succeeds, and (2) section 9's signed-in/no-
+ * Current-Artwork path, via `startNewArtwork`. Both share this one
+ * function -- there is no separate "anonymous" vs. "signed-in" promotion
+ * implementation.
  */
-function promoteAnonymousDrawing(): Promise<void> {
+function promoteUnboundDrawing(): Promise<void> {
   const drawing = drawingRuntime();
   if (!drawing || drawing.getUnclaimedStrokes().length === 0) return Promise.resolve();
   beginSave();
@@ -264,19 +330,27 @@ function promoteAnonymousDrawing(): Promise<void> {
     .then((result) => {
       endClaimBatch(result);
       if (!result.complete) {
-        console.error("[SubwayMemberRuntime] Some anonymous Artwork could not be saved", result);
+        console.error("[SubwayMemberRuntime] Some drawing could not be saved", result);
       }
     })
     .catch((error: unknown) => {
       pendingSaveCount = Math.max(0, pendingSaveCount - 1);
-      console.error("[SubwayMemberRuntime] Anonymous Artwork claim failed", error);
+      console.error("[SubwayMemberRuntime] Artwork claim failed", error);
     });
 }
 
-/** Member V1C -- the button's label depends on whether eligible anonymous drawing currently exists; refreshed only at the existing drawing-committed/removed event points, never polled. */
-function hasEligibleAnonymousDrawing(): boolean {
+/** The button's label depends on whether eligible unbound drawing currently exists; refreshed only at the existing drawing-committed/removed event points, never polled. */
+function hasEligibleUnboundDrawing(): boolean {
   const drawing = drawingRuntime();
   return !!drawing && drawing.getUnclaimedStrokes().length > 0;
+}
+
+let closeArtworkButton: HTMLButtonElement | null = null;
+
+/** ARTWORK V1 -- shows/hides the CLOSE ARTWORK control based on whether a Current Artwork is actually open; called on every currentArtworkSession change. */
+function renderCloseArtworkControl(): void {
+  if (!closeArtworkButton) return;
+  closeArtworkButton.hidden = currentArtworkSession.getState().kind !== "artwork";
 }
 
 function ensureMemberUI(): void {
@@ -292,6 +366,15 @@ function ensureMemberUI(): void {
     else dialog?.showModal();
   });
   controls.appendChild(button);
+
+  closeArtworkButton = document.createElement("button");
+  closeArtworkButton.type = "button";
+  closeArtworkButton.dataset.closeArtwork = "true";
+  closeArtworkButton.textContent = "CLOSE ARTWORK";
+  closeArtworkButton.setAttribute("aria-label", "Close the current Artwork and return to the shared Map");
+  closeArtworkButton.hidden = true;
+  closeArtworkButton.addEventListener("click", () => closeCurrentArtwork());
+  controls.appendChild(closeArtworkButton);
 
   dialog = document.createElement("dialog");
   dialog.className = "subway-member-dialog";
@@ -339,7 +422,7 @@ function renderIdentityState(): void {
     ? "MEMBER"
     : state.status === "initializing"
       ? "…"
-      : hasEligibleAnonymousDrawing() ? "SIGN IN TO SAVE" : "SIGN IN";
+      : hasEligibleUnboundDrawing() ? "SIGN IN TO SAVE" : "SIGN IN";
   button.setAttribute("aria-label", state.status === "signedIn" ? "Open StudioRich Member Home" : "StudioRich Member sign in");
   if (state.status === "signedIn") {
     dialog?.close();
@@ -350,23 +433,22 @@ function renderIdentityState(): void {
   }
 }
 
-async function hydrateOwnedArtwork(memberId: string): Promise<void> {
+/**
+ * ARTWORK V1 -- populates the Member Home gallery projection ONLY. This
+ * deliberately no longer calls `drawing.hydrateArtworks(...)`: the ordinary
+ * shared Map must not automatically become a composite of every owned
+ * Artwork (section 12). Rendering a specific Artwork's Marks onto the
+ * drawing overlay now happens ONLY through the explicit `openArtwork` path
+ * above.
+ */
+async function loadOwnedArtworkLibrary(memberId: string): Promise<void> {
   if (hydratedMemberId === memberId) return;
-  const drawing = drawingRuntime();
-  if (!drawing) return;
-  drawing.removePersistedStrokes();
   const artworks = (await (artworkRepository.listOwnedArtwork ?? artworkRepository.listOwnedMapArtwork).call(artworkRepository, memberId)).filter((artwork) => artwork.surfaceId === SUBWAY_MAP_SURFACE_ID);
   artworkPersistence.replaceKnownArtworks(artworks);
   // Member V1B: authoritative durable truth reconciles/replaces the session
   // projection wholesale on (re)hydration -- any earlier same-session
   // upserts are superseded by this fresh Firestore read.
   sessionArtworkLibrary.replaceAll(artworks);
-  // Calibration V1 Revision 11: ONE batch call, ONE render/cache rebuild --
-  // was previously one `hydrateArtwork` call (and therefore one full
-  // static-composite rebuild) PER Artwork document, an O(n^2) cost across
-  // this account's ~150-200 Map Artworks that measured close to the
-  // reported ~30s sign-in freeze.
-  drawing.hydrateArtworks(artworks.filter((artwork) => artwork.state === "draft"));
   hydratedMemberId = memberId;
 }
 
@@ -380,6 +462,13 @@ document.addEventListener("surface-drawing:stroke-committed", (event) => {
   }
   const detail = (event as CustomEvent).detail as { stroke?: WallOperation };
   if (!detail?.stroke) return;
+  // ARTWORK V1 (section 9): with no Current Artwork, a signed-in stroke
+  // stays unbound in memory -- never silently persisted into a
+  // proximity-defined document. `artworkPersistence.persistStroke` would
+  // already no-op for this case (see mapArtworkBridge.ts's "none" branch),
+  // but skipping it here also avoids a misleading "Saving…"/"Saved" for
+  // work that was never actually persisted.
+  if (currentArtworkSession.getState().kind === "none") return;
   beginSave();
   void artworkPersistence
     .persistStroke(detail.stroke)
@@ -410,18 +499,30 @@ memberIdentity.subscribe((nextState) => {
   root.SBE!.MemberIdentityState = state;
   root.SBE!.PublicMember = state.status === "signedIn" ? serializePublicMember(state.member) : null;
   if (state.status === "signedIn") {
-    void hydrateOwnedArtwork(state.member.uid).catch((error: unknown) => {
-      console.error("[SubwayMemberRuntime] Artwork hydration failed", error);
+    // ARTWORK V1: every fresh sign-in starts at the ordinary shared-Map
+    // default -- no Current Artwork is ever restored automatically across
+    // a sign-in/reload boundary (see currentArtworkSession.ts's doc).
+    currentArtworkSession.clear();
+    void loadOwnedArtworkLibrary(state.member.uid).catch((error: unknown) => {
+      console.error("[SubwayMemberRuntime] Artwork library load failed", error);
       setMessage("Saved artwork could not be loaded.", true);
     });
-    // Member V1C: promotion is independent of hydration (they operate on
-    // disjoint bound/unbound stroke sets) and only ever runs here, i.e.
-    // only after authentication has genuinely succeeded.
-    void promoteAnonymousDrawing();
+    // Member V1C (now generalized -- ARTWORK V1 section 10): if anonymous
+    // strokes exist at the moment sign-in succeeds, arm a `pending` Current
+    // Artwork so the whole batch converges onto ONE newly-created document
+    // regardless of geographic distance, then promote it. This is
+    // independent of the library load above (disjoint bound/unbound stroke
+    // sets) and only ever runs here, i.e. only after authentication has
+    // genuinely succeeded -- a cancelled/failed sign-in never reaches this.
+    if (hasEligibleUnboundDrawing()) {
+      currentArtworkSession.setPendingNewArtwork();
+      void promoteUnboundDrawing();
+    }
   } else if (hydratedMemberId) {
     drawingRuntime()?.removePersistedStrokes();
     hydratedMemberId = null;
     sessionArtworkLibrary.replaceAll([]);
+    currentArtworkSession.clear();
   }
   renderIdentityState();
 });

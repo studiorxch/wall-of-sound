@@ -83,6 +83,20 @@ export interface ArtworkBindingRuntime<TStroke extends object> {
   bindArtwork(stroke: TStroke, artworkId: string, markId: string, creatorId: string, surfaceId: string): boolean;
 }
 
+/**
+ * ARTWORK V1 -- explicit Current Artwork routing target, read fresh by the
+ * bridge on every persisted stroke (see `createArtworkPersistenceBridge`'s
+ * own doc for why this must be read INSIDE the queued operation, not at
+ * call time). Mirrors `currentArtworkSession.ts`'s `CurrentArtworkState`
+ * exactly, but this module does not import that one -- it stays decoupled
+ * from any particular session implementation; a caller supplies whatever
+ * shape it wants via `getCurrentArtworkTarget`.
+ */
+export type CurrentArtworkTarget =
+  | { readonly kind: "none" }
+  | { readonly kind: "pending" }
+  | { readonly kind: "artwork"; readonly artworkId: string };
+
 export interface ArtworkPersistenceBridgeOptions<TStroke extends object> {
   readonly repository: ArtworkRepository;
   readonly drawing: ArtworkBindingRuntime<TStroke>;
@@ -101,6 +115,19 @@ export interface ArtworkPersistenceBridgeOptions<TStroke extends object> {
   readonly onArtworkSaved?: (artwork: Artwork) => void;
   /** Fired when an Artwork is fully removed (its last Mark was deleted, or `deleteOwnedArtwork` succeeded elsewhere). */
   readonly onArtworkRemoved?: (artworkId: string) => void;
+  /**
+   * ARTWORK V1 -- when supplied, this REPLACES the legacy proximity-based
+   * `selectArtworkForMark` selection entirely: "none" leaves the stroke
+   * unbound (no persistence attempted), "pending" creates a brand-new
+   * Artwork on the next persisted Mark, and `{artwork, artworkId}` appends
+   * to that exact document regardless of geographic distance. Omitted
+   * entirely (as Blackbook's bridge instance does), the bridge behaves
+   * exactly as before -- this is additive, not a replacement of the
+   * generic bridge's default behavior.
+   */
+  readonly getCurrentArtworkTarget?: () => CurrentArtworkTarget;
+  /** Fired the moment a "pending" target's first Mark actually creates its Artwork document -- lets the caller's session promote "pending" to a real artworkId. */
+  readonly onCurrentArtworkEstablished?: (artworkId: string) => void;
 }
 
 export function toStrokeMark(stroke: WallStroke, markId: string): StrokeMark {
@@ -173,6 +200,8 @@ export function createArtworkPersistenceBridge<TStroke extends { artworkId?: str
   createMarkId = () => crypto.randomUUID(),
   onArtworkSaved,
   onArtworkRemoved,
+  getCurrentArtworkTarget,
+  onCurrentArtworkEstablished,
 }: ArtworkPersistenceBridgeOptions<TStroke>) {
   const removedBeforeSave = new WeakSet<TStroke>();
   const artworks = new Map<string, Artwork>();
@@ -202,10 +231,34 @@ export function createArtworkPersistenceBridge<TStroke extends { artworkId?: str
       stroke.markId = markId;
       const mark = toMark(stroke, markId);
       const operation = persistenceQueue.then(async () => {
-        const candidate = selectArtworkForMark([...artworks.values()], memberId, surfaceId, mark);
-        const artwork = candidate
-          ? await repository.appendOwnedArtworkMark(candidate.id, memberId, mark)
-          : await (repository.createArtwork ?? repository.createMapArtwork).call(repository, { creatorId: memberId, surfaceId, mark });
+        // ARTWORK V1: `getCurrentArtworkTarget` is read HERE, inside the
+        // queued turn -- not synchronously above at call time -- so that
+        // several strokes dispatched together (e.g. a claim/promotion
+        // batch) each see the CURRENT state of the target at their own
+        // turn. A "pending" target's first queued stroke creates the
+        // Artwork and fires `onCurrentArtworkEstablished` synchronously
+        // before the next queued stroke's turn runs, so every stroke in
+        // the same batch converges onto the SAME newly-created Artwork,
+        // regardless of geographic distance -- exactly the invariant this
+        // build introduces.
+        const target = getCurrentArtworkTarget?.();
+        if (target?.kind === "none") return;
+
+        let artwork: Artwork;
+        if (target?.kind === "artwork") {
+          artwork = await repository.appendOwnedArtworkMark(target.artworkId, memberId, mark);
+        } else if (target?.kind === "pending") {
+          artwork = await (repository.createArtwork ?? repository.createMapArtwork).call(repository, { creatorId: memberId, surfaceId, mark });
+          onCurrentArtworkEstablished?.(artwork.id);
+        } else {
+          // Legacy path -- only reachable when the caller never supplies
+          // `getCurrentArtworkTarget` (e.g. Blackbook's bridge instance),
+          // preserving proximity-based grouping exactly as before.
+          const candidate = selectArtworkForMark([...artworks.values()], memberId, surfaceId, mark);
+          artwork = candidate
+            ? await repository.appendOwnedArtworkMark(candidate.id, memberId, mark)
+            : await (repository.createArtwork ?? repository.createMapArtwork).call(repository, { creatorId: memberId, surfaceId, mark });
+        }
         retain(artwork);
         if (removedBeforeSave.has(stroke)) {
           removedBeforeSave.delete(stroke);
