@@ -656,23 +656,44 @@
           ));
           ui.undo();
 
-          // Pitch fallback correctness: with a pitched camera (Subway
-          // mode's actual default -- pitch is NOT flattened here), a
-          // mid-gesture move tick must still fall back to the exact
-          // pre-Revision-12 behavior (a real rebuild every tick), never the
-          // similarity-transform path, since pitch breaks that assumption.
+          // Calibration V1 Revision 19: superseded expectation. Pre-Revision-19,
+          // a pitched camera had no geographic presentation path, so a
+          // mid-gesture move tick had to fall back to a real rebuild every
+          // tick (2D affine cannot represent perspective under pitch). With
+          // ArtworkGeographicPresentation active (the production default --
+          // see artworkGeographicPresentation.js's auto-enable on
+          // "map:ready"), Mapbox itself reprojects the geographic
+          // CanvasSources continuously, so a pitched gesture now correctly
+          // produces ZERO authoritative rebuilds mid-gesture and exactly ONE
+          // at settle -- this is the entire point of Revision 19, not a
+          // regression to guard against. The old assertion (rebuild every
+          // tick) described the presentation-mode="canvas" fallback path
+          // only; that fallback's own correctness is exercised separately
+          // (its atomic-init-failure and cleanup behavior), not by forcing
+          // an intentionally expensive strategy into the default pitched
+          // path.
+          var agp = SBE.ArtworkGeographicPresentation;
           mapForR12.jumpTo({ pitch: 30 });
           drawing.__test.markStaticDirty();
           drawing.renderOverlay();
-          var rebuildsBeforePitchedGesture = drawing.__test.getStaticRebuildCount();
-          mapForR12.easeTo({ bearing: mapForR12.getBearing() + 15, duration: 400 });
-          await waitMs(120);
-          var rebuildsMidPitchedGesture = drawing.__test.getStaticRebuildCount();
-          results.push(assertion(
-            "Revision 12: a pitched camera's mid-gesture move ticks still fall back to a real rebuild every tick (pitch is deliberately NOT optimized this revision)",
-            rebuildsMidPitchedGesture > rebuildsBeforePitchedGesture
-          ));
-          await waitMs(400);
+          if (agp && agp.isEnabled && agp.isEnabled()) {
+            var rebuildsBeforePitchedGesture19 = drawing.__test.getStaticRebuildCount();
+            var updatesBeforePitchedGesture19 = agp.getDiagnostics().updateCount;
+            mapForR12.easeTo({ bearing: mapForR12.getBearing() + 15, duration: 400 });
+            await waitMs(120);
+            results.push(assertion(
+              "Revision 19: with geographic presentation active, a pitched camera's mid-gesture move ticks produce ZERO authoritative rebuilds (Mapbox reprojects the geographic CanvasSources continuously instead)",
+              drawing.__test.getStaticRebuildCount() === rebuildsBeforePitchedGesture19
+            ));
+            await waitMs(400);
+            results.push(assertion(
+              "Revision 19: moveend after a pitched gesture performs exactly ONE authoritative rebuild and ONE geographic presentation update",
+              drawing.__test.getStaticRebuildCount() === rebuildsBeforePitchedGesture19 + 1 &&
+              agp.getDiagnostics().updateCount === updatesBeforePitchedGesture19 + 1
+            ));
+          } else {
+            results.push(assertion("Revision 19: pitched-gesture geographic-presentation tests (skipped -- ArtworkGeographicPresentation not enabled in this environment)", true));
+          }
 
           // Restore the exact original camera before continuing the suite.
           mapForR12.jumpTo({ center: originalCenter, zoom: originalZoom, bearing: originalBearing, pitch: originalPitch });

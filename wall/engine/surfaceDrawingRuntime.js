@@ -76,6 +76,33 @@
   var _cameraBaseline = null;
   var _cameraTransform = null;
 
+  // Calibration V1 Revision 18 (CanvasSource presentation spike, experimental
+  // -- see canvasSourcePresentationSpike.js): "canvas" (default) is the
+  // unchanged Revision 9-17 presentation (this file draws the composite to
+  // `_ctx` itself, with Revision 12's transform during a gesture).
+  // "canvassource" means an external Mapbox CanvasSource is presenting the
+  // SAME `_staticComposite` canvas geographically -- this file still owns
+  // Marks -> culling -> rasterization -> the composite canvas's pixel
+  // content, unchanged; it just stops blitting that canvas to `_ctx` itself
+  // (see _renderAll) and stops deriving/applying its own screen-space
+  // transform mid-gesture (see init()'s "map:cameraMoved" handler). Never
+  // set outside setPresentationMode(); defaults to today's behavior.
+  var _presentationMode = "canvas";
+  // Calibration V1 Revision 20: the optional single production consumer of
+  // every authoritative rebuild while in "canvassource" mode -- set via
+  // `setPresentationHook`. This file remains authoritative for producing
+  // the parent composite; it does not know or care what (if anything) is
+  // presenting it geographically. Called with (compositeCanvas) at the end
+  // of `_rebuildStaticComposite` -- covers every trigger that already
+  // invalidates the cache (commit, undo, hydrate, moveend, surface switch,
+  // resize), not a separate/parallel event-listener path. The consumer
+  // (ArtworkGeographicPresentation) derives its own tile geography directly
+  // from the REAL current camera via map.unproject() -- this file no
+  // longer computes any geographic coverage itself (Revision 20; see
+  // Revision 19I for why an earlier detached-camera version of that
+  // computation was wrong).
+  var _presentationHook = null;
+
   // ── Accessors ──────────────────────────────────────────────────────────────
   function _mbr() { return SBE.MapboxViewportRuntime; }
   function _ws()  { return SBE.Workspace; }
@@ -146,6 +173,13 @@
       // exact pre-Revision-12 behavior of a full rebuild on every tick, so
       // pitched interaction is never less correct than before.
       bus.on("map:cameraMoved", function () {
+        // Calibration V1 Revision 18 (CanvasSource spike): when a
+        // CanvasSource is presenting the composite, Mapbox's own render
+        // loop reprojects it every frame -- this file does NOTHING at all
+        // on a mid-gesture tick (no transform derivation, no rebuild, no
+        // _renderAll -- the active-gesture live-preview layer, if any, is
+        // still driven separately by pointer events, unaffected).
+        if (_presentationMode === "canvassource") return;
         var transform = _deriveCameraTransform();
         if (transform) {
           _cameraTransform = transform;
@@ -609,6 +643,16 @@
     // triggers it) has a correct reference to derive from.
     _cameraTransform = null;
     _captureCameraBaseline();
+    // Calibration V1 Revision 20: hand the completed composite to whatever
+    // is presenting it geographically (if anything) -- this file no longer
+    // computes any geographic coverage itself; the consumer derives its own
+    // tile geometry from the REAL current camera. Every trigger that
+    // reaches this function (commit, undo, hydrate, moveend, surface
+    // switch, resize) is covered uniformly, with no separate event wiring
+    // needed.
+    if (_presentationMode === "canvassource" && _presentationHook) {
+      _presentationHook(composite);
+    }
   }
 
   // Calibration V1 Revision 12: records the camera state (via two
@@ -754,7 +798,16 @@
     if (_staticDirty) _rebuildStaticComposite();
 
     _ctx.clearRect(0, 0, _canvas.width, _canvas.height);
-    if (_cameraTransform) {
+    // Calibration V1 Revision 18 (CanvasSource presentation spike): when an
+    // experimental CanvasSource is presenting this SAME composite canvas
+    // geographically (see canvasSourcePresentationSpike.js), this overlay
+    // must stay blank -- Mapbox's own layer already shows the composite, so
+    // drawing it AGAIN here would double-present it. Everything upstream
+    // (culling, rasterization, the composite canvas itself) is completely
+    // unchanged; only this final blit-to-screen step is skipped.
+    if (_presentationMode === "canvassource") {
+      // still draw the active in-progress gesture below, just not the composite
+    } else if (_cameraTransform) {
       _drawTransformedComposite(_ctx, composite, _cameraTransform);
     } else {
       // Calibration V1 Revision 14: crop/blit the padded composite's center
@@ -1288,6 +1341,39 @@
   // Force a re-render (called externally after camera change)
   function renderOverlay() { _renderAll(); }
 
+  // ── Calibration V1 Revision 20: production presentation API ─────────────
+  // Promoted from __test-only Revision 18 introspection to a real,
+  // supported integration surface -- ArtworkGeographicPresentation.js is
+  // a genuine production consumer, not a test. __test.* aliases below are
+  // kept pointing at the SAME functions so existing Revision 12/16/18
+  // regression tests keep working unchanged. This file computes NO
+  // geographic coverage itself (Revision 20 removed the Revision 19
+  // detached-pitch-0-camera quad math after Revision 19I proved it wrong
+  // -- see ArtworkGeographicPresentation.js's own doc); it only exposes the
+  // composite canvas and overscan geometry so the presenter can derive its
+  // own tile geography from the REAL current camera.
+  function setPresentationMode(mode) {
+    if (mode !== "canvas" && mode !== "canvassource") return false;
+    _presentationMode = mode;
+    _renderAll();
+    return true;
+  }
+  function getPresentationMode() { return _presentationMode; }
+  function getCompositeCanvas() { return _ensureStaticComposite(); }
+  function getStaticRebuildCount() { return _staticRebuildCount; }
+  function setPresentationHook(fn) { _presentationHook = typeof fn === "function" ? fn : null; }
+  function getOverscanInfo() {
+    return {
+      ratio: OVERSCAN_RATIO,
+      viewportWidth: _canvas ? _canvas.width : 0,
+      viewportHeight: _canvas ? _canvas.height : 0,
+      rasterWidth: _overscanWidth(),
+      rasterHeight: _overscanHeight(),
+      offsetX: _overscanOffsetX(),
+      offsetY: _overscanOffsetY(),
+    };
+  }
+
   SBE.SurfaceDrawingRuntime = {
     init:           init,
     getBrush:       getBrush,
@@ -1301,6 +1387,13 @@
     hydrateArtwork: hydrateArtwork,
     hydrateArtworks: hydrateArtworks,
     removePersistedStrokes: removePersistedStrokes,
+    setPresentationMode:   setPresentationMode,
+    getPresentationMode:   getPresentationMode,
+    getCompositeCanvas:    getCompositeCanvas,
+    getStaticRebuildCount: getStaticRebuildCount,
+    markStaticDirty:       _markStaticDirty,
+    setPresentationHook:   setPresentationHook,
+    getOverscanInfo:       getOverscanInfo,
     __test: {
       capturePoint: function (clientX, clientY) {
         return _capturePoint({ clientX: clientX, clientY: clientY });
@@ -1337,19 +1430,16 @@
       getCameraTransform: function () { return _cameraTransform ? Object.assign({}, _cameraTransform) : null; },
       getCameraBaseline: function () { return _cameraBaseline ? Object.assign({}, _cameraBaseline) : null; },
       // Calibration V1 Revision 14 (Artwork Cache Overscan) introspection.
-      getOverscanInfo: function () {
-        return {
-          ratio: OVERSCAN_RATIO,
-          viewportWidth: _canvas ? _canvas.width : 0,
-          viewportHeight: _canvas ? _canvas.height : 0,
-          rasterWidth: _overscanWidth(),
-          rasterHeight: _overscanHeight(),
-          offsetX: _overscanOffsetX(),
-          offsetY: _overscanOffsetY(),
-        };
-      },
+      getOverscanInfo: getOverscanInfo,
       // Calibration V1 Revision 16 (Visible-Mark Culling) introspection.
       getLastCullStats: function () { return _lastCullStats ? Object.assign({}, _lastCullStats) : null; },
+      // Calibration V1 Revision 20: these now just alias the real
+      // production API above -- kept under __test too since existing
+      // regression tests reference them via this namespace.
+      setPresentationMode: setPresentationMode,
+      getPresentationMode: getPresentationMode,
+      getCompositeCanvas: getCompositeCanvas,
+      getOverscanRasterSize: function () { return { width: _overscanWidth(), height: _overscanHeight() }; },
       // Renders the static composite using ALL objects (no culling) into an
       // offscreen canvas of the SAME padded size, for direct pixel-identity
       // comparison against the normal (culled) composite -- the correctness
