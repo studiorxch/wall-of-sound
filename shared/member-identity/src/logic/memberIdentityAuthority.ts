@@ -30,6 +30,8 @@ export interface MemberIdentityAuthority {
   createAccountWithEmailPassword(email: string, password: string): Promise<void>;
   signInWithGoogle(): Promise<void>;
   signOut(): Promise<void>;
+  /** Member V1A Profile edit -- signed-in members only; throws otherwise. */
+  updateProfile(displayName: string): Promise<void>;
 }
 
 const INITIALIZING_STATE: MemberIdentityState = {
@@ -183,6 +185,29 @@ export class StudioRichMemberIdentityAuthority implements MemberIdentityAuthorit
   signOut(): Promise<void> {
     this.authResolutionGeneration += 1;
     return this.runAuthOperation("signOut", () => this.auth.signOut());
+  }
+
+  async updateProfile(displayName: string): Promise<void> {
+    if (this.state.status !== "signedIn") {
+      const detail: MemberIdentityError = {
+        scope: "member",
+        code: "member/not-signed-in",
+        message: "Sign in to edit your StudioRich profile.",
+      };
+      this.setError(this.state.authUser, detail);
+      throw new MemberIdentityActionError(detail);
+    }
+    const { authUser } = this.state;
+    try {
+      const member = await this.members.updateDisplayName(authUser.uid, displayName);
+      if (this.state.status === "signedIn" && this.state.authUser.uid === authUser.uid) {
+        this.setState({ status: "signedIn", authUser, member, error: null });
+      }
+    } catch (error) {
+      const detail = normalizeMemberIdentityError("member", error);
+      this.setError(authUser, detail);
+      throw new MemberIdentityActionError(detail);
+    }
   }
 
   private async runAuthOperation(

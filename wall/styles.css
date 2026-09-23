@@ -1209,6 +1209,58 @@ body.subway-public .subway-ribbon-sunroof-exit {
 .subway-member-status { min-height: 16px; margin: 0; color: rgba(238, 242, 246, 0.68); font: 400 12px/1.3 system-ui, sans-serif; }
 .subway-member-status.is-error { color: #ff789d; }
 
+/* ── Member V1A — Member Home ──────────────────────────────────────────── */
+.member-home-dialog {
+  width: min(420px, calc(100vw - 32px));
+  max-height: min(680px, calc(100vh - 64px));
+  overflow-y: auto;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 12px;
+  color: #eef2f6;
+  background: #101318;
+}
+.member-home-dialog::backdrop { background: rgba(0, 0, 0, 0.72); }
+.member-home-header {
+  position: sticky;
+  top: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 44px 12px 20px;
+  background: #101318;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+.member-home-header h2 { margin: 0; flex: 1; font: 600 13px/1.2 system-ui, sans-serif; letter-spacing: 0.08em; }
+.member-home-back { border: 0; background: transparent; color: rgba(238, 242, 246, 0.72); font: 600 11px/1 system-ui, sans-serif; cursor: pointer; }
+.member-home-close { position: absolute; top: 10px; right: 14px; border: 0; background: transparent; color: #eef2f6; font-size: 22px; cursor: pointer; }
+.member-home-identity { display: grid; justify-items: center; gap: 4px; padding: 20px 20px 8px; text-align: center; }
+.member-home-avatar { width: 64px; height: 64px; border-radius: 50%; object-fit: cover; background: rgba(255, 255, 255, 0.08); }
+.member-home-name { font: 600 16px/1.2 system-ui, sans-serif; }
+.member-home-since { font: 400 12px/1.3 system-ui, sans-serif; color: rgba(238, 242, 246, 0.6); }
+.member-home-section { padding: 14px 20px; border-top: 1px solid rgba(255, 255, 255, 0.08); }
+.member-home-section h3 { margin: 0 0 10px; font: 600 11px/1.2 system-ui, sans-serif; letter-spacing: 0.1em; color: rgba(238, 242, 246, 0.72); }
+.member-home-empty { margin: 0; font: 400 12px/1.4 system-ui, sans-serif; color: rgba(238, 242, 246, 0.6); }
+.member-home-link { border: 1px solid rgba(255, 255, 255, 0.16); border-radius: 6px; padding: 8px 12px; margin-top: 10px; color: #eef2f6; background: transparent; font: 600 11px/1 system-ui, sans-serif; letter-spacing: 0.06em; cursor: pointer; }
+.member-home-signout { width: calc(100% - 40px); margin: 8px 20px 20px; min-height: 40px; border: 1px solid rgba(255, 120, 157, 0.4); border-radius: 6px; color: #ff789d; background: transparent; font: 600 11px/1 system-ui, sans-serif; letter-spacing: 0.08em; cursor: pointer; }
+
+.member-artwork-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+.member-artwork-card-wrapper { position: relative; }
+.member-artwork-delete { position: absolute; top: 4px; right: 4px; width: 20px; height: 20px; border: 0; border-radius: 50%; color: #fff; background: rgba(0, 0, 0, 0.55); font-size: 14px; line-height: 1; cursor: pointer; }
+.member-artwork-card { display: grid; gap: 6px; width: 100%; padding: 0; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; background: #090b0e; cursor: pointer; text-align: left; overflow: hidden; }
+.member-artwork-thumb { display: block; width: 100%; height: auto; background: #090b0e; }
+.member-artwork-thumb--empty { opacity: 0.35; }
+.member-artwork-meta { display: grid; gap: 2px; padding: 6px 8px 8px; }
+.member-artwork-title { font: 600 12px/1.2 system-ui, sans-serif; }
+.member-artwork-updated, .member-artwork-surface { font: 400 10px/1.3 system-ui, sans-serif; color: rgba(238, 242, 246, 0.6); }
+
+.member-profile-form { display: grid; gap: 12px; padding: 14px 20px; }
+.member-profile-form label { display: grid; gap: 6px; font: 600 10px/1.2 system-ui, sans-serif; letter-spacing: 0.08em; }
+.member-profile-form input { min-height: 38px; padding: 0 10px; border: 1px solid rgba(255, 255, 255, 0.16); border-radius: 6px; color: #fff; background: #090b0e; font: 400 14px/1 system-ui, sans-serif; }
+.member-profile-status { min-height: 14px; margin: 0; font: 400 12px/1.3 system-ui, sans-serif; color: rgba(238, 242, 246, 0.68); }
+.member-settings-line { margin: 0 0 10px; font: 400 12px/1.3 system-ui, sans-serif; color: rgba(238, 242, 246, 0.72); }
+.member-settings-placeholder { margin: 0; padding: 14px 20px 20px; font: 400 11px/1.4 system-ui, sans-serif; color: rgba(238, 242, 246, 0.45); }
+
 /* ── Design tokens — scoped to .racetrack-overlay only, never :root.
    RACETRACK's premium dark/orange aesthetic is deliberately separate from
    WALL's global chrome tokens (--accent: teal) so nothing bleeds into

@@ -66,6 +66,7 @@ function repository(): MemberRepository {
     getMember: vi.fn(async () => member),
     ensureMemberForAuthUser: vi.fn(async () => member),
     updateLastSeen: vi.fn(async () => member),
+    updateDisplayName: vi.fn(async (_uid: string, displayName: string) => ({ ...member, displayName })),
   };
 }
 
@@ -167,6 +168,29 @@ describe("StudioRichMemberIdentityAuthority", () => {
     authority.stop();
     expect(auth.unsubscribeCount).toBe(1);
     expect(authority.getState().status).toBe("signedOut");
+  });
+
+  it("updates displayName for a signed-in member and reflects it in state", async () => {
+    const auth = new FakeAuthGateway();
+    const members = repository();
+    const authority = new StudioRichMemberIdentityAuthority(auth, members);
+    await authority.start();
+    auth.emitUser(authUser);
+    await vi.waitFor(() => expect(authority.getState().status).toBe("signedIn"));
+
+    await authority.updateProfile("New Name");
+
+    expect(members.updateDisplayName).toHaveBeenCalledWith("member-1", "New Name");
+    expect(authority.getState()).toMatchObject({ status: "signedIn", member: { displayName: "New Name" } });
+  });
+
+  it("rejects updateProfile when not signed in", async () => {
+    const auth = new FakeAuthGateway();
+    const authority = new StudioRichMemberIdentityAuthority(auth, repository());
+    await authority.start();
+    auth.emitUser(null);
+
+    await expect(authority.updateProfile("New Name")).rejects.toBeInstanceOf(MemberIdentityActionError);
   });
 
   it("surfaces auth-listener failures", async () => {

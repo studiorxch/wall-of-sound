@@ -10,10 +10,14 @@ import {
   SPRAY_SUPPLY,
   type MemberIdentityState,
 } from "@studiorich/member-identity";
+import type { Artwork } from "@studiorich/member-identity";
 import {
   createMapArtworkPersistenceBridge,
+  SUBWAY_MAP_SURFACE_ID,
   type WallOperation,
 } from "./mapArtworkBridge";
+import { createMemberHomeController } from "./memberHomeUI";
+import { navigateToArtwork } from "./navigateToArtwork";
 import { resolveMopDabPlan, resolveMopEmissionPoints } from "./mopDeposition";
 import { MAP_SURFACE_REFERENCE_ZOOM, resolveZoomScale } from "./mapZoomScale";
 import { hashSeed, resolveSprayCorePlan, resolveSprayParticlePlan, STUDIORICH_STOCK_CAP } from "./sprayDeposition";
@@ -37,6 +41,9 @@ type WallRuntime = {
   MemberIdentityAuthority?: unknown;
   MemberIdentityState?: MemberIdentityState;
   PublicMember?: unknown;
+  MapboxViewportRuntime?: {
+    fitBounds(bounds: readonly [readonly [number, number], readonly [number, number]], options?: Record<string, unknown>): void;
+  };
   /**
    * Map Art Supplies Integration V1: the SAME supply defaults and aerosol/
    * Mop deposition engines Blackbook already uses, published onto
@@ -105,6 +112,28 @@ let state: MemberIdentityState = memberIdentity.getState();
 let hydratedMemberId: string | null = null;
 let dialog: HTMLDialogElement | null = null;
 let statusElement: HTMLElement | null = null;
+/** Member V1A -- the same Artwork list already hydrated onto the canvas at sign-in, kept here so Member Home's gallery reads it directly instead of issuing a second `listOwnedArtwork` query merely to render a UI. */
+let ownedArtworks: readonly Artwork[] = [];
+
+const memberHome = createMemberHomeController({
+  authority: memberIdentity,
+  getOwnedArtworks: () => ownedArtworks,
+  onOpenArtwork(artwork) {
+    memberHome.close();
+    navigateToArtwork(
+      { fitBounds: (bounds, options) => root.SBE?.MapboxViewportRuntime?.fitBounds(bounds, options) },
+      artwork,
+      { expectedSurfaceId: SUBWAY_MAP_SURFACE_ID },
+    );
+  },
+  async onDeleteArtwork(artwork) {
+    if (state.status !== "signedIn") return;
+    await artworkRepository.deleteOwnedArtwork(artwork.id, state.member.uid);
+    ownedArtworks = ownedArtworks.filter((item) => item.id !== artwork.id);
+    drawingRuntime()?.removePersistedStrokes();
+    drawingRuntime()?.hydrateArtworks(ownedArtworks.filter((item) => item.state === "draft"));
+  },
+});
 
 function drawingRuntime() {
   return root.SBE?.SurfaceDrawingRuntime ?? null;
@@ -137,7 +166,7 @@ function ensureMemberUI(): void {
   button.textContent = "SIGN IN";
   button.setAttribute("aria-label", "StudioRich Member sign in");
   button.addEventListener("click", () => {
-    if (state.status === "signedIn") void memberIdentity.signOut();
+    if (state.status === "signedIn") memberHome.open();
     else dialog?.showModal();
   });
   controls.appendChild(button);
@@ -185,12 +214,13 @@ function renderIdentityState(): void {
   if (!button) return;
   button.disabled = state.status === "initializing";
   button.textContent = state.status === "signedIn" ? "MEMBER" : state.status === "initializing" ? "…" : "SIGN IN";
-  button.setAttribute("aria-label", state.status === "signedIn" ? "Sign out StudioRich Member" : "StudioRich Member sign in");
+  button.setAttribute("aria-label", state.status === "signedIn" ? "Open StudioRich Member Home" : "StudioRich Member sign in");
   if (state.status === "signedIn") {
     dialog?.close();
     setMessage("");
-  } else if (state.status === "error") {
-    setMessage(state.error.message, true);
+  } else {
+    memberHome.close();
+    if (state.status === "error") setMessage(state.error.message, true);
   }
 }
 
@@ -199,8 +229,9 @@ async function hydrateOwnedArtwork(memberId: string): Promise<void> {
   const drawing = drawingRuntime();
   if (!drawing) return;
   drawing.removePersistedStrokes();
-  const artworks = (await (artworkRepository.listOwnedArtwork ?? artworkRepository.listOwnedMapArtwork).call(artworkRepository, memberId)).filter((artwork) => artwork.surfaceId === "map:new-york");
+  const artworks = (await (artworkRepository.listOwnedArtwork ?? artworkRepository.listOwnedMapArtwork).call(artworkRepository, memberId)).filter((artwork) => artwork.surfaceId === SUBWAY_MAP_SURFACE_ID);
   artworkPersistence.replaceKnownArtworks(artworks);
+  ownedArtworks = artworks;
   // Calibration V1 Revision 11: ONE batch call, ONE render/cache rebuild --
   // was previously one `hydrateArtwork` call (and therefore one full
   // static-composite rebuild) PER Artwork document, an O(n^2) cost across
@@ -241,6 +272,7 @@ memberIdentity.subscribe((nextState) => {
   } else if (hydratedMemberId) {
     drawingRuntime()?.removePersistedStrokes();
     hydratedMemberId = null;
+    ownedArtworks = [];
   }
   renderIdentityState();
 });

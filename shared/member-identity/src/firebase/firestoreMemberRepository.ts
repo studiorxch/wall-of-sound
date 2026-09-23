@@ -92,6 +92,28 @@ export class FirestoreMemberRepository implements MemberRepository {
     return member;
   }
 
+  async updateDisplayName(uid: string, displayName: string): Promise<StudioRichMember> {
+    assertUid(uid);
+    const trimmed = displayName.trim();
+    if (!trimmed) throw new Error("invalid_member_displayName");
+    const memberReference = doc(this.firestore, MEMBER_COLLECTION_PATH, uid);
+
+    await runTransaction(this.firestore, async (transaction) => {
+      const snapshot = await transaction.get(memberReference);
+      if (!snapshot.exists()) throw new Error("member_not_found");
+      decodeMember(snapshot);
+      transaction.update(memberReference, {
+        displayName: trimmed,
+        updatedAt: serverTimestamp(),
+        lastSeenAt: serverTimestamp(),
+      });
+    });
+
+    const member = await this.getMember(uid);
+    if (!member) throw new Error("member_not_found_after_update");
+    return member;
+  }
+
   async updateLastSeen(uid: string): Promise<StudioRichMember> {
     assertUid(uid);
     const memberReference = doc(this.firestore, MEMBER_COLLECTION_PATH, uid);
