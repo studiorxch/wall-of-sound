@@ -30,6 +30,8 @@ export interface MemberHomeController {
   open(): void;
   close(): void;
   render(): void;
+  /** Member V1B -- re-renders only if Member Home is currently open; a no-op otherwise (the next `open()` already reads current state). Call this after the session-owned Artwork projection changes. */
+  refresh(): void;
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, className?: string): HTMLElementTagNameMap[K] {
@@ -43,6 +45,44 @@ export function createMemberHomeController({ authority, getOwnedArtworks, onOpen
   let showAllArtwork = false;
   let profileEditing = false;
   let statusMessage = "";
+
+  /**
+   * Member V1B -- thumbnails are disposable and re-derived, but re-running
+   * the composition render for every Artwork on every render() call (e.g.
+   * on each live update while Member Home is open) is wasted work when only
+   * one Artwork actually changed. Cached per Artwork id, keyed by its own
+   * `updatedAt` -- a cache hit is only possible for an UNCHANGED Artwork; an
+   * updated one gets a fresh authoritative `updatedAt` from the persistence
+   * result and naturally misses. Pruned to the current owned set on every
+   * render so a deleted Artwork's cache entry doesn't linger forever.
+   */
+  const thumbnailCache = new Map<string, { readonly updatedAtMs: number; readonly canvas: HTMLCanvasElement }>();
+
+  function pruneThumbnailCache(currentIds: ReadonlySet<string>): void {
+    for (const id of thumbnailCache.keys()) {
+      if (!currentIds.has(id)) thumbnailCache.delete(id);
+    }
+  }
+
+  function renderCachedThumbnail(artwork: Artwork): { readonly canvas: HTMLCanvasElement; readonly ok: boolean } {
+    const updatedAtMs = artwork.updatedAt.getTime();
+    const cached = thumbnailCache.get(artwork.id);
+    if (cached && cached.updatedAtMs === updatedAtMs) {
+      const canvas = el("canvas", "member-artwork-thumb");
+      canvas.width = THUMBNAIL_SIZE.width;
+      canvas.height = THUMBNAIL_SIZE.height;
+      const ctx = canvas.getContext("2d");
+      ctx?.drawImage(cached.canvas, 0, 0);
+      return { canvas, ok: true };
+    }
+    const canvas = el("canvas", "member-artwork-thumb");
+    canvas.width = THUMBNAIL_SIZE.width;
+    canvas.height = THUMBNAIL_SIZE.height;
+    const ctx = canvas.getContext("2d");
+    const result = ctx ? drawArtworkThumbnail(ctx, artwork, THUMBNAIL_SIZE) : { ok: false };
+    thumbnailCache.set(artwork.id, { updatedAtMs, canvas });
+    return { canvas, ok: result.ok };
+  }
 
   const dialog = el("dialog", "member-home-dialog");
   dialog.setAttribute("aria-label", "StudioRich Member Home");
@@ -87,14 +127,8 @@ export function createMemberHomeController({ authority, getOwnedArtworks, onOpen
   function renderArtworkCard(artwork: Artwork): HTMLElement {
     const card = el("button", "member-artwork-card");
     card.type = "button";
-    const canvas = el("canvas", "member-artwork-thumb");
-    canvas.width = THUMBNAIL_SIZE.width;
-    canvas.height = THUMBNAIL_SIZE.height;
-    const ctx = canvas.getContext("2d");
-    if (ctx) {
-      const result = drawArtworkThumbnail(ctx, artwork, THUMBNAIL_SIZE);
-      if (!result.ok) canvas.classList.add("member-artwork-thumb--empty");
-    }
+    const { canvas, ok } = renderCachedThumbnail(artwork);
+    if (!ok) canvas.classList.add("member-artwork-thumb--empty");
     card.appendChild(canvas);
     const meta = el("div", "member-artwork-meta");
     const title = el("span", "member-artwork-title");
@@ -146,6 +180,7 @@ export function createMemberHomeController({ authority, getOwnedArtworks, onOpen
     artworkHeading.textContent = "ARTWORK";
     artworkSection.appendChild(artworkHeading);
     const artworks = sortArtworksByRecency(getOwnedArtworks());
+    pruneThumbnailCache(new Set(artworks.map((item) => item.id)));
     if (!artworks.length) {
       const empty = el("p", "member-home-empty");
       empty.textContent = "Nothing saved yet — draw on the map to start your first Artwork.";
@@ -343,5 +378,8 @@ export function createMemberHomeController({ authority, getOwnedArtworks, onOpen
     },
     close: close_,
     render,
+    refresh(): void {
+      if (dialog.open) render();
+    },
   };
 }

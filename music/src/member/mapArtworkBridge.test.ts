@@ -187,6 +187,93 @@ describe("Artwork composition bridge", () => {
     expect(repository.appendOwnedArtworkMark).not.toHaveBeenCalled();
   });
 
+  it("Member V1B: onArtworkSaved fires with the authoritative Artwork only after persistence succeeds, never before", async () => {
+    const saved: string[] = [];
+    const repository: ArtworkRepository = {
+      createMapArtwork: vi.fn(async () => artwork("artwork-new")),
+      listOwnedMapArtwork: vi.fn(async () => []),
+      appendOwnedArtworkMark: vi.fn(),
+      removeOwnedArtworkMark: vi.fn(),
+      deleteOwnedArtwork: vi.fn(),
+    };
+    const bridge = createMapArtworkPersistenceBridge({
+      repository,
+      drawing: { bindArtwork: vi.fn(() => true) },
+      getAuthenticatedMemberId: () => "member-1",
+      onArtworkSaved: (a) => saved.push(a.id),
+    });
+
+    expect(saved).toEqual([]);
+    await bridge.persistStroke(wallStroke("stroke-1"));
+    expect(saved).toEqual(["artwork-new"]);
+  });
+
+  it("Member V1B: onArtworkSaved does NOT fire when persistence fails", async () => {
+    const saved: string[] = [];
+    const repository: ArtworkRepository = {
+      createMapArtwork: vi.fn(async () => { throw new Error("offline"); }),
+      listOwnedMapArtwork: vi.fn(async () => []),
+      appendOwnedArtworkMark: vi.fn(),
+      removeOwnedArtworkMark: vi.fn(),
+      deleteOwnedArtwork: vi.fn(),
+    };
+    const bridge = createMapArtworkPersistenceBridge({
+      repository,
+      drawing: { bindArtwork: vi.fn(() => true) },
+      getAuthenticatedMemberId: () => "member-1",
+      onArtworkSaved: (a) => saved.push(a.id),
+    });
+
+    await expect(bridge.persistStroke(wallStroke("stroke-1"))).rejects.toThrow("offline");
+    expect(saved).toEqual([]);
+  });
+
+  it("Member V1B: onArtworkSaved reflects an UPDATE to the same Artwork id, not a new one, when grouping appends to an existing Artwork", async () => {
+    const existingMark = toStrokeMark(wallStroke("stroke-a"), "mark-a");
+    const existing = { ...artwork("artwork-a"), marks: [existingMark] };
+    const updated = { ...existing, marks: [existingMark, toStrokeMark(wallStroke("stroke-b"), "mark-b")] };
+    const repository: ArtworkRepository = {
+      createMapArtwork: vi.fn(), listOwnedMapArtwork: vi.fn(async () => [existing]),
+      appendOwnedArtworkMark: vi.fn(async () => updated),
+      removeOwnedArtworkMark: vi.fn(), deleteOwnedArtwork: vi.fn(),
+    };
+    const savedIds: string[] = [];
+    const bridge = createMapArtworkPersistenceBridge({
+      repository,
+      drawing: { bindArtwork: vi.fn(() => true) },
+      getAuthenticatedMemberId: () => "member-1",
+      createMarkId: () => "mark-b",
+      onArtworkSaved: (a) => savedIds.push(a.id),
+    });
+    bridge.replaceKnownArtworks([existing]);
+
+    await bridge.persistStroke(wallStroke("stroke-b"));
+
+    expect(savedIds).toEqual(["artwork-a"]);
+  });
+
+  it("Member V1B: onArtworkRemoved fires when the last Mark is removed (Artwork document deleted)", async () => {
+    const mark = toStrokeMark(wallStroke("stroke-a"), "mark-a");
+    const existing = { ...artwork("artwork-a"), marks: [mark] };
+    const hydrated = Object.assign(wallStroke("stroke-a"), { artworkId: "artwork-a", markId: "mark-a", creatorId: "member-1" });
+    const repository: ArtworkRepository = {
+      createMapArtwork: vi.fn(), listOwnedMapArtwork: vi.fn(async () => [existing]),
+      appendOwnedArtworkMark: vi.fn(), removeOwnedArtworkMark: vi.fn(async () => null), deleteOwnedArtwork: vi.fn(),
+    };
+    const removedIds: string[] = [];
+    const bridge = createMapArtworkPersistenceBridge({
+      repository,
+      drawing: { bindArtwork: vi.fn(() => true) },
+      getAuthenticatedMemberId: () => "member-1",
+      onArtworkRemoved: (id) => removedIds.push(id),
+    });
+    bridge.replaceKnownArtworks([existing]);
+
+    await bridge.removeStroke(hydrated);
+
+    expect(removedIds).toEqual(["artwork-a"]);
+  });
+
   it("Map Art Supplies V1: carries Mop and Spray material identity through geographic Marks -- the SAME supply ids Blackbook uses, never a Map-specific duplicate", () => {
     const mop = toStrokeMark({ ...wallStroke("stroke-mop"), operation: "mop", style: { color: "#1c6e6e", width: 34, opacity: 0.55 } }, "mark-mop");
     const spray = toStrokeMark({ ...wallStroke("stroke-spray"), operation: "spray", style: { color: "#e2572b", width: 24, opacity: 0.6 } }, "mark-spray");

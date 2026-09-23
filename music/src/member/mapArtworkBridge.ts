@@ -90,6 +90,17 @@ export interface ArtworkPersistenceBridgeOptions<TStroke extends object> {
   readonly surfaceId: string;
   readonly toMark: (stroke: TStroke, markId: string) => ArtworkMark;
   readonly createMarkId?: () => string;
+  /**
+   * Member V1B -- fired with the AUTHORITATIVE Artwork exactly when a
+   * persistence operation actually succeeds (never optimistically before
+   * that). Lets a caller (e.g. `subwayMemberRuntime.ts`'s session-owned
+   * Artwork projection) stay live without a second Firestore query or a
+   * second grouping/identity decision -- this is the SAME Artwork object
+   * `retain()` already tracks internally, just also handed outward.
+   */
+  readonly onArtworkSaved?: (artwork: Artwork) => void;
+  /** Fired when an Artwork is fully removed (its last Mark was deleted, or `deleteOwnedArtwork` succeeded elsewhere). */
+  readonly onArtworkRemoved?: (artworkId: string) => void;
 }
 
 export function toStrokeMark(stroke: WallStroke, markId: string): StrokeMark {
@@ -160,14 +171,22 @@ export function createArtworkPersistenceBridge<TStroke extends { artworkId?: str
   surfaceId,
   toMark,
   createMarkId = () => crypto.randomUUID(),
+  onArtworkSaved,
+  onArtworkRemoved,
 }: ArtworkPersistenceBridgeOptions<TStroke>) {
   const removedBeforeSave = new WeakSet<TStroke>();
   const artworks = new Map<string, Artwork>();
   let persistenceQueue = Promise.resolve();
 
   function retain(artwork: Artwork | null, removedId?: string) {
-    if (removedId) artworks.delete(removedId);
-    if (artwork) artworks.set(artwork.id, artwork);
+    if (removedId) {
+      artworks.delete(removedId);
+      onArtworkRemoved?.(removedId);
+    }
+    if (artwork) {
+      artworks.set(artwork.id, artwork);
+      onArtworkSaved?.(artwork);
+    }
   }
 
   return {

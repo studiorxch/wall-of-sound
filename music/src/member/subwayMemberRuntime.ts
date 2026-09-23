@@ -10,7 +10,6 @@ import {
   SPRAY_SUPPLY,
   type MemberIdentityState,
 } from "@studiorich/member-identity";
-import type { Artwork } from "@studiorich/member-identity";
 import {
   createMapArtworkPersistenceBridge,
   SUBWAY_MAP_SURFACE_ID,
@@ -18,6 +17,7 @@ import {
 } from "./mapArtworkBridge";
 import { createMemberHomeController } from "./memberHomeUI";
 import { navigateToArtwork } from "./navigateToArtwork";
+import { createSessionArtworkLibrary } from "./sessionArtworkLibrary";
 import { resolveMopDabPlan, resolveMopEmissionPoints } from "./mopDeposition";
 import { MAP_SURFACE_REFERENCE_ZOOM, resolveZoomScale } from "./mapZoomScale";
 import { hashSeed, resolveSprayCorePlan, resolveSprayParticlePlan, STUDIORICH_STOCK_CAP } from "./sprayDeposition";
@@ -112,12 +112,25 @@ let state: MemberIdentityState = memberIdentity.getState();
 let hydratedMemberId: string | null = null;
 let dialog: HTMLDialogElement | null = null;
 let statusElement: HTMLElement | null = null;
-/** Member V1A -- the same Artwork list already hydrated onto the canvas at sign-in, kept here so Member Home's gallery reads it directly instead of issuing a second `listOwnedArtwork` query merely to render a UI. */
-let ownedArtworks: readonly Artwork[] = [];
+let saveStatusElement: HTMLElement | null = null;
+let pendingSaveCount = 0;
+let saveStatusHideTimer: number | null = null;
+
+/**
+ * Member V1B -- the ONE authoritative in-memory projection of the
+ * signed-in Member's owned Artwork for this session (see
+ * sessionArtworkLibrary.ts's own doc). Initial state comes from
+ * `listOwnedArtwork` hydration; after that it is kept live by
+ * `artworkPersistence`'s `onArtworkSaved`/`onArtworkRemoved` callbacks,
+ * which only fire after a real Firestore round trip succeeds -- never
+ * optimistically.
+ */
+const sessionArtworkLibrary = createSessionArtworkLibrary();
+sessionArtworkLibrary.subscribe(() => memberHome.refresh());
 
 const memberHome = createMemberHomeController({
   authority: memberIdentity,
-  getOwnedArtworks: () => ownedArtworks,
+  getOwnedArtworks: () => sessionArtworkLibrary.getAll(),
   onOpenArtwork(artwork) {
     memberHome.close();
     navigateToArtwork(
@@ -129,9 +142,9 @@ const memberHome = createMemberHomeController({
   async onDeleteArtwork(artwork) {
     if (state.status !== "signedIn") return;
     await artworkRepository.deleteOwnedArtwork(artwork.id, state.member.uid);
-    ownedArtworks = ownedArtworks.filter((item) => item.id !== artwork.id);
+    sessionArtworkLibrary.remove(artwork.id);
     drawingRuntime()?.removePersistedStrokes();
-    drawingRuntime()?.hydrateArtworks(ownedArtworks.filter((item) => item.state === "draft"));
+    drawingRuntime()?.hydrateArtworks(sessionArtworkLibrary.getAll().filter((item) => item.state === "draft"));
   },
 });
 
@@ -149,12 +162,55 @@ const artworkPersistence = createMapArtworkPersistenceBridge({
   getAuthenticatedMemberId() {
     return state.status === "signedIn" ? state.member.uid : null;
   },
+  onArtworkSaved: (artwork) => sessionArtworkLibrary.upsert(artwork),
+  onArtworkRemoved: (artworkId) => sessionArtworkLibrary.remove(artworkId),
 });
 
 function setMessage(message: string, isError = false): void {
   if (!statusElement) return;
   statusElement.textContent = message;
   statusElement.classList.toggle("is-error", isError);
+}
+
+/**
+ * Member V1B -- the smallest truthful save-status affordance: "Saving…"
+ * while a persistence operation is in flight, "Saved" only once it actually
+ * succeeds, nothing on failure (the existing `setMessage` error path already
+ * covers that). `pendingSaveCount` coalesces rapid consecutive strokes so
+ * the status doesn't flicker Saving/Saved/Saving/Saved per stroke -- only
+ * the LAST in-flight operation to finish updates the visible text.
+ */
+function ensureSaveStatusElement(): void {
+  const controls = document.getElementById("subway-map-paint-controls");
+  if (!controls || saveStatusElement) return;
+  saveStatusElement = document.createElement("span");
+  saveStatusElement.className = "subway-member-save-status";
+  saveStatusElement.setAttribute("aria-live", "polite");
+  controls.appendChild(saveStatusElement);
+}
+
+function beginSave(): void {
+  ensureSaveStatusElement();
+  pendingSaveCount += 1;
+  if (saveStatusHideTimer !== null) {
+    window.clearTimeout(saveStatusHideTimer);
+    saveStatusHideTimer = null;
+  }
+  if (saveStatusElement) saveStatusElement.textContent = "Saving…";
+}
+
+function endSave(succeeded: boolean): void {
+  pendingSaveCount = Math.max(0, pendingSaveCount - 1);
+  if (!saveStatusElement || pendingSaveCount > 0) return;
+  if (!succeeded) {
+    saveStatusElement.textContent = "";
+    return;
+  }
+  saveStatusElement.textContent = "Saved";
+  saveStatusHideTimer = window.setTimeout(() => {
+    if (saveStatusElement) saveStatusElement.textContent = "";
+    saveStatusHideTimer = null;
+  }, 2000);
 }
 
 function ensureMemberUI(): void {
@@ -231,7 +287,10 @@ async function hydrateOwnedArtwork(memberId: string): Promise<void> {
   drawing.removePersistedStrokes();
   const artworks = (await (artworkRepository.listOwnedArtwork ?? artworkRepository.listOwnedMapArtwork).call(artworkRepository, memberId)).filter((artwork) => artwork.surfaceId === SUBWAY_MAP_SURFACE_ID);
   artworkPersistence.replaceKnownArtworks(artworks);
-  ownedArtworks = artworks;
+  // Member V1B: authoritative durable truth reconciles/replaces the session
+  // projection wholesale on (re)hydration -- any earlier same-session
+  // upserts are superseded by this fresh Firestore read.
+  sessionArtworkLibrary.replaceAll(artworks);
   // Calibration V1 Revision 11: ONE batch call, ONE render/cache rebuild --
   // was previously one `hydrateArtwork` call (and therefore one full
   // static-composite rebuild) PER Artwork document, an O(n^2) cost across
@@ -245,10 +304,15 @@ document.addEventListener("surface-drawing:stroke-committed", (event) => {
   if (state.status !== "signedIn") return;
   const detail = (event as CustomEvent).detail as { stroke?: WallOperation };
   if (!detail?.stroke) return;
-  void artworkPersistence.persistStroke(detail.stroke).catch((error: unknown) => {
-    console.error("[SubwayMemberRuntime] Artwork save failed", error);
-    setMessage("Artwork could not be saved.", true);
-  });
+  beginSave();
+  void artworkPersistence
+    .persistStroke(detail.stroke)
+    .then(() => endSave(true))
+    .catch((error: unknown) => {
+      endSave(false);
+      console.error("[SubwayMemberRuntime] Artwork save failed", error);
+      setMessage("Artwork could not be saved.", true);
+    });
 });
 
 document.addEventListener("surface-drawing:stroke-removed", (event) => {
@@ -272,7 +336,7 @@ memberIdentity.subscribe((nextState) => {
   } else if (hydratedMemberId) {
     drawingRuntime()?.removePersistedStrokes();
     hydratedMemberId = null;
-    ownedArtworks = [];
+    sessionArtworkLibrary.replaceAll([]);
   }
   renderIdentityState();
 });
