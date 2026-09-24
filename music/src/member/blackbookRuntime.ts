@@ -36,6 +36,7 @@ import {
   resolveGraphiteProfile,
   strokeGraphite,
   strokeInk,
+  strokeMarker,
   traceSmoothedPath,
   GRAPHITE_GRADE_ORDER,
   GRAPHITE_PROFILE_VERSION,
@@ -380,6 +381,18 @@ function drawOperation(operation: BlackbookOperation): void {
     materialCtx.save();
     const scaledStyle = { ...operation.style, width: operation.style.width * widthScale() };
     strokeInk(materialCtx, points.map((point) => docToScreen(point)), scaledStyle);
+    materialCtx.restore();
+    return;
+  }
+  // Marker Material Calibration V1: Marker gets its own named material
+  // function (strokeMarker, strokeSmoothing.ts) instead of sharing
+  // Eraser's anonymous generic block below -- same seed-source convention
+  // (operation.id, stable across the Mark's whole lifecycle) already used
+  // by Pencil/Mop/Spray.
+  if (operation.operation === "marker") {
+    materialCtx.save();
+    const scaledStyle = { ...operation.style, width: operation.style.width * widthScale() };
+    strokeMarker(materialCtx, points.map((point) => docToScreen(point)), scaledStyle, operation.id);
     materialCtx.restore();
     return;
   }

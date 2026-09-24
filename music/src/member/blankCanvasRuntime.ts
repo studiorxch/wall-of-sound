@@ -3,7 +3,7 @@ import { BLANK_SURFACE_ID, type BlankOperation } from "./blankArtworkBridge";
 import { createCartesianCamera, type CartesianCamera } from "./cartesianWorkspaceCamera";
 import { resolveMopDabPlan } from "./mopDeposition";
 import { hashSeed, resolveSprayCorePlan, resolveSprayParticlePlan } from "./sprayDeposition";
-import { fillMopDab, fillSprayParticle, hash01, hashLateralUnit, resolveGraphiteProfile, strokeGraphite, strokeInk, traceSmoothedPath } from "./strokeSmoothing";
+import { fillMopDab, fillSprayParticle, hash01, hashLateralUnit, resolveGraphiteProfile, strokeGraphite, strokeInk, strokeMarker, traceSmoothedPath } from "./strokeSmoothing";
 
 /**
  * ARTWORK V2 -- Blank Artwork's own lightweight, non-Mapbox drawing
@@ -159,6 +159,12 @@ function drawOperation(context: CanvasRenderingContext2D, operation: BlankOperat
   if (operation.operation === "pen") {
     context.save();
     strokeInk(context, points, { ...operation.style, width: operation.style.width * zoom() });
+    context.restore();
+    return;
+  }
+  if (operation.operation === "marker") {
+    context.save();
+    strokeMarker(context, points, { ...operation.style, width: operation.style.width * zoom() }, operation.id);
     context.restore();
     return;
   }

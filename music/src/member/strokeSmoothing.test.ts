@@ -7,6 +7,7 @@ import {
   resolveGraphiteProfile,
   strokeGraphite,
   strokeInk,
+  strokeMarker,
   traceSmoothedPath,
   withAlpha,
   GRAPHITE_GRADE_ORDER,
@@ -465,5 +466,97 @@ describe("Graphite Grades Foundation V1 -- profiles", () => {
   it("GRAPHITE_PROFILE_VERSION is a positive integer", () => {
     expect(Number.isInteger(GRAPHITE_PROFILE_VERSION)).toBe(true);
     expect(GRAPHITE_PROFILE_VERSION).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe("strokeMarker -- Marker Material Calibration V1", () => {
+  const points = [{ x: 0, y: 0 }, { x: 10, y: 2 }, { x: 22, y: 5 }, { x: 30, y: 4 }, { x: 41, y: 6 }];
+  const style = { color: "#171412", width: 12, opacity: 0.85 };
+
+  it("draws nothing for fewer than 2 points", () => {
+    const { ctx, calls } = fakeStrokeContext();
+    strokeMarker(ctx as never, [], style, "mark-a");
+    strokeMarker(ctx as never, [{ x: 1, y: 1 }], style, "mark-a");
+    expect(calls).toEqual([]);
+  });
+
+  it("is deterministic: identical points + seed produce an identical call sequence every time (reload-safe)", () => {
+    const first = fakeStrokeContext();
+    strokeMarker(first.ctx as never, points, style, "mark-a");
+    const second = fakeStrokeContext();
+    strokeMarker(second.ctx as never, points, style, "mark-a");
+    expect(second.calls).toEqual(first.calls);
+  });
+
+  it("a different Mark id (seed) produces a different variance pattern -- not one universal texture", () => {
+    const a = fakeStrokeContext();
+    strokeMarker(a.ctx as never, points, style, "mark-a");
+    const b = fakeStrokeContext();
+    strokeMarker(b.ctx as never, points, style, "mark-b");
+    expect(b.calls).not.toEqual(a.calls);
+  });
+
+  it("respects the authored color for every pass -- never pushed toward a fixed ink black", () => {
+    const { ctx, strokeStyles } = fakeStrokeContext();
+    strokeMarker(ctx as never, points, { ...style, color: "#2a6fd6" }, "mark-a");
+    expect(strokeStyles.length).toBeGreaterThan(0);
+    for (const value of strokeStyles) expect(value).toBe("#2a6fd6");
+  });
+
+  it("scales rendered widths with the authored width across narrow/medium/broad", () => {
+    const narrow = fakeStrokeContext();
+    strokeMarker(narrow.ctx as never, points, { ...style, width: 3 }, "mark-a");
+    const medium = fakeStrokeContext();
+    strokeMarker(medium.ctx as never, points, { ...style, width: 12 }, "mark-a");
+    const broad = fakeStrokeContext();
+    strokeMarker(broad.ctx as never, points, { ...style, width: 30 }, "mark-a");
+    expect(Math.max(...medium.lineWidths)).toBeGreaterThan(Math.max(...narrow.lineWidths));
+    expect(Math.max(...broad.lineWidths)).toBeGreaterThan(Math.max(...medium.lineWidths));
+  });
+
+  it("a narrow Marker stroke is still visibly broader than an equal-width Pen stroke (its own halo pass widens the silhouette)", () => {
+    const marker = fakeStrokeContext();
+    strokeMarker(marker.ctx as never, points, { ...style, width: 3 }, "mark-a");
+    const pen = fakeStrokeContext();
+    strokeInk(pen.ctx as never, points, { ...style, width: 3 });
+    expect(Math.max(...marker.lineWidths)).toBeGreaterThan(Math.max(...pen.lineWidths));
+  });
+
+  it("scales alpha with opacity -- lower opacity reads as more translucent marker, higher as denser ink", () => {
+    const light = fakeStrokeContext();
+    strokeMarker(light.ctx as never, points, { ...style, opacity: 0.2 }, "mark-a");
+    const dense = fakeStrokeContext();
+    strokeMarker(dense.ctx as never, points, { ...style, opacity: 0.95 }, "mark-a");
+    expect(Math.max(...dense.alphas)).toBeGreaterThan(Math.max(...light.alphas));
+  });
+
+  it("opacity never exceeds 1 even at full authored opacity (no clipping artifact)", () => {
+    const { ctx, alphas } = fakeStrokeContext();
+    strokeMarker(ctx as never, points, { ...style, opacity: 1 }, "mark-a");
+    for (const alpha of alphas) expect(alpha).toBeLessThanOrEqual(1);
+  });
+
+  it("draws a core pass denser than Pencil's own body-pass alpha -- Marker must not read as faint/sketchy", () => {
+    const { ctx, alphas } = fakeStrokeContext();
+    strokeMarker(ctx as never, points, style, "mark-a");
+    // The core pass is the densest single pass; Pencil's HB body alpha is
+    // authored*0.75 (GRAPHITE_PROFILES.hb.depositionAlpha) -- Marker's peak
+    // single-pass alpha must exceed that fraction of its own opacity.
+    expect(Math.max(...alphas) / style.opacity).toBeGreaterThan(0.75);
+  });
+
+  it("never exceeds the authored width by more than a controlled halo margin -- broad Marker must not balloon into Mop territory", () => {
+    const { ctx, lineWidths } = fakeStrokeContext();
+    strokeMarker(ctx as never, points, { ...style, width: 40 }, "mark-a");
+    expect(Math.max(...lineWidths)).toBeLessThan(40 * 1.3);
+  });
+
+  it("bounds its work to the stroke's own recorded points -- no unbounded or particle-array-scaled loop", () => {
+    const { ctx, calls } = fakeStrokeContext();
+    strokeMarker(ctx as never, points, style, "mark-a");
+    // Two whole-path passes (halo, core) plus at most one stroke per
+    // recorded segment (points.length - 1) for the variance pass.
+    const strokeCalls = calls.filter((call) => call === "stroke").length;
+    expect(strokeCalls).toBeLessThanOrEqual(points.length + 1);
   });
 });

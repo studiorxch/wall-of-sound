@@ -900,6 +900,8 @@
       _drawGraphitePoints(ctx, drawPts, scaledStyle, seedSource, obj.variantId);
     } else if (materialId === "ink") {
       _drawInkPoints(ctx, drawPts, scaledStyle);
+    } else if (materialId === "marker") {
+      _drawMarkerPoints(ctx, drawPts, scaledStyle, seedSource);
     } else {
       _drawRawPoints(ctx, drawPts, scaledStyle);
     }
@@ -915,6 +917,23 @@
     if (rendering && rendering.strokeInk) {
       ctx.save();
       rendering.strokeInk(ctx, pts, style);
+      ctx.restore();
+      return;
+    }
+    _drawRawPoints(ctx, pts, style);
+  }
+
+  // Marker Material Calibration V1: same named marker material treatment
+  // Blackbook/Blank use (strokeMarker, strokeSmoothing.ts), reached through
+  // the SAME ArtSupplyRendering bridge -- falls back to the plain
+  // single-pass line if that bridge hasn't loaded yet, exactly like
+  // _drawInkPoints/_drawGraphitePoints's own fallback. `seedSource` is
+  // `obj.id` (see `_drawStroke`'s own doc for why never `obj.markId`).
+  function _drawMarkerPoints(ctx, pts, style, seedSource) {
+    var rendering = _rendering();
+    if (rendering && rendering.strokeMarker) {
+      ctx.save();
+      rendering.strokeMarker(ctx, pts, style, seedSource);
       ctx.restore();
       return;
     }

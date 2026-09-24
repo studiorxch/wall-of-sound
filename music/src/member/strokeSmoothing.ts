@@ -19,6 +19,8 @@
  * authored geometry itself. The persisted Mark's points are never touched.
  */
 
+import { hashSeed } from "./sprayDeposition";
+
 export interface SmoothablePoint {
   readonly x: number;
   readonly y: number;
@@ -347,5 +349,104 @@ export function strokeInk(
   ctx.globalAlpha = style.opacity;
   ctx.strokeStyle = style.color;
   ctx.stroke();
+  ctx.restore();
+}
+
+/**
+ * Marker Material Calibration V1 -- Marker's own named material treatment,
+ * positioned deliberately BETWEEN Pen (`strokeInk`, one crisp full-opacity
+ * pass, no variation at all) and Mop (a separate wet/physical body+dab
+ * system) rather than continuing to share Eraser's anonymous generic
+ * single-pass fallback the recon for this build found it using.
+ *
+ * Three passes over the SAME already-authored/smoothed points -- no new
+ * capture, no persisted data, no particles:
+ *
+ * 1. HALO -- the smoothed path stroked WIDER than the authored width at a
+ *    low, fixed alpha, drawn FIRST (underneath). This is what reads as a
+ *    marker's slightly absorptive edge -- ink just barely spreading past
+ *    the nib's contact width into the paper -- without any canvas blur
+ *    filter (explicitly avoided: a blur reads as airbrush/glow, not
+ *    absorption). Because it sits under the denser core, only a thin outer
+ *    sliver of it is ever visible past the core's own edge.
+ * 2. CORE -- the SAME smoothed path stroked again, near the authored
+ *    width, at a HIGH fixed alpha (`MARKER_CORE_ALPHA`, deliberately denser
+ *    than Pencil's own body-pass alpha -- Marker should never read as
+ *    faint/sketchy). This is most of what an artist sees; by itself it
+ *    would already look like a solid, slightly-less-than-Pen-opacity
+ *    marker line.
+ * 3. VARIANCE -- a third pass over the SAME core geometry (not offset,
+ *    not narrower/wider, not skipped like Pencil's grain) whose alpha
+ *    flickers within a small deterministic range per point. Because it is
+ *    perfectly colinear with the core (no lateral jitter at all), it never
+ *    reads as broken/grainy the way Pencil's grain does -- it only adds
+ *    the "mild deposition variation" a real marker nib has, riding
+ *    entirely on top of an already-solid core.
+ *
+ * BUILDUP: every pass composites with ordinary `source-over` alpha, so a
+ * second full pass over the same path (or a crossing stroke) naturally
+ * deepens color where the passes overlap -- exactly like a real marker
+ * pressed over itself -- with no separate "wetness" state to track and no
+ * risk of ever reaching Mop's pooling/gravity/viscosity territory (there is
+ * no such simulation here at all).
+ *
+ * DETERMINISM: the only "randomness" is `hash01`, a pure function of each
+ * point's own persisted coordinates plus this Mark's own stable
+ * `seedSource` (its `operation.id`/`obj.id`, assigned once and never
+ * reassigned -- the same seed-source convention Mop/Spray/Pencil already
+ * use). No `Math.random()`, no `Date.now()`, no camera/view state feeds
+ * this function -- the same Mark renders pixel-identical on every redraw,
+ * pan, zoom, and reload.
+ */
+const MARKER_HALO_WIDTH_SCALE = 1.16;
+const MARKER_HALO_ALPHA = 0.22;
+const MARKER_CORE_WIDTH_SCALE = 0.98;
+const MARKER_CORE_ALPHA = 0.86;
+const MARKER_VARIANCE_ALPHA_BASE = 0.08;
+const MARKER_VARIANCE_ALPHA_RANGE = 0.1;
+
+export function strokeMarker(
+  ctx: CanvasRenderingContext2D,
+  points: readonly SmoothablePoint[],
+  style: { readonly color: string; readonly width: number; readonly opacity: number },
+  seedSource: string,
+): void {
+  if (points.length < 2) return;
+  const seed = hashSeed(seedSource);
+
+  ctx.save();
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.globalCompositeOperation = "source-over";
+  ctx.strokeStyle = style.color;
+
+  // Pass 1: HALO -- wide, low-alpha, drawn first/underneath.
+  ctx.beginPath();
+  traceSmoothedPath(ctx, points);
+  ctx.lineWidth = Math.max(0.5, style.width * MARKER_HALO_WIDTH_SCALE);
+  ctx.globalAlpha = style.opacity * MARKER_HALO_ALPHA;
+  ctx.stroke();
+
+  // Pass 2: CORE -- the dense, legible marker body.
+  ctx.beginPath();
+  traceSmoothedPath(ctx, points);
+  ctx.lineWidth = Math.max(0.5, style.width * MARKER_CORE_WIDTH_SCALE);
+  ctx.globalAlpha = style.opacity * MARKER_CORE_ALPHA;
+  ctx.stroke();
+
+  // Pass 3: VARIANCE -- same core geometry, no lateral offset, only a
+  // small deterministic per-point alpha flicker (mild absorptive
+  // deposition variation, never Pencil's broken/skipped grain).
+  ctx.lineWidth = Math.max(0.5, style.width * MARKER_CORE_WIDTH_SCALE);
+  for (let index = 1; index < points.length; index += 1) {
+    const a = points[index - 1];
+    const b = points[index];
+    const variance = MARKER_VARIANCE_ALPHA_BASE + hash01(a.x + seed, a.y + seed, 11) * MARKER_VARIANCE_ALPHA_RANGE;
+    ctx.globalAlpha = Math.min(1, Math.max(0, style.opacity * variance));
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.stroke();
+  }
   ctx.restore();
 }
