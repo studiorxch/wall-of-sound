@@ -160,9 +160,25 @@ service cloud.firestore {
       return hasValidStrokeMark(mark) || hasValidMaterialErasureMark(mark);
     }
 
+    function hasValidPageFrame(frame) {
+      return frame is map
+        && frame.keys().hasAll(['x', 'y', 'width', 'height'])
+        && frame.keys().hasOnly(['x', 'y', 'width', 'height'])
+        && frame.x is number
+        && frame.y is number
+        && frame.width is number
+        && frame.width > 0
+        && frame.height is number
+        && frame.height > 0;
+    }
+
     function hasValidArtworkV1Shape(data) {
       return data.keys().hasAll(['creatorId', 'surfaceId', 'artworkType', 'title', 'createdAt', 'updatedAt', 'composition', 'marks', 'state', 'visibility'])
-        && data.keys().hasOnly(['creatorId', 'surfaceId', 'artworkType', 'title', 'createdAt', 'updatedAt', 'composition', 'marks', 'state', 'visibility'])
+        // Blackbook Spatial Workspace V1: 'pageFrame' is OPTIONAL (not in
+        // hasAll) -- only a Blackbook-style bounded-page Artwork carries it;
+        // Map and Blank Artworks are unaffected.
+        && data.keys().hasOnly(['creatorId', 'surfaceId', 'artworkType', 'title', 'createdAt', 'updatedAt', 'composition', 'marks', 'state', 'visibility', 'pageFrame'])
+        && (!data.keys().hasAny(['pageFrame']) || hasValidPageFrame(data.pageFrame))
         && data.creatorId is string
         && data.surfaceId is string
         // ARTWORK V2: an explicit, durable discriminator -- immutable after
@@ -250,6 +266,10 @@ service cloud.firestore {
         && request.resource.data.createdAt == resource.data.createdAt
         && (!resource.data.keys().hasAny(['surfaceId']) || request.resource.data.surfaceId == resource.data.surfaceId)
         && (!resource.data.keys().hasAny(['artworkType']) || request.resource.data.artworkType == resource.data.artworkType)
+        // Blackbook Spatial Workspace V1: the page frame is authored once,
+        // at creation, and never resized/repositioned afterward -- same
+        // immutability pattern as artworkType above.
+        && (!resource.data.keys().hasAny(['pageFrame']) || request.resource.data.pageFrame == resource.data.pageFrame)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'geometry',
           'surface',

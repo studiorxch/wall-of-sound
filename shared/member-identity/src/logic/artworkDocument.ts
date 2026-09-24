@@ -5,6 +5,7 @@ import type {
   GeographicArtworkPoint,
   LocalArtworkPoint,
   MapArtwork,
+  PageFrame,
 } from "../data/artworkTypes.js";
 
 export const ARTWORK_GROUPING_PROXIMITY_DEGREES = 0.0005;
@@ -21,6 +22,13 @@ export interface NewMapArtworkDocument<TTimestamp> {
   readonly marks: readonly ArtworkMark[];
   readonly state: "draft";
   readonly visibility: "private";
+  readonly pageFrame?: PageFrame;
+}
+
+function isValidPageFrame(frame: PageFrame): boolean {
+  return Number.isFinite(frame.x) && Number.isFinite(frame.y)
+    && Number.isFinite(frame.width) && frame.width > 0
+    && Number.isFinite(frame.height) && frame.height > 0;
 }
 
 const MAX_ARTWORK_TITLE_LENGTH = 200;
@@ -111,6 +119,7 @@ export function createMapArtworkDocument<TTimestamp>(
   assertIdentifier(input.creatorId, "creator_id");
   assertIdentifier(input.surfaceId, "surface_id");
   validateArtworkMark(input.mark);
+  if (input.pageFrame && !isValidPageFrame(input.pageFrame)) throw new Error("invalid_artwork_page_frame");
   return {
     creatorId: input.creatorId,
     createdAt: timestamp,
@@ -125,6 +134,10 @@ export function createMapArtworkDocument<TTimestamp>(
     marks: [input.mark],
     state: "draft",
     visibility: "private",
+    // Blackbook Spatial Workspace V1: omitted entirely (never `undefined`)
+    // when the caller doesn't supply one -- Map and Blank Artworks never
+    // gain this key.
+    ...(input.pageFrame ? { pageFrame: input.pageFrame } : {}),
   };
 }
 

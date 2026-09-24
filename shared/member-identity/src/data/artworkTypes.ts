@@ -40,6 +40,26 @@ export type ArtworkMark = StrokeMark | MaterialErasureMark;
  */
 export type ArtworkType = "map" | "blank";
 
+/**
+ * Blackbook Spatial Workspace V1 -- the authored, content-INDEPENDENT
+ * Blackbook page/composition frame, in Artwork-local document coordinates.
+ * Deliberately NOT `composition.bounds` (that field is content-derived --
+ * the bounding box of whatever Marks currently exist, also used for
+ * proximity-based gallery matching and thumbnail fitting; a page frame must
+ * exist even on an empty page and never changes as content is drawn on or
+ * off it). Optional: only Blackbook sets one today; Map and Blank Artworks
+ * have no page frame and are unaffected. `x`/`y` are the frame's top-left
+ * corner -- not assumed to be the workspace origin, so a future multi-Surface
+ * workspace can place more than one frame at different positions without a
+ * schema change.
+ */
+export interface PageFrame {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
+
 export interface Artwork {
   readonly id: string;
   readonly creatorId: string;
@@ -64,6 +84,8 @@ export interface Artwork {
   readonly marks: readonly ArtworkMark[];
   readonly state: "draft" | "archived";
   readonly visibility: "private";
+  /** Blackbook Spatial Workspace V1 -- see `PageFrame`'s own doc. Absent for Map/Blank Artworks. Immutable after creation (rules-enforced). */
+  readonly pageFrame?: PageFrame;
 }
 export type MapArtwork = Artwork;
 
@@ -75,6 +97,8 @@ export interface CreateArtworkInput {
   readonly artworkType?: ArtworkType;
   /** Optional; defaults to `""` (no title) when omitted. */
   readonly title?: string;
+  /** Optional; only a Blackbook-style bounded-page caller supplies this. */
+  readonly pageFrame?: PageFrame;
 }
 export type CreateMapArtworkInput = CreateArtworkInput;
 

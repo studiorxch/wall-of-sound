@@ -5,6 +5,7 @@ import type {
   ArtworkMark,
   ArtworkType,
   GeographicMaterialErasureMark,
+  PageFrame,
   StrokeMark,
 } from "@studiorich/member-identity";
 import { selectArtworkForMark } from "@studiorich/member-identity";
@@ -129,6 +130,14 @@ export interface ArtworkPersistenceBridgeOptions<TStroke extends object> {
   readonly getCurrentArtworkTarget?: () => CurrentArtworkTarget;
   /** Fired the moment a "pending" target's first Mark actually creates its Artwork document -- lets the caller's session promote "pending" to a real artworkId. */
   readonly onCurrentArtworkEstablished?: (artworkId: string) => void;
+  /**
+   * Blackbook Spatial Workspace V1 -- a fixed, content-independent page
+   * frame carried through to EVERY `createArtwork` call this bridge makes
+   * (legacy proximity-based path and the "pending" path alike). Omitted
+   * entirely (as Map's and Blank's bridge instances do) when this caller
+   * has no bounded page -- those Artworks never gain a `pageFrame` key.
+   */
+  readonly pageFrame?: PageFrame;
 }
 
 export function toStrokeMark(stroke: WallStroke, markId: string): StrokeMark {
@@ -203,6 +212,7 @@ export function createArtworkPersistenceBridge<TStroke extends { artworkId?: str
   onArtworkRemoved,
   getCurrentArtworkTarget,
   onCurrentArtworkEstablished,
+  pageFrame,
 }: ArtworkPersistenceBridgeOptions<TStroke>) {
   const removedBeforeSave = new WeakSet<TStroke>();
   const artworks = new Map<string, Artwork>();
@@ -249,7 +259,7 @@ export function createArtworkPersistenceBridge<TStroke extends { artworkId?: str
         if (target?.kind === "artwork") {
           artwork = await repository.appendOwnedArtworkMark(target.artworkId, memberId, mark);
         } else if (target?.kind === "pending") {
-          artwork = await (repository.createArtwork ?? repository.createMapArtwork).call(repository, { creatorId: memberId, surfaceId, mark, artworkType: target.artworkType, title: target.title });
+          artwork = await (repository.createArtwork ?? repository.createMapArtwork).call(repository, { creatorId: memberId, surfaceId, mark, artworkType: target.artworkType, title: target.title, ...(pageFrame ? { pageFrame } : {}) });
           onCurrentArtworkEstablished?.(artwork.id);
         } else {
           // Legacy path -- only reachable when the caller never supplies
@@ -258,7 +268,7 @@ export function createArtworkPersistenceBridge<TStroke extends { artworkId?: str
           const candidate = selectArtworkForMark([...artworks.values()], memberId, surfaceId, mark);
           artwork = candidate
             ? await repository.appendOwnedArtworkMark(candidate.id, memberId, mark)
-            : await (repository.createArtwork ?? repository.createMapArtwork).call(repository, { creatorId: memberId, surfaceId, mark });
+            : await (repository.createArtwork ?? repository.createMapArtwork).call(repository, { creatorId: memberId, surfaceId, mark, ...(pageFrame ? { pageFrame } : {}) });
         }
         retain(artwork);
         if (removedBeforeSave.has(stroke)) {

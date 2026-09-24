@@ -135,4 +135,29 @@ describe("createMapArtworkDocument", () => {
     expect(selectArtworkForMark([base], "member-uid", "blackbook:book-1:page:page-2", nearby)).toBeNull();
     expect(selectArtworkForMark([base], "member-uid", base.surfaceId, mark)).toBeNull();
   });
+
+  // Blackbook Spatial Workspace V1: pageFrame is optional, additive, and
+  // never affects composition.bounds (which stays purely content-derived).
+  describe("pageFrame", () => {
+    it("omits pageFrame entirely when the caller doesn't supply one", () => {
+      const document = createMapArtworkDocument({ creatorId: "member-uid", surfaceId: "blackbook:book-1:page:page-1", mark: localMark }, "server-time");
+      expect(document).not.toHaveProperty("pageFrame");
+    });
+
+    it("persists a supplied pageFrame without affecting composition.bounds", () => {
+      const document = createMapArtworkDocument({ creatorId: "member-uid", surfaceId: "blackbook:book-1:page:page-1", mark: localMark, pageFrame: { x: 0, y: 0, width: 1, height: 1 } }, "server-time");
+      expect(document.pageFrame).toEqual({ x: 0, y: 0, width: 1, height: 1 });
+      expect(document.composition.bounds).toEqual({ minX: 0.1, minY: 0.2, maxX: 0.2, maxY: 0.3 });
+    });
+
+    it("rejects a non-positive-size pageFrame", () => {
+      expect(() => createMapArtworkDocument({ creatorId: "member-uid", surfaceId: "blackbook:book-1:page:page-1", mark: localMark, pageFrame: { x: 0, y: 0, width: 0, height: 1 } }, "server-time"))
+        .toThrow("invalid_artwork_page_frame");
+    });
+
+    it("rejects a non-finite pageFrame", () => {
+      expect(() => createMapArtworkDocument({ creatorId: "member-uid", surfaceId: "blackbook:book-1:page:page-1", mark: localMark, pageFrame: { x: Number.NaN, y: 0, width: 1, height: 1 } }, "server-time"))
+        .toThrow("invalid_artwork_page_frame");
+    });
+  });
 });

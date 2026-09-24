@@ -18,13 +18,13 @@
       button { border: 1px solid #575047; background: #171512; color: inherit; border-radius: 999px; padding: 9px 14px; font: inherit; cursor: pointer; }
       button[data-active="true"] { color: #171412; background: #f3eee4; }
       button:disabled { opacity: .38; cursor: default; }
-      canvas { display: block; width: 100%; aspect-ratio: 4 / 5; background: #f3eee4; border-radius: 5px; box-shadow: 0 20px 70px #000a; touch-action: none; }
+      canvas { display: block; width: 100%; aspect-ratio: 4 / 5; background: #0f0d0b; border-radius: 5px; box-shadow: 0 20px 70px #000a; touch-action: none; }
       #blackbook-status { display: block; margin-top: 10px; color: #a9a197; font-size: 11px; }
     </style>
   </head>
   <body>
     <main>
-      <header><h1>StudioRich Blackbook · Page 1</h1><div class="actions"><button id="blackbook-undo" disabled>UNDO</button><button id="blackbook-member">…</button></div></header>
+      <header><h1>StudioRich Blackbook · Page 1</h1><div class="actions"><button id="blackbook-pan">PAN</button><button id="blackbook-undo" disabled>UNDO</button><button id="blackbook-member">…</button></div></header>
       <div class="supplies" aria-label="Art Supplies"><button id="blackbook-pencil" data-active="true">PENCIL</button><button id="blackbook-pen">PEN</button><button id="blackbook-marker">MARKER</button><button id="blackbook-mop">MOP</button><button id="blackbook-spray">SPRAY</button><button id="blackbook-eraser">ERASER</button><label>WIDTH <input id="blackbook-width" type="range" min="1" max="48" step="1" value="5"></label><label>OPACITY <input id="blackbook-opacity" type="range" min="0.15" max="1" step="0.05" value="0.82"></label></div>
       <canvas id="blackbook-page" width="720" height="900" aria-label="Blackbook Page 1 drawing surface"></canvas>
       <small id="blackbook-status" aria-live="polite">Connecting…</small>

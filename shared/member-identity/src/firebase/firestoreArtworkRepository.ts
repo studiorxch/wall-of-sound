@@ -23,6 +23,7 @@ import type {
   GeographicArtworkPoint,
   LocalArtworkPoint,
   MapArtwork,
+  PageFrame,
 } from "../data/artworkTypes.js";
 import type { ArtMaterialId, ArtSupplyId } from "../data/artSupplyTypes.js";
 import { boundsForMarks, createMapArtworkDocument, normalizeArtworkTitle, validateArtworkMark } from "../logic/artworkDocument.js";
@@ -100,6 +101,15 @@ function decodeMark(value: unknown): ArtworkMark {
   return decoded;
 }
 
+function decodePageFrame(value: unknown): PageFrame | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const frame = value as Record<string, unknown>;
+  if (!Number.isFinite(frame.x) || !Number.isFinite(frame.y) || !Number.isFinite(frame.width) || !Number.isFinite(frame.height)) {
+    return undefined;
+  }
+  return { x: frame.x as number, y: frame.y as number, width: frame.width as number, height: frame.height as number };
+}
+
 function legacyMark(value: unknown, createdAt: Date): ArtworkMark {
   if (!value || typeof value !== "object") throw new Error("invalid_artwork_stroke");
   const stroke = value as Record<string, unknown>;
@@ -115,6 +125,7 @@ export function decodeArtworkData(id: string, data: DocumentData): MapArtwork {
   if (!marks.length) throw new Error("invalid_artwork_marks");
   if (data.state !== "draft" && data.state !== "archived") throw new Error("invalid_artwork_state");
   if (data.visibility !== "private") throw new Error("invalid_artwork_visibility");
+  const pageFrame = decodePageFrame(data.pageFrame);
   return {
     id,
     creatorId: data.creatorId,
@@ -130,6 +141,7 @@ export function decodeArtworkData(id: string, data: DocumentData): MapArtwork {
     marks,
     state: data.state,
     visibility: "private",
+    ...(pageFrame ? { pageFrame } : {}),
   };
 }
 
@@ -139,7 +151,22 @@ function decodeArtwork(snapshot: DocumentSnapshot<DocumentData>): MapArtwork {
 }
 
 function storedArtwork(artwork: Artwork, updatedAt: ReturnType<typeof serverTimestamp>) {
-  return { creatorId: artwork.creatorId, surfaceId: artwork.surfaceId, artworkType: artwork.artworkType, title: artwork.title, createdAt: Timestamp.fromDate(artwork.createdAt), updatedAt, composition: { bounds: boundsForMarks(artwork.marks), startedAt: Timestamp.fromDate(artwork.composition.startedAt), lastEditedAt: updatedAt }, marks: artwork.marks, state: artwork.state, visibility: artwork.visibility };
+  return {
+    creatorId: artwork.creatorId,
+    surfaceId: artwork.surfaceId,
+    artworkType: artwork.artworkType,
+    title: artwork.title,
+    createdAt: Timestamp.fromDate(artwork.createdAt),
+    updatedAt,
+    composition: { bounds: boundsForMarks(artwork.marks), startedAt: Timestamp.fromDate(artwork.composition.startedAt), lastEditedAt: updatedAt },
+    marks: artwork.marks,
+    state: artwork.state,
+    visibility: artwork.visibility,
+    // Blackbook Spatial Workspace V1: immutable after creation (rules-
+    // enforced) -- carried through unchanged on every rewrite (rename,
+    // mark append/remove), never dropped, never re-derived.
+    ...(artwork.pageFrame ? { pageFrame: artwork.pageFrame } : {}),
+  };
 }
 
 export class FirestoreArtworkRepository implements ArtworkRepository {

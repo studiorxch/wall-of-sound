@@ -1,5 +1,6 @@
 import type { Artwork } from "@studiorich/member-identity";
 import { BLANK_SURFACE_ID, type BlankOperation } from "./blankArtworkBridge";
+import { createCartesianCamera, type CartesianCamera } from "./cartesianWorkspaceCamera";
 import { resolveMopDabPlan } from "./mopDeposition";
 import { hashSeed, resolveSprayCorePlan, resolveSprayParticlePlan } from "./sprayDeposition";
 import { fillMopDab, fillSprayParticle, hash01, hashLateralUnit, traceSmoothedPath } from "./strokeSmoothing";
@@ -28,12 +29,6 @@ export type BlankBrush = {
   readonly opacity: number;
 };
 
-interface Camera {
-  panX: number;
-  panY: number;
-  zoom: number;
-}
-
 interface DocPoint {
   readonly x: number;
   readonly y: number;
@@ -48,7 +43,11 @@ let canvas: HTMLCanvasElement | null = null;
 let ctx: CanvasRenderingContext2D | null = null;
 let panButton: HTMLButtonElement | null = null;
 
-const camera: Camera = { panX: 0, panY: 0, zoom: 1 };
+// Blackbook Spatial Workspace V1: this is the same shared camera Blackbook's
+// own workspace now uses (see cartesianWorkspaceCamera.ts) -- Blank's own
+// pan/zoom/projection behavior is unchanged, only the math moved to a
+// reusable module instead of living privately in this file.
+const cameraView: CartesianCamera = createCartesianCamera();
 let panMode = false;
 let isPointerDown = false;
 let activeDocPoints: DocPoint[] = [];
@@ -60,12 +59,13 @@ let getBrush: () => BlankBrush = () => ({ supplyId: "pencil", color: "#171412", 
 
 function width(): number { return canvas?.clientWidth ?? window.innerWidth; }
 function height(): number { return canvas?.clientHeight ?? window.innerHeight; }
+function zoom(): number { return cameraView.getState().zoom; }
 
 function docToScreen(point: DocPoint): { x: number; y: number } {
-  return { x: width() / 2 + (point.x + camera.panX) * camera.zoom, y: height() / 2 + (point.y + camera.panY) * camera.zoom };
+  return cameraView.docToScreen(point, width(), height());
 }
 function screenToDoc(x: number, y: number): DocPoint {
-  return { x: (x - width() / 2) / camera.zoom - camera.panX, y: (y - height() / 2) / camera.zoom - camera.panY };
+  return cameraView.screenToDoc(x, y, width(), height());
 }
 
 function ensureCanvas(): void {
@@ -115,7 +115,7 @@ function resizeCanvas(): void {
 
 function niceDotSpacing(): number {
   for (const step of DOT_SPACING_STEPS) {
-    if (step * camera.zoom >= MIN_DOT_SCREEN_SPACING) return step;
+    if (step * zoom() >= MIN_DOT_SCREEN_SPACING) return step;
   }
   return DOT_SPACING_STEPS[DOT_SPACING_STEPS.length - 1];
 }
@@ -129,7 +129,7 @@ function renderDots(): void {
   const startX = Math.floor(topLeft.x / spacing) * spacing;
   const startY = Math.floor(topLeft.y / spacing) * spacing;
   ctx.fillStyle = "rgba(255,255,255,0.16)";
-  const radius = Math.max(0.6, Math.min(1.6, camera.zoom));
+  const radius = Math.max(0.6, Math.min(1.6, zoom()));
   for (let x = startX; x <= bottomRight.x; x += spacing) {
     for (let y = startY; y <= bottomRight.y; y += spacing) {
       const screen = docToScreen({ x, y });
@@ -155,12 +155,12 @@ function drawOperation(context: CanvasRenderingContext2D, operation: BlankOperat
   traceSmoothedPath(context, points);
   if (operation.operation === "eraser") {
     context.globalCompositeOperation = "destination-out";
-    context.lineWidth = operation.width * camera.zoom;
+    context.lineWidth = operation.width * zoom();
     context.globalAlpha = 1;
     context.strokeStyle = "#000";
   } else {
     context.globalCompositeOperation = "source-over";
-    context.lineWidth = operation.style.width * camera.zoom;
+    context.lineWidth = operation.style.width * zoom();
     context.globalAlpha = operation.style.opacity;
     context.strokeStyle = operation.style.color;
   }
@@ -169,7 +169,7 @@ function drawOperation(context: CanvasRenderingContext2D, operation: BlankOperat
 }
 
 function drawMop(context: CanvasRenderingContext2D, points: readonly { x: number; y: number }[], style: { readonly color: string; readonly width: number; readonly opacity: number }): void {
-  const scaledWidth = style.width * camera.zoom;
+  const scaledWidth = style.width * zoom();
   context.save();
   context.lineCap = "round"; context.lineJoin = "round";
   context.globalCompositeOperation = "source-over";
@@ -204,7 +204,7 @@ function drawMop(context: CanvasRenderingContext2D, points: readonly { x: number
 }
 
 function drawSpray(context: CanvasRenderingContext2D, points: readonly { x: number; y: number }[], style: { readonly color: string; readonly width: number; readonly opacity: number }, seedSource: string): void {
-  const baseRadius = (style.width * camera.zoom) * 0.5;
+  const baseRadius = (style.width * zoom()) * 0.5;
   const seed = hashSeed(seedSource);
   context.save();
   context.globalCompositeOperation = "source-over";
@@ -258,8 +258,7 @@ function onPointerMove(event: PointerEvent): void {
   if (!isPointerDown || !canvas?.hasPointerCapture(event.pointerId)) return;
   if (panMode) {
     if (lastScreenPoint) {
-      camera.panX += (event.clientX - lastScreenPoint.x) / camera.zoom;
-      camera.panY += (event.clientY - lastScreenPoint.y) / camera.zoom;
+      cameraView.panBy(event.clientX - lastScreenPoint.x, event.clientY - lastScreenPoint.y);
     }
     lastScreenPoint = { x: event.clientX, y: event.clientY };
     render();
@@ -292,17 +291,14 @@ function onPointerUp(event: PointerEvent): void {
 
 function onWheel(event: WheelEvent): void {
   event.preventDefault();
-  const before = screenToDoc(event.clientX, event.clientY);
   const factor = Math.exp(-event.deltaY * 0.0015);
-  camera.zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, camera.zoom * factor));
-  camera.panX = (event.clientX - width() / 2) / camera.zoom - before.x;
-  camera.panY = (event.clientY - height() / 2) / camera.zoom - before.y;
+  cameraView.zoomAt(event.clientX, event.clientY, factor, width(), height(), MIN_ZOOM, MAX_ZOOM);
   render();
 }
 
 function fitToContent(): void {
   if (!operations.length) {
-    camera.panX = 0; camera.panY = 0; camera.zoom = 1;
+    cameraView.reset();
     return;
   }
   const points = operations.flatMap((operation) => operation.points);
@@ -310,12 +306,16 @@ function fitToContent(): void {
   const maxX = Math.max(...points.map((p) => p.x));
   const minY = Math.min(...points.map((p) => p.y));
   const maxY = Math.max(...points.map((p) => p.y));
+  // Same span floor as before extraction: a single point (or a perfectly
+  // straight horizontal/vertical stroke) must not zoom in to infinity.
   const spanX = Math.max(1, maxX - minX);
   const spanY = Math.max(1, maxY - minY);
-  const padding = 0.8;
-  camera.zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Math.min(width() / spanX, height() / spanY) * padding));
-  camera.panX = -(minX + maxX) / 2;
-  camera.panY = -(minY + maxY) / 2;
+  const centerX = (minX + maxX) / 2;
+  const centerY = (minY + maxY) / 2;
+  cameraView.fitToRect(
+    { minX: centerX - spanX / 2, minY: centerY - spanY / 2, maxX: centerX + spanX / 2, maxY: centerY + spanY / 2 },
+    width(), height(), 0.8, MIN_ZOOM, MAX_ZOOM,
+  );
 }
 
 export interface BlankCanvasRuntime {

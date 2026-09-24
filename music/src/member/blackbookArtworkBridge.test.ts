@@ -135,4 +135,18 @@ describe("Blackbook Artwork Surface bridge", () => {
     expect(repository.removeOwnedArtworkMark).toHaveBeenCalledWith("art-spray", "member-1", "mark-spray");
     expect(repository.removeOwnedArtworkMark).not.toHaveBeenCalledWith("art-spray", "member-1", "mark-a");
   });
+
+  it("Blackbook Spatial Workspace V1: a brand-new page's first Mark creates its Artwork WITH the fixed page frame", async () => {
+    const first = artwork("art-first");
+    const repository: ArtworkRepository = {
+      createArtwork: vi.fn(async () => first), listOwnedArtwork: vi.fn(async () => []),
+      createMapArtwork: vi.fn(async () => first), listOwnedMapArtwork: vi.fn(async () => []),
+      appendOwnedArtworkMark: vi.fn(), removeOwnedArtworkMark: vi.fn(),
+      deleteOwnedArtwork: vi.fn(), renameOwnedArtwork: vi.fn(),
+    };
+    const bindArtwork = vi.fn(() => true);
+    const bridge = createBlackbookArtworkPersistenceBridge({ repository, drawing: { bindArtwork }, getAuthenticatedMemberId: () => "member-1", createMarkId: () => "mark-a" });
+    await bridge.persistStroke(stroke("a"));
+    expect(repository.createArtwork).toHaveBeenCalledWith(expect.objectContaining({ pageFrame: { x: 0, y: 0, width: 1, height: 1 } }));
+  });
 });

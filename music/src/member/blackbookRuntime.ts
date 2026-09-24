@@ -11,16 +11,19 @@ import {
   type MemberIdentityState,
 } from "@studiorich/member-identity";
 import {
+  BLACKBOOK_PAGE_FRAME,
   BLACKBOOK_PAGE_SURFACE_ID,
   createBlackbookArtworkPersistenceBridge,
   type BlackbookOperation,
 } from "./blackbookArtworkBridge";
+import { createCartesianCamera, type CartesianCamera, type DocRect } from "./cartesianWorkspaceCamera";
 import { resolveMopDabPlan } from "./mopDeposition";
 import { hashSeed, resolveSprayCorePlan, resolveSprayParticlePlan } from "./sprayDeposition";
 import { fillMopDab, fillSprayParticle, hash01, hashLateralUnit, traceSmoothedPath } from "./strokeSmoothing";
 
 function required<T>(value: T | null, error: string): T { if (!value) throw new Error(error); return value; }
 const canvas = required(document.querySelector<HTMLCanvasElement>("#blackbook-page"), "blackbook_surface_missing");
+const panButton = required(document.querySelector<HTMLButtonElement>("#blackbook-pan"), "blackbook_surface_missing");
 const undoButton = required(document.querySelector<HTMLButtonElement>("#blackbook-undo"), "blackbook_surface_missing");
 const memberButton = required(document.querySelector<HTMLButtonElement>("#blackbook-member"), "blackbook_surface_missing");
 const status = required(document.querySelector<HTMLElement>("#blackbook-status"), "blackbook_surface_missing");
@@ -38,11 +41,78 @@ const ctx = required(canvas.getContext("2d"), "blackbook_canvas_unavailable");
 const memberIdentity = createFirebaseMemberIdentityAuthority(import.meta.env);
 const repository = createFirebaseArtworkRepository(import.meta.env);
 let memberState: MemberIdentityState = memberIdentity.getState();
+
+/**
+ * Blackbook Spatial Workspace V1 -- the SAME shared Cartesian camera Blank
+ * Canvas uses (cartesianWorkspaceCamera.ts). VIEW transform only: this never
+ * reads or mutates a persisted Mark's `{x,y}` -- it only changes how a
+ * document-space point PROJECTS onto the screen. Zoom bounds are chosen for
+ * this workspace's own unit convention (the page is exactly 1x1 document
+ * units -- see BLACKBOOK_PAGE_FRAME's doc): MIN_ZOOM lets the artist zoom far
+ * out to see a wide desk around a small page; MAX_ZOOM allows a close, high-
+ * fidelity zoom into fine linework.
+ */
+const cameraView: CartesianCamera = createCartesianCamera();
+const MIN_ZOOM = 20;
+const MAX_ZOOM = 4000;
+const PAGE_FRAME_RECT: DocRect = {
+  minX: BLACKBOOK_PAGE_FRAME.x,
+  minY: BLACKBOOK_PAGE_FRAME.y,
+  maxX: BLACKBOOK_PAGE_FRAME.x + BLACKBOOK_PAGE_FRAME.width,
+  maxY: BLACKBOOK_PAGE_FRAME.y + BLACKBOOK_PAGE_FRAME.height,
+};
+let panMode = false;
+let lastScreenPoint: { x: number; y: number } | null = null;
+
+function width(): number { return canvas.clientWidth; }
+function height(): number { return canvas.clientHeight; }
+/**
+ * Every already-persisted `style.width`/`erasure.width` value was authored
+ * against Blackbook's OLD fixed 720px-wide backing store -- a width of "5"
+ * meant "5 real screen pixels when the page fills a 720px-wide canvas",
+ * never "5 document units". Scaling a material's width by the raw camera
+ * zoom (document-units-per-screen-pixel, ~1 at the OLD fixed scale but now
+ * anywhere from MIN_ZOOM..MAX_ZOOM) would make an old width of "5" render
+ * anywhere from a hairline to an enormous solid block depending on the
+ * CURRENT view -- not a zoom bug, a unit-mismatch bug. Dividing by this
+ * reference converts the camera's zoom back into "screen pixels per the
+ * OLD reference page width", so a Mark authored (or reopened) at the page's
+ * OWN natural fitted scale renders at effectively its original size, and
+ * scales proportionally with the page exactly like Blank's own Marks do.
+ */
+const WIDTH_REFERENCE_ZOOM = 720;
+function widthScale(): number { return cameraView.getState().zoom / WIDTH_REFERENCE_ZOOM; }
+function docToScreen(point: { x: number; y: number }): { x: number; y: number } {
+  return cameraView.docToScreen(point, width(), height());
+}
+function screenToDoc(x: number, y: number): { x: number; y: number } {
+  return cameraView.screenToDoc(x, y, width(), height());
+}
+/** Frames the fixed page (never the content) -- see requirement 5's "page initially fits sensibly in view". Runtime-only view state, never persisted (requirement 8). */
+function fitPageIntoView(): void {
+  cameraView.fitToRect(PAGE_FRAME_RECT, width(), height(), 0.6, MIN_ZOOM, MAX_ZOOM);
+}
+
 const materialLayers = Object.fromEntries(["graphite", "ink", "marker", "mop", "spray"].map((materialId) => {
   const layer = document.createElement("canvas");
-  layer.width = canvas.width; layer.height = canvas.height;
   return [materialId, { canvas: layer, context: required(layer.getContext("2d"), "blackbook_material_canvas_unavailable") }];
 })) as Record<"graphite" | "ink" | "marker" | "mop" | "spray", { canvas: HTMLCanvasElement; context: CanvasRenderingContext2D }>;
+
+/** Keeps the visible canvas and every material layer's backing store in sync with the element's live CSS size (DPR-aware) -- mirrors blankCanvasRuntime.ts's `resizeCanvas`. Never re-frames the camera: an existing view must survive a viewport resize unchanged (requirement 2). */
+function resizeCanvasesToDisplaySize(): void {
+  const dpr = window.devicePixelRatio || 1;
+  const cssWidth = canvas.clientWidth;
+  const cssHeight = canvas.clientHeight;
+  canvas.width = Math.round(cssWidth * dpr);
+  canvas.height = Math.round(cssHeight * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  for (const layer of Object.values(materialLayers)) {
+    layer.canvas.width = Math.round(cssWidth * dpr);
+    layer.canvas.height = Math.round(cssHeight * dpr);
+    layer.context.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+}
+
 let operations: BlackbookOperation[] = [];
 let activePoints: { x: number; y: number }[] = [];
 let nextOperationId = 1;
@@ -55,18 +125,44 @@ const supplySettings: Record<"pencil" | "pen" | "marker" | "mop" | "spray", { wi
   spray: { ...SPRAY_SUPPLY.defaultSettings },
 };
 
-function render(): void {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+/**
+ * UI/workspace chrome only -- the page's dotted perimeter and the neutral
+ * workspace backdrop. Never a Mark, never persisted, never affects
+ * `composition.bounds`, never appears in a thumbnail as Artwork content
+ * (requirement 5) -- exactly the same non-persistence guarantee Blank
+ * Canvas's own `renderDots` already has.
+ */
+function renderWorkspaceAndPageFrame(): void {
+  ctx.fillStyle = "#0f0d0b";
+  ctx.fillRect(0, 0, width(), height());
+  const topLeft = docToScreen({ x: PAGE_FRAME_RECT.minX, y: PAGE_FRAME_RECT.minY });
+  const bottomRight = docToScreen({ x: PAGE_FRAME_RECT.maxX, y: PAGE_FRAME_RECT.maxY });
   ctx.fillStyle = "#f3eee4";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  for (const layer of Object.values(materialLayers)) layer.context.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.fillRect(topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y);
+}
+
+function renderPageFrameOutline(): void {
+  const topLeft = docToScreen({ x: PAGE_FRAME_RECT.minX, y: PAGE_FRAME_RECT.minY });
+  const bottomRight = docToScreen({ x: PAGE_FRAME_RECT.maxX, y: PAGE_FRAME_RECT.maxY });
+  ctx.save();
+  ctx.strokeStyle = "rgba(243,238,228,0.35)";
+  ctx.lineWidth = 1;
+  ctx.setLineDash([2, 4]);
+  ctx.strokeRect(topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y);
+  ctx.restore();
+}
+
+function render(): void {
+  renderWorkspaceAndPageFrame();
+  for (const layer of Object.values(materialLayers)) layer.context.clearRect(0, 0, width(), height());
   for (const operation of operations) drawOperation(operation);
   if (activePoints.length > 1) drawOperation(activeOperation(activePoints));
-  ctx.drawImage(materialLayers.graphite.canvas, 0, 0);
-  ctx.drawImage(materialLayers.mop.canvas, 0, 0);
-  ctx.drawImage(materialLayers.spray.canvas, 0, 0);
-  ctx.drawImage(materialLayers.ink.canvas, 0, 0);
-  ctx.drawImage(materialLayers.marker.canvas, 0, 0);
+  ctx.drawImage(materialLayers.graphite.canvas, 0, 0, width(), height());
+  ctx.drawImage(materialLayers.mop.canvas, 0, 0, width(), height());
+  ctx.drawImage(materialLayers.spray.canvas, 0, 0, width(), height());
+  ctx.drawImage(materialLayers.ink.canvas, 0, 0, width(), height());
+  ctx.drawImage(materialLayers.marker.canvas, 0, 0, width(), height());
+  renderPageFrameOutline();
   undoButton.disabled = memberState.status !== "signedIn" || operations.length === 0;
   pencilButton.dataset.active = String(activeSupply === "pencil");
   penButton.dataset.active = String(activeSupply === "pen");
@@ -74,6 +170,7 @@ function render(): void {
   mopButton.dataset.active = String(activeSupply === "mop");
   sprayButton.dataset.active = String(activeSupply === "spray");
   eraserButton.dataset.active = String(activeSupply === "eraser");
+  panButton.dataset.active = String(panMode);
 }
 
 // Calibration V1 (revised): quadratic-midpoint smoothing (see
@@ -88,7 +185,7 @@ function render(): void {
 // Pointer-sample density (coalescing) is a separate, earlier layer and
 // still applies to every supply -- see the pointermove handler below.
 function path(context: CanvasRenderingContext2D, points: readonly { x: number; y: number }[]): void {
-  const scaled = points.map((point) => ({ x: point.x * canvas.width, y: point.y * canvas.height }));
+  const scaled = points.map((point) => docToScreen(point));
   context.beginPath();
   traceSmoothedPath(context, scaled);
 }
@@ -97,7 +194,7 @@ function path(context: CanvasRenderingContext2D, points: readonly { x: number; y
 // geometrically aligned with resolveMopDabPlan's dabs, which are placed at
 // the same raw recorded points) and Spray's new macro core pass (below).
 function rawPath(context: CanvasRenderingContext2D, points: readonly { x: number; y: number }[]): void {
-  const scaled = points.map((point) => ({ x: point.x * canvas.width, y: point.y * canvas.height }));
+  const scaled = points.map((point) => docToScreen(point));
   context.beginPath();
   context.moveTo(scaled[0].x, scaled[0].y);
   for (const point of scaled.slice(1)) context.lineTo(point.x, point.y);
@@ -132,12 +229,12 @@ function drawOperation(operation: BlackbookOperation): void {
   path(materialCtx, points);
   if (operation.operation === "eraser") {
     materialCtx.globalCompositeOperation = "destination-out";
-    materialCtx.lineWidth = operation.width;
+    materialCtx.lineWidth = operation.width * widthScale();
     materialCtx.globalAlpha = 1;
     materialCtx.strokeStyle = "#000";
   } else {
     materialCtx.globalCompositeOperation = "source-over";
-    materialCtx.lineWidth = operation.style.width;
+    materialCtx.lineWidth = operation.style.width * widthScale();
     materialCtx.globalAlpha = operation.style.opacity;
     materialCtx.strokeStyle = operation.style.color;
   }
@@ -185,17 +282,18 @@ function drawMopStroke(
   points: readonly { x: number; y: number }[],
   style: { readonly color: string; readonly width: number; readonly opacity: number },
 ): void {
-  const scaledPoints = points.map((point) => ({ x: point.x * canvas.width, y: point.y * canvas.height }));
+  const scaledPoints = points.map((point) => docToScreen(point));
+  const scaledWidth = style.width * widthScale();
   context.save();
   context.lineCap = "round"; context.lineJoin = "round";
   context.globalCompositeOperation = "source-over";
   rawPath(context, points);
-  context.lineWidth = style.width;
+  context.lineWidth = scaledWidth;
   context.globalAlpha = style.opacity * 0.92;
   context.strokeStyle = style.color;
   context.stroke();
-  const dabs = resolveMopDabPlan(scaledPoints, style.width * 0.5);
-  const baseRadius = style.width * 0.5;
+  const dabs = resolveMopDabPlan(scaledPoints, scaledWidth * 0.5);
+  const baseRadius = scaledWidth * 0.5;
   // Calibration V1 Revision 10 (dot-gesture fix, mirrored here for
   // consistency with the Map's identical fix): the random inclusion
   // probability and lateral scatter exist to break up a LONG stroke's
@@ -258,9 +356,9 @@ function drawSprayStroke(
   style: { readonly color: string; readonly width: number; readonly opacity: number },
   seedSource: string,
 ): void {
-  const scaledPoints = points.map((point) => ({ x: point.x * canvas.width, y: point.y * canvas.height }));
+  const scaledPoints = points.map((point) => docToScreen(point));
   const seed = hashSeed(seedSource);
-  const baseRadius = style.width * 0.5;
+  const baseRadius = (style.width * widthScale()) * 0.5;
 
   context.save();
   context.globalCompositeOperation = "source-over";
@@ -302,9 +400,15 @@ function activeOperation(points: readonly { x: number; y: number }[]): Blackbook
   return { operation: activeSupply, id: "active", points, style: { color, width: Number(widthControl.value), opacity: Number(opacityControl.value) } };
 }
 
+// Blackbook Spatial Workspace V1: pointer capture now goes through the
+// workspace camera instead of dividing by the canvas's own displayed size --
+// this is what lets a captured point land outside [0,1] (off the page) when
+// the artist has panned/zoomed, while an unrotated/unpanned canvas at
+// zoom=1 would only ever have mapped a click inside the element to [0,1]
+// anyway. VIEW transform only -- never touches persisted geometry.
 function point(event: PointerEvent) {
   const rect = canvas.getBoundingClientRect();
-  return { x: (event.clientX - rect.left) / rect.width, y: (event.clientY - rect.top) / rect.height };
+  return screenToDoc(event.clientX - rect.left, event.clientY - rect.top);
 }
 
 const persistence = createBlackbookArtworkPersistenceBridge({
@@ -332,17 +436,36 @@ function hydrate(artworks: readonly Artwork[]): void {
       style: mark.style,
     }] : mark.type === "material-erasure" && mark.geometry.format === "local-2d-erasure-v1" ? [{ operation: "eraser", id: `blackbook-mark-${mark.id}`, artworkId: artwork.id, markId: mark.id, creatorId: artwork.creatorId, surfaceId: artwork.surfaceId, points: mark.geometry.points, width: mark.width }] : []));
   persistence.replaceKnownArtworks(artworks.filter((artwork) => artwork.surfaceId === BLACKBOOK_PAGE_SURFACE_ID));
+  fitPageIntoView();
   render();
 }
 
+// Blackbook Spatial Workspace V1: the smallest interaction consistent with
+// Blank Canvas's own pattern -- a PAN toggle button switches the SAME
+// pointer gesture between drawing and navigating, so drawing and navigation
+// can never occur simultaneously (requirement 7). Wheel-zoom is always
+// active regardless of mode, exactly like Blank.
 canvas.addEventListener("pointerdown", (event) => {
-  if (memberState.status !== "signedIn") return;
   canvas.setPointerCapture(event.pointerId);
+  if (panMode) {
+    lastScreenPoint = { x: event.clientX, y: event.clientY };
+    return;
+  }
+  if (memberState.status !== "signedIn") return;
   activePoints = [point(event)];
   render();
 });
 canvas.addEventListener("pointermove", (event) => {
   if (!canvas.hasPointerCapture(event.pointerId)) return;
+  if (panMode) {
+    if (lastScreenPoint) {
+      cameraView.panBy(event.clientX - lastScreenPoint.x, event.clientY - lastScreenPoint.y);
+    }
+    lastScreenPoint = { x: event.clientX, y: event.clientY };
+    render();
+    return;
+  }
+  if (memberState.status !== "signedIn") return;
   // Calibration V1: browsers batch several real pointer samples into one
   // "coalesced" move event during a fast gesture; reading only the event's
   // own final position (the old behavior) silently drops those in-between
@@ -358,6 +481,7 @@ canvas.addEventListener("pointermove", (event) => {
 canvas.addEventListener("pointerup", (event) => {
   if (!canvas.hasPointerCapture(event.pointerId)) return;
   canvas.releasePointerCapture(event.pointerId);
+  if (panMode) { lastScreenPoint = null; return; }
   if (activePoints.length > 1) {
     const operation = { ...activeOperation(activePoints), id: `blackbook-operation-${nextOperationId++}` } as BlackbookOperation;
     operations.push(operation);
@@ -372,6 +496,24 @@ undoButton.addEventListener("click", () => {
   if (!operation) return;
   render();
   void persistence.removeStroke(operation).catch((error) => { status.textContent = error instanceof Error ? error.message : "Undo failed"; });
+});
+
+panButton.addEventListener("click", () => {
+  panMode = !panMode;
+  render();
+});
+
+canvas.addEventListener("wheel", (event) => {
+  event.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  const factor = Math.exp(-event.deltaY * 0.0015);
+  cameraView.zoomAt(event.clientX - rect.left, event.clientY - rect.top, factor, width(), height(), MIN_ZOOM, MAX_ZOOM);
+  render();
+}, { passive: false });
+
+window.addEventListener("resize", () => {
+  resizeCanvasesToDisplaySize();
+  render();
 });
 
 // Calibration V1: the WIDTH slider's own min/max become instrument-specific
@@ -436,5 +578,7 @@ memberIdentity.subscribe((state) => {
   }
 });
 
+resizeCanvasesToDisplaySize();
+fitPageIntoView();
 render();
 void memberIdentity.start();

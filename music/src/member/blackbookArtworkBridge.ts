@@ -1,9 +1,22 @@
-import type { ArtMaterialId, ArtworkRepository, LocalMaterialErasureMark, LocalStrokeMark } from "@studiorich/member-identity";
+import type { ArtMaterialId, ArtworkRepository, LocalMaterialErasureMark, LocalStrokeMark, PageFrame } from "@studiorich/member-identity";
 import { createArtworkPersistenceBridge } from "./mapArtworkBridge";
 
 export const STUDIO_RICH_BLACKBOOK_ID = "studio-rich-main";
 export const STUDIO_RICH_BLACKBOOK_PAGE_ID = "page-1";
 export const BLACKBOOK_PAGE_SURFACE_ID = `blackbook:${STUDIO_RICH_BLACKBOOK_ID}:page:${STUDIO_RICH_BLACKBOOK_PAGE_ID}`;
+
+/**
+ * Blackbook Spatial Workspace V1 -- the authored page frame, in the exact
+ * same per-axis-normalized unit space Blackbook's Marks already persist in
+ * ({x,y} independently roughly in [0,1], see toLocalStrokeMark below). {0,
+ * 0, 1, 1} means "the page occupies exactly the unit square" -- zero
+ * reinterpretation of any pre-existing persisted Mark is needed: a point
+ * already at (0.5, 0.5) is already the page's center, (0,0)/(1,1) are
+ * already its corners. Not workspace-origin-anchored by assumption
+ * elsewhere (see PageFrame's own doc) -- only V1's one page happens to sit
+ * at the workspace origin.
+ */
+export const BLACKBOOK_PAGE_FRAME: PageFrame = { x: 0, y: 0, width: 1, height: 1 };
 
 export interface BlackbookStroke {
   readonly operation: "pencil" | "pen" | "marker" | "mop" | "spray";
@@ -67,5 +80,6 @@ export function createBlackbookArtworkPersistenceBridge(options: {
     ...options,
     surfaceId: BLACKBOOK_PAGE_SURFACE_ID,
     toMark: toBlackbookMark,
+    pageFrame: BLACKBOOK_PAGE_FRAME,
   });
 }

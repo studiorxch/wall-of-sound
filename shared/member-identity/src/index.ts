@@ -22,6 +22,7 @@ export type {
   LocalBounds,
   LocalStrokeMark,
   MapArtwork,
+  PageFrame,
   StrokeMark,
   MaterialErasureMark,
   LocalMaterialErasureMark,
