@@ -98,23 +98,72 @@ export interface SprayCapProfile {
  * rather than competing with it for perceptual weight. `maxEmissionPoints`
  * and `maxParticlesPerEmission` still bound total particle count.
  */
+/**
+ * Spray Material Calibration V1: live inspection of the pre-calibration
+ * profile (still visible in git history) showed the STOCK CAP reading as a
+ * flat, hard-edged, uniformly-colored capsule -- indistinguishable from a
+ * plain rounded-line digital brush -- at ordinary authored widths, not
+ * aerosol at all. Root cause, confirmed by isolating each layer: the THREE
+ * core passes (`coreWidthRatio: 0.55` -> each pass ~1.1x baseRadius wide)
+ * jittered by only `coreJitterRatio * baseRadius` (~0.16x baseRadius, well
+ * under 2px at an ordinary authored width) landed almost perfectly on top
+ * of each other, so three passes composited into what looked like ONE
+ * solid stroke -- while the particle field (`particleRadiusRatio: 0.09`,
+ * `baseParticleAlpha: 0.16`) was simultaneously too small and too faint to
+ * read as texture at normal viewing zoom, leaving nothing visible outside
+ * that solid core at all.
+ *
+ * Recalibration, same two-layer architecture (core for continuity, particle
+ * field for edge texture/falloff -- never reintroducing Revision 2's
+ * rejected `ctx.filter = blur(...)` "airbrush/glow" look, and never
+ * reverting to Revision 3's rejected per-segment-stroke "dotted pattern"),
+ * tuned against live Blackbook screenshots at normal AND close zoom:
+ * - `coreWidthRatio` narrowed (0.55 -> 0.34) and `coreJitterRatio`/
+ *   `coreWidthJitterRatio` roughly 2.5x -- the core alone now visibly
+ *   breathes pass-to-pass instead of stacking into one flat rectangle, and
+ *   leaves real room for the particle band around it. `coreAlpha` eased
+ *   slightly (0.55 -> 0.42) to match the narrower, less dominant core.
+ * - `particleMinRadiusRatio` lowered (0.4 -> 0.2) so the particle field
+ *   starts closer to center and overlaps the core's own edge, removing the
+ *   visible seam between "core zone" and "particle zone" the old gap
+ *   between 0.55x (core edge) and 0.4x (particle start) risked.
+ * - `particleRadiusRatio` (0.09 -> 0.2), `baseParticleAlpha` (0.16 -> 0.36),
+ *   `baseParticlesPerEmission` (5 -> 9) and `maxParticlesPerEmission`
+ *   (8 -> 15) all raised so the particle field is actually visible at
+ *   normal zoom (this build's whole complaint) while staying individually
+ *   translucent -- overlapping particles still visibly accumulate rather
+ *   than each one reading as decorative confetti.
+ * - The particle radius's absolute floor (`resolveSprayParticlePlan`,
+ *   below) was separately raised 0.4px -> 1.1px: at Spray's own narrow
+ *   authored width (`DRAWING_WIDTH_RANGES.spray.min = 8`, baseRadius = 4),
+ *   even the recalibrated `particleRadiusRatio` above rounded particles
+ *   down to a near-invisible sub-pixel dot, so narrow Spray still read as
+ *   a plain crisp line (Pen-like) with no aerosol texture -- exactly the
+ *   "narrow must remain aerosol, not become Pen" requirement this build
+ *   is held to. This floor is deliberately in `resolveSprayParticlePlan`,
+ *   not this profile, since it protects every current and future cap's
+ *   narrow end, not just the Stock Cap's own tuning.
+ * - `edgeSoftness` raised (1.6 -> 2.0) for a more gradual outer falloff.
+ * `maxEmissionPoints`/`maxParticlesPerEmission` remain the two bounds that
+ * keep total work independent of stroke length -- see this module's
+ * Performance doc further down.
+ */
 export const STUDIORICH_STOCK_CAP: SprayCapProfile = Object.freeze({
   id: "studiorich-stock",
   name: "StudioRich Stock Cap",
-  baseParticlesPerEmission: 5,
-  maxParticlesPerEmission: 8,
+  baseParticlesPerEmission: 9,
+  maxParticlesPerEmission: 15,
   maxEmissionPoints: 200,
   centerBias: 1,
-  edgeSoftness: 1.6,
-  baseParticleAlpha: 0.16,
-  particleRadiusRatio: 0.09,
-  particleMinRadiusRatio: 0.4,
-  // Revision 3 core -- see the field docs above and resolveSprayCorePlan.
+  edgeSoftness: 2,
+  baseParticleAlpha: 0.36,
+  particleRadiusRatio: 0.2,
+  particleMinRadiusRatio: 0.2,
   corePasses: 3,
-  coreAlpha: 0.55,
-  coreWidthRatio: 0.55,
-  coreJitterRatio: 0.16,
-  coreWidthJitterRatio: 0.22,
+  coreAlpha: 0.42,
+  coreWidthRatio: 0.34,
+  coreJitterRatio: 0.4,
+  coreWidthJitterRatio: 0.5,
 });
 
 // Calibration V1: tightened from 0.35 -- denser emission-point spacing so a
@@ -281,7 +330,16 @@ export function resolveSprayParticlePlan(
       particles.push({
         x: emission.x + Math.cos(angle) * offsetRadius,
         y: emission.y + Math.sin(angle) * offsetRadius,
-        radius: Math.max(0.4, baseRadius * cap.particleRadiusRatio * radiusJitter),
+        // Spray Material Calibration V1: raised from 0.4 -- at Spray's own
+        // narrow-end authored width (DRAWING_WIDTH_RANGES.spray.min = 8,
+        // baseRadius = 4), the OLD floor let particles round down to a
+        // near-invisible sub-pixel dot, so narrow Spray read as a plain
+        // crisp thin line (Pen-like) with no aerosol texture at all --
+        // exactly the "must remain aerosol, not become Pen" defect this
+        // build exists to fix. A slightly higher absolute floor keeps
+        // narrow Spray's overspray genuinely visible without meaningfully
+        // changing the already-large broad-end particle sizes.
+        radius: Math.max(1.1, baseRadius * cap.particleRadiusRatio * radiusJitter),
         alpha: cap.baseParticleAlpha * edgeFalloff * clamp(emission.densityFactor, 0.4, 1.4),
       });
     }

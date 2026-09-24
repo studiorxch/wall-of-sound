@@ -502,7 +502,11 @@
   //     dab range again should re-check this margin.
   //   - Spray's particles offset up to `baseRadius` from their emission
   //     point (bandedRadius maxes at 1) plus their own small radius, ~
-  //     `1.09 * baseRadius = ~0.55 * width` (sprayDeposition.ts).
+  //     `1.2 * baseRadius = ~0.6 * width` at Spray's own broad end (Spray
+  //     Material Calibration V1 raised `particleRadiusRatio` 0.09 -> 0.2
+  //     and the particle radius floor 0.4px -> 1.1px so narrow Spray still
+  //     shows visible aerosol texture; was ~0.55 * width --
+  //     sprayDeposition.ts's own STUDIORICH_STOCK_CAP doc).
   //   - Eraser uses `obj.width` directly, same treatment as a plain stroke.
   // The largest of these (Mop, ~0.96x post-calibration) is still covered
   // by using the FULL `width` (not `width/2`) as the margin -- thinner
@@ -1044,82 +1048,25 @@
     _drawRawPoints(ctx, pts, style);
   }
 
-  // Calibration V1 Revision 4: the core is `resolveSprayCorePlan` -- each
-  // pass is ONE continuous stroke (one moveTo/lineTo chain, one stroke()
-  // call), never many separate short segment strokes. Revision 3 drew the
-  // core per tiny sub-segment (reusing the particle field's fine spacing);
-  // since each segment was shorter than the core's own line width, every
-  // one rendered as a fat round blob, producing a regularly-spaced
-  // "dotted/stamped pattern". A single continuous stroke per pass has no
-  // such node artifact regardless of point count, and still needs no
-  // canvas blur (Revision 2's separate airbrush-glow problem). Falls back
-  // to a single raw-line pass only if the deposition bridge hasn't loaded
-  // `resolveSprayCorePlan` yet (an older cached bundle), never as the
-  // normal path.
-  function _drawSprayCore(ctx, pts, style, seed) {
-    var deposition = _deposition();
-    if (!deposition || !deposition.resolveSprayCorePlan) {
+  // Spray Material Calibration V1: same named material treatment
+  // Blackbook/Blank use (strokeSpray, strokeSmoothing.ts -- the SAME
+  // recalibrated StudioRich Stock Cap aerosol engine, core+particle),
+  // reached through the SAME ArtSupplyRendering bridge -- falls back to a
+  // plain single-pass line if that bridge hasn't loaded yet, exactly like
+  // _drawInkPoints/_drawMarkerPoints/_drawMopPoints's own fallback.
+  // `seedSource` is `obj.id` (see `_drawStroke`'s own doc for why never
+  // `obj.markId`), so a committed Spray Mark's deposition never reseeds on
+  // camera movement or reload -- only the SCREEN POSITION of the pattern
+  // moves as `pts` (already reprojected by the caller) moves with the map.
+  function _drawSprayPoints(ctx, pts, style, seedSource) {
+    var rendering = _rendering();
+    if (rendering && rendering.strokeSpray) {
       ctx.save();
-      ctx.globalCompositeOperation = "source-over";
-      ctx.lineCap = "round"; ctx.lineJoin = "round";
-      ctx.beginPath();
-      _rawPath(ctx, pts);
-      ctx.lineWidth = style.width * 0.55;
-      ctx.globalAlpha = style.opacity * 0.55;
-      ctx.strokeStyle = style.color;
-      ctx.stroke();
+      rendering.strokeSpray(ctx, pts, style, seedSource);
       ctx.restore();
       return;
     }
-    var plan = deposition.resolveSprayCorePlan(pts, style.width * 0.5, seed);
-    ctx.save();
-    ctx.globalCompositeOperation = "source-over";
-    ctx.lineCap = "round"; ctx.lineJoin = "round";
-    ctx.strokeStyle = style.color;
-    for (var i = 0; i < plan.length; i++) {
-      var pass = plan[i];
-      if (!pass.points || pass.points.length < 2) continue;
-      ctx.globalAlpha = style.opacity * pass.alpha;
-      ctx.lineWidth = pass.width;
-      ctx.beginPath();
-      ctx.moveTo(pass.points[0].x, pass.points[0].y);
-      for (var p = 1; p < pass.points.length; p++) ctx.lineTo(pass.points[p].x, pass.points[p].y);
-      ctx.stroke();
-    }
-    ctx.restore();
-  }
-
-  // Same aerosol engine Blackbook uses (resolveSprayParticlePlan + the
-  // StudioRich Stock Cap) -- `seedSource` is the Mark's own stable id
-  // (markId once persisted, the local stroke id before that), so a
-  // committed Spray Mark's deposition never reseeds on camera movement or
-  // reload: only the SCREEN POSITION of each particle changes as `pts`
-  // (already reprojected by the caller) moves with the map.
-  function _drawSprayPoints(ctx, pts, style, seedSource) {
-    var deposition = _deposition();
-    if (!deposition || !deposition.resolveSprayParticlePlan || !deposition.hashSeed) { _drawRawPoints(ctx, pts, style); return; }
-    var seed = deposition.hashSeed(String(seedSource));
-    if (pts.length > 1) _drawSprayCore(ctx, pts, style, seed);
-    var plan = deposition.resolveSprayParticlePlan(pts, style.width * 0.5, seed);
-    var rendering = _rendering();
-    ctx.save();
-    ctx.globalCompositeOperation = "source-over";
-    if (rendering && rendering.fillSprayParticle) {
-      // Calibration V1: soft radial-gradient particle fill (the same helper
-      // blackbookRuntime.ts uses) instead of a flat, hard-edged circle --
-      // see strokeSmoothing.ts.
-      for (var i = 0; i < plan.length; i++) rendering.fillSprayParticle(ctx, plan[i], style.color, style.opacity);
-    } else {
-      ctx.fillStyle = style.color;
-      for (var j = 0; j < plan.length; j++) {
-        var particle = plan[j];
-        ctx.globalAlpha = style.opacity * particle.alpha;
-        ctx.beginPath();
-        ctx.arc(particle.x, particle.y, particle.radius, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-    ctx.restore();
+    _drawRawPoints(ctx, pts, style);
   }
 
   // ── Canvas resize sync ─────────────────────────────────────────────────────

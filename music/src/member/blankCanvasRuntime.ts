@@ -1,8 +1,7 @@
 import type { Artwork } from "@studiorich/member-identity";
 import { BLANK_SURFACE_ID, type BlankOperation } from "./blankArtworkBridge";
 import { createCartesianCamera, type CartesianCamera } from "./cartesianWorkspaceCamera";
-import { hashSeed, resolveSprayCorePlan, resolveSprayParticlePlan } from "./sprayDeposition";
-import { fillSprayParticle, resolveGraphiteProfile, strokeGraphite, strokeInk, strokeMarker, strokeMop, traceSmoothedPath } from "./strokeSmoothing";
+import { resolveGraphiteProfile, strokeGraphite, strokeInk, strokeMarker, strokeMop, strokeSpray, traceSmoothedPath } from "./strokeSmoothing";
 
 /**
  * ARTWORK V2 -- Blank Artwork's own lightweight, non-Mapbox drawing
@@ -152,7 +151,12 @@ function drawOperation(context: CanvasRenderingContext2D, operation: BlankOperat
     context.restore();
     return;
   }
-  if (operation.operation === "spray") { drawSpray(context, points, operation.style, operation.id); return; }
+  if (operation.operation === "spray") {
+    context.save();
+    strokeSpray(context, points, { ...operation.style, width: operation.style.width * zoom() }, operation.id);
+    context.restore();
+    return;
+  }
   if (operation.operation === "pencil") {
     context.save();
     const profile = resolveGraphiteProfile(operation.variantId);
@@ -191,27 +195,6 @@ function drawOperation(context: CanvasRenderingContext2D, operation: BlankOperat
   context.restore();
 }
 
-function drawSpray(context: CanvasRenderingContext2D, points: readonly { x: number; y: number }[], style: { readonly color: string; readonly width: number; readonly opacity: number }, seedSource: string): void {
-  const baseRadius = (style.width * zoom()) * 0.5;
-  const seed = hashSeed(seedSource);
-  context.save();
-  context.globalCompositeOperation = "source-over";
-  context.lineCap = "round"; context.lineJoin = "round";
-  for (const pass of resolveSprayCorePlan(points, baseRadius, seed)) {
-    if (pass.points.length < 2) continue;
-    context.globalAlpha = style.opacity * pass.alpha;
-    context.strokeStyle = style.color;
-    context.lineWidth = pass.width;
-    context.beginPath();
-    context.moveTo(pass.points[0].x, pass.points[0].y);
-    for (const point of pass.points.slice(1)) context.lineTo(point.x, point.y);
-    context.stroke();
-  }
-  context.restore();
-  context.save();
-  for (const particle of resolveSprayParticlePlan(points, baseRadius, seed)) fillSprayParticle(context, particle, style.color, style.opacity);
-  context.restore();
-}
 
 function render(): void {
   if (!ctx || !canvas) return;

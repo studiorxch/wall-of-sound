@@ -19,7 +19,7 @@
  * authored geometry itself. The persisted Mark's points are never touched.
  */
 
-import { hashSeed } from "./sprayDeposition";
+import { hashSeed, resolveSprayCorePlan, resolveSprayParticlePlan } from "./sprayDeposition";
 import { resolveMopDabPlan } from "./mopDeposition";
 
 export interface SmoothablePoint {
@@ -575,6 +575,75 @@ export function strokeMop(
       style.color,
       style.opacity,
     );
+  }
+  ctx.restore();
+}
+
+/**
+ * Spray Material Calibration V1 -- Spray's own named material function,
+ * consolidating what was previously three separately-maintained copies of
+ * the same rendering (blackbookRuntime.ts's `drawSprayStroke`,
+ * blankCanvasRuntime.ts's `drawSpray`, and Map's `_drawSprayPoints`/
+ * `_drawSprayCore` in surfaceDrawingRuntime.js). The AEROSOL ENGINE itself
+ * (`resolveSprayCorePlan`/`resolveSprayParticlePlan`, sprayDeposition.ts,
+ * and the recalibrated `STUDIORICH_STOCK_CAP` profile -- see that
+ * constant's own doc for exactly what changed and why) is unchanged by
+ * this function; this is only the shared CANVAS drawing loop, exactly the
+ * same role `strokeMop` plays relative to `resolveMopDabPlan`.
+ *
+ * Two layers, drawn in order:
+ * 1. CORE -- `resolveSprayCorePlan`'s continuous, independently-jittered
+ *    passes (never per-segment strokes -- that reintroduces the
+ *    "dotted pattern" Revision 3/4 already fixed).
+ * 2. PARTICLES -- `resolveSprayParticlePlan`'s bounded particle list, each
+ *    filled as a soft radial gradient (`fillSprayParticle`, never a flat
+ *    circle) -- the edge-texture/overspray layer around the core.
+ *
+ * DETERMINISM: both layers derive their own independent seeded-PRNG stream
+ * from `hashSeed(seedSource)` (`seedSource` is the Mark's own stable
+ * `operation.id`/`obj.id` -- never `Date.now()`/`Math.random()`), so the
+ * same points + width + seed reproduce the exact same spray pattern on
+ * every redraw, pan, zoom, and reload.
+ *
+ * PERFORMANCE: bounded independently of stroke length or canvas size --
+ * `resolveSprayCorePlan` samples at most `CORE_MAX_SAMPLE_POINTS` (220)
+ * points per pass (`corePasses`, 3, fixed), and
+ * `resolveSprayParticlePlan` emits at most `cap.maxEmissionPoints` (200)
+ * emission points, each producing at most `cap.maxParticlesPerEmission`
+ * (11) particles -- worst case ~2,200 small `fillMopDab`-style gradient
+ * fills for the longest possible single Mark, never scaling with canvas
+ * area or an Artwork's total history.
+ */
+export function strokeSpray(
+  ctx: CanvasRenderingContext2D,
+  points: readonly SmoothablePoint[],
+  style: { readonly color: string; readonly width: number; readonly opacity: number },
+  seedSource: string,
+): void {
+  if (points.length < 2) return;
+  const seed = hashSeed(seedSource);
+  const baseRadius = style.width * 0.5;
+
+  ctx.save();
+  ctx.globalCompositeOperation = "source-over";
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  for (const pass of resolveSprayCorePlan(points, baseRadius, seed)) {
+    if (pass.points.length < 2) continue;
+    ctx.globalAlpha = style.opacity * pass.alpha;
+    ctx.strokeStyle = style.color;
+    ctx.lineWidth = pass.width;
+    ctx.beginPath();
+    ctx.moveTo(pass.points[0].x, pass.points[0].y);
+    for (const point of pass.points.slice(1)) ctx.lineTo(point.x, point.y);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  ctx.save();
+  ctx.globalCompositeOperation = "source-over";
+  for (const particle of resolveSprayParticlePlan(points, baseRadius, seed)) {
+    fillSprayParticle(ctx, particle, style.color, style.opacity);
   }
   ctx.restore();
 }

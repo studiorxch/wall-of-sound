@@ -26,14 +26,13 @@ import { createCartesianCamera, type CartesianCamera, type DocRect } from "./car
 import { createCurrentArtworkSession } from "./currentArtworkSession";
 import { formatArtworkUpdatedAt, sortArtworksByRecency } from "./artworkGallery";
 import { drawArtworkThumbnail } from "./artworkThumbnail";
-import { hashSeed, resolveSprayCorePlan, resolveSprayParticlePlan } from "./sprayDeposition";
 import {
-  fillSprayParticle,
   resolveGraphiteProfile,
   strokeGraphite,
   strokeInk,
   strokeMarker,
   strokeMop,
+  strokeSpray,
   traceSmoothedPath,
   GRAPHITE_GRADE_ORDER,
   GRAPHITE_PROFILE_VERSION,
@@ -342,7 +341,10 @@ function drawOperation(operation: BlackbookOperation): void {
     // once and never reassigned; `markId` is set later, asynchronously,
     // once persistence completes, which would otherwise silently reroll
     // this Mark's deterministic deposition the instant that happens.
-    drawSprayStroke(materialCtx, points, operation.style, operation.id);
+    materialCtx.save();
+    const scaledStyle = { ...operation.style, width: operation.style.width * widthScale() };
+    strokeSpray(materialCtx, points.map((point) => docToScreen(point)), scaledStyle, operation.id);
+    materialCtx.restore();
     return;
   }
   // Graphite Pencil V1: Pencil gets its own deterministic graphite render
@@ -402,61 +404,6 @@ function drawOperation(operation: BlackbookOperation): void {
     materialCtx.strokeStyle = operation.style.color;
   }
   materialCtx.stroke(); materialCtx.restore();
-}
-
-/**
- * Calibration V1 Revision 4: two deposition scales, drawn in order.
- *
- * 1. CORE -- `resolveSprayCorePlan` (see sprayDeposition.ts): `corePasses`
- *    low-alpha, deterministically jittered CONTINUOUS strokes (one
- *    `moveTo`/`lineTo` chain + one `stroke()` call PER PASS -- never many
- *    separate short segment strokes; Revision 3 did that and the segments
- *    were shorter than the core's own line width, so each one rendered as
- *    a fat round blob, producing the "dotted/stamped pattern" regression).
- *    A continuous stroke has no regularly-spaced node artifact regardless
- *    of point count. No canvas blur anywhere (that was Revision 2's
- *    airbrush-glow problem).
- * 2. OVERSPRAY -- the existing deterministic particle field, the fine EDGE
- *    TEXTURE layer (not the primary stroke).
- *
- * Both passes read the SAME authored points and use independent seeded PRNG
- * streams from the same `seedSource`, so replay is pixel-identical.
- */
-function drawSprayStroke(
-  context: CanvasRenderingContext2D,
-  points: readonly { x: number; y: number }[],
-  style: { readonly color: string; readonly width: number; readonly opacity: number },
-  seedSource: string,
-): void {
-  const scaledPoints = points.map((point) => docToScreen(point));
-  const seed = hashSeed(seedSource);
-  const baseRadius = (style.width * widthScale()) * 0.5;
-
-  context.save();
-  context.globalCompositeOperation = "source-over";
-  context.lineCap = "round"; context.lineJoin = "round";
-  for (const pass of resolveSprayCorePlan(scaledPoints, baseRadius, seed)) {
-    if (pass.points.length < 2) continue;
-    context.globalAlpha = style.opacity * pass.alpha;
-    context.strokeStyle = style.color;
-    context.lineWidth = pass.width;
-    context.beginPath();
-    context.moveTo(pass.points[0].x, pass.points[0].y);
-    for (const point of pass.points.slice(1)) context.lineTo(point.x, point.y);
-    context.stroke();
-  }
-  context.restore();
-
-  const plan = resolveSprayParticlePlan(scaledPoints, baseRadius, seed);
-  context.save();
-  context.globalCompositeOperation = "source-over";
-  // Each particle is a soft radial gradient (see fillSprayParticle in
-  // strokeSmoothing.ts) instead of a flat, hard-edged circle -- fine
-  // texture around the core, not separately visible "stamps".
-  for (const particle of plan) {
-    fillSprayParticle(context, particle, style.color, style.opacity);
-  }
-  context.restore();
 }
 
 function activeOperation(points: readonly { x: number; y: number }[]): BlackbookOperation {
