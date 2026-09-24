@@ -1,5 +1,5 @@
-import type { Artwork, MemberIdentityAuthority, MemberIdentityState, StudioRichMember } from "@studiorich/member-identity";
-import { deriveArtworkSurfaceLabel, deriveArtworkTitle, formatArtworkUpdatedAt, formatMemberSince, sortArtworksByRecency } from "./artworkGallery";
+import type { Artwork, ArtworkType, MemberIdentityAuthority, MemberIdentityState, StudioRichMember } from "@studiorich/member-identity";
+import { deriveArtworkSurfaceLabel, deriveArtworkTitle, deriveArtworkTypeLabel, formatArtworkUpdatedAt, formatMemberSince, sortArtworksByRecency } from "./artworkGallery";
 import { drawArtworkThumbnail } from "./artworkThumbnail";
 
 /**
@@ -16,16 +16,18 @@ import { drawArtworkThumbnail } from "./artworkThumbnail";
 const RECENT_ARTWORK_LIMIT = 6;
 const THUMBNAIL_SIZE = { width: 156, height: 110 } as const;
 
-type Screen = "home" | "artwork" | "profile" | "settings";
+type Screen = "home" | "artwork" | "profile" | "settings" | "new-artwork";
 
 export interface MemberHomeOptions {
   readonly authority: MemberIdentityAuthority;
   readonly getOwnedArtworks: () => readonly Artwork[];
   readonly onOpenArtwork: (artwork: Artwork) => void;
-  /** ARTWORK V1 -- "+ NEW ARTWORK". For V1 there is only one creation type (Map Artwork); see currentArtworkSession.ts's doc for why this arms a `pending` state rather than creating an empty document. */
-  readonly onNewArtwork: () => void;
+  /** ARTWORK V2 -- "+ NEW ARTWORK": Member picks MAP or BLANK and an optional title; see currentArtworkSession.ts's doc for why this arms a `pending` state rather than creating an empty document. */
+  readonly onCreateArtwork: (artworkType: ArtworkType, title: string) => void;
   /** Optional: wires the existing `deleteOwnedArtwork` behavior behind an explicit confirmation. Omitted entirely (no delete control rendered) if the caller cannot safely expose it. */
   readonly onDeleteArtwork?: (artwork: Artwork) => Promise<void>;
+  /** ARTWORK V2 -- rename. Never changes the Artwork id. Omitted entirely (no rename control) if the caller cannot safely expose it. */
+  readonly onRenameArtwork?: (artwork: Artwork, title: string) => Promise<void>;
 }
 
 export interface MemberHomeController {
@@ -42,11 +44,12 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, className?: string): 
   return node;
 }
 
-export function createMemberHomeController({ authority, getOwnedArtworks, onOpenArtwork, onNewArtwork, onDeleteArtwork }: MemberHomeOptions): MemberHomeController {
+export function createMemberHomeController({ authority, getOwnedArtworks, onOpenArtwork, onCreateArtwork, onDeleteArtwork, onRenameArtwork }: MemberHomeOptions): MemberHomeController {
   let screen: Screen = "home";
   let showAllArtwork = false;
   let profileEditing = false;
   let statusMessage = "";
+  let newArtworkType: ArtworkType = "map";
 
   /**
    * Member V1B -- thumbnails are disposable and re-derived, but re-running
@@ -138,13 +141,28 @@ export function createMemberHomeController({ authority, getOwnedArtworks, onOpen
     const updated = el("span", "member-artwork-updated");
     updated.textContent = formatArtworkUpdatedAt(artwork.updatedAt);
     const surface = el("span", "member-artwork-surface");
-    surface.textContent = deriveArtworkSurfaceLabel(artwork.surfaceId);
+    surface.textContent = `${deriveArtworkTypeLabel(artwork.artworkType)} · ${deriveArtworkSurfaceLabel(artwork.surfaceId)}`;
     meta.append(title, updated, surface);
     card.appendChild(meta);
     card.addEventListener("click", () => onOpenArtwork(artwork));
 
+    if (!onDeleteArtwork && !onRenameArtwork) return card;
+
+    const wrapper = el("div", "member-artwork-card-wrapper");
+    if (onRenameArtwork) {
+      const rename = el("button", "member-artwork-rename");
+      rename.type = "button";
+      rename.setAttribute("aria-label", "Rename this Artwork");
+      rename.textContent = "✎";
+      rename.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const next = window.prompt("Rename Artwork", deriveArtworkTitle(artwork) === "Untitled Artwork" ? "" : deriveArtworkTitle(artwork));
+        if (next === null) return;
+        void onRenameArtwork(artwork, next).then(() => render());
+      });
+      wrapper.appendChild(rename);
+    }
     if (onDeleteArtwork) {
-      const wrapper = el("div", "member-artwork-card-wrapper");
       const remove = el("button", "member-artwork-delete");
       remove.type = "button";
       remove.setAttribute("aria-label", "Delete this Artwork");
@@ -154,10 +172,10 @@ export function createMemberHomeController({ authority, getOwnedArtworks, onOpen
         if (!window.confirm("Delete this Artwork? This cannot be undone.")) return;
         void onDeleteArtwork(artwork).then(() => render());
       });
-      wrapper.append(card, remove);
-      return wrapper;
+      wrapper.appendChild(remove);
     }
-    return card;
+    wrapper.prepend(card);
+    return wrapper;
   }
 
   function renderHome(): void {
@@ -183,7 +201,7 @@ export function createMemberHomeController({ authority, getOwnedArtworks, onOpen
     const newArtwork = el("button", "member-home-link");
     newArtwork.type = "button";
     newArtwork.textContent = "+ NEW ARTWORK";
-    newArtwork.addEventListener("click", () => onNewArtwork());
+    newArtwork.addEventListener("click", () => setScreen("new-artwork"));
     artworkSection.append(artworkHeading, newArtwork);
     const artworks = sortArtworksByRecency(getOwnedArtworks());
     pruneThumbnailCache(new Set(artworks.map((item) => item.id)));
@@ -240,7 +258,7 @@ export function createMemberHomeController({ authority, getOwnedArtworks, onOpen
     const newArtwork = el("button", "member-home-link");
     newArtwork.type = "button";
     newArtwork.textContent = "+ NEW ARTWORK";
-    newArtwork.addEventListener("click", () => onNewArtwork());
+    newArtwork.addEventListener("click", () => setScreen("new-artwork"));
     dialog.appendChild(newArtwork);
     const artworks = sortArtworksByRecency(getOwnedArtworks());
     const visible = showAllArtwork ? artworks : artworks.slice(0, RECENT_ARTWORK_LIMIT);
@@ -329,6 +347,42 @@ export function createMemberHomeController({ authority, getOwnedArtworks, onOpen
     dialog.appendChild(form);
   }
 
+  function renderNewArtworkScreen(): void {
+    dialog.replaceChildren(renderHeader("NEW ARTWORK", true));
+
+    const typeChoice = el("div", "member-new-artwork-types");
+    (["map", "blank"] as const).forEach((type) => {
+      const button = el("button", "member-home-link");
+      button.type = "button";
+      button.textContent = deriveArtworkTypeLabel(type).toUpperCase();
+      button.dataset.active = String(newArtworkType === type);
+      button.addEventListener("click", () => {
+        newArtworkType = type;
+        render();
+      });
+      typeChoice.appendChild(button);
+    });
+    dialog.appendChild(typeChoice);
+
+    const form = el("div", "member-profile-form");
+    const label = el("label");
+    label.textContent = "Title (optional)";
+    const input = el("input");
+    input.type = "text";
+    input.placeholder = "Leave blank for a generated name";
+    label.appendChild(input);
+    form.appendChild(label);
+    dialog.appendChild(form);
+
+    const start = el("button", "member-home-signout");
+    start.type = "button";
+    start.textContent = "START";
+    start.addEventListener("click", () => {
+      onCreateArtwork(newArtworkType, input.value);
+    });
+    dialog.appendChild(start);
+  }
+
   function renderSettingsScreen(): void {
     dialog.replaceChildren(renderHeader("SETTINGS", true));
     const member = currentMember();
@@ -375,6 +429,7 @@ export function createMemberHomeController({ authority, getOwnedArtworks, onOpen
     if (screen === "home") renderHome();
     else if (screen === "artwork") renderArtworkScreen();
     else if (screen === "profile") renderProfileScreen();
+    else if (screen === "new-artwork") renderNewArtworkScreen();
     else renderSettingsScreen();
   }
 
@@ -384,6 +439,7 @@ export function createMemberHomeController({ authority, getOwnedArtworks, onOpen
       showAllArtwork = false;
       profileEditing = false;
       statusMessage = "";
+      newArtworkType = "map";
       render();
       dialog.showModal();
     },

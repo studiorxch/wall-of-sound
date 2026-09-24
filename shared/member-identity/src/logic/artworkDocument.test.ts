@@ -24,7 +24,7 @@ describe("createMapArtworkDocument", () => {
   it("composes Pencil and graphite-erasure Marks on a local Surface without coupling supply identity to coordinates", () => {
     const pencil = { ...localMark, material: { supplyId: "pencil" as const, materialId: "graphite" as const } };
     const erase = { id: "erase-1", type: "material-erasure" as const, createdAt: new Date(1), geometry: { format: "local-2d-erasure-v1" as const, points: [{ x: 0.22, y: 0.3 }, { x: 0.25, y: 0.35 }] }, targetMaterialId: "graphite" as const, width: 20 };
-    const base = { id: "local-art", creatorId: "member-uid", surfaceId: "blackbook:book-1:page:page-1", createdAt: new Date(0), updatedAt: new Date(0), composition: { bounds: boundsForMarks([pencil]), startedAt: new Date(0), lastEditedAt: new Date(0) }, marks: [pencil], state: "draft" as const, visibility: "private" as const };
+    const base = { id: "local-art", creatorId: "member-uid", surfaceId: "blackbook:book-1:page:page-1", createdAt: new Date(0), updatedAt: new Date(0), composition: { bounds: boundsForMarks([pencil]), startedAt: new Date(0), lastEditedAt: new Date(0) }, marks: [pencil], artworkType: "map" as const, title: "", state: "draft" as const, visibility: "private" as const };
     expect(selectArtworkForMark([base], base.creatorId, base.surfaceId, erase)?.id).toBe("local-art");
     expect(boundsForMarks([pencil, erase])).toEqual({ minX: 0.1, minY: 0.2, maxX: 0.25, maxY: 0.35 });
   });
@@ -34,7 +34,7 @@ describe("createMapArtworkDocument", () => {
     const pen = { ...localMark, id: "pen", material: { supplyId: "pen" as const, materialId: "ink" as const }, style: { color: "#101828", width: 3, opacity: 0.65 } };
     const marker = { ...localMark, id: "marker", material: { supplyId: "marker" as const, materialId: "marker" as const }, style: { color: "#d32852", width: 16, opacity: 0.72 } };
     const erase = { id: "erase", type: "material-erasure" as const, createdAt: new Date(3), geometry: { format: "local-2d-erasure-v1" as const, points: localMark.geometry.points }, targetMaterialId: "graphite" as const, width: 28 };
-    const base = { id: "art", creatorId: "member-uid", surfaceId: "blackbook:book-1:page:page-1", createdAt: new Date(0), updatedAt: new Date(0), composition: { bounds: boundsForMarks([pencil]), startedAt: new Date(0), lastEditedAt: new Date(0) }, marks: [pencil], state: "draft" as const, visibility: "private" as const };
+    const base = { id: "art", creatorId: "member-uid", surfaceId: "blackbook:book-1:page:page-1", createdAt: new Date(0), updatedAt: new Date(0), composition: { bounds: boundsForMarks([pencil]), startedAt: new Date(0), lastEditedAt: new Date(0) }, marks: [pencil], artworkType: "map" as const, title: "", state: "draft" as const, visibility: "private" as const };
     expect(selectArtworkForMark([base], base.creatorId, base.surfaceId, pen)?.id).toBe("art");
     expect(selectArtworkForMark([base], base.creatorId, base.surfaceId, marker)?.id).toBe("art");
     expect([pencil, pen, marker, erase].map((item) => item.id)).toEqual(["pencil", "pen", "marker", "erase"]);
@@ -44,7 +44,7 @@ describe("createMapArtworkDocument", () => {
   it("keeps Mop as its own material -- coexists with graphite/ink/marker, is not confused with Marker, and works on both local and geographic coordinate variants", () => {
     const pencil = { ...localMark, id: "pencil", material: { supplyId: "pencil" as const, materialId: "graphite" as const } };
     const mop = { ...localMark, id: "mop", material: { supplyId: "mop" as const, materialId: "mop" as const }, style: { color: "#1c6e6e", width: 34, opacity: 0.55 } };
-    const base = { id: "art", creatorId: "member-uid", surfaceId: "blackbook:book-1:page:page-1", createdAt: new Date(0), updatedAt: new Date(0), composition: { bounds: boundsForMarks([pencil]), startedAt: new Date(0), lastEditedAt: new Date(0) }, marks: [pencil], state: "draft" as const, visibility: "private" as const };
+    const base = { id: "art", creatorId: "member-uid", surfaceId: "blackbook:book-1:page:page-1", createdAt: new Date(0), updatedAt: new Date(0), composition: { bounds: boundsForMarks([pencil]), startedAt: new Date(0), lastEditedAt: new Date(0) }, marks: [pencil], artworkType: "map" as const, title: "", state: "draft" as const, visibility: "private" as const };
     expect(selectArtworkForMark([base], base.creatorId, base.surfaceId, mop)?.id).toBe("art");
     expect(mop.material.materialId).not.toBe("marker");
     expect(() => createMapArtworkDocument({ creatorId: base.creatorId, surfaceId: base.surfaceId, mark: mop }, "server-time")).not.toThrow();
@@ -56,7 +56,7 @@ describe("createMapArtworkDocument", () => {
   it("keeps Spray as its own material -- coexists with graphite/ink/marker/mop, is not confused with Marker or Mop, and works on both local and geographic coordinate variants", () => {
     const pencil = { ...localMark, id: "pencil", material: { supplyId: "pencil" as const, materialId: "graphite" as const } };
     const spray = { ...localMark, id: "spray", material: { supplyId: "spray" as const, materialId: "spray" as const }, style: { color: "#e2572b", width: 24, opacity: 0.6 } };
-    const base = { id: "art", creatorId: "member-uid", surfaceId: "blackbook:book-1:page:page-1", createdAt: new Date(0), updatedAt: new Date(0), composition: { bounds: boundsForMarks([pencil]), startedAt: new Date(0), lastEditedAt: new Date(0) }, marks: [pencil], state: "draft" as const, visibility: "private" as const };
+    const base = { id: "art", creatorId: "member-uid", surfaceId: "blackbook:book-1:page:page-1", createdAt: new Date(0), updatedAt: new Date(0), composition: { bounds: boundsForMarks([pencil]), startedAt: new Date(0), lastEditedAt: new Date(0) }, marks: [pencil], artworkType: "map" as const, title: "", state: "draft" as const, visibility: "private" as const };
     expect(selectArtworkForMark([base], base.creatorId, base.surfaceId, spray)?.id).toBe("art");
     expect(spray.material.materialId).not.toBe("marker");
     expect(spray.material.materialId).not.toBe("mop");
@@ -78,6 +78,8 @@ describe("createMapArtworkDocument", () => {
       surfaceId: "map:new-york",
       composition: { bounds: { west: -73.99, south: 40.72, east: -73.98, north: 40.73 }, startedAt: "server-time", lastEditedAt: "server-time" },
       marks: [mark],
+      artworkType: "map",
+      title: "",
       state: "draft",
       visibility: "private",
     });
@@ -92,7 +94,7 @@ describe("createMapArtworkDocument", () => {
   });
 
   it("groups nearby marks but separates distant, creator, and surface boundaries", () => {
-    const base = { id: "art-1", creatorId: "member-uid", surfaceId: "map:new-york", createdAt: new Date(0), updatedAt: new Date(0), composition: { bounds: boundsForMarks([mark]), startedAt: new Date(0), lastEditedAt: new Date(0) }, marks: [mark], state: "draft" as const, visibility: "private" as const };
+    const base = { id: "art-1", creatorId: "member-uid", surfaceId: "map:new-york", createdAt: new Date(0), updatedAt: new Date(0), composition: { bounds: boundsForMarks([mark]), startedAt: new Date(0), lastEditedAt: new Date(0) }, marks: [mark], artworkType: "map" as const, title: "", state: "draft" as const, visibility: "private" as const };
     const nearby = { ...mark, id: "mark-2", geometry: { ...mark.geometry, points: [{ longitude: -73.9798, latitude: 40.73 }, { longitude: -73.97, latitude: 40.74 }] } };
     const distant = { ...nearby, geometry: { ...mark.geometry, points: [{ longitude: -74.2, latitude: 40.5 }, { longitude: -74.19, latitude: 40.51 }] } };
     expect(selectArtworkForMark([base], "member-uid", "map:new-york", nearby)?.id).toBe("art-1");
@@ -109,12 +111,25 @@ describe("createMapArtworkDocument", () => {
   it("supports local page coordinates without treating them as geography", () => {
     expect(createMapArtworkDocument({ creatorId: "member-uid", surfaceId: "blackbook:book-1:page:page-1", mark: localMark }, "server-time").composition.bounds)
       .toEqual({ minX: 0.1, minY: 0.2, maxX: 0.2, maxY: 0.3 });
-    expect(() => createMapArtworkDocument({ creatorId: "member-uid", surfaceId: "blackbook:book-1:page:page-1", mark: { ...localMark, geometry: { ...localMark.geometry, points: [{ x: 1.2, y: 0.2 }, localMark.geometry.points[1]] } } }, "server-time"))
+  });
+
+  // ARTWORK V2: local/Cartesian coordinates are no longer assumed to be a
+  // normalized 0..1 page -- that was Blackbook's own convention, not a
+  // shared invariant. A Blank Artwork's infinite document space has no
+  // such bound (see artworkDocument.ts's `finiteLocalCoordinate` doc).
+  // Only non-finite values are rejected now.
+  it("accepts local coordinates far outside 0..1 (Blank Artwork's infinite document space)", () => {
+    expect(() => createMapArtworkDocument({ creatorId: "member-uid", surfaceId: "blank:default", mark: { ...localMark, geometry: { ...localMark.geometry, points: [{ x: 12000, y: -4500 }, localMark.geometry.points[1]] } } }, "server-time"))
+      .not.toThrow();
+  });
+
+  it("still rejects non-finite local coordinates", () => {
+    expect(() => createMapArtworkDocument({ creatorId: "member-uid", surfaceId: "blank:default", mark: { ...localMark, geometry: { ...localMark.geometry, points: [{ x: Number.NaN, y: 0.2 }, localMark.geometry.points[1]] } } }, "server-time"))
       .toThrow("invalid_artwork_local_points");
   });
 
   it("groups related local Marks only on the same local Surface and format", () => {
-    const base = { id: "local-art", creatorId: "member-uid", surfaceId: "blackbook:book-1:page:page-1", createdAt: new Date(0), updatedAt: new Date(0), composition: { bounds: boundsForMarks([localMark]), startedAt: new Date(0), lastEditedAt: new Date(0) }, marks: [localMark], state: "draft" as const, visibility: "private" as const };
+    const base = { id: "local-art", creatorId: "member-uid", surfaceId: "blackbook:book-1:page:page-1", createdAt: new Date(0), updatedAt: new Date(0), composition: { bounds: boundsForMarks([localMark]), startedAt: new Date(0), lastEditedAt: new Date(0) }, marks: [localMark], artworkType: "map" as const, title: "", state: "draft" as const, visibility: "private" as const };
     const nearby = { ...localMark, id: "local-mark-2", geometry: { ...localMark.geometry, points: [{ x: 0.21, y: 0.3 }, { x: 0.3, y: 0.4 }] } };
     expect(selectArtworkForMark([base], "member-uid", base.surfaceId, nearby)?.id).toBe("local-art");
     expect(selectArtworkForMark([base], "member-uid", "blackbook:book-1:page:page-2", nearby)).toBeNull();

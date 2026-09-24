@@ -3,6 +3,7 @@ import type {
   ArtworkRepository,
   Artwork,
   ArtworkMark,
+  ArtworkType,
   GeographicMaterialErasureMark,
   StrokeMark,
 } from "@studiorich/member-identity";
@@ -94,7 +95,7 @@ export interface ArtworkBindingRuntime<TStroke extends object> {
  */
 export type CurrentArtworkTarget =
   | { readonly kind: "none" }
-  | { readonly kind: "pending" }
+  | { readonly kind: "pending"; readonly artworkType: ArtworkType; readonly title: string }
   | { readonly kind: "artwork"; readonly artworkId: string };
 
 export interface ArtworkPersistenceBridgeOptions<TStroke extends object> {
@@ -248,7 +249,7 @@ export function createArtworkPersistenceBridge<TStroke extends { artworkId?: str
         if (target?.kind === "artwork") {
           artwork = await repository.appendOwnedArtworkMark(target.artworkId, memberId, mark);
         } else if (target?.kind === "pending") {
-          artwork = await (repository.createArtwork ?? repository.createMapArtwork).call(repository, { creatorId: memberId, surfaceId, mark });
+          artwork = await (repository.createArtwork ?? repository.createMapArtwork).call(repository, { creatorId: memberId, surfaceId, mark, artworkType: target.artworkType, title: target.title });
           onCurrentArtworkEstablished?.(artwork.id);
         } else {
           // Legacy path -- only reachable when the caller never supplies

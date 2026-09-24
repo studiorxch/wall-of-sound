@@ -15,10 +15,19 @@ export interface NewMapArtworkDocument<TTimestamp> {
   readonly createdAt: TTimestamp;
   readonly updatedAt: TTimestamp;
   readonly surfaceId: string;
+  readonly artworkType: "map" | "blank";
+  readonly title: string;
   readonly composition: { readonly bounds: ArtworkBounds; readonly startedAt: TTimestamp; readonly lastEditedAt: TTimestamp };
   readonly marks: readonly ArtworkMark[];
   readonly state: "draft";
   readonly visibility: "private";
+}
+
+const MAX_ARTWORK_TITLE_LENGTH = 200;
+
+/** ARTWORK V2 -- trims and caps a title; blank/whitespace-only input becomes `""` (no title), never persisted as a meaningful custom name. */
+export function normalizeArtworkTitle(title: string | undefined | null): string {
+  return (title ?? "").trim().slice(0, MAX_ARTWORK_TITLE_LENGTH);
 }
 
 function assertIdentifier(value: string, field: string): void {
@@ -36,9 +45,15 @@ function finiteGeographicCoordinate(point: GeographicArtworkPoint): boolean {
     && point.latitude <= 90;
 }
 
+/**
+ * ARTWORK V2: local/Cartesian coordinates are no longer assumed to be a
+ * normalized 0..1 page (that was specifically Blackbook's own convention,
+ * not a shared invariant) -- a Blank Artwork's infinite document space has
+ * no such bound. Only finiteness is validated here; Firestore rules
+ * likewise never constrained point value ranges, only point count.
+ */
 function finiteLocalCoordinate(point: LocalArtworkPoint): boolean {
-  return Number.isFinite(point.x) && Number.isFinite(point.y)
-    && point.x >= 0 && point.x <= 1 && point.y >= 0 && point.y <= 1;
+  return Number.isFinite(point.x) && Number.isFinite(point.y);
 }
 
 export function validateArtworkMark(mark: ArtworkMark): void {
@@ -101,6 +116,11 @@ export function createMapArtworkDocument<TTimestamp>(
     createdAt: timestamp,
     updatedAt: timestamp,
     surfaceId: input.surfaceId,
+    // ARTWORK V2: defaults keep every existing caller that predates this
+    // field (Blackbook's bridge) compiling and writing valid documents
+    // unchanged -- neither value is ever read for those documents.
+    artworkType: input.artworkType ?? "map",
+    title: normalizeArtworkTitle(input.title),
     composition: { bounds: boundsForMarks([input.mark]), startedAt: timestamp, lastEditedAt: timestamp },
     marks: [input.mark],
     state: "draft",

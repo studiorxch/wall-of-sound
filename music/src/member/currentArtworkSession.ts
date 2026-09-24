@@ -30,17 +30,20 @@
  * never automatic -- see subwayMemberRuntime.ts's scoped-hydration doc.
  */
 
+/** ARTWORK V2 -- durable Artwork discriminator; NOT the same concept as coordinate system (see artworkTypes.ts's own doc). */
+export type ArtworkTypeId = "map" | "blank";
+
 export type CurrentArtworkState =
   | { readonly kind: "none" }
-  | { readonly kind: "pending" }
+  | { readonly kind: "pending"; readonly artworkType: ArtworkTypeId; readonly title: string }
   | { readonly kind: "artwork"; readonly artworkId: string };
 
 export const NO_CURRENT_ARTWORK: CurrentArtworkState = { kind: "none" };
 
 export interface CurrentArtworkSession {
   getState(): CurrentArtworkState;
-  /** Arms a new Artwork: no document exists yet, created lazily by the first persisted Mark. */
-  setPendingNewArtwork(): void;
+  /** Arms a new Artwork of the given type/title: no document exists yet, created lazily by the first persisted Mark (see mapArtworkBridge.ts's "pending" branch). */
+  setPendingNewArtwork(artworkType: ArtworkTypeId, title: string): void;
   /** Makes an already-known Artwork id Current -- e.g. opening it from Member Home, or a "pending" Artwork's first Mark establishing its real id. */
   setCurrentArtwork(artworkId: string): void;
   /** Returns to the ordinary shared-Map default: no Current Artwork. */
@@ -59,7 +62,7 @@ export function createCurrentArtworkSession(): CurrentArtworkSession {
 
   return {
     getState: () => state,
-    setPendingNewArtwork: () => set({ kind: "pending" }),
+    setPendingNewArtwork: (artworkType, title) => set({ kind: "pending", artworkType, title }),
     setCurrentArtwork: (artworkId: string) => set({ kind: "artwork", artworkId }),
     clear: () => set(NO_CURRENT_ARTWORK),
     subscribe(listener) {

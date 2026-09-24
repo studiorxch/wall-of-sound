@@ -7,10 +7,10 @@ describe("createCurrentArtworkSession", () => {
     expect(session.getState()).toEqual({ kind: "none" });
   });
 
-  it("setPendingNewArtwork arms a pending state with no artworkId yet", () => {
+  it("setPendingNewArtwork arms a pending state carrying type/title, with no artworkId yet", () => {
     const session = createCurrentArtworkSession();
-    session.setPendingNewArtwork();
-    expect(session.getState()).toEqual({ kind: "pending" });
+    session.setPendingNewArtwork("blank", "0923");
+    expect(session.getState()).toEqual({ kind: "pending", artworkType: "blank", title: "0923" });
   });
 
   it("setCurrentArtwork makes an explicit Artwork id Current", () => {
@@ -31,12 +31,12 @@ describe("createCurrentArtworkSession", () => {
     const listener = vi.fn();
     session.subscribe(listener);
 
-    session.setPendingNewArtwork();
+    session.setPendingNewArtwork("map", "0923");
     session.setCurrentArtwork("artwork-a");
     session.clear();
 
     expect(listener).toHaveBeenCalledTimes(3);
-    expect(listener).toHaveBeenNthCalledWith(1, { kind: "pending" });
+    expect(listener).toHaveBeenNthCalledWith(1, { kind: "pending", artworkType: "map", title: "0923" });
     expect(listener).toHaveBeenNthCalledWith(2, { kind: "artwork", artworkId: "artwork-a" });
     expect(listener).toHaveBeenNthCalledWith(3, { kind: "none" });
   });
@@ -46,7 +46,7 @@ describe("createCurrentArtworkSession", () => {
     const listener = vi.fn();
     const unsubscribe = session.subscribe(listener);
     unsubscribe();
-    session.setPendingNewArtwork();
+    session.setPendingNewArtwork("map", "0923");
     expect(listener).not.toHaveBeenCalled();
   });
 });

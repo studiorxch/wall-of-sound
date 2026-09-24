@@ -27,7 +27,7 @@ function artwork(id: string, creatorId = "member-1"): MapArtwork {
     surfaceId: SUBWAY_MAP_SURFACE_ID,
     composition: { bounds: { west: -73.99, south: 40.72, east: -73.98, north: 40.73 }, startedAt: new Date(0), lastEditedAt: new Date(0) },
     marks: [],
-    state: "draft",
+    artworkType: "map", title: "", state: "draft",
     visibility: "private",
   };
 }
@@ -70,6 +70,7 @@ describe("Artwork composition bridge", () => {
       appendOwnedArtworkMark: vi.fn(async () => artwork("artwork-b")),
       removeOwnedArtworkMark: vi.fn(async () => null),
       deleteOwnedArtwork: vi.fn(async () => undefined),
+      renameOwnedArtwork: vi.fn(async () => artwork("artwork-b")),
     };
     const drawing = {
       bindArtwork: vi.fn((stroke: WallStroke, artworkId: string, markId: string, creatorId: string, surfaceId: string) => {
@@ -105,6 +106,7 @@ describe("Artwork composition bridge", () => {
       appendOwnedArtworkMark: vi.fn(async () => artwork("artwork-b")),
       removeOwnedArtworkMark: vi.fn(async () => null),
       deleteOwnedArtwork: vi.fn(async () => undefined),
+      renameOwnedArtwork: vi.fn(async () => artwork("artwork-b")),
     };
     const drawing = { bindArtwork: vi.fn(() => true) };
     const bridge = createMapArtworkPersistenceBridge({
@@ -137,6 +139,7 @@ describe("Artwork composition bridge", () => {
       appendOwnedArtworkMark: vi.fn(),
       removeOwnedArtworkMark: vi.fn(async () => null),
       deleteOwnedArtwork: vi.fn(async () => undefined),
+      renameOwnedArtwork: vi.fn(async () => artwork("artwork-b")),
     };
     const bridge = createMapArtworkPersistenceBridge({
       repository,
@@ -156,7 +159,7 @@ describe("Artwork composition bridge", () => {
     const repository: ArtworkRepository = {
       createMapArtwork: vi.fn(), listOwnedMapArtwork: vi.fn(async () => [existing]),
       appendOwnedArtworkMark: vi.fn(async () => updated),
-      removeOwnedArtworkMark: vi.fn(async () => existing), deleteOwnedArtwork: vi.fn(),
+      removeOwnedArtworkMark: vi.fn(async () => existing), deleteOwnedArtwork: vi.fn(), renameOwnedArtwork: vi.fn(),
     };
     const strokeB = wallStroke("stroke-b");
     const drawing = { bindArtwork: vi.fn((stroke: WallStroke, artworkId: string, markId: string, creatorId: string, surfaceId: string) => Object.assign(stroke, { artworkId, markId, creatorId, surfaceId }) && true) };
@@ -178,7 +181,7 @@ describe("Artwork composition bridge", () => {
     const distantStroke: WallStroke = { ...wallStroke("stroke-b"), points: [{ longitude: -74.2, latitude: 40.5 }, { longitude: -74.19, latitude: 40.51 }] };
     const repository: ArtworkRepository = {
       createMapArtwork: vi.fn(async () => artwork("artwork-b")), listOwnedMapArtwork: vi.fn(async () => [existing]),
-      appendOwnedArtworkMark: vi.fn(), removeOwnedArtworkMark: vi.fn(), deleteOwnedArtwork: vi.fn(),
+      appendOwnedArtworkMark: vi.fn(), removeOwnedArtworkMark: vi.fn(), deleteOwnedArtwork: vi.fn(), renameOwnedArtwork: vi.fn(),
     };
     const bridge = createMapArtworkPersistenceBridge({ repository, drawing: { bindArtwork: vi.fn(() => true) }, getAuthenticatedMemberId: () => "member-1", createMarkId: () => "mark-b" });
     bridge.replaceKnownArtworks([existing]);
@@ -191,7 +194,7 @@ describe("Artwork composition bridge", () => {
     const createMapArtwork = vi.fn(async () => artwork("artwork-new"));
     const repository: ArtworkRepository = {
       createMapArtwork, listOwnedMapArtwork: vi.fn(async () => []),
-      appendOwnedArtworkMark: vi.fn(), removeOwnedArtworkMark: vi.fn(), deleteOwnedArtwork: vi.fn(),
+      appendOwnedArtworkMark: vi.fn(), removeOwnedArtworkMark: vi.fn(), deleteOwnedArtwork: vi.fn(), renameOwnedArtwork: vi.fn(),
     };
     const bindArtwork = vi.fn(() => true);
     const bridge = createMapArtworkPersistenceBridge({
@@ -209,12 +212,12 @@ describe("Artwork composition bridge", () => {
     const repository: ArtworkRepository = {
       createMapArtwork: vi.fn(async () => artwork("artwork-new")),
       listOwnedMapArtwork: vi.fn(async () => []),
-      appendOwnedArtworkMark: vi.fn(), removeOwnedArtworkMark: vi.fn(), deleteOwnedArtwork: vi.fn(),
+      appendOwnedArtworkMark: vi.fn(), removeOwnedArtworkMark: vi.fn(), deleteOwnedArtwork: vi.fn(), renameOwnedArtwork: vi.fn(),
     };
     const established: string[] = [];
     const bridge = createMapArtworkPersistenceBridge({
       repository, drawing: { bindArtwork: vi.fn(() => true) }, getAuthenticatedMemberId: () => "member-1",
-      getCurrentArtworkTarget: () => ({ kind: "pending" }),
+      getCurrentArtworkTarget: () => ({ kind: "pending", artworkType: "map", title: "0923" }),
       onCurrentArtworkEstablished: (id) => established.push(id),
     });
 
@@ -229,7 +232,7 @@ describe("Artwork composition bridge", () => {
       createMapArtwork: vi.fn(),
       listOwnedMapArtwork: vi.fn(async () => []),
       appendOwnedArtworkMark: vi.fn(async () => artwork("artwork-a")),
-      removeOwnedArtworkMark: vi.fn(), deleteOwnedArtwork: vi.fn(),
+      removeOwnedArtworkMark: vi.fn(), deleteOwnedArtwork: vi.fn(), renameOwnedArtwork: vi.fn(),
     };
     const farStroke: WallStroke = { ...wallStroke("stroke-far"), points: [{ longitude: -74.5, latitude: 40.1 }, { longitude: -74.49, latitude: 40.11 }] };
     const bridge = createMapArtworkPersistenceBridge({
@@ -249,9 +252,9 @@ describe("Artwork composition bridge", () => {
       createMapArtwork: vi.fn(async () => { createCount += 1; return artwork("artwork-batch"); }),
       listOwnedMapArtwork: vi.fn(async () => []),
       appendOwnedArtworkMark: vi.fn(async () => artwork("artwork-batch")),
-      removeOwnedArtworkMark: vi.fn(), deleteOwnedArtwork: vi.fn(),
+      removeOwnedArtworkMark: vi.fn(), deleteOwnedArtwork: vi.fn(), renameOwnedArtwork: vi.fn(),
     };
-    let target: { kind: "pending" } | { kind: "artwork"; artworkId: string } = { kind: "pending" };
+    let target: { kind: "pending"; artworkType: "map"; title: string } | { kind: "artwork"; artworkId: string } = { kind: "pending", artworkType: "map", title: "0923" };
     const bridge = createMapArtworkPersistenceBridge({
       repository, drawing: { bindArtwork: vi.fn(() => true) }, getAuthenticatedMemberId: () => "member-1",
       getCurrentArtworkTarget: () => target,
@@ -273,7 +276,7 @@ describe("Artwork composition bridge", () => {
       listOwnedMapArtwork: vi.fn(async () => []),
       appendOwnedArtworkMark: vi.fn(),
       removeOwnedArtworkMark: vi.fn(),
-      deleteOwnedArtwork: vi.fn(),
+      deleteOwnedArtwork: vi.fn(), renameOwnedArtwork: vi.fn(),
     };
     const bridge = createMapArtworkPersistenceBridge({
       repository,
@@ -294,7 +297,7 @@ describe("Artwork composition bridge", () => {
       listOwnedMapArtwork: vi.fn(async () => []),
       appendOwnedArtworkMark: vi.fn(),
       removeOwnedArtworkMark: vi.fn(),
-      deleteOwnedArtwork: vi.fn(),
+      deleteOwnedArtwork: vi.fn(), renameOwnedArtwork: vi.fn(),
     };
     const bridge = createMapArtworkPersistenceBridge({
       repository,
@@ -314,7 +317,7 @@ describe("Artwork composition bridge", () => {
     const repository: ArtworkRepository = {
       createMapArtwork: vi.fn(), listOwnedMapArtwork: vi.fn(async () => [existing]),
       appendOwnedArtworkMark: vi.fn(async () => updated),
-      removeOwnedArtworkMark: vi.fn(), deleteOwnedArtwork: vi.fn(),
+      removeOwnedArtworkMark: vi.fn(), deleteOwnedArtwork: vi.fn(), renameOwnedArtwork: vi.fn(),
     };
     const savedIds: string[] = [];
     const bridge = createMapArtworkPersistenceBridge({
@@ -337,7 +340,7 @@ describe("Artwork composition bridge", () => {
     const hydrated = Object.assign(wallStroke("stroke-a"), { artworkId: "artwork-a", markId: "mark-a", creatorId: "member-1" });
     const repository: ArtworkRepository = {
       createMapArtwork: vi.fn(), listOwnedMapArtwork: vi.fn(async () => [existing]),
-      appendOwnedArtworkMark: vi.fn(), removeOwnedArtworkMark: vi.fn(async () => null), deleteOwnedArtwork: vi.fn(),
+      appendOwnedArtworkMark: vi.fn(), removeOwnedArtworkMark: vi.fn(async () => null), deleteOwnedArtwork: vi.fn(), renameOwnedArtwork: vi.fn(),
     };
     const removedIds: string[] = [];
     const bridge = createMapArtworkPersistenceBridge({

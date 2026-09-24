@@ -30,12 +30,36 @@ export interface GeographicMaterialErasureMark { readonly id: string; readonly t
 export type MaterialErasureMark = LocalMaterialErasureMark | GeographicMaterialErasureMark;
 export type ArtworkMark = StrokeMark | MaterialErasureMark;
 
+/**
+ * ARTWORK V2 -- an explicit, durable discriminator. Deliberately NOT the
+ * same concept as coordinate system: "map" today means geographic
+ * coordinates and "blank" means local Cartesian coordinates, but a future
+ * Artwork type is not required to keep that 1:1 mapping (see
+ * artworkTypes' own module doc in the V2 recon -- this field says WHAT the
+ * Artwork is, not HOW its Marks are positioned).
+ */
+export type ArtworkType = "map" | "blank";
+
 export interface Artwork {
   readonly id: string;
   readonly creatorId: string;
   readonly createdAt: Date;
   readonly updatedAt: Date;
   readonly surfaceId: string;
+  /** ARTWORK V2 -- immutable after creation (rules-enforced, mirroring surfaceId's own immutability). */
+  readonly artworkType: ArtworkType;
+  /**
+   * ARTWORK V2 -- presentation metadata, never Artwork identity (the
+   * Firestore document id remains canonical). Empty string means "no
+   * meaningful title" -- both true legacy documents (created before this
+   * field existed) and any caller that doesn't supply one (e.g. Blackbook,
+   * which has its own separate gallery and never displays this field)
+   * decode to `""`, not `null`, so callers never need a null-check just to
+   * render a fallback. The Member-facing "Untitled Artwork"/date-based
+   * fallback lives entirely in `music/src/member/artworkGallery.ts` -- this
+   * type never invents a default itself.
+   */
+  readonly title: string;
   readonly composition: { readonly bounds: ArtworkBounds; readonly startedAt: Date; readonly lastEditedAt: Date };
   readonly marks: readonly ArtworkMark[];
   readonly state: "draft" | "archived";
@@ -47,6 +71,10 @@ export interface CreateArtworkInput {
   readonly creatorId: string;
   readonly surfaceId: string;
   readonly mark: ArtworkMark;
+  /** Optional so existing callers (e.g. Blackbook's bridge) keep compiling unchanged -- the repository defaults this to `"map"` when omitted. */
+  readonly artworkType?: ArtworkType;
+  /** Optional; defaults to `""` (no title) when omitted. */
+  readonly title?: string;
 }
 export type CreateMapArtworkInput = CreateArtworkInput;
 
@@ -56,6 +84,8 @@ export interface ArtworkRepository {
   appendOwnedArtworkMark(artworkId: string, creatorId: string, mark: ArtworkMark): Promise<Artwork>;
   removeOwnedArtworkMark(artworkId: string, creatorId: string, markId: string): Promise<Artwork | null>;
   deleteOwnedArtwork(artworkId: string, creatorId: string): Promise<void>;
+  /** ARTWORK V2 -- renames an owned Artwork. Never changes the Artwork id; updates `updatedAt`. */
+  renameOwnedArtwork(artworkId: string, creatorId: string, title: string): Promise<Artwork>;
   /** Backward-compatible Map aliases. */
   createMapArtwork(input: CreateMapArtworkInput): Promise<MapArtwork>;
   listOwnedMapArtwork(creatorId: string): Promise<readonly MapArtwork[]>;

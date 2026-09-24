@@ -1,6 +1,7 @@
 import {
   createFirebaseArtworkRepository,
   createFirebaseMemberIdentityAuthority,
+  normalizeArtworkTitle,
   serializePublicMember,
   MARKER_SUPPLY,
   MOP_SUPPLY,
@@ -9,6 +10,7 @@ import {
   PENCIL_SUPPLY,
   SPRAY_SUPPLY,
   type Artwork,
+  type ArtworkType,
   type MemberIdentityState,
 } from "@studiorich/member-identity";
 import {
@@ -16,7 +18,10 @@ import {
   SUBWAY_MAP_SURFACE_ID,
   type WallOperation,
 } from "./mapArtworkBridge";
+import { BLANK_SURFACE_ID, createBlankArtworkPersistenceBridge, type BlankOperation } from "./blankArtworkBridge";
+import { createBlankCanvasRuntime } from "./blankCanvasRuntime";
 import { createAnonymousArtworkClaimer, type AnonymousArtworkClaimResult } from "./claimAnonymousArtwork";
+import { resolveDefaultArtworkTitle } from "./artworkGallery";
 import { createCurrentArtworkSession } from "./currentArtworkSession";
 import { createMemberHomeController } from "./memberHomeUI";
 import { navigateToArtwork } from "./navigateToArtwork";
@@ -42,6 +47,8 @@ type WallRuntime = {
     removePersistedStrokes(): number;
     /** Member V1C -- a snapshot of this surface's real drawing operations that are not yet bound to a Firestore Artwork. Never the live internal array. */
     getUnclaimedStrokes(): readonly WallOperation[];
+    /** ARTWORK V2 -- the currently-selected supply/color/width/opacity; Blank reuses this exact same toolbar selection instead of building its own. */
+    getBrush(): { supplyId: string; color: string; width: number; opacity: number };
   };
   MemberIdentityAuthority?: unknown;
   MemberIdentityState?: MemberIdentityState;
@@ -142,8 +149,23 @@ sessionArtworkLibrary.subscribe(() => memberHome.refresh());
 const currentArtworkSession = createCurrentArtworkSession();
 currentArtworkSession.subscribe(() => renderCloseArtworkControl());
 
-/** Member V1C -- promotes anonymous/unbound strokes into the signed-in Member's Current Artwork by replaying them through the SAME persistence bridge below. See claimAnonymousArtwork.ts's own doc. Reused unmodified for both the sign-in-to-save path (V1C) and the signed-in-with-no-Current-Artwork path (ARTWORK V1, section 9). */
+/** ARTWORK V2 -- which Surface/runtime is currently being edited; `null` means the ordinary shared Map (no Current Artwork). Only ever "blank" while a Blank Artwork is pending or open. */
+let activeSurfaceKind: ArtworkType | null = null;
+
+/** Member V1C -- promotes anonymous/unbound strokes into the signed-in Member's Current Artwork by replaying them through the SAME persistence bridge below. See claimAnonymousArtwork.ts's own doc. Reused unmodified for both the sign-in-to-save path (V1C) and the signed-in-with-no-Current-Artwork path (ARTWORK V1, section 9). Map only -- Blank has no anonymous/shared surface to promote from (see section 10's scope note). */
 const anonymousClaimer = createAnonymousArtworkClaimer<WallOperation>();
+
+/** ARTWORK V2 -- Blank Artwork's own lightweight, non-Mapbox drawing runtime. See blankCanvasRuntime.ts's own doc. */
+const blankCanvasRuntime = createBlankCanvasRuntime();
+blankCanvasRuntime.setBrushSource(() => {
+  const brush = drawingRuntime()?.getBrush();
+  return {
+    supplyId: (brush?.supplyId as "pencil" | "pen" | "marker" | "mop" | "spray" | "eraser") ?? "pencil",
+    color: brush?.color ?? "#171412",
+    width: brush?.width ?? 6,
+    opacity: brush?.opacity ?? 0.9,
+  };
+});
 
 const memberHome = createMemberHomeController({
   authority: memberIdentity,
@@ -152,9 +174,9 @@ const memberHome = createMemberHomeController({
     memberHome.close();
     openArtwork(artwork);
   },
-  onNewArtwork() {
+  onCreateArtwork(artworkType, title) {
     memberHome.close();
-    void startNewArtwork();
+    void startNewArtwork(artworkType, title);
   },
   async onDeleteArtwork(artwork) {
     if (state.status !== "signedIn") return;
@@ -162,9 +184,13 @@ const memberHome = createMemberHomeController({
     sessionArtworkLibrary.remove(artwork.id);
     const current = currentArtworkSession.getState();
     if (current.kind === "artwork" && current.artworkId === artwork.id) {
-      currentArtworkSession.clear();
-      drawingRuntime()?.removePersistedStrokes();
+      closeCurrentArtwork();
     }
+  },
+  async onRenameArtwork(artwork, title) {
+    if (state.status !== "signedIn") return;
+    const renamed = await artworkRepository.renameOwnedArtwork(artwork.id, state.member.uid, title);
+    sessionArtworkLibrary.upsert(renamed);
   },
 });
 
@@ -184,21 +210,49 @@ const artworkPersistence = createMapArtworkPersistenceBridge({
   },
   onArtworkSaved: (artwork) => sessionArtworkLibrary.upsert(artwork),
   onArtworkRemoved: (artworkId) => sessionArtworkLibrary.remove(artworkId),
-  getCurrentArtworkTarget: () => currentArtworkSession.getState(),
+  getCurrentArtworkTarget: () => (activeSurfaceKind === "blank" ? { kind: "none" } : currentArtworkSession.getState()),
+  onCurrentArtworkEstablished: (artworkId) => currentArtworkSession.setCurrentArtwork(artworkId),
+});
+
+const blankPersistence = createBlankArtworkPersistenceBridge({
+  repository: artworkRepository,
+  drawing: {
+    bindArtwork(stroke, artworkId, markId, creatorId, surfaceId) {
+      return blankCanvasRuntime.bindArtwork(stroke, artworkId, markId, creatorId, surfaceId);
+    },
+  },
+  getAuthenticatedMemberId() {
+    return state.status === "signedIn" ? state.member.uid : null;
+  },
+  onArtworkSaved: (artwork) => sessionArtworkLibrary.upsert(artwork),
+  onArtworkRemoved: (artworkId) => sessionArtworkLibrary.remove(artworkId),
+  getCurrentArtworkTarget: () => (activeSurfaceKind === "map" ? { kind: "none" } : currentArtworkSession.getState()),
   onCurrentArtworkEstablished: (artworkId) => currentArtworkSession.setCurrentArtwork(artworkId),
 });
 
 /**
- * ARTWORK V1 -- OPEN ARTWORK: establishes explicit document-open semantics.
- * Scoped hydration only -- this never touches Firestore beyond the normal
- * read already in `sessionArtworkLibrary` (the `artwork` object passed in
- * is already the full authoritative document). Any previously-open
- * Artwork's Marks are removed from the overlay first so opening A never
- * silently composites B/C/D just because they share a surfaceId.
+ * ARTWORK V2 -- OPEN ARTWORK: establishes explicit document-open semantics,
+ * branching by `artworkType`. Scoped hydration only -- this never touches
+ * Firestore beyond the normal read already in `sessionArtworkLibrary` (the
+ * `artwork` object passed in is already the full authoritative document).
+ * Any previously-open Artwork's Marks are removed from its own Surface
+ * first so opening A never silently composites B/C/D just because they
+ * share a surfaceId, and switching Map<->Blank never leaves the other
+ * Surface's stale content visible.
  */
 function openArtwork(artwork: Artwork): void {
+  if (artwork.artworkType === "blank") {
+    drawingRuntime()?.removePersistedStrokes();
+    activeSurfaceKind = "blank";
+    currentArtworkSession.setCurrentArtwork(artwork.id);
+    blankCanvasRuntime.hydrate(artwork);
+    blankCanvasRuntime.enter();
+    return;
+  }
+  blankCanvasRuntime.exit();
   const drawing = drawingRuntime();
   drawing?.removePersistedStrokes();
+  activeSurfaceKind = "map";
   currentArtworkSession.setCurrentArtwork(artwork.id);
   if (artwork.state === "draft") drawing?.hydrateArtworks([artwork]);
   navigateToArtwork(
@@ -209,28 +263,46 @@ function openArtwork(artwork: Artwork): void {
 }
 
 /**
- * ARTWORK V1 -- CLOSE ARTWORK: the smallest truthful way back to the
- * ordinary shared Map state. Never deletes the Artwork or alters its
- * persisted Marks -- only clears session-local state and the drawing
+ * ARTWORK V2 -- CLOSE ARTWORK: the smallest truthful way back to the
+ * ordinary shared Map state (Blank has no shared "world" to return to --
+ * closing a Blank Artwork returns to Member Home's ordinary shared-Map
+ * backdrop too, per the build brief). Never deletes the Artwork or alters
+ * its persisted Marks -- only clears session-local state and the drawing
  * overlay's in-memory copy of what was hydrated for editing.
  */
 function closeCurrentArtwork(): void {
   currentArtworkSession.clear();
-  drawingRuntime()?.removePersistedStrokes();
+  if (activeSurfaceKind === "blank") blankCanvasRuntime.exit();
+  else drawingRuntime()?.removePersistedStrokes();
+  activeSurfaceKind = null;
 }
 
 /**
- * ARTWORK V1 -- "+ NEW ARTWORK": arms a `pending` Current Artwork (no
- * Firestore document yet -- see currentArtworkSession.ts's doc on why).
- * If any strokes are already unbound on screen (this is also the
- * signed-in/no-Current-Artwork path from section 9), promote them
- * immediately into the new Artwork via the same claim mechanism V1C uses.
+ * ARTWORK V2 -- "+ NEW ARTWORK": resolves the working title (custom, or
+ * the centralized date-based default), arms a `pending` Current Artwork of
+ * the chosen type (no Firestore document yet -- see currentArtworkSession.ts's
+ * doc on why), and enters the matching Surface. For Map, if any strokes are
+ * already unbound on screen (this is also the signed-in/no-Current-Artwork
+ * path from section 9), promote them immediately via the same claim
+ * mechanism V1C uses; Blank has no such pre-existing unbound state to
+ * promote (see the V2 scope note on anonymous Blank drawing).
  */
-async function startNewArtwork(): Promise<void> {
+async function startNewArtwork(artworkType: ArtworkType, customTitle: string): Promise<void> {
   if (state.status !== "signedIn") return;
-  const previouslyOpen = currentArtworkSession.getState().kind === "artwork";
-  currentArtworkSession.setPendingNewArtwork();
-  if (previouslyOpen) drawingRuntime()?.removePersistedStrokes();
+  const title = normalizeArtworkTitle(customTitle) || resolveDefaultArtworkTitle(sessionArtworkLibrary.getAll());
+  const previouslyOpenArtwork = currentArtworkSession.getState().kind === "artwork";
+  if (previouslyOpenArtwork) {
+    if (activeSurfaceKind === "blank") blankCanvasRuntime.exit();
+    else drawingRuntime()?.removePersistedStrokes();
+  }
+  currentArtworkSession.setPendingNewArtwork(artworkType, title);
+  if (artworkType === "blank") {
+    activeSurfaceKind = "blank";
+    blankCanvasRuntime.hydrate(null);
+    blankCanvasRuntime.enter();
+    return;
+  }
+  activeSurfaceKind = "map";
   await promoteUnboundDrawing();
 }
 
@@ -443,8 +515,13 @@ function renderIdentityState(): void {
  */
 async function loadOwnedArtworkLibrary(memberId: string): Promise<void> {
   if (hydratedMemberId === memberId) return;
-  const artworks = (await (artworkRepository.listOwnedArtwork ?? artworkRepository.listOwnedMapArtwork).call(artworkRepository, memberId)).filter((artwork) => artwork.surfaceId === SUBWAY_MAP_SURFACE_ID);
-  artworkPersistence.replaceKnownArtworks(artworks);
+  // ARTWORK V2: the Member gallery is explicitly a MIXED Map+Blank gallery
+  // (section 12) -- both surfaceIds belong to it. Blackbook's own separate
+  // surfaceId is deliberately excluded; it keeps its own separate gallery.
+  const artworks = (await (artworkRepository.listOwnedArtwork ?? artworkRepository.listOwnedMapArtwork).call(artworkRepository, memberId))
+    .filter((artwork) => artwork.surfaceId === SUBWAY_MAP_SURFACE_ID || artwork.surfaceId === BLANK_SURFACE_ID);
+  artworkPersistence.replaceKnownArtworks(artworks.filter((artwork) => artwork.surfaceId === SUBWAY_MAP_SURFACE_ID));
+  blankPersistence.replaceKnownArtworks(artworks.filter((artwork) => artwork.surfaceId === BLANK_SURFACE_ID));
   // Member V1B: authoritative durable truth reconciles/replaces the session
   // projection wholesale on (re)hydration -- any earlier same-session
   // upserts are superseded by this fresh Firestore read.
@@ -494,6 +571,28 @@ document.addEventListener("surface-drawing:stroke-removed", (event) => {
   });
 });
 
+/**
+ * ARTWORK V2 -- Blank's own commit/remove wiring, parallel to Map's above
+ * but routed through `blankPersistence`. Blank is only ever reachable
+ * signed-in with an explicit Current Artwork already armed (via
+ * `+ NEW ARTWORK` or OPEN) -- there is no anonymous/no-current-Artwork
+ * Blank drawing state to guard against, unlike Map's "none" check.
+ */
+document.addEventListener("blank-drawing:stroke-committed", (event) => {
+  if (state.status !== "signedIn") return;
+  const detail = (event as CustomEvent).detail as { stroke?: BlankOperation };
+  if (!detail?.stroke) return;
+  beginSave();
+  void blankPersistence
+    .persistStroke(detail.stroke)
+    .then(() => endSave(true))
+    .catch((error: unknown) => {
+      endSave(false);
+      console.error("[SubwayMemberRuntime] Blank Artwork save failed", error);
+      setMessage("Artwork could not be saved.", true);
+    });
+});
+
 memberIdentity.subscribe((nextState) => {
   state = nextState;
   root.SBE!.MemberIdentityState = state;
@@ -515,10 +614,13 @@ memberIdentity.subscribe((nextState) => {
     // sets) and only ever runs here, i.e. only after authentication has
     // genuinely succeeded -- a cancelled/failed sign-in never reaches this.
     if (hasEligibleUnboundDrawing()) {
-      currentArtworkSession.setPendingNewArtwork();
+      activeSurfaceKind = "map";
+      currentArtworkSession.setPendingNewArtwork("map", resolveDefaultArtworkTitle(sessionArtworkLibrary.getAll()));
       void promoteUnboundDrawing();
     }
   } else if (hydratedMemberId) {
+    blankCanvasRuntime.exit();
+    activeSurfaceKind = null;
     drawingRuntime()?.removePersistedStrokes();
     hydratedMemberId = null;
     sessionArtworkLibrary.replaceAll([]);

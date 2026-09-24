@@ -11,7 +11,7 @@ function artwork(id: string, updatedAt: string): Artwork {
     surfaceId: "map:new-york",
     composition: { bounds: { west: 0, south: 0, east: 1, north: 1 }, startedAt: new Date(updatedAt), lastEditedAt: new Date(updatedAt) },
     marks: [],
-    state: "draft",
+    artworkType: "map", title: "", state: "draft",
     visibility: "private",
   };
 }

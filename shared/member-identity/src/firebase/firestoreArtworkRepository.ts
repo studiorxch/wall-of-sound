@@ -25,7 +25,7 @@ import type {
   MapArtwork,
 } from "../data/artworkTypes.js";
 import type { ArtMaterialId, ArtSupplyId } from "../data/artSupplyTypes.js";
-import { boundsForMarks, createMapArtworkDocument, validateArtworkMark } from "../logic/artworkDocument.js";
+import { boundsForMarks, createMapArtworkDocument, normalizeArtworkTitle, validateArtworkMark } from "../logic/artworkDocument.js";
 
 export const ARTWORK_COLLECTION_PATH = "artworks";
 
@@ -121,6 +121,11 @@ export function decodeArtworkData(id: string, data: DocumentData): MapArtwork {
     createdAt,
     updatedAt,
     surfaceId: legacy ? "map:new-york" : String(data.surfaceId ?? ""),
+    // ARTWORK V2: a document written before this field existed (legacy or
+    // Blackbook) decodes to the same defaults `createMapArtworkDocument`
+    // writes for a new caller that omits them -- never `undefined`.
+    artworkType: data.artworkType === "blank" ? "blank" : "map",
+    title: typeof data.title === "string" ? data.title : "",
     composition: legacy ? { bounds: boundsForMarks(marks), startedAt: createdAt, lastEditedAt: updatedAt } : { bounds: data.composition.bounds, startedAt: data.composition.startedAt.toDate(), lastEditedAt: data.composition.lastEditedAt.toDate() },
     marks,
     state: data.state,
@@ -134,7 +139,7 @@ function decodeArtwork(snapshot: DocumentSnapshot<DocumentData>): MapArtwork {
 }
 
 function storedArtwork(artwork: Artwork, updatedAt: ReturnType<typeof serverTimestamp>) {
-  return { creatorId: artwork.creatorId, surfaceId: artwork.surfaceId, createdAt: Timestamp.fromDate(artwork.createdAt), updatedAt, composition: { bounds: boundsForMarks(artwork.marks), startedAt: Timestamp.fromDate(artwork.composition.startedAt), lastEditedAt: updatedAt }, marks: artwork.marks, state: artwork.state, visibility: artwork.visibility };
+  return { creatorId: artwork.creatorId, surfaceId: artwork.surfaceId, artworkType: artwork.artworkType, title: artwork.title, createdAt: Timestamp.fromDate(artwork.createdAt), updatedAt, composition: { bounds: boundsForMarks(artwork.marks), startedAt: Timestamp.fromDate(artwork.composition.startedAt), lastEditedAt: updatedAt }, marks: artwork.marks, state: artwork.state, visibility: artwork.visibility };
 }
 
 export class FirestoreArtworkRepository implements ArtworkRepository {
@@ -189,6 +194,19 @@ export class FirestoreArtworkRepository implements ArtworkRepository {
       where("creatorId", "==", creatorId),
     ));
     return snapshot.docs.map(decodeArtwork).sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+  }
+
+  async renameOwnedArtwork(artworkId: string, creatorId: string, title: string): Promise<Artwork> {
+    assertIdentifier(artworkId, "artwork_id");
+    assertIdentifier(creatorId, "member_uid");
+    const reference = doc(this.firestore, ARTWORK_COLLECTION_PATH, artworkId);
+    const normalizedTitle = normalizeArtworkTitle(title);
+    await runTransaction(this.firestore, async (transaction) => {
+      const artwork = decodeArtwork(await transaction.get(reference));
+      if (artwork.creatorId !== creatorId) throw new Error("artwork_owner_mismatch");
+      transaction.set(reference, storedArtwork({ ...artwork, title: normalizedTitle }, serverTimestamp()));
+    });
+    return decodeArtwork(await getDoc(reference));
   }
 
   async deleteOwnedArtwork(artworkId: string, creatorId: string): Promise<void> {

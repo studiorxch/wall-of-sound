@@ -161,10 +161,20 @@ service cloud.firestore {
     }
 
     function hasValidArtworkV1Shape(data) {
-      return data.keys().hasAll(['creatorId', 'surfaceId', 'createdAt', 'updatedAt', 'composition', 'marks', 'state', 'visibility'])
-        && data.keys().hasOnly(['creatorId', 'surfaceId', 'createdAt', 'updatedAt', 'composition', 'marks', 'state', 'visibility'])
+      return data.keys().hasAll(['creatorId', 'surfaceId', 'artworkType', 'title', 'createdAt', 'updatedAt', 'composition', 'marks', 'state', 'visibility'])
+        && data.keys().hasOnly(['creatorId', 'surfaceId', 'artworkType', 'title', 'createdAt', 'updatedAt', 'composition', 'marks', 'state', 'visibility'])
         && data.creatorId is string
         && data.surfaceId is string
+        // ARTWORK V2: an explicit, durable discriminator -- immutable after
+        // creation (enforced in the `update` rule below, mirroring
+        // surfaceId's own immutability clause), never inferred solely from
+        // surfaceId.
+        && data.artworkType in ['map', 'blank']
+        // Presentation metadata only, never Artwork identity -- "" means no
+        // meaningful title (legacy documents, or a caller like Blackbook
+        // that never displays this field).
+        && data.title is string
+        && data.title.size() <= 200
         && data.createdAt is timestamp
         && data.updatedAt is timestamp
         && data.composition is map
@@ -239,10 +249,12 @@ service cloud.firestore {
         && (hasValidArtworkShape(request.resource.data) || hasValidArtworkV1Shape(request.resource.data))
         && request.resource.data.createdAt == resource.data.createdAt
         && (!resource.data.keys().hasAny(['surfaceId']) || request.resource.data.surfaceId == resource.data.surfaceId)
+        && (!resource.data.keys().hasAny(['artworkType']) || request.resource.data.artworkType == resource.data.artworkType)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'geometry',
           'surface',
           'surfaceId',
+          'title',
           'composition',
           'marks',
           'updatedAt',

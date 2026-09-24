@@ -7,7 +7,7 @@ function stroke(id: string, offset = 0): BlackbookStroke {
 }
 
 function artwork(id: string, marks: readonly ArtworkMark[] = [toLocalStrokeMark(stroke("a"), "mark-a", new Date(0))]): Artwork {
-  return { id, creatorId: "member-1", surfaceId: BLACKBOOK_PAGE_SURFACE_ID, createdAt: new Date(0), updatedAt: new Date(0), composition: { bounds: { minX: 0.1, minY: 0.2, maxX: 0.2, maxY: 0.3 }, startedAt: new Date(0), lastEditedAt: new Date(0) }, marks, state: "draft", visibility: "private" };
+  return { id, creatorId: "member-1", surfaceId: BLACKBOOK_PAGE_SURFACE_ID, createdAt: new Date(0), updatedAt: new Date(0), composition: { bounds: { minX: 0.1, minY: 0.2, maxX: 0.2, maxY: 0.3 }, startedAt: new Date(0), lastEditedAt: new Date(0) }, marks, artworkType: "map", title: "", state: "draft", visibility: "private" };
 }
 
 describe("Blackbook Artwork Surface bridge", () => {
@@ -54,7 +54,7 @@ describe("Blackbook Artwork Surface bridge", () => {
       createMapArtwork: vi.fn(async () => first), listOwnedMapArtwork: vi.fn(async () => [first]),
       appendOwnedArtworkMark: vi.fn(async () => twoMarks),
       removeOwnedArtworkMark: vi.fn().mockResolvedValueOnce(first).mockResolvedValueOnce(null),
-      deleteOwnedArtwork: vi.fn(),
+      deleteOwnedArtwork: vi.fn(), renameOwnedArtwork: vi.fn(),
     };
     const bindArtwork = vi.fn((item: BlackbookOperation, artworkId: string, markId: string, creatorId: string, surfaceId: string) => Boolean(Object.assign(item, { artworkId, markId, creatorId, surfaceId })));
     const bridge = createBlackbookArtworkPersistenceBridge({ repository, drawing: { bindArtwork }, getAuthenticatedMemberId: () => "member-1", createMarkId: () => "mark-b" });
@@ -81,7 +81,7 @@ describe("Blackbook Artwork Surface bridge", () => {
       createMapArtwork: vi.fn(async () => first), listOwnedMapArtwork: vi.fn(async () => [first]),
       appendOwnedArtworkMark: vi.fn(async () => withMop),
       removeOwnedArtworkMark: vi.fn(async () => first),
-      deleteOwnedArtwork: vi.fn(),
+      deleteOwnedArtwork: vi.fn(), renameOwnedArtwork: vi.fn(),
     };
     const bindArtwork = vi.fn((item: BlackbookOperation, artworkId: string, markId: string, creatorId: string, surfaceId: string) => Boolean(Object.assign(item, { artworkId, markId, creatorId, surfaceId })));
     const bridge = createBlackbookArtworkPersistenceBridge({ repository, drawing: { bindArtwork }, getAuthenticatedMemberId: () => "member-1", createMarkId: () => "mark-mop" });
@@ -122,7 +122,7 @@ describe("Blackbook Artwork Surface bridge", () => {
       createMapArtwork: vi.fn(async () => first), listOwnedMapArtwork: vi.fn(async () => [first]),
       appendOwnedArtworkMark: vi.fn(async () => withSpray),
       removeOwnedArtworkMark: vi.fn(async () => first),
-      deleteOwnedArtwork: vi.fn(),
+      deleteOwnedArtwork: vi.fn(), renameOwnedArtwork: vi.fn(),
     };
     const bindArtwork = vi.fn((item: BlackbookOperation, artworkId: string, markId: string, creatorId: string, surfaceId: string) => Boolean(Object.assign(item, { artworkId, markId, creatorId, surfaceId })));
     const bridge = createBlackbookArtworkPersistenceBridge({ repository, drawing: { bindArtwork }, getAuthenticatedMemberId: () => "member-1", createMarkId: () => "mark-spray" });
