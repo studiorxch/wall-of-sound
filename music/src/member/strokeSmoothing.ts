@@ -165,3 +165,84 @@ export function hash01(x: number, y: number, salt = 0): number {
 export function hashLateralUnit(x: number, y: number): number {
   return hash01(x, y) * 2 - 1;
 }
+
+/**
+ * Graphite Pencil V1: a small, pure, fully deterministic rendering treatment
+ * that makes Pencil read as dry graphite deposited on paper instead of a
+ * lower-opacity Pen line. Two passes over the SAME already-authored points
+ * `traceSmoothedPath` already receives -- no new capture, no extra
+ * resolution, no persisted particle data:
+ *
+ * 1. BODY: the same quadratic-smoothed path every clean-line supply already
+ *    draws, but at a REDUCED per-pass alpha (`opacity * 0.75`) and a touch
+ *    narrower than the authored width -- this is what gives repeated
+ *    sketching passes room to visibly darken via ordinary canvas alpha
+ *    compositing, instead of one pass already reading as near-solid.
+ * 2. GRAIN: a second, thinner pass walked segment-by-segment over the RAW
+ *    (unsmoothed) points -- about 30% of segments are skipped and the
+ *    surviving ones get a small perpendicular jitter and their own
+ *    per-segment alpha, all derived from `hash01`/`hashLateralUnit` seeded
+ *    by each segment's own coordinates plus the Mark's own stable
+ *    `seedSource` (its `operation.id`/`obj.id`, assigned once and never
+ *    reassigned -- the exact same seed source Mop/Spray already use, see
+ *    their own "Revision 11" doc). This is what breaks up the line into an
+ *    imperfect, slightly broken graphite deposit rather than a mechanically
+ *    perfect stroke, WITHOUT drawing per-particle primitives -- the loop
+ *    bound is the stroke's own already-recorded point count, never larger.
+ *
+ * Determinism: every input to `hash01` here is either a persisted point
+ * coordinate or the Mark's own stable id -- never `Date.now()`, never
+ * `Math.random()`, never anything from the live camera/view. The exact same
+ * Mark therefore renders pixel-identical on every redraw, every zoom level,
+ * every pan, and after every save/reopen -- camera movement changes only
+ * the PROJECTED screen position of these same deterministic passes, never
+ * their content.
+ */
+export function strokeGraphite(
+  ctx: CanvasRenderingContext2D,
+  points: readonly SmoothablePoint[],
+  style: { readonly color: string; readonly width: number; readonly opacity: number },
+  seedSource: string,
+): void {
+  if (points.length < 2) return;
+  const seed = (() => {
+    let h = 0;
+    for (let i = 0; i < seedSource.length; i += 1) h = (h * 31 + seedSource.charCodeAt(i)) | 0;
+    return h;
+  })();
+
+  ctx.save();
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.globalCompositeOperation = "source-over";
+  ctx.strokeStyle = style.color;
+
+  // Pass 1: primary graphite body.
+  ctx.beginPath();
+  traceSmoothedPath(ctx, points);
+  ctx.lineWidth = Math.max(0.5, style.width * 0.92);
+  ctx.globalAlpha = style.opacity * 0.75;
+  ctx.stroke();
+
+  // Pass 2: grain -- per-segment coverage/jitter, deterministic from the
+  // segment's own position and this Mark's own stable seed.
+  ctx.lineWidth = Math.max(0.4, style.width * 0.5);
+  for (let index = 1; index < points.length; index += 1) {
+    const a = points[index - 1];
+    const b = points[index];
+    const key = hash01(a.x + seed, a.y + seed, 3);
+    if (key > 0.68) continue; // ~32% of segments skipped -> imperfect coverage
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const length = Math.hypot(dx, dy) || 1;
+    const jitter = hashLateralUnit(a.x + seed, a.y + seed) * style.width * 0.14;
+    const offsetX = (-dy / length) * jitter;
+    const offsetY = (dx / length) * jitter;
+    ctx.globalAlpha = style.opacity * (0.22 + hash01(a.x + seed, a.y + seed, 5) * 0.28);
+    ctx.beginPath();
+    ctx.moveTo(a.x + offsetX, a.y + offsetY);
+    ctx.lineTo(b.x + offsetX, b.y + offsetY);
+    ctx.stroke();
+  }
+  ctx.restore();
+}

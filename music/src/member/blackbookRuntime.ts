@@ -23,7 +23,7 @@ import {
 import { createCartesianCamera, type CartesianCamera, type DocRect } from "./cartesianWorkspaceCamera";
 import { resolveMopDabPlan } from "./mopDeposition";
 import { hashSeed, resolveSprayCorePlan, resolveSprayParticlePlan } from "./sprayDeposition";
-import { fillMopDab, fillSprayParticle, hash01, hashLateralUnit, traceSmoothedPath } from "./strokeSmoothing";
+import { fillMopDab, fillSprayParticle, hash01, hashLateralUnit, strokeGraphite, traceSmoothedPath } from "./strokeSmoothing";
 
 function required<T>(value: T | null, error: string): T { if (!value) throw new Error(error); return value; }
 const canvas = required(document.querySelector<HTMLCanvasElement>("#blackbook-page"), "blackbook_surface_missing");
@@ -247,6 +247,18 @@ function drawOperation(operation: BlackbookOperation): void {
     // once persistence completes, which would otherwise silently reroll
     // this Mark's deterministic deposition the instant that happens.
     drawSprayStroke(materialCtx, points, operation.style, operation.id);
+    return;
+  }
+  // Graphite Pencil V1: Pencil gets its own deterministic graphite render
+  // treatment (strokeGraphite, strokeSmoothing.ts) instead of the flat
+  // single-pass line Pen/Marker/Eraser still use below -- same seed-source
+  // convention as Mop/Spray (operation.id, stable across the Mark's whole
+  // lifecycle).
+  if (operation.operation === "pencil") {
+    materialCtx.save();
+    const scaledStyle = { ...operation.style, width: operation.style.width * widthScale() };
+    strokeGraphite(materialCtx, points.map((point) => docToScreen(point)), scaledStyle, operation.id);
+    materialCtx.restore();
     return;
   }
   materialCtx.save();

@@ -3,7 +3,7 @@ import { BLANK_SURFACE_ID, type BlankOperation } from "./blankArtworkBridge";
 import { createCartesianCamera, type CartesianCamera } from "./cartesianWorkspaceCamera";
 import { resolveMopDabPlan } from "./mopDeposition";
 import { hashSeed, resolveSprayCorePlan, resolveSprayParticlePlan } from "./sprayDeposition";
-import { fillMopDab, fillSprayParticle, hash01, hashLateralUnit, traceSmoothedPath } from "./strokeSmoothing";
+import { fillMopDab, fillSprayParticle, hash01, hashLateralUnit, strokeGraphite, traceSmoothedPath } from "./strokeSmoothing";
 
 /**
  * ARTWORK V2 -- Blank Artwork's own lightweight, non-Mapbox drawing
@@ -149,6 +149,12 @@ function drawOperation(context: CanvasRenderingContext2D, operation: BlankOperat
   if (points.length < 2) return;
   if (operation.operation === "mop") { drawMop(context, points, operation.style); return; }
   if (operation.operation === "spray") { drawSpray(context, points, operation.style, operation.id); return; }
+  if (operation.operation === "pencil") {
+    context.save();
+    strokeGraphite(context, points, { ...operation.style, width: operation.style.width * zoom() }, operation.id);
+    context.restore();
+    return;
+  }
   context.save();
   context.lineCap = "round"; context.lineJoin = "round";
   context.beginPath();

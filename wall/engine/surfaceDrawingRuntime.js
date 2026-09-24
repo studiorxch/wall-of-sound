@@ -896,9 +896,27 @@
       _drawMopPoints(ctx, drawPts, scaledStyle, seedSource);
     } else if (materialId === "spray") {
       _drawSprayPoints(ctx, drawPts, scaledStyle, seedSource);
+    } else if (materialId === "graphite") {
+      _drawGraphitePoints(ctx, drawPts, scaledStyle, seedSource);
     } else {
       _drawRawPoints(ctx, drawPts, scaledStyle);
     }
+  }
+
+  // Graphite Pencil V1: same deterministic graphite render treatment
+  // Blackbook/Blank use (strokeGraphite, strokeSmoothing.ts), reached
+  // through the SAME ArtSupplyRendering bridge _tracePath already uses --
+  // falls back to the plain single-pass line if that bridge hasn't loaded
+  // yet, exactly like _tracePath's own fallback.
+  function _drawGraphitePoints(ctx, pts, style, seedSource) {
+    var rendering = _rendering();
+    if (rendering && rendering.strokeGraphite) {
+      ctx.save();
+      rendering.strokeGraphite(ctx, pts, style, seedSource);
+      ctx.restore();
+      return;
+    }
+    _drawRawPoints(ctx, pts, style);
   }
 
   // Graphite-only, matching Blackbook's Eraser -- destination-out on the

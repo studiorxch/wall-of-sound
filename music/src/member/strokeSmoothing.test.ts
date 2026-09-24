@@ -1,5 +1,31 @@
 import { describe, expect, it } from "vitest";
-import { fillMopDab, fillSprayParticle, hash01, hashLateralUnit, traceSmoothedPath, withAlpha } from "./strokeSmoothing";
+import { fillMopDab, fillSprayParticle, hash01, hashLateralUnit, strokeGraphite, traceSmoothedPath, withAlpha } from "./strokeSmoothing";
+
+function fakeStrokeContext() {
+  const calls: string[] = [];
+  const lineWidths: number[] = [];
+  const alphas: number[] = [];
+  const strokeStyles: string[] = [];
+  const ctx = {
+    save: () => calls.push("save"),
+    restore: () => calls.push("restore"),
+    stroke: () => calls.push("stroke"),
+    beginPath: () => calls.push("beginPath"),
+    moveTo: (x: number, y: number) => calls.push(`moveTo(${x},${y})`),
+    lineTo: (x: number, y: number) => calls.push(`lineTo(${x},${y})`),
+    quadraticCurveTo: (cx: number, cy: number, x: number, y: number) => calls.push(`quadraticCurveTo(${cx},${cy},${x},${y})`),
+    get lineWidth() { return lineWidths[lineWidths.length - 1] ?? 0; },
+    set lineWidth(value: number) { lineWidths.push(value); calls.push(`lineWidth=${value}`); },
+    get globalAlpha() { return alphas[alphas.length - 1] ?? 0; },
+    set globalAlpha(value: number) { alphas.push(value); calls.push(`globalAlpha=${value}`); },
+    get strokeStyle() { return strokeStyles[strokeStyles.length - 1] ?? ""; },
+    set strokeStyle(value: string) { strokeStyles.push(value); calls.push(`strokeStyle=${value}`); },
+    lineCap: "",
+    lineJoin: "",
+    globalCompositeOperation: "",
+  };
+  return { ctx, calls, lineWidths, alphas, strokeStyles };
+}
 
 function fakeContext() {
   const calls: string[] = [];
@@ -186,5 +212,77 @@ describe("fillMopDab -- Revision 11 crisp contact edge (opacity != edge softness
     // the alpha values at each offset differ with opacity.
     expect(stopsLow.map((s) => s[0])).toEqual(stopsHigh.map((s) => s[0]));
     expect(stopsLow[0][1]).not.toBe(stopsHigh[0][1]);
+  });
+});
+
+describe("strokeGraphite -- Graphite Pencil V1", () => {
+  const points = [{ x: 0, y: 0 }, { x: 10, y: 2 }, { x: 22, y: 5 }, { x: 30, y: 4 }, { x: 41, y: 6 }];
+  const style = { color: "#171412", width: 6, opacity: 0.82 };
+
+  it("draws nothing for fewer than 2 points", () => {
+    const { ctx, calls } = fakeStrokeContext();
+    strokeGraphite(ctx as never, [], style, "mark-a");
+    strokeGraphite(ctx as never, [{ x: 1, y: 1 }], style, "mark-a");
+    expect(calls).toEqual([]);
+  });
+
+  it("is deterministic: identical points + seed produce an identical call sequence every time", () => {
+    const first = fakeStrokeContext();
+    strokeGraphite(first.ctx as never, points, style, "mark-a");
+    const second = fakeStrokeContext();
+    strokeGraphite(second.ctx as never, points, style, "mark-a");
+    expect(second.calls).toEqual(first.calls);
+  });
+
+  it("a different Mark id (seed) produces a different grain pattern -- not one universal texture", () => {
+    const a = fakeStrokeContext();
+    strokeGraphite(a.ctx as never, points, style, "mark-a");
+    const b = fakeStrokeContext();
+    strokeGraphite(b.ctx as never, points, style, "mark-b");
+    expect(b.calls).not.toEqual(a.calls);
+  });
+
+  it("never draws at full opacity in a single pass -- buildup needs headroom below saturation", () => {
+    const { ctx, alphas } = fakeStrokeContext();
+    strokeGraphite(ctx as never, points, style, "mark-a");
+    for (const alpha of alphas) expect(alpha).toBeLessThan(style.opacity);
+  });
+
+  it("respects the authored color for every pass", () => {
+    const { ctx, strokeStyles } = fakeStrokeContext();
+    strokeGraphite(ctx as never, points, style, "mark-a");
+    expect(strokeStyles.length).toBeGreaterThan(0);
+    for (const value of strokeStyles) expect(value).toBe(style.color);
+  });
+
+  it("a user-selected non-default color is honored, not overridden by a fixed graphite gray", () => {
+    const { ctx, strokeStyles } = fakeStrokeContext();
+    strokeGraphite(ctx as never, points, { ...style, color: "#2a6fd6" }, "mark-a");
+    for (const value of strokeStyles) expect(value).toBe("#2a6fd6");
+  });
+
+  it("scales rendered widths with the authored width", () => {
+    const narrow = fakeStrokeContext();
+    strokeGraphite(narrow.ctx as never, points, { ...style, width: 3 }, "mark-a");
+    const wide = fakeStrokeContext();
+    strokeGraphite(wide.ctx as never, points, { ...style, width: 20 }, "mark-a");
+    expect(Math.max(...wide.lineWidths)).toBeGreaterThan(Math.max(...narrow.lineWidths));
+  });
+
+  it("scales alpha with opacity -- lower opacity reads as lighter graphite, higher as denser mass", () => {
+    const light = fakeStrokeContext();
+    strokeGraphite(light.ctx as never, points, { ...style, opacity: 0.2 }, "mark-a");
+    const dense = fakeStrokeContext();
+    strokeGraphite(dense.ctx as never, points, { ...style, opacity: 0.95 }, "mark-a");
+    expect(Math.max(...dense.alphas)).toBeGreaterThan(Math.max(...light.alphas));
+  });
+
+  it("bounds its work to the stroke's own recorded points -- no unbounded or particle-array-scaled loop", () => {
+    const { ctx, calls } = fakeStrokeContext();
+    strokeGraphite(ctx as never, points, style, "mark-a");
+    // One body pass (beginPath+stroke) plus at most one beginPath+stroke per
+    // recorded segment (points.length - 1) for the grain pass -- never more.
+    const strokeCalls = calls.filter((call) => call === "stroke").length;
+    expect(strokeCalls).toBeLessThanOrEqual(points.length);
   });
 });
