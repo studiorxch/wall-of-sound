@@ -28,8 +28,11 @@ export type {
   LocalMaterialErasureMark,
   GeographicMaterialErasureMark,
 } from "./data/artworkTypes.js";
-export type { ArtMaterialId, ArtSupplyId, ArtSupplySettings, MarkMaterialIdentity, PencilSupplySettings } from "./data/artSupplyTypes.js";
-export { MARKER_SUPPLY, MOP_SUPPLY, PEN_SUPPLY, PENCIL_SUPPLY, PENCIL_ERASER_SUPPLY, SPRAY_SUPPLY, canEraseMaterial } from "./data/artSupplyTypes.js";
+export type { ArtMaterialId, ArtSupplyId, ArtSupplySettings, DrawingSupplyId, DrawingWidthRange, MarkMaterialIdentity, PencilSupplySettings } from "./data/artSupplyTypes.js";
+export {
+  MARKER_SUPPLY, MOP_SUPPLY, PEN_SUPPLY, PENCIL_SUPPLY, PENCIL_ERASER_SUPPLY, SPRAY_SUPPLY, canEraseMaterial,
+  DRAWING_SUPPLY_ORDER, DRAWING_WIDTH_RANGES, DRAWING_DEFAULT_COLORS,
+} from "./data/artSupplyTypes.js";
 export { ARTWORK_GROUPING_PROXIMITY_DEGREES, ARTWORK_GROUPING_PROXIMITY_LOCAL, boundsForMarks, normalizeArtworkTitle, selectArtworkForMark } from "./logic/artworkDocument.js";
 export {
   serializePublicMember,

@@ -3,6 +3,9 @@ import {
   createFirebaseMemberIdentityAuthority,
   normalizeArtworkTitle,
   serializePublicMember,
+  DRAWING_DEFAULT_COLORS,
+  DRAWING_SUPPLY_ORDER,
+  DRAWING_WIDTH_RANGES,
   MARKER_SUPPLY,
   MOP_SUPPLY,
   PEN_SUPPLY,
@@ -75,6 +78,12 @@ type WallRuntime = {
     SPRAY_SUPPLY: typeof SPRAY_SUPPLY;
     PENCIL_ERASER_SUPPLY: typeof PENCIL_ERASER_SUPPLY;
   };
+  /** Drawing Shell V1 -- see this field's assignment below for the full seam doc. */
+  DrawingShellConfig?: {
+    supplyOrder: typeof DRAWING_SUPPLY_ORDER;
+    widthRanges: typeof DRAWING_WIDTH_RANGES;
+    defaultColors: typeof DRAWING_DEFAULT_COLORS;
+  };
   ArtSupplyDeposition?: {
     resolveMopDabPlan: typeof resolveMopDabPlan;
     resolveMopEmissionPoints: typeof resolveMopEmissionPoints;
@@ -112,6 +121,15 @@ type WallRuntime = {
 const root = window as typeof window & { SBE?: WallRuntime };
 root.SBE ??= {};
 root.SBE.ArtSupplies = { PENCIL_SUPPLY, PEN_SUPPLY, MARKER_SUPPLY, MOP_SUPPLY, SPRAY_SUPPLY, PENCIL_ERASER_SUPPLY };
+/**
+ * Drawing Shell V1 -- the same canonical Art Supply order/width-ranges/
+ * default-colors Blackbook's own runtime reads directly (it imports
+ * `@studiorich/member-identity` as a real Vite module); the plain-JS
+ * `subwayMapPaintSurface.js` IIFE has no import statement, so this is how
+ * it reaches the SAME values instead of keeping its own private copy. Data
+ * only -- no component, no DOM, no coupling between the two bundlers.
+ */
+root.SBE.DrawingShellConfig = { supplyOrder: DRAWING_SUPPLY_ORDER, widthRanges: DRAWING_WIDTH_RANGES, defaultColors: DRAWING_DEFAULT_COLORS };
 root.SBE.ArtSupplyDeposition = { resolveMopDabPlan, resolveMopEmissionPoints, resolveSprayParticlePlan, resolveSprayCorePlan, hashSeed, STUDIORICH_STOCK_CAP };
 root.SBE.ArtSupplyRendering = { traceSmoothedPath, fillSprayParticle, fillMopDab, withAlpha, hashLateralUnit, hash01 };
 root.SBE.MapZoomScale = { resolveZoomScale, MAP_SURFACE_REFERENCE_ZOOM };
@@ -428,6 +446,17 @@ function renderCloseArtworkControl(): void {
 function ensureMemberUI(): void {
   const controls = document.getElementById("subway-map-paint-controls");
   if (!controls || controls.querySelector("[data-member-action]")) return;
+  // Drawing Shell V1: Member/session controls are workspace-owned, not Art
+  // Supply controls (see the UI Unification recon) -- they still live
+  // beside the Drawing Shell's floating panel for now (no new panel, no
+  // Member UI redesign), but in their OWN wrapper/class so they read as a
+  // visually distinct group rather than another paint-tool button.
+  let contextGroup = controls.querySelector<HTMLDivElement>(".subway-map-context-controls");
+  if (!contextGroup) {
+    contextGroup = document.createElement("div");
+    contextGroup.className = "subway-map-context-controls";
+    controls.appendChild(contextGroup);
+  }
   const button = document.createElement("button");
   button.type = "button";
   button.dataset.memberAction = "open";
@@ -437,7 +466,7 @@ function ensureMemberUI(): void {
     if (state.status === "signedIn") memberHome.open();
     else dialog?.showModal();
   });
-  controls.appendChild(button);
+  contextGroup.appendChild(button);
 
   closeArtworkButton = document.createElement("button");
   closeArtworkButton.type = "button";
@@ -446,7 +475,7 @@ function ensureMemberUI(): void {
   closeArtworkButton.setAttribute("aria-label", "Close the current Artwork and return to the shared Map");
   closeArtworkButton.hidden = true;
   closeArtworkButton.addEventListener("click", () => closeCurrentArtwork());
-  controls.appendChild(closeArtworkButton);
+  contextGroup.appendChild(closeArtworkButton);
 
   dialog = document.createElement("dialog");
   dialog.className = "subway-member-dialog";

@@ -1,6 +1,9 @@
 import {
   createFirebaseArtworkRepository,
   createFirebaseMemberIdentityAuthority,
+  DRAWING_DEFAULT_COLORS,
+  DRAWING_SUPPLY_ORDER,
+  DRAWING_WIDTH_RANGES,
   MARKER_SUPPLY,
   MOP_SUPPLY,
   PEN_SUPPLY,
@@ -8,6 +11,7 @@ import {
   PENCIL_SUPPLY,
   SPRAY_SUPPLY,
   type Artwork,
+  type DrawingSupplyId,
   type MemberIdentityState,
 } from "@studiorich/member-identity";
 import {
@@ -33,6 +37,18 @@ const markerButton = required(document.querySelector<HTMLButtonElement>("#blackb
 const mopButton = required(document.querySelector<HTMLButtonElement>("#blackbook-mop"), "blackbook_surface_missing");
 const sprayButton = required(document.querySelector<HTMLButtonElement>("#blackbook-spray"), "blackbook_surface_missing");
 const eraserButton = required(document.querySelector<HTMLButtonElement>("#blackbook-eraser"), "blackbook_surface_missing");
+const colorControl = required(document.querySelector<HTMLInputElement>("#blackbook-color"), "blackbook_surface_missing");
+
+// Drawing Shell V1: the static HTML's supply-button order is authored by
+// hand -- this guard fails loudly in development the moment it drifts from
+// the canonical order Map now also reads, instead of the two silently
+// diverging again the way the pre-Shell WIDTH_RANGE/color duplicates did.
+{
+  const buttonOrder = [pencilButton, penButton, markerButton, mopButton, sprayButton].map((button) => button.id.replace("blackbook-", ""));
+  if (buttonOrder.join(",") !== DRAWING_SUPPLY_ORDER.join(",")) {
+    throw new Error(`blackbook_supply_order_mismatch: expected [${DRAWING_SUPPLY_ORDER.join(",")}], found [${buttonOrder.join(",")}]`);
+  }
+}
 const widthControl = required(document.querySelector<HTMLInputElement>("#blackbook-width"), "blackbook_surface_missing");
 const opacityControl = required(document.querySelector<HTMLInputElement>("#blackbook-opacity"), "blackbook_surface_missing");
 
@@ -117,12 +133,17 @@ let operations: BlackbookOperation[] = [];
 let activePoints: { x: number; y: number }[] = [];
 let nextOperationId = 1;
 let activeSupply: "pencil" | "pen" | "marker" | "mop" | "spray" | "eraser" = "pencil";
-const supplySettings: Record<"pencil" | "pen" | "marker" | "mop" | "spray", { width: number; opacity: number }> = {
-  pencil: { ...PENCIL_SUPPLY.defaultSettings },
-  pen: { ...PEN_SUPPLY.defaultSettings },
-  marker: { ...MARKER_SUPPLY.defaultSettings },
-  mop: { ...MOP_SUPPLY.defaultSettings },
-  spray: { ...SPRAY_SUPPLY.defaultSettings },
+// Drawing Shell V1 -- per-supply remembered Width/Opacity/Color, seeded from
+// the SAME canonical defaults Map now reads too (DRAWING_DEFAULT_COLORS,
+// each supply's own `defaultSettings`). Switching supplies restores that
+// supply's own last-used values instead of leaking one supply's settings
+// into another -- unchanged behavior, only the color is new.
+const supplySettings: Record<DrawingSupplyId, { width: number; opacity: number; color: string }> = {
+  pencil: { ...PENCIL_SUPPLY.defaultSettings, color: DRAWING_DEFAULT_COLORS.pencil },
+  pen: { ...PEN_SUPPLY.defaultSettings, color: DRAWING_DEFAULT_COLORS.pen },
+  marker: { ...MARKER_SUPPLY.defaultSettings, color: DRAWING_DEFAULT_COLORS.marker },
+  mop: { ...MOP_SUPPLY.defaultSettings, color: DRAWING_DEFAULT_COLORS.mop },
+  spray: { ...SPRAY_SUPPLY.defaultSettings, color: DRAWING_DEFAULT_COLORS.spray },
 };
 
 /**
@@ -164,13 +185,17 @@ function render(): void {
   ctx.drawImage(materialLayers.marker.canvas, 0, 0, width(), height());
   renderPageFrameOutline();
   undoButton.disabled = memberState.status !== "signedIn" || operations.length === 0;
-  pencilButton.dataset.active = String(activeSupply === "pencil");
-  penButton.dataset.active = String(activeSupply === "pen");
-  markerButton.dataset.active = String(activeSupply === "marker");
-  mopButton.dataset.active = String(activeSupply === "mop");
-  sprayButton.dataset.active = String(activeSupply === "spray");
-  eraserButton.dataset.active = String(activeSupply === "eraser");
-  panButton.dataset.active = String(panMode);
+  // Drawing Shell V1: `aria-pressed` is now the one canonical active-tool
+  // state signal (same convention Map's toolbar already used) -- CSS reads
+  // it directly ([aria-pressed="true"]), so a screen reader and the visual
+  // highlight can never disagree the way a separate data-attribute risked.
+  pencilButton.setAttribute("aria-pressed", String(activeSupply === "pencil"));
+  penButton.setAttribute("aria-pressed", String(activeSupply === "pen"));
+  markerButton.setAttribute("aria-pressed", String(activeSupply === "marker"));
+  mopButton.setAttribute("aria-pressed", String(activeSupply === "mop"));
+  sprayButton.setAttribute("aria-pressed", String(activeSupply === "spray"));
+  eraserButton.setAttribute("aria-pressed", String(activeSupply === "eraser"));
+  panButton.setAttribute("aria-pressed", String(panMode));
 }
 
 // Calibration V1 (revised): quadratic-midpoint smoothing (see
@@ -389,15 +414,12 @@ function drawSprayStroke(
 
 function activeOperation(points: readonly { x: number; y: number }[]): BlackbookOperation {
   if (activeSupply === "eraser") return { operation: "eraser", id: "active", points, width: PENCIL_ERASER_SUPPLY.defaultWidth };
-  // Mop's muted wet-ink teal and Spray's punchy aerosol orange each keep
-  // their own material visually distinct from Marker's saturated pink at a
-  // glance, independent of width/opacity differences.
-  const color = activeSupply === "pencil" ? "#171412"
-    : activeSupply === "pen" ? "#101828"
-    : activeSupply === "mop" ? "#1c6e6e"
-    : activeSupply === "spray" ? "#e2572b"
-    : "#d32852";
-  return { operation: activeSupply, id: "active", points, style: { color, width: Number(widthControl.value), opacity: Number(opacityControl.value) } };
+  // Drawing Shell V1: color now comes from the live COLOR control (per-supply
+  // remembered, seeded from the SAME canonical DRAWING_DEFAULT_COLORS Map
+  // reads) instead of a fixed per-supply constant -- changing color only
+  // ever affects the NEXT authored Mark; already-persisted Marks keep their
+  // own already-authored `style.color` untouched.
+  return { operation: activeSupply, id: "active", points, style: { color: colorControl.value, width: Number(widthControl.value), opacity: Number(opacityControl.value) } };
 }
 
 // Blackbook Spatial Workspace V1: pointer capture now goes through the
@@ -516,26 +538,15 @@ window.addEventListener("resize", () => {
   render();
 });
 
-// Calibration V1: the WIDTH slider's own min/max become instrument-specific
-// so the slider's middle lands in each supply's everyday useful range,
-// without changing what a stored Width number means when rendered (still
-// a literal canvas-pixel line width, or footprint-radius*2 for Mop/Spray).
-const WIDTH_RANGE: Record<"pencil" | "pen" | "marker" | "mop" | "spray", { min: number; max: number }> = {
-  pencil: { min: 2, max: 14 },
-  pen: { min: 1, max: 10 },
-  marker: { min: 6, max: 32 },
-  mop: { min: 14, max: 54 },
-  spray: { min: 8, max: 40 },
-};
-
-function selectSupply(supply: "pencil" | "pen" | "marker" | "mop" | "spray" | "eraser"): void {
+function selectSupply(supply: DrawingSupplyId | "eraser"): void {
   activeSupply = supply;
   if (supply !== "eraser") {
-    const range = WIDTH_RANGE[supply];
+    const range = DRAWING_WIDTH_RANGES[supply];
     widthControl.min = String(range.min);
     widthControl.max = String(range.max);
     widthControl.value = String(supplySettings[supply].width);
     opacityControl.value = String(supplySettings[supply].opacity);
+    colorControl.value = supplySettings[supply].color;
   }
   render();
 }
@@ -544,6 +555,7 @@ function rememberSupplySettings(): void {
   if (activeSupply === "eraser") return;
   supplySettings[activeSupply].width = Number(widthControl.value);
   supplySettings[activeSupply].opacity = Number(opacityControl.value);
+  supplySettings[activeSupply].color = colorControl.value;
 }
 
 pencilButton.addEventListener("click", () => selectSupply("pencil"));
@@ -552,12 +564,14 @@ markerButton.addEventListener("click", () => selectSupply("marker"));
 mopButton.addEventListener("click", () => selectSupply("mop"));
 sprayButton.addEventListener("click", () => selectSupply("spray"));
 eraserButton.addEventListener("click", () => { activeSupply = "eraser"; render(); });
+colorControl.addEventListener("input", rememberSupplySettings);
 widthControl.addEventListener("input", rememberSupplySettings);
 opacityControl.addEventListener("input", rememberSupplySettings);
-widthControl.min = String(WIDTH_RANGE.pencil.min);
-widthControl.max = String(WIDTH_RANGE.pencil.max);
+widthControl.min = String(DRAWING_WIDTH_RANGES.pencil.min);
+widthControl.max = String(DRAWING_WIDTH_RANGES.pencil.max);
 widthControl.value = String(PENCIL_SUPPLY.defaultSettings.width);
 opacityControl.value = String(PENCIL_SUPPLY.defaultSettings.opacity);
+colorControl.value = DRAWING_DEFAULT_COLORS.pencil;
 
 memberButton.addEventListener("click", () => {
   if (memberState.status === "signedIn") void memberIdentity.signOut();

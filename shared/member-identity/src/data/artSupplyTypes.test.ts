@@ -1,5 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { MARKER_SUPPLY, MOP_SUPPLY, PEN_SUPPLY, PENCIL_ERASER_SUPPLY, PENCIL_SUPPLY, SPRAY_SUPPLY, canEraseMaterial } from "./artSupplyTypes.js";
+import {
+  DRAWING_DEFAULT_COLORS,
+  DRAWING_SUPPLY_ORDER,
+  DRAWING_WIDTH_RANGES,
+  MARKER_SUPPLY,
+  MOP_SUPPLY,
+  PEN_SUPPLY,
+  PENCIL_ERASER_SUPPLY,
+  PENCIL_SUPPLY,
+  SPRAY_SUPPLY,
+  canEraseMaterial,
+} from "./artSupplyTypes.js";
 
 describe("Art Supplies V1", () => {
   it("defines Pencil as a graphite-producing supply with editable performance settings", () => {
@@ -50,5 +61,29 @@ describe("Art Supplies V4 -- Spray", () => {
   it("keeps the graphite-only Eraser from targeting Spray -- no universal or Spray-specific eraser", () => {
     expect(canEraseMaterial("eraser", "spray")).toBe(false);
     expect(canEraseMaterial("eraser", "graphite")).toBe(true);
+  });
+});
+
+describe("Drawing Shell V1 -- canonical presentation constants", () => {
+  it("defines a stable, canonical Art Supply order", () => {
+    expect(DRAWING_SUPPLY_ORDER).toEqual(["pencil", "pen", "marker", "mop", "spray"]);
+  });
+
+  it("gives every canonical supply a width range whose middle differs per instrument", () => {
+    expect(Object.keys(DRAWING_WIDTH_RANGES).sort()).toEqual([...DRAWING_SUPPLY_ORDER].sort());
+    for (const supply of DRAWING_SUPPLY_ORDER) {
+      const range = DRAWING_WIDTH_RANGES[supply];
+      expect(range.min).toBeLessThan(range.max);
+    }
+  });
+
+  it("gives every canonical supply its own visually-distinct default color", () => {
+    expect(Object.keys(DRAWING_DEFAULT_COLORS).sort()).toEqual([...DRAWING_SUPPLY_ORDER].sort());
+    const colors = DRAWING_SUPPLY_ORDER.map((supply) => DRAWING_DEFAULT_COLORS[supply]);
+    expect(new Set(colors).size).toBe(colors.length);
+  });
+
+  it("Mop and Marker keep visually distinct default colors, matching their distinct material identities", () => {
+    expect(DRAWING_DEFAULT_COLORS.mop).not.toBe(DRAWING_DEFAULT_COLORS.marker);
   });
 });

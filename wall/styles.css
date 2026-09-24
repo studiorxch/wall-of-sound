@@ -1115,6 +1115,20 @@ body.subway-public .subway-ribbon-sunroof-exit {
   backdrop-filter: blur(8px);
 }
 .subway-map-paint-controls[hidden] { display: none !important; }
+/* Drawing Shell V1: Member/session controls (SIGN IN, CLOSE ARTWORK) are
+   workspace-owned, not Art Supply controls -- a visual break (border/margin)
+   separates this group from the Level 1/Level 2 drawing rows above it, so
+   the two read as distinct control families inside the same floating panel
+   rather than one undifferentiated row of buttons (see the UI Unification
+   recon). Behavior is unchanged -- same panel, same buttons, new grouping. */
+.subway-map-context-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-top: 6px;
+  margin-top: 2px;
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+}
 /* Map Art Supplies Integration V1: Level 1 (persistent, compact) and Level 2
    (contextual COLOR/WIDTH/OPACITY, shown only while a drawing supply is
    active) each lay out as their own row inside the same floating panel. */

@@ -70,3 +70,41 @@ export const PENCIL_ERASER_SUPPLY = Object.freeze({
 export function canEraseMaterial(supplyId: ArtSupplyId, materialId: ArtMaterialId): boolean {
   return supplyId === PENCIL_ERASER_SUPPLY.id && materialId === PENCIL_ERASER_SUPPLY.targetMaterialId;
 }
+
+/**
+ * Drawing Shell V1 -- canonical Art Supply presentation constants, the
+ * single source both Map (`subwayMapPaintSurface.js`, a plain-JS
+ * window.SBE runtime) and Blackbook (`blackbookRuntime.ts`, a Vite-built
+ * module) now read instead of each keeping its own private, independently
+ * drifting copy. Values are UNCHANGED from what both implementations
+ * already used identically before this consolidation -- this is a
+ * de-duplication, not a recalibration. Deliberately just data (order,
+ * ranges, colors): no component, no DOM, no runtime coupling between the
+ * two bundling environments.
+ */
+export type DrawingSupplyId = "pencil" | "pen" | "marker" | "mop" | "spray";
+
+export const DRAWING_SUPPLY_ORDER: readonly DrawingSupplyId[] = Object.freeze(["pencil", "pen", "marker", "mop", "spray"]);
+
+export interface DrawingWidthRange {
+  readonly min: number;
+  readonly max: number;
+}
+
+/** Calibration V1: each slider's own min/max so its middle lands in that instrument's own everyday useful range -- see PENCIL_SUPPLY etc.'s `defaultSettings.width` for the single starting value within this range. */
+export const DRAWING_WIDTH_RANGES: Readonly<Record<DrawingSupplyId, DrawingWidthRange>> = Object.freeze({
+  pencil: Object.freeze({ min: 2, max: 14 }),
+  pen: Object.freeze({ min: 1, max: 10 }),
+  marker: Object.freeze({ min: 6, max: 32 }),
+  mop: Object.freeze({ min: 14, max: 54 }),
+  spray: Object.freeze({ min: 8, max: 40 }),
+});
+
+/** Each material's own visually-distinct default ink color -- see mopDeposition.ts/strokeSmoothing.ts's own docs for why Mop's muted teal and Spray's punchy orange stay distinguishable from Marker's saturated pink at a glance. */
+export const DRAWING_DEFAULT_COLORS: Readonly<Record<DrawingSupplyId, string>> = Object.freeze({
+  pencil: "#171412",
+  pen: "#101828",
+  marker: "#d32852",
+  mop: "#1c6e6e",
+  spray: "#e2572b",
+});

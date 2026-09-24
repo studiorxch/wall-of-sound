@@ -20,20 +20,7 @@
   var ROOT_ID = "subway-map-paint-controls";
   var _root = null;
 
-  var DRAW_SUPPLIES = ["pencil", "pen", "marker", "mop", "spray"];
   var SUPPLY_LABELS = { pencil: "PENCIL", pen: "PEN", marker: "MARKER", mop: "MOP", spray: "SPRAY" };
-  // Calibration V1: WIDTH stores the same raw canvas-pixel/footprint number
-  // it always has (no persisted-value migration) -- only the SLIDER's own
-  // min/max are tool-specific, so the middle of the slider lands in each
-  // instrument's own useful everyday range instead of a member having to
-  // hunt at one extreme of a single 1-48 range shared by every supply.
-  var WIDTH_RANGE = {
-    pencil: { min: 2, max: 14 },
-    pen: { min: 1, max: 10 },
-    marker: { min: 6, max: 32 },
-    mop: { min: 14, max: 54 },
-    spray: { min: 8, max: 40 },
-  };
   // Per-supply remembered Width/Opacity/Color, mirroring Blackbook's
   // supplySettings map -- switching supplies restores that supply's own
   // last-used values instead of leaking one supply's settings into another.
@@ -42,6 +29,24 @@
   function _workspace() { return SBE.Workspace || null; }
   function _drawing() { return SBE.SurfaceDrawingRuntime || null; }
   function _supplies() { return SBE.ArtSupplies || null; }
+  // Drawing Shell V1: canonical supply order/width-ranges/default-colors,
+  // published once by subwayMemberRuntime.ts (the same Vite module
+  // Blackbook itself imports @studiorich/member-identity from) onto
+  // window.SBE -- this plain-JS IIFE has no import statement of its own, so
+  // this is the seam it reads instead of keeping its own private copy that
+  // could silently drift from Blackbook's. A hardcoded fallback (matching
+  // the values that shipped here before this consolidation) covers only the
+  // narrow window before that module has finished loading.
+  var FALLBACK_SUPPLY_ORDER = ["pencil", "pen", "marker", "mop", "spray"];
+  var FALLBACK_WIDTH_RANGES = {
+    pencil: { min: 2, max: 14 }, pen: { min: 1, max: 10 }, marker: { min: 6, max: 32 },
+    mop: { min: 14, max: 54 }, spray: { min: 8, max: 40 },
+  };
+  var FALLBACK_DEFAULT_COLORS = { pencil: "#171412", pen: "#101828", marker: "#d32852", mop: "#1c6e6e", spray: "#e2572b" };
+  function _shellConfig() { return SBE.DrawingShellConfig || null; }
+  function _drawSupplies() { var config = _shellConfig(); return (config && config.supplyOrder) || FALLBACK_SUPPLY_ORDER; }
+  function _widthRange(supplyId) { var config = _shellConfig(); var ranges = (config && config.widthRanges) || FALLBACK_WIDTH_RANGES; return ranges[supplyId] || { min: 1, max: 48 }; }
+  function _defaultColor(supplyId) { var config = _shellConfig(); var colors = (config && config.defaultColors) || FALLBACK_DEFAULT_COLORS; return colors[supplyId] || "#171412"; }
   function _subwayActive() {
     var surface = SBE.SubwayPresentationSurface;
     return !!(surface && surface.isActive && surface.isActive());
@@ -51,11 +56,10 @@
     if (_supplySettings) return _supplySettings;
     var supplies = _supplies();
     _supplySettings = {};
-    DRAW_SUPPLIES.forEach(function (id) {
+    _drawSupplies().forEach(function (id) {
       var key = id.toUpperCase() + "_SUPPLY";
       var defaults = supplies && supplies[key] ? supplies[key].defaultSettings : { width: 6, opacity: 0.85 };
-      var color = id === "pencil" ? "#171412" : id === "pen" ? "#101828" : id === "mop" ? "#1c6e6e" : id === "spray" ? "#e2572b" : "#d32852";
-      _supplySettings[id] = { color: color, width: defaults.width, opacity: defaults.opacity };
+      _supplySettings[id] = { color: _defaultColor(id), width: defaults.width, opacity: defaults.opacity };
     });
     return _supplySettings;
   }
@@ -63,7 +67,7 @@
   function _activeDrawSupply() {
     var drawing = _drawing();
     var brush = drawing && drawing.getBrush ? drawing.getBrush() : null;
-    return brush && DRAW_SUPPLIES.indexOf(brush.supplyId) !== -1 ? brush.supplyId : null;
+    return brush && _drawSupplies().indexOf(brush.supplyId) !== -1 ? brush.supplyId : null;
   }
 
   function _setMode(mode) {
@@ -80,7 +84,7 @@
     if (!drawing || !drawing.setBrush) return false;
     if (supplyId === "eraser") {
       drawing.setBrush({ supplyId: "eraser" });
-    } else if (DRAW_SUPPLIES.indexOf(supplyId) !== -1) {
+    } else if (_drawSupplies().indexOf(supplyId) !== -1) {
       var settings = _ensureSupplySettings()[supplyId];
       drawing.setBrush({ supplyId: supplyId, color: settings.color, width: settings.width, opacity: settings.opacity });
     } else {
@@ -131,7 +135,7 @@
     var level1 = ''
       + '<div class="subway-map-paint-level1" data-map-paint-level="1">'
       + '<button type="button" data-map-paint-mode="navigate">PAN</button>'
-      + DRAW_SUPPLIES.map(function (id) {
+      + _drawSupplies().map(function (id) {
           return '<button type="button" data-map-paint-supply="' + id + '">' + SUPPLY_LABELS[id] + '</button>';
         }).join("")
       + '<button type="button" data-map-paint-supply="eraser">ERASER</button>'
@@ -202,7 +206,7 @@
         var opacityInput = level2.querySelector('[data-map-paint-option="opacity"]');
         if (colorInput && global.document.activeElement !== colorInput) colorInput.value = brush.color;
         if (widthInput && global.document.activeElement !== widthInput) {
-          var range = WIDTH_RANGE[supplyId] || { min: 1, max: 48 };
+          var range = _widthRange(supplyId);
           widthInput.min = String(range.min);
           widthInput.max = String(range.max);
           widthInput.value = String(brush.width);
