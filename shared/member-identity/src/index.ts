@@ -51,3 +51,14 @@ export {
 } from "./firebase/firebaseConfig.js";
 export { createFirebaseMemberIdentityAuthority } from "./firebase/createFirebaseMemberIdentityAuthority.js";
 export { createFirebaseArtworkRepository } from "./firebase/createFirebaseArtworkRepository.js";
+export { createFirebaseEventRadioRepository } from "./firebase/createFirebaseEventRadioRepository.js";
+export { validateSetEventProgramInput, RADIO_PROGRAMS_COLLECTION_PATH, EVENT_PROGRAM_DOCUMENT_PATH } from "./firebase/firestoreEventRadioRepository.js";
+export type {
+  EventPlaybackMode,
+  EventProgramEndPolicy,
+  EventProgramState,
+  EventRadioRepository,
+  EventStatus,
+  RadioProgramSummary,
+  SetEventProgramInput,
+} from "./data/eventRadioTypes.js";

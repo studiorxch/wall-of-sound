@@ -221,7 +221,7 @@ function checkDrift(): void {
 
 async function initialize(): Promise<void> {
   if (!hasUI) return;
-  config = await loadEventProgramConfig();
+  config = await loadEventProgramConfig(import.meta.env);
   try {
     const response = await fetch(`${config.manifestBaseUrl}radio-manifest.json`);
     if (!response.ok) throw new Error(`manifest fetch failed: ${response.status}`);

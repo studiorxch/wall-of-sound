@@ -10,6 +10,17 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == uid;
     }
 
+    // Event Radio Turnkey Operations V1: the ENTIRE operator-authority
+    // boundary for `radioPrograms`/`eventProgram`. Deliberately an email
+    // allowlist against the EXISTING Firebase Auth identity Member already
+    // uses -- not a second identity system, not a frontend secret, and not
+    // custom claims (no Admin SDK access is available in this environment
+    // to set them; see this build's own recon). Extend this list, never a
+    // frontend flag, to add another operator.
+    function isEventOperator() {
+      return isSignedIn() && request.auth.token.email == 'whatsup@richielau.com';
+    }
+
     function hasExactMemberFields(data) {
       return data.keys().hasAll([
           'uid',
@@ -298,6 +309,40 @@ service cloud.firestore {
         && request.resource.data.updatedAt == request.time;
 
       allow delete: if isSignedIn() && resource.data.creatorId == request.auth.uid;
+    }
+
+    // Event Radio Turnkey Operations V1: StudioRich-owned program catalog
+    // and active-event config. PUBLIC READ (no sign-in) -- a listener must
+    // be able to resolve and play the event's music with zero StudioRich
+    // authentication of their own; only WRITES are gated to the operator.
+    match /radioPrograms/{programId} {
+      allow read: if true;
+      allow write: if isEventOperator()
+        && request.resource.data.keys().hasAll(['title', 'manifestBaseUrl', 'trackCount', 'totalDurationSeconds'])
+        && request.resource.data.keys().hasOnly(['title', 'manifestBaseUrl', 'trackCount', 'totalDurationSeconds'])
+        && request.resource.data.title is string
+        && request.resource.data.manifestBaseUrl is string
+        && request.resource.data.trackCount is int
+        && request.resource.data.trackCount >= 0
+        && request.resource.data.totalDurationSeconds is number
+        && request.resource.data.totalDurationSeconds >= 0;
+      allow delete: if isEventOperator();
+    }
+
+    match /eventProgram/{documentId} {
+      allow read: if true;
+      allow write: if isEventOperator()
+        && documentId == 'current'
+        && request.resource.data.keys().hasAll(['programId', 'playbackMode', 'startAtMs', 'endPolicy', 'status', 'updatedAt', 'updatedBy'])
+        && request.resource.data.keys().hasOnly(['programId', 'playbackMode', 'startAtMs', 'endPolicy', 'status', 'updatedAt', 'updatedBy'])
+        && request.resource.data.programId is string
+        && request.resource.data.playbackMode in ['personal', 'clock']
+        && (request.resource.data.startAtMs == null || request.resource.data.startAtMs is number)
+        && request.resource.data.endPolicy in ['stop', 'repeat']
+        && request.resource.data.status in ['inactive', 'ready', 'active']
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.updatedBy is string;
+      allow delete: if false;
     }
   }
 }

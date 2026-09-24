@@ -1,0 +1,8 @@
+{
+  "name": "wall-of-sound-beta01-tooling",
+  "private": true,
+  "description": "Root-level tooling only (Firebase CLI for firebase.json at repo root). Not an npm workspace root -- music/, colorlab/, shared/member-identity each remain independent packages.",
+  "devDependencies": {
+    "firebase-tools": "^13.29.1"
+  }
+}

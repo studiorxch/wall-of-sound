@@ -2090,6 +2090,7 @@ export default defineConfig({
         main: path.resolve(__dirname, 'index.html'),
         radioPlayer: path.resolve(__dirname, 'radio-player.html'),
         blackbook: path.resolve(__dirname, 'blackbook.html'),
+        eventControl: path.resolve(__dirname, 'event-control.html'),
         subwayMemberRuntime: path.resolve(__dirname, 'src/member/subwayMemberRuntime.ts'),
       },
       output: {

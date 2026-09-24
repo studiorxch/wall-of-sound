@@ -1,22 +1,24 @@
 /**
- * Event Music + Clock Radio Foundation V1 -- the PROGRAM CONFIG this build's
- * own brief asks to keep separate from PLAYBACK MODE and from CODE
- * (requirement 14/31): which playlist bundle plays, in which mode, and
- * (for CLOCK mode) when the program started. None of this is a compiled
- * constant -- it is fetched at runtime from a plain static JSON resource,
- * `/event-program.json`, precisely so an operator can change it by
- * replacing that one file on whatever host serves this app, with zero
+ * Event Radio Turnkey Operations V1 -- the PROGRAM CONFIG this build's own
+ * brief asks to keep separate from PLAYBACK MODE and from CODE. Primary
+ * authority is now the StudioRich-owned `eventProgram`/`radioPrograms`
+ * Firestore collections (see `@studiorich/member-identity`'s
+ * `EventRadioRepository`) -- the SAME data layer Member/Artwork already
+ * use, editable by an authorized operator via ordinary Firestore access
+ * (Console, or the small operator control this build adds), with zero
  * source-code edit, zero AI coding agent involvement, and zero application
- * rebuild.
+ * rebuild/redeploy.
  *
- * KNOWN LIMITATION (reported, not solved here -- see this build's own
- * capacity/operator-dependency report): this repository has no configured
- * production static hosting today (`firebase.json` has no `hosting`
- * section), so "replace the file on the host" has no real host to target
- * yet in this environment. The mechanism itself -- fetch, not import -- is
- * what makes that operationally possible once hosting exists; this file
- * does not attempt to stand up that hosting.
+ * `loadEventProgramConfig` only resolves a program when its stored
+ * `status` is `"active"` -- requirement 9's own rule that a listener must
+ * never receive an operator's still-being-configured ("inactive"/"ready")
+ * event. Falls back, in order, to the legacy static `/event-program.json`
+ * resource (kept only as an offline/pre-Firestore-rules-publish safety net
+ * from the prior build) and finally to `DEFAULT_EVENT_PROGRAM_CONFIG` --
+ * Blackbook's music feature must never be fully broken merely because an
+ * operator hasn't configured an event yet.
  */
+import { createFirebaseEventRadioRepository, type StudioRichFirebaseEnvironment } from "@studiorich/member-identity";
 
 export type EventPlaybackMode = "personal" | "clock";
 export type EventProgramEndPolicy = "stop" | "repeat";
@@ -77,14 +79,51 @@ export function parseEventProgramConfig(raw: unknown): EventProgramConfig {
   };
 }
 
-/** Fetches and validates `/event-program.json`; falls back to the safe default on any failure (network error, 404, invalid JSON, invalid shape). Never throws. */
-export async function loadEventProgramConfig(): Promise<EventProgramConfig> {
+/** Legacy static-file fallback (from the prior build) -- kept only as an offline/pre-Firestore-rules-publish safety net, never the primary source anymore. */
+async function loadStaticFallbackConfig(): Promise<EventProgramConfig> {
   try {
     const response = await fetch("/event-program.json", { cache: "no-store" });
     if (!response.ok) return DEFAULT_EVENT_PROGRAM_CONFIG;
-    const raw = await response.json();
-    return parseEventProgramConfig(raw);
+    return parseEventProgramConfig(await response.json());
   } catch {
     return DEFAULT_EVENT_PROGRAM_CONFIG;
   }
+}
+
+/**
+ * Resolves the active event's playable config: reads the operator-owned
+ * `eventProgram` document and joins it against `radioPrograms` (both
+ * Firestore, both StudioRich-owned data -- see this module's own doc) to
+ * turn a human-chosen `programId` into the `manifestBaseUrl` the player
+ * actually needs. Only ever resolves a program whose `status` is
+ * `"active"`; "inactive"/"ready" (or no document at all, e.g. the
+ * `eventProgram`/`radioPrograms` Firestore rules haven't been published
+ * yet in this environment) fall through to the legacy static-file
+ * fallback and finally to the hardcoded safe default. Never throws.
+ *
+ * LIVE CONFIG CHANGES (requirement 18): resolved ONCE, at load time --
+ * the smallest predictable V1 behavior. An operator's change takes effect
+ * the next time a client loads Blackbook, never retroactively for an
+ * already-open tab; no realtime listener/polling is introduced.
+ */
+export async function loadEventProgramConfig(environment: StudioRichFirebaseEnvironment): Promise<EventProgramConfig> {
+  try {
+    const repository = createFirebaseEventRadioRepository(environment);
+    const [state, programs] = await Promise.all([repository.getEventProgram(), repository.listRadioPrograms()]);
+    if (state && state.status === "active" && state.programId) {
+      const program = programs.find((candidate) => candidate.id === state.programId);
+      if (program) {
+        return {
+          schemaVersion: "1.0.0",
+          manifestBaseUrl: program.manifestBaseUrl,
+          playbackMode: state.playbackMode,
+          startAtMs: state.startAtMs,
+          endPolicy: state.endPolicy,
+        };
+      }
+    }
+  } catch {
+    // Firestore unreachable or rules not yet published -- fall through.
+  }
+  return loadStaticFallbackConfig();
 }
