@@ -88,6 +88,20 @@ export function validateArtworkMark(mark: ArtworkMark): void {
       || (mark.material.supplyId === "mop" && mark.material.materialId === "mop")
       || (mark.material.supplyId === "spray" && mark.material.materialId === "spray");
     if (!validMaterial) throw new Error("invalid_artwork_material");
+    // Graphite Grades Foundation V1: `variantId`/`profileVersion` are always
+    // present together or absent together, and never on a non-graded
+    // supply -- this package deliberately does NOT hardcode the specific
+    // valid grade strings (that catalog belongs to the engine that reads
+    // it, e.g. strokeSmoothing.ts's GRAPHITE_GRADE_ORDER); Firestore rules
+    // are the layer that restricts to a known whitelist.
+    const hasVariant = "variantId" in mark.material;
+    const hasProfileVersion = "profileVersion" in mark.material;
+    if (hasVariant !== hasProfileVersion) throw new Error("invalid_artwork_material_variant");
+    if (hasVariant) {
+      if (mark.material.supplyId !== "pencil") throw new Error("invalid_artwork_material_variant");
+      if (typeof mark.material.variantId !== "string" || !mark.material.variantId) throw new Error("invalid_artwork_material_variant");
+      if (!Number.isInteger(mark.material.profileVersion) || (mark.material.profileVersion as number) < 1) throw new Error("invalid_artwork_material_variant");
+    }
   }
   if (!mark.style || typeof mark.style.color !== "string" || !mark.style.color.trim()) {
     throw new Error("invalid_artwork_style_color");

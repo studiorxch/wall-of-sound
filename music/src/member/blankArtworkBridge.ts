@@ -37,6 +37,9 @@ export interface BlankStroke {
   surfaceId?: string;
   readonly points: readonly { readonly x: number; readonly y: number }[];
   readonly style: { readonly color: string; readonly width: number; readonly opacity: number };
+  /** Graphite Grades Foundation V1 -- see BlackbookStroke's identical field doc. Blank has no grade-selection UI (no change required here for that reason alone), but a Mark carrying these renders with its own stored grade rather than always assuming HB. */
+  readonly variantId?: string;
+  readonly profileVersion?: number;
 }
 
 export interface BlankErasure {
@@ -60,7 +63,13 @@ export function toBlankStrokeMark(stroke: BlankStroke, markId: string): LocalStr
     createdAt: new Date(),
     geometry: { format: "local-2d-stroke-v1", points: stroke.points.map(({ x, y }) => ({ x, y })) },
     style: { ...stroke.style },
-    material: { supplyId: stroke.operation, materialId: MATERIAL_BY_SUPPLY[stroke.operation] },
+    material: {
+      supplyId: stroke.operation,
+      materialId: MATERIAL_BY_SUPPLY[stroke.operation],
+      ...(stroke.operation === "pencil" && stroke.variantId !== undefined && stroke.profileVersion !== undefined
+        ? { variantId: stroke.variantId, profileVersion: stroke.profileVersion }
+        : {}),
+    },
   };
 }
 

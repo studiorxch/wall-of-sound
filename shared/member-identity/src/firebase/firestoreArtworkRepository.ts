@@ -92,6 +92,12 @@ function decodeMark(value: unknown): ArtworkMark {
     ...(material ? { material: {
       supplyId: String(material.supplyId) as ArtSupplyId,
       materialId: String(material.materialId) as ArtMaterialId,
+      // Graphite Grades Foundation V1: decoded together, omitted together --
+      // a legacy Mark (or a non-graded supply) never gets an invented
+      // variant identity.
+      ...(typeof material.variantId === "string" && Number.isFinite(material.profileVersion)
+        ? { variantId: material.variantId, profileVersion: material.profileVersion as number }
+        : {}),
     } } : {}),
   };
   const decoded: ArtworkMark = format === "local-2d-stroke-v1"

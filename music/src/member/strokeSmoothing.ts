@@ -198,11 +198,74 @@ export function hashLateralUnit(x: number, y: number): number {
  * the PROJECTED screen position of these same deterministic passes, never
  * their content.
  */
+/**
+ * Graphite Grades Foundation V1 -- the smallest typed model that
+ * parameterizes exactly the behavior `strokeGraphite` already had, and
+ * nothing else. Every field here replaces a constant that was previously
+ * hardcoded inline (see the HB profile below, which is byte-identical to
+ * Graphite Pencil V1's own former literals) -- no speculative/no-op fields
+ * (no smudgeMobility, no eraserResponse, no pressure) were added, since the
+ * current renderer has no meaningful use for them yet (see the recon this
+ * build follows).
+ */
+export interface GraphiteProfile {
+  /** Body-pass alpha, as a fraction of the authored opacity -- "how much graphite mass a single pass deposits." */
+  readonly depositionAlpha: number;
+  /** Fraction of grain segments actually drawn (0..1) -- "how continuous/dense the grain is," not merely a skip gimmick. */
+  readonly grainDensity: number;
+  /** Grain alpha's floor, as a fraction of authored opacity. */
+  readonly grainAlphaBase: number;
+  /** Grain alpha's additional random range on top of the floor. */
+  readonly grainAlphaRange: number;
+  /** Lateral grain jitter, as a fraction of authored width -- "how precise vs. rough the edge reads." */
+  readonly edgeJitter: number;
+}
+
+/**
+ * Graphite Grades Foundation V1 -- seven calibration anchors toward the
+ * eventual full 9H-9B professional range (see this build's own recon).
+ * HB's values are UNCHANGED from Graphite Pencil V1's own hardcoded
+ * constants (0.75, 0.68, 0.22, 0.28, 0.14) -- this is the calibration
+ * reference every other grade is tuned relative to, not a new value.
+ *
+ * The H/B progression moves multiple renderer characteristics together
+ * (deposition alpha, grain density, grain alpha, edge jitter) rather than
+ * a single opacity scalar, per this build's explicit "not merely opacity"
+ * requirement -- harder grades read as lighter AND more restrained/precise;
+ * softer grades read as darker AND richer/rougher, never just "more faded"
+ * or "more solid."
+ */
+export type GraphiteGradeId = "9h" | "6h" | "3h" | "hb" | "3b" | "6b" | "9b";
+
+export const GRAPHITE_GRADE_ORDER: readonly GraphiteGradeId[] = Object.freeze(["9h", "6h", "3h", "hb", "3b", "6b", "9b"]);
+
+/** All seven anchor profiles share this version -- see strokeInk/strokeGraphite's own module doc on engine vs. profile versioning for why a separate engine-version field isn't needed yet. */
+export const GRAPHITE_PROFILE_VERSION = 1;
+
+export const GRAPHITE_PROFILES: Readonly<Record<GraphiteGradeId, GraphiteProfile>> = Object.freeze({
+  "9h": Object.freeze({ depositionAlpha: 0.58, grainDensity: 0.48, grainAlphaBase: 0.12, grainAlphaRange: 0.20, edgeJitter: 0.06 }),
+  "6h": Object.freeze({ depositionAlpha: 0.637, grainDensity: 0.547, grainAlphaBase: 0.153, grainAlphaRange: 0.227, edgeJitter: 0.087 }),
+  "3h": Object.freeze({ depositionAlpha: 0.693, grainDensity: 0.613, grainAlphaBase: 0.187, grainAlphaRange: 0.253, edgeJitter: 0.113 }),
+  hb: Object.freeze({ depositionAlpha: 0.75, grainDensity: 0.68, grainAlphaBase: 0.22, grainAlphaRange: 0.28, edgeJitter: 0.14 }),
+  "3b": Object.freeze({ depositionAlpha: 0.807, grainDensity: 0.747, grainAlphaBase: 0.253, grainAlphaRange: 0.307, edgeJitter: 0.167 }),
+  "6b": Object.freeze({ depositionAlpha: 0.863, grainDensity: 0.813, grainAlphaBase: 0.287, grainAlphaRange: 0.333, edgeJitter: 0.193 }),
+  "9b": Object.freeze({ depositionAlpha: 0.92, grainDensity: 0.88, grainAlphaBase: 0.32, grainAlphaRange: 0.36, edgeJitter: 0.22 }),
+});
+
+/** Legacy Marks (authored before Graphite Grades Foundation V1, or missing/unknown variantId) always resolve to HB -- Graphite Pencil V1's own exact behavior, never a guess. */
+export function resolveGraphiteProfile(variantId: string | null | undefined): GraphiteProfile {
+  if (variantId && Object.prototype.hasOwnProperty.call(GRAPHITE_PROFILES, variantId)) {
+    return GRAPHITE_PROFILES[variantId as GraphiteGradeId];
+  }
+  return GRAPHITE_PROFILES.hb;
+}
+
 export function strokeGraphite(
   ctx: CanvasRenderingContext2D,
   points: readonly SmoothablePoint[],
   style: { readonly color: string; readonly width: number; readonly opacity: number },
   seedSource: string,
+  profile: GraphiteProfile = GRAPHITE_PROFILES.hb,
 ): void {
   if (points.length < 2) return;
   const seed = (() => {
@@ -221,7 +284,7 @@ export function strokeGraphite(
   ctx.beginPath();
   traceSmoothedPath(ctx, points);
   ctx.lineWidth = Math.max(0.5, style.width * 0.92);
-  ctx.globalAlpha = style.opacity * 0.75;
+  ctx.globalAlpha = style.opacity * profile.depositionAlpha;
   ctx.stroke();
 
   // Pass 2: grain -- per-segment coverage/jitter, deterministic from the
@@ -231,14 +294,14 @@ export function strokeGraphite(
     const a = points[index - 1];
     const b = points[index];
     const key = hash01(a.x + seed, a.y + seed, 3);
-    if (key > 0.68) continue; // ~32% of segments skipped -> imperfect coverage
+    if (key > profile.grainDensity) continue; // imperfect coverage -- fraction retained == grainDensity
     const dx = b.x - a.x;
     const dy = b.y - a.y;
     const length = Math.hypot(dx, dy) || 1;
-    const jitter = hashLateralUnit(a.x + seed, a.y + seed) * style.width * 0.14;
+    const jitter = hashLateralUnit(a.x + seed, a.y + seed) * style.width * profile.edgeJitter;
     const offsetX = (-dy / length) * jitter;
     const offsetY = (dx / length) * jitter;
-    ctx.globalAlpha = style.opacity * (0.22 + hash01(a.x + seed, a.y + seed, 5) * 0.28);
+    ctx.globalAlpha = style.opacity * (profile.grainAlphaBase + hash01(a.x + seed, a.y + seed, 5) * profile.grainAlphaRange);
     ctx.beginPath();
     ctx.moveTo(a.x + offsetX, a.y + offsetY);
     ctx.lineTo(b.x + offsetX, b.y + offsetY);

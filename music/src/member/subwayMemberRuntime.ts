@@ -32,7 +32,7 @@ import { createSessionArtworkLibrary } from "./sessionArtworkLibrary";
 import { resolveMopDabPlan, resolveMopEmissionPoints } from "./mopDeposition";
 import { MAP_SURFACE_REFERENCE_ZOOM, resolveZoomScale } from "./mapZoomScale";
 import { hashSeed, resolveSprayCorePlan, resolveSprayParticlePlan, STUDIORICH_STOCK_CAP } from "./sprayDeposition";
-import { fillMopDab, fillSprayParticle, hash01, hashLateralUnit, strokeGraphite, strokeInk, traceSmoothedPath, withAlpha } from "./strokeSmoothing";
+import { fillMopDab, fillSprayParticle, hash01, hashLateralUnit, resolveGraphiteProfile, strokeGraphite, strokeInk, traceSmoothedPath, withAlpha } from "./strokeSmoothing";
 
 type WallRuntime = {
   Workspace?: { getActiveSurface(): unknown };
@@ -107,6 +107,8 @@ type WallRuntime = {
     hash01: typeof hash01;
     /** Graphite Pencil V1 -- see strokeGraphite's own doc in strokeSmoothing.ts. */
     strokeGraphite: typeof strokeGraphite;
+    /** Graphite Grades Foundation V1 -- see resolveGraphiteProfile's own doc in strokeSmoothing.ts. */
+    resolveGraphiteProfile: typeof resolveGraphiteProfile;
     /** Ink Pen V1 -- see strokeInk's own doc in strokeSmoothing.ts. */
     strokeInk: typeof strokeInk;
   };
@@ -135,7 +137,7 @@ root.SBE.ArtSupplies = { PENCIL_SUPPLY, PEN_SUPPLY, MARKER_SUPPLY, MOP_SUPPLY, S
  */
 root.SBE.DrawingShellConfig = { supplyOrder: DRAWING_SUPPLY_ORDER, widthRanges: DRAWING_WIDTH_RANGES, defaultColors: DRAWING_DEFAULT_COLORS };
 root.SBE.ArtSupplyDeposition = { resolveMopDabPlan, resolveMopEmissionPoints, resolveSprayParticlePlan, resolveSprayCorePlan, hashSeed, STUDIORICH_STOCK_CAP };
-root.SBE.ArtSupplyRendering = { traceSmoothedPath, fillSprayParticle, fillMopDab, withAlpha, hashLateralUnit, hash01, strokeGraphite, strokeInk };
+root.SBE.ArtSupplyRendering = { traceSmoothedPath, fillSprayParticle, fillMopDab, withAlpha, hashLateralUnit, hash01, strokeGraphite, strokeInk, resolveGraphiteProfile };
 root.SBE.MapZoomScale = { resolveZoomScale, MAP_SURFACE_REFERENCE_ZOOM };
 
 const memberIdentity = createFirebaseMemberIdentityAuthority(import.meta.env);

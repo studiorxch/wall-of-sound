@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { boundsForMarks, createMapArtworkDocument, selectArtworkForMark } from "./artworkDocument.js";
+import { boundsForMarks, createMapArtworkDocument, selectArtworkForMark, validateArtworkMark } from "./artworkDocument.js";
 
 const mark = {
   id: "mark-1",
@@ -158,6 +158,38 @@ describe("createMapArtworkDocument", () => {
     it("rejects a non-finite pageFrame", () => {
       expect(() => createMapArtworkDocument({ creatorId: "member-uid", surfaceId: "blackbook:book-1:page:page-1", mark: localMark, pageFrame: { x: Number.NaN, y: 0, width: 1, height: 1 } }, "server-time"))
         .toThrow("invalid_artwork_page_frame");
+    });
+  });
+
+  describe("Graphite Grades Foundation V1 -- Mark material variant identity", () => {
+    const pencilMark = { ...localMark, material: { supplyId: "pencil" as const, materialId: "graphite" as const } };
+
+    it("a legacy Pencil Mark (no variantId) remains valid", () => {
+      expect(() => validateArtworkMark(pencilMark)).not.toThrow();
+    });
+
+    it("a Pencil Mark with a valid variantId + profileVersion is valid", () => {
+      const graded = { ...pencilMark, material: { ...pencilMark.material, variantId: "6b", profileVersion: 1 } };
+      expect(() => validateArtworkMark(graded)).not.toThrow();
+    });
+
+    it("variantId and profileVersion must be present together", () => {
+      const onlyVariant = { ...pencilMark, material: { ...pencilMark.material, variantId: "6b" } };
+      expect(() => validateArtworkMark(onlyVariant as never)).toThrow();
+      const onlyVersion = { ...pencilMark, material: { ...pencilMark.material, profileVersion: 1 } };
+      expect(() => validateArtworkMark(onlyVersion as never)).toThrow();
+    });
+
+    it("a non-Pencil supply may not carry a variantId", () => {
+      const penMark = { ...localMark, material: { supplyId: "pen" as const, materialId: "ink" as const, variantId: "6b", profileVersion: 1 } };
+      expect(() => validateArtworkMark(penMark as never)).toThrow();
+    });
+
+    it("profileVersion must be a positive integer", () => {
+      const zero = { ...pencilMark, material: { ...pencilMark.material, variantId: "6b", profileVersion: 0 } };
+      expect(() => validateArtworkMark(zero as never)).toThrow();
+      const fractional = { ...pencilMark, material: { ...pencilMark.material, variantId: "6b", profileVersion: 1.5 } };
+      expect(() => validateArtworkMark(fractional as never)).toThrow();
     });
   });
 });

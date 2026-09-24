@@ -27,6 +27,14 @@ export interface BlackbookStroke {
   surfaceId?: string;
   readonly points: readonly { readonly x: number; readonly y: number }[];
   readonly style: { readonly color: string; readonly width: number; readonly opacity: number };
+  /**
+   * Graphite Grades Foundation V1 -- which variant/grade authored this
+   * stroke (e.g. "6b"), paired with `profileVersion`. Only meaningful for
+   * `operation === "pencil"`; absent for every other supply, and absent on
+   * a Pencil stroke authored before this field existed (resolves to HB).
+   */
+  readonly variantId?: string;
+  readonly profileVersion?: number;
 }
 
 export interface BlackbookErasure {
@@ -57,7 +65,16 @@ export function toLocalStrokeMark(stroke: BlackbookStroke, markId: string, creat
     createdAt,
     geometry: { format: "local-2d-stroke-v1", points: stroke.points.map(({ x, y }) => ({ x, y })) },
     style: { ...stroke.style },
-    material: { supplyId: stroke.operation, materialId: MATERIAL_BY_SUPPLY[stroke.operation] },
+    material: {
+      supplyId: stroke.operation,
+      materialId: MATERIAL_BY_SUPPLY[stroke.operation],
+      // Graphite Grades Foundation V1: only Pencil ever carries a variant;
+      // omitted entirely (never `undefined`) for every other supply or when
+      // no grade was selected.
+      ...(stroke.operation === "pencil" && stroke.variantId !== undefined && stroke.profileVersion !== undefined
+        ? { variantId: stroke.variantId, profileVersion: stroke.profileVersion }
+        : {}),
+    },
   };
 }
 

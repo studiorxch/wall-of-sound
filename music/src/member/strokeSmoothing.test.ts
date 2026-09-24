@@ -1,5 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { fillMopDab, fillSprayParticle, hash01, hashLateralUnit, strokeGraphite, strokeInk, traceSmoothedPath, withAlpha } from "./strokeSmoothing";
+import {
+  fillMopDab,
+  fillSprayParticle,
+  hash01,
+  hashLateralUnit,
+  resolveGraphiteProfile,
+  strokeGraphite,
+  strokeInk,
+  traceSmoothedPath,
+  withAlpha,
+  GRAPHITE_GRADE_ORDER,
+  GRAPHITE_PROFILES,
+  GRAPHITE_PROFILE_VERSION,
+} from "./strokeSmoothing";
 
 function fakeStrokeContext() {
   const calls: string[] = [];
@@ -348,5 +361,109 @@ describe("strokeInk -- Ink Pen V1", () => {
     // Pen draws exactly one stroke; Pencil's grain pass draws additional
     // per-segment strokes.
     expect(ink.calls.filter((c) => c === "stroke").length).toBeLessThan(graphite.calls.filter((c) => c === "stroke").length);
+  });
+});
+
+describe("Graphite Grades Foundation V1 -- profiles", () => {
+  const points = [{ x: 0, y: 0 }, { x: 10, y: 2 }, { x: 22, y: 5 }, { x: 30, y: 4 }, { x: 41, y: 6 }, { x: 55, y: 9 }];
+  const style = { color: "#171412", width: 6, opacity: 0.82 };
+
+  it("defines all seven calibration anchors in hard-to-soft order", () => {
+    expect(GRAPHITE_GRADE_ORDER).toEqual(["9h", "6h", "3h", "hb", "3b", "6b", "9b"]);
+    expect(Object.keys(GRAPHITE_PROFILES).sort()).toEqual([...GRAPHITE_GRADE_ORDER].sort());
+  });
+
+  it("HB preserves Graphite Pencil V1's exact original constants", () => {
+    expect(GRAPHITE_PROFILES.hb).toEqual({
+      depositionAlpha: 0.75,
+      grainDensity: 0.68,
+      grainAlphaBase: 0.22,
+      grainAlphaRange: 0.28,
+      edgeJitter: 0.14,
+    });
+  });
+
+  it("calling strokeGraphite with no profile argument renders identically to explicitly passing HB", () => {
+    const implicit = fakeStrokeContext();
+    strokeGraphite(implicit.ctx as never, points, style, "mark-a");
+    const explicit = fakeStrokeContext();
+    strokeGraphite(explicit.ctx as never, points, style, "mark-a", GRAPHITE_PROFILES.hb);
+    expect(explicit.calls).toEqual(implicit.calls);
+  });
+
+  it("resolveGraphiteProfile resolves a legacy/missing/unknown variantId to HB", () => {
+    expect(resolveGraphiteProfile(undefined)).toBe(GRAPHITE_PROFILES.hb);
+    expect(resolveGraphiteProfile(null)).toBe(GRAPHITE_PROFILES.hb);
+    expect(resolveGraphiteProfile("")).toBe(GRAPHITE_PROFILES.hb);
+    expect(resolveGraphiteProfile("not-a-real-grade")).toBe(GRAPHITE_PROFILES.hb);
+  });
+
+  it("resolveGraphiteProfile resolves each known grade to its own profile", () => {
+    for (const grade of GRAPHITE_GRADE_ORDER) {
+      expect(resolveGraphiteProfile(grade)).toBe(GRAPHITE_PROFILES[grade]);
+    }
+  });
+
+  it("deposition alpha increases monotonically from 9H (hardest) to 9B (softest)", () => {
+    const alphas = GRAPHITE_GRADE_ORDER.map((grade) => GRAPHITE_PROFILES[grade].depositionAlpha);
+    for (let i = 1; i < alphas.length; i += 1) expect(alphas[i]).toBeGreaterThan(alphas[i - 1]);
+  });
+
+  it("grain density increases monotonically from 9H (sparsest/most restrained) to 9B (densest)", () => {
+    const densities = GRAPHITE_GRADE_ORDER.map((grade) => GRAPHITE_PROFILES[grade].grainDensity);
+    for (let i = 1; i < densities.length; i += 1) expect(densities[i]).toBeGreaterThan(densities[i - 1]);
+  });
+
+  it("edge jitter increases monotonically from 9H (most precise) to 9B (roughest)", () => {
+    const jitters = GRAPHITE_GRADE_ORDER.map((grade) => GRAPHITE_PROFILES[grade].edgeJitter);
+    for (let i = 1; i < jitters.length; i += 1) expect(jitters[i]).toBeGreaterThan(jitters[i - 1]);
+  });
+
+  it("9H remains visibly present -- not reduced to invisible", () => {
+    const { ctx, alphas } = fakeStrokeContext();
+    strokeGraphite(ctx as never, points, style, "mark-a", GRAPHITE_PROFILES["9h"]);
+    expect(Math.max(...alphas)).toBeGreaterThan(0.15);
+  });
+
+  it("9B stays below full opacity in its body pass -- it must still read as graphite, not become a flat/solid Marker-like fill", () => {
+    const { ctx } = fakeStrokeContext();
+    strokeGraphite(ctx as never, points, style, "mark-a", GRAPHITE_PROFILES["9b"]);
+    // Body-pass alpha = opacity * depositionAlpha; even at full authored
+    // opacity this must stay meaningfully under 1 (still has visible grain
+    // texture on top, and never becomes a single fully-opaque fill).
+    expect(GRAPHITE_PROFILES["9b"].depositionAlpha).toBeLessThan(1);
+  });
+
+  it("9B still draws a grain pass (still graphite, not a flat single-pass line)", () => {
+    const { calls } = (() => {
+      const f = fakeStrokeContext();
+      strokeGraphite(f.ctx as never, points, style, "mark-a", GRAPHITE_PROFILES["9b"]);
+      return f;
+    })();
+    // Body pass + at least one grain-pass stroke.
+    expect(calls.filter((c) => c === "stroke").length).toBeGreaterThan(1);
+  });
+
+  it("grade differences are NOT achieved merely by scaling opacity -- deposition alpha AND grain density AND edge jitter all differ between 9H and 9B", () => {
+    const nine9h = GRAPHITE_PROFILES["9h"];
+    const nine9b = GRAPHITE_PROFILES["9b"];
+    expect(nine9h.depositionAlpha).not.toBe(nine9b.depositionAlpha);
+    expect(nine9h.grainDensity).not.toBe(nine9b.grainDensity);
+    expect(nine9h.edgeJitter).not.toBe(nine9b.edgeJitter);
+  });
+
+  it("each grade renders deterministically (identical points+seed -> identical calls)", () => {
+    for (const grade of GRAPHITE_GRADE_ORDER) {
+      const first = fakeStrokeContext();
+      strokeGraphite(first.ctx as never, points, style, "mark-a", GRAPHITE_PROFILES[grade]);
+      const second = fakeStrokeContext();
+      strokeGraphite(second.ctx as never, points, style, "mark-a", GRAPHITE_PROFILES[grade]);
+      expect(second.calls).toEqual(first.calls);
+    }
+  });
+
+  it("GRAPHITE_PROFILE_VERSION is a positive integer", () => {
+    expect(Number.isInteger(GRAPHITE_PROFILE_VERSION)).toBe(true);
+    expect(GRAPHITE_PROFILE_VERSION).toBeGreaterThanOrEqual(1);
   });
 });

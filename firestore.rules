@@ -127,12 +127,25 @@ service cloud.firestore {
         && (!('material' in mark)
           || (mark.material is map
             && mark.material.keys().hasAll(['supplyId', 'materialId'])
-            && mark.material.keys().hasOnly(['supplyId', 'materialId'])
+            // Graphite Grades Foundation V1: 'variantId'/'profileVersion'
+            // are OPTIONAL (not in hasAll) additive keys -- a legacy Mark
+            // (only supplyId/materialId) remains valid unchanged.
+            && mark.material.keys().hasOnly(['supplyId', 'materialId', 'variantId', 'profileVersion'])
             && ((mark.material.supplyId == 'pencil' && mark.material.materialId == 'graphite')
               || (mark.material.supplyId == 'pen' && mark.material.materialId == 'ink')
               || (mark.material.supplyId == 'marker' && mark.material.materialId == 'marker')
               || (mark.material.supplyId == 'mop' && mark.material.materialId == 'mop')
-              || (mark.material.supplyId == 'spray' && mark.material.materialId == 'spray'))))
+              || (mark.material.supplyId == 'spray' && mark.material.materialId == 'spray'))
+            // Present together or absent together; only Pencil may carry a
+            // grade; the grade itself is restricted to the seven calibrated
+            // anchors -- deliberately NOT an open string (see this build's
+            // own recon's security-boundary requirement).
+            && (('variantId' in mark.material) == ('profileVersion' in mark.material))
+            && (!('variantId' in mark.material)
+              || (mark.material.supplyId == 'pencil'
+                && mark.material.variantId in ['9h', '6h', '3h', 'hb', '3b', '6b', '9b']
+                && mark.material.profileVersion is int
+                && mark.material.profileVersion >= 1))))
         && hasValidAuthoredZoom(mark)
         && hasValidArtworkStyle(mark.style);
     }

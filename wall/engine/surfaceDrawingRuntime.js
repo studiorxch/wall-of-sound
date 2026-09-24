@@ -897,7 +897,7 @@
     } else if (materialId === "spray") {
       _drawSprayPoints(ctx, drawPts, scaledStyle, seedSource);
     } else if (materialId === "graphite") {
-      _drawGraphitePoints(ctx, drawPts, scaledStyle, seedSource);
+      _drawGraphitePoints(ctx, drawPts, scaledStyle, seedSource, obj.variantId);
     } else if (materialId === "ink") {
       _drawInkPoints(ctx, drawPts, scaledStyle);
     } else {
@@ -926,11 +926,16 @@
   // through the SAME ArtSupplyRendering bridge _tracePath already uses --
   // falls back to the plain single-pass line if that bridge hasn't loaded
   // yet, exactly like _tracePath's own fallback.
-  function _drawGraphitePoints(ctx, pts, style, seedSource) {
+  function _drawGraphitePoints(ctx, pts, style, seedSource, variantId) {
     var rendering = _rendering();
     if (rendering && rendering.strokeGraphite) {
       ctx.save();
-      rendering.strokeGraphite(ctx, pts, style, seedSource);
+      // Graphite Grades Foundation V1: resolves THIS Mark's own stored
+      // grade (never a currently-selected UI grade -- Map has no grade
+      // selector at all) via the same bridge-published resolver Blackbook/
+      // Blank use; a legacy/missing variantId resolves to HB automatically.
+      var profile = rendering.resolveGraphiteProfile ? rendering.resolveGraphiteProfile(variantId) : undefined;
+      rendering.strokeGraphite(ctx, pts, style, seedSource, profile);
       ctx.restore();
       return;
     }
@@ -1324,6 +1329,11 @@
           type: "stroke",
           operation: mark.material ? mark.material.supplyId : "pencil",
           style: Object.assign({}, mark.style),
+          // Graphite Grades Foundation V1: carries through if the persisted
+          // Mark has it -- same optional/undefined-safe pattern as
+          // authoredZoom above; a legacy Mark simply won't have it, and
+          // resolveGraphiteProfile's own fallback resolves that to HB.
+          variantId: mark.material && typeof mark.material.variantId === "string" ? mark.material.variantId : undefined,
         }));
         added += 1;
       } else if (mark.type === "material-erasure") {

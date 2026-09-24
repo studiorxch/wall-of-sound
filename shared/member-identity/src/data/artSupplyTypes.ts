@@ -4,6 +4,27 @@ export type ArtSupplyId = "pencil" | "pen" | "marker" | "mop" | "spray" | "erase
 export interface MarkMaterialIdentity {
   readonly supplyId: ArtSupplyId;
   readonly materialId: ArtMaterialId;
+  /**
+   * Graphite Grades Foundation V1 -- which variant/grade of `supplyId`
+   * authored this Mark (e.g. "6b"), if any. Deliberately a plain string
+   * here, not a closed union: this shared identity package stays decoupled
+   * from any one material's own profile catalog (that catalog -- the
+   * actual valid grade IDs and their tuning values -- lives with the
+   * engine that reads it, e.g. `GRAPHITE_GRADE_ORDER` in
+   * `music/src/member/strokeSmoothing.ts`). Absent entirely on a legacy
+   * Mark (authored before this field existed) or on a non-graded supply
+   * (Pen/Marker/Mop/Spray) -- a missing `variantId` always means "resolve
+   * to that material's own default/reference behavior," never an error.
+   */
+  readonly variantId?: string;
+  /**
+   * Pairs with `variantId`: which version of that variant's material
+   * profile was in effect when this Mark was authored -- see
+   * `GRAPHITE_PROFILE_VERSION`'s own doc for why a separate ENGINE version
+   * isn't needed yet. Always present together with `variantId`, always
+   * absent together with it.
+   */
+  readonly profileVersion?: number;
 }
 
 export interface ArtSupplySettings {

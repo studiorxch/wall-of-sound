@@ -3,7 +3,7 @@ import { BLANK_SURFACE_ID, type BlankOperation } from "./blankArtworkBridge";
 import { createCartesianCamera, type CartesianCamera } from "./cartesianWorkspaceCamera";
 import { resolveMopDabPlan } from "./mopDeposition";
 import { hashSeed, resolveSprayCorePlan, resolveSprayParticlePlan } from "./sprayDeposition";
-import { fillMopDab, fillSprayParticle, hash01, hashLateralUnit, strokeGraphite, strokeInk, traceSmoothedPath } from "./strokeSmoothing";
+import { fillMopDab, fillSprayParticle, hash01, hashLateralUnit, resolveGraphiteProfile, strokeGraphite, strokeInk, traceSmoothedPath } from "./strokeSmoothing";
 
 /**
  * ARTWORK V2 -- Blank Artwork's own lightweight, non-Mapbox drawing
@@ -151,7 +151,8 @@ function drawOperation(context: CanvasRenderingContext2D, operation: BlankOperat
   if (operation.operation === "spray") { drawSpray(context, points, operation.style, operation.id); return; }
   if (operation.operation === "pencil") {
     context.save();
-    strokeGraphite(context, points, { ...operation.style, width: operation.style.width * zoom() }, operation.id);
+    const profile = resolveGraphiteProfile(operation.variantId);
+    strokeGraphite(context, points, { ...operation.style, width: operation.style.width * zoom() }, operation.id, profile);
     context.restore();
     return;
   }
@@ -372,6 +373,9 @@ export function createBlankCanvasRuntime(): BlankCanvasRuntime {
             surfaceId: artwork.surfaceId,
             points: mark.geometry.points,
             style: mark.style,
+            ...(mark.material?.variantId !== undefined && mark.material?.profileVersion !== undefined
+              ? { variantId: mark.material.variantId, profileVersion: mark.material.profileVersion }
+              : {}),
           } as BlankOperation];
         }
         if (mark.type === "material-erasure" && mark.geometry.format === "local-2d-erasure-v1") {

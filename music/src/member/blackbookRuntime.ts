@@ -23,7 +23,19 @@ import {
 import { createCartesianCamera, type CartesianCamera, type DocRect } from "./cartesianWorkspaceCamera";
 import { resolveMopDabPlan } from "./mopDeposition";
 import { hashSeed, resolveSprayCorePlan, resolveSprayParticlePlan } from "./sprayDeposition";
-import { fillMopDab, fillSprayParticle, hash01, hashLateralUnit, strokeGraphite, strokeInk, traceSmoothedPath } from "./strokeSmoothing";
+import {
+  fillMopDab,
+  fillSprayParticle,
+  hash01,
+  hashLateralUnit,
+  resolveGraphiteProfile,
+  strokeGraphite,
+  strokeInk,
+  traceSmoothedPath,
+  GRAPHITE_GRADE_ORDER,
+  GRAPHITE_PROFILE_VERSION,
+  type GraphiteGradeId,
+} from "./strokeSmoothing";
 
 function required<T>(value: T | null, error: string): T { if (!value) throw new Error(error); return value; }
 const canvas = required(document.querySelector<HTMLCanvasElement>("#blackbook-page"), "blackbook_surface_missing");
@@ -38,6 +50,18 @@ const mopButton = required(document.querySelector<HTMLButtonElement>("#blackbook
 const sprayButton = required(document.querySelector<HTMLButtonElement>("#blackbook-spray"), "blackbook_surface_missing");
 const eraserButton = required(document.querySelector<HTMLButtonElement>("#blackbook-eraser"), "blackbook_surface_missing");
 const colorControl = required(document.querySelector<HTMLInputElement>("#blackbook-color"), "blackbook_surface_missing");
+/**
+ * Graphite Grades Foundation V1 -- TEMPORARY calibration-only instrument.
+ * This is explicitly NOT the Art Store, NOT "My Art Supplies", and NOT the
+ * eventual Drawing Shell variant UX (see this build's own recon/brief) --
+ * it exists only so grade progression can be evaluated by a human before
+ * any of that architecture is built. Deliberately a single plain `<select>`
+ * subordinate to the PENCIL button (never a peer button, never seven new
+ * top-level tools), isolated behind its own id/element reference so it can
+ * be deleted or swapped for the future Store UI without touching any
+ * graphite rendering code.
+ */
+const gradeSelect = required(document.querySelector<HTMLSelectElement>("#blackbook-grade-select"), "blackbook_surface_missing");
 
 // Drawing Shell V1: the static HTML's supply-button order is authored by
 // hand -- this guard fails loudly in development the moment it drifts from
@@ -133,6 +157,14 @@ let operations: BlackbookOperation[] = [];
 let activePoints: { x: number; y: number }[] = [];
 let nextOperationId = 1;
 let activeSupply: "pencil" | "pen" | "marker" | "mop" | "spray" | "eraser" = "pencil";
+/**
+ * Graphite Grades Foundation V1 -- TEMPORARY calibration selector state
+ * only (see gradeSelect's own doc below). Controls which grade authors the
+ * NEXT Pencil Mark; never mutates any already-authored Mark. Not the Art
+ * Store, not "My Art Supplies" -- Pencil remains one Drawing Shell
+ * instrument family; this is strictly "Pencil -> which grade" beneath it.
+ */
+let activeGraphiteGrade: GraphiteGradeId = "hb";
 // Drawing Shell V1 -- per-supply remembered Width/Opacity/Color, seeded from
 // the SAME canonical defaults Map now reads too (DRAWING_DEFAULT_COLORS,
 // each supply's own `defaultSettings`). Switching supplies restores that
@@ -196,6 +228,11 @@ function render(): void {
   sprayButton.setAttribute("aria-pressed", String(activeSupply === "spray"));
   eraserButton.setAttribute("aria-pressed", String(activeSupply === "eraser"));
   panButton.setAttribute("aria-pressed", String(panMode));
+  // Graphite Grades Foundation V1: the grade selector only makes sense
+  // while Pencil is the active supply -- disabled (never hidden) otherwise,
+  // same "visually modest, clearly subordinate" treatment as the rest of
+  // this temporary instrument.
+  gradeSelect.disabled = activeSupply !== "pencil";
 }
 
 // Calibration V1 (revised): quadratic-midpoint smoothing (see
@@ -257,7 +294,13 @@ function drawOperation(operation: BlackbookOperation): void {
   if (operation.operation === "pencil") {
     materialCtx.save();
     const scaledStyle = { ...operation.style, width: operation.style.width * widthScale() };
-    strokeGraphite(materialCtx, points.map((point) => docToScreen(point)), scaledStyle, operation.id);
+    // Graphite Grades Foundation V1: resolve THIS Mark's own stored grade,
+    // never the currently-selected UI grade -- an old Mark authored as 6B
+    // must keep rendering as 6B even after the artist switches the
+    // selector to HB for their next stroke. Legacy Marks (no variantId)
+    // resolve to HB automatically (resolveGraphiteProfile's own fallback).
+    const profile = resolveGraphiteProfile(operation.variantId);
+    strokeGraphite(materialCtx, points.map((point) => docToScreen(point)), scaledStyle, operation.id, profile);
     materialCtx.restore();
     return;
   }
@@ -443,7 +486,15 @@ function activeOperation(points: readonly { x: number; y: number }[]): Blackbook
   // reads) instead of a fixed per-supply constant -- changing color only
   // ever affects the NEXT authored Mark; already-persisted Marks keep their
   // own already-authored `style.color` untouched.
-  return { operation: activeSupply, id: "active", points, style: { color: colorControl.value, width: Number(widthControl.value), opacity: Number(opacityControl.value) } };
+  return {
+    operation: activeSupply,
+    id: "active",
+    points,
+    style: { color: colorControl.value, width: Number(widthControl.value), opacity: Number(opacityControl.value) },
+    // Graphite Grades Foundation V1: only Pencil carries a grade; every
+    // other supply is unaffected.
+    ...(activeSupply === "pencil" ? { variantId: activeGraphiteGrade, profileVersion: GRAPHITE_PROFILE_VERSION } : {}),
+  };
 }
 
 // Blackbook Spatial Workspace V1: pointer capture now goes through the
@@ -480,6 +531,12 @@ function hydrate(artworks: readonly Artwork[]): void {
       surfaceId: artwork.surfaceId,
       points: mark.geometry.points,
       style: mark.style,
+      // Graphite Grades Foundation V1: carry this Mark's OWN stored grade
+      // through hydration so drawOperation renders it with the grade it was
+      // actually authored with, not whatever grade is currently selected.
+      ...(mark.material?.variantId !== undefined && mark.material?.profileVersion !== undefined
+        ? { variantId: mark.material.variantId, profileVersion: mark.material.profileVersion }
+        : {}),
     }] : mark.type === "material-erasure" && mark.geometry.format === "local-2d-erasure-v1" ? [{ operation: "eraser", id: `blackbook-mark-${mark.id}`, artworkId: artwork.id, markId: mark.id, creatorId: artwork.creatorId, surfaceId: artwork.surfaceId, points: mark.geometry.points, width: mark.width }] : []));
   persistence.replaceKnownArtworks(artworks.filter((artwork) => artwork.surfaceId === BLACKBOOK_PAGE_SURFACE_ID));
   fitPageIntoView();
@@ -582,6 +639,10 @@ function rememberSupplySettings(): void {
   supplySettings[activeSupply].color = colorControl.value;
 }
 
+gradeSelect.addEventListener("change", () => {
+  const value = gradeSelect.value;
+  if ((GRAPHITE_GRADE_ORDER as readonly string[]).includes(value)) activeGraphiteGrade = value as GraphiteGradeId;
+});
 pencilButton.addEventListener("click", () => selectSupply("pencil"));
 penButton.addEventListener("click", () => selectSupply("pen"));
 markerButton.addEventListener("click", () => selectSupply("marker"));

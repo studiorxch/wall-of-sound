@@ -150,3 +150,32 @@ describe("Blackbook Artwork Surface bridge", () => {
     expect(repository.createArtwork).toHaveBeenCalledWith(expect.objectContaining({ pageFrame: { x: 0, y: 0, width: 1, height: 1 } }));
   });
 });
+
+describe("Graphite Grades Foundation V1 -- Mark variant identity", () => {
+  it("a Pencil stroke with a grade persists variantId + profileVersion on the Mark", () => {
+    const graded = { ...stroke("a"), variantId: "6b", profileVersion: 1 };
+    const mark = toLocalStrokeMark(graded, "mark-a", new Date(0));
+    expect(mark.material).toEqual({ supplyId: "pencil", materialId: "graphite", variantId: "6b", profileVersion: 1 });
+  });
+
+  it("a Pencil stroke with no grade selected omits variantId/profileVersion entirely (legacy-compatible)", () => {
+    const mark = toLocalStrokeMark(stroke("a"), "mark-a", new Date(0));
+    expect(mark.material).toEqual({ supplyId: "pencil", materialId: "graphite" });
+    expect(mark.material).not.toHaveProperty("variantId");
+  });
+
+  it("a non-Pencil supply never carries a variantId, even if one were mistakenly supplied", () => {
+    const penStroke = { ...stroke("a"), operation: "pen" as const, variantId: "6b", profileVersion: 1 };
+    const mark = toLocalStrokeMark(penStroke, "mark-a", new Date(0));
+    expect(mark.material).toEqual({ supplyId: "pen", materialId: "ink" });
+  });
+
+  it("changing the active grade does not mutate an already-authored Mark", () => {
+    const first = toLocalStrokeMark({ ...stroke("a"), variantId: "3h", profileVersion: 1 }, "mark-a", new Date(0));
+    const second = toLocalStrokeMark({ ...stroke("b"), variantId: "9b", profileVersion: 1 }, "mark-b", new Date(1));
+    expect(first.material).toMatchObject({ variantId: "3h" });
+    expect(second.material).toMatchObject({ variantId: "9b" });
+    // Building the second Mark must not have touched the first.
+    expect(first.material).toMatchObject({ variantId: "3h" });
+  });
+});

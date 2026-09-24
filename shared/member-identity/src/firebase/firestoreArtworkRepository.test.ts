@@ -187,3 +187,40 @@ describe("Calibration V1 Revision 7 -- authoredZoom decode round trip", () => {
     expect(artwork.marks[0]).not.toHaveProperty("authoredZoom");
   });
 });
+
+describe("Graphite Grades Foundation V1 -- Mark material variant decode", () => {
+  it("decodes a graded Pencil Mark's variantId and profileVersion", () => {
+    const time = Timestamp.fromDate(new Date("2026-01-01T00:00:00Z"));
+    const artwork = decodeArtworkData("graphite-graded", {
+      creatorId: "member-1", createdAt: time, updatedAt: time,
+      surfaceId: "blackbook:studio-rich-main:page:page-1",
+      composition: { bounds: { minX: 0.1, minY: 0.2, maxX: 0.3, maxY: 0.4 }, startedAt: time, lastEditedAt: time },
+      marks: [{
+        id: "mark-6b", type: "stroke", createdAt: time,
+        geometry: { format: "local-2d-stroke-v1", points: [{ x: 0.1, y: 0.2 }, { x: 0.3, y: 0.4 }] },
+        style: { color: "#171412", width: 8, opacity: 0.9 },
+        material: { supplyId: "pencil", materialId: "graphite", variantId: "6b", profileVersion: 1 },
+      }],
+      state: "draft", visibility: "private",
+    });
+    expect(artwork.marks[0]).toMatchObject({ material: { supplyId: "pencil", materialId: "graphite", variantId: "6b", profileVersion: 1 } });
+  });
+
+  it("a legacy Pencil Mark (no variantId) decodes without inventing one", () => {
+    const time = Timestamp.fromDate(new Date("2026-01-01T00:00:00Z"));
+    const artwork = decodeArtworkData("graphite-legacy", {
+      creatorId: "member-1", createdAt: time, updatedAt: time,
+      surfaceId: "blackbook:studio-rich-main:page:page-1",
+      composition: { bounds: { minX: 0.1, minY: 0.2, maxX: 0.3, maxY: 0.4 }, startedAt: time, lastEditedAt: time },
+      marks: [{
+        id: "mark-legacy-pencil", type: "stroke", createdAt: time,
+        geometry: { format: "local-2d-stroke-v1", points: [{ x: 0.1, y: 0.2 }, { x: 0.3, y: 0.4 }] },
+        style: { color: "#171412", width: 5, opacity: 0.82 },
+        material: { supplyId: "pencil", materialId: "graphite" },
+      }],
+      state: "draft", visibility: "private",
+    });
+    expect(artwork.marks[0].material).not.toHaveProperty("variantId");
+    expect(artwork.marks[0].material).not.toHaveProperty("profileVersion");
+  });
+});
