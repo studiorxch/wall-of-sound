@@ -23,7 +23,7 @@ import {
 import { createCartesianCamera, type CartesianCamera, type DocRect } from "./cartesianWorkspaceCamera";
 import { resolveMopDabPlan } from "./mopDeposition";
 import { hashSeed, resolveSprayCorePlan, resolveSprayParticlePlan } from "./sprayDeposition";
-import { fillMopDab, fillSprayParticle, hash01, hashLateralUnit, strokeGraphite, traceSmoothedPath } from "./strokeSmoothing";
+import { fillMopDab, fillSprayParticle, hash01, hashLateralUnit, strokeGraphite, strokeInk, traceSmoothedPath } from "./strokeSmoothing";
 
 function required<T>(value: T | null, error: string): T { if (!value) throw new Error(error); return value; }
 const canvas = required(document.querySelector<HTMLCanvasElement>("#blackbook-page"), "blackbook_surface_missing");
@@ -258,6 +258,18 @@ function drawOperation(operation: BlackbookOperation): void {
     materialCtx.save();
     const scaledStyle = { ...operation.style, width: operation.style.width * widthScale() };
     strokeGraphite(materialCtx, points.map((point) => docToScreen(point)), scaledStyle, operation.id);
+    materialCtx.restore();
+    return;
+  }
+  // Ink Pen V1: Pen gets its own named material function (strokeInk,
+  // strokeSmoothing.ts) instead of sharing Marker/Eraser's anonymous
+  // generic block below -- pixel-identical to the previous rendering (same
+  // single continuous pass), but now a real, findable, testable material
+  // identity distinct from Pencil's graphite treatment.
+  if (operation.operation === "pen") {
+    materialCtx.save();
+    const scaledStyle = { ...operation.style, width: operation.style.width * widthScale() };
+    strokeInk(materialCtx, points.map((point) => docToScreen(point)), scaledStyle);
     materialCtx.restore();
     return;
   }

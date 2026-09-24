@@ -246,3 +246,43 @@ export function strokeGraphite(
   }
   ctx.restore();
 }
+
+/**
+ * Ink Pen V1 -- Pen's own named, deliberately-calibrated material function,
+ * distinct from Pencil's `strokeGraphite` (grainy, sub-saturation, built for
+ * sketching buildup) rather than a second anonymous use of the generic path.
+ *
+ * Live calibration against the graphite-calibrated Pencil showed the
+ * existing single continuous `traceSmoothedPath` + one `stroke()` pass --
+ * full given opacity, no jitter, no secondary deposition -- ALREADY reads as
+ * a crisp, confident, committed ink line once contrasted with Pencil's
+ * softer, textured, sub-saturation body pass. Per this build's own guidance
+ * ("a single well-calibrated body stroke may remain appropriate... the goal
+ * is material identity, not algorithmic novelty"), no additional rendering
+ * complexity was introduced: intersections stay perfectly clean (ordinary
+ * alpha compositing, no fuzz/bloom/swelling), width/opacity/color apply
+ * exactly as authored, and there is nothing here for pan/zoom/reload to
+ * destabilize (purely geometric, no seed, no hash, no randomness at all --
+ * even more trivially deterministic than strokeGraphite). This function
+ * exists so Pen has a real, findable, testable material identity in the
+ * codebase rather than silently reusing whatever the shared fallback
+ * happens to do -- exactly the seam a future ink refinement would extend.
+ */
+export function strokeInk(
+  ctx: CanvasRenderingContext2D,
+  points: readonly SmoothablePoint[],
+  style: { readonly color: string; readonly width: number; readonly opacity: number },
+): void {
+  if (points.length < 2) return;
+  ctx.save();
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.globalCompositeOperation = "source-over";
+  ctx.beginPath();
+  traceSmoothedPath(ctx, points);
+  ctx.lineWidth = style.width;
+  ctx.globalAlpha = style.opacity;
+  ctx.strokeStyle = style.color;
+  ctx.stroke();
+  ctx.restore();
+}

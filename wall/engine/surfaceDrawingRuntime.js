@@ -898,9 +898,27 @@
       _drawSprayPoints(ctx, drawPts, scaledStyle, seedSource);
     } else if (materialId === "graphite") {
       _drawGraphitePoints(ctx, drawPts, scaledStyle, seedSource);
+    } else if (materialId === "ink") {
+      _drawInkPoints(ctx, drawPts, scaledStyle);
     } else {
       _drawRawPoints(ctx, drawPts, scaledStyle);
     }
+  }
+
+  // Ink Pen V1: same named ink material treatment Blackbook/Blank use
+  // (strokeInk, strokeSmoothing.ts) -- reached through the SAME
+  // ArtSupplyRendering bridge, falling back to the plain single-pass line
+  // (pixel-identical to strokeInk's own body) if that bridge hasn't loaded
+  // yet, exactly like _drawGraphitePoints's own fallback.
+  function _drawInkPoints(ctx, pts, style) {
+    var rendering = _rendering();
+    if (rendering && rendering.strokeInk) {
+      ctx.save();
+      rendering.strokeInk(ctx, pts, style);
+      ctx.restore();
+      return;
+    }
+    _drawRawPoints(ctx, pts, style);
   }
 
   // Graphite Pencil V1: same deterministic graphite render treatment

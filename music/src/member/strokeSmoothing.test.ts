@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fillMopDab, fillSprayParticle, hash01, hashLateralUnit, strokeGraphite, traceSmoothedPath, withAlpha } from "./strokeSmoothing";
+import { fillMopDab, fillSprayParticle, hash01, hashLateralUnit, strokeGraphite, strokeInk, traceSmoothedPath, withAlpha } from "./strokeSmoothing";
 
 function fakeStrokeContext() {
   const calls: string[] = [];
@@ -284,5 +284,69 @@ describe("strokeGraphite -- Graphite Pencil V1", () => {
     // recorded segment (points.length - 1) for the grain pass -- never more.
     const strokeCalls = calls.filter((call) => call === "stroke").length;
     expect(strokeCalls).toBeLessThanOrEqual(points.length);
+  });
+});
+
+describe("strokeInk -- Ink Pen V1", () => {
+  const points = [{ x: 0, y: 0 }, { x: 10, y: 2 }, { x: 22, y: 5 }, { x: 30, y: 4 }, { x: 41, y: 6 }];
+  const style = { color: "#101828", width: 3, opacity: 0.95 };
+
+  it("draws nothing for fewer than 2 points", () => {
+    const { ctx, calls } = fakeStrokeContext();
+    strokeInk(ctx as never, [], style);
+    strokeInk(ctx as never, [{ x: 1, y: 1 }], style);
+    expect(calls).toEqual([]);
+  });
+
+  it("draws exactly one continuous body pass -- no grain, no secondary deposition", () => {
+    const { ctx, calls } = fakeStrokeContext();
+    strokeInk(ctx as never, points, style);
+    expect(calls.filter((call) => call === "stroke").length).toBe(1);
+    expect(calls.filter((call) => call === "beginPath").length).toBe(1);
+  });
+
+  it("is fully deterministic (purely geometric -- no hashing, no randomness, no seed needed)", () => {
+    const first = fakeStrokeContext();
+    strokeInk(first.ctx as never, points, style);
+    const second = fakeStrokeContext();
+    strokeInk(second.ctx as never, points, style);
+    expect(second.calls).toEqual(first.calls);
+  });
+
+  it("respects the authored color", () => {
+    const { ctx, strokeStyles } = fakeStrokeContext();
+    strokeInk(ctx as never, points, style);
+    expect(strokeStyles).toEqual([style.color]);
+  });
+
+  it("a user-selected non-default color is honored", () => {
+    const { ctx, strokeStyles } = fakeStrokeContext();
+    strokeInk(ctx as never, points, { ...style, color: "#2a6fd6" });
+    expect(strokeStyles).toEqual(["#2a6fd6"]);
+  });
+
+  it("respects the authored width exactly (no reduction, no secondary width)", () => {
+    const { ctx, lineWidths } = fakeStrokeContext();
+    strokeInk(ctx as never, points, { ...style, width: 7 });
+    expect(lineWidths).toEqual([7]);
+  });
+
+  it("respects the authored opacity exactly (no sub-saturation, unlike Pencil)", () => {
+    const { ctx, alphas } = fakeStrokeContext();
+    strokeInk(ctx as never, points, { ...style, opacity: 0.4 });
+    expect(alphas).toEqual([0.4]);
+  });
+
+  it("renders a denser, more continuous pass than Pencil's graphite treatment at the same style", () => {
+    const ink = fakeStrokeContext();
+    strokeInk(ink.ctx as never, points, style);
+    const graphite = fakeStrokeContext();
+    strokeGraphite(graphite.ctx as never, points, style, "mark-a");
+    // Pen's single pass reaches the full authored opacity; Pencil's body
+    // pass is deliberately sub-saturation to leave room for sketch buildup.
+    expect(Math.max(...ink.alphas)).toBeGreaterThan(Math.max(...graphite.alphas));
+    // Pen draws exactly one stroke; Pencil's grain pass draws additional
+    // per-segment strokes.
+    expect(ink.calls.filter((c) => c === "stroke").length).toBeLessThan(graphite.calls.filter((c) => c === "stroke").length);
   });
 });
