@@ -26,17 +26,14 @@ import { createCartesianCamera, type CartesianCamera, type DocRect } from "./car
 import { createCurrentArtworkSession } from "./currentArtworkSession";
 import { formatArtworkUpdatedAt, sortArtworksByRecency } from "./artworkGallery";
 import { drawArtworkThumbnail } from "./artworkThumbnail";
-import { resolveMopDabPlan } from "./mopDeposition";
 import { hashSeed, resolveSprayCorePlan, resolveSprayParticlePlan } from "./sprayDeposition";
 import {
-  fillMopDab,
   fillSprayParticle,
-  hash01,
-  hashLateralUnit,
   resolveGraphiteProfile,
   strokeGraphite,
   strokeInk,
   strokeMarker,
+  strokeMop,
   traceSmoothedPath,
   GRAPHITE_GRADE_ORDER,
   GRAPHITE_PROFILE_VERSION,
@@ -320,15 +317,6 @@ function path(context: CanvasRenderingContext2D, points: readonly { x: number; y
   traceSmoothedPath(context, scaled);
 }
 
-// The plain, un-smoothed polyline -- Mop's own background pass (so it stays
-// geometrically aligned with resolveMopDabPlan's dabs, which are placed at
-// the same raw recorded points) and Spray's new macro core pass (below).
-function rawPath(context: CanvasRenderingContext2D, points: readonly { x: number; y: number }[]): void {
-  const scaled = points.map((point) => docToScreen(point));
-  context.beginPath();
-  context.moveTo(scaled[0].x, scaled[0].y);
-  for (const point of scaled.slice(1)) context.lineTo(point.x, point.y);
-}
 
 function drawOperation(operation: BlackbookOperation): void {
   const { points } = operation;
@@ -341,7 +329,10 @@ function drawOperation(operation: BlackbookOperation): void {
     : "graphite"; // eraser targets graphite only
   const materialCtx = materialLayers[materialId].context;
   if (operation.operation === "mop") {
-    drawMopStroke(materialCtx, points, operation.style);
+    materialCtx.save();
+    const scaledStyle = { ...operation.style, width: operation.style.width * widthScale() };
+    strokeMop(materialCtx, points.map((point) => docToScreen(point)), scaledStyle, operation.id);
+    materialCtx.restore();
     return;
   }
   if (operation.operation === "spray") {
@@ -411,97 +402,6 @@ function drawOperation(operation: BlackbookOperation): void {
     materialCtx.strokeStyle = operation.style.color;
   }
   materialCtx.stroke(); materialCtx.restore();
-}
-
-/**
- * Calibration V1 Revision 6: at close zoom, even with Revision 5's lateral
- * scatter, Mop's dabs still read as an identifiable sequence of stamps --
- * a close-up isolated render confirmed the combination of causes: dabs are
- * (a) a flat, hard-edged filled circle (no soft falloff, unlike Spray's
- * particles), (b) drawn at every resampled point with near-uniform size
- * (only the narrow 0.7x-1.25x speed-response range) and (c) at perfectly
- * regular spacing (the resampling that fixed Revision 3's continuity gaps).
- * A human eye reconstructs "the sampling path" from any of these alone;
- * together they made it unmistakable.
- *
- * Fix, targeting all three causes without hiding the layer behind more
- * opacity (kept as a real, architecturally separate deposition pass):
- * (a) dabs now use the SAME soft radial-gradient fill as Spray's particles
- *     (`fillSprayParticle`, already shared) instead of a flat circle --
- *     no hard edge to individually register.
- * (b) each dab's rendered radius AND alpha get their own independent
- *     deterministic jitter (`hash01` with different salts) on top of the
- *     existing speed response, so consecutive same-speed dabs no longer
- *     look near-identical.
- * (c) each dab has an independent, deterministic chance of being skipped
- *     entirely (`MOP_DAB_INCLUDE_PROBABILITY`), breaking the perfectly
- *     regular along-path rhythm the resampling otherwise guarantees --
- *     the resampling's overlap guarantee (Revision 3's actual fix) lives
- *     in the CONTINUOUS BODY stroke, not in the dab texture, so skipping
- *     dabs never reintroduces a body gap.
- *
- * Lateral scatter (Revision 5, still the fix for the "second centerline
- * track") is unchanged.
- */
-const MOP_DAB_VISUAL_SCALE = 0.55;
-const MOP_DAB_LATERAL_SCALE = 0.6;
-const MOP_DAB_INCLUDE_PROBABILITY = 0.6;
-const MOP_DAB_RADIUS_JITTER_RANGE = 0.5; // +/- 50% around the speed-response radius
-const MOP_DAB_ALPHA_JITTER_RANGE = 0.45; // +/- 45% around the base alpha
-
-function drawMopStroke(
-  context: CanvasRenderingContext2D,
-  points: readonly { x: number; y: number }[],
-  style: { readonly color: string; readonly width: number; readonly opacity: number },
-): void {
-  const scaledPoints = points.map((point) => docToScreen(point));
-  const scaledWidth = style.width * widthScale();
-  context.save();
-  context.lineCap = "round"; context.lineJoin = "round";
-  context.globalCompositeOperation = "source-over";
-  rawPath(context, points);
-  context.lineWidth = scaledWidth;
-  context.globalAlpha = style.opacity * 0.92;
-  context.strokeStyle = style.color;
-  context.stroke();
-  const dabs = resolveMopDabPlan(scaledPoints, scaledWidth * 0.5);
-  const baseRadius = scaledWidth * 0.5;
-  // Calibration V1 Revision 10 (dot-gesture fix, mirrored here for
-  // consistency with the Map's identical fix): the random inclusion
-  // probability and lateral scatter exist to break up a LONG stroke's
-  // regular rhythm; applied to a dot (1-3 dabs total) they instead make it
-  // a coin-flip whether the dab renders at all, and visibly off-center.
-  const isDotLike = dabs.length <= 3;
-  for (let index = 0; index < dabs.length; index += 1) {
-    const dab = dabs[index];
-    if (!isDotLike && hash01(dab.x, dab.y, 4) > MOP_DAB_INCLUDE_PROBABILITY) continue;
-    const prev = dabs[index - 1] ?? dab;
-    const next = dabs[index + 1] ?? dab;
-    const tangentX = next.x - prev.x;
-    const tangentY = next.y - prev.y;
-    const tangentLength = Math.hypot(tangentX, tangentY) || 1;
-    // Perpendicular to the local path direction -- rotate the tangent 90°.
-    const perpX = -tangentY / tangentLength;
-    const perpY = tangentX / tangentLength;
-    const lateral = isDotLike ? 0 : hashLateralUnit(dab.x, dab.y) * baseRadius * MOP_DAB_LATERAL_SCALE;
-    const radiusJitter = 1 + (hash01(dab.x, dab.y, 1) * 2 - 1) * MOP_DAB_RADIUS_JITTER_RANGE;
-    const alphaJitter = 1 + (hash01(dab.x, dab.y, 2) * 2 - 1) * MOP_DAB_ALPHA_JITTER_RANGE;
-    // Calibration V1 Revision 11: `fillMopDab` (a comparatively crisp
-    // contact-edge fill), not `fillSprayParticle` (Spray's soft aerosol
-    // falloff) -- see strokeSmoothing.ts's doc for the full rationale.
-    fillMopDab(
-      context,
-      {
-        x: dab.x + perpX * lateral,
-        y: dab.y + perpY * lateral,
-        radius: Math.max(0.3, dab.radius * MOP_DAB_VISUAL_SCALE * radiusJitter),
-        alpha: Math.max(0, dab.alphaScale * 0.55 * alphaJitter),
-      },
-      style.color,
-      style.opacity,
-    );
-  }
-  context.restore();
 }
 
 /**

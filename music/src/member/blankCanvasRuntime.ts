@@ -1,9 +1,8 @@
 import type { Artwork } from "@studiorich/member-identity";
 import { BLANK_SURFACE_ID, type BlankOperation } from "./blankArtworkBridge";
 import { createCartesianCamera, type CartesianCamera } from "./cartesianWorkspaceCamera";
-import { resolveMopDabPlan } from "./mopDeposition";
 import { hashSeed, resolveSprayCorePlan, resolveSprayParticlePlan } from "./sprayDeposition";
-import { fillMopDab, fillSprayParticle, hash01, hashLateralUnit, resolveGraphiteProfile, strokeGraphite, strokeInk, strokeMarker, traceSmoothedPath } from "./strokeSmoothing";
+import { fillSprayParticle, resolveGraphiteProfile, strokeGraphite, strokeInk, strokeMarker, strokeMop, traceSmoothedPath } from "./strokeSmoothing";
 
 /**
  * ARTWORK V2 -- Blank Artwork's own lightweight, non-Mapbox drawing
@@ -147,7 +146,12 @@ function projected(points: readonly DocPoint[]): { x: number; y: number }[] {
 function drawOperation(context: CanvasRenderingContext2D, operation: BlankOperation): void {
   const points = projected(operation.points);
   if (points.length < 2) return;
-  if (operation.operation === "mop") { drawMop(context, points, operation.style); return; }
+  if (operation.operation === "mop") {
+    context.save();
+    strokeMop(context, points, { ...operation.style, width: operation.style.width * zoom() }, operation.id);
+    context.restore();
+    return;
+  }
   if (operation.operation === "spray") { drawSpray(context, points, operation.style, operation.id); return; }
   if (operation.operation === "pencil") {
     context.save();
@@ -184,41 +188,6 @@ function drawOperation(context: CanvasRenderingContext2D, operation: BlankOperat
     context.strokeStyle = operation.style.color;
   }
   context.stroke();
-  context.restore();
-}
-
-function drawMop(context: CanvasRenderingContext2D, points: readonly { x: number; y: number }[], style: { readonly color: string; readonly width: number; readonly opacity: number }): void {
-  const scaledWidth = style.width * zoom();
-  context.save();
-  context.lineCap = "round"; context.lineJoin = "round";
-  context.globalCompositeOperation = "source-over";
-  context.beginPath();
-  context.moveTo(points[0].x, points[0].y);
-  for (const point of points.slice(1)) context.lineTo(point.x, point.y);
-  context.lineWidth = scaledWidth;
-  context.globalAlpha = style.opacity * 0.92;
-  context.strokeStyle = style.color;
-  context.stroke();
-  const dabs = resolveMopDabPlan(points, scaledWidth * 0.5);
-  const isDotLike = dabs.length <= 3;
-  for (let index = 0; index < dabs.length; index += 1) {
-    const dab = dabs[index];
-    if (!isDotLike && hash01(dab.x, dab.y, 4) > 0.6) continue;
-    const prev = dabs[index - 1] ?? dab;
-    const next = dabs[index + 1] ?? dab;
-    const tangentLength = Math.hypot(next.x - prev.x, next.y - prev.y) || 1;
-    const perpX = -(next.y - prev.y) / tangentLength;
-    const perpY = (next.x - prev.x) / tangentLength;
-    const lateral = isDotLike ? 0 : hashLateralUnit(dab.x, dab.y) * (scaledWidth * 0.5) * 0.6;
-    const radiusJitter = 1 + (hash01(dab.x, dab.y, 1) * 2 - 1) * 0.5;
-    const alphaJitter = 1 + (hash01(dab.x, dab.y, 2) * 2 - 1) * 0.45;
-    fillMopDab(context, {
-      x: dab.x + perpX * lateral,
-      y: dab.y + perpY * lateral,
-      radius: Math.max(0.3, dab.radius * 0.55 * radiusJitter),
-      alpha: Math.max(0, dab.alphaScale * 0.55 * alphaJitter),
-    }, style.color, style.opacity);
-  }
   context.restore();
 }
 

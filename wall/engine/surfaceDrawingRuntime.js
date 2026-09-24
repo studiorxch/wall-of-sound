@@ -492,19 +492,23 @@
   //     its centerline (round caps/joins).
   //   - Mop's dabs can offset up to `baseRadius * MOP_DAB_LATERAL_SCALE`
   //     (0.6) laterally PLUS extend up to
-  //     `baseRadius * MOP_DAB_VISUAL_SCALE * (1 + RADIUS_JITTER_RANGE)`
-  //     (0.55 * 1.5 = 0.825) in radius, where `baseRadius = width/2` --
-  //     worst case combined reach from the centerline is
-  //     `~1.425 * baseRadius = ~0.71 * width` (mopDeposition.ts /
-  //     surfaceDrawingRuntime.js's own MOP_DAB_* constants).
+  //     `baseRadius * MOP_DAB_RADIUS_MAX_SCALE` (1.32, Mop Material
+  //     Calibration V1 -- was 0.825 pre-calibration) in radius, where
+  //     `baseRadius = width/2` -- worst case combined reach from the
+  //     centerline is `~1.92 * baseRadius = ~0.96 * width`
+  //     (strokeSmoothing.ts's `strokeMop`'s own MOP_DAB_* constants).
+  //     Only ~4% headroom under the full-`width` margin below (was ~40%
+  //     pre-calibration) -- still safely covered, but calibrating Mop's
+  //     dab range again should re-check this margin.
   //   - Spray's particles offset up to `baseRadius` from their emission
   //     point (bandedRadius maxes at 1) plus their own small radius, ~
   //     `1.09 * baseRadius = ~0.55 * width` (sprayDeposition.ts).
   //   - Eraser uses `obj.width` directly, same treatment as a plain stroke.
-  // The largest of these (Mop, ~0.71x) is comfortably covered by using the
-  // FULL `width` (not `width/2`) as the margin -- ~40% headroom over the
-  // worst measured case, cheap to keep simple/uniform across all four
-  // supplies rather than a separate precise allowance per material.
+  // The largest of these (Mop, ~0.96x post-calibration) is still covered
+  // by using the FULL `width` (not `width/2`) as the margin -- thinner
+  // headroom than before Mop Material Calibration V1, but still safe --
+  // cheap to keep simple/uniform across all four supplies rather than a
+  // separate precise allowance per material.
   // `authoredZoom` is accounted for by applying the SAME `_zoomScaleFor`
   // scale the actual render pass uses, so a Mark authored at a very
   // different zoom than the current camera still gets a correctly
@@ -1019,135 +1023,25 @@
     ctx.restore();
   }
 
-  // Same two-pass technique as Blackbook's drawMopStroke: a continuous
-  // rounded stroke for path continuity (raw, un-smoothed -- see _rawPath),
-  // plus the shared resolveMopDabPlan's dabs for the wet/broad deposited
-  // character. Falls back to a plain stroke if the deposition bridge hasn't
-  // loaded yet.
-  // Calibration V1 Revision 4: rebalanced from Revision 3 -- dabs used to
-  // be drawn at up to their own full speed-response radius (diameter up to
-  // 1.25x the body's own width), bulging past the body stroke's edges and
-  // staying visually dominant even after Revision 3's overlap-guaranteed
-  // resampling fix ("Mop seems the same, drawing as a dotted pattern").
-  // Now the BODY stroke is the dominant pass (near-full opacity, was
-  // 0.7x), and dabs are drawn at a fraction of their resolved radius
-  // (well under the body's own half-width, so they blend inside the
-  // stroke) at low alpha and only every other one -- same shared
-  // `resolveMopDabPlan` data, just rebalanced visual weighting.
-  // Calibration V1 Revision 5: isolating body-only vs dabs-only render
-  // showed dabs sit EXACTLY on the (densely resampled) centerline points,
-  // so the dab layer alone was a second thin track down the middle of the
-  // body, not lateral texture -- the user's "inner dotted line" report.
-  // Each dab now gets a small, purely deterministic lateral offset
-  // (`_hashLateralUnit`, a function of the dab's own position, no seed/
-  // randomness) applied PERPENDICULAR to the local path direction, so dabs
-  // scatter across the stroke's width like grain instead of stacking on
-  // its centerline -- the same "scatter around the point" principle
-  // Spray's particle field already uses.
-  // Calibration V1 Revision 6: close-zoom inspection showed dabs still
-  // read as an identifiable stamped sequence even after Revision 5's
-  // lateral scatter -- a flat hard-edged circle, drawn at every resampled
-  // point with only a narrow speed-response size range, at perfectly
-  // regular spacing. Fixed on all three fronts: soft radial-gradient fill
-  // (via the shared fillSprayParticle helper, same as Spray's particles --
-  // no hard edge), independent deterministic radius/alpha jitter per dab,
-  // and a deterministic per-dab inclusion probability that breaks the
-  // regular along-path rhythm (the body stroke, not the dab texture, is
-  // what guarantees no gaps -- skipping dabs never reopens Revision 3's
-  // continuity bug). Lateral scatter (Revision 5) is unchanged.
-  var MOP_DAB_VISUAL_SCALE = 0.55;
-  var MOP_DAB_LATERAL_SCALE = 0.6;
-  var MOP_DAB_INCLUDE_PROBABILITY = 0.6;
-  var MOP_DAB_RADIUS_JITTER_RANGE = 0.5;
-  var MOP_DAB_ALPHA_JITTER_RANGE = 0.45;
-
-  // Fallback only -- same shape as strokeSmoothing.ts's hash01, used
-  // solely if the rendering bridge hasn't loaded yet.
-  function _hash01Fallback(x, y, salt) {
-    var h = Math.sin(x * 12.9898 + y * 78.233 + (salt || 0) * 37.719) * 43758.5453;
-    return h - Math.floor(h);
-  }
-
-  // Calibration V1 Revision 10 (camera-instability fix): every dab's
-  // jitter/skip/scatter used to be keyed on `dab.x, dab.y` -- the dab's
-  // REPROJECTED SCREEN POSITION, which changes on every pan/zoom/pitch.
-  // That meant a completed Mark's "deterministic" texture silently
-  // re-rolled on every camera move (most visible on a dot, where the
-  // Mark's entire rendering hinges on one or two dabs' hash draws, but
-  // present for every Mop Mark). Fixed by keying on the Mark's own STABLE
-  // identity (`seedSource` -- `markId` once persisted, the local stroke id
-  // before that, matching exactly what Spray's `resolveSprayParticlePlan`/
-  // `resolveSprayCorePlan` already do) plus the dab's INDEX in its own
-  // deposition plan (stable for a given authored path), never screen
-  // coordinates.
+  // Mop Material Calibration V1: same named material treatment Blackbook/
+  // Blank use (strokeMop, strokeSmoothing.ts), reached through the SAME
+  // ArtSupplyRendering bridge -- falls back to the plain single-pass line
+  // if that bridge hasn't loaded yet, exactly like _drawInkPoints/
+  // _drawMarkerPoints/_drawGraphitePoints's own fallback. `seedSource` is
+  // `obj.id` (see `_drawStroke`'s own doc for why never `obj.markId` --
+  // this is also what keeps a dab's deterministic jitter stable across
+  // pan/zoom/reprojection, since strokeMop derives it from this stable
+  // seed combined with each dab's own resampled position, never from raw
+  // screen coordinates alone).
   function _drawMopPoints(ctx, pts, style, seedSource) {
-    var deposition = _deposition();
-    if (!deposition || !deposition.resolveMopDabPlan) { _drawRawPoints(ctx, pts, style); return; }
     var rendering = _rendering();
-    var hash01 = (rendering && rendering.hash01) || _hash01Fallback;
-    // Calibration V1 Revision 11: fillMopDab (crisp contact edge), not
-    // fillSprayParticle (Spray's soft aerosol falloff) -- see
-    // strokeSmoothing.ts's doc. Falls back to fillSprayParticle only if an
-    // older cached bundle hasn't loaded fillMopDab yet, never as the
-    // normal path.
-    var fillSoftDab = (rendering && rendering.fillMopDab) || (rendering && rendering.fillSprayParticle);
-    var markSeed = (deposition.hashSeed && seedSource != null) ? deposition.hashSeed(String(seedSource)) : 0;
-    ctx.save();
-    ctx.globalCompositeOperation = "source-over";
-    ctx.lineCap = "round"; ctx.lineJoin = "round";
-    ctx.beginPath();
-    _rawPath(ctx, pts);
-    ctx.lineWidth = style.width;
-    ctx.globalAlpha = style.opacity * 0.92;
-    ctx.strokeStyle = style.color;
-    ctx.stroke();
-    ctx.fillStyle = style.color;
-    var dabs = deposition.resolveMopDabPlan(pts, style.width * 0.5);
-    var baseRadius = style.width * 0.5;
-    // Calibration V1 Revision 10 (dot-gesture fix): the random per-dab
-    // inclusion probability and lateral scatter exist to break up a LONG
-    // stroke's regular rhythm -- across hundreds of dabs, randomly
-    // dropping/offsetting some is invisible texture. Applied to a DOT
-    // gesture (one, or very few, dabs total) the exact same randomness
-    // instead makes the dot itself unreliable: a coin-flip whether its
-    // one dab renders at all, and a visible off-center wobble when it
-    // does. A short dab list (<=3, generously covers a dot/near-dot) skips
-    // both -- every dab always renders, centered -- while any real stroke
-    // (every-day case, dabs.length usually in the dozens+) is completely
-    // unaffected.
-    var isDotLike = dabs.length <= 3;
-    for (var d = 0; d < dabs.length; d++) {
-      var dab = dabs[d];
-      if (!isDotLike && hash01(markSeed, d, 4) > MOP_DAB_INCLUDE_PROBABILITY) continue;
-      var prev = dabs[d - 1] || dab;
-      var next = dabs[d + 1] || dab;
-      var tangentX = next.x - prev.x;
-      var tangentY = next.y - prev.y;
-      var tangentLength = Math.hypot(tangentX, tangentY) || 1;
-      var perpX = -tangentY / tangentLength;
-      var perpY = tangentX / tangentLength;
-      var lateral = isDotLike ? 0 : (hash01(markSeed, d, 0) * 2 - 1) * baseRadius * MOP_DAB_LATERAL_SCALE;
-      var radiusJitter = 1 + (hash01(markSeed, d, 1) * 2 - 1) * MOP_DAB_RADIUS_JITTER_RANGE;
-      var alphaJitter = 1 + (hash01(markSeed, d, 2) * 2 - 1) * MOP_DAB_ALPHA_JITTER_RANGE;
-      var px = dab.x + perpX * lateral, py = dab.y + perpY * lateral;
-      var r = Math.max(0.3, dab.radius * MOP_DAB_VISUAL_SCALE * radiusJitter);
-      var a = Math.max(0, dab.alphaScale * 0.55 * alphaJitter);
-      // Defensive: some legacy/edge-case reprojected point (e.g. a
-      // pre-existing Mark whose geographic coordinates land outside the
-      // camera's currently representable range) can yield a non-finite
-      // screen position -- createRadialGradient/arc throw hard on that.
-      // Skip just this one dab rather than aborting the whole render pass.
-      if (!isFinite(px) || !isFinite(py) || !isFinite(r) || !isFinite(a)) continue;
-      if (fillSoftDab) {
-        fillSoftDab(ctx, { x: px, y: py, radius: r, alpha: a }, style.color, style.opacity);
-      } else {
-        ctx.globalAlpha = style.opacity * a;
-        ctx.beginPath();
-        ctx.arc(px, py, r, 0, Math.PI * 2);
-        ctx.fill();
-      }
+    if (rendering && rendering.strokeMop) {
+      ctx.save();
+      rendering.strokeMop(ctx, pts, style, seedSource);
+      ctx.restore();
+      return;
     }
-    ctx.restore();
+    _drawRawPoints(ctx, pts, style);
   }
 
   // Calibration V1 Revision 4: the core is `resolveSprayCorePlan` -- each

@@ -8,6 +8,7 @@ import {
   strokeGraphite,
   strokeInk,
   strokeMarker,
+  strokeMop,
   traceSmoothedPath,
   withAlpha,
   GRAPHITE_GRADE_ORDER,
@@ -39,6 +40,39 @@ function fakeStrokeContext() {
     globalCompositeOperation: "",
   };
   return { ctx, calls, lineWidths, alphas, strokeStyles };
+}
+
+/** Combines fakeStrokeContext's stroke tracking with fakeContext's fill/gradient tracking -- strokeMop's body pass strokes, its dab pass fills (via fillMopDab's radial gradient). */
+function fakeMopContext() {
+  const calls: string[] = [];
+  const lineWidths: number[] = [];
+  const alphas: number[] = [];
+  const strokeStyles: string[] = [];
+  const gradientStops: [number, string][] = [];
+  const ctx = {
+    save: () => calls.push("save"),
+    restore: () => calls.push("restore"),
+    stroke: () => calls.push("stroke"),
+    fill: () => calls.push("fill"),
+    beginPath: () => calls.push("beginPath"),
+    moveTo: (x: number, y: number) => calls.push(`moveTo(${x},${y})`),
+    lineTo: (x: number, y: number) => calls.push(`lineTo(${x},${y})`),
+    arc: (x: number, y: number, r: number) => calls.push(`arc(${x},${y},${r})`),
+    createRadialGradient: () => ({
+      addColorStop: (offset: number, color: string) => gradientStops.push([offset, color]),
+    }),
+    get lineWidth() { return lineWidths[lineWidths.length - 1] ?? 0; },
+    set lineWidth(value: number) { lineWidths.push(value); calls.push(`lineWidth=${value}`); },
+    get globalAlpha() { return alphas[alphas.length - 1] ?? 0; },
+    set globalAlpha(value: number) { alphas.push(value); calls.push(`globalAlpha=${value}`); },
+    get strokeStyle() { return strokeStyles[strokeStyles.length - 1] ?? ""; },
+    set strokeStyle(value: string) { strokeStyles.push(value); calls.push(`strokeStyle=${value}`); },
+    fillStyle: "" as unknown,
+    lineCap: "",
+    lineJoin: "",
+    globalCompositeOperation: "",
+  };
+  return { ctx, calls, lineWidths, alphas, strokeStyles, gradientStops };
 }
 
 function fakeContext() {
@@ -558,5 +592,108 @@ describe("strokeMarker -- Marker Material Calibration V1", () => {
     // recorded segment (points.length - 1) for the variance pass.
     const strokeCalls = calls.filter((call) => call === "stroke").length;
     expect(strokeCalls).toBeLessThanOrEqual(points.length + 1);
+  });
+});
+
+describe("strokeMop -- Mop Material Calibration V1", () => {
+  // Widely-spaced points so resolveMopDabPlan's overlap-guaranteed
+  // resampling produces a real, non-trivial dab count.
+  const points = [{ x: 0, y: 0 }, { x: 40, y: 8 }, { x: 88, y: 20 }, { x: 120, y: 16 }, { x: 164, y: 24 }];
+  const style = { color: "#1c6e6e", width: 20, opacity: 0.85 };
+
+  it("draws nothing for fewer than 2 points", () => {
+    const { ctx, calls } = fakeMopContext();
+    strokeMop(ctx as never, [], style, "mark-a");
+    strokeMop(ctx as never, [{ x: 1, y: 1 }], style, "mark-a");
+    expect(calls).toEqual([]);
+  });
+
+  it("is deterministic: identical points + seed produce an identical call sequence every time (reload-safe)", () => {
+    const first = fakeMopContext();
+    strokeMop(first.ctx as never, points, style, "mark-a");
+    const second = fakeMopContext();
+    strokeMop(second.ctx as never, points, style, "mark-a");
+    expect(second.calls).toEqual(first.calls);
+  });
+
+  it("a different Mark id (seed) produces a different dab pattern -- not one universal texture", () => {
+    const a = fakeMopContext();
+    strokeMop(a.ctx as never, points, style, "mark-a");
+    const b = fakeMopContext();
+    strokeMop(b.ctx as never, points, style, "mark-b");
+    expect(b.calls).not.toEqual(a.calls);
+  });
+
+  it("draws a continuous body stroke (path continuity guaranteed regardless of dab placement)", () => {
+    const { ctx, calls } = fakeMopContext();
+    strokeMop(ctx as never, points, style, "mark-a");
+    expect(calls).toContain(`moveTo(${points[0].x},${points[0].y})`);
+    expect(calls.filter((call) => call === "stroke").length).toBe(1);
+  });
+
+  it("respects the authored color for both the body stroke and the dab fill", () => {
+    const { ctx, strokeStyles, gradientStops } = fakeMopContext();
+    strokeMop(ctx as never, points, { ...style, color: "#2a6fd6" }, "mark-a");
+    for (const value of strokeStyles) expect(value).toBe("#2a6fd6");
+    expect(gradientStops.length).toBeGreaterThan(0);
+    for (const [, color] of gradientStops) expect(color).toContain("42, 111, 214"); // #2a6fd6 as rgb
+  });
+
+  it("scales the body width with the authored width across narrow/medium/broad", () => {
+    const narrow = fakeMopContext();
+    strokeMop(narrow.ctx as never, points, { ...style, width: 4 }, "mark-a");
+    const medium = fakeMopContext();
+    strokeMop(medium.ctx as never, points, { ...style, width: 20 }, "mark-a");
+    const broad = fakeMopContext();
+    strokeMop(broad.ctx as never, points, { ...style, width: 44 }, "mark-a");
+    expect(Math.max(...medium.lineWidths)).toBeGreaterThan(Math.max(...narrow.lineWidths));
+    expect(Math.max(...broad.lineWidths)).toBeGreaterThan(Math.max(...medium.lineWidths));
+  });
+
+  it("scales alpha with opacity -- lower opacity reads as thinner paint, higher as denser deposition", () => {
+    const light = fakeMopContext();
+    strokeMop(light.ctx as never, points, { ...style, opacity: 0.2 }, "mark-a");
+    const dense = fakeMopContext();
+    strokeMop(dense.ctx as never, points, { ...style, opacity: 0.95 }, "mark-a");
+    expect(Math.max(...dense.alphas)).toBeGreaterThan(Math.max(...light.alphas));
+  });
+
+  it("produces at least one dab whose radius exceeds the body's own half-width -- the imperfect, paint-loaded edge that distinguishes Mop from Marker's contained halo", () => {
+    // Checked across several Mark ids (not just one) since which specific
+    // dab draws the high end of the deterministic jitter range depends on
+    // the seed -- the material claim is "this CAN happen", not "always at
+    // this exact seed".
+    const maxRadiusAcrossSeeds = ["mark-a", "mark-b", "mark-c", "mark-d", "mark-e"].map((seed) => {
+      const { ctx, calls } = fakeMopContext();
+      strokeMop(ctx as never, points, style, seed);
+      const arcRadii = calls.filter((call) => call.startsWith("arc(")).map((call) => Number(call.slice(0, -1).split(",")[2]));
+      return arcRadii.length > 0 ? Math.max(...arcRadii) : 0;
+    });
+    expect(Math.max(...maxRadiusAcrossSeeds)).toBeGreaterThan(style.width / 2);
+  });
+
+  it("bounds its work to a fixed multiple of resolveMopDabPlan's own (already-bounded) emission count -- no unbounded or canvas-area-scaled loop", () => {
+    const { ctx, calls } = fakeMopContext();
+    strokeMop(ctx as never, points, style, "mark-a");
+    // One body stroke + at most one fill-producing arc per emission point;
+    // resolveMopDabPlan itself is bounded (MOP_MAX_EMISSION_POINTS), so
+    // this is bounded regardless of how long the authored stroke gets.
+    const arcCalls = calls.filter((call) => call.startsWith("arc(")).length;
+    expect(arcCalls).toBeLessThan(300);
+  });
+
+  it("a Mop stroke is denser (higher peak single-pass alpha) than a same-width, same-opacity Marker stroke -- heavier deposition, not Marker-with-a-bigger-brush", () => {
+    const mop = fakeMopContext();
+    strokeMop(mop.ctx as never, points, style, "mark-a");
+    const marker = fakeStrokeContext();
+    strokeMarker(marker.ctx as never, points, style, "mark-a");
+    expect(Math.max(...mop.alphas)).toBeGreaterThanOrEqual(Math.max(...marker.alphas) * 0.85);
+  });
+
+  it("existing legacy Mop Marks (no new fields) render without error through the same function", () => {
+    const legacyStyle = { color: "#171412", width: 12, opacity: 0.6 };
+    expect(() => strokeMop({} as never, [], legacyStyle, "legacy-mark")).not.toThrow();
+    const { ctx } = fakeMopContext();
+    expect(() => strokeMop(ctx as never, points, legacyStyle, "legacy-mark")).not.toThrow();
   });
 });

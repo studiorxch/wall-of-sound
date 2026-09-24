@@ -20,6 +20,7 @@
  */
 
 import { hashSeed } from "./sprayDeposition";
+import { resolveMopDabPlan } from "./mopDeposition";
 
 export interface SmoothablePoint {
   readonly x: number;
@@ -447,6 +448,133 @@ export function strokeMarker(
     ctx.moveTo(a.x, a.y);
     ctx.lineTo(b.x, b.y);
     ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/**
+ * Mop Material Calibration V1 -- Mop's own named material function,
+ * consolidating what was previously three separately-maintained copies of
+ * the same rendering (blackbookRuntime.ts's `drawMopStroke`,
+ * blankCanvasRuntime.ts's `drawMop`, and Map's `_drawMopPoints` in
+ * surfaceDrawingRuntime.js), each hand-tuning the same magic constants
+ * independently -- see this build's own recon. The DEPOSITION timing/
+ * spacing model itself (`resolveMopDabPlan`/`resolveMopEmissionPoints`,
+ * mopDeposition.ts) is unchanged and still the single source of WHERE a
+ * dab lands and how big its speed-response radius is; this function is
+ * only responsible for HOW each dab paints, positioned deliberately
+ * between Marker (`strokeMarker` -- controlled, absorptive, smooth) and
+ * Spray (soft aerosol falloff, `fillSprayParticle`) rather than either.
+ *
+ * Two passes, both over the SAME already-authored/resampled points:
+ *
+ * 1. BODY -- the same raw (unsmoothed) continuous polyline `resolveMopDabPlan`
+ *    itself resamples from, stroked once at `MOP_BODY_ALPHA` (deliberately
+ *    LOWER than a single Marker core pass -- this is what leaves buildup
+ *    headroom: a lone Mop pass should already look heavy, but two
+ *    overlapping passes must still visibly deepen further). Guarantees
+ *    path continuity regardless of how sparse the authored points are,
+ *    exactly like before.
+ * 2. DABS -- one crisp-edged (`fillMopDab`, never Spray's soft radial
+ *    falloff) circular deposit per resampled emission point, laterally
+ *    scattered and radius/alpha-jittered, ALL deterministic functions of
+ *    each dab's own position plus this Mark's stable seed. The key
+ *    calibration change from the prior per-runtime copies: dab radius now
+ *    ranges from noticeably SMALLER to noticeably LARGER than the body's
+ *    own half-width (`MOP_DAB_RADIUS_MIN_SCALE`..`MOP_DAB_RADIUS_MAX_SCALE`,
+ *    previously a flat 0.55x that kept every dab strictly inside the
+ *    body's own crisp edge). Letting some dabs bulge past the body's
+ *    stroked edge is what gives Mop its "imperfect paint-loaded edge" and
+ *    "visible accumulation" -- the body pass alone was previously already
+ *    smoother/crisper than Marker's own halo-softened edge, the opposite
+ *    of the intended material relationship. Dab alpha was raised to a
+ *    level where dabs meaningfully deepen color (not a near-invisible
+ *    glaze), so overlap/repeated passes/crossings visibly enrich.
+ *
+ * SPEED/SPACING: `resolveMopDabPlan` already derives a deterministic
+ * `densityFactor` per dab from how closely the ORIGINAL authored points
+ * were spaced (closer/slower -> bigger; farther/faster -> smaller) -- no
+ * velocity or timestamp capture, no new persisted field. This function
+ * only consumes that already-resolved radius; it introduces no additional
+ * speed/spacing interpretation of its own.
+ *
+ * DETERMINISM: every jitter call is `hash01`/`hashLateralUnit` of a dab's
+ * own resampled position plus `hashSeed(seedSource)` (`seedSource` is the
+ * Mark's own stable `operation.id`/`obj.id`, the same convention Pencil/
+ * Marker/Spray already use) -- no `Math.random()`, no `Date.now()`.
+ *
+ * PERFORMANCE: unchanged O(n) shape -- exactly one dab per emission point
+ * (already bounded to `MOP_MAX_EMISSION_POINTS` by `resolveMopDabPlan`
+ * regardless of the authored stroke's own length or point count), one
+ * `fillMopDab` call each; no new resampling pass and no per-frame
+ * recomputation beyond what the prior implementation already did.
+ */
+const MOP_BODY_ALPHA = 0.78;
+const MOP_DAB_INCLUDE_PROBABILITY = 0.6;
+const MOP_DAB_LATERAL_SCALE = 0.6;
+const MOP_DAB_RADIUS_MIN_SCALE = 0.78;
+const MOP_DAB_RADIUS_MAX_SCALE = 1.32;
+const MOP_DAB_ALPHA_BASE = 0.4;
+const MOP_DAB_ALPHA_RANGE = 0.3;
+
+export function strokeMop(
+  ctx: CanvasRenderingContext2D,
+  points: readonly SmoothablePoint[],
+  style: { readonly color: string; readonly width: number; readonly opacity: number },
+  seedSource: string,
+): void {
+  if (points.length < 2) return;
+  const seed = hashSeed(seedSource);
+  const baseRadius = style.width * 0.5;
+
+  ctx.save();
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.globalCompositeOperation = "source-over";
+
+  // Pass 1: BODY -- raw (unsmoothed) polyline, guarantees continuity.
+  ctx.beginPath();
+  ctx.moveTo(points[0].x, points[0].y);
+  for (const point of points.slice(1)) ctx.lineTo(point.x, point.y);
+  ctx.lineWidth = style.width;
+  ctx.globalAlpha = style.opacity * MOP_BODY_ALPHA;
+  ctx.strokeStyle = style.color;
+  ctx.stroke();
+
+  // Pass 2: DABS -- deterministic per-dab jitter, seeded by this Mark's
+  // own stable id so two different Marks never share one jitter pattern.
+  const dabs = resolveMopDabPlan(points, baseRadius);
+  // Calibration V1 Revision 10 (dot-gesture fix, preserved): a short dab
+  // list (a dot/near-dot gesture) always renders fully centered -- the
+  // inclusion/scatter randomness exists to break up a LONG stroke's
+  // regular rhythm and is actively harmful applied to only 1-3 dabs.
+  const isDotLike = dabs.length <= 3;
+  for (let index = 0; index < dabs.length; index += 1) {
+    const dab = dabs[index];
+    const dabSeedX = dab.x + seed;
+    const dabSeedY = dab.y + seed;
+    if (!isDotLike && hash01(dabSeedX, dabSeedY, 4) > MOP_DAB_INCLUDE_PROBABILITY) continue;
+    const prev = dabs[index - 1] ?? dab;
+    const next = dabs[index + 1] ?? dab;
+    const tangentX = next.x - prev.x;
+    const tangentY = next.y - prev.y;
+    const tangentLength = Math.hypot(tangentX, tangentY) || 1;
+    const perpX = -tangentY / tangentLength;
+    const perpY = tangentX / tangentLength;
+    const lateral = isDotLike ? 0 : hashLateralUnit(dabSeedX, dabSeedY) * baseRadius * MOP_DAB_LATERAL_SCALE;
+    const radiusScale = MOP_DAB_RADIUS_MIN_SCALE + hash01(dabSeedX, dabSeedY, 1) * (MOP_DAB_RADIUS_MAX_SCALE - MOP_DAB_RADIUS_MIN_SCALE);
+    const alphaJitter = MOP_DAB_ALPHA_BASE + hash01(dabSeedX, dabSeedY, 2) * MOP_DAB_ALPHA_RANGE;
+    fillMopDab(
+      ctx,
+      {
+        x: dab.x + perpX * lateral,
+        y: dab.y + perpY * lateral,
+        radius: Math.max(0.3, dab.radius * radiusScale),
+        alpha: Math.max(0, dab.alphaScale * alphaJitter),
+      },
+      style.color,
+      style.opacity,
+    );
   }
   ctx.restore();
 }
