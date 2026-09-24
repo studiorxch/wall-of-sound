@@ -19,9 +19,11 @@ import {
   BLACKBOOK_PAGE_FRAME,
   BLACKBOOK_PAGE_SURFACE_ID,
   createBlackbookArtworkPersistenceBridge,
+  resolveActiveBlackbookArtworkId,
   type BlackbookOperation,
 } from "./blackbookArtworkBridge";
 import { createCartesianCamera, type CartesianCamera, type DocRect } from "./cartesianWorkspaceCamera";
+import { createCurrentArtworkSession } from "./currentArtworkSession";
 import { resolveMopDabPlan } from "./mopDeposition";
 import { hashSeed, resolveSprayCorePlan, resolveSprayParticlePlan } from "./sprayDeposition";
 import {
@@ -567,6 +569,41 @@ function point(event: PointerEvent) {
   return screenToDoc(event.clientX - rect.left, event.clientY - rect.top);
 }
 
+/**
+ * BLACKBOOK PAGE ISOLATION V1 -- explicit active-Artwork identity. THE
+ * SESSION CHOOSES THE ARTWORK (same invariant `currentArtworkSession.ts`
+ * already established for Map): `getCurrentArtworkTarget` below replaces
+ * the legacy proximity-based routing entirely, so a Mark always lands on
+ * `currentArtwork`'s own explicit target, never "whichever nearby
+ * document Surface grouping happens to pick".
+ */
+const currentArtwork = createCurrentArtworkSession();
+/**
+ * Every Blackbook Artwork this signed-in member owns (surfaceId-filtered),
+ * kept current by `hydrate()` and by every successful persist
+ * (`onArtworkSaved`/`onArtworkRemoved`) -- NOT the rendered page itself.
+ * `applyActiveArtwork()` is what decides which ONE of these is on screen.
+ */
+let knownArtworksCache: readonly Artwork[] = [];
+
+function upsertKnownArtwork(artwork: Artwork): void {
+  knownArtworksCache = [...knownArtworksCache.filter((known) => known.id !== artwork.id), artwork];
+}
+function forgetKnownArtwork(artworkId: string): void {
+  knownArtworksCache = knownArtworksCache.filter((known) => known.id !== artworkId);
+}
+
+function activeArtworkStorageKey(memberId: string): string {
+  return `studiorich:blackbook:active-artwork:${memberId}`;
+}
+/** Per-device "last opened page" memory only -- never shared/synced, never authoritative over Firestore, purely which page reopens by default. */
+function readRememberedActiveArtworkId(memberId: string): string | null {
+  try { return window.localStorage.getItem(activeArtworkStorageKey(memberId)); } catch { return null; }
+}
+function rememberActiveArtworkId(memberId: string, artworkId: string): void {
+  try { window.localStorage.setItem(activeArtworkStorageKey(memberId), artworkId); } catch { /* best-effort only */ }
+}
+
 const persistence = createBlackbookArtworkPersistenceBridge({
   repository,
   drawing: {
@@ -576,40 +613,86 @@ const persistence = createBlackbookArtworkPersistenceBridge({
     },
   },
   getAuthenticatedMemberId: () => memberState.status === "signedIn" ? memberState.member.uid : null,
+  getCurrentArtworkTarget: () => currentArtwork.getState(),
+  onCurrentArtworkEstablished: (artworkId) => {
+    currentArtwork.setCurrentArtwork(artworkId);
+    if (memberState.status === "signedIn") rememberActiveArtworkId(memberState.member.uid, artworkId);
+  },
+  onArtworkSaved: upsertKnownArtwork,
+  onArtworkRemoved: forgetKnownArtwork,
 });
 
-function hydrate(artworks: readonly Artwork[]): void {
-  operations = artworks
-    .filter((artwork) => artwork.surfaceId === BLACKBOOK_PAGE_SURFACE_ID && artwork.state === "draft")
-    .flatMap((artwork) => artwork.marks.flatMap((mark): BlackbookOperation[] => mark.type === "stroke" && mark.geometry.format === "local-2d-stroke-v1" ? [{
-      operation: mark.material?.supplyId === "pen" ? "pen" : mark.material?.supplyId === "marker" ? "marker" : mark.material?.supplyId === "mop" ? "mop" : mark.material?.supplyId === "spray" ? "spray" : "pencil",
-      id: `blackbook-mark-${mark.id}`,
-      artworkId: artwork.id,
-      markId: mark.id,
-      creatorId: artwork.creatorId,
-      surfaceId: artwork.surfaceId,
-      points: mark.geometry.points,
-      style: mark.style,
-      // Graphite Grades Foundation V1: carry this Mark's OWN stored grade
-      // through hydration so drawOperation renders it with the grade it was
-      // actually authored with, not whatever grade is currently selected.
-      ...(mark.material?.variantId !== undefined && mark.material?.profileVersion !== undefined
-        ? { variantId: mark.material.variantId, profileVersion: mark.material.profileVersion }
-        : {}),
-    }] : mark.type === "material-erasure" && mark.geometry.format === "local-2d-erasure-v1" ? [{ operation: "eraser", id: `blackbook-mark-${mark.id}`, artworkId: artwork.id, markId: mark.id, creatorId: artwork.creatorId, surfaceId: artwork.surfaceId, points: mark.geometry.points, width: mark.width }] : []));
-  const knownArtworks = artworks.filter((artwork) => artwork.surfaceId === BLACKBOOK_PAGE_SURFACE_ID);
-  // Blackbook Default Page Format: an OLD Artwork's own authored page frame
-  // remains authoritative -- resolve THIS session's page frame from
-  // whatever was actually persisted, never silently substitute the current
-  // canonical default for existing content. Proximity grouping can split
-  // one page's content across several Artwork documents; they all share
-  // one authored page, so the first persisted pageFrame found is correct.
-  // Brand-new/legacy content with no persisted pageFrame at all falls back
-  // to today's canonical default (BLACKBOOK_PAGE_FRAME).
-  activePageFrame = knownArtworks.find((artwork) => artwork.pageFrame)?.pageFrame ?? BLACKBOOK_PAGE_FRAME;
-  persistence.replaceKnownArtworks(knownArtworks);
+/** Maps ONE Artwork's own Marks to BlackbookOperations -- never another Artwork's, even one sharing the same Surface (the core invariant this build introduces). */
+function marksToOperations(artwork: Artwork): BlackbookOperation[] {
+  return artwork.marks.flatMap((mark): BlackbookOperation[] => mark.type === "stroke" && mark.geometry.format === "local-2d-stroke-v1" ? [{
+    operation: mark.material?.supplyId === "pen" ? "pen" : mark.material?.supplyId === "marker" ? "marker" : mark.material?.supplyId === "mop" ? "mop" : mark.material?.supplyId === "spray" ? "spray" : "pencil",
+    id: `blackbook-mark-${mark.id}`,
+    artworkId: artwork.id,
+    markId: mark.id,
+    creatorId: artwork.creatorId,
+    surfaceId: artwork.surfaceId,
+    points: mark.geometry.points,
+    style: mark.style,
+    // Graphite Grades Foundation V1: carry this Mark's OWN stored grade
+    // through hydration so drawOperation renders it with the grade it was
+    // actually authored with, not whatever grade is currently selected.
+    ...(mark.material?.variantId !== undefined && mark.material?.profileVersion !== undefined
+      ? { variantId: mark.material.variantId, profileVersion: mark.material.profileVersion }
+      : {}),
+  }] : mark.type === "material-erasure" && mark.geometry.format === "local-2d-erasure-v1" ? [{ operation: "eraser", id: `blackbook-mark-${mark.id}`, artworkId: artwork.id, markId: mark.id, creatorId: artwork.creatorId, surfaceId: artwork.surfaceId, points: mark.geometry.points, width: mark.width }] : []);
+}
+
+/**
+ * Renders EXACTLY the currently-active Artwork -- never a Surface-wide
+ * merge. `pageFrame` comes from that SAME Artwork (requirement 6): each
+ * Artwork's own persisted frame is independent of every other Artwork
+ * that happens to share this Surface.
+ */
+function applyActiveArtwork(): void {
+  const target = currentArtwork.getState();
+  const active = target.kind === "artwork" ? knownArtworksCache.find((artwork) => artwork.id === target.artworkId) ?? null : null;
+  operations = active ? marksToOperations(active) : [];
+  activePageFrame = active?.pageFrame ?? BLACKBOOK_PAGE_FRAME;
   fitPageIntoView();
   render();
+}
+
+/**
+ * Opens exactly one Blackbook Artwork by id -- the minimal explicit
+ * selection mechanism this build introduces (requirement 5: no gallery/
+ * page-strip UI yet). Reachable today via this session's own
+ * `?artwork=<id>` URL parameter (see `resolveInitialActiveArtwork`
+ * below); a future gallery card would call this same function.
+ */
+function openArtwork(artworkId: string): void {
+  if (memberState.status !== "signedIn") return;
+  if (!knownArtworksCache.some((artwork) => artwork.id === artworkId)) return;
+  currentArtwork.setCurrentArtwork(artworkId);
+  rememberActiveArtworkId(memberState.member.uid, artworkId);
+  activePoints = [];
+  applyActiveArtwork();
+}
+
+function resolveInitialActiveArtwork(): void {
+  if (memberState.status !== "signedIn") return;
+  const memberId = memberState.member.uid;
+  const requestedId = new URLSearchParams(window.location.search).get("artwork");
+  const rememberedId = readRememberedActiveArtworkId(memberId);
+  const resolvedId = resolveActiveBlackbookArtworkId(knownArtworksCache, requestedId, rememberedId);
+  if (resolvedId) {
+    openArtwork(resolvedId);
+  } else {
+    // No Blackbook Artwork exists for this member yet -- arm a brand-new
+    // page rather than leaving any previous state in place (requirement 9).
+    currentArtwork.setPendingNewArtwork("map", "");
+    applyActiveArtwork();
+  }
+}
+
+function hydrate(artworks: readonly Artwork[]): void {
+  knownArtworksCache = artworks.filter((artwork) => artwork.surfaceId === BLACKBOOK_PAGE_SURFACE_ID && artwork.state === "draft");
+  persistence.replaceKnownArtworks(knownArtworksCache);
+  resolveInitialActiveArtwork();
 }
 
 // Blackbook Spatial Workspace V1: the smallest interaction consistent with
@@ -686,23 +769,23 @@ fitButton.addEventListener("click", () => {
 });
 
 /**
- * BLACKBOOK EVENT UI POLISH V1 -- NEW (requirement 5). Deliberately does
- * NOT delete/clear the current Artwork: it only forgets it from THIS
- * session's in-memory persistence bridge (`replaceKnownArtworks([])`), so
- * the legacy proximity-based routing in mapArtworkBridge.ts's
- * `createArtworkPersistenceBridge` finds no candidate for the next stroke
- * and creates a brand-new Artwork document instead of appending to the one
- * just left -- the same `createArtwork` lifecycle every Blackbook Artwork
- * already goes through, always carrying the canonical 16:9 `pageFrame`
- * (see blackbookArtworkBridge.ts's `BLACKBOOK_PAGE_FRAME`). The artwork
- * that was just active is untouched in Firestore and remains fully
- * recoverable by `listOwnedArtwork` on the next hydrate.
+ * BLACKBOOK PAGE ISOLATION V1 -- NEW. Deliberately does NOT delete/clear
+ * the current Artwork: it only moves `currentArtwork`'s explicit target to
+ * "pending", so the FIRST next Mark creates a brand-new Artwork document
+ * (via the same `createArtwork` lifecycle every Blackbook Artwork already
+ * goes through, always carrying the canonical 16:9 `pageFrame`) and
+ * `onCurrentArtworkEstablished` promotes it to the new active Artwork.
+ * The Artwork that was just active is untouched in Firestore, stays in
+ * `knownArtworksCache`, and remains independently reopenable via
+ * `openArtwork` -- not just "recoverable in theory", but genuinely
+ * isolated: this session no longer renders or routes Marks to it at all
+ * once NEW has moved on.
  */
 function startNewPage(): void {
   if (memberState.status !== "signedIn") return;
   operations = [];
   activePoints = [];
-  persistence.replaceKnownArtworks([]);
+  currentArtwork.setPendingNewArtwork("map", "");
   activePageFrame = BLACKBOOK_PAGE_FRAME;
   fitPageIntoView();
   showStatus("New page", "success");
@@ -793,6 +876,8 @@ memberIdentity.subscribe((state) => {
     showStatus("Private page — sign in to draw", "info");
     operations = [];
     activePageFrame = BLACKBOOK_PAGE_FRAME;
+    knownArtworksCache = [];
+    currentArtwork.clear();
     persistence.replaceKnownArtworks([]);
     fitPageIntoView();
     render();

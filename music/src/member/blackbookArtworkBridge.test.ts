@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { selectArtworkForMark, type Artwork, type ArtworkMark, type ArtworkRepository } from "@studiorich/member-identity";
-import { BLACKBOOK_PAGE_FRAME, BLACKBOOK_PAGE_SURFACE_ID, createBlackbookArtworkPersistenceBridge, toLocalErasureMark, toLocalStrokeMark, type BlackbookOperation, type BlackbookStroke } from "./blackbookArtworkBridge";
+import { BLACKBOOK_PAGE_FRAME, BLACKBOOK_PAGE_SURFACE_ID, createBlackbookArtworkPersistenceBridge, resolveActiveBlackbookArtworkId, toLocalErasureMark, toLocalStrokeMark, type BlackbookOperation, type BlackbookStroke } from "./blackbookArtworkBridge";
 
 function stroke(id: string, offset = 0): BlackbookStroke {
   return { operation: "pencil", id, points: [{ x: 0.1 + offset, y: 0.2 }, { x: 0.2 + offset, y: 0.3 }], style: { color: "#171412", width: 7, opacity: 0.9 } };
@@ -249,5 +249,127 @@ describe("Blackbook Default Page Format -- canonical 16:9 landscape default", ()
     const bridge = createBlackbookArtworkPersistenceBridge({ repository, drawing: { bindArtwork }, getAuthenticatedMemberId: () => "member-1", createMarkId: () => "mark-a" });
     await bridge.persistStroke(stroke("a"));
     expect(repository.createArtwork).toHaveBeenCalledWith(expect.objectContaining({ pageFrame: { x: 0, y: 0, width: 1, height: 9 / 16 } }));
+  });
+});
+
+describe("Blackbook Page Isolation V1 -- explicit active-Artwork routing", () => {
+  function repositoryFor(artworks: Record<string, Artwork>): ArtworkRepository {
+    return {
+      createArtwork: vi.fn(), listOwnedArtwork: vi.fn(async () => Object.values(artworks)),
+      createMapArtwork: vi.fn(), listOwnedMapArtwork: vi.fn(async () => Object.values(artworks)),
+      appendOwnedArtworkMark: vi.fn(async (artworkId: string, _creatorId: string, mark: ArtworkMark) => {
+        const existing = artworks[artworkId];
+        const updated = { ...existing, marks: [...existing.marks, mark] };
+        artworks[artworkId] = updated;
+        return updated;
+      }),
+      removeOwnedArtworkMark: vi.fn(async (artworkId: string, _creatorId: string, markId: string) => {
+        const existing = artworks[artworkId];
+        const remaining = existing.marks.filter((mark) => mark.id !== markId);
+        if (remaining.length === 0) { delete artworks[artworkId]; return null; }
+        const updated = { ...existing, marks: remaining };
+        artworks[artworkId] = updated;
+        return updated;
+      }),
+      deleteOwnedArtwork: vi.fn(), renameOwnedArtwork: vi.fn(),
+    };
+  }
+
+  it("Artwork A and Artwork B may share the same Blackbook Surface without their Marks merging", () => {
+    const a = artwork("art-a");
+    const b = artwork("art-b", [toLocalStrokeMark(stroke("b", 0.3), "mark-b", new Date(1))]);
+    expect(a.surfaceId).toBe(BLACKBOOK_PAGE_SURFACE_ID);
+    expect(b.surfaceId).toBe(BLACKBOOK_PAGE_SURFACE_ID);
+    expect(a.marks).not.toEqual(b.marks);
+  });
+
+  it("an explicit 'artwork' target appends only to that Artwork, never a Surface-proximity match, even when another Artwork sits right next to it", async () => {
+    const a = artwork("art-a"); // marks near (0.1,0.2)
+    const b = artwork("art-b", [toLocalStrokeMark(stroke("b", 0.001), "mark-b-seed", new Date(0))]); // marks almost on top of A's
+    const artworks: Record<string, Artwork> = { "art-a": a, "art-b": b };
+    const repository = repositoryFor(artworks);
+    const bindArtwork = vi.fn(() => true);
+    const bridge = createBlackbookArtworkPersistenceBridge({
+      repository, drawing: { bindArtwork }, getAuthenticatedMemberId: () => "member-1", createMarkId: () => "mark-new",
+      getCurrentArtworkTarget: () => ({ kind: "artwork", artworkId: "art-b" }),
+    });
+    await bridge.persistStroke(stroke("new", 0.0005)); // geographically indistinguishable from A
+    expect(repository.appendOwnedArtworkMark).toHaveBeenCalledWith("art-b", "member-1", expect.objectContaining({ id: "mark-new" }));
+    expect(repository.appendOwnedArtworkMark).not.toHaveBeenCalledWith("art-a", expect.anything(), expect.anything());
+  });
+
+  it("NEW ('pending' target) creates a distinct Artwork and establishes it as the new active Artwork via onCurrentArtworkEstablished", async () => {
+    const created = artwork("art-fresh", [toLocalStrokeMark(stroke("fresh"), "mark-fresh", new Date(1))]);
+    const repository: ArtworkRepository = {
+      createArtwork: vi.fn(async () => created), listOwnedArtwork: vi.fn(async () => []),
+      createMapArtwork: vi.fn(async () => created), listOwnedMapArtwork: vi.fn(async () => []),
+      appendOwnedArtworkMark: vi.fn(), removeOwnedArtworkMark: vi.fn(),
+      deleteOwnedArtwork: vi.fn(), renameOwnedArtwork: vi.fn(),
+    };
+    const bindArtwork = vi.fn(() => true);
+    const established = vi.fn();
+    const bridge = createBlackbookArtworkPersistenceBridge({
+      repository, drawing: { bindArtwork }, getAuthenticatedMemberId: () => "member-1", createMarkId: () => "mark-fresh",
+      getCurrentArtworkTarget: () => ({ kind: "pending", artworkType: "map", title: "" }),
+      onCurrentArtworkEstablished: established,
+    });
+    await bridge.persistStroke(stroke("fresh"));
+    expect(repository.createArtwork).toHaveBeenCalledWith(expect.objectContaining({ pageFrame: BLACKBOOK_PAGE_FRAME }));
+    expect(established).toHaveBeenCalledWith("art-fresh");
+  });
+
+  it("Undo (removeStroke) affects only the active Artwork the removed Mark actually belongs to", async () => {
+    const a = artwork("art-a");
+    const artworks: Record<string, Artwork> = { "art-a": a };
+    const repository = repositoryFor(artworks);
+    const bindArtwork = vi.fn(() => true);
+    const bridge = createBlackbookArtworkPersistenceBridge({ repository, drawing: { bindArtwork }, getAuthenticatedMemberId: () => "member-1" });
+    const hydratedMarkOfA = Object.assign(stroke("a"), { artworkId: "art-a", markId: "mark-a", creatorId: "member-1", surfaceId: BLACKBOOK_PAGE_SURFACE_ID });
+    await bridge.removeStroke(hydratedMarkOfA);
+    expect(repository.removeOwnedArtworkMark).toHaveBeenCalledWith("art-a", "member-1", "mark-a");
+    expect(repository.removeOwnedArtworkMark).not.toHaveBeenCalledWith("art-b", expect.anything(), expect.anything());
+  });
+
+  describe("resolveActiveBlackbookArtworkId -- explicit/deterministic selection only", () => {
+    it("prefers an explicitly requested id (e.g. a '?artwork=' link) when it is one of this member's known Artworks", () => {
+      const a = artwork("art-a");
+      const b = artwork("art-b");
+      expect(resolveActiveBlackbookArtworkId([a, b], "art-b", "art-a")).toBe("art-b");
+    });
+
+    it("falls back to the remembered (last-opened) id when nothing was explicitly requested", () => {
+      const a = artwork("art-a");
+      const b = artwork("art-b");
+      expect(resolveActiveBlackbookArtworkId([a, b], null, "art-b")).toBe("art-b");
+    });
+
+    it("ignores a requested or remembered id that no longer belongs to this member, falling through instead of erroring", () => {
+      const a = artwork("art-a");
+      expect(resolveActiveBlackbookArtworkId([a], "art-ghost", "also-ghost")).toBe("art-a");
+    });
+
+    it("FALLBACK RULE (requirement 9): with no requested/remembered id, resolves to the most recently updated known Artwork -- the same recency definition artworkGallery.ts's My Artwork listing already uses", () => {
+      const older = { ...artwork("art-old"), updatedAt: new Date(0) };
+      const newer = { ...artwork("art-new"), updatedAt: new Date(1000) };
+      expect(resolveActiveBlackbookArtworkId([older, newer], null, null)).toBe("art-new");
+    });
+
+    it("a legacy Artwork with no remembered active-Artwork metadata at all still resolves (never null) as long as the member owns at least one Blackbook Artwork", () => {
+      const legacySquare = { ...artwork("art-legacy"), pageFrame: { x: 0, y: 0, width: 1, height: 1 } };
+      expect(resolveActiveBlackbookArtworkId([legacySquare], null, null)).toBe("art-legacy");
+    });
+
+    it("resolves to null (caller arms a brand-new page) only when the member has no Blackbook Artwork at all", () => {
+      expect(resolveActiveBlackbookArtworkId([], null, null)).toBeNull();
+    });
+
+    it("different persisted pageFrames stay independent per Artwork -- resolving an id never substitutes another Artwork's frame", () => {
+      const square = { ...artwork("art-square"), pageFrame: { x: 0, y: 0, width: 1, height: 1 } };
+      const landscape = { ...artwork("art-landscape"), pageFrame: BLACKBOOK_PAGE_FRAME };
+      const resolvedSquareId = resolveActiveBlackbookArtworkId([square, landscape], "art-square", null);
+      const resolvedLandscapeId = resolveActiveBlackbookArtworkId([square, landscape], "art-landscape", null);
+      expect([square, landscape].find((a) => a.id === resolvedSquareId)?.pageFrame).toEqual({ x: 0, y: 0, width: 1, height: 1 });
+      expect([square, landscape].find((a) => a.id === resolvedLandscapeId)?.pageFrame).toEqual(BLACKBOOK_PAGE_FRAME);
+    });
   });
 });

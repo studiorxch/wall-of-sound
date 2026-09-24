@@ -1,5 +1,6 @@
-import type { ArtMaterialId, ArtworkRepository, LocalMaterialErasureMark, LocalStrokeMark, PageFrame } from "@studiorich/member-identity";
-import { createArtworkPersistenceBridge } from "./mapArtworkBridge";
+import type { ArtMaterialId, Artwork, ArtworkRepository, LocalMaterialErasureMark, LocalStrokeMark, PageFrame } from "@studiorich/member-identity";
+import { createArtworkPersistenceBridge, type CurrentArtworkTarget } from "./mapArtworkBridge";
+import { sortArtworksByRecency } from "./artworkGallery";
 
 export const STUDIO_RICH_BLACKBOOK_ID = "studio-rich-main";
 export const STUDIO_RICH_BLACKBOOK_PAGE_ID = "page-1";
@@ -102,6 +103,23 @@ export function createBlackbookArtworkPersistenceBridge(options: {
   drawing: { bindArtwork(stroke: BlackbookOperation, artworkId: string, markId: string, creatorId: string, surfaceId: string): boolean };
   getAuthenticatedMemberId: () => string | null;
   createMarkId?: () => string;
+  /**
+   * BLACKBOOK PAGE ISOLATION V1 -- when supplied, this is what makes NEW
+   * (and reopening a specific page) mean something durable: it REPLACES
+   * the legacy proximity-based `selectArtworkForMark` routing entirely
+   * (see `createArtworkPersistenceBridge`'s own doc in mapArtworkBridge.ts)
+   * so a Mark always lands on the explicitly active Blackbook Artwork,
+   * never "whichever nearby document Surface grouping happens to pick".
+   * Omitted, Blackbook falls back to its original proximity behavior
+   * (pre-isolation callers/tests keep compiling unchanged).
+   */
+  getCurrentArtworkTarget?: () => CurrentArtworkTarget;
+  /** Fires once a "pending" target's first Mark actually creates its Artwork document -- see mapArtworkBridge.ts's own doc. */
+  onCurrentArtworkEstablished?: (artworkId: string) => void;
+  /** Fires with the authoritative Artwork on every successful persist -- lets a caller keep its own known-Artwork cache current without a second Firestore read. */
+  onArtworkSaved?: (artwork: Artwork) => void;
+  /** Fires when an Artwork is fully removed (its last Mark undone). */
+  onArtworkRemoved?: (artworkId: string) => void;
 }) {
   return createArtworkPersistenceBridge({
     ...options,
@@ -109,4 +127,39 @@ export function createBlackbookArtworkPersistenceBridge(options: {
     toMark: toBlackbookMark,
     pageFrame: BLACKBOOK_PAGE_FRAME,
   });
+}
+
+/**
+ * BLACKBOOK PAGE ISOLATION V1 -- explicit, deterministic active-Artwork
+ * selection. Never proximity/Mark-count/size-based (the exact thing this
+ * build exists to stop doing). Resolution order:
+ *
+ * 1. `requestedId` -- an id explicitly asked for (e.g. this session's own
+ *    `?artwork=<id>` URL parameter), when it's actually one of this
+ *    member's known Blackbook Artworks.
+ * 2. `rememberedId` -- the last Artwork this member had open on this
+ *    device (see blackbookRuntime.ts's `localStorage`-backed
+ *    remember/read), when it still exists.
+ * 3. FALLBACK RULE (requirement 9 -- only reached when neither of the
+ *    above resolves, e.g. this member's very first load on a new device,
+ *    or a legacy member who drew before NEW/isolation existed): the
+ *    member's own most-recently-updated Blackbook Artwork, using the
+ *    SAME recency definition `artworkGallery.ts`'s `sortArtworksByRecency`
+ *    already uses for My Artwork -- the choice least surprising to
+ *    someone resuming whatever they were last drawing. This never
+ *    recombines Marks from more than one Artwork; it only decides which
+ *    SINGLE Artwork opens.
+ *
+ * Returns `null` when this member has no Blackbook Artwork at all yet --
+ * the caller treats that as "arm a brand-new page" (`setPendingNewArtwork`),
+ * never as a reason to leave the previous state in place.
+ */
+export function resolveActiveBlackbookArtworkId(
+  knownArtworks: readonly Artwork[],
+  requestedId: string | null,
+  rememberedId: string | null,
+): string | null {
+  const resolve = (id: string | null): string | null =>
+    id !== null && knownArtworks.some((artwork) => artwork.id === id) ? id : null;
+  return resolve(requestedId) ?? resolve(rememberedId) ?? (knownArtworks.length > 0 ? sortArtworksByRecency(knownArtworks)[0].id : null);
 }
