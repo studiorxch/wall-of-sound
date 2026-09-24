@@ -148,11 +148,38 @@
       .my-page-item-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
       .my-page-item-title { font-size: 10px; letter-spacing: .03em; color: #f4efe7; }
       .my-page-item-meta { font-size: 9px; letter-spacing: .03em; color: #928a80; }
+
+      /**
+       * Event Music + Clock Radio Foundation V1 -- deliberately the
+       * smallest useful Now Playing control: Play/Pause + title/artist,
+       * nothing else (no library, no playlist editor, no DJ controls --
+       * see this build's own UI requirement). Placed top-left, independent
+       * of every bottom-bar group (Member/Art Supplies/workspace actions)
+       * -- it is wired once by eventMusicRuntime.ts, entirely outside
+       * Blackbook's own Artwork/page lifecycle, so it never needs to sit
+       * inside a group that lifecycle already owns.
+       */
+      #event-music {
+        position: absolute; z-index: 9; top: 16px; left: 130px;
+        display: flex; align-items: center; gap: 10px;
+        padding: 8px 12px; max-width: 260px;
+      }
+      #event-music-toggle { min-width: 34px; padding: 6px 10px; font-size: 13px; }
+      #event-music-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+      #event-music-title { font-size: 10px; letter-spacing: .03em; color: #f4efe7; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      #event-music-artist { font-size: 9px; letter-spacing: .03em; color: #928a80; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     </style>
   </head>
   <body>
     <div id="app">
       <span id="brand-mark">STUDIORICH BLACKBOOK</span>
+      <div id="event-music" class="island" aria-label="Event music">
+        <button id="event-music-toggle" disabled>▶</button>
+        <div id="event-music-text">
+          <span id="event-music-title">Loading music…</span>
+          <span id="event-music-artist"></span>
+        </div>
+      </div>
       <canvas id="blackbook-page" aria-label="Blackbook drawing workspace"></canvas>
       <small id="status-toast" class="island" aria-live="polite"></small>
 
@@ -201,5 +228,6 @@
       </div>
     </div>
     <script type="module" src="/src/member/blackbookRuntime.ts"></script>
+    <script type="module" src="/src/member/eventMusicRuntime.ts"></script>
   </body>
 </html>

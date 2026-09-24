@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "1.0.0",
+  "manifestBaseUrl": "/radio-web-export/soft-motion-radio/v1/",
+  "playbackMode": "personal",
+  "startAtMs": null,
+  "endPolicy": "stop",
+  "updatedAt": "2026-09-24T00:00:00.000Z"
+}
