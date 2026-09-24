@@ -42,8 +42,16 @@ function required<T>(value: T | null, error: string): T { if (!value) throw new 
 const canvas = required(document.querySelector<HTMLCanvasElement>("#blackbook-page"), "blackbook_surface_missing");
 const panButton = required(document.querySelector<HTMLButtonElement>("#blackbook-pan"), "blackbook_surface_missing");
 const undoButton = required(document.querySelector<HTMLButtonElement>("#blackbook-undo"), "blackbook_surface_missing");
+const fitButton = required(document.querySelector<HTMLButtonElement>("#blackbook-fit"), "blackbook_surface_missing");
+const newButton = required(document.querySelector<HTMLButtonElement>("#blackbook-new"), "blackbook_surface_missing");
 const memberButton = required(document.querySelector<HTMLButtonElement>("#blackbook-member"), "blackbook_surface_missing");
-const status = required(document.querySelector<HTMLElement>("#blackbook-status"), "blackbook_surface_missing");
+/**
+ * BLACKBOOK EVENT UI POLISH V1 -- the raw developer-facing Surface ID no
+ * longer occupies permanent UI (requirement 14). `status` is now a
+ * transient toast: `showStatus()` below is the only thing that writes to
+ * it, and every "success" message clears itself automatically.
+ */
+const status = required(document.querySelector<HTMLElement>("#status-toast"), "blackbook_surface_missing");
 const pencilButton = required(document.querySelector<HTMLButtonElement>("#blackbook-pencil"), "blackbook_surface_missing");
 const penButton = required(document.querySelector<HTMLButtonElement>("#blackbook-pen"), "blackbook_surface_missing");
 const markerButton = required(document.querySelector<HTMLButtonElement>("#blackbook-marker"), "blackbook_surface_missing");
@@ -76,8 +84,40 @@ const gradeSelect = required(document.querySelector<HTMLSelectElement>("#blackbo
 }
 const widthControl = required(document.querySelector<HTMLInputElement>("#blackbook-width"), "blackbook_surface_missing");
 const opacityControl = required(document.querySelector<HTMLInputElement>("#blackbook-opacity"), "blackbook_surface_missing");
+/**
+ * CONTEXTUAL MATERIAL CONTROLS (requirement 10) -- containers only, never
+ * the inputs themselves, so hiding a control never has to touch its
+ * remembered value (`supplySettings`) or its own change listener.
+ */
+const gradeContainer = required(document.querySelector<HTMLElement>("#blackbook-grade-container"), "blackbook_surface_missing");
+const colorContainer = required(document.querySelector<HTMLElement>("#blackbook-color-container"), "blackbook_surface_missing");
+const opacityContainer = required(document.querySelector<HTMLElement>("#blackbook-opacity-container"), "blackbook_surface_missing");
 
 const ctx = required(canvas.getContext("2d"), "blackbook_canvas_unavailable");
+
+/**
+ * BLACKBOOK EVENT UI POLISH V1 -- quiet transient save/error feedback
+ * (requirement 14), replacing the old permanent status line. "Saved"
+ * (and any other non-error message) clears itself; an error stays until
+ * the next status change so it remains actionable. Diagnostic detail for
+ * a real failure still reaches the console (requirement 14's "preserve
+ * useful diagnostic detail in the appropriate developer channel/log") --
+ * this only controls what the MEMBER sees.
+ */
+let statusClearTimer: number | null = null;
+function showStatus(message: string, kind: "info" | "success" | "error" = "info"): void {
+  if (statusClearTimer !== null) window.clearTimeout(statusClearTimer);
+  status.textContent = message;
+  status.dataset.kind = kind;
+  status.dataset.visible = "true";
+  if (kind === "success") {
+    statusClearTimer = window.setTimeout(() => { status.dataset.visible = "false"; }, 1400);
+  }
+}
+function reportError(userMessage: string, error: unknown): void {
+  console.error(`[blackbook] ${userMessage}`, error);
+  showStatus(userMessage, "error");
+}
 
 const memberIdentity = createFirebaseMemberIdentityAuthority(import.meta.env);
 const repository = createFirebaseArtworkRepository(import.meta.env);
@@ -617,7 +657,10 @@ canvas.addEventListener("pointerup", (event) => {
   if (activePoints.length > 1) {
     const operation = { ...activeOperation(activePoints), id: `blackbook-operation-${nextOperationId++}` } as BlackbookOperation;
     operations.push(operation);
-    void persistence.persistStroke(operation).catch((error) => { status.textContent = error instanceof Error ? error.message : "Artwork save failed"; });
+    showStatus("Saving…", "info");
+    void persistence.persistStroke(operation)
+      .then(() => showStatus("Saved", "success"))
+      .catch((error) => reportError("Couldn't save that stroke", error));
   }
   activePoints = [];
   render();
@@ -627,13 +670,45 @@ undoButton.addEventListener("click", () => {
   const operation = operations.pop();
   if (!operation) return;
   render();
-  void persistence.removeStroke(operation).catch((error) => { status.textContent = error instanceof Error ? error.message : "Undo failed"; });
+  void persistence.removeStroke(operation)
+    .then(() => showStatus("Saved", "success"))
+    .catch((error) => reportError("Undo didn't save", error));
 });
 
 panButton.addEventListener("click", () => {
   panMode = !panMode;
   render();
 });
+
+fitButton.addEventListener("click", () => {
+  fitPageIntoView();
+  render();
+});
+
+/**
+ * BLACKBOOK EVENT UI POLISH V1 -- NEW (requirement 5). Deliberately does
+ * NOT delete/clear the current Artwork: it only forgets it from THIS
+ * session's in-memory persistence bridge (`replaceKnownArtworks([])`), so
+ * the legacy proximity-based routing in mapArtworkBridge.ts's
+ * `createArtworkPersistenceBridge` finds no candidate for the next stroke
+ * and creates a brand-new Artwork document instead of appending to the one
+ * just left -- the same `createArtwork` lifecycle every Blackbook Artwork
+ * already goes through, always carrying the canonical 16:9 `pageFrame`
+ * (see blackbookArtworkBridge.ts's `BLACKBOOK_PAGE_FRAME`). The artwork
+ * that was just active is untouched in Firestore and remains fully
+ * recoverable by `listOwnedArtwork` on the next hydrate.
+ */
+function startNewPage(): void {
+  if (memberState.status !== "signedIn") return;
+  operations = [];
+  activePoints = [];
+  persistence.replaceKnownArtworks([]);
+  activePageFrame = BLACKBOOK_PAGE_FRAME;
+  fitPageIntoView();
+  showStatus("New page", "success");
+  render();
+}
+newButton.addEventListener("click", startNewPage);
 
 canvas.addEventListener("wheel", (event) => {
   event.preventDefault();
@@ -648,6 +723,19 @@ window.addEventListener("resize", () => {
   render();
 });
 
+/**
+ * CONTEXTUAL MATERIAL CONTROLS (requirement 10) -- only currently supported
+ * controls, per supply: Pencil (grade+color+width+opacity), Pen/Marker/Mop
+ * (color+width+opacity), Spray (color+width -- existing supported controls
+ * only, no opacity), Eraser (width only). Toggling visibility never touches
+ * rendering or any remembered value.
+ */
+function updateContextualControls(supply: DrawingSupplyId | "eraser"): void {
+  gradeContainer.hidden = supply !== "pencil";
+  colorContainer.hidden = supply === "eraser";
+  opacityContainer.hidden = supply === "eraser" || supply === "spray";
+}
+
 function selectSupply(supply: DrawingSupplyId | "eraser"): void {
   activeSupply = supply;
   if (supply !== "eraser") {
@@ -658,6 +746,7 @@ function selectSupply(supply: DrawingSupplyId | "eraser"): void {
     opacityControl.value = String(supplySettings[supply].opacity);
     colorControl.value = supplySettings[supply].color;
   }
+  updateContextualControls(supply);
   render();
 }
 
@@ -677,7 +766,7 @@ penButton.addEventListener("click", () => selectSupply("pen"));
 markerButton.addEventListener("click", () => selectSupply("marker"));
 mopButton.addEventListener("click", () => selectSupply("mop"));
 sprayButton.addEventListener("click", () => selectSupply("spray"));
-eraserButton.addEventListener("click", () => { activeSupply = "eraser"; render(); });
+eraserButton.addEventListener("click", () => { activeSupply = "eraser"; updateContextualControls("eraser"); render(); });
 colorControl.addEventListener("input", rememberSupplySettings);
 widthControl.addEventListener("input", rememberSupplySettings);
 opacityControl.addEventListener("input", rememberSupplySettings);
@@ -686,6 +775,7 @@ widthControl.max = String(DRAWING_WIDTH_RANGES.pencil.max);
 widthControl.value = String(PENCIL_SUPPLY.defaultSettings.width);
 opacityControl.value = String(PENCIL_SUPPLY.defaultSettings.opacity);
 colorControl.value = DRAWING_DEFAULT_COLORS.pencil;
+updateContextualControls("pencil");
 
 memberButton.addEventListener("click", () => {
   if (memberState.status === "signedIn") void memberIdentity.signOut();
@@ -696,10 +786,11 @@ memberIdentity.subscribe((state) => {
   memberState = state;
   memberButton.disabled = state.status === "initializing";
   memberButton.textContent = state.status === "signedIn" ? "SIGN OUT" : state.status === "initializing" ? "…" : "SIGN IN";
-  status.textContent = state.status === "signedIn" ? BLACKBOOK_PAGE_SURFACE_ID : "Private page — sign in to draw";
   if (state.status === "signedIn") {
-    void (repository.listOwnedArtwork ?? repository.listOwnedMapArtwork).call(repository, state.member.uid).then(hydrate).catch((error) => { status.textContent = error instanceof Error ? error.message : "Artwork hydration failed"; });
+    status.dataset.visible = "false";
+    void (repository.listOwnedArtwork ?? repository.listOwnedMapArtwork).call(repository, state.member.uid).then(hydrate).catch((error) => reportError("Couldn't load your Blackbook", error));
   } else {
+    showStatus("Private page — sign in to draw", "info");
     operations = [];
     activePageFrame = BLACKBOOK_PAGE_FRAME;
     persistence.replaceKnownArtworks([]);

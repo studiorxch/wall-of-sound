@@ -5,42 +5,161 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>StudioRich Blackbook</title>
     <style>
-      :root { color-scheme: dark; font-family: Inter, system-ui, sans-serif; background: #090909; color: #f4efe7; }
-      * { box-sizing: border-box; }
-      body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: radial-gradient(circle at top, #23201c, #090909 62%); }
-      main { width: min(92vw, 780px); }
-      header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-      h1 { margin: 0; font-size: 14px; letter-spacing: .16em; text-transform: uppercase; }
-      .actions { display: flex; gap: 8px; }
-      .supplies { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 0 0 12px; }
-      .supplies label { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #c8c0b6; }
-      .supplies input { width: 110px; }
-      /* Drawing Shell V1: same active-tool accent StudioRich already uses on
-         the Map drawing controls (wall/styles.css's .subway-map-paint-controls
-         button.is-active) -- same instrument panel, different cockpit. */
-      button { border: 1px solid #575047; background: #171512; color: inherit; border-radius: 6px; padding: 9px 14px; font: 600 10px/1 inherit; letter-spacing: .08em; cursor: pointer; }
-      button[aria-pressed="true"] { border-color: rgba(255, 78, 132, 0.72); color: #ff4e84; background: rgba(255, 78, 132, 0.12); }
-      button:disabled { opacity: .38; cursor: default; }
-      input[type="color"] { width: 26px; height: 22px; padding: 0; border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 4px; background: transparent; }
-      /* Graphite Grades Foundation V1: a TEMPORARY calibration-only control,
-         deliberately styled as subordinate to PENCIL (smaller, plain select,
-         no button chrome) rather than as a peer instrument -- communicates
-         "Pencil, then grade" rather than seven new tools. Isolated under its
-         own id/class so it can be removed or replaced by the future Art
-         Store / My Art Supplies UI without touching graphite rendering. */
-      #blackbook-grade-select { font: 600 10px/1 inherit; letter-spacing: .06em; background: #171512; color: #c8c0b6; border: 1px solid #575047; border-radius: 4px; padding: 6px 8px; }
-      #blackbook-grade-select:disabled { opacity: .38; }
-      canvas { display: block; width: 100%; aspect-ratio: 4 / 5; background: #0f0d0b; border-radius: 5px; box-shadow: 0 20px 70px #000a; touch-action: none; }
-      #blackbook-status { display: block; margin-top: 10px; color: #a9a197; font-size: 11px; }
+      /**
+       * BLACKBOOK EVENT UI POLISH V1 -- visual language adapted from
+       * prototypes/spatial-spraypaint/index.html's `.island`/`#bottom-bar`
+       * pattern (translucent/blurred rounded panels, LEFT identity / CENTER
+       * instrument / RIGHT workspace-document grid, minimal permanent
+       * chrome). Visual reference only -- no Spatial Spraypaint runtime
+       * code (HandTracker/PersonSegmenter/WetDripEngine/cap engine/camera)
+       * is imported or depended on here.
+       *
+       * WORKSPACE vs PAGE FRAME (preserved from Blackbook Default Page
+       * Format / 0924A): the canvas below fills the entire available view
+       * (the unbounded Cartesian WORKSPACE) -- the finite 16:9 PAGE is
+       * drawn INSIDE that canvas by blackbookRuntime.ts's own camera/render
+       * code, never by CSS aspect-ratio. Do not re-introduce a fixed-
+       * aspect-ratio canvas here.
+       */
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      :root { color-scheme: dark; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #f4efe7; background: #050505; }
+      html, body, #app { width: 100%; height: 100%; overflow: hidden; }
+      button, select, input { font: inherit; }
+      button {
+        min-height: 34px;
+        border: 1px solid rgba(255,255,255,.16);
+        border-radius: 9px;
+        background: rgba(24,22,19,.92);
+        color: #f4efe7;
+        padding: 7px 11px;
+        font: 700 10px/1 inherit;
+        letter-spacing: .07em;
+        cursor: pointer;
+      }
+      button:hover { border-color: rgba(255,255,255,.32); background: rgba(38,34,29,.96); }
+      button:disabled { opacity: .4; cursor: default; }
+      button[aria-pressed="true"] { border-color: rgba(255, 78, 132, 0.72); color: #ff4e84; background: rgba(255, 78, 132, 0.14); }
+      input[type="color"] { width: 24px; height: 24px; padding: 0; border: 1px solid rgba(255,255,255,.18); border-radius: 5px; background: transparent; }
+      input[type="range"] { accent-color: #ff4e84; width: 90px; }
+      select { border: 1px solid rgba(255,255,255,.16); border-radius: 6px; background: rgba(24,22,19,.92); color: #f4efe7; padding: 6px 8px; font: 700 10px/1 inherit; letter-spacing: .05em; }
+      select:disabled { opacity: .4; }
+
+      #app { position: relative; background: #050505; }
+      canvas#blackbook-page { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; display: block; }
+
+      #brand-mark {
+        position: absolute; top: 16px; left: 18px; z-index: 9;
+        color: rgba(255,255,255,.28); font-size: 9px; font-weight: 900; letter-spacing: 1.6px;
+        pointer-events: none;
+      }
+
+      /* Floating island shell -- same restrained translucent/blurred panel Spatial Spraypaint uses for every grouped control cluster. */
+      .island {
+        border: 1px solid rgba(255,255,255,.12);
+        border-radius: 14px;
+        background: rgba(14,13,11,.86);
+        box-shadow: 0 12px 40px rgba(0,0,0,.4);
+        backdrop-filter: blur(16px);
+      }
+
+      /* Bottom bar: LEFT identity -- CENTER instrument (Art Supplies) -- RIGHT workspace/document + future system menu. */
+      #bottom-bar {
+        position: absolute; z-index: 10; left: 16px; right: 16px; bottom: 16px;
+        display: grid; grid-template-columns: minmax(0,1fr) auto minmax(0,1fr);
+        align-items: end; gap: 12px; pointer-events: none;
+      }
+      #identity-group, #instrument-group, #system-group { display: flex; align-items: center; gap: 8px; pointer-events: auto; }
+      #identity-group { justify-self: start; }
+      #instrument-group { justify-self: center; flex-direction: column; align-items: center; gap: 8px; min-width: 0; }
+      #system-group { justify-self: end; flex-wrap: wrap; justify-content: flex-end; }
+      #art-island, #supply-controls { flex-wrap: wrap; justify-content: center; }
+
+      /* Narrow viewport fallback -- the three-column bar stacks instead of overlapping once there isn't room for all three groups side by side. */
+      @media (max-width: 900px) {
+        #bottom-bar { grid-template-columns: 1fr; justify-items: center; row-gap: 8px; }
+        #identity-group, #system-group { justify-self: center; }
+      }
+
+      /* CONTEXTUAL MATERIAL CONTROLS -- which controls this island shows is decided entirely by blackbookRuntime.ts's `selectSupply`; this markup always contains all of them so no layout rebuild is needed when the active supply changes. */
+      #supply-controls { display: flex; align-items: center; gap: 10px; padding: 8px 12px; }
+      #supply-controls label { display: flex; align-items: center; gap: 6px; font-size: 10px; letter-spacing: .04em; color: #c8c0b6; }
+      #supply-controls [hidden] { display: none !important; }
+
+      #art-island { display: flex; align-items: center; gap: 6px; padding: 6px; }
+      /**
+       * ICON READINESS (BLACKBOOK EVENT UI POLISH V1, requirement 9) -- the
+       * real StudioRich Art Supply icon assets are not yet in this repo.
+       * Drop-in convention for later: an SVG at
+       *   music/public/icons/art-supplies/<supplyId>.svg   (viewBox 0 0 48 48)
+       * for <supplyId> in pencil|pen|marker|mop|spray|eraser, referenced
+       * here via a `--icon-<supplyId>` custom property on :root, e.g.
+       *   :root { --icon-pencil: url(/icons/art-supplies/pencil.svg); }
+       * `.tool-icon-glyph[data-icon]` below already reads that property by
+       * name -- adding the file + the one variable line is the entire
+       * integration; no button markup or layout change is needed. Until an
+       * icon exists the glyph renders at 0 size and the text label alone
+       * identifies the tool (no emoji, no placeholder art).
+       */
+      .tool-icon { display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 46px; padding: 7px 6px; }
+      .tool-icon-glyph { width: 16px; height: 16px; background-size: contain; background-repeat: no-repeat; background-position: center; }
+      .tool-icon-glyph[data-icon="pencil"] { background-image: var(--icon-pencil, none); }
+      .tool-icon-glyph[data-icon="pen"] { background-image: var(--icon-pen, none); }
+      .tool-icon-glyph[data-icon="marker"] { background-image: var(--icon-marker, none); }
+      .tool-icon-glyph[data-icon="mop"] { background-image: var(--icon-mop, none); }
+      .tool-icon-glyph[data-icon="spray"] { background-image: var(--icon-spray, none); }
+      .tool-icon-glyph[data-icon="eraser"] { background-image: var(--icon-eraser, none); }
+      .tool-icon-label { font-size: 9px; }
+
+      #status-toast {
+        position: absolute; z-index: 11; left: 50%; top: 18px; transform: translateX(-50%);
+        padding: 7px 14px; font-size: 10px; letter-spacing: .06em; color: #f4efe7;
+        opacity: 0; transition: opacity 180ms ease; pointer-events: none;
+      }
+      #status-toast[data-visible="true"] { opacity: 1; }
+      #status-toast[data-kind="error"] { color: #ff9a9a; }
     </style>
   </head>
   <body>
-    <main>
-      <header><h1>StudioRich Blackbook · Page 1</h1><div class="actions"><button id="blackbook-pan" aria-pressed="false">PAN</button><button id="blackbook-undo" disabled>UNDO</button><button id="blackbook-member">…</button></div></header>
-      <div class="supplies" aria-label="Art Supplies"><button id="blackbook-pencil" aria-pressed="true">PENCIL</button><select id="blackbook-grade-select" aria-label="Pencil grade (temporary calibration control)"><option value="9h">9H</option><option value="6h">6H</option><option value="3h">3H</option><option value="hb" selected>HB</option><option value="3b">3B</option><option value="6b">6B</option><option value="9b">9B</option></select><button id="blackbook-pen" aria-pressed="false">PEN</button><button id="blackbook-marker" aria-pressed="false">MARKER</button><button id="blackbook-mop" aria-pressed="false">MOP</button><button id="blackbook-spray" aria-pressed="false">SPRAY</button><button id="blackbook-eraser" aria-pressed="false">ERASER</button><label>COLOR <input id="blackbook-color" type="color"></label><label>WIDTH <input id="blackbook-width" type="range" min="1" max="48" step="1" value="5"></label><label>OPACITY <input id="blackbook-opacity" type="range" min="0.15" max="1" step="0.05" value="0.82"></label></div>
-      <canvas id="blackbook-page" width="720" height="900" aria-label="Blackbook Page 1 drawing surface"></canvas>
-      <small id="blackbook-status" aria-live="polite">Connecting…</small>
-    </main>
+    <div id="app">
+      <span id="brand-mark">STUDIORICH BLACKBOOK</span>
+      <canvas id="blackbook-page" aria-label="Blackbook drawing workspace"></canvas>
+      <small id="status-toast" class="island" aria-live="polite"></small>
+
+      <div id="bottom-bar">
+        <div id="identity-group">
+          <button id="blackbook-member" class="island">…</button>
+        </div>
+
+        <div id="instrument-group">
+          <div id="supply-controls" class="island" aria-label="Material controls">
+            <label id="blackbook-grade-container">GRADE <select id="blackbook-grade-select" aria-label="Pencil grade">
+              <option value="9h">9H</option><option value="6h">6H</option><option value="3h">3H</option>
+              <option value="hb" selected>HB</option><option value="3b">3B</option><option value="6b">6B</option><option value="9b">9B</option>
+            </select></label>
+            <label id="blackbook-color-container">COLOR <input id="blackbook-color" type="color"></label>
+            <label id="blackbook-width-container">WIDTH <input id="blackbook-width" type="range" min="1" max="48" step="1" value="5"></label>
+            <label id="blackbook-opacity-container">OPACITY <input id="blackbook-opacity" type="range" min="0.15" max="1" step="0.05" value="0.82"></label>
+          </div>
+          <div id="art-island" class="island" aria-label="Art Supplies">
+            <button id="blackbook-pencil" class="tool-icon" aria-pressed="true"><span class="tool-icon-glyph" data-icon="pencil" aria-hidden="true"></span><span class="tool-icon-label">PENCIL</span></button>
+            <button id="blackbook-pen" class="tool-icon" aria-pressed="false"><span class="tool-icon-glyph" data-icon="pen" aria-hidden="true"></span><span class="tool-icon-label">PEN</span></button>
+            <button id="blackbook-marker" class="tool-icon" aria-pressed="false"><span class="tool-icon-glyph" data-icon="marker" aria-hidden="true"></span><span class="tool-icon-label">MARKER</span></button>
+            <button id="blackbook-mop" class="tool-icon" aria-pressed="false"><span class="tool-icon-glyph" data-icon="mop" aria-hidden="true"></span><span class="tool-icon-label">MOP</span></button>
+            <button id="blackbook-spray" class="tool-icon" aria-pressed="false"><span class="tool-icon-glyph" data-icon="spray" aria-hidden="true"></span><span class="tool-icon-label">SPRAY</span></button>
+            <button id="blackbook-eraser" class="tool-icon" aria-pressed="false"><span class="tool-icon-glyph" data-icon="eraser" aria-hidden="true"></span><span class="tool-icon-label">ERASER</span></button>
+          </div>
+        </div>
+
+        <div id="system-group">
+          <button id="blackbook-fit" class="island">FIT</button>
+          <button id="blackbook-pan" class="island" aria-pressed="false">PAN</button>
+          <button id="blackbook-undo" class="island" disabled>UNDO</button>
+          <button id="blackbook-new" class="island">NEW</button>
+          <!-- Future system-menu home (About StudioRich / Feedback / Help / Version) -- not built in this pass, but reserved here so it never has to compete with drawing space later. -->
+          <button id="blackbook-menu" class="island" disabled>…</button>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/member/blackbookRuntime.ts"></script>
   </body>
 </html>

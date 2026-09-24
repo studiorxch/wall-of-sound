@@ -180,6 +180,57 @@ describe("Graphite Grades Foundation V1 -- Mark variant identity", () => {
   });
 });
 
+describe("Blackbook Event UI Polish V1 -- NEW workflow", () => {
+  it("NEW (replaceKnownArtworks([])) makes the next Mark create a brand-new Artwork with the canonical 16:9 pageFrame, rather than appending to the artwork just left", async () => {
+    const previous = artwork("art-previous");
+    const fresh = artwork("art-fresh", [toLocalStrokeMark(stroke("fresh"), "mark-fresh", new Date(1))]);
+    const repository: ArtworkRepository = {
+      createArtwork: vi.fn(async () => fresh), listOwnedArtwork: vi.fn(async () => [previous, fresh]),
+      createMapArtwork: vi.fn(async () => fresh), listOwnedMapArtwork: vi.fn(async () => [previous, fresh]),
+      appendOwnedArtworkMark: vi.fn(async () => previous), removeOwnedArtworkMark: vi.fn(),
+      deleteOwnedArtwork: vi.fn(), renameOwnedArtwork: vi.fn(),
+    };
+    const bindArtwork = vi.fn(() => true);
+    const bridge = createBlackbookArtworkPersistenceBridge({ repository, drawing: { bindArtwork }, getAuthenticatedMemberId: () => "member-1", createMarkId: () => "mark-fresh" });
+    // Simulates the session already knowing about `previous` (as if hydrated/drawn on).
+    bridge.replaceKnownArtworks([previous]);
+    // NEW: forget the in-session artwork so the next Mark cannot be routed to it by proximity.
+    bridge.replaceKnownArtworks([]);
+    await bridge.persistStroke(stroke("fresh"));
+    expect(repository.createArtwork).toHaveBeenCalledWith(expect.objectContaining({ pageFrame: BLACKBOOK_PAGE_FRAME }));
+    expect(repository.appendOwnedArtworkMark).not.toHaveBeenCalled();
+  });
+
+  it("repeated NEW produces distinct Artwork identities, and the previously active Artwork is never deleted or mutated by NEW itself", async () => {
+    const page1 = artwork("art-page-1");
+    const page2 = artwork("art-page-2");
+    const page3 = artwork("art-page-3");
+    const createArtwork = vi.fn().mockResolvedValueOnce(page1).mockResolvedValueOnce(page2).mockResolvedValueOnce(page3);
+    const repository: ArtworkRepository = {
+      createArtwork, listOwnedArtwork: vi.fn(async () => []),
+      createMapArtwork: createArtwork, listOwnedMapArtwork: vi.fn(async () => []),
+      appendOwnedArtworkMark: vi.fn(), removeOwnedArtworkMark: vi.fn(),
+      deleteOwnedArtwork: vi.fn(), renameOwnedArtwork: vi.fn(),
+    };
+    const bindArtwork = vi.fn(() => true);
+    let markCounter = 0;
+    const bridge = createBlackbookArtworkPersistenceBridge({ repository, drawing: { bindArtwork }, getAuthenticatedMemberId: () => "member-1", createMarkId: () => `mark-${(markCounter += 1)}` });
+
+    await bridge.persistStroke(stroke("s1"));
+    bridge.replaceKnownArtworks([]); // NEW
+    await bridge.persistStroke(stroke("s2"));
+    bridge.replaceKnownArtworks([]); // NEW
+    await bridge.persistStroke(stroke("s3"));
+
+    expect(createArtwork).toHaveBeenCalledTimes(3);
+    expect(repository.deleteOwnedArtwork).not.toHaveBeenCalled();
+    // Every created Artwork carries the same canonical 16:9 default -- NEW never invents an alternate paper size.
+    for (const call of createArtwork.mock.calls) {
+      expect(call[0]).toMatchObject({ pageFrame: BLACKBOOK_PAGE_FRAME });
+    }
+  });
+});
+
 describe("Blackbook Default Page Format -- canonical 16:9 landscape default", () => {
   it("the canonical default page frame is landscape 16:9, not the old square", () => {
     expect(BLACKBOOK_PAGE_FRAME.width).toBeGreaterThan(BLACKBOOK_PAGE_FRAME.height);
