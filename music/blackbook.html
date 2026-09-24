@@ -117,6 +117,37 @@
       }
       #status-toast[data-visible="true"] { opacity: 1; }
       #status-toast[data-kind="error"] { color: #ff9a9a; }
+
+      /**
+       * BLACKBOOK MY PAGES V1 -- a lightweight panel over the workspace, NOT
+       * a new application screen: same `.island` translucent/blurred
+       * treatment as every other Blackbook control cluster, anchored just
+       * above the bottom bar so it reads as part of this system rather than
+       * a modal interruption. The workspace stays visible/conceptually
+       * "behind" it (no full-screen scrim).
+       */
+      #my-pages-panel {
+        position: absolute; z-index: 12; right: 16px; bottom: 74px;
+        width: min(300px, calc(100vw - 32px));
+        max-height: min(420px, calc(100vh - 140px));
+        display: flex; flex-direction: column; gap: 8px;
+        padding: 10px; overflow: hidden;
+      }
+      #my-pages-panel[hidden] { display: none; }
+      #my-pages-header { display: flex; align-items: center; justify-content: space-between; padding: 0 2px; }
+      #my-pages-header span { font-size: 10px; letter-spacing: .1em; color: #c8c0b6; }
+      #my-pages-list { display: flex; flex-direction: column; gap: 6px; overflow-y: auto; }
+      #my-pages-empty { font-size: 10px; color: #c8c0b6; padding: 6px 2px 10px; line-height: 1.5; }
+      .my-page-item {
+        display: flex; align-items: center; gap: 10px;
+        width: 100%; text-align: left; min-height: 0;
+        padding: 6px; border-radius: 10px;
+      }
+      .my-page-item[aria-current="true"] { border-color: rgba(255, 78, 132, 0.72); background: rgba(255, 78, 132, 0.1); }
+      .my-page-item canvas { display: block; border-radius: 5px; background: #f3eee4; flex-shrink: 0; }
+      .my-page-item-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+      .my-page-item-title { font-size: 10px; letter-spacing: .03em; color: #f4efe7; }
+      .my-page-item-meta { font-size: 9px; letter-spacing: .03em; color: #928a80; }
     </style>
   </head>
   <body>
@@ -155,9 +186,18 @@
           <button id="blackbook-pan" class="island" aria-pressed="false">PAN</button>
           <button id="blackbook-undo" class="island" disabled>UNDO</button>
           <button id="blackbook-new" class="island">NEW</button>
+          <button id="blackbook-my-pages" class="island" aria-pressed="false" aria-haspopup="true">MY PAGES</button>
           <!-- Future system-menu home (About StudioRich / Feedback / Help / Version) -- not built in this pass, but reserved here so it never has to compete with drawing space later. -->
           <button id="blackbook-menu" class="island" disabled>…</button>
         </div>
+      </div>
+
+      <div id="my-pages-panel" class="island" hidden aria-label="My Pages">
+        <div id="my-pages-header">
+          <span>MY PAGES</span>
+          <button id="my-pages-new">+ NEW</button>
+        </div>
+        <div id="my-pages-list"></div>
       </div>
     </div>
     <script type="module" src="/src/member/blackbookRuntime.ts"></script>

@@ -17,13 +17,15 @@ import {
 } from "@studiorich/member-identity";
 import {
   BLACKBOOK_PAGE_FRAME,
-  BLACKBOOK_PAGE_SURFACE_ID,
   createBlackbookArtworkPersistenceBridge,
+  filterBlackbookArtworks,
   resolveActiveBlackbookArtworkId,
   type BlackbookOperation,
 } from "./blackbookArtworkBridge";
 import { createCartesianCamera, type CartesianCamera, type DocRect } from "./cartesianWorkspaceCamera";
 import { createCurrentArtworkSession } from "./currentArtworkSession";
+import { formatArtworkUpdatedAt, sortArtworksByRecency } from "./artworkGallery";
+import { drawArtworkThumbnail } from "./artworkThumbnail";
 import { resolveMopDabPlan } from "./mopDeposition";
 import { hashSeed, resolveSprayCorePlan, resolveSprayParticlePlan } from "./sprayDeposition";
 import {
@@ -46,6 +48,10 @@ const panButton = required(document.querySelector<HTMLButtonElement>("#blackbook
 const undoButton = required(document.querySelector<HTMLButtonElement>("#blackbook-undo"), "blackbook_surface_missing");
 const fitButton = required(document.querySelector<HTMLButtonElement>("#blackbook-fit"), "blackbook_surface_missing");
 const newButton = required(document.querySelector<HTMLButtonElement>("#blackbook-new"), "blackbook_surface_missing");
+const myPagesButton = required(document.querySelector<HTMLButtonElement>("#blackbook-my-pages"), "blackbook_surface_missing");
+const myPagesPanel = required(document.querySelector<HTMLElement>("#my-pages-panel"), "blackbook_surface_missing");
+const myPagesList = required(document.querySelector<HTMLElement>("#my-pages-list"), "blackbook_surface_missing");
+const myPagesNewButton = required(document.querySelector<HTMLButtonElement>("#my-pages-new"), "blackbook_surface_missing");
 const memberButton = required(document.querySelector<HTMLButtonElement>("#blackbook-member"), "blackbook_surface_missing");
 /**
  * BLACKBOOK EVENT UI POLISH V1 -- the raw developer-facing Surface ID no
@@ -658,17 +664,26 @@ function applyActiveArtwork(): void {
 }
 
 /**
- * Opens exactly one Blackbook Artwork by id -- the minimal explicit
- * selection mechanism this build introduces (requirement 5: no gallery/
- * page-strip UI yet). Reachable today via this session's own
- * `?artwork=<id>` URL parameter (see `resolveInitialActiveArtwork`
- * below); a future gallery card would call this same function.
+ * Opens exactly one Blackbook Artwork by id -- the explicit selection
+ * mechanism both the `?artwork=<id>` URL parameter (see
+ * `resolveInitialActiveArtwork` below) and MY PAGES route through; there
+ * is exactly one way this runtime ever changes the active Artwork.
+ *
+ * BLACKBOOK MY PAGES V1 (requirement 17) -- also keeps the URL's own
+ * `?artwork=` parameter in sync via `history.replaceState`, never
+ * `pushState`/a navigation: switching pages stays a same-session, no-
+ * reload operation (`hydrate()` is not re-run), while a manual page
+ * reload afterward still resolves to the same Artwork through the
+ * now-current URL, not only through the `localStorage` fallback.
  */
 function openArtwork(artworkId: string): void {
   if (memberState.status !== "signedIn") return;
   if (!knownArtworksCache.some((artwork) => artwork.id === artworkId)) return;
   currentArtwork.setCurrentArtwork(artworkId);
   rememberActiveArtworkId(memberState.member.uid, artworkId);
+  const url = new URL(window.location.href);
+  url.searchParams.set("artwork", artworkId);
+  window.history.replaceState(null, "", url);
   activePoints = [];
   applyActiveArtwork();
 }
@@ -690,7 +705,7 @@ function resolveInitialActiveArtwork(): void {
 }
 
 function hydrate(artworks: readonly Artwork[]): void {
-  knownArtworksCache = artworks.filter((artwork) => artwork.surfaceId === BLACKBOOK_PAGE_SURFACE_ID && artwork.state === "draft");
+  knownArtworksCache = filterBlackbookArtworks(artworks);
   persistence.replaceKnownArtworks(knownArtworksCache);
   resolveInitialActiveArtwork();
 }
@@ -793,6 +808,93 @@ function startNewPage(): void {
 }
 newButton.addEventListener("click", startNewPage);
 
+/**
+ * BLACKBOOK MY PAGES V1 -- a minimal visual chooser over the SAME
+ * explicit active-Artwork architecture Page Isolation V1 introduced.
+ * Deliberately OPEN/SELECT only (requirement 12): no delete/rename/
+ * reorder/duplicate here. Deliberately no chain/order semantics --
+ * `sortArtworksByRecency` is presentation-only ordering, the same one
+ * `artworkGallery.ts` already uses for My Artwork, not a persisted
+ * sequence.
+ *
+ * Thumbnails reuse `drawArtworkThumbnail` (artworkThumbnail.ts) as-is --
+ * no new rendering/storage pipeline. Blackbook Artworks never set a real
+ * `title` (see artworkGallery.ts's own doc), so `deriveArtworkTitle`
+ * would just read "Untitled Artwork" for every page; the concise
+ * updated-at date/time (`formatArtworkUpdatedAt`) is a more useful label
+ * without inventing a naming system (requirement 4).
+ */
+const MY_PAGES_THUMBNAIL_SIZE = { width: 64, height: 40 } as const;
+
+function describePageFormat(pageFrame: PageFrame | undefined): string {
+  if (!pageFrame || pageFrame.height <= 0) return "—";
+  const ratio = pageFrame.width / pageFrame.height;
+  if (Math.abs(ratio - 16 / 9) < 0.01) return "16:9";
+  if (Math.abs(ratio - 1) < 0.01) return "1:1";
+  return `${ratio.toFixed(2)}:1`;
+}
+
+function renderMyPagesList(): void {
+  myPagesList.replaceChildren();
+  if (knownArtworksCache.length === 0) {
+    const empty = document.createElement("p");
+    empty.id = "my-pages-empty";
+    empty.textContent = "No pages yet -- press + NEW to start your first sheet.";
+    myPagesList.append(empty);
+    return;
+  }
+  const activeId = currentArtwork.getState();
+  const activeArtworkId = activeId.kind === "artwork" ? activeId.artworkId : null;
+  for (const artwork of sortArtworksByRecency(knownArtworksCache)) {
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "my-page-item island";
+    item.setAttribute("aria-current", String(artwork.id === activeArtworkId));
+    const thumbnail = document.createElement("canvas");
+    thumbnail.width = MY_PAGES_THUMBNAIL_SIZE.width;
+    thumbnail.height = MY_PAGES_THUMBNAIL_SIZE.height;
+    const thumbnailCtx = thumbnail.getContext("2d");
+    if (thumbnailCtx) {
+      thumbnailCtx.fillStyle = "#f3eee4";
+      thumbnailCtx.fillRect(0, 0, thumbnail.width, thumbnail.height);
+      drawArtworkThumbnail(thumbnailCtx, artwork, MY_PAGES_THUMBNAIL_SIZE);
+    }
+    const text = document.createElement("span");
+    text.className = "my-page-item-text";
+    const title = document.createElement("span");
+    title.className = "my-page-item-title";
+    title.textContent = formatArtworkUpdatedAt(artwork.updatedAt);
+    const meta = document.createElement("span");
+    meta.className = "my-page-item-meta";
+    meta.textContent = `${describePageFormat(artwork.pageFrame)} · ${artwork.marks.length} mark${artwork.marks.length === 1 ? "" : "s"}`;
+    text.append(title, meta);
+    item.append(thumbnail, text);
+    item.addEventListener("click", () => {
+      openArtwork(artwork.id);
+      closeMyPages();
+    });
+    myPagesList.append(item);
+  }
+}
+
+function openMyPages(): void {
+  renderMyPagesList();
+  myPagesPanel.hidden = false;
+  myPagesButton.setAttribute("aria-pressed", "true");
+}
+function closeMyPages(): void {
+  myPagesPanel.hidden = true;
+  myPagesButton.setAttribute("aria-pressed", "false");
+}
+myPagesButton.addEventListener("click", () => {
+  if (myPagesPanel.hidden) openMyPages();
+  else closeMyPages();
+});
+myPagesNewButton.addEventListener("click", () => {
+  startNewPage();
+  closeMyPages();
+});
+
 canvas.addEventListener("wheel", (event) => {
   event.preventDefault();
   const rect = canvas.getBoundingClientRect();
@@ -879,6 +981,7 @@ memberIdentity.subscribe((state) => {
     knownArtworksCache = [];
     currentArtwork.clear();
     persistence.replaceKnownArtworks([]);
+    closeMyPages();
     fitPageIntoView();
     render();
   }

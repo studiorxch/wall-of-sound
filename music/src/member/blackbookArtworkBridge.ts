@@ -130,6 +130,18 @@ export function createBlackbookArtworkPersistenceBridge(options: {
 }
 
 /**
+ * BLACKBOOK MY PAGES V1 -- the one canonical filter for "this member's
+ * Blackbook pages" (used by both `blackbookRuntime.ts`'s `hydrate()` and
+ * MY PAGES' own listing, so the two can never silently diverge). Excludes
+ * any Artwork from a different Surface (Map, Blank Canvas) and any
+ * non-`"draft"` Artwork, exactly as `hydrate()` already did inline before
+ * this build factored it out for reuse/testability.
+ */
+export function filterBlackbookArtworks(artworks: readonly Artwork[]): Artwork[] {
+  return artworks.filter((artwork) => artwork.surfaceId === BLACKBOOK_PAGE_SURFACE_ID && artwork.state === "draft");
+}
+
+/**
  * BLACKBOOK PAGE ISOLATION V1 -- explicit, deterministic active-Artwork
  * selection. Never proximity/Mark-count/size-based (the exact thing this
  * build exists to stop doing). Resolution order:

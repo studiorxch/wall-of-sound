@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { selectArtworkForMark, type Artwork, type ArtworkMark, type ArtworkRepository } from "@studiorich/member-identity";
-import { BLACKBOOK_PAGE_FRAME, BLACKBOOK_PAGE_SURFACE_ID, createBlackbookArtworkPersistenceBridge, resolveActiveBlackbookArtworkId, toLocalErasureMark, toLocalStrokeMark, type BlackbookOperation, type BlackbookStroke } from "./blackbookArtworkBridge";
+import { BLACKBOOK_PAGE_FRAME, BLACKBOOK_PAGE_SURFACE_ID, createBlackbookArtworkPersistenceBridge, filterBlackbookArtworks, resolveActiveBlackbookArtworkId, toLocalErasureMark, toLocalStrokeMark, type BlackbookOperation, type BlackbookStroke } from "./blackbookArtworkBridge";
 
 function stroke(id: string, offset = 0): BlackbookStroke {
   return { operation: "pencil", id, points: [{ x: 0.1 + offset, y: 0.2 }, { x: 0.2 + offset, y: 0.3 }], style: { color: "#171412", width: 7, opacity: 0.9 } };
@@ -371,5 +371,33 @@ describe("Blackbook Page Isolation V1 -- explicit active-Artwork routing", () =>
       expect([square, landscape].find((a) => a.id === resolvedSquareId)?.pageFrame).toEqual({ x: 0, y: 0, width: 1, height: 1 });
       expect([square, landscape].find((a) => a.id === resolvedLandscapeId)?.pageFrame).toEqual(BLACKBOOK_PAGE_FRAME);
     });
+  });
+});
+
+describe("Blackbook My Pages V1 -- listing", () => {
+  it("lists a member's Blackbook Artworks", () => {
+    const a = artwork("art-a");
+    const b = artwork("art-b");
+    expect(filterBlackbookArtworks([a, b])).toEqual([a, b]);
+  });
+
+  it("excludes non-Blackbook Artworks (a different Surface) from the listing", () => {
+    const blackbookArtwork = artwork("art-blackbook");
+    const mapArtwork = { ...artwork("art-map"), surfaceId: "map:new-york" };
+    expect(filterBlackbookArtworks([blackbookArtwork, mapArtwork])).toEqual([blackbookArtwork]);
+  });
+
+  it("excludes an archived (non-draft) Artwork from the listing", () => {
+    const draft = artwork("art-draft");
+    const archived = { ...artwork("art-archived"), state: "archived" as const };
+    expect(filterBlackbookArtworks([draft, archived])).toEqual([draft]);
+  });
+
+  it("MY PAGES switching (openArtwork's underlying resolution) never mutates a non-selected Artwork's own data -- resolving an id is a pure read, not a write", () => {
+    const a = artwork("art-a");
+    const b = artwork("art-b");
+    const beforeA = JSON.stringify(a);
+    resolveActiveBlackbookArtworkId([a, b], "art-b", null);
+    expect(JSON.stringify(a)).toBe(beforeA);
   });
 });
