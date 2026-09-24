@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { selectArtworkForMark, type Artwork, type ArtworkMark, type ArtworkRepository } from "@studiorich/member-identity";
-import { BLACKBOOK_PAGE_SURFACE_ID, createBlackbookArtworkPersistenceBridge, toLocalErasureMark, toLocalStrokeMark, type BlackbookOperation, type BlackbookStroke } from "./blackbookArtworkBridge";
+import { BLACKBOOK_PAGE_FRAME, BLACKBOOK_PAGE_SURFACE_ID, createBlackbookArtworkPersistenceBridge, toLocalErasureMark, toLocalStrokeMark, type BlackbookOperation, type BlackbookStroke } from "./blackbookArtworkBridge";
 
 function stroke(id: string, offset = 0): BlackbookStroke {
   return { operation: "pencil", id, points: [{ x: 0.1 + offset, y: 0.2 }, { x: 0.2 + offset, y: 0.3 }], style: { color: "#171412", width: 7, opacity: 0.9 } };
@@ -147,7 +147,7 @@ describe("Blackbook Artwork Surface bridge", () => {
     const bindArtwork = vi.fn(() => true);
     const bridge = createBlackbookArtworkPersistenceBridge({ repository, drawing: { bindArtwork }, getAuthenticatedMemberId: () => "member-1", createMarkId: () => "mark-a" });
     await bridge.persistStroke(stroke("a"));
-    expect(repository.createArtwork).toHaveBeenCalledWith(expect.objectContaining({ pageFrame: { x: 0, y: 0, width: 1, height: 1 } }));
+    expect(repository.createArtwork).toHaveBeenCalledWith(expect.objectContaining({ pageFrame: BLACKBOOK_PAGE_FRAME }));
   });
 });
 
@@ -177,5 +177,26 @@ describe("Graphite Grades Foundation V1 -- Mark variant identity", () => {
     expect(second.material).toMatchObject({ variantId: "9b" });
     // Building the second Mark must not have touched the first.
     expect(first.material).toMatchObject({ variantId: "3h" });
+  });
+});
+
+describe("Blackbook Default Page Format -- canonical 16:9 landscape default", () => {
+  it("the canonical default page frame is landscape 16:9, not the old square", () => {
+    expect(BLACKBOOK_PAGE_FRAME.width).toBeGreaterThan(BLACKBOOK_PAGE_FRAME.height);
+    expect(BLACKBOOK_PAGE_FRAME.width / BLACKBOOK_PAGE_FRAME.height).toBeCloseTo(16 / 9, 10);
+  });
+
+  it("a brand-new Blackbook Artwork receives the canonical 16:9 pageFrame", async () => {
+    const first = artwork("art-first");
+    const repository: ArtworkRepository = {
+      createArtwork: vi.fn(async () => first), listOwnedArtwork: vi.fn(async () => []),
+      createMapArtwork: vi.fn(async () => first), listOwnedMapArtwork: vi.fn(async () => []),
+      appendOwnedArtworkMark: vi.fn(), removeOwnedArtworkMark: vi.fn(),
+      deleteOwnedArtwork: vi.fn(), renameOwnedArtwork: vi.fn(),
+    };
+    const bindArtwork = vi.fn(() => true);
+    const bridge = createBlackbookArtworkPersistenceBridge({ repository, drawing: { bindArtwork }, getAuthenticatedMemberId: () => "member-1", createMarkId: () => "mark-a" });
+    await bridge.persistStroke(stroke("a"));
+    expect(repository.createArtwork).toHaveBeenCalledWith(expect.objectContaining({ pageFrame: { x: 0, y: 0, width: 1, height: 9 / 16 } }));
   });
 });

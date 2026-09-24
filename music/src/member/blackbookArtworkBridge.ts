@@ -6,17 +6,27 @@ export const STUDIO_RICH_BLACKBOOK_PAGE_ID = "page-1";
 export const BLACKBOOK_PAGE_SURFACE_ID = `blackbook:${STUDIO_RICH_BLACKBOOK_ID}:page:${STUDIO_RICH_BLACKBOOK_PAGE_ID}`;
 
 /**
- * Blackbook Spatial Workspace V1 -- the authored page frame, in the exact
- * same per-axis-normalized unit space Blackbook's Marks already persist in
- * ({x,y} independently roughly in [0,1], see toLocalStrokeMark below). {0,
- * 0, 1, 1} means "the page occupies exactly the unit square" -- zero
- * reinterpretation of any pre-existing persisted Mark is needed: a point
- * already at (0.5, 0.5) is already the page's center, (0,0)/(1,1) are
- * already its corners. Not workspace-origin-anchored by assumption
- * elsewhere (see PageFrame's own doc) -- only V1's one page happens to sit
- * at the workspace origin.
+ * Blackbook Default Page Format -- the canonical page frame given to a
+ * BRAND-NEW Blackbook Artwork (see blackbookRuntime.ts's `activePageFrame`
+ * for how an EXISTING Artwork's own already-persisted `pageFrame` always
+ * takes precedence over this constant instead). Landscape 16:9 (width=1,
+ * height=9/16): Blackbook content is not assumed to be only a conventional
+ * portrait sketchbook sheet -- it may become wallpaper, a zine spread, a
+ * train-car or wall composition, or a video presentation, all of which read
+ * naturally as landscape. `width` stays at the same "1 unit" scale the
+ * original square default used, so this is purely a SHAPE change, not a
+ * change of overall scale.
+ *
+ * Not workspace-origin-anchored by assumption elsewhere (see PageFrame's
+ * own doc) -- only this one page happens to sit at the workspace origin.
+ * Marks are captured through the shared Cartesian camera (see
+ * cartesianWorkspaceCamera.ts), so a point is always authored directly in
+ * THIS frame's own document-space units at authoring time -- there is no
+ * separate "normalized" convention to reinterpret, and changing this
+ * constant never retroactively changes what an already-persisted Mark's
+ * `{x,y}` means.
  */
-export const BLACKBOOK_PAGE_FRAME: PageFrame = { x: 0, y: 0, width: 1, height: 1 };
+export const BLACKBOOK_PAGE_FRAME: PageFrame = { x: 0, y: 0, width: 1, height: 9 / 16 };
 
 export interface BlackbookStroke {
   readonly operation: "pencil" | "pen" | "marker" | "mop" | "spray";

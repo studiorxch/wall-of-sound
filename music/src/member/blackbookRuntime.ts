@@ -13,6 +13,7 @@ import {
   type Artwork,
   type DrawingSupplyId,
   type MemberIdentityState,
+  type PageFrame,
 } from "@studiorich/member-identity";
 import {
   BLACKBOOK_PAGE_FRAME,
@@ -87,20 +88,38 @@ let memberState: MemberIdentityState = memberIdentity.getState();
  * Canvas uses (cartesianWorkspaceCamera.ts). VIEW transform only: this never
  * reads or mutates a persisted Mark's `{x,y}` -- it only changes how a
  * document-space point PROJECTS onto the screen. Zoom bounds are chosen for
- * this workspace's own unit convention (the page is exactly 1x1 document
- * units -- see BLACKBOOK_PAGE_FRAME's doc): MIN_ZOOM lets the artist zoom far
- * out to see a wide desk around a small page; MAX_ZOOM allows a close, high-
- * fidelity zoom into fine linework.
+ * this workspace's own unit convention (the page's LARGER dimension is 1
+ * document unit -- see BLACKBOOK_PAGE_FRAME's doc; this held for the
+ * original 1x1 square default and still holds for the 16:9 landscape
+ * default): MIN_ZOOM lets the artist zoom far out to see a wide desk around
+ * a small page; MAX_ZOOM allows a close, high-fidelity zoom into fine
+ * linework.
  */
 const cameraView: CartesianCamera = createCartesianCamera();
 const MIN_ZOOM = 20;
 const MAX_ZOOM = 4000;
-const PAGE_FRAME_RECT: DocRect = {
-  minX: BLACKBOOK_PAGE_FRAME.x,
-  minY: BLACKBOOK_PAGE_FRAME.y,
-  maxX: BLACKBOOK_PAGE_FRAME.x + BLACKBOOK_PAGE_FRAME.width,
-  maxY: BLACKBOOK_PAGE_FRAME.y + BLACKBOOK_PAGE_FRAME.height,
-};
+/**
+ * Blackbook Default Page Format -- the page frame actually rendered/fitted
+ * is resolved PER SESSION from whatever's hydrated, never hardcoded to the
+ * canonical default alone. This is what keeps an OLD Artwork's own
+ * authored page frame authoritative: `hydrate()` below sets this to the
+ * FIRST persisted `pageFrame` it finds among this member's own Blackbook
+ * Artworks (proximity grouping can split one page's content across
+ * several Artwork documents, but they all share one authored page, so the
+ * first one found is the right one); brand-new/legacy content with no
+ * persisted pageFrame at all falls back to `BLACKBOOK_PAGE_FRAME` (today's
+ * canonical default). Never mutates any persisted document -- purely which
+ * rect this session fits/outlines.
+ */
+let activePageFrame: PageFrame = BLACKBOOK_PAGE_FRAME;
+function pageFrameRect(): DocRect {
+  return {
+    minX: activePageFrame.x,
+    minY: activePageFrame.y,
+    maxX: activePageFrame.x + activePageFrame.width,
+    maxY: activePageFrame.y + activePageFrame.height,
+  };
+}
 let panMode = false;
 let lastScreenPoint: { x: number; y: number } | null = null;
 
@@ -130,7 +149,7 @@ function screenToDoc(x: number, y: number): { x: number; y: number } {
 }
 /** Frames the fixed page (never the content) -- see requirement 5's "page initially fits sensibly in view". Runtime-only view state, never persisted (requirement 8). */
 function fitPageIntoView(): void {
-  cameraView.fitToRect(PAGE_FRAME_RECT, width(), height(), 0.6, MIN_ZOOM, MAX_ZOOM);
+  cameraView.fitToRect(pageFrameRect(), width(), height(), 0.6, MIN_ZOOM, MAX_ZOOM);
 }
 
 const materialLayers = Object.fromEntries(["graphite", "ink", "marker", "mop", "spray"].map((materialId) => {
@@ -188,15 +207,15 @@ const supplySettings: Record<DrawingSupplyId, { width: number; opacity: number; 
 function renderWorkspaceAndPageFrame(): void {
   ctx.fillStyle = "#0f0d0b";
   ctx.fillRect(0, 0, width(), height());
-  const topLeft = docToScreen({ x: PAGE_FRAME_RECT.minX, y: PAGE_FRAME_RECT.minY });
-  const bottomRight = docToScreen({ x: PAGE_FRAME_RECT.maxX, y: PAGE_FRAME_RECT.maxY });
+  const topLeft = docToScreen({ x: pageFrameRect().minX, y: pageFrameRect().minY });
+  const bottomRight = docToScreen({ x: pageFrameRect().maxX, y: pageFrameRect().maxY });
   ctx.fillStyle = "#f3eee4";
   ctx.fillRect(topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y);
 }
 
 function renderPageFrameOutline(): void {
-  const topLeft = docToScreen({ x: PAGE_FRAME_RECT.minX, y: PAGE_FRAME_RECT.minY });
-  const bottomRight = docToScreen({ x: PAGE_FRAME_RECT.maxX, y: PAGE_FRAME_RECT.maxY });
+  const topLeft = docToScreen({ x: pageFrameRect().minX, y: pageFrameRect().minY });
+  const bottomRight = docToScreen({ x: pageFrameRect().maxX, y: pageFrameRect().maxY });
   ctx.save();
   ctx.strokeStyle = "rgba(243,238,228,0.35)";
   ctx.lineWidth = 1;
@@ -538,7 +557,17 @@ function hydrate(artworks: readonly Artwork[]): void {
         ? { variantId: mark.material.variantId, profileVersion: mark.material.profileVersion }
         : {}),
     }] : mark.type === "material-erasure" && mark.geometry.format === "local-2d-erasure-v1" ? [{ operation: "eraser", id: `blackbook-mark-${mark.id}`, artworkId: artwork.id, markId: mark.id, creatorId: artwork.creatorId, surfaceId: artwork.surfaceId, points: mark.geometry.points, width: mark.width }] : []));
-  persistence.replaceKnownArtworks(artworks.filter((artwork) => artwork.surfaceId === BLACKBOOK_PAGE_SURFACE_ID));
+  const knownArtworks = artworks.filter((artwork) => artwork.surfaceId === BLACKBOOK_PAGE_SURFACE_ID);
+  // Blackbook Default Page Format: an OLD Artwork's own authored page frame
+  // remains authoritative -- resolve THIS session's page frame from
+  // whatever was actually persisted, never silently substitute the current
+  // canonical default for existing content. Proximity grouping can split
+  // one page's content across several Artwork documents; they all share
+  // one authored page, so the first persisted pageFrame found is correct.
+  // Brand-new/legacy content with no persisted pageFrame at all falls back
+  // to today's canonical default (BLACKBOOK_PAGE_FRAME).
+  activePageFrame = knownArtworks.find((artwork) => artwork.pageFrame)?.pageFrame ?? BLACKBOOK_PAGE_FRAME;
+  persistence.replaceKnownArtworks(knownArtworks);
   fitPageIntoView();
   render();
 }
@@ -672,7 +701,9 @@ memberIdentity.subscribe((state) => {
     void (repository.listOwnedArtwork ?? repository.listOwnedMapArtwork).call(repository, state.member.uid).then(hydrate).catch((error) => { status.textContent = error instanceof Error ? error.message : "Artwork hydration failed"; });
   } else {
     operations = [];
+    activePageFrame = BLACKBOOK_PAGE_FRAME;
     persistence.replaceKnownArtworks([]);
+    fitPageIntoView();
     render();
   }
 });
