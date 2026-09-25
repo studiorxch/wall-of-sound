@@ -42,8 +42,9 @@ import { DualDeckPlaybackEngine } from "../audio/DualDeckPlaybackEngine";
 import type { RadioWebManifest, RadioWebManifestEntry } from "../data/radioWebBundleTypes";
 import { restoreGainAndStartDeck, tryAcquireStartLock, type DeckId } from "../radioPlayerStartSequence";
 import { loadEventProgramConfig, type EventProgramConfig } from "./eventProgramConfig";
-import { resolveProgramPosition, TOLERATED_DRIFT_SECONDS, CORRECTABLE_DRIFT_SECONDS, type ProgramTrack } from "../logic/radio/radioProgramClock";
-import { readRadioResumableSession, writeRadioResumableSession, resolveResumedOffsetSeconds, type RadioResumableSession } from "../audio/radioResumableSession";
+import { TOLERATED_DRIFT_SECONDS, CORRECTABLE_DRIFT_SECONDS } from "../logic/radio/radioProgramClock";
+import { readRadioResumableSession, writeRadioResumableSession, type RadioResumableSession } from "../audio/radioResumableSession";
+import { resolveBroadcastState, type BroadcastProgramInput } from "../logic/radio/resolvedBroadcastState";
 
 function required<T>(value: T | null, error: string): T { if (!value) throw new Error(error); return value; }
 
@@ -81,8 +82,10 @@ function buildSourceUrl(entry: RadioWebManifestEntry): string {
   return required(config, "event_program_config_missing").manifestBaseUrl + entry.audioUrl;
 }
 
-function manifestTracks(): readonly ProgramTrack[] {
-  return (manifest?.entries ?? []).map((entry) => ({ id: entry.radioTrackId, durationSeconds: entry.durationSeconds }));
+/** The `BroadcastProgramInput` `resolveBroadcastState` needs, built from the already-resolved `EventProgramConfig` -- see resolvedBroadcastState.ts's own doc for why this omits Firestore-only bookkeeping fields. `programId` is null: this config shape never carried one. */
+function broadcastProgramInput(): BroadcastProgramInput {
+  const current = required(config, "event_program_config_missing");
+  return { programId: null, playbackMode: current.playbackMode, startAtMs: current.startAtMs, endPolicy: current.endPolicy };
 }
 
 function displayNowPlaying(entry: RadioWebManifestEntry): void {
@@ -164,31 +167,24 @@ async function advanceOrStop(): Promise<void> {
 }
 
 /**
- * Resolves where THIS session should start: index 0 at offset 0 for
- * "personal" mode, or the CLOCK's currently-resolved track + offset for
- * "clock" mode with a real `startAtMs` -- see `radioProgramClock.ts`'s own
- * doc for the resolution rule. Falls back to track 0 at offset 0 whenever
- * clock resolution can't produce a playable position (no startAtMs, empty
- * program, or the program has already ended under a "stop" policy) rather
- * than refusing to play at all.
- *
- * MAP / Blackbook / RADIO Integration Beta: in "personal" mode, a matching
- * resumable session (same `manifestBaseUrl` -- a different program never
- * resumes into the wrong track list) takes priority over track 0/offset 0,
- * extrapolated forward by real elapsed time via `resolveResumedOffsetSeconds`
- * -- see that module's own doc for why "clock" mode never consults it here.
+ * Resolves where THIS session should start, via the canonical
+ * `resolveBroadcastState` resolver (Batch 02C) -- Clock mode's track+offset
+ * or Personal mode's matching-session track+offset when the resolver
+ * returns `"playing"`, falling back to track 0 at offset 0 for every other
+ * resolved status (`inactive`/`before-start`/`ended`/`empty`) exactly as
+ * this function already did before this refactor, rather than refusing to
+ * play at all.
  */
 function resolveStartPosition(): { index: number; offsetSeconds: number } {
-  if (config?.playbackMode === "clock" && config.startAtMs !== null) {
-    const resolution = resolveProgramPosition({ tracks: manifestTracks(), programStartAtMs: config.startAtMs, nowMs: Date.now(), endPolicy: config.endPolicy });
-    if (resolution.status === "playing") return { index: resolution.trackIndex, offsetSeconds: resolution.offsetSeconds };
-  }
-  if (config?.playbackMode === "personal") {
-    const session = readSessionSafely();
-    if (session && session.playbackMode === "personal" && session.manifestBaseUrl === config.manifestBaseUrl) {
-      return { index: session.trackIndex, offsetSeconds: resolveResumedOffsetSeconds(session, Date.now()) };
-    }
-  }
+  if (!config) return { index: 0, offsetSeconds: 0 };
+  const resolved = resolveBroadcastState({
+    program: broadcastProgramInput(),
+    manifestBaseUrl: config.manifestBaseUrl,
+    manifest,
+    nowMs: Date.now(),
+    resumableSession: readSessionSafely(),
+  });
+  if (resolved.status === "playing") return { index: resolved.trackIndex, offsetSeconds: resolved.offsetSeconds };
   return { index: 0, offsetSeconds: 0 };
 }
 
@@ -262,13 +258,19 @@ function togglePlayPause(): void {
  * mode has no shared timeline to correct against and is skipped entirely.
  */
 function checkDrift(): void {
-  if (!engine || !manifest || !isPlaying || config?.playbackMode !== "clock" || config.startAtMs === null) return;
-  const resolution = resolveProgramPosition({ tracks: manifestTracks(), programStartAtMs: config.startAtMs, nowMs: Date.now(), endPolicy: config.endPolicy });
-  if (resolution.status !== "playing" || resolution.trackIndex !== activeIndex) return;
+  if (!engine || !manifest || !isPlaying || !config || config.playbackMode !== "clock" || config.startAtMs === null) return;
+  const resolved = resolveBroadcastState({
+    program: broadcastProgramInput(),
+    manifestBaseUrl: config.manifestBaseUrl,
+    manifest,
+    nowMs: Date.now(),
+    resumableSession: null,
+  });
+  if (resolved.status !== "playing" || resolved.trackIndex !== activeIndex) return;
   const localSeconds = engine.getCurrentTime(activeDeck);
-  const drift = Math.abs(localSeconds - resolution.offsetSeconds);
+  const drift = Math.abs(localSeconds - resolved.offsetSeconds);
   if (drift > CORRECTABLE_DRIFT_SECONDS) {
-    engine.seekDeck(activeDeck, resolution.offsetSeconds);
+    engine.seekDeck(activeDeck, resolved.offsetSeconds);
   } else if (drift > TOLERATED_DRIFT_SECONDS) {
     // eslint-disable-next-line no-console -- V1 reports only; no audible correction (see module doc).
     console.info(`[event-music] drift ${drift.toFixed(1)}s (tolerated, not corrected)`);
