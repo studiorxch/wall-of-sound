@@ -69,3 +69,17 @@ export {
   type RadioProgramSummary,
   type SetEventProgramInput,
 } from "./data/eventRadioTypes.js";
+export { createFirebaseRadioChannelRepository } from "./firebase/createFirebaseRadioChannelRepository.js";
+export {
+  validateCreateRadioChannelInput,
+  validateUpdateRadioChannelInput,
+  RADIO_CHANNELS_COLLECTION_PATH,
+} from "./firebase/firestoreRadioChannelRepository.js";
+export {
+  type CreateRadioChannelInput,
+  type RadioChannel,
+  type RadioChannelRepository,
+  type RadioChannelRotation,
+  type RadioChannelStatus,
+  type UpdateRadioChannelInput,
+} from "./data/radioChannelTypes.js";
