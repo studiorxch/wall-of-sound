@@ -89,6 +89,25 @@
         <div id="message" role="status"></div>
 
         <div id="current-state"></div>
+
+        <!-- Batch 03B.6 -- package bootstrap/recovery, independent of MUSIC's
+             local playlist state. The normal path for a fresh publication
+             remains the MUSIC Publish panel's own "Create Program"; this is
+             for a package that already exists but has no local Program yet. -->
+        <details id="add-published-program">
+          <summary>Add Published Program</summary>
+          <label for="package-url-input">Package URL</label>
+          <input id="package-url-input" type="text" placeholder="https://radio.studiorich.tv/radio/.../v1/" />
+          <button id="load-package">Load Package</button>
+          <div id="package-load-message" role="status"></div>
+
+          <div id="package-preview" hidden>
+            <div id="package-preview-title"></div>
+            <div id="package-preview-details"></div>
+            <button id="create-program-from-package">Create Program</button>
+          </div>
+        </details>
+
         <button id="sign-out">Sign Out</button>
       </div>
     </main>

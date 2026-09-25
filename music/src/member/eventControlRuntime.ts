@@ -16,12 +16,20 @@
 import {
   createFirebaseEventRadioRepository,
   createFirebaseMemberIdentityAuthority,
+  generateRadioProgramId,
   STUDIO_RICH_OPERATOR_EMAILS,
   type EventPlaybackMode,
   type EventStatus,
   type MemberIdentityState,
   type RadioProgramSummary,
 } from "@studiorich/member-identity";
+import type { RadioWebManifest } from "../data/radioWebBundleTypes";
+import {
+  deriveCreateRadioProgramInputFromManifest,
+  findExistingProgramForPackage,
+  normalizePackageBaseUrl,
+  type ProgramFromManifestResult,
+} from "../logic/radio/programFromManifest";
 
 /** Client-side UX gate only -- see this module's own doc. Must match firestore.rules' own operator allowlist. */
 const OPERATOR_EMAILS = STUDIO_RICH_OPERATOR_EMAILS;
@@ -48,6 +56,15 @@ const applyButton = required(document.querySelector<HTMLButtonElement>("#apply")
 const messageEl = required(document.querySelector<HTMLElement>("#message"), "event_control_surface_missing");
 const currentStateEl = required(document.querySelector<HTMLElement>("#current-state"), "event_control_surface_missing");
 
+// Batch 03B.6 -- package bootstrap/recovery section.
+const packageUrlInput = required(document.querySelector<HTMLInputElement>("#package-url-input"), "event_control_surface_missing");
+const loadPackageButton = required(document.querySelector<HTMLButtonElement>("#load-package"), "event_control_surface_missing");
+const packageLoadMessageEl = required(document.querySelector<HTMLElement>("#package-load-message"), "event_control_surface_missing");
+const packagePreviewEl = required(document.querySelector<HTMLElement>("#package-preview"), "event_control_surface_missing");
+const packagePreviewTitleEl = required(document.querySelector<HTMLElement>("#package-preview-title"), "event_control_surface_missing");
+const packagePreviewDetailsEl = required(document.querySelector<HTMLElement>("#package-preview-details"), "event_control_surface_missing");
+const createProgramFromPackageButton = required(document.querySelector<HTMLButtonElement>("#create-program-from-package"), "event_control_surface_missing");
+
 const memberIdentity = createFirebaseMemberIdentityAuthority(import.meta.env);
 const repository = createFirebaseEventRadioRepository(import.meta.env);
 
@@ -55,6 +72,11 @@ let memberState: MemberIdentityState = memberIdentity.getState();
 let programs: readonly RadioProgramSummary[] = [];
 let mode: EventPlaybackMode = "personal";
 let status: EventStatus = "inactive";
+// Batch 03B.6 -- the last successfully-validated package load, held only
+// long enough for the operator's own explicit "Create Program" click. A
+// fresh "Load Package" click (or a Program creation) always clears this --
+// the write action never fires from stale state.
+let loadedPackage: { readonly manifest: RadioWebManifest; readonly result: Extract<ProgramFromManifestResult, { status: "valid" }> } | null = null;
 
 function isAuthorizedOperator(state: MemberIdentityState): boolean {
   return state.status === "signedIn" && OPERATOR_EMAILS.includes(state.authUser.email ?? "");
@@ -162,6 +184,91 @@ applyButton.addEventListener("click", () => {
       setMessage(error instanceof Error ? error.message.replace(/_/g, " ") : "Apply failed", "error");
     })
     .finally(() => { applyButton.disabled = false; });
+});
+
+// Batch 03B.6 -- Load Package: fetches+validates only, writes nothing.
+function formatPackagePreview(result: Extract<ProgramFromManifestResult, { status: "valid" }>): string {
+  const minutes = Math.floor(result.input.totalDurationSeconds / 60);
+  const seconds = Math.round(result.input.totalDurationSeconds % 60);
+  return `${result.input.trackCount} tracks · ${minutes}m ${seconds}s · Package v${result.input.bundleVersion} · stationId: ${result.input.stationId}`;
+}
+
+const MANIFEST_LOAD_INVALID_REASON_LABEL: Record<string, string> = {
+  invalid_url_not_https: "Package URL must be an absolute https:// URL.",
+  invalid_manifest_not_object: "That URL did not return a valid manifest.",
+  invalid_manifest_schema_version: "This manifest's schema version isn't supported.",
+  invalid_manifest_missing_station_id: "Manifest is missing its stationId.",
+  invalid_manifest_missing_title: "Manifest is missing a title.",
+  invalid_manifest_invalid_bundle_version: "Manifest has an invalid bundleVersion.",
+  invalid_manifest_empty_entries: "Manifest has no playable entries.",
+  invalid_manifest_invalid_duration: "Manifest has an invalid totalDurationSeconds.",
+};
+
+loadPackageButton.addEventListener("click", () => {
+  const normalized = normalizePackageBaseUrl(packageUrlInput.value);
+  loadedPackage = null;
+  packagePreviewEl.hidden = true;
+  if (!normalized) {
+    packageLoadMessageEl.textContent = "Enter a valid absolute https:// package URL.";
+    packageLoadMessageEl.dataset.kind = "error";
+    return;
+  }
+  loadPackageButton.disabled = true;
+  packageLoadMessageEl.textContent = "Loading…";
+  packageLoadMessageEl.dataset.kind = "info";
+  fetch(`${normalized}radio-manifest.json`)
+    .then((response) => {
+      if (!response.ok) throw new Error(`manifest fetch failed: ${response.status}`);
+      return response.json();
+    })
+    .then((manifest: unknown) => {
+      const result = deriveCreateRadioProgramInputFromManifest(manifest, normalized);
+      if (result.status === "invalid") {
+        packageLoadMessageEl.textContent = MANIFEST_LOAD_INVALID_REASON_LABEL[result.reason] ?? result.reason;
+        packageLoadMessageEl.dataset.kind = "error";
+        return;
+      }
+      const duplicate = findExistingProgramForPackage(programs, result.input.stationId, result.input.bundleVersion);
+      if (duplicate) {
+        packageLoadMessageEl.textContent = `Already has a Program: "${duplicate.title}" (${duplicate.id}). Not creating a duplicate.`;
+        packageLoadMessageEl.dataset.kind = "error";
+        return;
+      }
+      loadedPackage = { manifest: manifest as RadioWebManifest, result };
+      packageLoadMessageEl.textContent = "";
+      packagePreviewTitleEl.textContent = result.input.title;
+      packagePreviewDetailsEl.textContent = formatPackagePreview(result);
+      packagePreviewEl.hidden = false;
+    })
+    .catch((error) => {
+      packageLoadMessageEl.textContent = error instanceof Error ? error.message : String(error);
+      packageLoadMessageEl.dataset.kind = "error";
+    })
+    .finally(() => { loadPackageButton.disabled = false; });
+});
+
+// Batch 03B.6 -- Create Program: the explicit second action required
+// before any write. Never fires from a stale/cleared loadedPackage.
+createProgramFromPackageButton.addEventListener("click", () => {
+  if (!loadedPackage) return;
+  createProgramFromPackageButton.disabled = true;
+  packageLoadMessageEl.textContent = "Creating Program…";
+  packageLoadMessageEl.dataset.kind = "info";
+  const input = { ...loadedPackage.result.input, programId: generateRadioProgramId() };
+  repository.createRadioProgram(input)
+    .then((created) => {
+      packageLoadMessageEl.textContent = `Program created: ${created.id}`;
+      packageLoadMessageEl.dataset.kind = "success";
+      packagePreviewEl.hidden = true;
+      loadedPackage = null;
+      packageUrlInput.value = "";
+      return loadPrograms();
+    })
+    .catch((error) => {
+      packageLoadMessageEl.textContent = error instanceof Error ? error.message : String(error);
+      packageLoadMessageEl.dataset.kind = "error";
+    })
+    .finally(() => { createProgramFromPackageButton.disabled = false; });
 });
 
 signInButton.addEventListener("click", () => void memberIdentity.signInWithGoogle());
