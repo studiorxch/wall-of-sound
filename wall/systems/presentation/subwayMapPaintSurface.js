@@ -61,7 +61,7 @@
   // is the Firestore `artworks` create/update rules' own
   // `isRestrictedAuthoringSurface`/`isStudioRichMapAuthor` check, which
   // applies regardless of what this toolbar shows or hides.
-  var STUDIO_RICH_MAP_AUTHOR_EMAILS = ["whatsup@richielau.com"];
+  var STUDIO_RICH_MAP_AUTHOR_EMAILS = ["richardjlau@gmail.com"];
   function _isStudioRichMapAuthor() {
     var state = SBE.MemberIdentityState;
     var email = state && state.status === "signedIn" && state.authUser ? state.authUser.email : null;

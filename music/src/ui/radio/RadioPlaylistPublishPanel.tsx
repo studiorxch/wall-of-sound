@@ -27,6 +27,7 @@ import {
   createFirebaseEventRadioRepository,
   createFirebaseMemberIdentityAuthority,
   generateRadioProgramId,
+  STUDIO_RICH_OPERATOR_EMAILS,
   type MemberIdentityState,
 } from "@studiorich/member-identity";
 import type { Track } from "../../data/trackTypes";
@@ -91,7 +92,7 @@ function getProgramCreationRepository() {
 // own OPERATOR_EMAILS and wall/'s subwayMapPaintSurface.js -- the real
 // authority gate is firestore.rules' isEventOperator(), enforced
 // regardless of what this list contains.
-const PROGRAM_CREATION_OPERATOR_EMAILS = ["whatsup@richielau.com"];
+const PROGRAM_CREATION_OPERATOR_EMAILS = STUDIO_RICH_OPERATOR_EMAILS;
 
 type ProgramCreationState =
   | { status: "idle" }

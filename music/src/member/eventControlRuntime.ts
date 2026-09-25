@@ -16,6 +16,7 @@
 import {
   createFirebaseEventRadioRepository,
   createFirebaseMemberIdentityAuthority,
+  STUDIO_RICH_OPERATOR_EMAILS,
   type EventPlaybackMode,
   type EventStatus,
   type MemberIdentityState,
@@ -23,7 +24,7 @@ import {
 } from "@studiorich/member-identity";
 
 /** Client-side UX gate only -- see this module's own doc. Must match firestore.rules' own operator allowlist. */
-const OPERATOR_EMAILS = ["whatsup@richielau.com"];
+const OPERATOR_EMAILS = STUDIO_RICH_OPERATOR_EMAILS;
 
 function required<T>(value: T | null, error: string): T { if (!value) throw new Error(error); return value; }
 

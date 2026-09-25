@@ -716,7 +716,7 @@
         ui.__test.renderNow();
         results.push(assertion("ordinary member: MAP drawing toolbar is hidden", !ui.isAuthorizedForMapAuthoring() && global.document.getElementById("subway-map-paint-controls").hidden));
 
-        SBE.MemberIdentityState = { status: "signedIn", authUser: { email: "whatsup@richielau.com" } };
+        SBE.MemberIdentityState = { status: "signedIn", authUser: { email: "richardjlau@gmail.com" } };
         ui.__test.renderNow();
         results.push(assertion("StudioRich author: MAP drawing toolbar is available", ui.isAuthorizedForMapAuthoring() && !global.document.getElementById("subway-map-paint-controls").hidden));
 

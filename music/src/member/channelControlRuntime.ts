@@ -28,6 +28,7 @@ import {
   createFirebaseEventRadioRepository,
   createFirebaseMemberIdentityAuthority,
   createFirebaseRadioChannelRepository,
+  STUDIO_RICH_OPERATOR_EMAILS,
   type EventRadioRepository,
   type MemberIdentityState,
   type RadioChannel,
@@ -62,7 +63,7 @@ async function fetchManifest(manifestBaseUrl: string): Promise<RadioWebManifest>
 }
 
 /** Client-side UX gate only -- see this module's own doc. Must match firestore.rules' own operator allowlist. */
-const OPERATOR_EMAILS = ["whatsup@richielau.com"];
+const OPERATOR_EMAILS = STUDIO_RICH_OPERATOR_EMAILS;
 
 /** V1 assumes exactly one Channel identity -- see this batch's own scope note; a future multi-Channel picker is out of scope here. */
 const FIRST_CHANNEL_ID = "studiorich-radio";

@@ -19,7 +19,7 @@ service cloud.firestore {
     // them). Extend THIS list, never a frontend flag or a second list, to
     // add another StudioRich operator.
     function studioRichOperatorEmails() {
-      return ['whatsup@richielau.com'];
+      return ['richardjlau@gmail.com'];
     }
     function isStudioRichOperator() {
       return isSignedIn() && request.auth.token.email in studioRichOperatorEmails();
