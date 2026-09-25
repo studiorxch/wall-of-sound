@@ -53,16 +53,31 @@ export function validateSetEventProgramInput(input: SetEventProgramInput, knownP
   if (input.startAtMs != null && !Number.isFinite(input.startAtMs)) throw new Error("invalid_event_clock_start_time");
 }
 
-function decodeRadioProgram(id: string, data: Record<string, unknown>): RadioProgramSummary | null {
+/**
+ * Batch 02F -- `stationId`/`bundleVersion` are OPTIONAL and read verbatim
+ * only: a malformed or absent value simply omits that field from the
+ * decoded result (same "drop the bad optional field, don't reject the
+ * whole document" convention this codebase already uses elsewhere, e.g.
+ * `hasValidAuthoredZoom` in firestore.rules) -- it is NEVER derived from
+ * `manifestBaseUrl`, `title`, or any other field on this document.
+ */
+export function decodeRadioProgram(id: string, data: Record<string, unknown>): RadioProgramSummary | null {
   if (typeof data.title !== "string" || typeof data.manifestBaseUrl !== "string") return null;
   if (!Number.isFinite(data.trackCount) || !Number.isFinite(data.totalDurationSeconds)) return null;
   const manifestBaseUrl = data.manifestBaseUrl.endsWith("/") ? data.manifestBaseUrl : `${data.manifestBaseUrl}/`;
+  const stationId = typeof data.stationId === "string" && data.stationId.length > 0 ? data.stationId : undefined;
+  const bundleVersion =
+    typeof data.bundleVersion === "number" && Number.isInteger(data.bundleVersion) && data.bundleVersion > 0
+      ? data.bundleVersion
+      : undefined;
   return {
     id,
     title: data.title,
     manifestBaseUrl,
     trackCount: data.trackCount as number,
     totalDurationSeconds: data.totalDurationSeconds as number,
+    stationId,
+    bundleVersion,
   };
 }
 

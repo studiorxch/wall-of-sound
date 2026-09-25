@@ -8,7 +8,21 @@
  * duplicates that catalog, only points at it by id.
  */
 
-/** One already-published RADIO bundle an operator can choose for an event -- human-readable, never a raw manifest URL the operator has to type. */
+/**
+ * One already-published RADIO bundle an operator can choose for an event --
+ * human-readable, never a raw manifest URL the operator has to type.
+ *
+ * Batch 02F -- RADIO Program Package Identity Contract: `stationId` +
+ * `bundleVersion` are the canonical, immutable RADIO Package identity
+ * (`stationId === RadioWebManifest.stationId === RadioPlaylist.id`,
+ * `bundleVersion === RadioWebManifest.bundleVersion` -- see
+ * radioWebBundleTypes.ts). Both OPTIONAL: existing manually-authored
+ * `radioPrograms` documents carry only `manifestBaseUrl` and remain fully
+ * valid. Never derived from `manifestBaseUrl`, `title`, or any URL slug --
+ * only ever read verbatim from a document that actually has them. No
+ * application write path exists yet for these fields (see this batch's own
+ * scope note); they are recognized on read only.
+ */
 export interface RadioProgramSummary {
   readonly id: string;
   readonly title: string;
@@ -16,6 +30,10 @@ export interface RadioProgramSummary {
   readonly manifestBaseUrl: string;
   readonly trackCount: number;
   readonly totalDurationSeconds: number;
+  /** Canonical RADIO Package identity, part 1 -- `RadioWebManifest.stationId` (= `RadioPlaylist.id`). Absent on legacy/manually-authored documents. */
+  readonly stationId?: string;
+  /** Canonical RADIO Package identity, part 2 -- `RadioWebManifest.bundleVersion`. Absent on legacy/manually-authored documents. */
+  readonly bundleVersion?: number;
 }
 
 export type EventPlaybackMode = "personal" | "clock";
