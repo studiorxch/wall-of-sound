@@ -385,13 +385,28 @@ service cloud.firestore {
       allow read: if true;
       allow write: if isEventOperator()
         && request.resource.data.keys().hasAll(['title', 'manifestBaseUrl', 'trackCount', 'totalDurationSeconds'])
-        && request.resource.data.keys().hasOnly(['title', 'manifestBaseUrl', 'trackCount', 'totalDurationSeconds'])
+        // Batch 02H -- RADIO Program Package Identity Firestore Rules:
+        // `stationId`/`bundleVersion` (Batch 02F's canonical, immutable
+        // RADIO Package identity -- stationId === RadioWebManifest.stationId
+        // === RadioPlaylist.id, bundleVersion === RadioWebManifest.bundleVersion)
+        // are OPTIONAL here, matching the decodeRadioProgram contract exactly:
+        // a legacy document with only the original four fields remains fully
+        // valid and writable. Deliberately NOT required as a pair -- nothing
+        // in this codebase reads either field yet (no write path, no
+        // resolver consumption), so no coupling reason was found to justify
+        // an atomicity constraint; each is validated independently, same as
+        // the decoder already does.
+        && request.resource.data.keys().hasOnly(['title', 'manifestBaseUrl', 'trackCount', 'totalDurationSeconds', 'stationId', 'bundleVersion'])
         && request.resource.data.title is string
         && request.resource.data.manifestBaseUrl is string
         && request.resource.data.trackCount is int
         && request.resource.data.trackCount >= 0
         && request.resource.data.totalDurationSeconds is number
-        && request.resource.data.totalDurationSeconds >= 0;
+        && request.resource.data.totalDurationSeconds >= 0
+        && (!request.resource.data.keys().hasAny(['stationId'])
+          || (request.resource.data.stationId is string && request.resource.data.stationId.size() > 0))
+        && (!request.resource.data.keys().hasAny(['bundleVersion'])
+          || (request.resource.data.bundleVersion is int && request.resource.data.bundleVersion > 0));
       allow delete: if isEventOperator();
     }
 
