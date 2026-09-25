@@ -10,15 +10,56 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == uid;
     }
 
-    // Event Radio Turnkey Operations V1: the ENTIRE operator-authority
-    // boundary for `radioPrograms`/`eventProgram`. Deliberately an email
-    // allowlist against the EXISTING Firebase Auth identity Member already
-    // uses -- not a second identity system, not a frontend secret, and not
-    // custom claims (no Admin SDK access is available in this environment
-    // to set them; see this build's own recon). Extend this list, never a
-    // frontend flag, to add another operator.
+    // StudioRich operator identity: the ONE allowlist backing every
+    // StudioRich-only capability in this app (Event Radio config, MAP
+    // authoring, and any future one) -- deliberately an email allowlist
+    // against the EXISTING Firebase Auth identity Member already uses, not
+    // a second identity system, not a frontend secret, and not custom
+    // claims (no Admin SDK access is available in this environment to set
+    // them). Extend THIS list, never a frontend flag or a second list, to
+    // add another StudioRich operator.
+    function studioRichOperatorEmails() {
+      return ['whatsup@richielau.com'];
+    }
+    function isStudioRichOperator() {
+      return isSignedIn() && request.auth.token.email in studioRichOperatorEmails();
+    }
+
+    // Event Radio Turnkey Operations V1: named alias, unchanged behavior --
+    // kept so its own feature reads standalone.
     function isEventOperator() {
-      return isSignedIn() && request.auth.token.email == 'whatsup@richielau.com';
+      return isStudioRichOperator();
+    }
+
+    // MAP / Blackbook / RADIO Integration Beta: same StudioRich identity,
+    // named for its own call site so future context-specific entitlements
+    // (e.g. a narrower "map authors" list, if ever needed) can diverge from
+    // isEventOperator() without touching this one.
+    function isStudioRichMapAuthor() {
+      return isStudioRichOperator();
+    }
+
+    // A Mark-authoring `surfaceId` whose CONTEXT is StudioRich-only, not
+    // member-open. `surfaceId` is already a required, immutable-after-
+    // creation string on every Artwork (see hasValidArtworkV1Shape) and is
+    // already proven unique per real context in this codebase --
+    // "map:new-york" (the one live prefix, from
+    // music/src/member/mapArtworkBridge.ts's SUBWAY_MAP_SURFACE_ID) is used
+    // NOWHERE else: Blackbook's own surfaceId is "blackbook:...", and the
+    // MAPS-in-Blackbook graffiti feature uses its own per-placement surface
+    // ids, never this prefix. Extend the regex alternation below, never a
+    // second field or a client-supplied flag, to add a future restricted
+    // context (WALL/TRAIN/STATION/MAP_TEMPLATE/EVENT) -- do not do so until
+    // that context actually exists.
+    function isRestrictedAuthoringSurface(surfaceId) {
+      // Prefix check via slicing, not a regex `.matches()` -- this build's
+      // own acceptance run showed regex evaluation pushing an
+      // already-large `artworks` rule over Firestore's per-request
+      // expression-evaluation budget on some paths ("maximum of 1000
+      // expressions" emulator warnings). A slice-and-compare is
+      // functionally identical for a fixed literal prefix and measurably
+      // cheaper.
+      return surfaceId.size() >= 4 && surfaceId[0:4] == 'map:';
     }
 
     function hasExactMemberFields(data) {
@@ -273,6 +314,21 @@ service cloud.firestore {
       allow read: if isSignedIn() && resource.data.creatorId == request.auth.uid;
 
       allow create: if isSignedIn()
+        // MAP / Blackbook / RADIO Integration Beta: a StudioRich-only
+        // authoring CONTEXT, not a global creation ban -- an ordinary
+        // member's Blackbook/other-surface Artwork is untouched by this
+        // clause (isRestrictedAuthoringSurface is false for it), so this
+        // does not weaken artwork creation in general. Evaluated BEFORE
+        // the shape validators below on purpose: this build's own
+        // acceptance run showed the existing dual-shape
+        // `hasValidArtworkShape(...) || hasValidArtworkV1Shape(...)` check
+        // is expensive enough that running it before a denial pushed
+        // Firestore's per-request rule-evaluation budget over its limit
+        // ("maximum of 1000 expressions") on the deny path. Cheap checks
+        // first, expensive validation only once we know it's worth doing.
+        && (!request.resource.data.keys().hasAny(['surfaceId'])
+          || !isRestrictedAuthoringSurface(request.resource.data.surfaceId)
+          || isStudioRichMapAuthor())
         && (hasValidArtworkShape(request.resource.data) || hasValidArtworkV1Shape(request.resource.data))
         && request.resource.data.creatorId == request.auth.uid
         && request.resource.data.state == 'draft'
@@ -286,6 +342,16 @@ service cloud.firestore {
       allow update: if isSignedIn()
         && resource.data.creatorId == request.auth.uid
         && request.resource.data.creatorId == request.auth.uid
+        // Same StudioRich-only-context check as create, above, evaluated
+        // against the EXISTING document's surfaceId (which create/immutability
+        // already guarantees cannot change) -- so a member who could never
+        // have created a "map:*" Artwork also can never append a Mark to
+        // one, including one authored before this rule existed. Evaluated
+        // BEFORE the expensive shape validators for the same
+        // expression-budget reason documented on the create rule above.
+        && (!resource.data.keys().hasAny(['surfaceId'])
+          || !isRestrictedAuthoringSurface(resource.data.surfaceId)
+          || isStudioRichMapAuthor())
         && (hasValidArtworkShape(request.resource.data) || hasValidArtworkV1Shape(request.resource.data))
         && request.resource.data.createdAt == resource.data.createdAt
         && (!resource.data.keys().hasAny(['surfaceId']) || request.resource.data.surfaceId == resource.data.surfaceId)

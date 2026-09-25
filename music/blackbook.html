@@ -168,11 +168,25 @@
       #event-music-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
       #event-music-title { font-size: 10px; letter-spacing: .03em; color: #f4efe7; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       #event-music-artist { font-size: 9px; letter-spacing: .03em; color: #928a80; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+      /**
+       * MAP / Blackbook / RADIO Integration Beta -- the Blackbook -> MAP
+       * half of the required bidirectional link (wall/'s own
+       * subwayBlackbookNavLink.js carries the MAP -> Blackbook half). A
+       * plain same-tab link for the same "one authoritative player" reason
+       * documented there.
+       */
+      #map-nav-link {
+        position: fixed; z-index: 10000; top: 16px; right: 16px;
+        padding: 8px 14px; font-size: 11px; font-weight: 700; letter-spacing: .07em;
+        text-decoration: none; color: #f4efe7;
+      }
     </style>
   </head>
   <body>
     <div id="app">
       <span id="brand-mark">STUDIORICH BLACKBOOK</span>
+      <a id="map-nav-link" class="island" href="http://localhost:5510/" aria-label="Back to MAP">MAP</a>
       <div id="event-music" class="island" aria-label="Event music">
         <button id="event-music-toggle" disabled>▶</button>
         <div id="event-music-text">

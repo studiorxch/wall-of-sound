@@ -703,6 +703,30 @@
           results.push(assertion("Revision 12: camera interaction cache real-gesture tests (skipped -- map not ready in this environment)", true));
         }
       }
+
+      // MAP / Blackbook / RADIO Integration Beta: MEMBER_MAP vs
+      // STUDIORICH_MAP toolbar gating -- exercises SubwayMapPaintSurface's
+      // own `isAuthorizedForMapAuthoring`, driven purely by
+      // `window.SBE.MemberIdentityState` (the same object
+      // subwayMemberRuntime.ts publishes on every real auth-state change),
+      // never a second entitlement source.
+      var originalMemberIdentityState = SBE.MemberIdentityState;
+      try {
+        SBE.MemberIdentityState = { status: "signedIn", authUser: { email: "ordinary-member@example.com" } };
+        ui.__test.renderNow();
+        results.push(assertion("ordinary member: MAP drawing toolbar is hidden", !ui.isAuthorizedForMapAuthoring() && global.document.getElementById("subway-map-paint-controls").hidden));
+
+        SBE.MemberIdentityState = { status: "signedIn", authUser: { email: "whatsup@richielau.com" } };
+        ui.__test.renderNow();
+        results.push(assertion("StudioRich author: MAP drawing toolbar is available", ui.isAuthorizedForMapAuthoring() && !global.document.getElementById("subway-map-paint-controls").hidden));
+
+        SBE.MemberIdentityState = { status: "signedOut", authUser: null };
+        ui.__test.renderNow();
+        results.push(assertion("signed-out visitor: MAP drawing toolbar is hidden", !ui.isAuthorizedForMapAuthoring() && global.document.getElementById("subway-map-paint-controls").hidden));
+      } finally {
+        SBE.MemberIdentityState = originalMemberIdentityState;
+        ui.__test.renderNow();
+      }
     } finally {
       surface.overlayObjects = originalObjects;
       workspace.setInteractionMode(originalMode);

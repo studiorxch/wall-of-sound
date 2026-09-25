@@ -43,6 +43,7 @@ import type { RadioWebManifest, RadioWebManifestEntry } from "../data/radioWebBu
 import { restoreGainAndStartDeck, tryAcquireStartLock, type DeckId } from "../radioPlayerStartSequence";
 import { loadEventProgramConfig, type EventProgramConfig } from "./eventProgramConfig";
 import { resolveProgramPosition, TOLERATED_DRIFT_SECONDS, CORRECTABLE_DRIFT_SECONDS, type ProgramTrack } from "../logic/radio/radioProgramClock";
+import { readRadioResumableSession, writeRadioResumableSession, resolveResumedOffsetSeconds, type RadioResumableSession } from "../audio/radioResumableSession";
 
 function required<T>(value: T | null, error: string): T { if (!value) throw new Error(error); return value; }
 
@@ -89,6 +90,37 @@ function displayNowPlaying(entry: RadioWebManifestEntry): void {
   if (toggleButton) toggleButton.textContent = "⏸";
 }
 
+/**
+ * MAP / Blackbook / RADIO Integration Beta: writes the resumable session on
+ * every meaningful playback event (track start/advance, pause, resume) --
+ * see radioResumableSession.ts's own doc for why sessionStorage, and why
+ * CLOCK mode still writes one despite never reading it back for position.
+ * A missing `sessionStorage` (e.g. a non-browser test environment) is a
+ * silent no-op, matching this module's existing "never break the drawing
+ * surface" posture.
+ */
+function persistSession(): void {
+  if (!engine || !manifest || !config || activeIndex === -1) return;
+  const entry = manifest.entries[activeIndex];
+  if (!entry) return;
+  const session: RadioResumableSession = {
+    schemaVersion: 1,
+    manifestBaseUrl: config.manifestBaseUrl,
+    trackId: entry.radioTrackId,
+    trackIndex: activeIndex,
+    offsetSeconds: engine.getCurrentTime(activeDeck),
+    referenceAtMs: Date.now(),
+    isPlaying,
+    volume: 1,
+    playbackMode: config.playbackMode,
+  };
+  try {
+    writeRadioResumableSession(window.sessionStorage, session);
+  } catch {
+    // sessionStorage unavailable (private mode, disabled storage) -- resuming just starts fresh next time.
+  }
+}
+
 /** Preloads (only) the first entry from `fromIndex` that loads successfully, at `cueStartSeconds`, into `deckId` -- never stops the whole station over one bad file. */
 async function preloadFirstAvailable(deckId: DeckId, fromIndex: number, cueStartSeconds = 0): Promise<number> {
   if (!manifest || !engine) return -1;
@@ -123,6 +155,7 @@ async function advanceOrStop(): Promise<void> {
     activeIndex = incomingIndex;
     incomingIndex = -1;
     displayNowPlaying(manifest.entries[activeIndex]);
+    persistSession();
     void queueNextAfter(activeIndex);
   } else {
     incomingIndex = await preloadFirstAvailable(incomingDeck, incomingIndex + 1);
@@ -138,13 +171,33 @@ async function advanceOrStop(): Promise<void> {
  * clock resolution can't produce a playable position (no startAtMs, empty
  * program, or the program has already ended under a "stop" policy) rather
  * than refusing to play at all.
+ *
+ * MAP / Blackbook / RADIO Integration Beta: in "personal" mode, a matching
+ * resumable session (same `manifestBaseUrl` -- a different program never
+ * resumes into the wrong track list) takes priority over track 0/offset 0,
+ * extrapolated forward by real elapsed time via `resolveResumedOffsetSeconds`
+ * -- see that module's own doc for why "clock" mode never consults it here.
  */
 function resolveStartPosition(): { index: number; offsetSeconds: number } {
   if (config?.playbackMode === "clock" && config.startAtMs !== null) {
     const resolution = resolveProgramPosition({ tracks: manifestTracks(), programStartAtMs: config.startAtMs, nowMs: Date.now(), endPolicy: config.endPolicy });
     if (resolution.status === "playing") return { index: resolution.trackIndex, offsetSeconds: resolution.offsetSeconds };
   }
+  if (config?.playbackMode === "personal") {
+    const session = readSessionSafely();
+    if (session && session.playbackMode === "personal" && session.manifestBaseUrl === config.manifestBaseUrl) {
+      return { index: session.trackIndex, offsetSeconds: resolveResumedOffsetSeconds(session, Date.now()) };
+    }
+  }
   return { index: 0, offsetSeconds: 0 };
+}
+
+function readSessionSafely(): RadioResumableSession | null {
+  try {
+    return readRadioResumableSession(window.sessionStorage);
+  } catch {
+    return null;
+  }
 }
 
 async function startPlayback(): Promise<void> {
@@ -165,6 +218,7 @@ async function startPlayback(): Promise<void> {
     displayNowPlaying(entry);
     firstTrackSettled = true;
     isPlaying = true;
+    persistSession();
     void queueNextAfter(activeIndex);
     return;
   }
@@ -190,10 +244,12 @@ function togglePlayPause(): void {
     engine.pauseAll();
     isPlaying = false;
     if (toggleButton) toggleButton.textContent = "▶";
+    persistSession();
   } else {
     void engine.resumeAll();
     isPlaying = true;
     if (toggleButton) toggleButton.textContent = "⏸";
+    persistSession();
   }
 }
 

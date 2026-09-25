@@ -52,6 +52,22 @@
     return !!(surface && surface.isActive && surface.isActive());
   }
 
+  // MAP / Blackbook / RADIO Integration Beta: MEMBER_MAP (navigation only)
+  // vs STUDIORICH_MAP (navigation + this toolbar) -- the SAME StudioRich
+  // operator identity `firestore.rules`' `isStudioRichOperator()` allowlists
+  // (reused, not a second allowlist), read off the SAME `window.SBE`
+  // MemberIdentityState `subwayMemberRuntime.ts` already publishes on every
+  // auth-state change. This is a UX convenience only: the real enforcement
+  // is the Firestore `artworks` create/update rules' own
+  // `isRestrictedAuthoringSurface`/`isStudioRichMapAuthor` check, which
+  // applies regardless of what this toolbar shows or hides.
+  var STUDIO_RICH_MAP_AUTHOR_EMAILS = ["whatsup@richielau.com"];
+  function _isStudioRichMapAuthor() {
+    var state = SBE.MemberIdentityState;
+    var email = state && state.status === "signedIn" && state.authUser ? state.authUser.email : null;
+    return !!email && STUDIO_RICH_MAP_AUTHOR_EMAILS.indexOf(email) !== -1;
+  }
+
   function _ensureSupplySettings() {
     if (_supplySettings) return _supplySettings;
     var supplies = _supplies();
@@ -174,7 +190,7 @@
     var drawing = _drawing();
     var mode = workspace && workspace.getInteractionMode ? workspace.getInteractionMode() : "navigate";
     var strokes = drawing && drawing.getStrokes ? drawing.getStrokes() : [];
-    root.hidden = !active;
+    root.hidden = !active || !_isStudioRichMapAuthor();
 
     var supplyId = _activeDrawSupply();
     root.querySelectorAll("[data-map-paint-mode]").forEach(function (button) {
@@ -242,6 +258,7 @@
       var workspace = _workspace();
       return workspace && workspace.getInteractionMode ? workspace.getInteractionMode() : null;
     },
+    isAuthorizedForMapAuthoring: _isStudioRichMapAuthor,
     __test: { renderNow: _render, rootId: ROOT_ID },
   });
 })(window);
