@@ -1,8 +1,9 @@
 /**
- * Batch 02Q -- RADIO Channel Control: Bootstrap + Rotation Editor.
- * Checkpoint 1 only: create the first Channel, edit its rotation
- * (add/remove/reorder), Save Rotation, Activate/Deactivate, Start/Restart
- * Rotation Now. No ON AIR diagnostics yet (Batch 02P's checkpoint 2).
+ * Batch 02Q/02R -- RADIO Channel Control: Bootstrap + Rotation Editor
+ * (checkpoint 1) plus the ON AIR/NEXT diagnostic (checkpoint 2). Create
+ * the first Channel, edit its rotation (add/remove/reorder), Save
+ * Rotation, Activate/Deactivate, Start/Restart Rotation Now, and see what
+ * the deterministic Channel clock says is on air right now. No audio.
  *
  * AUTHORITY: reuses the SAME Firebase Auth (Google sign-in) Member
  * identity Event Radio Control already uses -- no second identity
@@ -15,6 +16,12 @@
  * `channelRotationEditorState.ts`'s own pure functions -- see that
  * module's own doc for exactly which operations preserve `anchorAtMs`
  * and which one (Start/Restart only) deliberately changes it.
+ *
+ * DIAGNOSTIC REFRESH (Batch 02R): a periodic re-resolution for DISPLAY
+ * ONLY -- every tick just asks `resolveChannelTrackBroadcast` "what owns
+ * Date.now() right now," the exact same deterministic question any other
+ * caller would ask. No cursor, no stored offset, no Channel document, and
+ * no `eventProgram/current` document is ever written by this refresh.
  */
 
 import {
@@ -27,7 +34,10 @@ import {
   type RadioChannelRepository,
   type RadioProgramSummary,
 } from "@studiorich/member-identity";
+import type { RadioWebManifest } from "../data/radioWebBundleTypes";
 import { slugifyStationTitle } from "../logic/radio/radioWebBundlePlan";
+import { resolveChannelTrackBroadcast } from "../logic/radio/channelTrackBroadcast";
+import { buildChannelDiagnosticDisplay } from "../logic/radio/channelDiagnosticDisplay";
 import {
   addProgramToRotation,
   buildActivateChannelUpdate,
@@ -41,6 +51,16 @@ import {
   removeProgramFromRotation,
 } from "../logic/radio/channelRotationEditorState";
 
+/** Same re-resolution interval-only-affects-display posture, roughly matching eventMusicRuntime.ts's own 20s drift-check cadence order of magnitude but tighter since this is the operator's own live diagnostic, not a listener's background drift check. */
+const DIAGNOSTIC_REFRESH_INTERVAL_MS = 5000;
+
+/** Same path-string fetch convention radioPlayerMain.ts/eventMusicRuntime.ts already use -- see channelTrackBroadcast.ts's own recon note on why no {stationId,bundleVersion}->URL routing exists yet. */
+async function fetchManifest(manifestBaseUrl: string): Promise<RadioWebManifest> {
+  const response = await fetch(`${manifestBaseUrl}radio-manifest.json`);
+  if (!response.ok) throw new Error(`manifest fetch failed: ${response.status}`);
+  return (await response.json()) as RadioWebManifest;
+}
+
 /** Client-side UX gate only -- see this module's own doc. Must match firestore.rules' own operator allowlist. */
 const OPERATOR_EMAILS = ["whatsup@richielau.com"];
 
@@ -53,6 +73,7 @@ const signedOutEl = required(document.querySelector<HTMLElement>("#signed-out"),
 const notAuthorizedEl = required(document.querySelector<HTMLElement>("#not-authorized"), "channel_control_surface_missing");
 const createFormEl = required(document.querySelector<HTMLElement>("#create-channel-form"), "channel_control_surface_missing");
 const editorEl = required(document.querySelector<HTMLElement>("#channel-editor"), "channel_control_surface_missing");
+const diagnosticEl = required(document.querySelector<HTMLElement>("#channel-diagnostic"), "channel_control_surface_missing");
 
 const signInButton = required(document.querySelector<HTMLButtonElement>("#sign-in"), "channel_control_surface_missing");
 const signOutButton = required(document.querySelector<HTMLButtonElement>("#sign-out"), "channel_control_surface_missing");
@@ -76,6 +97,16 @@ const activateButton = required(document.querySelector<HTMLButtonElement>("#acti
 const deactivateButton = required(document.querySelector<HTMLButtonElement>("#deactivate-channel"), "channel_control_surface_missing");
 const startRestartButton = required(document.querySelector<HTMLButtonElement>("#start-restart"), "channel_control_surface_missing");
 
+const diagnosticHeadlineEl = required(document.querySelector<HTMLElement>("#diagnostic-headline"), "channel_control_surface_missing");
+const diagnosticDetailEl = required(document.querySelector<HTMLElement>("#diagnostic-detail"), "channel_control_surface_missing");
+const diagnosticOnAirFieldsEl = required(document.querySelector<HTMLElement>("#diagnostic-on-air-fields"), "channel_control_surface_missing");
+const diagnosticProgramTitleEl = required(document.querySelector<HTMLElement>("#diagnostic-program-title"), "channel_control_surface_missing");
+const diagnosticTrackLabelEl = required(document.querySelector<HTMLElement>("#diagnostic-track-label"), "channel_control_surface_missing");
+const diagnosticProgramPositionEl = required(document.querySelector<HTMLElement>("#diagnostic-program-position"), "channel_control_surface_missing");
+const diagnosticProgramEndsInEl = required(document.querySelector<HTMLElement>("#diagnostic-program-ends-in"), "channel_control_surface_missing");
+const diagnosticTrackPositionEl = required(document.querySelector<HTMLElement>("#diagnostic-track-position"), "channel_control_surface_missing");
+const diagnosticNextTitleEl = required(document.querySelector<HTMLElement>("#diagnostic-next-title"), "channel_control_surface_missing");
+
 const memberIdentity = createFirebaseMemberIdentityAuthority(import.meta.env);
 const channelRepository: Pick<RadioChannelRepository, "getRadioChannel" | "createRadioChannel" | "updateRadioChannel"> =
   createFirebaseRadioChannelRepository(import.meta.env);
@@ -87,6 +118,7 @@ let programsById = new Map<string, RadioProgramSummary>();
 let channel: RadioChannel | null = null;
 /** Locally-edited-but-not-yet-saved rotation order -- kept separate from `channel.rotation.programIds` until "Save Rotation" per this batch's own "edit locally until explicitly saved" instruction. */
 let draftProgramIds: string[] = [];
+let diagnosticIntervalId: ReturnType<typeof setInterval> | null = null;
 
 function isAuthorizedOperator(state: MemberIdentityState): boolean {
   return state.status === "signedIn" && OPERATOR_EMAILS.includes(state.authUser.email ?? "");
@@ -162,6 +194,68 @@ function renderRotationList(): void {
   rotationLengthEl.textContent = `Rotation Length: ${formatDuration(computeRotationLengthSeconds(draftProgramIds, programsById))}`;
 }
 
+/**
+ * Batch 02R -- the ONE place this page calls `resolveChannelTrackBroadcast`.
+ * Reuses the SAME `channelRepository`/`eventRadioRepository` instances
+ * already constructed for the rotation editor (no second repository
+ * abstraction), and the SAME `programsById` catalog the editor already
+ * loads -- refreshed here too, since the catalog can change independently
+ * of the Channel document. Read-only: `resolveChannelTrackBroadcast`
+ * itself performs no writes, and neither does anything in this function.
+ */
+async function refreshDiagnostic(): Promise<void> {
+  if (diagnosticEl.hidden) return;
+  const nowMs = Date.now();
+  let result: Awaited<ReturnType<typeof resolveChannelTrackBroadcast>>;
+  try {
+    result = await resolveChannelTrackBroadcast({
+      channelId: FIRST_CHANNEL_ID,
+      nowMs,
+      radioChannelRepository: channelRepository,
+      eventRadioRepository,
+      fetchManifest,
+    });
+  } catch (error) {
+    diagnosticHeadlineEl.textContent = "ERROR";
+    diagnosticHeadlineEl.dataset.kind = "error";
+    diagnosticDetailEl.textContent = error instanceof Error ? error.message : String(error);
+    diagnosticOnAirFieldsEl.hidden = true;
+    return;
+  }
+
+  const display = buildChannelDiagnosticDisplay(result, programsById, nowMs);
+  diagnosticHeadlineEl.textContent = display.headline;
+  diagnosticHeadlineEl.dataset.kind = display.kind;
+  diagnosticDetailEl.textContent = display.detail;
+  diagnosticNextTitleEl.textContent = display.nextProgramTitle ?? "—";
+
+  if (display.kind === "on-air") {
+    diagnosticOnAirFieldsEl.hidden = false;
+    diagnosticProgramTitleEl.textContent = display.programTitle ?? "";
+    diagnosticTrackLabelEl.textContent = display.trackLabel ?? "";
+    diagnosticProgramPositionEl.textContent = display.programPosition ?? "";
+    diagnosticProgramEndsInEl.textContent = display.programEndsIn ?? "";
+    diagnosticTrackPositionEl.textContent = display.trackPosition ?? "";
+  } else {
+    diagnosticOnAirFieldsEl.hidden = true;
+  }
+}
+
+function startDiagnosticRefresh(): void {
+  diagnosticEl.hidden = false;
+  void refreshDiagnostic();
+  if (diagnosticIntervalId !== null) return;
+  diagnosticIntervalId = setInterval(() => void refreshDiagnostic(), DIAGNOSTIC_REFRESH_INTERVAL_MS);
+}
+
+function stopDiagnosticRefresh(): void {
+  diagnosticEl.hidden = true;
+  if (diagnosticIntervalId !== null) {
+    clearInterval(diagnosticIntervalId);
+    diagnosticIntervalId = null;
+  }
+}
+
 async function loadProgramsAndBuildIndex(): Promise<void> {
   programs = await eventRadioRepository.listRadioPrograms();
   programsById = new Map(programs.map((program) => [program.id, program]));
@@ -172,6 +266,7 @@ async function showCreateChannelForm(): Promise<void> {
   notAuthorizedEl.hidden = true;
   editorEl.hidden = true;
   createFormEl.hidden = false;
+  stopDiagnosticRefresh();
   setMessage(createMessageEl, "");
   await loadProgramsAndBuildIndex();
   populateProgramSelect(createProgramSelect);
@@ -195,6 +290,7 @@ async function showChannelEditor(): Promise<void> {
   await loadProgramsAndBuildIndex();
   draftProgramIds = channel ? [...channel.rotation.programIds] : [];
   renderChannelEditor();
+  startDiagnosticRefresh();
 }
 
 async function showOperatorSurface(): Promise<void> {
@@ -259,6 +355,7 @@ saveRotationButton.addEventListener("click", () => {
       channel = updated;
       setMessage(messageEl, "Rotation saved.", "success");
       renderChannelEditor();
+      void refreshDiagnostic();
     })
     .catch((error) => {
       setMessage(messageEl, error instanceof Error ? error.message.replace(/_/g, " ") : "Save failed", "error");
@@ -269,14 +366,14 @@ saveRotationButton.addEventListener("click", () => {
 activateButton.addEventListener("click", () => {
   if (!channel || memberState.status !== "signedIn") return;
   channelRepository.updateRadioChannel(buildActivateChannelUpdate(channel.channelId), memberState.member.uid)
-    .then((updated) => { channel = updated; renderChannelEditor(); setMessage(messageEl, "Channel activated.", "success"); })
+    .then((updated) => { channel = updated; renderChannelEditor(); setMessage(messageEl, "Channel activated.", "success"); void refreshDiagnostic(); })
     .catch((error) => setMessage(messageEl, error instanceof Error ? error.message.replace(/_/g, " ") : "Activate failed", "error"));
 });
 
 deactivateButton.addEventListener("click", () => {
   if (!channel || memberState.status !== "signedIn") return;
   channelRepository.updateRadioChannel(buildDeactivateChannelUpdate(channel.channelId), memberState.member.uid)
-    .then((updated) => { channel = updated; renderChannelEditor(); setMessage(messageEl, "Channel deactivated.", "success"); })
+    .then((updated) => { channel = updated; renderChannelEditor(); setMessage(messageEl, "Channel deactivated.", "success"); void refreshDiagnostic(); })
     .catch((error) => setMessage(messageEl, error instanceof Error ? error.message.replace(/_/g, " ") : "Deactivate failed", "error"));
 });
 
@@ -295,6 +392,7 @@ startRestartButton.addEventListener("click", () => {
       draftProgramIds = [...updated.rotation.programIds];
       renderChannelEditor();
       setMessage(messageEl, "Rotation restarted — Program 01 is on air now.", "success");
+      void refreshDiagnostic();
     })
     .catch((error) => setMessage(messageEl, error instanceof Error ? error.message.replace(/_/g, " ") : "Start/Restart failed", "error"))
     .finally(() => { startRestartButton.disabled = false; });
@@ -313,11 +411,13 @@ memberIdentity.subscribe((state) => {
     createFormEl.hidden = true;
     editorEl.hidden = true;
     notAuthorizedEl.hidden = false;
+    stopDiagnosticRefresh();
   } else {
     signedOutEl.hidden = false;
     createFormEl.hidden = true;
     editorEl.hidden = true;
     notAuthorizedEl.hidden = true;
+    stopDiagnosticRefresh();
   }
 });
 

@@ -70,6 +70,19 @@
         font-size: 11px;
       }
       #start-restart-note { font-size: 9px; color: #928a80; margin-top: 6px; line-height: 1.5; }
+
+      /* ON AIR / NEXT diagnostic (Batch 02R) */
+      #diagnostic-headline { font-size: 13px; font-weight: 700; letter-spacing: .04em; }
+      #diagnostic-headline[data-kind="on-air"] { color: #9adfa0; }
+      #diagnostic-headline[data-kind="inactive"] { color: #928a80; }
+      #diagnostic-headline[data-kind="before-start"] { color: #e8c96a; }
+      #diagnostic-headline[data-kind="error"] { color: #ff9a9a; }
+      #diagnostic-detail { font-size: 10px; color: #c8c0b6; margin-top: 4px; line-height: 1.5; }
+      #diagnostic-on-air-fields[hidden] { display: none; }
+      #diagnostic-on-air-fields { margin-top: 10px; font-size: 10px; line-height: 1.8; color: #c8c0b6; }
+      #diagnostic-on-air-fields strong { color: #f4efe7; }
+      #diagnostic-next { margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,.08); font-size: 10px; color: #c8c0b6; }
+      #diagnostic-refresh-note { margin-top: 12px; font-size: 9px; color: #6b6560; line-height: 1.5; }
     </style>
   </head>
   <body>
@@ -99,6 +112,19 @@
 
         <button id="create-channel" style="width:100%;margin-top:16px">Create First Channel</button>
         <div id="create-message"></div>
+      </div>
+
+      <div id="channel-diagnostic" class="island" hidden>
+        <div id="diagnostic-headline"></div>
+        <div id="diagnostic-detail"></div>
+        <div id="diagnostic-on-air-fields" hidden>
+          <div>Program: <strong id="diagnostic-program-title"></strong></div>
+          <div>Track: <strong id="diagnostic-track-label"></strong></div>
+          <div>Program Position: <strong id="diagnostic-program-position"></strong> (ends in <span id="diagnostic-program-ends-in"></span>)</div>
+          <div>Track Position: <strong id="diagnostic-track-position"></strong></div>
+        </div>
+        <div id="diagnostic-next">NEXT: <strong id="diagnostic-next-title"></strong></div>
+        <div id="diagnostic-refresh-note">Display refreshes automatically. Broadcast position is resolved from the Channel clock, not from this page.</div>
       </div>
 
       <div id="channel-editor" class="island" hidden>
