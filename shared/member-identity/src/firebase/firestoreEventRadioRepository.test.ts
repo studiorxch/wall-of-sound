@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { decodeRadioProgram, validateSetEventProgramInput } from "./firestoreEventRadioRepository.js";
-import type { SetEventProgramInput } from "../data/eventRadioTypes.js";
+import { decodeRadioProgram, validateCreateRadioProgramInput, validateSetEventProgramInput } from "./firestoreEventRadioRepository.js";
+import { generateRadioProgramId, type CreateRadioProgramInput, type SetEventProgramInput } from "../data/eventRadioTypes.js";
 
 const KNOWN_PROGRAMS = new Set(["soft-motion-radio", "jungle-fade"]);
 
@@ -158,5 +158,96 @@ describe("decodeRadioProgram -- Batch 02F RADIO Program Package Identity Contrac
   it("normalizes manifestBaseUrl to a trailing slash exactly as before this batch, regardless of stationId/bundleVersion presence", () => {
     const result = decodeRadioProgram("soft-motion-radio", { ...BASE_PROGRAM_DOC, stationId: "radplaylist_abc", bundleVersion: 2 });
     expect(result!.manifestBaseUrl.endsWith("/")).toBe(true);
+  });
+});
+
+function fullCreateInput(overrides: Partial<CreateRadioProgramInput> = {}): CreateRadioProgramInput {
+  return {
+    programId: "radprogram_abc123_xyz789",
+    title: "Soft Motion Radio",
+    manifestBaseUrl: "/radio-web-export/soft-motion-radio/v3",
+    trackCount: 11,
+    totalDurationSeconds: 1546.6,
+    stationId: "radplaylist_abc123_xyz789",
+    bundleVersion: 3,
+    ...overrides,
+  };
+}
+
+describe("validateCreateRadioProgramInput -- Batch 02I Published Package -> RADIO Program Creation", () => {
+  it("accepts a complete, valid create input", () => {
+    expect(() => validateCreateRadioProgramInput(fullCreateInput())).not.toThrow();
+  });
+
+  it("rejects a missing programId", () => {
+    expect(() => validateCreateRadioProgramInput(fullCreateInput({ programId: "" }))).toThrow("invalid_radio_program_id");
+  });
+
+  it("rejects a missing title", () => {
+    expect(() => validateCreateRadioProgramInput(fullCreateInput({ title: "" }))).toThrow("invalid_radio_program_title");
+  });
+
+  it("rejects a missing manifestBaseUrl", () => {
+    expect(() => validateCreateRadioProgramInput(fullCreateInput({ manifestBaseUrl: "" }))).toThrow("invalid_radio_program_manifest_base_url");
+  });
+
+  it("rejects a non-integer trackCount", () => {
+    expect(() => validateCreateRadioProgramInput(fullCreateInput({ trackCount: 1.5 }))).toThrow("invalid_radio_program_track_count");
+  });
+
+  it("rejects a negative trackCount", () => {
+    expect(() => validateCreateRadioProgramInput(fullCreateInput({ trackCount: -1 }))).toThrow("invalid_radio_program_track_count");
+  });
+
+  it("rejects a non-finite totalDurationSeconds", () => {
+    expect(() => validateCreateRadioProgramInput(fullCreateInput({ totalDurationSeconds: Number.NaN }))).toThrow("invalid_radio_program_total_duration_seconds");
+  });
+
+  it("rejects a negative totalDurationSeconds", () => {
+    expect(() => validateCreateRadioProgramInput(fullCreateInput({ totalDurationSeconds: -1 }))).toThrow("invalid_radio_program_total_duration_seconds");
+  });
+
+  it("rejects a missing/empty stationId -- required here, unlike the optional-on-read RadioProgramSummary field", () => {
+    expect(() => validateCreateRadioProgramInput(fullCreateInput({ stationId: "" }))).toThrow("invalid_radio_program_station_id");
+  });
+
+  it("rejects a zero bundleVersion", () => {
+    expect(() => validateCreateRadioProgramInput(fullCreateInput({ bundleVersion: 0 }))).toThrow("invalid_radio_program_bundle_version");
+  });
+
+  it("rejects a negative bundleVersion", () => {
+    expect(() => validateCreateRadioProgramInput(fullCreateInput({ bundleVersion: -1 }))).toThrow("invalid_radio_program_bundle_version");
+  });
+
+  it("rejects a non-integer bundleVersion", () => {
+    expect(() => validateCreateRadioProgramInput(fullCreateInput({ bundleVersion: 1.5 }))).toThrow("invalid_radio_program_bundle_version");
+  });
+
+  it("rejects a missing bundleVersion entirely (required, not optional, for application creation)", () => {
+    const { bundleVersion: _bundleVersion, ...withoutBundleVersion } = fullCreateInput();
+    void _bundleVersion;
+    expect(() => validateCreateRadioProgramInput(withoutBundleVersion as CreateRadioProgramInput)).toThrow("invalid_radio_program_bundle_version");
+  });
+
+  it("rejects a missing stationId entirely (required, not optional, for application creation)", () => {
+    const { stationId: _stationId, ...withoutStationId } = fullCreateInput();
+    void _stationId;
+    expect(() => validateCreateRadioProgramInput(withoutStationId as CreateRadioProgramInput)).toThrow("invalid_radio_program_station_id");
+  });
+});
+
+describe("generateRadioProgramId -- Batch 02I", () => {
+  it("generates an id independent from any stationId -- never programId === stationId by construction", () => {
+    const stationId = "radplaylist_abc123_xyz789";
+    const programId = generateRadioProgramId();
+    expect(programId).not.toBe(stationId);
+    expect(programId.startsWith("radprogram_")).toBe(true);
+    expect(stationId.startsWith("radplaylist_")).toBe(true);
+  });
+
+  it("generates distinct ids on successive calls", () => {
+    const first = generateRadioProgramId();
+    const second = generateRadioProgramId();
+    expect(first).not.toBe(second);
   });
 });

@@ -52,13 +52,20 @@ export {
 export { createFirebaseMemberIdentityAuthority } from "./firebase/createFirebaseMemberIdentityAuthority.js";
 export { createFirebaseArtworkRepository } from "./firebase/createFirebaseArtworkRepository.js";
 export { createFirebaseEventRadioRepository } from "./firebase/createFirebaseEventRadioRepository.js";
-export { validateSetEventProgramInput, RADIO_PROGRAMS_COLLECTION_PATH, EVENT_PROGRAM_DOCUMENT_PATH } from "./firebase/firestoreEventRadioRepository.js";
-export type {
-  EventPlaybackMode,
-  EventProgramEndPolicy,
-  EventProgramState,
-  EventRadioRepository,
-  EventStatus,
-  RadioProgramSummary,
-  SetEventProgramInput,
+export {
+  validateSetEventProgramInput,
+  validateCreateRadioProgramInput,
+  RADIO_PROGRAMS_COLLECTION_PATH,
+  EVENT_PROGRAM_DOCUMENT_PATH,
+} from "./firebase/firestoreEventRadioRepository.js";
+export {
+  generateRadioProgramId,
+  type CreateRadioProgramInput,
+  type EventPlaybackMode,
+  type EventProgramEndPolicy,
+  type EventProgramState,
+  type EventRadioRepository,
+  type EventStatus,
+  type RadioProgramSummary,
+  type SetEventProgramInput,
 } from "./data/eventRadioTypes.js";

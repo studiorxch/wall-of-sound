@@ -23,6 +23,12 @@
 // (see RadioWebExportPreflightDialog.tsx).
 
 import { useEffect, useRef, useState } from "react";
+import {
+  createFirebaseEventRadioRepository,
+  createFirebaseMemberIdentityAuthority,
+  generateRadioProgramId,
+  type MemberIdentityState,
+} from "@studiorich/member-identity";
 import type { Track } from "../../data/trackTypes";
 import type { CompleteSongAnalysis } from "../../data/songAnalysisTypes";
 import type { LoopAsset } from "../../data/loopTypes";
@@ -51,6 +57,46 @@ const PUBLISH_STAGE_LABEL: Record<PublishStage, string> = {
 function nowIso(): string {
   return new Date().toISOString();
 }
+
+// Batch 02I -- Published Package -> RADIO Program Creation: the SAME
+// Firebase identity Event Radio Control already uses (same
+// one-instance-per-app pattern every other consumer of this package
+// follows) -- not a second sign-in flow. Firebase Auth's
+// browserLocalPersistence means an operator who already signed in via
+// Event Radio Control (event-control.html, same origin) is recognized
+// here automatically; this panel never needs its own sign-in UI.
+//
+// Batch 02I-B -- LAZY on purpose: RadioPlaylistPublishPanel.tsx is reached
+// via a fully static import chain from App.tsx, so a module-scope
+// `createFirebaseMemberIdentityAuthority(...)` call would construct a real
+// Firebase App/Auth instance on EVERY MUSIC session, whether or not the
+// user ever opens a RADIO playlist. These two lazy getters defer that
+// construction to the first actual use (this component mounting), while
+// still only ever constructing one instance each for the lifetime of the
+// page -- the same singleton behavior the eager version had, just
+// deferred. Not a dynamic `import()` -- the module itself is still
+// statically imported, per this batch's own scope note.
+let cachedProgramCreationMemberIdentity: ReturnType<typeof createFirebaseMemberIdentityAuthority> | null = null;
+function getProgramCreationMemberIdentity() {
+  cachedProgramCreationMemberIdentity ??= createFirebaseMemberIdentityAuthority(import.meta.env);
+  return cachedProgramCreationMemberIdentity;
+}
+let cachedProgramCreationRepository: ReturnType<typeof createFirebaseEventRadioRepository> | null = null;
+function getProgramCreationRepository() {
+  cachedProgramCreationRepository ??= createFirebaseEventRadioRepository(import.meta.env);
+  return cachedProgramCreationRepository;
+}
+// Client-side UX gate ONLY, same convention as eventControlRuntime.ts's
+// own OPERATOR_EMAILS and wall/'s subwayMapPaintSurface.js -- the real
+// authority gate is firestore.rules' isEventOperator(), enforced
+// regardless of what this list contains.
+const PROGRAM_CREATION_OPERATOR_EMAILS = ["whatsup@richielau.com"];
+
+type ProgramCreationState =
+  | { status: "idle" }
+  | { status: "pending" }
+  | { status: "success"; programId: string }
+  | { status: "error"; message: string };
 
 interface Props {
   radioPlaylist: RadioPlaylist;
@@ -93,6 +139,18 @@ export function RadioPlaylistPublishPanel({
   // 0723_RADIO_One_Action_Publish — the single Publish action's own state.
   const [publishStage, setPublishStage] = useState<PublishStage | null>(null);
   const [publishFailures, setPublishFailures] = useState<PublishEntryFailure[]>([]);
+
+  // Batch 02I — Create Program action's own state, independent of Publish.
+  const [programCreation, setProgramCreation] = useState<ProgramCreationState>({ status: "idle" });
+  const [memberState, setMemberState] = useState<MemberIdentityState>(() => getProgramCreationMemberIdentity().getState());
+  useEffect(() => {
+    const memberIdentity = getProgramCreationMemberIdentity();
+    const unsubscribe = memberIdentity.subscribe(setMemberState);
+    void memberIdentity.start();
+    return unsubscribe;
+  }, []);
+  const isAuthorizedOperator =
+    memberState.status === "signedIn" && PROGRAM_CREATION_OPERATOR_EMAILS.includes(memberState.authUser.email ?? "");
 
   // Same pattern as RadioMultiTrackPrepWorkspace's radioPlaylistRef —
   // onEntryPatch fires repeatedly across awaited network calls within one
@@ -147,6 +205,34 @@ export function RadioPlaylistPublishPanel({
     .sort((a, b) => b.bundleVersion - a.bundleVersion);
   const latestExport = playlistExports[0];
   const hasPreparing = entries.some((e) => preparationStateByEntryId.get(e.id) === "PREPARING");
+
+  // Batch 02I — constructs the create input ONLY from already-authoritative
+  // publication data already in scope (radioPlaylist, latestExport) — no
+  // extra fetch, no re-derivation of the track list, no package identity
+  // inferred from title/slug (manifestBaseUrl is built from the SAME
+  // canonical formula radioPlayerMain.ts/eventProgramConfig.ts already use,
+  // from latestExport's own slug+bundleVersion, never from a title/slug
+  // shortcut). Never touches eventProgram/current — creating a Program
+  // never puts it on air.
+  async function handleCreateProgram() {
+    if (!latestExport || programCreation.status === "pending") return;
+    setProgramCreation({ status: "pending" });
+    try {
+      const manifestBaseUrl = `/radio-web-export/${encodeURIComponent(latestExport.slug)}/v${encodeURIComponent(String(latestExport.bundleVersion))}/`;
+      const created = await getProgramCreationRepository().createRadioProgram({
+        programId: generateRadioProgramId(),
+        title: radioPlaylist.title,
+        manifestBaseUrl,
+        trackCount: latestExport.entryCount,
+        totalDurationSeconds: latestExport.totalDurationSeconds,
+        stationId: radioPlaylist.id,
+        bundleVersion: latestExport.bundleVersion,
+      });
+      setProgramCreation({ status: "success", programId: created.id });
+    } catch (error) {
+      setProgramCreation({ status: "error", message: error instanceof Error ? error.message : String(error) });
+    }
+  }
 
   const storageSummary = summarizePlaylistStorage(
     [...preview.ready, ...preview.needsApproval, ...preview.needsPreparation, ...preview.staleOrFailed].map((e) => {
@@ -244,6 +330,20 @@ export function RadioPlaylistPublishPanel({
                 Play Preview
               </a>
               <button className="npw-btn npw-btn--ghost" onClick={handlePublish}>Update Published Version</button>
+              {programCreation.status === "success" ? (
+                <span className="radio-diff-note">
+                  Program created: {programCreation.programId}. Not on air yet — reload Event Radio Control to see and assign it (it loads the program catalog once per sign-in, not live).
+                </span>
+              ) : !isAuthorizedOperator ? (
+                <span className="radio-diff-note">Sign in as the StudioRich operator (via Event Radio Control) to create a Program from this publication.</span>
+              ) : (
+                <>
+                  <button className="npw-btn npw-btn--ghost" onClick={handleCreateProgram} disabled={programCreation.status === "pending"}>
+                    {programCreation.status === "pending" ? "Creating Program…" : "Create Program"}
+                  </button>
+                  {programCreation.status === "error" && <span className="radio-diff-note">{programCreation.message}</span>}
+                </>
+              )}
             </>
           ) : (
             <button className="npw-btn npw-btn--primary" onClick={handlePublish}>Publish</button>

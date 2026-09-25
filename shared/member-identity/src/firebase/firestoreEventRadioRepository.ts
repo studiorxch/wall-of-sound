@@ -4,11 +4,13 @@ import {
   doc,
   getDoc,
   getDocs,
+  runTransaction,
   serverTimestamp,
   setDoc,
   type Firestore,
 } from "firebase/firestore";
 import type {
+  CreateRadioProgramInput,
   EventPlaybackMode,
   EventProgramEndPolicy,
   EventProgramState,
@@ -51,6 +53,25 @@ export function validateSetEventProgramInput(input: SetEventProgramInput, knownP
     if (input.startAtMs == null || !Number.isFinite(input.startAtMs)) throw new Error("invalid_event_clock_start_time");
   }
   if (input.startAtMs != null && !Number.isFinite(input.startAtMs)) throw new Error("invalid_event_clock_start_time");
+}
+
+/**
+ * Batch 02I -- mirrors `validateSetEventProgramInput`'s own "throw before
+ * any Firestore write" posture. Every field is REQUIRED (unlike
+ * `decodeRadioProgram`'s optional-field tolerance on READ, which exists
+ * only for legacy documents) -- a new application-created Program always
+ * carries a complete package assignment.
+ */
+export function validateCreateRadioProgramInput(input: CreateRadioProgramInput): void {
+  if (!input.programId) throw new Error("invalid_radio_program_id");
+  if (!input.title) throw new Error("invalid_radio_program_title");
+  if (!input.manifestBaseUrl) throw new Error("invalid_radio_program_manifest_base_url");
+  if (!Number.isInteger(input.trackCount) || input.trackCount < 0) throw new Error("invalid_radio_program_track_count");
+  if (!Number.isFinite(input.totalDurationSeconds) || input.totalDurationSeconds < 0) {
+    throw new Error("invalid_radio_program_total_duration_seconds");
+  }
+  if (!input.stationId) throw new Error("invalid_radio_program_station_id");
+  if (!Number.isInteger(input.bundleVersion) || input.bundleVersion <= 0) throw new Error("invalid_radio_program_bundle_version");
 }
 
 /**
@@ -106,6 +127,42 @@ export class FirestoreEventRadioRepository implements EventRadioRepository {
     const updatedAt = data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : null;
     const updatedBy = typeof data.updatedBy === "string" ? data.updatedBy : null;
     return { programId, playbackMode, startAtMs, endPolicy, status, updatedAt, updatedBy };
+  }
+
+  /**
+   * Batch 02I -- create-only: a `programId` collision throws
+   * `radio_program_id_collision` rather than overwriting the existing
+   * document. Uses the same `runTransaction` read-then-conditionally-write
+   * pattern this package already uses for create-only safety elsewhere
+   * (see `FirestoreArtworkRepository.appendOwnedArtworkMark`'s sibling
+   * methods) rather than a bare `setDoc`, which would silently replace
+   * an existing Program on an id collision.
+   */
+  async createRadioProgram(input: CreateRadioProgramInput): Promise<RadioProgramSummary> {
+    validateCreateRadioProgramInput(input);
+    const manifestBaseUrl = input.manifestBaseUrl.endsWith("/") ? input.manifestBaseUrl : `${input.manifestBaseUrl}/`;
+    const reference = doc(this.firestore, RADIO_PROGRAMS_COLLECTION_PATH, input.programId);
+    await runTransaction(this.firestore, async (transaction) => {
+      const existing = await transaction.get(reference);
+      if (existing.exists()) throw new Error("radio_program_id_collision");
+      transaction.set(reference, {
+        title: input.title,
+        manifestBaseUrl,
+        trackCount: input.trackCount,
+        totalDurationSeconds: input.totalDurationSeconds,
+        stationId: input.stationId,
+        bundleVersion: input.bundleVersion,
+      });
+    });
+    return {
+      id: input.programId,
+      title: input.title,
+      manifestBaseUrl,
+      trackCount: input.trackCount,
+      totalDurationSeconds: input.totalDurationSeconds,
+      stationId: input.stationId,
+      bundleVersion: input.bundleVersion,
+    };
   }
 
   async setEventProgram(input: SetEventProgramInput, updatedByMemberId: string): Promise<void> {

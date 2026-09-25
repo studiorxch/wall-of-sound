@@ -68,6 +68,27 @@ export interface SetEventProgramInput {
   readonly status: EventStatus;
 }
 
+/**
+ * Batch 02I -- Published Package -> RADIO Program Creation: the first
+ * application-level (not Firestore-Console) way to create a
+ * `radioPrograms/{programId}` document. Unlike `RadioProgramSummary`
+ * (where `stationId`/`bundleVersion` are optional, for backward
+ * compatibility with legacy hand-authored documents), a NEW
+ * application-created Program always carries a complete package
+ * assignment -- both fields are REQUIRED here, never optional, and never
+ * inferred from `manifestBaseUrl`/title/slug. `programId` is deliberately
+ * independent from `stationId` -- see `generateRadioProgramId`.
+ */
+export interface CreateRadioProgramInput {
+  readonly programId: string;
+  readonly title: string;
+  readonly manifestBaseUrl: string;
+  readonly trackCount: number;
+  readonly totalDurationSeconds: number;
+  readonly stationId: string;
+  readonly bundleVersion: number;
+}
+
 export interface EventRadioRepository {
   /** Every operator-selectable published program -- public read, matches the "PUBLIC/MEMBER read" half of this build's own authority rule. */
   listRadioPrograms(): Promise<readonly RadioProgramSummary[]>;
@@ -75,4 +96,25 @@ export interface EventRadioRepository {
   getEventProgram(): Promise<EventProgramState | null>;
   /** Authorized-operator-only in Firestore rules; VALIDATES before writing (requirement 19) -- a malformed config throws rather than silently activating. */
   setEventProgram(input: SetEventProgramInput, updatedByMemberId: string): Promise<void>;
+  /**
+   * Batch 02I -- authorized-operator-only in Firestore rules (same
+   * `isEventOperator()` gate as every other `radioPrograms` write).
+   * VALIDATES before writing, same posture as `setEventProgram`. NEVER
+   * overwrites an existing document at `programId` -- a collision throws
+   * rather than silently replacing a Program (see
+   * `FirestoreEventRadioRepository`'s own transaction). Does not touch
+   * `eventProgram/current` -- creating a Program never puts it on air.
+   */
+  createRadioProgram(input: CreateRadioProgramInput): Promise<RadioProgramSummary>;
+}
+
+/**
+ * Same convention as `musicToRadioPlaylistSync.ts`'s own (module-private)
+ * `genRadioPlaylistId` -- a fresh, unguessable, non-sequential id,
+ * independent of `stationId`/title/slug on purpose (a title-derived or
+ * stationId-derived id would tie Program identity to Package identity,
+ * which this batch's own product decision explicitly forbids).
+ */
+export function generateRadioProgramId(): string {
+  return `radprogram_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
