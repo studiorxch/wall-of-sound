@@ -196,19 +196,58 @@ describe("ChannelListenerPlaybackController -- no competing engines/listeners", 
   });
 });
 
-describe("ChannelListenerPlaybackController -- stop/dispose", () => {
-  it("stop() calls the engine's stopAll and unsubscribes from deck-ended", async () => {
+describe("ChannelListenerPlaybackController -- stop() is reusable, destroy() is permanent (Batch 02T)", () => {
+  it("stop() calls the engine's stopAll but KEEPS the deck-ended subscription alive", async () => {
     const resolve = vi.fn(async () => onAirResult());
     const { engine, stopAll, fireDeckEnded } = fakeEngine();
     const controller = createChannelListenerPlaybackController({ channelId: "channel-main", ...repos(), engine, nowMs: () => 1000, resolve });
     await controller.play();
     controller.stop();
     expect(stopAll).toHaveBeenCalledTimes(1);
-    // After stop(), the deck-ended subscription is torn down -- firing it must not trigger another resolve.
+    // Unlike destroy(), stop() must NOT unsubscribe -- firing deck-ended afterward still re-resolves.
+    resolve.mockClear();
+    fireDeckEnded("A");
+    await Promise.resolve();
+    expect(resolve).toHaveBeenCalledTimes(1);
+  });
+
+  it("the SAME controller can Play again after stop(), and track-end auto-advance still works afterward", async () => {
+    const resolve = vi.fn(async () => onAirResult());
+    const { engine, preload, fireDeckEnded } = fakeEngine();
+    const controller = createChannelListenerPlaybackController({ channelId: "channel-main", ...repos(), engine, nowMs: () => 1000, resolve });
+    await controller.play();
+    controller.stop();
+    const secondOutcome = await controller.play();
+    expect(secondOutcome.status).toBe("started");
+    // Auto-advance still works after a stop()+play() cycle -- the constructor-time subscription was never lost.
+    preload.mockClear();
+    fireDeckEnded("A");
+    await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+    expect(preload).toHaveBeenCalled();
+  });
+
+  it("destroy() calls stopAll, unsubscribes from deck-ended, AND calls the engine's own destroy() if present", async () => {
+    const resolve = vi.fn(async () => onAirResult());
+    const { engine, stopAll, fireDeckEnded } = fakeEngine();
+    const engineDestroy = vi.fn();
+    (engine as unknown as { destroy: () => void }).destroy = engineDestroy;
+    const controller = createChannelListenerPlaybackController({ channelId: "channel-main", ...repos(), engine, nowMs: () => 1000, resolve });
+    await controller.play();
+    controller.destroy();
+    expect(stopAll).toHaveBeenCalledTimes(1);
+    expect(engineDestroy).toHaveBeenCalledTimes(1);
     resolve.mockClear();
     fireDeckEnded("A");
     await Promise.resolve();
     expect(resolve).not.toHaveBeenCalled();
+  });
+
+  it("destroy() does not throw when the engine has no destroy() of its own (optional)", async () => {
+    const resolve = vi.fn(async () => onAirResult());
+    const { engine } = fakeEngine();
+    const controller = createChannelListenerPlaybackController({ channelId: "channel-main", ...repos(), engine, nowMs: () => 1000, resolve });
+    await controller.play();
+    expect(() => controller.destroy()).not.toThrow();
   });
 });
 

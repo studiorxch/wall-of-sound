@@ -46,6 +46,8 @@ import { resolveChannelTrackBroadcast, type ChannelTrackBroadcastResult } from "
 export interface ChannelListenerEngineLike extends StartDeckEngineLike {
   onDeckEnded(handler: (deckId: DeckId) => void): () => void;
   stopAll(): void;
+  /** Optional -- only `destroy()` (permanent teardown) calls this if the engine exposes it; `stop()` never does. */
+  destroy?(): void;
 }
 
 export type ChannelListenerPlaybackOutcome =
@@ -275,10 +277,31 @@ export class ChannelListenerPlaybackController {
     return { status: "started", programId: effective.programId, trackId: effective.trackId, cueStartSeconds: effective.trackOffsetSeconds, latencyCorrected };
   }
 
-  /** Stops the engine and unsubscribes from deck-ended -- the safe dispose path. */
+  /**
+   * Batch 02T -- STOP is not TEARDOWN: stops the currently audible deck
+   * only. The `onDeckEnded` subscription (registered exactly once, in the
+   * constructor) deliberately stays alive, so a later `play()` on this
+   * SAME controller still auto-advances at track end -- stopping and
+   * replaying must never silently lose that capability. Marks the
+   * controller as not-started so a later `play()` behaves like a fresh
+   * start rather than assuming continuity.
+   */
   stop(): void {
     this.engine.stopAll();
+    this.started = false;
+  }
+
+  /**
+   * Batch 02T -- permanent teardown, distinct from `stop()`: releases the
+   * `onDeckEnded` subscription and, if the engine exposes one, calls its
+   * own `destroy()`. The controller is NOT expected to be reusable after
+   * this -- call `stop()` instead for "pause listening, may resume later."
+   */
+  destroy(): void {
+    this.engine.stopAll();
     this.unsubscribeDeckEnded();
+    this.engine.destroy?.();
+    this.started = false;
   }
 }
 
