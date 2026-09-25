@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>StudioRich Channel Control</title>
+    <style>
+      /**
+       * Batch 02Q -- RADIO Channel Control: Bootstrap + Rotation Editor.
+       * Sibling page to event-control.html, not an extension of it --
+       * Event Radio Control configures one flat operational record;
+       * Channel rotation is inherently a list-editing surface. Reuses
+       * that page's exact visual language (island panels, same accent
+       * color, same button/label conventions) verbatim rather than
+       * inventing a new one, per this batch's own instruction.
+       */
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      :root { color-scheme: dark; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #f4efe7; background: #050505; }
+      body { min-height: 100vh; display: flex; align-items: flex-start; justify-content: center; padding: 48px 16px; }
+      main { width: min(480px, 100%); }
+      h1 { font-size: 12px; letter-spacing: .16em; text-transform: uppercase; color: #c8c0b6; margin-bottom: 20px; }
+      .island {
+        border: 1px solid rgba(255,255,255,.12);
+        border-radius: 14px;
+        background: rgba(14,13,11,.86);
+        box-shadow: 0 12px 40px rgba(0,0,0,.4);
+        backdrop-filter: blur(16px);
+        padding: 20px;
+      }
+      .island + .island { margin-top: 16px; }
+      #signed-out, #not-authorized { text-align: center; padding: 32px 20px; font-size: 12px; color: #c8c0b6; line-height: 1.6; }
+      button { border: 1px solid rgba(255,255,255,.16); background: rgba(24,22,19,.92); color: #f4efe7; border-radius: 9px; padding: 9px 16px; font: 700 10px/1 inherit; letter-spacing: .07em; cursor: pointer; }
+      button:hover { border-color: rgba(255,255,255,.32); }
+      button:disabled { opacity: .4; cursor: default; }
+      label { display: block; font-size: 9px; letter-spacing: .08em; text-transform: uppercase; color: #928a80; margin: 16px 0 6px; }
+      label:first-of-type { margin-top: 0; }
+      select, input { width: 100%; border: 1px solid rgba(255,255,255,.16); background: rgba(24,22,19,.92); color: #f4efe7; border-radius: 8px; padding: 9px 10px; font: 600 11px/1 inherit; }
+      #message { margin-top: 14px; font-size: 10px; letter-spacing: .03em; min-height: 14px; }
+      #message[data-kind="error"] { color: #ff9a9a; }
+      #message[data-kind="success"] { color: #9adfa0; }
+      #sign-out { margin-top: 16px; width: 100%; }
+
+      /* Rotation editor */
+      #channel-status-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+      #channel-title { font-size: 13px; font-weight: 700; }
+      #channel-status-badge { font-size: 9px; letter-spacing: .08em; text-transform: uppercase; padding: 3px 8px; border-radius: 999px; border: 1px solid rgba(255,255,255,.16); }
+      #channel-status-badge[data-status="active"] { color: #9adfa0; border-color: rgba(154,223,160,.5); }
+      #channel-status-badge[data-status="inactive"] { color: #928a80; }
+      #rotation-list { list-style: none; margin-top: 12px; }
+      #rotation-list li {
+        display: flex; align-items: center; gap: 8px;
+        padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,.06);
+        font-size: 11px;
+      }
+      #rotation-list li:last-child { border-bottom: none; }
+      .rotation-position { color: #928a80; width: 20px; flex-shrink: 0; }
+      .rotation-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .rotation-row-controls { display: flex; gap: 4px; flex-shrink: 0; }
+      .rotation-row-controls button { padding: 4px 8px; font-size: 9px; }
+      #add-program-row { display: flex; gap: 8px; margin-top: 16px; }
+      #add-program-row select { flex: 1; }
+      #add-program-row button { flex-shrink: 0; }
+      #rotation-length { margin-top: 14px; font-size: 10px; color: #928a80; }
+      #save-rotation { width: 100%; margin-top: 14px; }
+      #status-controls { display: flex; gap: 8px; margin-top: 20px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,.1); }
+      #status-controls button { flex: 1; }
+      #start-restart {
+        width: 100%; margin-top: 10px; padding: 12px;
+        border-color: rgba(255, 78, 132, 0.72); color: #ff4e84; background: rgba(255, 78, 132, 0.14);
+        font-size: 11px;
+      }
+      #start-restart-note { font-size: 9px; color: #928a80; margin-top: 6px; line-height: 1.5; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>StudioRich Channel Control</h1>
+
+      <div id="signed-out" class="island">
+        <p>Sign in as an authorized StudioRich operator to control Channel rotation.</p>
+        <button id="sign-in" style="margin-top:16px">Sign in with Google</button>
+      </div>
+
+      <div id="not-authorized" class="island" hidden>
+        <p>Signed in, but this account is not an authorized RADIO operator.</p>
+        <button id="sign-out-unauthorized" style="margin-top:16px">Sign Out</button>
+      </div>
+
+      <div id="create-channel-form" class="island" hidden>
+        <p style="font-size:11px;color:#c8c0b6;margin-bottom:16px">No Channel exists yet. Creating one requires at least one Program in its initial rotation.</p>
+        <label for="create-title">Title</label>
+        <input id="create-title" type="text" value="StudioRich Radio" />
+
+        <label for="create-channel-id">Channel ID</label>
+        <input id="create-channel-id" type="text" value="studiorich-radio" />
+
+        <label for="create-program-select">Initial Program</label>
+        <select id="create-program-select"></select>
+
+        <button id="create-channel" style="width:100%;margin-top:16px">Create First Channel</button>
+        <div id="create-message"></div>
+      </div>
+
+      <div id="channel-editor" class="island" hidden>
+        <div id="channel-status-row">
+          <span id="channel-title"></span>
+          <span id="channel-status-badge"></span>
+        </div>
+
+        <label>Rotation</label>
+        <ul id="rotation-list"></ul>
+
+        <div id="add-program-row">
+          <select id="add-program-select"></select>
+          <button id="add-program">Add Program</button>
+        </div>
+
+        <div id="rotation-length"></div>
+        <button id="save-rotation">Save Rotation</button>
+        <div id="message" role="status"></div>
+
+        <div id="status-controls">
+          <button id="deactivate-channel">Deactivate</button>
+          <button id="activate-channel">Activate</button>
+        </div>
+        <button id="start-restart">Start / Restart Rotation Now</button>
+        <div id="start-restart-note">Resets the Channel clock — Program 01 begins immediately at offset 0. This is different from Activate, which resumes the existing timeline.</div>
+
+        <button id="sign-out">Sign Out</button>
+      </div>
+    </main>
+    <script type="module" src="/src/member/channelControlRuntime.ts"></script>
+  </body>
+</html>
