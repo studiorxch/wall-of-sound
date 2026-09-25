@@ -42,7 +42,10 @@ function repos(channelValue: RadioChannel | null, programs: readonly RadioProgra
   };
 }
 
-const TWO_TRACK_MANIFEST = manifest([entry({ radioTrackId: "t0", durationSeconds: 1800 }), entry({ radioTrackId: "t1", durationSeconds: 1800 })]);
+const TWO_TRACK_MANIFEST = manifest([
+  entry({ radioTrackId: "t0", durationSeconds: 1800, audioUrl: "audio/t0.opus" }),
+  entry({ radioTrackId: "t1", durationSeconds: 1800, audioUrl: "audio/t1.opus" }),
+]);
 
 describe("resolveChannelTrackBroadcast -- upstream passthrough (Channel clock states)", () => {
   it("passes through channel-not-found unchanged", async () => {
@@ -111,6 +114,19 @@ describe("resolveChannelTrackBroadcast -- on-air resolution", () => {
     // program-a is 3600s (1hr); exactly at the boundary we should be on program-b, track b0, offset 0.
     const result = await resolveChannelTrackBroadcast({ channelId: "channel-main", nowMs: T0 + HOUR, ...r });
     expect(result).toMatchObject({ status: "on-air", programId: "program-b", trackId: "b0", trackOffsetSeconds: 0 });
+  });
+
+  it("Batch 02S: exposes manifestBaseUrl + audioUrl on the on-air result, matching the fetched manifest, without a second fetch", async () => {
+    const r = repos(channel(), [program()], async () => TWO_TRACK_MANIFEST);
+    const result = await resolveChannelTrackBroadcast({ channelId: "channel-main", nowMs: T0 + 900_000, ...r });
+    expect(result).toMatchObject({ status: "on-air", manifestBaseUrl: "/radio-web-export/program-a/v1/", audioUrl: "audio/t0.opus" });
+    expect(r.fetchManifest).toHaveBeenCalledTimes(1);
+  });
+
+  it("Batch 02S: audioUrl matches the RESOLVED track, not always the first entry", async () => {
+    const r = repos(channel(), [program()], async () => TWO_TRACK_MANIFEST);
+    const result = await resolveChannelTrackBroadcast({ channelId: "channel-main", nowMs: T0 + 1800_000, ...r }); // -> t1
+    expect(result).toMatchObject({ status: "on-air", trackId: "t1", audioUrl: "audio/t1.opus" });
   });
 });
 

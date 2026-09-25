@@ -102,6 +102,8 @@ describe("buildChannelDiagnosticDisplay -- on-air", () => {
     trackDurationSeconds: 200,
     nextProgramId: "program-b",
     cycleIndex: 0,
+    manifestBaseUrl: "/radio-web-export/program-a/v1/",
+    audioUrl: "audio/t7.opus",
   };
 
   it("resolves the Program title from the catalog", () => {
@@ -149,6 +151,7 @@ describe("buildChannelDiagnosticDisplay -- determinism / no local accumulation",
       programOffsetSeconds: 100, programStartedAtMs: 0, programEndsAtMs: 1000,
       trackId: "t0", trackIndex: 0, trackOffsetSeconds: 10, trackDurationSeconds: 200,
       nextProgramId: "program-a", cycleIndex: 0,
+      manifestBaseUrl: "/radio-web-export/program-a/v1/", audioUrl: "audio/t0.opus",
     };
     const first = buildChannelDiagnosticDisplay(onAir, programsById, 500);
     const second = buildChannelDiagnosticDisplay(onAir, programsById, 500);

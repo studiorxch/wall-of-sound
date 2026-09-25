@@ -68,6 +68,18 @@ export type ChannelTrackBroadcastResult =
       readonly trackDurationSeconds: number;
       readonly nextProgramId: string;
       readonly cycleIndex: number;
+      /**
+       * Batch 02S -- narrow addition, genuinely required by the playback
+       * engine (not presentation metadata): the Package base path and the
+       * resolved track's own relative audio path, so a listener consumer
+       * can build a real `sourceUrl` (`manifestBaseUrl + audioUrl`,
+       * the exact same join `radioPlayerMain.ts`/`eventMusicRuntime.ts`
+       * already do) WITHOUT a second manifest fetch immediately after
+       * this function already fetched the exact same manifest. No
+       * title/artist/bpm/etc. added -- only what the engine actually needs.
+       */
+      readonly manifestBaseUrl: string;
+      readonly audioUrl: string;
     };
 
 export async function resolveChannelTrackBroadcast(
@@ -100,6 +112,12 @@ export async function resolveChannelTrackBroadcast(
   if (track.status === "invalid-manifest") return { status: "invalid-manifest", channelId, programId };
   if (track.status === "track-resolution-failed") return { status: "track-resolution-failed", channelId, programId };
 
+  // track.trackIndex is guaranteed to be a real position in manifest.entries
+  // (see channelTrackPosition.ts's own doc on sidestepping the manifest/
+  // index mismatch debt) -- safe to index directly for audioUrl.
+  const entry = manifest.entries[track.trackIndex];
+  if (!entry) return { status: "invalid-manifest", channelId, programId };
+
   return {
     status: "on-air",
     channelId,
@@ -114,5 +132,7 @@ export async function resolveChannelTrackBroadcast(
     trackDurationSeconds: track.trackDurationSeconds,
     nextProgramId,
     cycleIndex,
+    manifestBaseUrl: program.manifestBaseUrl,
+    audioUrl: entry.audioUrl,
   };
 }

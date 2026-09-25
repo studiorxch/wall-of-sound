@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>StudioRich Radio — Channel</title>
+    <style>
+      /**
+       * Batch 02S -- the smallest proof surface for deterministic Channel
+       * playback. NOT a replacement for radioPlayerMain.ts's own slug+v
+       * package-player (that stays untouched) -- this proves the SEPARATE
+       * Channel -> Program -> Track chain produces real audio. No sign-in:
+       * a listener needs zero StudioRich identity, matching every other
+       * public RADIO surface (radioPrograms/radioChannels are public-read).
+       */
+      html, body { height: 100%; margin: 0; }
+      body {
+        background: #0a0a0c; color: #e8e8ec;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        display: flex; align-items: center; justify-content: center;
+      }
+      #root { width: 100%; max-width: 420px; padding: 32px; box-sizing: border-box; text-align: center; }
+      #title { font-size: 12px; letter-spacing: .15em; text-transform: uppercase; opacity: .5; margin-bottom: 16px; }
+      #play { padding: 14px 32px; font-size: 16px; border-radius: 999px; border: none; background: #e8e8ec; color: #0a0a0c; cursor: pointer; }
+      #play:disabled { opacity: .5; cursor: default; }
+      #diagnostic { margin-top: 28px; text-align: left; font-size: 11px; line-height: 1.8; color: #c8c0b6; }
+      #diagnostic-headline { font-size: 13px; font-weight: 700; letter-spacing: .04em; }
+      #diagnostic-headline[data-kind="on-air"] { color: #9adfa0; }
+      #diagnostic-headline[data-kind="error"] { color: #ff9a9a; }
+      #diagnostic-headline[data-kind="inactive"], #diagnostic-headline[data-kind="before-start"] { color: #928a80; }
+    </style>
+  </head>
+  <body>
+    <div id="root">
+      <div id="title">StudioRich Radio — Channel</div>
+      <button id="play" disabled>Loading…</button>
+      <div id="diagnostic">
+        <div id="diagnostic-headline"></div>
+        <div id="diagnostic-detail"></div>
+        <div id="diagnostic-fields" hidden>
+          <div>Program: <strong id="diagnostic-program"></strong></div>
+          <div>Track: <strong id="diagnostic-track"></strong></div>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/channelRadioMain.ts"></script>
+  </body>
+</html>
