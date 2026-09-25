@@ -205,6 +205,30 @@ export function slugifyStationTitle(title: string): string {
   return slug || "station";
 }
 
+// Batch 02V — the ONE deployed origin published RADIO packages resolve
+// against once publish-radio-to-sites.mjs has copied them into the
+// separate studiorich-orbital Sites project (see that script's own
+// public/radio/<slug>/v<n>/ destination). This is production package
+// addressing, not the MUSIC dev-server's own /radio-web-export preview
+// route (vite.config.ts) — the two are deliberately never unified.
+export const RADIO_PUBLIC_PACKAGE_ORIGIN = "https://radio.studiorich.tv";
+
+// Deterministic, pure derivation of a published RADIO package's public
+// manifest base URL -- the address a Program's manifestBaseUrl should
+// carry once its underlying package has actually been published via
+// publish-radio-to-sites.mjs. Mirrors that script's own
+// public/radio/<slug>/v<bundleVersion>/ destination exactly; if that
+// script's own path convention ever changes, this must change with it
+// (see this batch's own cross-check against the script).
+export function buildRadioPublicPackageBaseUrl(input: { slug: string; bundleVersion: number }): string {
+  const slug = input.slug.trim();
+  if (!slug) throw new Error("buildRadioPublicPackageBaseUrl: slug must not be empty");
+  if (!Number.isInteger(input.bundleVersion) || input.bundleVersion < 1) {
+    throw new Error("buildRadioPublicPackageBaseUrl: bundleVersion must be a positive integer");
+  }
+  return `${RADIO_PUBLIC_PACKAGE_ORIGIN}/radio/${encodeURIComponent(slug)}/v${input.bundleVersion}/`;
+}
+
 // Turns a validated, exportable plan into the exact request body
 // /radio-web-bundle-export expects. Deliberately sends ONLY
 // {radioTrackId, packageVersion} per entry — every display/musical/

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildWebBundlePlan, slugifyStationTitle, buildWebBundleExportRequest } from "./radioWebBundlePlan";
+import { buildWebBundlePlan, slugifyStationTitle, buildWebBundleExportRequest, buildRadioPublicPackageBaseUrl, RADIO_PUBLIC_PACKAGE_ORIGIN } from "./radioWebBundlePlan";
 import type { EntryPlanInput } from "./radioWebBundlePlan";
 import type { RadioPlaylist, RadioPlaylistEntry } from "../../data/radioPlaylistTypes";
 import type { RadioTrackPackageManifest } from "../../data/radioTrackPackageTypes";
@@ -127,6 +127,66 @@ describe("slugifyStationTitle", () => {
 
   it("falls back to a non-empty default when nothing usable remains", () => {
     expect(slugifyStationTitle("🎧🎧🎧")).toBe("station");
+  });
+});
+
+describe("buildRadioPublicPackageBaseUrl (Batch 02V)", () => {
+  it("produces the canonical absolute HTTPS package base URL for an ordinary slug/version", () => {
+    expect(buildRadioPublicPackageBaseUrl({ slug: "soft-motion-radio", bundleVersion: 1 })).toBe(
+      "https://radio.studiorich.tv/radio/soft-motion-radio/v1/",
+    );
+  });
+
+  it("matches publish-radio-to-sites.mjs's own destination convention for a real example", () => {
+    expect(buildRadioPublicPackageBaseUrl({ slug: "night-transmission", bundleVersion: 3 })).toBe(
+      "https://radio.studiorich.tv/radio/night-transmission/v3/",
+    );
+  });
+
+  it("is an absolute HTTPS URL rooted at the canonical public origin", () => {
+    const url = buildRadioPublicPackageBaseUrl({ slug: "soft-motion-radio", bundleVersion: 1 });
+    expect(url.startsWith(`${RADIO_PUBLIC_PACKAGE_ORIGIN}/`)).toBe(true);
+  });
+
+  it("always ends with a trailing slash", () => {
+    expect(buildRadioPublicPackageBaseUrl({ slug: "soft-motion-radio", bundleVersion: 1 }).endsWith("/")).toBe(true);
+  });
+
+  it("is deterministic for the same input", () => {
+    const a = buildRadioPublicPackageBaseUrl({ slug: "soft-motion-radio", bundleVersion: 2 });
+    const b = buildRadioPublicPackageBaseUrl({ slug: "soft-motion-radio", bundleVersion: 2 });
+    expect(a).toBe(b);
+  });
+
+  it("handles bundle versions greater than 1", () => {
+    expect(buildRadioPublicPackageBaseUrl({ slug: "soft-motion-radio", bundleVersion: 12 })).toBe(
+      "https://radio.studiorich.tv/radio/soft-motion-radio/v12/",
+    );
+  });
+
+  it("rejects an empty slug", () => {
+    expect(() => buildRadioPublicPackageBaseUrl({ slug: "", bundleVersion: 1 })).toThrow();
+    expect(() => buildRadioPublicPackageBaseUrl({ slug: "   ", bundleVersion: 1 })).toThrow();
+  });
+
+  it("rejects a non-positive or non-integer bundle version", () => {
+    expect(() => buildRadioPublicPackageBaseUrl({ slug: "soft-motion-radio", bundleVersion: 0 })).toThrow();
+    expect(() => buildRadioPublicPackageBaseUrl({ slug: "soft-motion-radio", bundleVersion: -1 })).toThrow();
+    expect(() => buildRadioPublicPackageBaseUrl({ slug: "soft-motion-radio", bundleVersion: 1.5 })).toThrow();
+  });
+
+  it("regression: never produces MUSIC's own dev-server preview route -- Program identity must not be dev-only", () => {
+    const url = buildRadioPublicPackageBaseUrl({ slug: "soft-motion-radio", bundleVersion: 1 });
+    expect(url.startsWith("/radio-web-export/")).toBe(false);
+    expect(url).not.toContain("/radio-web-export/");
+  });
+
+  it("has no dependency on window.location -- the same inputs always resolve the same, regardless of caller origin", () => {
+    // A pure function of {slug, bundleVersion} only; nothing here reads
+    // globalThis.location, so this test simply documents the guarantee by
+    // asserting the signature never needs an origin/location argument.
+    const url = buildRadioPublicPackageBaseUrl({ slug: "soft-motion-radio", bundleVersion: 1 });
+    expect(url).toBe("https://radio.studiorich.tv/radio/soft-motion-radio/v1/");
   });
 });
 

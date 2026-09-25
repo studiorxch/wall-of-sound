@@ -39,6 +39,7 @@ import type { RadioPromotionFormInput } from "../../data/radioLoopTypes";
 import type { PlaylistRecord } from "../../data/playProjectTypes";
 import type { PromoteLoopToRadioResult, RadioPromotionPhase } from "../../logic/radio/radioPromotionOrchestrator";
 import { buildPublishPreview } from "../../logic/radio/radioPublishPreview";
+import { buildRadioPublicPackageBaseUrl } from "../../logic/radio/radioWebBundlePlan";
 import { estimateInboxItemBytes, summarizePlaylistStorage } from "../../logic/radio/radioStorageEstimate";
 import { computePublishPatch, computeUnpublishPatch, radioPlaylistStateLabel } from "../../logic/radio/radioPlaylistPublicationState";
 import {
@@ -209,16 +210,21 @@ export function RadioPlaylistPublishPanel({
   // Batch 02I — constructs the create input ONLY from already-authoritative
   // publication data already in scope (radioPlaylist, latestExport) — no
   // extra fetch, no re-derivation of the track list, no package identity
-  // inferred from title/slug (manifestBaseUrl is built from the SAME
-  // canonical formula radioPlayerMain.ts/eventProgramConfig.ts already use,
-  // from latestExport's own slug+bundleVersion, never from a title/slug
-  // shortcut). Never touches eventProgram/current — creating a Program
-  // never puts it on air.
+  // inferred from title/slug. Never touches eventProgram/current — creating
+  // a Program never puts it on air.
+  //
+  // Batch 02V — manifestBaseUrl now points at the PUBLISHED package's
+  // public address (buildRadioPublicPackageBaseUrl), not MUSIC's own
+  // /radio-web-export dev-server preview route. A Program is operator-
+  // facing production identity; it must be consumable by a listener who
+  // isn't running MUSIC's dev server at all. The dev-only preview route
+  // remains untouched below (see the "Preview" link), and is deliberately
+  // never used for Program creation.
   async function handleCreateProgram() {
     if (!latestExport || programCreation.status === "pending") return;
     setProgramCreation({ status: "pending" });
     try {
-      const manifestBaseUrl = `/radio-web-export/${encodeURIComponent(latestExport.slug)}/v${encodeURIComponent(String(latestExport.bundleVersion))}/`;
+      const manifestBaseUrl = buildRadioPublicPackageBaseUrl({ slug: latestExport.slug, bundleVersion: latestExport.bundleVersion });
       const created = await getProgramCreationRepository().createRadioProgram({
         programId: generateRadioProgramId(),
         title: radioPlaylist.title,
