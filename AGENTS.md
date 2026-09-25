@@ -12,6 +12,21 @@ documents, and verified runtime behavior as authoritative.
 Do not reconstruct systems from assumptions, old conversations, outdated plans,
 or superseded specifications.
 
+## Architecture Bookkeeping
+
+Before broad architectural recon, read `docs/architecture/`.
+
+Treat `docs/architecture/` as the canonical current-state registry.
+
+When implementation changes an architectural fact, update the relevant
+architecture document in the same commit.
+
+Do not use chronological reports as the primary source of current
+architecture.
+
+If architecture docs conflict with code, perform targeted recon only for
+the discrepancy, resolve it, and update the docs.
+
 ## Architecture
 
 Follow the existing architecture:
