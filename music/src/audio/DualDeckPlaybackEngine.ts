@@ -15,7 +15,7 @@ import type {
 import { createIdleDeck, loadDeck, markDeckReady, markDeckPlaying, markDeckPaused, markDeckEnded, markDeckError, resetDeckToIdle, setDeckGain } from "./deckTransport";
 import { buildCrossfadeEnvelopes, buildHardCutEnvelopes, computeTransitionProgress } from "./transitionScheduler";
 import { gainAtContextTime } from "./gainEnvelope";
-import { evaluateAudibleReadiness } from "./handoffReadiness";
+import { evaluateAudibleReadiness, type AudibleReadinessOptions } from "./handoffReadiness";
 import {
   createDeckEqChain, spliceDeckEqChainIn, bypassDeckEqChain, scheduleDeckEqAutomation, cancelDeckEqAutomation, teardownDeckEqChain,
   type DeckEqChainNodes, type EqAutomationEvent,
@@ -223,15 +223,19 @@ export class DualDeckPlaybackEngine {
       () => {
         audio.pause();
         // eslint-disable-next-line no-console
-        console.error("[RADIO DIAGNOSTIC] primeForUserGesture() resolved", { deckId, diagnostics: this.getDeckDiagnostics(deckId) });
+        console.debug("[RADIO DIAGNOSTIC] primeForUserGesture() resolved", { deckId, diagnostics: this.getDeckDiagnostics(deckId) });
       },
       (err: unknown) => {
-        // DIAGNOSTIC PASS -- previously silently swallowed; the user's own
-        // required-capture list explicitly asks "whether primeForUserGesture()
-        // succeeded/rejected", so this is now logged (never thrown/awaited by
-        // any caller -- still fire-and-forget, per this method's own contract).
+        // Root cause of the real start-failure regression is now known
+        // (audio_element_zero_volume, repaired in handoffReadiness.ts) --
+        // this rejection (typically AbortError, interrupted by preload()'s
+        // own load() call moments later) was proven harmless/routine during
+        // that investigation, not a real anomaly, so it logs at console.debug
+        // rather than console.error to avoid noise. Still logged (never
+        // silently swallowed) since it remains useful context if a genuinely
+        // different rejection ever appears here.
         // eslint-disable-next-line no-console
-        console.error("[RADIO DIAGNOSTIC] primeForUserGesture() rejected", {
+        console.debug("[RADIO DIAGNOSTIC] primeForUserGesture() rejected", {
           deckId,
           errorName: err instanceof Error ? err.name : "UnknownError",
           errorMessage: err instanceof Error ? err.message : String(err),
@@ -253,7 +257,7 @@ export class DualDeckPlaybackEngine {
   // window (default 200ms, within the spec's documented 100-300ms range) so
   // a resolved play() promise on a suspended AudioContext, a muted element,
   // or a zero gain path can never be mistaken for real audible output.
-  async confirmAudibleReadiness(deckId: "A" | "B", observationWindowMs = DEFAULT_READINESS_OBSERVATION_MS): Promise<EngineAudibleReadiness> {
+  async confirmAudibleReadiness(deckId: "A" | "B", observationWindowMs = DEFAULT_READINESS_OBSERVATION_MS, options?: AudibleReadinessOptions): Promise<EngineAudibleReadiness> {
     const n = this.nodes[deckId];
     if (this.ctx?.state === "suspended") {
       try { await this.ctx.resume(); } catch { /* evaluated below via audioContextState */ }
@@ -271,7 +275,7 @@ export class DualDeckPlaybackEngine {
       positionBeforeSeconds, positionAfterSeconds,
       playRejected: false,
       sourceLoadFailed: this.states[deckId].state === "error",
-    });
+    }, options);
   }
 
   pauseDeck(deckId: "A" | "B") {

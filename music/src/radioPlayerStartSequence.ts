@@ -23,6 +23,7 @@
 // reimplemented.
 
 import type { EngineAudibleReadiness } from "./audio/dualDeckTypes";
+import type { AudibleReadinessOptions } from "./audio/handoffReadiness";
 import type { RadioWebManifestEntry } from "./data/radioWebBundleTypes";
 
 export type DeckId = "A" | "B";
@@ -32,7 +33,7 @@ export interface StartDeckEngineLike {
   setDeckGainValue(deckId: DeckId, value: number): void;
   playDeck(deckId: DeckId): Promise<void>;
   pauseDeck(deckId: DeckId): void;
-  confirmAudibleReadiness(deckId: DeckId, observationWindowMs?: number): Promise<EngineAudibleReadiness>;
+  confirmAudibleReadiness(deckId: DeckId, observationWindowMs?: number, options?: AudibleReadinessOptions): Promise<EngineAudibleReadiness>;
 }
 
 export interface StartDeckOutcome {
@@ -63,7 +64,7 @@ function abortFailedDeck(engine: StartDeckEngineLike, deckId: DeckId): void {
 // by design, so restore full gain, start it, then require REAL confirmed
 // audible readiness before reporting success. A rejected play() or a
 // failed readiness check both abort the deck and report — never throw.
-export async function restoreGainAndStartDeck(engine: StartDeckEngineLike, deckId: DeckId): Promise<StartDeckOutcome> {
+export async function restoreGainAndStartDeck(engine: StartDeckEngineLike, deckId: DeckId, readinessOptions?: AudibleReadinessOptions): Promise<StartDeckOutcome> {
   engine.setDeckGainValue(deckId, 1);
 
   try {
@@ -88,7 +89,7 @@ export async function restoreGainAndStartDeck(engine: StartDeckEngineLike, deckI
     return { ok: false, failureReason };
   }
 
-  const readiness = await engine.confirmAudibleReadiness(deckId);
+  const readiness = await engine.confirmAudibleReadiness(deckId, undefined, readinessOptions);
   if (!readiness.ok) {
     const failureReason = readiness.failureReason ?? "unknown";
     // eslint-disable-next-line no-console

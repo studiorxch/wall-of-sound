@@ -104,20 +104,30 @@ function unexpectedErrorOutcome(channelId: string, error: unknown): ChannelListe
 
 type OnAirResult = Extract<ChannelTrackBroadcastResult, { status: "on-air" }>;
 
-// DIAGNOSTIC PASS ONLY -- see radioPlayerStartSequence.ts's own diagnostic
-// comment for the reasoning. This accumulates the last N stage snapshots
-// under window.SBE.RadioDiagnostics (same window.SBE.* bridge convention
-// MemberIdentityState/RadioChannelReceiverState already use) so a failure
-// in a real user's browser can be read directly from DevTools Console --
-// console.error alone can scroll out of view before anyone thinks to copy
-// it. Purely additive: never read from, never gates any control flow.
+// DIAGNOSTIC SURFACE -- root cause of the RADIO start regression
+// (audio_element_zero_volume, repaired below) was found and proven using
+// this instrumentation, so it is kept, but reduced: only genuine
+// failure/anomaly stages still log at console.error (rare, worth
+// surfacing); the routine "resolved"/"started" stages that fire on every
+// single track transition, forever, are logged at console.debug instead so
+// a real user's production console isn't spammed with error-level noise
+// for ordinary successful playback. The window.SBE.RadioDiagnostics
+// snapshot (same window.SBE.* bridge convention MemberIdentityState/
+// RadioChannelReceiverState already use) still records every stage
+// regardless of level, so a failure can still be read directly from
+// DevTools Console even if the triggering log line scrolled past. Purely
+// additive: never read from, never gates any control flow.
+const RADIO_DIAGNOSTIC_ERROR_STAGES = new Set([
+  "channel_resolution_threw", "channel_resolution_not_on_air", "preload_failed", "engine_start_failed",
+]);
 interface RootWithRadioDiagnostics {
   SBE?: { RadioDiagnostics?: Array<{ stage: string; atMs: number; data: unknown }> };
 }
 function recordRadioDiagnostic(stage: string, data: unknown): void {
   try {
+    const log = RADIO_DIAGNOSTIC_ERROR_STAGES.has(stage) ? console.error : console.debug;
     // eslint-disable-next-line no-console
-    console.error(`[RADIO DIAGNOSTIC] ${stage}`, data);
+    log(`[RADIO DIAGNOSTIC] ${stage}`, data);
     const root = window as unknown as RootWithRadioDiagnostics;
     root.SBE = root.SBE || {};
     root.SBE.RadioDiagnostics = root.SBE.RadioDiagnostics || [];
@@ -319,7 +329,22 @@ export class ChannelListenerPlaybackController {
       return { status: "failed", reason: `preload_failed:${name}: ${message}`, broadcastResult: effective };
     }
 
-    const startOutcome = await restoreGainAndStartDeck(this.engine, deckId);
+    // RADIO ROOT-CAUSE REPAIR -- HTMLAudioElement.volume on this engine is,
+    // by DualDeckPlaybackEngine.setMasterVolume's own documented design, the
+    // RADIO listener's persisted PERSONAL volume preference (0..1),
+    // deliberately separate from GainNode.gain (crossfade automation). It
+    // is applied to the SAME persistent <audio> elements confirmAudibleReadiness
+    // inspects, on every track start, forever -- so a listener who
+    // legitimately chose volume 0 would otherwise have every single track
+    // start (including every future crossfade handoff) misreported as
+    // "engine_start_failed:audio_element_zero_volume", even though the
+    // engine itself (context running, source connected, deck gain 1,
+    // position advancing) is genuinely healthy. Only RADIO's Channel
+    // listener opts out of this specific check -- MUSIC's own prepared
+    // playback (usePreparedPlaybackController.ts) never touches
+    // HTMLAudioElement.volume at all, so a real zero there still correctly
+    // indicates a broken engine and keeps failing exactly as before.
+    const startOutcome = await restoreGainAndStartDeck(this.engine, deckId, { ignoreZeroVolume: true });
     if (!startOutcome.ok) {
       recordRadioDiagnostic("engine_start_failed", {
         channelId: this.channelId, deckId, trackId: effective.trackId, sourceUrl,
