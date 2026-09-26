@@ -103,10 +103,8 @@ import { resolveCratePool, resolveCrateTracks } from "./logic/resolveCrate";
 import { generateMissingAutoMoodCrates, auditAutoMoodCrates, auditMoodCrateCounts, regenerateMoodCratesFromCurrentTags, type MoodCrateCountMode, type MoodCrateSourceScope } from "./logic/autoMoodCrates";
 import { pickAudioFiles, importAudioFiles, auditAudioAnalysis, reanalyzeTrack, reanalyzeMissing } from "./logic/audioImport";
 import { buildIntakeItem, isSupportedAudioExtension } from "./logic/importIntake";
-import { attachAssetToTrack, getTrackAssets } from "./logic/trackAssetReconciliation";
+import { attachAssetToTrack } from "./logic/trackAssetReconciliation";
 import type { MusicImportIntakeItem } from "./data/importTypes";
-import type { TrackAsset } from "./data/trackAssetTypes";
-import type { FileHealthStatus } from "./data/fileHealthTypes";
 import { probeAudioPlayability } from "./logic/audioPlaybackProbe";
 import { findTracksMissingFromSaved } from "./logic/externalIndexRecovery";
 import { ImportIntakePanel } from "./ui/ImportIntakePanel";
@@ -4564,8 +4562,6 @@ export default function App() {
       return { trackId, cleared: false };
     }
 
-    // Step C (0826B): the actual probe is shared with recheckTrackAssetHealth
-    // below via probeAudioPlayability — same mechanism, just parameterized.
     const result = await probeAudioPlayability(url);
     if (result.playable) {
       setPlaybackErrors((prev) => { const n = new Map(prev); n.delete(trackId); return n; });
@@ -4593,57 +4589,6 @@ export default function App() {
     return { trackId, cleared: false };
   }
 
-  // Step C (0826B) — per-asset file health for Step B's multi-format model.
-  // Reuses the exact same probe as recheckTrackPlayback; the only new thing
-  // is resolving a URL per-asset instead of per-track, and persisting the
-  // result onto each asset (assetStatus/assetStatusCheckedAt) rather than
-  // into the track-level trackPlaybackIssues map, since a Track can now have
-  // several independently-healthy-or-not physical files. On-demand only —
-  // no background scanning, matching the existing recheck pattern.
-  function resolveAssetAudioUrl(track: Track, asset: TrackAsset): string | null {
-    if (asset.isPrimary && asset.assetId === `primary:${track.trackId}`) return resolveTrackAudioUrl(track);
-    return asset.filePath ? `/music-audio/${asset.filePath}` : null;
-  }
-
-  async function recheckTrackAssetHealth(trackId: string): Promise<void> {
-    const track = libraryTracksRef.current.find((t) => t.trackId === trackId);
-    if (!track) return;
-    const assets = getTrackAssets(track);
-    const nonPrimary = assets.filter((a) => !a.isPrimary);
-
-    // Always refresh the primary/legacy file's health through the existing
-    // mechanism — its result lives in trackPlaybackIssues, not assetStatus.
-    await recheckTrackPlayback(track);
-    if (nonPrimary.length === 0) return; // nothing additional to persist onto `assets`
-
-    const checkedAt = nowIso();
-    const checked: TrackAsset[] = [];
-    for (const asset of nonPrimary) {
-      const url = resolveAssetAudioUrl(track, asset);
-      if (!url) { checked.push({ ...asset, assetStatus: "missing", assetStatusCheckedAt: checkedAt }); continue; }
-      const result = await probeAudioPlayability(url);
-      const status: FileHealthStatus = result.playable
-        ? "healthy"
-        : result.code === "CODEC" ? "codec_blocked"
-        : result.code === "NETWORK" ? "unavailable"
-        : "missing";
-      checked.push({ ...asset, assetStatus: status, assetStatusCheckedAt: checkedAt });
-    }
-    const checkedById = new Map(checked.map((a) => [a.assetId, a]));
-    const nextAssets = assets.map((a) => checkedById.get(a.assetId) ?? a);
-
-    const next = libraryTracksRef.current.map((t) => (t.trackId === trackId ? { ...t, assets: nextAssets } : t));
-    libraryTracksRef.current = next;
-    setLibraryTracks(next);
-    savePlayProject(makeProj(playlistsRef.current, next));
-  }
-
-  const [recheckingFileHealthTrackId, setRecheckingFileHealthTrackId] = useState<string | null>(null);
-
-  function handleRecheckFileHealth(trackId: string) {
-    setRecheckingFileHealthTrackId(trackId);
-    void recheckTrackAssetHealth(trackId).finally(() => setRecheckingFileHealthTrackId(null));
-  }
 
   function handleRecheckPlaybackIssue(trackId: string) {
     const track = libraryTracksRef.current.find((t) => t.trackId === trackId);

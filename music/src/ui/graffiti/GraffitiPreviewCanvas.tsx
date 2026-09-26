@@ -4,8 +4,6 @@ import { sizeCanvasForDPR, renderStroke } from "../../graffiti/graffitiCanvasRen
 
 type Props = {
   strokes: Stroke[];
-  canvasWidth: number;
-  canvasHeight: number;
   cssWidth: number;
   cssHeight: number;
   backgroundImageSrc?: string;
@@ -16,7 +14,7 @@ type Props = {
 // generator both produce data for (BUILD §32: preview through the existing
 // renderer, never a second rendering path). Renders once per strokes
 // change; no pointer handling at all (this is inspection-only).
-export function GraffitiPreviewCanvas({ strokes, canvasWidth, canvasHeight, cssWidth, cssHeight, backgroundImageSrc }: Props) {
+export function GraffitiPreviewCanvas({ strokes, cssWidth, cssHeight, backgroundImageSrc }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const dpr = typeof window !== "undefined" ? (window.devicePixelRatio || 1) : 1;
 

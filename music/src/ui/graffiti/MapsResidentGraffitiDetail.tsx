@@ -176,8 +176,6 @@ export function MapsResidentGraffitiDetail({ residentId, onBack }: Props) {
             <div className="graffiti-confirm-panel">
               <GraffitiPreviewCanvas
                 strokes={preview.strokes}
-                canvasWidth={PREVIEW_WIDTH}
-                canvasHeight={PREVIEW_HEIGHT}
                 cssWidth={PREVIEW_CSS_WIDTH}
                 cssHeight={PREVIEW_CSS_HEIGHT}
               />

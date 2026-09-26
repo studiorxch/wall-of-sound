@@ -11,13 +11,13 @@ const RECT: SurfaceRect = { left: 100, top: 50, width: 400, height: 200 };
 
 describe("normalizePointerEvent — pointer normalization (#1)", () => {
   it("maps client coordinates into normalized 0..1 surface space, never raw pixels", () => {
-    const p = normalizePointerEvent({ clientX: 300, clientY: 150, pointerType: "mouse", pressure: 0, timeStamp: 1000 }, RECT);
+    const p = normalizePointerEvent({ clientX: 300, clientY: 150, pointerType: "mouse", pressure: 0, tiltX: 0, tiltY: 0, twist: 0, timeStamp: 1000 }, RECT);
     expect(p.x).toBeCloseTo(0.5, 5);
     expect(p.y).toBeCloseTo(0.5, 5);
   });
 
   it("clamps out-of-canvas coordinates to [0,1] rather than producing an out-of-bounds point (#16 bounds enforcement)", () => {
-    const p = normalizePointerEvent({ clientX: -500, clientY: 9000, pointerType: "pen", pressure: 0.5, timeStamp: 1000 }, RECT);
+    const p = normalizePointerEvent({ clientX: -500, clientY: 9000, pointerType: "pen", pressure: 0.5, tiltX: 0, tiltY: 0, twist: 0, timeStamp: 1000 }, RECT);
     expect(p.x).toBe(0);
     expect(p.y).toBe(1);
   });
@@ -25,7 +25,7 @@ describe("normalizePointerEvent — pointer normalization (#1)", () => {
 
 describe("normalizePointerEvent — mouse input (#2)", () => {
   it("mouse input normalizes with pointerType 'mouse' and clears the Pointer Events spec's synthetic 0 pressure to undefined (documented fallback, not a fabricated value)", () => {
-    const p = normalizePointerEvent({ clientX: 100, clientY: 50, pointerType: "mouse", pressure: 0, timeStamp: 1000 }, RECT);
+    const p = normalizePointerEvent({ clientX: 100, clientY: 50, pointerType: "mouse", pressure: 0, tiltX: 0, tiltY: 0, twist: 0, timeStamp: 1000 }, RECT);
     expect(p.pointerType).toBe("mouse");
     expect(p.pressure).toBeUndefined();
   });
@@ -33,7 +33,7 @@ describe("normalizePointerEvent — mouse input (#2)", () => {
 
 describe("normalizePointerEvent — touch input normalization (#3)", () => {
   it("touch input normalizes with pointerType 'touch' and preserves a real reported pressure", () => {
-    const p = normalizePointerEvent({ clientX: 100, clientY: 50, pointerType: "touch", pressure: 0.7, timeStamp: 1000 }, RECT);
+    const p = normalizePointerEvent({ clientX: 100, clientY: 50, pointerType: "touch", pressure: 0.7, tiltX: 0, tiltY: 0, twist: 0, timeStamp: 1000 }, RECT);
     expect(p.pointerType).toBe("touch");
     expect(p.pressure).toBe(0.7);
   });
@@ -59,17 +59,17 @@ describe("normalizePointerEvent — pen metadata preservation (#4)", () => {
 
 describe("normalizePointerEvent — pressure fallback (#5)", () => {
   it("a real low pen pressure (e.g. a light touch) is preserved as-is, never floored to a fallback", () => {
-    const p = normalizePointerEvent({ clientX: 100, clientY: 50, pointerType: "pen", pressure: 0.02, timeStamp: 1000 }, RECT);
+    const p = normalizePointerEvent({ clientX: 100, clientY: 50, pointerType: "pen", pressure: 0.02, tiltX: 0, tiltY: 0, twist: 0, timeStamp: 1000 }, RECT);
     expect(p.pressure).toBe(0.02);
   });
 });
 
 describe("normalizePointerEvent — high-DPI coordinate mapping (#6)", () => {
   it("normalization is resolution-independent — the same CSS-space rect produces identical normalized output regardless of devicePixelRatio (DPR scaling is applied only to the canvas backing store, never to point normalization)", () => {
-    const p1 = normalizePointerEvent({ clientX: 300, clientY: 150, pointerType: "mouse", pressure: 0, timeStamp: 1000 }, RECT);
+    const p1 = normalizePointerEvent({ clientX: 300, clientY: 150, pointerType: "mouse", pressure: 0, tiltX: 0, tiltY: 0, twist: 0, timeStamp: 1000 }, RECT);
     // A DPR change never alters getBoundingClientRect()'s CSS-pixel values,
     // so the same rect + same client coords must normalize identically.
-    const p2 = normalizePointerEvent({ clientX: 300, clientY: 150, pointerType: "mouse", pressure: 0, timeStamp: 1000 }, RECT);
+    const p2 = normalizePointerEvent({ clientX: 300, clientY: 150, pointerType: "mouse", pressure: 0, tiltX: 0, tiltY: 0, twist: 0, timeStamp: 1000 }, RECT);
     expect(p1.x).toBe(p2.x);
     expect(p1.y).toBe(p2.y);
   });
@@ -78,7 +78,7 @@ describe("normalizePointerEvent — high-DPI coordinate mapping (#6)", () => {
 describe("normalizePointerEvent — normalized surface coordinates (#7)", () => {
   it("never stores raw browser pixel coordinates — output is always within [0,1] regardless of input rect size", () => {
     const bigRect: SurfaceRect = { left: 0, top: 0, width: 3000, height: 1200 };
-    const p = normalizePointerEvent({ clientX: 1500, clientY: 600, pointerType: "mouse", pressure: 0, timeStamp: 1000 }, bigRect);
+    const p = normalizePointerEvent({ clientX: 1500, clientY: 600, pointerType: "mouse", pressure: 0, tiltX: 0, tiltY: 0, twist: 0, timeStamp: 1000 }, bigRect);
     expect(p.x).toBeGreaterThanOrEqual(0);
     expect(p.x).toBeLessThanOrEqual(1);
     expect(p.y).toBeGreaterThanOrEqual(0);

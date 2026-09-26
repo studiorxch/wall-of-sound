@@ -71,7 +71,7 @@ function pickColor(rand: () => number, palette: string[]): string {
 // applied directly as every point's `pressure` — always under
 // `pointerType: "generated"`, so nothing downstream can mistake it for an
 // observed device reading.
-function generateStrokePoints(rand: () => number, style: GraffitiStyleProfile, canvasWidth: number, canvasHeight: number, startTime: number): StrokePoint[] {
+function generateStrokePoints(rand: () => number, style: GraffitiStyleProfile, startTime: number): StrokePoint[] {
   const pointCount = 5 + Math.round(style.complexity * 10) + Math.round(style.density * 5);
   const margin = 0.12;
   let x = margin + rand() * (1 - margin * 2);
@@ -117,7 +117,7 @@ export function generateStrokesFromIntent(intent: ResidentArtworkIntent, style: 
     const rand = createSeededRandom(strokeSeed);
     const color = pickColor(rand, intent.palette);
     const baseWidth = style.widthRange.min + rand() * (style.widthRange.max - style.widthRange.min);
-    const points = generateStrokePoints(rand, style, intent.compositionBounds.width, intent.compositionBounds.height, intent.generatedAt + i * 200);
+    const points = generateStrokePoints(rand, style, intent.generatedAt + i * 200);
     return {
       id: `gstroke-resident-${intent.residentId}-${intent.seed}-${i}`,
       tool, color, baseWidth, points,

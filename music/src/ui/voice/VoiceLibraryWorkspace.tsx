@@ -1057,7 +1057,7 @@ export function VoiceLibraryWorkspace({
                             <button
                               type="button"
                               className={`voice-filter-button${filterActive ? " active" : ""}`}
-                              onClick={(event) => openPropertyFilter(columnId, event.currentTarget)}
+                              onClick={(event) => openPropertyFilter(columnId as "group" | "voice", event.currentTarget)}
                             >
                               ⌄
                             </button>

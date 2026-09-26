@@ -35,7 +35,14 @@ export function EditTimeline({ track, model, cursorFrame, onCursorFrameChange }:
 
   return (
     <div className="edit-timeline-shell">
-      <MusicalRuler grid={grid} sampleRate={analysis.sampleRate} zoomLevel="bars" transform={transform} />
+      <MusicalRuler
+        grid={grid}
+        sampleRate={analysis.sampleRate}
+        zoomLevel="bars"
+        durationSeconds={analysis.decodedFrameCount / analysis.sampleRate}
+        viewStartSeconds={0}
+        viewEndSeconds={analysis.decodedFrameCount / analysis.sampleRate}
+      />
       <div
         className="edit-timeline"
         role="application"
