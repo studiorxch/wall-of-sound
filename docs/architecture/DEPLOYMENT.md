@@ -8,13 +8,36 @@ appended to, whenever a fact here changes.
 
 ```
 domain:              radio.studiorich.tv
-source repository:   studiorich-orbital  (separate git repo, NOT this one)
+source repository:   studiorich-orbital  (separate git repo, NOT this one —
+                       actual local checkout at
+                       /Users/studio/Projects/wall-of-sound/studiorich-orbital,
+                       NOT under wall-of-sound-beta01)
 source branch:        main
-hosting:             OpenAI Sites
+hosting (current production, as of this writing): OpenAI Sites
+hosting (proven, not yet cut over): direct Cloudflare Workers deploy,
+                       temporary URL https://studiorich-orbital.richardjlau.workers.dev
 package source:      public/radio/**            (source, committed)
 built static assets: dist/client/radio/**        (build output)
 CORS response rule:  worker/index.ts             (source, committed — see below)
 ```
+
+**Direct Cloudflare Workers deployment is now proven working**, independent
+of OpenAI Sites. `npx wrangler deploy --config dist/server/wrangler.json`
+(after `npm run build`) deploys the exact same source directly to Cloudflare
+Workers' default `*.workers.dev` subdomain — no restructuring needed, no
+custom domain/route attached by this deploy. This was verified end-to-end:
+application loads, the Soft Motion Radio v1 manifest is present and
+byte-identical (sha256-verified) to the known immutable package, and —
+critically — the `/radio/**` CORS fix (`worker/index.ts`, commit `60b415f`)
+**works correctly there immediately**, with `Access-Control-Allow-Origin: *`
+and `Access-Control-Allow-Methods: GET, HEAD` present on manifest GET,
+manifest HEAD, and a real `.opus` GET, all with an `Origin` header. This
+confirms OpenAI Sites — not the code — was the actual blocker documented
+below and in DEBT.md.
+
+**OpenAI Sites remains current production** (`radio.studiorich.tv` is not
+yet repointed) until an explicit, separately-approved custom-domain
+cutover.
 
 `studiorich-orbital` is a Next.js app (via `vinext`) deployed to Cloudflare
 Workers. `public/radio/**` is served through Cloudflare's native Static
@@ -37,6 +60,8 @@ is the Worker-level header injection above.
 
 ## Deployment procedure
 
+### Current production path (OpenAI Sites)
+
 ```
 commit/push source (git push to studiorich-orbital's origin/main)
         ↓
@@ -58,7 +83,31 @@ There is no CI/CD workflow, Sites CLI, or deploy script committed anywhere
 in `studiorich-orbital` — no automated mechanism exists in this environment
 to trigger or confirm a Sites deploy. The only way to know production has
 actually changed is to check it directly (response headers, ETag, content)
-after being told a deploy completed.
+after being told a deploy completed. This path has been unreliable in
+practice — see DEBT.md.
+
+### Proven alternative path (direct Cloudflare Workers)
+
+```
+npm run build   (or: npx vinext build && bash scripts/validate-artifact.sh,
+                 if the wrapper's GNU `timeout` dependency isn't installed)
+        ↓
+npx wrangler deploy --config dist/server/wrangler.json
+        ↓
+publishes immediately to https://studiorich-orbital.richardjlau.workers.dev
+        ↓
+verify directly (curl/browser)
+```
+
+Requires `npx wrangler whoami` to show an authenticated account with
+Workers write permission. No `account_id`, `routes`, or custom domain is
+set in the generated `dist/server/wrangler.json` — a bare deploy publishes
+only to the default `*.workers.dev` subdomain, never touching
+`radio.studiorich.tv` or any DNS. Verified end-to-end working, including
+the `/radio/**` CORS fix, on the first attempt — no propagation delay, no
+missing-header mystery. **Cutting `radio.studiorich.tv` over to this path
+requires a separate, explicit, approved custom-domain step — not yet
+done.**
 
 ### Current CORS deployment checkpoint
 
