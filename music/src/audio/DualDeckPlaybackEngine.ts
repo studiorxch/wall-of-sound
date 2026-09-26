@@ -219,7 +219,26 @@ export class DualDeckPlaybackEngine {
     const audio = this.nodes[deckId].audio;
     const wasMuted = audio.muted;
     audio.muted = true;
-    void audio.play().then(() => audio.pause()).catch(() => { /* best-effort only */ }).finally(() => { audio.muted = wasMuted; });
+    void audio.play().then(
+      () => {
+        audio.pause();
+        // eslint-disable-next-line no-console
+        console.error("[RADIO DIAGNOSTIC] primeForUserGesture() resolved", { deckId, diagnostics: this.getDeckDiagnostics(deckId) });
+      },
+      (err: unknown) => {
+        // DIAGNOSTIC PASS -- previously silently swallowed; the user's own
+        // required-capture list explicitly asks "whether primeForUserGesture()
+        // succeeded/rejected", so this is now logged (never thrown/awaited by
+        // any caller -- still fire-and-forget, per this method's own contract).
+        // eslint-disable-next-line no-console
+        console.error("[RADIO DIAGNOSTIC] primeForUserGesture() rejected", {
+          deckId,
+          errorName: err instanceof Error ? err.name : "UnknownError",
+          errorMessage: err instanceof Error ? err.message : String(err),
+          diagnostics: this.getDeckDiagnostics(deckId),
+        });
+      },
+    ).finally(() => { audio.muted = wasMuted; });
   }
 
   async playDeck(deckId: "A" | "B") {

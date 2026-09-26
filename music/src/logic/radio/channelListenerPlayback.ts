@@ -104,6 +104,30 @@ function unexpectedErrorOutcome(channelId: string, error: unknown): ChannelListe
 
 type OnAirResult = Extract<ChannelTrackBroadcastResult, { status: "on-air" }>;
 
+// DIAGNOSTIC PASS ONLY -- see radioPlayerStartSequence.ts's own diagnostic
+// comment for the reasoning. This accumulates the last N stage snapshots
+// under window.SBE.RadioDiagnostics (same window.SBE.* bridge convention
+// MemberIdentityState/RadioChannelReceiverState already use) so a failure
+// in a real user's browser can be read directly from DevTools Console --
+// console.error alone can scroll out of view before anyone thinks to copy
+// it. Purely additive: never read from, never gates any control flow.
+interface RootWithRadioDiagnostics {
+  SBE?: { RadioDiagnostics?: Array<{ stage: string; atMs: number; data: unknown }> };
+}
+function recordRadioDiagnostic(stage: string, data: unknown): void {
+  try {
+    // eslint-disable-next-line no-console
+    console.error(`[RADIO DIAGNOSTIC] ${stage}`, data);
+    const root = window as unknown as RootWithRadioDiagnostics;
+    root.SBE = root.SBE || {};
+    root.SBE.RadioDiagnostics = root.SBE.RadioDiagnostics || [];
+    root.SBE.RadioDiagnostics.push({ stage, atMs: Date.now(), data });
+    if (root.SBE.RadioDiagnostics.length > 50) root.SBE.RadioDiagnostics.shift();
+  } catch {
+    // Diagnostics must never throw into the real playback path.
+  }
+}
+
 /**
  * Owns exactly one engine instance for its whole lifetime (injected, never
  * constructed internally) -- repeated `play()` calls never create a second
@@ -184,11 +208,17 @@ export class ChannelListenerPlaybackController {
           fetchManifest: this.fetchManifest,
         });
       } catch (error) {
+        recordRadioDiagnostic("channel_resolution_threw", {
+          channelId: this.channelId,
+          errorName: error instanceof Error ? error.name : "UnknownError",
+          errorMessage: error instanceof Error ? error.message : String(error),
+        });
         const outcome = unexpectedErrorOutcome(this.channelId, error);
         this.notify(outcome);
         return outcome;
       }
       if (result.status !== "on-air") {
+        recordRadioDiagnostic("channel_resolution_not_on_air", { channelId: this.channelId, status: result.status });
         const outcome: ChannelListenerPlaybackOutcome = { status: "failed", reason: result.status, broadcastResult: result };
         this.notify(outcome);
         return outcome;
@@ -263,17 +293,42 @@ export class ChannelListenerPlaybackController {
 
     const sourceUrl = effective.manifestBaseUrl + effective.audioUrl;
     const deckId = this.activeDeck;
+
+    // DIAGNOSTIC PASS -- dump the full resolved chain (Channel/Program/Track/
+    // offset/URL) the instant resolution succeeds, BEFORE preload/play are
+    // attempted, so a failure at any later stage can still be correlated
+    // against exactly what was resolved. Also written to the global
+    // window.SBE.RadioDiagnostics snapshot (see recordRadioDiagnostic below)
+    // so it survives even if the console has scrolled past it.
+    recordRadioDiagnostic("resolved", {
+      channelId: this.channelId, deckId,
+      programId: effective.programId, trackId: effective.trackId,
+      trackOffsetSeconds: effective.trackOffsetSeconds, latencyCorrected,
+      manifestBaseUrl: effective.manifestBaseUrl, audioUrl: effective.audioUrl, sourceUrl,
+    });
+
     try {
       await this.engine.preload(deckId, { trackId: effective.trackId, slotId: effective.trackId, sourceUrl, cueStartSeconds: effective.trackOffsetSeconds });
     } catch (error) {
-      return { status: "failed", reason: `preload_failed:${error instanceof Error ? error.message : String(error)}`, broadcastResult: effective };
+      const name = error instanceof Error ? error.name : "UnknownError";
+      const message = error instanceof Error ? error.message : String(error);
+      recordRadioDiagnostic("preload_failed", {
+        channelId: this.channelId, deckId, trackId: effective.trackId, sourceUrl,
+        errorName: name, errorMessage: message, errorStack: error instanceof Error ? error.stack : undefined,
+      });
+      return { status: "failed", reason: `preload_failed:${name}: ${message}`, broadcastResult: effective };
     }
 
     const startOutcome = await restoreGainAndStartDeck(this.engine, deckId);
     if (!startOutcome.ok) {
+      recordRadioDiagnostic("engine_start_failed", {
+        channelId: this.channelId, deckId, trackId: effective.trackId, sourceUrl,
+        failureReason: startOutcome.failureReason, readiness: startOutcome.readiness,
+      });
       return { status: "failed", reason: `engine_start_failed:${startOutcome.failureReason}`, broadcastResult: effective };
     }
 
+    recordRadioDiagnostic("started", { channelId: this.channelId, deckId, trackId: effective.trackId, cueStartSeconds: effective.trackOffsetSeconds });
     return { status: "started", programId: effective.programId, trackId: effective.trackId, cueStartSeconds: effective.trackOffsetSeconds, latencyCorrected };
   }
 

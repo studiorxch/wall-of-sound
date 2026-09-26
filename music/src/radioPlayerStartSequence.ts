@@ -69,7 +69,21 @@ export async function restoreGainAndStartDeck(engine: StartDeckEngineLike, deckI
   try {
     await engine.playDeck(deckId);
   } catch (err) {
-    const failureReason = `play_rejected: ${err instanceof Error ? err.message : String(err)}`;
+    // DIAGNOSTIC PASS -- .name (e.g. "NotAllowedError") is a SEPARATE
+    // property from .message on a real DOMException; the prior
+    // failureReason string only ever captured .message, which can omit
+    // the actual rejection classification the browser gave us. Preserve
+    // both here, plus the full native error object, without changing the
+    // return shape any other code branches on.
+    const name = err instanceof Error ? err.name : "UnknownError";
+    const message = err instanceof Error ? err.message : String(err);
+    const failureReason = `play_rejected: ${name}: ${message}`;
+    // eslint-disable-next-line no-console
+    console.error("[RADIO DIAGNOSTIC] playDeck() rejected", {
+      deckId, errorName: name, errorMessage: message,
+      errorStack: err instanceof Error ? err.stack : undefined,
+      engineDiagnostics: (engine as { getDeckDiagnostics?: (id: DeckId) => unknown }).getDeckDiagnostics?.(deckId),
+    });
     abortFailedDeck(engine, deckId);
     return { ok: false, failureReason };
   }
@@ -77,6 +91,8 @@ export async function restoreGainAndStartDeck(engine: StartDeckEngineLike, deckI
   const readiness = await engine.confirmAudibleReadiness(deckId);
   if (!readiness.ok) {
     const failureReason = readiness.failureReason ?? "unknown";
+    // eslint-disable-next-line no-console
+    console.error("[RADIO DIAGNOSTIC] confirmAudibleReadiness() failed", { deckId, readiness });
     abortFailedDeck(engine, deckId);
     return { ok: false, failureReason, readiness };
   }
