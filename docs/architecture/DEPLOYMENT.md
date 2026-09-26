@@ -13,16 +13,27 @@ source branch:        main
 hosting:             OpenAI Sites
 package source:      public/radio/**            (source, committed)
 built static assets: dist/client/radio/**        (build output)
-static response rules: public/_headers           (source, committed)
+CORS response rule:  worker/index.ts             (source, committed — see below)
 ```
 
 `studiorich-orbital` is a Next.js app (via `vinext`) deployed to Cloudflare
-Workers, using Cloudflare's native Static Assets feature to serve
-`public/radio/**` — not a dynamic route, no Worker code involved in serving
-those files. `public/_headers` (the Cloudflare Pages/Workers-Assets
-convention) is honored **locally** (confirmed via `wrangler dev`), but as of
-the most recent verification, production was **not yet honoring it** even
-after a reported deploy — see the CORS checkpoint below and DEBT.md.
+Workers. `public/radio/**` is served through Cloudflare's native Static
+Assets feature (`env.ASSETS.fetch`), reached today via `worker/index.ts`'s
+own `fetch` handler, which intercepts `/radio/**` GET/HEAD requests, fetches
+from `env.ASSETS`, and adds `Access-Control-Allow-Origin: */
+Access-Control-Allow-Methods: GET, HEAD` before returning — the same
+pattern this Worker already used for `/_vinext/image`.
+
+**`public/_headers` (the Cloudflare Pages/Workers-Assets convention) is
+committed but NOT the active CORS mechanism.** It works correctly under
+local `wrangler dev` (confirmed), but repeated direct production checks —
+across multiple days, well past any reasonable deploy-propagation window —
+showed production never honoring it (identical stale `ETag`, no
+`access-control-*` header, and the pre-existing `/assets/*` immutable-cache
+rule also unhonored). This project's actual OpenAI Sites hosting does not
+appear to apply `_headers` the way plain Cloudflare Workers Static Assets
+does. The file is left in place (harmless) but the real, verified mechanism
+is the Worker-level header injection above.
 
 ## Deployment procedure
 
@@ -57,15 +68,19 @@ recorded here only so a future check can confirm whether production has
 moved past this point:
 
 ```
-GitHub source commit:            57ddaeb
-OpenAI Sites deployed-source commit: 4d654ee
+GitHub source commit (public/_headers attempt):  57ddaeb
+OpenAI Sites deployed-source commit (reported):    4d654ee
+GitHub source commit (Worker-level CORS fix):     60b415f  ← pushed, NOT yet confirmed live
 ```
 
-As of the most recent direct production check against these commits,
-`public/_headers`' rules (both the new `/radio/*` CORS rule and the
-pre-existing `/assets/*` immutable-cache rule) were **not yet observed live**
-on `radio.studiorich.tv`, despite the reported deploy. See DEBT.md for the
-open item this leaves.
+`_headers`-based CORS (`57ddaeb`/`4d654ee`) was never observed live in
+production despite a reported deploy — this is what led to the Worker-level
+fix above. `60b415f` (the Worker-level fix, adding CORS headers inside
+`worker/index.ts`'s own `fetch` handler) has been pushed to `origin/main`
+but, as of the last direct production check, production is still serving
+the pre-fix build (identical `ETag` to before the push) — **push alone has
+not yet resulted in a new deploy**. See DEBT.md for the open item this
+leaves.
 
 ## Worktree distinction
 

@@ -137,26 +137,29 @@ a concrete revisit trigger. This is not a general TODO list; see
 
 ---
 
-### Production `public/_headers` not confirmed honored by OpenAI Sites
+### OpenAI Sites production deploy not confirmed for the RADIO CORS fix
 
-- **Problem**: `studiorich-orbital`'s `public/_headers` (adding
-  `Access-Control-Allow-Origin: */Access-Control-Allow-Methods: GET, HEAD`
-  for `/radio/*`, and preserving vinext's pre-existing `/assets/*` immutable
-  cache rule) was verified working locally via `wrangler dev`, but as of the
-  last direct production check — after a reported OpenAI Sites deploy of the
-  commit containing this file — **neither the new CORS rule nor the
-  pre-existing cache rule was observed live** on `radio.studiorich.tv`.
+- **Problem**: `studiorich-orbital`'s `public/_headers` approach was
+  confirmed, across multiple days of direct production checks, to never be
+  honored in production (identical stale `ETag`, no `access-control-*`
+  header, pre-existing `/assets/*` cache rule also unhonored) — ruled out as
+  propagation delay given the elapsed time. The fix was moved to
+  `worker/index.ts` itself (commit `60b415f`, pushed to `origin/main`),
+  which intercepts `/radio/**` and adds CORS headers in code confirmed to
+  execute per-request in production (the existing `/_vinext/image` path
+  proves the Worker's own `fetch` handler runs there). As of the last
+  direct check, **production is still serving the pre-fix build** —
+  identical `ETag` to before this push — confirming (again) that `git push`
+  alone does not trigger an OpenAI Sites deploy.
 - **Impact**: MUSIC's Event Radio Control "Load Package" bootstrap flow
-  (`programFromManifest.ts` + `eventControlRuntime.ts`) cannot complete a
-  real cross-origin fetch against the live package until this is resolved —
-  it is currently blocked in production, though fully implemented and
-  tested against synthetic data.
-- **Current status**: open. Root cause not yet established — could be Sites
-  deploy propagation delay, or a genuine gap in how OpenAI Sites' asset
-  layer handles `_headers` relative to plain Cloudflare Workers Static
-  Assets.
-- **Revisit trigger**: the next time production is checked and either (a)
-  the headers appear (issue was propagation delay — close this item), or
-  (b) they still don't appear after a longer wait (escalate to whoever
-  administers the OpenAI Sites project for that platform's own `_headers`
-  support).
+  (`programFromManifest.ts` + `eventControlRuntime.ts`), the Channel
+  listener, and BLACKBOOK/Event Music all remain blocked from real
+  cross-origin package access in production until this deploy actually
+  lands — all fully implemented and tested against synthetic/local data.
+- **Current status**: open, blocked on a manual OpenAI Sites deploy action
+  (open the Site → Edit → Work → explicit build/deploy — see this file's
+  own Deployment procedure) that only Richie can perform from this
+  environment.
+- **Revisit trigger**: after the next confirmed OpenAI Sites deploy,
+  re-check production directly (manifest + `.opus` GET with an `Origin`
+  header) before assuming this is resolved.
