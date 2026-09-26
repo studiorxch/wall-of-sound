@@ -58,10 +58,62 @@ a concrete revisit trigger. This is not a general TODO list; see
   confusion (see OWNERSHIP.md's "Known noncanonical / replaced mechanisms").
 - **Current status**: both paths run today, independently, for different
   purposes (MUSIC's own in-app preview vs. RADIO's real broadcast). Not
-  deleted, not merged.
+  deleted, not merged. Confirmed during SUBWAY architecture consolidation
+  (2026-09) that `wall/systems/presentation/nowPlayingHud.js` — LIVE MAP's
+  own "Now Playing" HUD — reads this same legacy `nowPlayingBroadcastBridge.ts`
+  snapshot (via `localStorage` key `wos:nowPlaying:snapshot`), not RADIO's
+  Channel Clock. MAP does not implement RADIO playback; this is its one
+  "now playing" consumer, and it is the legacy path.
 - **Revisit trigger**: if MUSIC's own preview surface is ever asked to
   reflect real RADIO Channel state, or if a user-visible inconsistency
   between the two is reported.
+
+---
+
+### SUBWAY station-geometry authoring system has no bridge into the live `wall/` runtime
+
+- **Problem**: the MUSIC-side station-geometry/archetype/editor system
+  (`music/src/data/stationGeometryTypes.ts`, `stationGeometryStore.ts`,
+  `music/src/logic/maps/station*`, `music/src/ui/maps/StationGeometryEditor.tsx`)
+  persists to its own IndexedDB (`MUSIC_STATION_GEOMETRY_DB`) and has **zero**
+  consumers anywhere in `wall/` — confirmed by grep, no file under `wall/`
+  references `stationGeometry`/`StationGeometryData`. The editor is also not
+  wired into MAPS' own "Stations" library navigation
+  (`MapsStationDetail.tsx`/`MapsStationsGrid.tsx`, which bridges a different,
+  unrelated station identity via `wallStationLibraryBridge.ts` — see
+  [subway/README.md](subway/README.md) §8).
+- **Impact**: authored station geometry (platform footprints, track
+  centerlines, level/mezzanine structure) cannot render on the live SUBWAY
+  map today, no matter how calibrated it is. Any future agent asked to "show
+  the authored station geometry on the map" must build this bridge — it does
+  not already exist and should not be assumed to.
+- **Current status**: not built. Editor and data model are real and
+  functional in isolation; only 4 stations have any record at all, and only
+  Bay Ridge Av is confirmed platform-plan-calibrated (see
+  [subway/README.md](subway/README.md) §6/§7).
+- **Revisit trigger**: the first batch that needs authored station geometry
+  to actually render in `wall/` (Surface Map, Underground/3D, or a future
+  station-interior view).
+
+---
+
+### `SubwayTrackStructureAuthority` has zero rendering/camera/visibility consumers
+
+- **Problem**: `wall/systems/transit/subwayTrackStructureAuthority.js`
+  classifies real track segments (underground/elevated/at_grade/open_cut/
+  embankment/unknown) from an official, pre-joined NYC Subway Lines ROW_TYPE
+  snapshot — but, per its own header's explicit scope boundary, no
+  rendering, camera, altitude, or visibility system currently calls into it.
+- **Impact**: there is real, already-sourced ground-truth data for deciding
+  when a train visually enters a tunnel or elevated structure, but nothing
+  uses it yet. A future agent implementing Surface/Underground visual
+  transitions could easily not know this data already exists and build a
+  second, redundant classifier.
+- **Current status**: data and classification API exist and are tested;
+  unconsumed.
+- **Revisit trigger**: the first batch that needs to decide, at render time,
+  whether a given train/track segment is underground/elevated/at-grade —
+  route it through this authority rather than re-deriving the classification.
 
 ---
 

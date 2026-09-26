@@ -55,3 +55,28 @@ None of the above are dead code (all are still imported somewhere in current
 `music/src`) — they are architecturally separate from, and should not be
 confused with, RADIO's canonical Channel/Program resolution path documented
 in [radio/README.md](radio/README.md).
+
+## MAP / SUBWAY responsibilities
+
+See [subway/README.md](subway/README.md) for the full current-state map.
+
+| Responsibility | Owner | Status |
+|---|---|---|
+| canonical Subway id minting | `mtaSubwayIdentity.js` (`wall/systems/transit/`) | CANONICAL |
+| live train truth/identity | `SubwayLogicalRollingStockAuthority` (`wall/systems/transit/`) | CANONICAL |
+| live station place/identity | `MTASubwayStationLibrary` (`wall/systems/transit/`) | CANONICAL |
+| Surface Map (2D) rendering | `mtaSubwayMapLayer.js` (`wall/systems/presentation/`) | CANONICAL |
+| Underground / Tunnel Vision (3D) rendering | `subway3DTrainActorLayer.js` + `subway3DVisibilityPolicy.js` (`wall/systems/presentation/`) | ACTIVE — dev-flag gated OFF by default |
+| track-structure classification (underground/elevated/at-grade/…) | `SubwayTrackStructureAuthority` (`wall/systems/transit/`) | ACTIVE, but DORMANT relative to rendering — zero current consumers |
+| subway camera authority | `subwayCameraSunroof.js` (`wall/systems/presentation/`) | EXPERIMENTAL |
+| station geometry authority (authored plan/topology) | `stationGeometryStore.ts` / `stationGeometryTypes.ts` (`music/src/data/`) | EXPERIMENTAL, authoring-only — not bridged into `wall/` |
+| station archetypes | `stationArchetypeTypes.ts` + `stationArchetypeInstantiate.ts` (`music/src/`) | EXPERIMENTAL |
+| station classification grammar | `stationClassificationTypes.ts` (`music/src/data/`) | EXPERIMENTAL — types + tests only, no classifier |
+| station editor | `StationGeometryEditor.tsx` (`music/src/ui/maps/`) | EXPERIMENTAL — single-station (Bay Ridge Av) V0 |
+| MAP member paint authoring (free drawing) | `subwayMapPaintSurface.js` → Firestore `artworks` (`surfaceId: map:*`) | ACTIVE |
+| car-surface graffiti authoring | `SubwayArtworkAuthority` / `SubwayArtworkPlacementAuthority` / `SubwayCarSurfaceAuthority` / `SubwayResidentGraffitiArtistAuthority` (`wall/systems/transit/`) | ACTIVE — separate identity/storage from map paint above |
+
+The live runtime authorities above and the MUSIC-side station-geometry
+authoring tools are **two disjoint systems** — see
+[subway/README.md](subway/README.md)'s §8 for the full persistence/authority
+breakdown before assuming either feeds the other.

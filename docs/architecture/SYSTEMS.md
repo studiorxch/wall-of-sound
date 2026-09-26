@@ -60,7 +60,11 @@ Only systems with strong current evidence are listed. See
 - **Primary integration boundaries**: shares the same StudioRich operator
   identity as RADIO (`STUDIO_RICH_OPERATOR_EMAILS`, see OWNERSHIP.md); does
   **not** currently consume RADIO's Channel broadcast state — see DEBT.md.
-- **Status**: ACTIVE.
+- **Status**: ACTIVE. See [subway/README.md](subway/README.md) for the full
+  map — read that before any SUBWAY-related task. The live SUBWAY runtime
+  (`wall/`) and the MUSIC-side station-geometry authoring tool
+  (`music/src/ui/maps/StationGeometryEditor.tsx`) are currently unbridged;
+  see that page for the full current-state picture.
 
 ## MEMBER IDENTITY
 
