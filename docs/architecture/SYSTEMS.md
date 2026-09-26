@@ -88,6 +88,8 @@ Only systems with strong current evidence are listed. See
   is always `firestore.rules`' own `studioRichOperatorEmails()`, which must
   be kept in sync by hand — there is no mechanism to share a literal between
   TypeScript and the Firestore rules language.
-- **Status**: ACTIVE. `browserLocalPersistence` is **origin-scoped** — a
-  sign-in on one running dev server does not carry over to a different
-  server/port/worktree, even when it's the same application's code.
+- **Status**: ACTIVE. See [members/README.md](members/README.md) for the
+  full map — read that before any identity/auth/operator-authority task.
+  `browserLocalPersistence` is **origin-scoped** — a sign-in on one running
+  dev server does not carry over to a different server/port/worktree, even
+  when it's the same application's code.
