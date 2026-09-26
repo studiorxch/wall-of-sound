@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>StudioRich Admin</title>
+    <style>
+      /**
+       * β0.1 PRODUCT CONVERGENCE -- the first coherent ADMIN entry point.
+       * Composes the EXISTING, unmodified event-control.html and
+       * channel-control.html under one tab shell via same-origin iframes --
+       * deliberately not a direct-DOM composition, since both pages are
+       * full runtimes with their own fixed-id assumptions and independent
+       * Firebase/member-identity singleton construction; iframing avoids
+       * any risk of ID collision or double-initialization without a large
+       * refactor of either runtime. RADIO is the only workspace today,
+       * covering both halves of the existing Program/Channel workflow
+       * (Program creation lives on the Program pane, Channel rotation on
+       * the Channel pane) -- neither pane's own logic is touched here.
+       *
+       * UI-level operator gate only (adminShellRuntime.ts, mirroring every
+       * other client-side OPERATOR_EMAILS check in this app) -- the real
+       * authority remains firestore.rules' own isEventOperator(), enforced
+       * inside each iframed page exactly as it always was.
+       */
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      :root { color-scheme: dark; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      html, body { height: 100%; background: #0a0a0c; color: #e8e8ec; }
+      #signed-out, #not-authorized {
+        max-width: 420px; margin: 80px auto; text-align: center; padding: 32px;
+        border: 1px solid rgba(255,255,255,.14); border-radius: 14px; background: rgba(20,20,24,.6);
+      }
+      #signed-out button, #not-authorized button {
+        margin-top: 16px; padding: 10px 20px; border-radius: 999px; border: 1px solid rgba(255,255,255,.2);
+        background: #e8e8ec; color: #0a0a0c; font: 700 12px/1 inherit; cursor: pointer;
+      }
+      #admin-shell { display: flex; flex-direction: column; height: 100%; }
+      #admin-shell[hidden] { display: none; } /* an author rule for the same property (display: flex above) beats the UA default [hidden] rule -- this restores it explicitly */
+      #admin-tabbar {
+        display: flex; gap: 4px; padding: 10px 16px; border-bottom: 1px solid rgba(255,255,255,.12);
+        align-items: center;
+      }
+      #admin-tabbar h1 { font-size: 12px; letter-spacing: .12em; text-transform: uppercase; opacity: .6; margin-right: 16px; }
+      .admin-tab {
+        padding: 8px 16px; border-radius: 999px; border: 1px solid rgba(255,255,255,.16);
+        background: rgba(24,22,19,.9); color: #e8e8ec; font: 700 11px/1 inherit; letter-spacing: .05em; cursor: pointer;
+      }
+      .admin-tab[aria-selected="true"] { border-color: #9adfa0; color: #9adfa0; }
+      #admin-workspace { flex: 1; overflow: hidden; }
+      .admin-panel { display: none; height: 100%; flex-direction: column; }
+      .admin-panel[data-active="true"] { display: flex; }
+      .admin-pane-row { flex: 1; display: flex; flex-direction: column; }
+      .admin-pane-row h2 {
+        padding: 8px 16px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; opacity: .55;
+        border-bottom: 1px solid rgba(255,255,255,.08);
+      }
+      .admin-pane-row iframe { flex: 1; border: none; width: 100%; }
+      #sign-out-admin { position: fixed; bottom: 16px; right: 16px; }
+    </style>
+  </head>
+  <body>
+    <div id="signed-out" hidden>
+      <p>Sign in as an authorized StudioRich operator to open ADMIN.</p>
+      <button id="sign-in" type="button">Sign in with Google</button>
+    </div>
+
+    <div id="not-authorized" hidden>
+      <p>Signed in, but this account is not an authorized StudioRich operator.</p>
+      <button id="sign-out-unauthorized" type="button">Sign Out</button>
+    </div>
+
+    <div id="admin-shell" hidden>
+      <div id="admin-tabbar">
+        <h1>StudioRich Admin</h1>
+        <button class="admin-tab" data-tab="radio" aria-selected="true" type="button">RADIO</button>
+      </div>
+      <div id="admin-workspace">
+        <div class="admin-panel" data-panel="radio" data-active="true">
+          <div class="admin-pane-row" style="flex: 0 0 50%;">
+            <h2>Program (Event Radio Control)</h2>
+            <iframe src="/event-control.html" title="Event Radio Control"></iframe>
+          </div>
+          <div class="admin-pane-row" style="flex: 0 0 50%;">
+            <h2>Channel (Channel Control)</h2>
+            <iframe src="/channel-control.html" title="Channel Control"></iframe>
+          </div>
+        </div>
+      </div>
+      <button id="sign-out-admin" type="button">Sign Out</button>
+    </div>
+
+    <script type="module" src="/src/member/adminShellRuntime.ts"></script>
+  </body>
+</html>

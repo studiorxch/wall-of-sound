@@ -455,9 +455,43 @@ function renderCloseArtworkControl(): void {
   closeArtworkButton.hidden = currentArtworkSession.getState().kind !== "artwork";
 }
 
+// β0.1 PRODUCT CONVERGENCE: SIGN IN must be reachable from a public visitor
+// on the ordinary default view -- independent of paint mode and
+// isStudioRichMapAuthor(). It previously lived only inside
+// #subway-map-paint-controls, whose OWN visibility is
+// `!active || !_isStudioRichMapAuthor()` (subwayMapPaintSurface.js) -- a
+// circular gate an ordinary, not-yet-signed-in visitor could never satisfy.
+// This is a NEW, always-visible top-level container, separate from that
+// operator-only drawing toolbar, which keeps its own existing visibility
+// rule completely untouched (no weakening of map:* paint authorization).
+function ensureTopLevelSignInUI(): HTMLButtonElement {
+  let bar = document.getElementById("subway-member-topbar");
+  if (bar) return bar.querySelector("[data-member-action]") as HTMLButtonElement;
+  bar = document.createElement("div");
+  bar.id = "subway-member-topbar";
+  // top:104px -- stacks below radioChannelHud.js's bar (top:16px) and
+  // subwayBlackbookNavLink.js's link (top:60px), same right:16px anchor,
+  // avoiding the click-swallowing overlap all three previously shared.
+  bar.style.cssText = "position:fixed;top:104px;right:16px;z-index:10000;";
+  const button = document.createElement("button");
+  button.type = "button";
+  button.dataset.memberAction = "open";
+  button.textContent = "SIGN IN";
+  button.setAttribute("aria-label", "StudioRich Member sign in");
+  button.className = "subway-blackbook-nav-link"; // reuse the existing top-chrome pill styling, no new CSS needed
+  button.addEventListener("click", () => {
+    if (state.status === "signedIn") memberHome.open();
+    else dialog?.showModal();
+  });
+  bar.appendChild(button);
+  document.body.appendChild(bar);
+  return button;
+}
+
 function ensureMemberUI(): void {
+  ensureTopLevelSignInUI();
   const controls = document.getElementById("subway-map-paint-controls");
-  if (!controls || controls.querySelector("[data-member-action]")) return;
+  if (!controls || controls.querySelector("[data-close-artwork]")) return;
   // Drawing Shell V1: Member/session controls are workspace-owned, not Art
   // Supply controls (see the UI Unification recon) -- they still live
   // beside the Drawing Shell's floating panel for now (no new panel, no
@@ -469,16 +503,6 @@ function ensureMemberUI(): void {
     contextGroup.className = "subway-map-context-controls";
     controls.appendChild(contextGroup);
   }
-  const button = document.createElement("button");
-  button.type = "button";
-  button.dataset.memberAction = "open";
-  button.textContent = "SIGN IN";
-  button.setAttribute("aria-label", "StudioRich Member sign in");
-  button.addEventListener("click", () => {
-    if (state.status === "signedIn") memberHome.open();
-    else dialog?.showModal();
-  });
-  contextGroup.appendChild(button);
 
   closeArtworkButton = document.createElement("button");
   closeArtworkButton.type = "button";

@@ -2697,8 +2697,15 @@
     // Mapbox's own interaction handlers never went through Tilt at all.
     // Every other Wall mode (harbor, etc.) is unaffected -- Tilt still
     // initializes and runs exactly as before everywhere else.
+    // β0.1 PRODUCT CONVERGENCE: SUBWAY is the default world -- a bare load
+    // (no `mode` param) counts as subway mode here too, same default-value
+    // change as wall/index.html's own SUBWAY boot block. Only an explicit
+    // OTHER mode opts out.
     var isSubwayMode = (function () {
-      try { return new URLSearchParams(global.location.search).get('mode') === 'subway'; }
+      try {
+        var mode = new URLSearchParams(global.location.search).get('mode');
+        return !mode || mode === 'subway';
+      }
       catch (e) { return false; }
     })();
     if (SBE.TiltProjectionRuntime && !isSubwayMode) {

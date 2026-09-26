@@ -175,6 +175,15 @@
        * subwayBlackbookNavLink.js carries the MAP -> Blackbook half). A
        * plain same-tab link for the same "one authoritative player" reason
        * documented there.
+       *
+       * β0.1 PRODUCT CONVERGENCE: no more hardcoded localhost dev port.
+       * `blackbook.html` and `wall-app/` are always siblings at the site
+       * root (music/vite.config.ts's copy-wall-app-public plugin copies
+       * wall/ to dist/wall-app/, alongside dist/blackbook.html; the dev
+       * proxy mirrors this at /blackbook.html + /wall-app/ on the same
+       * MUSIC origin) -- a plain relative "wall-app/" href resolves
+       * correctly on any host/port without JS. Landing on bare wall-app/
+       * (no query params) now opens the SUBWAY-default β0.1 experience.
        */
       #map-nav-link {
         position: fixed; z-index: 10000; top: 16px; right: 16px;
@@ -186,7 +195,7 @@
   <body>
     <div id="app">
       <span id="brand-mark">STUDIORICH BLACKBOOK</span>
-      <a id="map-nav-link" class="island" href="http://localhost:5510/" aria-label="Back to MAP">MAP</a>
+      <a id="map-nav-link" class="island" href="wall-app/" aria-label="Back to MAP">MAP</a>
       <div id="event-music" class="island" aria-label="Event music">
         <button id="event-music-toggle" disabled>▶</button>
         <div id="event-music-text">

@@ -94,3 +94,11 @@ direction map.
 | shared Art Supply set | `shared/member-identity/src/data/artSupplyTypes.ts` | CANONICAL — the one supply set every drawing surface (Blackbook, MAP paint) reuses |
 | Surface identity (`surfaceId`) | real, required, immutable field on every Artwork (`firestore.rules`) | CANONICAL as a field; the generalized `surfaces/` namespace itself is DIRECTION, not built |
 | multi-page/multi-book Blackbook, Read content, World Layers, Access-vs-Visibility | not implemented | DIRECTION — see [blackbook/README.md](blackbook/README.md) |
+
+## ADMIN
+
+| Responsibility | Owner | Status |
+|---|---|---|
+| ADMIN shell/tab composition | `music/admin.html` + `adminShellRuntime.ts` (`music/src/member/`) | ACTIVE — UI-only operator gate (`STUDIO_RICH_OPERATOR_EMAILS`); real authority remains `firestore.rules`' `isEventOperator()` inside each composed page |
+| RADIO Program workspace | same-origin iframe of the existing, unmodified `event-control.html` | CANONICAL implementation reused, not rebuilt |
+| RADIO Channel workspace | same-origin iframe of the existing, unmodified `channel-control.html` | CANONICAL implementation reused, not rebuilt |

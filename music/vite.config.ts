@@ -2093,6 +2093,7 @@ export default defineConfig({
         eventControl: path.resolve(__dirname, 'event-control.html'),
         channelControl: path.resolve(__dirname, 'channel-control.html'),
         channelRadio: path.resolve(__dirname, 'channel-radio.html'),
+        admin: path.resolve(__dirname, 'admin.html'),
         subwayMemberRuntime: path.resolve(__dirname, 'src/member/subwayMemberRuntime.ts'),
         radioChannelReceiverRuntime: path.resolve(__dirname, 'src/member/radioChannelReceiverRuntime.ts'),
       },

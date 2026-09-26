@@ -2932,13 +2932,19 @@
          Unlike RACETRACK, this does not hide chrome or open a separate scene
          — SUBWAY renders directly onto the canonical live map, since its
          product role is to become part of the commuter map, not a separate
-         walled mode. A plain reload without the param never fetches or
-         renders anything subway-related. ── -->
+         walled mode.
+         β0.1 PRODUCT CONVERGENCE: SUBWAY is now the default world -- a bare
+         load (no `mode` param at all) activates it exactly the same as an
+         explicit `?mode=subway`. Only an explicit OTHER mode (currently
+         `?mode=racetrack`) opts back out, preserving that world's own
+         existing entry untouched. This is a default-value change only --
+         no new activation path, no duplicated MTASubwayMapLayer logic. ── -->
     <script>
       (function () {
         try {
           var params = new URLSearchParams(window.location.search);
-          if (params.get('mode') !== 'subway') return;
+          var mode = params.get('mode');
+          if (mode && mode !== 'subway') return; // any OTHER explicit mode (e.g. racetrack) opts out
           if (window.SBE && window.SBE.MTASubwayMapLayer) {
             window.SBE.MTASubwayMapLayer.activate();
           }

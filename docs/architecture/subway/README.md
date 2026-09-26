@@ -12,6 +12,16 @@ MTA-realtime-driven map of the NYC Subway, rendered inside `wall/` (a
 separate, non-Vite JavaScript runtime — not the MUSIC Vite/React app; see
 [../SYSTEMS.md](../SYSTEMS.md)'s MAP/SUBWAY entry).
 
+**β0.1 PRODUCT CONVERGENCE: SUBWAY is now the default `wall/index.html`
+entry mode.** A bare load (no `?mode=` param at all) activates
+`MTASubwayMapLayer` exactly the same as an explicit `?mode=subway` —
+previously a bare load opened only the older general LIVE MAP shell with
+no subway-related fetch/render at all. Only an explicit OTHER mode (e.g.
+`?mode=racetrack`) opts back out. This is a default-value change only, in
+`wall/index.html`'s own boot script and `wall/main.js`'s `isSubwayMode`
+Tilt-skip check — no new activation path, no duplicated
+`MTASubwayMapLayer` logic.
+
 SUBWAY evolved **additively** inside `wall/` on top of pre-existing MAP/World
 infrastructure (Worlds, Orb, itinerary/routing, RACETRACK — see AGENTS.md's
 "Protected MAPS / RACETRACK Infrastructure"). That older infrastructure is
