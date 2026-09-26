@@ -156,10 +156,19 @@ a concrete revisit trigger. This is not a general TODO list; see
   listener, and BLACKBOOK/Event Music all remain blocked from real
   cross-origin package access in production until this deploy actually
   lands — all fully implemented and tested against synthetic/local data.
-- **Current status**: open, blocked on a manual OpenAI Sites deploy action
-  (open the Site → Edit → Work → explicit build/deploy — see this file's
-  own Deployment procedure) that only Richie can perform from this
-  environment.
+- **Current status**: open. An explicit OpenAI Sites rebuild/deploy of
+  `studiorich-orbital` was reported completed after `60b415f`. Re-verified
+  directly afterward (manifest GET+HEAD, one `.opus` GET, all with an
+  `Origin` header, plus cache-busting query strings to rule out a stale
+  Cloudflare cache entry): production **still returns the pre-fix
+  response** — identical `ETag`, no `access-control-*` header.
+  `origin/main` was independently confirmed to be exactly `60b415f`
+  (`git fetch` + `git log origin/main -1`), ruling out "wrong commit
+  pushed" as the cause. The remaining possibilities are narrowed to: the
+  reported Sites deploy did not actually complete/target this commit, or
+  Cloudflare's edge is caching the pre-deploy response independently of the
+  new deploy (less likely given cache-busting query strings didn't help
+  either). Root cause still not established from this environment.
 - **Revisit trigger**: after the next confirmed OpenAI Sites deploy,
   re-check production directly (manifest + `.opus` GET with an `Origin`
   header) before assuming this is resolved.
