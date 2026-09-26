@@ -33,10 +33,22 @@ const CHANNEL_ID = "studiorich-radio";
 /** Personal, local-only preference -- explicitly not a broadcast-authority concern. */
 const VOLUME_STORAGE_KEY = "wos:radioChannel:volume";
 
-type RadioChannelReceiverState =
+// Exported so any other real Vite/TS receiver (e.g. blackbookRadioUI.ts)
+// can type window.SBE.RadioChannelReceiver precisely instead of casting to
+// `unknown` -- the runtime object itself is unchanged, this is type-only.
+export type RadioChannelReceiverState =
   | { readonly status: "off"; readonly live: boolean }
   | { readonly status: "on"; readonly live: boolean; readonly nowPlaying: { readonly title: string; readonly artist: string } | null }
   | { readonly status: "failed"; readonly live: boolean; readonly reason: string };
+
+export interface RadioChannelReceiver {
+  turnOn(): void;
+  turnOff(): void;
+  setVolume(value: number): void;
+  getVolume(): number;
+  isOn(): boolean;
+  subscribe(listener: Listener): () => void;
+}
 
 type Listener = (state: RadioChannelReceiverState) => void;
 

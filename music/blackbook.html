@@ -150,21 +150,30 @@
       .my-page-item-meta { font-size: 9px; letter-spacing: .03em; color: #928a80; }
 
       /**
-       * Event Music + Clock Radio Foundation V1 -- deliberately the
-       * smallest useful Now Playing control: Play/Pause + title/artist,
-       * nothing else (no library, no playlist editor, no DJ controls --
-       * see this build's own UI requirement). Placed top-left, independent
-       * of every bottom-bar group (Member/Art Supplies/workspace actions)
-       * -- it is wired once by eventMusicRuntime.ts, entirely outside
-       * Blackbook's own Artwork/page lifecycle, so it never needs to sit
-       * inside a group that lifecycle already owns.
+       * β0.1 -- BLACKBOOK canonical RADIO receiver. Previously this
+       * control (top-left, independent of every bottom-bar group) was
+       * wired to eventMusicRuntime.ts (the separate eventProgram/current
+       * system), which is empty in production today ("Event music
+       * unavailable"). Replaced with the SAME canonical Channel receiver
+       * MAP already uses (radioChannelReceiverRuntime.ts's
+       * window.SBE.RadioChannelReceiver) -- one shared broadcast, two
+       * receivers, never a second RADIO implementation.
+       * eventMusicRuntime.ts itself is untouched and unrelated (separate
+       * documented system, out of this batch's scope) -- only this one
+       * script reference changed.
        */
       #event-music {
         position: absolute; z-index: 9; top: 16px; left: 130px;
         display: flex; align-items: center; gap: 10px;
-        padding: 8px 12px; max-width: 260px;
+        padding: 8px 12px; max-width: 320px;
       }
-      #event-music-toggle { min-width: 34px; padding: 6px 10px; font-size: 13px; }
+      #event-music-live { display: flex; align-items: center; gap: 6px; font: 700 10px/1 inherit; letter-spacing: .06em; opacity: .35; }
+      #event-music-live[data-live="true"] { opacity: 1; }
+      #event-music-live-dot { width: 7px; height: 7px; border-radius: 50%; background: #ff3b30; }
+      #event-music-live[data-live="false"] #event-music-live-dot { background: rgba(255,255,255,.25); }
+      #event-music-toggle { min-width: 34px; padding: 6px 10px; font-size: 11px; font-weight: 700; letter-spacing: .05em; }
+      #event-music-toggle[data-on="true"] { border-color: #9adfa0; color: #9adfa0; }
+      #event-music-volume { width: 56px; }
       #event-music-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
       #event-music-title { font-size: 10px; letter-spacing: .03em; color: #f4efe7; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       #event-music-artist { font-size: 9px; letter-spacing: .03em; color: #928a80; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -196,10 +205,12 @@
     <div id="app">
       <span id="brand-mark">STUDIORICH BLACKBOOK</span>
       <a id="map-nav-link" class="island" href="wall-app/" aria-label="Back to MAP">MAP</a>
-      <div id="event-music" class="island" aria-label="Event music">
-        <button id="event-music-toggle" disabled>▶</button>
+      <div id="event-music" class="island" aria-label="RADIO">
+        <span id="event-music-live" data-live="false"><span id="event-music-live-dot"></span>LIVE RADIO</span>
+        <button id="event-music-toggle" data-on="false" type="button">RADIO OFF</button>
+        <input id="event-music-volume" type="range" min="0" max="1" step="0.01" aria-label="RADIO volume" />
         <div id="event-music-text">
-          <span id="event-music-title">Loading music…</span>
+          <span id="event-music-title"></span>
           <span id="event-music-artist"></span>
         </div>
       </div>
@@ -251,6 +262,7 @@
       </div>
     </div>
     <script type="module" src="/src/member/blackbookRuntime.ts"></script>
-    <script type="module" src="/src/member/eventMusicRuntime.ts"></script>
+    <script type="module" src="/src/member/radioChannelReceiverRuntime.ts"></script>
+    <script type="module" src="/src/member/blackbookRadioUI.ts"></script>
   </body>
 </html>

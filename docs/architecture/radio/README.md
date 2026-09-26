@@ -168,3 +168,39 @@ integration (reflecting live RADIO activity visually) — the boundary was
 not investigated deeply enough to wire cleanly without risking scope creep;
 treat this as the immediate presentation follow-up, not evidence that no
 suitable integration point exists.
+
+## BLACKBOOK is a second receiver of the same broadcast
+
+BLACKBOOK (`music/blackbook.html`) is now a real receiver too — the exact
+same `radioChannelReceiverRuntime.ts` bridge MAP uses, imported directly
+as a real ES module (BLACKBOOK is a real Vite/TS page, unlike `wall/`, so
+no `window.SBE` indirection is strictly needed, though the module still
+publishes there too for consistency):
+
+```
+music/src/member/radioChannelReceiverRuntime.ts   (identical import, same
+  channelId "studiorich-radio" — no second Channel, no second receiver
+  implementation)
+        ↓
+music/src/member/blackbookRadioUI.ts   (BLACKBOOK's own thin wiring,
+  mirroring radioChannelHud.js's exact behavior for MAP)
+```
+
+This replaces BLACKBOOK's previous top-left music control, which was wired
+to `eventMusicRuntime.ts` (the separate `eventProgram/current` system,
+empty in production — "Event music unavailable"). `eventMusicRuntime.ts`
+itself is untouched and remains a real, separate, documented system (see
+DEBT.md); it is simply no longer referenced from `blackbook.html`.
+
+**MAP and BLACKBOOK are two independent receivers of the one
+`studiorich-radio` broadcast — never two authorities.** Verified via the
+critical synchronization test: entering BLACKBOOK with RADIO already ON in
+MAP does not carry a playback session across (same-tab navigation means
+only one page-level engine ever exists at a time, by design); turning
+BLACKBOOK's own receiver ON resolves the *current* shared position
+independently and lands on the same track MAP was playing, correctly
+advanced by real elapsed time — never restarting the track at 0. The same
+OFF→wait→ON rejoin-at-current-position behavior already proven for MAP
+holds identically for BLACKBOOK, because both call the exact same
+`resolveChannelTrackBroadcast` chain against the exact same Firestore
+Channel — agreement is structural, not coordinated between the two pages.

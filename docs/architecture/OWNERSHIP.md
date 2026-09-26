@@ -91,6 +91,7 @@ direction map.
 |---|---|---|
 | Blackbook page authoring (drawing) | `blackbookRuntime.ts` + `blackbookArtworkBridge.ts` (`music/src/member/`) | ACTIVE — one hardcoded page today |
 | shared Artwork persistence bridge | `mapArtworkBridge.ts`'s `createArtworkPersistenceBridge` (`music/src/member/`) | CANONICAL — reused by both Blackbook and MAP paint, never duplicated |
+| RADIO Channel reception (BLACKBOOK) | `radioChannelReceiverRuntime.ts` (shared with MAP) + `blackbookRadioUI.ts` (`music/src/member/`) | ACTIVE — a second independent receiver of `studiorich-radio`, never a second implementation; see [radio/README.md](radio/README.md) |
 | shared Art Supply set | `shared/member-identity/src/data/artSupplyTypes.ts` | CANONICAL — the one supply set every drawing surface (Blackbook, MAP paint) reuses |
 | Surface identity (`surfaceId`) | real, required, immutable field on every Artwork (`firestore.rules`) | CANONICAL as a field; the generalized `surfaces/` namespace itself is DIRECTION, not built |
 | multi-page/multi-book Blackbook, Read content, World Layers, Access-vs-Visibility | not implemented | DIRECTION — see [blackbook/README.md](blackbook/README.md) |
