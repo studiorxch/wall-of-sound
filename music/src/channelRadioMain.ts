@@ -61,6 +61,11 @@ playButton.addEventListener("click", () => {
   playButton.textContent = "Starting…";
 
   const engine = new DualDeckPlaybackEngine();
+  // URGENT REGRESSION FIX -- see DualDeckPlaybackEngine.primeForUserGesture's
+  // own doc: must run synchronously, inside this click handler, before the
+  // async Channel/Program/manifest resolution below (controller.play())
+  // can outlast the browser's transient user-activation window.
+  engine.primeForUserGesture();
   controller = createChannelListenerPlaybackController({
     channelId: CHANNEL_ID,
     radioChannelRepository,

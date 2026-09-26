@@ -146,6 +146,11 @@ async function turnOn(): Promise<void> {
   if (controller) return; // ON is idempotent -- never a second engine/controller
   engine = new DualDeckPlaybackEngine();
   engine.setMasterVolume(readStoredVolume());
+  // URGENT REGRESSION FIX -- must run synchronously, before the first
+  // `await` below, so it stays inside the click's own transient user-
+  // activation window. See DualDeckPlaybackEngine.primeForUserGesture's
+  // own doc for why the later real playDeck() call needs this.
+  engine.primeForUserGesture();
   controller = createChannelListenerPlaybackController({
     channelId: CHANNEL_ID,
     radioChannelRepository,

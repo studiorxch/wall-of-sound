@@ -193,6 +193,35 @@ export class DualDeckPlaybackEngine {
     );
   }
 
+  // URGENT REGRESSION FIX -- root cause of "engine_start_failed:
+  // play_rejected" on both MAP and BLACKBOOK's Channel receiver. play()
+  // (both preload() and the real playDeck() below) only ever runs AFTER
+  // an async Channel/Program/manifest resolution round-trip against
+  // Firestore + a cross-origin manifest fetch -- by the time the real
+  // `n.audio.play()` call happens, the browser's own transient user-
+  // activation window from the original click can already have expired
+  // under real-world network latency (Chrome's own activation window is a
+  // few seconds; a cold Firebase SDK init + CORS manifest fetch can easily
+  // exceed that), so `play()` rejects with NotAllowedError even though a
+  // real click started the whole sequence. This was already latent in
+  // channelRadioMain.ts's own identical async structure -- just never
+  // triggered under fast/local conditions.
+  //
+  // Fix: call this SYNCHRONOUSLY, inside the click handler itself, BEFORE
+  // any async Firestore/manifest work begins. It plays+immediately pauses
+  // the SAME persistent <audio> element deck "A" (both decks are created
+  // once in the constructor and never recreated) -- a real, gesture-tied
+  // play() call that keeps the element "engaged" for Chrome's later reuse,
+  // even after the async gap. No Channel/Program/track resolution is
+  // touched; this is purely an audio-element activation primer.
+  primeForUserGesture(deckId: "A" | "B" = "A"): void {
+    this.ensureContext();
+    const audio = this.nodes[deckId].audio;
+    const wasMuted = audio.muted;
+    audio.muted = true;
+    void audio.play().then(() => audio.pause()).catch(() => { /* best-effort only */ }).finally(() => { audio.muted = wasMuted; });
+  }
+
   async playDeck(deckId: "A" | "B") {
     const n = this.nodes[deckId];
     this.ensureContext();
