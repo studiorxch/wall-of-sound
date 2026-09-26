@@ -137,42 +137,16 @@ a concrete revisit trigger. This is not a general TODO list; see
 
 ---
 
-### OpenAI Sites does not reliably deploy `studiorich-orbital` — direct Cloudflare deployment proven as the alternative
+### RESOLVED — production RADIO CORS
 
-- **Problem**: `studiorich-orbital`'s `public/_headers` approach was
-  confirmed, across multiple days of direct production checks, to never be
-  honored in production. The fix was moved to `worker/index.ts` itself
-  (commit `60b415f`), which intercepts `/radio/**` and adds CORS headers in
-  code confirmed to execute per-request (the existing `/_vinext/image` path
-  proves the Worker's own `fetch` handler runs there). Even after a
-  reported explicit OpenAI Sites rebuild/deploy of `60b415f`, production
-  continued to return the identical pre-fix `ETag` with no `access-control-*`
-  header — confirmed via cache-busted requests and independent verification
-  that `origin/main` was exactly `60b415f` (ruling out a push/branch
-  mismatch). **This isolated the problem to OpenAI Sites' own deploy
-  reliability, not the code.**
-
-  Proof: the exact same commit (`60b415f`), built with the exact same
-  `npm run build`, deployed directly to Cloudflare Workers via
-  `npx wrangler deploy --config dist/server/wrangler.json`, worked
-  correctly on the **first attempt** — manifest GET/HEAD and a real
-  `.opus` GET all returned `Access-Control-Allow-Origin: *` /
-  `Access-Control-Allow-Methods: GET, HEAD` with an `Origin` header, at
-  `https://studiorich-orbital.richardjlau.workers.dev`, with byte-identical
-  (sha256-verified) package content.
-- **Impact**: MUSIC's Event Radio Control "Load Package" bootstrap flow,
-  the Channel listener, and BLACKBOOK/Event Music all remain blocked from
-  real cross-origin package access **in current production**
-  (`radio.studiorich.tv`, still served by OpenAI Sites) until the
-  custom-domain cutover to direct Cloudflare deployment happens. They would
-  work today against the proven `*.workers.dev` temporary URL.
-- **Current status**: root cause resolved (OpenAI Sites deploy
-  unreliability, not a code defect). Direct Cloudflare Workers deployment
-  is proven and repeatable — see DEPLOYMENT.md's "Proven alternative path."
-  `radio.studiorich.tv` itself has **not** been cut over yet — that is a
-  separate, explicitly-gated custom-domain change, not yet approved/done.
-- **Revisit trigger**: this item closes once `radio.studiorich.tv` is cut
-  over to the direct Cloudflare deployment and verified; until then, any
-  RADIO batch depending on production CORS should use the `*.workers.dev`
-  URL for verification, not assume `radio.studiorich.tv` reflects the
-  latest source.
+`studiorich-orbital`'s `public/_headers` approach was never honored by
+OpenAI Sites' hosting; the real fix (`worker/index.ts`, commit `60b415f`)
+was validated first at a temporary Cloudflare `*.workers.dev` URL, then put
+into production via a Cloudflare Worker route on `radio.studiorich.tv/*`
+(`studiorich.tv`'s authoritative DNS is now Cloudflare; OpenAI Sites remains
+the origin behind that route, not removed). Verified directly against
+`radio.studiorich.tv` itself: manifest and a real `.opus` asset both return
+`Access-Control-Allow-Origin: */Access-Control-Allow-Methods: GET, HEAD`
+with an `Origin` header, and both are byte-identical (sha256-verified) to
+the known immutable package. See DEPLOYMENT.md for the full mechanism and
+verification evidence. No longer an open item.
