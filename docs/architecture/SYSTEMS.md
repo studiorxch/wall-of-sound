@@ -66,6 +66,29 @@ Only systems with strong current evidence are listed. See
   (`music/src/ui/maps/StationGeometryEditor.tsx`) are currently unbridged;
   see that page for the full current-state picture.
 
+## BLACKBOOK
+
+- **Purpose**: StudioRich's art-book / publishing / creative-authoring
+  domain — not one HTML page, not WALL, not spraypaint, not SUBWAY
+  graffiti. Today this means one fixed page a member draws on with a
+  shared set of drawing supplies.
+- **Canonical owner/location**: `music/blackbook.html` →
+  `music/src/member/blackbookRuntime.ts` (MUSIC's own Vite build), plus
+  `blackbookArtworkBridge.ts`/`blankArtworkBridge.ts` and the shared
+  Artwork persistence bridge (`mapArtworkBridge.ts`'s
+  `createArtworkPersistenceBridge`) also used by MAP paint.
+- **Important persistence**: Firestore `artworks`
+  (`artworkType: "blank"`, `surfaceId: blackbook:studio-rich-main:page:page-1`
+  — one hardcoded Blackbook/page today, not yet multi-page/multi-book).
+- **Primary integration boundaries**: relies on MEMBERS for identity, shares
+  the Art Supply set and Artwork persistence bridge with MAP paint
+  authoring; does not currently integrate with RADIO or SUBWAY.
+- **Status**: ACTIVE for the single current page/drawing use case. See
+  [blackbook/README.md](blackbook/README.md) for the full current-vs-
+  direction map — read that before any BLACKBOOK-related task, since its
+  intended product scope (multi-page art-book, Surfaces, World Layers,
+  Read content) is considerably larger than what's built.
+
 ## MEMBER IDENTITY
 
 - **Purpose**: the one Firebase Auth-backed identity every StudioRich

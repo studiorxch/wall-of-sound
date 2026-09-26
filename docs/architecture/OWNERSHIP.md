@@ -80,3 +80,16 @@ The live runtime authorities above and the MUSIC-side station-geometry
 authoring tools are **two disjoint systems** — see
 [subway/README.md](subway/README.md)'s §8 for the full persistence/authority
 breakdown before assuming either feeds the other.
+
+## BLACKBOOK responsibilities
+
+See [blackbook/README.md](blackbook/README.md) for the full current-vs-
+direction map.
+
+| Responsibility | Owner | Status |
+|---|---|---|
+| Blackbook page authoring (drawing) | `blackbookRuntime.ts` + `blackbookArtworkBridge.ts` (`music/src/member/`) | ACTIVE — one hardcoded page today |
+| shared Artwork persistence bridge | `mapArtworkBridge.ts`'s `createArtworkPersistenceBridge` (`music/src/member/`) | CANONICAL — reused by both Blackbook and MAP paint, never duplicated |
+| shared Art Supply set | `shared/member-identity/src/data/artSupplyTypes.ts` | CANONICAL — the one supply set every drawing surface (Blackbook, MAP paint) reuses |
+| Surface identity (`surfaceId`) | real, required, immutable field on every Artwork (`firestore.rules`) | CANONICAL as a field; the generalized `surfaces/` namespace itself is DIRECTION, not built |
+| multi-page/multi-book Blackbook, Read content, World Layers, Access-vs-Visibility | not implemented | DIRECTION — see [blackbook/README.md](blackbook/README.md) |
