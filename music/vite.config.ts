@@ -2094,11 +2094,14 @@ export default defineConfig({
         channelControl: path.resolve(__dirname, 'channel-control.html'),
         channelRadio: path.resolve(__dirname, 'channel-radio.html'),
         subwayMemberRuntime: path.resolve(__dirname, 'src/member/subwayMemberRuntime.ts'),
+        radioChannelReceiverRuntime: path.resolve(__dirname, 'src/member/radioChannelReceiverRuntime.ts'),
       },
       output: {
-        entryFileNames: (chunk) => chunk.name === 'subwayMemberRuntime'
-          ? 'assets/subway-member-runtime.js'
-          : 'assets/[name]-[hash].js',
+        entryFileNames: (chunk) => {
+          if (chunk.name === 'subwayMemberRuntime') return 'assets/subway-member-runtime.js';
+          if (chunk.name === 'radioChannelReceiverRuntime') return 'assets/radio-channel-receiver-runtime.js';
+          return 'assets/[name]-[hash].js';
+        },
       },
     },
   },

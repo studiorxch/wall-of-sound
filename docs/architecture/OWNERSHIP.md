@@ -75,6 +75,7 @@ See [subway/README.md](subway/README.md) for the full current-state map.
 | station editor | `StationGeometryEditor.tsx` (`music/src/ui/maps/`) | EXPERIMENTAL — single-station (Bay Ridge Av) V0 |
 | MAP member paint authoring (free drawing) | `subwayMapPaintSurface.js` → Firestore `artworks` (`surfaceId: map:*`) | ACTIVE |
 | car-surface graffiti authoring | `SubwayArtworkAuthority` / `SubwayArtworkPlacementAuthority` / `SubwayCarSurfaceAuthority` / `SubwayResidentGraffitiArtistAuthority` (`wall/systems/transit/`) | ACTIVE — separate identity/storage from map paint above |
+| RADIO Channel reception (LIVE indicator, RADIO ON/OFF, volume, Now Playing) | `radioChannelReceiverRuntime.ts` (`music/src/member/`) + `radioChannelHud.js` (`wall/systems/presentation/`) | ACTIVE — receiver only, no clock/resolver authority of its own; see [radio/README.md](radio/README.md) |
 
 The live runtime authorities above and the MUSIC-side station-geometry
 authoring tools are **two disjoint systems** — see

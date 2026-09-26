@@ -115,10 +115,56 @@ reachable from production.
 
 ## MAP's relationship to RADIO
 
-MAP should **consume** RADIO's Channel/broadcast state if it ever needs a
-"what's playing" concept of its own — never invent a second, MAP-specific
-broadcast system. No such consumption exists yet (see
-[../DEBT.md](../DEBT.md) for the current gap between MUSIC's own preview
-broadcast concept and RADIO's real Channel authority); this is the standing
-architectural instruction for when that need arises, not a description of
-something already wired up.
+MAP is now a real receiver of RADIO's canonical Channel — not a description
+of future direction, an actual wired integration:
+
+```
+music/src/member/radioChannelReceiverRuntime.ts   (real Vite/TS module, its
+  own build entry -> assets/radio-channel-receiver-runtime.js)
+  constructs the SAME createChannelListenerPlaybackController +
+  DualDeckPlaybackEngine channel-radio.html already uses, targeting the
+  ONE canonical channelId "studiorich-radio" -- no second Channel identity.
+  Publishes window.SBE.RadioChannelReceiver (control: turnOn/turnOff/
+  setVolume) and window.SBE.RadioChannelReceiverState (read-only), same
+  bridge convention subwayMemberRuntime.ts already uses for
+  MemberIdentityState.
+        ↓
+wall/systems/presentation/radioChannelHud.js   (plain JS, wall/'s own
+  runtime) -- reads/controls ONLY through that bridge. Computes nothing
+  about Channel/Program/track resolution itself.
+```
+
+MAP owns no clock, no Program/track resolver, no playback-position
+authority of its own — every decision is delegated to the existing RADIO
+resolver chain (`resolveChannelTrackBroadcast` / `resolveChannelRotation`).
+Turning MAP's receiver OFF and back ON always re-resolves the Channel's
+*current* shared-clock position — no locally-remembered pause offset is
+ever preserved (verified: OFF resets to `currentTime: 0`; a later ON after
+real elapsed time rejoins far past that reset point, not at 0 and not
+resumed from where it stopped).
+
+"● LIVE RADIO" reflects the Channel's own `status` field (polled every 10s
+via the existing `getRadioChannel` read — no new resolver), independent of
+whether MAP's own receiver is ON or OFF — a visual toggle is never treated
+as broadcast authority.
+
+Volume is personal, local-only state (`localStorage` key
+`wos:radioChannel:volume`), applied via a new, narrow
+`DualDeckPlaybackEngine.setMasterVolume()` method that sets the two
+persistent `<audio>` elements' own `.volume` directly — a separate
+multiplicative layer from the crossfade `GainNode` automation, never
+touching transition timing.
+
+Now Playing display is a new, separate transient HUD
+(`wos-now-playing-radio`) — reusing `nowPlayingHud.js`'s own visual/CSS
+conventions but **not** extending that file, since its own header
+explicitly scopes it to MUSIC's local `playbackAuthority.ts` snapshot only
+("MUST NOT... read any other MUSIC/RADIO state"). Extending it would have
+mixed two separate authorities into one display; a second, RADIO-scoped
+HUD following the same pattern preserves that boundary.
+
+Not yet done, deliberately out of this batch's scope: Waveformer
+integration (reflecting live RADIO activity visually) — the boundary was
+not investigated deeply enough to wire cleanly without risking scope creep;
+treat this as the immediate presentation follow-up, not evidence that no
+suitable integration point exists.

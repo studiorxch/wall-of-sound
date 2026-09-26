@@ -2873,6 +2873,12 @@
     <script src="./systems/presentation/subwayPresentationSurface.tests.js"></script>
     <script src="./systems/presentation/subwayMapPaintSurface.tests.js?r=20"></script>
     <script type="module" src="../assets/subway-member-runtime.js"></script>
+    <!-- ── MAP × RADIO -- Production synchronized listener integration.
+         Same same-origin bridge pattern as subway-member-runtime.js above,
+         for the ONE canonical RADIO Channel ("studiorich-radio"). MAP is a
+         receiver only -- no clock/resolver/authority of its own. ── -->
+    <script type="module" src="../assets/radio-channel-receiver-runtime.js"></script>
+    <script src="./systems/presentation/radioChannelHud.js"></script>
     <script src="./systems/presentation/subwayStationHud.tests.js"></script>
     <script src="./systems/presentation/subwayLineRibbon.tests.js"></script>
     <!-- ── 0819_SUBWAY_Sunroof_Camera_Ride_Test_v1.0.0_BUILD — experimental

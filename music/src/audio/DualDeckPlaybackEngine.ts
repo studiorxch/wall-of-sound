@@ -269,6 +269,20 @@ export class DualDeckPlaybackEngine {
     return this.nodes[deckId].audio.currentTime;
   }
 
+  // Batch: MAP RADIO receiver -- a personal, local volume control,
+  // deliberately separate from the crossfade gain envelope above (deck
+  // GainNode automation owns transitions; HTMLAudioElement.volume is an
+  // independent multiplicative factor the browser applies on top of it).
+  // Applied to BOTH decks' underlying <audio> elements directly -- they are
+  // the same two persistent elements created once in the constructor, so
+  // this reaches whatever plays next without needing to be reapplied per
+  // track. Never touches crossfade timing/automation.
+  setMasterVolume(value: number): void {
+    const clamped = Math.min(1, Math.max(0, value));
+    this.nodes.A.audio.volume = clamped;
+    this.nodes.B.audio.volume = clamped;
+  }
+
   // ── DJ Transition Engine (0722D) — EQ splice, engaged ONLY on demand ────
   // by djTransitionPlayback.ts for an authorized active-mode plan whose
   // family actually needs EQ automation. Requires ensureContext() to have
