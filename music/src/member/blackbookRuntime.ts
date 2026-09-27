@@ -26,7 +26,7 @@ import {
 } from "./blackbookArtworkBridge";
 import { createCartesianCamera, type CartesianCamera, type DocRect } from "./cartesianWorkspaceCamera";
 import { createCurrentArtworkSession } from "./currentArtworkSession";
-import { formatArtworkUpdatedAt, sortArtworksByRecency } from "./artworkGallery";
+import { numberArtworksForPagesDrawer } from "./artworkGallery";
 import { drawArtworkThumbnail } from "./artworkThumbnail";
 import {
   resolveGraphiteProfile,
@@ -49,10 +49,10 @@ const undoButton = required(document.querySelector<HTMLButtonElement>("#blackboo
 const clearButton = required(document.querySelector<HTMLButtonElement>("#blackbook-clear"), "blackbook_surface_missing");
 const fitButton = required(document.querySelector<HTMLButtonElement>("#blackbook-fit"), "blackbook_surface_missing");
 const newButton = required(document.querySelector<HTMLButtonElement>("#blackbook-new"), "blackbook_surface_missing");
-const myPagesButton = required(document.querySelector<HTMLButtonElement>("#blackbook-my-pages"), "blackbook_surface_missing");
-const myPagesPanel = required(document.querySelector<HTMLElement>("#my-pages-panel"), "blackbook_surface_missing");
-const myPagesList = required(document.querySelector<HTMLElement>("#my-pages-list"), "blackbook_surface_missing");
-const myPagesNewButton = required(document.querySelector<HTMLButtonElement>("#my-pages-new"), "blackbook_surface_missing");
+const pagesToggleButton = required(document.querySelector<HTMLButtonElement>("#blackbook-pages-toggle"), "blackbook_surface_missing");
+const pagesDrawer = required(document.querySelector<HTMLElement>("#pages-drawer"), "blackbook_surface_missing");
+const pagesDrawerList = required(document.querySelector<HTMLElement>("#pages-drawer-list"), "blackbook_surface_missing");
+const pagesDrawerNewButton = required(document.querySelector<HTMLButtonElement>("#pages-drawer-new"), "blackbook_surface_missing");
 const memberButton = required(document.querySelector<HTMLButtonElement>("#blackbook-member"), "blackbook_surface_missing");
 /**
  * BLACKBOOK EVENT UI POLISH V1 -- the raw developer-facing Surface ID no
@@ -588,6 +588,12 @@ function setActiveArtworkIdentity(artworkId: string): void {
   if (memberState.status !== "signedIn") return;
   rememberActiveArtworkId(memberState.member.uid, artworkId);
   window.history.replaceState(null, "", withActiveArtworkUrlParam(window.location.href, artworkId));
+  // BLACKBOOK Embedded PAGES Drawer V1 -- keep the drawer's own selected-
+  // card state in sync with whichever path just changed the active
+  // Artwork (an explicit `openArtwork()`, or NEW's own pending-Artwork
+  // materialization) -- only when the drawer is actually open, since a
+  // closed drawer has nothing visible to update.
+  if (pagesDrawer.dataset.open === "true") renderPagesDrawerList();
 }
 
 /**
@@ -896,90 +902,94 @@ function startNewPage(): void {
 newButton.addEventListener("click", startNewPage);
 
 /**
- * BLACKBOOK MY PAGES V1 -- a minimal visual chooser over the SAME
- * explicit active-Artwork architecture Page Isolation V1 introduced.
- * Deliberately OPEN/SELECT only (requirement 12): no delete/rename/
- * reorder/duplicate here. Deliberately no chain/order semantics --
- * `sortArtworksByRecency` is presentation-only ordering, the same one
- * `artworkGallery.ts` already uses for My Artwork, not a persisted
- * sequence.
- *
- * Thumbnails reuse `drawArtworkThumbnail` (artworkThumbnail.ts) as-is --
- * no new rendering/storage pipeline. Blackbook Artworks never set a real
- * `title` (see artworkGallery.ts's own doc), so `deriveArtworkTitle`
- * would just read "Untitled Artwork" for every page; the concise
- * updated-at date/time (`formatArtworkUpdatedAt`) is a more useful label
- * without inventing a naming system (requirement 4).
+ * BLACKBOOK Embedded PAGES Drawer V1 -- replaces MY PAGES' previous
+ * modal/overlay with a permanent layout primitive (see blackbook.html's
+ * own `#pages-drawer`/`#workspace` CSS doc). Still routes through the
+ * SAME explicit active-Artwork architecture Page Isolation V1
+ * introduced -- OPEN/SELECT only (no delete/rename/reorder here; V1
+ * ordering is `sortArtworksByRecency`, the same presentation-only
+ * ordering `artworkGallery.ts` already uses elsewhere, never a persisted
+ * sequence). Cards are deliberately minimal: thumbnail + presentation-
+ * order number only -- no timestamp/dimensions/mark-count/id. That data
+ * is NOT deleted from the Artwork itself; it simply isn't surfaced as
+ * primary drawer UI (per this batch's own requirement 4). Selecting a
+ * card, or pressing "+", never closes the drawer -- it stays open across
+ * navigation, matching this batch's own explicit requirement.
  */
-const MY_PAGES_THUMBNAIL_SIZE = { width: 64, height: 40 } as const;
+const PAGES_DRAWER_THUMBNAIL_SIZE = { width: 76, height: 47 } as const;
 
-function describePageFormat(pageFrame: PageFrame | undefined): string {
-  if (!pageFrame || pageFrame.height <= 0) return "—";
-  const ratio = pageFrame.width / pageFrame.height;
-  if (Math.abs(ratio - 16 / 9) < 0.01) return "16:9";
-  if (Math.abs(ratio - 1) < 0.01) return "1:1";
-  return `${ratio.toFixed(2)}:1`;
-}
-
-function renderMyPagesList(): void {
-  myPagesList.replaceChildren();
+function renderPagesDrawerList(): void {
+  pagesDrawerList.replaceChildren();
   if (knownArtworksCache.length === 0) {
     const empty = document.createElement("p");
-    empty.id = "my-pages-empty";
-    empty.textContent = "No pages yet -- press + NEW to start your first sheet.";
-    myPagesList.append(empty);
+    empty.id = "pages-drawer-empty";
+    empty.textContent = "No pages yet — press + to start your first sheet.";
+    pagesDrawerList.append(empty);
     return;
   }
   const activeId = currentArtwork.getState();
   const activeArtworkId = activeId.kind === "artwork" ? activeId.artworkId : null;
-  for (const artwork of sortArtworksByRecency(knownArtworksCache)) {
+  numberArtworksForPagesDrawer(knownArtworksCache).forEach(({ number: pageNumber, artwork }) => {
     const item = document.createElement("button");
     item.type = "button";
-    item.className = "my-page-item island";
+    item.className = "pages-drawer-item";
     item.setAttribute("aria-current", String(artwork.id === activeArtworkId));
+    item.setAttribute("aria-label", `Page ${pageNumber}`);
     const thumbnail = document.createElement("canvas");
-    thumbnail.width = MY_PAGES_THUMBNAIL_SIZE.width;
-    thumbnail.height = MY_PAGES_THUMBNAIL_SIZE.height;
+    thumbnail.width = PAGES_DRAWER_THUMBNAIL_SIZE.width;
+    thumbnail.height = PAGES_DRAWER_THUMBNAIL_SIZE.height;
     const thumbnailCtx = thumbnail.getContext("2d");
     if (thumbnailCtx) {
+      // BLACKBOOK CLEAR + Single-Step Undo V1 interaction: a cleared
+      // Artwork has zero Marks -- `drawArtworkThumbnail` draws nothing
+      // more on top of this fill, which is exactly the sensible blank
+      // preview a cleared/empty page should show (never a stale/stretched
+      // leftover image, never a crash).
       thumbnailCtx.fillStyle = "#f3eee4";
       thumbnailCtx.fillRect(0, 0, thumbnail.width, thumbnail.height);
-      drawArtworkThumbnail(thumbnailCtx, artwork, MY_PAGES_THUMBNAIL_SIZE);
+      drawArtworkThumbnail(thumbnailCtx, artwork, PAGES_DRAWER_THUMBNAIL_SIZE);
     }
-    const text = document.createElement("span");
-    text.className = "my-page-item-text";
-    const title = document.createElement("span");
-    title.className = "my-page-item-title";
-    title.textContent = formatArtworkUpdatedAt(artwork.updatedAt);
-    const meta = document.createElement("span");
-    meta.className = "my-page-item-meta";
-    meta.textContent = `${describePageFormat(artwork.pageFrame)} · ${artwork.marks.length} mark${artwork.marks.length === 1 ? "" : "s"}`;
-    text.append(title, meta);
-    item.append(thumbnail, text);
-    item.addEventListener("click", () => {
-      openArtwork(artwork.id);
-      closeMyPages();
-    });
-    myPagesList.append(item);
-  }
+    const number = document.createElement("span");
+    number.className = "pages-drawer-item-number";
+    // Presentation order only -- never the Artwork's own id/identity.
+    number.textContent = String(pageNumber);
+    item.append(thumbnail, number);
+    item.addEventListener("click", () => openArtwork(artwork.id));
+    pagesDrawerList.append(item);
+  });
 }
 
-function openMyPages(): void {
-  renderMyPagesList();
-  myPagesPanel.hidden = false;
-  myPagesButton.setAttribute("aria-pressed", "true");
+/**
+ * Opening/closing the drawer changes ONLY `#workspace`'s own CSS flex
+ * width -- `canvas.clientWidth`/`clientHeight` (what
+ * `blackbookRuntime.ts`'s own `width()`/`height()` already read) change
+ * as a result, so the existing `resizeCanvasesToDisplaySize()`/`render()`
+ * pair (already the exact pair the native `window` `resize` listener
+ * below calls) is invoked explicitly here too. `cameraView`'s own pan/
+ * zoom state is untouched -- this is a VIEWPORT remap of the same
+ * document-space Artwork, never a change to any Mark/PageFrame/Artboard
+ * coordinate, exactly like an ordinary window resize already is.
+ */
+function openPagesDrawer(): void {
+  renderPagesDrawerList();
+  pagesDrawer.dataset.open = "true";
+  pagesToggleButton.setAttribute("aria-pressed", "true");
+  resizeCanvasesToDisplaySize();
+  render();
 }
-function closeMyPages(): void {
-  myPagesPanel.hidden = true;
-  myPagesButton.setAttribute("aria-pressed", "false");
+function closePagesDrawer(): void {
+  pagesDrawer.dataset.open = "false";
+  pagesToggleButton.setAttribute("aria-pressed", "false");
+  resizeCanvasesToDisplaySize();
+  render();
 }
-myPagesButton.addEventListener("click", () => {
-  if (myPagesPanel.hidden) openMyPages();
-  else closeMyPages();
+pagesToggleButton.addEventListener("click", () => {
+  if (pagesDrawer.dataset.open === "true") closePagesDrawer();
+  else openPagesDrawer();
 });
-myPagesNewButton.addEventListener("click", () => {
+pagesDrawerNewButton.addEventListener("click", () => {
   startNewPage();
-  closeMyPages();
+  renderPagesDrawerList();
 });
 
 canvas.addEventListener("wheel", (event) => {
@@ -1077,7 +1087,7 @@ memberIdentity.subscribe((state) => {
     knownArtworksCache = [];
     currentArtwork.clear();
     persistence.replaceKnownArtworks([]);
-    closeMyPages();
+    closePagesDrawer();
     fitPageIntoView();
     render();
   }

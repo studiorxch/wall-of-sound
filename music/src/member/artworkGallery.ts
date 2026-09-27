@@ -14,6 +14,23 @@ export function sortArtworksByRecency(artworks: readonly Artwork[]): Artwork[] {
 }
 
 /**
+ * BLACKBOOK Embedded PAGES Drawer V1 -- the drawer's own card numbering
+ * (1, 2, 3, ...), extracted as a pure function so it's testable without a
+ * DOM harness. Deliberately PRESENTATION ORDER ONLY: `number` is always
+ * this array's own 1-based position, NEVER derived from -- and never
+ * substituted for -- `artwork.id` (real, persisted Artwork identity).
+ * Reuses the SAME `sortArtworksByRecency` ordering every other Blackbook
+ * gallery surface already uses -- not a second/parallel ordering.
+ */
+export interface NumberedArtwork {
+  readonly number: number;
+  readonly artwork: Artwork;
+}
+export function numberArtworksForPagesDrawer(artworks: readonly Artwork[]): readonly NumberedArtwork[] {
+  return sortArtworksByRecency(artworks).map((artwork, index) => ({ number: index + 1, artwork }));
+}
+
+/**
  * ARTWORK V2 -- `Artwork.title` is now real, persisted presentation
  * metadata (empty string means "no title" -- true legacy documents from
  * before this field existed, or a caller like Blackbook that never

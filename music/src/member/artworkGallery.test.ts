@@ -6,6 +6,7 @@ import {
   deriveArtworkTypeLabel,
   formatArtworkUpdatedAt,
   formatMemberSince,
+  numberArtworksForPagesDrawer,
   resolveDefaultArtworkTitle,
   sortArtworksByRecency,
 } from "./artworkGallery";
@@ -119,5 +120,38 @@ describe("formatArtworkUpdatedAt / formatMemberSince", () => {
   it("produces non-empty human-readable strings", () => {
     expect(formatArtworkUpdatedAt(new Date("2026-03-05T10:30:00Z")).length).toBeGreaterThan(0);
     expect(formatMemberSince(new Date("2026-01-01T00:00:00Z")).length).toBeGreaterThan(0);
+  });
+});
+
+describe("BLACKBOOK Embedded PAGES Drawer V1 -- numberArtworksForPagesDrawer", () => {
+  it("numbers 1..N in the SAME recency order sortArtworksByRecency already uses -- never a second/parallel ordering", () => {
+    const older = artwork("a", "2026-01-01T00:00:00Z");
+    const newer = artwork("b", "2026-02-01T00:00:00Z");
+    const numbered = numberArtworksForPagesDrawer([older, newer]);
+    expect(numbered.map((entry) => entry.artwork.id)).toEqual(sortArtworksByRecency([older, newer]).map((a) => a.id));
+    expect(numbered.map((entry) => entry.number)).toEqual([1, 2]);
+  });
+
+  it("numbers are presentation order only -- reordering the underlying recency never makes a number equal an Artwork id, and the same Artwork can receive a DIFFERENT number after its recency changes", () => {
+    const a = artwork("art-a", "2026-01-01T00:00:00Z");
+    const b = artwork("art-b", "2026-02-01T00:00:00Z");
+    const before = numberArtworksForPagesDrawer([a, b]);
+    expect(before.find((entry) => entry.artwork.id === "art-b")?.number).toBe(1);
+    // "art-a" becomes more recently updated than "art-b" -- a real recency change, not an identity change.
+    const aUpdated = { ...a, updatedAt: new Date("2026-03-01T00:00:00Z") };
+    const after = numberArtworksForPagesDrawer([aUpdated, b]);
+    expect(after.find((entry) => entry.artwork.id === "art-a")?.number).toBe(1);
+    // The Artwork's own id/identity is completely unaffected by its number changing.
+    expect(after.find((entry) => entry.artwork.id === "art-a")?.artwork.id).toBe("art-a");
+  });
+
+  it("removes no data from the underlying Artwork -- every original field is still present on each numbered entry", () => {
+    const a = artwork("art-a", "2026-01-01T00:00:00Z", "blackbook:studio-rich-main:page:page-1", "", "blank");
+    const numbered = numberArtworksForPagesDrawer([a]);
+    expect(numbered[0].artwork).toEqual(a);
+  });
+
+  it("an empty Artwork list numbers to an empty list, never throwing", () => {
+    expect(numberArtworksForPagesDrawer([])).toEqual([]);
   });
 });

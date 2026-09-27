@@ -44,7 +44,27 @@
       select { border: 1px solid rgba(255,255,255,.16); border-radius: 6px; background: rgba(24,22,19,.92); color: #f4efe7; padding: 6px 8px; font: 700 10px/1 inherit; letter-spacing: .05em; }
       select:disabled { opacity: .4; }
 
-      #app { position: relative; background: #050505; }
+      /**
+       * BLACKBOOK Embedded PAGES Drawer V1 -- `#app` is now a flex row of
+       * TWO siblings: `#pages-drawer` (navigation) and `#workspace` (the
+       * canvas plus every existing piece of floating chrome, all of which
+       * were already `position: absolute` relative to their nearest
+       * positioned ancestor -- moving that ancestor role from `#app` to
+       * `#workspace` re-parents all of it with ZERO changes to any of
+       * their own existing position/top/left/right/bottom rules below.
+       * Opening/closing the drawer changes `#workspace`'s own flex-basis,
+       * which changes `canvas.clientWidth/Height` -- blackbookRuntime.ts's
+       * own `width()`/`height()` already read those live, and the existing
+       * `resizeCanvasesToDisplaySize()`/`render()` pair (already called on
+       * every native window resize) is called explicitly on drawer
+       * open/close too. This is a VIEWPORT change only: `cameraView`'s own
+       * pan/zoom state is untouched, so the same document-space Artwork
+       * simply gets remapped onto the new screen area, exactly like
+       * resizing the browser window already does -- no Artwork/Mark/
+       * PageFrame coordinate is ever touched by this.
+       */
+      #app { display: flex; flex-direction: row; background: #050505; }
+      #workspace { position: relative; flex: 1 1 auto; min-width: 0; height: 100%; }
       canvas#blackbook-page { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; display: block; }
 
       #brand-mark {
@@ -122,35 +142,47 @@
       #status-toast[data-kind="error"] { color: #ff9a9a; }
 
       /**
-       * BLACKBOOK MY PAGES V1 -- a lightweight panel over the workspace, NOT
-       * a new application screen: same `.island` translucent/blurred
-       * treatment as every other Blackbook control cluster, anchored just
-       * above the bottom bar so it reads as part of this system rather than
-       * a modal interruption. The workspace stays visible/conceptually
-       * "behind" it (no full-screen scrim).
+       * BLACKBOOK Embedded PAGES Drawer V1 -- replaces the previous MY
+       * PAGES modal/overlay. This is a permanent LAYOUT primitive, not an
+       * overlay: `#pages-drawer` is a real flex sibling of `#workspace`
+       * (see `#app`'s own doc above), so opening it narrows the Workspace
+       * rather than covering it, and the Workspace stays fully interactive
+       * while it's open. Closed state is `width: 0` + `overflow: hidden`
+       * (no permanent large column) rather than `display: none`, so the
+       * width transition animates and layout never jumps. Cards are
+       * deliberately minimal (thumbnail + presentation-order number only,
+       * requirement 4) -- no timestamps/dimensions/mark-counts/IDs as
+       * primary UI; that data still exists on each Artwork, it's simply no
+       * longer surfaced here (development diagnostics remain available
+       * through existing mechanisms, e.g. Firestore/DevTools, not a new
+       * inspector).
        */
-      #my-pages-panel {
-        position: absolute; z-index: 12; right: 16px; bottom: 74px;
-        width: min(300px, calc(100vw - 32px));
-        max-height: min(420px, calc(100vh - 140px));
-        display: flex; flex-direction: column; gap: 8px;
-        padding: 10px; overflow: hidden;
+      #pages-drawer {
+        flex: 0 0 auto; width: 0; overflow: hidden;
+        display: flex; flex-direction: column; align-items: stretch;
+        background: rgba(10,9,8,.92); border-right: 1px solid rgba(255,255,255,.08);
+        transition: width 160ms ease;
       }
-      #my-pages-panel[hidden] { display: none; }
-      #my-pages-header { display: flex; align-items: center; justify-content: space-between; padding: 0 2px; }
-      #my-pages-header span { font-size: 10px; letter-spacing: .1em; color: #c8c0b6; }
-      #my-pages-list { display: flex; flex-direction: column; gap: 6px; overflow-y: auto; }
-      #my-pages-empty { font-size: 10px; color: #c8c0b6; padding: 6px 2px 10px; line-height: 1.5; }
-      .my-page-item {
-        display: flex; align-items: center; gap: 10px;
-        width: 100%; text-align: left; min-height: 0;
-        padding: 6px; border-radius: 10px;
+      #pages-drawer[data-open="true"] { width: 116px; }
+      #pages-drawer-list {
+        flex: 1 1 auto; min-height: 0; overflow-y: auto;
+        display: flex; flex-direction: column; align-items: center; gap: 14px;
+        padding: 16px 0;
       }
-      .my-page-item[aria-current="true"] { border-color: rgba(255, 78, 132, 0.72); background: rgba(255, 78, 132, 0.1); }
-      .my-page-item canvas { display: block; border-radius: 5px; background: #f3eee4; flex-shrink: 0; }
-      .my-page-item-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-      .my-page-item-title { font-size: 10px; letter-spacing: .03em; color: #f4efe7; }
-      .my-page-item-meta { font-size: 9px; letter-spacing: .03em; color: #928a80; }
+      #pages-drawer-empty { font-size: 9px; color: #928a80; text-align: center; padding: 0 10px; line-height: 1.5; }
+      .pages-drawer-item {
+        display: flex; flex-direction: column; align-items: center; gap: 6px;
+        width: 84px; padding: 4px; border-radius: 10px; border-color: transparent; background: transparent;
+        flex-shrink: 0;
+      }
+      .pages-drawer-item[aria-current="true"] { border-color: rgba(255, 78, 132, 0.72); background: rgba(255, 78, 132, 0.1); }
+      .pages-drawer-item canvas { display: block; border-radius: 5px; background: #f3eee4; }
+      .pages-drawer-item-number { font-size: 10px; letter-spacing: .03em; color: #c8c0b6; }
+      .pages-drawer-item[aria-current="true"] .pages-drawer-item-number { color: #ff4e84; }
+      #pages-drawer-new {
+        flex-shrink: 0; margin: 0 auto 10px; width: 84px; min-height: 34px;
+        font-size: 14px; font-weight: 700;
+      }
 
       /**
        * β0.1 -- BLACKBOOK canonical RADIO receiver. Previously this
@@ -206,75 +238,82 @@
   </head>
   <body>
     <div id="app">
-      <span id="brand-mark">STUDIORICH BLACKBOOK</span>
-      <a id="map-nav-link" class="island" href="wall-app/" aria-label="Back to MAP">MAP</a>
-      <div id="event-music" class="island" aria-label="RADIO">
-        <span id="event-music-live" data-live="false"><span id="event-music-live-dot"></span>LIVE RADIO</span>
-        <button id="event-music-toggle" data-on="false" type="button">RADIO OFF</button>
-        <input id="event-music-volume" type="range" min="0" max="1" step="0.01" aria-label="RADIO volume" />
-        <div id="event-music-text">
-          <span id="event-music-title"></span>
-          <span id="event-music-artist"></span>
-        </div>
-      </div>
-      <canvas id="blackbook-page" aria-label="Blackbook drawing workspace"></canvas>
-      <small id="status-toast" class="island" aria-live="polite"></small>
-
-      <div id="bottom-bar">
-        <div id="identity-group">
-          <button id="blackbook-member" class="island">…</button>
-        </div>
-
-        <div id="instrument-group">
-          <div id="supply-controls" class="island" aria-label="Material controls">
-            <label id="blackbook-grade-container">GRADE <select id="blackbook-grade-select" aria-label="Pencil grade">
-              <option value="9h">9H</option><option value="6h">6H</option><option value="3h">3H</option>
-              <option value="hb" selected>HB</option><option value="3b">3B</option><option value="6b">6B</option><option value="9b">9B</option>
-            </select></label>
-            <label id="blackbook-color-container">COLOR <input id="blackbook-color" type="color"></label>
-            <label id="blackbook-width-container">WIDTH <input id="blackbook-width" type="range" min="1" max="48" step="1" value="5"></label>
-            <label id="blackbook-opacity-container">OPACITY <input id="blackbook-opacity" type="range" min="0.15" max="1" step="0.05" value="0.82"></label>
-            <!-- BLACKBOOK Spray Physicality V1 -- TEMPORARY minimal cap
-                 selector, Spray-only. See blackbookRuntime.ts's own doc:
-                 the smallest coherent control this batch's own instruction
-                 allows, not a tool-palette redesign. -->
-            <span id="blackbook-cap-container">CAP
-              <button id="blackbook-cap-stock" type="button" aria-pressed="true">SKINNY</button>
-              <button id="blackbook-cap-fat" type="button" aria-pressed="false">FAT</button>
-            </span>
-          </div>
-          <div id="art-island" class="island" aria-label="Art Supplies">
-            <button id="blackbook-pencil" class="tool-icon" aria-pressed="true"><span class="tool-icon-glyph" data-icon="pencil" aria-hidden="true"></span><span class="tool-icon-label">PENCIL</span></button>
-            <button id="blackbook-pen" class="tool-icon" aria-pressed="false"><span class="tool-icon-glyph" data-icon="pen" aria-hidden="true"></span><span class="tool-icon-label">PEN</span></button>
-            <button id="blackbook-marker" class="tool-icon" aria-pressed="false"><span class="tool-icon-glyph" data-icon="marker" aria-hidden="true"></span><span class="tool-icon-label">MARKER</span></button>
-            <button id="blackbook-mop" class="tool-icon" aria-pressed="false"><span class="tool-icon-glyph" data-icon="mop" aria-hidden="true"></span><span class="tool-icon-label">MOP</span></button>
-            <button id="blackbook-spray" class="tool-icon" aria-pressed="false"><span class="tool-icon-glyph" data-icon="spray" aria-hidden="true"></span><span class="tool-icon-label">SPRAY</span></button>
-            <button id="blackbook-eraser" class="tool-icon" aria-pressed="false"><span class="tool-icon-glyph" data-icon="eraser" aria-hidden="true"></span><span class="tool-icon-label">ERASER</span></button>
+      <!-- BLACKBOOK Embedded PAGES Drawer V1 -- a real layout sibling of
+           #workspace, not an overlay. See this file's own CSS doc above
+           for exactly how opening/closing this reflows the Workspace
+           without ever touching Artwork/world coordinates. -->
+      <nav id="pages-drawer" data-open="false" aria-label="Pages">
+        <div id="pages-drawer-list"></div>
+        <button id="pages-drawer-new" type="button" aria-label="New page">+</button>
+      </nav>
+      <div id="workspace">
+        <span id="brand-mark">STUDIORICH BLACKBOOK</span>
+        <a id="map-nav-link" class="island" href="wall-app/" aria-label="Back to MAP">MAP</a>
+        <div id="event-music" class="island" aria-label="RADIO">
+          <span id="event-music-live" data-live="false"><span id="event-music-live-dot"></span>LIVE RADIO</span>
+          <button id="event-music-toggle" data-on="false" type="button">RADIO OFF</button>
+          <input id="event-music-volume" type="range" min="0" max="1" step="0.01" aria-label="RADIO volume" />
+          <div id="event-music-text">
+            <span id="event-music-title"></span>
+            <span id="event-music-artist"></span>
           </div>
         </div>
+        <canvas id="blackbook-page" aria-label="Blackbook drawing workspace"></canvas>
+        <small id="status-toast" class="island" aria-live="polite"></small>
 
-        <div id="system-group">
-          <button id="blackbook-fit" class="island">FIT</button>
-          <button id="blackbook-pan" class="island" aria-pressed="false">PAN</button>
-          <button id="blackbook-undo" class="island" disabled>UNDO</button>
-          <!-- BLACKBOOK CLEAR + Single-Step Undo V1 -- clears the CURRENT
-               Artwork's Marks in place (no confirmation -- UNDO is the
-               safety mechanism). Distinct from NEW, which starts a
-               separate Artwork/page. -->
-          <button id="blackbook-clear" class="island" disabled>CLEAR</button>
-          <button id="blackbook-new" class="island">NEW</button>
-          <button id="blackbook-my-pages" class="island" aria-pressed="false" aria-haspopup="true">MY PAGES</button>
-          <!-- Future system-menu home (About StudioRich / Feedback / Help / Version) -- not built in this pass, but reserved here so it never has to compete with drawing space later. -->
-          <button id="blackbook-menu" class="island" disabled>…</button>
-        </div>
-      </div>
+        <div id="bottom-bar">
+          <div id="identity-group">
+            <button id="blackbook-member" class="island">…</button>
+          </div>
 
-      <div id="my-pages-panel" class="island" hidden aria-label="My Pages">
-        <div id="my-pages-header">
-          <span>MY PAGES</span>
-          <button id="my-pages-new">+ NEW</button>
+          <div id="instrument-group">
+            <div id="supply-controls" class="island" aria-label="Material controls">
+              <label id="blackbook-grade-container">GRADE <select id="blackbook-grade-select" aria-label="Pencil grade">
+                <option value="9h">9H</option><option value="6h">6H</option><option value="3h">3H</option>
+                <option value="hb" selected>HB</option><option value="3b">3B</option><option value="6b">6B</option><option value="9b">9B</option>
+              </select></label>
+              <label id="blackbook-color-container">COLOR <input id="blackbook-color" type="color"></label>
+              <label id="blackbook-width-container">WIDTH <input id="blackbook-width" type="range" min="1" max="48" step="1" value="5"></label>
+              <label id="blackbook-opacity-container">OPACITY <input id="blackbook-opacity" type="range" min="0.15" max="1" step="0.05" value="0.82"></label>
+              <!-- BLACKBOOK Spray Physicality V1 -- TEMPORARY minimal cap
+                   selector, Spray-only. See blackbookRuntime.ts's own doc:
+                   the smallest coherent control this batch's own instruction
+                   allows, not a tool-palette redesign. -->
+              <span id="blackbook-cap-container">CAP
+                <button id="blackbook-cap-stock" type="button" aria-pressed="true">SKINNY</button>
+                <button id="blackbook-cap-fat" type="button" aria-pressed="false">FAT</button>
+              </span>
+            </div>
+            <div id="art-island" class="island" aria-label="Art Supplies">
+              <button id="blackbook-pencil" class="tool-icon" aria-pressed="true"><span class="tool-icon-glyph" data-icon="pencil" aria-hidden="true"></span><span class="tool-icon-label">PENCIL</span></button>
+              <button id="blackbook-pen" class="tool-icon" aria-pressed="false"><span class="tool-icon-glyph" data-icon="pen" aria-hidden="true"></span><span class="tool-icon-label">PEN</span></button>
+              <button id="blackbook-marker" class="tool-icon" aria-pressed="false"><span class="tool-icon-glyph" data-icon="marker" aria-hidden="true"></span><span class="tool-icon-label">MARKER</span></button>
+              <button id="blackbook-mop" class="tool-icon" aria-pressed="false"><span class="tool-icon-glyph" data-icon="mop" aria-hidden="true"></span><span class="tool-icon-label">MOP</span></button>
+              <button id="blackbook-spray" class="tool-icon" aria-pressed="false"><span class="tool-icon-glyph" data-icon="spray" aria-hidden="true"></span><span class="tool-icon-label">SPRAY</span></button>
+              <button id="blackbook-eraser" class="tool-icon" aria-pressed="false"><span class="tool-icon-glyph" data-icon="eraser" aria-hidden="true"></span><span class="tool-icon-label">ERASER</span></button>
+            </div>
+          </div>
+
+          <div id="system-group">
+            <button id="blackbook-fit" class="island">FIT</button>
+            <button id="blackbook-pan" class="island" aria-pressed="false">PAN</button>
+            <button id="blackbook-undo" class="island" disabled>UNDO</button>
+            <!-- BLACKBOOK CLEAR + Single-Step Undo V1 -- clears the CURRENT
+                 Artwork's Marks in place (no confirmation -- UNDO is the
+                 safety mechanism). Distinct from NEW, which starts a
+                 separate Artwork/page. -->
+            <button id="blackbook-clear" class="island" disabled>CLEAR</button>
+            <button id="blackbook-new" class="island">NEW</button>
+            <!-- BLACKBOOK Embedded PAGES Drawer V1 -- the compact, always-
+                 discoverable toggle for #pages-drawer (replaces the
+                 previous MY PAGES modal trigger; same button, new
+                 behavior -- opening/closing a layout drawer rather than a
+                 modal overlay). -->
+            <button id="blackbook-pages-toggle" class="island" aria-pressed="false" aria-controls="pages-drawer">PAGES</button>
+            <!-- Future system-menu home (About StudioRich / Feedback / Help / Version) -- not built in this pass, but reserved here so it never has to compete with drawing space later. -->
+            <button id="blackbook-menu" class="island" disabled>…</button>
+          </div>
         </div>
-        <div id="my-pages-list"></div>
       </div>
     </div>
     <script type="module" src="/src/member/blackbookRuntime.ts"></script>

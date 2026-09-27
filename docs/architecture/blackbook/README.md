@@ -132,12 +132,47 @@ future Wallpaper batch doesn't have to reverse an incorrectly-assumed
 "Artboard is always freely movable/resizable" invariant that was never
 actually established.
 
-## 5b. PAGE NAVIGATION (direction only — not implemented)
+## 5b. PAGE NAVIGATION (current: embedded PAGES Drawer V1)
 
-**Current**: MY PAGES (§5, §7) is a minimal, OPEN/SELECT-only modal
-overlay listing this member's flat set of Blackbook Artworks
-(thumbnail + updated-at date + mark count), with no reorder/delete. It
-covers the entire viewport while open.
+**Current, as of the BLACKBOOK Embedded PAGES Drawer V1 batch**: the
+previous MY PAGES modal/overlay is replaced by a permanent LAYOUT
+primitive — `#pages-drawer` is a real flex sibling of `#workspace`
+(`music/blackbook.html`), not an overlay. Opening it narrows `#workspace`
+(and everything positioned relative to it — canvas, toolbar, RADIO HUD,
+status toast, all unchanged CSS, simply re-parented); closing restores
+the width. The Workspace stays fully interactive and visible while the
+drawer is open, and it never auto-closes on selection or on pressing "+".
+
+Opening/closing the drawer is a VIEWPORT change only: `blackbookRuntime.ts`
+calls its own existing `resizeCanvasesToDisplaySize()`/`render()` pair
+(the same pair the native `window` `resize` listener already calls) —
+`cameraView`'s own pan/zoom state is untouched, so the same document-space
+Artwork/Marks/PageFrame/Artboard simply get remapped onto the new screen
+area, exactly like an ordinary browser window resize. No Artwork/Mark/
+Artboard coordinate is ever mutated by opening or closing the drawer.
+
+Cards are deliberately minimal: a thumbnail (`drawArtworkThumbnail`,
+reused verbatim) plus a PRESENTATION-ORDER number only
+(`artworkGallery.ts`'s `numberArtworksForPagesDrawer`, a pure function
+over the SAME `sortArtworksByRecency` ordering every other Blackbook
+gallery surface already uses). Timestamps/dimensions/mark-counts/ids are
+no longer primary drawer UI — that data still exists on each Artwork
+document, unchanged; it simply isn't surfaced here. The presentation
+number is never Artwork identity and never persisted. Selecting a card
+routes through the same canonical `openArtwork()` (§ NEW/URL identity,
+`779af30`) every other Artwork-opening path already uses — the drawer is
+not a second navigation/identity mechanism. The "+" affordance calls the
+same canonical NEW/pending-Artwork lifecycle (§7's CLEAR+Undo paragraph's
+sibling invariant) — pressing it never creates an empty persisted
+Artwork.
+
+**Known V1 limitation (thumbnail accuracy)**: thumbnails reuse the
+existing `drawArtworkThumbnail` renderer as-is. It is a real, correct
+rendering of an Artwork's own Marks (not a placeholder), but it is not
+yet a dedicated, optimized preview/export pipeline — no bounded caching,
+no incremental update as an Artwork's own Marks change while the drawer
+is open. A substantially more accurate/efficient thumbnail subsystem
+remains future work, not built in this batch.
 
 **Direction (not current — none of the following is built)**:
 
@@ -145,28 +180,17 @@ covers the entire viewport while open.
   eventually contain one or more Artboards (§5a) — a future connected/
   chained Artwork (e.g. a continuous train or wall composed of many
   Artboards) remains ONE item in that presentation order, never expanded
-  into many separate list entries.
-- The page navigator becomes an embedded, COLLAPSIBLE drawer, not a modal
-  overlay: opening it creates a persistent navigation column that the
-  Workspace viewport reflows/pushes over (never a full-viewport cover).
-  Artwork/world coordinates never change merely because the viewport
-  reflowed — the drawer is a viewport/presentation concern, never an
-  Artwork-coordinate concern (same "presentation ≠ world" separation §5a
-  already establishes for Workspace/Artboard).
-- Navigation becomes primarily THUMBNAIL-based; accurate Artboard/Artwork
-  thumbnails become the primary recognition mechanism, not development
-  metadata (timestamps/dimensions/mark counts), which should not dominate
-  the permanent drawer the way it does MY PAGES' own current listing.
-  Sequence numbers shown represent PRESENTATION ORDER, never database
-  identity.
-- A connected/chained Artwork gets a compact "this continues" indication
-  in the drawer, rather than attempting to render every one of its
-  Artboards as separate entries.
-- Reorder and delete are later direction, not this drawer's own first
-  version.
+  into many separate drawer entries. The drawer represents the Artwork,
+  not every Artboard it may eventually contain; a compact "this
+  continues" indicator for such an Artwork is future direction with no
+  chosen design yet.
+- Drag reorder, a persisted presentation-order schema, and Artwork
+  deletion are all later direction — V1 is open/select only, exactly as
+  MY PAGES was.
+- Page naming and page folders are not implemented.
 
-None of this is implemented. MY PAGES remains the current, real mechanism
-until a dedicated PAGES-drawer batch replaces it.
+MY PAGES (the modal) no longer exists — the drawer is now the one current
+mechanism for Blackbook page navigation.
 
 ## 6. SURFACE (current vs. direction)
 
