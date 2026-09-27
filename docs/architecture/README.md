@@ -61,3 +61,4 @@ Architecture docs: no update required.
 | [DEPLOYMENT.md](DEPLOYMENT.md) | Verified deployment facts and procedure, especially RADIO |
 | [DEBT.md](DEBT.md) | Actionable architectural debt, each with a revisit trigger |
 | [radio/README.md](radio/README.md) | The one-page RADIO architecture map — read this before any RADIO batch |
+| [admin/README.md](admin/README.md) | ADMIN control plane — its relationship to MEMBER, visibility-vs-authorization rule, current RADIO scope |

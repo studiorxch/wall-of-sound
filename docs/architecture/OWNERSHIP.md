@@ -98,8 +98,22 @@ direction map.
 
 ## ADMIN
 
+See [admin/README.md](admin/README.md) for the full control-plane map.
+
+ADMIN is a sibling of MEMBER in the global account/navigation layer, not a
+descendant of it: MEMBER is identity/entitlement for the creative products
+(MAP, BLACKBOOK, RADIO listening); ADMIN is StudioRich's own operational
+control plane over those same products (RADIO ops, future SUBWAY/BLACKBOOK/
+MUSIC ops). Both read the same underlying Firebase Auth identity
+(`MemberIdentityState`) — ADMIN is not a second identity system, it is a
+visibility+authority distinction layered on the one identity Member already
+has.
+
 | Responsibility | Owner | Status |
 |---|---|---|
 | ADMIN shell/tab composition | `music/admin.html` + `adminShellRuntime.ts` (`music/src/member/`) | ACTIVE — UI-only operator gate (`STUDIO_RICH_OPERATOR_EMAILS`); real authority remains `firestore.rules`' `isEventOperator()` inside each composed page |
+| MAP → ADMIN nav entry (sibling of the MEMBER button) | `ensureAdminLink()`/`renderAdminLinkVisibility()` (`subwayMemberRuntime.ts`) | ACTIVE — same `STUDIO_RICH_OPERATOR_EMAILS` UI-only gate; opens `admin.html` in a new tab (no DualDeckPlaybackEngine of its own, so no risk to MAP's own RADIO receiver) |
 | RADIO Program workspace | same-origin iframe of the existing, unmodified `event-control.html` | CANONICAL implementation reused, not rebuilt |
 | RADIO Channel workspace | same-origin iframe of the existing, unmodified `channel-control.html` | CANONICAL implementation reused, not rebuilt |
+| RADIO operator entry point (from ADMIN) | ADMIN's RADIO tab → Program pane (`event-control.html`) + Channel pane (`channel-control.html`) | CANONICAL — the one operator path; not duplicated elsewhere in ADMIN |
+| SUBWAY / BLACKBOOK / MUSIC ops sections | not implemented | DIRECTION — see [admin/README.md](admin/README.md)'s information architecture; β0.1 scope is RADIO only |

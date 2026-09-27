@@ -12,6 +12,7 @@ import {
   PENCIL_ERASER_SUPPLY,
   PENCIL_SUPPLY,
   SPRAY_SUPPLY,
+  STUDIO_RICH_OPERATOR_EMAILS,
   type Artwork,
   type ArtworkType,
   type MemberIdentityState,
@@ -464,6 +465,45 @@ function renderCloseArtworkControl(): void {
 // This is a NEW, always-visible top-level container, separate from that
 // operator-only drawing toolbar, which keeps its own existing visibility
 // rule completely untouched (no weakening of map:* paint authorization).
+/** ADMIN control-plane entry -- see docs/architecture/admin/README.md and OWNERSHIP.md's ADMIN section. Gated by the SAME canonical STUDIO_RICH_OPERATOR_EMAILS allowlist every other operator-only UI in this app checks; the real authority stays firestore.rules' isEventOperator()/isStudioRichOperator(), unaffected by this UI-only visibility toggle. An ordinary member gets no ADMIN element in the DOM at all -- not a disabled button, not a placeholder -- since `renderAdminLinkVisibility()` removes the link entirely rather than hiding/disabling it. */
+const ADMIN_URL = new URL("../admin.html", window.location.href).href;
+
+function isAuthorizedOperator(): boolean {
+  return state.status === "signedIn" && STUDIO_RICH_OPERATOR_EMAILS.includes(state.authUser.email ?? "");
+}
+
+// Opens in a NEW tab (unlike subwayBlackbookNavLink.js's deliberate
+// same-tab link) -- admin.html never constructs a DualDeckPlaybackEngine
+// of its own (it only iframes event-control.html/channel-control.html, the
+// existing Program/Channel operator tools), so there is no risk of a
+// second competing RADIO playback engine. Keeping MAP's own tab alive also
+// means its RADIO receiver keeps playing uninterrupted while an operator
+// works in ADMIN, rather than tearing it down via same-tab navigation.
+function ensureAdminLink(): HTMLAnchorElement {
+  let link = document.getElementById("subway-admin-nav-link") as HTMLAnchorElement | null;
+  if (link) return link;
+  link = document.createElement("a");
+  link.id = "subway-admin-nav-link";
+  link.href = ADMIN_URL;
+  link.target = "_blank";
+  link.rel = "noopener";
+  link.textContent = "ADMIN";
+  link.setAttribute("aria-label", "Open StudioRich Admin");
+  link.className = "subway-blackbook-nav-link";
+  link.style.cssText = "position:fixed;top:104px;right:112px;z-index:10000;";
+  document.body.appendChild(link);
+  return link;
+}
+
+function renderAdminLinkVisibility(): void {
+  const existing = document.getElementById("subway-admin-nav-link");
+  if (isAuthorizedOperator()) {
+    ensureAdminLink().hidden = false;
+  } else if (existing) {
+    existing.remove(); // signed out / unauthorized -- no artifact left in the DOM at all
+  }
+}
+
 function ensureTopLevelSignInUI(): HTMLButtonElement {
   let bar = document.getElementById("subway-member-topbar");
   if (bar) return bar.querySelector("[data-member-action]") as HTMLButtonElement;
@@ -561,6 +601,7 @@ function renderIdentityState(): void {
       ? "…"
       : hasEligibleUnboundDrawing() ? "SIGN IN TO SAVE" : "SIGN IN";
   button.setAttribute("aria-label", state.status === "signedIn" ? "Open StudioRich Member Home" : "StudioRich Member sign in");
+  renderAdminLinkVisibility();
   if (state.status === "signedIn") {
     dialog?.close();
     setMessage("");
