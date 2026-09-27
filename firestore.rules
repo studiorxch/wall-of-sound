@@ -248,7 +248,16 @@ service cloud.firestore {
         && frame.height > 0;
     }
 
-    function hasValidArtworkV1Shape(data) {
+    // BLACKBOOK CLEAR + Single-Step Undo V1 -- `allowEmptyMarks` is true
+    // ONLY for the `update` rule below (an EXISTING, already-owned
+    // document being rewritten with a possibly-empty `marks` array by
+    // CLEAR, or restored to its pre-clear array by a single UNDO) --
+    // NEVER for `create`, which still requires a real first Mark, per
+    // this app's own "NEW must not persist an empty Artwork" invariant.
+    // `data.marks[0]` is guarded (never indexed when the list is empty) --
+    // indexing an empty list is itself a rules-evaluation error, not a
+    // false/deny result.
+    function hasValidArtworkV1Shape(data, allowEmptyMarks) {
       return data.keys().hasAll(['creatorId', 'surfaceId', 'artworkType', 'title', 'createdAt', 'updatedAt', 'composition', 'marks', 'state', 'visibility'])
         // Blackbook Spatial Workspace V1: 'pageFrame' is OPTIONAL (not in
         // hasAll) -- only a Blackbook-style bounded-page Artwork carries it;
@@ -288,9 +297,9 @@ service cloud.firestore {
         && data.composition.startedAt is timestamp
         && data.composition.lastEditedAt is timestamp
         && data.marks is list
-        && data.marks.size() >= 1
+        && data.marks.size() >= (allowEmptyMarks ? 0 : 1)
         && data.marks.size() <= 500
-        && hasValidArtworkMark(data.marks[0])
+        && (data.marks.size() == 0 || hasValidArtworkMark(data.marks[0]))
         && data.state in ['draft', 'archived']
         && data.visibility == 'private';
     }
@@ -340,7 +349,7 @@ service cloud.firestore {
         && (!request.resource.data.keys().hasAny(['surfaceId'])
           || !isRestrictedAuthoringSurface(request.resource.data.surfaceId)
           || isStudioRichMapAuthor())
-        && (hasValidArtworkShape(request.resource.data) || hasValidArtworkV1Shape(request.resource.data))
+        && (hasValidArtworkShape(request.resource.data) || hasValidArtworkV1Shape(request.resource.data, false))
         && request.resource.data.creatorId == request.auth.uid
         && request.resource.data.state == 'draft'
         && request.resource.data.visibility == 'private'
@@ -363,7 +372,12 @@ service cloud.firestore {
         && (!resource.data.keys().hasAny(['surfaceId'])
           || !isRestrictedAuthoringSurface(resource.data.surfaceId)
           || isStudioRichMapAuthor())
-        && (hasValidArtworkShape(request.resource.data) || hasValidArtworkV1Shape(request.resource.data))
+        // BLACKBOOK CLEAR + Single-Step Undo V1 -- `allowEmptyMarks: true`
+        // here only: an update to an EXISTING, already-owned document may
+        // legitimately carry an empty `marks` array (CLEAR), never a
+        // brand-new document (the `create` rule above still passes
+        // `false`).
+        && (hasValidArtworkShape(request.resource.data) || hasValidArtworkV1Shape(request.resource.data, true))
         && request.resource.data.createdAt == resource.data.createdAt
         && (!resource.data.keys().hasAny(['surfaceId']) || request.resource.data.surfaceId == resource.data.surfaceId)
         && (!resource.data.keys().hasAny(['artworkType']) || request.resource.data.artworkType == resource.data.artworkType)

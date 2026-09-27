@@ -123,6 +123,21 @@ export interface ArtworkRepository {
   listOwnedArtwork?(creatorId: string): Promise<readonly Artwork[]>;
   appendOwnedArtworkMark(artworkId: string, creatorId: string, mark: ArtworkMark): Promise<Artwork>;
   removeOwnedArtworkMark(artworkId: string, creatorId: string, markId: string): Promise<Artwork | null>;
+  /**
+   * BLACKBOOK CLEAR + Single-Step Undo V1 -- replaces an owned Artwork's
+   * ENTIRE `marks` array in one write, WITHOUT deleting the document even
+   * when `marks` is empty (unlike `removeOwnedArtworkMark`, which deletes
+   * the whole document once its own per-mark removal empties it -- that
+   * behavior is correct for "the last stroke was undone," wrong for
+   * "CLEAR the working surface but keep this Artwork/page"). Serves BOTH
+   * CLEAR (`marks: []`) and restoring the pre-clear composition via a
+   * single UNDO (`marks: <the pre-clear snapshot>`) -- one logical action,
+   * one write, never a loop of per-Mark removals/appends. Optional so
+   * every existing `ArtworkRepository` fake/mock in this codebase (which
+   * predates this capability) keeps compiling unchanged; the real
+   * Firestore-backed repository always implements it.
+   */
+  replaceOwnedArtworkMarks?(artworkId: string, creatorId: string, marks: readonly ArtworkMark[]): Promise<Artwork>;
   deleteOwnedArtwork(artworkId: string, creatorId: string): Promise<void>;
   /** ARTWORK V2 -- renames an owned Artwork. Never changes the Artwork id; updates `updatedAt`. */
   renameOwnedArtwork(artworkId: string, creatorId: string, title: string): Promise<Artwork>;

@@ -127,8 +127,18 @@ export function decodeArtworkData(id: string, data: DocumentData): MapArtwork {
   const createdAt = timestamp(data, "createdAt");
   const updatedAt = timestamp(data, "updatedAt");
   const legacy = data.surface?.type === "map" && data.geometry?.format === "geographic-strokes-v1" && Array.isArray(data.geometry.strokes);
+  // BLACKBOOK CLEAR + Single-Step Undo V1 -- a real, legitimately-cleared
+  // Artwork now persists with ZERO marks (see `replaceOwnedArtworkMarks`'s
+  // own doc) and must still decode successfully -- the previous
+  // `if (!marks.length) throw new Error("invalid_artwork_marks")` here
+  // rejected exactly that case. Matches the same relaxation already made
+  // at the write side (firestore.rules' `hasValidArtworkV1Shape`,
+  // `storedArtwork`'s own bounds handling): a genuinely malformed document
+  // (no `marks` field at all) still decodes to `[]` via the ternary above
+  // rather than throwing, same as before this change -- there was never a
+  // way to distinguish "malformed" from "legitimately empty" at this
+  // layer, and the write side is what actually enforces well-formedness.
   const marks = legacy ? data.geometry.strokes.map((stroke: unknown) => legacyMark(stroke, createdAt)) : Array.isArray(data.marks) ? data.marks.map(decodeMark) : [];
-  if (!marks.length) throw new Error("invalid_artwork_marks");
   if (data.state !== "draft" && data.state !== "archived") throw new Error("invalid_artwork_state");
   if (data.visibility !== "private") throw new Error("invalid_artwork_visibility");
   const pageFrame = decodePageFrame(data.pageFrame);
@@ -164,7 +174,17 @@ function storedArtwork(artwork: Artwork, updatedAt: ReturnType<typeof serverTime
     title: artwork.title,
     createdAt: Timestamp.fromDate(artwork.createdAt),
     updatedAt,
-    composition: { bounds: boundsForMarks(artwork.marks), startedAt: Timestamp.fromDate(artwork.composition.startedAt), lastEditedAt: updatedAt },
+    // BLACKBOOK CLEAR + Single-Step Undo V1 -- `boundsForMarks([])` throws
+    // ("artwork_requires_mark"): it was never meant to run against an
+    // empty marks array, since every PRIOR caller either always had at
+    // least one mark (append/create) or deleted the whole document rather
+    // than persisting zero marks (removeOwnedArtworkMark). CLEAR is the
+    // first caller that legitimately persists an empty marks array while
+    // keeping the document alive -- the previous bounds are simply kept
+    // (meaningless while there's nothing to show, harmless to leave
+    // stale; recomputed correctly the moment any mark exists again).
+    // Byte-identical to the previous behavior whenever marks is non-empty.
+    composition: { bounds: artwork.marks.length > 0 ? boundsForMarks(artwork.marks) : artwork.composition.bounds, startedAt: Timestamp.fromDate(artwork.composition.startedAt), lastEditedAt: updatedAt },
     marks: artwork.marks,
     state: artwork.state,
     visibility: artwork.visibility,
@@ -214,6 +234,18 @@ export class FirestoreArtworkRepository implements ArtworkRepository {
       transaction.set(reference, storedArtwork({ ...artwork, marks }, serverTimestamp()));
     });
     return deleted ? null : decodeArtwork(await getDoc(reference));
+  }
+
+  async replaceOwnedArtworkMarks(artworkId: string, creatorId: string, marks: readonly ArtworkMark[]): Promise<Artwork> {
+    assertIdentifier(artworkId, "artwork_id"); assertIdentifier(creatorId, "member_uid");
+    marks.forEach(validateArtworkMark);
+    const reference = doc(this.firestore, ARTWORK_COLLECTION_PATH, artworkId);
+    await runTransaction(this.firestore, async (transaction) => {
+      const artwork = decodeArtwork(await transaction.get(reference));
+      if (artwork.creatorId !== creatorId) throw new Error("artwork_owner_mismatch");
+      transaction.set(reference, storedArtwork({ ...artwork, marks: [...marks] }, serverTimestamp()));
+    });
+    return decodeArtwork(await getDoc(reference));
   }
 
   async listOwnedMapArtwork(creatorId: string): Promise<readonly MapArtwork[]> {

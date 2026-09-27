@@ -132,6 +132,42 @@ future Wallpaper batch doesn't have to reverse an incorrectly-assumed
 "Artboard is always freely movable/resizable" invariant that was never
 actually established.
 
+## 5b. PAGE NAVIGATION (direction only — not implemented)
+
+**Current**: MY PAGES (§5, §7) is a minimal, OPEN/SELECT-only modal
+overlay listing this member's flat set of Blackbook Artworks
+(thumbnail + updated-at date + mark count), with no reorder/delete. It
+covers the entire viewport while open.
+
+**Direction (not current — none of the following is built)**:
+
+- BLACKBOOK contains an ORDERED sequence of Artworks. An Artwork may
+  eventually contain one or more Artboards (§5a) — a future connected/
+  chained Artwork (e.g. a continuous train or wall composed of many
+  Artboards) remains ONE item in that presentation order, never expanded
+  into many separate list entries.
+- The page navigator becomes an embedded, COLLAPSIBLE drawer, not a modal
+  overlay: opening it creates a persistent navigation column that the
+  Workspace viewport reflows/pushes over (never a full-viewport cover).
+  Artwork/world coordinates never change merely because the viewport
+  reflowed — the drawer is a viewport/presentation concern, never an
+  Artwork-coordinate concern (same "presentation ≠ world" separation §5a
+  already establishes for Workspace/Artboard).
+- Navigation becomes primarily THUMBNAIL-based; accurate Artboard/Artwork
+  thumbnails become the primary recognition mechanism, not development
+  metadata (timestamps/dimensions/mark counts), which should not dominate
+  the permanent drawer the way it does MY PAGES' own current listing.
+  Sequence numbers shown represent PRESENTATION ORDER, never database
+  identity.
+- A connected/chained Artwork gets a compact "this continues" indication
+  in the drawer, rather than attempting to render every one of its
+  Artboards as separate entries.
+- Reorder and delete are later direction, not this drawer's own first
+  version.
+
+None of this is implemented. MY PAGES remains the current, real mechanism
+until a dedicated PAGES-drawer batch replaces it.
+
 ## 6. SURFACE (current vs. direction)
 
 **Current**: `surfaceId` is already a real, required, immutable-after-
@@ -161,6 +197,29 @@ the shared Art Supply set (pencil/pen/marker/mop/spray), single-creator
 authorship (`creatorId == request.auth.uid`), save/versioning via ordinary
 Firestore document updates (`updatedAt`, `state: draft|archived`). No
 collaboration model exists (one `creatorId` per Artwork, immutable).
+
+**CLEAR + Single-Step Undo (current, as of the BLACKBOOK CLEAR +
+Single-Step Undo batch)**: an Artwork's ENTIRE `marks` array can be
+replaced in one write (`ArtworkRepository.replaceOwnedArtworkMarks`),
+distinct from the per-Mark `appendOwnedArtworkMark`/`removeOwnedArtworkMark`
+this file already documented. Unlike `removeOwnedArtworkMark` (which
+deletes the whole document once its own removal empties `marks`),
+`replaceOwnedArtworkMarks` never deletes the document, even when given an
+empty array -- an Artwork document with zero Marks is now a valid,
+intentional state (a cleared page), not a malformed one. This required
+relaxing two previously-universal invariants, now precisely scoped:
+`firestore.rules`' `hasValidArtworkV1Shape` accepts `marks.size() == 0`
+on `update` only (never `create` -- a brand-new Artwork still always
+requires a real first Mark), and `decodeArtworkData`'s client-side decoder
+no longer rejects an empty `marks` array. CLEAR is one logical, one-write
+action regardless of how many Marks existed (never a loop of per-Mark
+removals); restoring via a single Undo is the same operation with the
+pre-clear array. Runtime state for "is there a pending clear to undo"
+(`lastClearSnapshot` in `blackbookRuntime.ts`) is transient/in-memory
+only, invalidated the instant any other authoring action happens --
+cross-reload Undo of an OLDER clear is not a guarantee this architecture
+makes; only the immediate result of CLEAR, or of an immediate Undo of it,
+is guaranteed persisted correctly.
 
 **Direction (not current)**: READ content (photography, artwork, editorial,
 station/neighborhood stories, characters, products, location information,

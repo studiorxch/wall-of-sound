@@ -20,6 +20,7 @@ import {
   createBlackbookArtworkPersistenceBridge,
   filterBlackbookArtworks,
   resolveActiveBlackbookArtworkId,
+  toBlackbookMark,
   withActiveArtworkUrlParam,
   type BlackbookOperation,
 } from "./blackbookArtworkBridge";
@@ -45,6 +46,7 @@ function required<T>(value: T | null, error: string): T { if (!value) throw new 
 const canvas = required(document.querySelector<HTMLCanvasElement>("#blackbook-page"), "blackbook_surface_missing");
 const panButton = required(document.querySelector<HTMLButtonElement>("#blackbook-pan"), "blackbook_surface_missing");
 const undoButton = required(document.querySelector<HTMLButtonElement>("#blackbook-undo"), "blackbook_surface_missing");
+const clearButton = required(document.querySelector<HTMLButtonElement>("#blackbook-clear"), "blackbook_surface_missing");
 const fitButton = required(document.querySelector<HTMLButtonElement>("#blackbook-fit"), "blackbook_surface_missing");
 const newButton = required(document.querySelector<HTMLButtonElement>("#blackbook-new"), "blackbook_surface_missing");
 const myPagesButton = required(document.querySelector<HTMLButtonElement>("#blackbook-my-pages"), "blackbook_surface_missing");
@@ -223,6 +225,17 @@ function resizeCanvasesToDisplaySize(): void {
 }
 
 let operations: BlackbookOperation[] = [];
+/**
+ * BLACKBOOK CLEAR + Single-Step Undo V1 -- set the instant CLEAR runs,
+ * holding the pre-clear `operations` so exactly one UNDO can restore all
+ * of them as a single logical action, regardless of how many Marks were
+ * cleared (never a per-Mark undo stack). Invalidated (nulled) the moment
+ * ANY other authoring action happens afterward -- a newly committed
+ * stroke, or a second CLEAR -- so CLEAR's own undo is only ever available
+ * while it is genuinely "the last action," the same single-level
+ * semantics Undo already has for an individual stroke.
+ */
+let lastClearSnapshot: readonly BlackbookOperation[] | null = null;
 interface CapturedPoint { readonly x: number; readonly y: number; readonly tMs?: number; readonly pressure?: number }
 let activePoints: CapturedPoint[] = [];
 /** BLACKBOOK Spray Physicality V1 -- the current gesture's own start time, reset on every pointerdown. Never persisted itself; only `tMs` (elapsed since this) is ever recorded on a point. */
@@ -333,7 +346,11 @@ function render(): void {
   ctx.drawImage(materialLayers.ink.canvas, 0, 0, width(), height());
   ctx.drawImage(materialLayers.marker.canvas, 0, 0, width(), height());
   renderArtboardOutline();
-  undoButton.disabled = memberState.status !== "signedIn" || operations.length === 0;
+  // BLACKBOOK CLEAR + Single-Step Undo V1 -- Undo must stay enabled right
+  // after CLEAR even though `operations` is now empty (there's a pending
+  // `lastClearSnapshot` to restore).
+  undoButton.disabled = memberState.status !== "signedIn" || (operations.length === 0 && lastClearSnapshot === null);
+  clearButton.disabled = memberState.status !== "signedIn" || operations.length === 0;
   // Drawing Shell V1: `aria-pressed` is now the one canonical active-tool
   // state signal (same convention Map's toolbar already used) -- CSS reads
   // it directly ([aria-pressed="true"]), so a screen reader and the visual
@@ -573,6 +590,26 @@ function setActiveArtworkIdentity(artworkId: string): void {
   window.history.replaceState(null, "", withActiveArtworkUrlParam(window.location.href, artworkId));
 }
 
+/**
+ * BLACKBOOK CLEAR + Single-Step Undo V1 -- replaces `artworkId`'s ENTIRE
+ * persisted `marks` array in ONE write (`repository.replaceOwnedArtworkMarks`,
+ * never a loop of per-Mark append/remove calls -- CLEAR of a 500-Mark
+ * Artwork is one logical, one-write action). Reuses `toBlackbookMark`
+ * (the SAME encoder every ordinary stroke commit already uses) for each
+ * operation, so a restored-via-Undo Mark is byte-identical to how it was
+ * originally persisted. `op.markId` is used when a stroke's own append
+ * has already resolved and bound it; falls back to the operation's own
+ * client-side id only for the narrow window where CLEAR/UNDO race an
+ * in-flight append (the SAME class of unresolved race the existing
+ * single-stroke Undo already has -- not newly introduced here).
+ */
+function replaceArtworkMarks(artworkId: string, ops: readonly BlackbookOperation[]): Promise<Artwork> {
+  if (memberState.status !== "signedIn") return Promise.reject(new Error("blackbook_clear_requires_sign_in"));
+  if (!repository.replaceOwnedArtworkMarks) return Promise.reject(new Error("blackbook_clear_unsupported"));
+  const marks = ops.map((operation) => toBlackbookMark(operation, operation.markId ?? operation.id));
+  return repository.replaceOwnedArtworkMarks(artworkId, memberState.member.uid, marks);
+}
+
 const persistence = createBlackbookArtworkPersistenceBridge({
   repository,
   drawing: {
@@ -651,6 +688,10 @@ function openArtwork(artworkId: string): void {
   if (!knownArtworksCache.some((artwork) => artwork.id === artworkId)) return;
   setActiveArtworkIdentity(artworkId);
   activePoints = [];
+  // BLACKBOOK CLEAR + Single-Step Undo V1 -- a pending clear-undo belongs
+  // only to the Artwork it was cleared from; switching to a different
+  // Artwork must never let it resurface later.
+  lastClearSnapshot = null;
   applyActiveArtwork();
 }
 
@@ -752,6 +793,11 @@ canvas.addEventListener("pointerup", (event) => {
     // of the reported mouse-up reshuffle.
     const operation = activeOperation(activePoints);
     operations.push(operation);
+    // BLACKBOOK CLEAR + Single-Step Undo V1 -- a newly committed stroke
+    // means CLEAR is no longer "the last action" -- its own one-shot Undo
+    // is no longer available (same single-level semantics as an ordinary
+    // stroke's own ordinary Undo).
+    lastClearSnapshot = null;
     showStatus("Saving…", "info");
     void persistence.persistStroke(operation)
       .then(() => showStatus("Saved", "success"))
@@ -763,6 +809,20 @@ canvas.addEventListener("pointerup", (event) => {
 });
 
 undoButton.addEventListener("click", () => {
+  if (lastClearSnapshot !== null) {
+    const restored = lastClearSnapshot;
+    operations = [...restored];
+    lastClearSnapshot = null;
+    render();
+    const target = currentArtwork.getState();
+    if (target.kind === "artwork") {
+      showStatus("Saving…", "info");
+      void replaceArtworkMarks(target.artworkId, restored)
+        .then(() => showStatus("Saved", "success"))
+        .catch((error) => reportError("Undo didn't save", error));
+    }
+    return;
+  }
   const operation = operations.pop();
   if (!operation) return;
   render();
@@ -770,6 +830,34 @@ undoButton.addEventListener("click", () => {
     .then(() => showStatus("Saved", "success"))
     .catch((error) => reportError("Undo didn't save", error));
 });
+
+/**
+ * BLACKBOOK CLEAR + Single-Step Undo V1 -- clears the CURRENT Artwork's
+ * visible authored Marks as ONE logical, ONE-write action (never a loop
+ * of per-Mark removals, which -- via `removeOwnedArtworkMark`'s own
+ * documented "delete the whole document once its last Mark is removed"
+ * behavior -- would destroy the Artwork itself, exactly what CLEAR must
+ * never do). Preserves Artwork identity: no NEW, no URL change, no
+ * `localStorage` change, no MY PAGES entry. Immediate, no confirmation --
+ * Undo is the safety mechanism (see `lastClearSnapshot`'s own doc).
+ * Pressing CLEAR on an already-empty Artwork (including a still-pending,
+ * never-yet-materialized NEW page) is a safe no-op.
+ */
+function clearArtwork(): void {
+  if (memberState.status !== "signedIn") return;
+  if (operations.length === 0) return;
+  const target = currentArtwork.getState();
+  const previous = operations;
+  operations = [];
+  lastClearSnapshot = previous;
+  render();
+  if (target.kind !== "artwork") return; // nothing persisted yet to clear (defensive -- operations.length>0 already implies a real Artwork exists)
+  showStatus("Saving…", "info");
+  void replaceArtworkMarks(target.artworkId, [])
+    .then(() => showStatus("Cleared", "success"))
+    .catch((error) => reportError("Couldn't clear", error));
+}
+clearButton.addEventListener("click", clearArtwork);
 
 panButton.addEventListener("click", () => {
   panMode = !panMode;
@@ -798,6 +886,7 @@ function startNewPage(): void {
   if (memberState.status !== "signedIn") return;
   operations = [];
   activePoints = [];
+  lastClearSnapshot = null;
   currentArtwork.setPendingNewArtwork("map", "");
   activePageFrame = BLACKBOOK_PAGE_FRAME;
   fitPageIntoView();

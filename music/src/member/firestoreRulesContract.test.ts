@@ -25,9 +25,13 @@ describe("Firestore Member and Artwork ownership contract", () => {
   it("accepts the embedded Mark composition shape while preserving legacy compatibility", () => {
     expect(rules).toContain("hasValidArtworkV1Shape");
     expect(rules).toContain("hasValidStrokeMark");
-    expect(rules).toContain("data.marks.size() >= 1");
+    // BLACKBOOK CLEAR + Single-Step Undo V1 -- an update may legitimately
+    // persist zero Marks (CLEAR); a create never may. Both bounds are
+    // asserted directly rather than matching one exact literal expression.
+    expect(rules).toContain("data.marks.size() >= (allowEmptyMarks ? 0 : 1)");
     expect(rules).toContain("request.resource.data.surfaceId == resource.data.surfaceId");
-    expect(rules).toContain("hasValidArtworkShape(request.resource.data) || hasValidArtworkV1Shape(request.resource.data)");
+    expect(rules).toContain("hasValidArtworkShape(request.resource.data) || hasValidArtworkV1Shape(request.resource.data, false)");
+    expect(rules).toContain("hasValidArtworkShape(request.resource.data) || hasValidArtworkV1Shape(request.resource.data, true)");
   });
 
   it("allows Pencil material metadata and graphite-only authored Eraser Marks", () => {
