@@ -14,20 +14,44 @@ export function sortArtworksByRecency(artworks: readonly Artwork[]): Artwork[] {
 }
 
 /**
+ * BLACKBOOK PAGES Drawer V1.1 -- canonical BOOK order: earliest-created
+ * Artwork first, newest last, matching a physical sketchbook's own page
+ * order (page 1 was drawn first). Deliberately `createdAt`, never
+ * `updatedAt` (used by `sortArtworksByRecency` above, for a genuinely
+ * different concern -- "resume whatever I was last working on") and never
+ * `artwork.id` (Firestore auto-generated ids are NOT documented as
+ * sortable/chronological -- see `firestoreArtworkRepository.ts`'s own
+ * `doc(collection(...))` call, which lets Firestore assign an opaque id;
+ * treating that as chronology would be relying on an implementation
+ * detail this codebase never promises). `createdAt` is set once, from
+ * `request.time`/`serverTimestamp()`, and is immutable thereafter
+ * (`firestore.rules`' own `request.resource.data.createdAt ==
+ * resource.data.createdAt` on every update) -- exactly the stable,
+ * monotonic ordering a book's own page sequence needs: it never reorders
+ * an existing page just because that page was edited (unlike recency),
+ * and a newly materialized Artwork's own fresh `createdAt` is always
+ * later than every existing one, so it always sorts last, i.e. appends.
+ */
+export function sortArtworksByCreationOrder(artworks: readonly Artwork[]): Artwork[] {
+  return [...artworks].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+}
+
+/**
  * BLACKBOOK Embedded PAGES Drawer V1 -- the drawer's own card numbering
  * (1, 2, 3, ...), extracted as a pure function so it's testable without a
  * DOM harness. Deliberately PRESENTATION ORDER ONLY: `number` is always
  * this array's own 1-based position, NEVER derived from -- and never
  * substituted for -- `artwork.id` (real, persisted Artwork identity).
- * Reuses the SAME `sortArtworksByRecency` ordering every other Blackbook
- * gallery surface already uses -- not a second/parallel ordering.
+ * V1.1: uses `sortArtworksByCreationOrder` (earliest -> latest, "book
+ * order") -- not `sortArtworksByRecency`, which would renumber/reshuffle
+ * every page each time any one of them was merely edited.
  */
 export interface NumberedArtwork {
   readonly number: number;
   readonly artwork: Artwork;
 }
 export function numberArtworksForPagesDrawer(artworks: readonly Artwork[]): readonly NumberedArtwork[] {
-  return sortArtworksByRecency(artworks).map((artwork, index) => ({ number: index + 1, artwork }));
+  return sortArtworksByCreationOrder(artworks).map((artwork, index) => ({ number: index + 1, artwork }));
 }
 
 /**

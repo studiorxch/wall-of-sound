@@ -63,6 +63,29 @@ describe("createCartesianCamera", () => {
     expect(state.panY).toBeCloseTo(-50, 9);
   });
 
+  it("PAGES DRAWER V1.1: docToScreen/screenToDoc stay self-consistent when the viewport width/height changes (the drawer-open/close case) -- camera state (pan/zoom) is untouched by a viewport resize, and any consumer that reads the CURRENT width/height for both the render and the pointer-read side (never a value captured before the resize) recovers the exact same document point", () => {
+    const camera = createCartesianCamera();
+    const doc = { x: 42, y: -17 };
+    // Narrower "viewport" -- e.g. the Workspace's own width once a 116px PAGES drawer opens.
+    const wide = { width: 800, height: 600 };
+    const narrow = { width: 800 - 116, height: 600 };
+    const screenWide = camera.docToScreen(doc, wide.width, wide.height);
+    const screenNarrow = camera.docToScreen(doc, narrow.width, narrow.height);
+    // The SAME document point legitimately projects to a DIFFERENT screen
+    // position once the viewport narrows (the whole point of a reflow) --
+    // this is expected, not a bug.
+    expect(screenNarrow).not.toEqual(screenWide);
+    // But reading EACH screen position back through screenToDoc using the
+    // SAME width/height that produced it must recover the exact original
+    // document point -- this is the actual invariant a live pointer click
+    // depends on: as long as the click-time width/height matches the
+    // render-time width/height (both always read live from the canvas'
+    // own current CSS box, never cached), the mapping is exact regardless
+    // of what the current viewport width happens to be.
+    expect(camera.screenToDoc(screenWide.x, screenWide.y, wide.width, wide.height)).toEqual(doc);
+    expect(camera.screenToDoc(screenNarrow.x, screenNarrow.y, narrow.width, narrow.height)).toEqual(doc);
+  });
+
   it("reset returns to the identity view", () => {
     const camera = createCartesianCamera();
     camera.panBy(100, 100);

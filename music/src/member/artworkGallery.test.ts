@@ -8,14 +8,15 @@ import {
   formatMemberSince,
   numberArtworksForPagesDrawer,
   resolveDefaultArtworkTitle,
+  sortArtworksByCreationOrder,
   sortArtworksByRecency,
 } from "./artworkGallery";
 
-function artwork(id: string, updatedAt: string, surfaceId = "map:new-york", title = "", artworkType: ArtworkType = "map"): Artwork {
+function artwork(id: string, updatedAt: string, surfaceId = "map:new-york", title = "", artworkType: ArtworkType = "map", createdAt: string = updatedAt): Artwork {
   return {
     id,
     creatorId: "member-1",
-    createdAt: new Date(updatedAt),
+    createdAt: new Date(createdAt),
     updatedAt: new Date(updatedAt),
     surfaceId,
     composition: { bounds: { west: 0, south: 0, east: 1, north: 1 }, startedAt: new Date(updatedAt), lastEditedAt: new Date(updatedAt) },
@@ -123,25 +124,57 @@ describe("formatArtworkUpdatedAt / formatMemberSince", () => {
   });
 });
 
-describe("BLACKBOOK Embedded PAGES Drawer V1 -- numberArtworksForPagesDrawer", () => {
-  it("numbers 1..N in the SAME recency order sortArtworksByRecency already uses -- never a second/parallel ordering", () => {
-    const older = artwork("a", "2026-01-01T00:00:00Z");
-    const newer = artwork("b", "2026-02-01T00:00:00Z");
-    const numbered = numberArtworksForPagesDrawer([older, newer]);
-    expect(numbered.map((entry) => entry.artwork.id)).toEqual(sortArtworksByRecency([older, newer]).map((a) => a.id));
-    expect(numbered.map((entry) => entry.number)).toEqual([1, 2]);
+describe("BLACKBOOK PAGES Drawer V1.1 -- sortArtworksByCreationOrder", () => {
+  it("orders earliest-created first, latest last -- book order, not recency", () => {
+    const earlier = artwork("a", "2026-01-01T00:00:00Z");
+    const later = artwork("b", "2026-02-01T00:00:00Z");
+    expect(sortArtworksByCreationOrder([later, earlier]).map((x) => x.id)).toEqual(["a", "b"]);
   });
 
-  it("numbers are presentation order only -- reordering the underlying recency never makes a number equal an Artwork id, and the same Artwork can receive a DIFFERENT number after its recency changes", () => {
+  it("does NOT mutate the input array", () => {
+    const artworks = [artwork("b", "2026-02-01T00:00:00Z"), artwork("a", "2026-01-01T00:00:00Z")];
+    const original = [...artworks];
+    sortArtworksByCreationOrder(artworks);
+    expect(artworks).toEqual(original);
+  });
+
+  it("ignores updatedAt entirely -- editing an old page never moves it in book order (the exact defect this batch corrects)", () => {
+    // "a" was created first, then "b". "a" is edited LATER (updatedAt far after "b"'s own updatedAt) --
+    // book order must still be a, b, since createdAt (not updatedAt) governs it.
+    const a = artwork("a", "2026-03-01T00:00:00Z", "map:new-york", "", "map", "2026-01-01T00:00:00Z");
+    const b = artwork("b", "2026-01-15T00:00:00Z", "map:new-york", "", "map", "2026-01-10T00:00:00Z");
+    expect(sortArtworksByCreationOrder([b, a]).map((x) => x.id)).toEqual(["a", "b"]);
+  });
+});
+
+describe("BLACKBOOK Embedded PAGES Drawer V1.1 -- numberArtworksForPagesDrawer", () => {
+  it("numbers 1..N in the SAME creation (book) order sortArtworksByCreationOrder already uses -- never a second/parallel ordering", () => {
+    const earlier = artwork("a", "2026-01-01T00:00:00Z");
+    const later = artwork("b", "2026-02-01T00:00:00Z");
+    const numbered = numberArtworksForPagesDrawer([later, earlier]);
+    expect(numbered.map((entry) => entry.artwork.id)).toEqual(sortArtworksByCreationOrder([later, earlier]).map((a) => a.id));
+    expect(numbered.map((entry) => entry.number)).toEqual([1, 2]);
+    expect(numbered[0].artwork.id).toBe("a"); // earliest-created is page 1
+  });
+
+  it("a newly materialized Artwork (freshest createdAt) always appends at the END, receiving the highest number -- NEW must never become page 1", () => {
+    const first = artwork("first", "2026-01-01T00:00:00Z");
+    const second = artwork("second", "2026-01-02T00:00:00Z");
+    const justCreated = artwork("just-created", "2026-01-03T00:00:00Z");
+    const numbered = numberArtworksForPagesDrawer([justCreated, first, second]);
+    expect(numbered.map((entry) => entry.artwork.id)).toEqual(["first", "second", "just-created"]);
+    expect(numbered.find((entry) => entry.artwork.id === "just-created")?.number).toBe(3);
+  });
+
+  it("numbers are presentation order only -- editing an existing page (updatedAt changes, createdAt does not) never changes its number or its identity", () => {
     const a = artwork("art-a", "2026-01-01T00:00:00Z");
-    const b = artwork("art-b", "2026-02-01T00:00:00Z");
+    const b = artwork("art-b", "2026-01-02T00:00:00Z");
     const before = numberArtworksForPagesDrawer([a, b]);
-    expect(before.find((entry) => entry.artwork.id === "art-b")?.number).toBe(1);
-    // "art-a" becomes more recently updated than "art-b" -- a real recency change, not an identity change.
-    const aUpdated = { ...a, updatedAt: new Date("2026-03-01T00:00:00Z") };
-    const after = numberArtworksForPagesDrawer([aUpdated, b]);
+    expect(before.find((entry) => entry.artwork.id === "art-a")?.number).toBe(1);
+    // "art-a" is edited (a real, later updatedAt) -- its createdAt, and therefore its book-order number, must not change.
+    const aEdited = { ...a, updatedAt: new Date("2026-03-01T00:00:00Z") };
+    const after = numberArtworksForPagesDrawer([aEdited, b]);
     expect(after.find((entry) => entry.artwork.id === "art-a")?.number).toBe(1);
-    // The Artwork's own id/identity is completely unaffected by its number changing.
     expect(after.find((entry) => entry.artwork.id === "art-a")?.artwork.id).toBe("art-a");
   });
 

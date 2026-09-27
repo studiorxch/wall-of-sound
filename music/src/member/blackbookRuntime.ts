@@ -53,6 +53,7 @@ const pagesToggleButton = required(document.querySelector<HTMLButtonElement>("#b
 const pagesDrawer = required(document.querySelector<HTMLElement>("#pages-drawer"), "blackbook_surface_missing");
 const pagesDrawerList = required(document.querySelector<HTMLElement>("#pages-drawer-list"), "blackbook_surface_missing");
 const pagesDrawerNewButton = required(document.querySelector<HTMLButtonElement>("#pages-drawer-new"), "blackbook_surface_missing");
+const pagesDrawerCollapseButton = required(document.querySelector<HTMLButtonElement>("#pages-drawer-collapse"), "blackbook_surface_missing");
 const memberButton = required(document.querySelector<HTMLButtonElement>("#blackbook-member"), "blackbook_surface_missing");
 /**
  * BLACKBOOK EVENT UI POLISH V1 -- the raw developer-facing Surface ID no
@@ -974,19 +975,25 @@ function openPagesDrawer(): void {
   renderPagesDrawerList();
   pagesDrawer.dataset.open = "true";
   pagesToggleButton.setAttribute("aria-pressed", "true");
-  resizeCanvasesToDisplaySize();
-  render();
+  // PAGES DRAWER V1.1 -- no manual resize/render call here: the canvas's
+  // own ResizeObserver (below) tracks its real box continuously through
+  // the drawer's own CSS width transition and resyncs the backing store
+  // at every step, which a single synchronous call at toggle time cannot
+  // do (see that observer's own doc for the exact bug this replaces).
 }
 function closePagesDrawer(): void {
   pagesDrawer.dataset.open = "false";
   pagesToggleButton.setAttribute("aria-pressed", "false");
-  resizeCanvasesToDisplaySize();
-  render();
 }
 pagesToggleButton.addEventListener("click", () => {
   if (pagesDrawer.dataset.open === "true") closePagesDrawer();
   else openPagesDrawer();
 });
+// PAGES DRAWER V1.1 -- a second, drawer-local way to close it (the
+// far-side toolbar toggle above is unchanged and still works). Only ever
+// closes -- opening only ever happens via the toolbar toggle, matching
+// this control's own "‹" collapse-only affordance.
+pagesDrawerCollapseButton.addEventListener("click", closePagesDrawer);
 pagesDrawerNewButton.addEventListener("click", () => {
   startNewPage();
   renderPagesDrawerList();
@@ -1000,10 +1007,44 @@ canvas.addEventListener("wheel", (event) => {
   render();
 }, { passive: false });
 
-window.addEventListener("resize", () => {
+/**
+ * PAGES DRAWER V1.1 -- root cause of the reported cursor/Mark mismatch
+ * with the drawer open: `resizeCanvasesToDisplaySize()` sets the canvas's
+ * BACKING STORE pixel dimensions (`canvas.width`/`height`) from its CSS
+ * box (`canvas.clientWidth`/`clientHeight`) at the instant it's called.
+ * `#pages-drawer`'s own `width` CSS transition means the canvas's CSS box
+ * keeps changing for ~160ms AFTER the drawer toggles -- a single
+ * synchronous resize+render call made at toggle time (the previous
+ * `openPagesDrawer`/`closePagesDrawer` behavior) fixed the backing store
+ * to whatever transitional width existed at that exact instant, not the
+ * drawer's final, settled width. Once the transition finished, the
+ * canvas's CSS box no longer matched its own backing store, so the
+ * browser auto-scaled the (now differently-sized) canvas bitmap onto its
+ * CSS box -- shifting/stretching every already-consistent
+ * `docToScreen`/`screenToDoc` calculation (both already correctly read
+ * live `canvas.clientWidth/Height`) by exactly that mismatch. This was
+ * never a pointer-math bug; `point()`'s own `canvas.getBoundingClientRect()`
+ * read was already correct at every call. It was a stale-backing-store
+ * bug that only a render pass AFTER the box truly settles can fix.
+ *
+ * Fix: a `ResizeObserver` on the canvas element itself is the one
+ * canonical mechanism for "the canvas's actual on-screen box changed, for
+ * ANY reason" -- drawer open/close (at every frame of its transition, so
+ * the backing store tracks the box continuously, not just once at the
+ * start), a native window resize, an orientation change, or any future
+ * layout change this file doesn't yet know about. This REPLACES the
+ * previous plain `window` `resize` listener (a strict subset of what this
+ * observer already covers) and the drawer toggle's own manual resize
+ * calls (removed from `openPagesDrawer`/`closePagesDrawer` below) --
+ * there is now exactly one place this app decides "the canvas box
+ * changed, resync the backing store and re-render," derived from the
+ * canvas's own real measured bounds, never a hardcoded drawer-width
+ * offset.
+ */
+new ResizeObserver(() => {
   resizeCanvasesToDisplaySize();
   render();
-});
+}).observe(canvas);
 
 /**
  * CONTEXTUAL MATERIAL CONTROLS (requirement 10) -- only currently supported
