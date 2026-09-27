@@ -316,15 +316,15 @@ concerns).
   `isRestrictedAuthoringSurface`, `surfaceId: map:*`). Fully documented in
   [../SYSTEMS.md](../SYSTEMS.md) and [../OWNERSHIP.md](../OWNERSHIP.md); not
   duplicated here.
-- **RADIO** — MAP/SUBWAY does **not** currently consume RADIO's canonical
-  Channel/broadcast state (the standing gap already recorded in
-  [../radio/README.md](../radio/README.md) and [../DEBT.md](../DEBT.md)).
-  Concretely for SUBWAY: `wall/systems/presentation/nowPlayingHud.js` (the
-  LIVE MAP "Now Playing" HUD) reads only `music/src/runtime/
-  nowPlayingBroadcastBridge.ts`'s legacy local snapshot — the same LEGACY
-  mechanism [../DEBT.md](../DEBT.md) already documents as separate from
-  RADIO's real Channel Clock, not RADIO playback itself. Do not describe MAP
-  RADIO playback as implemented; it is not.
+- **RADIO** — MAP/SUBWAY receives the canonical Channel through
+  `music/src/member/radioChannelReceiverRuntime.ts` and
+  `wall/systems/presentation/radioChannelHud.js` (LIVE, ON/OFF, local volume,
+  Now Playing). The receiver delegates resolution and playback to existing
+  RADIO logic and `DualDeckPlaybackEngine`; see [../radio/README.md](../radio/README.md).
+  It belongs to the MAP document: navigation to BLACKBOOK ends that playback
+  lifetime, and BLACKBOOK creates its own initially-OFF receiver. Separately,
+  `nowPlayingHud.js` still consumes MUSIC's legacy local snapshot through
+  `nowPlayingBroadcastBridge.ts`; it is not the Channel receiver/HUD.
 - **WALL/paint** — two intentionally separate authoring systems exist (§8):
   general map paint (Firestore `artworks`) and structured car-surface
   graffiti (`SubwayArtworkAuthority` family, localStorage). Do not merge them

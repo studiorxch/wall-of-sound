@@ -62,8 +62,11 @@ a concrete revisit trigger. This is not a general TODO list; see
   (2026-09) that `wall/systems/presentation/nowPlayingHud.js` — LIVE MAP's
   own "Now Playing" HUD — reads this same legacy `nowPlayingBroadcastBridge.ts`
   snapshot (via `localStorage` key `wos:nowPlaying:snapshot`), not RADIO's
-  Channel Clock. MAP does not implement RADIO playback; this is its one
-  "now playing" consumer, and it is the legacy path.
+  Channel Clock. MAP also has a separate, active Channel receiver/HUD:
+  `radioChannelReceiverRuntime.ts` + `radioChannelHud.js`. The legacy HUD
+  is not its only consumer and does not describe RADIO playback. MAP and
+  BLACKBOOK still own independent document-level receivers; cross-surface
+  playback continuity is not implemented.
 - **Revisit trigger**: if MUSIC's own preview surface is ever asked to
   reflect real RADIO Channel state, or if a user-visible inconsistency
   between the two is reported.

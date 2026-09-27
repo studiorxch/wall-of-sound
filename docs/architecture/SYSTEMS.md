@@ -58,8 +58,10 @@ Only systems with strong current evidence are listed. See
   in `firestore.rules`); every other prefix (e.g. `blackbook:`) is ordinary
   member-open authoring.
 - **Primary integration boundaries**: shares the same StudioRich operator
-  identity as RADIO (`STUDIO_RICH_OPERATOR_EMAILS`, see OWNERSHIP.md); does
-  **not** currently consume RADIO's Channel broadcast state — see DEBT.md.
+  identity as RADIO (`STUDIO_RICH_OPERATOR_EMAILS`, see OWNERSHIP.md);
+  consumes RADIO through `radioChannelReceiverRuntime.ts` and
+  `radioChannelHud.js`. Its receiver is document-owned; navigation to
+  BLACKBOOK does not preserve playback. See [radio/README.md](radio/README.md).
 - **Status**: ACTIVE. See [subway/README.md](subway/README.md) for the full
   map — read that before any SUBWAY-related task. The live SUBWAY runtime
   (`wall/`) and the MUSIC-side station-geometry authoring tool
@@ -82,7 +84,10 @@ Only systems with strong current evidence are listed. See
   — one hardcoded Blackbook/page today, not yet multi-page/multi-book).
 - **Primary integration boundaries**: relies on MEMBERS for identity, shares
   the Art Supply set and Artwork persistence bridge with MAP paint
-  authoring; does not currently integrate with RADIO or SUBWAY.
+  authoring; receives the same RADIO Channel through
+  `radioChannelReceiverRuntime.ts` and `blackbookRadioUI.ts`, and links back
+  to MAP/SUBWAY by full-document navigation. Its receiver is independent
+  of MAP's receiver; neither owns the shared broadcast clock.
 - **Status**: ACTIVE for the single current page/drawing use case. See
   [blackbook/README.md](blackbook/README.md) for the full current-vs-
   direction map — read that before any BLACKBOOK-related task, since its

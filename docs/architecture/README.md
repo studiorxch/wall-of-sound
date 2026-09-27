@@ -62,3 +62,13 @@ Architecture docs: no update required.
 | [DEBT.md](DEBT.md) | Actionable architectural debt, each with a revisit trigger |
 | [radio/README.md](radio/README.md) | The one-page RADIO architecture map — read this before any RADIO batch |
 | [admin/README.md](admin/README.md) | ADMIN control plane — its relationship to MEMBER, visibility-vs-authorization rule, current RADIO scope |
+
+## Proposed architecture (not current-state truth)
+
+The `proposals/` directory is an explicitly separate specification area.
+Entries there must not be read as implemented architecture. Promote facts into
+current-state pages only with their verified implementation checkpoints.
+
+- [STUDIORICH HOME persistent host V1](proposals/HOME_PERSISTENT_HOST_V1.md) —
+  proposed same-origin surface hosting, public URL/history contract, persistent
+  RADIO session, browser validation gates, and staged migration. Not implemented.
