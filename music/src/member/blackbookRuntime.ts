@@ -20,6 +20,7 @@ import {
   createBlackbookArtworkPersistenceBridge,
   filterBlackbookArtworks,
   resolveActiveBlackbookArtworkId,
+  withActiveArtworkUrlParam,
   type BlackbookOperation,
 } from "./blackbookArtworkBridge";
 import { createCartesianCamera, type CartesianCamera, type DocRect } from "./cartesianWorkspaceCamera";
@@ -547,6 +548,31 @@ function rememberActiveArtworkId(memberId: string, artworkId: string): void {
   try { window.localStorage.setItem(activeArtworkStorageKey(memberId), artworkId); } catch { /* best-effort only */ }
 }
 
+/**
+ * NEW ARTWORK PERSISTENCE V1 -- the ONE place this runtime ever changes
+ * which Artwork identity is authoritative, so `openArtwork()` (MY PAGES /
+ * the `?artwork=` URL param) and `onCurrentArtworkEstablished` (a pending
+ * NEW target's first Mark materializing into a real persisted Artwork)
+ * can never diverge on what "the current Artwork" means. Root cause this
+ * exists to fix: `onCurrentArtworkEstablished` previously updated
+ * `currentArtwork`'s in-memory state and `localStorage`'s remembered id,
+ * but NEVER the URL's own `?artwork=` param. If that URL param already
+ * named a DIFFERENT (the previous) Artwork -- the normal case, since
+ * opening Blackbook at all typically already resolves and writes some
+ * `?artwork=<id>` -- a reload's own `resolveActiveBlackbookArtworkId`
+ * prefers the URL over `localStorage` (see that function's own doc),
+ * silently reverting to the stale previous Artwork and making the newly
+ * materialized one (and everything drawn on it) appear to vanish on
+ * reload, even though it was genuinely persisted in Firestore the whole
+ * time. Only the URL/localStorage/in-memory identity was ever wrong; nothing about persistence itself.
+ */
+function setActiveArtworkIdentity(artworkId: string): void {
+  currentArtwork.setCurrentArtwork(artworkId);
+  if (memberState.status !== "signedIn") return;
+  rememberActiveArtworkId(memberState.member.uid, artworkId);
+  window.history.replaceState(null, "", withActiveArtworkUrlParam(window.location.href, artworkId));
+}
+
 const persistence = createBlackbookArtworkPersistenceBridge({
   repository,
   drawing: {
@@ -557,10 +583,11 @@ const persistence = createBlackbookArtworkPersistenceBridge({
   },
   getAuthenticatedMemberId: () => memberState.status === "signedIn" ? memberState.member.uid : null,
   getCurrentArtworkTarget: () => currentArtwork.getState(),
-  onCurrentArtworkEstablished: (artworkId) => {
-    currentArtwork.setCurrentArtwork(artworkId);
-    if (memberState.status === "signedIn") rememberActiveArtworkId(memberState.member.uid, artworkId);
-  },
+  // NEW ARTWORK PERSISTENCE V1 -- see setActiveArtworkIdentity's own doc.
+  // Never reset activePoints/re-render here: this fires mid-gesture (the
+  // pending target's FIRST Mark is what establishes the Artwork), and the
+  // gesture currently being drawn must keep rendering uninterrupted.
+  onCurrentArtworkEstablished: setActiveArtworkIdentity,
   onArtworkSaved: upsertKnownArtwork,
   onArtworkRemoved: forgetKnownArtwork,
 });
@@ -622,11 +649,7 @@ function applyActiveArtwork(): void {
 function openArtwork(artworkId: string): void {
   if (memberState.status !== "signedIn") return;
   if (!knownArtworksCache.some((artwork) => artwork.id === artworkId)) return;
-  currentArtwork.setCurrentArtwork(artworkId);
-  rememberActiveArtworkId(memberState.member.uid, artworkId);
-  const url = new URL(window.location.href);
-  url.searchParams.set("artwork", artworkId);
-  window.history.replaceState(null, "", url);
+  setActiveArtworkIdentity(artworkId);
   activePoints = [];
   applyActiveArtwork();
 }

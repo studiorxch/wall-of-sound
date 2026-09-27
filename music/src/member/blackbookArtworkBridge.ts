@@ -187,3 +187,36 @@ export function resolveActiveBlackbookArtworkId(
     id !== null && knownArtworks.some((artwork) => artwork.id === id) ? id : null;
   return resolve(requestedId) ?? resolve(rememberedId) ?? (knownArtworks.length > 0 ? sortArtworksByRecency(knownArtworks)[0].id : null);
 }
+
+/**
+ * NEW ARTWORK IDENTITY SYNCHRONIZATION V1 -- the pure write-side
+ * counterpart to `resolveActiveBlackbookArtworkId`'s read-side resolution
+ * above. Root cause this exists to fix: `blackbookRuntime.ts` had TWO
+ * separate places that made an Artwork "the current one" --
+ * `openArtwork()` (MY PAGES / an explicit `?artwork=` open) correctly
+ * updated the URL, but `onCurrentArtworkEstablished` (a pending NEW
+ * target's first Mark materializing into a real persisted Artwork) only
+ * updated in-memory state and `localStorage`, never the URL. Since
+ * `resolveActiveBlackbookArtworkId` above always prefers the URL over
+ * `localStorage`, a stale `?artwork=<previous>` param left in place after
+ * NEW materialized a brand-new Artwork silently reverted a reload back to
+ * the previous Artwork -- even though the new one was genuinely, fully
+ * persisted (confirmed reachable via MY PAGES the whole time). This was
+ * never a persistence defect; it was a reload-fidelity / identity-
+ * synchronization gap.
+ *
+ * Pure and DOM-free (uses the WHATWG `URL` class, not `window.location`)
+ * specifically so the exact URL-rewrite behavior is directly testable
+ * without a browser/jsdom harness -- `blackbookRuntime.ts`'s own
+ * `setActiveArtworkIdentity` is a thin wrapper that reads
+ * `window.location.href`, calls this, and applies the result via
+ * `history.replaceState` (never `pushState` -- switching the active
+ * Artwork, whether via MY PAGES or NEW's own materialization, remains a
+ * same-session state change, never a new browser-history entry, exactly
+ * as `openArtwork()` already established).
+ */
+export function withActiveArtworkUrlParam(currentUrl: string, artworkId: string): string {
+  const url = new URL(currentUrl);
+  url.searchParams.set("artwork", artworkId);
+  return url.toString();
+}

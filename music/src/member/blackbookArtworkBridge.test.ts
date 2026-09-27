@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { selectArtworkForMark, type Artwork, type ArtworkMark, type ArtworkRepository } from "@studiorich/member-identity";
-import { BLACKBOOK_PAGE_FRAME, BLACKBOOK_PAGE_SURFACE_ID, createBlackbookArtworkPersistenceBridge, filterBlackbookArtworks, resolveActiveBlackbookArtworkId, toLocalErasureMark, toLocalStrokeMark, type BlackbookOperation, type BlackbookStroke } from "./blackbookArtworkBridge";
+import { BLACKBOOK_PAGE_FRAME, BLACKBOOK_PAGE_SURFACE_ID, createBlackbookArtworkPersistenceBridge, filterBlackbookArtworks, resolveActiveBlackbookArtworkId, toLocalErasureMark, toLocalStrokeMark, withActiveArtworkUrlParam, type BlackbookOperation, type BlackbookStroke } from "./blackbookArtworkBridge";
 
 function stroke(id: string, offset = 0): BlackbookStroke {
   return { operation: "pencil", id, points: [{ x: 0.1 + offset, y: 0.2 }, { x: 0.2 + offset, y: 0.3 }], style: { color: "#171412", width: 7, opacity: 0.9 } };
@@ -370,6 +370,92 @@ describe("Blackbook Page Isolation V1 -- explicit active-Artwork routing", () =>
       const resolvedLandscapeId = resolveActiveBlackbookArtworkId([square, landscape], "art-landscape", null);
       expect([square, landscape].find((a) => a.id === resolvedSquareId)?.pageFrame).toEqual({ x: 0, y: 0, width: 1, height: 1 });
       expect([square, landscape].find((a) => a.id === resolvedLandscapeId)?.pageFrame).toEqual(BLACKBOOK_PAGE_FRAME);
+    });
+  });
+
+  describe("withActiveArtworkUrlParam -- the write-side identity sync (NEW Artwork reload-fidelity repair)", () => {
+    it("replaces an existing '?artwork=' param with the newly established Artwork's id", () => {
+      const next = withActiveArtworkUrlParam("https://app.example/blackbook.html?artwork=art-a", "art-b");
+      expect(new URL(next).searchParams.get("artwork")).toBe("art-b");
+    });
+
+    it("adds the param when the URL had none yet (e.g. this session's very first materialized Artwork)", () => {
+      const next = withActiveArtworkUrlParam("https://app.example/blackbook.html", "art-b");
+      expect(new URL(next).searchParams.get("artwork")).toBe("art-b");
+    });
+
+    it("preserves the URL's other parts (path, unrelated query params) -- never a full navigation/rewrite", () => {
+      const next = withActiveArtworkUrlParam("https://app.example/blackbook.html?foo=bar&artwork=art-a", "art-b");
+      const url = new URL(next);
+      expect(url.pathname).toBe("/blackbook.html");
+      expect(url.searchParams.get("foo")).toBe("bar");
+      expect(url.searchParams.get("artwork")).toBe("art-b");
+    });
+  });
+
+  describe("NEW Artwork reload-fidelity repair -- end-to-end identity synchronization (pure, DOM-free)", () => {
+    // Simulates blackbookRuntime.ts's own sequence without any DOM/browser
+    // dependency: `withActiveArtworkUrlParam` computes what the URL becomes;
+    // `resolveActiveBlackbookArtworkId` (the read side, already exhaustively
+    // tested above) decides what a subsequent reload resolves to. Together
+    // these two pure functions ARE the complete identity-synchronization
+    // contract `setActiveArtworkIdentity` wraps for the real DOM.
+    it("Artwork A active -> NEW -> first Mark materializes B -> URL and remembered identity both become B -> a reload resolves to B, not A", () => {
+      const a = artwork("art-a");
+      const b = artwork("art-b");
+      const knownAfterBMaterializes = [a, b]; // B is now genuinely persisted and known, exactly as MY PAGES would show it
+
+      // Before materialization: URL still names A (the ordinary case -- any returning session already has SOME ?artwork= param).
+      const urlBeforeMaterialization = "https://app.example/blackbook.html?artwork=art-a";
+
+      // The exact write blackbookRuntime.ts's onCurrentArtworkEstablished(B) now performs:
+      const urlAfterMaterialization = withActiveArtworkUrlParam(urlBeforeMaterialization, "art-b");
+      const rememberedAfterMaterialization = "art-b"; // rememberActiveArtworkId's own effect, already correct before this repair
+
+      expect(new URL(urlAfterMaterialization).searchParams.get("artwork")).toBe("art-b");
+
+      // A subsequent reload reads exactly these two values back:
+      const requestedOnReload = new URL(urlAfterMaterialization).searchParams.get("artwork");
+      const resolvedOnReload = resolveActiveBlackbookArtworkId(knownAfterBMaterializes, requestedOnReload, rememberedAfterMaterialization);
+      expect(resolvedOnReload).toBe("art-b"); // NOT "art-a" -- the exact regression this batch fixes
+    });
+
+    it("before this repair (URL never updated on materialization), the same reload would have incorrectly resolved back to A -- proves this test actually exercises the real regression, not a tautology", () => {
+      const a = artwork("art-a");
+      const b = artwork("art-b");
+      const knownAfterBMaterializes = [a, b];
+      // The OLD, buggy behavior: URL is never touched by materialization.
+      const staleUrl = "https://app.example/blackbook.html?artwork=art-a";
+      const rememberedAfterMaterialization = "art-b";
+      const requestedOnReload = new URL(staleUrl).searchParams.get("artwork");
+      const resolvedOnReload = resolveActiveBlackbookArtworkId(knownAfterBMaterializes, requestedOnReload, rememberedAfterMaterialization);
+      expect(resolvedOnReload).toBe("art-a"); // the bug, reproduced directly
+    });
+
+    it("opening an existing Artwork through MY PAGES (openArtwork's own path) continues to synchronize identity correctly -- unchanged by this repair", () => {
+      const a = artwork("art-a");
+      const b = artwork("art-b");
+      // openArtwork's own sequence: URL + remembered both set to the opened id.
+      const urlAfterOpen = withActiveArtworkUrlParam("https://app.example/blackbook.html?artwork=art-a", "art-b");
+      const rememberedAfterOpen = "art-b";
+      const resolvedOnReload = resolveActiveBlackbookArtworkId([a, b], new URL(urlAfterOpen).searchParams.get("artwork"), rememberedAfterOpen);
+      expect(resolvedOnReload).toBe("art-b");
+    });
+
+    it("the URL continues to outrank a remembered id during reload when it explicitly addresses a known Artwork (pre-existing, unchanged priority rule)", () => {
+      const a = artwork("art-a");
+      const b = artwork("art-b");
+      // URL says B, but a DIFFERENT device/tab last remembered A -- URL must still win.
+      expect(resolveActiveBlackbookArtworkId([a, b], "art-b", "art-a")).toBe("art-b");
+    });
+
+    it("creating B never touches A's own document/state -- withActiveArtworkUrlParam and resolveActiveBlackbookArtworkId are pure functions of their own inputs, never mutating the Artwork list they're given", () => {
+      const a = artwork("art-a");
+      const knownBefore = [a];
+      const snapshotBefore = JSON.parse(JSON.stringify(knownBefore));
+      withActiveArtworkUrlParam("https://app.example/blackbook.html?artwork=art-a", "art-b");
+      resolveActiveBlackbookArtworkId(knownBefore, "art-b", "art-b");
+      expect(JSON.parse(JSON.stringify(knownBefore))).toEqual(snapshotBefore);
     });
   });
 });
