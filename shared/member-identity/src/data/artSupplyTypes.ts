@@ -25,6 +25,16 @@ export interface MarkMaterialIdentity {
    * absent together with it.
    */
   readonly profileVersion?: number;
+  /**
+   * BLACKBOOK Spray Physicality V1 -- which `SprayCapProfile` id
+   * (`sprayDeposition.ts`) authored this Mark's deposition, e.g.
+   * `"studiorich-stock"`/`"studiorich-fat"`. Only meaningful for
+   * `supplyId === "spray"`; absent on every other supply and on every
+   * Spray Mark authored before caps existed (resolves to the Stock Cap,
+   * the engine's existing default -- never an error, never a different
+   * visual result for an already-persisted Mark).
+   */
+  readonly capId?: string;
 }
 
 export interface ArtSupplySettings {

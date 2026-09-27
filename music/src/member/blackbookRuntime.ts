@@ -38,6 +38,7 @@ import {
   GRAPHITE_PROFILE_VERSION,
   type GraphiteGradeId,
 } from "./strokeSmoothing";
+import { resolveSprayCapProfile, DEFAULT_SPRAY_CAP_ID, STUDIORICH_STOCK_CAP, STUDIORICH_FAT_CAP } from "./sprayDeposition";
 
 function required<T>(value: T | null, error: string): T { if (!value) throw new Error(error); return value; }
 const canvas = required(document.querySelector<HTMLCanvasElement>("#blackbook-page"), "blackbook_surface_missing");
@@ -97,6 +98,9 @@ const opacityControl = required(document.querySelector<HTMLInputElement>("#black
 const gradeContainer = required(document.querySelector<HTMLElement>("#blackbook-grade-container"), "blackbook_surface_missing");
 const colorContainer = required(document.querySelector<HTMLElement>("#blackbook-color-container"), "blackbook_surface_missing");
 const opacityContainer = required(document.querySelector<HTMLElement>("#blackbook-opacity-container"), "blackbook_surface_missing");
+const capContainer = required(document.querySelector<HTMLElement>("#blackbook-cap-container"), "blackbook_surface_missing");
+const capStockButton = required(document.querySelector<HTMLButtonElement>("#blackbook-cap-stock"), "blackbook_surface_missing");
+const capFatButton = required(document.querySelector<HTMLButtonElement>("#blackbook-cap-fat"), "blackbook_surface_missing");
 
 const ctx = required(canvas.getContext("2d"), "blackbook_canvas_unavailable");
 
@@ -218,7 +222,10 @@ function resizeCanvasesToDisplaySize(): void {
 }
 
 let operations: BlackbookOperation[] = [];
-let activePoints: { x: number; y: number }[] = [];
+interface CapturedPoint { readonly x: number; readonly y: number; readonly tMs?: number; readonly pressure?: number }
+let activePoints: CapturedPoint[] = [];
+/** BLACKBOOK Spray Physicality V1 -- the current gesture's own start time, reset on every pointerdown. Never persisted itself; only `tMs` (elapsed since this) is ever recorded on a point. */
+let activeStrokeStartMs = 0;
 let nextOperationId = 1;
 let activeSupply: "pencil" | "pen" | "marker" | "mop" | "spray" | "eraser" = "pencil";
 /**
@@ -229,6 +236,14 @@ let activeSupply: "pencil" | "pen" | "marker" | "mop" | "spray" | "eraser" = "pe
  * instrument family; this is strictly "Pencil -> which grade" beneath it.
  */
 let activeGraphiteGrade: GraphiteGradeId = "hb";
+/**
+ * BLACKBOOK Spray Physicality V1 -- TEMPORARY minimal cap selector state
+ * (see capStockButton/capFatButton's own doc below), the smallest coherent
+ * UI this batch's own instruction allows. Controls which SprayCapProfile
+ * authors the NEXT Spray Mark; never mutates an already-authored Mark's own
+ * persisted capId.
+ */
+let activeSprayCapId: string = DEFAULT_SPRAY_CAP_ID;
 // Drawing Shell V1 -- per-supply remembered Width/Opacity/Color, seeded from
 // the SAME canonical defaults Map now reads too (DRAWING_DEFAULT_COLORS,
 // each supply's own `defaultSettings`). Switching supplies restores that
@@ -343,7 +358,13 @@ function drawOperation(operation: BlackbookOperation): void {
     // this Mark's deterministic deposition the instant that happens.
     materialCtx.save();
     const scaledStyle = { ...operation.style, width: operation.style.width * widthScale() };
-    strokeSpray(materialCtx, points.map((point) => docToScreen(point)), scaledStyle, operation.id);
+    // BLACKBOOK Spray Physicality V1: docToScreen returns a fresh {x,y}
+    // object -- tMs/pressure must be carried through explicitly, or every
+    // Spray stroke would silently lose its velocity/pressure capture the
+    // instant it's rendered.
+    const sprayPoints = points as readonly { readonly x: number; readonly y: number; readonly tMs?: number; readonly pressure?: number }[];
+    const screenPoints = sprayPoints.map((point) => ({ ...docToScreen(point), tMs: point.tMs, pressure: point.pressure }));
+    strokeSpray(materialCtx, screenPoints, scaledStyle, operation.id, resolveSprayCapProfile(operation.capId));
     materialCtx.restore();
     return;
   }
@@ -406,7 +427,7 @@ function drawOperation(operation: BlackbookOperation): void {
   materialCtx.stroke(); materialCtx.restore();
 }
 
-function activeOperation(points: readonly { x: number; y: number }[]): BlackbookOperation {
+function activeOperation(points: readonly CapturedPoint[]): BlackbookOperation {
   if (activeSupply === "eraser") return { operation: "eraser", id: "active", points, width: PENCIL_ERASER_SUPPLY.defaultWidth };
   // Drawing Shell V1: color now comes from the live COLOR control (per-supply
   // remembered, seeded from the SAME canonical DRAWING_DEFAULT_COLORS Map
@@ -421,6 +442,8 @@ function activeOperation(points: readonly { x: number; y: number }[]): Blackbook
     // Graphite Grades Foundation V1: only Pencil carries a grade; every
     // other supply is unaffected.
     ...(activeSupply === "pencil" ? { variantId: activeGraphiteGrade, profileVersion: GRAPHITE_PROFILE_VERSION } : {}),
+    // BLACKBOOK Spray Physicality V1: only Spray carries a capId.
+    ...(activeSupply === "spray" ? { capId: activeSprayCapId } : {}),
   };
 }
 
@@ -430,9 +453,20 @@ function activeOperation(points: readonly { x: number; y: number }[]): Blackbook
 // the artist has panned/zoomed, while an unrotated/unpanned canvas at
 // zoom=1 would only ever have mapped a click inside the element to [0,1]
 // anyway. VIEW transform only -- never touches persisted geometry.
-function point(event: PointerEvent) {
+/**
+ * BLACKBOOK Spray Physicality V1 -- `tMs`/`pressure` are captured ONLY for
+ * Spray (per this batch's own "strictly on Spray" scope), and only
+ * `tMs`/`pressure` -- never tilt/twist/pointerType, per this batch's own
+ * "do not blindly persist every browser PointerEvent property" instruction.
+ * `tMs` is elapsed ms since `activeStrokeStartMs` (this gesture's own first
+ * point, reset on every pointerdown) -- never `Date.now()`/wall-clock
+ * itself, so replay is unaffected by when a Mark is later reopened.
+ */
+function point(event: PointerEvent): CapturedPoint {
   const rect = canvas.getBoundingClientRect();
-  return screenToDoc(event.clientX - rect.left, event.clientY - rect.top);
+  const doc = screenToDoc(event.clientX - rect.left, event.clientY - rect.top);
+  if (activeSupply !== "spray") return doc;
+  return { ...doc, tMs: performance.now() - activeStrokeStartMs, pressure: event.pressure };
 }
 
 /**
@@ -504,6 +538,12 @@ function marksToOperations(artwork: Artwork): BlackbookOperation[] {
     // actually authored with, not whatever grade is currently selected.
     ...(mark.material?.variantId !== undefined && mark.material?.profileVersion !== undefined
       ? { variantId: mark.material.variantId, profileVersion: mark.material.profileVersion }
+      : {}),
+    // BLACKBOOK Spray Physicality V1: carry this Mark's OWN stored cap
+    // through hydration -- a legacy Spray Mark (no capId) resolves to the
+    // Stock Cap via resolveSprayCapProfile's own fallback, never an error.
+    ...(mark.material?.supplyId === "spray" && mark.material?.capId !== undefined
+      ? { capId: mark.material.capId }
       : {}),
   }] : mark.type === "material-erasure" && mark.geometry.format === "local-2d-erasure-v1" ? [{ operation: "eraser", id: `blackbook-mark-${mark.id}`, artworkId: artwork.id, markId: mark.id, creatorId: artwork.creatorId, surfaceId: artwork.surfaceId, points: mark.geometry.points, width: mark.width }] : []);
 }
@@ -582,6 +622,7 @@ canvas.addEventListener("pointerdown", (event) => {
     return;
   }
   if (memberState.status !== "signedIn") return;
+  activeStrokeStartMs = performance.now();
   activePoints = [point(event)];
   render();
 });
@@ -779,6 +820,7 @@ function updateContextualControls(supply: DrawingSupplyId | "eraser"): void {
   gradeContainer.hidden = supply !== "pencil";
   colorContainer.hidden = supply === "eraser";
   opacityContainer.hidden = supply === "eraser" || supply === "spray";
+  capContainer.hidden = supply !== "spray";
 }
 
 function selectSupply(supply: DrawingSupplyId | "eraser"): void {
@@ -806,6 +848,14 @@ gradeSelect.addEventListener("change", () => {
   const value = gradeSelect.value;
   if ((GRAPHITE_GRADE_ORDER as readonly string[]).includes(value)) activeGraphiteGrade = value as GraphiteGradeId;
 });
+
+function selectSprayCap(capId: string): void {
+  activeSprayCapId = capId;
+  capStockButton.setAttribute("aria-pressed", String(capId === STUDIORICH_STOCK_CAP.id));
+  capFatButton.setAttribute("aria-pressed", String(capId === STUDIORICH_FAT_CAP.id));
+}
+capStockButton.addEventListener("click", () => selectSprayCap(STUDIORICH_STOCK_CAP.id));
+capFatButton.addEventListener("click", () => selectSprayCap(STUDIORICH_FAT_CAP.id));
 pencilButton.addEventListener("click", () => selectSupply("pencil"));
 penButton.addEventListener("click", () => selectSupply("pen"));
 markerButton.addEventListener("click", () => selectSupply("marker"));

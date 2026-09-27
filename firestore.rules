@@ -182,7 +182,11 @@ service cloud.firestore {
             // Graphite Grades Foundation V1: 'variantId'/'profileVersion'
             // are OPTIONAL (not in hasAll) additive keys -- a legacy Mark
             // (only supplyId/materialId) remains valid unchanged.
-            && mark.material.keys().hasOnly(['supplyId', 'materialId', 'variantId', 'profileVersion'])
+            // BLACKBOOK Spray Physicality V1: 'capId' is an OPTIONAL
+            // (not in hasAll) additive key, same pattern as
+            // 'variantId'/'profileVersion' -- a legacy Spray Mark (no
+            // capId) remains valid unchanged.
+            && mark.material.keys().hasOnly(['supplyId', 'materialId', 'variantId', 'profileVersion', 'capId'])
             && ((mark.material.supplyId == 'pencil' && mark.material.materialId == 'graphite')
               || (mark.material.supplyId == 'pen' && mark.material.materialId == 'ink')
               || (mark.material.supplyId == 'marker' && mark.material.materialId == 'marker')
@@ -197,7 +201,14 @@ service cloud.firestore {
               || (mark.material.supplyId == 'pencil'
                 && mark.material.variantId in ['9h', '6h', '3h', 'hb', '3b', '6b', '9b']
                 && mark.material.profileVersion is int
-                && mark.material.profileVersion >= 1))))
+                && mark.material.profileVersion >= 1))
+            // Only Spray may carry a capId, restricted to the known cap
+            // registry (sprayDeposition.ts's SPRAY_CAP_PROFILES) --
+            // deliberately not an open string, same boundary as the grade
+            // allowlist above.
+            && (!('capId' in mark.material)
+              || (mark.material.supplyId == 'spray'
+                && mark.material.capId in ['studiorich-stock', 'studiorich-fat']))))
         && hasValidAuthoredZoom(mark)
         && hasValidArtworkStyle(mark.style);
     }

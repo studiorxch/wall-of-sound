@@ -19,12 +19,15 @@
  * authored geometry itself. The persisted Mark's points are never touched.
  */
 
-import { hashSeed, resolveSprayCorePlan, resolveSprayParticlePlan } from "./sprayDeposition";
+import { hashSeed, resolveSprayCorePlan, resolveSprayParticlePlan, STUDIORICH_STOCK_CAP, type SprayCapProfile } from "./sprayDeposition";
 import { resolveMopDabPlan } from "./mopDeposition";
 
 export interface SmoothablePoint {
   readonly x: number;
   readonly y: number;
+  /** BLACKBOOK Spray Physicality V1 -- see LocalArtworkPoint's identical doc in artworkTypes.ts. Only consumed by strokeSpray; every other material ignores these. */
+  readonly tMs?: number;
+  readonly pressure?: number;
 }
 
 /**
@@ -619,6 +622,7 @@ export function strokeSpray(
   points: readonly SmoothablePoint[],
   style: { readonly color: string; readonly width: number; readonly opacity: number },
   seedSource: string,
+  cap: SprayCapProfile = STUDIORICH_STOCK_CAP,
 ): void {
   if (points.length < 2) return;
   const seed = hashSeed(seedSource);
@@ -628,7 +632,7 @@ export function strokeSpray(
   ctx.globalCompositeOperation = "source-over";
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
-  for (const pass of resolveSprayCorePlan(points, baseRadius, seed)) {
+  for (const pass of resolveSprayCorePlan(points, baseRadius, seed, cap)) {
     if (pass.points.length < 2) continue;
     ctx.globalAlpha = style.opacity * pass.alpha;
     ctx.strokeStyle = style.color;
@@ -642,7 +646,7 @@ export function strokeSpray(
 
   ctx.save();
   ctx.globalCompositeOperation = "source-over";
-  for (const particle of resolveSprayParticlePlan(points, baseRadius, seed)) {
+  for (const particle of resolveSprayParticlePlan(points, baseRadius, seed, cap)) {
     fillSprayParticle(ctx, particle, style.color, style.opacity);
   }
   ctx.restore();

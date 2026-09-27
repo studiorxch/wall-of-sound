@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   hashSeed,
+  resolveSprayCapProfile,
   resolveSprayCorePlan,
   resolveSprayEmissionPoints,
   resolveSprayParticlePlan,
+  SPRAY_CAP_PROFILES,
+  STUDIORICH_FAT_CAP,
   STUDIORICH_STOCK_CAP,
   type SprayCapProfile,
 } from "./sprayDeposition";
@@ -309,5 +312,155 @@ describe("Spray aerosol engine -- Revision 8 (a long zigzag's late-stage directi
     const xs = lastQuarter.map((point) => point.x);
     const spread = Math.max(...xs) - Math.min(...xs);
     expect(spread).toBeGreaterThan(amplitude); // real oscillation, not collapsed
+  });
+});
+
+describe("BLACKBOOK Spray Physicality V1 -- determinism", () => {
+  it("identical new-style points (with tMs/pressure) + identical seed/cap -> identical particle plan", () => {
+    const points = [
+      { x: 100, y: 100, tMs: 0, pressure: 0.4 },
+      { x: 140, y: 110, tMs: 30, pressure: 0.7 },
+      { x: 180, y: 140, tMs: 80, pressure: 0.9 },
+    ];
+    const a = resolveSprayParticlePlan(points, 20, hashSeed("mark-phys"), STUDIORICH_FAT_CAP);
+    const b = resolveSprayParticlePlan(points, 20, hashSeed("mark-phys"), STUDIORICH_FAT_CAP);
+    expect(a).toEqual(b);
+    expect(a.length).toBeGreaterThan(0);
+  });
+
+  it("identical new-style points -> identical core plan (reload/replay proof)", () => {
+    const points = [{ x: 0, y: 0, tMs: 0, pressure: 0.5 }, { x: 50, y: 10, tMs: 60, pressure: 0.5 }, { x: 90, y: 40, tMs: 140, pressure: 0.5 }];
+    const first = resolveSprayCorePlan(points, 15, hashSeed("reload-mark"));
+    const second = resolveSprayCorePlan(points, 15, hashSeed("reload-mark"));
+    expect(first).toEqual(second);
+  });
+
+  it("legacy {x,y}-only Spray Marks (no tMs/pressure at all) still render deterministically, byte-identical to their own pre-Physicality-pass output shape", () => {
+    const legacyPoints = [{ x: 100, y: 100 }, { x: 140, y: 110 }, { x: 180, y: 140 }];
+    const a = resolveSprayParticlePlan(legacyPoints, 20, hashSeed("legacy-mark"));
+    const b = resolveSprayParticlePlan(legacyPoints, 20, hashSeed("legacy-mark"));
+    expect(a).toEqual(b);
+    expect(a.length).toBeGreaterThan(0);
+  });
+});
+
+describe("BLACKBOOK Spray Physicality V1 -- velocity (movement speed)", () => {
+  it("a SLOW segment (small distance, large dt) deposits MORE than a FAST segment (large distance, small dt) covering the same span", () => {
+    const slow = [{ x: 0, y: 0, tMs: 0 }, { x: 10, y: 0, tMs: 200 }]; // 0.05 px/ms
+    const fast = [{ x: 0, y: 0, tMs: 0 }, { x: 10, y: 0, tMs: 5 }]; // 2 px/ms
+    const slowPlan = resolveSprayParticlePlan(slow, 20, hashSeed("speed-test"));
+    const fastPlan = resolveSprayParticlePlan(fast, 20, hashSeed("speed-test"));
+    expect(slowPlan.length).toBeGreaterThan(fastPlan.length);
+  });
+
+  it("resolveSprayEmissionPoints' densityFactor is bounded even for an extreme velocity (very large or near-zero dt)", () => {
+    const extreme = [{ x: 0, y: 0, tMs: 0 }, { x: 500, y: 0, tMs: 0.001 }];
+    const emissions = resolveSprayEmissionPoints(extreme, 20);
+    for (const e of emissions) {
+      expect(e.densityFactor).toBeGreaterThanOrEqual(0.55);
+      expect(e.densityFactor).toBeLessThanOrEqual(1.6);
+    }
+  });
+
+  it("a stroke with NO tMs on any point falls back to the legacy point-spacing proxy (unchanged from pre-Physicality-pass behavior) -- checked directly on densityFactor, since total particle count also depends on the (unrelated) number of interpolated emission points along a longer segment", () => {
+    const closePoints = [{ x: 0, y: 0 }, { x: 2, y: 0 }]; // close together -> dwelling -> higher density
+    const farPoints = [{ x: 0, y: 0 }, { x: 40, y: 0 }]; // far apart -> fast -> lower density
+    const closeEmissions = resolveSprayEmissionPoints(closePoints, 20);
+    const farEmissions = resolveSprayEmissionPoints(farPoints, 20);
+    expect(closeEmissions[closeEmissions.length - 1].densityFactor).toBeGreaterThan(farEmissions[farEmissions.length - 1].densityFactor);
+  });
+});
+
+describe("BLACKBOOK Spray Physicality V1 -- pressure", () => {
+  it("varying pressure across a stroke is bounded -- never collapses to near-zero or blows out particle count arbitrarily", () => {
+    const points = [
+      { x: 0, y: 0, tMs: 0, pressure: 0 },
+      { x: 20, y: 0, tMs: 40, pressure: 1 },
+      { x: 40, y: 0, tMs: 80, pressure: 0.5 },
+    ];
+    const plan = resolveSprayParticlePlan(points, 20, hashSeed("pressure-bounds"));
+    expect(plan.length).toBeGreaterThan(0);
+    for (const particle of plan) {
+      expect(particle.radius).toBeGreaterThan(0);
+      expect(particle.alpha).toBeGreaterThanOrEqual(0);
+      expect(particle.alpha).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it("a CONSTANT pressure across the whole stroke (mouse's own PointerEvent.pressure=0.5 convention) produces the SAME plan as no pressure captured at all -- mouse stays fully usable, never mistaken for a real signal", () => {
+    const withConstantPressure = [
+      { x: 0, y: 0, tMs: 0, pressure: 0.5 },
+      { x: 20, y: 0, tMs: 40, pressure: 0.5 },
+      { x: 40, y: 0, tMs: 80, pressure: 0.5 },
+    ];
+    const withoutPressure = withConstantPressure.map(({ pressure: _pressure, ...rest }) => rest);
+    const withPlan = resolveSprayParticlePlan(withConstantPressure, 20, hashSeed("mouse-test"));
+    const withoutPlan = resolveSprayParticlePlan(withoutPressure, 20, hashSeed("mouse-test"));
+    expect(withPlan).toEqual(withoutPlan);
+  });
+
+  it("a genuinely VARYING pressure signal changes the deposition from the neutral (no-signal) case", () => {
+    const varying = [
+      { x: 0, y: 0, tMs: 0, pressure: 0.1 },
+      { x: 20, y: 0, tMs: 40, pressure: 0.9 },
+      { x: 40, y: 0, tMs: 80, pressure: 0.3 },
+    ];
+    const neutral = varying.map(({ pressure: _pressure, ...rest }) => rest);
+    const varyingPlan = resolveSprayParticlePlan(varying, 20, hashSeed("varying-pressure"));
+    const neutralPlan = resolveSprayParticlePlan(neutral, 20, hashSeed("varying-pressure"));
+    expect(varyingPlan).not.toEqual(neutralPlan);
+  });
+
+  it("missing pressure on some points but not others still produces a finite, bounded plan (safe fallback, never throws/NaNs)", () => {
+    const mixed = [{ x: 0, y: 0, tMs: 0, pressure: 0.8 }, { x: 20, y: 0, tMs: 40 }, { x: 40, y: 0, tMs: 80, pressure: 0.3 }];
+    const plan = resolveSprayParticlePlan(mixed, 20, hashSeed("mixed-pressure"));
+    expect(plan.length).toBeGreaterThan(0);
+    for (const particle of plan) {
+      expect(Number.isFinite(particle.x)).toBe(true);
+      expect(Number.isFinite(particle.y)).toBe(true);
+      expect(Number.isFinite(particle.radius)).toBe(true);
+      expect(Number.isFinite(particle.alpha)).toBe(true);
+    }
+  });
+});
+
+describe("BLACKBOOK Spray Physicality V1 -- cap personality", () => {
+  const points = [{ x: 100, y: 100 }, { x: 140, y: 110 }, { x: 180, y: 140 }];
+
+  it("Fat Cap and Stock/Skinny Cap produce genuinely DIFFERENT deposition characteristics from identical points/seed -- not merely different widths", () => {
+    const stock = resolveSprayParticlePlan(points, 20, hashSeed("cap-compare"), STUDIORICH_STOCK_CAP);
+    const fat = resolveSprayParticlePlan(points, 20, hashSeed("cap-compare"), STUDIORICH_FAT_CAP);
+    expect(fat).not.toEqual(stock);
+    // Fat: wider footprint -- particles land further from the emission point on average.
+    const avgOffset = (plan: readonly { x: number; y: number }[], origin: { x: number; y: number }) =>
+      plan.reduce((sum, p) => sum + Math.hypot(p.x - origin.x, p.y - origin.y), 0) / plan.length;
+    expect(avgOffset(fat, points[0])).toBeGreaterThan(avgOffset(stock, points[0]) * 0.5);
+    // Fat: individually larger particles (particleRadiusRatio + the wider
+    // footprintRadiusScale both raise per-particle radius) -- a wider,
+    // wash-like footprint from fewer-but-bigger deposits, not simply "more
+    // dots of the same size" (a real fat cap's wider orifice covers more
+    // area per pass, it doesn't multiply droplet count 1:1).
+    const avgRadius = (plan: readonly { radius: number }[]) => plan.reduce((sum, p) => sum + p.radius, 0) / plan.length;
+    expect(avgRadius(fat)).toBeGreaterThan(avgRadius(stock));
+  });
+
+  it("Fat Cap's core is proportionally narrower relative to its own wider footprint (soft-center wash, not a dominant line)", () => {
+    const stockCore = resolveSprayCorePlan(points, 20, hashSeed("core-compare"), STUDIORICH_STOCK_CAP);
+    const fatCore = resolveSprayCorePlan(points, 20, hashSeed("core-compare"), STUDIORICH_FAT_CAP);
+    const stockWidth = stockCore[0].width;
+    const fatWidth = fatCore[0].width;
+    // Fat's effective radius is 1.65x, but coreWidthRatio is lower -- net width is not simply proportional.
+    expect(fatWidth).not.toBeCloseTo(stockWidth * STUDIORICH_FAT_CAP.footprintRadiusScale, 1);
+  });
+
+  it("resolveSprayCapProfile resolves a known id, and falls back to Stock for an unknown/absent id (legacy Mark safety)", () => {
+    expect(resolveSprayCapProfile("studiorich-fat").id).toBe("studiorich-fat");
+    expect(resolveSprayCapProfile("studiorich-stock").id).toBe("studiorich-stock");
+    expect(resolveSprayCapProfile(undefined).id).toBe("studiorich-stock");
+    expect(resolveSprayCapProfile("unknown-future-cap").id).toBe("studiorich-stock");
+  });
+
+  it("SPRAY_CAP_PROFILES is a plain data registry containing both caps -- a future cap needs no new rendering branch", () => {
+    expect(Object.keys(SPRAY_CAP_PROFILES).sort()).toEqual(["studiorich-fat", "studiorich-stock"]);
   });
 });

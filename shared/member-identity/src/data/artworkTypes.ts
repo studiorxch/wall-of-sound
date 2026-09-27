@@ -2,9 +2,25 @@ export interface GeographicArtworkPoint {
   readonly longitude: number;
   readonly latitude: number;
 }
+/**
+ * BLACKBOOK Spray Physicality V1 -- `tMs`/`pressure` are OPTIONAL, additive
+ * capture fields, meaningful today only to Spray's deposition engine
+ * (`sprayDeposition.ts`). `tMs` is elapsed milliseconds since the gesture's
+ * own first point (never wall-clock/`Date.now()` -- a relative, replayable
+ * duration), letting deposition compute REAL movement velocity instead of
+ * the older point-spacing proxy. `pressure` is the raw `PointerEvent.pressure`
+ * value (0-1) at that point, when the input device reported one. Both are
+ * absent entirely on every Mark authored before this field existed and on
+ * every non-Spray stroke -- an absent value always means "use the existing
+ * deterministic point-spacing fallback," never an error, never a
+ * different/incompatible point shape. Rendering never depends on when a
+ * point is REPLAYED, only on these persisted, authored values.
+ */
 export interface LocalArtworkPoint {
   readonly x: number;
   readonly y: number;
+  readonly tMs?: number;
+  readonly pressure?: number;
 }
 export interface GeographicBounds { readonly west: number; readonly south: number; readonly east: number; readonly north: number }
 export interface LocalBounds { readonly minX: number; readonly minY: number; readonly maxX: number; readonly maxY: number }

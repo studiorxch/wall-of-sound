@@ -84,6 +84,9 @@
       #supply-controls { display: flex; align-items: center; gap: 10px; padding: 8px 12px; }
       #supply-controls label { display: flex; align-items: center; gap: 6px; font-size: 10px; letter-spacing: .04em; color: #c8c0b6; }
       #supply-controls [hidden] { display: none !important; }
+      #blackbook-cap-container { display: flex; align-items: center; gap: 6px; font-size: 10px; letter-spacing: .04em; color: #c8c0b6; }
+      #blackbook-cap-container button { border: 1px solid rgba(255,255,255,.16); background: rgba(24,22,19,.92); color: #c8c0b6; border-radius: 999px; padding: 4px 10px; font: 700 9px/1 inherit; letter-spacing: .05em; cursor: pointer; }
+      #blackbook-cap-container button[aria-pressed="true"] { border-color: #e2572b; color: #e2572b; }
 
       #art-island { display: flex; align-items: center; gap: 6px; padding: 6px; }
       /**
@@ -231,6 +234,14 @@
             <label id="blackbook-color-container">COLOR <input id="blackbook-color" type="color"></label>
             <label id="blackbook-width-container">WIDTH <input id="blackbook-width" type="range" min="1" max="48" step="1" value="5"></label>
             <label id="blackbook-opacity-container">OPACITY <input id="blackbook-opacity" type="range" min="0.15" max="1" step="0.05" value="0.82"></label>
+            <!-- BLACKBOOK Spray Physicality V1 -- TEMPORARY minimal cap
+                 selector, Spray-only. See blackbookRuntime.ts's own doc:
+                 the smallest coherent control this batch's own instruction
+                 allows, not a tool-palette redesign. -->
+            <span id="blackbook-cap-container">CAP
+              <button id="blackbook-cap-stock" type="button" aria-pressed="true">SKINNY</button>
+              <button id="blackbook-cap-fat" type="button" aria-pressed="false">FAT</button>
+            </span>
           </div>
           <div id="art-island" class="island" aria-label="Art Supplies">
             <button id="blackbook-pencil" class="tool-icon" aria-pressed="true"><span class="tool-icon-glyph" data-icon="pencil" aria-hidden="true"></span><span class="tool-icon-label">PENCIL</span></button>

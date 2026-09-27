@@ -37,11 +37,17 @@ import { simplifyPathToBudget } from "./pathSimplify";
 export interface SprayPoint {
   readonly x: number;
   readonly y: number;
+  /** BLACKBOOK Spray Physicality V1 -- elapsed ms since the gesture's own first point (never wall-clock). Absent on legacy Marks -- see this module's velocity-vs-spacing doc below. */
+  readonly tMs?: number;
+  /** Raw `PointerEvent.pressure` (0-1) at this point, when the input device reported one. Absent on legacy Marks or devices with no real pressure signal. */
+  readonly pressure?: number;
 }
 
 export interface SprayEmissionPoint extends SprayPoint {
-  /** >1 in slow/dwelled sections, <1 in fast sections -- see resolveMopDabPlan's identical proxy in mopDeposition.ts for the full rationale (point spacing as a free, deterministic stand-in for pointer speed). */
+  /** >1 in slow/dwelled sections, <1 in fast sections -- from real captured velocity when available (see `densityFactorForSegment`), else the legacy point-spacing proxy (resolveMopDabPlan's identical fallback in mopDeposition.ts). */
   readonly densityFactor: number;
+  /** BLACKBOOK Spray Physicality V1 -- bounded pressure-derived flow multiplier (1 = neutral/no signal). See `pressureFlowFactor`'s own doc. */
+  readonly flowFactor: number;
 }
 
 export interface SprayParticle extends SprayPoint {
@@ -55,6 +61,17 @@ const PARTICLE_RADIUS_JITTER_FLOOR = 0.55;
 export interface SprayCapProfile {
   readonly id: string;
   readonly name: string;
+  /**
+   * BLACKBOOK Spray Physicality V1 -- Cap Personality. Multiplies the
+   * artist's own authored Width (already `baseRadius = width * 0.5`)
+   * into this cap's ACTUAL physical footprint -- 1 = no change from the
+   * Stock Cap's existing calibrated behavior. A wider cap (e.g. Fat)
+   * genuinely covers more area than the same Width slider value on the
+   * Stock Cap, the same way a real fat cap's wider orifice sprays a
+   * broader pattern at the same distance/hand speed -- this is cap
+   * PERSONALITY, not a duplicate of the Width control.
+   */
+  readonly footprintRadiusScale: number;
   /** Particles emitted per emission point at densityFactor 1 -- scaled by that point's own densityFactor and rounded, then bounded by maxParticlesPerEmission. */
   readonly baseParticlesPerEmission: number;
   readonly maxParticlesPerEmission: number;
@@ -151,6 +168,7 @@ export interface SprayCapProfile {
 export const STUDIORICH_STOCK_CAP: SprayCapProfile = Object.freeze({
   id: "studiorich-stock",
   name: "StudioRich Stock Cap",
+  footprintRadiusScale: 1,
   baseParticlesPerEmission: 9,
   maxParticlesPerEmission: 15,
   maxEmissionPoints: 200,
@@ -166,6 +184,53 @@ export const STUDIORICH_STOCK_CAP: SprayCapProfile = Object.freeze({
   coreWidthJitterRatio: 0.5,
 });
 
+/**
+ * BLACKBOOK Spray Physicality V1 -- Cap Personality. A "fat cap" in real
+ * aerosol art is a wide-orifice nozzle: a broader, softer, wash-like
+ * pattern with less defined center and more overspray, at the cost of
+ * control -- the opposite trade-off from a skinny/stock cap's tight,
+ * confident line. Modeled here as: a wider physical footprint
+ * (`footprintRadiusScale`), a proportionally NARROWER core relative to
+ * that bigger footprint (`coreWidthRatio` lower than Stock's, so the
+ * core reads as a soft center rather than dominating the wider field),
+ * more particles at a lower per-particle alpha (a diffuse wash builds up
+ * through accumulation rather than a few dense dots), and softer edge
+ * falloff (`edgeSoftness` higher = more gradual). This is deliberately
+ * NOT just "STUDIORICH_STOCK_CAP with a bigger radius" -- every
+ * differentiating field the module's own SprayCapProfile doc describes
+ * is touched, per this batch's own "not merely different brush widths"
+ * requirement.
+ */
+export const STUDIORICH_FAT_CAP: SprayCapProfile = Object.freeze({
+  id: "studiorich-fat",
+  name: "StudioRich Fat Cap",
+  footprintRadiusScale: 1.65,
+  baseParticlesPerEmission: 13,
+  maxParticlesPerEmission: 20,
+  maxEmissionPoints: 200,
+  centerBias: 0.8,
+  edgeSoftness: 2.6,
+  baseParticleAlpha: 0.26,
+  particleRadiusRatio: 0.22,
+  particleMinRadiusRatio: 0.28,
+  corePasses: 3,
+  coreAlpha: 0.3,
+  coreWidthRatio: 0.22,
+  coreJitterRatio: 0.55,
+  coreWidthJitterRatio: 0.6,
+});
+
+/** Data-driven cap registry -- a future StudioRich cap is a new profile object added here, never a new rendering branch. `DEFAULT_SPRAY_CAP_ID` resolves every legacy Spray Mark (authored before caps existed) to the Stock Cap, preserving its exact existing calibrated look. */
+export const SPRAY_CAP_PROFILES: Readonly<Record<string, SprayCapProfile>> = Object.freeze({
+  [STUDIORICH_STOCK_CAP.id]: STUDIORICH_STOCK_CAP,
+  [STUDIORICH_FAT_CAP.id]: STUDIORICH_FAT_CAP,
+});
+export const DEFAULT_SPRAY_CAP_ID = STUDIORICH_STOCK_CAP.id;
+
+export function resolveSprayCapProfile(capId: string | undefined): SprayCapProfile {
+  return (capId !== undefined && SPRAY_CAP_PROFILES[capId]) || STUDIORICH_STOCK_CAP;
+}
+
 // Calibration V1: tightened from 0.35 -- denser emission-point spacing so a
 // fast drag reads as one continuous sprayed field rather than a line of
 // separated islands. Still purely a function of baseRadius (never camera or
@@ -178,6 +243,78 @@ const DENSITY_RESPONSE = 0.5;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+/**
+ * BLACKBOOK Spray Physicality V1 -- Movement. `tMs` is present (and
+ * strictly increasing) on every point of a NEW Spray Mark; entirely absent
+ * on a legacy Mark authored before this field existed. A stroke is either
+ * fully timed or fully untimed (both endpoints of every segment come from
+ * the same authoring session) -- this checks the two endpoints of ONE
+ * segment, which is all `densityFactorForSegment` below ever needs.
+ */
+function hasVelocitySignal(a: SprayPoint, b: SprayPoint): boolean {
+  return a.tMs !== undefined && b.tMs !== undefined && b.tMs > a.tMs;
+}
+
+/**
+ * Real movement speed, in authored-units per ms (same coordinate space as
+ * `baseRadius` -- document-space units, already resolution-independent).
+ * `neutralSpeed` is calibrated so an ordinary, unhurried tag-speed gesture
+ * (roughly one `baseRadius` of travel every ~40ms, a plausible hand-speed
+ * order of magnitude at typical Blackbook zoom) lands near densityFactor 1,
+ * the same anchor point the legacy spacing proxy uses.
+ */
+const NEUTRAL_SPEED_RATIO_PER_MS = NEUTRAL_SPACING_RATIO / 40;
+const VELOCITY_DENSITY_RESPONSE = 0.6;
+
+function densityFactorForSegment(start: SprayPoint, end: SprayPoint, baseRadius: number): number {
+  const segmentLength = Math.hypot(end.x - start.x, end.y - start.y);
+  if (hasVelocitySignal(start, end)) {
+    const dt = (end.tMs as number) - (start.tMs as number);
+    const speed = segmentLength / dt; // authored-units / ms
+    const neutralSpeed = Math.max(1e-6, baseRadius * NEUTRAL_SPEED_RATIO_PER_MS);
+    // Slower than neutral -> factor > 1 (more deposit, dwelling); faster -> factor < 1 (lighter, dispersed).
+    return clamp(1 + (1 - speed / neutralSpeed) * VELOCITY_DENSITY_RESPONSE, MIN_DENSITY_FACTOR, MAX_DENSITY_FACTOR);
+  }
+  // Legacy fallback: the original point-spacing proxy, byte-identical to
+  // the pre-Physicality-pass behavior for any Mark with no `tMs`.
+  const neutralSpacing = Math.max(1e-6, baseRadius * NEUTRAL_SPACING_RATIO);
+  return clamp(1 + (1 - segmentLength / neutralSpacing) * DENSITY_RESPONSE, MIN_DENSITY_FACTOR, MAX_DENSITY_FACTOR);
+}
+
+/**
+ * BLACKBOOK Spray Physicality V1 -- Pressure. Used CONSERVATIVELY (bounded
+ * ~±18%) and only when the whole stroke actually carries a real pressure
+ * SIGNAL, not merely a value -- a mouse (and most touch input) reports a
+ * constant `pressure` (typically 0.5) for the whole gesture per the
+ * PointerEvent spec, which is not a physical pressure reading. Determinism
+ * comes from `points` alone (no device-type flag persisted): the variance
+ * across a stroke's own recorded pressures is a bounded, deterministic
+ * property of the same points every other part of this engine already
+ * reads. A near-constant series (mouse, most touch) yields a near-zero
+ * variance and falls back to `neutral = 1`, exactly like an absent value.
+ */
+const PRESSURE_VARIANCE_SIGNAL_THRESHOLD = 0.0025; // ~5% stddev-equivalent
+const PRESSURE_FLOW_RESPONSE = 0.36; // bounded factor range: [1-0.18, 1+0.18]
+
+function hasMeaningfulPressureSignal(points: readonly SprayPoint[]): boolean {
+  const values = points.map((p) => p.pressure).filter((p): p is number => p !== undefined);
+  if (values.length < 2) return false;
+  const mean = values.reduce((sum, v) => sum + v, 0) / values.length;
+  const variance = values.reduce((sum, v) => sum + (v - mean) ** 2, 0) / values.length;
+  return variance > PRESSURE_VARIANCE_SIGNAL_THRESHOLD;
+}
+
+/** 0 (light touch) -> ~0.82x flow; 1 (full pressure) -> ~1.18x flow. Never a 0..1-mapped-to-full-opacity slider -- see this module's own doc. */
+function pressureFlowFactor(pressure: number | undefined, signalPresent: boolean): number {
+  if (!signalPresent || pressure === undefined) return 1;
+  return clamp(1 + (pressure - 0.5) * PRESSURE_FLOW_RESPONSE, 1 - PRESSURE_FLOW_RESPONSE / 2, 1 + PRESSURE_FLOW_RESPONSE / 2);
+}
+/** A much smaller, bounded radius nudge (max ±6%) -- pressure primarily affects FLOW/density (paint volume), only a subtle secondary effect on footprint size, per this batch's own "flow/density primarily" instruction. */
+function pressureRadiusFactor(pressure: number | undefined, signalPresent: boolean): number {
+  if (!signalPresent || pressure === undefined) return 1;
+  return clamp(1 + (pressure - 0.5) * 0.12, 0.94, 1.06);
 }
 
 /**
@@ -247,7 +384,14 @@ export function resolveSprayEmissionPoints(
   cap: SprayCapProfile = STUDIORICH_STOCK_CAP,
 ): readonly SprayEmissionPoint[] {
   if (points.length === 0 || baseRadius <= 0) return [];
-  const nominalStep = Math.max(1e-6, baseRadius * MIN_STEP_RATIO);
+  // BLACKBOOK Spray Physicality V1 -- Cap Personality: the cap's own
+  // footprint scale is applied ONCE, here, so every downstream computation
+  // (step sizing, velocity-neutral calibration, and resolveSprayParticlePlan's
+  // own particle offsets/radii) consistently uses the cap's REAL physical
+  // footprint, not the artist's raw Width value.
+  const effectiveRadius = baseRadius * cap.footprintRadiusScale;
+  const pressureSignal = hasMeaningfulPressureSignal(points);
+  const nominalStep = Math.max(1e-6, effectiveRadius * MIN_STEP_RATIO);
   // Budget one fewer than the cap so the loop's own rounding can never push
   // the actual count past it -- correctness (whole-path coverage) over
   // hitting the bound exactly.
@@ -265,20 +409,28 @@ export function resolveSprayEmissionPoints(
     totalLength += Math.hypot(source[index].x - source[index - 1].x, source[index].y - source[index - 1].y);
   }
   const maxStep = Math.max(nominalStep, totalLength / budget);
-  const neutralSpacing = Math.max(1e-6, baseRadius * NEUTRAL_SPACING_RATIO);
-  const densityAt = (spacing: number): number =>
-    clamp(1 + (1 - spacing / neutralSpacing) * DENSITY_RESPONSE, MIN_DENSITY_FACTOR, MAX_DENSITY_FACTOR);
 
-  const emissions: SprayEmissionPoint[] = [{ ...source[0], densityFactor: densityAt(0) }];
+  const emissions: SprayEmissionPoint[] = [{
+    ...source[0],
+    densityFactor: densityFactorForSegment(source[0], source[0], effectiveRadius),
+    flowFactor: pressureFlowFactor(source[0].pressure, pressureSignal),
+  }];
   for (let index = 1; index < source.length; index += 1) {
     const start = source[index - 1];
     const end = source[index];
+    const density = densityFactorForSegment(start, end, effectiveRadius);
+    // Flow uses the SEGMENT's average pressure -- both endpoints, same
+    // "meaningful signal" gate as density's velocity check, deterministic
+    // from the two already-authored points.
+    const segmentPressure = start.pressure !== undefined && end.pressure !== undefined
+      ? (start.pressure + end.pressure) / 2
+      : start.pressure ?? end.pressure;
+    const flow = pressureFlowFactor(segmentPressure, pressureSignal);
     const segmentLength = Math.hypot(end.x - start.x, end.y - start.y);
-    const density = densityAt(segmentLength);
     const steps = Math.max(1, Math.ceil(segmentLength / maxStep));
     for (let step = 1; step <= steps; step += 1) {
       const t = step / steps;
-      emissions.push({ x: start.x + (end.x - start.x) * t, y: start.y + (end.y - start.y) * t, densityFactor: density });
+      emissions.push({ x: start.x + (end.x - start.x) * t, y: start.y + (end.y - start.y) * t, densityFactor: density, flowFactor: flow });
     }
   }
   // Belt-and-braces hard cap -- the pre-simplified `source` above keeps
@@ -309,13 +461,18 @@ export function resolveSprayParticlePlan(
   cap: SprayCapProfile = STUDIORICH_STOCK_CAP,
 ): readonly SprayParticle[] {
   if (baseRadius <= 0) return [];
+  const effectiveRadius = baseRadius * cap.footprintRadiusScale;
   const emissions = resolveSprayEmissionPoints(points, baseRadius, cap);
   const random = createSeededRandom(seed);
   const particles: SprayParticle[] = [];
   for (const emission of emissions) {
+    // BLACKBOOK Spray Physicality V1 -- Pressure: flow (density/volume)
+    // scales particle COUNT here, folded in alongside the existing
+    // velocity/spacing densityFactor -- both are bounded, both come from
+    // already-authored, replayable data.
     const particleCount = Math.min(
       cap.maxParticlesPerEmission,
-      Math.max(1, Math.round(cap.baseParticlesPerEmission * emission.densityFactor)),
+      Math.max(1, Math.round(cap.baseParticlesPerEmission * emission.densityFactor * emission.flowFactor)),
     );
     for (let index = 0; index < particleCount; index += 1) {
       const angle = random() * Math.PI * 2;
@@ -324,9 +481,13 @@ export function resolveSprayParticlePlan(
       // core's job (see `particleMinRadiusRatio`'s doc). Remaps [0,1] into
       // [particleMinRadiusRatio, 1] instead of [0,1].
       const bandedRadius = cap.particleMinRadiusRatio + normalizedRadius * (1 - cap.particleMinRadiusRatio);
-      const offsetRadius = bandedRadius * baseRadius;
+      const offsetRadius = bandedRadius * effectiveRadius;
       const edgeFalloff = (1 - normalizedRadius) ** cap.edgeSoftness;
       const radiusJitter = PARTICLE_RADIUS_JITTER_FLOOR + random() * (1 - PARTICLE_RADIUS_JITTER_FLOOR);
+      // BLACKBOOK Spray Physicality V1 -- Pressure's secondary, much
+      // smaller (±6%) effect on particle radius (footprint), alongside its
+      // primary flow/density effect above.
+      const pressureRadius = pressureRadiusFactor(emission.pressure, emission.flowFactor !== 1);
       particles.push({
         x: emission.x + Math.cos(angle) * offsetRadius,
         y: emission.y + Math.sin(angle) * offsetRadius,
@@ -339,7 +500,7 @@ export function resolveSprayParticlePlan(
         // build exists to fix. A slightly higher absolute floor keeps
         // narrow Spray's overspray genuinely visible without meaningfully
         // changing the already-large broad-end particle sizes.
-        radius: Math.max(1.1, baseRadius * cap.particleRadiusRatio * radiusJitter),
+        radius: Math.max(1.1, effectiveRadius * cap.particleRadiusRatio * radiusJitter * pressureRadius),
         alpha: cap.baseParticleAlpha * edgeFalloff * clamp(emission.densityFactor, 0.4, 1.4),
       });
     }
@@ -349,6 +510,8 @@ export function resolveSprayParticlePlan(
 
 export interface SprayCorePoint extends SprayPoint {
   readonly densityFactor: number;
+  /** BLACKBOOK Spray Physicality V1 -- see SprayEmissionPoint.flowFactor's identical doc. */
+  readonly flowFactor: number;
 }
 
 export interface SprayCorePass {
@@ -395,14 +558,16 @@ const CORE_MAX_SAMPLE_POINTS = 220;
 export function resolveSprayCoreSamplePoints(
   points: readonly SprayPoint[],
   baseRadius: number,
+  cap: SprayCapProfile = STUDIORICH_STOCK_CAP,
 ): readonly SprayCorePoint[] {
   if (points.length === 0 || baseRadius <= 0) return [];
-  const nominalStep = Math.max(1e-6, baseRadius * CORE_STEP_RATIO);
-  const neutralSpacing = Math.max(1e-6, baseRadius * NEUTRAL_SPACING_RATIO);
-  const densityAt = (spacing: number): number =>
-    clamp(1 + (1 - spacing / neutralSpacing) * DENSITY_RESPONSE, MIN_DENSITY_FACTOR, MAX_DENSITY_FACTOR);
+  const effectiveRadius = baseRadius * cap.footprintRadiusScale;
+  const pressureSignal = hasMeaningfulPressureSignal(points);
+  const nominalStep = Math.max(1e-6, effectiveRadius * CORE_STEP_RATIO);
 
-  if (points.length === 1) return [{ ...points[0], densityFactor: densityAt(0) }];
+  if (points.length === 1) {
+    return [{ ...points[0], densityFactor: densityFactorForSegment(points[0], points[0], effectiveRadius), flowFactor: pressureFlowFactor(points[0].pressure, pressureSignal) }];
+  }
 
   const budget = Math.max(1, CORE_MAX_SAMPLE_POINTS - 1);
   // Revision 8: same fix as resolveSprayEmissionPoints -- simplify first
@@ -414,16 +579,24 @@ export function resolveSprayCoreSamplePoints(
   }
   const step = Math.max(nominalStep, totalLength / budget);
 
-  const samples: SprayCorePoint[] = [{ ...source[0], densityFactor: densityAt(0) }];
+  const samples: SprayCorePoint[] = [{
+    ...source[0],
+    densityFactor: densityFactorForSegment(source[0], source[0], effectiveRadius),
+    flowFactor: pressureFlowFactor(source[0].pressure, pressureSignal),
+  }];
   for (let index = 1; index < source.length; index += 1) {
     const start = source[index - 1];
     const end = source[index];
+    const density = densityFactorForSegment(start, end, effectiveRadius);
+    const segmentPressure = start.pressure !== undefined && end.pressure !== undefined
+      ? (start.pressure + end.pressure) / 2
+      : start.pressure ?? end.pressure;
+    const flow = pressureFlowFactor(segmentPressure, pressureSignal);
     const segmentLength = Math.hypot(end.x - start.x, end.y - start.y);
-    const density = densityAt(segmentLength);
     const steps = Math.max(1, Math.ceil(segmentLength / step));
     for (let s = 1; s <= steps; s += 1) {
       const t = s / steps;
-      samples.push({ x: start.x + (end.x - start.x) * t, y: start.y + (end.y - start.y) * t, densityFactor: density });
+      samples.push({ x: start.x + (end.x - start.x) * t, y: start.y + (end.y - start.y) * t, densityFactor: density, flowFactor: flow });
     }
   }
   // Revision 8: geometry-aware simplification, not an index slice +
@@ -443,12 +616,21 @@ export function resolveSprayCorePlan(
   cap: SprayCapProfile = STUDIORICH_STOCK_CAP,
 ): readonly SprayCorePass[] {
   if (baseRadius <= 0 || points.length === 0) return [];
-  const samples = resolveSprayCoreSamplePoints(points, baseRadius);
+  const effectiveRadius = baseRadius * cap.footprintRadiusScale;
+  const samples = resolveSprayCoreSamplePoints(points, baseRadius, cap);
   if (samples.length === 0) return [];
   const random = createSeededRandom(seed);
   const passes = Math.max(1, cap.corePasses);
-  const nominalWidth = Math.max(0.6, baseRadius * 2 * cap.coreWidthRatio);
+  const nominalWidth = Math.max(0.6, effectiveRadius * 2 * cap.coreWidthRatio);
   const passAlphaBudget = cap.coreAlpha / Math.sqrt(passes);
+  // BLACKBOOK Spray Physicality V1 -- Pressure/Movement: the core's own
+  // flow/density character, averaged across the whole stroke (the core is
+  // ONE continuous pass per cap.corePasses, not per-segment, so it uses a
+  // single stroke-level scalar rather than the particle field's per-emission
+  // resolution -- consistent with this pass's own "continuity is this
+  // layer's only job" doc above).
+  const meanDensity = samples.reduce((sum, s) => sum + s.densityFactor, 0) / samples.length;
+  const meanFlow = samples.reduce((sum, s) => sum + s.flowFactor, 0) / samples.length;
 
   const passesOut: SprayCorePass[] = [];
   for (let pass = 0; pass < passes; pass += 1) {
@@ -457,16 +639,16 @@ export function resolveSprayCorePlan(
     // genuinely CONTINUOUS path (a per-point jitter would reintroduce
     // small zig-zags at fine spacing); the passes still differ from each
     // other, and from one Mark to the next, deterministically.
-    const jitterX = (random() - 0.5) * baseRadius * cap.coreJitterRatio;
-    const jitterY = (random() - 0.5) * baseRadius * cap.coreJitterRatio;
+    const jitterX = (random() - 0.5) * effectiveRadius * cap.coreJitterRatio;
+    const jitterY = (random() - 0.5) * effectiveRadius * cap.coreJitterRatio;
     const widthJitter = 1 + (random() - 0.5) * cap.coreWidthJitterRatio;
     const jittered: SprayCorePoint[] = samples.length === 1
-      ? [samples[0], samples[0]].map((p) => ({ x: p.x + jitterX, y: p.y + jitterY, densityFactor: p.densityFactor }))
-      : samples.map((p) => ({ x: p.x + jitterX, y: p.y + jitterY, densityFactor: p.densityFactor }));
+      ? [samples[0], samples[0]].map((p) => ({ x: p.x + jitterX, y: p.y + jitterY, densityFactor: p.densityFactor, flowFactor: p.flowFactor }))
+      : samples.map((p) => ({ x: p.x + jitterX, y: p.y + jitterY, densityFactor: p.densityFactor, flowFactor: p.flowFactor }));
     passesOut.push({
       points: jittered,
-      width: Math.max(0.6, nominalWidth * widthJitter),
-      alpha: passAlphaBudget * (1 - passRatio * 0.3),
+      width: Math.max(0.6, nominalWidth * widthJitter * clamp(meanDensity, 0.8, 1.2)),
+      alpha: passAlphaBudget * (1 - passRatio * 0.3) * meanFlow,
     });
   }
   return passesOut;

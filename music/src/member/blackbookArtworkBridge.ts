@@ -36,7 +36,7 @@ export interface BlackbookStroke {
   markId?: string;
   creatorId?: string;
   surfaceId?: string;
-  readonly points: readonly { readonly x: number; readonly y: number }[];
+  readonly points: readonly { readonly x: number; readonly y: number; readonly tMs?: number; readonly pressure?: number }[];
   readonly style: { readonly color: string; readonly width: number; readonly opacity: number };
   /**
    * Graphite Grades Foundation V1 -- which variant/grade authored this
@@ -46,6 +46,8 @@ export interface BlackbookStroke {
    */
   readonly variantId?: string;
   readonly profileVersion?: number;
+  /** BLACKBOOK Spray Physicality V1 -- which SprayCapProfile id authored this stroke. Only meaningful for `operation === "spray"`; absent for every other supply and for a Spray stroke authored before caps existed (resolves to the Stock Cap). */
+  readonly capId?: string;
 }
 
 export interface BlackbookErasure {
@@ -74,7 +76,15 @@ export function toLocalStrokeMark(stroke: BlackbookStroke, markId: string, creat
     id: markId,
     type: "stroke",
     createdAt,
-    geometry: { format: "local-2d-stroke-v1", points: stroke.points.map(({ x, y }) => ({ x, y })) },
+    // BLACKBOOK Spray Physicality V1: preserve tMs/pressure when present
+    // (Spray only ever sets them; every other supply's points never carry
+    // them) -- never force an explicit `undefined` key onto a legacy-shaped
+    // point.
+    geometry: { format: "local-2d-stroke-v1", points: stroke.points.map((p) => ({
+      x: p.x, y: p.y,
+      ...(p.tMs !== undefined ? { tMs: p.tMs } : {}),
+      ...(p.pressure !== undefined ? { pressure: p.pressure } : {}),
+    })) },
     style: { ...stroke.style },
     material: {
       supplyId: stroke.operation,
@@ -85,6 +95,8 @@ export function toLocalStrokeMark(stroke: BlackbookStroke, markId: string, creat
       ...(stroke.operation === "pencil" && stroke.variantId !== undefined && stroke.profileVersion !== undefined
         ? { variantId: stroke.variantId, profileVersion: stroke.profileVersion }
         : {}),
+      // BLACKBOOK Spray Physicality V1: only Spray ever carries a capId.
+      ...(stroke.operation === "spray" && stroke.capId !== undefined ? { capId: stroke.capId } : {}),
     },
   };
 }
