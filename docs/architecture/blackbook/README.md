@@ -79,6 +79,59 @@ artwork, characters, products/objects, and one or more writable Surfaces,
 composed together. None of this is implemented; only the single
 mark-drawing case exists today.
 
+## 5a. WORKSPACE / ARTWORK / ARTBOARD (current, established this batch)
+
+BLACKBOOK Live Stroke Stability + Open Workspace (β0.1) replaced the
+previous assumption that the opaque page-fill rectangle *was* the creative
+page. Three distinct concepts now exist, deliberately never collapsed into
+each other:
+
+- **Workspace** — the open authoring area (`renderWorkspace()`,
+  `blackbookRuntime.ts`). An effectively unconstrained dark (`#0f0d0b`)
+  backdrop, never a bounded "sheet of paper." UI/rendering chrome only —
+  never a Mark, never persisted, never affects `composition.bounds`, never
+  appears in a thumbnail as Artwork content.
+- **Artwork** — authored Marks (unchanged: `LocalStrokeMark`/
+  `LocalMaterialErasureMark`, §7). Conceptually independent of both
+  Workspace appearance and the Artboard: Marks render directly over the
+  open Workspace at their own already-authored coordinates regardless of
+  whether they fall inside or outside the Artboard outline. Removing the
+  opaque page fill did not move, rescale, or reinterpret a single existing
+  Mark — same `PageFrame`, same coordinate system, same camera transform.
+- **Artboard** — the finite presentation/export region. This IS the
+  existing `PageFrame`/`pageFrameRect()` (§5) — same position, dimensions,
+  and coordinate system as before this batch — now represented as a
+  subtle thin dotted boundary (`renderArtboardOutline()`) instead of an
+  opaque fill. The Artboard is not a physical sheet of paper and is not
+  the total available creative world; it indicates the current
+  presentation/export region, nothing more. **Not movable or resizable
+  yet** — an Artboard Tool (move/resize/aspect-ratio presets/export
+  dimensions/export-the-region/multiple presentation formats) is future
+  direction, not implemented, and this batch deliberately does not
+  establish unrestricted Artboard movement/resizing as a universal
+  BLACKBOOK invariant (see the Wallpaper note below).
+
+**Workspace appearance ≠ Wallpaper/world ≠ Artwork ≠ Artboard.** Workspace
+appearance (currently a fixed dark backdrop; a future Dark/Light authoring
+preference would live here) is an authoring-interface concern and must
+never mutate artwork data. It is explicitly NOT Wallpaper — no Wallpaper
+content (photographic/material/behavioral) is implemented anywhere in
+BLACKBOOK today; the dark Workspace backdrop is a placeholder authoring
+surface, not a Wallpaper.
+
+**Future Wallpaper/Artboard relationship (principle only, not
+implemented)**: different future Wallpaper/world types may have different
+spatial relationships to the Artboard — an extensible/procedural Wallpaper
+may continue indefinitely beyond an Artboard; a finite photographic or
+panoramic Wallpaper may establish meaningful available bounds; a
+spatially/world-registered Wallpaper may define or constrain Artboard
+geometry according to physical/environmental geometry. Wallpaper may
+therefore eventually *provide default* or *constrain available* Artboard
+geometry. None of those behaviors exist yet — recorded here only so a
+future Wallpaper batch doesn't have to reverse an incorrectly-assumed
+"Artboard is always freely movable/resizable" invariant that was never
+actually established.
+
 ## 6. SURFACE (current vs. direction)
 
 **Current**: `surfaceId` is already a real, required, immutable-after-

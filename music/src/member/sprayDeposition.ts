@@ -171,7 +171,7 @@ export const STUDIORICH_STOCK_CAP: SprayCapProfile = Object.freeze({
   footprintRadiusScale: 1,
   baseParticlesPerEmission: 9,
   maxParticlesPerEmission: 15,
-  maxEmissionPoints: 200,
+  maxEmissionPoints: 600,
   centerBias: 1,
   edgeSoftness: 2,
   baseParticleAlpha: 0.36,
@@ -207,7 +207,7 @@ export const STUDIORICH_FAT_CAP: SprayCapProfile = Object.freeze({
   footprintRadiusScale: 1.65,
   baseParticlesPerEmission: 13,
   maxParticlesPerEmission: 20,
-  maxEmissionPoints: 200,
+  maxEmissionPoints: 600,
   centerBias: 0.8,
   edgeSoftness: 2.6,
   baseParticleAlpha: 0.26,
@@ -404,11 +404,26 @@ export function resolveSprayEmissionPoints(
   // the per-segment interpolation below can never overflow. See
   // pathSimplify.ts's module doc for the full bug this fixes.
   const source = points.length - 1 > budget ? simplifyPathToBudget(points, budget + 1) : points;
-  let totalLength = 0;
-  for (let index = 1; index < source.length; index += 1) {
-    totalLength += Math.hypot(source[index].x - source[index - 1].x, source[index].y - source[index - 1].y);
-  }
-  const maxStep = Math.max(nominalStep, totalLength / budget);
+  // LIVE STROKE STABILITY V1 -- root cause of "already-deposited pigment
+  // visibly reorganizes while the gesture continues": this step size used
+  // to be WIDENED (`Math.max(nominalStep, totalLength / budget)`) using
+  // `totalLength` measured across the WHOLE current point array. Since
+  // `points` grows on every pointermove during a live gesture, that
+  // widening recomputed EVERY earlier segment's own interpolation density
+  // on every single frame -- once total length grew enough to trigger
+  // widening, every already-rendered emission point's exact position
+  // shifted retroactively, even though its own two source points never
+  // changed. Fixed: the step size is now a pure function of `effectiveRadius`
+  // alone (`nominalStep`), never of the current path's aggregate length --
+  // a segment's own interpolation is fully determined by ONLY that
+  // segment's own two endpoints, so appending new points can only ever ADD
+  // new emissions after the existing ones, never alter them. The remaining
+  // safety net below (the post-hoc `simplifyPathToBudget` if `emissions`
+  // still exceeds `cap.maxEmissionPoints`) is now a rare last resort for a
+  // genuinely pathological gesture length, not a mechanism this build's own
+  // realistic "one long slow Spray stroke" acceptance case will hit -- see
+  // this module's own raised `maxEmissionPoints` on both cap profiles.
+  const maxStep = nominalStep;
 
   const emissions: SprayEmissionPoint[] = [{
     ...source[0],
@@ -553,7 +568,13 @@ export interface SprayCorePass {
  * replay is pixel-identical.
  */
 const CORE_STEP_RATIO = 0.9;
-const CORE_MAX_SAMPLE_POINTS = 220;
+// LIVE STROKE STABILITY V1: raised from 220 (matching maxEmissionPoints'
+// 200 -> 600 raise, same ~3x factor) -- now that step size no longer
+// widens to fit a budget, this is purely a worst-case safety ceiling for a
+// genuinely pathological gesture length, not something a realistic "one
+// long, slow" gesture (this build's own acceptance case) should ever
+// approach. Raised, not removed -- a hard cost bound must still exist.
+const CORE_MAX_SAMPLE_POINTS = 660;
 
 export function resolveSprayCoreSamplePoints(
   points: readonly SprayPoint[],
@@ -573,11 +594,12 @@ export function resolveSprayCoreSamplePoints(
   // Revision 8: same fix as resolveSprayEmissionPoints -- simplify first
   // (shape-preserving) if raw point count alone could overflow the budget.
   const source = points.length - 1 > budget ? simplifyPathToBudget(points, budget + 1) : points;
-  let totalLength = 0;
-  for (let index = 1; index < source.length; index += 1) {
-    totalLength += Math.hypot(source[index].x - source[index - 1].x, source[index].y - source[index - 1].y);
-  }
-  const step = Math.max(nominalStep, totalLength / budget);
+  // LIVE STROKE STABILITY V1 -- see resolveSprayEmissionPoints' identical
+  // fix/doc. A per-segment step that depends only on `effectiveRadius`
+  // (never on the current path's aggregate length) so the core's own
+  // continuous pass never retroactively reflows earlier segments as the
+  // gesture continues.
+  const step = nominalStep;
 
   const samples: SprayCorePoint[] = [{
     ...source[0],

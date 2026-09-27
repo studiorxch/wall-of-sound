@@ -464,3 +464,56 @@ describe("BLACKBOOK Spray Physicality V1 -- cap personality", () => {
     expect(Object.keys(SPRAY_CAP_PROFILES).sort()).toEqual(["studiorich-fat", "studiorich-stock"]);
   });
 });
+
+describe("BLACKBOOK Live Stroke Stability V1 -- prefix stability under a growing gesture", () => {
+  // Simulates a live, slowly-growing gesture: the same points array with
+  // more points appended each "frame", exactly like activePoints during a
+  // real pointermove sequence.
+  function longSlowGesture(count: number): { x: number; y: number; tMs: number }[] {
+    return Array.from({ length: count }, (_, i) => ({
+      x: i * 3, y: Math.sin(i * 0.15) * 15, tMs: i * 20,
+    }));
+  }
+
+  it("resolveSprayEmissionPoints: the emissions for an EARLIER prefix of a gesture are an exact PREFIX of the emissions for a LONGER version of the same gesture -- appending points never changes/reorders/regenerates earlier emissions", () => {
+    const full = longSlowGesture(120);
+    const shortPrefix = full.slice(0, 40);
+    const shortEmissions = resolveSprayEmissionPoints(shortPrefix, 12);
+    const fullEmissions = resolveSprayEmissionPoints(full, 12);
+    expect(fullEmissions.length).toBeGreaterThan(shortEmissions.length);
+    expect(fullEmissions.slice(0, shortEmissions.length)).toEqual(shortEmissions);
+  });
+
+  it("resolveSprayParticlePlan: particles generated for an earlier prefix are byte-identical and appear unchanged (same values, same order) once the gesture grows further -- the exact 'previously deposited pigment must not reorganize' requirement", () => {
+    const full = longSlowGesture(120);
+    const shortPrefix = full.slice(0, 40);
+    const seed = hashSeed("stability-mark");
+    const shortPlan = resolveSprayParticlePlan(shortPrefix, 12, seed);
+    const fullPlan = resolveSprayParticlePlan(full, 12, seed);
+    expect(fullPlan.length).toBeGreaterThan(shortPlan.length);
+    expect(fullPlan.slice(0, shortPlan.length)).toEqual(shortPlan);
+  });
+
+  it("resolveSprayCorePlan: each pass's points for an earlier prefix are an exact prefix of the same pass once the gesture grows further", () => {
+    const full = longSlowGesture(120);
+    const shortPrefix = full.slice(0, 40);
+    const seed = hashSeed("stability-core-mark");
+    const shortPlan = resolveSprayCorePlan(shortPrefix, 12, seed);
+    const fullPlan = resolveSprayCorePlan(full, 12, seed);
+    expect(fullPlan.length).toBe(shortPlan.length); // same number of passes (corePasses is fixed)
+    for (let i = 0; i < shortPlan.length; i++) {
+      expect(fullPlan[i].points.length).toBeGreaterThan(shortPlan[i].points.length);
+      expect(fullPlan[i].points.slice(0, shortPlan[i].points.length)).toEqual(shortPlan[i].points);
+      // Width/alpha are stroke-level scalars (mean density/flow across the
+      // whole path) -- these MAY drift slightly as the path grows (a longer
+      // gesture's own mean speed differs from a short prefix's), which is
+      // expected and does not violate per-point prefix stability.
+    }
+  });
+
+  it("a realistic 'long, slow' gesture (well within the raised maxEmissionPoints budget) never triggers the belt-and-braces post-hoc simplification that would otherwise reflow the whole emission list", () => {
+    const long = longSlowGesture(150); // comfortably under the 600-point cap at this baseRadius/step
+    const emissions = resolveSprayEmissionPoints(long, 12);
+    expect(emissions.length).toBeLessThan(STUDIORICH_STOCK_CAP.maxEmissionPoints);
+  });
+});

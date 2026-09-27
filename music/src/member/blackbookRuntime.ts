@@ -227,6 +227,21 @@ let activePoints: CapturedPoint[] = [];
 /** BLACKBOOK Spray Physicality V1 -- the current gesture's own start time, reset on every pointerdown. Never persisted itself; only `tMs` (elapsed since this) is ever recorded on a point. */
 let activeStrokeStartMs = 0;
 let nextOperationId = 1;
+/**
+ * LIVE STROKE STABILITY V1 -- root cause of "mouse-up visibly reinterprets
+ * the stroke": every deterministic material (Spray/Mop/Pencil/Marker) seeds
+ * its own render from `operation.id` (see drawOperation's own seed-source
+ * doc). The live in-progress preview previously always rendered under the
+ * literal id "active", then pointerup swapped in a brand-new
+ * `blackbook-operation-${n}` id for the SAME points the instant the
+ * gesture ended -- reseeding the entire deterministic particle/dab field
+ * to a completely different PRNG sequence at exactly the moment the
+ * artist lifted the pointer. Fix: allocate the real, final id ONCE, at
+ * pointerdown (before a single point is even captured), and use that same
+ * id for every live-preview render AND as the committed Mark's own id --
+ * never a second id, never a reseed.
+ */
+let activeOperationId: string | null = null;
 let activeSupply: "pencil" | "pen" | "marker" | "mop" | "spray" | "eraser" = "pencil";
 /**
  * Graphite Grades Foundation V1 -- TEMPORARY calibration selector state
@@ -258,34 +273,46 @@ const supplySettings: Record<DrawingSupplyId, { width: number; opacity: number; 
 };
 
 /**
- * UI/workspace chrome only -- the page's dotted perimeter and the neutral
- * workspace backdrop. Never a Mark, never persisted, never affects
- * `composition.bounds`, never appears in a thumbnail as Artwork content
- * (requirement 5) -- exactly the same non-persistence guarantee Blank
- * Canvas's own `renderDots` already has.
+ * BLACKBOOK Workspace / Artboard Separation V1 -- Workspace is the open
+ * authoring area: an effectively unconstrained dark backdrop, never a
+ * bounded "sheet of paper." This function owns ONLY that backdrop fill --
+ * it no longer paints any opaque region for the Artboard (see
+ * renderArtboardOutline below for that). Never a Mark, never persisted,
+ * never affects `composition.bounds`, never appears in a thumbnail as
+ * Artwork content (requirement 5) -- exactly the same non-persistence
+ * guarantee Blank Canvas's own `renderDots` already has.
  */
-function renderWorkspaceAndPageFrame(): void {
+function renderWorkspace(): void {
   ctx.fillStyle = "#0f0d0b";
   ctx.fillRect(0, 0, width(), height());
-  const topLeft = docToScreen({ x: pageFrameRect().minX, y: pageFrameRect().minY });
-  const bottomRight = docToScreen({ x: pageFrameRect().maxX, y: pageFrameRect().maxY });
-  ctx.fillStyle = "#f3eee4";
-  ctx.fillRect(topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y);
 }
 
-function renderPageFrameOutline(): void {
+/**
+ * BLACKBOOK Workspace / Artboard Separation V1 -- the Artboard is the
+ * finite presentation/export region (the existing artwork boundary,
+ * `pageFrameRect()`/`activePageFrame`, UNCHANGED in position, dimensions,
+ * and coordinate system -- only its PRESENTATION changes here). It is
+ * represented as a subtle thin dotted boundary, never an opaque fill: the
+ * Artboard is not a physical sheet of paper and must not read as the total
+ * available creative world, or as something Artwork is clipped to. Marks
+ * are drawn directly over the open Workspace regardless of whether they
+ * fall inside or outside this outline -- this function draws ONLY the
+ * indicator, never anything that could reinterpret or clip Artwork.
+ */
+function renderArtboardOutline(): void {
   const topLeft = docToScreen({ x: pageFrameRect().minX, y: pageFrameRect().minY });
   const bottomRight = docToScreen({ x: pageFrameRect().maxX, y: pageFrameRect().maxY });
   ctx.save();
-  ctx.strokeStyle = "rgba(243,238,228,0.35)";
+  ctx.strokeStyle = "rgba(243,238,228,0.3)";
   ctx.lineWidth = 1;
-  ctx.setLineDash([2, 4]);
+  ctx.lineCap = "round";
+  ctx.setLineDash([0.5, 5]);
   ctx.strokeRect(topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y);
   ctx.restore();
 }
 
 function render(): void {
-  renderWorkspaceAndPageFrame();
+  renderWorkspace();
   for (const layer of Object.values(materialLayers)) layer.context.clearRect(0, 0, width(), height());
   for (const operation of operations) drawOperation(operation);
   if (activePoints.length > 1) drawOperation(activeOperation(activePoints));
@@ -294,7 +321,7 @@ function render(): void {
   ctx.drawImage(materialLayers.spray.canvas, 0, 0, width(), height());
   ctx.drawImage(materialLayers.ink.canvas, 0, 0, width(), height());
   ctx.drawImage(materialLayers.marker.canvas, 0, 0, width(), height());
-  renderPageFrameOutline();
+  renderArtboardOutline();
   undoButton.disabled = memberState.status !== "signedIn" || operations.length === 0;
   // Drawing Shell V1: `aria-pressed` is now the one canonical active-tool
   // state signal (same convention Map's toolbar already used) -- CSS reads
@@ -428,7 +455,13 @@ function drawOperation(operation: BlackbookOperation): void {
 }
 
 function activeOperation(points: readonly CapturedPoint[]): BlackbookOperation {
-  if (activeSupply === "eraser") return { operation: "eraser", id: "active", points, width: PENCIL_ERASER_SUPPLY.defaultWidth };
+  // LIVE STROKE STABILITY V1 -- `activeOperationId` is allocated once, at
+  // pointerdown, and reused verbatim through every live-preview render and
+  // the final commit -- see its own doc above. Falls back to "active" only
+  // if this is ever called with no gesture in progress (never happens on
+  // the real pointerdown/move/up path, kept only as a defensive default).
+  const id = activeOperationId ?? "active";
+  if (activeSupply === "eraser") return { operation: "eraser", id, points, width: PENCIL_ERASER_SUPPLY.defaultWidth };
   // Drawing Shell V1: color now comes from the live COLOR control (per-supply
   // remembered, seeded from the SAME canonical DRAWING_DEFAULT_COLORS Map
   // reads) instead of a fixed per-supply constant -- changing color only
@@ -436,7 +469,7 @@ function activeOperation(points: readonly CapturedPoint[]): BlackbookOperation {
   // own already-authored `style.color` untouched.
   return {
     operation: activeSupply,
-    id: "active",
+    id,
     points,
     style: { color: colorControl.value, width: Number(widthControl.value), opacity: Number(opacityControl.value) },
     // Graphite Grades Foundation V1: only Pencil carries a grade; every
@@ -623,6 +656,10 @@ canvas.addEventListener("pointerdown", (event) => {
   }
   if (memberState.status !== "signedIn") return;
   activeStrokeStartMs = performance.now();
+  // LIVE STROKE STABILITY V1 -- allocate the real, final id NOW, before the
+  // first point is even captured, so live preview and the eventual commit
+  // never differ in seed. See activeOperationId's own doc.
+  activeOperationId = `blackbook-operation-${nextOperationId++}`;
   activePoints = [point(event)];
   render();
 });
@@ -654,13 +691,18 @@ canvas.addEventListener("pointerup", (event) => {
   canvas.releasePointerCapture(event.pointerId);
   if (panMode) { lastScreenPoint = null; return; }
   if (activePoints.length > 1) {
-    const operation = { ...activeOperation(activePoints), id: `blackbook-operation-${nextOperationId++}` } as BlackbookOperation;
+    // LIVE STROKE STABILITY V1 -- reuse the SAME id the live preview just
+    // rendered under; never allocate a new one here. See activeOperationId's
+    // own doc for why a second id at this exact moment was the root cause
+    // of the reported mouse-up reshuffle.
+    const operation = activeOperation(activePoints);
     operations.push(operation);
     showStatus("Saving…", "info");
     void persistence.persistStroke(operation)
       .then(() => showStatus("Saved", "success"))
       .catch((error) => reportError("Couldn't save that stroke", error));
   }
+  activeOperationId = null;
   activePoints = [];
   render();
 });
