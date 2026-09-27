@@ -198,15 +198,39 @@
       #pages-drawer-list:hover::-webkit-scrollbar-thumb,
       #pages-drawer-list:active::-webkit-scrollbar-thumb { background: rgba(255,255,255,.34); }
       #pages-drawer-empty { font-size: 9px; color: #928a80; text-align: center; padding: 0 10px; line-height: 1.5; }
+      /**
+       * BLACKBOOK Artwork DELETE V1 -- each card is now a small group
+       * (`.pages-drawer-item`, a plain `<div>`, never itself a `<button>`)
+       * containing TWO real, non-nested buttons: `.pages-drawer-item-open`
+       * (thumbnail + number, opens the Artwork) and
+       * `.pages-drawer-item-delete` (a small "×" restrained to the
+       * thumbnail's own corner, revealed on hover/focus so the narrow
+       * drawer isn't permanently cluttered with delete controls).
+       */
       .pages-drawer-item {
         display: flex; flex-direction: column; align-items: center; gap: 6px;
-        width: 84px; padding: 4px; border-radius: 10px; border-color: transparent; background: transparent;
-        flex-shrink: 0;
+        width: 84px; padding: 4px; border-radius: 10px;
+        flex-shrink: 0; position: relative;
       }
-      .pages-drawer-item[aria-current="true"] { border-color: rgba(255, 78, 132, 0.72); background: rgba(255, 78, 132, 0.1); }
-      .pages-drawer-item canvas { display: block; border-radius: 5px; background: #f3eee4; }
+      .pages-drawer-item-open {
+        display: flex; flex-direction: column; align-items: center; gap: 6px;
+        width: 100%; border-color: transparent; background: transparent;
+      }
+      .pages-drawer-item[aria-current="true"] .pages-drawer-item-open { border-color: rgba(255, 78, 132, 0.72); background: rgba(255, 78, 132, 0.1); }
+      .pages-drawer-item-open canvas { display: block; border-radius: 5px; background: #f3eee4; }
       .pages-drawer-item-number { font-size: 10px; letter-spacing: .03em; color: #c8c0b6; }
       .pages-drawer-item[aria-current="true"] .pages-drawer-item-number { color: #ff4e84; }
+      .pages-drawer-item-delete {
+        position: absolute; top: 2px; right: 2px; z-index: 1;
+        min-height: 0; width: 18px; height: 18px; padding: 0;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 11px; line-height: 1; border-radius: 999px;
+        background: rgba(10,9,8,.85); border-color: rgba(255,255,255,.2);
+        opacity: 0; transition: opacity 120ms ease;
+      }
+      .pages-drawer-item:hover .pages-drawer-item-delete,
+      .pages-drawer-item:focus-within .pages-drawer-item-delete { opacity: 1; }
+      .pages-drawer-item-delete:hover { border-color: #ff4e84; color: #ff4e84; }
       #pages-drawer-new {
         flex-shrink: 0; margin: 0 auto 10px; width: 84px; min-height: 34px;
         font-size: 14px; font-weight: 700;

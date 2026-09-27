@@ -207,12 +207,9 @@ remains future work, not built in this batch.
   not every Artboard it may eventually contain; a compact "this
   continues" indicator for such an Artwork is future direction with no
   chosen design yet.
-- Drag reorder, a persisted presentation-order schema, and Artwork
-  deletion are all later direction — V1.1 is open/select only, exactly as
-  MY PAGES was. Deletion in particular will need its own bounded design
-  (it touches persistence, active-page fallback, and URL identity, not
-  just the drawer's own presentation) and is deliberately not attempted
-  alongside this drawer work.
+- Drag reorder and a persisted presentation-order schema are later
+  direction — the drawer's only ordering is the canonical book order
+  above (§5c covers DELETE, which IS now implemented).
 - Page naming and page folders are not implemented.
 - At larger scale (a book of roughly 68-200+ Artworks), the current
   thumbnail-strip drawer is expected to remain ONE presentation mode, not
@@ -224,6 +221,57 @@ remains future work, not built in this batch.
 
 MY PAGES (the modal) no longer exists — the drawer is now the one current
 mechanism for Blackbook page navigation.
+
+## 5c. CLEAR vs. NEW vs. DELETE (current, established BLACKBOOK Artwork DELETE V1)
+
+Four distinct Artwork-lifecycle operations now exist and are deliberately
+never collapsed into each other:
+
+- **NEW** — arms `CurrentArtworkSession`'s `"pending"` state
+  (`startNewPage()`). No document exists yet; one materializes lazily on
+  the first persisted Mark. Pressing "+" never creates an empty persisted
+  Artwork.
+- **CLEAR** — `replaceOwnedArtworkMarks(artworkId, creatorId, [])`. The
+  Artwork document, its id, and its place in the drawer all survive with
+  `marks: []`; a single `lastClearSnapshot` (module-level state in
+  `blackbookRuntime.ts`) permits exactly one Undo to restore the cleared
+  Marks. CLEAR never asks for confirmation — Undo is its own safety net.
+- **DELETE** — `deleteOwnedArtwork(artworkId, creatorId)`
+  (`firestoreArtworkRepository.ts`). The Firestore document itself is
+  removed; the id ceases to exist and the page disappears from the
+  drawer/book order entirely. DELETE is NOT undoable — there is no Trash
+  or Recently-Deleted (later direction, not implemented) — so unlike
+  CLEAR it requires an explicit `window.confirm` ("Delete this Artwork
+  from your Blackbook?") before doing anything. Canceling makes zero
+  mutation. Ownership is enforced at the Firestore rules layer
+  (`allow delete: if isSignedIn() && resource.data.creatorId ==
+  request.auth.uid`, already present/deployed independently of this
+  batch), not merely by hiding the UI control — a non-owner's
+  `deleteOwnedArtwork` call is rejected by Firestore itself.
+- **PAGES drawer** — navigate/manage identities only (§5b); the per-card
+  delete affordance (a small hover-revealed `×`, `.pages-drawer-item-delete`
+  in `blackbook.html`) is the one UI entry point into DELETE, kept
+  deliberately restrained rather than a general context-menu system.
+
+**Final-Mark-removal semantics (revisited this batch)**:
+`removeOwnedArtworkMark` previously deleted the whole Artwork document the
+instant an ordinary Undo emptied its `marks` array — a leftover assumption
+from before CLEAR made an empty-but-existing Artwork valid. It now always
+`transaction.set`s the surviving (possibly empty) Artwork and never
+deletes the document; only `deleteOwnedArtwork` deletes. Undoing every
+Mark one at a time is therefore CLEAR-equivalent, never DELETE-equivalent.
+
+**Active-Artwork replacement on DELETE** (`pickReplacementArtworkId`,
+`artworkGallery.ts`, pure/unit-tested): deleting the active Artwork
+selects, in book order, (1) the next Artwork, else (2) the previous
+Artwork, else (3) `null` — the caller then re-enters the existing NEW
+pending state via the same canonical `openArtwork()`/`startNewPage()`
+identity-sync path (never a second URL/localStorage mechanism). Deleting a
+non-active Artwork only removes its card and renumbers; the active
+Artwork's identity, state, and camera are left untouched.
+
+Trash/Recently-Deleted, Undo-of-DELETE, bulk/multi-select delete, and drag
+reorder all remain future direction — none is implemented.
 
 ## 6. SURFACE (current vs. direction)
 

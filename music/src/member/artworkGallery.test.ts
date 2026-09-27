@@ -7,6 +7,7 @@ import {
   formatArtworkUpdatedAt,
   formatMemberSince,
   numberArtworksForPagesDrawer,
+  pickReplacementArtworkId,
   resolveDefaultArtworkTitle,
   sortArtworksByCreationOrder,
   sortArtworksByRecency,
@@ -186,5 +187,39 @@ describe("BLACKBOOK Embedded PAGES Drawer V1.1 -- numberArtworksForPagesDrawer",
 
   it("an empty Artwork list numbers to an empty list, never throwing", () => {
     expect(numberArtworksForPagesDrawer([])).toEqual([]);
+  });
+});
+
+describe("BLACKBOOK Artwork DELETE V1 -- pickReplacementArtworkId", () => {
+  const a = artwork("a", "2026-01-01T00:00:00Z");
+  const b = artwork("b", "2026-01-02T00:00:00Z");
+  const c = artwork("c", "2026-01-03T00:00:00Z");
+  const d = artwork("d", "2026-01-04T00:00:00Z");
+  const e = artwork("e", "2026-01-05T00:00:00Z");
+
+  it("picks the NEXT Artwork in book order when deleting an active middle page", () => {
+    // book order: a b c d e -- deleting c (middle) should select d (next).
+    expect(pickReplacementArtworkId([a, b, c, d, e], "c")).toBe("d");
+  });
+
+  it("picks the PREVIOUS Artwork when the deleted page is the LAST in book order (no next exists)", () => {
+    expect(pickReplacementArtworkId([a, b, c, d, e], "e")).toBe("d");
+  });
+
+  it("picks the NEXT Artwork when the deleted page is FIRST in book order", () => {
+    expect(pickReplacementArtworkId([a, b, c], "a")).toBe("b");
+  });
+
+  it("returns null when deleting the SOLE remaining Artwork -- caller enters the pending-NEW/empty-book state", () => {
+    expect(pickReplacementArtworkId([a], "a")).toBeNull();
+  });
+
+  it("returns null (safe, deliberate) when the given id isn't found in the provided list", () => {
+    expect(pickReplacementArtworkId([a, b], "ghost")).toBeNull();
+  });
+
+  it("never returns the deleted Artwork's own id", () => {
+    const replacement = pickReplacementArtworkId([a, b, c], "b");
+    expect(replacement).not.toBe("b");
   });
 });

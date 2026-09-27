@@ -55,6 +55,24 @@ export function numberArtworksForPagesDrawer(artworks: readonly Artwork[]): read
 }
 
 /**
+ * BLACKBOOK Artwork DELETE V1 -- deterministic replacement selection when
+ * the ACTIVE Artwork is the one being deleted, per this batch's own
+ * required order: (1) next Artwork in book (creation) order, if one
+ * exists; (2) otherwise the previous one, if one exists; (3) otherwise
+ * `null` (the caller enters the existing pending-NEW/empty-book state --
+ * this function never invents or persists anything, it only picks an id
+ * from `artworksBeforeDeletion`, which MUST still include the
+ * about-to-be-deleted Artwork so its neighbors can be found). Pure and
+ * DOM-free so the exact selection rule is independently testable.
+ */
+export function pickReplacementArtworkId(artworksBeforeDeletion: readonly Artwork[], deletedArtworkId: string): string | null {
+  const ordered = sortArtworksByCreationOrder(artworksBeforeDeletion);
+  const index = ordered.findIndex((artwork) => artwork.id === deletedArtworkId);
+  if (index === -1) return null;
+  return ordered[index + 1]?.id ?? ordered[index - 1]?.id ?? null;
+}
+
+/**
  * ARTWORK V2 -- `Artwork.title` is now real, persisted presentation
  * metadata (empty string means "no title" -- true legacy documents from
  * before this field existed, or a caller like Blackbook that never

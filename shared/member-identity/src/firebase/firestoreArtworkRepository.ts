@@ -221,19 +221,35 @@ export class FirestoreArtworkRepository implements ArtworkRepository {
     return decodeArtwork(await getDoc(reference));
   }
 
+  /**
+   * BLACKBOOK Artwork DELETE V1 -- this used to `transaction.delete(reference)`
+   * (returning `null`) the instant removing a Mark emptied `marks`. That
+   * was never a deliberate "delete the Artwork" decision -- it was a
+   * side effect of an older assumption (since relaxed for CLEAR, see
+   * `replaceOwnedArtworkMarks`/`storedArtwork`/`decodeArtworkData`'s own
+   * docs) that an Artwork document could never legitimately hold zero
+   * Marks. Now that it can, undoing your way down to zero Marks one at a
+   * time must behave exactly like CLEAR does -- the Artwork and its own
+   * identity survive, empty -- never like DELETE, which is now its own
+   * explicit, first-class operation (`deleteOwnedArtwork`). This method
+   * therefore never deletes the document itself; the returned value is
+   * always the (possibly now-empty) surviving Artwork, never `null` --
+   * the `| null` return type is kept only for interface/caller
+   * compatibility (no caller needs updating; `retain()` in
+   * mapArtworkBridge.ts already handles a non-null result correctly, and
+   * simply never takes its "was removed" branch from this method anymore).
+   */
   async removeOwnedArtworkMark(artworkId: string, creatorId: string, markId: string): Promise<MapArtwork | null> {
     assertIdentifier(artworkId, "artwork_id"); assertIdentifier(creatorId, "member_uid"); assertIdentifier(markId, "mark_id");
     const reference = doc(this.firestore, ARTWORK_COLLECTION_PATH, artworkId);
-    let deleted = false;
     await runTransaction(this.firestore, async (transaction) => {
       const artwork = decodeArtwork(await transaction.get(reference));
       if (artwork.creatorId !== creatorId) throw new Error("artwork_owner_mismatch");
       const marks = artwork.marks.filter((mark) => mark.id !== markId);
       if (marks.length === artwork.marks.length) return;
-      if (!marks.length) { transaction.delete(reference); deleted = true; return; }
       transaction.set(reference, storedArtwork({ ...artwork, marks }, serverTimestamp()));
     });
-    return deleted ? null : decodeArtwork(await getDoc(reference));
+    return decodeArtwork(await getDoc(reference));
   }
 
   async replaceOwnedArtworkMarks(artworkId: string, creatorId: string, marks: readonly ArtworkMark[]): Promise<Artwork> {

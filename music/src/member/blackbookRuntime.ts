@@ -26,7 +26,7 @@ import {
 } from "./blackbookArtworkBridge";
 import { createCartesianCamera, type CartesianCamera, type DocRect } from "./cartesianWorkspaceCamera";
 import { createCurrentArtworkSession } from "./currentArtworkSession";
-import { numberArtworksForPagesDrawer } from "./artworkGallery";
+import { numberArtworksForPagesDrawer, pickReplacementArtworkId } from "./artworkGallery";
 import { drawArtworkThumbnail } from "./artworkThumbnail";
 import {
   resolveGraphiteProfile,
@@ -931,11 +931,19 @@ function renderPagesDrawerList(): void {
   const activeId = currentArtwork.getState();
   const activeArtworkId = activeId.kind === "artwork" ? activeId.artworkId : null;
   numberArtworksForPagesDrawer(knownArtworksCache).forEach(({ number: pageNumber, artwork }) => {
-    const item = document.createElement("button");
-    item.type = "button";
+    // BLACKBOOK Artwork DELETE V1 -- the card is a plain group (never
+    // itself a button) containing two SEPARATE, non-nested buttons: open
+    // and delete. Nesting a delete <button> inside the open <button>
+    // would be invalid HTML/ARIA and would make delete-clicks also fire
+    // open.
+    const item = document.createElement("div");
     item.className = "pages-drawer-item";
     item.setAttribute("aria-current", String(artwork.id === activeArtworkId));
-    item.setAttribute("aria-label", `Page ${pageNumber}`);
+
+    const open = document.createElement("button");
+    open.type = "button";
+    open.className = "pages-drawer-item-open";
+    open.setAttribute("aria-label", `Page ${pageNumber}`);
     const thumbnail = document.createElement("canvas");
     thumbnail.width = PAGES_DRAWER_THUMBNAIL_SIZE.width;
     thumbnail.height = PAGES_DRAWER_THUMBNAIL_SIZE.height;
@@ -954,10 +962,75 @@ function renderPagesDrawerList(): void {
     number.className = "pages-drawer-item-number";
     // Presentation order only -- never the Artwork's own id/identity.
     number.textContent = String(pageNumber);
-    item.append(thumbnail, number);
-    item.addEventListener("click", () => openArtwork(artwork.id));
+    open.append(thumbnail, number);
+    open.addEventListener("click", () => openArtwork(artwork.id));
+
+    const deleteButton = document.createElement("button");
+    deleteButton.type = "button";
+    deleteButton.className = "pages-drawer-item-delete";
+    deleteButton.setAttribute("aria-label", `Delete page ${pageNumber}`);
+    deleteButton.textContent = "×";
+    deleteButton.addEventListener("click", (event) => {
+      event.stopPropagation();
+      void confirmAndDeleteArtwork(artwork.id, pageNumber);
+    });
+
+    item.append(open, deleteButton);
     pagesDrawerList.append(item);
   });
+}
+
+/**
+ * BLACKBOOK Artwork DELETE V1 -- a first-class, explicit Artwork-lifecycle
+ * operation, never a side effect of removing Marks (see
+ * `removeOwnedArtworkMark`'s own updated doc in firestoreArtworkRepository.ts
+ * -- undoing your way to zero Marks now behaves like CLEAR, preserving
+ * the Artwork; only this function ever removes an Artwork document).
+ * Minimal native `window.confirm` -- destructive, so (unlike CLEAR)
+ * requires confirmation; CANCEL performs zero mutation.
+ *
+ * Failure behavior: the repository call is awaited BEFORE any local state
+ * changes -- the card is never removed, and no navigation away from the
+ * active Artwork ever happens, unless the real Firestore delete already
+ * succeeded. A failure reports an error and leaves everything exactly as
+ * it was (no rollback needed because nothing was changed yet).
+ *
+ * Active-Artwork replacement uses the SAME canonical `openArtwork()`
+ * (779af30's identity-sync path) or `startNewPage()` (the existing
+ * pending-NEW lifecycle) every other navigation already uses -- never a
+ * second URL/localStorage synchronization implementation.
+ * `pickReplacementArtworkId` (artworkGallery.ts) is computed from the
+ * book order captured BEFORE the deletion so the deleted Artwork's own
+ * neighbors are still findable.
+ */
+async function confirmAndDeleteArtwork(artworkId: string, pageNumber: number): Promise<void> {
+  if (memberState.status !== "signedIn") return;
+  if (!window.confirm(`Delete this Artwork from your Blackbook? (Page ${pageNumber})`)) return;
+  const artworksBeforeDeletion = knownArtworksCache;
+  const activeId = currentArtwork.getState();
+  const wasActive = activeId.kind === "artwork" && activeId.artworkId === artworkId;
+  showStatus("Deleting…", "info");
+  try {
+    await repository.deleteOwnedArtwork(artworkId, memberState.member.uid);
+  } catch (error) {
+    reportError("Couldn't delete that page", error);
+    return;
+  }
+  forgetKnownArtwork(artworkId);
+  if (wasActive) {
+    // setActiveArtworkIdentity (inside openArtwork) already clears
+    // lastClearSnapshot on any identity change -- a stale clear-undo for
+    // the just-deleted Artwork can never resurface here.
+    const replacementId = pickReplacementArtworkId(artworksBeforeDeletion, artworkId);
+    if (replacementId) openArtwork(replacementId);
+    else startNewPage();
+  } else {
+    // A non-active Artwork was deleted -- the active Artwork's own
+    // identity/Workspace/camera state is completely untouched; only the
+    // drawer's own list/numbering needs to refresh.
+    renderPagesDrawerList();
+  }
+  showStatus("Deleted", "success");
 }
 
 /**
