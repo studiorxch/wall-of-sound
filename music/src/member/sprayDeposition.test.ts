@@ -3,6 +3,7 @@ import {
   hashSeed,
   resolveSprayCapProfile,
   resolveSprayCorePlan,
+  resolveSprayCoreSamplePoints,
   resolveSprayEmissionPoints,
   resolveSprayParticlePlan,
   SPRAY_CAP_PROFILES,
@@ -287,9 +288,25 @@ describe("Spray aerosol engine -- Revision 8 (a long zigzag's late-stage directi
     return Array.from({ length: count }, (_, i) => ({ x: i % 2 === 0 ? -amplitude : amplitude, y: i * 4 }));
   }
 
+  // LIVE STROKE STABILITY V2: this zigzag (180 points, ~7200 units of total
+  // path length) is sized to stay comfortably UNDER resolveSprayEmissionPoints'
+  // own maxEmissionPoints cap at this baseRadius (3000 emissions * ~2.64
+  // step ~= 7920 units of coverage) -- Revision 8's ORIGINAL 600-point
+  // version (~24,000 units) intentionally exceeded every cap this engine
+  // has ever had, to prove "never truncate, always cover the whole path."
+  // That guarantee is no longer this engine's design: per the explicit
+  // "BLACKBOOK Spray Stability + Persistence Corrective Pass" batch,
+  // append/prefix stability across a live, growing gesture now takes
+  // priority over guaranteed whole-path coverage once a gesture exceeds the
+  // cap (see LIVE STROKE STABILITY V2's own doc in sprayDeposition.ts) --
+  // exceeding the cap now means "stop depositing NEW material," never "go
+  // back and re-simplify what's already there." This test still proves the
+  // original Revision 8 property (no straight-line collapse) for any
+  // gesture that fits within the cap, which is the realistic case; the cap-
+  // exceeding case has its OWN dedicated prefix-stability test below.
   it("resolveSprayEmissionPoints keeps real oscillation near each checkpoint throughout the path, not flattened toward the centerline after some point (the straight-line-collapse bug) -- checked over a small window since gap-filling interpolation between preserved corners legitimately adds intermediate-x points", () => {
     const amplitude = 20;
-    const points = buildZigzag(600, amplitude);
+    const points = buildZigzag(180, amplitude);
     const emissions = resolveSprayEmissionPoints(points, 12);
     const totalY = (points.length - 1) * 4;
     const checkpoints = [0.25, 0.5, 0.75, 0.9, 0.97];
@@ -511,9 +528,81 @@ describe("BLACKBOOK Live Stroke Stability V1 -- prefix stability under a growing
     }
   });
 
-  it("a realistic 'long, slow' gesture (well within the raised maxEmissionPoints budget) never triggers the belt-and-braces post-hoc simplification that would otherwise reflow the whole emission list", () => {
-    const long = longSlowGesture(150); // comfortably under the 600-point cap at this baseRadius/step
+  it("a realistic 'long, slow' gesture (well within the raised maxEmissionPoints budget) stays under the cap entirely", () => {
+    const long = longSlowGesture(150); // comfortably under the cap at this baseRadius/step
     const emissions = resolveSprayEmissionPoints(long, 12);
     expect(emissions.length).toBeLessThan(STUDIORICH_STOCK_CAP.maxEmissionPoints);
+  });
+});
+
+describe("LIVE STROKE STABILITY V2 -- a substantially longer, direction-changing gesture that CROSSES the emission/core budget threshold", () => {
+  // A real reported failure: previously-deposited Spray visibly rearranged
+  // once a long, continuing gesture crossed a resampling threshold, most
+  // noticeably right around a direction change. This builds a path with
+  // MANY direction changes (a zigzag, not a straight line -- straight-line
+  // paths interpolate identically regardless of how the array is chunked,
+  // so a zigzag is the shape that would actually expose a global
+  // resample's bucket-boundary sensitivity) long enough to exceed BOTH
+  // resolveSprayEmissionPoints' and resolveSprayCoreSamplePoints' own
+  // maxEmissionPoints/CORE_MAX_SAMPLE_POINTS cap (3000) at this baseRadius.
+  function longZigzagGesture(count: number, amplitude = 15): { x: number; y: number; tMs: number }[] {
+    return Array.from({ length: count }, (_, i) => ({
+      x: (i % 2 === 0 ? -amplitude : amplitude) + i * 0.02, y: i * 3, tMs: i * 10,
+    }));
+  }
+
+  it("resolveSprayEmissionPoints: a prefix taken from BEFORE the cap is crossed is byte-identical whether or not the gesture goes on to cross it -- crossing the cap later never rewrites earlier segments, even across many direction changes", () => {
+    const baseRadius = 12; // nominalStep ~= 2.64; cap 3000 -> ~7920 units of coverage
+    const shortGesture = longZigzagGesture(150); // well under the cap on its own
+    const veryLongGesture = longZigzagGesture(6000); // guaranteed to cross the cap given this path's own length
+    const shortEmissions = resolveSprayEmissionPoints(shortGesture, baseRadius);
+    const longEmissions = resolveSprayEmissionPoints(veryLongGesture, baseRadius);
+    // The long gesture genuinely hit the cap (proving this test exercises the real threshold-crossing condition).
+    expect(longEmissions.length).toBe(STUDIORICH_STOCK_CAP.maxEmissionPoints);
+    expect(shortEmissions.length).toBeLessThan(longEmissions.length);
+    // The exact invariant: everything computed from the SHORT prefix survives, unaltered, inside the long gesture's own result.
+    expect(longEmissions.slice(0, shortEmissions.length)).toEqual(shortEmissions);
+  });
+
+  it("resolveSprayParticlePlan: same invariant end to end -- particles from an early prefix of a direction-changing gesture are an exact, unaltered prefix of the particles from the full, cap-exceeding gesture", () => {
+    const baseRadius = 12;
+    const seed = hashSeed("long-zigzag-mark");
+    const shortGesture = longZigzagGesture(150);
+    const veryLongGesture = longZigzagGesture(6000);
+    const shortPlan = resolveSprayParticlePlan(shortGesture, baseRadius, seed);
+    const longPlan = resolveSprayParticlePlan(veryLongGesture, baseRadius, seed);
+    expect(longPlan.length).toBeGreaterThan(shortPlan.length);
+    expect(longPlan.slice(0, shortPlan.length)).toEqual(shortPlan);
+  });
+
+  it("resolveSprayCoreSamplePoints/resolveSprayCorePlan: a direction-changing gesture that crosses CORE_MAX_SAMPLE_POINTS still preserves every earlier sample/pass-point unaltered", () => {
+    const baseRadius = 12; // CORE_STEP_RATIO 0.9 -> step ~= 10.8; cap 3000 -> ~32,400 units of coverage
+    const shortGesture = longZigzagGesture(300);
+    const veryLongGesture = longZigzagGesture(15000); // long enough to exceed even the core's coarser step/cap
+    const shortSamples = resolveSprayCoreSamplePoints(shortGesture, baseRadius);
+    const longSamples = resolveSprayCoreSamplePoints(veryLongGesture, baseRadius);
+    // The long gesture genuinely hit its own cap (proving this exercises the real threshold-crossing condition).
+    expect(longSamples.length).toBeLessThan(veryLongGesture.length);
+    expect(longSamples.length).toBeGreaterThan(shortSamples.length);
+    expect(longSamples.slice(0, shortSamples.length)).toEqual(shortSamples);
+
+    const seed = hashSeed("long-zigzag-core");
+    const shortPlan = resolveSprayCorePlan(shortGesture, baseRadius, seed);
+    const longPlan = resolveSprayCorePlan(veryLongGesture, baseRadius, seed);
+    for (let i = 0; i < shortPlan.length; i++) {
+      expect(longPlan[i].points.slice(0, shortPlan[i].points.length)).toEqual(shortPlan[i].points);
+    }
+  });
+
+  it("incrementally growing the SAME direction-changing gesture one point at a time never alters any previously-computed emission -- the exact live-render scenario (pointermove appending points one frame at a time)", () => {
+    const baseRadius = 12;
+    const full = longZigzagGesture(4000);
+    let previous = resolveSprayEmissionPoints(full.slice(0, 50), baseRadius);
+    for (let cut = 200; cut <= full.length; cut += 400) {
+      const current = resolveSprayEmissionPoints(full.slice(0, cut), baseRadius);
+      expect(current.length).toBeGreaterThanOrEqual(previous.length);
+      expect(current.slice(0, previous.length)).toEqual(previous);
+      previous = current;
+    }
   });
 });

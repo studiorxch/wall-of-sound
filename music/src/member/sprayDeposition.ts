@@ -32,7 +32,6 @@
  * profile (currently always the Stock Cap -- no per-Mark cap field yet).
  */
 
-import { simplifyPathToBudget } from "./pathSimplify";
 
 export interface SprayPoint {
   readonly x: number;
@@ -171,7 +170,7 @@ export const STUDIORICH_STOCK_CAP: SprayCapProfile = Object.freeze({
   footprintRadiusScale: 1,
   baseParticlesPerEmission: 9,
   maxParticlesPerEmission: 15,
-  maxEmissionPoints: 600,
+  maxEmissionPoints: 3000,
   centerBias: 1,
   edgeSoftness: 2,
   baseParticleAlpha: 0.36,
@@ -207,7 +206,7 @@ export const STUDIORICH_FAT_CAP: SprayCapProfile = Object.freeze({
   footprintRadiusScale: 1.65,
   baseParticlesPerEmission: 13,
   maxParticlesPerEmission: 20,
-  maxEmissionPoints: 600,
+  maxEmissionPoints: 3000,
   centerBias: 0.8,
   edgeSoftness: 2.6,
   baseParticleAlpha: 0.26,
@@ -391,48 +390,50 @@ export function resolveSprayEmissionPoints(
   // footprint, not the artist's raw Width value.
   const effectiveRadius = baseRadius * cap.footprintRadiusScale;
   const pressureSignal = hasMeaningfulPressureSignal(points);
-  const nominalStep = Math.max(1e-6, effectiveRadius * MIN_STEP_RATIO);
-  // Budget one fewer than the cap so the loop's own rounding can never push
-  // the actual count past it -- correctness (whole-path coverage) over
-  // hitting the bound exactly.
-  const budget = Math.max(1, cap.maxEmissionPoints - 1);
-  // Revision 8: if the RAW point count alone would already exceed the
-  // budget (every segment contributes at least one output point below,
-  // regardless of step size -- a long zigzag/wavy gesture with many short
-  // segments hits this easily), simplify the raw points FIRST via
-  // Douglas-Peucker (preserves corners/extrema, unlike an index slice) so
-  // the per-segment interpolation below can never overflow. See
-  // pathSimplify.ts's module doc for the full bug this fixes.
-  const source = points.length - 1 > budget ? simplifyPathToBudget(points, budget + 1) : points;
-  // LIVE STROKE STABILITY V1 -- root cause of "already-deposited pigment
-  // visibly reorganizes while the gesture continues": this step size used
-  // to be WIDENED (`Math.max(nominalStep, totalLength / budget)`) using
-  // `totalLength` measured across the WHOLE current point array. Since
-  // `points` grows on every pointermove during a live gesture, that
-  // widening recomputed EVERY earlier segment's own interpolation density
-  // on every single frame -- once total length grew enough to trigger
-  // widening, every already-rendered emission point's exact position
-  // shifted retroactively, even though its own two source points never
-  // changed. Fixed: the step size is now a pure function of `effectiveRadius`
-  // alone (`nominalStep`), never of the current path's aggregate length --
-  // a segment's own interpolation is fully determined by ONLY that
-  // segment's own two endpoints, so appending new points can only ever ADD
-  // new emissions after the existing ones, never alter them. The remaining
-  // safety net below (the post-hoc `simplifyPathToBudget` if `emissions`
-  // still exceeds `cap.maxEmissionPoints`) is now a rare last resort for a
-  // genuinely pathological gesture length, not a mechanism this build's own
-  // realistic "one long slow Spray stroke" acceptance case will hit -- see
-  // this module's own raised `maxEmissionPoints` on both cap profiles.
-  const maxStep = nominalStep;
+  // LIVE STROKE STABILITY V2 -- root cause of the REMAINING rearrangement
+  // (reported specifically at a direction change, on a long gesture):
+  // Revision 8's own safety nets -- pre-simplifying the RAW points via
+  // Douglas-Peucker once `points.length - 1 > budget`, and post-hoc
+  // simplifying the built `emissions` list once it exceeded
+  // `cap.maxEmissionPoints` -- are each a GLOBAL recompute over the WHOLE
+  // current array. `simplifyPathToBudget`'s bucket boundaries are a
+  // function of the CURRENT total point count, so the exact instant a
+  // live, still-growing gesture crossed either threshold, EVERY earlier
+  // segment's representative points could be reselected differently --
+  // this is a full reflow, not merely a step-size change (V1's fix), and
+  // raising the threshold (V1's own change) only delayed it, never
+  // removed it, exactly as flagged in this batch's own brief. A direction
+  // change is not itself the cause -- it's simply attention-grabbing when
+  // it happens to coincide with the threshold crossing on a long gesture
+  // that also happens to still be moving.
+  //
+  // Fixed by removing BOTH global resamples entirely: segments are walked
+  // in original order, one at a time, using ONLY that segment's own two
+  // endpoints (never any other point, never the array's current total
+  // length or count) -- so an earlier segment's emissions are, by
+  // construction, permanently fixed the instant they're computed, for the
+  // lifetime of the array. The `cap.maxEmissionPoints` ceiling is now
+  // enforced by simply STOPPING once it's reached (a hard append cutoff,
+  // never a re-selection of what's already been emitted) -- per this
+  // batch's own explicit instruction: "design it to preserve append/prefix
+  // stability rather than globally resampling the complete growing
+  // stroke." The trade-off is real and intentional: an extremely long
+  // gesture may stop gaining NEW spray coverage past the cap, but nothing
+  // already deposited can ever be altered by continuing to draw --
+  // stability is prioritized over completeness. `maxEmissionPoints` is
+  // sized generously (see both cap profiles' own values) to cover any
+  // realistic single gesture with margin.
+  const maxStep = Math.max(1e-6, effectiveRadius * MIN_STEP_RATIO);
 
   const emissions: SprayEmissionPoint[] = [{
-    ...source[0],
-    densityFactor: densityFactorForSegment(source[0], source[0], effectiveRadius),
-    flowFactor: pressureFlowFactor(source[0].pressure, pressureSignal),
+    ...points[0],
+    densityFactor: densityFactorForSegment(points[0], points[0], effectiveRadius),
+    flowFactor: pressureFlowFactor(points[0].pressure, pressureSignal),
   }];
-  for (let index = 1; index < source.length; index += 1) {
-    const start = source[index - 1];
-    const end = source[index];
+  segmentLoop:
+  for (let index = 1; index < points.length; index += 1) {
+    const start = points[index - 1];
+    const end = points[index];
     const density = densityFactorForSegment(start, end, effectiveRadius);
     // Flow uses the SEGMENT's average pressure -- both endpoints, same
     // "meaningful signal" gate as density's velocity check, deterministic
@@ -444,20 +445,10 @@ export function resolveSprayEmissionPoints(
     const segmentLength = Math.hypot(end.x - start.x, end.y - start.y);
     const steps = Math.max(1, Math.ceil(segmentLength / maxStep));
     for (let step = 1; step <= steps; step += 1) {
+      if (emissions.length >= cap.maxEmissionPoints) break segmentLoop;
       const t = step / steps;
       emissions.push({ x: start.x + (end.x - start.x) * t, y: start.y + (end.y - start.y) * t, densityFactor: density, flowFactor: flow });
     }
-  }
-  // Belt-and-braces hard cap -- the pre-simplified `source` above keeps
-  // segment COUNT within budget, but per-segment interpolation can still
-  // overflow the total (segment lengths vary around the average the
-  // adaptive step assumed). Revision 8: this used to be an index
-  // slice + force-jump-the-last-point, which silently reproduced the
-  // exact straight-line-collapse bug at this second layer even after the
-  // raw points were correctly pre-simplified. Uses the same geometry-aware
-  // simplifier as the raw-point pass, not a truncation.
-  if (emissions.length > cap.maxEmissionPoints) {
-    return simplifyPathToBudget(emissions, cap.maxEmissionPoints);
   }
   return emissions;
 }
@@ -568,13 +559,14 @@ export interface SprayCorePass {
  * replay is pixel-identical.
  */
 const CORE_STEP_RATIO = 0.9;
-// LIVE STROKE STABILITY V1: raised from 220 (matching maxEmissionPoints'
-// 200 -> 600 raise, same ~3x factor) -- now that step size no longer
-// widens to fit a budget, this is purely a worst-case safety ceiling for a
-// genuinely pathological gesture length, not something a realistic "one
-// long, slow" gesture (this build's own acceptance case) should ever
-// approach. Raised, not removed -- a hard cost bound must still exist.
-const CORE_MAX_SAMPLE_POINTS = 660;
+// LIVE STROKE STABILITY V2: 220 -> 660 -> 3000 (matching maxEmissionPoints'
+// own raise). Now that this cap is enforced as a hard APPEND CUTOFF rather
+// than a trigger for a global resample (see resolveSprayCoreSamplePoints'
+// own doc), a generous value is the right trade-off: any realistic single
+// gesture stays comfortably under it, and even a genuinely pathological
+// gesture that DOES hit it simply stops gaining new core coverage rather
+// than reflowing anything already drawn.
+const CORE_MAX_SAMPLE_POINTS = 3000;
 
 export function resolveSprayCoreSamplePoints(
   points: readonly SprayPoint[],
@@ -590,25 +582,22 @@ export function resolveSprayCoreSamplePoints(
     return [{ ...points[0], densityFactor: densityFactorForSegment(points[0], points[0], effectiveRadius), flowFactor: pressureFlowFactor(points[0].pressure, pressureSignal) }];
   }
 
-  const budget = Math.max(1, CORE_MAX_SAMPLE_POINTS - 1);
-  // Revision 8: same fix as resolveSprayEmissionPoints -- simplify first
-  // (shape-preserving) if raw point count alone could overflow the budget.
-  const source = points.length - 1 > budget ? simplifyPathToBudget(points, budget + 1) : points;
-  // LIVE STROKE STABILITY V1 -- see resolveSprayEmissionPoints' identical
-  // fix/doc. A per-segment step that depends only on `effectiveRadius`
-  // (never on the current path's aggregate length) so the core's own
-  // continuous pass never retroactively reflows earlier segments as the
-  // gesture continues.
+  // LIVE STROKE STABILITY V2 -- see resolveSprayEmissionPoints' identical,
+  // fully-documented fix. No pre- or post-hoc `simplifyPathToBudget` global
+  // resample -- segments are walked in order using only their own two
+  // endpoints, and the cap is enforced as a hard append cutoff (`break`),
+  // never a re-selection of already-emitted samples.
   const step = nominalStep;
 
   const samples: SprayCorePoint[] = [{
-    ...source[0],
-    densityFactor: densityFactorForSegment(source[0], source[0], effectiveRadius),
-    flowFactor: pressureFlowFactor(source[0].pressure, pressureSignal),
+    ...points[0],
+    densityFactor: densityFactorForSegment(points[0], points[0], effectiveRadius),
+    flowFactor: pressureFlowFactor(points[0].pressure, pressureSignal),
   }];
-  for (let index = 1; index < source.length; index += 1) {
-    const start = source[index - 1];
-    const end = source[index];
+  segmentLoop:
+  for (let index = 1; index < points.length; index += 1) {
+    const start = points[index - 1];
+    const end = points[index];
     const density = densityFactorForSegment(start, end, effectiveRadius);
     const segmentPressure = start.pressure !== undefined && end.pressure !== undefined
       ? (start.pressure + end.pressure) / 2
@@ -617,16 +606,10 @@ export function resolveSprayCoreSamplePoints(
     const segmentLength = Math.hypot(end.x - start.x, end.y - start.y);
     const steps = Math.max(1, Math.ceil(segmentLength / step));
     for (let s = 1; s <= steps; s += 1) {
+      if (samples.length >= CORE_MAX_SAMPLE_POINTS) break segmentLoop;
       const t = s / steps;
       samples.push({ x: start.x + (end.x - start.x) * t, y: start.y + (end.y - start.y) * t, densityFactor: density, flowFactor: flow });
     }
-  }
-  // Revision 8: geometry-aware simplification, not an index slice +
-  // forced endpoint jump -- see the doc above resolveSprayEmissionPoints'
-  // own belt-and-braces cap for why the old version reproduced the
-  // straight-line-collapse bug at this layer.
-  if (samples.length > CORE_MAX_SAMPLE_POINTS) {
-    return simplifyPathToBudget(samples, CORE_MAX_SAMPLE_POINTS);
   }
   return samples;
 }

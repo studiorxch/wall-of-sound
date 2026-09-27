@@ -242,6 +242,16 @@ let nextOperationId = 1;
  * never a second id, never a reseed.
  */
 let activeOperationId: string | null = null;
+/**
+ * SPRAY PERSISTENCE V1 -- see the pointermove handler's own doc. 4000
+ * points is far beyond any ordinary single Spray gesture's real raw point
+ * count (confirmed live-testable ranges are in the low hundreds to low
+ * thousands) while staying comfortably under the ~18,000-20,000-point
+ * range where a real Spray Mark (tMs+pressure per point) was confirmed,
+ * via direct Firestore-emulator repro against the real deployed rules, to
+ * start hitting Firestore's own rules-evaluation resource limits.
+ */
+const MAX_SPRAY_RAW_POINTS = 4000;
 let activeSupply: "pencil" | "pen" | "marker" | "mop" | "spray" | "eraser" = "pencil";
 /**
  * Graphite Grades Foundation V1 -- TEMPORARY calibration selector state
@@ -683,7 +693,29 @@ canvas.addEventListener("pointermove", (event) => {
   // only how many points are RECORDED, not any interpolation/smoothing.
   const coalesced = typeof event.getCoalescedEvents === "function" ? event.getCoalescedEvents() : [];
   const samples = coalesced.length > 0 ? coalesced : [event];
-  for (const sample of samples) activePoints.push(point(sample));
+  for (const sample of samples) {
+    // SPRAY PERSISTENCE V1 -- a genuinely long/slow Spray gesture, now that
+    // each point also carries tMs/pressure (roughly 3x a legacy {x,y}
+    // point's own serialized size), can accumulate a raw points array large
+    // enough to exceed Firestore's own per-write rules-evaluation resource
+    // limits ("PERMISSION_DENIED: maximum of 1000 expressions..." /
+    // "maximum allotted memory... reached") well before any product-level
+    // cap on this file's own emission/particle counts is reached --
+    // confirmed by direct repro against the Firestore emulator using the
+    // real, currently-deployed rules (fails at 20,000 tMs/pressure points,
+    // ~1.2MB serialized; a real Artwork document may already contain other
+    // Marks, further eating into that budget). This stops RECORDING new
+    // raw points once a gesture reaches a generous ceiling -- far beyond
+    // any ordinary single gesture's real point count -- rather than
+    // letting the persisted payload grow unbounded. Once frozen, already-
+    // captured points (and everything already deposited from them) are
+    // completely untouched -- this preserves the exact same
+    // append/prefix-stability invariant the render-side fix already
+    // established, it just also bounds growth at its source. Scoped to
+    // Spray only, per this batch's own scope freeze.
+    if (activeSupply === "spray" && activePoints.length >= MAX_SPRAY_RAW_POINTS) break;
+    activePoints.push(point(sample));
+  }
   render();
 });
 canvas.addEventListener("pointerup", (event) => {
