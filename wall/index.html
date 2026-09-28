@@ -12,6 +12,7 @@
       href="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css"
       rel="stylesheet"
     />
+  <script src="./systems/runtime/WosEndpointGuard.js"></script>
   <!-- 0624O — Embed mode: ?embed=1 or ?controls=0 or ?hud=0 or ?chrome=0 hides WOS control chrome -->
   <!-- 0629A — OBS mode: ?obs=1 hides authoring chrome but keeps flight HUD -->
   <script>
@@ -23,8 +24,8 @@
       if (p.get('obs') === '1') {
         document.documentElement.classList.add('wos-obs');
       }
-      // Auto-detect iframe context — always treat embedded runs as wos-embed
-      if (window.self !== window.top) {
+      // HOME is a full application surface; legacy PLAY/MUSIC iframe chrome stays unchanged.
+      if (window.self !== window.top && !window.SBE.WosEndpointGuard.isHome) {
         document.documentElement.classList.add('wos-embed');
       }
     })();
@@ -2441,7 +2442,6 @@
     <!-- 0627 Presentation routing — must load before traversal deck and debug companions -->
     <script src="./systems/presentation/WosPresentationModeState.js"></script>
     <script src="./systems/presentation/WosPresentationRouter.js"></script>
-    <script src="./systems/runtime/WosEndpointGuard.js"></script>
     <script src="./systems/runtime/WosStartupCoordinator.js"></script>
     <script src="./systems/runtime/WosModeTransitionController.js"></script>
     <!-- ── 0626: WOS Orbital Mode — data → logic → interface load order ─────── -->
@@ -2867,6 +2867,7 @@
          keep every SUBWAY presentation-layer script grouped together. ── -->
     <script src="./systems/presentation/subwayPresentationSurface.js"></script>
     <script src="./systems/presentation/subwayMapPaintSurface.js"></script>
+    <script src="./systems/presentation/homeMapSurface.js"></script>
     <script src="./systems/presentation/subwayBlackbookNavLink.js"></script>
     <script src="./systems/presentation/subwayStationHud.js"></script>
     <script src="./systems/presentation/subwayLineRibbon.js"></script>
@@ -3245,7 +3246,7 @@
          Accepts play:route-stop to call SBE.TraversalControlDeck.stop(). -->
     <script>
       (function () {
-        if (window === window.parent) return; // standalone — do not start bridge
+        if (window === window.parent || window.SBE.WosEndpointGuard.isHome) return; // HOME does not consume PLAY commands
 
         // ── Heartbeat ───────────────────────────────────────────────────────────
         function getHeartbeatPayload() {

@@ -34,6 +34,15 @@
     link.id = LINK_ID;
     link.className = "subway-blackbook-nav-link";
     link.href = BLACKBOOK_URL;
+    // HOME owns the current-tab route. Standalone and legacy embeds retain the original anchor.
+    if (SBE.WosEndpointGuard?.isHome) {
+      link.addEventListener("click", function (event) {
+        event.preventDefault();
+        if (!SBE.HomeMapSurface.requestNavigate({ surface: "blackbook" })) {
+          link.setAttribute("aria-label", "HOME rejected Blackbook navigation; retry from HOME");
+        }
+      });
+    }
     link.textContent = "BLACKBOOK";
     link.setAttribute("aria-label", "Open Blackbook to draw");
     // Inline styling on purpose -- this is a minimal beta addition and

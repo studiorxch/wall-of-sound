@@ -49,7 +49,7 @@
       embed:              !!(html && html.classList.contains('wos-embed')),
       obs:                !!(html && html.classList.contains('wos-obs')),
       playControlsHidden: !!(body && body.classList.contains('play-controls-hidden')),
-      iframe:             global.self !== global.top,
+      iframe:             (global.self !== global.top && !SBE.WosEndpointGuard?.isHome),
       forced:             global.__WOS_BROADCAST_SAFE__ === true,
     };
   }

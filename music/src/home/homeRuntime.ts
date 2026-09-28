@@ -17,6 +17,11 @@ let expectedUrl = "";
 let readinessTimer: ReturnType<typeof setTimeout> | undefined;
 const cancelReadinessTimer = () => { if (readinessTimer !== undefined) clearTimeout(readinessTimer); readinessTimer = undefined; };
 const childUrl = (route: HomeRoute, identity: HomeSurfaceIdentity): string => {
+  if (route.surface === "map") {
+    const url = new URL("/wall-app/", location.origin);
+    url.search = new URLSearchParams({ host: "home", homeRuntime: identity.runtimeId, homeNavigation: String(identity.navigationId) }).toString();
+    return url.href;
+  }
   const url = new URL("/home-surface-dev.html", location.origin);
   url.search = serializeHomeRoute(route);
   url.searchParams.set("runtime", identity.runtimeId);
@@ -29,11 +34,11 @@ const navigation = createHomeNavigation(runtimeId, {
     url.search = serializeHomeRoute(route);
     history[mode === "push" ? "pushState" : "replaceState"]({ home: 1 }, "", url);
   },
-  leave() { cancelReadinessTimer(); frame.hidden = true; },
+  leave() { cancelReadinessTimer(); frame.style.visibility = "hidden"; },
   mount(route, identity) {
     expectedUrl = childUrl(route, identity);
-    frame.hidden = true;
-    readinessTimer = setTimeout(() => navigation.fail(identity.navigationId, "surface_ready_timeout"), 5000);
+    frame.style.visibility = "hidden";
+    readinessTimer = setTimeout(() => navigation.fail(identity.navigationId, "surface_ready_timeout"), route.surface === "map" ? 30000 : 5000);
     try { frame.contentWindow!.location.replace(expectedUrl); }
     catch { navigation.fail(identity.navigationId, "surface_mount_failed"); }
   },
@@ -43,7 +48,8 @@ const navigation = createHomeNavigation(runtimeId, {
     required("#phase").textContent = state.phase;
     required("#failure").textContent = state.diagnostic ?? "";
     required("#diagnostics").textContent = JSON.stringify(state, null, 2);
-    frame.hidden = state.phase !== "active";
+    frame.hidden = state.phase === "failed" || state.phase === "idle";
+    frame.style.visibility = state.phase === "active" ? "visible" : "hidden";
     required<HTMLButtonElement>("#retry").disabled = state.route === null;
   },
 });
@@ -81,6 +87,8 @@ frame.addEventListener("load", () => {
   const doc = frame.contentDocument;
   if (!doc) { navigation.fail(navigation.getState().navigationId, "surface_document_unavailable"); return; }
   if (doc.URL === "about:blank" || doc.readyState !== "complete") return;
+  // MAP becomes ready asynchronously after its real viewport loads, not merely HTML load.
+  if (!doc.documentElement.dataset.homeReady && expectedDocument(doc)) return;
   let report: unknown;
   try { report = JSON.parse(doc.documentElement.dataset.homeReady ?? "null"); }
   catch { report = null; }

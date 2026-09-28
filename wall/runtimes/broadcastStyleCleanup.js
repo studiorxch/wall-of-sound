@@ -100,7 +100,7 @@
     var embed = !!(html && html.classList.contains('wos-embed'));
     var obs   = !!(html && html.classList.contains('wos-obs'));
     var pch   = !!(body && body.classList.contains('play-controls-hidden'));
-    var iframe = (global.self !== global.top);
+    var iframe = ((global.self !== global.top && !SBE.WosEndpointGuard?.isHome));
     var forced = (global.__WOS_BROADCAST_SAFE__ === true);
     return { embed: embed, obs: obs, playControlsHidden: pch, iframe: iframe, forced: forced };
   }
