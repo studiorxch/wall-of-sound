@@ -56,6 +56,7 @@ Architecture docs: no update required.
 
 | File | Covers |
 |---|---|
+| [home/README.md](home/README.md) | Development-only persistent HOME skeleton, contract and HOST-01 verification |
 | [SYSTEMS.md](SYSTEMS.md) | The StudioRich system registry — MUSIC, RADIO, MAP/SUBWAY, MEMBER IDENTITY |
 | [OWNERSHIP.md](OWNERSHIP.md) | Which system/module owns which responsibility, and canonical-vs-legacy status |
 | [DEPLOYMENT.md](DEPLOYMENT.md) | Verified deployment facts and procedure, especially RADIO |
@@ -71,4 +72,4 @@ current-state pages only with their verified implementation checkpoints.
 
 - [STUDIORICH HOME persistent host V1](proposals/HOME_PERSISTENT_HOST_V1.md) —
   proposed same-origin surface hosting, public URL/history contract, persistent
-  RADIO session, browser validation gates, and staged migration. Not implemented.
+  RADIO session, browser validation gates, and staged migration. Only the development HOST-01 skeleton is implemented; see the current HOME page.

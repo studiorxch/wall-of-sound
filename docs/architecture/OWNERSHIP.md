@@ -117,3 +117,13 @@ has.
 | RADIO Channel workspace | same-origin iframe of the existing, unmodified `channel-control.html` | CANONICAL implementation reused, not rebuilt |
 | RADIO operator entry point (from ADMIN) | ADMIN's RADIO tab → Program pane (`event-control.html`) + Channel pane (`channel-control.html`) | CANONICAL — the one operator path; not duplicated elsewhere in ADMIN |
 | SUBWAY / BLACKBOOK / MUSIC ops sections | not implemented | DIRECTION — see [admin/README.md](admin/README.md)'s information architecture; β0.1 scope is RADIO only |
+
+## HOME development skeleton
+
+| Responsibility | Owner | Status |
+|---|---|---|
+| Persistent local HOME runtime / surface slot | `music/src/home/homeRuntime.ts` | EXPERIMENTAL |
+| HOST-01 route, history decisions and readiness lifecycle | `music/src/logic/home/homeNavigation.ts` + `homeRoutes.ts` | EXPERIMENTAL |
+
+These own only controlled HOST-01 surfaces; existing MAP/BLACKBOOK document and
+RADIO ownership remains unchanged. See [HOME](home/README.md).

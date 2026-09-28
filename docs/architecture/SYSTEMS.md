@@ -3,6 +3,15 @@
 Only systems with strong current evidence are listed. See
 [README.md](README.md) for what this directory is and isn't.
 
+## HOME
+
+- **Status**: EXPERIMENTAL, development-only HOST-01 skeleton.
+- **Owner**: `music/src/home/homeRuntime.ts`, with pure navigation in `music/src/logic/home/`.
+- **Scope**: persistent parent identity and one controlled same-origin surface slot;
+  parent owns route/history/readiness. No real MAP, BLACKBOOK or RADIO hosting.
+- **Persistence**: local URL route only; runtime identity lasts for the document.
+- See [HOME current state](home/README.md). Production routing is unchanged.
+
 ## MUSIC
 
 - **Purpose**: library intelligence, playlist authoring, track preparation,

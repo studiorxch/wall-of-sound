@@ -153,3 +153,18 @@ the origin behind that route, not removed). Verified directly against
 with an `Origin` header, and both are byte-identical (sha256-verified) to
 the known immutable package. See DEPLOYMENT.md for the full mechanism and
 verification evidence. No longer an open item.
+
+---
+
+### HOME HOST-01 development-only integration seams
+
+- **Problem**: HOME hosts controlled fixtures through dev-only query URLs; artwork
+  replacement remounts the fixture. Lifecycle leave currently only hides the slot
+  and cancels readiness timing, with no real surface save/drain protocol.
+- **Impact**: proves parent ownership but cannot yet host real MAP/BLACKBOOK or
+  provide production canonical URLs or persistent RADIO.
+- **Current status**: intentional HOST-01 boundary; no production inputs changed.
+- **Revisit trigger**: HOST-02 must adapt real MAP lifecycle/navigation; HOST-03
+  must integrate BLACKBOOK artwork state without fixture remount assumptions.
+  Canonical routing and RADIO ownership require their own later checkpoints.
+  Replace fixture adapters through the existing HOME authority, not a second router.

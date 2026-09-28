@@ -1,0 +1,9 @@
+<!doctype html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>HOME — HOST-01 development</title>
+<style>body{font:16px system-ui;margin:1.5rem}button{margin:.25rem;padding:.5rem}iframe{display:block;width:100%;height:40vh;min-height:220px;border:1px solid #888}iframe[hidden]{display:none}pre{white-space:pre-wrap}#failure{color:#a00}</style></head>
+<body><h1>HOME — HOST-01 development</h1><p>Controlled test surfaces only. No MAP, BLACKBOOK, MEMBER or RADIO runtime is loaded.</p>
+<p>HOME runtime: <code id="runtime-id"></code></p>
+<nav aria-label="Test surface navigation"><button id="map">Surface A · MAP model</button><button id="blackbook">Surface B · BLACKBOOK model</button><button id="back">Back</button><button id="forward">Forward</button><button id="retry">Retry surface</button></nav>
+<p id="route"></p><p id="phase" role="status"></p><p id="failure" role="alert"></p>
+<iframe id="surface" title="Controlled HOST-01 surface"></iframe><pre id="diagnostics"></pre>
+<script type="module" src="/src/home/homeRuntime.ts"></script></body></html>
