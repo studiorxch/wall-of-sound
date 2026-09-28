@@ -1,0 +1,27 @@
+<!doctype html><html><head><meta charset="utf-8"><title>HOST-00 child</title></head><body>
+<h2 id="label"></h2><button id="on">ON — synchronous parent call</button>
+<button id="slow">ON — prime now, load after 6 seconds</button>
+<button id="a">Artwork A (parent replace)</button><button id="b">Artwork B (parent replace)</button>
+<button id="child-replace">Child artwork replaceState</button>
+<a id="child-nav" href="/surface.html?surface=child-navigated">Ordinary child navigation</a>
+<button id="replace-nav">Child location.replace</button>
+<input id="input" aria-label="Child keyboard input"><button id="last">Last child control</button>
+<script>
+const label = document.querySelector('#label'); label.textContent = location.search;
+function activate(delay, event) {
+  parent.HOST00.record('child-click', { trusted: event.isTrusted, active: navigator.userActivation.isActive });
+  parent.HOST00.activate(delay); // Deliberately synchronous. No promise/timer/message boundary.
+}
+document.querySelector('#on').onclick = event => activate(0, event);
+document.querySelector('#slow').onclick = event => activate(6000, event);
+document.querySelector('#a').onclick = () => parent.HOST00.artwork('A');
+document.querySelector('#b').onclick = () => parent.HOST00.artwork('B');
+document.querySelector('#child-replace').onclick = () => {
+  history.replaceState(null, '', '/surface.html?surface=blackbook&artwork=child-only');
+  parent.HOST00.record('child-replace-state', { childUrl: location.href, topUrl: parent.location.href });
+};
+document.querySelector('#replace-nav').onclick = () => location.replace('/surface.html?surface=child-replaced');
+document.addEventListener('pointerdown', event => parent.HOST00.record('pointer', { trusted: event.isTrusted, target: event.target.id }));
+document.addEventListener('keydown', event => parent.HOST00.record('key', { trusted: event.isTrusted, key: event.key, target: event.target.id }));
+parent.HOST00.record('child-ready', { url: location.href });
+</script></body></html>

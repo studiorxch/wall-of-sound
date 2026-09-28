@@ -3,7 +3,8 @@
 Status: **PROPOSED / NOT IMPLEMENTED**. Documentation checkpoint, 2026-09-27.
 Baseline: `release/subway-beta-0.1`, implementation commit `c71ca04`.
 This is the designated proposal and migration contract, not current-state
-registry truth. No HOST or RADIO migration stage is complete. Implementation
+registry truth. HOST-00 has isolated desktop-Chrome feasibility evidence with constraints;
+no production HOST or RADIO migration stage is complete. Implementation
 requires separate checkpoints; this document does not authorize deployment.
 
 ## Current topology and problem
@@ -110,6 +111,16 @@ internal transport fields from shareable URLs. Use a versioned, minimal
 history state (route/navigation id), never auth, audio objects, or a broadcast
 cursor. Initialize the first entry with replaceState. The URL is sufficient
 when history.state is absent. Top URL/title and displayed surface must agree.
+
+HOST-00 experimentally confirmed the following in desktop Chrome (existing
+profile); see [findings and evidence](HOST_00_FINDINGS.md). Ordinary iframe.src
+and child links consume Back steps without changing the parent URL. Independent
+child location.replace can also restore stale child content on Forward after
+parent popstate handling. Therefore ready/load must validate the child route
+against the latest parent route/navigation id after traversal; bounded
+replacement or explicit error resolves mismatch, never a corrective history
+push or unbounded loop. This stronger reconciliation is required in HOST-01,
+not implemented by the diagnostic harness.
 
 Child frames must not perform ordinary internal anchor navigation or pushState.
 Use replacement navigation for the frame slot, not successive `iframe.src`
@@ -244,7 +255,13 @@ parent engine creation/primeForUserGesture. The parent owns all audio objects.
 Same-origin activation propagation supports this design, but does not establish
 uniform autoplay success across browsers, devices, or delayed media loading.
 
-Before extracting production ownership, run a local disposable experiment with
+HOST-00 confirmed trusted synchronous child activation, running AudioContext,
+advancing HTMLAudioElement playback, nonzero signal, and stable audio ownership
+across child replacements in Chrome 153's existing profile. Six-second delayed
+loading after synchronous prime also succeeded. Fresh-profile launch stalled;
+Safari/Firefox/iOS and human audible output were not verified. These results
+permit an opt-in local skeleton, not production ownership migration. Before
+extracting production ownership, complete the remaining browser experiment with
 real media and the existing engine: child click → parent prime → deliberately
 slow resolver → playback; OFF/ON; frame replacement while playing; track-end
 advance on both decks; keyboard/touch; fresh browser profile, Safari/iOS where
@@ -341,9 +358,12 @@ production mutation or deployment, and RADIO visual redesign.
 ## Documentation checkpoint evidence
 
 Implemented in this checkpoint: proposal and verified stale RADIO integration
-statements only. Application implementation: none. Browser experiments: not run;
-future gates above remain unverified. Validation: repository path/link checks and
-`git diff --check`; no runtime behavior claim. First implementation recommendation:
-HOST-00, then HOST-01 only after its activation/history evidence passes. Never
+statements only. Application implementation: none. Initial specification checkpoint ran no browser experiments. HOST-00 later
+collected constrained desktop-Chrome evidence, recorded in
+[HOST_00_FINDINGS.md](HOST_00_FINDINGS.md); other browser/product gates remain
+unverified. Validation: repository path/link checks and
+`git diff --check`; no runtime behavior claim. Next separately authorized checkpoint: opt-in local HOST-01, enforcing the
+HOST-00 constraints above. Do not enable public routing or migrate production
+RADIO until the remaining browser/product gates pass. Never
 revert the existing Channel resolver, dual-deck engine, identity, or artwork
 infrastructure to implement this proposal.
