@@ -46,6 +46,23 @@ independently generated, never derived from a package or Channel). V1 ships
 with exactly one Channel (`"studiorich-radio"`), but nothing in the
 `radioChannels` schema assumes a single Channel.
 
+**A MUSIC Playlist that has already been sent to RADIO keeps a STABLE
+1:1 `RadioPlaylist` identity for its entire life (batch 0929-4).**
+`RadioPlaylist.id` never changes and is never re-minted by an ordinary
+edit — `sendPlaylistToRadio`
+(`music/src/logic/radio/musicToRadioPlaylistSync.ts`) always updates the
+existing record found by `sourceMusicPlaylistId`, regardless of its
+`state`. (A prior doctrine — "a PUBLISHED RadioPlaylist forks a fresh
+draft identity on re-send" — was removed after human acceptance exposed
+it as a real defect: editing a MUSIC playlist's title and re-sending
+produced two RadioPlaylists for one MUSIC playlist. Package immutability
+was never actually protected by that fork; it's independently guaranteed
+at the export-record layer — see "Channel rotation semantics" section's
+sibling, `radioWebBundleWriter.ts`'s own version-increment/refuse-
+overwrite logic.) `RadioPlaylist.version` is legacy/historical only — it
+no longer changes; real publication versioning is
+`RadioWebExportRecord.bundleVersion`.
+
 ## Authority
 
 ```
@@ -257,6 +274,38 @@ Current-state facts worth recording here directly:
   on `/radio-publish-to-sites` or any sibling route, since only the
   operator's own local MUSIC dev server can reach it. This matches
   existing precedent; it is not a new exception.
+- **RadioPlaylist identity is stable — see "Identity" above.** A MUSIC
+  Playlist already sent to RADIO keeps exactly one `RadioPlaylist` for its
+  whole life; ordinary edits (title, track corrections) update it in
+  place and never mint a second one.
+
+### Future direction — unified Playlist collection (not implemented)
+
+COLLECTIONS → Playlists (MUSIC's own `PlaylistProject`) and RADIO →
+Playlists (`RadioPlaylist`) are planned to eventually collapse into one
+presented Playlist collection — RADIO is something you do with a
+playlist, not a second copy of it. This is direction, not current state;
+no sidebar/collection UI work has been done. Two candidate identity
+models were considered when correcting RadioPlaylist's identity handling
+(batch 0929-4):
+
+1. one Playlist identity + RADIO-specific state/publication metadata
+   attached to it directly, or
+2. one source Playlist identity (`PlaylistProject`) + a stable 1:1 RADIO
+   projection (`RadioPlaylist`) linked by `sourceMusicPlaylistId`.
+
+**The current implementation safely supports (2), and batch 0929-4's fix
+was built to be compatible with it, not to foreclose it.** `PlaylistRecord`
+and `RadioPlaylist` are structurally different today (MUSIC's own
+slots/curve/locks vs. RADIO's own entries/approval/trackBinding/
+publication state) — collapsing them into one type (option 1) would be a
+real data-model merge across both systems' logic, not a UI change, and is
+out of scope for any batch that hasn't been asked to do it explicitly. A
+stable 1:1 projection (option 2) needed only what this batch already did:
+a permanent identity link that's always the update target, never forked.
+A future sidebar/collection-UI consolidation can present `PlaylistProject`
++ its linked `RadioPlaylist` as one row without requiring a third identity
+model or a migration beyond what already exists.
 
 ### Human acceptance — real 45-track playlist (2026-09-29)
 

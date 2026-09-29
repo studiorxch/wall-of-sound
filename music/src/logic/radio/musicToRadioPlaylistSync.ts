@@ -12,9 +12,19 @@
 // short-circuits to the existing draft, unchanged, with zero new Inbox
 // items.
 //
-// Immutability: a PUBLISHED RadioPlaylist is never mutated in place — a
-// re-send while the active version is published creates a fresh draft
-// record instead (same immutable-version doctrine as RadioLoopPackageManifest).
+// Identity corrective pass (batch 0929-4) — RadioPlaylist identity is
+// STABLE and always an update target, regardless of `state`. A MUSIC
+// Playlist that has already been sent to RADIO keeps ONE RadioPlaylist
+// `id` for its entire life; ordinary edits (title, track changes) never
+// mint a second RadioPlaylist for the same `sourceMusicPlaylistId`.
+// Immutability belongs to Packages (RadioWebExportRecord), not to
+// RadioPlaylist identity — `radioWebBundleWriter.ts`'s own export logic
+// already guarantees a prior Package version is never mutated or
+// overwritten, independently of anything here. The PREVIOUS doctrine
+// ("a PUBLISHED RadioPlaylist forks a fresh draft on re-send") was a
+// leftover from before that Package-level guarantee existed; it produced
+// duplicate RadioPlaylist identities for the same MUSIC playlist and is
+// removed.
 //
 // 0718A_MUSIC_RADIO_Clean_Board_and_Explicit_Send_Flows §2 — RADIO cards
 // render entirely from data snapshotted here at send time, never a live
@@ -66,9 +76,10 @@ export function sendPlaylistToRadio(
   const trackById = new Map(tracks.map((t) => [t.trackId, t]));
   const snapshotDurationSeconds = orderedTrackIds.reduce((sum, id) => sum + (trackById.get(id)?.durationSeconds ?? 0), 0);
 
-  // A PUBLISHED playlist is immutable — treat this send as "start a fresh
-  // draft" rather than as an update target.
-  const targetExisting = existingRadioPlaylist && existingRadioPlaylist.state !== "PUBLISHED" ? existingRadioPlaylist : null;
+  // Batch 0929-4 — RadioPlaylist identity is stable regardless of `state`;
+  // any existing record (caller already excludes RETIRED) is the update
+  // target. Package immutability is guaranteed independently, elsewhere.
+  const targetExisting = existingRadioPlaylist;
 
   // A true no-op requires BOTH the track signature AND every snapshotted
   // display field (0718A §2: title/coverImage/accentColor/durationSeconds)
@@ -142,11 +153,13 @@ export function sendPlaylistToRadio(
     nextEntries.push({ ...entry, order: nextEntries.length });
   }
 
-  const version = targetExisting
-    ? targetExisting.version
-    : existingRadioPlaylist
-      ? String(Number(existingRadioPlaylist.version) + 1)
-      : "1";
+  // targetExisting === existingRadioPlaylist now (see above) — kept as a
+  // field for historical/persisted-record compatibility, but it no longer
+  // increments: identity is stable, so there is no more "fork a new draft"
+  // event left to number. Real publication versioning is
+  // RadioWebExportRecord.bundleVersion, not this field — see
+  // docs/architecture/radio/README.md.
+  const version = targetExisting ? targetExisting.version : "1";
 
   const radioPlaylist: RadioPlaylist = {
     id: playlistId,

@@ -80,9 +80,14 @@ export type RadioPlaylistEntry = {
 // sourceMusicPlaylistRevision is a computed ordered-assigned-trackId-
 // sequence signature (modeled on the existing optionsGeneratedFromTrackSignature
 // pattern) — not a real MUSIC playlist revision number, since none exists.
-// A published version is immutable; a later edit creates a new draft/
-// version rather than mutating the published record (same doctrine as
-// RadioLoopPackageManifest's own version history).
+//
+// Identity corrective pass (batch 0929-4) — `id` is a STABLE identity for
+// the entire life of the RadioPlaylist, independent of `state`. Publish
+// immutability lives at the Package layer (RadioWebExportRecord, see
+// radioWebBundleWriter.ts), never here — editing and re-sending the same
+// source MUSIC playlist always updates this same record in place; it
+// never mints a second RadioPlaylist. `version` is legacy/historical
+// (kept for already-persisted records) and no longer increments.
 export type RadioPlaylist = {
   id: string;
   sourceMusicPlaylistId?: string;

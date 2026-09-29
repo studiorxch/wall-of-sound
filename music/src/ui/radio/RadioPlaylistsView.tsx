@@ -109,7 +109,10 @@ export function RadioPlaylistsView({
                     <span className="radio-badge radio-badge-ready">{readyCount}/{rp.entries.length} ready</span>
                     {lockedCount > 0 && <span className="radio-badge radio-badge-unprepared">{lockedCount} locked</span>}
                   </span>
-                  <span className="pgc-updated">{radioPlaylistStateLabel(rp.state)} · v{rp.version}</span>
+                  {/* Batch 0929-4 — RadioPlaylist.version no longer changes
+                      (identity is stable now, not versioned); dropped from
+                      display so this never shows a permanently-stale "v1". */}
+                  <span className="pgc-updated">{radioPlaylistStateLabel(rp.state)}</span>
                 </div>
                 <div className="pgc-hover-actions" onClick={(e) => e.stopPropagation()}>
                   <button className="pgc-ha-btn" title="Open" onClick={() => setOpenPlaylistId(rp.id)}>Open</button>

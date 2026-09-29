@@ -6835,11 +6835,12 @@ export default function App() {
     setViewMode("radio_loopchain_player");
   }
 
-  // §6.3 — create-or-update a draft RADIO playlist. sendPlaylistToRadio
-  // (pure) already computes the full merged Inbox array and the correct
-  // playlist record (including the PUBLISHED-is-immutable new-draft
-  // branch); this is a thin persistence wrapper, same shape as every other
-  // handler above.
+  // §6.3, corrected by batch 0929-4 — create-or-update a RADIO playlist
+  // with a STABLE identity. sendPlaylistToRadio (pure) already computes
+  // the full merged Inbox array and the correct playlist record, always
+  // updating `existing` in place when one is found for this
+  // sourceMusicPlaylistId (regardless of its state); this is a thin
+  // persistence wrapper, same shape as every other handler above.
   function handleSendPlaylistToRadio(musicPlaylistId: string) {
     const musicPlaylist = playlistsRef.current.find((p) => p.playlistId === musicPlaylistId);
     if (!musicPlaylist) return;

@@ -124,7 +124,17 @@ describe("sendPlaylistToRadio — create-vs-update branching", () => {
     expect(second.radioPlaylist.updatedAt).toBe(LATER);
   });
 
-  it("a PUBLISHED radioPlaylist is never mutated in place — a re-send creates a fresh draft with a bumped version", () => {
+  // Identity corrective pass (batch 0929-4) — replaces the old assertion
+  // that a PUBLISHED RadioPlaylist forks a fresh draft identity on
+  // re-send. Human acceptance of commit 9d50ffe exposed that behavior as
+  // a real defect: editing the source MUSIC playlist's title and
+  // re-sending created a SECOND RadioPlaylist instead of updating the
+  // existing one, leaving two RadioPlaylists (β0.1.1, β0.1.2) for one
+  // MUSIC playlist. RadioPlaylist identity must be stable regardless of
+  // `state` — Package immutability (see radioWebBundleWriter.test.ts's
+  // own "re-export never touches v1" coverage) already guarantees
+  // publication safety at the correct layer.
+  it("a PUBLISHED radioPlaylist IS updated in place on re-send — identity never forks", () => {
     const src1 = playlist([slot(0, "t1")]);
     const first = sendPlaylistToRadio(src1, null, [], [track("t1")], NOW);
     const published: RadioPlaylist = { ...first.radioPlaylist, state: "PUBLISHED", publishedAt: NOW };
@@ -133,12 +143,70 @@ describe("sendPlaylistToRadio — create-vs-update branching", () => {
     const second = sendPlaylistToRadio(src2, published, first.inboxItems, [track("t1"), track("t2")], LATER);
 
     expect(second.changed).toBe(true);
-    expect(second.radioPlaylist.id).not.toBe(published.id);
-    expect(second.radioPlaylist.version).toBe("2");
-    expect(second.radioPlaylist.state).toBe("DRAFT");
-    // The published record itself is untouched — the caller still holds
-    // `published` unmodified since this function never mutates inputs.
-    expect(published.state).toBe("PUBLISHED");
+    expect(second.radioPlaylist.id).toBe(published.id);
+    expect(second.radioPlaylist.version).toBe(published.version);
+    // The editorial PUBLISHED mark is preserved, not reset by an edit —
+    // this batch changes identity handling only, not state semantics.
+    expect(second.radioPlaylist.state).toBe("PUBLISHED");
+    expect(second.radioPlaylist.entries.length).toBe(2);
+  });
+});
+
+describe("sendPlaylistToRadio — identity stability (batch 0929-4 regression)", () => {
+  it("1. a first Send creates exactly one RadioPlaylist identity", () => {
+    const src = playlist([slot(0, "t1")], { title: "β0.1.1" });
+    const result = sendPlaylistToRadio(src, null, [], [track("t1")], NOW);
+    expect(result.radioPlaylist.id).toMatch(/^radplaylist_/);
+    expect(result.radioPlaylist.sourceMusicPlaylistId).toBe("pl_1");
+  });
+
+  it("2. editing the title and sending again (playlist already PUBLISHED) leaves exactly one identity", () => {
+    const src1 = playlist([slot(0, "t1")], { title: "β0.1.1" });
+    const first = sendPlaylistToRadio(src1, null, [], [track("t1")], NOW);
+    const published: RadioPlaylist = { ...first.radioPlaylist, state: "PUBLISHED", publishedAt: NOW };
+
+    const src2 = playlist([slot(0, "t1")], { title: "β0.1.2" });
+    const second = sendPlaylistToRadio(src2, published, first.inboxItems, [track("t1")], LATER);
+
+    expect(second.radioPlaylist.id).toBe(first.radioPlaylist.id);
+    expect(second.radioPlaylist.title).toBe("β0.1.2");
+  });
+
+  it("3. editing tracks and sending again (playlist already PUBLISHED) leaves exactly one identity", () => {
+    const src1 = playlist([slot(0, "t1")]);
+    const first = sendPlaylistToRadio(src1, null, [], [track("t1")], NOW);
+    const published: RadioPlaylist = { ...first.radioPlaylist, state: "PUBLISHED", publishedAt: NOW };
+
+    const src2 = playlist([slot(0, "t1"), slot(1, "t2"), slot(2, "t3")]);
+    const second = sendPlaylistToRadio(src2, published, first.inboxItems, [track("t1"), track("t2"), track("t3")], LATER);
+
+    expect(second.radioPlaylist.id).toBe(first.radioPlaylist.id);
+    expect(second.radioPlaylist.entries.length).toBe(3);
+  });
+
+  it("4. identity is stable across a full realistic sequence: send, publish, edit title, edit tracks, re-send again", () => {
+    const src1 = playlist([slot(0, "t1"), slot(1, "t2")], { title: "β0.1.1" });
+    const sent = sendPlaylistToRadio(src1, null, [], [track("t1"), track("t2")], NOW);
+    const originalId = sent.radioPlaylist.id;
+
+    // Simulate a successful Publish's own side effect (computePublishPatch
+    // sets state: "PUBLISHED" — see radioOnePublishOrchestrator.ts).
+    const afterPublish: RadioPlaylist = { ...sent.radioPlaylist, state: "PUBLISHED", publishedAt: NOW };
+
+    const src2 = playlist([slot(0, "t1"), slot(1, "t2")], { title: "β0.1.2" });
+    const afterTitleEdit = sendPlaylistToRadio(src2, afterPublish, sent.inboxItems, [track("t1"), track("t2")], LATER);
+    expect(afterTitleEdit.radioPlaylist.id).toBe(originalId);
+
+    const src3 = playlist([slot(0, "t1"), slot(1, "t2"), slot(2, "t3")], { title: "β0.1.2" });
+    const afterTrackEdit = sendPlaylistToRadio(
+      src3,
+      afterTitleEdit.radioPlaylist,
+      afterTitleEdit.inboxItems,
+      [track("t1"), track("t2"), track("t3")],
+      LATER,
+    );
+    expect(afterTrackEdit.radioPlaylist.id).toBe(originalId);
+    expect(afterTrackEdit.radioPlaylist.entries.length).toBe(3);
   });
 });
 
