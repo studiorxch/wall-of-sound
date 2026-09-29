@@ -8,14 +8,15 @@ function fixture(context: 'standalone' | 'embedded' | 'home', query?: string) {
   const handlers: Record<string, () => void> = {};
   const clicks: Record<string, (event: { preventDefault(): void }) => void> = {};
   const ready = vi.fn(() => true), requestNavigate = vi.fn(() => true);
+  const requestGoogleCredential = vi.fn(() => Promise.resolve({ ok: true, credential: { providerId: 'google.com' } }));
   let mapReady = () => {};
   const link = { id: '', className: '', href: '', textContent: '', style: { cssText: '' }, setAttribute: vi.fn(), addEventListener: (event: string, fn: typeof clicks[string]) => { clicks[event] = fn; } };
   const doc = { documentElement: { dataset: {} }, addEventListener: (event: string, fn: () => void) => { handlers[event] = fn; }, getElementById: () => null, createElement: () => link, body: { appendChild: vi.fn() } };
   const win: Record<string, any> = { document: doc, location: { origin: 'http://local', href: 'http://local/wall-app/', pathname: '/wall-app/', search: query ?? (context === 'home' ? '?host=home&homeRuntime=session&homeNavigation=4' : '') }, SBE: { MapboxViewportRuntime: { onReady: (fn: () => void) => { mapReady = fn; } } } };
-  win.parent = context === 'standalone' ? win : { location: { origin: 'http://local' }, StudioRichHome: { version: 1, ready, requestNavigate } };
+  win.parent = context === 'standalone' ? win : { location: { origin: 'http://local' }, StudioRichHome: { version: 1, ready, requestNavigate, requestGoogleCredential } };
   const run = (file: string) => runInNewContext(source(file), { window: win, URL, URLSearchParams, console });
   run('systems/runtime/WosEndpointGuard.js');
-  return { win, doc, ready, requestNavigate, handlers, clicks, link, run, mapReady: () => mapReady() };
+  return { win, doc, ready, requestNavigate, requestGoogleCredential, handlers, clicks, link, run, mapReady: () => mapReady() };
 }
 
 describe('HOME / MAP adapter', () => {
@@ -42,5 +43,14 @@ describe('HOME / MAP adapter', () => {
     const f = fixture(context); f.run('systems/presentation/homeMapSurface.js'); f.run('systems/presentation/subwayBlackbookNavLink.js');
     expect(f.link.href).toBe('http://local/blackbook.html'); expect(f.clicks.click).toBeUndefined();
     expect(f.win.SBE.HomeMapSurface).toBeUndefined(); expect(f.ready).not.toHaveBeenCalled();
+  });
+  it('HOST-03B: delegates hosted Google credential request to HOME with the same identity used for navigation', async () => {
+    const f = fixture('home'); f.run('systems/presentation/homeMapSurface.js');
+    await expect(f.win.SBE.HomeMapSurface.requestGoogleCredential()).resolves.toEqual({ ok: true, credential: { providerId: 'google.com' } });
+    expect(f.requestGoogleCredential).toHaveBeenCalledExactlyOnceWith(f.doc, f.win.SBE.WosEndpointGuard.homeIdentity);
+  });
+  it.each(['standalone', 'embedded'] as const)('HOST-03B: HomeMapSurface (and therefore requestGoogleCredential) is absent in %s -- MAP keeps its own local Google popup path', context => {
+    const f = fixture(context); f.run('systems/presentation/homeMapSurface.js');
+    expect(f.win.SBE.HomeMapSurface).toBeUndefined();
   });
 });

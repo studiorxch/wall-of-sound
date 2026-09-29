@@ -17,6 +17,7 @@ import {
   type ArtworkType,
   type MemberIdentityState,
 } from "@studiorich/member-identity";
+import type { HostedGoogleCredentialResult } from "../data/hostedAuthTypes";
 import {
   createMapArtworkPersistenceBridge,
   SUBWAY_MAP_SURFACE_ID,
@@ -128,6 +129,10 @@ type WallRuntime = {
   MapZoomScale?: {
     resolveZoomScale: typeof resolveZoomScale;
     MAP_SURFACE_REFERENCE_ZOOM: typeof MAP_SURFACE_REFERENCE_ZOOM;
+  };
+  /** HOST-02/03B -- set by wall/systems/presentation/homeMapSurface.js only when this document is HOME-hosted; absent standalone/embedded. */
+  HomeMapSurface?: {
+    requestGoogleCredential(): Promise<HostedGoogleCredentialResult>;
   };
 };
 
@@ -341,6 +346,18 @@ function setMessage(message: string, isError = false): void {
   if (!statusElement) return;
   statusElement.textContent = message;
   statusElement.classList.toggle("is-error", isError);
+}
+
+/** HOST-03B -- explicit failure copy for the hosted Google-credential transport; see blackbookRuntime.ts's own identical mapping. */
+function hostedGoogleSignInFailureMessage(reason: string): string {
+  switch (reason) {
+    case "popup_blocked": return "The browser blocked the Google sign-in window.";
+    case "popup_closed": return "Google sign-in was closed before it finished.";
+    case "credential_missing": return "Google sign-in did not return a usable credential.";
+    case "home_unavailable": return "StudioRich Home is unavailable -- try reloading.";
+    case "stale_identity": case "surface_left": return "Navigation changed before sign-in finished -- try again.";
+    default: return "StudioRich sign-in is temporarily unavailable.";
+  }
 }
 
 /**
@@ -579,11 +596,25 @@ function ensureMemberUI(): void {
     const email = (dialog?.querySelector('[name="email"]') as HTMLInputElement | null)?.value ?? "";
     const password = (dialog?.querySelector('[name="password"]') as HTMLInputElement | null)?.value ?? "";
     setMessage("Connecting…");
-    const operation = action === "google"
-      ? memberIdentity.signInWithGoogle()
-      : action === "create"
-        ? memberIdentity.createAccountWithEmailPassword(email, password)
-        : memberIdentity.signInWithEmailPassword(email, password);
+    // HOST-03B -- when HOME-hosted, delegate the Google popup to HOME's own
+    // never-nested window; the click reaches it SYNCHRONOUSLY here (via
+    // window.SBE.HomeMapSurface, set only when hosted -- HOST-02's own
+    // explicit, query-based detection, never bare window.self !== window.top)
+    // so the user gesture is preserved. Standalone/embedded (HomeMapSurface
+    // absent) keeps calling signInWithGoogle() directly, unchanged. Never
+    // falls back to a local popup on any hosted failure -- that would
+    // reintroduce the nested-popup defect this transport exists to avoid.
+    const hostedGoogleSignIn = root.SBE?.HomeMapSurface?.requestGoogleCredential;
+    const operation = action === "google" && hostedGoogleSignIn
+      ? hostedGoogleSignIn().then((result) => {
+          if (!result.ok) throw new Error(hostedGoogleSignInFailureMessage(result.reason));
+          return memberIdentity.signInWithCredential(result.credential);
+        })
+      : action === "google"
+        ? memberIdentity.signInWithGoogle()
+        : action === "create"
+          ? memberIdentity.createAccountWithEmailPassword(email, password)
+          : memberIdentity.signInWithEmailPassword(email, password);
     void operation.catch((error: unknown) => {
       setMessage(error instanceof Error ? error.message : "StudioRich sign-in failed.", true);
     });

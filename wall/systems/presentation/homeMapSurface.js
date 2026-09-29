@@ -8,6 +8,14 @@
   SBE.HomeMapSurface = Object.freeze({
     requestNavigate: function (destination) {
       return global.parent.StudioRichHome.requestNavigate(global.document, identity, destination);
+    },
+    // HOST-03B -- requests HOME's own never-nested window initiate/complete
+    // the Google popup; resolves to an opaque credential for this surface's
+    // OWN MemberIdentityAuthority.signInWithCredential. Must be called
+    // synchronously within the sign-in click handler to preserve the user
+    // gesture -- see subwayMemberRuntime.ts's own caller.
+    requestGoogleCredential: function () {
+      return global.parent.StudioRichHome.requestGoogleCredential(global.document, identity);
     }
   });
   function reportReady() {

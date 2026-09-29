@@ -18,6 +18,8 @@ export interface AuthGateway {
   signInWithEmailPassword(email: string, password: string): Promise<void>;
   createAccountWithEmailPassword(email: string, password: string): Promise<void>;
   signInWithGoogle(): Promise<void>;
+  /** HOST-03B -- completes sign-in from a credential obtained elsewhere (see FirebaseAuthGateway's own doc). Never opens a popup itself. */
+  signInWithCredential(serialized: unknown): Promise<void>;
   signOut(): Promise<void>;
 }
 
@@ -29,6 +31,8 @@ export interface MemberIdentityAuthority {
   signInWithEmailPassword(email: string, password: string): Promise<void>;
   createAccountWithEmailPassword(email: string, password: string): Promise<void>;
   signInWithGoogle(): Promise<void>;
+  /** HOST-03B -- completes sign-in from a credential HOME's own never-nested window already obtained (a hosted surface's own popup-free path). Not for standalone use -- standalone keeps calling signInWithGoogle(). */
+  signInWithCredential(serialized: unknown): Promise<void>;
   signOut(): Promise<void>;
   /** Member V1A Profile edit -- signed-in members only; throws otherwise. */
   updateProfile(displayName: string): Promise<void>;
@@ -180,6 +184,10 @@ export class StudioRichMemberIdentityAuthority implements MemberIdentityAuthorit
 
   signInWithGoogle(): Promise<void> {
     return this.runAuthOperation("googleSignIn", () => this.auth.signInWithGoogle());
+  }
+
+  signInWithCredential(serialized: unknown): Promise<void> {
+    return this.runAuthOperation("googleSignIn", () => this.auth.signInWithCredential(serialized));
   }
 
   signOut(): Promise<void> {

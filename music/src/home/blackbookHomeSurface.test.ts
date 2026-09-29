@@ -29,6 +29,7 @@ function fakeHost(overrides: Partial<HomeSurfaceHost> = {}): HomeSurfaceHost {
     requestNavigate: vi.fn(() => true),
     replaceArtwork: vi.fn(() => true),
     syncArtworkRoute: vi.fn(() => true),
+    requestGoogleCredential: vi.fn(() => Promise.resolve({ ok: true as const, credential: {} })),
     ...overrides,
   };
 }
@@ -69,13 +70,14 @@ describe("createBlackbookHomeSurface -- context detection", () => {
 });
 
 describe("createBlackbookHomeSurface -- standalone/non-HOME is a safe no-op", () => {
-  it("reportReady/reportArtworkChange/requestNavigateToMap never touch anything", () => {
+  it("reportReady/reportArtworkChange/requestNavigateToMap/requestGoogleCredential never touch anything", async () => {
     fixture("");
     const surface = createBlackbookHomeSurface();
     expect(surface.isHome).toBe(false);
     expect(() => surface.reportReady()).not.toThrow();
     expect(surface.reportArtworkChange("A")).toBe(false);
     expect(surface.requestNavigateToMap()).toBe(false);
+    await expect(surface.requestGoogleCredential()).resolves.toEqual({ ok: false, reason: "home_unavailable" });
   });
 });
 
@@ -124,5 +126,19 @@ describe("createBlackbookHomeSurface -- HOME-hosted readiness and artwork sync",
     const surface = createBlackbookHomeSurface();
     expect(surface.requestNavigateToMap()).toBe(true);
     expect(host.requestNavigate).toHaveBeenCalledExactlyOnceWith(document, { runtimeId: "session", navigationId: 4, routeKey: "surface=blackbook" }, { surface: "map" });
+  });
+  it("HOST-03B: delegates the Google sign-in popup request to HOME and relays its result verbatim", async () => {
+    const host = fakeHost({ requestGoogleCredential: vi.fn(() => Promise.resolve({ ok: true as const, credential: { providerId: "google.com" } })) });
+    fixture("?host=home&homeRuntime=session&homeNavigation=4", { location: { origin: "http://local" }, StudioRichHome: host });
+    const surface = createBlackbookHomeSurface();
+    await expect(surface.requestGoogleCredential()).resolves.toEqual({ ok: true, credential: { providerId: "google.com" } });
+    expect(host.requestGoogleCredential).toHaveBeenCalledExactlyOnceWith(document, { runtimeId: "session", navigationId: 4, routeKey: "surface=blackbook" });
+  });
+  it("HOST-03B: relays a hosted failure verbatim -- never retries or falls back locally", async () => {
+    const host = fakeHost({ requestGoogleCredential: vi.fn(() => Promise.resolve({ ok: false as const, reason: "popup_blocked" as const })) });
+    fixture("?host=home&homeRuntime=session&homeNavigation=4", { location: { origin: "http://local" }, StudioRichHome: host });
+    const surface = createBlackbookHomeSurface();
+    await expect(surface.requestGoogleCredential()).resolves.toEqual({ ok: false, reason: "popup_blocked" });
+    expect(host.requestGoogleCredential).toHaveBeenCalledOnce();
   });
 });

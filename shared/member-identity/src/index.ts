@@ -51,6 +51,10 @@ export {
   type StudioRichFirebaseEnvironment,
 } from "./firebase/firebaseConfig.js";
 export { createFirebaseMemberIdentityAuthority } from "./firebase/createFirebaseMemberIdentityAuthority.js";
+export {
+  createFirebaseGoogleAuthPopupInitiator,
+  type GoogleAuthPopupInitiator,
+} from "./firebase/firebaseGoogleAuthPopupInitiator.js";
 export { createFirebaseArtworkRepository } from "./firebase/createFirebaseArtworkRepository.js";
 export { createFirebaseEventRadioRepository } from "./firebase/createFirebaseEventRadioRepository.js";
 export {

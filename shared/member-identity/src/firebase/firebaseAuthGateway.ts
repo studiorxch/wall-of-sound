@@ -1,9 +1,11 @@
 import {
   GoogleAuthProvider,
+  OAuthProvider,
   browserLocalPersistence,
   createUserWithEmailAndPassword,
   onAuthStateChanged,
   setPersistence,
+  signInWithCredential as firebaseSignInWithCredential,
   signInWithEmailAndPassword,
   signInWithPopup,
   signOut,
@@ -54,6 +56,21 @@ export class FirebaseAuthGateway implements AuthGateway {
 
   async signInWithGoogle(): Promise<void> {
     await signInWithPopup(this.auth, this.googleProvider);
+  }
+
+  /**
+   * HOST-03B -- completes sign-in from a credential obtained elsewhere (HOME's
+   * own never-nested window, when this surface is hosted; see
+   * createFirebaseGoogleAuthPopupInitiator.ts). `OAuthProvider.credentialFromJSON`
+   * is the documented, generic reconstructor for any serialized OAuthCredential
+   * (including Google's) -- GoogleAuthProvider itself has no such static method,
+   * only `credential()`/`credentialFromResult()`, neither of which round-trips
+   * a JSON blob. This never opens a popup itself; the credential must already
+   * be a fully-resolved Google OAuth result.
+   */
+  async signInWithCredential(serialized: unknown): Promise<void> {
+    const credential = OAuthProvider.credentialFromJSON(serialized as object | string);
+    await firebaseSignInWithCredential(this.auth, credential);
   }
 
   async signOut(): Promise<void> {

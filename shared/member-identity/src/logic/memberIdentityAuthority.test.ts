@@ -32,6 +32,7 @@ class FakeAuthGateway implements AuthGateway {
   readonly signInWithEmailPassword = vi.fn(async () => undefined);
   readonly createAccountWithEmailPassword = vi.fn(async () => undefined);
   readonly signInWithGoogle = vi.fn(async () => undefined);
+  readonly signInWithCredential = vi.fn(async () => undefined);
   readonly signOut = vi.fn(async () => undefined);
   subscribeCount = 0;
   unsubscribeCount = 0;
@@ -123,6 +124,32 @@ describe("StudioRichMemberIdentityAuthority", () => {
     expect(auth.signInWithGoogle).toHaveBeenCalledOnce();
     expect(auth.signOut).toHaveBeenCalledOnce();
     expect(authority.getState().status).toBe("signedOut");
+  });
+
+  it("HOST-03B: signInWithCredential completes sign-in from a hosted-origin credential without ever calling signInWithGoogle", async () => {
+    const auth = new FakeAuthGateway();
+    const authority = new StudioRichMemberIdentityAuthority(auth, repository());
+    await authority.start();
+
+    const serialized = { providerId: "google.com", signInMethod: "oauth" };
+    await authority.signInWithCredential(serialized);
+
+    expect(auth.signInWithCredential).toHaveBeenCalledExactlyOnceWith(serialized);
+    expect(auth.signInWithGoogle).not.toHaveBeenCalled();
+  });
+
+  it("HOST-03B: signInWithCredential failure normalizes the same way signInWithGoogle's does", async () => {
+    const auth = new FakeAuthGateway();
+    auth.signInWithCredential.mockRejectedValueOnce(
+      Object.assign(new Error("bad credential"), { code: "auth/invalid-credential" }),
+    );
+    const authority = new StudioRichMemberIdentityAuthority(auth, repository());
+    await authority.start();
+
+    await expect(authority.signInWithCredential({})).rejects.toBeInstanceOf(
+      MemberIdentityActionError,
+    );
+    expect(authority.getState().error?.code).toBe("auth/invalid-credential");
   });
 
   it("does not report signed-in when member bootstrap fails", async () => {

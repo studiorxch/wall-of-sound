@@ -1206,9 +1206,38 @@ opacityControl.value = String(PENCIL_SUPPLY.defaultSettings.opacity);
 colorControl.value = DRAWING_DEFAULT_COLORS.pencil;
 updateContextualControls("pencil");
 
+/**
+ * HOST-03B -- hosted-context sign-in transport. HOME's own never-nested
+ * window owns the actual Google popup; this only relays the resulting
+ * credential into the SAME `memberIdentity` this file already uses
+ * everywhere else -- no second member-state authority, no change to
+ * standalone behavior (the `else` branch below, unchanged from before this
+ * batch). Never falls back to a locally-initiated `signInWithGoogle()` on
+ * any failure -- that would silently reintroduce the exact nested-popup
+ * defect this transport exists to avoid.
+ */
+function hostedGoogleSignInFailureMessage(reason: string): string {
+  switch (reason) {
+    case "popup_blocked": return "The browser blocked the Google sign-in window.";
+    case "popup_closed": return "Google sign-in was closed before it finished.";
+    case "credential_missing": return "Google sign-in did not return a usable credential.";
+    case "home_unavailable": return "StudioRich Home is unavailable -- try reloading.";
+    case "stale_identity": case "surface_left": return "Navigation changed before sign-in finished -- try again.";
+    default: return "StudioRich sign-in is temporarily unavailable.";
+  }
+}
 memberButton.addEventListener("click", () => {
-  if (memberState.status === "signedIn") void memberIdentity.signOut();
-  else void memberIdentity.signInWithGoogle();
+  if (memberState.status === "signedIn") { void memberIdentity.signOut(); return; }
+  if (homeSurface.isHome) {
+    void homeSurface.requestGoogleCredential().then((result) => {
+      if (!result.ok) { reportError(hostedGoogleSignInFailureMessage(result.reason), new Error(result.reason)); return; }
+      return memberIdentity.signInWithCredential(result.credential).catch((error: unknown) => {
+        reportError("StudioRich sign-in is temporarily unavailable.", error);
+      });
+    });
+    return;
+  }
+  void memberIdentity.signInWithGoogle();
 });
 
 memberIdentity.subscribe((state) => {

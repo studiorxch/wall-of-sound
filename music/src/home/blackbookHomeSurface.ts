@@ -1,4 +1,5 @@
 import type { HomeRoute, HomeSurfaceIdentity } from "../data/homeRouteTypes";
+import type { HostedGoogleCredentialResult } from "../data/hostedAuthTypes";
 import { homeRouteKey } from "../logic/home/homeRoutes";
 import "./homeSurfaceContract"; // side-effect only: declares window.StudioRichHome
 
@@ -30,6 +31,14 @@ export interface BlackbookHomeSurface {
   reportArtworkChange(artworkId: string | null): boolean;
   /** Delegates the BLACKBOOK -> MAP control through HOME's navigation authority instead of a native anchor navigation. */
   requestNavigateToMap(): boolean;
+  /**
+   * HOST-03B -- requests HOME's own never-nested window initiate and
+   * complete a Google sign-in popup, resolving to an opaque credential this
+   * surface's OWN `memberIdentity.signInWithCredential` completes with. Must
+   * be called synchronously within the sign-in button's own click handler
+   * to preserve the user gesture -- see the caller in `blackbookRuntime.ts`.
+   */
+  requestGoogleCredential(): Promise<HostedGoogleCredentialResult>;
 }
 
 const NOT_HOME: BlackbookHomeSurface = Object.freeze({
@@ -37,6 +46,7 @@ const NOT_HOME: BlackbookHomeSurface = Object.freeze({
   reportReady() { /* standalone/non-HOME: nothing to report */ },
   reportArtworkChange: () => false,
   requestNavigateToMap: () => false,
+  requestGoogleCredential: () => Promise.resolve({ ok: false as const, reason: "home_unavailable" as const }),
 });
 
 export function createBlackbookHomeSurface(): BlackbookHomeSurface {
@@ -78,6 +88,9 @@ export function createBlackbookHomeSurface(): BlackbookHomeSurface {
       },
       requestNavigateToMap(): boolean {
         return host.requestNavigate(document, identity(), { surface: "map" });
+      },
+      requestGoogleCredential(): Promise<HostedGoogleCredentialResult> {
+        return host.requestGoogleCredential(document, identity());
       },
     });
   } catch {

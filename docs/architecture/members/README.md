@@ -33,13 +33,28 @@ Firebase Auth (Google sign-in + email/password)
 `createFirebaseMemberIdentityAuthority(env)` is the one entry point every
 consumer uses to get a `MemberIdentityAuthority` (`.getState()`,
 `.subscribe()`, `.signInWithGoogle()`, `.signInWithEmailPassword()`,
-`.signOut()`, `.start()`).
+`.signInWithCredential()`, `.signOut()`, `.start()`).
+
+**HOST-03B (development-only HOME hosting, see [../home/README.md](../home/README.md)):**
+`signInWithCredential(serialized)` completes sign-in from a credential
+obtained elsewhere — specifically, HOME's own never-nested window running a
+SEPARATE, minimal `createFirebaseGoogleAuthPopupInitiator` (also exported
+from this package) that ONLY calls `signInWithPopup`/extracts
+`credential.toJSON()`. This is not a second identity system and not MEMBER
+ownership migration: the popup initiator never constructs a
+`MemberIdentityAuthority`, never touches `members/{uid}`, and every
+consumer's own state machine (this file's whole point) is unchanged. A
+hosted surface delegates ONLY the popup call itself when it detects hosting
+(BLACKBOOK/MAP's own existing, explicit `isHome` detection — never bare
+`window.self !== window.top`); standalone continues calling
+`signInWithGoogle()` directly, exactly as before HOST-03B.
 
 ## 3. Major components
 
 | Component | File | Role |
 |---|---|---|
-| Auth gateway | `firebase/firebaseAuthGateway.ts` | Firebase Auth wrapper, `browserLocalPersistence` |
+| Auth gateway | `firebase/firebaseAuthGateway.ts` | Firebase Auth wrapper, `browserLocalPersistence`; `signInWithCredential` reconstructs via `OAuthProvider.credentialFromJSON` |
+| Hosted popup initiator (HOST-03B) | `firebase/firebaseGoogleAuthPopupInitiator.ts` | `createFirebaseGoogleAuthPopupInitiator` — HOME's own minimal `signInWithPopup` + `credential.toJSON()`; not a `MemberIdentityAuthority`, no Firestore access |
 | Identity authority | `logic/memberIdentityAuthority.ts` | the state machine consumers subscribe to |
 | Bootstrap logic | `logic/memberBootstrap.ts` | pure — decides create vs. update-patch for `members/{uid}` on sign-in |
 | Member repository | `logic/memberRepository.ts` / `firebase/firestoreMemberRepository.ts` | reads/writes `members/{uid}` |
@@ -138,11 +153,13 @@ auth path; none exists). This is the one identity system.
 
 ## 9. Known architectural debt
 
-None specific to MEMBERS itself beyond what's already tracked in
-[../DEBT.md](../DEBT.md) (the operator-email dual-copy sync burden in §6
-above is a design characteristic, not filed there as separate debt, since
-no better mechanism is currently available in the Firestore rules
-language).
+The operator-email dual-copy sync burden in §6 above is a design
+characteristic, not filed as debt, since no better mechanism is currently
+available in the Firestore rules language. See [../DEBT.md](../DEBT.md) for
+the one real open item: HOST-03B's hosted Google-credential transport has
+not yet been proven against a real Google popup in a real browser (only unit
+tested — this agent's own sandboxed browser-automation tool cannot open a
+genuine popup window at all, hosted or standalone).
 
 ## 10. Unresolved questions
 

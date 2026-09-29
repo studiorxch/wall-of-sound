@@ -200,23 +200,27 @@ verification evidence. No longer an open item.
   pre-existing risk: `proposals/HOME_PERSISTENT_HOST_V1.md`'s own "Final
   acceptance and unresolved questions" section flagged "auth
   popup/persistence in hosted mode" as unresolved before HOST-03 began.
-- **Current status**: known, disclosed, root cause narrowed but NOT fixed.
-  HOST-03A (recon, see [proposals/HOST_03A_MEMBER_AUTH_BOUNDARY.md](proposals/HOST_03A_MEMBER_AUTH_BOUNDARY.md))
-  isolated the cause specifically to the real Google popup flow (not to
-  "being signed in" generically — an email/password sign-in through the same
-  hosted document does not reproduce it), and observed a concrete
-  `window.open()`-from-a-nested-iframe anomaly supporting a
-  COOP/popup-fragility explanation, though the exact browser mechanism
-  remains unproven. Not reproducible in this agent's own sandboxed
-  browser-automation tool at all (a separate, unrelated `window.opener`/
-  popup-relay limitation blocks even attempting the real popup flow there).
+- **Current status**: HOST-03B implemented HOST-03A's recommended narrow
+  authentication transport/coordination adapter — HOME's own (never-nested)
+  window initiates/completes the Google popup on a hosted surface's behalf,
+  relaying back only an opaque credential for that surface's own unmodified
+  `MemberIdentityAuthority` to consume via `signInWithCredential`. See
+  [home/README.md](home/README.md)'s "HOST-03B" section for the implemented
+  contract and files. **NOT yet proven against a real Google popup in a real
+  browser** — this agent's own sandboxed browser-automation tool cannot open
+  a genuine popup window at all (confirmed AGAIN this pass to be a general
+  tool limitation, not specific to a nested-iframe caller: triggering the
+  popup from HOME's own never-nested window produced the identical
+  `window.opener === null`/same-tab-navigation anomaly). Ordinary hosted
+  MAP↔BLACKBOOK navigation with no auth involved was re-confirmed unaffected
+  by this batch's changes (one HOME runtime UUID held across a full round
+  trip).
 - **Revisit trigger**: before HOME-hosted BLACKBOOK or MAP sign-in is
   presented as safe for real use, or before RADIO-01 begins (RADIO-01 depends
-  on HOME's top-level document surviving ordinary member interactions).
-  HOST-03A recommends a narrow authentication transport/coordination adapter
-  — HOME's own (never-nested) window initiates the Google popup on the
-  child's behalf, relaying only the resulting credential back for the child's
-  own unmodified `MemberIdentityAuthority` to consume via
-  `signInWithCredential` — NOT a broader MEMBER ownership migration. See
-  HOST_03A_MEMBER_AUTH_BOUNDARY.md §9–§12 for the proposed implementation
-  checkpoint and its acceptance matrix; not implemented yet.
+  on HOME's top-level document surviving ordinary member interactions). A
+  real human Chrome pass through the required acceptance sequence (see the
+  HOST-03B completion report) is the one remaining gate — if it passes,
+  promote this from DEBT to a closed item and mark RADIO-01 eligible on this
+  axis; if it still recreates HOME, the transport itself needs further
+  investigation (this was NOT achievable via this agent's own tooling this
+  pass).

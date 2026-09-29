@@ -1,13 +1,17 @@
-# HOME — current architecture and HOST-03 status
+# HOME — current architecture and HOST-03B status
 
 HOST-03 replaces HOST-01/02's remaining controlled BLACKBOOK fixture with the real
 `music/blackbook.html` document, alongside HOST-02's real MAP/SUBWAY (`/wall-app`,
 via the existing dev proxy). Both of HOME's two surfaces are now real product
-documents; no fixture remains in the live navigation path. MEMBER and RADIO are not
-migrated — MAP and BLACKBOOK retain independent document-owned RADIO receivers and
-their own existing per-document MEMBER identity consumers. Production canonical
-routing remains future work. The full persistent-host proposal remains unimplemented
-beyond this bounded checkpoint.
+documents; no fixture remains in the live navigation path. HOST-03B adds ONE narrow
+piece of MEMBER-adjacent infrastructure to HOME itself: a hosted Google-credential
+transport (see §"HOST-03B — hosted Google-credential transport" below) — HOME
+initiates/completes the Google popup on a hosted surface's behalf and relays back
+only an opaque credential; each surface's own `MemberIdentityAuthority` (state,
+Firestore member bootstrap, sign-out) is completely unchanged and unmigrated. RADIO
+is not migrated — MAP and BLACKBOOK retain independent document-owned RADIO
+receivers. Production canonical routing remains future work. The full
+persistent-host proposal remains unimplemented beyond this bounded checkpoint.
 
 ## Implementation and ownership
 
@@ -288,6 +292,100 @@ domain-specific save/drain (BLACKBOOK already persists per-stroke, not
 per-session, so a MAP↔BLACKBOOK surface switch carries the same in-flight-write
 risk standalone BLACKBOOK already has on an ordinary link click — not a new
 risk this batch introduces; no new leave-barrier was built). See ../DEBT.md.
-A future checkpoint would migrate MEMBER/RADIO ownership into HOME; neither has
+A future checkpoint would migrate RADIO ownership into HOME; that has not
 begun. No deployment, Firebase writes, production access, or routing changes
 occurred in HOST-01, HOST-02, or HOST-03.
+
+## HOST-03B — hosted Google-credential transport (2026-09-30)
+
+Implements the narrow model recommended by
+[HOST_03A_MEMBER_AUTH_BOUNDARY.md](../proposals/HOST_03A_MEMBER_AUTH_BOUNDARY.md):
+**HOME owns only the browser-sensitive popup transaction; each surface's own
+`MemberIdentityAuthority` is completely unchanged.** This is not MEMBER
+centralization — no member profile, entitlements, sign-out, or Firestore
+member data ownership moved. HOME gained exactly one new dependency: its own
+Firebase Auth app instance, used solely to run `signInWithPopup` from a
+window that (unlike a hosted surface) is never itself nested.
+
+```
+child surface (hosted)                 persistent HOME (never nested)
+  sign-in click
+       │ synchronous, same-origin call (preserves the user gesture)
+       ▼
+  requestGoogleCredential(source, identity) ──▶ activeCaller() gate
+                                                      │
+                                                activeCaller() gate again after
+                                                the popup resolves (surface_left
+                                                if the surface's own navigation
+                                                moved on while the user was
+                                                completing it)
+                                                      │
+                                                signInWithPopup(HOME's own auth)
+                                                      │
+                                              credential.toJSON() (opaque blob)
+       ◀──────────────────────────────────────────────┘
+  memberIdentity.signInWithCredential(credential)
+       │
+  the surface's OWN, unmodified MemberIdentityAuthority completes sign-in
+```
+
+- `shared/member-identity`: `AuthGateway`/`MemberIdentityAuthority` gained one
+  new method, `signInWithCredential(serialized)` — reuses the existing
+  `runAuthOperation("googleSignIn", ...)` path, no new state machine.
+  `FirebaseAuthGateway.signInWithCredential` reconstructs the credential via
+  `OAuthProvider.credentialFromJSON` (the documented generic reconstructor;
+  `GoogleAuthProvider` itself has no such static method) then calls Firebase's
+  own `signInWithCredential`. New `createFirebaseGoogleAuthPopupInitiator`
+  (`firebase/firebaseGoogleAuthPopupInitiator.ts`) is the ONE thing HOME needs:
+  reuses the exact same config/app/emulator bootstrap every other consumer in
+  the package already goes through (no parallel Firebase init path), exposes
+  only `signInWithGooglePopup(): Promise<unknown>` (an opaque `credential.toJSON()`),
+  never constructs a `MemberIdentityAuthority` or touches Firestore.
+- `music/src/data/hostedAuthTypes.ts` (new): `HostedGoogleCredentialResult`,
+  a discriminated `{ok:true,credential} | {ok:false,reason,message?}` — the
+  one new typed contract crossing the HOME/surface boundary. Reasons:
+  `home_unavailable`, `stale_identity`, `popup_blocked`, `popup_closed`,
+  `credential_missing`, `auth_error`, `surface_left`. No silent fallback path
+  exists anywhere in this contract or its callers.
+- `music/src/logic/home/hostedGoogleAuth.ts` (new): `classifyGoogleAuthPopupError`
+  and `performHostedGoogleCredentialRequest` — the pure orchestration/
+  classification logic, unit tested without a browser or real Firebase Auth
+  (same "logic vs. DOM adapter" split `homeNavigation.ts` already established).
+  The identity gate runs BOTH before opening the popup (rejects a stale caller
+  outright, never opens a popup for it) AND after it resolves (`surface_left`
+  if the surface's own navigation moved on while the popup was open — a
+  credential is never handed back to a caller whose context changed).
+- `homeSurfaceContract.ts` / `homeRuntime.ts`: new `requestGoogleCredential`
+  on `HomeSurfaceHost`, gated by the same `activeCaller()` used for
+  `requestNavigate`/`syncArtworkRoute`. `homeRuntime.ts`'s own implementation
+  is a thin DOM/Firebase adapter over `performHostedGoogleCredentialRequest`.
+- `blackbookHomeSurface.ts` / `homeMapSurface.js`: both gained
+  `requestGoogleCredential()`, delegating verbatim to HOME. BLACKBOOK's is
+  TypeScript (same MUSIC/Vite build as HOME); MAP's is the plain-JS
+  `SBE.HomeMapSurface` object HOST-02 already established, extended with one
+  more method — no second MAP-side adapter file.
+- `blackbookRuntime.ts` (`memberButton`) / `subwayMemberRuntime.ts` (the
+  dialog's `google` action): both branch on hosted-context detection ALREADY
+  established by HOST-02/03 (`blackbookHomeSurface`'s `isHome`;
+  `window.SBE.HomeMapSurface`'s presence) — never bare
+  `window.self !== window.top`. Hosted calls the new transport and completes
+  via `signInWithCredential`; standalone/embedded is completely unchanged
+  (still calls `signInWithGoogle()` directly). Neither ever falls back to a
+  local popup after a hosted failure — every failure surfaces an explicit,
+  reason-specific status message instead.
+
+**Verified this pass:** ordinary hosted MAP↔BLACKBOOK navigation (no auth
+involved) is unaffected by these changes — re-confirmed via real Chrome
+acceptance, one HOME runtime UUID held across a full round trip after this
+batch's edits. **Not verified this pass:** a real Google popup completing
+through the new hosted transport. This agent's own sandboxed browser-
+automation tool cannot open a genuine separate popup window at all — this
+was newly confirmed to be a GENERAL limitation of the tool (not specific to
+a nested-iframe caller, as HOST-03A's own investigation had narrowed it to):
+triggering the popup from HOME's own never-nested window in this session
+produced the identical `window.opener === null` / same-tab-navigation
+anomaly HOST-03A observed from BLACKBOOK's nested context. This tool
+therefore cannot validate ANY popup-based flow, hosted or standalone, and
+real human Chrome acceptance is required before this transport can be
+considered proven. See HOST_03A_MEMBER_AUTH_BOUNDARY.md's own status update
+and the human-acceptance steps in this batch's completion report.

@@ -1,5 +1,8 @@
+import { createFirebaseGoogleAuthPopupInitiator, type GoogleAuthPopupInitiator } from "@studiorich/member-identity";
 import type { HomeRoute, HomeSurfaceIdentity } from "../data/homeRouteTypes";
+import type { HostedGoogleCredentialResult } from "../data/hostedAuthTypes";
 import { createHomeNavigation } from "../logic/home/homeNavigation";
+import { performHostedGoogleCredentialRequest } from "../logic/home/hostedGoogleAuth";
 import { matchesSurfaceIdentity, serializeHomeRoute } from "../logic/home/homeRoutes";
 import type { HomeSurfaceHost } from "./homeSurfaceContract";
 
@@ -82,12 +85,35 @@ function activeCaller(source: Document, identity: HomeSurfaceIdentity): boolean 
   const expected = navigation.getExpectedIdentity();
   return navigation.getState().phase === "active" && expectedDocument(source) && expected !== null && matchesSurfaceIdentity(expected, identity);
 }
+// HOST-03B -- constructed lazily (only once a hosted surface actually
+// requests it), reusing the exact same config/emulator bootstrap every
+// other Firebase consumer in this repo already goes through. HOME never
+// otherwise touches Firebase Auth -- this is the one, minimum dependency
+// the hosted-authentication transport requires (see HOST_03A_MEMBER_AUTH_BOUNDARY.md).
+let googleAuthPopupInitiator: GoogleAuthPopupInitiator | undefined;
+function getGoogleAuthPopupInitiator(): GoogleAuthPopupInitiator {
+  googleAuthPopupInitiator ??= createFirebaseGoogleAuthPopupInitiator(import.meta.env);
+  return googleAuthPopupInitiator;
+}
+/**
+ * HOST-03B -- the hosted authentication transport's DOM/Firebase adapter.
+ * Orchestration (identity gating, error classification, never falling back)
+ * lives in `performHostedGoogleCredentialRequest` (`logic/home/hostedGoogleAuth.ts`),
+ * unit tested there without a browser or a real Firebase Auth instance.
+ */
+function requestGoogleCredential(source: Document, identity: HomeSurfaceIdentity): Promise<HostedGoogleCredentialResult> {
+  return performHostedGoogleCredentialRequest({
+    isActiveCaller: () => activeCaller(source, identity),
+    signInWithGooglePopup: () => getGoogleAuthPopupInitiator().signInWithGooglePopup(),
+  });
+}
 const api: HomeSurfaceHost = Object.freeze({
   version: 1,
   ready: acceptReady,
   requestNavigate: (source: Document, identity: HomeSurfaceIdentity, destination: unknown) => activeCaller(source, identity) && navigation.requestNavigate(destination),
   replaceArtwork: (source: Document, identity: HomeSurfaceIdentity, artworkId: unknown) => activeCaller(source, identity) && navigation.replaceArtwork(artworkId),
   syncArtworkRoute: (source: Document, identity: HomeSurfaceIdentity, artworkId: unknown) => activeCaller(source, identity) && navigation.syncArtworkRoute(artworkId),
+  requestGoogleCredential,
 });
 window.StudioRichHome = api;
 
