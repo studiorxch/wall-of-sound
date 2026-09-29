@@ -1,6 +1,7 @@
-import { describe, it, expect } from "vitest";
-import { findProgramsForStation, planProgramLifecycleAction, findConflictingProgramForUpdate } from "./radioProgramLifecycle";
-import type { RadioProgramSummary } from "@studiorich/member-identity";
+import { describe, it, expect, vi } from "vitest";
+import { findProgramsForStation, planProgramLifecycleAction, findConflictingProgramForUpdate, listSchedulablePlaylists, resolveProgramForSchedule } from "./radioProgramLifecycle";
+import type { CreateRadioProgramInput, EventRadioRepository, RadioProgramSummary, UpdateRadioProgramInput } from "@studiorich/member-identity";
+import type { RadioWebExportRecord } from "../../data/radioWebBundleTypes";
 
 function program(overrides: Partial<RadioProgramSummary> = {}): RadioProgramSummary {
   return {
@@ -73,5 +74,104 @@ describe("findConflictingProgramForUpdate -- collision guard for the update path
     const target = program({ id: "target", bundleVersion: 1 });
     // target itself already "claims" v1 -- updating IT to v1 (a no-op) must not self-conflict.
     expect(findConflictingProgramForUpdate([target], "target", "radplaylist_soft_motion", 1)).toBeNull();
+  });
+});
+
+function exportRecord(overrides: Partial<RadioWebExportRecord> = {}): RadioWebExportRecord {
+  return {
+    id: "radweb_1", radioPlaylistId: "radplaylist_1", slug: "soft-motion-radio", bundleVersion: 1,
+    exportedAt: "2026-09-29T00:00:00.000Z", contentSignature: "sig", totalByteSize: 1000,
+    totalDurationSeconds: 1546.6, entryCount: 11, validation: { ok: true, checkedAt: "2026-09-29T00:00:00.000Z" },
+    exportPath: "/radio-web-export/soft-motion-radio/v1/",
+    ...overrides,
+  };
+}
+
+describe("listSchedulablePlaylists -- RADIO-04", () => {
+  it("includes a playlist only once it has BOTH a local export AND a matching Sites publication", () => {
+    const playlists = [{ id: "radplaylist_1", title: "Soft Motion Radio" }];
+    const exports = [exportRecord()];
+    const sitesPubs = [{ radioPlaylistId: "radplaylist_1", slug: "soft-motion-radio", bundleVersion: 1 }];
+    const result = listSchedulablePlaylists(playlists, exports, sitesPubs);
+    expect(result).toEqual([{ radioPlaylistId: "radplaylist_1", title: "Soft Motion Radio", latestExport: exports[0] }]);
+  });
+
+  it("excludes a playlist with a local export but NO matching Sites publication -- never offers an unpublished package", () => {
+    const playlists = [{ id: "radplaylist_1", title: "Soft Motion Radio" }];
+    const exports = [exportRecord()];
+    const result = listSchedulablePlaylists(playlists, exports, []);
+    expect(result).toEqual([]);
+  });
+
+  it("excludes a playlist with no export at all", () => {
+    const playlists = [{ id: "radplaylist_1", title: "Soft Motion Radio" }];
+    expect(listSchedulablePlaylists(playlists, [], [])).toEqual([]);
+  });
+
+  it("uses the LATEST export version, and requires the Sites publication to match that exact version", () => {
+    const playlists = [{ id: "radplaylist_1", title: "Soft Motion Radio" }];
+    const v1 = exportRecord({ id: "radweb_1", bundleVersion: 1 });
+    const v2 = exportRecord({ id: "radweb_2", bundleVersion: 2 });
+    // Only v1 was ever published to Sites -- v2 exists locally but isn't live yet.
+    const sitesPubs = [{ radioPlaylistId: "radplaylist_1", slug: "soft-motion-radio", bundleVersion: 1 }];
+    const result = listSchedulablePlaylists(playlists, [v1, v2], sitesPubs);
+    expect(result).toEqual([]); // latestExport is v2, but only v1 is Sites-published -- not schedulable yet
+  });
+});
+
+function fakeRepo(overrides: Partial<{ createRadioProgram: EventRadioRepository["createRadioProgram"]; updateRadioProgram: EventRadioRepository["updateRadioProgram"] }> = {}) {
+  return {
+    createRadioProgram: overrides.createRadioProgram ?? vi.fn(async (input: CreateRadioProgramInput) => ({ id: input.programId, title: input.title, manifestBaseUrl: input.manifestBaseUrl, trackCount: input.trackCount, totalDurationSeconds: input.totalDurationSeconds, stationId: input.stationId, bundleVersion: input.bundleVersion })),
+    updateRadioProgram: overrides.updateRadioProgram ?? vi.fn(async (input: UpdateRadioProgramInput) => ({ id: input.programId, title: input.title, manifestBaseUrl: input.manifestBaseUrl, trackCount: input.trackCount, totalDurationSeconds: input.totalDurationSeconds, stationId: input.stationId, bundleVersion: input.bundleVersion })),
+  };
+}
+
+describe("resolveProgramForSchedule -- RADIO-04 (the ONE place Program create/update happens for scheduling)", () => {
+  const schedulable = { radioPlaylistId: "radplaylist_1", title: "Soft Motion Radio", latestExport: exportRecord({ bundleVersion: 2, entryCount: 11, totalDurationSeconds: 1546.6 }) };
+
+  it("no existing Program for this station -> creates one via createRadioProgram, never updateRadioProgram", async () => {
+    const repo = fakeRepo();
+    const created = await resolveProgramForSchedule(repo, schedulable, []);
+    expect(repo.createRadioProgram).toHaveBeenCalledTimes(1);
+    expect(repo.updateRadioProgram).not.toHaveBeenCalled();
+    expect(created.stationId).toBe("radplaylist_1");
+    expect(created.bundleVersion).toBe(2);
+  });
+
+  it("an existing Program behind the latest version -> updates it in place, preserving programId, never creates a second Program", async () => {
+    const existing = program({ id: "radprogram_stable", stationId: "radplaylist_1", bundleVersion: 1 });
+    const repo = fakeRepo();
+    const result = await resolveProgramForSchedule(repo, schedulable, [existing]);
+    expect(repo.updateRadioProgram).toHaveBeenCalledTimes(1);
+    expect(repo.createRadioProgram).not.toHaveBeenCalled();
+    expect(result.id).toBe("radprogram_stable");
+    expect(result.bundleVersion).toBe(2);
+  });
+
+  it("an existing Program already at the latest version -> reused as-is, no write at all", async () => {
+    const existing = program({ id: "radprogram_stable", stationId: "radplaylist_1", bundleVersion: 2 });
+    const repo = fakeRepo();
+    const result = await resolveProgramForSchedule(repo, schedulable, [existing]);
+    expect(repo.updateRadioProgram).not.toHaveBeenCalled();
+    expect(repo.createRadioProgram).not.toHaveBeenCalled();
+    expect(result).toBe(existing);
+  });
+
+  it("ambiguous (more than one Program for this station) without a preferredProgramId -> throws, never silently picks one", async () => {
+    const a = program({ id: "a", stationId: "radplaylist_1" });
+    const b = program({ id: "b", stationId: "radplaylist_1" });
+    const repo = fakeRepo();
+    await expect(resolveProgramForSchedule(repo, schedulable, [a, b])).rejects.toThrow("radio_program_ambiguous_for_station");
+    expect(repo.createRadioProgram).not.toHaveBeenCalled();
+    expect(repo.updateRadioProgram).not.toHaveBeenCalled();
+  });
+
+  it("ambiguous WITH an explicit preferredProgramId -> updates exactly that one", async () => {
+    const a = program({ id: "a", stationId: "radplaylist_1" });
+    const b = program({ id: "b", stationId: "radplaylist_1" });
+    const repo = fakeRepo();
+    const result = await resolveProgramForSchedule(repo, schedulable, [a, b], "b");
+    expect(repo.updateRadioProgram).toHaveBeenCalledTimes(1);
+    expect(result.id).toBe("b");
   });
 });

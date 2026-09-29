@@ -14,16 +14,21 @@ RadioPlaylist
 immutable RadioWebManifest Package
   ↓ referenced by
 Program
-  ↓ scheduled by
-Channel
+  ↓ (RADIO-04) optionally scheduled by
+RadioScheduleBlock                       -- Program x Channel x start x end
+  ↓ takes priority during its own window
+Channel                                   -- otherwise: continuous rotation
   ↓ deterministic wall-clock resolution
 Broadcast State
   ↓ consumed by
 RADIO / MAP / BLACKBOOK / future surfaces
 ```
 
-**`RadioPlaylist ≠ Package ≠ Program ≠ Channel`** — four distinct things,
-never collapsed into each other.
+**`RadioPlaylist ≠ Package ≠ Program ≠ Schedule ≠ Channel`** — five distinct
+things, never collapsed into each other. A Program does not need a Schedule
+entry to be heard (Channel rotation plays it on its own repeating cycle);
+a Schedule entry only ever narrows WHEN a specific Program temporarily wins
+over that same rotation — see "RADIO Schedule (RADIO-04)" below.
 
 ## Identity
 
@@ -32,6 +37,8 @@ RadioPlaylist.id                 authoring identity        (music/src/data/radio
 {stationId, bundleVersion}       immutable package identity (music/src/data/radioWebBundleTypes.ts)
 programId                        operational Program identity (generateRadioProgramId(), independent of package identity)
 channelId                        broadcast Channel identity  (fixed "studiorich-radio" for the first Channel)
+RadioScheduleBlock.id             one scheduled occurrence's identity (generateRadioScheduleBlockId(), RADIO-04)
+seriesId                          groups occurrences generated from ONE recurring request; null for a one-off — never re-derives an occurrence, history/grouping only
 slug + version                   public routing identity ONLY — never used as Program/Channel identity
 ```
 
@@ -75,6 +82,7 @@ created.
 ```
 Firestore radioPrograms          Program catalog
 Firestore radioChannels          Channel authority (status + rotation: anchorAtMs + programIds)
+Firestore radioScheduleBlocks    canonical Schedule authority — Program x Channel x start x end (RADIO-04)
 Firestore eventProgram/current   single active event config (personal/clock playback mode)
 immutable public manifest        package/content authority (radio-manifest.json — trackCount, totalDurationSeconds, etc., all read verbatim, never recomputed by a consumer)
 sessionStorage                   Personal resume ONLY (radioResumableSession.ts) — never broadcast authority
@@ -101,6 +109,13 @@ resolveTrackAtProgramOffset               "Program Clock" — which track owns t
 
 resolveChannelTrackBroadcast              composes the Channel clock + Program clock + manifest fetch
   (music/src/logic/radio/channelTrackBroadcast.ts)
+
+resolveChannelTrackBroadcastWithSchedule  RADIO-04 -- explicit priority wrapper: an active
+  (music/src/logic/radio/               RadioScheduleBlock's own Program wins for its own
+   radioScheduleBroadcastPriority.ts)    window; otherwise delegates to
+                                         resolveChannelTrackBroadcast UNCHANGED (byte-identical
+                                         call) -- see "RADIO Schedule (RADIO-04)" below. This is
+                                         the function the REAL listener path now calls.
 
 channelListenerPlayback.ts                drives real audio via DualDeckPlaybackEngine
   (music/src/audio/DualDeckPlaybackEngine.ts)
@@ -134,12 +149,152 @@ by "Start/Restart Rotation Now" (always `Date.now()` at click time) —
 ordinary rotation edits (add/remove/reorder, Save Rotation) leave it
 unchanged.
 
-The current domain model does not represent: a future-dated start for a
-Program, a time-boxed override that reverts to normal rotation afterward, or
-recurring/calendar scheduling (e.g. "every Friday at 8pm"). These are not
-built and not partially built — the schema has no field for any of them.
+**`RadioChannelRotation`/`anchorAtMs` themselves still represent none of
+this — unchanged by RADIO-04.** There is still no future-dated-start,
+time-boxed-override, or recurring/calendar field anywhere on
+`RadioChannel`/`RadioChannelRotation`, and nothing in this batch added one
+— `anchorAtMs` is changed by exactly the same one action as before
+("Start/Restart Rotation Now"), never by a Schedule write. What RADIO-04
+added is a SEPARATE authority (`radioScheduleBlocks`, see "RADIO Schedule
+(RADIO-04)" below) that can win priority over rotation for a bounded
+window, without rotation itself ever being mutated, paused, or restarted
+to make that happen. Do not read the existence of Schedule as rotation
+having grown a calendar — it hasn't; a second, explicit-priority authority
+was added instead, exactly as this architecture's own prior recon required
+("do not fake those capabilities using anchorAtMs if they are not
+represented by the current model").
+
+## RADIO Schedule (RADIO-04)
+
+The canonical `Program x Channel x start x end` authority, closing the gap
+the RADIO/PROMOTER scheduling recon identified: neither `RadioChannelRotation`
+(a repeating cycle, no calendar) nor `eventProgram/current` (a global
+singleton, no channel reference, no duration) could represent a Program
+scheduled for a specific dated window on a specific Channel.
+
+```
+Firestore radioScheduleBlocks/{blockId}
+  channelId, programId, startAtMs, endAtMs (epoch ms, half-open [start, end)),
+  status: "scheduled" | "cancelled", seriesId, recurrence, createdAt/updatedAt/updatedBy
+```
+
+**Persistence — materialized occurrences, not a virtual rule.** A recurring
+request writes one real, independently-persisted document PER occurrence
+(sharing one `seriesId`), never a single rule expanded at read time.
+Recurrence is always bounded (`untilMs` or `count` — `validateRecurrence`,
+`shared/member-identity/src/firebase/firestoreRadioScheduleRepository.ts`,
+rejects an unbounded rule), specifically so every occurrence CAN be
+materialized up front. This means: **editing/cancelling a series never
+touches a past, already-aired occurrence** — each occurrence is its own
+document; nothing here ever re-derives one from a rule. A block is never
+hard-deleted (`firestore.rules`' own `allow delete: if false` for this
+collection, not just an app-level omission) — correcting a mistake means
+cancelling the occurrence (`cancelScheduleBlock`, status only, never
+deleted) and creating a fresh one.
+
+**Recurrence support (V1): `none` | `daily` | `weekly`, bounded by
+`untilMs` or `count`.** `music/src/logic/radio/radioScheduleRecurrence.ts`'s
+`materializeOccurrences` generates every occurrence at creation time, with
+a hard safety cap (`MAX_RADIO_SCHEDULE_OCCURRENCES = 366`) independent of
+whatever bound the operator requested. Monthly/custom-interval recurrence
+and any calendar-grid concept (Day/Week/Month) are NOT implemented — the
+operator UI (`RadioProgrammingView.tsx`) is a weekly VIEWPORT onto real
+dated weeks (Prev/This/Next), never the data boundary; a Month calendar
+was explicitly out of scope for this batch.
+
+**Conflict prevention — explicit rejection, never silent override.**
+`findRadioScheduleConflicts` (pure, exported from
+`firestoreRadioScheduleRepository.ts`) checks every candidate occurrence
+against every OTHER existing non-cancelled block on the same Channel, and
+against every other candidate in the same batch (a bad recurring request
+can self-conflict). `createScheduleBlocks` re-checks this server-round-
+trip-side (the UI's own pre-check is a courtesy, never the enforcement
+boundary) and rejects the WHOLE batch — nothing is written — on any
+overlap. Half-open interval: a block ending exactly when another starts is
+not a conflict.
+
+**Channel priority — explicit resolution, never rotation mutation.**
+`resolveChannelTrackBroadcastWithSchedule`
+(`music/src/logic/radio/radioScheduleBroadcastPriority.ts`) is the ONE new
+decision point, and the exact wrapper this architecture's own priority
+model requires:
+
+```
+BEFORE a scheduled window  -> resolveChannelTrackBroadcast() unchanged.
+DURING a scheduled window  -> the scheduled block's own Program wins,
+                               resolved here (loops its own manifest via
+                               the same modulo-cycle math rotation already
+                               uses, if the window outlasts the Program's
+                               own duration -- the "one 6-8 hour Program
+                               repeatedly" bootstrap case).
+AFTER a scheduled window   -> resolveChannelTrackBroadcast() unchanged
+                               again -- NO special "rejoin" logic exists or
+                               is needed, because that resolver was ALREADY
+                               a pure function of (state, nowMs) with no
+                               stored cursor BEFORE this batch (see
+                               "Canonical runtime path" above). Simply not
+                               intercepting after the window ends is
+                               sufficient by construction.
+```
+
+`anchorAtMs`/`RadioChannelRotation` are never read for writing anywhere in
+this module — structurally impossible, since the Channel repository type
+it depends on (`Pick<RadioChannelRepository, "getRadioChannel">`) has no
+update method at all. Verified directly:
+`radioScheduleBroadcastPriority.test.ts`'s own dedicated test asserts
+`anchorAtMs` stays byte-identical across resolution calls before, during,
+and after a scheduled window.
+
+**Wired into the real listener path.** `createRadioChannelReceiver.ts` (the
+ONE canonical listener factory every real surface — MAP, BLACKBOOK,
+standalone — already goes through) now passes a thin closure wrapping
+`resolveChannelTrackBroadcastWithSchedule` as `channelListenerPlayback.ts`'s
+existing `resolve?: typeof resolveChannelTrackBroadcast` injection point —
+zero changes to that file's own types or logic. When no block is active,
+this closure delegates 100% to the exact same function every other
+consumer (Channel Control, diagnostics) still calls directly — behavior is
+byte-identical to pre-RADIO-04 whenever nothing is scheduled.
+
+**Program creation/reuse moved here — no longer in Playlist Publication
+Tracking.** `RadioPlaylistPublishPanel.tsx` no longer offers Create/Update
+Program at all (see "Operator playlist/programming workflow" below for the
+corrected chain). `music/src/logic/radio/radioProgramLifecycle.ts`'s
+`resolveProgramForSchedule` is the ONE place `createRadioProgram`/
+`updateRadioProgram` are called for scheduling — reuses RADIO-03's exact
+`planProgramLifecycleAction` decision (create / update-in-place / already-
+up-to-date / ambiguous-needs-operator-choice), never a second Program-
+construction path. `listSchedulablePlaylists` gates which RadioPlaylists
+even appear in the scheduling picker on the same "real export AND matching
+Sites publication" discipline the old Publish-panel Program buttons used.
+
+**Public Now/Next/Upcoming — reads the canonical authority, never a second
+one.** `music/src/logic/radio/radioPublicProgramGuide.ts`'s
+`resolveRadioProgramGuide` composes `findActiveScheduleBlock`/
+`findNextScheduleBlock`/`listUpcomingScheduleBlocks` (the same pure
+selectors the priority resolver uses) with the existing Channel Clock as
+the rotation fallback for `now`. Scope, deliberately smaller than
+"predict all future programming": `next`/`upcoming` only ever report
+SCHEDULED blocks — normal Channel rotation's own future cycling is not
+simulated forward in time (Channel rotation is a repeating cycle, not a
+calendar; predicting its far future is a separate, larger capability this
+batch does not claim). `now` correctly reflects either source. Rendered
+today inside `RadioProgrammingView.tsx` itself (the smallest read
+representation proving the authority works) — no separate public product
+surface exists yet; future MEMBER reminders/notifications are expected to
+consume this same `resolveRadioProgramGuide` function, not a new one.
 
 ## What is NOT Channel authority
+
+This section is about the `RadioChannel` DOCUMENT's own authority
+(`rotation.anchorAtMs`/`programIds`) — none of the items below ever write
+to it or are read by `resolveChannelRotation`/`resolveCurrentChannelBroadcast`.
+`radioScheduleBlocks` (RADIO-04) is deliberately NOT listed here even
+though it's also a separate collection: it DOES influence what a listener
+hears, on purpose, via the explicit `resolveChannelTrackBroadcastWithSchedule`
+priority wrapper described above — but it still never reads, writes, or
+requires knowledge of the Channel document's own `anchorAtMs`/`programIds`
+to do so. That's the distinction: the items below have ZERO influence on
+broadcast state; Schedule has bounded, explicit, non-mutating influence.
 
 - **`eventProgram/current`**
   (`shared/member-identity/src/data/eventRadioTypes.ts`) is a separate,
@@ -182,9 +337,16 @@ reachable from production.
 ## Operator playlist/programming workflow (current facts)
 
 Batch 0929-3 (lifecycle streamlining, on top of RADIO-02's own terminal-only
-fix) consolidated the chain to ONE operator Publish action. The full chain
-has real, working operator UI end to end, with no Terminal step and no
-separate manual "Publish to Sites" click:
+fix) consolidated the playlist chain to ONE operator Publish action.
+RADIO-04 (batch 0929-6) then drew the product boundary explicitly: **the
+playlist-publication workflow ends at Publish.** Program creation/update is
+no longer a required step of publishing a Playlist — it happens later,
+implicitly, behind the RADIO → Programming scheduling workflow, using the
+exact same RADIO-03 lifecycle logic (`resolveProgramForSchedule` →
+`planProgramLifecycleAction` → `createRadioProgram`/`updateRadioProgram`),
+never a second Program-construction path. The full chain has real, working
+operator UI end to end, with no Terminal step and no separate manual
+"Publish to Sites" click, and no separate manual "Create Program" click:
 
 ```
 MUSIC playlist authoring (PlaylistsGrid.tsx: create/open/duplicate/delete)
@@ -199,17 +361,33 @@ RadioMultiTrackPrepWorkspace.tsx — the source RadioPlaylist stays fully
      immutable local Web Bundle version → for a signed-in operator, copy
      that version into the Sites checkout — see "Publish is one action,
      four internal stages" below)
-RadioPlaylistPublishPanel.tsx's "Create Program" / "Update Program to vN"
-  button (operator-gated, only enabled once Publish's own Sites-copy stage
-  has actually succeeded for this version — the one remaining explicit
-  operator decision after a successful Publish; which of the two is
-  offered depends on whether a Program already references this station —
-  RADIO-03, batch 0929-5)
-  ↓ createRadioProgram / updateRadioProgram (real UI call, same programId
-     preserved on update)
+RadioPlaylistPublishPanel.tsx now stops here — "Published vN — ready to
+  schedule in RADIO → Programming." No Program button, no Program state
+  rendered in this panel at all (RADIO-04 removed
+  `handleCreateProgram`/`handleUpdateProgram` and the Program-lifecycle
+  state entirely from this file; playlist publication and RADIO
+  programming are separate operator workflows, per the Creative Interface
+  Doctrine's "does it belong in the current workflow" test).
+  ⇩ (separately, whenever an operator chooses to schedule this Playlist —
+     not required immediately after Publish)
+RadioProgrammingView.tsx ("RADIO → Programming" — a weekly linear/FAST-style
+  grid, not a calendar): pick a Channel → navigate to a dated week →
+  click an open time slot or an existing block's "+ Program"
+  ↓ RadioScheduleBlockDialog.tsx: choose a published, schedulable Playlist
+     (`listSchedulablePlaylists` — same "real export AND matching Sites
+     publication" gate the old Publish-panel Program buttons used) →
+     choose start/end → optionally set bounded recurrence (none / daily /
+     weekly, end by date or occurrence count) → Save
+  ↓ resolveProgramForSchedule (music/src/logic/radio/radioProgramLifecycle.ts)
+     — the ONE place create/update/reuse happens, reusing RADIO-03's
+     planProgramLifecycleAction unchanged — then materializes one
+     RadioScheduleBlock document per occurrence
 channel-control.html's rotation editor (add/remove/reorder Programs via a
   real <select> from listRadioPrograms(), Save Rotation, Activate/
-  Deactivate, Start/Restart Rotation Now)
+  Deactivate, Start/Restart Rotation Now) — unchanged by RADIO-04; a
+  Program still does not need a Schedule entry to be part of normal
+  rotation. A RadioScheduleBlock only ever grants that Program TEMPORARY
+  priority during its own window (see "RADIO Schedule (RADIO-04)" above).
 ```
 
 Per-track approval, per-track preparation, the manual "Export Web
@@ -276,11 +454,13 @@ Current-state facts worth recording here directly:
   Package fields anywhere else — every consumer re-reads
   `listRadioPrograms()` fresh on every resolution, so a Package-reference
   update is picked up by the very next resolution call with no other
-  propagation step. `RadioPlaylistPublishPanel.tsx` now offers "Update
-  Program to vN" instead of "Create Program" whenever a Program already
-  references this station (`radioProgramLifecycle.ts`'s
-  `planProgramLifecycleAction`), so correcting a playlist and republishing
-  never creates a second, redundant Program for the same playlist. Program
+  propagation step. As of RADIO-04, `planProgramLifecycleAction`'s
+  create-vs-update decision is no longer surfaced as a button in
+  `RadioPlaylistPublishPanel.tsx` (that UI was removed — see "Operator
+  playlist/programming workflow" above); it now runs inside
+  `resolveProgramForSchedule` at scheduling time, so correcting a playlist
+  and republishing, then scheduling the new version, still never creates a
+  second, redundant Program for the same station. Program
   has no active/inactive field of its own (only `RadioChannel.status` and
   `EventProgramState.status` model any lifecycle state) — deactivate/
   reactivate was deliberately NOT added to Program in this batch; a

@@ -67,6 +67,16 @@ export interface UpdateRadioChannelInput {
 export interface RadioChannelRepository {
   /** Public read, matches `radioPrograms`/`eventProgram`'s own "PUBLIC/MEMBER read" authority rule. `null` if the channel has never been created. */
   getRadioChannel(channelId: string): Promise<RadioChannel | null>;
+  /**
+   * RADIO-04 -- every real Channel, public read. V1 has exactly one
+   * (`"studiorich-radio"`), but nothing about this schema ever assumed
+   * that (see this type's own header comment) -- a caller needing a
+   * Channel selector (RadioProgrammingView.tsx) previously had no way to
+   * enumerate Channels without already knowing every `channelId` in
+   * advance. Same "fetch the whole collection" convention
+   * `listRadioPrograms()` already uses.
+   */
+  listRadioChannels(): Promise<readonly RadioChannel[]>;
   /** Authorized-operator-only in Firestore rules. Create-only -- a `channelId` collision throws rather than overwriting. Validates every referenced `programId` against the real `radioPrograms` catalog before writing. */
   createRadioChannel(input: CreateRadioChannelInput, createdByMemberId: string): Promise<RadioChannel>;
   /** Authorized-operator-only in Firestore rules. The channel must already exist -- this never creates one. Validates the same way `createRadioChannel` does. */

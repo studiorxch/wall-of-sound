@@ -102,6 +102,16 @@ export class FirestoreRadioChannelRepository implements RadioChannelRepository {
     return decodeRadioChannel(channelId, snapshot.data());
   }
 
+  async listRadioChannels(): Promise<readonly RadioChannel[]> {
+    const snapshot = await getDocs(collection(this.firestore, RADIO_CHANNELS_COLLECTION_PATH));
+    const channels: RadioChannel[] = [];
+    for (const docSnapshot of snapshot.docs) {
+      const decoded = decodeRadioChannel(docSnapshot.id, docSnapshot.data());
+      if (decoded) channels.push(decoded);
+    }
+    return channels;
+  }
+
   /**
    * Create-only: a `channelId` collision throws
    * `radio_channel_id_collision` rather than overwriting -- same

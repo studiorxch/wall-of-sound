@@ -34,19 +34,25 @@ Only systems with strong current evidence are listed. See
   MUSIC browser session.
 - **Canonical owner/location**: `music/src/logic/radio/`,
   `music/src/member/{eventControlRuntime,channelControlRuntime}.ts`,
-  `shared/member-identity` (Program/Channel repositories), `firestore.rules`
-  (`radioPrograms`/`eventProgram`/`radioChannels`), and the separate
-  `studiorich-orbital` repository (public hosting).
+  `shared/member-identity` (Program/Channel/Schedule repositories),
+  `firestore.rules`
+  (`radioPrograms`/`eventProgram`/`radioChannels`/`radioScheduleBlocks`),
+  and the separate `studiorich-orbital` repository (public hosting).
 - **Important persistence**: Firestore `radioPrograms` (Program catalog),
   Firestore `radioChannels` (Channel/rotation authority), Firestore
-  `eventProgram/current` (single active event config), the immutable
-  `radio-manifest.json` package itself (content authority), and
-  `sessionStorage` for personal-resume only (never authority).
+  `radioScheduleBlocks` (Schedule authority — `Program x Channel x start x
+  end`, bounded-priority only, RADIO-04), Firestore `eventProgram/current`
+  (single active event config), the immutable `radio-manifest.json`
+  package itself (content authority), and `sessionStorage` for
+  personal-resume only (never authority).
 - **Primary integration boundaries**: package publication
   (`publish-radio-to-sites.mjs` → `studiorich-orbital`), Program creation
-  (from MUSIC's local export state, or from an already-published package
-  URL via Event Radio Control's bootstrap path), Channel rotation
-  (Channel Control), listener playback (`channelListenerPlayback.ts` +
+  (as of RADIO-04, resolved implicitly at scheduling time by
+  `resolveProgramForSchedule`, or from an already-published package URL
+  via Event Radio Control's bootstrap path — no longer a manual step of
+  MUSIC's Publish workflow), Channel rotation (Channel Control), scheduled-
+  Program priority (`resolveChannelTrackBroadcastWithSchedule`, RADIO-04),
+  listener playback (`channelListenerPlayback.ts` +
   `DualDeckPlaybackEngine`).
 - **Status**: ACTIVE. See [radio/README.md](radio/README.md) for the full
   map — read that before any RADIO-related task.

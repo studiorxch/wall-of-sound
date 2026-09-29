@@ -35,7 +35,8 @@ current status. See [README.md](README.md) for what "current" means here.
 | Personal resume | `radioResumableSession.ts` (`sessionStorage`) — resume state only, never broadcast authority | CANONICAL |
 | MUSIC authoring persistence | MUSIC local state / IndexedDB (`MUSIC_STATE_DB`) | CANONICAL (for authoring only — never a source of truth for anything published) |
 | public package hosting | `radio.studiorich.tv` (separate `studiorich-orbital` repository) | CANONICAL |
-| Program bootstrap from an already-published package | `music/src/logic/radio/programFromManifest.ts` + Event Radio Control's "Add Published Program" section | ACTIVE — the recovery/bootstrap path, independent of MUSIC's local IndexedDB; the MUSIC Publish panel's own "Create Program" remains the normal path when local publication state exists |
+| Program bootstrap from an already-published package | `music/src/logic/radio/programFromManifest.ts` + Event Radio Control's "Add Published Program" section | ACTIVE — the recovery/bootstrap path, independent of MUSIC's local IndexedDB; the normal path (RADIO-04) is `resolveProgramForSchedule` (`radioProgramLifecycle.ts`), called from `RadioScheduleBlockDialog.tsx` at scheduling time, not from the Publish panel — see [radio/README.md](radio/README.md)'s "Operator playlist/programming workflow" |
+| Schedule authority | Firestore `radioScheduleBlocks` (via `RadioScheduleRepository`) | CANONICAL (RADIO-04) — `Program x Channel x start x end`; bounded-priority influence on playback only, never mutates `radioChannels`' own rotation fields — see [radio/README.md](radio/README.md)'s "RADIO Schedule (RADIO-04)" |
 | StudioRich operator identity | `STUDIO_RICH_OPERATOR_EMAILS` (`shared/member-identity/src/data/operatorIdentity.ts`) mirrored by `firestore.rules`' `studioRichOperatorEmails()` | CANONICAL — client copy is UX-only; the rules copy is the real authority, kept in sync by hand |
 
 ## Known noncanonical / replaced mechanisms

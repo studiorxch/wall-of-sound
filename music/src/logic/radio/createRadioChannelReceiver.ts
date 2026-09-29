@@ -11,10 +11,23 @@
 // RADIO resolver chain (resolveChannelTrackBroadcast -> resolveChannelRotation),
 // exactly as before extraction. A receiver, never a second broadcast
 // authority.
+//
+// RADIO-04 (batch 0929-6) -- the real listener path now resolves through
+// resolveChannelTrackBroadcastWithSchedule instead of
+// resolveChannelTrackBroadcast directly, via a thin closure
+// (`resolveWithSchedule` below) that partially applies the schedule
+// repository and otherwise has the EXACT SAME signature
+// channelListenerPlayback.ts's own `resolve?: typeof resolveChannelTrackBroadcast`
+// injection point already expects -- zero changes to that file. When no
+// scheduled block is active, this wrapper delegates 100% to
+// resolveChannelTrackBroadcast unchanged (see radioScheduleBroadcastPriority.ts's
+// own doc); a scheduled Program only ever WINS during its own window,
+// never mutates Channel rotation.
 
 import {
   createFirebaseEventRadioRepository,
   createFirebaseRadioChannelRepository,
+  createFirebaseRadioScheduleRepository,
 } from "@studiorich/member-identity";
 import type { RadioWebManifest } from "../../data/radioWebBundleTypes";
 import { DualDeckPlaybackEngine } from "../../audio/DualDeckPlaybackEngine";
@@ -23,6 +36,8 @@ import {
   type ChannelListenerPlaybackController,
   type ChannelListenerPlaybackOutcome,
 } from "./channelListenerPlayback";
+import { resolveChannelTrackBroadcastWithSchedule } from "./radioScheduleBroadcastPriority";
+import type { ResolveChannelTrackBroadcastInput } from "./channelTrackBroadcast";
 
 /** The one canonical production Channel -- see docs/architecture/radio/README.md. Never a second Channel identity invented here. */
 const CHANNEL_ID = "studiorich-radio";
@@ -75,6 +90,14 @@ function storeVolume(value: number): void {
 export function createRadioChannelReceiver(): RadioChannelReceiver {
   const radioChannelRepository = createFirebaseRadioChannelRepository(import.meta.env);
   const eventRadioRepository = createFirebaseEventRadioRepository(import.meta.env);
+  const radioScheduleRepository = createFirebaseRadioScheduleRepository(import.meta.env);
+
+  // Same signature as resolveChannelTrackBroadcast itself -- satisfies
+  // channelListenerPlayback.ts's existing `resolve?: typeof
+  // resolveChannelTrackBroadcast` injection point unchanged.
+  function resolveWithSchedule(input: ResolveChannelTrackBroadcastInput) {
+    return resolveChannelTrackBroadcastWithSchedule({ ...input, radioScheduleRepository });
+  }
 
   async function fetchManifest(manifestBaseUrl: string): Promise<RadioWebManifest> {
     const response = await fetch(`${manifestBaseUrl}radio-manifest.json`);
@@ -154,6 +177,7 @@ export function createRadioChannelReceiver(): RadioChannelReceiver {
       eventRadioRepository,
       fetchManifest,
       engine,
+      resolve: resolveWithSchedule,
     });
     controller.subscribe((outcome) => void handleOutcome(outcome));
     setState({ status: "on", live, nowPlaying: null });

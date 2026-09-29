@@ -90,3 +90,20 @@ export {
   type RadioChannelStatus,
   type UpdateRadioChannelInput,
 } from "./data/radioChannelTypes.js";
+export { createFirebaseRadioScheduleRepository } from "./firebase/createFirebaseRadioScheduleRepository.js";
+export {
+  validateCreateRadioScheduleBlockInput,
+  validateRecurrence as validateRadioScheduleRecurrence,
+  findScheduleConflicts as findRadioScheduleConflicts,
+  RADIO_SCHEDULE_BLOCKS_COLLECTION_PATH,
+} from "./firebase/firestoreRadioScheduleRepository.js";
+export {
+  generateRadioScheduleBlockId,
+  generateRadioScheduleSeriesId,
+  type CreateRadioScheduleBlockInput,
+  type RadioScheduleBlock,
+  type RadioScheduleBlockStatus,
+  type RadioScheduleRecurrence,
+  type RadioScheduleRecurrenceFrequency,
+  type RadioScheduleRepository,
+} from "./data/radioScheduleTypes.js";

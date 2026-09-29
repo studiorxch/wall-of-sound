@@ -9,7 +9,7 @@ import { type TrackDragPayload } from "../logic/playlistMembership";
 // between 0722 and this build (redirected on sight, no real nav row). This
 // build reactivates it as a real destination: the canonical, multi-source
 // Loop Library, with a real "Loop Library" row under Collections below.
-export type ViewMode = "playlist" | "library" | "library_dashboard" | "groups" | "orphans" | "excluded" | "locks" | "playlists_grid" | "sampler_banks_grid" | "crates_grid" | "crate_detail" | "artists" | "mood_signal_audit" | "analyzer_review" | "loop_library" | "sectional_looper" | "glyph_audio" | "edit" | "perform" | "radio" | "radio_playlists_grid" | "radio_banks_grid" | "collections_overview" | "radio_loopchain_player" | "machine_life_research" | "suno_library" | "voice_library";
+export type ViewMode = "playlist" | "library" | "library_dashboard" | "groups" | "orphans" | "excluded" | "locks" | "playlists_grid" | "sampler_banks_grid" | "crates_grid" | "crate_detail" | "artists" | "mood_signal_audit" | "analyzer_review" | "loop_library" | "sectional_looper" | "glyph_audio" | "edit" | "perform" | "radio" | "radio_playlists_grid" | "radio_banks_grid" | "radio_programming" | "collections_overview" | "radio_loopchain_player" | "machine_life_research" | "suno_library" | "voice_library";
 
 type Props = {
   playlists: PlaylistRecord[];
@@ -266,6 +266,13 @@ export function FileManager({
               nested
               active={viewMode === "radio_banks_grid"}
               onClick={() => onViewModeChange("radio_banks_grid")}
+            />
+            <NavRow
+              icon="repeat"
+              label="Programming"
+              nested
+              active={viewMode === "radio_programming"}
+              onClick={() => onViewModeChange("radio_programming")}
             />
           </div>
         </div>

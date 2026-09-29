@@ -483,5 +483,53 @@ service cloud.firestore {
         && request.resource.data.updatedBy is string;
       allow delete: if isEventOperator();
     }
+
+    // RADIO-04 -- the canonical `Program x Channel x start x end` schedule
+    // authority (see docs/architecture/radio/README.md). PUBLIC READ, same
+    // rationale as every other RADIO catalog above -- the public program
+    // guide and any listener resolve this with zero StudioRich
+    // authentication. Split into `allow create`/`allow update` (unlike
+    // radioPrograms/radioChannels' shared `allow write`) because the two
+    // operations genuinely validate differently: create only ever writes
+    // status "scheduled"; update may only flip status to "cancelled" --
+    // every other field is immutable once created (a schedule OCCURRENCE
+    // is corrected by cancelling it and creating a new one, never by
+    // rewriting its own start/end/program in place). `allow delete: if
+    // false` -- a schedule block is NEVER hard-deleted by any client,
+    // reinforcing the "historical occurrences must not disappear" doctrine
+    // at the rules layer itself, not just by omission from the app's own
+    // repository interface.
+    match /radioScheduleBlocks/{blockId} {
+      allow read: if true;
+      allow create: if isEventOperator()
+        && request.resource.data.keys().hasAll(['channelId', 'programId', 'startAtMs', 'endAtMs', 'status', 'seriesId', 'recurrence', 'createdAt', 'updatedAt', 'updatedBy'])
+        && request.resource.data.keys().hasOnly(['channelId', 'programId', 'startAtMs', 'endAtMs', 'status', 'seriesId', 'recurrence', 'createdAt', 'updatedAt', 'updatedBy'])
+        && request.resource.data.channelId is string
+        && request.resource.data.channelId.size() > 0
+        && request.resource.data.programId is string
+        && request.resource.data.programId.size() > 0
+        && request.resource.data.startAtMs is number
+        && request.resource.data.endAtMs is number
+        && request.resource.data.endAtMs > request.resource.data.startAtMs
+        && request.resource.data.status == 'scheduled'
+        && (request.resource.data.seriesId == null || (request.resource.data.seriesId is string && request.resource.data.seriesId.size() > 0))
+        && (request.resource.data.recurrence == null || request.resource.data.recurrence is map)
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.updatedBy is string;
+      allow update: if isEventOperator()
+        && request.resource.data.keys().hasAll(['channelId', 'programId', 'startAtMs', 'endAtMs', 'status', 'seriesId', 'recurrence', 'createdAt', 'updatedAt', 'updatedBy'])
+        && request.resource.data.keys().hasOnly(['channelId', 'programId', 'startAtMs', 'endAtMs', 'status', 'seriesId', 'recurrence', 'createdAt', 'updatedAt', 'updatedBy'])
+        && request.resource.data.channelId == resource.data.channelId
+        && request.resource.data.programId == resource.data.programId
+        && request.resource.data.startAtMs == resource.data.startAtMs
+        && request.resource.data.endAtMs == resource.data.endAtMs
+        && request.resource.data.seriesId == resource.data.seriesId
+        && request.resource.data.status in ['scheduled', 'cancelled']
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.updatedBy is string;
+      allow delete: if false;
+    }
   }
 }

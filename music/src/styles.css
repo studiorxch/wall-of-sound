@@ -13760,3 +13760,35 @@ td.cat-col-frozen { z-index: 1; }
 .suno-detail-analysis-status--ready { color: var(--status-good); }
 .suno-detail-analysis-status--pending { color: var(--status-warning); }
 .suno-detail-analysis-warnings { font-size: 11px; color: var(--text-dim); margin-top: 8px; }
+
+/* ── RADIO Programming weekly grid (RADIO-04) ── */
+.radio-programming-view { display: flex; flex-direction: column; height: 100%; overflow: hidden; padding: 16px; gap: 10px; }
+.radio-programming-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.radio-programming-header h2 { margin: 0; }
+.radio-programming-channel-select select { margin-left: 6px; background: var(--surface2); color: var(--text-main); border: 1px solid var(--border2); border-radius: 4px; padding: 4px 8px; }
+.radio-programming-guide { display: flex; gap: 20px; flex-wrap: wrap; font-size: 12px; color: var(--text-mid); background: var(--surface2); border: 1px solid var(--border2); border-radius: 6px; padding: 8px 12px; }
+.radio-programming-week-nav { display: flex; align-items: center; gap: 10px; }
+.radio-programming-week-label { font-size: 13px; font-weight: 600; min-width: 180px; text-align: center; }
+.radio-programming-legend { margin: 0; }
+
+.radio-programming-grid { display: flex; overflow: auto; border: 1px solid var(--border2); border-radius: 6px; flex: 1; min-height: 0; }
+.radio-programming-grid-gutter { flex: 0 0 52px; border-right: 1px solid var(--border2); background: var(--surface2); }
+.radio-programming-hour-label { font-size: 10px; color: var(--text-dim); text-align: right; padding-right: 6px; box-sizing: border-box; border-top: 1px solid var(--border, #2a2a2e); }
+.radio-programming-day-col { flex: 1; min-width: 120px; border-right: 1px solid var(--border, #2a2a2e); display: flex; flex-direction: column; }
+.radio-programming-day-col--today { background: color-mix(in srgb, var(--accent, #4a90e2) 6%, transparent); }
+.radio-programming-day-header { flex: 0 0 auto; font-size: 11px; font-weight: 600; text-align: center; padding: 6px 0; border-bottom: 1px solid var(--border2); position: sticky; top: 0; background: var(--bg-panel, #1a1a1e); z-index: 1; }
+.radio-programming-day-body { position: relative; }
+.radio-programming-hour-slot { position: absolute; left: 0; right: 0; width: 100%; background: transparent; border: none; border-top: 1px solid var(--border, #2a2a2e); cursor: pointer; padding: 0; }
+.radio-programming-hour-slot:hover:not(:disabled) { background: color-mix(in srgb, var(--accent, #4a90e2) 10%, transparent); }
+.radio-programming-hour-slot:disabled { cursor: default; }
+.radio-programming-block { position: absolute; left: 2px; right: 2px; background: var(--accent, #4a90e2); color: #fff; border: 1px solid color-mix(in srgb, var(--accent, #4a90e2) 60%, black); border-radius: 4px; padding: 2px 6px; font-size: 10px; text-align: left; overflow: hidden; cursor: pointer; display: flex; flex-direction: column; gap: 1px; z-index: 2; }
+.radio-programming-block--live { outline: 2px solid var(--status-good, #4caf50); outline-offset: 1px; }
+.radio-programming-block-title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.radio-programming-block-time { opacity: 0.85; }
+
+.radio-schedule-block-dialog { max-width: 480px; }
+.radio-schedule-block-form { display: flex; flex-direction: column; gap: 10px; }
+.radio-schedule-block-form label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-mid); }
+.radio-schedule-block-form select, .radio-schedule-block-form input[type="date"], .radio-schedule-block-form input[type="time"] { background: var(--surface2); color: var(--text-main); border: 1px solid var(--border2); border-radius: 4px; padding: 4px 8px; }
+.radio-schedule-recurrence-bound { display: flex; flex-direction: column; gap: 6px; padding: 8px; border: 1px solid var(--border2); border-radius: 4px; background: var(--surface2); }
+.radio-schedule-block-detail p { margin: 4px 0; }

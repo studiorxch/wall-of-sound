@@ -8,8 +8,18 @@
 // and never a function of Package identity -- these functions only decide
 // WHICH existing Program (if any) the operator should be offered an
 // update onto, never construct a new one.
+//
+// RADIO-04 (batch 0929-6) -- extended with the orchestration this
+// lifecycle logic now serves: Program creation/reuse moved out of
+// RadioPlaylistPublishPanel.tsx entirely and lives behind the scheduling
+// workflow (RadioProgrammingView.tsx) instead. `resolveProgramForSchedule`
+// is the ONE place that calls createRadioProgram/updateRadioProgram when
+// scheduling a published Playlist -- never duplicated at either call site.
 
-import type { RadioProgramSummary } from "@studiorich/member-identity";
+import type { CreateRadioProgramInput, EventRadioRepository, RadioProgramSummary } from "@studiorich/member-identity";
+import { generateRadioProgramId } from "@studiorich/member-identity";
+import type { RadioWebExportRecord } from "../../data/radioWebBundleTypes";
+import { buildRadioPublicPackageBaseUrl } from "./radioWebBundlePlan";
 import { findExistingProgramForPackage } from "./programFromManifest";
 
 /**
@@ -64,4 +74,91 @@ export function findConflictingProgramForUpdate(
 ): RadioProgramSummary | null {
   const claimant = findExistingProgramForPackage(existingPrograms, stationId, bundleVersion);
   return claimant && claimant.id !== targetProgramId ? claimant : null;
+}
+
+export interface SchedulablePlaylist {
+  readonly radioPlaylistId: string;
+  readonly title: string;
+  readonly latestExport: RadioWebExportRecord;
+}
+
+/**
+ * RADIO-04 -- a RadioPlaylist is offerable in the scheduling workflow only
+ * once it has BOTH a real local export AND a matching, actually-succeeded
+ * Sites publication for that exact `{slug, bundleVersion}` -- same
+ * discipline `RadioPlaylistPublishPanel.tsx`'s own
+ * `sitesPublicationForLatestExport` already enforces for Create/Update
+ * Program (RADIO-02/03), now the single gate for scheduling instead.
+ */
+export function listSchedulablePlaylists(
+  radioPlaylists: readonly { id: string; title: string }[],
+  radioWebExports: readonly RadioWebExportRecord[],
+  radioSitesPublications: readonly { radioPlaylistId: string; slug: string; bundleVersion: number }[],
+): readonly SchedulablePlaylist[] {
+  const result: SchedulablePlaylist[] = [];
+  for (const playlist of radioPlaylists) {
+    const exports = radioWebExports.filter((r) => r.radioPlaylistId === playlist.id).slice().sort((a, b) => b.bundleVersion - a.bundleVersion);
+    const latestExport = exports[0];
+    if (!latestExport) continue;
+    const published = radioSitesPublications.some(
+      (r) => r.radioPlaylistId === playlist.id && r.slug === latestExport.slug && r.bundleVersion === latestExport.bundleVersion,
+    );
+    if (!published) continue;
+    result.push({ radioPlaylistId: playlist.id, title: playlist.title, latestExport });
+  }
+  return result;
+}
+
+/**
+ * RADIO-04 -- the ONE place Program creation/reuse happens for the
+ * scheduling workflow: resolves the immutable published Package for
+ * `schedulable`, then finds/reuses/updates/creates the RadioProgram using
+ * the exact same RADIO-03 lifecycle decision (`planProgramLifecycleAction`)
+ * already proven in RadioPlaylistPublishPanel.tsx -- never a second
+ * Program-construction path. `programId` is preserved across an update
+ * (RADIO-03's own guarantee); a genuinely new Program only gets a new id
+ * via the existing `generateRadioProgramId()`.
+ *
+ * `preferredProgramId` lets a caller resolve an "ambiguous" state (more
+ * than one Program already references this station) by naming which one
+ * to update -- this function NEVER silently picks one on the caller's
+ * behalf; omitting it while ambiguous throws.
+ */
+export async function resolveProgramForSchedule(
+  repository: Pick<EventRadioRepository, "createRadioProgram" | "updateRadioProgram">,
+  schedulable: SchedulablePlaylist,
+  existingProgramsForStation: readonly RadioProgramSummary[],
+  preferredProgramId?: string,
+): Promise<RadioProgramSummary> {
+  const plan = planProgramLifecycleAction(existingProgramsForStation, schedulable.latestExport.bundleVersion);
+  if (plan.kind === "up_to_date") return plan.program;
+
+  if (plan.kind === "ambiguous") {
+    const chosen = preferredProgramId ? plan.programs.find((p) => p.id === preferredProgramId) : undefined;
+    if (!chosen) throw new Error("radio_program_ambiguous_for_station");
+    return repository.updateRadioProgram({
+      programId: chosen.id,
+      title: schedulable.title,
+      manifestBaseUrl: buildRadioPublicPackageBaseUrl({ slug: schedulable.latestExport.slug, bundleVersion: schedulable.latestExport.bundleVersion }),
+      trackCount: schedulable.latestExport.entryCount,
+      totalDurationSeconds: schedulable.latestExport.totalDurationSeconds,
+      stationId: schedulable.radioPlaylistId,
+      bundleVersion: schedulable.latestExport.bundleVersion,
+    });
+  }
+
+  const manifestBaseUrl = buildRadioPublicPackageBaseUrl({ slug: schedulable.latestExport.slug, bundleVersion: schedulable.latestExport.bundleVersion });
+  const shared = {
+    title: schedulable.title,
+    manifestBaseUrl,
+    trackCount: schedulable.latestExport.entryCount,
+    totalDurationSeconds: schedulable.latestExport.totalDurationSeconds,
+    stationId: schedulable.radioPlaylistId,
+    bundleVersion: schedulable.latestExport.bundleVersion,
+  };
+  if (plan.kind === "update_available") {
+    return repository.updateRadioProgram({ programId: plan.program.id, ...shared });
+  }
+  const createInput: CreateRadioProgramInput = { programId: generateRadioProgramId(), ...shared };
+  return repository.createRadioProgram(createInput);
 }

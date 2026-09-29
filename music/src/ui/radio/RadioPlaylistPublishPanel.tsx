@@ -35,29 +35,23 @@
 // "Mark Ready for Publishing" flag are all real, still-supported
 // operations — they live in the Diagnostics section below as advanced
 // recovery, not as routine steps a successful Publish requires the
-// operator to see or operate. "Create Program"/"Update Program" remain
-// their own explicit decision (a Program is operator-facing production
-// identity, never created or repointed as a side effect of Publish) and
-// are the one next action surfaced once a version has actually reached
-// the Sites checkout.
+// operator to see or operate.
 //
-// RADIO-03 (batch 0929-5) — Program identity is stable, same discipline
-// as RadioPlaylist's own identity (batch 0929-4): if a Program already
-// references this station (any version), this panel offers "Update
-// Program to vN" (preserves programId, and therefore every Channel
-// rotation slot referencing it) instead of "Create Program" — a
-// correction/republish never creates a second, redundant Program for the
-// same playlist. See radioProgramLifecycle.ts for the pure decision logic
-// and docs/architecture/radio/README.md for the full Program lifecycle.
+// RADIO-04 (batch 0929-6) — PRODUCT BOUNDARY: Playlist publication ends at
+// Publish. "Create Program"/"Update Program" are DELIBERATELY NOT offered
+// here anymore — Program creation/reuse now happens entirely behind the
+// scheduling workflow (RadioProgrammingView.tsx, "RADIO → Programming"),
+// via radioProgramLifecycle.ts's resolveProgramForSchedule (the exact same
+// RADIO-03 lifecycle logic this panel used to call directly, never
+// duplicated). This panel's own job stops at making a Package real and
+// Sites-published; scheduling it onto a Channel is a separate, later
+// operator decision. See docs/architecture/radio/README.md.
 
 import { useEffect, useRef, useState } from "react";
 import {
-  createFirebaseEventRadioRepository,
   createFirebaseMemberIdentityAuthority,
-  generateRadioProgramId,
   STUDIO_RICH_OPERATOR_EMAILS,
   type MemberIdentityState,
-  type RadioProgramSummary,
 } from "@studiorich/member-identity";
 import type { Track } from "../../data/trackTypes";
 import type { CompleteSongAnalysis } from "../../data/songAnalysisTypes";
@@ -69,14 +63,12 @@ import type { RadioPromotionFormInput } from "../../data/radioLoopTypes";
 import type { PlaylistRecord } from "../../data/playProjectTypes";
 import type { PromoteLoopToRadioResult, RadioPromotionPhase } from "../../logic/radio/radioPromotionOrchestrator";
 import { buildPublishPreview } from "../../logic/radio/radioPublishPreview";
-import { buildRadioPublicPackageBaseUrl } from "../../logic/radio/radioWebBundlePlan";
 import { estimateInboxItemBytes, summarizePlaylistStorage } from "../../logic/radio/radioStorageEstimate";
 import { computePublishPatch, computeUnpublishPatch, radioPlaylistStateLabel } from "../../logic/radio/radioPlaylistPublicationState";
 import {
   runOnePublishViaFetch, PUBLISH_FAILURE_LABEL,
   type PublishStage, type PublishEntryFailure,
 } from "../../logic/radio/radioOnePublishOrchestrator";
-import { findProgramsForStation, planProgramLifecycleAction, findConflictingProgramForUpdate } from "../../logic/radio/radioProgramLifecycle";
 import { PromoteToRadioDialog } from "./PromoteToRadioDialog";
 import { RadioWebExportPreflightDialog } from "./RadioWebExportPreflightDialog";
 
@@ -104,48 +96,34 @@ function generateSitesPublicationId(): string {
   return `sitespub_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
-// Batch 02I -- Published Package -> RADIO Program Creation: the SAME
-// Firebase identity Event Radio Control already uses (same
-// one-instance-per-app pattern every other consumer of this package
-// follows) -- not a second sign-in flow. Firebase Auth's
+// Batch 02I -- the SAME Firebase identity Event Radio Control already
+// uses (same one-instance-per-app pattern every other consumer of this
+// package follows) -- not a second sign-in flow. Firebase Auth's
 // browserLocalPersistence means an operator who already signed in via
 // Event Radio Control (event-control.html, same origin) is recognized
-// here automatically; this panel never needs its own sign-in UI.
+// here automatically; this panel never needs its own sign-in UI. Still
+// needed post-RADIO-04: Publish's own Sites-copy stage and the Diagnostics
+// "Republish to Sites" recovery control remain operator-gated, even though
+// Program creation/reuse no longer happens in this file at all.
 //
 // Batch 02I-B -- LAZY on purpose: RadioPlaylistPublishPanel.tsx is reached
 // via a fully static import chain from App.tsx, so a module-scope
 // `createFirebaseMemberIdentityAuthority(...)` call would construct a real
 // Firebase App/Auth instance on EVERY MUSIC session, whether or not the
-// user ever opens a RADIO playlist. These two lazy getters defer that
-// construction to the first actual use (this component mounting), while
-// still only ever constructing one instance each for the lifetime of the
-// page -- the same singleton behavior the eager version had, just
-// deferred. Not a dynamic `import()` -- the module itself is still
+// user ever opens a RADIO playlist. Deferred to first actual use (this
+// component mounting), constructing at most one instance for the page's
+// lifetime. Not a dynamic `import()` -- the module itself is still
 // statically imported, per this batch's own scope note.
-let cachedProgramCreationMemberIdentity: ReturnType<typeof createFirebaseMemberIdentityAuthority> | null = null;
-function getProgramCreationMemberIdentity() {
-  cachedProgramCreationMemberIdentity ??= createFirebaseMemberIdentityAuthority(import.meta.env);
-  return cachedProgramCreationMemberIdentity;
-}
-let cachedProgramCreationRepository: ReturnType<typeof createFirebaseEventRadioRepository> | null = null;
-function getProgramCreationRepository() {
-  cachedProgramCreationRepository ??= createFirebaseEventRadioRepository(import.meta.env);
-  return cachedProgramCreationRepository;
+let cachedMemberIdentity: ReturnType<typeof createFirebaseMemberIdentityAuthority> | null = null;
+function getMemberIdentity() {
+  cachedMemberIdentity ??= createFirebaseMemberIdentityAuthority(import.meta.env);
+  return cachedMemberIdentity;
 }
 // Client-side UX gate ONLY, same convention as eventControlRuntime.ts's
 // own OPERATOR_EMAILS and wall/'s subwayMapPaintSurface.js -- the real
 // authority gate is firestore.rules' isEventOperator(), enforced
 // regardless of what this list contains.
-const PROGRAM_CREATION_OPERATOR_EMAILS = STUDIO_RICH_OPERATOR_EMAILS;
-
-// RADIO-03 (batch 0929-5) — covers both outcomes now possible: creating a
-// Program (first time this station has one) or updating an existing
-// Program's Package reference (adopting a corrected/new version).
-type ProgramLifecycleState =
-  | { status: "idle" }
-  | { status: "pending" }
-  | { status: "success"; programId: string; action: "created" | "updated" }
-  | { status: "error"; message: string };
+const OPERATOR_EMAILS = STUDIO_RICH_OPERATOR_EMAILS;
 
 // RADIO-02 (batch 0929-2) — the "Publish to Sites" action's own state.
 // "idle" also covers "already published, ready to republish" — whether a
@@ -207,31 +185,15 @@ export function RadioPlaylistPublishPanel({
   // Sites-copy stage specifically needs a retry without re-running export.
   const [sitesPublish, setSitesPublish] = useState<SitesPublishState>({ status: "idle" });
 
-  // Batch 02I, broadened by RADIO-03 (batch 0929-5) — Create/Update
-  // Program action's own state, independent of Publish.
-  const [programLifecycle, setProgramLifecycle] = useState<ProgramLifecycleState>({ status: "idle" });
-  // RADIO-03 — every real Program already referencing this station
-  // (public read, no operator sign-in required just to look). null means
-  // "not loaded yet" — distinct from an empty array, so the UI never
-  // flashes "Create Program" before this resolves.
-  const [existingProgramsForStation, setExistingProgramsForStation] = useState<readonly RadioProgramSummary[] | null>(null);
+  const [memberState, setMemberState] = useState<MemberIdentityState>(() => getMemberIdentity().getState());
   useEffect(() => {
-    let cancelled = false;
-    getProgramCreationRepository()
-      .listRadioPrograms()
-      .then((programs) => { if (!cancelled) setExistingProgramsForStation(findProgramsForStation(programs, radioPlaylist.id)); })
-      .catch(() => { if (!cancelled) setExistingProgramsForStation([]); });
-    return () => { cancelled = true; };
-  }, [radioPlaylist.id]);
-  const [memberState, setMemberState] = useState<MemberIdentityState>(() => getProgramCreationMemberIdentity().getState());
-  useEffect(() => {
-    const memberIdentity = getProgramCreationMemberIdentity();
+    const memberIdentity = getMemberIdentity();
     const unsubscribe = memberIdentity.subscribe(setMemberState);
     void memberIdentity.start();
     return unsubscribe;
   }, []);
   const isAuthorizedOperator =
-    memberState.status === "signedIn" && PROGRAM_CREATION_OPERATOR_EMAILS.includes(memberState.authUser.email ?? "");
+    memberState.status === "signedIn" && OPERATOR_EMAILS.includes(memberState.authUser.email ?? "");
 
   // Same pattern as RadioMultiTrackPrepWorkspace's radioPlaylistRef —
   // onEntryPatch fires repeatedly across awaited network calls within one
@@ -274,17 +236,6 @@ export function RadioPlaylistPublishPanel({
         .slice()
         .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())[0]
     : undefined;
-
-  // RADIO-03 (batch 0929-5) — what the operator should be offered for
-  // Program lifecycle: create (no Program yet), update (one exists, behind
-  // the latest version), up to date (one exists, already current), or
-  // ambiguous (more than one already references this station — resolved
-  // in Diagnostics, never silently picked for the operator). null only
-  // while existingProgramsForStation hasn't loaded yet.
-  const programPlan =
-    existingProgramsForStation && latestExport
-      ? planProgramLifecycleAction(existingProgramsForStation, latestExport.bundleVersion)
-      : null;
 
   // RADIO-02's own /radio-publish-to-sites request, extracted so it can be
   // called two ways: automatically, as Publish's own internal final stage
@@ -371,74 +322,6 @@ export function RadioPlaylistPublishPanel({
     setSitesPublish({ status: "pending" });
     const result = await publishExportToSites(latestExport);
     setSitesPublish(result.ok ? { status: "idle" } : { status: "error", message: result.message });
-  }
-
-  // Batch 02I — constructs the create input ONLY from already-authoritative
-  // publication data already in scope (radioPlaylist, latestExport) — no
-  // extra fetch, no re-derivation of the track list, no package identity
-  // inferred from title/slug. Never touches eventProgram/current — creating
-  // a Program never puts it on air.
-  //
-  // Batch 02V — manifestBaseUrl now points at the PUBLISHED package's
-  // public address (buildRadioPublicPackageBaseUrl), not MUSIC's own
-  // /radio-web-export dev-server preview route. A Program is operator-
-  // facing production identity; it must be consumable by a listener who
-  // isn't running MUSIC's dev server at all. The dev-only preview route
-  // remains untouched below (see the "Preview" link), and is deliberately
-  // never used for Program creation.
-  async function handleCreateProgram() {
-    if (!latestExport || programLifecycle.status === "pending") return;
-    setProgramLifecycle({ status: "pending" });
-    try {
-      const manifestBaseUrl = buildRadioPublicPackageBaseUrl({ slug: latestExport.slug, bundleVersion: latestExport.bundleVersion });
-      const created = await getProgramCreationRepository().createRadioProgram({
-        programId: generateRadioProgramId(),
-        title: radioPlaylist.title,
-        manifestBaseUrl,
-        trackCount: latestExport.entryCount,
-        totalDurationSeconds: latestExport.totalDurationSeconds,
-        stationId: radioPlaylist.id,
-        bundleVersion: latestExport.bundleVersion,
-      });
-      setProgramLifecycle({ status: "success", programId: created.id, action: "created" });
-      setExistingProgramsForStation((prev) => [...(prev ?? []), created]);
-    } catch (error) {
-      setProgramLifecycle({ status: "error", message: error instanceof Error ? error.message : String(error) });
-    }
-  }
-
-  // RADIO-03 (batch 0929-5) -- the corrective counterpart to
-  // handleCreateProgram: adopts a corrected/new Package version onto an
-  // EXISTING Program, preserving its programId (so every Channel rotation
-  // slot or eventProgram/current reference to it keeps working unchanged
-  // -- see docs/architecture/radio/README.md). Same
-  // Sites-publication/operator gates as create; never mutates Package v1
-  // or any other already-published version, only which one this Program's
-  // own reference points at.
-  async function handleUpdateProgram(program: RadioProgramSummary) {
-    if (!latestExport || programLifecycle.status === "pending") return;
-    const conflict = findConflictingProgramForUpdate(existingProgramsForStation ?? [], program.id, radioPlaylist.id, latestExport.bundleVersion);
-    if (conflict) {
-      setProgramLifecycle({ status: "error", message: `Program "${conflict.title}" (${conflict.id}) already references v${latestExport.bundleVersion} — resolve that first.` });
-      return;
-    }
-    setProgramLifecycle({ status: "pending" });
-    try {
-      const manifestBaseUrl = buildRadioPublicPackageBaseUrl({ slug: latestExport.slug, bundleVersion: latestExport.bundleVersion });
-      const updated = await getProgramCreationRepository().updateRadioProgram({
-        programId: program.id,
-        title: radioPlaylist.title,
-        manifestBaseUrl,
-        trackCount: latestExport.entryCount,
-        totalDurationSeconds: latestExport.totalDurationSeconds,
-        stationId: radioPlaylist.id,
-        bundleVersion: latestExport.bundleVersion,
-      });
-      setProgramLifecycle({ status: "success", programId: updated.id, action: "updated" });
-      setExistingProgramsForStation((prev) => (prev ?? []).map((p) => (p.id === updated.id ? updated : p)));
-    } catch (error) {
-      setProgramLifecycle({ status: "error", message: error instanceof Error ? error.message : String(error) });
-    }
   }
 
   const storageSummary = summarizePlaylistStorage(
@@ -538,35 +421,7 @@ export function RadioPlaylistPublishPanel({
               <a className="npw-btn npw-btn--primary" href={`/radio-player.html?slug=${encodeURIComponent(latestExport.slug)}&v=${latestExport.bundleVersion}`} target="_blank" rel="noreferrer">
                 Play Preview
               </a>
-              {programLifecycle.status === "success" ? (
-                <span className="radio-diff-note">
-                  Program {programLifecycle.action === "created" ? "created" : "updated"}: {programLifecycle.programId}. Not on air yet — reload Channel Control/Event Radio Control to see it (the program catalog loads once per sign-in, not live).
-                </span>
-              ) : !isAuthorizedOperator ? (
-                <span className="radio-diff-note">
-                  Sign in as the StudioRich operator (via Event Radio Control) to {programPlan?.kind === "update_available" ? "update the Program for" : "create a Program from"} this package.
-                </span>
-              ) : programPlan === null ? (
-                <span className="radio-diff-note">Checking existing Programs…</span>
-              ) : programPlan.kind === "up_to_date" ? (
-                <span className="radio-diff-note">Program "{programPlan.program.title}" is already on this version ({programPlan.program.id}).</span>
-              ) : programPlan.kind === "update_available" ? (
-                <>
-                  <button className="npw-btn npw-btn--primary" onClick={() => handleUpdateProgram(programPlan.program)} disabled={programLifecycle.status === "pending"}>
-                    {programLifecycle.status === "pending" ? "Updating Program…" : `Update Program to v${latestExport.bundleVersion}`}
-                  </button>
-                  {programLifecycle.status === "error" && <span className="radio-diff-note">{programLifecycle.message}</span>}
-                </>
-              ) : programPlan.kind === "ambiguous" ? (
-                <span className="radio-diff-note">Multiple Programs already reference this playlist ({programPlan.programs.length}) — resolve in Diagnostics.</span>
-              ) : (
-                <>
-                  <button className="npw-btn npw-btn--primary" onClick={handleCreateProgram} disabled={programLifecycle.status === "pending"}>
-                    {programLifecycle.status === "pending" ? "Creating Program…" : "Create Program"}
-                  </button>
-                  {programLifecycle.status === "error" && <span className="radio-diff-note">{programLifecycle.message}</span>}
-                </>
-              )}
+              <span className="radio-diff-note">Published v{latestExport.bundleVersion} — ready to schedule in RADIO → Programming.</span>
               <button className="npw-btn npw-btn--ghost" onClick={handlePublish}>Publish New Version</button>
             </>
           ) : latestExport ? (
@@ -614,32 +469,6 @@ export function RadioPlaylistPublishPanel({
             Current state: <strong>{radioPlaylistStateLabel(radioPlaylist.state)}</strong>
             {" · "}Web bundle lifecycle: <strong>{derivedLifecycleLabel(preview, latestExport, hasPreparing)}</strong>
           </p>
-
-          {programPlan?.kind === "ambiguous" && latestExport && (
-            <div className="radio-publish-section radio-publish-program-ambiguous">
-              <h3>Programs referencing this playlist ({programPlan.programs.length})</h3>
-              <p className="radio-diff-note">
-                More than one Program already references this playlist — pick which one should adopt v{latestExport.bundleVersion}.
-              </p>
-              <ul>
-                {programPlan.programs.map((p) => (
-                  <li key={p.id}>
-                    {p.title} ({p.id}) — currently v{p.bundleVersion ?? "?"}
-                    {isAuthorizedOperator && p.bundleVersion !== latestExport.bundleVersion && (
-                      <button
-                        className="npw-btn npw-btn--ghost"
-                        onClick={() => handleUpdateProgram(p)}
-                        disabled={programLifecycle.status === "pending"}
-                      >
-                        {programLifecycle.status === "pending" ? "Updating…" : `Update to v${latestExport.bundleVersion}`}
-                      </button>
-                    )}
-                  </li>
-                ))}
-              </ul>
-              {programLifecycle.status === "error" && <p className="radio-diff-note">{programLifecycle.message}</p>}
-            </div>
-          )}
 
           <div className="radio-publish-storage">
             <span>Estimated size: {(storageSummary.totalBytes / 1024 / 1024).toFixed(1)} MB</span>

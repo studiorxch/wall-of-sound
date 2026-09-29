@@ -146,6 +146,7 @@ import type { RadioWebExportRecord, RadioSitesPublicationRecord } from "./data/r
 import type { LoopchainDraft, RadioLoopchainSectionAcceptance, LoopchainObservation } from "./data/radioLoopchainTypes";
 import type { LoopchainListenerFeedback } from "./data/loopchainFeedbackTypes";
 import { RadioPlaylistsView } from "./ui/radio/RadioPlaylistsView";
+import { RadioProgrammingView } from "./ui/radio/RadioProgrammingView";
 import { RadioLoopchainPlayer } from "./ui/radio/RadioLoopchainPlayer";
 import { RadioBanksView } from "./ui/radio/RadioBanksView";
 import { type RadioLooperSharedProps } from "./ui/radio/RadioMultiTrackPrepWorkspace";
@@ -7766,6 +7767,12 @@ export default function App() {
               radioInboxItems={radioInboxItems}
               libraryTracks={libraryTracks}
               onUpdateRadioBank={handleUpdateRadioBank}
+            />
+          ) : viewMode === "radio_programming" ? (
+            <RadioProgrammingView
+              radioPlaylists={radioPlaylists}
+              radioWebExports={radioWebExports}
+              radioSitesPublications={radioSitesPublications}
             />
           ) : viewMode === "collections_overview" ? (
             <CollectionsOverview
