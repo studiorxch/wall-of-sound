@@ -6,6 +6,53 @@ a concrete revisit trigger. This is not a general TODO list; see
 
 ---
 
+### This worktree's gitignored asset/reference mirrors are intentionally incomplete
+
+- **Problem**: `library/catalog/audio/`, `library/external/audio/`,
+  `library/reference/audio/`, every `library/**/*.{mp3,wav,flac,aiff,aif,
+  m4a,ogg}`, and all of `WOS-share/` are gitignored (`.gitignore` root
+  entries) — worktree-local, never shared by git between
+  `wall-of-sound-beta01` and the older `wall-of-sound` checkout (see
+  [DEPLOYMENT.md](DEPLOYMENT.md)'s "Worktree distinction"). Confirmed
+  during RADIO-02 human acceptance (2026-09-29): this worktree's
+  `library/music/catalog/audio/` has 5 files (~60KB) against the main
+  checkout's 1044 files (~27GB) — same `catalog/tracks.csv` metadata,
+  byte-identical (sha1 `d906221a...`), but almost none of the real audio
+  it references. `WOS-share/SUNO_LIBRARY` doesn't exist in this worktree
+  at all (only a small `WOS-share/MUSIC` subfolder does). By contrast,
+  `library/music/RadioWebExports/**` (including its `.opus` audio) IS
+  git-tracked — `.opus` isn't in the ignore list — so already-published
+  local export bundles are real and correct here; this gap is specific to
+  RAW, not-yet-exported catalog source audio and to the Suno manifest
+  mirror.
+- **Impact**: any MUSIC action needing raw catalog source audio for a
+  track this worktree doesn't have a sample of — RADIO Publish's
+  source-audio-hash check (`/radio-track-source-hash`,
+  `music/vite.config.ts`), track preparation, Song Library's Suno-derived
+  view — reports the track as genuinely unavailable/missing (correct
+  behavior given the file really is absent locally), which looks
+  identical to a real regression from the operator's point of view.
+- **Current status**: not fixed, and not something code can fix — this is
+  a data-provisioning gap, not a path-resolution bug. Both roots already
+  have an established, documented override for exactly this situation:
+  `PLAY_LIBRARY_ROOT` (`music/vite.config.ts`, resolves ALL of `LIBRARY_ROOT`
+  — catalog reads AND `RadioWebExports`/`RadioTrackLibrary`/
+  `TrackStemLibrary` write targets, since they're all one shared root) and
+  `SUNO_LIBRARY_WOS_SHARE_ROOT` (same file, independent of the above,
+  read-only). Pointing either at the main checkout's real copies
+  (`/Users/studio/Projects/wall-of-sound/library/music`,
+  `/Users/studio/Projects/wall-of-sound/WOS-share/SUNO_LIBRARY`) is safe —
+  read-only for Suno manifests; for `PLAY_LIBRARY_ROOT`, a fresh Publish
+  export would land under the main checkout's own `RadioWebExports`
+  (additive/versioned, never overwrites), not this worktree's.
+- **Revisit trigger**: before assuming any raw catalog track or Suno
+  manifest is genuinely missing from the project — check whether it's
+  simply absent from THIS worktree's local, gitignored copy first. Revisit
+  if this worktree ever needs to test the full real catalog routinely
+  without a cross-worktree `PLAY_LIBRARY_ROOT` override.
+
+---
+
 ### `.claude/launch.json`'s "music" entry points at the wrong worktree
 
 - **Problem**: this repo's own `.claude/launch.json` (tracked, committed) has
