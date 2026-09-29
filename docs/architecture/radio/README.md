@@ -283,3 +283,47 @@ Channel — agreement is structural, not coordinated between the two pages.
 session already ON in hosted MAP DOES carry across into hosted BLACKBOOK
 (and back), because both are, in that context, thin proxies for the exact
 same persistent-shell-owned engine, not two independent local ones.
+
+## Local RADIO acceptance procedure (dev/emulator-only)
+
+The local emulator normally has no `radioChannels`/`radioPrograms` data, so
+a fresh local HOST environment resolves `{status:"failed",
+reason:"channel-not-found"}` rather than playing anything. To get a real,
+audible local broadcast for acceptance testing (no production access, no
+new RADIO architecture):
+
+1. An already-exported local package already exists on disk at
+   `library/music/RadioWebExports/<slug>/v<n>/` (e.g. `soft-motion-radio/v1`
+   — real `.opus` audio, a real `radio-manifest.json`) from a prior MUSIC
+   "Send to RADIO" publish run. Served locally, dev-only, by the existing
+   `/radio-web-export/` Vite middleware — never reachable from production,
+   never the canonical public package URL (see "Public package addressing"
+   above).
+2. **Known gotcha**: that middleware resolves its library root relative to
+   the *actual Node process* working directory, not `music/`. If
+   `tools/host-02/server.mjs` is launched from the repo root (as its own
+   documented usage shows), pass `PLAY_LIBRARY_ROOT` explicitly, e.g.
+   `PLAY_LIBRARY_ROOT="$(pwd)/library/music" node tools/host-02/server.mjs`
+   — otherwise the local package 404s. Not a code defect; nothing in the
+   repo needed to change.
+3. With the Firestore/Auth emulators and `tools/host-02/server.mjs` running,
+   sign in as the one allow-listed operator email
+   (`STUDIO_RICH_OPERATOR_EMAILS`, `richardjlau@gmail.com`) against the
+   **emulator only**, then call the EXISTING repository functions directly
+   (`createFirebaseEventRadioRepository().createRadioProgram(...)` with
+   `manifestBaseUrl` pointed at the local `/radio-web-export/...` URL, then
+   `createFirebaseRadioChannelRepository().createRadioChannel(...)`/
+   `updateRadioChannel(...)` to put that Program in an active
+   `studiorich-radio` rotation). No UI currently exposes "create a Program
+   from an arbitrary manifest URL" end to end — see the RADIO β0.1 operator
+   recon below for the gap this reveals. This is exactly what the
+   `channel-control.html`/RADIO Publish panel machinery already does
+   server-side; nothing new was built, just invoked directly against the
+   emulator for a one-off local acceptance pass, never committed as a
+   script.
+4. Reload the local HOME/MAP page — RADIO ON now resolves to real
+   `{status:"on", nowPlaying:{title, artist}}` and plays real audio.
+
+Human audible acceptance using exactly this procedure — see "Human audible
+acceptance" in [../home/README.md](../home/README.md)'s own RADIO-01
+section.

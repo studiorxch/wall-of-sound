@@ -238,27 +238,16 @@ verification evidence. No longer an open item.
 
 ---
 
-### RADIO-01 — audible playback continuity not yet human-verified
+### RESOLVED — RADIO-01 audible playback continuity
 
-- **Problem**: RADIO-01's persistent-session-ownership mechanism (HOME owns
-  one RADIO engine across hosted MAP/BLACKBOOK surface swaps) was verified
-  this checkpoint using the local emulator, which has no seeded
-  `radioChannels`/`radioPrograms` data — so verification proved
-  session/ownership continuity (same engine, same state, survives
-  navigation) via a `{status:"failed", reason:"channel-not-found"}` steady
-  state, not actual audible playback continuity.
-- **Impact**: the core RADIO-01 invariant ("once RADIO is ON, navigation
-  must not interrupt/restart/resync the broadcast") has not been confirmed
-  with real audio actually playing across a hosted MAP ↔ BLACKBOOK swap.
-  The mechanism proven to preserve engine/session identity is the same
-  mechanism that would carry real playback, but this has not been directly
-  observed.
-- **Current status**: not verified. See
-  [home/README.md](home/README.md)'s own RADIO-01 section for exactly what
-  WAS verified this pass.
-- **Revisit trigger**: before RADIO-01 is presented as fully accepted, or
-  before RADIO-02+ (control-facade/attachment work) begins. Requires either
-  real production-shaped RADIO data seeded into the local emulator (a
-  `radioChannels`/`radioPrograms` document plus a reachable manifest) or a
-  real human Chrome pass against a real, live broadcast, confirming audible,
-  uninterrupted playback across MAP → BLACKBOOK → MAP with RADIO already ON.
+Human audible acceptance PASSED (2026-10-02). Local emulator seeded with a
+real Program/Channel referencing the already-existing local
+`soft-motion-radio` v1 package (served via the existing dev-only
+`/radio-web-export/` route — no new RADIO architecture, no production
+access). Persistent runtime `a6d46deb-3a51-4966-9c16-0d304690a745`. Human
+confirmed RADIO remained audibly continuous across MAP → BLACKBOOK and
+BLACKBOOK → MAP — no interruption, restart, perceptible seek/resync, or
+duplicate/echo playback; the persistent runtime UUID stayed unchanged;
+explicit RADIO OFF stopped playback. See
+[home/README.md](home/README.md)'s own RADIO-01 section for the full
+record. No longer an open item.

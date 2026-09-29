@@ -510,9 +510,22 @@ Explicit RADIO OFF genuinely stopped the session (`isOn()` false,
 `{status:"off"}`), confirmed independently of the failure-path check.
 Standalone MAP and standalone BLACKBOOK (visited directly, outside HOME)
 both still construct their own local engine and behave exactly as before
-this checkpoint. **Not verified**: audible real playback continuity across
-a navigation (requires seeded RADIO data this checkpoint didn't set up —
-do not read the failure-path proof above as a substitute for that).
+this checkpoint.
+
+**Human audible acceptance — PASSED (2026-10-02).** A follow-up preparation
+pass seeded the local emulator with a real Program/Channel referencing an
+already-existing local package (`library/music/RadioWebExports/soft-motion-radio/v1`,
+served via the existing dev-only `/radio-web-export/` route — see
+[../radio/README.md](../radio/README.md) for the exact procedure), so a
+human could listen rather than rely on the `channel-not-found` proxy above.
+Persistent runtime `a6d46deb-3a51-4966-9c16-0d304690a745`. Observed by the
+human directly: RADIO remained AUDIBLY continuous across MAP → BLACKBOOK
+and BLACKBOOK → MAP — no interruption, no restart, no perceptible
+seek/resync, no duplicate/echo playback; the persistent runtime UUID stayed
+unchanged throughout; explicit RADIO OFF stopped playback. This closes the
+one remaining RADIO-01 acceptance gap — the core invariant ("once RADIO is
+ON, hosted navigation must not interrupt/restart/resync it") is now
+human-verified, not just structurally proven.
 
 A real defect was found and fixed during this pass's own browser
 verification (not merely designed against, actually caught): the FIRST
