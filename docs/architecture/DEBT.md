@@ -219,11 +219,46 @@ verification evidence. No longer an open item.
   reload-with-selected-Artwork); standalone MAP and standalone BLACKBOOK
   Google sign-in regression checks.
 - **Revisit trigger**: before HOME-hosted BLACKBOOK sign-in specifically (not
-  yet human-tested at all) is presented as safe for real use, or before
-  RADIO-01 begins (RADIO-01 depends on HOME's top-level document surviving
-  ordinary member interactions across BOTH hosted surfaces, not just MAP). A
-  human Chrome pass through the remaining acceptance items above (§C in the
-  HOST-03B human-acceptance report) is the one remaining gate — if it passes
-  too, promote this from DEBT to a closed item and mark RADIO-01 eligible on
-  this axis; if BLACKBOOK-initiated sign-in still recreates HOME, the
-  transport needs further investigation specific to that path.
+  yet human-tested at all) is presented as safe for real use. A human Chrome
+  pass through the remaining acceptance items above (§C in the HOST-03B
+  human-acceptance report) is the one remaining gate — if it passes too,
+  promote this from DEBT to a closed item; if BLACKBOOK-initiated sign-in
+  still recreates HOME, the transport needs further investigation specific
+  to that path.
+- **Note (RADIO-01, 2026-10-01)**: RADIO-01 (persistent RADIO session
+  ownership, see [home/README.md](home/README.md)'s own section) was
+  implemented WITHOUT waiting for this item to close first — an explicit
+  decision, since MEMBER/auth acceptance and RADIO ownership migration are
+  separate concerns and this item's remaining gap is specific to
+  BLACKBOOK-initiated hosted sign-in, not to navigation/session survival in
+  general (already proven for the hosted-MAP path). RADIO-01's OWN human
+  acceptance still needs real, seeded broadcast data to verify audible
+  continuity — see that section's own "Not verified" note — which is a
+  different, still-open requirement from this one.
+
+---
+
+### RADIO-01 — audible playback continuity not yet human-verified
+
+- **Problem**: RADIO-01's persistent-session-ownership mechanism (HOME owns
+  one RADIO engine across hosted MAP/BLACKBOOK surface swaps) was verified
+  this checkpoint using the local emulator, which has no seeded
+  `radioChannels`/`radioPrograms` data — so verification proved
+  session/ownership continuity (same engine, same state, survives
+  navigation) via a `{status:"failed", reason:"channel-not-found"}` steady
+  state, not actual audible playback continuity.
+- **Impact**: the core RADIO-01 invariant ("once RADIO is ON, navigation
+  must not interrupt/restart/resync the broadcast") has not been confirmed
+  with real audio actually playing across a hosted MAP ↔ BLACKBOOK swap.
+  The mechanism proven to preserve engine/session identity is the same
+  mechanism that would carry real playback, but this has not been directly
+  observed.
+- **Current status**: not verified. See
+  [home/README.md](home/README.md)'s own RADIO-01 section for exactly what
+  WAS verified this pass.
+- **Revisit trigger**: before RADIO-01 is presented as fully accepted, or
+  before RADIO-02+ (control-facade/attachment work) begins. Requires either
+  real production-shaped RADIO data seeded into the local emulator (a
+  `radioChannels`/`radioPrograms` document plus a reachable manifest) or a
+  real human Chrome pass against a real, live broadcast, confirming audible,
+  uninterrupted playback across MAP → BLACKBOOK → MAP with RADIO already ON.

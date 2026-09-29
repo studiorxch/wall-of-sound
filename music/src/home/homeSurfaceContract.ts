@@ -1,5 +1,21 @@
 import type { HomeSurfaceIdentity } from "../data/homeRouteTypes";
 import type { HostedGoogleCredentialResult } from "../data/hostedAuthTypes";
+import type { RadioChannelReceiver } from "../logic/radio/createRadioChannelReceiver";
+
+/**
+ * RADIO-01 -- deliberately narrower than `HomeSurfaceIdentity`: only the
+ * document-mount identity (runtime + navigation generation), never
+ * `routeKey`. RADIO ownership has nothing to do with which Artwork is
+ * currently active in BLACKBOOK -- gating on the full route identity would
+ * make every `syncArtworkRoute` call (which never remounts) invalidate an
+ * already-granted RADIO session handle for no reason. A real remount
+ * (`navigationId` incrementing) is the only thing that should end one
+ * mount's claim on the session.
+ */
+export interface HomeMountIdentity {
+  readonly runtimeId: string;
+  readonly navigationId: number;
+}
 
 /** Same-origin trusted first-party contract. Document identity rejects callbacks retained from departed children. */
 export interface HomeSurfaceHost {
@@ -34,6 +50,20 @@ export interface HomeSurfaceHost {
    * the caller must not retry via a locally-initiated `signInWithPopup`.
    */
   requestGoogleCredential(source: Document, identity: HomeSurfaceIdentity): Promise<HostedGoogleCredentialResult>;
+  /**
+   * RADIO-01 -- hands the CURRENTLY active mount a handle bound to HOME's
+   * ONE persistent RADIO session (constructed lazily, reused verbatim
+   * across every later surface swap for this HOME document's lifetime).
+   * Returns `null` when `identity` does not match the currently active
+   * mount (stale/wrong runtime, a departed document, or HOME simply not
+   * having reached "active" yet) -- the caller MUST treat `null` as an
+   * explicit failure and must NEVER fall back to constructing its own
+   * local engine; see `createFailedRadioChannelReceiver`. Gated on mount
+   * identity only (`HomeMountIdentity`, not the full route/Artwork
+   * identity) -- an Artwork-only `syncArtworkRoute` change must never
+   * invalidate an already-granted handle.
+   */
+  getRadioSession(source: Document, identity: HomeMountIdentity): RadioChannelReceiver | null;
 }
 
 declare global {

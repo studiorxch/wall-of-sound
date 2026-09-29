@@ -1,4 +1,16 @@
-# HOME — current architecture and HOST-03B status
+# HOME — current architecture and RADIO-01 status
+
+**Terminology.** "Persistent HOME" on this page (and the HOST-00–03/RADIO-01
+names) refers to the same thing as "the persistent StudioRich shell/runtime"
+used elsewhere (e.g. [../radio/README.md](../radio/README.md)) — the
+development-only top-level document that owns cross-surface navigation, the
+hosted Google-credential transport, and (as of RADIO-01) the persistent
+RADIO session. It is explicitly NOT a user-facing HOME *product* surface
+(a page/panel a member would visit) — no such product surface exists yet.
+This distinction matters going forward: future work may build an actual
+HOME product surface ON TOP of this persistent shell, but the shell itself
+is infrastructure, not a feature. Historical HOST-00–03 names are kept
+as-is; this note is about how to read them, not a rename.
 
 HOST-03 replaces HOST-01/02's remaining controlled BLACKBOOK fixture with the real
 `music/blackbook.html` document, alongside HOST-02's real MAP/SUBWAY (`/wall-app`,
@@ -8,10 +20,13 @@ piece of MEMBER-adjacent infrastructure to HOME itself: a hosted Google-credenti
 transport (see §"HOST-03B — hosted Google-credential transport" below) — HOME
 initiates/completes the Google popup on a hosted surface's behalf and relays back
 only an opaque credential; each surface's own `MemberIdentityAuthority` (state,
-Firestore member bootstrap, sign-out) is completely unchanged and unmigrated. RADIO
-is not migrated — MAP and BLACKBOOK retain independent document-owned RADIO
-receivers. Production canonical routing remains future work. The full
-persistent-host proposal remains unimplemented beyond this bounded checkpoint.
+Firestore member bootstrap, sign-out) is completely unchanged and unmigrated.
+RADIO-01 adds a second, symmetric piece of infrastructure: a persistent RADIO
+session (see §"RADIO-01 — persistent RADIO session ownership" below) — HOME owns
+the ONE playback engine across hosted surface swaps; each surface's own RADIO UI
+wiring (`radioChannelHud.js`/`blackbookRadioUI.ts`) is completely unchanged.
+Production canonical routing remains future work. The full persistent-host
+proposal remains unimplemented beyond this bounded checkpoint.
 
 ## Implementation and ownership
 
@@ -80,6 +95,24 @@ persistent-host proposal remains unimplemented beyond this bounded checkpoint.
   and in-progress authoring state all survive an ordinary PAGES selection,
   exactly like BLACKBOOK's own pre-existing no-reload `openArtwork()` already
   guarantees standalone.
+- `music/src/logic/radio/createRadioChannelReceiver.ts` (RADIO-01, new): the
+  ONE canonical RADIO receiver factory (extracted verbatim from
+  `radioChannelReceiverRuntime.ts`'s former script body) both a standalone
+  document and the persistent shell's own session call — never a second
+  engine implementation. `createFailedRadioChannelReceiver` is the explicit
+  fail-closed stand-in a rejected hosted request uses.
+- `music/src/home/homeRadioSession.ts` (RADIO-01, new): the persistent
+  shell's own RADIO session manager — lazy, at-most-once engine
+  construction, reused verbatim across every hosted surface swap.
+- `music/src/home/homeSurfaceContract.ts` / `homeRuntime.ts`: gained
+  `getRadioSession`, gated by mount identity only (`HomeMountIdentity`),
+  not the full route/Artwork identity `syncArtworkRoute` changes.
+- `music/src/member/radioChannelReceiverRuntime.ts` (RADIO-01, rewritten):
+  the ONE shared bootstrap script both `wall/index.html` and
+  `blackbook.html` load; standalone/embedded behavior unchanged, hosted
+  behavior now delegates to the persistent shell's session. See the
+  dedicated "RADIO-01" section below for the full design and two real
+  defects found/fixed during this checkpoint's own browser verification.
 
 Run MUSIC's Vite dev server and open `/home-dev.html?surface=map`.
 The only model destinations are `{surface:"map"}` and
@@ -409,3 +442,88 @@ authenticated session; (D) standalone MAP Google sign-in regression;
 (E) standalone BLACKBOOK Google sign-in regression. See
 HOST_03A_MEMBER_AUTH_BOUNDARY.md's own status line and DEBT.md's revisit
 trigger for the current acceptance boundary.
+
+## RADIO-01 — persistent RADIO session ownership (2026-10-01)
+
+Moves RADIO's active playback/session ownership out of replaceable hosted
+MAP/BLACKBOOK documents and into the persistent shell — the first
+checkpoint of the ORIGINAL persistent-runtime objective this whole HOST-0x
+line exists for (RADIO continuity), now that both hosted surfaces and
+hosted MEMBER auth are proven. See
+[../radio/README.md](../radio/README.md)'s own "Persistent ownership under
+the StudioRich shell" section for the full design and verification detail;
+this section covers HOME's own side of the contract.
+
+- `music/src/logic/radio/createRadioChannelReceiver.ts` (new): the ONE
+  canonical receiver factory, extracted verbatim from
+  `radioChannelReceiverRuntime.ts`'s former top-level script body — same
+  engine, same controller, same behavior. Both a standalone document's own
+  local instance AND the persistent shell's one shared instance call this
+  SAME function; never a second/parallel engine implementation.
+  `createFailedRadioChannelReceiver(reason)` is the explicit, fail-closed
+  stand-in a hosted document uses when its session request is rejected —
+  reports `{status:"failed",reason}` immediately, never plays anything,
+  never falls back to a local engine.
+- `music/src/home/homeRadioSession.ts` (new):
+  `createHomeRadioSessionManager()` — constructs the underlying receiver
+  lazily, at most once, and hands out a receiver-shaped `acquire()` handle
+  to whichever surface currently holds it. Listener cleanup happens once
+  per `acquire()` call (once per new mount), clearing whatever the
+  PREVIOUS mount registered — never per individual `subscribe()` call,
+  which would incorrectly evict a still-current mount's own second
+  listener (this document's own bootstrap keeps a `window.SBE` state
+  mirror subscribed AND the surface's UI wiring separately subscribes its
+  own `render` — both must coexist for one mount's whole lifetime).
+- `homeSurfaceContract.ts` / `homeRuntime.ts`: new `getRadioSession`
+  on `HomeSurfaceHost`, gated by a NEW, narrower identity check
+  (`HomeMountIdentity` / `activeMount()`) than `activeCaller()` — matches
+  only `runtimeId` + `navigationId` (mount generation), deliberately never
+  the full route/Artwork identity `syncArtworkRoute` changes without a
+  remount. Returns `null` (never a usable fallback) when the caller isn't
+  the currently active mount.
+- `radioChannelReceiverRuntime.ts` (rewritten as a thin bootstrap): does
+  its OWN explicit, query-based hosting detection (self-contained, not
+  shared with `blackbookHomeSurface.ts`'s equivalent, since this one script
+  runs standalone in BOTH the MAP and BLACKBOOK documents). When hosted,
+  retries `getRadioSession()` with a bounded budget (100 × 50ms, matching
+  `blackbookRadioUI.ts`'s own existing `window.SBE.RadioChannelReceiver`
+  polling budget) before settling on the failed stand-in — needed because
+  this script's own `<script type="module">` tag runs well before HOME's
+  readiness handshake completes, so an immediate single attempt would
+  almost always be (incorrectly) rejected as "not active yet." Neither
+  `radioChannelHud.js` (MAP) nor `blackbookRadioUI.ts` (BLACKBOOK) were
+  modified — both already tolerate `window.SBE.RadioChannelReceiver` not
+  existing yet via their own pre-existing retry loop, so no new "not
+  ready" UI state was needed either.
+
+**Verified this pass (real Chrome, local emulator-only HOST environment,
+no seeded `radioChannels`/`radioPrograms` data):** turned RADIO ON in
+hosted MAP; the shell's session resolved to `{status:"failed",
+reason:"channel-not-found"}` (expected — no Channel is seeded locally;
+this proves session/ownership continuity, not audible playback, which
+requires real broadcast data this checkpoint doesn't set up). Navigated
+MAP → BLACKBOOK: BLACKBOOK's own RADIO widget immediately showed that SAME
+failed state, with no click, proving it observed the persistent session's
+already-in-flight result rather than starting fresh at `{status:"off"}`.
+Navigated BLACKBOOK → MAP: same state, same HOME runtime UUID throughout.
+Explicit RADIO OFF genuinely stopped the session (`isOn()` false,
+`{status:"off"}`), confirmed independently of the failure-path check.
+Standalone MAP and standalone BLACKBOOK (visited directly, outside HOME)
+both still construct their own local engine and behave exactly as before
+this checkpoint. **Not verified**: audible real playback continuity across
+a navigation (requires seeded RADIO data this checkpoint didn't set up —
+do not read the failure-path proof above as a substitute for that).
+
+A real defect was found and fixed during this pass's own browser
+verification (not merely designed against, actually caught): the FIRST
+implementation checked mount identity too early relative to HOME's own
+readiness handshake, permanently caching a `stale_identity` failure even
+for an eventually-successful mount — fixed by the bounded retry described
+above. A second real defect was also found and fixed: the FIRST
+`homeRadioSession.ts` design replaced ANY listener on ANY `subscribe()`
+call (not just a new mount's own), which silently broke the bootstrap's
+own `window.SBE` state mirror the instant the surface's OWN UI wiring
+subscribed a second listener on the SAME mount — fixed by moving listener
+cleanup to once-per-`acquire()` instead of once-per-`subscribe()`. Both are
+covered by new regression tests (`homeRadioSession.test.ts`,
+`radioChannelReceiverRuntime.test.ts`).

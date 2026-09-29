@@ -4,7 +4,9 @@ import type { HostedGoogleCredentialResult } from "../data/hostedAuthTypes";
 import { createHomeNavigation } from "../logic/home/homeNavigation";
 import { performHostedGoogleCredentialRequest } from "../logic/home/hostedGoogleAuth";
 import { matchesSurfaceIdentity, serializeHomeRoute } from "../logic/home/homeRoutes";
-import type { HomeSurfaceHost } from "./homeSurfaceContract";
+import type { RadioChannelReceiver } from "../logic/radio/createRadioChannelReceiver";
+import { createHomeRadioSessionManager } from "./homeRadioSession";
+import type { HomeMountIdentity, HomeSurfaceHost } from "./homeSurfaceContract";
 
 // Deliberately excluded from production Rollup inputs; also fail closed if imported in a production bundle.
 if (!import.meta.env.DEV) throw new Error("home_skeleton_development_only");
@@ -85,6 +87,19 @@ function activeCaller(source: Document, identity: HomeSurfaceIdentity): boolean 
   const expected = navigation.getExpectedIdentity();
   return navigation.getState().phase === "active" && expectedDocument(source) && expected !== null && matchesSurfaceIdentity(expected, identity);
 }
+/**
+ * RADIO-01 -- deliberately narrower than `activeCaller`: matches only
+ * runtime + navigation generation, never `routeKey`/Artwork identity, so a
+ * `syncArtworkRoute` call (which never remounts) can never invalidate an
+ * already-granted RADIO session handle. `expectedDocument` itself is
+ * already safe to reuse here -- `expectedUrl` is only ever set inside
+ * `mount()`, never touched by `syncArtworkRoute`, so it stays stable
+ * across Artwork-only route churn for the SAME mount.
+ */
+function activeMount(source: Document, identity: HomeMountIdentity): boolean {
+  const state = navigation.getState();
+  return state.phase === "active" && expectedDocument(source) && state.runtimeId === identity.runtimeId && state.navigationId === identity.navigationId;
+}
 // HOST-03B -- constructed lazily (only once a hosted surface actually
 // requests it), reusing the exact same config/emulator bootstrap every
 // other Firebase consumer in this repo already goes through. HOME never
@@ -107,6 +122,18 @@ function requestGoogleCredential(source: Document, identity: HomeSurfaceIdentity
     signInWithGooglePopup: () => getGoogleAuthPopupInitiator().signInWithGooglePopup(),
   });
 }
+const radioSessionManager = createHomeRadioSessionManager();
+/**
+ * RADIO-01 -- fail closed on rejection: returns `null`, never a
+ * locally-usable fallback. `radioSessionManager.acquire()` is only called
+ * once the caller is confirmed to be the active mount, and hands back a
+ * handle bound to HOME's ONE persistent session (lazily constructed on
+ * first use, reused verbatim across every later surface swap).
+ */
+function getRadioSession(source: Document, identity: HomeMountIdentity): RadioChannelReceiver | null {
+  if (!activeMount(source, identity)) return null;
+  return radioSessionManager.acquire();
+}
 const api: HomeSurfaceHost = Object.freeze({
   version: 1,
   ready: acceptReady,
@@ -114,6 +141,7 @@ const api: HomeSurfaceHost = Object.freeze({
   replaceArtwork: (source: Document, identity: HomeSurfaceIdentity, artworkId: unknown) => activeCaller(source, identity) && navigation.replaceArtwork(artworkId),
   syncArtworkRoute: (source: Document, identity: HomeSurfaceIdentity, artworkId: unknown) => activeCaller(source, identity) && navigation.syncArtworkRoute(artworkId),
   requestGoogleCredential,
+  getRadioSession,
 });
 window.StudioRichHome = api;
 

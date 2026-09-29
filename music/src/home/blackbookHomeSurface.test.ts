@@ -30,6 +30,7 @@ function fakeHost(overrides: Partial<HomeSurfaceHost> = {}): HomeSurfaceHost {
     replaceArtwork: vi.fn(() => true),
     syncArtworkRoute: vi.fn(() => true),
     requestGoogleCredential: vi.fn(() => Promise.resolve({ ok: true as const, credential: {} })),
+    getRadioSession: vi.fn(() => null),
     ...overrides,
   };
 }
