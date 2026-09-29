@@ -6,6 +6,63 @@ a concrete revisit trigger. This is not a general TODO list; see
 
 ---
 
+### `.claude/launch.json`'s "music" entry points at the wrong worktree
+
+- **Problem**: this repo's own `.claude/launch.json` (tracked, committed) has
+  exactly one `"music"` entry, and its `cwd` is
+  `/Users/studio/Projects/wall-of-sound/music` — the OLDER/main worktree
+  (see [DEPLOYMENT.md](DEPLOYMENT.md)'s "Worktree distinction") — not this
+  `wall-of-sound-beta01` worktree's own `music/`. There is no separate
+  `"music"` (or similarly named) entry for beta01 at all.
+- **Impact**: any agent or tool that launches MUSIC via this named config
+  (e.g. a `preview_start`-style launch by name) boots the OTHER worktree's
+  code, silently — which can predate RADIO Channel/Program/operator-identity
+  work that only exists on this branch (per DEPLOYMENT.md). Confirmed during
+  a RADIO-02 human-acceptance investigation (2026-09-29): this was NOT the
+  cause of that investigation's actual symptom (a plain `npm run dev` was
+  used instead, bypassing this file entirely), but it's a real, separate,
+  confirmed footgun for any future launch-by-name attempt.
+- **Current status**: not fixed; not touched by this pass (out of scope —
+  diagnosis only, per that investigation's own instructions).
+- **Revisit trigger**: before relying on `preview_start`/launch-by-name for
+  `"music"` from this worktree, or the next time someone adds a genuine
+  beta01-specific `"music"` entry to this file.
+
+---
+
+### MUSIC's browser-persisted authoring state has no single documented canonical origin
+
+- **Problem**: MUSIC persists all authoring state (library, playlists,
+  RADIO playlists) exclusively in browser IndexedDB (`MUSIC_STATE_DB`,
+  `music/src/logic/musicStateStore.ts`), which is scoped strictly by
+  browser origin (scheme+host+port) AND by browser/profile — never by git
+  worktree or filesystem path. Nothing in this repo documents one canonical
+  origin (host:port) that real authored MUSIC state already lives under,
+  and this repo's own tooling mixes at least two candidate origins for
+  running MUSIC's dev server: plain `npm run dev` (`http://localhost:5173`
+  by Vite's own default) and `tools/host-02/server.mjs`
+  (`http://127.0.0.1:5220`, requires the Firebase emulators already
+  running). These are two different origins with two independent, empty-
+  until-proven-otherwise `MUSIC_STATE_DB` instances.
+- **Impact**: opening MUSIC at the "wrong" origin/browser for a given
+  authoring history looks identical to real data loss ("MUSIC State Could
+  Not Be Loaded" / "No saved state was found") even though nothing was
+  actually lost — confirmed during a RADIO-02 human-acceptance
+  investigation (2026-09-29) where `http://localhost:5173` opened via
+  MUSIC's own Vite dev server showed empty library/playlist counts.
+- **Current status**: not fixed; this is a genuine environment/testing gap,
+  not a RADIO-02 (or any other) code defect. No filesystem-based fallback
+  or seed path exists anywhere in the load chain (confirmed: `App.tsx` →
+  `playProjectStorage.ts` → `musicAutosave.ts` → `musicStateStore.ts`), so
+  the only way to locate real prior state is to check IndexedDB directly
+  (browser DevTools → Application → IndexedDB) at each candidate origin,
+  in whichever browser/profile was actually used for that prior authoring.
+- **Revisit trigger**: the next time a human acceptance pass reports
+  unexpectedly empty MUSIC state, or before treating any one origin as
+  "the" place real MUSIC authoring data lives.
+
+---
+
 ### RADIO manifest/clock index identity mismatch
 
 - **Problem**: `resolvedBroadcastState.ts`'s callers index the original
