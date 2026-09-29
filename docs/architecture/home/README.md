@@ -374,18 +374,38 @@ child surface (hosted)                 persistent HOME (never nested)
   local popup after a hosted failure — every failure surfaces an explicit,
   reason-specific status message instead.
 
-**Verified this pass:** ordinary hosted MAP↔BLACKBOOK navigation (no auth
+**Agent-side (this pass):** ordinary hosted MAP↔BLACKBOOK navigation (no auth
 involved) is unaffected by these changes — re-confirmed via real Chrome
 acceptance, one HOME runtime UUID held across a full round trip after this
-batch's edits. **Not verified this pass:** a real Google popup completing
-through the new hosted transport. This agent's own sandboxed browser-
+batch's edits. A real Google popup completing through the new hosted
+transport could NOT be agent-verified: this agent's own sandboxed browser-
 automation tool cannot open a genuine separate popup window at all — this
-was newly confirmed to be a GENERAL limitation of the tool (not specific to
-a nested-iframe caller, as HOST-03A's own investigation had narrowed it to):
+was confirmed to be a GENERAL limitation of the tool (not specific to a
+nested-iframe caller, as HOST-03A's own investigation had narrowed it to):
 triggering the popup from HOME's own never-nested window in this session
 produced the identical `window.opener === null` / same-tab-navigation
-anomaly HOST-03A observed from BLACKBOOK's nested context. This tool
-therefore cannot validate ANY popup-based flow, hosted or standalone, and
-real human Chrome acceptance is required before this transport can be
-considered proven. See HOST_03A_MEMBER_AUTH_BOUNDARY.md's own status update
-and the human-acceptance steps in this batch's completion report.
+anomaly HOST-03A observed from BLACKBOOK's nested context.
+
+**Human Chrome acceptance (2026-09-30) — the exact failure sequence HOST-03
+originally found is no longer reproducible:**
+
+| Step | Result |
+|---|---|
+| HOME on real MAP | PASS — `active`, UUID `c2a73228-1b4d-4f39-9616-343fdbb2d387` |
+| Real Google popup sign-in initiated from hosted MAP | PASS — real popup opened, completed; MAP's own control changed SIGN IN → MEMBER; ADMIN became visible for the authorized operator |
+| HOME runtime UUID after that sign-in | PASS — unchanged (`c2a73228-...`) |
+| MAP → BLACKBOOK (MAP's own control) | PASS — real BLACKBOOK active, same UUID, BLACKBOOK observed the authenticated member state |
+| BLACKBOOK → MAP (BLACKBOOK's own control) | PASS — real MAP active again, same UUID, authenticated state still visible |
+
+This directly validates the HOST-03B top-level popup coordination path for
+**hosted MAP** through the exact `MAP → Google popup → MAP authenticated →
+BLACKBOOK → MAP` sequence that previously recreated HOME. **Still
+unverified by a human**, so HOST-03B is not yet fully accepted:
+(A) a Google popup initiated specifically from hosted BLACKBOOK while
+signed out; (B) BLACKBOOK → MAP → BLACKBOOK after a BLACKBOOK-initiated
+sign-in; (C) BLACKBOOK's own lifecycle acceptance (draw, PAGES switch,
+NEW, CLEAR→Undo, DELETE, reload-with-selected-Artwork) under a hosted,
+authenticated session; (D) standalone MAP Google sign-in regression;
+(E) standalone BLACKBOOK Google sign-in regression. See
+HOST_03A_MEMBER_AUTH_BOUNDARY.md's own status line and DEBT.md's revisit
+trigger for the current acceptance boundary.

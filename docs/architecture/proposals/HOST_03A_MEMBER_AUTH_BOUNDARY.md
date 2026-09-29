@@ -1,16 +1,20 @@
 # HOST-03A — Hosted MEMBER authentication boundary (recon)
 
 Status: **IMPLEMENTED as HOST-03B — Model B (the recommended narrow
-authentication transport/coordination adapter), pending real-browser human
-acceptance.** This document's own recon and recommendation (§7–§9 below) are
-now current-state truth for the CODE that exists; see
-[../home/README.md](../home/README.md)'s own "HOST-03B — hosted
+authentication transport/coordination adapter). Partially human-accepted
+(2026-09-30): a real Chrome test reproduced the exact original failure
+sequence — `MAP → Google popup sign-in → MAP authenticated → BLACKBOOK →
+MAP` — through hosted MAP, and the HOME runtime UUID survived unchanged
+throughout. The BLACKBOOK-initiated popup path, the full BLACKBOOK
+authenticated-lifecycle acceptance, and the standalone regression checks
+remain unverified by a human.** This document's own recon and
+recommendation (§7–§9 below) are now current-state truth for the CODE that
+exists; see [../home/README.md](../home/README.md)'s own "HOST-03B — hosted
 Google-credential transport" section for the implemented contract, files,
-and — critically — what remains unverified (a real Google popup completing
-through this transport in a real browser; this agent's own sandboxed
-browser-automation tool cannot open a genuine popup window at all).
-Baseline: `release/subway-beta-0.1`, HOST-03 implementation `dfba1b5`,
-disclosure commit `529244a`, this recon commit `7ee7d00`.
+and the current, still-partial acceptance table. Baseline:
+`release/subway-beta-0.1`, HOST-03 implementation `dfba1b5`, disclosure
+commit `529244a`, this recon commit `7ee7d00`, implementation commit
+`cff1e12`.
 
 ## 1. Starting checkpoint
 

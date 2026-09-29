@@ -206,21 +206,24 @@ verification evidence. No longer an open item.
   relaying back only an opaque credential for that surface's own unmodified
   `MemberIdentityAuthority` to consume via `signInWithCredential`. See
   [home/README.md](home/README.md)'s "HOST-03B" section for the implemented
-  contract and files. **NOT yet proven against a real Google popup in a real
-  browser** — this agent's own sandboxed browser-automation tool cannot open
-  a genuine popup window at all (confirmed AGAIN this pass to be a general
-  tool limitation, not specific to a nested-iframe caller: triggering the
-  popup from HOME's own never-nested window produced the identical
-  `window.opener === null`/same-tab-navigation anomaly). Ordinary hosted
-  MAP↔BLACKBOOK navigation with no auth involved was re-confirmed unaffected
-  by this batch's changes (one HOME runtime UUID held across a full round
-  trip).
-- **Revisit trigger**: before HOME-hosted BLACKBOOK or MAP sign-in is
-  presented as safe for real use, or before RADIO-01 begins (RADIO-01 depends
-  on HOME's top-level document surviving ordinary member interactions). A
-  real human Chrome pass through the required acceptance sequence (see the
-  HOST-03B completion report) is the one remaining gate — if it passes,
-  promote this from DEBT to a closed item and mark RADIO-01 eligible on this
-  axis; if it still recreates HOME, the transport itself needs further
-  investigation (this was NOT achievable via this agent's own tooling this
-  pass).
+  contract and files. **Partially human-accepted (2026-09-30)**: a real
+  Chrome test reproduced the ORIGINAL failing sequence exactly —
+  `MAP → Google popup sign-in → MAP authenticated → BLACKBOOK → MAP` — and
+  the HOME runtime UUID (`c2a73228-1b4d-4f39-9616-343fdbb2d387`) survived
+  unchanged throughout; MAP's own control correctly changed SIGN IN → MEMBER
+  and ADMIN became visible for the authorized operator. This is real evidence
+  the original defect is fixed for the hosted-MAP path. **Still unverified by
+  a human**: a Google popup initiated from hosted BLACKBOOK while signed out;
+  BLACKBOOK → MAP → BLACKBOOK after that BLACKBOOK-initiated sign-in;
+  BLACKBOOK's own authenticated lifecycle (draw/PAGES/NEW/CLEAR-Undo/DELETE/
+  reload-with-selected-Artwork); standalone MAP and standalone BLACKBOOK
+  Google sign-in regression checks.
+- **Revisit trigger**: before HOME-hosted BLACKBOOK sign-in specifically (not
+  yet human-tested at all) is presented as safe for real use, or before
+  RADIO-01 begins (RADIO-01 depends on HOME's top-level document surviving
+  ordinary member interactions across BOTH hosted surfaces, not just MAP). A
+  human Chrome pass through the remaining acceptance items above (§C in the
+  HOST-03B human-acceptance report) is the one remaining gate — if it passes
+  too, promote this from DEBT to a closed item and mark RADIO-01 eligible on
+  this axis; if BLACKBOOK-initiated sign-in still recreates HOME, the
+  transport needs further investigation specific to that path.
