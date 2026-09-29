@@ -12361,6 +12361,8 @@ span.ph-crate-chip-label:hover { color: var(--text-mid, #aaa); }
 .radio-diff-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-dim); margin-bottom: 4px; }
 .radio-diff-section ul { margin: 0; padding-left: 18px; font-size: 12px; color: var(--text-mid); }
 .radio-diff-note { font-size: 11px; color: var(--text-dim); margin-top: 10px; }
+.radio-diff-link { color: var(--accent, #ff4e84); text-decoration: underline; }
+.radio-diff-link:hover { opacity: 0.85; }
 .radio-dialog-actions { display: flex; gap: 8px; justify-content: flex-end; align-items: center; margin-top: 16px; }
 
 .radio-prep-workspace { display: flex; flex-direction: column; height: 100%; overflow: hidden; }

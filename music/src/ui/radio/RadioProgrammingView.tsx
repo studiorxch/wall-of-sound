@@ -252,7 +252,19 @@ export function RadioProgrammingView({ radioPlaylists, radioWebExports, radioSit
       </div>
 
       {!isAuthorizedOperator && (
-        <p className="radio-diff-note">Sign in as the StudioRich operator (via Event Radio Control) to schedule a Program.</p>
+        <p className="radio-diff-note">
+          {memberState.status === "signedIn"
+            ? "Signed in, but not as a StudioRich operator — scheduling is read-only."
+            : (
+              <>
+                Not signed in — scheduling is read-only.{" "}
+                <a className="radio-diff-link" href="/event-control.html" target="_blank" rel="noreferrer">
+                  Sign in as the StudioRich operator
+                </a>{" "}
+                (opens Event Radio Control; the same persistent session — no separate Programming sign-in).
+              </>
+            )}
+        </p>
       )}
 
       <div className="radio-programming-grid" style={{ ["--radio-programming-hour-px" as string]: `${HOUR_PX}px` }}>
