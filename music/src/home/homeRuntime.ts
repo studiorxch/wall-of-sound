@@ -22,10 +22,18 @@ const childUrl = (route: HomeRoute, identity: HomeSurfaceIdentity): string => {
     url.search = new URLSearchParams({ host: "home", homeRuntime: identity.runtimeId, homeNavigation: String(identity.navigationId) }).toString();
     return url.href;
   }
-  const url = new URL("/home-surface-dev.html", location.origin);
-  url.search = serializeHomeRoute(route);
-  url.searchParams.set("runtime", identity.runtimeId);
-  url.searchParams.set("navigation", String(identity.navigationId));
+  // HOST-03 -- the real BLACKBOOK document, not the HOST-01/02 fixture.
+  // Mounted either bare (no prior artwork route -- BLACKBOOK resolves its
+  // own initial artwork internally via localStorage/fallback, same as
+  // standalone) or, on a reload/restore of a route that already names an
+  // artwork, with that same `?artwork=` param BLACKBOOK's OWN existing
+  // `resolveInitialActiveArtwork()` already reads -- no new resolution
+  // logic, just forwarding the identity HOME's URL already carries. Either
+  // way BLACKBOOK reports back via `syncArtworkRoute` once resolved.
+  const url = new URL("/blackbook.html", location.origin);
+  const params = new URLSearchParams({ host: "home", homeRuntime: identity.runtimeId, homeNavigation: String(identity.navigationId) });
+  if (route.surface === "blackbook" && route.artworkId !== undefined) params.set("artwork", route.artworkId);
+  url.search = params.toString();
   return url.href;
 };
 const navigation = createHomeNavigation(runtimeId, {
@@ -79,6 +87,7 @@ const api: HomeSurfaceHost = Object.freeze({
   ready: acceptReady,
   requestNavigate: (source: Document, identity: HomeSurfaceIdentity, destination: unknown) => activeCaller(source, identity) && navigation.requestNavigate(destination),
   replaceArtwork: (source: Document, identity: HomeSurfaceIdentity, artworkId: unknown) => activeCaller(source, identity) && navigation.replaceArtwork(artworkId),
+  syncArtworkRoute: (source: Document, identity: HomeSurfaceIdentity, artworkId: unknown) => activeCaller(source, identity) && navigation.syncArtworkRoute(artworkId),
 });
 window.StudioRichHome = api;
 

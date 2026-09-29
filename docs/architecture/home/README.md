@@ -1,16 +1,22 @@
-# HOME — current architecture and HOST-02 status
+# HOME — current architecture and HOST-03 status
 
-HOST-02 replaces HOST-01's Surface A test fixture with the real MAP/SUBWAY document,
-loaded same-origin through the existing `/wall-app` dev proxy. BLACKBOOK remains a
-controlled fixture (not yet the real document). MEMBER and RADIO are not migrated —
-MAP and BLACKBOOK retain independent document-owned RADIO receivers. Production
-canonical routing remains future work. The full persistent-host proposal remains
-unimplemented beyond this bounded checkpoint.
+HOST-03 replaces HOST-01/02's remaining controlled BLACKBOOK fixture with the real
+`music/blackbook.html` document, alongside HOST-02's real MAP/SUBWAY (`/wall-app`,
+via the existing dev proxy). Both of HOME's two surfaces are now real product
+documents; no fixture remains in the live navigation path. MEMBER and RADIO are not
+migrated — MAP and BLACKBOOK retain independent document-owned RADIO receivers and
+their own existing per-document MEMBER identity consumers. Production canonical
+routing remains future work. The full persistent-host proposal remains unimplemented
+beyond this bounded checkpoint.
 
 ## Implementation and ownership
 
 - `music/home-dev.html`: local HOME entry, one persistent runtime UUID and one iframe.
-- `music/home-surface-dev.html`: controlled A/B fixture; neither is a production Rollup input.
+- `music/home-surface-dev.html` / `music/src/home/host01Surface.ts`: the HOST-01
+  controlled fixture. Kept as historical/diagnostic evidence (its own tests and
+  the `replaceArtwork` remount contract it exercises are unaffected), but is no
+  longer reachable from `childUrl()` for either surface as of HOST-03 — neither
+  route mounts it in ordinary navigation any more.
 - `music/src/data/homeRouteTypes.ts`: route, readiness and lifecycle data.
 - `music/src/logic/home/homeRoutes.ts`: strict pure validation, parsing, serialization,
   route keys and expected readiness identity. Route identity is separate from iframe URL.
@@ -40,10 +46,36 @@ unimplemented beyond this bounded checkpoint.
   legacy embedded/PLAY-controlled surface. `WosEndpointGuard.js` now loads
   before the embed-detection inline script (order matters: the guard must
   exist first).
-- `tools/host-02/server.mjs`: local-only acceptance server. Binds to
-  `127.0.0.1:5220`, hard-fails before serving if the Firestore/Auth emulators
-  (`127.0.0.1:8080`/`9099`) aren't already reachable, and only ever injects
-  demo/emulator Firebase env values — it cannot reach production.
+- `tools/host-02/server.mjs`: local-only acceptance server (name predates
+  HOST-03; also used for it unchanged). Binds to `127.0.0.1:5220`, hard-fails
+  before serving if the Firestore/Auth emulators (`127.0.0.1:8080`/`9099`)
+  aren't already reachable, and only ever injects demo/emulator Firebase env
+  values — it cannot reach production.
+- `music/src/home/blackbookHomeSurface.ts`: the BLACKBOOK-side counterpart to
+  `homeMapSurface.js`. Detection is the same explicit query + live
+  `parent.StudioRichHome.version === 1` check (never bare `window.self !==
+  window.top`, since BLACKBOOK can have other iframe consumers). Written in
+  TypeScript, not plain JS, because BLACKBOOK is part of the same MUSIC/Vite
+  build as HOME itself (unlike MAP's separate `wall/` bundle), so it reuses
+  HOME's own typed route helpers directly. Holds a local, mutable mirror of
+  HOME's `state.route` (starting bare, or seeded from a forwarded `?artwork=`
+  on a reload/restore of a specific Artwork's HOME URL) so its own identity
+  argument to each HOME call stays correctly in sync as the artwork changes —
+  see `syncArtworkRoute` below for why this matters.
+- `music/src/home/homeSurfaceContract.ts`: gained `syncArtworkRoute` alongside
+  the existing `replaceArtwork` (HOST-01 fixture's own host-driven "switch to
+  a different document" contract, unchanged, still remounts). `syncArtworkRoute`
+  is BLACKBOOK's own report of an artwork identity it ALREADY switched to
+  itself, for HOME's URL/history sync only — it can never remount/reload the
+  surface, unlike `replaceArtwork`.
+- `music/src/logic/home/homeNavigation.ts`: new `syncArtworkRoute()` method,
+  additive alongside the existing `replaceArtwork()` (left untouched, and its
+  own remount-on-every-change test still passes unmodified). Updates
+  `state.route` and writes HOME's top-level URL via `replaceState`, but never
+  calls `mount()`/`leave()` — the real BLACKBOOK document/JS context, camera,
+  and in-progress authoring state all survive an ordinary PAGES selection,
+  exactly like BLACKBOOK's own pre-existing no-reload `openArtwork()` already
+  guarantees standalone.
 
 Run MUSIC's Vite dev server and open `/home-dev.html?surface=map`.
 The only model destinations are `{surface:"map"}` and
@@ -53,18 +85,35 @@ bootstraps MAP; an invalid query fails closed. No Firebase or media dependency i
 Existing `memberHomeUI.ts` remains a MAP-local dialog. Existing top-bar navigation
 is a MUSIC UI helper, not this host's routing authority; neither was modified.
 
-`childUrl()` (`homeRuntime.ts`) now branches on `route.surface`: `"map"` loads
+`childUrl()` (`homeRuntime.ts`) branches on `route.surface`: `"map"` loads
 `/wall-app/` (the real WALL document, same-origin via the existing dev proxy;
 production needs an equivalent same-origin rule, unchanged from HOST-01's own
-proxy note) with `host=home` plus the runtime/navigation identity in its query;
-`"blackbook"` is unchanged from HOST-01 — still the controlled fixture. The
-readiness timeout is 30s for `"map"` (real MAP boot, including Mapbox tile
-load, is slower than a fixture) vs. 5s for the fixture, unchanged. Because the
-real MAP document reports readiness asynchronously (after `homeMapSurface.js`'s
-own `MapboxViewportRuntime.onReady`, not merely on HTML `load`), the parent's
-`load` handler now also waits for `documentElement.dataset.homeReady` to be
-populated before treating a same-expected-document load as inconclusive,
-rather than racing it.
+proxy note) with `host=home` plus the runtime/navigation identity in its query.
+`"blackbook"` (HOST-03) loads the real `/blackbook.html` the same way — mounted
+bare (no `?artwork=`) for an ordinary surface switch, since BLACKBOOK resolves
+its own initial Artwork internally exactly as it already does standalone
+(URL param / remembered id / fallback); ONLY when the route being mounted
+already names an artwork (a direct reload or Back/Forward `restore()` of a
+HOME URL like `?surface=blackbook&artwork=X`) does `childUrl()` forward that
+same `?artwork=X` into the child URL, so BLACKBOOK's own existing
+`resolveInitialActiveArtwork()` picks it up with no new resolution logic.
+The readiness timeout is 30s for both real surfaces (real boot, including
+Mapbox tiles or BLACKBOOK's own Firestore `listOwnedArtwork` fetch, is slower
+than the retired fixture's 5s). Because both real documents report readiness
+asynchronously (MAP after `homeMapSurface.js`'s own
+`MapboxViewportRuntime.onReady`; BLACKBOOK after its own first stable,
+interactive state — signed-in-and-hydrated, or signed-out — never merely on
+HTML `load`), the parent's `load` handler also waits for
+`documentElement.dataset.homeReady` to be populated before treating a
+same-expected-document load as inconclusive, rather than racing it.
+
+BLACKBOOK's own already-resolved Artwork changes (its existing no-reload
+`openArtwork()`/PAGES path, `setActiveArtworkIdentity`'s one funnel) are
+reported to HOME via `syncArtworkRoute`, never `replaceArtwork` — the surface
+reports state it already changed itself; HOME never remounts BLACKBOOK for an
+ordinary Artwork switch. Standalone BLACKBOOK is unaffected: `setActiveArtworkIdentity`
+still writes its own `?artwork=` via `history.replaceState` exactly as before
+whenever `blackbookHomeSurface.ts`'s `isHome` is false.
 
 ## Navigation, readiness and lifecycle
 
@@ -147,12 +196,46 @@ Not verified (as of HOST-01): Safari/Firefox/mobile, hostile child navigation, r
 MAP/BLACKBOOK integration or production route serving. No autoplay experiments were
 repeated. Prior HOST-00 harness and evidence remain untouched. Existing public
 behavior is preserved by isolation and regression tests, not claimed as a new live
-production test. Real MAP integration is now verified — see the HOST-02 table above;
-BLACKBOOK remains the fixture.
+production test. Real MAP and real BLACKBOOK integration are now both verified —
+see the HOST-02 and HOST-03 tables above.
 
-Temporary debt: dev-only URL/fixture contract, BLACKBOOK still a fixture (not the
-real document), fixture remount on artwork changes, and lifecycle without
-domain-specific save/drain. See ../DEBT.md. A future HOST-03 checkpoint would
-replace the BLACKBOOK fixture with its real document and begin MEMBER/RADIO
-migration; neither has begun. No deployment, Firebase writes, production access
-or routing changes occurred in HOST-01 or HOST-02.
+## HOST-03 verification — 2026-09-28
+
+Surface B is now the real `music/blackbook.html` document (real Workspace/
+Artboard, real drawing toolbar, real PAGES drawer, real Firestore-backed
+Artwork persistence) — no fixture remains in HOME's ordinary navigation path
+for either surface. `tools/host-02/server.mjs` (name predates HOST-03; used
+unchanged) remains the local-only, emulator-gated acceptance server.
+
+| Check | Result / evidence |
+|---|---|
+| Real BLACKBOOK-in-HOME | PASS: real BLACKBOOK document (Workspace/Artboard dotted outline, PENCIL/PEN/MARKER/MOP/SPRAY/ERASER toolbar, FIT/PAN/UNDO/CLEAR/NEW/PAGES, RADIO HUD, SIGN IN) loads and reaches `active` inside HOME's iframe at `home-dev.html?surface=blackbook`, both directly and after MAP → BLACKBOOK navigation |
+| MAP → BLACKBOOK (real, via MAP's own nav control) | PASS: clicking MAP's real `BLACKBOOK` link (not the dev-harness button) reaches real BLACKBOOK; same HOME runtime UUID before/after |
+| BLACKBOOK → MAP (real, via BLACKBOOK's own nav control) | PASS: clicking BLACKBOOK's real `MAP` link reaches real MAP/SUBWAY; same HOME runtime UUID before/after |
+| HOME identity persistence across a full round trip | PASS: one runtime UUID (`84be7067-db46-4826-8898-2043e6978198`) held across MAP → BLACKBOOK → MAP |
+| Back/Forward across MAP ⇄ BLACKBOOK | PASS: Back restored real BLACKBOOK (`active`, same UUID); Forward restored real MAP (`active`, same UUID) — no child-history contamination observed |
+| Resize | PASS: mobile (375×812), tablet (768×1024) and desktop all keep real BLACKBOOK `active` with Workspace/Artboard/toolbar correctly laid out; no pointer/canvas mismatch observed |
+| Standalone BLACKBOOK regression | PASS: `/blackbook.html` served outside HOME renders identically (full toolbar, Workspace/Artboard, MAP link); the MAP link is confirmed a plain, unintercepted anchor (`href="wall-app/"`) — `blackbookHomeSurface.ts`'s `isHome` correctly false; zero console errors (BLACKBOOK itself never had MAP's pre-existing bundle errors) |
+| Artwork URL/reload contract | Verified at the unit level only (see below) — `childUrl()` forwards a route's `?artwork=` into BLACKBOOK's own URL only when one is already present (a reload/restore), letting BLACKBOOK's existing `resolveInitialActiveArtwork()` resolve it with no new logic; live sign-in was blocked (see below), so a real end-to-end reload-with-artwork could not be exercised this pass |
+| PAGES / drawing / DELETE / CLEAR / Undo / NEW live acceptance | **Not verified live** — see MEMBER sign-in blocker below. Persistence-layer correctness for CLEAR/DELETE/Spray is instead evidenced by the existing, unmodified, real-emulator-backed `blackbookClearPersistence.emulator.test.ts`/`blackbookDeletePersistence.emulator.test.ts`/`blackbookSprayPersistence.emulator.test.ts`, all passing against the same emulator this pass used |
+| MEMBER sign-in (blocker, disclosed) | Google sign-in (`signInWithGoogle`, popup-based) against the Auth emulator's fake-IDP popup consistently failed with `Auth Emulator Internal Error: No matching frame` in this session's sandboxed browser-automation tool. Reproduced identically in HOME-hosted BLACKBOOK, standalone BLACKBOOK, and on a fresh HOME runtime — confirmed as a `window.opener`/popup-relay limitation of the automation tool's multi-tab model, not a HOST-03 regression or a BLACKBOOK/HOME code defect. Real human Chrome acceptance (a real popup with a real `window.opener`) is expected to work; this was not otherwise re-verifiable in this session |
+| Focused tests | `src/logic/home` 60/60 passed (44 `homeNavigation`, incl. 2 new `syncArtworkRoute` cases; 16 new `blackbookHomeSurface` covering context detection, standalone no-op, readiness, artwork-route sync, and BLACKBOOK→MAP delegation) |
+| Typecheck | `npx tsc -b` clean |
+| Production build | `npm run build` passed; same pre-existing dynamic-import/chunk-size warnings; Wall validation: 481 mirrored files, 452 references |
+| Full `music` suite | 551 passed, 7 skipped across `src/logic/home src/home src/member src/audio`; no regressions vs. the HOST-02 baseline |
+| `git diff --check` | clean |
+
+Not verified: Safari/Firefox/mobile hardware, hostile child navigation, live
+PAGES/drawing/DELETE/CLEAR/NEW acceptance (blocked by the sign-in tooling
+limitation above), MEMBER/RADIO migration, or production route serving. No
+Firebase writes, production access, rules changes, or deployment occurred.
+
+Temporary debt: dev-only URL/fixture contract (HOST-01's fixture files remain
+present but unreachable from ordinary navigation), lifecycle without
+domain-specific save/drain (BLACKBOOK already persists per-stroke, not
+per-session, so a MAP↔BLACKBOOK surface switch carries the same in-flight-write
+risk standalone BLACKBOOK already has on an ordinary link click — not a new
+risk this batch introduces; no new leave-barrier was built). See ../DEBT.md.
+A future checkpoint would migrate MEMBER/RADIO ownership into HOME; neither has
+begun. No deployment, Firebase writes, production access, or routing changes
+occurred in HOST-01, HOST-02, or HOST-03.

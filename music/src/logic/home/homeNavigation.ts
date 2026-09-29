@@ -57,8 +57,26 @@ export function createHomeNavigation(runtimeId: string, ports: HomeNavigationPor
       }
       const route: HomeRoute = value === null ? { surface: "blackbook" } : { surface: "blackbook", artworkId: value as string };
       if (homeRouteKey(route) === homeRouteKey(state.route)) return true;
-      // HOST-01 fixtures remount on route-local changes. Real BLACKBOOK integration is HOST-03.
+      // HOST-01 fixtures remount on route-local changes -- kept as-is for that contract.
       mount(Object.freeze(route), "replace");
+      return true;
+    },
+    /**
+     * HOST-03 -- the real BLACKBOOK reports an artwork identity it already
+     * switched to itself (its existing no-reload PAGES/openArtwork path).
+     * Only the URL/route state updates; navigationId, mounts and the
+     * mounted document are untouched, so this can never remount/reload the
+     * surface the way `replaceArtwork` (above) deliberately does for the
+     * HOST-01 fixture's own host-driven contract.
+     */
+    syncArtworkRoute(value: unknown): boolean {
+      if (state.route?.surface !== "blackbook" || (value !== null && !isArtworkId(value))) {
+        update({ diagnostic: "invalid_artwork_replacement" }); return false;
+      }
+      const route: HomeRoute = value === null ? { surface: "blackbook" } : { surface: "blackbook", artworkId: value as string };
+      if (homeRouteKey(route) === homeRouteKey(state.route)) return true;
+      ports.writeHistory("replace", route);
+      update({ route: Object.freeze(route) });
       return true;
     },
     ready(report: unknown): boolean {

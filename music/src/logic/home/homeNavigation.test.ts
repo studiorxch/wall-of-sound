@@ -71,6 +71,27 @@ describe("HOST-01 parent navigation authority", () => {
     f.nav.replaceArtwork(null);
     expect(f.nav.getState().route).toEqual({ surface: "blackbook" });
   });
+  it("HOST-03: syncArtworkRoute updates the route/URL WITHOUT remounting (unlike replaceArtwork)", () => {
+    const f = fixture(); f.nav.restore("?surface=blackbook", true); f.ready();
+    const mountsBefore = f.mounts.length;
+    expect(f.nav.syncArtworkRoute("A")).toBe(true);
+    expect(f.nav.syncArtworkRoute("B")).toBe(true);
+    expect(f.nav.syncArtworkRoute("B")).toBe(true); // identical selection is a no-op
+    expect(f.mounts).toHaveLength(mountsBefore); // never remounts -- the real BLACKBOOK document/JS context survives
+    expect(f.leaves()).toBe(0);
+    expect(f.history.map(x => x.mode).slice(1)).toEqual(["replace", "replace"]); // only 2 writes: the no-op made none
+    expect(homeRouteKey(f.nav.getState().route!)).toBe("surface=blackbook&artwork=B");
+    expect(f.nav.getState().phase).toBe("active"); // stays active throughout -- no mounting phase flicker
+    expect(f.nav.syncArtworkRoute(null)).toBe(true);
+    expect(f.nav.getState().route).toEqual({ surface: "blackbook" });
+  });
+  it("HOST-03: syncArtworkRoute is rejected outside a blackbook route, and rejects invalid ids", () => {
+    const f = fixture(); f.nav.restore("?surface=map", true); f.ready();
+    expect(f.nav.syncArtworkRoute("A")).toBe(false);
+    f.nav.requestNavigate({ surface: "blackbook" }); f.ready();
+    expect(f.nav.syncArtworkRoute("")).toBe(false);
+    expect(f.nav.syncArtworkRoute("a/b")).toBe(false);
+  });
   it("rejects invalid requests without history/mount mutation", () => {
     const f = fixture(); f.nav.restore("", true); f.ready();
     expect(f.nav.requestNavigate("/wall-app/")).toBe(false);

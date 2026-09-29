@@ -41,6 +41,7 @@ import {
   type GraphiteGradeId,
 } from "./strokeSmoothing";
 import { resolveSprayCapProfile, DEFAULT_SPRAY_CAP_ID, STUDIORICH_STOCK_CAP, STUDIORICH_FAT_CAP } from "./sprayDeposition";
+import { createBlackbookHomeSurface } from "../home/blackbookHomeSurface";
 
 function required<T>(value: T | null, error: string): T { if (!value) throw new Error(error); return value; }
 const canvas = required(document.querySelector<HTMLCanvasElement>("#blackbook-page"), "blackbook_surface_missing");
@@ -55,6 +56,17 @@ const pagesDrawerList = required(document.querySelector<HTMLElement>("#pages-dra
 const pagesDrawerNewButton = required(document.querySelector<HTMLButtonElement>("#pages-drawer-new"), "blackbook_surface_missing");
 const pagesDrawerCollapseButton = required(document.querySelector<HTMLButtonElement>("#pages-drawer-collapse"), "blackbook_surface_missing");
 const memberButton = required(document.querySelector<HTMLButtonElement>("#blackbook-member"), "blackbook_surface_missing");
+const mapNavLink = required(document.querySelector<HTMLAnchorElement>("#map-nav-link"), "blackbook_surface_missing");
+// HOST-03 -- explicit, query-based HOME detection (never bare window.self
+// !== window.top; BLACKBOOK can have other iframe consumers). A no-op
+// (isHome: false) in standalone BLACKBOOK and in any non-HOME embed.
+const homeSurface = createBlackbookHomeSurface();
+if (homeSurface.isHome) {
+  mapNavLink.addEventListener("click", (event) => {
+    event.preventDefault();
+    homeSurface.requestNavigateToMap();
+  });
+}
 /**
  * BLACKBOOK EVENT UI POLISH V1 -- the raw developer-facing Surface ID no
  * longer occupies permanent UI (requirement 14). `status` is now a
@@ -588,7 +600,13 @@ function setActiveArtworkIdentity(artworkId: string): void {
   currentArtwork.setCurrentArtwork(artworkId);
   if (memberState.status !== "signedIn") return;
   rememberActiveArtworkId(memberState.member.uid, artworkId);
-  window.history.replaceState(null, "", withActiveArtworkUrlParam(window.location.href, artworkId));
+  // HOST-03 -- when HOME-hosted, HOME owns the top-level URL/history; this
+  // reports the already-changed identity for HOME's own replaceState sync
+  // instead of writing this (iframe-local, invisible) document's own URL.
+  // Standalone/non-HOME keeps the original same-document URL sync exactly
+  // as before.
+  if (homeSurface.isHome) homeSurface.reportArtworkChange(artworkId);
+  else window.history.replaceState(null, "", withActiveArtworkUrlParam(window.location.href, artworkId));
   // BLACKBOOK Embedded PAGES Drawer V1 -- keep the drawer's own selected-
   // card state in sync with whichever path just changed the active
   // Artwork (an explicit `openArtwork()`, or NEW's own pending-Artwork
@@ -721,6 +739,12 @@ function resolveInitialActiveArtwork(): void {
 function hydrate(artworks: readonly Artwork[]): void {
   knownArtworksCache = filterBlackbookArtworks(artworks);
   persistence.replaceKnownArtworks(knownArtworksCache);
+  // HOST-03 -- report readiness BEFORE resolving the initial Artwork: once
+  // resolved, `resolveInitialActiveArtwork` -> `openArtwork` ->
+  // `setActiveArtworkIdentity` immediately reports the resolved identity to
+  // HOME, which is only accepted once HOME's own navigation phase is
+  // "active" -- i.e. after this readiness report.
+  homeSurface.reportReady();
   resolveInitialActiveArtwork();
 }
 
@@ -1204,6 +1228,10 @@ memberIdentity.subscribe((state) => {
     closePagesDrawer();
     fitPageIntoView();
     render();
+    // HOST-03 -- also a stable, interactive state (the existing "sign in to
+    // draw" page), and readiness doesn't gate on auth resolving any more
+    // than MAP's own MapboxViewportRuntime.onReady does; idempotent.
+    homeSurface.reportReady();
   }
 });
 

@@ -370,6 +370,22 @@ client-side-only "hide" that's mistaken for real access control).
 
 ## 10. Integration boundaries
 
+- **HOME** (development-only, HOST-03) — `music/src/home/blackbookHomeSurface.ts`
+  is BLACKBOOK's own narrow HOME-hosting adapter, detected only via an explicit
+  validated same-origin query identity (`?host=home&homeRuntime=...&
+  homeNavigation=...` plus a live `parent.StudioRichHome.version === 1` check —
+  never bare `window.self !== window.top`, since BLACKBOOK can have other
+  iframe consumers). When hosted, `setActiveArtworkIdentity` (§ NEW ARTWORK
+  PERSISTENCE V1) reports its already-changed Artwork identity to HOME via
+  `syncArtworkRoute` for HOME's own top-level URL sync, instead of writing this
+  document's own (invisible, iframe-local) URL; standalone BLACKBOOK is
+  unaffected. The `#map-nav-link` anchor is intercepted only when hosted,
+  delegating to HOME's navigation authority instead of a native anchor
+  navigation; standalone/other embeds keep the plain anchor. No BLACKBOOK
+  domain behavior (drawing, PAGES, CLEAR/DELETE/NEW, persistence) changes when
+  hosted — see [../home/README.md](../home/README.md) for the full contract.
+  This remains a development-only, opt-in integration; production routing is
+  unimplemented.
 - **MEMBERS** — owns identity/authentication/shared operator authority; see
   [../members/README.md](../members/README.md). BLACKBOOK relies on it for
   *who's signed in*, never reimplements auth.

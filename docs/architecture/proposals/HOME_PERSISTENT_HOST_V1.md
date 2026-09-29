@@ -1,8 +1,10 @@
 # STUDIORICH HOME — persistent host V1 proposal
 
-Status: **PROPOSED; development HOST-01 skeleton implemented only**.
+Status: **PROPOSED; HOST-01/02/03 development checkpoints implemented only**.
 See [current HOME architecture](../home/README.md) for the bounded implementation
-and verification. Real surfaces, RADIO ownership and production routing remain proposed.
+and verification — both real surfaces (MAP/SUBWAY, HOST-02; BLACKBOOK, HOST-03)
+are now hosted in the development skeleton. RADIO ownership and production
+routing remain proposed and unimplemented.
 Baseline: `release/subway-beta-0.1`, implementation commit `c71ca04`.
 This is the designated proposal and migration contract, not current-state
 registry truth. HOST-00 has isolated desktop-Chrome feasibility evidence with constraints;
