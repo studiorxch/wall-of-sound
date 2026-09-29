@@ -72,4 +72,9 @@ current-state pages only with their verified implementation checkpoints.
 
 - [STUDIORICH HOME persistent host V1](proposals/HOME_PERSISTENT_HOST_V1.md) —
   proposed same-origin surface hosting, public URL/history contract, persistent
-  RADIO session, browser validation gates, and staged migration. Only the development HOST-01 skeleton is implemented; see the current HOME page.
+  RADIO session, browser validation gates, and staged migration. Only the development HOST-01/02/03 skeleton (real MAP + real BLACKBOOK, both hosted) is implemented; see the current HOME page.
+- [HOST-03A — hosted MEMBER authentication boundary](proposals/HOST_03A_MEMBER_AUTH_BOUNDARY.md) —
+  recon into the real defect HOST-03 human acceptance found (a real Google
+  popup sign-in from a HOME-hosted surface recreates HOME's own top-level
+  document); recommends a narrow auth transport/coordination adapter owned by
+  HOME. Recon only — not implemented.

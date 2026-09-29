@@ -200,15 +200,23 @@ verification evidence. No longer an open item.
   pre-existing risk: `proposals/HOME_PERSISTENT_HOST_V1.md`'s own "Final
   acceptance and unresolved questions" section flagged "auth
   popup/persistence in hosted mode" as unresolved before HOST-03 began.
-- **Current status**: known, disclosed, NOT fixed. Not reproducible in this
-  agent's own sandboxed browser-automation tool (a separate, unrelated
-  `window.opener`/popup-relay limitation blocks even attempting the real
-  popup flow there), so no further agent-side isolation was possible this
-  pass beyond the email/password-vs-Google-popup comparison above.
-- **Revisit trigger**: before HOME-hosted BLACKBOOK (or MAP, whose own
-  separate MEMBER dialog has not yet been acceptance-tested against a real
-  Google popup under HOME and likely has the same latent exposure) sign-in
-  is presented as safe for real use. Likely requires a MEMBER-flow design
-  decision (e.g. `signInWithRedirect` with a coordinated top-level
-  completion step) — explicitly out of HOST-03's own scope ("Do not migrate
-  MEMBER ownership in HOST-03"), so deliberately not attempted here.
+- **Current status**: known, disclosed, root cause narrowed but NOT fixed.
+  HOST-03A (recon, see [proposals/HOST_03A_MEMBER_AUTH_BOUNDARY.md](proposals/HOST_03A_MEMBER_AUTH_BOUNDARY.md))
+  isolated the cause specifically to the real Google popup flow (not to
+  "being signed in" generically — an email/password sign-in through the same
+  hosted document does not reproduce it), and observed a concrete
+  `window.open()`-from-a-nested-iframe anomaly supporting a
+  COOP/popup-fragility explanation, though the exact browser mechanism
+  remains unproven. Not reproducible in this agent's own sandboxed
+  browser-automation tool at all (a separate, unrelated `window.opener`/
+  popup-relay limitation blocks even attempting the real popup flow there).
+- **Revisit trigger**: before HOME-hosted BLACKBOOK or MAP sign-in is
+  presented as safe for real use, or before RADIO-01 begins (RADIO-01 depends
+  on HOME's top-level document surviving ordinary member interactions).
+  HOST-03A recommends a narrow authentication transport/coordination adapter
+  — HOME's own (never-nested) window initiates the Google popup on the
+  child's behalf, relaying only the resulting credential back for the child's
+  own unmodified `MemberIdentityAuthority` to consume via
+  `signInWithCredential` — NOT a broader MEMBER ownership migration. See
+  HOST_03A_MEMBER_AUTH_BOUNDARY.md §9–§12 for the proposed implementation
+  checkpoint and its acceptance matrix; not implemented yet.
