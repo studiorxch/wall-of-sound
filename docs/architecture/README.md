@@ -77,4 +77,9 @@ current-state pages only with their verified implementation checkpoints.
   recon into the real defect HOST-03 human acceptance found (a real Google
   popup sign-in from a HOME-hosted surface recreates HOME's own top-level
   document); recommends a narrow auth transport/coordination adapter owned by
-  HOME. Recon only — not implemented.
+  HOME. Implemented as HOST-03B (`cff1e12`), partially human-accepted.
+- [Persistent MEMBER presentation boundary](proposals/MEMBER_PRESENTATION_BOUNDARY.md) —
+  recon into whether persistent HOME should also render a shared, recognizable
+  MEMBER/avatar control across hosted surfaces (MAP has one; BLACKBOOK
+  doesn't), kept explicitly distinct from identity authority and OAuth
+  transaction ownership. Recon only — not implemented.
