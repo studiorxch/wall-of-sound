@@ -27,6 +27,12 @@ architecture.
 If architecture docs conflict with code, perform targeted recon only for
 the discrepancy, resolve it, and update the docs.
 
+This applies to recon/investigation/audit work exactly as it does to
+implementation: a recon is not complete until its current-state findings
+are reconciled with `docs/architecture/` — see that directory's own
+`README.md` ("The rule for future recon") for the full canonical statement
+of this rule; do not restate it here.
+
 ## Architecture
 
 Follow the existing architecture:

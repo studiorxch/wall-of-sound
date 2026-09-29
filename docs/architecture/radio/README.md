@@ -35,6 +35,17 @@ channelId                        broadcast Channel identity  (fixed "studiorich-
 slug + version                   public routing identity ONLY — never used as Program/Channel identity
 ```
 
+Every layer above is keyed for multiplicity by design, not V1-only: multiple
+MUSIC playlists (`PlaylistProject`, keyed by `projectId`, never a singleton),
+multiple `RadioPlaylist`s (each carrying its own `sourceMusicPlaylistId`
+link), multiple published Packages (multiple `stationId`s, and multiple
+`bundleVersion`s per `stationId`), and multiple `radioPrograms` documents
+already coexist today (three real published packages on disk —
+`soft-motion-radio`, `jungle-fade`, `new-playlist` — and Program ids are
+independently generated, never derived from a package or Channel). V1 ships
+with exactly one Channel (`"studiorich-radio"`), but nothing in the
+`radioChannels` schema assumes a single Channel.
+
 ## Authority
 
 ```
@@ -81,8 +92,39 @@ not availability**. A missing/malformed/duplicate Program reference
 invalidates the whole rotation resolution (all-or-nothing), never a silent
 partial result or a fallback to a different track.
 
+Every resolver above takes `nowMs` from the ordinary system wall clock
+(`Date.now()`) — RADIO consumes this shared, ordinary clock, but RADIO is
+not its owner and should not be documented as StudioRich's universal time
+authority. Nothing about `resolveChannelRotation`/`resolveChannelTrackBroadcast`
+requires or grants RADIO that role; it is simply the one system that
+currently reads `Date.now()` this way.
+
+## Channel rotation semantics
+
+`RadioChannelRotation = { anchorAtMs: number, programIds: readonly string[] }`
+is a **continuously repeating cycle, not a calendar**: there is no day/time/
+calendar field anywhere in `RadioChannel`, `RadioChannelRotation`, or the
+Channel Control editor's own update-builders. `anchorAtMs` is the fixed
+epoch-ms instant `programIds[0]` began its first cycle; it is changed ONLY
+by "Start/Restart Rotation Now" (always `Date.now()` at click time) —
+ordinary rotation edits (add/remove/reorder, Save Rotation) leave it
+unchanged.
+
+The current domain model does not represent: a future-dated start for a
+Program, a time-boxed override that reverts to normal rotation afterward, or
+recurring/calendar scheduling (e.g. "every Friday at 8pm"). These are not
+built and not partially built — the schema has no field for any of them.
+
 ## What is NOT Channel authority
 
+- **`eventProgram/current`**
+  (`shared/member-identity/src/data/eventRadioTypes.ts`) is a separate,
+  singleton, manually-staged authority — one Program, one `playbackMode`
+  (`"personal" | "clock"`), one `endPolicy` (`"stop" | "repeat"`), advanced
+  through `status` (`"inactive" → "ready" → "active"`) only by an operator's
+  own `setEventProgram` call. It has no scheduled/calendar end time and no
+  relationship to `radioChannels`/Channel rotation at all — never confuse
+  this with the Channel Clock.
 - **`active.json`** (in `studiorich-orbital`'s `public/radio/`) selects what
   the *existing, separate, package-slug-based* public RADIO player
   (`radio-player.html`/`radioPlayerMain.ts`, and the equivalent page in
@@ -115,10 +157,30 @@ reachable from production.
 
 ## Operator playlist/programming workflow (current facts)
 
-MUSIC → RADIO → Channel is already a real, mostly UI-driven chain — see
+The following chain already has real, working operator UI end to end, with
+one exception (below):
+
+```
+MUSIC playlist authoring (PlaylistsGrid.tsx: create/open/duplicate/delete)
+  ↓ "Send to RADIO" (per-playlist button, local-only — writes to MUSIC's
+     own IndexedDB state, not Firestore)
+RadioPlaylistPublishPanel.tsx's readiness preview (five categories: Ready /
+  Needs approval / Needs preparation / Stale-or-failed / Excluded; storage
+  estimate)
+  ↓ "Publish" (writes real files to
+     library/music/RadioWebExports/<slug>/v<n>/ via MUSIC's own local Vite
+     dev-server endpoints)
+RadioPlaylistPublishPanel.tsx's "Create Program" button
+  ↓ createRadioProgram (real UI call)
+channel-control.html's rotation editor (add/remove/reorder Programs via a
+  real <select> from listRadioPrograms(), Save Rotation, Activate/
+  Deactivate, Start/Restart Rotation Now)
+```
+
+See
 [../proposals/RADIO_OPERATOR_WORKFLOW_RECON.md](../proposals/RADIO_OPERATOR_WORKFLOW_RECON.md)
-for the full recon (workflow diagram, exact files per stage, a scheduling
-capability matrix). Two current-state facts worth recording here directly:
+for the full recon (exact files per stage, a scheduling capability matrix).
+Current-state facts worth recording here directly:
 
 - **`radioPrograms` is create-only.** `EventRadioRepository` has no
   update or delete method for a Program, in its interface or any

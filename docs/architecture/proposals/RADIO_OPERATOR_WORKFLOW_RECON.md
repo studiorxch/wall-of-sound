@@ -7,6 +7,23 @@ workflow stop" for RADIO β0.1; it does not implement the missing pieces.
 Baseline: `release/subway-beta-0.1`, RADIO-01 implementation `24cd4dd`,
 human audible acceptance commit `1fdb4c9`.
 
+**Reconciled with the architecture registry (per `../README.md`'s recon
+rule):** every current-state fact this recon established is now also
+recorded directly in [../radio/README.md](../radio/README.md) — the
+multi-playlist/package/Program structural-support note, the full operator
+UI chain, the `radioPrograms` create-only limitation, the terminal-only
+Sites-publish step, the "Channel rotation semantics" section (`anchorAtMs`,
+repeating-not-calendar, what future/time-boxed/recurring scheduling is not
+represented), the `eventProgram/current` separate-authority note, and the
+GLOBAL-clock-consumer-not-owner caveat. RADIO-01 persistent shell ownership
+and its human audible acceptance were already canonical state before this
+recon, in [../home/README.md](../home/README.md). This recon document
+remains as supporting analysis and evidence; it is not itself the
+canonical source for any of the facts above. The future GLOBAL/GROUP/
+INDIVIDUAL clock-scope note in §11 below is intentionally NOT promoted into
+STATE — it remains architecture guidance only, exactly as this document
+originally scoped it.
+
 **Headline finding, ahead of the detail below: far more already exists,
 through real UI, than the brief's own framing assumed.** MUSIC already has
 a full multi-playlist authoring surface with a per-playlist "Send → RADIO"

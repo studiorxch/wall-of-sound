@@ -52,6 +52,48 @@ Architecture docs: no update required.
   cannot otherwise be confirmed from the code — never the default first
   step.
 
+**RECON IS NOT COMPLETE UNTIL ITS FINDINGS ARE RECONCILED WITH THE
+ARCHITECTURE REGISTRY.**
+
+Any recon, investigation, audit, feasibility study, or implementation
+discovery that establishes facts about current system behavior must finish
+by comparing those findings against the canonical architecture
+documentation.
+
+Confirmed current-state findings must either:
+
+1. be incorporated into the appropriate canonical STATE documentation; or
+2. be explicitly verified as already represented there.
+
+Do not leave established architectural truth only in a REPORT, PROPOSAL,
+recon document, completion message, test output, or conversation.
+
+Classify findings according to their actual status:
+
+```
+STATE            = what is true now
+DEBT             = a known missing capability, inconsistency, limitation,
+                    or required corrective work
+PROPOSAL / RECON = analysis, evidence, alternatives, recommendations,
+                    and future possibilities
+```
+
+A recon document may remain as supporting evidence and historical analysis,
+but it is not a substitute for canonical STATE documentation. Do not
+promote speculation, recommendations, future architecture, or unimplemented
+designs into STATE.
+
+If a recon establishes no new architectural truth, explicitly report:
+
+```
+Architecture registry: recon findings already represented; no update required.
+```
+
+This reconciliation is part of completing the recon, not a separate
+optional cleanup task. This is the one canonical statement of the rule —
+other contributor/agent guidance should point here rather than restating
+it in full.
+
 ## What's in here
 
 | File | Covers |
