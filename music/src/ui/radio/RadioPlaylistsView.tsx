@@ -11,7 +11,7 @@ import type { Track } from "../../data/trackTypes";
 import type { CompleteSongAnalysis } from "../../data/songAnalysisTypes";
 import type { RadioInboxItem } from "../../data/radioInboxTypes";
 import type { RadioPlaylist, RadioEntryPreparationState } from "../../data/radioPlaylistTypes";
-import type { RadioWebExportRecord } from "../../data/radioWebBundleTypes";
+import type { RadioWebExportRecord, RadioSitesPublicationRecord } from "../../data/radioWebBundleTypes";
 import type { PlaylistRecord } from "../../data/playProjectTypes";
 import { radioPlaylistStateLabel } from "../../logic/radio/radioPlaylistPublicationState";
 import { buildPublishPreview } from "../../logic/radio/radioPublishPreview";
@@ -42,16 +42,18 @@ interface Props {
   songAnalyses: CompleteSongAnalysis[];
   sourceMusicPlaylists: PlaylistRecord[];
   radioWebExports: RadioWebExportRecord[];
+  radioSitesPublications: RadioSitesPublicationRecord[];
   onUpdateRadioPlaylist: (id: string, patch: Partial<RadioPlaylist>) => void;
   onUpdateRadioInboxItem: (id: string, patch: Partial<RadioInboxItem>) => void;
   onExportWebBundle: (record: RadioWebExportRecord) => void;
+  onPublishedToSites: (record: RadioSitesPublicationRecord) => void;
   looperShared: RadioLooperSharedProps;
   onOpenLoopchainPlayer?: (candidateSourceTrackIds: string[]) => void;
 }
 
 export function RadioPlaylistsView({
-  radioPlaylists, radioInboxItems, libraryTracks, songAnalyses, sourceMusicPlaylists, radioWebExports,
-  onUpdateRadioPlaylist, onUpdateRadioInboxItem, onExportWebBundle, looperShared, onOpenLoopchainPlayer,
+  radioPlaylists, radioInboxItems, libraryTracks, songAnalyses, sourceMusicPlaylists, radioWebExports, radioSitesPublications,
+  onUpdateRadioPlaylist, onUpdateRadioInboxItem, onExportWebBundle, onPublishedToSites, looperShared, onOpenLoopchainPlayer,
 }: Props) {
   const [openPlaylistId, setOpenPlaylistId] = useState<string | null>(null);
   const [publishPanelPlaylistId, setPublishPanelPlaylistId] = useState<string | null>(null);
@@ -67,9 +69,11 @@ export function RadioPlaylistsView({
         songAnalyses={songAnalyses}
         sourceMusicPlaylists={sourceMusicPlaylists}
         radioWebExports={radioWebExports}
+        radioSitesPublications={radioSitesPublications}
         onUpdateRadioPlaylist={onUpdateRadioPlaylist}
         onUpdateRadioInboxItem={onUpdateRadioInboxItem}
         onExportWebBundle={onExportWebBundle}
+        onPublishedToSites={onPublishedToSites}
         looperShared={looperShared}
         onBack={() => setOpenPlaylistId(null)}
         onOpenLoopchainPlayer={onOpenLoopchainPlayer}
@@ -128,10 +132,12 @@ export function RadioPlaylistsView({
           loops={looperShared.loops}
           preparationStateByEntryId={NO_LIVE_PREPARATION_STATES}
           radioWebExports={radioWebExports}
+          radioSitesPublications={radioSitesPublications}
           onUpdateRadioPlaylist={onUpdateRadioPlaylist}
           onUpdateRadioInboxItem={onUpdateRadioInboxItem}
           onPromoteToRadio={looperShared.onPromoteToRadio}
           onExportedWebBundle={onExportWebBundle}
+          onPublishedToSites={onPublishedToSites}
           onClose={() => setPublishPanelPlaylistId(null)}
         />
       )}

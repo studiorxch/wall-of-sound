@@ -30,6 +30,9 @@ import { trackPackageVersionDir } from './server/radio/radioTrackPackageWriter'
 import { readCurrentTrackManifest } from './server/radio/radioTrackManifestBuilder'
 import { exportWebBundle, listBundleVersions } from './server/radio/radioWebBundleWriter'
 import { validateWebBundle } from './server/radio/radioWebBundleValidator'
+// RADIO-02 (batch 0929-2) — reuses the existing terminal-only publish
+// script's own validated logic; never a second publication implementation.
+import { publishRadioToSites, PublishToSitesError } from './scripts/publish-radio-to-sites.mjs'
 import { revealDirectoryInFinder } from './server/radio/radioPackageReveal'
 import { deleteVoiceFile, revealVoiceFileInFinder } from './server/voice/voiceFileAccess'
 import { generateMacOsSpeech, getMacOsSayProviderDescriptor, listMacOsSayVoices } from './server/voice/macosSayProvider'
@@ -126,6 +129,11 @@ interface RadioWebBundleRevealBody {
   bundleVersion?: number
 }
 
+interface RadioPublishToSitesBody {
+  slug?: string
+  bundleVersion?: number
+}
+
 interface VoiceGenerationBody {
   providerId?: string
   text?: string
@@ -186,6 +194,16 @@ const RADIO_LIBRARY_ROOT = path.join(LIBRARY_ROOT, 'RadioLoopLibrary')
 // bundles — nothing under either root is ever uploaded or deployed.
 const RADIO_TRACK_LIBRARY_ROOT = path.join(LIBRARY_ROOT, 'RadioTrackLibrary')
 const RADIO_WEB_EXPORT_ROOT = path.join(LIBRARY_ROOT, 'RadioWebExports')
+
+// RADIO-02 (batch 0929-2) — the Sites project (studiorich-orbital) is a
+// SEPARATE git repository, not under this repo. RADIO_SITES_ROOT env var →
+// else the sibling checkout documented in docs/architecture/DEPLOYMENT.md's
+// "Worktree distinction" (both repos share the same parent directory).
+// This only ever writes into that checkout's own working tree — it never
+// commits, pushes, or deploys (see publish-radio-to-sites.mjs's own header).
+const RADIO_SITES_ROOT = process.env.RADIO_SITES_ROOT
+  ? path.resolve(process.env.RADIO_SITES_ROOT)
+  : path.resolve(process.cwd(), '../../wall-of-sound/studiorich-orbital')
 
 // 0722C_MUSIC_Production_Stem_Export — fourth sibling root, same
 // LIBRARY_ROOT configurability. Holds immutable, versioned, per-track
@@ -1749,6 +1767,43 @@ export default defineConfig({
             const bundleDir = path.join(RADIO_WEB_EXPORT_ROOT, slug, `v${bundleVersion}`)
             const result = await revealDirectoryInFinder(bundleDir)
             radioJson(res, 200, result)
+          }).catch(() => radioJson(res, 400, { ok: false, error: 'invalid_json_body' }))
+        })
+
+        // RADIO-02 (batch 0929-2) — the one remaining terminal-only step in
+        // the operator publish chain, now UI-triggered. Copies an already
+        // web-bundle-exported local package into the Sites project's own
+        // working tree and flips its active.json pointer — reusing
+        // publish-radio-to-sites.mjs's own validated copy/verify/atomic-
+        // rename logic verbatim, never a second publication implementation.
+        // This does NOT commit, push, or deploy anything; going live on the
+        // public domain still requires a separate `git push` from inside
+        // the Sites checkout (see docs/architecture/DEPLOYMENT.md). Fails
+        // closed (never falls back to any remote/production path) when the
+        // local Sites checkout isn't present.
+        server.middlewares.use('/radio-publish-to-sites', (req, res) => {
+          if (req.method !== 'POST') { radioJson(res, 405, { ok: false, error: 'method_not_allowed' }); return }
+          readJsonBody(req).then(async (rawBody) => {
+            const body = rawBody as RadioPublishToSitesBody
+            const slug = String(body?.slug ?? '')
+            const bundleVersion = Number(body?.bundleVersion ?? 0)
+            if (!slug || !bundleVersion) { radioJson(res, 400, { ok: false, error: 'missing_params' }); return }
+            try {
+              const result = await publishRadioToSites({
+                slug,
+                version: bundleVersion,
+                exportsRoot: RADIO_WEB_EXPORT_ROOT,
+                sitesRoot: RADIO_SITES_ROOT,
+                activate: true,
+              })
+              radioJson(res, 200, { ok: true, ...result })
+            } catch (error) {
+              if (error instanceof PublishToSitesError) {
+                radioJson(res, 422, { ok: false, error: error.message })
+              } else {
+                radioJson(res, 500, { ok: false, error: error instanceof Error ? error.message : 'unexpected_error' })
+              }
+            }
           }).catch(() => radioJson(res, 400, { ok: false, error: 'invalid_json_body' }))
         })
 

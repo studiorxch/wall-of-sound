@@ -15,12 +15,20 @@
 // a validated RadioWebExportRecord exists (never inferred from playlist
 // state alone).
 //
-// HONEST LOCAL-ONLY LANGUAGE (mandatory, spec-corrected): this build does
-// not implement a real web-publish bridge. Every button and status label
-// here MUST go through radioPlaylistStateLabel/the copy below — never the
-// words "Publish to Web" or "Unpublish" anywhere in this file, and the
-// Web Bundle export flow must always say "Does not upload or deploy."
-// (see RadioWebExportPreflightDialog.tsx).
+// HONEST LOCAL-ONLY LANGUAGE (mandatory, spec-corrected): the "Publish"/
+// "Update Published Version" action (Web Bundle export) remains local-only
+// — it must always say "Does not upload or deploy" (see
+// RadioWebExportPreflightDialog.tsx), and never use the words "Publish to
+// Web" or "Unpublish" anywhere in this file.
+//
+// RADIO-02 (batch 0929-2) — "Publish to Sites" is a SEPARATE, real action:
+// it copies the already-exported local bundle into the Sites project's own
+// LOCAL checkout via the /radio-publish-to-sites dev-server route (which
+// reuses music/scripts/publish-radio-to-sites.mjs's own validated logic
+// verbatim). It does NOT commit, push, or deploy — reaching the real public
+// domain still requires a separate `git push` from inside that checkout
+// (see docs/architecture/DEPLOYMENT.md). Copy for THIS action must say
+// exactly that; do not imply the public domain goes live automatically.
 
 import { useEffect, useRef, useState } from "react";
 import {
@@ -35,7 +43,7 @@ import type { CompleteSongAnalysis } from "../../data/songAnalysisTypes";
 import type { LoopAsset } from "../../data/loopTypes";
 import type { RadioInboxItem } from "../../data/radioInboxTypes";
 import type { RadioPlaylist, RadioEntryPreparationState } from "../../data/radioPlaylistTypes";
-import type { RadioWebExportRecord } from "../../data/radioWebBundleTypes";
+import type { RadioWebExportRecord, RadioSitesPublicationRecord } from "../../data/radioWebBundleTypes";
 import type { RadioPromotionFormInput } from "../../data/radioLoopTypes";
 import type { PlaylistRecord } from "../../data/playProjectTypes";
 import type { PromoteLoopToRadioResult, RadioPromotionPhase } from "../../logic/radio/radioPromotionOrchestrator";
@@ -58,6 +66,14 @@ const PUBLISH_STAGE_LABEL: Record<PublishStage, string> = {
 
 function nowIso(): string {
   return new Date().toISOString();
+}
+
+// RADIO-02 (batch 0929-2) — module-scope, same convention as
+// generateRadioProgramId() (member-identity's own id generator): kept out
+// of the component body so react-hooks/purity doesn't flag the inline
+// Date.now()/Math.random() calls a handler needs for a fresh local id.
+function generateSitesPublicationId(): string {
+  return `sitespub_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
 // Batch 02I -- Published Package -> RADIO Program Creation: the SAME
@@ -100,6 +116,15 @@ type ProgramCreationState =
   | { status: "success"; programId: string }
   | { status: "error"; message: string };
 
+// RADIO-02 (batch 0929-2) — the "Publish to Sites" action's own state.
+// "idle" also covers "already published, ready to republish" — whether a
+// version has already reached the Sites checkout is derived from
+// radioSitesPublications, not tracked here (see sitesPublicationForLatestExport).
+type SitesPublishState =
+  | { status: "idle" }
+  | { status: "pending" }
+  | { status: "error"; message: string };
+
 interface Props {
   radioPlaylist: RadioPlaylist;
   allRadioPlaylists: RadioPlaylist[];
@@ -110,10 +135,12 @@ interface Props {
   loops: LoopAsset[];
   preparationStateByEntryId: Map<string, RadioEntryPreparationState>;
   radioWebExports: RadioWebExportRecord[];
+  radioSitesPublications: RadioSitesPublicationRecord[];
   onUpdateRadioPlaylist: (id: string, patch: Partial<RadioPlaylist>) => void;
   onUpdateRadioInboxItem: (id: string, patch: Partial<RadioInboxItem>) => void;
   onPromoteToRadio: (loopId: string, formInput: RadioPromotionFormInput, onProgress?: (phase: RadioPromotionPhase) => void) => Promise<PromoteLoopToRadioResult>;
   onExportedWebBundle: (record: RadioWebExportRecord) => void;
+  onPublishedToSites: (record: RadioSitesPublicationRecord) => void;
   onClose: () => void;
 }
 
@@ -131,8 +158,8 @@ function derivedLifecycleLabel(preview: ReturnType<typeof buildPublishPreview>, 
 export function RadioPlaylistPublishPanel({
   radioPlaylist, allRadioPlaylists, radioInboxItems, libraryTracks, songAnalyses, loops,
   sourceMusicPlaylists,
-  preparationStateByEntryId, radioWebExports,
-  onUpdateRadioPlaylist, onUpdateRadioInboxItem, onPromoteToRadio, onExportedWebBundle, onClose,
+  preparationStateByEntryId, radioWebExports, radioSitesPublications,
+  onUpdateRadioPlaylist, onUpdateRadioInboxItem, onPromoteToRadio, onExportedWebBundle, onPublishedToSites, onClose,
 }: Props) {
   const [promotingLoop, setPromotingLoop] = useState<LoopAsset | null>(null);
   const [confirmingMark, setConfirmingMark] = useState(false);
@@ -141,6 +168,10 @@ export function RadioPlaylistPublishPanel({
   // 0723_RADIO_One_Action_Publish — the single Publish action's own state.
   const [publishStage, setPublishStage] = useState<PublishStage | null>(null);
   const [publishFailures, setPublishFailures] = useState<PublishEntryFailure[]>([]);
+
+  // RADIO-02 (batch 0929-2) — Publish to Sites action's own state,
+  // independent of Publish and of Create Program.
+  const [sitesPublish, setSitesPublish] = useState<SitesPublishState>({ status: "idle" });
 
   // Batch 02I — Create Program action's own state, independent of Publish.
   const [programCreation, setProgramCreation] = useState<ProgramCreationState>({ status: "idle" });
@@ -207,6 +238,53 @@ export function RadioPlaylistPublishPanel({
     .sort((a, b) => b.bundleVersion - a.bundleVersion);
   const latestExport = playlistExports[0];
   const hasPreparing = entries.some((e) => preparationStateByEntryId.get(e.id) === "PREPARING");
+
+  const playlistSitesPublications = radioSitesPublications
+    .filter((r) => r.radioPlaylistId === radioPlaylist.id)
+    .slice()
+    .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
+
+  // RADIO-02 (batch 0929-2) — whether latestExport has actually reached the
+  // Sites checkout, derived ONLY from a real recorded success (never from
+  // latestExport/playlist state alone — same discipline as latestExport's
+  // own derivation above). Gates Create Program below: creating a Program
+  // whose manifestBaseUrl points at a package that was never actually
+  // copied to the Sites checkout would be a dead link.
+  const sitesPublicationForLatestExport = latestExport
+    ? radioSitesPublications
+        .filter((r) => r.radioPlaylistId === radioPlaylist.id && r.slug === latestExport.slug && r.bundleVersion === latestExport.bundleVersion)
+        .slice()
+        .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())[0]
+    : undefined;
+
+  async function handlePublishToSites() {
+    if (!latestExport || sitesPublish.status === "pending") return;
+    setSitesPublish({ status: "pending" });
+    try {
+      const response = await fetch("/radio-publish-to-sites", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slug: latestExport.slug, bundleVersion: latestExport.bundleVersion }),
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok || !body?.ok) {
+        setSitesPublish({ status: "error", message: body?.error ?? `Publish to Sites failed (HTTP ${response.status})` });
+        return;
+      }
+      onPublishedToSites({
+        id: generateSitesPublicationId(),
+        radioPlaylistId: radioPlaylist.id,
+        slug: latestExport.slug,
+        bundleVersion: latestExport.bundleVersion,
+        publishedAt: nowIso(),
+        relativeFinalDir: body.relativeFinalDir,
+        manifestUrl: body.manifestUrl ?? null,
+      });
+      setSitesPublish({ status: "idle" });
+    } catch (error) {
+      setSitesPublish({ status: "error", message: error instanceof Error ? error.message : String(error) });
+    }
+  }
 
   // Batch 02I — constructs the create input ONLY from already-authoritative
   // publication data already in scope (radioPlaylist, latestExport) — no
@@ -337,18 +415,34 @@ export function RadioPlaylistPublishPanel({
                 Play Preview
               </a>
               <button className="npw-btn npw-btn--ghost" onClick={handlePublish}>Update Published Version</button>
-              {programCreation.status === "success" ? (
-                <span className="radio-diff-note">
-                  Program created: {programCreation.programId}. Not on air yet — reload Event Radio Control to see and assign it (it loads the program catalog once per sign-in, not live).
-                </span>
-              ) : !isAuthorizedOperator ? (
-                <span className="radio-diff-note">Sign in as the StudioRich operator (via Event Radio Control) to create a Program from this publication.</span>
+              {!isAuthorizedOperator ? (
+                <span className="radio-diff-note">Sign in as the StudioRich operator (via Event Radio Control) to publish this package to the Sites project or create a Program.</span>
+              ) : !sitesPublicationForLatestExport ? (
+                <>
+                  <button className="npw-btn npw-btn--ghost" onClick={handlePublishToSites} disabled={sitesPublish.status === "pending"}>
+                    {sitesPublish.status === "pending" ? "Publishing to Sites…" : "Publish to Sites"}
+                  </button>
+                  {sitesPublish.status === "error" && <span className="radio-diff-note">Publish to Sites failed — {sitesPublish.message}</span>}
+                </>
               ) : (
                 <>
-                  <button className="npw-btn npw-btn--ghost" onClick={handleCreateProgram} disabled={programCreation.status === "pending"}>
-                    {programCreation.status === "pending" ? "Creating Program…" : "Create Program"}
+                  <span className="radio-diff-note">Published to Sites: {sitesPublicationForLatestExport.relativeFinalDir}</span>
+                  {programCreation.status === "success" ? (
+                    <span className="radio-diff-note">
+                      Program created: {programCreation.programId}. Not on air yet — reload Event Radio Control to see and assign it (it loads the program catalog once per sign-in, not live).
+                    </span>
+                  ) : (
+                    <>
+                      <button className="npw-btn npw-btn--ghost" onClick={handleCreateProgram} disabled={programCreation.status === "pending"}>
+                        {programCreation.status === "pending" ? "Creating Program…" : "Create Program"}
+                      </button>
+                      {programCreation.status === "error" && <span className="radio-diff-note">{programCreation.message}</span>}
+                    </>
+                  )}
+                  <button className="npw-btn npw-btn--ghost" onClick={handlePublishToSites} disabled={sitesPublish.status === "pending"}>
+                    {sitesPublish.status === "pending" ? "Republishing to Sites…" : "Republish to Sites"}
                   </button>
-                  {programCreation.status === "error" && <span className="radio-diff-note">{programCreation.message}</span>}
+                  {sitesPublish.status === "error" && <span className="radio-diff-note">Publish to Sites failed — {sitesPublish.message}</span>}
                 </>
               )}
             </>
@@ -407,6 +501,19 @@ export function RadioPlaylistPublishPanel({
                 {playlistExports.map((r) => (
                   <li key={r.id}>
                     v{r.bundleVersion} — {r.entryCount} tracks — {(r.totalByteSize / 1024 / 1024).toFixed(1)} MB — {new Date(r.exportedAt).toLocaleString()}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {playlistSitesPublications.length > 0 && (
+            <div className="radio-publish-section radio-publish-sites-history">
+              <h3>Published to Sites ({playlistSitesPublications.length})</h3>
+              <ul>
+                {playlistSitesPublications.map((r) => (
+                  <li key={r.id}>
+                    v{r.bundleVersion} — {r.relativeFinalDir} — {new Date(r.publishedAt).toLocaleString()}
                   </li>
                 ))}
               </ul>

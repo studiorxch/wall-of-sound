@@ -20,7 +20,7 @@ import type { CompleteSongAnalysis } from "../../data/songAnalysisTypes";
 import type { RadioInboxItem } from "../../data/radioInboxTypes";
 import type { RadioPlaylist, RadioPlaylistEntry, RadioTrackPackageBinding } from "../../data/radioPlaylistTypes";
 import type { RadioTrackPrepareResponse, RadioTrackVerifyResult } from "../../data/radioTrackPackageTypes";
-import type { RadioWebExportRecord } from "../../data/radioWebBundleTypes";
+import type { RadioWebExportRecord, RadioSitesPublicationRecord } from "../../data/radioWebBundleTypes";
 import type { PlaylistRecord } from "../../data/playProjectTypes";
 import { prepareMissingAnalysesForPlaylist, type PlaylistWaveformPreparationProgress } from "../../logic/radio/radioPlaylistWaveformPreparation";
 import { computeVisibleRowRange } from "../../logic/radio/radioRowWindowing";
@@ -50,9 +50,11 @@ interface Props {
   songAnalyses: CompleteSongAnalysis[];
   sourceMusicPlaylists: PlaylistRecord[];
   radioWebExports: RadioWebExportRecord[];
+  radioSitesPublications: RadioSitesPublicationRecord[];
   onUpdateRadioPlaylist: (id: string, patch: Partial<RadioPlaylist>) => void;
   onUpdateRadioInboxItem: (id: string, patch: Partial<RadioInboxItem>) => void;
   onExportWebBundle: (record: RadioWebExportRecord) => void;
+  onPublishedToSites: (record: RadioSitesPublicationRecord) => void;
   looperShared: RadioLooperSharedProps;
   onBack: () => void;
   // 0721_MUSIC_RADIO_Sectional_Loopchain_Player — opens the loopchain
@@ -69,9 +71,9 @@ interface BatchState {
 }
 
 export function RadioMultiTrackPrepWorkspace({
-  radioPlaylist, allRadioPlaylists, radioInboxItems, libraryTracks, songAnalyses, radioWebExports,
+  radioPlaylist, allRadioPlaylists, radioInboxItems, libraryTracks, songAnalyses, radioWebExports, radioSitesPublications,
   sourceMusicPlaylists,
-  onUpdateRadioPlaylist, onUpdateRadioInboxItem, onExportWebBundle, looperShared, onBack, onOpenLoopchainPlayer,
+  onUpdateRadioPlaylist, onUpdateRadioInboxItem, onExportWebBundle, onPublishedToSites, looperShared, onBack, onOpenLoopchainPlayer,
 }: Props) {
   const [expandedEntryId, setExpandedEntryId] = useState<string | null>(null);
   const [scrollTop, setScrollTop] = useState(0);
@@ -339,10 +341,12 @@ export function RadioMultiTrackPrepWorkspace({
           loops={looperShared.loops}
           preparationStateByEntryId={preparationStateByEntryId}
           radioWebExports={radioWebExports}
+          radioSitesPublications={radioSitesPublications}
           onUpdateRadioPlaylist={onUpdateRadioPlaylist}
           onUpdateRadioInboxItem={onUpdateRadioInboxItem}
           onPromoteToRadio={looperShared.onPromoteToRadio}
           onExportedWebBundle={onExportWebBundle}
+          onPublishedToSites={onPublishedToSites}
           onClose={() => setShowPublishPanel(false)}
         />
       )}

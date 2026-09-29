@@ -289,6 +289,9 @@ export type PlayProject = {
   // export history. Only a fully validated bundle produces a record;
   // EXPORTED display state derives from these, never from playlist state.
   radioWebExports?: import("./radioWebBundleTypes").RadioWebExportRecord[];
+  // RADIO-02 (batch 0929-2) — append-only local-Sites-checkout publication
+  // history, same reason/shape convention as radioWebExports above.
+  radioSitesPublications?: import("./radioWebBundleTypes").RadioSitesPublicationRecord[];
   // 0721_MUSIC_RADIO_Sectional_Loopchain_Player — a listening instrument,
   // not a publishing feature. One working chain draft at a time
   // (project-level, same reason as songAnalyses/radioPlaylists above);

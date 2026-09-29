@@ -190,3 +190,21 @@ export interface RadioWebExportRecord {
   validation: { ok: true; checkedAt: string };
   exportPath: string;
 }
+
+// RADIO-02 (batch 0929-2) — persisted sites-publication history
+// (PlayProject.radioSitesPublications). Append-only, same convention as
+// RadioWebExportRecord above: a record is only ever added after the local
+// Sites checkout copy actually succeeded — never inferred from playlist or
+// export state. Does NOT mean the public domain is live yet — that still
+// requires a separate `git push` from inside the Sites checkout (see
+// docs/architecture/DEPLOYMENT.md); this only records that THIS package
+// version reached the local Sites project's own working tree.
+export interface RadioSitesPublicationRecord {
+  id: string;
+  radioPlaylistId: string;
+  slug: string;
+  bundleVersion: number;
+  publishedAt: string;
+  relativeFinalDir: string;
+  manifestUrl: string | null;
+}

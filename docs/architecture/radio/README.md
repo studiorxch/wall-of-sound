@@ -157,8 +157,9 @@ reachable from production.
 
 ## Operator playlist/programming workflow (current facts)
 
-The following chain already has real, working operator UI end to end, with
-one exception (below):
+RADIO-02 (batch 0929-2) closed the one remaining terminal-only gap below —
+the full chain now has real, working operator UI end to end, with no
+Terminal step:
 
 ```
 MUSIC playlist authoring (PlaylistsGrid.tsx: create/open/duplicate/delete)
@@ -170,7 +171,15 @@ RadioPlaylistPublishPanel.tsx's readiness preview (five categories: Ready /
   ↓ "Publish" (writes real files to
      library/music/RadioWebExports/<slug>/v<n>/ via MUSIC's own local Vite
      dev-server endpoints)
-RadioPlaylistPublishPanel.tsx's "Create Program" button
+RadioPlaylistPublishPanel.tsx's "Publish to Sites" button (operator-gated)
+  ↓ POST /radio-web-bundle-export... then POST /radio-publish-to-sites
+     (dev-server route, reuses publish-radio-to-sites.mjs's own validated
+     copy/verify/atomic-rename logic — copies into the Sites checkout's
+     OWN LOCAL working tree only; does not commit, push, or deploy — see
+     "One local-copy step, one still-manual deploy step" below)
+RadioPlaylistPublishPanel.tsx's "Create Program" button (operator-gated,
+  only enabled once Publish to Sites has actually succeeded for this
+  version)
   ↓ createRadioProgram (real UI call)
 channel-control.html's rotation editor (add/remove/reorder Programs via a
   real <select> from listRadioPrograms(), Save Rotation, Activate/
@@ -179,20 +188,37 @@ channel-control.html's rotation editor (add/remove/reorder Programs via a
 
 See
 [../proposals/RADIO_OPERATOR_WORKFLOW_RECON.md](../proposals/RADIO_OPERATOR_WORKFLOW_RECON.md)
-for the full recon (exact files per stage, a scheduling capability matrix).
+for the original recon (exact files per stage, a scheduling capability
+matrix) — its own "terminal-only" finding below is now historical, not
+current.
 Current-state facts worth recording here directly:
 
 - **`radioPrograms` is create-only.** `EventRadioRepository` has no
   update or delete method for a Program, in its interface or any
   implementation — an operator mistake is permanent (though harmless
   unless the Program is added to a Channel's rotation).
-- **One step in the chain is terminal-only.** Getting an already-exported
-  local package (`library/music/RadioWebExports/<slug>/v<n>/`) onto the
-  real public URL above requires running
-  `node music/scripts/publish-radio-to-sites.mjs <slug>` by hand — no UI
-  triggers it. Every other step (playlist creation, Send to RADIO,
-  Publish/export, Create Program, Channel rotation editing) already has
-  real UI.
+- **One local-copy step, one still-manual deploy step.** "Publish to
+  Sites" (`/radio-publish-to-sites`, `music/scripts/publish-radio-to-sites.mjs`)
+  copies an already-exported local package into the Sites checkout's own
+  working tree and flips its `active.json` pointer — this is now
+  UI-triggered, no Terminal required. It does NOT commit, push, or
+  deploy. Reaching the real public URL above still requires a separate
+  `git push` from inside that checkout to its own `origin/main` (see
+  [../DEPLOYMENT.md](../DEPLOYMENT.md)) — an intentionally unautomated,
+  still-manual step this batch did not touch.
+- **Create Program is gated on an actual Sites publish, not just a local
+  export.** `RadioPlaylistPublishPanel.tsx` only shows/enables "Create
+  Program" once a `RadioSitesPublicationRecord` exists for the exact
+  `{slug, bundleVersion}` being created — fixing a latent gap where a
+  Program's `manifestBaseUrl` could previously point at a package that
+  was never actually copied to the Sites checkout.
+- **"Publish to Sites"/"Create Program" are client-side-gated to the
+  StudioRich operator** (`isAuthorizedOperator`, same
+  `STUDIO_RICH_OPERATOR_EMAILS` pattern as every other operator action in
+  this codebase) — same posture as every other local dev-server route:
+  no server-side auth check exists on `/radio-publish-to-sites` or any
+  sibling route, since only the operator's own local MUSIC dev server can
+  reach it. This matches existing precedent; it is not a new exception.
 
 ## MAP's relationship to RADIO
 

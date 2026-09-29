@@ -13,6 +13,20 @@
  * updated after that rename succeeds — so a failure at any point leaves
  * the previously-active version completely untouched.
  *
+ * This does NOT commit, push, or deploy anything — it only writes to the
+ * local Sites project checkout's own working tree. Reaching the real
+ * public domain still requires a separate `git push` from inside that
+ * checkout to its own `origin/main` (see docs/architecture/DEPLOYMENT.md).
+ *
+ * RADIO-02 (batch 0929-2) — the core logic below (`validateSource`,
+ * `copyTree`, `publishRadioToSites`) is also imported directly by
+ * music/vite.config.ts's `/radio-publish-to-sites` dev-server route, so
+ * MUSIC's own operator UI can trigger this without a Terminal. `fail()`
+ * throws `PublishToSitesError` rather than calling `process.exit` so a
+ * long-running server process can catch and report it instead of dying;
+ * the CLI entry point below still turns that into the exact same
+ * stderr+exit(1) behavior as before.
+ *
  * Usage:
  *   node scripts/publish-radio-to-sites.mjs <slug> [--version N] [--sites-root <path>] [--no-activate]
  *
@@ -26,11 +40,18 @@ import { fileURLToPath } from "url";
 import { dirname, resolve, join, relative } from "path";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = resolve(__dirname, "../.."); // wall-of-sound/
-const EXPORTS_ROOT = join(REPO_ROOT, "library/music/RadioWebExports");
+const REPO_ROOT = resolve(__dirname, "../.."); // wall-of-sound-beta01/
+const DEFAULT_EXPORTS_ROOT = join(REPO_ROOT, "library/music/RadioWebExports");
+const DEFAULT_SITES_ROOT = join(REPO_ROOT, "studiorich-orbital");
 
-function parseArgs(argv) {
-  const args = { slug: null, version: null, sitesRoot: join(REPO_ROOT, "studiorich-orbital"), activate: true };
+export class PublishToSitesError extends Error {}
+
+function fail(message) {
+  throw new PublishToSitesError(message);
+}
+
+export function parseArgs(argv) {
+  const args = { slug: null, version: null, sitesRoot: DEFAULT_SITES_ROOT, activate: true };
   const positional = [];
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
@@ -43,17 +64,12 @@ function parseArgs(argv) {
   return args;
 }
 
-function fail(message) {
-  console.error(`[publish-radio-to-sites] FAILED: ${message}`);
-  process.exit(1);
-}
-
 function sha256File(path) {
   return createHash("sha256").update(readFileSync(path)).digest("hex");
 }
 
-function resolveSourceVersionDir(slug, explicitVersion) {
-  const stationDir = join(EXPORTS_ROOT, slug);
+export function resolveSourceVersionDir(exportsRoot, slug, explicitVersion) {
+  const stationDir = join(exportsRoot, slug);
   if (!existsSync(stationDir)) fail(`no export found for slug "${slug}" under ${relative(REPO_ROOT, stationDir)}`);
   if (explicitVersion != null) {
     const dir = join(stationDir, `v${explicitVersion}`);
@@ -68,7 +84,7 @@ function resolveSourceVersionDir(slug, explicitVersion) {
   return { dir: join(stationDir, `v${versions[0]}`), version: versions[0] };
 }
 
-function loadJson(path, label) {
+export function loadJson(path, label) {
   if (!existsSync(path)) fail(`${label} not found at ${relative(REPO_ROOT, path)}`);
   let parsed;
   try {
@@ -79,7 +95,7 @@ function loadJson(path, label) {
   return parsed;
 }
 
-function validateSource(sourceDir) {
+export function validateSource(sourceDir) {
   const manifest = loadJson(join(sourceDir, "radio-manifest.json"), "radio-manifest.json");
   const checksums = loadJson(join(sourceDir, "checksums.json"), "checksums.json");
 
@@ -119,7 +135,7 @@ function validateSource(sourceDir) {
   return { manifest, checksums, fileList: fileEntries.map(([rel]) => rel), totalBytes };
 }
 
-function copyTree(sourceDir, destDir, fileList) {
+export function copyTree(sourceDir, destDir, fileList) {
   mkdirSync(destDir, { recursive: true });
   for (const rel of fileList) {
     const srcPath = join(sourceDir, rel);
@@ -129,21 +145,36 @@ function copyTree(sourceDir, destDir, fileList) {
   }
 }
 
-function main() {
-  const args = parseArgs(process.argv.slice(2));
-  if (!args.slug) fail("usage: node scripts/publish-radio-to-sites.mjs <slug> [--version N] [--sites-root <path>] [--no-activate]");
-  if (!existsSync(args.sitesRoot)) fail(`Sites root not found at ${args.sitesRoot} — extract the Sites source first`);
-  const hostingJsonPath = join(args.sitesRoot, ".openai/hosting.json");
-  if (!existsSync(hostingJsonPath)) fail(`${relative(REPO_ROOT, hostingJsonPath)} not found — this does not look like the Sites project root`);
+/**
+ * Library entry point — importable from music/vite.config.ts's dev-server
+ * route as well as from this file's own CLI wrapper below. Throws
+ * `PublishToSitesError` for any expected/validated failure (bad slug,
+ * missing Sites checkout, checksum mismatch, etc.) so a caller can turn it
+ * into an HTTP error response instead of the process exiting. Any other
+ * thrown error is unexpected (e.g. a real fs/IO failure) and should be
+ * treated as a 500 by callers, not retried automatically.
+ *
+ * `exportsRoot` and `sitesRoot` are both REQUIRED here (no implicit
+ * defaults) — the CLI wrapper below supplies its own historical defaults;
+ * a server-side caller must pass its own already-resolved roots so this
+ * never silently reads from a directory the caller didn't intend.
+ */
+export async function publishRadioToSites({ slug, version = null, exportsRoot, sitesRoot, activate = true, onProgress = () => {} }) {
+  if (!slug) fail("slug is required");
+  if (!exportsRoot) fail("exportsRoot is required");
+  if (!sitesRoot) fail("sitesRoot is required");
+  if (!existsSync(sitesRoot)) fail(`Sites root not found at ${sitesRoot} — extract or check out the Sites project first`);
+  const hostingJsonPath = join(sitesRoot, ".openai/hosting.json");
+  if (!existsSync(hostingJsonPath)) fail(`${hostingJsonPath} not found — this does not look like the Sites project root`);
 
-  const { dir: sourceDir, version } = resolveSourceVersionDir(args.slug, args.version);
-  console.log(`[publish-radio-to-sites] validating ${relative(REPO_ROOT, sourceDir)} ...`);
+  const { dir: sourceDir, version: resolvedVersion } = resolveSourceVersionDir(exportsRoot, slug, version);
+  onProgress(`validating ${relative(exportsRoot, sourceDir)} ...`);
   const { manifest, fileList, totalBytes } = validateSource(sourceDir);
-  console.log(`[publish-radio-to-sites] validated ${fileList.length} files (${(totalBytes / 1e6).toFixed(2)} MB), ${manifest.entries.length} tracks`);
+  onProgress(`validated ${fileList.length} files (${(totalBytes / 1e6).toFixed(2)} MB), ${manifest.entries.length} tracks`);
 
-  const radioPublicRoot = join(args.sitesRoot, "public/radio");
-  const finalDir = join(radioPublicRoot, args.slug, `v${version}`);
-  const tempDir = join(radioPublicRoot, `.tmp-${args.slug}-v${version}-${process.pid}`);
+  const radioPublicRoot = join(sitesRoot, "public/radio");
+  const finalDir = join(radioPublicRoot, slug, `v${resolvedVersion}`);
+  const tempDir = join(radioPublicRoot, `.tmp-${slug}-v${resolvedVersion}-${process.pid}`);
 
   if (existsSync(tempDir)) rmSync(tempDir, { recursive: true, force: true });
   try {
@@ -166,14 +197,15 @@ function main() {
     if (existsSync(tempDir)) rmSync(tempDir, { recursive: true, force: true });
     throw error;
   }
-  console.log(`[publish-radio-to-sites] committed ${relative(args.sitesRoot, finalDir)}`);
+  onProgress(`committed ${relative(sitesRoot, finalDir)}`);
 
-  if (args.activate) {
-    const manifestUrl = `radio/${args.slug}/v${version}/radio-manifest.json`;
+  let manifestUrl = null;
+  if (activate) {
+    manifestUrl = `radio/${slug}/v${resolvedVersion}/radio-manifest.json`;
     const activePointer = {
       schemaVersion: "1.0.0",
-      stationSlug: args.slug,
-      bundleVersion: version,
+      stationSlug: slug,
+      bundleVersion: resolvedVersion,
       manifestUrl,
       updatedAt: new Date().toISOString(),
     };
@@ -181,10 +213,43 @@ function main() {
     const activeTempPath = join(radioPublicRoot, "active.json.tmp");
     writeFileSync(activeTempPath, JSON.stringify(activePointer, null, 2) + "\n");
     renameSync(activeTempPath, activePath);
-    console.log(`[publish-radio-to-sites] active pointer -> ${manifestUrl}`);
+    onProgress(`active pointer -> ${manifestUrl}`);
   } else {
-    console.log("[publish-radio-to-sites] --no-activate: version deployed but not activated");
+    onProgress("--no-activate: version deployed but not activated");
   }
+
+  return {
+    slug,
+    version: resolvedVersion,
+    finalDir,
+    relativeFinalDir: relative(sitesRoot, finalDir),
+    fileCount: fileList.length,
+    totalBytes,
+    activated: activate,
+    manifestUrl,
+  };
 }
 
-main();
+async function runCli() {
+  const args = parseArgs(process.argv.slice(2));
+  if (!args.slug) fail("usage: node scripts/publish-radio-to-sites.mjs <slug> [--version N] [--sites-root <path>] [--no-activate]");
+  await publishRadioToSites({
+    slug: args.slug,
+    version: args.version,
+    exportsRoot: DEFAULT_EXPORTS_ROOT,
+    sitesRoot: args.sitesRoot,
+    activate: args.activate,
+    onProgress: (message) => console.log(`[publish-radio-to-sites] ${message}`),
+  });
+}
+
+// CLI entry point — unchanged behavior from before this file became
+// importable: prints `[publish-radio-to-sites] FAILED: <message>` and
+// exits 1 on any error, exactly as the old inline `fail()` did.
+if (import.meta.url === `file://${process.argv[1]}`) {
+  runCli().catch((error) => {
+    const message = error instanceof PublishToSitesError ? error.message : (error?.message ?? String(error));
+    console.error(`[publish-radio-to-sites] FAILED: ${message}`);
+    process.exit(1);
+  });
+}

@@ -24,6 +24,18 @@ INDIVIDUAL clock-scope note in §11 below is intentionally NOT promoted into
 STATE — it remains architecture guidance only, exactly as this document
 originally scoped it.
 
+**RADIO-02 (batch 0929-2) implemented this recon's headline gap.** The
+"one genuinely terminal-only step" identified below (§ "Headline finding")
+is no longer terminal-only — `RadioPlaylistPublishPanel.tsx`'s "Publish to
+Sites" button now triggers it via a new `/radio-publish-to-sites`
+dev-server route, reusing `publish-radio-to-sites.mjs`'s own validated
+logic. This does NOT close the `radioPrograms` create-only gap (§
+"Headline finding", item 2) — that remains open, unchanged, deferred to a
+future RADIO-03. See [../radio/README.md](../radio/README.md)'s own
+"Operator playlist/programming workflow" section for the current chain;
+the workflow diagram and narrative immediately below this point in this
+document describe the PRE-RADIO-02 state and are now historical.
+
 **Headline finding, ahead of the detail below: far more already exists,
 through real UI, than the brief's own framing assumed.** MUSIC already has
 a full multi-playlist authoring surface with a per-playlist "Send → RADIO"

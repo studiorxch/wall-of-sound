@@ -142,7 +142,7 @@ import { compareMusicBankToRadioBank, type RadioBankUpdateDiff } from "./logic/r
 import { addAssetReceipt, addOrReactivateReceipt, dismissReceipt, migrateLegacyInboxItemsToReceipts } from "./logic/radio/radioDashboardReceipts";
 import { RadioDashboardView } from "./ui/radio/RadioDashboardView";
 // 0718B_RADIO_Web_Publication_Asset_Export_Bridge
-import type { RadioWebExportRecord } from "./data/radioWebBundleTypes";
+import type { RadioWebExportRecord, RadioSitesPublicationRecord } from "./data/radioWebBundleTypes";
 import type { LoopchainDraft, RadioLoopchainSectionAcceptance, LoopchainObservation } from "./data/radioLoopchainTypes";
 import type { LoopchainListenerFeedback } from "./data/loopchainFeedbackTypes";
 import { RadioPlaylistsView } from "./ui/radio/RadioPlaylistsView";
@@ -572,6 +572,10 @@ export default function App() {
   // radioWebBundleExportOrchestrator.ts's buildExportRecord).
   const [radioWebExports, setRadioWebExports] = useState<RadioWebExportRecord[]>(() => loadPlayProject()?.radioWebExports ?? []);
   const radioWebExportsRef = useRef<RadioWebExportRecord[]>([]);
+  // RADIO-02 (batch 0929-2) — persisted local-Sites-checkout publication
+  // history; only ever appended to after a real publish-to-sites success.
+  const [radioSitesPublications, setRadioSitesPublications] = useState<RadioSitesPublicationRecord[]>(() => loadPlayProject()?.radioSitesPublications ?? []);
+  const radioSitesPublicationsRef = useRef<RadioSitesPublicationRecord[]>([]);
   // 0721_MUSIC_RADIO_Sectional_Loopchain_Player — one working chain draft,
   // plus its region-bound loop acceptances and local observation log,
   // project-level for the same reason as songAnalyses/radioPlaylists above.
@@ -816,6 +820,7 @@ export default function App() {
   useEffect(() => { radioPlaylistsRef.current = radioPlaylists; }, [radioPlaylists]);
   useEffect(() => { radioBanksRef.current = radioBanks; }, [radioBanks]);
   useEffect(() => { radioWebExportsRef.current = radioWebExports; }, [radioWebExports]);
+  useEffect(() => { radioSitesPublicationsRef.current = radioSitesPublications; }, [radioSitesPublications]);
   useEffect(() => { radioDashboardReceiptsRef.current = radioDashboardReceipts; }, [radioDashboardReceipts]);
   useEffect(() => { loopchainDraftRef.current = loopchainDraft; }, [loopchainDraft]);
   useEffect(() => { loopchainSectionAcceptancesRef.current = loopchainSectionAcceptances; }, [loopchainSectionAcceptances]);
@@ -942,6 +947,7 @@ export default function App() {
       radioBanks: radioBanksRef.current.length ? radioBanksRef.current : undefined,
       radioDashboardReceipts: radioDashboardReceiptsRef.current.length ? radioDashboardReceiptsRef.current : undefined,
       radioWebExports: radioWebExportsRef.current.length ? radioWebExportsRef.current : undefined,
+      radioSitesPublications: radioSitesPublicationsRef.current.length ? radioSitesPublicationsRef.current : undefined,
       loopchainDraft: loopchainDraftRef.current,
       loopchainSectionAcceptances: loopchainSectionAcceptancesRef.current.length ? loopchainSectionAcceptancesRef.current : undefined,
       loopchainObservations: loopchainObservationsRef.current.length ? loopchainObservationsRef.current : undefined,
@@ -5928,6 +5934,10 @@ export default function App() {
     const loadedRadioWebExports = p.radioWebExports ?? [];
     radioWebExportsRef.current = loadedRadioWebExports;
     setRadioWebExports(loadedRadioWebExports);
+    // RADIO-02 (batch 0929-2) — same re-seed step.
+    const loadedRadioSitesPublications = p.radioSitesPublications ?? [];
+    radioSitesPublicationsRef.current = loadedRadioSitesPublications;
+    setRadioSitesPublications(loadedRadioSitesPublications);
     // 0721_MUSIC_RADIO_Sectional_Loopchain_Player — same re-seed step.
     loopchainDraftRef.current = p.loopchainDraft;
     setLoopchainDraft(p.loopchainDraft);
@@ -6778,6 +6788,15 @@ export default function App() {
     const next = [...radioWebExportsRef.current, record];
     radioWebExportsRef.current = next;
     setRadioWebExports(next);
+    savePlayProject(makeProj(playlistsRef.current));
+  }
+
+  // RADIO-02 (batch 0929-2) — append-only history; called ONLY after the
+  // /radio-publish-to-sites dev-server route reports a real success.
+  function handlePublishedToSites(record: RadioSitesPublicationRecord) {
+    const next = [...radioSitesPublicationsRef.current, record];
+    radioSitesPublicationsRef.current = next;
+    setRadioSitesPublications(next);
     savePlayProject(makeProj(playlistsRef.current));
   }
 
@@ -7716,9 +7735,11 @@ export default function App() {
               songAnalyses={songAnalyses}
               sourceMusicPlaylists={playlists}
               radioWebExports={radioWebExports}
+              radioSitesPublications={radioSitesPublications}
               onUpdateRadioPlaylist={handleUpdateRadioPlaylist}
               onUpdateRadioInboxItem={handleUpdateRadioInboxItem}
               onExportWebBundle={handleExportWebBundle}
+              onPublishedToSites={handlePublishedToSites}
               looperShared={radioLooperShared}
               onOpenLoopchainPlayer={handleOpenLoopchainPlayer}
             />
