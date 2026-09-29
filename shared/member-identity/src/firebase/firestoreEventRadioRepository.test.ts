@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { decodeRadioProgram, validateCreateRadioProgramInput, validateSetEventProgramInput } from "./firestoreEventRadioRepository.js";
-import { generateRadioProgramId, type CreateRadioProgramInput, type SetEventProgramInput } from "../data/eventRadioTypes.js";
+import { decodeRadioProgram, validateCreateRadioProgramInput, validateSetEventProgramInput, validateUpdateRadioProgramInput } from "./firestoreEventRadioRepository.js";
+import { generateRadioProgramId, type CreateRadioProgramInput, type SetEventProgramInput, type UpdateRadioProgramInput } from "../data/eventRadioTypes.js";
 
 const KNOWN_PROGRAMS = new Set(["soft-motion-radio", "jungle-fade"]);
 
@@ -233,6 +233,62 @@ describe("validateCreateRadioProgramInput -- Batch 02I Published Package -> RADI
     const { stationId: _stationId, ...withoutStationId } = fullCreateInput();
     void _stationId;
     expect(() => validateCreateRadioProgramInput(withoutStationId as CreateRadioProgramInput)).toThrow("invalid_radio_program_station_id");
+  });
+});
+
+function fullUpdateInput(overrides: Partial<UpdateRadioProgramInput> = {}): UpdateRadioProgramInput {
+  return {
+    programId: "radprogram_abc123_xyz789",
+    title: "Soft Motion Radio",
+    manifestBaseUrl: "/radio-web-export/soft-motion-radio/v3",
+    trackCount: 11,
+    totalDurationSeconds: 1546.6,
+    stationId: "radplaylist_abc123_xyz789",
+    bundleVersion: 3,
+    ...overrides,
+  };
+}
+
+describe("validateUpdateRadioProgramInput -- RADIO-03 (batch 0929-5) Program Package Version Adoption", () => {
+  it("accepts a complete, valid update input", () => {
+    expect(() => validateUpdateRadioProgramInput(fullUpdateInput())).not.toThrow();
+  });
+
+  it("accepts adopting a HIGHER bundleVersion than the Program previously had -- the whole point of this input", () => {
+    expect(() => validateUpdateRadioProgramInput(fullUpdateInput({ bundleVersion: 2 }))).not.toThrow();
+  });
+
+  it("rejects a missing programId -- the identity being updated must be named", () => {
+    expect(() => validateUpdateRadioProgramInput(fullUpdateInput({ programId: "" }))).toThrow("invalid_radio_program_id");
+  });
+
+  it("rejects a missing title", () => {
+    expect(() => validateUpdateRadioProgramInput(fullUpdateInput({ title: "" }))).toThrow("invalid_radio_program_title");
+  });
+
+  it("rejects a missing manifestBaseUrl", () => {
+    expect(() => validateUpdateRadioProgramInput(fullUpdateInput({ manifestBaseUrl: "" }))).toThrow("invalid_radio_program_manifest_base_url");
+  });
+
+  it("rejects a non-integer trackCount", () => {
+    expect(() => validateUpdateRadioProgramInput(fullUpdateInput({ trackCount: 1.5 }))).toThrow("invalid_radio_program_track_count");
+  });
+
+  it("rejects a negative totalDurationSeconds", () => {
+    expect(() => validateUpdateRadioProgramInput(fullUpdateInput({ totalDurationSeconds: -1 }))).toThrow("invalid_radio_program_total_duration_seconds");
+  });
+
+  it("rejects a missing/empty stationId (fails closed on an invalid/nonexistent package reference)", () => {
+    expect(() => validateUpdateRadioProgramInput(fullUpdateInput({ stationId: "" }))).toThrow("invalid_radio_program_station_id");
+  });
+
+  it("rejects a zero or negative bundleVersion (fails closed on an invalid package version)", () => {
+    expect(() => validateUpdateRadioProgramInput(fullUpdateInput({ bundleVersion: 0 }))).toThrow("invalid_radio_program_bundle_version");
+    expect(() => validateUpdateRadioProgramInput(fullUpdateInput({ bundleVersion: -1 }))).toThrow("invalid_radio_program_bundle_version");
+  });
+
+  it("rejects a non-integer bundleVersion", () => {
+    expect(() => validateUpdateRadioProgramInput(fullUpdateInput({ bundleVersion: 1.5 }))).toThrow("invalid_radio_program_bundle_version");
   });
 });
 

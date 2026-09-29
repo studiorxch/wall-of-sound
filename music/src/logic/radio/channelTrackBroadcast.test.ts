@@ -130,6 +130,32 @@ describe("resolveChannelTrackBroadcast -- on-air resolution", () => {
   });
 });
 
+describe("resolveChannelTrackBroadcast -- RADIO-03 (batch 0929-5): Program Package-version adoption is picked up automatically", () => {
+  it("6. a Program's catalog record changing (simulating updateRadioProgram v1 -> v2) is reflected by the very next resolution call, with no other propagation step", async () => {
+    // Two distinct catalog snapshots, same programId -- exactly what
+    // listRadioPrograms() returns before vs. after a real updateRadioProgram
+    // call changes this Program's manifestBaseUrl/bundleVersion in place.
+    let currentPrograms: readonly RadioProgramSummary[] = [program({ manifestBaseUrl: "/radio-web-export/program-a/v1/" })];
+    const manifestV1 = manifest([entry({ radioTrackId: "t0-v1", durationSeconds: 3600, audioUrl: "audio/t0-v1.opus" })]);
+    const manifestV2 = manifest([entry({ radioTrackId: "t0-v2", durationSeconds: 3600, audioUrl: "audio/t0-v2.opus" })]);
+    const r = {
+      radioChannelRepository: { getRadioChannel: vi.fn(async () => channel()) } as unknown as Pick<RadioChannelRepository, "getRadioChannel">,
+      eventRadioRepository: { listRadioPrograms: vi.fn(async () => currentPrograms) } as unknown as Pick<EventRadioRepository, "listRadioPrograms">,
+      fetchManifest: vi.fn(async (url: string) => (url.includes("v2") ? manifestV2 : manifestV1)),
+    };
+
+    const before = await resolveChannelTrackBroadcast({ channelId: "channel-main", nowMs: T0, ...r });
+    expect(before).toMatchObject({ status: "on-air", manifestBaseUrl: "/radio-web-export/program-a/v1/", trackId: "t0-v1" });
+
+    // Simulate the update: same programId, new Package reference -- no
+    // Channel/rotation change, no second Program created.
+    currentPrograms = [program({ manifestBaseUrl: "/radio-web-export/program-a/v2/", bundleVersion: 2 })];
+
+    const after = await resolveChannelTrackBroadcast({ channelId: "channel-main", nowMs: T0, ...r });
+    expect(after).toMatchObject({ status: "on-air", programId: "program-a", manifestBaseUrl: "/radio-web-export/program-a/v2/", trackId: "t0-v2" });
+  });
+});
+
 describe("resolveChannelTrackBroadcast -- synchronization invariant", () => {
   it("deterministic: identical inputs produce identical results", async () => {
     const r = repos(channel(), [program()], async () => TWO_TRACK_MANIFEST);

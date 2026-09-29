@@ -19,9 +19,12 @@
  * radioWebBundleTypes.ts). Both OPTIONAL: existing manually-authored
  * `radioPrograms` documents carry only `manifestBaseUrl` and remain fully
  * valid. Never derived from `manifestBaseUrl`, `title`, or any URL slug --
- * only ever read verbatim from a document that actually has them. No
- * application write path exists yet for these fields (see this batch's own
- * scope note); they are recognized on read only.
+ * only ever read verbatim from a document that actually has them.
+ *
+ * RADIO-03 (batch 0929-5) -- both `createRadioProgram` (Batch 02I) and now
+ * `updateRadioProgram` write these fields; the "no application write path
+ * yet" note above describes this type's original Batch 02F introduction
+ * only and is no longer current.
  */
 export interface RadioProgramSummary {
   readonly id: string;
@@ -89,6 +92,28 @@ export interface CreateRadioProgramInput {
   readonly bundleVersion: number;
 }
 
+/**
+ * RADIO-03 (batch 0929-5) -- adopts a different already-published Package
+ * version onto an EXISTING Program, preserving `programId` (and therefore
+ * every Channel rotation slot/eventProgram reference to it) -- the
+ * corrective counterpart to `createRadioProgram`. Same required-field
+ * shape as `CreateRadioProgramInput` (firestore.rules' `radioPrograms`
+ * `allow write` validates create and update identically; there is no
+ * partial-patch write, the full field set is always resupplied). Never
+ * mutates a published Package itself (`RadioWebExportRecord`/Sites
+ * checkout) -- only which already-immutable version this Program's own
+ * reference points at.
+ */
+export interface UpdateRadioProgramInput {
+  readonly programId: string;
+  readonly title: string;
+  readonly manifestBaseUrl: string;
+  readonly trackCount: number;
+  readonly totalDurationSeconds: number;
+  readonly stationId: string;
+  readonly bundleVersion: number;
+}
+
 export interface EventRadioRepository {
   /** Every operator-selectable published program -- public read, matches the "PUBLIC/MEMBER read" half of this build's own authority rule. */
   listRadioPrograms(): Promise<readonly RadioProgramSummary[]>;
@@ -106,6 +131,16 @@ export interface EventRadioRepository {
    * `eventProgram/current` -- creating a Program never puts it on air.
    */
   createRadioProgram(input: CreateRadioProgramInput): Promise<RadioProgramSummary>;
+  /**
+   * RADIO-03 (batch 0929-5) -- authorized-operator-only in Firestore rules
+   * (same `isEventOperator()` gate, same `allow write` block as create).
+   * VALIDATES before writing. Requires the document to ALREADY exist --
+   * the mirror-image guard of createRadioProgram's collision check --
+   * `radio_program_not_found` if it doesn't, never silently creating one.
+   * `programId` is never regenerated; every Channel rotation slot or
+   * `eventProgram/current` reference to it keeps working unchanged.
+   */
+  updateRadioProgram(input: UpdateRadioProgramInput): Promise<RadioProgramSummary>;
 }
 
 /**

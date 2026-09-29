@@ -60,12 +60,14 @@ export { createFirebaseEventRadioRepository } from "./firebase/createFirebaseEve
 export {
   validateSetEventProgramInput,
   validateCreateRadioProgramInput,
+  validateUpdateRadioProgramInput,
   RADIO_PROGRAMS_COLLECTION_PATH,
   EVENT_PROGRAM_DOCUMENT_PATH,
 } from "./firebase/firestoreEventRadioRepository.js";
 export {
   generateRadioProgramId,
   type CreateRadioProgramInput,
+  type UpdateRadioProgramInput,
   type EventPlaybackMode,
   type EventProgramEndPolicy,
   type EventProgramState,

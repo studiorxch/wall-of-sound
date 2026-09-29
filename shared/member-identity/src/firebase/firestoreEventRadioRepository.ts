@@ -18,6 +18,7 @@ import type {
   EventStatus,
   RadioProgramSummary,
   SetEventProgramInput,
+  UpdateRadioProgramInput,
 } from "../data/eventRadioTypes.js";
 
 export const RADIO_PROGRAMS_COLLECTION_PATH = "radioPrograms";
@@ -63,6 +64,25 @@ export function validateSetEventProgramInput(input: SetEventProgramInput, knownP
  * carries a complete package assignment.
  */
 export function validateCreateRadioProgramInput(input: CreateRadioProgramInput): void {
+  if (!input.programId) throw new Error("invalid_radio_program_id");
+  if (!input.title) throw new Error("invalid_radio_program_title");
+  if (!input.manifestBaseUrl) throw new Error("invalid_radio_program_manifest_base_url");
+  if (!Number.isInteger(input.trackCount) || input.trackCount < 0) throw new Error("invalid_radio_program_track_count");
+  if (!Number.isFinite(input.totalDurationSeconds) || input.totalDurationSeconds < 0) {
+    throw new Error("invalid_radio_program_total_duration_seconds");
+  }
+  if (!input.stationId) throw new Error("invalid_radio_program_station_id");
+  if (!Number.isInteger(input.bundleVersion) || input.bundleVersion <= 0) throw new Error("invalid_radio_program_bundle_version");
+}
+
+/**
+ * RADIO-03 (batch 0929-5) -- identical field-level validation to
+ * `validateCreateRadioProgramInput` (same required shape, same throw-
+ * before-any-Firestore-write posture); kept as its own named function
+ * rather than a call-through so the thrown error codes stay meaningful
+ * (`invalid_radio_program_*`) regardless of which caller is validating.
+ */
+export function validateUpdateRadioProgramInput(input: UpdateRadioProgramInput): void {
   if (!input.programId) throw new Error("invalid_radio_program_id");
   if (!input.title) throw new Error("invalid_radio_program_title");
   if (!input.manifestBaseUrl) throw new Error("invalid_radio_program_manifest_base_url");
@@ -145,6 +165,42 @@ export class FirestoreEventRadioRepository implements EventRadioRepository {
     await runTransaction(this.firestore, async (transaction) => {
       const existing = await transaction.get(reference);
       if (existing.exists()) throw new Error("radio_program_id_collision");
+      transaction.set(reference, {
+        title: input.title,
+        manifestBaseUrl,
+        trackCount: input.trackCount,
+        totalDurationSeconds: input.totalDurationSeconds,
+        stationId: input.stationId,
+        bundleVersion: input.bundleVersion,
+      });
+    });
+    return {
+      id: input.programId,
+      title: input.title,
+      manifestBaseUrl,
+      trackCount: input.trackCount,
+      totalDurationSeconds: input.totalDurationSeconds,
+      stationId: input.stationId,
+      bundleVersion: input.bundleVersion,
+    };
+  }
+
+  /**
+   * RADIO-03 (batch 0929-5) -- mirror-image guard of createRadioProgram's
+   * own transaction: requires the document to ALREADY exist
+   * (`radio_program_not_found` if not), never silently creating one on a
+   * typo'd or stale `programId`. `programId` itself is never regenerated
+   * -- the document at this exact path is overwritten in place with the
+   * new package assignment, preserving every existing reference to it
+   * (Channel rotation `programIds[]`, `eventProgram/current.programId`).
+   */
+  async updateRadioProgram(input: UpdateRadioProgramInput): Promise<RadioProgramSummary> {
+    validateUpdateRadioProgramInput(input);
+    const manifestBaseUrl = input.manifestBaseUrl.endsWith("/") ? input.manifestBaseUrl : `${input.manifestBaseUrl}/`;
+    const reference = doc(this.firestore, RADIO_PROGRAMS_COLLECTION_PATH, input.programId);
+    await runTransaction(this.firestore, async (transaction) => {
+      const existing = await transaction.get(reference);
+      if (!existing.exists()) throw new Error("radio_program_not_found");
       transaction.set(reference, {
         title: input.title,
         manifestBaseUrl,

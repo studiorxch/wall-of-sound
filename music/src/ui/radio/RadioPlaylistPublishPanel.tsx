@@ -35,10 +35,20 @@
 // "Mark Ready for Publishing" flag are all real, still-supported
 // operations — they live in the Diagnostics section below as advanced
 // recovery, not as routine steps a successful Publish requires the
-// operator to see or operate. "Create Program" remains its own explicit
-// decision (a Program is operator-facing production identity, never
-// created as a side effect of Publish) and is the one next action
-// surfaced once a version has actually reached the Sites checkout.
+// operator to see or operate. "Create Program"/"Update Program" remain
+// their own explicit decision (a Program is operator-facing production
+// identity, never created or repointed as a side effect of Publish) and
+// are the one next action surfaced once a version has actually reached
+// the Sites checkout.
+//
+// RADIO-03 (batch 0929-5) — Program identity is stable, same discipline
+// as RadioPlaylist's own identity (batch 0929-4): if a Program already
+// references this station (any version), this panel offers "Update
+// Program to vN" (preserves programId, and therefore every Channel
+// rotation slot referencing it) instead of "Create Program" — a
+// correction/republish never creates a second, redundant Program for the
+// same playlist. See radioProgramLifecycle.ts for the pure decision logic
+// and docs/architecture/radio/README.md for the full Program lifecycle.
 
 import { useEffect, useRef, useState } from "react";
 import {
@@ -47,6 +57,7 @@ import {
   generateRadioProgramId,
   STUDIO_RICH_OPERATOR_EMAILS,
   type MemberIdentityState,
+  type RadioProgramSummary,
 } from "@studiorich/member-identity";
 import type { Track } from "../../data/trackTypes";
 import type { CompleteSongAnalysis } from "../../data/songAnalysisTypes";
@@ -65,6 +76,7 @@ import {
   runOnePublishViaFetch, PUBLISH_FAILURE_LABEL,
   type PublishStage, type PublishEntryFailure,
 } from "../../logic/radio/radioOnePublishOrchestrator";
+import { findProgramsForStation, planProgramLifecycleAction, findConflictingProgramForUpdate } from "../../logic/radio/radioProgramLifecycle";
 import { PromoteToRadioDialog } from "./PromoteToRadioDialog";
 import { RadioWebExportPreflightDialog } from "./RadioWebExportPreflightDialog";
 
@@ -126,10 +138,13 @@ function getProgramCreationRepository() {
 // regardless of what this list contains.
 const PROGRAM_CREATION_OPERATOR_EMAILS = STUDIO_RICH_OPERATOR_EMAILS;
 
-type ProgramCreationState =
+// RADIO-03 (batch 0929-5) — covers both outcomes now possible: creating a
+// Program (first time this station has one) or updating an existing
+// Program's Package reference (adopting a corrected/new version).
+type ProgramLifecycleState =
   | { status: "idle" }
   | { status: "pending" }
-  | { status: "success"; programId: string }
+  | { status: "success"; programId: string; action: "created" | "updated" }
   | { status: "error"; message: string };
 
 // RADIO-02 (batch 0929-2) — the "Publish to Sites" action's own state.
@@ -192,8 +207,22 @@ export function RadioPlaylistPublishPanel({
   // Sites-copy stage specifically needs a retry without re-running export.
   const [sitesPublish, setSitesPublish] = useState<SitesPublishState>({ status: "idle" });
 
-  // Batch 02I — Create Program action's own state, independent of Publish.
-  const [programCreation, setProgramCreation] = useState<ProgramCreationState>({ status: "idle" });
+  // Batch 02I, broadened by RADIO-03 (batch 0929-5) — Create/Update
+  // Program action's own state, independent of Publish.
+  const [programLifecycle, setProgramLifecycle] = useState<ProgramLifecycleState>({ status: "idle" });
+  // RADIO-03 — every real Program already referencing this station
+  // (public read, no operator sign-in required just to look). null means
+  // "not loaded yet" — distinct from an empty array, so the UI never
+  // flashes "Create Program" before this resolves.
+  const [existingProgramsForStation, setExistingProgramsForStation] = useState<readonly RadioProgramSummary[] | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    getProgramCreationRepository()
+      .listRadioPrograms()
+      .then((programs) => { if (!cancelled) setExistingProgramsForStation(findProgramsForStation(programs, radioPlaylist.id)); })
+      .catch(() => { if (!cancelled) setExistingProgramsForStation([]); });
+    return () => { cancelled = true; };
+  }, [radioPlaylist.id]);
   const [memberState, setMemberState] = useState<MemberIdentityState>(() => getProgramCreationMemberIdentity().getState());
   useEffect(() => {
     const memberIdentity = getProgramCreationMemberIdentity();
@@ -245,6 +274,17 @@ export function RadioPlaylistPublishPanel({
         .slice()
         .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())[0]
     : undefined;
+
+  // RADIO-03 (batch 0929-5) — what the operator should be offered for
+  // Program lifecycle: create (no Program yet), update (one exists, behind
+  // the latest version), up to date (one exists, already current), or
+  // ambiguous (more than one already references this station — resolved
+  // in Diagnostics, never silently picked for the operator). null only
+  // while existingProgramsForStation hasn't loaded yet.
+  const programPlan =
+    existingProgramsForStation && latestExport
+      ? planProgramLifecycleAction(existingProgramsForStation, latestExport.bundleVersion)
+      : null;
 
   // RADIO-02's own /radio-publish-to-sites request, extracted so it can be
   // called two ways: automatically, as Publish's own internal final stage
@@ -347,8 +387,8 @@ export function RadioPlaylistPublishPanel({
   // remains untouched below (see the "Preview" link), and is deliberately
   // never used for Program creation.
   async function handleCreateProgram() {
-    if (!latestExport || programCreation.status === "pending") return;
-    setProgramCreation({ status: "pending" });
+    if (!latestExport || programLifecycle.status === "pending") return;
+    setProgramLifecycle({ status: "pending" });
     try {
       const manifestBaseUrl = buildRadioPublicPackageBaseUrl({ slug: latestExport.slug, bundleVersion: latestExport.bundleVersion });
       const created = await getProgramCreationRepository().createRadioProgram({
@@ -360,9 +400,44 @@ export function RadioPlaylistPublishPanel({
         stationId: radioPlaylist.id,
         bundleVersion: latestExport.bundleVersion,
       });
-      setProgramCreation({ status: "success", programId: created.id });
+      setProgramLifecycle({ status: "success", programId: created.id, action: "created" });
+      setExistingProgramsForStation((prev) => [...(prev ?? []), created]);
     } catch (error) {
-      setProgramCreation({ status: "error", message: error instanceof Error ? error.message : String(error) });
+      setProgramLifecycle({ status: "error", message: error instanceof Error ? error.message : String(error) });
+    }
+  }
+
+  // RADIO-03 (batch 0929-5) -- the corrective counterpart to
+  // handleCreateProgram: adopts a corrected/new Package version onto an
+  // EXISTING Program, preserving its programId (so every Channel rotation
+  // slot or eventProgram/current reference to it keeps working unchanged
+  // -- see docs/architecture/radio/README.md). Same
+  // Sites-publication/operator gates as create; never mutates Package v1
+  // or any other already-published version, only which one this Program's
+  // own reference points at.
+  async function handleUpdateProgram(program: RadioProgramSummary) {
+    if (!latestExport || programLifecycle.status === "pending") return;
+    const conflict = findConflictingProgramForUpdate(existingProgramsForStation ?? [], program.id, radioPlaylist.id, latestExport.bundleVersion);
+    if (conflict) {
+      setProgramLifecycle({ status: "error", message: `Program "${conflict.title}" (${conflict.id}) already references v${latestExport.bundleVersion} — resolve that first.` });
+      return;
+    }
+    setProgramLifecycle({ status: "pending" });
+    try {
+      const manifestBaseUrl = buildRadioPublicPackageBaseUrl({ slug: latestExport.slug, bundleVersion: latestExport.bundleVersion });
+      const updated = await getProgramCreationRepository().updateRadioProgram({
+        programId: program.id,
+        title: radioPlaylist.title,
+        manifestBaseUrl,
+        trackCount: latestExport.entryCount,
+        totalDurationSeconds: latestExport.totalDurationSeconds,
+        stationId: radioPlaylist.id,
+        bundleVersion: latestExport.bundleVersion,
+      });
+      setProgramLifecycle({ status: "success", programId: updated.id, action: "updated" });
+      setExistingProgramsForStation((prev) => (prev ?? []).map((p) => (p.id === updated.id ? updated : p)));
+    } catch (error) {
+      setProgramLifecycle({ status: "error", message: error instanceof Error ? error.message : String(error) });
     }
   }
 
@@ -463,19 +538,34 @@ export function RadioPlaylistPublishPanel({
               <a className="npw-btn npw-btn--primary" href={`/radio-player.html?slug=${encodeURIComponent(latestExport.slug)}&v=${latestExport.bundleVersion}`} target="_blank" rel="noreferrer">
                 Play Preview
               </a>
-              {programCreation.status === "success" ? (
+              {programLifecycle.status === "success" ? (
                 <span className="radio-diff-note">
-                  Program created: {programCreation.programId}. Not on air yet — reload Event Radio Control to see and assign it (it loads the program catalog once per sign-in, not live).
+                  Program {programLifecycle.action === "created" ? "created" : "updated"}: {programLifecycle.programId}. Not on air yet — reload Channel Control/Event Radio Control to see it (the program catalog loads once per sign-in, not live).
                 </span>
-              ) : isAuthorizedOperator ? (
+              ) : !isAuthorizedOperator ? (
+                <span className="radio-diff-note">
+                  Sign in as the StudioRich operator (via Event Radio Control) to {programPlan?.kind === "update_available" ? "update the Program for" : "create a Program from"} this package.
+                </span>
+              ) : programPlan === null ? (
+                <span className="radio-diff-note">Checking existing Programs…</span>
+              ) : programPlan.kind === "up_to_date" ? (
+                <span className="radio-diff-note">Program "{programPlan.program.title}" is already on this version ({programPlan.program.id}).</span>
+              ) : programPlan.kind === "update_available" ? (
                 <>
-                  <button className="npw-btn npw-btn--primary" onClick={handleCreateProgram} disabled={programCreation.status === "pending"}>
-                    {programCreation.status === "pending" ? "Creating Program…" : "Create Program"}
+                  <button className="npw-btn npw-btn--primary" onClick={() => handleUpdateProgram(programPlan.program)} disabled={programLifecycle.status === "pending"}>
+                    {programLifecycle.status === "pending" ? "Updating Program…" : `Update Program to v${latestExport.bundleVersion}`}
                   </button>
-                  {programCreation.status === "error" && <span className="radio-diff-note">{programCreation.message}</span>}
+                  {programLifecycle.status === "error" && <span className="radio-diff-note">{programLifecycle.message}</span>}
                 </>
+              ) : programPlan.kind === "ambiguous" ? (
+                <span className="radio-diff-note">Multiple Programs already reference this playlist ({programPlan.programs.length}) — resolve in Diagnostics.</span>
               ) : (
-                <span className="radio-diff-note">Sign in as the StudioRich operator (via Event Radio Control) to create a Program from this package.</span>
+                <>
+                  <button className="npw-btn npw-btn--primary" onClick={handleCreateProgram} disabled={programLifecycle.status === "pending"}>
+                    {programLifecycle.status === "pending" ? "Creating Program…" : "Create Program"}
+                  </button>
+                  {programLifecycle.status === "error" && <span className="radio-diff-note">{programLifecycle.message}</span>}
+                </>
               )}
               <button className="npw-btn npw-btn--ghost" onClick={handlePublish}>Publish New Version</button>
             </>
@@ -524,6 +614,32 @@ export function RadioPlaylistPublishPanel({
             Current state: <strong>{radioPlaylistStateLabel(radioPlaylist.state)}</strong>
             {" · "}Web bundle lifecycle: <strong>{derivedLifecycleLabel(preview, latestExport, hasPreparing)}</strong>
           </p>
+
+          {programPlan?.kind === "ambiguous" && latestExport && (
+            <div className="radio-publish-section radio-publish-program-ambiguous">
+              <h3>Programs referencing this playlist ({programPlan.programs.length})</h3>
+              <p className="radio-diff-note">
+                More than one Program already references this playlist — pick which one should adopt v{latestExport.bundleVersion}.
+              </p>
+              <ul>
+                {programPlan.programs.map((p) => (
+                  <li key={p.id}>
+                    {p.title} ({p.id}) — currently v{p.bundleVersion ?? "?"}
+                    {isAuthorizedOperator && p.bundleVersion !== latestExport.bundleVersion && (
+                      <button
+                        className="npw-btn npw-btn--ghost"
+                        onClick={() => handleUpdateProgram(p)}
+                        disabled={programLifecycle.status === "pending"}
+                      >
+                        {programLifecycle.status === "pending" ? "Updating…" : `Update to v${latestExport.bundleVersion}`}
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+              {programLifecycle.status === "error" && <p className="radio-diff-note">{programLifecycle.message}</p>}
+            </div>
+          )}
 
           <div className="radio-publish-storage">
             <span>Estimated size: {(storageSummary.totalBytes / 1024 / 1024).toFixed(1)} MB</span>
