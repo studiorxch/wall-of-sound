@@ -163,8 +163,52 @@ verification evidence. No longer an open item.
   and cancels readiness timing, with no real surface save/drain protocol.
 - **Impact**: proves parent ownership but cannot yet host real MAP/BLACKBOOK or
   provide production canonical URLs or persistent RADIO.
-- **Current status**: intentional HOST-01 boundary; no production inputs changed.
-- **Revisit trigger**: HOST-02 must adapt real MAP lifecycle/navigation; HOST-03
-  must integrate BLACKBOOK artwork state without fixture remount assumptions.
-  Canonical routing and RADIO ownership require their own later checkpoints.
-  Replace fixture adapters through the existing HOME authority, not a second router.
+- **Current status**: HOST-02 (real MAP) and HOST-03 (real BLACKBOOK) are both
+  done — both of HOME's two surfaces are now real documents; the HOST-01 fixture
+  files remain present but are unreachable from ordinary navigation. See
+  [home/README.md](home/README.md).
+- **Revisit trigger**: canonical production routing and RADIO ownership still
+  require their own later checkpoints. See the dedicated HOST-03 auth-popup
+  entry below for the one open, disclosed defect from HOST-03's own human
+  acceptance pass.
+
+---
+
+### HOME HOST-03 — real Google sign-in popup recreates the HOME runtime
+
+- **Problem**: human Chrome acceptance of HOST-03 found that after a real
+  `signInWithGoogle()` popup sign-in succeeds inside HOME-hosted BLACKBOOK,
+  the NEXT navigation (BLACKBOOK → MAP via BLACKBOOK's own MAP control)
+  recreates HOME's own top-level document (`home-dev.html`) — a brand-new
+  runtime UUID appears, proving the persistent HOME runtime itself was
+  reloaded, not merely the child surface. Confirmed NOT caused by this
+  batch's own navigation code (`syncArtworkRoute`/`openArtwork`/
+  `setActiveArtworkIdentity`/the `#map-nav-link` interception): signing in
+  via `createUserWithEmailAndPassword` against the same emulator, then
+  following the identical MAP → BLACKBOOK → sign-in → BLACKBOOK → MAP steps,
+  did NOT reproduce it — isolating the cause to the real Google popup flow
+  itself (or its interaction with BLACKBOOK now always running inside an
+  iframe, which it never did before HOST-03), most likely a Chrome
+  Cross-Origin-Opener-Policy process-isolation side effect of opening a
+  cross-origin popup from a nested browsing context, or a Google-OAuth
+  anti-clickjacking restriction on iframe-invoked sign-in prompts — not
+  proven to one exact mechanism, only isolated and reproduced.
+- **Impact**: HOME-hosted BLACKBOOK sign-in via the real Google popup is
+  unsafe for real product use — the loss of the HOME runtime defeats the
+  entire point of a persistent host (in-memory RADIO/session state, if any
+  existed at that point, would be destroyed). This was an explicitly named,
+  pre-existing risk: `proposals/HOME_PERSISTENT_HOST_V1.md`'s own "Final
+  acceptance and unresolved questions" section flagged "auth
+  popup/persistence in hosted mode" as unresolved before HOST-03 began.
+- **Current status**: known, disclosed, NOT fixed. Not reproducible in this
+  agent's own sandboxed browser-automation tool (a separate, unrelated
+  `window.opener`/popup-relay limitation blocks even attempting the real
+  popup flow there), so no further agent-side isolation was possible this
+  pass beyond the email/password-vs-Google-popup comparison above.
+- **Revisit trigger**: before HOME-hosted BLACKBOOK (or MAP, whose own
+  separate MEMBER dialog has not yet been acceptance-tested against a real
+  Google popup under HOME and likely has the same latent exposure) sign-in
+  is presented as safe for real use. Likely requires a MEMBER-flow design
+  decision (e.g. `signInWithRedirect` with a coordinated top-level
+  completion step) — explicitly out of HOST-03's own scope ("Do not migrate
+  MEMBER ownership in HOST-03"), so deliberately not attempted here.

@@ -218,7 +218,7 @@ unchanged) remains the local-only, emulator-gated acceptance server.
 | Standalone BLACKBOOK regression | PASS: `/blackbook.html` served outside HOME renders identically (full toolbar, Workspace/Artboard, MAP link); the MAP link is confirmed a plain, unintercepted anchor (`href="wall-app/"`) — `blackbookHomeSurface.ts`'s `isHome` correctly false; zero console errors (BLACKBOOK itself never had MAP's pre-existing bundle errors) |
 | Artwork URL/reload contract | Verified at the unit level only (see below) — `childUrl()` forwards a route's `?artwork=` into BLACKBOOK's own URL only when one is already present (a reload/restore), letting BLACKBOOK's existing `resolveInitialActiveArtwork()` resolve it with no new logic; live sign-in was blocked (see below), so a real end-to-end reload-with-artwork could not be exercised this pass |
 | PAGES / drawing / DELETE / CLEAR / Undo / NEW live acceptance | **Not verified live** — see MEMBER sign-in blocker below. Persistence-layer correctness for CLEAR/DELETE/Spray is instead evidenced by the existing, unmodified, real-emulator-backed `blackbookClearPersistence.emulator.test.ts`/`blackbookDeletePersistence.emulator.test.ts`/`blackbookSprayPersistence.emulator.test.ts`, all passing against the same emulator this pass used |
-| MEMBER sign-in (blocker, disclosed) | Google sign-in (`signInWithGoogle`, popup-based) against the Auth emulator's fake-IDP popup consistently failed with `Auth Emulator Internal Error: No matching frame` in this session's sandboxed browser-automation tool. Reproduced identically in HOME-hosted BLACKBOOK, standalone BLACKBOOK, and on a fresh HOME runtime — confirmed as a `window.opener`/popup-relay limitation of the automation tool's multi-tab model, not a HOST-03 regression or a BLACKBOOK/HOME code defect. Real human Chrome acceptance (a real popup with a real `window.opener`) is expected to work; this was not otherwise re-verifiable in this session |
+| MEMBER sign-in (agent-side tooling) | This agent's own sandboxed browser-automation tool consistently failed `signInWithGoogle`'s real popup with `Auth Emulator Internal Error: No matching frame` (a `window.opener`/popup-relay limitation of that tool's multi-tab model, reproduced identically in HOME-hosted BLACKBOOK, standalone BLACKBOOK, and on a fresh HOME runtime — not a HOST-03 code defect on its own). **Real human Chrome acceptance found a genuine, separate defect in this exact area — see "HOST-03 human acceptance" below; do not read this row as "sign-in is safe under HOME."** |
 | Focused tests | `src/logic/home` 60/60 passed (44 `homeNavigation`, incl. 2 new `syncArtworkRoute` cases; 16 new `blackbookHomeSurface` covering context detection, standalone no-op, readiness, artwork-route sync, and BLACKBOOK→MAP delegation) |
 | Typecheck | `npx tsc -b` clean |
 | Production build | `npm run build` passed; same pre-existing dynamic-import/chunk-size warnings; Wall validation: 481 mirrored files, 452 references |
@@ -229,6 +229,58 @@ Not verified: Safari/Firefox/mobile hardware, hostile child navigation, live
 PAGES/drawing/DELETE/CLEAR/NEW acceptance (blocked by the sign-in tooling
 limitation above), MEMBER/RADIO migration, or production route serving. No
 Firebase writes, production access, rules changes, or deployment occurred.
+
+## HOST-03 human acceptance — 2026-09-29 — known defect, real Google popup sign-in
+
+Real Chrome human acceptance (bypassing the agent-side automation limitation
+above) found a genuine, reproducible defect this agent's own sandboxed
+browser tool could not surface:
+
+| Step | Result |
+|---|---|
+| HOME starts with real MAP | PASS |
+| MAP → BLACKBOOK via MAP's own control | PASS, HOME runtime unchanged |
+| Real BLACKBOOK becomes active | PASS |
+| MEMBER sign-in (real `signInWithGoogle` popup) inside HOME-hosted BLACKBOOK | PASS -- succeeds, BLACKBOOK stays in the same HOME runtime immediately after |
+| BLACKBOOK → MAP via BLACKBOOK's own control, AFTER that sign-in | **FAIL** -- MAP becomes active, but the HOME runtime UUID changes (a brand-new UUID), proving HOME's own top-level document (`home-dev.html`) was recreated during the navigation, not merely the child surface |
+
+**Isolated cause (this agent's own follow-up investigation):** the failure is
+specific to the real `signInWithPopup` Google flow, not to being
+"signed in" generically. Using `javascript_tool` to sign in the SAME hosted
+BLACKBOOK document via `createUserWithEmailAndPassword` against the same Auth
+emulator (bypassing the Google popup entirely, otherwise following the exact
+same acceptance steps -- MAP → BLACKBOOK, sign in, BLACKBOOK → MAP) did
+**not** reproduce the defect: the HOME runtime UUID was provably identical
+before and after. This isolates the cause to `signInWithPopup` itself (or the
+popup's interaction with BLACKBOOK now always running inside HOME's iframe,
+which it never did before HOST-03), not to `syncArtworkRoute`, `openArtwork`,
+`setActiveArtworkIdentity`, or the `#map-nav-link` interception this batch
+added -- none of which differ between the two sign-in paths.
+
+**This was an explicitly named, pre-existing risk.** `../proposals/HOME_PERSISTENT_HOST_V1.md`'s
+own "Final acceptance and unresolved questions" section flagged "auth
+popup/persistence in hosted mode" as unresolved before HOST-03 began. Google's
+own sign-in popup enforces restrictions on OAuth prompts invoked from within
+an iframe (BLACKBOOK's new-as-of-HOST-03 condition), and Chrome's
+Cross-Origin-Opener-Policy process-isolation behavior for cross-origin popups
+opened from a nested browsing context is a documented source of exactly this
+kind of top-level-document-recreation side effect, independent of this
+codebase's own navigation logic. This has NOT been proven to be one specific
+mechanism yet -- only reproduced, isolated to the popup path, and traced to a
+class of known browser/Google-OAuth behavior, not fixed.
+
+**Status: known, disclosed, NOT fixed in HOST-03.** Fixing it would very
+likely require changing BLACKBOOK's sign-in flow when HOME-hosted (e.g. a
+redirect-based flow with a coordinated top-level completion step) or another
+MEMBER-flow design decision -- both explicitly out of HOST-03's own scope
+("Do not migrate MEMBER ownership in HOST-03"). Per HOST-03's own stop
+condition ("If achieving this requires... MEMBER migration... STOP and report
+the blocker"), this is reported rather than silently expanded into a MEMBER
+redesign. HOME-hosted BLACKBOOK sign-in must be treated as unsafe for real
+product use until a dedicated follow-up checkpoint resolves it; this does not
+affect standalone BLACKBOOK (unchanged, never nested) or HOME-hosted MAP's
+own separate MEMBER dialog (not yet acceptance-tested against a real Google
+popup either -- likely the same latent exposure, unverified).
 
 Temporary debt: dev-only URL/fixture contract (HOST-01's fixture files remain
 present but unreachable from ordinary navigation), lifecycle without
