@@ -83,3 +83,10 @@ current-state pages only with their verified implementation checkpoints.
   MEMBER/avatar control across hosted surfaces (MAP has one; BLACKBOOK
   doesn't), kept explicitly distinct from identity authority and OAuth
   transaction ownership. Recon only — not implemented.
+- [RADIO β0.1 operator playlist/programming recon](proposals/RADIO_OPERATOR_WORKFLOW_RECON.md) —
+  what exists today across MUSIC Playlist → RadioPlaylist → immutable
+  Package → Program → Channel rotation → broadcast, entirely through real
+  UI, versus the one genuinely terminal-only step (publishing an export to
+  the public site) and Program's own create-only (no update/delete)
+  limitation; a scheduling capability matrix; and a future clock-scope
+  note. Recon only — not implemented.

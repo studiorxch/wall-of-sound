@@ -113,6 +113,25 @@ document should always be this — never MUSIC's own `/radio-web-export/...`
 dev-server preview route, which exists only for local preview and is never
 reachable from production.
 
+## Operator playlist/programming workflow (current facts)
+
+MUSIC → RADIO → Channel is already a real, mostly UI-driven chain — see
+[../proposals/RADIO_OPERATOR_WORKFLOW_RECON.md](../proposals/RADIO_OPERATOR_WORKFLOW_RECON.md)
+for the full recon (workflow diagram, exact files per stage, a scheduling
+capability matrix). Two current-state facts worth recording here directly:
+
+- **`radioPrograms` is create-only.** `EventRadioRepository` has no
+  update or delete method for a Program, in its interface or any
+  implementation — an operator mistake is permanent (though harmless
+  unless the Program is added to a Channel's rotation).
+- **One step in the chain is terminal-only.** Getting an already-exported
+  local package (`library/music/RadioWebExports/<slug>/v<n>/`) onto the
+  real public URL above requires running
+  `node music/scripts/publish-radio-to-sites.mjs <slug>` by hand — no UI
+  triggers it. Every other step (playlist creation, Send to RADIO,
+  Publish/export, Create Program, Channel rotation editing) already has
+  real UI.
+
 ## MAP's relationship to RADIO
 
 MAP is now a real receiver of RADIO's canonical Channel — not a description
