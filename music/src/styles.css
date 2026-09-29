@@ -12366,6 +12366,9 @@ span.ph-crate-chip-label:hover { color: var(--text-mid, #aaa); }
 .radio-prep-workspace { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
 .radio-prep-header { display: flex; align-items: center; gap: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border, #333); flex-shrink: 0; }
 .radio-prep-header h2 { margin: 0; }
+.radio-prep-title-input { margin: 0; padding: 2px 4px; font-size: 1.17em; font-weight: bold; font-family: inherit; color: inherit; background: transparent; border: 1px solid transparent; border-radius: 4px; min-width: 0; flex: 0 1 auto; }
+.radio-prep-title-input:hover { border-color: var(--border, #333); }
+.radio-prep-title-input:focus { border-color: var(--accent, #4a90e2); outline: none; }
 .radio-prep-header-meta { font-size: 11px; color: var(--text-dim); }
 .radio-prep-progress { display: flex; align-items: center; gap: 10px; padding: 8px 0; font-size: 12px; color: var(--text-mid); }
 .radio-prep-expanded { flex: 1; min-height: 0; overflow: auto; }

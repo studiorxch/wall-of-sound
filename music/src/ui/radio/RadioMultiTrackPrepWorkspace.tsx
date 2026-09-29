@@ -25,6 +25,7 @@ import type { PlaylistRecord } from "../../data/playProjectTypes";
 import { prepareMissingAnalysesForPlaylist, type PlaylistWaveformPreparationProgress } from "../../logic/radio/radioPlaylistWaveformPreparation";
 import { computeVisibleRowRange } from "../../logic/radio/radioRowWindowing";
 import { computeEntryPreparationState, buildApprovalPatch, buildTrackPrepareRequest } from "../../logic/radio/radioEntryPreparation";
+import { radioPlaylistStateLabel } from "../../logic/radio/radioPlaylistPublicationState";
 import { runTrackPreparationBatch, prepareTrackViaFetch, fetchSourceAssetHash, verifyTrackBindingViaFetch, type PrepareEntryTask } from "../../logic/radio/radioTrackPreparationOrchestrator";
 import { RadioPrepRow } from "./RadioPrepRow";
 import { SectionalLooperWorkspace, type SectionalLooperWorkspaceProps } from "../SectionalLooperWorkspace";
@@ -80,6 +81,21 @@ export function RadioMultiTrackPrepWorkspace({
   const [prepProgress, setPrepProgress] = useState<PlaylistWaveformPreparationProgress | null>(null);
   const [showPublishPanel, setShowPublishPanel] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+
+  // Lifecycle reconciliation (batch 0929-3) — RadioPlaylist.title is now
+  // editable; the source Playlist stays editable after publication, and
+  // renaming never touches any already-exported immutable Package.
+  const [titleDraft, setTitleDraft] = useState(radioPlaylist.title);
+  const [syncedTitle, setSyncedTitle] = useState(radioPlaylist.title);
+  if (radioPlaylist.title !== syncedTitle) {
+    setSyncedTitle(radioPlaylist.title);
+    setTitleDraft(radioPlaylist.title);
+  }
+  function commitTitle() {
+    const trimmed = titleDraft.trim();
+    if (trimmed && trimmed !== radioPlaylist.title) onUpdateRadioPlaylist(radioPlaylist.id, { title: trimmed });
+    else setTitleDraft(radioPlaylist.title);
+  }
 
   // 0718B — always-fresh entries for async callbacks (approve/prepare
   // responses arrive after the render that started them; reading the
@@ -298,8 +314,18 @@ export function RadioMultiTrackPrepWorkspace({
     <div className="radio-prep-workspace">
       <div className="radio-prep-header">
         <button className="looper-back" onClick={onBack}>← Back to Playlists</button>
-        <h2>{radioPlaylist.title}</h2>
-        <span className="radio-prep-header-meta">{entries.length} entries · {radioPlaylist.state}</span>
+        <input
+          className="radio-prep-title-input"
+          value={titleDraft}
+          onChange={(e) => setTitleDraft(e.target.value)}
+          onBlur={commitTitle}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") e.currentTarget.blur();
+            if (e.key === "Escape") { setTitleDraft(radioPlaylist.title); e.currentTarget.blur(); }
+          }}
+          aria-label="RADIO Playlist title"
+        />
+        <span className="radio-prep-header-meta">{entries.length} entries · {radioPlaylistStateLabel(radioPlaylist.state)}</span>
         <div className="radio-prep-header-actions">
           {!confirmingApproveEligible ? (
             <button className="tb-btn sm" disabled={notApprovedCount === 0} onClick={() => setConfirmingApproveEligible(true)}>

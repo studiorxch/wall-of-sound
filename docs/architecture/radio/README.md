@@ -157,68 +157,121 @@ reachable from production.
 
 ## Operator playlist/programming workflow (current facts)
 
-RADIO-02 (batch 0929-2) closed the one remaining terminal-only gap below —
-the full chain now has real, working operator UI end to end, with no
-Terminal step:
+Batch 0929-3 (lifecycle streamlining, on top of RADIO-02's own terminal-only
+fix) consolidated the chain to ONE operator Publish action. The full chain
+has real, working operator UI end to end, with no Terminal step and no
+separate manual "Publish to Sites" click:
 
 ```
 MUSIC playlist authoring (PlaylistsGrid.tsx: create/open/duplicate/delete)
   ↓ "Send to RADIO" (per-playlist button, local-only — writes to MUSIC's
      own IndexedDB state, not Firestore)
-RadioPlaylistPublishPanel.tsx's readiness preview (five categories: Ready /
-  Needs approval / Needs preparation / Stale-or-failed / Excluded; storage
-  estimate)
-  ↓ "Publish" (writes real files to
-     library/music/RadioWebExports/<slug>/v<n>/ via MUSIC's own local Vite
-     dev-server endpoints)
-RadioPlaylistPublishPanel.tsx's "Publish to Sites" button (operator-gated)
-  ↓ POST /radio-web-bundle-export... then POST /radio-publish-to-sites
-     (dev-server route, reuses publish-radio-to-sites.mjs's own validated
-     copy/verify/atomic-rename logic — copies into the Sites checkout's
-     OWN LOCAL working tree only; does not commit, push, or deploy — see
-     "One local-copy step, one still-manual deploy step" below)
+RadioMultiTrackPrepWorkspace.tsx — the source RadioPlaylist stays fully
+  editable here at every stage, published or not (title is editable
+  in-place; entries/lock/include/approve/prepare are never gated on
+  export or publication state)
+  ↓ "Publish" (ONE button/one progress indicator — internally: validate
+     source audio → bulk-prepare/approve every eligible entry → export an
+     immutable local Web Bundle version → for a signed-in operator, copy
+     that version into the Sites checkout — see "Publish is one action,
+     four internal stages" below)
 RadioPlaylistPublishPanel.tsx's "Create Program" button (operator-gated,
-  only enabled once Publish to Sites has actually succeeded for this
-  version)
+  only enabled once Publish's own Sites-copy stage has actually succeeded
+  for this version — the one remaining explicit operator decision after a
+  successful Publish)
   ↓ createRadioProgram (real UI call)
 channel-control.html's rotation editor (add/remove/reorder Programs via a
   real <select> from listRadioPrograms(), Save Rotation, Activate/
   Deactivate, Start/Restart Rotation Now)
 ```
 
+Per-track approval, per-track preparation, the manual "Export Web
+Bundle…" dialog, the editorial "Mark Ready for Publishing" flag, and a
+manual "Republish to Sites" recovery control all remain real, still-
+supported operations — they live behind `RadioPlaylistPublishPanel.tsx`'s
+collapsed Diagnostics section as advanced/recovery tools, not routine
+steps a successful Publish requires the operator to see or use.
+
 See
 [../proposals/RADIO_OPERATOR_WORKFLOW_RECON.md](../proposals/RADIO_OPERATOR_WORKFLOW_RECON.md)
 for the original recon (exact files per stage, a scheduling capability
-matrix) — its own "terminal-only" finding below is now historical, not
-current.
+matrix) — its own workflow diagram is now historical, not current.
 Current-state facts worth recording here directly:
 
-- **`radioPrograms` is create-only.** `EventRadioRepository` has no
-  update or delete method for a Program, in its interface or any
-  implementation — an operator mistake is permanent (though harmless
-  unless the Program is added to a Channel's rotation).
-- **One local-copy step, one still-manual deploy step.** "Publish to
-  Sites" (`/radio-publish-to-sites`, `music/scripts/publish-radio-to-sites.mjs`)
-  copies an already-exported local package into the Sites checkout's own
-  working tree and flips its `active.json` pointer — this is now
-  UI-triggered, no Terminal required. It does NOT commit, push, or
-  deploy. Reaching the real public URL above still requires a separate
-  `git push` from inside that checkout to its own `origin/main` (see
-  [../DEPLOYMENT.md](../DEPLOYMENT.md)) — an intentionally unautomated,
-  still-manual step this batch did not touch.
-- **Create Program is gated on an actual Sites publish, not just a local
-  export.** `RadioPlaylistPublishPanel.tsx` only shows/enables "Create
-  Program" once a `RadioSitesPublicationRecord` exists for the exact
-  `{slug, bundleVersion}` being created — fixing a latent gap where a
-  Program's `manifestBaseUrl` could previously point at a package that
-  was never actually copied to the Sites checkout.
-- **"Publish to Sites"/"Create Program" are client-side-gated to the
-  StudioRich operator** (`isAuthorizedOperator`, same
-  `STUDIO_RICH_OPERATOR_EMAILS` pattern as every other operator action in
-  this codebase) — same posture as every other local dev-server route:
-  no server-side auth check exists on `/radio-publish-to-sites` or any
-  sibling route, since only the operator's own local MUSIC dev server can
-  reach it. This matches existing precedent; it is not a new exception.
+- **Publish is one action, four internal stages.** `handlePublish`
+  (`RadioPlaylistPublishPanel.tsx`) always runs, in order: validate source
+  audio → prepare/bulk-approve → export (never mutates a prior version —
+  see "Package versioning is append-only and immutable" below) → for a
+  signed-in StudioRich operator only, copy the resulting (or
+  already-current, if this run was a no-op re-export) version to the Sites
+  checkout (`/radio-publish-to-sites`, reusing
+  `publish-radio-to-sites.mjs`'s validated logic verbatim — no second
+  implementation). A non-operator's Publish still exports the immutable
+  local Package correctly; it stops before the Sites-copy stage with an
+  explicit reason, never a silent partial success. This preserves RADIO-02's
+  exact same authorization boundary — the capability itself didn't change,
+  only that it's automatic for an authorized operator instead of a second
+  manual click.
+- **Package versioning is append-only and immutable — confirmed, not
+  assumed.** `music/server/radio/radioWebBundleWriter.ts`'s `exportWebBundle`
+  always computes the next `vN+1` from `listBundleVersions` and refuses to
+  overwrite an existing version directory (`RADIO_WEB_BUNDLE_VERSION_EXISTS`)
+  before an atomic move commits it — there is no code path anywhere in the
+  export chain that opens, rewrites, or deletes a prior version's files.
+  "Publish New Version" (the button shown once a Package already exists —
+  renamed from "Update Published Version" for accuracy) is the exact same
+  `handlePublish` action; it creates vN+1, it never updates v1 (or any
+  prior version) in place. Editing the source Playlist and republishing
+  therefore can never mutate an already-published Package.
+- **The source RadioPlaylist remains fully editable after publication —
+  confirmed, not assumed.** No control in `RadioMultiTrackPrepWorkspace.tsx`
+  (lock, include-in-publish, approve, prepare) is gated on `latestExport`,
+  `radioWebExports`, or `radioPlaylist.state`. Its `title` is now directly
+  editable in that workspace's header (batch 0929-3; it was display-only
+  before — a MUSIC-send-time snapshot with no rename path anywhere).
+  `radioPlaylist.state` (`DRAFT`/`PREPARING`/`READY`/`PUBLISHED`/`RETIRED`,
+  see `radioPlaylistPublicationState.ts`) is a fully separate, editorial-
+  only "reviewed and approved" flag — it has no relationship to whether a
+  Package/export exists; never conflate "playlist state PUBLISHED" with
+  "Package published to Sites."
+- **`radioPrograms` is create-only — unchanged, still open, deferred to
+  RADIO-03.** `EventRadioRepository` has no update or delete method for a
+  Program. This means a refreshed Package version cannot yet replace the
+  Package an existing Program points to without creating a brand-new
+  Program and manually re-editing the Channel's rotation to swap it in —
+  there is no safe, in-scope way to avoid that today. Recording this
+  explicitly as a real RADIO-03 requirement: Program update/deactivate
+  that lets an operator move existing Channel programming onto a
+  corrected/new Package version without rebuilding the Schedule/rotation
+  from scratch.
+- **Reaching the public domain remains a separate, unautomated step.**
+  Publish's Sites-copy stage only writes into the Sites checkout's own
+  local working tree. It does NOT commit, push, or deploy. A separate
+  `git push` from inside that checkout to its own `origin/main` is still
+  required (see [../DEPLOYMENT.md](../DEPLOYMENT.md)) — this batch did not
+  touch that step.
+- **Publish/Create Program are client-side-gated to the StudioRich
+  operator** (`isAuthorizedOperator`, same `STUDIO_RICH_OPERATOR_EMAILS`
+  pattern as every other operator action in this codebase) — same posture
+  as every other local dev-server route: no server-side auth check exists
+  on `/radio-publish-to-sites` or any sibling route, since only the
+  operator's own local MUSIC dev server can reach it. This matches
+  existing precedent; it is not a new exception.
+
+### Human acceptance — real 45-track playlist (2026-09-29)
+
+A real 45-track MUSIC playlist ("β0.1.1"), sent to RADIO and published
+through the current one-action Publish flow above, in this exact worktree
+once the correct library roots were used (see
+[../DEBT.md](../DEBT.md)'s gitignored-asset-mirror entry): MUSIC → RADIO
+send PASS; source-audio resolution PASS; one Publish click triggering
+automatic bulk preparation/approval PASS (45/45 reached READY, 0 needing
+approval, 0 needing preparation, 0 stale/failed); immutable exported
+bundle v1 PASS (45 tracks, 149.4 MB); Preview playback PASS. The preview's
+`hard_cut (legacy — no approved DJ plan for this pair)` label is expected,
+acceptable fallback behavior for a pair with no approved DJ transition
+plan — it is not a defect and does not make the DJ-transition project a
+dependency of RADIO publication.
 
 ## MAP's relationship to RADIO
 

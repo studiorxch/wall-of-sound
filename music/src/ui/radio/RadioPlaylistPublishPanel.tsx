@@ -15,20 +15,30 @@
 // a validated RadioWebExportRecord exists (never inferred from playlist
 // state alone).
 //
-// HONEST LOCAL-ONLY LANGUAGE (mandatory, spec-corrected): the "Publish"/
-// "Update Published Version" action (Web Bundle export) remains local-only
-// — it must always say "Does not upload or deploy" (see
-// RadioWebExportPreflightDialog.tsx), and never use the words "Publish to
-// Web" or "Unpublish" anywhere in this file.
+// HONEST LANGUAGE (mandatory): "Publish" copies real files into the Sites
+// project's own LOCAL checkout (see below) — it must never claim this is a
+// no-op or purely local-only action anymore. It must still never say
+// "deploy", "go live", "push to production", or "Unpublish" — reaching the
+// real public domain remains a separate, unautomated `git push` from
+// inside that checkout (see docs/architecture/DEPLOYMENT.md), which this
+// action never performs. Do not reintroduce the words "Publish to Web".
 //
-// RADIO-02 (batch 0929-2) — "Publish to Sites" is a SEPARATE, real action:
-// it copies the already-exported local bundle into the Sites project's own
-// LOCAL checkout via the /radio-publish-to-sites dev-server route (which
-// reuses music/scripts/publish-radio-to-sites.mjs's own validated logic
-// verbatim). It does NOT commit, push, or deploy — reaching the real public
-// domain still requires a separate `git push` from inside that checkout
-// (see docs/architecture/DEPLOYMENT.md). Copy for THIS action must say
-// exactly that; do not imply the public domain goes live automatically.
+// Batch 0929-3 (lifecycle streamlining) — Publish is now the ONE operator
+// action for the whole Playlist → Package chain. Internally it validates
+// source audio, bulk-prepares/approves every eligible entry, exports an
+// immutable Web Bundle version (RADIO-02's own already-existing,
+// never-mutate-a-prior-version guarantee — see radioWebBundleWriter.ts),
+// and — for a signed-in StudioRich operator — copies that version into the
+// Sites checkout (RADIO-02's own /radio-publish-to-sites route, reused
+// verbatim, never a second implementation). Per-track approval,
+// preparation, the manual "Export Web Bundle…" dialog, and the editorial
+// "Mark Ready for Publishing" flag are all real, still-supported
+// operations — they live in the Diagnostics section below as advanced
+// recovery, not as routine steps a successful Publish requires the
+// operator to see or operate. "Create Program" remains its own explicit
+// decision (a Program is operator-facing production identity, never
+// created as a side effect of Publish) and is the one next action
+// surfaced once a version has actually reached the Sites checkout.
 
 import { useEffect, useRef, useState } from "react";
 import {
@@ -58,10 +68,16 @@ import {
 import { PromoteToRadioDialog } from "./PromoteToRadioDialog";
 import { RadioWebExportPreflightDialog } from "./RadioWebExportPreflightDialog";
 
-const PUBLISH_STAGE_LABEL: Record<PublishStage, string> = {
+// Batch 0929-3 — one combined stage sequence covering both the local
+// export (PublishStage, from radioOnePublishOrchestrator.ts, reused
+// verbatim) and the Sites-checkout copy that now follows it automatically.
+type CombinedPublishStage = PublishStage | "publishing_to_sites";
+
+const PUBLISH_STAGE_LABEL: Record<CombinedPublishStage, string> = {
   validating: "Validating audio",
   preparing: "Preparing audio",
   exporting: "Exporting web version",
+  publishing_to_sites: "Publishing to Sites",
 };
 
 function nowIso(): string {
@@ -165,12 +181,15 @@ export function RadioPlaylistPublishPanel({
   const [confirmingMark, setConfirmingMark] = useState(false);
   const [showExportDialog, setShowExportDialog] = useState(false);
 
-  // 0723_RADIO_One_Action_Publish — the single Publish action's own state.
-  const [publishStage, setPublishStage] = useState<PublishStage | null>(null);
+  // 0723_RADIO_One_Action_Publish, extended by batch 0929-3 — the single
+  // Publish action's own state, now spanning both stages (export, then
+  // Sites-copy) behind one button/one progress indicator.
+  const [publishStage, setPublishStage] = useState<CombinedPublishStage | null>(null);
   const [publishFailures, setPublishFailures] = useState<PublishEntryFailure[]>([]);
 
-  // RADIO-02 (batch 0929-2) — Publish to Sites action's own state,
-  // independent of Publish and of Create Program.
+  // RADIO-02 (batch 0929-2), still used by the manual Diagnostics recovery
+  // control (batch 0929-3) for the case where Publish's own automatic
+  // Sites-copy stage specifically needs a retry without re-running export.
   const [sitesPublish, setSitesPublish] = useState<SitesPublishState>({ status: "idle" });
 
   // Batch 02I — Create Program action's own state, independent of Publish.
@@ -192,36 +211,6 @@ export function RadioPlaylistPublishPanel({
   // entries array once React re-renders between them.
   const radioPlaylistRef = useRef(radioPlaylist);
   useEffect(() => { radioPlaylistRef.current = radioPlaylist; }, [radioPlaylist]);
-
-  async function handlePublish() {
-    setPublishFailures([]);
-    setPublishStage("validating");
-    try {
-      const result = await runOnePublishViaFetch(
-        {
-          playlist: radioPlaylistRef.current,
-          inboxItems: radioInboxItems,
-          tracks: libraryTracks,
-          analyses: songAnalyses,
-          sourceMusicPlaylists,
-          allPlaylists: allRadioPlaylists,
-        },
-        {
-          onProgress: (stage) => setPublishStage(stage),
-          onEntryPatch: (entryId, patch) => {
-            const nextEntries = radioPlaylistRef.current.entries.map((e) => (e.id === entryId ? { ...e, ...patch } : e));
-            radioPlaylistRef.current = { ...radioPlaylistRef.current, entries: nextEntries };
-            onUpdateRadioPlaylist(radioPlaylistRef.current.id, { entries: nextEntries });
-          },
-        },
-      );
-      if (result.exportRecord) onExportedWebBundle(result.exportRecord);
-      if (result.playlistPatch) onUpdateRadioPlaylist(radioPlaylistRef.current.id, result.playlistPatch);
-      setPublishFailures(result.failures);
-    } finally {
-      setPublishStage(null);
-    }
-  }
 
   const preview = buildPublishPreview(radioPlaylist, radioInboxItems, preparationStateByEntryId);
   const entries = radioPlaylist.entries.slice().sort((a, b) => a.order - b.order);
@@ -257,33 +246,91 @@ export function RadioPlaylistPublishPanel({
         .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())[0]
     : undefined;
 
-  async function handlePublishToSites() {
-    if (!latestExport || sitesPublish.status === "pending") return;
-    setSitesPublish({ status: "pending" });
+  // RADIO-02's own /radio-publish-to-sites request, extracted so it can be
+  // called two ways: automatically, as Publish's own internal final stage
+  // below; and manually, from the Diagnostics recovery control, for the
+  // narrow case where THAT stage specifically failed/needs a retry without
+  // re-running the whole export. Never a second implementation of the copy
+  // itself — same route, same server-side logic either way.
+  async function publishExportToSites(exportRecord: RadioWebExportRecord): Promise<{ ok: true } | { ok: false; message: string }> {
     try {
       const response = await fetch("/radio-publish-to-sites", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ slug: latestExport.slug, bundleVersion: latestExport.bundleVersion }),
+        body: JSON.stringify({ slug: exportRecord.slug, bundleVersion: exportRecord.bundleVersion }),
       });
       const body = await response.json().catch(() => null);
       if (!response.ok || !body?.ok) {
-        setSitesPublish({ status: "error", message: body?.error ?? `Publish to Sites failed (HTTP ${response.status})` });
-        return;
+        return { ok: false, message: body?.error ?? `Publish to Sites failed (HTTP ${response.status})` };
       }
       onPublishedToSites({
         id: generateSitesPublicationId(),
         radioPlaylistId: radioPlaylist.id,
-        slug: latestExport.slug,
-        bundleVersion: latestExport.bundleVersion,
+        slug: exportRecord.slug,
+        bundleVersion: exportRecord.bundleVersion,
         publishedAt: nowIso(),
         relativeFinalDir: body.relativeFinalDir,
         manifestUrl: body.manifestUrl ?? null,
       });
-      setSitesPublish({ status: "idle" });
+      return { ok: true };
     } catch (error) {
-      setSitesPublish({ status: "error", message: error instanceof Error ? error.message : String(error) });
+      return { ok: false, message: error instanceof Error ? error.message : String(error) };
     }
+  }
+
+  // Batch 0929-3 (lifecycle streamlining) — the ONE operator Publish
+  // action. Internally: validate/prepare/bulk-approve/export (unchanged,
+  // radioOnePublishOrchestrator.ts), then — for a signed-in operator only,
+  // preserving RADIO-02's exact same authorization boundary — copy the
+  // resulting (or already-current, if this run was a no-op re-export) real
+  // version into the Sites checkout. A non-operator's Publish still
+  // exports the immutable local Package correctly; it just stops there,
+  // with an explicit reason, never a silent partial success.
+  async function handlePublish() {
+    setPublishFailures([]);
+    setSitesPublish({ status: "idle" });
+    setPublishStage("validating");
+    try {
+      const result = await runOnePublishViaFetch(
+        {
+          playlist: radioPlaylistRef.current,
+          inboxItems: radioInboxItems,
+          tracks: libraryTracks,
+          analyses: songAnalyses,
+          sourceMusicPlaylists,
+          allPlaylists: allRadioPlaylists,
+        },
+        {
+          onProgress: (stage) => setPublishStage(stage),
+          onEntryPatch: (entryId, patch) => {
+            const nextEntries = radioPlaylistRef.current.entries.map((e) => (e.id === entryId ? { ...e, ...patch } : e));
+            radioPlaylistRef.current = { ...radioPlaylistRef.current, entries: nextEntries };
+            onUpdateRadioPlaylist(radioPlaylistRef.current.id, { entries: nextEntries });
+          },
+        },
+      );
+      if (result.exportRecord) onExportedWebBundle(result.exportRecord);
+      if (result.playlistPatch) onUpdateRadioPlaylist(radioPlaylistRef.current.id, result.playlistPatch);
+      setPublishFailures(result.failures);
+
+      const effectiveExport = result.exportRecord ?? latestExport;
+      if (result.ok && effectiveExport && isAuthorizedOperator) {
+        setPublishStage("publishing_to_sites");
+        const sitesResult = await publishExportToSites(effectiveExport);
+        if (!sitesResult.ok) setSitesPublish({ status: "error", message: sitesResult.message });
+      }
+    } finally {
+      setPublishStage(null);
+    }
+  }
+
+  // Diagnostics-only manual recovery — retries ONLY the Sites-copy stage
+  // against the current latestExport, without re-running export/approval.
+  async function handleRetryPublishToSites() {
+    if (!latestExport || sitesPublish.status === "pending") return;
+    setSitesPublish({ status: "pending" });
+    const result = await publishExportToSites(latestExport);
+    setSitesPublish(result.ok ? { status: "idle" } : { status: "error", message: result.message });
   }
 
   // Batch 02I — constructs the create input ONLY from already-authoritative
@@ -400,7 +447,9 @@ export function RadioPlaylistPublishPanel({
         </div>
 
         <p className="radio-publish-notice">
-          Publishing exports a local, self-contained web bundle. It does not upload, host, or deploy anything.
+          Publish validates, prepares, and exports this playlist as an immutable Package version, then copies it
+          into the Sites project's own checkout. It never commits, pushes, or deploys — reaching the public
+          domain is a separate, unautomated step.
         </p>
 
         <div className="radio-publish-primary">
@@ -409,47 +458,52 @@ export function RadioPlaylistPublishPanel({
               <button className="npw-btn npw-btn--primary" disabled>Publishing…</button>
               <span className="radio-diff-note">{PUBLISH_STAGE_LABEL[publishStage]}</span>
             </>
-          ) : latestExport ? (
+          ) : latestExport && sitesPublicationForLatestExport ? (
             <>
               <a className="npw-btn npw-btn--primary" href={`/radio-player.html?slug=${encodeURIComponent(latestExport.slug)}&v=${latestExport.bundleVersion}`} target="_blank" rel="noreferrer">
                 Play Preview
               </a>
-              <button className="npw-btn npw-btn--ghost" onClick={handlePublish}>Update Published Version</button>
-              {!isAuthorizedOperator ? (
-                <span className="radio-diff-note">Sign in as the StudioRich operator (via Event Radio Control) to publish this package to the Sites project or create a Program.</span>
-              ) : !sitesPublicationForLatestExport ? (
+              {programCreation.status === "success" ? (
+                <span className="radio-diff-note">
+                  Program created: {programCreation.programId}. Not on air yet — reload Event Radio Control to see and assign it (it loads the program catalog once per sign-in, not live).
+                </span>
+              ) : isAuthorizedOperator ? (
                 <>
-                  <button className="npw-btn npw-btn--ghost" onClick={handlePublishToSites} disabled={sitesPublish.status === "pending"}>
-                    {sitesPublish.status === "pending" ? "Publishing to Sites…" : "Publish to Sites"}
+                  <button className="npw-btn npw-btn--primary" onClick={handleCreateProgram} disabled={programCreation.status === "pending"}>
+                    {programCreation.status === "pending" ? "Creating Program…" : "Create Program"}
                   </button>
-                  {sitesPublish.status === "error" && <span className="radio-diff-note">Publish to Sites failed — {sitesPublish.message}</span>}
+                  {programCreation.status === "error" && <span className="radio-diff-note">{programCreation.message}</span>}
                 </>
               ) : (
-                <>
-                  <span className="radio-diff-note">Published to Sites: {sitesPublicationForLatestExport.relativeFinalDir}</span>
-                  {programCreation.status === "success" ? (
-                    <span className="radio-diff-note">
-                      Program created: {programCreation.programId}. Not on air yet — reload Event Radio Control to see and assign it (it loads the program catalog once per sign-in, not live).
-                    </span>
-                  ) : (
-                    <>
-                      <button className="npw-btn npw-btn--ghost" onClick={handleCreateProgram} disabled={programCreation.status === "pending"}>
-                        {programCreation.status === "pending" ? "Creating Program…" : "Create Program"}
-                      </button>
-                      {programCreation.status === "error" && <span className="radio-diff-note">{programCreation.message}</span>}
-                    </>
-                  )}
-                  <button className="npw-btn npw-btn--ghost" onClick={handlePublishToSites} disabled={sitesPublish.status === "pending"}>
-                    {sitesPublish.status === "pending" ? "Republishing to Sites…" : "Republish to Sites"}
-                  </button>
-                  {sitesPublish.status === "error" && <span className="radio-diff-note">Publish to Sites failed — {sitesPublish.message}</span>}
-                </>
+                <span className="radio-diff-note">Sign in as the StudioRich operator (via Event Radio Control) to create a Program from this package.</span>
               )}
+              <button className="npw-btn npw-btn--ghost" onClick={handlePublish}>Publish New Version</button>
+            </>
+          ) : latestExport ? (
+            <>
+              <a className="npw-btn npw-btn--ghost" href={`/radio-player.html?slug=${encodeURIComponent(latestExport.slug)}&v=${latestExport.bundleVersion}`} target="_blank" rel="noreferrer">
+                Play Preview
+              </a>
+              <span className="radio-diff-note">
+                Exported v{latestExport.bundleVersion} locally.{" "}
+                {isAuthorizedOperator
+                  ? "Publish to finish copying it to the Sites project."
+                  : "Sign in as the StudioRich operator (via Event Radio Control) to publish it to the Sites project."}
+              </span>
+              <button className="npw-btn npw-btn--primary" onClick={handlePublish}>Publish</button>
             </>
           ) : (
             <button className="npw-btn npw-btn--primary" onClick={handlePublish}>Publish</button>
           )}
         </div>
+
+        {sitesPublish.status === "error" && (
+          <div className="radio-publish-failures">
+            <h4>Publish exported locally, but couldn't reach the Sites project</h4>
+            <p className="radio-diff-note">{sitesPublish.message}</p>
+            <button className="npw-btn npw-btn--primary" onClick={handlePublish}>Retry Publish</button>
+          </div>
+        )}
 
         {publishFailures.length > 0 && (
           <div className="radio-publish-failures">
@@ -464,7 +518,7 @@ export function RadioPlaylistPublishPanel({
         )}
 
         <details className="radio-publish-preview">
-          <summary>Diagnostics — approval, preparation, and manual export controls</summary>
+          <summary>Diagnostics — per-track approval/preparation, manual export, and Sites-publish recovery</summary>
 
           <p className="radio-diff-note">
             Current state: <strong>{radioPlaylistStateLabel(radioPlaylist.state)}</strong>
@@ -521,6 +575,11 @@ export function RadioPlaylistPublishPanel({
           )}
 
           <div className="radio-dialog-actions">
+            {latestExport && isAuthorizedOperator && (
+              <button className="npw-btn npw-btn--ghost" onClick={handleRetryPublishToSites} disabled={sitesPublish.status === "pending"}>
+                {sitesPublish.status === "pending" ? "Republishing to Sites…" : `Republish v${latestExport.bundleVersion} to Sites`}
+              </button>
+            )}
             <button className="npw-btn npw-btn--primary" onClick={() => setShowExportDialog(true)}>Export Web Bundle…</button>
             {isMarkedReady ? (
               <button className="npw-btn npw-btn--ghost" onClick={handleRemoveMark}>Remove Publication Mark</button>
