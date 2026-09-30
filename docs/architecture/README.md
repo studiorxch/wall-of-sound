@@ -132,3 +132,12 @@ current-state pages only with their verified implementation checkpoints.
   the public site) and Program's own create-only (no update/delete)
   limitation; a scheduling capability matrix; and a future clock-scope
   note. Recon only — not implemented.
+- [Station Base Truth / generic representation architecture](proposals/STATION_05_BASE_TRUTH_RECON.md) —
+  assesses the existing MUSIC-side `stationGeometryTypes.ts`/
+  `stationClassificationTypes.ts`/archetype subsystem as a candidate
+  generic Station Base Truth (tracks/platforms/adjacency, independent of
+  3D authoring); finds island platforms are type-valid but functionally
+  unproven, proposes two additive fields (`platformSide`,
+  `adjacentTrackId`) to support island topology and door-side derivation
+  without a parallel type system. Recon only — STATION-06 on hold pending
+  discussion.
