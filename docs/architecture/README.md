@@ -145,3 +145,13 @@ current-state pages only with their verified implementation checkpoints.
   dispatch repair); see [subway/README.md](subway/README.md)'s "STATION-06"
   section for current-state truth. A real island station seed remains
   future work.
+- [Detail View subject / station writable-surface architecture](proposals/STATION_09_DETAIL_SUBJECT_RECON.md) —
+  recon for connecting Platform's Overview to its Detail View: inventories
+  `StationWallSurface`/`suitableForArt`/`adjacentTrackId`, the
+  StationGeometryEditor, BLACKBOOK's Workspace/Artwork/Artboard model, and
+  the separate car-surface `ArtworkPlacement` precedent; proposes an
+  additive `StationDetailSubjectRef` (working name) pointer type, argues
+  observable/writable/passengerAccessible are independent and mostly
+  derived rather than stored facts, and that a facelift never changes
+  element identity since ids are already deterministic/role-based. Recon
+  only — not implemented; proposes the smallest STATION-10 follow-up.
