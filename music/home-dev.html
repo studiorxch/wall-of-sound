@@ -1,7 +1,31 @@
 <!doctype html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>HOME — HOST-03 development</title>
-<style>body{font:16px system-ui;margin:1.5rem}button{margin:.25rem;padding:.5rem}iframe{display:block;width:100%;height:70vh;min-height:220px;border:1px solid #888}iframe[hidden]{display:none}pre{white-space:pre-wrap}#failure{color:#a00}</style></head>
-<body><h1>HOME — HOST-03 development</h1><p>Development HOME: real MAP/SUBWAY and real BLACKBOOK. RADIO remains MAP/BLACKBOOK-document-owned; MEMBER is not migrated.</p>
+<style>
+body{font:16px system-ui;margin:1.5rem}button{margin:.25rem;padding:.5rem}iframe{display:block;width:100%;height:70vh;min-height:220px;border:1px solid #888}iframe[hidden]{display:none}pre{white-space:pre-wrap}#failure{color:#a00}
+#home-topbar{display:flex;align-items:center;justify-content:space-between;gap:1rem}
+/* MEMBER-01A -- the persistent avatar/account control. Lives here, a
+   sibling of #surface, never inside it, so iframe surface replacement
+   can never touch it. */
+.member-avatar{position:relative;display:inline-block}
+.member-avatar-button{width:36px;height:36px;padding:0;margin:0;border-radius:50%;border:1px solid #888;background:#eee;font:600 13px system-ui;line-height:1;cursor:pointer;overflow:hidden;display:flex;align-items:center;justify-content:center}
+.member-avatar-button[data-state="initializing"]{opacity:.6;cursor:default}
+.member-avatar-photo{width:100%;height:100%;object-fit:cover;border-radius:50%}
+.member-avatar-menu{position:absolute;right:0;top:calc(100% + 6px);z-index:20;min-width:200px;background:#fff;border:1px solid #888;border-radius:6px;padding:.5rem;box-shadow:0 4px 16px rgba(0,0,0,.2)}
+.member-avatar-menu-name{margin:.25rem .5rem;font-weight:600}
+.member-avatar-menu-email{margin:0 .5rem .5rem;font-size:12px;color:#555}
+.member-avatar-menu-item{display:block;width:100%;text-align:left;background:none;border:none;padding:.4rem .5rem;margin:0;cursor:pointer;border-radius:4px}
+.member-avatar-menu-item:hover{background:#f0f0f0}
+.member-avatar-edit-form{padding:.25rem .5rem}
+.member-avatar-edit-input{width:100%;box-sizing:border-box;margin-bottom:.35rem}
+.member-avatar-edit-actions{display:flex;gap:.25rem}
+.member-avatar-edit-actions .member-avatar-menu-item{flex:1;text-align:center}
+</style></head>
+<body>
+<div id="home-topbar">
+  <h1>HOME — HOST-03 development</h1>
+  <div id="member-avatar-root"></div>
+</div>
+<p>Development HOME: real MAP/SUBWAY and real BLACKBOOK. MEMBER-01A: the persistent avatar above owns identity/account presentation for a hosted session.</p>
 <p>HOME runtime: <code id="runtime-id"></code></p>
 <nav aria-label="Test surface navigation"><button id="map">MAP / SUBWAY</button><button id="blackbook">BLACKBOOK</button><button id="back">Back</button><button id="forward">Forward</button><button id="retry">Retry surface</button></nav>
 <p id="route"></p><p id="phase" role="status"></p><p id="failure" role="alert"></p>

@@ -1,4 +1,4 @@
-import { createFirebaseGoogleAuthPopupInitiator, type GoogleAuthPopupInitiator } from "@studiorich/member-identity";
+import { createFirebaseGoogleAuthPopupInitiator, type GoogleAuthPopupInitiator, type MemberIdentityAuthority } from "@studiorich/member-identity";
 import type { HomeRoute, HomeSurfaceIdentity } from "../data/homeRouteTypes";
 import type { HostedGoogleCredentialResult } from "../data/hostedAuthTypes";
 import { createHomeNavigation } from "../logic/home/homeNavigation";
@@ -6,6 +6,8 @@ import { performHostedGoogleCredentialRequest } from "../logic/home/hostedGoogle
 import { matchesSurfaceIdentity, serializeHomeRoute } from "../logic/home/homeRoutes";
 import type { RadioChannelReceiver } from "../logic/radio/createRadioChannelReceiver";
 import { createHomeRadioSessionManager } from "./homeRadioSession";
+import { createHomeMemberSessionManager } from "./homeMemberSession";
+import { renderMemberAvatar } from "./homeMemberAvatar";
 import type { HomeMountIdentity, HomeSurfaceHost } from "./homeSurfaceContract";
 
 // Deliberately excluded from production Rollup inputs; also fail closed if imported in a production bundle.
@@ -134,6 +136,17 @@ function getRadioSession(source: Document, identity: HomeMountIdentity): RadioCh
   if (!activeMount(source, identity)) return null;
   return radioSessionManager.acquire();
 }
+// MEMBER-01A -- same lazy-singleton/fail-closed shape as radioSessionManager
+// above, applied to MEMBER identity: exactly one live, hosted
+// `MemberIdentityAuthority` for this HOME document's lifetime. The
+// persistent avatar (mounted below) acquires its own handle directly, not
+// through this gated bridge function -- it IS the active/owning context,
+// not a hosted surface asking permission.
+const memberSessionManager = createHomeMemberSessionManager();
+function getMemberIdentity(source: Document, identity: HomeMountIdentity): MemberIdentityAuthority | null {
+  if (!activeMount(source, identity)) return null;
+  return memberSessionManager.acquire();
+}
 const api: HomeSurfaceHost = Object.freeze({
   version: 1,
   ready: acceptReady,
@@ -142,6 +155,7 @@ const api: HomeSurfaceHost = Object.freeze({
   syncArtworkRoute: (source: Document, identity: HomeSurfaceIdentity, artworkId: unknown) => activeCaller(source, identity) && navigation.syncArtworkRoute(artworkId),
   requestGoogleCredential,
   getRadioSession,
+  getMemberIdentity,
 });
 window.StudioRichHome = api;
 
@@ -166,3 +180,10 @@ required("#forward").addEventListener("click", () => history.forward());
 required("#retry").addEventListener("click", () => navigation.retry());
 window.addEventListener("pagehide", cancelReadinessTimer);
 navigation.restore(location.search, true);
+
+// MEMBER-01A -- the ONE persistent avatar, mounted once into
+// `#member-avatar-root` (a sibling of `#surface`, never inside it) for the
+// lifetime of this document. Acquires its own handle to the SAME session
+// `getMemberIdentity` above hands out to hosted surfaces -- the parent
+// renders from the exact live instance it owns, not a snapshot.
+renderMemberAvatar(required("#member-avatar-root"), memberSessionManager.acquire());

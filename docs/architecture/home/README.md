@@ -540,3 +540,129 @@ subscribed a second listener on the SAME mount — fixed by moving listener
 cleanup to once-per-`acquire()` instead of once-per-`subscribe()`. Both are
 covered by new regression tests (`homeRadioSession.test.ts`,
 `radioChannelReceiverRuntime.test.ts`).
+
+## MEMBER-01A — persistent MEMBER identity + avatar presentation
+
+Applies RADIO-01's exact ownership shape to MEMBER identity. **MEMBER
+still owns the identity domain** (`shared/member-identity`,
+`MemberIdentityAuthority`, Firebase Auth, Firestore `members/{uid}`) —
+nothing about this schema, package, or abstraction changed. What moved,
+for a HOSTED session only, is RUNTIME ownership (which JS object instance
+is actually live) and PRESENTATION ownership (where the avatar/account
+menu renders) — both now the persistent shell's, exactly as RADIO-01
+already established for playback. Domain ownership, runtime ownership,
+and presentation ownership are three separate questions; only the last
+two moved, and only for the hosted case.
+
+```
+MemberIdentityAuthority (shared/member-identity, unchanged domain)
+        │
+        │ hosted: ONE live instance, owned by the persistent shell
+        ▼
+Persistent StudioRich Runtime (homeRuntime.ts)
+        │
+        ├── MEMBER AVATAR / MENU (homeMemberAvatar.ts) — mounted once,
+        │       outside #surface, never remounted per surface swap
+        │
+        └── Surface Viewport (#surface iframe)
+                ├── MAP (subwayMemberRuntime.ts) — consumes, doesn't own
+                └── BLACKBOOK (blackbookRuntime.ts) — consumes, doesn't own
+
+Standalone MAP/BLACKBOOK (outside HOME): each still constructs its own
+local MemberIdentityAuthority, completely unchanged, exactly as before
+this batch.
+```
+
+- `music/src/home/homeMemberSession.ts` (new): `createHomeMemberSessionManager()`
+  — same lazy-singleton/listener-handoff shape as `homeRadioSession.ts`
+  (`acquire()` per caller, listener cleanup once per `acquire()` call, not
+  per `subscribe()`), applied to `MemberIdentityAuthority` instead of
+  `RadioChannelReceiver`.
+- `homeSurfaceContract.ts` / `homeRuntime.ts`: new `getMemberIdentity(source,
+  identity): MemberIdentityAuthority | null` on `HomeSurfaceHost`, gated
+  by the exact same `activeMount()`/`HomeMountIdentity` check
+  `getRadioSession` already uses. Returns `null` under the identical
+  conditions; callers must never fall back to a local authority.
+- `music/src/logic/home/memberAvatarPresentation.ts` (new, pure, tested):
+  `deriveMemberAvatarDisplay(state)` — the state→display mapping (kind:
+  initializing/signed-out/signed-in; photoURL preferring the member's own
+  edited value over the raw provider snapshot; deterministic initials
+  fallback when no photo exists). No DOM, same "logic vs. DOM adapter"
+  split `homeNavigation.ts`/`hostedGoogleAuth.ts` already establish.
+- `music/src/home/homeMemberAvatar.ts` (new): `renderMemberAvatar(container,
+  authority)` — the actual DOM construction/wiring (vanilla DOM, no
+  React, matching `homeRuntime.ts`'s own style throughout this tree).
+  Mounted exactly once into `home-dev.html`'s new `#member-avatar-root`
+  (a sibling of `#surface`, never inside it) — this is what makes
+  "persists across MAP → BLACKBOOK → MAP" true by DOM placement alone,
+  never by special protection logic. Minimum states implemented:
+  initializing (neutral, non-actionable — never falsely renders signed
+  out or signed in), signed-out (Sign In), signed-in (avatar/initials,
+  display name, email, Edit Profile, Sign Out). Deliberately no
+  MAP/RADIO/BLACKBOOK/MUSIC navigation — this control represents
+  MEMBER/account identity only.
+- `music/src/member/hostAwareMemberIdentity.ts` (new): the ONE shared
+  resolution both `subwayMemberRuntime.ts` and `blackbookRuntime.ts` call.
+  Standalone/embedded: returns the local authority completely unchanged.
+  Hosted: NEVER constructs/starts a local Firebase Auth instance —
+  returns a proxy starting in `"initializing"` that resolves HOME's one
+  persistent authority via `getMemberIdentity` (same bounded 100×50ms
+  retry budget `radioChannelReceiverRuntime.ts` already uses, for the
+  same reason — this script's own module body typically runs before
+  HOME's readiness handshake completes) and forwards every subsequent
+  call to it. Fails closed to an explicit `"error"` state if the bridge
+  never resolves — never a silent local fallback (that would recreate
+  the exact nested-popup risk HOST-03B exists to avoid, and would mean
+  two live authorities disagreeing about who is signed in). Self-contained
+  hosting detection, deliberately not shared with `blackbookHomeSurface.ts`'s
+  own equivalent check, for the identical reason `radioChannelReceiverRuntime.ts`'s
+  own detection is self-contained — this one module must also work for
+  MAP, which cannot import that TS-only adapter.
+- `subwayMemberRuntime.ts` / `blackbookRuntime.ts`: construction changed
+  from `createFirebaseMemberIdentityAuthority(import.meta.env)` directly
+  to `createHostAwareMemberIdentity(() => createFirebaseMemberIdentityAuthority(import.meta.env))`
+  — the ONE line each file needed; every existing `memberIdentity.xxx()`
+  call site is unaffected, since the returned object satisfies the exact
+  same interface either way. Each surface's own local sign-in
+  button/topbar is hidden (never removed from the DOM, so existing
+  `querySelector`-based code paths keep working) when hosted — the
+  persistent avatar now owns that interaction.
+- **HOST-03B's credential relay is superseded for hosted sign-in, not
+  removed.** The persistent avatar completes Google sign-in directly
+  against its own live authority (the parent window is never nested, so
+  the original nested-popup defect HOST-03B was built to route around
+  doesn't apply to the parent's own sign-in flow at all). `requestGoogleCredential`
+  remains on `HomeSurfaceHost`/`BlackbookHomeSurface`/`window.SBE.HomeMapSurface`
+  unchanged — each surface's own (now-hidden, but still wired) local
+  sign-in button still references it, and no evidence was found that
+  anything else depends on it being removed. Left in place as retained
+  compatibility plumbing, per this batch's own explicit instruction, not
+  because it's still load-bearing for the hosted path.
+- **ADMIN is untouched.** `admin.html` is never hosted inside HOME's
+  iframe (opens in a new tab, its own top-level document) and keeps
+  constructing its own separate `MemberIdentityAuthority` instance,
+  exactly as before this batch.
+
+**Verified this pass (real Chrome, `http://localhost:5176/home-dev.html?surface=map`,
+real production Firebase project — not the emulator harness):** HOME's
+own avatar mounted and resolved to `"signedOut"` correctly, with no false
+`"signed out"` flash while `"initializing"`. `MAP → BLACKBOOK → MAP`:
+persistent runtime UUID (`37fcfd86-3c7d-449b-82d1-5d63b7977ed0`) never
+changed across 3 mounts/2 leaves; the avatar element was never
+remounted/reset (confirmed via DOM inspection before and after); LIVE
+RADIO's own indicator remained visible on BLACKBOOK, confirming RADIO-01's
+persistence is unaffected by this batch. BLACKBOOK's own local
+`#blackbook-member` button was confirmed `hidden === true` while hosted.
+**One real environment limitation found, not a regression this batch
+introduced:** MAP's own `subwayMemberRuntime.ts` is served to `wall/` as
+a pre-built bundle (`/assets/subway-member-runtime.js`, per
+`vite.config.ts`'s `rollupOptions.input`) — the plain `vite --port 5176`
+dev server (unlike `tools/host-02/server.mjs`'s own dev-redirect
+middleware) has no on-the-fly TS transform for this specific path, so it
+404s until `music` is actually built. This pre-dates this batch entirely
+(the bundling config is unchanged) — MAP's own consumption of the shared
+`hostAwareMemberIdentity.ts` module is code-identical to BLACKBOOK's
+(verified live), so BLACKBOOK's own successful live verification is
+strong evidence MAP's would behave identically once built. Actual Google
+sign-in/Sign-Out/Edit-Profile were not exercised by this automated pass
+(real third-party credentials) — left for human acceptance.

@@ -25,6 +25,7 @@ import {
   type BlackbookOperation,
 } from "./blackbookArtworkBridge";
 import { createCartesianCamera, type CartesianCamera, type DocRect } from "./cartesianWorkspaceCamera";
+import { createHostAwareMemberIdentity } from "./hostAwareMemberIdentity";
 import { createCurrentArtworkSession } from "./currentArtworkSession";
 import { numberArtworksForPagesDrawer, pickReplacementArtworkId } from "./artworkGallery";
 import { drawArtworkThumbnail } from "./artworkThumbnail";
@@ -144,7 +145,11 @@ function reportError(userMessage: string, error: unknown): void {
   showStatus(userMessage, "error");
 }
 
-const memberIdentity = createFirebaseMemberIdentityAuthority(import.meta.env);
+// MEMBER-01A -- standalone/embedded: unchanged, the same local authority
+// as before. HOME-hosted: consumes the persistent parent's ONE live
+// authority instead of constructing a second, competing one -- see
+// hostAwareMemberIdentity.ts's own doc.
+const memberIdentity = createHostAwareMemberIdentity(() => createFirebaseMemberIdentityAuthority(import.meta.env));
 const repository = createFirebaseArtworkRepository(import.meta.env);
 let memberState: MemberIdentityState = memberIdentity.getState();
 
@@ -1239,6 +1244,12 @@ memberButton.addEventListener("click", () => {
   }
   void memberIdentity.signInWithGoogle();
 });
+
+// MEMBER-01A -- HOME-hosted: the persistent parent avatar already owns
+// sign-in/out presentation, so this document's own local control is
+// redundant. Never removed from the DOM (keeps every other call site's
+// `memberButton` references valid), just never shown.
+memberButton.hidden = homeSurface.isHome;
 
 memberIdentity.subscribe((state) => {
   memberState = state;

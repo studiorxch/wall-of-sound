@@ -1,3 +1,4 @@
+import type { MemberIdentityAuthority } from "@studiorich/member-identity";
 import type { HomeSurfaceIdentity } from "../data/homeRouteTypes";
 import type { HostedGoogleCredentialResult } from "../data/hostedAuthTypes";
 import type { RadioChannelReceiver } from "../logic/radio/createRadioChannelReceiver";
@@ -64,6 +65,24 @@ export interface HomeSurfaceHost {
    * invalidate an already-granted handle.
    */
   getRadioSession(source: Document, identity: HomeMountIdentity): RadioChannelReceiver | null;
+  /**
+   * MEMBER-01A -- hands the CURRENTLY active mount a handle bound to
+   * HOME's ONE persistent, hosted `MemberIdentityAuthority` (constructed
+   * lazily, reused verbatim across every later surface swap for this HOME
+   * document's lifetime) -- the exact same ownership/handoff shape as
+   * `getRadioSession` above, applied to MEMBER identity instead of RADIO
+   * playback. Returns `null` under the identical conditions
+   * `getRadioSession` does (stale/wrong runtime, a departed document, or
+   * HOME simply not having reached "active" yet) -- the caller MUST treat
+   * `null` as an explicit failure and must NEVER fall back to
+   * constructing its own local `MemberIdentityAuthority` while hosted
+   * (that would recreate the exact nested-popup risk HOST-03B exists to
+   * avoid, and would mean two live authorities disagreeing about who's
+   * signed in). Gated on mount identity only (`HomeMountIdentity`), same
+   * as `getRadioSession` -- an Artwork-only `syncArtworkRoute` change must
+   * never invalidate an already-granted handle.
+   */
+  getMemberIdentity(source: Document, identity: HomeMountIdentity): MemberIdentityAuthority | null;
 }
 
 declare global {

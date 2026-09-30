@@ -18,6 +18,7 @@ import {
   type MemberIdentityState,
 } from "@studiorich/member-identity";
 import type { HostedGoogleCredentialResult } from "../data/hostedAuthTypes";
+import { createHostAwareMemberIdentity } from "./hostAwareMemberIdentity";
 import {
   createMapArtworkPersistenceBridge,
   SUBWAY_MAP_SURFACE_ID,
@@ -152,7 +153,14 @@ root.SBE.ArtSupplyDeposition = { resolveMopDabPlan, resolveMopEmissionPoints, re
 root.SBE.ArtSupplyRendering = { traceSmoothedPath, fillSprayParticle, fillMopDab, withAlpha, hashLateralUnit, hash01, strokeGraphite, strokeInk, strokeMarker, strokeMop, strokeSpray, resolveGraphiteProfile };
 root.SBE.MapZoomScale = { resolveZoomScale, MAP_SURFACE_REFERENCE_ZOOM };
 
-const memberIdentity = createFirebaseMemberIdentityAuthority(import.meta.env);
+// MEMBER-01A -- standalone/embedded (not HOME-hosted): the exact same
+// local authority as before, unchanged. HOME-hosted: consumes the
+// persistent parent's ONE live authority via the HOME bridge instead of
+// constructing a second, competing one -- see hostAwareMemberIdentity.ts's
+// own doc. Every call site below (`memberIdentity.xxx()`) is unaffected --
+// this is the only change needed to make the rest of this file already
+// use the shared, hosted authority when applicable.
+const memberIdentity = createHostAwareMemberIdentity(() => createFirebaseMemberIdentityAuthority(import.meta.env));
 const artworkRepository = createFirebaseArtworkRepository(import.meta.env);
 root.SBE.MemberIdentityAuthority = memberIdentity;
 
@@ -530,6 +538,13 @@ function ensureTopLevelSignInUI(): HTMLButtonElement {
   // subwayBlackbookNavLink.js's link (top:60px), same right:16px anchor,
   // avoiding the click-swallowing overlap all three previously shared.
   bar.style.cssText = "position:fixed;top:104px;right:16px;z-index:10000;";
+  // MEMBER-01A -- HOME-hosted: the persistent parent avatar already owns
+  // sign-in/out/profile presentation, so this document's own local
+  // control is redundant. Same `root.SBE?.HomeMapSurface` hosted signal
+  // already used above for the credential-relay branch -- built and kept
+  // in the DOM (never removed, so `renderIdentityState()`'s own
+  // querySelector keeps working unchanged), just never shown.
+  bar.hidden = Boolean(root.SBE?.HomeMapSurface);
   const button = document.createElement("button");
   button.type = "button";
   button.dataset.memberAction = "open";

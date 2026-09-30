@@ -16,6 +16,31 @@ and the current, still-partial acceptance table. Baseline:
 commit `529244a`, this recon commit `7ee7d00`, implementation commit
 `cff1e12`.
 
+**MEMBER-01A follow-up (2026-10-03):** §7's Model D ("Full MEMBER
+centralization in HOME") was rejected here specifically because it
+"goes further than the evidence requires" and "requires a parallel
+non-HOME code path preserved indefinitely." Both objections were made
+against a requirement set that did NOT yet include physical avatar
+persistence across surface swaps. Once that became a hard product
+requirement (MEMBER-01A), Model D's parallel-path cost stopped being
+optional overhead and became unavoidable regardless of design — standalone
+MAP/BLACKBOOK must keep a local authority under ANY design that preserves
+standalone behavior at all (including Option B, "surface remains
+authority, publishes a snapshot"), so it is not a cost specific to
+centralization. MEMBER-01A implements a SCOPED version of Model D — the
+persistent parent owns the one live hosted authority; standalone is
+completely unmodified, exactly as this document's own §11 already
+required. See [../home/README.md](../home/README.md)'s "MEMBER-01A —
+persistent MEMBER identity + avatar presentation" section for the
+implemented contract, files, and verification. As a genuine side benefit
+not anticipated when Model B was chosen: because the parent's own window
+is never nested, MEMBER-01A's hosted sign-in no longer needs HOST-03B's
+credential-relay step at all for that path — the parent completes the
+entire sign-in directly against its own live authority. `requestGoogleCredential`
+remains in place (not removed this pass) for whatever still calls it,
+but it is no longer the mechanism actually used to sign in a hosted
+session's own persistent avatar.
+
 ## 1. Starting checkpoint
 
 Clean worktree, `release/subway-beta-0.1`, HEAD `529244a` — confirmed before
