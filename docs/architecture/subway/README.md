@@ -1046,3 +1046,122 @@ this batch touched no file `subwayStationHudTests` exercises.
 This batch touched no Station Base Truth, archetype, Platform-rendering,
 train-movement, door, realtime-transit-authority, or 3D-editor code —
 presentation-layer only, exactly as scoped.
+
+## 18. STATION-07 — generic station topology renderer proof
+
+Introduces a real, reusable topology-rendering authority — the bridge
+between Station Base Truth (§16) and any future Platform renderer. Two
+layers, deliberately separate:
+
+```
+Station Base Truth (StationGeometryData: platforms / trackCenterlines / wallSurfaces)
+        ↓
+topology projection — INTERPRETATION ONLY
+  stationTopologyProjection.ts: projectStationTopology()
+  reads real fields (platformId, platformSide, config, physicalRole/role,
+  adjacentTrackId), decides what a "lane" is and where it sits (by real
+  footprint/localPoints/localPolygon Y position) — produces a plain,
+  ordered StationTopologyModel. No archetype identity anywhere in its
+  input type or its logic.
+        ↓
+visual renderer — DRAWING ONLY
+  stationTopologySvgRenderer.ts: renderStationTopologySvg()
+  reads ONLY a StationTopologyModel — no StationGeometryData, no
+  provenance, no archetype identity (it has no access to either). Branches
+  only on a lane's own `kind`/`config`/`hasPlatform`.
+```
+
+**Ownership split, explicit:** the projection layer owns INTERPRETING
+Base Truth into a renderer-agnostic shape; the SVG layer owns DRAWING
+that shape and nothing else. Neither layer, nor
+`stationTopologyDebugRuntime.ts` (the debug page that calls them), ever
+branches on `archetypeId` — verified both by type (`StationTopologyInput`
+has no `archetypeId` field) and by test (`stationTopologyProjection.test.ts`'s
+own "archetype-blind contract" — a hand-built input structurally
+identical to a real archetype's output produces byte-identical projection
+output).
+
+**Reuse, not parallel coordinate math.** `LocalPoint2D`/`LocalPoint3D`
+are imported directly from `stationGeometryTypes.ts`, never redefined.
+`stationGeometryCoordinates.ts` (geographic ↔ station-local-meter
+conversion) is deliberately NOT used here — this proof operates entirely
+within the station-local frame a `StationGeometryData` record is already
+expressed in; there is no geographic coordinate anywhere in this
+pipeline, so importing that module would have been new, unnecessary
+coupling, not reuse.
+
+**Four-track island contract fixture extracted, not duplicated.**
+STATION-06's own synthetic `stationGeometryFourTrackIslandContract.test.ts`
+fixture now lives in `stationGeometryFourTrackIslandContractFixture.ts`
+(platforms/tracks/walls as named exports), imported by both the original
+contract test (unchanged assertions, still 9/9 passing) and the debug
+runtime's `ISLAND_4_TEST` fixture — one definition, two consumers, per
+this codebase's own "never a second, drifting copy" doctrine. Still NOT
+a production archetype — no `UG_ISLAND_4TRACK` was added.
+
+**Debug inspection — dev tooling only, never product navigation.**
+`music/station-topology-debug.html` + `stationTopologyDebugRuntime.ts`,
+modeled on `StationGeometryEditor.tsx`'s own "isolated route, no coupling
+to product navigation" convention. A `<select>` switches among
+`SIDE_2`/`ISLAND_2`/`SIDE_4`/`ISLAND_4_TEST`; three come from
+`instantiateStationArchetype()` (the same function §16's dispatch repair
+fixed), the fourth from the shared synthetic fixture above. Deliberately
+**excluded from `vite.config.ts`'s own production `rollupOptions.input`**
+— stronger than merely being unlinked, this page does not exist in a
+production build at all, the clearest possible guarantee it is dev-only.
+Live-verified: all four fixtures render visibly correct, distinct
+topologies (side platforms outside their tracks; one island platform
+between its two tracks with matching `platformSide` values; side-4's
+bypass express tracks rendered dashed/dim with an explicit "— no
+platform" label, never pretending to serve one; the island-4 fixture's
+two platforms and two outer walls, each wall's `→ track:...` label
+naming its real adjacent track, never a platform) — and switching
+fixtures never touches the renderer's own implementation.
+
+**Representation fidelity — verified, not just stated.** The renderer
+never reads `.provenance` anywhere. An archetype's `heuristic`-provenance
+output and the real, `reference`-provenance Bay Ridge Av seed produce
+identical lane-kind shapes for the same topology (tested directly); a
+test that mutates only `.provenance` on an otherwise-identical input
+confirms the projected model is byte-identical. This is the concrete
+proof that generic (archetype-derived) and future detailed (authored)
+geometry already share one renderer contract — a detailed station added
+later via the archived 3D Station Editor's own eventual bridge would
+need no new rendering system, only richer Base Truth fields for the
+SAME pipeline to read.
+
+**Testing.** `stationTopologyProjection.test.ts` (new, 19 cases): the
+archetype-blind contract (2 cases), SIDE_2 (4 cases, including the real
+Bay Ridge Av seed), ISLAND_2 (3 cases), SIDE_4 (3 cases), the island-4
+contract fixture (2 cases), wall-lane independence from platforms (3
+cases), generic-vs-authored provenance (2 cases).
+`stationGeometryFourTrackIslandContract.test.ts`
+unchanged in assertions, now imports its fixture from the shared module
+(still 9/9 passing). Broader `music/src/logic/maps/` + `src/data/` +
+`src/ui/maps/` + `src/station/` sweep: 524/524 passing. Full combined
+MUSIC suite: 3922/3929 (7 pre-existing skips, 11 pre-existing unrelated
+`trainingExclusionExport` failures, untouched by this batch). Typecheck
+and lint clean on every touched file.
+
+**Explicitly NOT built:** the final Platform page/surface, the 87.5/12.5
+Detail/Overview layout, drawing tools, writable-surface interaction,
+train movement, stopping/dwell, doors, live-arrival migration, a
+persistent transit authority, 3D, Station Editor changes, new real
+station survey data, a real island seed, or `UG_ISLAND_4TRACK` — none
+were required to prove the renderer contract, so none were added.
+
+### Recommendation for the smallest STATION-08 Platform batch
+
+The topology projection/renderer pair is proven sufficient for real
+drawing across every required validation case. The smallest next step is
+NOT the full Detail/Overview Platform UI — it's embedding this exact
+`projectStationTopology()`/`renderStationTopologySvg()` pipeline as the
+**Overview** band's own content for ONE real station (Bay Ridge Av,
+reading its real authored seed rather than an archetype), inside a
+minimal, non-interactive container reachable from the Mezzanine Drawer's
+own "ENTER PLATFORM" button (still disabled today). That proves the
+exact same renderer contract survives the jump from a standalone debug
+page into the real product surface, still with zero archetype-specific
+logic, BEFORE attempting the Detail/Writable view, train movement, or
+the 87.5/12.5 layout split — each of which is a materially larger,
+separable piece of work.

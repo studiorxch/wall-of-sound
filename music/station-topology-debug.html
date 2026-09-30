@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Station Topology Debug</title>
+<style>
+  :root { color-scheme: dark; }
+  body { font: 14px/1.4 -apple-system, system-ui, sans-serif; margin: 0; padding: 2rem; background: #0e0d0b; color: #f4efe7; }
+  h1 { font-size: 18px; margin: 0 0 .25rem; }
+  .topology-debug-banner { color: #6b6357; font-size: 12px; margin: 0 0 1.5rem; max-width: 640px; }
+  .topology-debug-controls { margin-bottom: 1.5rem; }
+  select { font: 700 12px/1 monospace; padding: 8px 10px; background: #1a1814; color: #f4efe7; border: 1px solid rgba(255,255,255,.2); border-radius: 6px; }
+  .topology-debug-layout { display: flex; gap: 2rem; flex-wrap: wrap; align-items: flex-start; }
+  #topology-debug-svg { border: 1px solid rgba(255,255,255,.1); border-radius: 8px; overflow: hidden; }
+  #topology-debug-lanes { list-style: none; margin: 0; padding: 0; font: 12px/1.6 monospace; color: #c8c0b6; min-width: 320px; }
+  #topology-debug-lanes li { padding: 2px 0; border-bottom: 1px solid rgba(255,255,255,.05); }
+  #topology-debug-lanes li[data-lane-kind="platform"] { color: #8fb8f0; }
+  #topology-debug-lanes li[data-lane-kind="wall"] { color: #a39a8d; }
+</style>
+</head>
+<body>
+  <h1>Station Topology Debug</h1>
+  <p class="topology-debug-banner">
+    STATION-07 -- development/debug tooling only, NOT a product surface. Not
+    reachable from MAP or the Mezzanine Drawer. Proves that one shared
+    renderer (projectStationTopology / renderStationTopologySvg) can
+    consume real canonical Station Base Truth and produce visibly correct,
+    distinct topologies for side and island stations without any
+    archetype-specific rendering logic.
+  </p>
+  <div class="topology-debug-controls">
+    <label for="topology-debug-fixture">Fixture:</label>
+    <select id="topology-debug-fixture"></select>
+  </div>
+  <div class="topology-debug-layout">
+    <div id="topology-debug-svg"></div>
+    <ul id="topology-debug-lanes"></ul>
+  </div>
+  <script type="module" src="/src/station/stationTopologyDebugRuntime.ts"></script>
+</body>
+</html>

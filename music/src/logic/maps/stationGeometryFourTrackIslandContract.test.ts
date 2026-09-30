@@ -1,5 +1,9 @@
 // ── Four-track island composition — contract validation only ──────────────────
 // STATION-06 (0912_WOS_Subway_Station_Base_Truth_Extension_v1.0.0)
+// STATION-07 -- the fixture itself now lives in
+// stationGeometryFourTrackIslandContractFixture.ts, shared with the debug
+// topology renderer (stationTopologyDebugRuntime.ts) so both consume the
+// exact same synthetic data rather than two drifting copies.
 //
 // NOT a production archetype (no UG_ISLAND_4TRACK is added — STATION-06's own
 // explicit scope boundary). This is a hand-built, synthetic StationGeometryData
@@ -18,100 +22,22 @@
 // StationTrackCenterline/StationPlatform/StationWallSurface — nothing new is
 // introduced beyond this checkpoint's own two additive fields.
 import { describe, it, expect } from "vitest";
-import type {
-  PlatformSide,
-  StationPlatform,
-  StationTrackCenterline,
-  StationWallSurface,
-  Provenance,
-} from "../../data/stationGeometryTypes";
+import type { StationTrackCenterline, PlatformSide } from "../../data/stationGeometryTypes";
 import { deriveUndergroundSide4TrackGeometry } from "./stationArchetypeUndergroundSide4Track";
 import { DEFAULT_UG_SIDE_4TRACK_PARAMETERS } from "../../data/stationArchetypeTypes";
-
-const TEST_PROVENANCE: Provenance = { source: "authored", note: "Synthetic contract-validation fixture — not a real station." };
-
-// ── The synthetic fixture ──────────────────────────────────────────────────
-// Y increases outward from the station's own track center, matching the
-// existing archetypes' own convention (see stationArchetypeUndergroundSide4Track.ts).
-const islandN: StationPlatform = {
-  id: "platform:CONTRACT:islandN",
-  levelId: "level:CONTRACT:platform",
-  config: "island",
-  servesRouteIds: [],
-  footprint: [
-    { x: -75, y: -10 },
-    { x: 75, y: -10 },
-    { x: 75, y: -6 },
-    { x: -75, y: -6 },
-  ],
-  provenance: TEST_PROVENANCE,
-};
-const islandS: StationPlatform = {
-  id: "platform:CONTRACT:islandS",
-  levelId: "level:CONTRACT:platform",
-  config: "island",
-  servesRouteIds: [],
-  footprint: [
-    { x: -75, y: 6 },
-    { x: 75, y: 6 },
-    { x: 75, y: 10 },
-    { x: -75, y: 10 },
-  ],
-  provenance: TEST_PROVENANCE,
-};
-
-function track(id: string, y: number, platformId: string | null, platformSide: PlatformSide | undefined, physicalRole: "local" | "express"): StationTrackCenterline {
-  return {
-    id,
-    platformId,
-    platformSide,
-    physicalRole,
-    localPoints: [
-      { x: -75, y },
-      { x: 75, y },
-    ],
-    provenance: TEST_PROVENANCE,
-  };
-}
-
-// Outer-to-inner across Y: WALL | LOCAL(trackN) | ISLAND(islandN) | EXPRESS(trackNE) | [gap] | EXPRESS(trackSE) | ISLAND(islandS) | LOCAL(trackS) | WALL
-const trackN = track("track:CONTRACT:local-n", -12, islandN.id, "A", "local"); // outer edge of islandN — the wall-facing side
-const trackNE = track("track:CONTRACT:express-n", -4, islandN.id, "B", "express"); // inner edge of islandN
-const trackSE = track("track:CONTRACT:express-s", 4, islandS.id, "A", "express"); // inner edge of islandS
-const trackS = track("track:CONTRACT:local-s", 12, islandS.id, "B", "local"); // outer edge of islandS — the wall-facing side
-
-const wallN: StationWallSurface = {
-  id: "wall:CONTRACT:outer-n",
-  levelId: "level:CONTRACT:platform",
-  localPolygon: [
-    { x: -75, y: -14, z: 0 },
-    { x: 75, y: -14, z: 0 },
-    { x: 75, y: -14, z: 4 },
-    { x: -75, y: -14, z: 4 },
-  ],
-  label: "Outer wall (north)",
-  suitableForArt: true,
-  adjacentTrackId: trackN.id, // faces the outer LOCAL track — no passenger platform beyond it
-  provenance: TEST_PROVENANCE,
-};
-const wallS: StationWallSurface = {
-  id: "wall:CONTRACT:outer-s",
-  levelId: "level:CONTRACT:platform",
-  localPolygon: [
-    { x: -75, y: 14, z: 0 },
-    { x: 75, y: 14, z: 0 },
-    { x: 75, y: 14, z: 4 },
-    { x: -75, y: 14, z: 4 },
-  ],
-  label: "Outer wall (south)",
-  suitableForArt: true,
-  adjacentTrackId: trackS.id,
-  provenance: TEST_PROVENANCE,
-};
-
-const platforms = [islandN, islandS];
-const trackCenterlines = [trackN, trackNE, trackSE, trackS];
-const wallSurfaces = [wallN, wallS];
+import {
+  islandN,
+  islandS,
+  trackN,
+  trackNE,
+  trackSE,
+  trackS,
+  wallN,
+  wallS,
+  FOUR_TRACK_ISLAND_CONTRACT_PLATFORMS as platforms,
+  FOUR_TRACK_ISLAND_CONTRACT_TRACK_CENTERLINES as trackCenterlines,
+  FOUR_TRACK_ISLAND_CONTRACT_WALL_SURFACES as wallSurfaces,
+} from "./stationGeometryFourTrackIslandContractFixture";
 
 describe("four-track island composition — contract validation (not a production archetype)", () => {
   it("each island platform relates independently to exactly its own two adjacent tracks", () => {
