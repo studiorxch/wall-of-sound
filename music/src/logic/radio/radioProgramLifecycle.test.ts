@@ -108,14 +108,32 @@ describe("listSchedulablePlaylists -- RADIO-04", () => {
     expect(listSchedulablePlaylists(playlists, [], [])).toEqual([]);
   });
 
-  it("uses the LATEST export version, and requires the Sites publication to match that exact version", () => {
+  it("RADIO-04B: still schedulable using the newer PUBLISHED version when a later, never-republished local export also exists -- does not require republishing merely to satisfy the scheduler", () => {
     const playlists = [{ id: "radplaylist_1", title: "Soft Motion Radio" }];
     const v1 = exportRecord({ id: "radweb_1", bundleVersion: 1 });
     const v2 = exportRecord({ id: "radweb_2", bundleVersion: 2 });
-    // Only v1 was ever published to Sites -- v2 exists locally but isn't live yet.
     const sitesPubs = [{ radioPlaylistId: "radplaylist_1", slug: "soft-motion-radio", bundleVersion: 1 }];
     const result = listSchedulablePlaylists(playlists, [v1, v2], sitesPubs);
-    expect(result).toEqual([]); // latestExport is v2, but only v1 is Sites-published -- not schedulable yet
+    expect(result).toEqual([{ radioPlaylistId: "radplaylist_1", title: "Soft Motion Radio", latestExport: v1 }]);
+  });
+
+  it("prefers the newest published version over an older one when both are Sites-published", () => {
+    const playlists = [{ id: "radplaylist_1", title: "Soft Motion Radio" }];
+    const v1 = exportRecord({ id: "radweb_1", bundleVersion: 1 });
+    const v2 = exportRecord({ id: "radweb_2", bundleVersion: 2 });
+    const sitesPubs = [
+      { radioPlaylistId: "radplaylist_1", slug: "soft-motion-radio", bundleVersion: 1 },
+      { radioPlaylistId: "radplaylist_1", slug: "soft-motion-radio", bundleVersion: 2 },
+    ];
+    const result = listSchedulablePlaylists(playlists, [v1, v2], sitesPubs);
+    expect(result).toEqual([{ radioPlaylistId: "radplaylist_1", title: "Soft Motion Radio", latestExport: v2 }]);
+  });
+
+  it("excludes a playlist whose only export is a later, unpublished re-export with no published version at all", () => {
+    const playlists = [{ id: "radplaylist_1", title: "Soft Motion Radio" }];
+    const v1 = exportRecord({ id: "radweb_1", bundleVersion: 1 });
+    const result = listSchedulablePlaylists(playlists, [v1], []);
+    expect(result).toEqual([]);
   });
 });
 

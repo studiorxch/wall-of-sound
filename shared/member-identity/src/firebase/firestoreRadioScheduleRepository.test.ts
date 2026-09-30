@@ -31,9 +31,19 @@ describe("validateCreateRadioScheduleBlockInput -- RADIO-04", () => {
     expect(() => validateCreateRadioScheduleBlockInput(createInput({ endAtMs: T0 }))).toThrow("invalid_radio_schedule_end_before_start");
     expect(() => validateCreateRadioScheduleBlockInput(createInput({ endAtMs: T0 - 1 }))).toThrow("invalid_radio_schedule_end_before_start");
   });
+  it("accepts a same-day span (Start/End share a calendar date)", () => {
+    expect(() => validateCreateRadioScheduleBlockInput(createInput({ startAtMs: T0, endAtMs: T0 + 2 * HOUR }))).not.toThrow();
+  });
+  it("RADIO-04B: accepts an overnight span crossing midnight into the next calendar date -- End must own its own date, never inferred from Start's", () => {
+    // T0 is a fixed instant; an 8-hour overnight block (e.g. 23:00 -> 07:00) is just a larger ms gap to this layer -- no special-casing needed, by construction.
+    expect(() => validateCreateRadioScheduleBlockInput(createInput({ startAtMs: T0, endAtMs: T0 + 8 * HOUR }))).not.toThrow();
+  });
+  it("RADIO-04B: accepts a multi-date span (several full days)", () => {
+    expect(() => validateCreateRadioScheduleBlockInput(createInput({ startAtMs: T0, endAtMs: T0 + 3 * 24 * HOUR }))).not.toThrow();
+  });
 });
 
-describe("validateRecurrence -- RADIO-04 (bounded-only V1)", () => {
+describe("validateRecurrence -- RADIO-04/04B (materialization always bounded; openEnded is an honest marker, not an unbounded write)", () => {
   it("accepts null (a one-off)", () => {
     expect(() => validateRecurrence(null)).not.toThrow();
   });
@@ -46,9 +56,16 @@ describe("validateRecurrence -- RADIO-04 (bounded-only V1)", () => {
   it("accepts weekly bounded by count", () => {
     expect(() => validateRecurrence({ frequency: "weekly", count: 8 })).not.toThrow();
   });
-  it("rejects an unbounded recurring rule -- fails closed, V1 never allows an infinite series", () => {
+  it("accepts weekly with openEnded (RADIO-04B Never) -- an explicit choice, not a fabricated count", () => {
+    expect(() => validateRecurrence({ frequency: "weekly", openEnded: true })).not.toThrow();
+  });
+  it("rejects an unbounded recurring rule with no explicit bound -- fails closed, never silently reinterpreted as Never", () => {
     expect(() => validateRecurrence({ frequency: "daily" } as RadioScheduleRecurrence)).toThrow("invalid_radio_schedule_recurrence_unbounded");
     expect(() => validateRecurrence({ frequency: "weekly" } as RadioScheduleRecurrence)).toThrow("invalid_radio_schedule_recurrence_unbounded");
+  });
+  it("rejects openEnded combined with untilMs or count -- exactly one bound choice, never ambiguous", () => {
+    expect(() => validateRecurrence({ frequency: "weekly", openEnded: true, count: 8 })).toThrow("invalid_radio_schedule_recurrence_ambiguous_bound");
+    expect(() => validateRecurrence({ frequency: "weekly", openEnded: true, untilMs: T0 })).toThrow("invalid_radio_schedule_recurrence_ambiguous_bound");
   });
   it("rejects a zero or negative count", () => {
     expect(() => validateRecurrence({ frequency: "daily", count: 0 })).toThrow("invalid_radio_schedule_recurrence_count");

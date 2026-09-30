@@ -35,7 +35,14 @@ export function validateRecurrence(recurrence: RadioScheduleRecurrence | null): 
   if (recurrence.frequency === "none") return;
   const hasUntil = recurrence.untilMs != null;
   const hasCount = recurrence.count != null;
-  if (!hasUntil && !hasCount) throw new Error("invalid_radio_schedule_recurrence_unbounded");
+  const hasOpenEnded = recurrence.openEnded === true;
+  const boundCount = [hasUntil, hasCount, hasOpenEnded].filter(Boolean).length;
+  // Exactly one of untilMs/count/openEnded -- an omitted bound is still a
+  // validation error even though openEnded now exists (RADIO-04B): a
+  // caller that simply forgot to set a bound must fail loudly, never be
+  // silently reinterpreted as "the operator chose Never."
+  if (boundCount === 0) throw new Error("invalid_radio_schedule_recurrence_unbounded");
+  if (boundCount > 1) throw new Error("invalid_radio_schedule_recurrence_ambiguous_bound");
   if (hasUntil && !Number.isFinite(recurrence.untilMs)) throw new Error("invalid_radio_schedule_recurrence_until");
   if (hasCount && (!Number.isInteger(recurrence.count) || (recurrence.count as number) <= 0)) {
     throw new Error("invalid_radio_schedule_recurrence_count");

@@ -51,4 +51,18 @@ describe("materializeOccurrences -- RADIO-04", () => {
     const result = materializeOccurrences({ startAtMs: T0, endAtMs: T0 + 90 * 60 * 1000 }, { frequency: "weekly", count: 4 });
     expect(result.every((o) => o.endAtMs - o.startAtMs === 90 * 60 * 1000)).toBe(true);
   });
+
+  it("RADIO-04B: an overnight block (crossing midnight) keeps its exact duration across every recurring occurrence", () => {
+    // 23:00 -> 07:00 the next day, repeated weekly -- each occurrence's own start/end still crosses midnight, unchanged.
+    const first = { startAtMs: T0, endAtMs: T0 + 8 * HOUR };
+    const result = materializeOccurrences(first, { frequency: "weekly", count: 3 });
+    expect(result).toHaveLength(3);
+    expect(result.every((o) => o.endAtMs - o.startAtMs === 8 * HOUR)).toBe(true);
+  });
+
+  it("RADIO-04B: openEnded (Never) has neither untilMs nor count, and still only materializes a real, bounded first batch -- not an infinite write", () => {
+    const result = materializeOccurrences({ startAtMs: T0, endAtMs: T0 + 2 * HOUR }, { frequency: "weekly", openEnded: true });
+    expect(result.length).toBe(MAX_RADIO_SCHEDULE_OCCURRENCES);
+    expect(result[0].startAtMs).toBe(T0);
+  });
 });

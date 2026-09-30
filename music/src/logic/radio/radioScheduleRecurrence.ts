@@ -21,6 +21,16 @@ export const MAX_RADIO_SCHEDULE_OCCURRENCES = 366;
  * interval from `first.startAtMs` -- deliberately NOT calendar-aware
  * (no DST/leap-day adjustment) for V1; each occurrence keeps the exact
  * same duration as `first`.
+ *
+ * RADIO-04B -- `recurrence.openEnded` (the operator's explicit "Never" End
+ * Repeat choice) has neither `untilMs` nor `count`, so both break checks
+ * below simply never fire and this naturally materializes a real, honest
+ * first batch up to `MAX_RADIO_SCHEDULE_OCCURRENCES` -- the same safety cap
+ * every bounded request already uses, not a special case. The persisted
+ * `recurrence.openEnded: true` is what distinguishes this from a bounded
+ * `count: 366` a caller never actually chose (see radioScheduleTypes.ts's
+ * own doc on that field, and this batch's architecture recon on extending
+ * an open-ended series' materialized horizon over time).
  */
 export function materializeOccurrences(first: OccurrenceWindow, recurrence: RadioScheduleRecurrence | null): OccurrenceWindow[] {
   if (!recurrence || recurrence.frequency === "none") return [first];

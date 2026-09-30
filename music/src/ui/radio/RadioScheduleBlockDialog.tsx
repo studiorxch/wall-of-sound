@@ -75,18 +75,19 @@ export function RadioScheduleBlockDialog({
   const programForBlock = block ? existingPrograms.find((p) => p.id === block.programId) : undefined;
 
   const [radioPlaylistId, setRadioPlaylistId] = useState<string>(schedulablePlaylists[0]?.radioPlaylistId ?? "");
-  const [dateStr, setDateStr] = useState(toDateInputValue(initialStartAtMs));
+  const [startDateStr, setStartDateStr] = useState(toDateInputValue(initialStartAtMs));
   const [startTimeStr, setStartTimeStr] = useState(toTimeInputValue(initialStartAtMs));
+  const [endDateStr, setEndDateStr] = useState(toDateInputValue(initialEndAtMs));
   const [endTimeStr, setEndTimeStr] = useState(toTimeInputValue(initialEndAtMs));
   const [frequency, setFrequency] = useState<RadioScheduleRecurrenceFrequency>("none");
-  const [recurrenceEndMode, setRecurrenceEndMode] = useState<"count" | "until">("count");
+  const [recurrenceEndMode, setRecurrenceEndMode] = useState<"never" | "until" | "count">("never");
   const [recurrenceCount, setRecurrenceCount] = useState(4);
   const [recurrenceUntilStr, setRecurrenceUntilStr] = useState(toDateInputValue(initialStartAtMs + 30 * 24 * 3600 * 1000));
   const [ambiguousChoice, setAmbiguousChoice] = useState<string>("");
   const [saveState, setSaveState] = useState<SaveState>({ status: "idle" });
 
-  const startAtMs = combineDateTime(dateStr, startTimeStr);
-  const endAtMs = combineDateTime(dateStr, endTimeStr);
+  const startAtMs = combineDateTime(startDateStr, startTimeStr);
+  const endAtMs = combineDateTime(endDateStr, endTimeStr);
 
   const selectedPlaylist = schedulablePlaylists.find((p) => p.radioPlaylistId === radioPlaylistId) ?? null;
   const programsForSelectedStation = selectedPlaylist ? findProgramsForStation(existingPrograms, selectedPlaylist.radioPlaylistId) : [];
@@ -95,7 +96,11 @@ export function RadioScheduleBlockDialog({
   const recurrence = useMemo(
     () => frequency === "none" ? null : {
       frequency,
-      ...(recurrenceEndMode === "count" ? { count: recurrenceCount } : { untilMs: combineDateTime(recurrenceUntilStr, endTimeStr) }),
+      ...(recurrenceEndMode === "never"
+        ? { openEnded: true as const }
+        : recurrenceEndMode === "count"
+          ? { count: recurrenceCount }
+          : { untilMs: combineDateTime(recurrenceUntilStr, endTimeStr) }),
     },
     [frequency, recurrenceEndMode, recurrenceCount, recurrenceUntilStr, endTimeStr],
   );
@@ -196,30 +201,49 @@ export function RadioScheduleBlockDialog({
               </label>
             )}
 
-            <label>Date <input type="date" value={dateStr} onChange={(e) => setDateStr(e.target.value)} /></label>
-            <label>Start <input type="time" value={startTimeStr} onChange={(e) => setStartTimeStr(e.target.value)} /></label>
-            <label>End <input type="time" value={endTimeStr} onChange={(e) => setEndTimeStr(e.target.value)} /></label>
+            <div className="radio-schedule-datetime-row">
+              <label>Starts
+                <input type="date" value={startDateStr} onChange={(e) => setStartDateStr(e.target.value)} />
+                <input type="time" value={startTimeStr} onChange={(e) => setStartTimeStr(e.target.value)} />
+              </label>
+            </div>
+            <div className="radio-schedule-datetime-row">
+              <label>Ends
+                <input type="date" value={endDateStr} onChange={(e) => setEndDateStr(e.target.value)} />
+                <input type="time" value={endTimeStr} onChange={(e) => setEndTimeStr(e.target.value)} />
+              </label>
+            </div>
 
-            <label>
-              Recurrence
-              <select value={frequency} onChange={(e) => setFrequency(e.target.value as RadioScheduleRecurrenceFrequency)}>
-                <option value="none">None (one time)</option>
-                <option value="daily">Daily</option>
-                <option value="weekly">Weekly</option>
-              </select>
-            </label>
+            <div className="radio-schedule-recurrence-row">
+              <label>Repeat
+                <select value={frequency} onChange={(e) => setFrequency(e.target.value as RadioScheduleRecurrenceFrequency)}>
+                  <option value="none">Does not repeat</option>
+                  <option value="daily">Every Day</option>
+                  <option value="weekly">Every Week</option>
+                </select>
+              </label>
+              {frequency !== "none" && (
+                <label>End Repeat
+                  <select value={recurrenceEndMode} onChange={(e) => setRecurrenceEndMode(e.target.value as typeof recurrenceEndMode)}>
+                    <option value="never">Never</option>
+                    <option value="until">On Date</option>
+                    <option value="count">After N Occurrences</option>
+                  </select>
+                </label>
+              )}
+              {frequency !== "none" && recurrenceEndMode === "until" && (
+                <input type="date" value={recurrenceUntilStr} onChange={(e) => setRecurrenceUntilStr(e.target.value)} />
+              )}
+              {frequency !== "none" && recurrenceEndMode === "count" && (
+                <input type="number" min={1} max={366} value={recurrenceCount} onChange={(e) => setRecurrenceCount(Number(e.target.value))} />
+              )}
+            </div>
             {frequency !== "none" && (
-              <div className="radio-schedule-recurrence-bound">
-                <label>
-                  <input type="radio" checked={recurrenceEndMode === "count"} onChange={() => setRecurrenceEndMode("count")} />
-                  {" "}Occurrences: <input type="number" min={1} max={366} value={recurrenceCount} onChange={(e) => setRecurrenceCount(Number(e.target.value))} disabled={recurrenceEndMode !== "count"} />
-                </label>
-                <label>
-                  <input type="radio" checked={recurrenceEndMode === "until"} onChange={() => setRecurrenceEndMode("until")} />
-                  {" "}Until: <input type="date" value={recurrenceUntilStr} onChange={(e) => setRecurrenceUntilStr(e.target.value)} disabled={recurrenceEndMode !== "until"} />
-                </label>
-                <p className="radio-diff-note">{previewOccurrences.length} occurrence(s) will be scheduled.</p>
-              </div>
+              <p className="radio-diff-note">
+                {recurrenceEndMode === "never"
+                  ? `No end date — schedules the next ${previewOccurrences.length} occurrence(s) now (through ${fmtDayOnly(previewOccurrences[previewOccurrences.length - 1]?.startAtMs ?? startAtMs)}); reopen this Program later to extend further.`
+                  : `${previewOccurrences.length} occurrence(s) will be scheduled.`}
+              </p>
             )}
 
             {conflicts.length > 0 && (
@@ -244,8 +268,19 @@ export function RadioScheduleBlockDialog({
   );
 }
 
+function fmtDayOnly(ms: number): string {
+  return new Date(ms).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
 function fmtRange(startAtMs: number, endAtMs: number): string {
   const start = new Date(startAtMs);
   const end = new Date(endAtMs);
-  return `${start.toLocaleDateString(undefined, { month: "short", day: "numeric" })} ${start.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })} – ${end.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`;
+  const startLabel = `${fmtDayOnly(startAtMs)} ${start.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`;
+  const sameDay = start.toDateString() === end.toDateString();
+  // A Program can cross midnight or span multiple dates -- never collapse
+  // the End side to a bare time when it's on a different date than Start.
+  const endLabel = sameDay
+    ? end.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })
+    : `${fmtDayOnly(endAtMs)} ${end.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`;
+  return `${startLabel} – ${endLabel}`;
 }

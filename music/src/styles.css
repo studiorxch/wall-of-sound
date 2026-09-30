@@ -13787,9 +13787,13 @@ td.cat-col-frozen { z-index: 1; }
 .radio-programming-block-title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .radio-programming-block-time { opacity: 0.85; }
 
-.radio-schedule-block-dialog { max-width: 480px; }
+.radio-schedule-block-dialog { max-width: 560px; }
 .radio-schedule-block-form { display: flex; flex-direction: column; gap: 10px; }
-.radio-schedule-block-form label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-mid); }
-.radio-schedule-block-form select, .radio-schedule-block-form input[type="date"], .radio-schedule-block-form input[type="time"] { background: var(--surface2); color: var(--text-main); border: 1px solid var(--border2); border-radius: 4px; padding: 4px 8px; }
-.radio-schedule-recurrence-bound { display: flex; flex-direction: column; gap: 6px; padding: 8px; border: 1px solid var(--border2); border-radius: 4px; background: var(--surface2); }
+.radio-schedule-block-form > label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-mid); }
+.radio-schedule-block-form select, .radio-schedule-block-form input[type="date"], .radio-schedule-block-form input[type="time"], .radio-schedule-block-form input[type="number"] { background: var(--surface2); color: var(--text-main); border: 1px solid var(--border2); border-radius: 4px; padding: 4px 8px; }
+/* RADIO-04B -- Starts/Ends and Repeat/End Repeat each fit one horizontal
+   row: a compact sentence-like control, not a stacked multi-row form. */
+.radio-schedule-datetime-row, .radio-schedule-recurrence-row { display: flex; flex-direction: row; align-items: center; gap: 10px; flex-wrap: wrap; }
+.radio-schedule-datetime-row label { display: flex; flex-direction: row; align-items: center; gap: 8px; font-size: 12px; color: var(--text-mid); }
+.radio-schedule-recurrence-row label { display: flex; flex-direction: row; align-items: center; gap: 6px; font-size: 12px; color: var(--text-mid); }
 .radio-schedule-block-detail p { margin: 4px 0; }

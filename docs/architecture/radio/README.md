@@ -192,15 +192,42 @@ collection, not just an app-level omission) — correcting a mistake means
 cancelling the occurrence (`cancelScheduleBlock`, status only, never
 deleted) and creating a fresh one.
 
-**Recurrence support (V1): `none` | `daily` | `weekly`, bounded by
-`untilMs` or `count`.** `music/src/logic/radio/radioScheduleRecurrence.ts`'s
-`materializeOccurrences` generates every occurrence at creation time, with
-a hard safety cap (`MAX_RADIO_SCHEDULE_OCCURRENCES = 366`) independent of
-whatever bound the operator requested. Monthly/custom-interval recurrence
-and any calendar-grid concept (Day/Week/Month) are NOT implemented — the
-operator UI (`RadioProgrammingView.tsx`) is a weekly VIEWPORT onto real
-dated weeks (Prev/This/Next), never the data boundary; a Month calendar
-was explicitly out of scope for this batch.
+**Recurrence support: `none` | `daily` | `weekly`, bounded by `untilMs`,
+`count`, or (RADIO-04B) the explicit `openEnded` marker.**
+`music/src/logic/radio/radioScheduleRecurrence.ts`'s `materializeOccurrences`
+generates every occurrence at creation time, with a hard safety cap
+(`MAX_RADIO_SCHEDULE_OCCURRENCES = 366`) independent of whatever bound the
+operator requested — this cap is unconditional, including for `openEnded`.
+Monthly/custom-interval recurrence and any calendar-grid concept
+(Day/Week/Month) are NOT implemented — the operator UI
+(`RadioProgrammingView.tsx`) is a weekly VIEWPORT onto real dated weeks
+(Prev/This/Next), never the data boundary; a Month calendar was explicitly
+out of scope for this batch.
+
+**`openEnded` ("Never" in End Repeat) — an honest marker, not a fabricated
+bound (RADIO-04B recon + minimal fix).** Human acceptance required a
+"Never" End Repeat choice; the canonical materialized-occurrence model
+(above) is deliberately bounded-only, and "silently translate Never into
+366 occurrences and call that indefinite" was explicitly ruled out.
+`RadioScheduleRecurrence.openEnded: true` is the smallest correct
+representation found: `validateRecurrence` now requires EXACTLY one of
+`untilMs` / `count` / `openEnded` (an omitted bound is still a validation
+error — never silently reinterpreted as intentional), and when `openEnded`
+is chosen, materialization still only ever writes the same real, bounded
+first batch every other request writes (up to 366) — the difference is
+TRUTH, not write behavior: the persisted record honestly says "open-ended,
+N materialized so far" instead of a `count` the operator never chose.
+**Deferred (recon only, not implemented this batch):** true indefinite
+recurrence — a materialized horizon that keeps extending forward over
+time without an operator noticing it ran out — needs an actual
+architectural addition: a series/rule authority (e.g. a
+`radioScheduleSeries` document per `seriesId`, storing the open recurrence
+rule and a `materializedThroughMs` cursor) that a later mechanism (a
+scheduled job, or an on-demand check when `RadioProgrammingView.tsx` views
+a future week near the horizon) reads to materialize the NEXT bounded
+batch, extending `materializedThroughMs` while leaving every
+already-materialized (possibly already-aired) occurrence untouched. This
+is a real, scoped, buildable follow-up — not implemented here.
 
 **Conflict prevention — explicit rejection, never silent override.**
 `findRadioScheduleConflicts` (pure, exported from
@@ -265,7 +292,20 @@ corrected chain). `music/src/logic/radio/radioProgramLifecycle.ts`'s
 up-to-date / ambiguous-needs-operator-choice), never a second Program-
 construction path. `listSchedulablePlaylists` gates which RadioPlaylists
 even appear in the scheduling picker on the same "real export AND matching
-Sites publication" discipline the old Publish-panel Program buttons used.
+Sites publication" discipline the old Publish-panel Program buttons used
+— **RADIO-04B fix:** it offers the newest export version that IS
+Sites-published, not necessarily the Playlist's single overall-newest
+export. The original version required those to be the same export,
+which silently dropped an already-published, already-live Playlist from
+the scheduler the moment ANY later local re-export existed for it (even
+one never itself republished) — exactly the "require republishing merely
+to satisfy the scheduler" friction human acceptance flagged.
+`RadioPlaylistPublishPanel.tsx`'s own `sitesPublicationForLatestExport`
+still answers a different, narrower question (is the newest version
+specifically live, for its own "ready to publish" messaging) and keeps
+its original behavior — scheduling answers "is ANY version of this
+Playlist live," which is what "already-published Playlist/Package state"
+actually means for this workflow.
 
 **Operator identity is recovered in-place, not via a detour through Event
 Radio Control (RADIO-04A, corrective pass).** The first human acceptance

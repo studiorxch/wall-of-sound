@@ -84,11 +84,23 @@ export interface SchedulablePlaylist {
 
 /**
  * RADIO-04 -- a RadioPlaylist is offerable in the scheduling workflow only
- * once it has BOTH a real local export AND a matching, actually-succeeded
- * Sites publication for that exact `{slug, bundleVersion}` -- same
- * discipline `RadioPlaylistPublishPanel.tsx`'s own
- * `sitesPublicationForLatestExport` already enforces for Create/Update
- * Program (RADIO-02/03), now the single gate for scheduling instead.
+ * once it has a real local export with a matching, actually-succeeded
+ * Sites publication for that exact `{slug, bundleVersion}`.
+ *
+ * RADIO-04B fix -- this is the newest export THAT IS published, not
+ * necessarily the overall newest export. The original version required
+ * the single newest `radioWebExports` entry to be the published one,
+ * which silently dropped an already-published, already-live Playlist from
+ * the scheduler the moment ANY later local re-export existed for it (even
+ * one made for an unrelated reason, never itself republished) -- exactly
+ * the "require republishing merely to satisfy the scheduler" friction this
+ * batch was told not to introduce. `RadioPlaylistPublishPanel.tsx`'s own
+ * `sitesPublicationForLatestExport` still has this same narrower
+ * (deliberately dead-link-averse) behavior for its own "ready to publish
+ * the newest version" messaging -- that's a different question (is the
+ * LATEST version live) from this one (is ANY version of this Playlist
+ * live and schedulable). Scheduling always uses the newest LIVE version,
+ * never fabricated from playlist/export state alone.
  */
 export function listSchedulablePlaylists(
   radioPlaylists: readonly { id: string; title: string }[],
@@ -98,13 +110,13 @@ export function listSchedulablePlaylists(
   const result: SchedulablePlaylist[] = [];
   for (const playlist of radioPlaylists) {
     const exports = radioWebExports.filter((r) => r.radioPlaylistId === playlist.id).slice().sort((a, b) => b.bundleVersion - a.bundleVersion);
-    const latestExport = exports[0];
-    if (!latestExport) continue;
-    const published = radioSitesPublications.some(
-      (r) => r.radioPlaylistId === playlist.id && r.slug === latestExport.slug && r.bundleVersion === latestExport.bundleVersion,
+    const publishedExport = exports.find((exp) =>
+      radioSitesPublications.some(
+        (r) => r.radioPlaylistId === playlist.id && r.slug === exp.slug && r.bundleVersion === exp.bundleVersion,
+      ),
     );
-    if (!published) continue;
-    result.push({ radioPlaylistId: playlist.id, title: playlist.title, latestExport });
+    if (!publishedExport) continue;
+    result.push({ radioPlaylistId: playlist.id, title: playlist.title, latestExport: publishedExport });
   }
   return result;
 }

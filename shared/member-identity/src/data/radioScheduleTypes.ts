@@ -30,6 +30,30 @@ export interface RadioScheduleRecurrence {
   readonly untilMs?: number;
   /** Bounded occurrence count, alternative/additional to `untilMs`. */
   readonly count?: number;
+  /**
+   * RADIO-04B -- an explicit, deliberate "the operator chose no end date"
+   * marker. This does NOT make materialization unbounded: `createScheduleBlocks`
+   * still only ever writes a real, bounded first batch (up to
+   * `MAX_RADIO_SCHEDULE_OCCURRENCES`, currently 366), exactly like a bounded
+   * request -- there is still no lazy/virtual expansion anywhere in this
+   * system. What this flag changes is TRUTH, not behavior: the persisted
+   * recurrence record honestly says "open-ended, N occurrences materialized
+   * so far" instead of fabricating a `count`/`untilMs` the operator never
+   * chose. `validateRecurrence` requires EXACTLY one of `untilMs`/`count`/
+   * `openEnded` -- an omitted bound is still a validation error, never
+   * silently read as "must mean open-ended" (a caller that simply forgot to
+   * set a bound should fail loudly, not be reinterpreted as intentional).
+   *
+   * Auto-extending an open-ended series' materialized horizon FORWARD over
+   * time (so it never runs out without an operator noticing) is real,
+   * useful future work this flag deliberately leaves room for -- a series/
+   * rule authority that can read "this series is still open, extend it" and
+   * generate the next real batch, keeping every already-materialized
+   * (possibly already-aired) occurrence immutable. That mechanism is NOT
+   * implemented here -- see docs/architecture/radio/README.md's RADIO-04B
+   * recon note for the proposed minimal design.
+   */
+  readonly openEnded?: boolean;
 }
 
 /**
