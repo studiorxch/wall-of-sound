@@ -38,6 +38,14 @@ const childUrl = (route: HomeRoute, identity: HomeSurfaceIdentity): string => {
     url.search = new URLSearchParams({ host: "home", homeRuntime: identity.runtimeId, homeNavigation: String(identity.navigationId), station: route.stationId }).toString();
     return url.href;
   }
+  if (route.surface === "platform") {
+    // STATION-08 -- the real Platform document (music/platform.html), same
+    // contract as "station" above -- carries the SAME canonical stationId
+    // forward, never hardcoded to Bay Ridge Av here.
+    const url = new URL("/platform.html", location.origin);
+    url.search = new URLSearchParams({ host: "home", homeRuntime: identity.runtimeId, homeNavigation: String(identity.navigationId), station: route.stationId }).toString();
+    return url.href;
+  }
   // HOST-03 -- the real BLACKBOOK document, not the HOST-01/02 fixture.
   // Mounted either bare (no prior artwork route -- BLACKBOOK resolves its
   // own initial artwork internally via localStorage/fallback, same as
@@ -189,6 +197,11 @@ required("#blackbook").addEventListener("click", () => navigation.requestNavigat
 // needed to reach the new surface at all from this harness). Bay Ridge Av
 // (R42) is this batch's own calibration station.
 required("#station").addEventListener("click", () => navigation.requestNavigate({ surface: "station", stationId: "R42" }));
+// STATION-08 -- same dev-harness-only posture as #station above (Bay Ridge
+// Av hardcoded here is a debug-button convenience, never the real
+// navigation contract itself -- the real ENTER PLATFORM action in the
+// Mezzanine Drawer carries whichever station is actually selected).
+required("#platform").addEventListener("click", () => navigation.requestNavigate({ surface: "platform", stationId: "R42" }));
 required("#back").addEventListener("click", () => history.back());
 required("#forward").addEventListener("click", () => history.forward());
 required("#retry").addEventListener("click", () => navigation.retry());

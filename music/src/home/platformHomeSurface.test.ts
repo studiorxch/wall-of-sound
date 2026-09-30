@@ -1,13 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createStationHomeSurface } from "./stationHomeSurface";
+import { createPlatformHomeSurface } from "./platformHomeSurface";
 import type { HomeSurfaceHost } from "./homeSurfaceContract";
 
 /**
- * STATION-01 -- same context-detection discipline
- * `blackbookHomeSurface.test.ts` already covers for BLACKBOOK: explicit
+ * STATION-08 -- same context-detection discipline
+ * `stationHomeSurface.test.ts` already covers for Station Cover: explicit
  * query + live `parent.StudioRichHome`, never bare `window.self !==
  * window.top`; standalone no-op; readiness report (once, idempotent);
- * delegated Station -> MAP navigation.
+ * delegated Platform -> MAP navigation, carrying no station-id-specific
+ * navigation of its own (Platform has nowhere further to navigate TO in
+ * this batch -- only back).
  */
 function fixture(search: string, parent?: unknown) {
   const dataset: Record<string, string> = {};
@@ -35,53 +37,54 @@ function fakeHost(overrides: Partial<HomeSurfaceHost> = {}): HomeSurfaceHost {
   };
 }
 
-describe("createStationHomeSurface -- context detection", () => {
+describe("createPlatformHomeSurface -- context detection", () => {
   it("is not HOME when there is no parent frame (standalone)", () => {
     fixture("?host=home&homeRuntime=r1&homeNavigation=1&station=R42");
-    const surface = createStationHomeSurface();
-    expect(surface.isHome).toBe(false);
+    expect(createPlatformHomeSurface().isHome).toBe(false);
   });
 
-  it("still parses stationId from the query in standalone mode", () => {
-    fixture("?station=R42");
-    const surface = createStationHomeSurface();
+  it("still parses stationId from the query in standalone mode -- the real station id this page was loaded for, never defaulted to R42", () => {
+    fixture("?station=R16");
+    const surface = createPlatformHomeSurface();
     expect(surface.isHome).toBe(false);
-    expect(surface.stationId).toBe("R42");
+    expect(surface.stationId).toBe("R16");
   });
 
   it("is not HOME without the exact host=home query param", () => {
     const parentWin = { StudioRichHome: fakeHost(), location: { origin: "http://local" } } as unknown as Window;
     fixture("?homeRuntime=r1&homeNavigation=1&station=R42", parentWin);
-    expect(createStationHomeSurface().isHome).toBe(false);
+    expect(createPlatformHomeSurface().isHome).toBe(false);
   });
 
-  it("is not HOME without a stationId in the query", () => {
+  it("is not HOME without a stationId in the query -- Platform must fail honestly, never silently substitute Bay Ridge Av", () => {
     const parentWin = { StudioRichHome: fakeHost(), location: { origin: "http://local" } } as unknown as Window;
     fixture("?host=home&homeRuntime=r1&homeNavigation=1", parentWin);
-    expect(createStationHomeSurface().isHome).toBe(false);
+    const surface = createPlatformHomeSurface();
+    expect(surface.isHome).toBe(false);
+    expect(surface.stationId).toBeNull();
   });
 
   it("is not HOME when parent.StudioRichHome is absent or the wrong version", () => {
     const parentWin = { StudioRichHome: undefined, location: { origin: "http://local" } } as unknown as Window;
     fixture("?host=home&homeRuntime=r1&homeNavigation=1&station=R42", parentWin);
-    expect(createStationHomeSurface().isHome).toBe(false);
+    expect(createPlatformHomeSurface().isHome).toBe(false);
   });
 
-  it("is HOME with a complete, valid hosted identity", () => {
+  it("is HOME with a complete, valid hosted identity, carrying the REAL requested station id", () => {
     const parentWin = { StudioRichHome: fakeHost(), location: { origin: "http://local" } } as unknown as Window;
-    fixture("?host=home&homeRuntime=r1&homeNavigation=1&station=R42", parentWin);
-    const surface = createStationHomeSurface();
+    fixture("?host=home&homeRuntime=r1&homeNavigation=1&station=R16", parentWin);
+    const surface = createPlatformHomeSurface();
     expect(surface.isHome).toBe(true);
-    expect(surface.stationId).toBe("R42");
+    expect(surface.stationId).toBe("R16");
   });
 });
 
-describe("createStationHomeSurface -- reportReady", () => {
+describe("createPlatformHomeSurface -- reportReady", () => {
   it("reports readiness exactly once (idempotent)", () => {
     const host = fakeHost();
     const parentWin = { StudioRichHome: host, location: { origin: "http://local" } } as unknown as Window;
     const { dataset } = fixture("?host=home&homeRuntime=r1&homeNavigation=1&station=R42", parentWin);
-    const surface = createStationHomeSurface();
+    const surface = createPlatformHomeSurface();
     surface.reportReady();
     surface.reportReady();
     expect(host.ready).toHaveBeenCalledOnce();
@@ -90,38 +93,22 @@ describe("createStationHomeSurface -- reportReady", () => {
 
   it("is a no-op in standalone mode", () => {
     fixture("?station=R42");
-    expect(() => createStationHomeSurface().reportReady()).not.toThrow();
+    expect(() => createPlatformHomeSurface().reportReady()).not.toThrow();
   });
 });
 
-describe("createStationHomeSurface -- requestNavigateToMap", () => {
+describe("createPlatformHomeSurface -- requestNavigateToMap (the return path)", () => {
   it("delegates to host.requestNavigate({surface:'map'}) when hosted", () => {
     const host = fakeHost();
     const parentWin = { StudioRichHome: host, location: { origin: "http://local" } } as unknown as Window;
     fixture("?host=home&homeRuntime=r1&homeNavigation=1&station=R42", parentWin);
-    const surface = createStationHomeSurface();
+    const surface = createPlatformHomeSurface();
     expect(surface.requestNavigateToMap()).toBe(true);
     expect(host.requestNavigate).toHaveBeenCalledWith(expect.anything(), expect.anything(), { surface: "map" });
   });
 
   it("returns false (never throws) in standalone mode", () => {
     fixture("?station=R42");
-    expect(createStationHomeSurface().requestNavigateToMap()).toBe(false);
-  });
-});
-
-describe("createStationHomeSurface -- requestNavigateToPlatform", () => {
-  it("delegates to host.requestNavigate({surface:'platform', stationId}) when hosted, carrying the SAME station id this page was loaded with -- never a hardcoded R42", () => {
-    const host = fakeHost();
-    const parentWin = { StudioRichHome: host, location: { origin: "http://local" } } as unknown as Window;
-    fixture("?host=home&homeRuntime=r1&homeNavigation=1&station=R16", parentWin);
-    const surface = createStationHomeSurface();
-    expect(surface.requestNavigateToPlatform()).toBe(true);
-    expect(host.requestNavigate).toHaveBeenCalledWith(expect.anything(), expect.anything(), { surface: "platform", stationId: "R16" });
-  });
-
-  it("returns false (never throws) in standalone mode", () => {
-    fixture("?station=R42");
-    expect(createStationHomeSurface().requestNavigateToPlatform()).toBe(false);
+    expect(createPlatformHomeSurface().requestNavigateToMap()).toBe(false);
   });
 });

@@ -147,6 +147,46 @@
     } else {
       results.push(_assert('showLineMode message-handling checks (SKIPPED — handleWindowMessage/lineModeMessageType/SubwayLineRibbon not all available)', true));
     }
+
+    // ── STATION-08: drawer → MAP enterPlatform() navigation message ────────
+    // Only tests the HOME-hosted branch (a real `location.href` mutation in
+    // the standalone-fallback branch would actually navigate this very test
+    // page away mid-run — unsafe to exercise live, same "skip what can't be
+    // safely exercised" posture this suite already uses elsewhere).
+    drawer.open('R42');
+    var platformFrameWindow = global.document.getElementById('subway-mezzanine-drawer-frame').contentWindow;
+    var platformHandle = drawer.__test.handleWindowMessage;
+    var platformMsgType = drawer.__test.enterPlatformMessageType;
+    var mapSurface = SBE.HomeMapSurface;
+    if (platformHandle && platformMsgType && mapSurface) {
+      var originalRequestNavigate = mapSurface.requestNavigate;
+      var navCalls = [];
+      try {
+        Object.defineProperty(SBE, 'HomeMapSurface', {
+          configurable: true,
+          value: Object.assign({}, mapSurface, { requestNavigate: function (destination) { navCalls.push(destination); return originalRequestNavigate.call(mapSurface, destination); } }),
+        });
+
+        platformHandle({ origin: global.location.origin, source: platformFrameWindow, data: { type: platformMsgType, stationId: 'R42' } });
+        results.push(_assert('a valid same-origin, same-iframe enterPlatform message calls HomeMapSurface.requestNavigate with the REAL station id, never hardcoded', navCalls.length === 1 && navCalls[0].surface === 'platform' && navCalls[0].stationId === 'R42', navCalls));
+
+        navCalls.length = 0;
+        platformHandle({ origin: global.location.origin, source: platformFrameWindow, data: { type: platformMsgType, stationId: 'R16' } });
+        results.push(_assert('a DIFFERENT real station id round-trips just as cleanly — never silently substituted', navCalls.length === 1 && navCalls[0].stationId === 'R16', navCalls));
+
+        navCalls.length = 0;
+        platformHandle({ origin: 'https://evil.example', source: platformFrameWindow, data: { type: platformMsgType, stationId: 'R42' } });
+        results.push(_assert('an enterPlatform message from the wrong origin is ignored', navCalls.length === 0));
+
+        navCalls.length = 0;
+        platformHandle({ origin: global.location.origin, source: platformFrameWindow, data: { type: platformMsgType, stationId: '' } });
+        results.push(_assert('an enterPlatform message with an empty/missing stationId is ignored', navCalls.length === 0));
+      } finally {
+        Object.defineProperty(SBE, 'HomeMapSurface', { configurable: true, value: mapSurface, writable: true });
+      }
+    } else {
+      results.push(_assert('enterPlatform message-handling checks (SKIPPED — handleWindowMessage/enterPlatformMessageType/HomeMapSurface not all available, e.g. MAP not HOME-hosted in this run)', true));
+    }
     drawer.close();
 
     var failed = results.filter(function (r) { return !r.pass; });

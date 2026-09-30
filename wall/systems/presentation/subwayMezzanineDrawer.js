@@ -100,7 +100,8 @@
     return _dom;
   }
 
-  // ── Drawer → MAP: restore SubwayLineRibbon.showLineMode() ──────────────────
+  // ── Drawer → MAP: restore SubwayLineRibbon.showLineMode(), and STATION-08's
+  //    own ENTER PLATFORM navigation ──────────────────────────────────────────
   // STATION-04A — the smallest appropriate drawer→MAP communication
   // mechanism: station.html (the drawer's own content, a separate
   // document) has no way to call a wall/-realm function directly, so it
@@ -111,14 +112,37 @@
   // some OTHER iframe could otherwise spoof this); requires BOTH the
   // origin AND the exact source window to match this drawer's own iframe.
   var LINE_MODE_MESSAGE_TYPE = 'stationCover:showLineMode';
+  var ENTER_PLATFORM_MESSAGE_TYPE = 'stationCover:enterPlatform';
+
+  function _handleShowLineMode(data) {
+    if (typeof data.routeId !== 'string' || !data.routeId) return;
+    var ribbon = SBE.SubwayLineRibbon;
+    if (ribbon) ribbon.showLineMode('subway:route:' + data.routeId); // same canonical-id convention _buildLineBadge's own removed click handler used
+  }
+
+  // STATION-08 — carries whichever real stationId the drawer is currently
+  // showing, never a hardcoded Bay Ridge Av. `SBE.HomeMapSurface` only
+  // exists when MAP itself is HOME-hosted (see homeMapSurface.js's own
+  // early-return when not); when MAP is fully standalone there is no HOME
+  // navigation authority to delegate to, so this falls back to a direct,
+  // same-origin top-level navigation instead — never silently doing nothing.
+  function _handleEnterPlatform(data) {
+    if (typeof data.stationId !== 'string' || !data.stationId) return;
+    var mapSurface = SBE.HomeMapSurface;
+    if (mapSurface) {
+      mapSurface.requestNavigate({ surface: 'platform', stationId: data.stationId });
+      return;
+    }
+    global.location.href = new URL('platform.html?station=' + encodeURIComponent(data.stationId), global.location.href).href;
+  }
 
   function _onWindowMessage(event) {
     if (event.origin !== global.location.origin) return;
     if (!_dom || event.source !== _dom.frameEl.contentWindow) return;
     var data = event.data;
-    if (!data || data.type !== LINE_MODE_MESSAGE_TYPE || typeof data.routeId !== 'string' || !data.routeId) return;
-    var ribbon = SBE.SubwayLineRibbon;
-    if (ribbon) ribbon.showLineMode('subway:route:' + data.routeId); // same canonical-id convention _buildLineBadge's own removed click handler used
+    if (!data || typeof data.type !== 'string') return;
+    if (data.type === LINE_MODE_MESSAGE_TYPE) { _handleShowLineMode(data); return; }
+    if (data.type === ENTER_PLATFORM_MESSAGE_TYPE) { _handleEnterPlatform(data); return; }
   }
   global.addEventListener('message', _onWindowMessage);
 
@@ -229,6 +253,7 @@
       storageKey: STORAGE_KEY,
       handleWindowMessage: _onWindowMessage,
       lineModeMessageType: LINE_MODE_MESSAGE_TYPE,
+      enterPlatformMessageType: ENTER_PLATFORM_MESSAGE_TYPE,
     },
   });
 

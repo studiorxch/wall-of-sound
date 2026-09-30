@@ -19,6 +19,17 @@ export interface StationHomeSurface {
   reportReady(): void;
   /** Delegates the Station -> MAP control through HOME's navigation authority instead of a native anchor navigation. */
   requestNavigateToMap(): boolean;
+  /**
+   * STATION-08 -- delegates Station Cover's own ENTER PLATFORM action
+   * through HOME's navigation authority, carrying this SAME canonical
+   * station id forward (never Bay Ridge Av hardcoded) -- only meaningful
+   * when this page is hosted directly via HOME's own `{surface:"station"}`
+   * route (`isHome`). When Station Cover is instead embedded inside MAP's
+   * own Mezzanine Drawer, `stationCoverRuntime.ts` uses a separate
+   * postMessage path instead (see subwayMezzanineDrawer.js) -- this
+   * surface has no parent `StudioRichHome` to call directly in that case.
+   */
+  requestNavigateToPlatform(): boolean;
 }
 
 // Deliberately NOT a module-level constant: it must never touch
@@ -32,6 +43,7 @@ function notHome(stationId: string | null): StationHomeSurface {
     stationId,
     reportReady() { /* standalone: nothing to report */ },
     requestNavigateToMap: () => false,
+    requestNavigateToPlatform: () => false,
   });
 }
 
@@ -62,6 +74,9 @@ export function createStationHomeSurface(): StationHomeSurface {
       },
       requestNavigateToMap(): boolean {
         return host.requestNavigate(document, identity(), { surface: "map" });
+      },
+      requestNavigateToPlatform(): boolean {
+        return host.requestNavigate(document, identity(), { surface: "platform", stationId });
       },
     });
   } catch {

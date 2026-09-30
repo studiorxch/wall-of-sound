@@ -9,7 +9,17 @@ export type HomeRoute =
    * `stationGeometry:<gtfsStopId>` convention already use. Never a second
    * station id scheme.
    */
-  | { readonly surface: "station"; readonly stationId: string };
+  | { readonly surface: "station"; readonly stationId: string }
+  /**
+   * STATION-08 -- the Platform surface, reached via the Mezzanine
+   * Drawer's ENTER PLATFORM action (or directly via this route for
+   * debugging). Same `stationId` identity as "station" above -- never a
+   * second scheme, never hardcoded to Bay Ridge Av in the route contract
+   * itself (STATION-08's own real seed coverage is a data-availability
+   * fact Platform's own runtime handles honestly, not a routing
+   * constraint).
+   */
+  | { readonly surface: "platform"; readonly stationId: string };
 
 export interface HomeSurfaceIdentity {
   readonly runtimeId: string;

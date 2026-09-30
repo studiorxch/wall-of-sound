@@ -57,6 +57,20 @@
 // same reachability class as live arrivals). Route symbols themselves
 // never shrink/deform to fit -- see station.html's own updated CSS
 // (flex-wrap + flex-shrink:0) for the layout-width-only wrapping rule.
+//
+// STATION-08 -- ENTER PLATFORM is now functional, carrying this SAME
+// canonical stationId forward (never Bay Ridge Av hardcoded here -- only
+// stationGeometryRegistry.ts's own honest data-availability table is
+// Bay-Ridge-specific today, and that's Platform's own concern, not this
+// button's). Three real contexts this document can be in, each with its
+// own navigation path, same "isHome vs. isEmbedded vs. fully standalone"
+// split the back link above already established:
+//   - isHome (hosted directly via HOME's {surface:"station"} route):
+//     homeSurface.requestNavigateToPlatform() -- HOME's own authority.
+//   - isEmbedded (inside MAP's own Mezzanine Drawer): postMessage up to
+//     subwayMezzanineDrawer.js, mirroring postShowLineMode() below exactly.
+//   - neither (fully standalone): a plain same-origin navigation, same
+//     posture the standalone back link's own real <a href> already has.
 
 import { fetchStaticSnapshot } from "../logic/maps/stationTruth";
 import { resolveStationTruth, type StationTruth } from "../logic/maps/stationTruth";
@@ -139,6 +153,23 @@ function postShowLineMode(routeId: string): void {
   window.parent.postMessage({ type: "stationCover:showLineMode", routeId }, window.location.origin);
 }
 
+function postEnterPlatform(stationId: string): void {
+  if (window.parent === window) return;
+  window.parent.postMessage({ type: "stationCover:enterPlatform", stationId }, window.location.origin);
+}
+
+function handleEnterPlatformClick(stationId: string): void {
+  if (homeSurface.isHome) {
+    homeSurface.requestNavigateToPlatform();
+    return;
+  }
+  if (isEmbedded) {
+    postEnterPlatform(stationId);
+    return;
+  }
+  location.href = new URL(`platform.html?station=${encodeURIComponent(stationId)}`, location.href).href;
+}
+
 function renderDirectionControl(): string {
   return `
     <div class="station-direction-control" role="group" aria-label="Direction">
@@ -210,8 +241,7 @@ function render(): void {
     ${renderArrivals()}
     ${renderLineOrientation(display.name)}
 
-    <button type="button" class="station-cover-enter-platform" disabled
-      title="The Platform view doesn't exist yet -- this is the navigation boundary a future batch completes.">
+    <button type="button" id="station-cover-enter-platform" class="station-cover-enter-platform">
       ENTER PLATFORM
     </button>
   `;
@@ -237,6 +267,8 @@ function render(): void {
       });
     });
   }
+
+  root.querySelector<HTMLButtonElement>("#station-cover-enter-platform")?.addEventListener("click", () => handleEnterPlatformClick(display.stationId));
 }
 
 async function boot(): Promise<void> {

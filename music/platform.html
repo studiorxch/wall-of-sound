@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>StudioRich Platform</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden;
+    font: 14px/1.4 -apple-system, system-ui, sans-serif; background: #0e0d0b; color: #f4efe7;
+  }
+
+  #platform-back-to-map {
+    display: inline-block; flex: 0 0 auto; align-self: flex-start;
+    margin: 1.25rem 1.25rem .75rem; color: #a39a8d; text-decoration: none;
+    padding: 6px 12px; border: 1px solid rgba(255,255,255,.14); border-radius: 8px;
+    font: 700 11px/1 inherit; letter-spacing: .07em; transition: border-color .15s, color .15s;
+  }
+  #platform-back-to-map:hover { border-color: rgba(255,255,255,.4); color: #f4efe7; }
+
+  /* STATION-08 -- the header: station identity | direction | route | arrival.
+     "Minimal" per its own brief -- one compact row, nothing else. Direction
+     is informational text, never implied to BE the platform (see
+     platformRuntime.ts's own header on why). */
+  #platform-header {
+    flex: 0 0 auto; display: flex; align-items: center; gap: .625rem; flex-wrap: wrap;
+    padding: 0 1.25rem .875rem; font: 700 13px/1 inherit; letter-spacing: .03em;
+  }
+  /* The [hidden] attribute's own UA-style (display:none) has lower
+     specificity than the ID rules above and below, which would otherwise
+     silently override it -- the exact bug this explicit re-assertion
+     fixes (caught live: an unknown-station error state was rendering
+     UNDER a still-visible DETAIL VIEW/PLATFORM OVERVIEW shell). */
+  #platform-header[hidden], #platform-body[hidden] { display: none; }
+  #platform-header .platform-header-sep { color: #3a352e; font-weight: 400; }
+  #platform-header-name { color: #f4efe7; }
+  #platform-header-direction { color: #a39a8d; letter-spacing: .06em; }
+  #platform-header-arrival { color: #6b6357; font-weight: 400; }
+
+  /* STATION-02's own circular "tinted glass" route badge, reused verbatim
+     (same classes/CSS station.html already established) -- canonical
+     circle, route-color outline/glyph, ~10% tint, no shine, no animation. */
+  .station-route-badge {
+    display: inline-flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    width: 22px; height: 22px; border-radius: 50%;
+    border: 1.5px solid var(--route-color);
+    background: var(--route-tint);
+    color: var(--route-color);
+    font: 700 12px/1 inherit;
+  }
+
+  /* STATION-08 -- the permanent Detail/Overview composition. 7:1 flex-grow
+     ratio = exactly 87.5% / 12.5% of the remaining vertical space below the
+     back link + header (both fixed-height "chrome"), preserving the
+     intended visual relationship the brief's own ASCII mockup shows. */
+  #platform-body { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; }
+
+  #platform-detail-view {
+    flex: 7 1 0; min-height: 0;
+    display: flex; align-items: center; justify-content: center;
+    color: #3a352e; font: 700 11px/1 monospace; letter-spacing: .12em;
+  }
+
+  #platform-overview {
+    flex: 1 1 0; min-height: 110px; max-height: 22vh;
+    border-top: 1px solid rgba(255,255,255,.08);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  #platform-overview-label {
+    flex: 0 0 auto; padding: 6px 1.25rem 2px; font: 700 10px/1 monospace;
+    letter-spacing: .1em; color: #3a352e;
+  }
+  #platform-overview-content {
+    flex: 1 1 auto; min-height: 0; overflow: auto; padding: 0 1.25rem 8px;
+    display: flex; align-items: center;
+  }
+  #platform-overview-content svg { max-width: 100%; height: auto; }
+  .platform-overview-note { color: #6b6357; font-size: 12px; margin: 0; }
+
+  .platform-status { padding: 2rem 1.25rem; color: #8a8177; }
+</style>
+</head>
+<body>
+  <a id="platform-back-to-map" href="/wall-app/">&larr; MAP</a>
+  <div id="platform-header" hidden></div>
+  <div id="platform-body" hidden>
+    <div id="platform-detail-view">DETAIL VIEW</div>
+    <div id="platform-overview">
+      <div id="platform-overview-label">PLATFORM OVERVIEW</div>
+      <div id="platform-overview-content"></div>
+    </div>
+  </div>
+  <div id="platform-status-root"><p class="platform-status">Loading station…</p></div>
+  <script type="module" src="/src/station/platformRuntime.ts"></script>
+</body>
+</html>

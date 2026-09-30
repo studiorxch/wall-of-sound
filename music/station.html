@@ -28,7 +28,9 @@
     body { padding: 1.75rem 1.25rem 2.5rem; }
   }
 
-  .station-cover-enter-platform { margin-top: 2rem; width: 100%; padding: 10px 18px; border-radius: 9px; border: 1px solid rgba(255,255,255,.14); background: none; color: #a39a8d; font: 700 12px/1 inherit; letter-spacing: .05em; cursor: not-allowed; text-align: center; }
+  /* STATION-08 -- functional, not a "coming soon" placeholder any more. */
+  .station-cover-enter-platform { margin-top: 2rem; width: 100%; padding: 10px 18px; border-radius: 9px; border: 1px solid rgba(255,255,255,.2); background: none; color: #f4efe7; font: 700 12px/1 inherit; letter-spacing: .05em; cursor: pointer; text-align: center; transition: border-color .15s, background .15s; }
+  .station-cover-enter-platform:hover, .station-cover-enter-platform:focus-visible { border-color: rgba(255,255,255,.5); background: rgba(255,255,255,.04); outline: none; }
 
   .station-cover-name { font-size: 26px; font-weight: 600; margin: 0 0 .875rem; letter-spacing: -.01em; overflow-wrap: break-word; }
 

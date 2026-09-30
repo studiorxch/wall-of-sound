@@ -27,6 +27,11 @@ export function validateHomeRoute(value: unknown): HomeRoute | null {
     if (!isStationId(route.stationId)) return null;
     return Object.freeze({ surface: "station", stationId: route.stationId as string });
   }
+  if (route.surface === "platform") {
+    if (keys.some(key => key !== "surface" && key !== "stationId")) return null;
+    if (!isStationId(route.stationId)) return null;
+    return Object.freeze({ surface: "platform", stationId: route.stationId as string });
+  }
   if (route.surface !== "blackbook" || keys.some(key => key !== "surface" && key !== "artworkId")) return null;
   if ("artworkId" in route && !isArtworkId(route.artworkId)) return null;
   return Object.freeze(route.artworkId === undefined ? { surface: "blackbook" } : { surface: "blackbook", artworkId: route.artworkId as string });
@@ -37,14 +42,14 @@ export function parseHomeSearch(search: string): HomeRoute | null {
   const params = new URLSearchParams(search);
   if ([...params.keys()].some(key => !["surface", "artwork", "station"].includes(key) || params.getAll(key).length !== 1)) return null;
   const surface = params.get("surface") ?? "map";
-  if (surface === "station") return validateHomeRoute({ surface, stationId: params.get("station") });
+  if (surface === "station" || surface === "platform") return validateHomeRoute({ surface, stationId: params.get("station") });
   return validateHomeRoute(params.has("artwork") ? { surface, artworkId: params.get("artwork") } : { surface });
 }
 
 export function serializeHomeRoute(route: HomeRoute): string {
   const params = new URLSearchParams({ surface: route.surface });
   if (route.surface === "blackbook" && route.artworkId !== undefined) params.set("artwork", route.artworkId);
-  if (route.surface === "station") params.set("station", route.stationId);
+  if (route.surface === "station" || route.surface === "platform") params.set("station", route.stationId);
   return params.toString();
 }
 

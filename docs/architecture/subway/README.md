@@ -1165,3 +1165,131 @@ page into the real product surface, still with zero archetype-specific
 logic, BEFORE attempting the Detail/Writable view, train movement, or
 the 87.5/12.5 layout split — each of which is a materially larger,
 separable piece of work.
+
+## 19. STATION-08 — first real Platform product surface
+
+Establishes Platform as the fourth real, HOME-hostable product surface
+(alongside MAP/BLACKBOOK/Station Cover), and makes the Mezzanine Drawer's
+own "ENTER PLATFORM" action functional — exactly the batch §18
+recommended.
+
+```
+MAP
+  ↓ select station
+MEZZANINE DRAWER
+  ↓ ENTER PLATFORM
+PLATFORM
+  ├── Detail View      — shell established, content NOT implemented
+  └── Platform Overview
+        ↓
+      StationGeometryData (stationGeometryRegistry.ts)
+        ↓
+      projectStationTopology()        (STATION-07, unmodified)
+        ↓
+      renderStationTopologySvg()      (STATION-07, unmodified)
+```
+
+**Route/surface contract.** `HomeRoute` gains
+`{surface:"platform", stationId}` (`homeRouteTypes.ts`), validated/
+parsed/serialized by the exact same `isStationId` discipline
+`{surface:"station"}` already uses (`homeRoutes.ts`) — same station id
+scheme, never a second one. `homeRuntime.ts`'s `childUrl()` maps it to
+the real `music/platform.html` document, same `host=home&homeRuntime=…
+&homeNavigation=…&station=…` query contract every other hosted surface
+already uses. `platform.html` is registered in `vite.config.ts`'s
+production `rollupOptions.input` — a real shipped page, not a debug-only
+one (contrast `station-topology-debug.html`, §18, deliberately excluded).
+
+**How the selected station id reaches Platform, end to end (never
+hardcoded to Bay Ridge Av anywhere in this chain):**
+
+```
+station.html's own ENTER PLATFORM button (stationCoverRuntime.ts)
+  reads its own already-resolved display.stationId
+        ↓ (one of three paths, by context)
+  isHome            → homeSurface.requestNavigateToPlatform()  (stationHomeSurface.ts)
+  isEmbedded        → postMessage {type:"stationCover:enterPlatform", stationId}
+                        → subwayMezzanineDrawer.js validates origin+source,
+                          calls SBE.HomeMapSurface.requestNavigate(...)
+                          (same postMessage-bridge pattern STATION-04A's
+                          own showLineMode restoration already established)
+  fully standalone  → a plain same-origin navigation to platform.html?station=…
+        ↓
+  HOME's real requestNavigate -> validateHomeRoute -> mount -> platform.html
+        ↓
+  createPlatformHomeSurface() (platformHomeSurface.ts) reads the SAME
+  stationId back out of its own query string
+```
+
+**Persistent shell — verified, not just asserted.** Platform constructs
+neither its own member-identity authority nor its own radio-receiver
+session, and renders no MEMBER/RADIO UI of its own at all (both already
+persist automatically as HOME's own permanent chrome, outside whichever
+surface is mounted — `homeRuntime.ts`'s own `#member-avatar-root` is a
+sibling of `#surface`, never inside it, untouched by any child surface
+swap). `platformRuntime.test.ts` asserts this directly against the real
+source text (no `createFirebaseMemberIdentityAuthority`/
+`createRadioChannelReceiver`/`getMemberIdentity`/`getRadioSession`
+anywhere in the file). Live-verified: the SAME `runtimeId` persists
+across a real MAP → Mezzanine Drawer → ENTER PLATFORM → Platform → back-
+to-MAP cycle (byte-identical before/after), and the MEMBER avatar DOM
+node is never removed/reconstructed at any point in that cycle.
+
+**Bay Ridge Av Overview — the real, unmodified STATION-07 pipeline.**
+`stationGeometryRegistry.ts` is the smallest honest lookup Platform
+needs: a plain `gtfsStopId -> builder function` map, today containing
+exactly one real entry (`R42 -> buildBayRidgeAvStationGeometrySeed`) —
+NOT a topology model, NOT a second archetype dispatch, NOT a fallback.
+Any other real/valid station id reaches the identical code path and
+renders an honest "topology isn't available in this view yet" Overview
+state — never a silent substitution. Live-verified: Bay Ridge Av
+resolves to exactly `platform → track → track → platform`, both
+platforms `config:"side"`, straight from its real authored seed, through
+`projectStationTopology()`/`renderStationTopologySvg()` completely
+unmodified since STATION-07 — `platformRuntime.ts` itself contains no
+archetype-identifier string anywhere (asserted directly by
+`platformRuntime.test.ts`).
+
+**Detail View — intentionally neutral, nothing decided.** A static,
+muted "DETAIL VIEW" label and nothing else. No writable surface, no
+Canvas, no BLACKBOOK tools, no train/wall selection, no zoom/pan, no 3D —
+this batch deliberately does not pre-decide how an observable/writable
+Base Truth surface becomes a selected Detail subject.
+
+**Layout.** `#platform-body` splits `flex: 7 1 0` (Detail) /
+`flex: 1 1 0` (Overview) — exactly 87.5%/12.5% of the remaining vertical
+space below the fixed-height back-link + header chrome, matching the
+brief's own ASCII mockup. A real bug this batch's own live verification
+caught before merge: `#platform-header`/`#platform-body`'s own ID-level
+`display:flex` rules silently defeated the native `[hidden]` attribute's
+lower-specificity `display:none` (an unknown-station error state was
+rendering visually UNDER a still-visible, still-flex DETAIL VIEW/
+OVERVIEW shell) — fixed with explicit `[hidden]` re-assertions, the same
+class of bug the Mezzanine Drawer's own STATION-04 work had to solve for
+a different reason (CSS-var-driven width vs. the `hidden` attribute).
+
+**Testing.** New: `homeNavigation.test.ts` (+4 cases: platform route
+round-trip/rejection, MAP↔PLATFORM↔MAP runtime-identity invariant, a
+non-R42 station id round-tripping cleanly), `stationHomeSurface.test.ts`
+(+2, `requestNavigateToPlatform`), `platformHomeSurface.test.ts` (new,
+10 cases, mirroring `stationHomeSurface.test.ts`'s own discipline),
+`stationGeometryRegistry.test.ts` (new, 2 cases), `platformRuntime.test.ts`
+(new, 6 cases — the MEMBER/RADIO/archetype-blindness/no-hardcoded-R42
+static-source assertions). `subwayMezzanineDrawer.tests.js` (wall/,
+hand-rolled) extended +4 cases for the `enterPlatform` message contract.
+Broader `music/src/logic/maps/` + `src/data/` + `src/ui/maps/` +
+`src/station/` + `src/home/` + `src/logic/home/` sweep: 680/680 passing.
+Full combined MUSIC suite: 3955/3962 (7 pre-existing skips, 11
+pre-existing unrelated `trainingExclusionExport` failures, untouched by
+this batch). Typecheck and lint clean on every touched file (two
+pre-existing, unrelated `homeRoutes.ts` control-character lint warnings
+on lines this batch never touched — confirmed via diff).
+
+**Explicitly NOT built:** the Platform Detail View's own content/writable
+architecture, the 87.5/12.5 layout's interactive behavior beyond static
+proportions, drawing tools, surface selection, train objects/movement/
+stopping/dwell/doors, arrival-countdown synchronization, clickable
+topology, a selected-viewport indicator, live-arrival authority
+migration, a persistent transit session, 3D, Station Editor changes, new
+archetypes, new real station survey data, a new island seed, or any
+Mezzanine Drawer redesign.
