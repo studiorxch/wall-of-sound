@@ -68,6 +68,53 @@ publicly listed while Cloudflare manages records behind them. Whoever next
 touches DNS for this domain should reconcile this directly in each
 provider's own dashboard rather than assume either account's UI is stale.
 
+## RADIO Firestore rules — RADIO-04/04D deployed and human-accepted
+
+**Deployed and verified**, 2026-09-30. RADIO-04 introduced the
+`radioScheduleBlocks` collection's Firestore rule and RADIO-04D introduced
+`radioChannels`' status-aware `programIds` conditional; both shipped as
+source-only for several batches (RADIO-04 through RADIO-04D's own
+completion reports explicitly flagged this and withheld deployment
+pending human authorization). Verified independently, read-only, by
+fetching the actual deployed ruleset for `studiorich-83b1e` via the
+Firebase Rules API (no `firebase deploy` run to check this) and diffing
+it byte-for-byte against source `firestore.rules`: the deployed ruleset
+now matches source exactly (`projects/studiorich-83b1e/rulesets/
+7b4ccd19-8a1c-4fb1-984b-9052e4157642`, superseding the prior
+`54b3aa50-...` ruleset that predated both changes).
+
+**Human acceptance evidence** (RADIO-04E authorization, 2026-09-30):
+- A new inactive Channel (`Sleepy Time`, empty rotation) was created
+  through RADIO → Programming's own "+" affordance and appeared correctly
+  in the Channel selector — confirms `radioChannels`' RADIO-04D rule is
+  live.
+- Scheduling a published Playlist (`β0.1.3`) against it succeeded, and the
+  resulting 6:00–8:00 AM block rendered on the weekly grid and opened its
+  own Scheduled Program detail on click — confirms `radioScheduleBlocks`'
+  create/read rules are live and the operator-authorization boundary
+  works end to end for a real signed-in operator.
+- Rename / Activate / Delete controls (RADIO-04E) were present in the same
+  session; their own behavior is recorded as a separate open follow-up
+  below, not yet individually human-verified.
+
+**Recorded follow-ups (not fixed in this pass, tracked here rather than
+re-discovered later):**
+1. The Channel `•••` menu popover can clip against the right viewport
+   edge depending on Channel-selector width/position.
+2. Scheduling a Playlist that already has multiple legacy duplicate
+   `radprogram_...` Program documents (pre-RADIO-03 duplication) surfaces
+   all of them to the operator as an opaque ambiguous-Program-id choice
+   (`radioProgramLifecycle.ts`'s existing `planProgramLifecycleAction`
+   "ambiguous" path, RadioScheduleBlockDialog.tsx's own picker). The
+   normal operator workflow should eventually resolve/reuse the correct
+   Program automatically rather than requiring a choice among internal
+   ids — not addressed in RADIO-04/04B/04D/04E.
+3. RADIO-04E's Rename, Activate/Deactivate, and Delete behaviors
+   specifically still need their own dedicated human verification pass
+   (distinct from the scheduling-workflow evidence recorded above).
+4. MEMBER/avatar presentation (RADIO-04E Part F recon) remains future
+   integration work — not implemented, not scheduled.
+
 ## Deployment procedure
 
 ### Current production routing (resolved)
