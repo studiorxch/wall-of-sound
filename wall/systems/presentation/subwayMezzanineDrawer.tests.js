@@ -101,6 +101,54 @@
       } catch (e) {}
     }
 
+    // ── STATION-04A: drawer → MAP showLineMode() message handling ──────────
+    // A real DOM message-shaped object, never an actual cross-document
+    // postMessage round-trip (unnecessary here — the handler is a pure
+    // function of the event-like object's own origin/source/data).
+    drawer.open('R42');
+    var frameWindow = global.document.getElementById('subway-mezzanine-drawer-frame').contentWindow;
+    var handle = drawer.__test.handleWindowMessage;
+    var msgType = drawer.__test.lineModeMessageType;
+    var ribbon = SBE.SubwayLineRibbon;
+    if (handle && msgType && ribbon) {
+      var originalShowLineMode = ribbon.showLineMode;
+      var calls = [];
+      try {
+        Object.defineProperty(SBE, 'SubwayLineRibbon', {
+          configurable: true,
+          value: Object.assign({}, ribbon, { showLineMode: function (routeId) { calls.push(routeId); return originalShowLineMode.call(ribbon, routeId); } }),
+        });
+
+        handle({ origin: global.location.origin, source: frameWindow, data: { type: msgType, routeId: 'R' } });
+        results.push(_assert('a valid same-origin, same-iframe message calls showLineMode with the canonical subway:route: id', calls.length === 1 && calls[0] === 'subway:route:R', calls));
+
+        calls.length = 0;
+        handle({ origin: 'https://evil.example', source: frameWindow, data: { type: msgType, routeId: 'R' } });
+        results.push(_assert('a message from the wrong origin is ignored, even with a valid source/data', calls.length === 0));
+
+        calls.length = 0;
+        handle({ origin: global.location.origin, source: global.window, data: { type: msgType, routeId: 'R' } });
+        results.push(_assert('a message from the wrong source window (not this drawer\'s own iframe) is ignored, even same-origin', calls.length === 0));
+
+        calls.length = 0;
+        handle({ origin: global.location.origin, source: frameWindow, data: { type: 'something-else', routeId: 'R' } });
+        results.push(_assert('a message with the wrong type is ignored', calls.length === 0));
+
+        calls.length = 0;
+        handle({ origin: global.location.origin, source: frameWindow, data: { type: msgType, routeId: '' } });
+        results.push(_assert('a message with an empty/missing routeId is ignored', calls.length === 0));
+
+        calls.length = 0;
+        handle({ origin: global.location.origin, source: frameWindow, data: null });
+        results.push(_assert('a message with no data at all does not throw and is ignored', calls.length === 0));
+      } finally {
+        Object.defineProperty(SBE, 'SubwayLineRibbon', { configurable: true, value: ribbon, writable: true });
+      }
+    } else {
+      results.push(_assert('showLineMode message-handling checks (SKIPPED — handleWindowMessage/lineModeMessageType/SubwayLineRibbon not all available)', true));
+    }
+    drawer.close();
+
     var failed = results.filter(function (r) { return !r.pass; });
     var summary = { ok: failed.length === 0, total: results.length, failed: failed.length, results: results };
     console.log('[SubwayMezzanineDrawerTests] ' + (summary.ok ? 'PASS' : 'FAIL') + ' — ' + (results.length - failed.length) + '/' + results.length);

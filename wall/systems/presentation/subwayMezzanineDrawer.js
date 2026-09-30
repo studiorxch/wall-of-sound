@@ -100,6 +100,28 @@
     return _dom;
   }
 
+  // ── Drawer → MAP: restore SubwayLineRibbon.showLineMode() ──────────────────
+  // STATION-04A — the smallest appropriate drawer→MAP communication
+  // mechanism: station.html (the drawer's own content, a separate
+  // document) has no way to call a wall/-realm function directly, so it
+  // posts a same-origin message instead; this module — which already owns
+  // the one real reference to the specific iframe window the message must
+  // have come from — validates it before acting. Never trusts event.data
+  // merely because event.origin matches (a different same-origin page in
+  // some OTHER iframe could otherwise spoof this); requires BOTH the
+  // origin AND the exact source window to match this drawer's own iframe.
+  var LINE_MODE_MESSAGE_TYPE = 'stationCover:showLineMode';
+
+  function _onWindowMessage(event) {
+    if (event.origin !== global.location.origin) return;
+    if (!_dom || event.source !== _dom.frameEl.contentWindow) return;
+    var data = event.data;
+    if (!data || data.type !== LINE_MODE_MESSAGE_TYPE || typeof data.routeId !== 'string' || !data.routeId) return;
+    var ribbon = SBE.SubwayLineRibbon;
+    if (ribbon) ribbon.showLineMode('subway:route:' + data.routeId); // same canonical-id convention _buildLineBadge's own removed click handler used
+  }
+  global.addEventListener('message', _onWindowMessage);
+
   // ── Resize drag ────────────────────────────────────────────────────────────
   function _onHandlePointerDown(event) {
     var dom = _ensureDom();
@@ -205,6 +227,8 @@
       clampWidth: _clampWidth,
       setOpenWidth: _setOpenWidth,
       storageKey: STORAGE_KEY,
+      handleWindowMessage: _onWindowMessage,
+      lineModeMessageType: LINE_MODE_MESSAGE_TYPE,
     },
   });
 

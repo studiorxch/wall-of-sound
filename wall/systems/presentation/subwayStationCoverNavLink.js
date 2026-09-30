@@ -19,6 +19,20 @@
 // itself works standalone -- see stationCoverRuntime.ts) exactly like
 // BLACKBOOK's own link; hosted intercepts the click and delegates through
 // HOME's navigation authority instead.
+//
+// RETIRED — STATION-04A. This was the only way to reach Station Cover
+// before the Mezzanine Drawer existed; since STATION-04, selecting Bay
+// Ridge Av on MAP already opens the drawer automatically (and
+// generically, not just for Bay Ridge Av), making this hardcoded,
+// always-visible, single-station pill genuinely redundant per this
+// codebase's own "never duplicate navigation" doctrine (STATION-04's own
+// report flagged this for STATION-05/06 evaluation; this batch resolves
+// it). No longer loaded by wall/index.html — this file is kept, not
+// deleted, as a reference for the standalone-vs-hosted link pattern
+// subwayBlackbookNavLink.js still uses live. music/station.html itself
+// remains fully reachable standalone (`station.html?station=<id>`) and
+// via the HOME `{surface:"station"}` route — only this one redundant
+// top-chrome trigger is retired.
 (function (global) {
   "use strict";
   var SBE = (global.SBE = global.SBE || {});

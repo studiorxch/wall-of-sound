@@ -46,6 +46,17 @@
 // An "ENTER PLATFORM" action is added (disabled placeholder, same honest
 // "coming soon" pattern the old creative-space button used) -- Platform
 // itself does not exist yet (STATION-04's own explicit scope boundary).
+//
+// STATION-04A -- corrective batch. Route badges are now clickable when
+// embedded, posting a same-origin message
+// (`{type:"stationCover:showLineMode", routeId}`) up to
+// subwayMezzanineDrawer.js, which calls the real
+// SBE.SubwayLineRibbon.showLineMode() on MAP's own side -- restoring the
+// Line Mode entry point STATION-04's own MAP cleanup removed (this
+// document has no way to reach that wall/-realm function directly, the
+// same reachability class as live arrivals). Route symbols themselves
+// never shrink/deform to fit -- see station.html's own updated CSS
+// (flex-wrap + flex-shrink:0) for the layout-width-only wrapping rule.
 
 import { fetchStaticSnapshot } from "../logic/maps/stationTruth";
 import { resolveStationTruth, type StationTruth } from "../logic/maps/stationTruth";
@@ -107,7 +118,25 @@ function escapeHtml(value: string): string {
 }
 
 function renderRouteBadge(route: StationCoverDisplay extends { kind: "resolved"; routes: readonly (infer R)[] } ? R : never): string {
-  return `<span class="station-route-badge" style="--route-color:${route.color};--route-text:${route.textColor};--route-tint:${route.tintBackground}">${escapeHtml(route.label)}</span>`;
+  // STATION-04A -- only interactive when embedded (there's no MAP/Line
+  // Ribbon to message when this page is standalone); the click/keydown
+  // handlers are wired in render() below, gated the same way.
+  const interactiveAttrs = isEmbedded
+    ? ` data-route-id="${escapeHtml(route.routeId)}" role="button" tabindex="0" aria-label="Show ${escapeHtml(route.label)} line on the map"`
+    : "";
+  const interactiveClass = isEmbedded ? " station-route-badge--interactive" : "";
+  return `<span class="station-route-badge${interactiveClass}" style="--route-color:${route.color};--route-text:${route.textColor};--route-tint:${route.tintBackground}"${interactiveAttrs}>${escapeHtml(route.label)}</span>`;
+}
+
+// STATION-04A -- the one postMessage this document ever sends. Same-origin
+// targetOrigin (the drawer's parent, wall/, is always same-origin -- see
+// subwayMezzanineDrawer.js's own iframe src construction). The receiving
+// side re-validates event.origin/event.source before acting on this --
+// this document never assumes the message was trusted just because it was
+// sent correctly.
+function postShowLineMode(routeId: string): void {
+  if (!isEmbedded || window.parent === window) return;
+  window.parent.postMessage({ type: "stationCover:showLineMode", routeId }, window.location.origin);
 }
 
 function renderDirectionControl(): string {
@@ -141,13 +170,21 @@ function renderLineOrientation(name: string): string {
   // non-directional (no claim about which neighbor is "north" vs
   // "south") -- the shape-projection direction is real but arbitrary
   // per GTFS shape, not a verified N/S mapping; see the architecture doc.
-  const previousLabel = currentOrientation?.previous ? escapeHtml(currentOrientation.previous.name.toUpperCase()) : "—";
-  const nextLabel = currentOrientation?.next ? escapeHtml(currentOrientation.next.name.toUpperCase()) : "—";
+  const previousName = currentOrientation?.previous?.name;
+  const nextName = currentOrientation?.next?.name;
+  const previousLabel = previousName ? escapeHtml(previousName.toUpperCase()) : "—";
+  const nextLabel = nextName ? escapeHtml(nextName.toUpperCase()) : "—";
+  // STATION-04A -- these two marks can visually truncate (station.html's
+  // own text-overflow:ellipsis) at narrow drawer widths; `title` keeps the
+  // full real name available (native tooltip / long-press) rather than
+  // simply losing it.
+  const previousTitle = previousName ? ` title="${escapeHtml(previousName)}"` : "";
+  const nextTitle = nextName ? ` title="${escapeHtml(nextName)}"` : "";
   return `
     <div class="station-line-orientation" aria-hidden="false">
-      <div class="station-line-mark station-line-mark--dim">${previousLabel}</div>
+      <div class="station-line-mark station-line-mark--dim"${previousTitle}>${previousLabel}</div>
       <div class="station-line-mark station-line-mark--current"><span class="station-line-dot"></span> ${escapeHtml(name.toUpperCase())}</div>
-      <div class="station-line-mark station-line-mark--dim">${nextLabel}</div>
+      <div class="station-line-mark station-line-mark--dim"${nextTitle}>${nextLabel}</div>
     </div>
     ${currentOrientation ? "" : `<p class="station-cover-note">Neighboring stations aren’t available in this view yet.</p>`}
   `;
@@ -187,6 +224,19 @@ function render(): void {
       render();
     });
   });
+
+  if (isEmbedded) {
+    root.querySelectorAll<HTMLElement>("[data-route-id]").forEach((badge) => {
+      const routeId = badge.dataset.routeId;
+      if (!routeId) return;
+      badge.addEventListener("click", () => postShowLineMode(routeId));
+      badge.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        postShowLineMode(routeId);
+      });
+    });
+  }
 }
 
 async function boot(): Promise<void> {

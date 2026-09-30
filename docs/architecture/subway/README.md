@@ -776,19 +776,19 @@ Platform itself does not exist yet — this batch's own explicit boundary.
 | BLACKBOOK / Bay Ridge Av Station top-chrome nav links | MAP-owned, `position:fixed` | **Unchanged**, verified byte-identical `getBoundingClientRect()` before/after drawer open+close this batch — the BLACKBOOK-position invariant holds |
 | Weather/clock HUD, global MAP chrome | MAP-owned, untouched | **Unchanged** |
 
-**Known gap, intentionally deferred (not silently dropped).**
-`_buildLineBadge`'s click handler (previously inside the now-removed
-identity badge row) was the ONLY production trigger for
-`SubwayLineRibbon.showLineMode()` ("click a served route to see its
-ordered station sequence in the left ribbon"). No replacement trigger
-was added this batch — the drawer's route badges live in a separate
-document and cannot call a `wall/`-realm function directly, and forcing
-the badge row back into `identityEl` (mixed-purpose: partly identity,
-partly a Line Mode trigger) would have re-blurred the exact boundary
-this batch establishes. **Recommended smallest resolution:** a small
-`postMessage` bridge from the drawer's own route-badge click (inside
-`station.html`) to `subwayMezzanineDrawer.js`, which already owns the
-same-origin iframe reference needed to receive it and call
+**Known gap, intentionally deferred (not silently dropped) — RESOLVED in
+STATION-04A, see §17.** `_buildLineBadge`'s click handler (previously
+inside the now-removed identity badge row) was the ONLY production
+trigger for `SubwayLineRibbon.showLineMode()` ("click a served route to
+see its ordered station sequence in the left ribbon"). No replacement
+trigger was added this batch — the drawer's route badges live in a
+separate document and cannot call a `wall/`-realm function directly, and
+forcing the badge row back into `identityEl` (mixed-purpose: partly
+identity, partly a Line Mode trigger) would have re-blurred the exact
+boundary this batch establishes. **Recommended smallest resolution:** a
+small `postMessage` bridge from the drawer's own route-badge click
+(inside `station.html`) to `subwayMezzanineDrawer.js`, which already owns
+the same-origin iframe reference needed to receive it and call
 `SBE.SubwayLineRibbon.showLineMode()` on MAP's side.
 
 ### Station Cover migration — reused / moved / superseded / retained
@@ -809,14 +809,11 @@ same-origin iframe reference needed to receive it and call
   exactly — only its label/destination changed.
 - **Retained, unmodified:** `music/station.html` remains independently
   reachable as a standalone, full-page HOME surface
-  (`{surface:"station", stationId}`) and via `subwayStationCoverNavLink.js`'s
-  own always-visible top-chrome pill — useful for a direct/shareable
-  link to a station's page outside of MAP context. **Intentionally left
-  for STATION-05 evaluation:** now that the drawer opens automatically
-  on every MAP selection and supersedes the pill's original "get me to
-  Station Cover" job for the common case, whether that pill should be
-  retired (per this codebase's own "never duplicate navigation" doctrine)
-  is a real open question this batch does not resolve unilaterally.
+  (`{surface:"station", stationId}`) — useful for a direct/shareable link
+  to a station's page outside of MAP context. **RESOLVED in STATION-04A
+  — see §17:** the redundant `subwayStationCoverNavLink.js` top-chrome
+  pill this section originally flagged for evaluation has since been
+  retired.
 
 ### Forward-architecture constraint — verified, not just stated
 
@@ -969,3 +966,83 @@ discovering representation gaps only after a much larger investment; a
 minimal renderer proves the contract is sufficient for real drawing, the
 same way this batch's synthetic island fixture proved it sufficient for
 relationship queries.
+
+## 17. STATION-04A — Mezzanine Drawer corrective batch
+
+Closes two items STATION-04 explicitly deferred, plus a route-badge
+layout defect found in review (drawer route badges could overflow/crowd
+at narrow widths or high service counts, with no wrapping rule).
+
+**Route badge wrapping — layout-width-driven, never station-specific.**
+`.station-cover-routes` (`music/station.html`) gained `flex-wrap: wrap`;
+each `.station-route-badge` gained `flex-shrink: 0`. Route symbols keep
+their canonical circular geometry (verified: every badge stays exactly
+square, uniform size, across Bay Ridge Av/1 route, Canal St/7 routes,
+Times Sq-42 St–Port Authority/11 resolvable routes, at all three widths)
+— wrapping onto additional rows is the only thing allowed to give, and
+it is a pure function of available width (no per-station or per-route-
+count branch anywhere in the code). Long station names
+(`.station-cover-name`) wrap via default block text flow plus
+`overflow-wrap: break-word`. Local-line-orientation neighbor labels
+(`.station-line-mark--dim`) gained `min-width: 0` (the standard flexbox
+fix — a flex item's default min-width is its own content's natural
+width, which silently defeats wrapping/ellipsis otherwise) plus
+`overflow: hidden; text-overflow: ellipsis`, with the full real name
+preserved in a `title` attribute; the current-station label
+(`--current`) gained `min-width: 0` and wraps rather than truncating,
+since it's the page's primary label.
+
+**`subwayStationCoverNavLink.js` retired.** No longer loaded by
+`wall/index.html` (script tag removed); the source file is kept, not
+deleted, with its own header updated to explain why. `music/station.html`
+remains fully reachable standalone and via the HOME `{surface:"station"}`
+route — only the redundant, hardcoded-to-Bay-Ridge-Av, always-visible
+top-chrome trigger is gone. BLACKBOOK's own nav link position was
+verified byte-identical before/after this removal (the position
+invariant holds — nothing else occupied the freed vertical slot, nothing
+needed to shift).
+
+**`SubwayLineRibbon.showLineMode()` restored via `postMessage`.** Exactly
+the mechanism §15 already recommended: `stationCoverRuntime.ts`'s route
+badges become clickable/keyboard-operable (`role="button"`, `tabindex`,
+Enter/Space) ONLY when embedded (`isEmbedded`), posting
+`{type:"stationCover:showLineMode", routeId}` to `window.parent` at the
+real, same-origin target. `subwayMezzanineDrawer.js` — which already
+owns the one real reference to its own iframe's `contentWindow` — adds a
+`window` `message` listener that validates BOTH `event.origin` (same-
+origin) AND `event.source` (must be exactly this drawer's own iframe
+window, never any other same-origin frame) before calling
+`SBE.SubwayLineRibbon.showLineMode('subway:route:' + routeId)` — the
+same canonical-id convention the original, removed click handler used.
+Verified live end-to-end: clicking (and Enter-key-activating) a route
+badge inside the embedded drawer moves the real Ribbon from `collapsed`
+to `line` mode. The standalone page sends no message at all
+(`window.parent === window` there) and its badges carry no interactive
+attributes.
+
+**Testing.** `subwayMezzanineDrawerTests` (wall/, hand-rolled) extended
+with the message-handling contract (+7 cases): valid message resolves to
+the correct canonical route id; wrong origin, wrong source window, wrong
+message type, empty/missing routeId, and null data are all independently
+verified to be ignored, never partially handled. Live-verified: all
+three named stations (Bay Ridge Av/1 route, Canal St/7 routes, Times
+Sq-42 St–Port Authority/11 resolvable routes) at all three widths
+(315px/360px/540px) — route badges never deform/shrink/hide, always
+uniform circles; long neighbor names ellipsis-truncate with a real
+`title` fallback; long station names wrap without escaping the drawer;
+the retired pill is absent from the DOM and its module isn't even
+loaded; BLACKBOOK position unchanged; the `showLineMode` round-trip
+works by click and by keyboard. Full hand-rolled `wall/` regression
+sweep (`subwayMezzanineDrawerTests`, `subwayLineRibbonTests`,
+`subwayPresentationSurfaceTests`) clean. MUSIC/Vite suite: 3903/3910
+(7 pre-existing skips, 11 pre-existing unrelated `trainingExclusionExport`
+failures from a missing `WOS-share/SUNO` fixture, untouched by this
+batch) — typecheck and lint clean on every touched file. One
+pre-existing, environment-dependent `subwayStationHudTests` YOUR TRIP/
+BOARD failure pair was observed (depends on a live train matching a
+synthetic scenario at the moment the suite runs) — confirmed unrelated:
+this batch touched no file `subwayStationHudTests` exercises.
+
+This batch touched no Station Base Truth, archetype, Platform-rendering,
+train-movement, door, realtime-transit-authority, or 3D-editor code —
+presentation-layer only, exactly as scoped.

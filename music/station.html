@@ -30,21 +30,35 @@
 
   .station-cover-enter-platform { margin-top: 2rem; width: 100%; padding: 10px 18px; border-radius: 9px; border: 1px solid rgba(255,255,255,.14); background: none; color: #a39a8d; font: 700 12px/1 inherit; letter-spacing: .05em; cursor: not-allowed; text-align: center; }
 
-  .station-cover-name { font-size: 26px; font-weight: 600; margin: 0 0 .875rem; letter-spacing: -.01em; }
+  .station-cover-name { font-size: 26px; font-weight: 600; margin: 0 0 .875rem; letter-spacing: -.01em; overflow-wrap: break-word; }
 
   /* STATION-02 -- circular outline "tinted glass" route badge. Border +
      glyph in the real route color, interior fill at ~10% opacity of the
      SAME color (tintBackground, derived not hardcoded) -- never a heavy
-     solid bullet/pill. */
-  .station-cover-routes { display: flex; gap: 10px; margin-bottom: 1.75rem; }
+     solid bullet/pill.
+     STATION-04A -- route symbols must never deform, shrink, or become
+     hidden, at any drawer width or service count. `flex-wrap` lets the
+     container grow onto additional rows purely from available width
+     (never a station-specific row-count rule); `flex-shrink: 0` on each
+     badge guarantees its circular geometry can never compress to fit --
+     wrapping is the only thing that's allowed to give. */
+  .station-cover-routes { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 1.75rem; }
   .station-route-badge {
     display: inline-flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
     width: 34px; height: 34px; border-radius: 50%;
     border: 1.5px solid var(--route-color);
     background: var(--route-tint);
     color: var(--route-color);
     font: 700 15px/1 inherit;
   }
+  /* STATION-04A -- clickable only inside the Mezzanine Drawer (see
+     stationCoverRuntime.ts's isEmbedded branch); restores the Line Mode
+     entry point STATION-04's own MAP cleanup removed, via a postMessage
+     bridge to subwayMezzanineDrawer.js rather than a direct wall/-realm
+     call this document cannot make. */
+  .station-route-badge--interactive { cursor: pointer; }
+  .station-route-badge--interactive:hover, .station-route-badge--interactive:focus-visible { background: var(--route-color); color: #0e0d0b; outline: none; }
 
   .station-cover-location { color: #8a8177; font-size: 13px; margin: 0 0 2.5rem; letter-spacing: .02em; }
   .station-cover-status { color: #8a8177; }
@@ -70,11 +84,16 @@
   .station-arrival-eta { color: #f4efe7; font-weight: 600; }
 
   /* STATION-02 -- quiet-at-rest local line orientation. Dashes either
-     side of a single current-station marker, no permanent station list. */
+     side of a single current-station marker, no permanent station list.
+     STATION-04A -- long real station names (e.g. "Port Authority Bus
+     Terminal") must stay readable and never push the drawer wider than
+     its own resizable 315-540px range. `min-width: 0` is the classic
+     flexbox fix (a flex item's default min-width is its content's
+     natural width, which silently defeats `flex`/wrapping otherwise). */
   .station-line-orientation { display: flex; align-items: center; gap: 10px; margin-bottom: .375rem; font-size: 12px; letter-spacing: .04em; }
-  .station-line-mark--dim { color: #3a352e; flex: 1; text-align: center; }
-  .station-line-mark--current { display: flex; align-items: center; gap: 6px; color: #f4efe7; font-weight: 700; white-space: nowrap; }
-  .station-line-dot { width: 6px; height: 6px; border-radius: 50%; background: #f4efe7; display: inline-block; }
+  .station-line-mark--dim { color: #3a352e; flex: 1; min-width: 0; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .station-line-mark--current { display: flex; align-items: center; gap: 6px; min-width: 0; flex: 0 1 auto; color: #f4efe7; font-weight: 700; overflow-wrap: break-word; }
+  .station-line-dot { width: 6px; height: 6px; border-radius: 50%; background: #f4efe7; display: inline-block; flex-shrink: 0; }
 </style>
 </head>
 <body>
