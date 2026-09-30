@@ -14,6 +14,17 @@
 // Advanced Channel configuration (rotation editing, Activate/Deactivate,
 // Start/Restart Rotation Now) stays in Channel Control -- not duplicated
 // here.
+//
+// NOT actually circular with "a Program needs a Channel to be created":
+// `CreateRadioProgramInput` has no `channelId` field at all (only
+// `stationId`, the source RadioPlaylist) -- Program creation never
+// depends on any Channel existing. A brand-new station with zero
+// Channels AND zero Programs still has a real bootstrap path: Event
+// Radio Control's "Add Published Program" creates a Program directly
+// from a published package's manifest URL, independent of this dialog
+// entirely. This dialog's own Program requirement only means "pick which
+// already-existing Program seeds the new Channel's rotation" -- it is
+// never the only way a Program can come into existence.
 
 import { useEffect, useState } from "react";
 import {
@@ -101,7 +112,7 @@ export function RadioNewChannelDialog({ getChannelRepository, getEventRadioRepos
             Initial Program
             <select value={programId} onChange={(e) => setProgramId(e.target.value)} disabled={!programs || programs.length === 0}>
               {!programs && <option value="">Loading…</option>}
-              {programs?.length === 0 && <option value="">No Programs exist yet — schedule one on an existing Channel first</option>}
+              {programs?.length === 0 && <option value="">No Programs exist yet — create one first via Event Radio Control's "Add Published Program"</option>}
               {programs?.map((p) => (
                 <option key={p.id} value={p.id}>{p.title}</option>
               ))}
