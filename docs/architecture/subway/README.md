@@ -344,3 +344,92 @@ concerns).
   representations owning or forking the underlying geometry. Today, none of
   these consumers exist (§1, §10); this is a statement of intended direction
   for whoever eventually builds the bridge, not a claim that it's built.
+
+## 12. STATION-01 — Station Cover V1 (Bay Ridge Av)
+
+The first real, implemented station REPRESENTATION — deliberately reads a
+DIFFERENT canonical truth source than the `StationGeometryData`/§5-§7
+system above (which remains unbridged, see §10; Station Cover V1 does not
+touch it at all).
+
+```
+Station Truth (existing, read-only)
+  wall/data/subway/mtaSubwayStaticSnapshot.json
+    .complexes[]  -- name, borough, routes[], lat/lon, gtfsStopIds[]
+    .routes[]     -- shortName, longName, color, textColor
+       ↓ fetch (same-origin: /wall-app/data/subway/mtaSubwayStaticSnapshot.json,
+         real in both dev [proxy] and production [copy-wall-app-public])
+music/src/logic/maps/stationTruth.ts
+  resolveStationTruth(snapshot, gtfsStopId) -- pure lookup, never a fetch
+  fetchStationTruth(gtfsStopId) -- the one IO wrapper
+       ↓
+music/src/logic/maps/stationCoverPresentation.ts
+  deriveStationCoverDisplay(stationId, truth) -- pure state->display,
+  same "logic vs. DOM adapter" split as memberAvatarPresentation.ts
+       ↓
+music/src/station/stationCoverRuntime.ts + music/station.html
+  the actual Station Cover page (a new hosted-capable surface, alongside
+  MAP and BLACKBOOK)
+```
+
+**Station Truth is independent from Station Representation, verified by
+construction, not just stated as direction (unlike §11's own
+`StationGeometryData` paragraph, which remains a stated-but-unbuilt
+direction):** `stationTruth.ts` never fetches a second copy of station
+name/routes/location — it reads the exact same file
+`wall/systems/transit/mtaSubwayStaticAdapter.js` already treats as
+canonical, by the exact same field names. No parallel station database,
+no hard-coded Bay Ridge Av facts, no second identity scheme — the real
+GTFS station-level stop id (`gtfsStopId`, e.g. `"R42"`) is the ONE
+parameter Station Cover is built around; Bay Ridge Av is the first
+instance, not a one-off page.
+
+**Deliberately does NOT expose underground/elevated classification.**
+`stationClassificationTypes.ts` has no automatic classifier and no
+station (including Bay Ridge Av) has a hand-authored classification
+record today (§5, §10) — `stationCoverPresentation.ts` has no field to
+render one from, by construction, rather than by an ad hoc omission
+check. A future batch that adds real, provenanced classification data
+extends `StationTruth`/`StationCoverDisplay` then, not before.
+
+**Hosted surface — MEMBER/RADIO ownership unchanged.** `music/station.html`
+is a third HOME-hostable surface, added to `HomeRoute`
+(`{surface:"station", stationId}`, `music/src/data/homeRouteTypes.ts`)
+and `childUrl()`/`homeRoutes.ts` alongside `map`/`blackbook`, same
+identity/readiness contract (`stationHomeSurface.ts`, modeled on
+`blackbookHomeSurface.ts` — explicit query-based detection, `reportReady()`
+once, `requestNavigateToMap()` delegates through HOME's own navigation
+authority when hosted). Station Cover constructs NO `MemberIdentityAuthority`
+and NO `RadioChannelReceiver` of its own — MEMBER (the persistent avatar,
+`homeMemberAvatar.ts`) and RADIO (`homeRadioSession.ts`) both live
+entirely in the persistent parent, outside every surface's own iframe, so
+navigating MAP → STATION → MAP (or BLACKBOOK ↔ STATION) never reconstructs
+either — verified by the same persistent-runtime-UUID/mount-count test
+pattern `homeNavigation.test.ts` already uses for MAP ↔ BLACKBOOK.
+
+**MAP entry (Phase 4 scope): one small, hosted-aware nav link, not a
+general station-click system.** `wall/systems/presentation/subwayStationCoverNavLink.js`
+(loaded in `wall/index.html` beside `subwayBlackbookNavLink.js`, same
+exact pattern: a real `<a href="station.html?station=R42">` standalone,
+intercepted via `HomeMapSurface.requestNavigate({surface:"station",
+stationId:"R42"})` when hosted) is scoped to this batch's own calibration
+station only. `subwayStationHud.js`'s existing, more complex per-station
+hover/arrival interaction was deliberately NOT touched — general "click
+any station to open its Cover" wiring is future work, not this batch.
+
+**Public creative-space boundary: navigation contract only, never a
+fake implementation.** No canonical station-associated public
+drawing/creative-space surface exists yet (personal BLACKBOOK and
+general MAP paint are the only two existing authoring surfaces, both
+member-personal or general-map-wide — neither is station-specific public
+space, see §8). Station Cover's own "Enter station creative space" action
+is rendered as an honest, disabled, clearly-labeled placeholder — never
+silently wired to BLACKBOOK, never a fake drawing surface. A future batch
+that builds a real station-associated public creative space wires this
+exact button; this batch intentionally goes no further.
+
+**Visual scope: intentionally minimal.** Station name, route badge(s)
+(color/label from the canonical routes table), borough (full name when
+recognized, the raw code as a fallback, omitted only when truth supplies
+none), and the two navigation actions above — nothing else. No photos, no
+arrivals, no directions, no 3D, no promotional content.

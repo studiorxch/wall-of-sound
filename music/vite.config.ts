@@ -2145,6 +2145,7 @@ export default defineConfig({
         main: path.resolve(__dirname, 'index.html'),
         radioPlayer: path.resolve(__dirname, 'radio-player.html'),
         blackbook: path.resolve(__dirname, 'blackbook.html'),
+        station: path.resolve(__dirname, 'station.html'),
         eventControl: path.resolve(__dirname, 'event-control.html'),
         channelControl: path.resolve(__dirname, 'channel-control.html'),
         channelRadio: path.resolve(__dirname, 'channel-radio.html'),

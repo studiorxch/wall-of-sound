@@ -29,6 +29,15 @@ const childUrl = (route: HomeRoute, identity: HomeSurfaceIdentity): string => {
     url.search = new URLSearchParams({ host: "home", homeRuntime: identity.runtimeId, homeNavigation: String(identity.navigationId) }).toString();
     return url.href;
   }
+  if (route.surface === "station") {
+    // STATION-01 -- the real Station Cover document (music/station.html),
+    // same same-origin/query-identity contract as MAP/BLACKBOOK above.
+    // `stationId` is the real GTFS station-level stop id (validated by
+    // homeRoutes.ts's own isStationId before a route can ever reach here).
+    const url = new URL("/station.html", location.origin);
+    url.search = new URLSearchParams({ host: "home", homeRuntime: identity.runtimeId, homeNavigation: String(identity.navigationId), station: route.stationId }).toString();
+    return url.href;
+  }
   // HOST-03 -- the real BLACKBOOK document, not the HOST-01/02 fixture.
   // Mounted either bare (no prior artwork route -- BLACKBOOK resolves its
   // own initial artwork internally via localStorage/fallback, same as
@@ -175,6 +184,11 @@ frame.addEventListener("error", () => navigation.fail(navigation.getState().navi
 window.addEventListener("popstate", () => navigation.restore(location.search));
 required("#map").addEventListener("click", () => navigation.requestNavigate({ surface: "map" }));
 required("#blackbook").addEventListener("click", () => navigation.requestNavigate({ surface: "blackbook" }));
+// STATION-01 -- dev-harness entry for direct acceptance testing, same
+// posture as #map/#blackbook above (not chrome polish -- the minimum
+// needed to reach the new surface at all from this harness). Bay Ridge Av
+// (R42) is this batch's own calibration station.
+required("#station").addEventListener("click", () => navigation.requestNavigate({ surface: "station", stationId: "R42" }));
 required("#back").addEventListener("click", () => history.back());
 required("#forward").addEventListener("click", () => history.forward());
 required("#retry").addEventListener("click", () => navigation.retry());

@@ -17,16 +17,19 @@ function fixture() {
 }
 
 describe("HOST-01 route boundary", () => {
-  it.each(["", "?surface=map", "?surface=blackbook", "?surface=blackbook&artwork=A%26B%3F%23"])('roundtrips local route %s', search => {
+  it.each(["", "?surface=map", "?surface=blackbook", "?surface=blackbook&artwork=A%26B%3F%23", "?surface=station&station=R42"])('roundtrips local route %s', search => {
     const route = parseHomeSearch(search)!;
     expect(route).not.toBeNull();
     expect(parseHomeSearch(serializeHomeRoute(route))).toEqual(route);
   });
-  it.each(["?surface=radio", "?surface=map&artwork=A", "?surface=blackbook&artwork=", "?surface=map&surface=blackbook", "?surface=blackbook&artwork=A&artwork=B", "?url=https://example.com", "?surface=blackbook&artwork=a%2Fb", "?surface=blackbook&artwork=%00"])("rejects invalid local URL %s", search => {
+  it.each(["?surface=radio", "?surface=map&artwork=A", "?surface=blackbook&artwork=", "?surface=map&surface=blackbook", "?surface=blackbook&artwork=A&artwork=B", "?url=https://example.com", "?surface=blackbook&artwork=a%2Fb", "?surface=blackbook&artwork=%00", "?surface=station", "?surface=station&station=", "?surface=station&station=a%2Fb", "?surface=station&station=%00", "?surface=station&artwork=A"])("rejects invalid local URL %s", search => {
     expect(parseHomeSearch(search)).toBeNull();
   });
-  it.each([null, [], "map", "/wall-app/", "https://example.com", { surface: "map", url: "/unsafe" }, { surface: "blackbook", artworkId: 4 }, { surface: "map", artworkId: "A" }, { surface: "blackbook", artworkId: " A" }])("rejects non-route destinations %#", value => {
+  it.each([null, [], "map", "/wall-app/", "https://example.com", { surface: "map", url: "/unsafe" }, { surface: "blackbook", artworkId: 4 }, { surface: "map", artworkId: "A" }, { surface: "blackbook", artworkId: " A" }, { surface: "station" }, { surface: "station", stationId: 42 }, { surface: "station", stationId: " R42" }, { surface: "station", stationId: "R42", artworkId: "A" }])("rejects non-route destinations %#", value => {
     expect(validateHomeRoute(value)).toBeNull();
+  });
+  it("STATION-01: accepts a valid station route", () => {
+    expect(validateHomeRoute({ surface: "station", stationId: "R42" })).toEqual({ surface: "station", stationId: "R42" });
   });
   it("copies and freezes destination data so a child cannot mutate parent state", () => {
     const input = { surface: "blackbook", artworkId: "A" };
@@ -132,5 +135,20 @@ describe("HOST-01 parent navigation authority", () => {
     expect(new Set(f.mounts.map(x => x.identity.runtimeId))).toEqual(new Set(["parent-session"]));
     expect(f.leaves()).toBe(4);
     expect(f.nav.getState()).toMatchObject({ runtimeId: "parent-session", mounts: 5, leaves: 4 });
+  });
+
+  it("STATION-01: MAP -> STATION -> MAP preserves the SAME persistent host runtime identity (the same invariant persistent MEMBER/RADIO session ownership depends on)", () => {
+    const f = fixture(); f.nav.restore("", true); f.ready();
+    f.nav.requestNavigate({ surface: "station", stationId: "R42" });
+    f.ready();
+    f.nav.requestNavigate({ surface: "map" });
+    f.ready();
+    expect(new Set(f.mounts.map(x => x.identity.runtimeId))).toEqual(new Set(["parent-session"]));
+    expect(f.mounts.map(x => x.route)).toEqual([
+      { surface: "map" },
+      { surface: "station", stationId: "R42" },
+      { surface: "map" },
+    ]);
+    expect(f.leaves()).toBe(2);
   });
 });

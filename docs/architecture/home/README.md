@@ -666,3 +666,24 @@ middleware) has no on-the-fly TS transform for this specific path, so it
 strong evidence MAP's would behave identically once built. Actual Google
 sign-in/Sign-Out/Edit-Profile were not exercised by this automated pass
 (real third-party credentials) — left for human acceptance.
+
+## STATION-01 — Station Cover as a third hosted surface
+
+`music/station.html`/`stationCoverRuntime.ts` (Bay Ridge Av, R42) joins
+MAP and BLACKBOOK as a third surface the persistent shell can host —
+`HomeRoute` gained `{surface:"station", stationId}`
+(`homeRouteTypes.ts`/`homeRoutes.ts`), `childUrl()` gained the matching
+case, and `stationHomeSurface.ts` (modeled directly on
+`blackbookHomeSurface.ts`) is its identity/readiness/navigation adapter.
+No new HOME infrastructure was needed — `getMemberIdentity`/`getRadioSession`
+and the persistent avatar/RADIO session already work for any hosted
+surface, not specifically MAP/BLACKBOOK; Station Cover is simply a new
+consumer of the exact same bridge, and constructs neither a
+`MemberIdentityAuthority` nor a `RadioChannelReceiver` of its own. Full
+Station Truth/Cover design detail lives in
+[../subway/README.md](../subway/README.md)'s own "STATION-01" section —
+not duplicated here. Verified live (`http://localhost:5176/home-dev.html?surface=map`
+→ STATION → back to MAP): the persistent runtime UUID and mount/leave
+counts were unchanged across the round trip, and the avatar was never
+remounted, exactly matching the MAP ↔ BLACKBOOK invariant this same
+harness already proved for MEMBER-01A/RADIO-01.
