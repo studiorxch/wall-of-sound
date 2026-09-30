@@ -5,15 +5,72 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>StudioRich Station</title>
 <style>
-  body { font: 16px/1.4 -apple-system, system-ui, sans-serif; margin: 0; padding: 2rem 1.5rem; background: #0e0d0b; color: #f4efe7; }
-  #station-back-to-map { display: inline-block; margin-bottom: 1.5rem; color: #f4efe7; text-decoration: none; padding: 6px 12px; border: 1px solid rgba(255,255,255,.24); border-radius: 8px; font: 700 11px/1 inherit; letter-spacing: .07em; }
-  #station-back-to-map:hover { border-color: rgba(255,255,255,.5); }
-  .station-cover-name { font-size: 28px; margin: 0 0 .5rem; }
-  .station-cover-routes { display: flex; gap: 8px; margin-bottom: .5rem; }
-  .station-route-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 28px; height: 28px; padding: 0 8px; border-radius: 14px; font: 700 14px/1 inherit; }
-  .station-cover-location { color: #c8c0b6; font-size: 14px; margin: 0 0 1.5rem; }
-  .station-cover-status { color: #c8c0b6; }
-  .station-cover-creative-space { margin-top: .5rem; padding: 10px 18px; border-radius: 9px; border: 1px solid rgba(255,255,255,.16); background: rgba(255,255,255,.06); color: #c8c0b6; font: 700 12px/1 inherit; letter-spacing: .04em; cursor: not-allowed; }
+  :root { color-scheme: dark; }
+  body { font: 16px/1.4 -apple-system, system-ui, sans-serif; margin: 0; padding: 3rem 1.75rem 4rem; background: #0e0d0b; color: #f4efe7; max-width: 460px; }
+
+  #station-back-to-map { display: inline-block; margin-bottom: 2.5rem; color: #a39a8d; text-decoration: none; padding: 6px 12px; border: 1px solid rgba(255,255,255,.14); border-radius: 8px; font: 700 11px/1 inherit; letter-spacing: .07em; transition: border-color .15s, color .15s; }
+  #station-back-to-map:hover { border-color: rgba(255,255,255,.4); color: #f4efe7; }
+
+  .station-cover-name { font-size: 26px; font-weight: 600; margin: 0 0 .875rem; letter-spacing: -.01em; }
+
+  /* STATION-02 -- circular outline "tinted glass" route badge. Border +
+     glyph in the real route color, interior fill at ~10% opacity of the
+     SAME color (tintBackground, derived not hardcoded) -- never a heavy
+     solid bullet/pill. */
+  .station-cover-routes { display: flex; gap: 10px; margin-bottom: 1.75rem; }
+  .station-route-badge {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 34px; height: 34px; border-radius: 50%;
+    border: 1.5px solid var(--route-color);
+    background: var(--route-tint);
+    color: var(--route-color);
+    font: 700 15px/1 inherit;
+    position: relative;
+    overflow: hidden;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .station-route-badge::after {
+      content: ""; position: absolute; inset: -1.5px; border-radius: 50%;
+      background: conic-gradient(from 0deg, transparent 0deg, rgba(255,255,255,.55) 8deg, transparent 20deg);
+      opacity: 0; animation: station-badge-shine 2.4s ease-out 1;
+      animation-play-state: paused;
+    }
+    .station-cover-routes:hover .station-route-badge::after,
+    .station-route-badge:focus-visible::after { animation-play-state: running; opacity: 1; }
+  }
+  @keyframes station-badge-shine { from { transform: rotate(0deg); opacity: 1; } to { transform: rotate(360deg); opacity: 0; } }
+
+  .station-cover-location { color: #8a8177; font-size: 13px; margin: 0 0 2.5rem; letter-spacing: .02em; }
+  .station-cover-status { color: #8a8177; }
+  .station-cover-note { color: #6b6357; font-size: 12.5px; margin: .5rem 0 0; }
+
+  /* STATION-02 -- restrained N/S control. Descriptive text, not a
+     conventional button pair; active direction may borrow route color,
+     inactive stays subdued. */
+  .station-direction-control { display: flex; align-items: center; gap: 10px; margin: 0 0 1.25rem; }
+  .station-direction-option {
+    appearance: none; background: none; border: none; padding: 0; cursor: pointer;
+    font: 700 11px/1 inherit; letter-spacing: .09em; color: #6b6357;
+    transition: color .15s;
+  }
+  .station-direction-option:hover { color: #a39a8d; }
+  .station-direction-option--active { color: #f4efe7; }
+  .station-direction-sep { color: #3a352e; font-size: 11px; }
+
+  .station-arrivals { margin-bottom: 2rem; }
+  .station-arrival-row { display: flex; align-items: baseline; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid rgba(255,255,255,.06); font-size: 14px; }
+  .station-arrival-row:last-child { border-bottom: none; }
+  .station-arrival-route { color: #c8c0b6; letter-spacing: .02em; }
+  .station-arrival-eta { color: #f4efe7; font-weight: 600; }
+
+  /* STATION-02 -- quiet-at-rest local line orientation. Dashes either
+     side of a single current-station marker, no permanent station list. */
+  .station-line-orientation { display: flex; align-items: center; gap: 10px; margin-bottom: .375rem; font-size: 12px; letter-spacing: .04em; }
+  .station-line-mark--dim { color: #3a352e; flex: 1; text-align: center; }
+  .station-line-mark--current { display: flex; align-items: center; gap: 6px; color: #f4efe7; font-weight: 700; white-space: nowrap; }
+  .station-line-dot { width: 6px; height: 6px; border-radius: 50%; background: #f4efe7; display: inline-block; }
+
+  .station-cover-creative-space { margin-top: 2.5rem; padding: 10px 18px; border-radius: 9px; border: 1px solid rgba(255,255,255,.1); background: none; color: #6b6357; font: 700 12px/1 inherit; letter-spacing: .04em; cursor: not-allowed; }
 </style>
 </head>
 <body>

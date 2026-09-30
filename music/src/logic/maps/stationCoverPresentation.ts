@@ -23,9 +23,31 @@ const BOROUGH_NAMES: Readonly<Record<string, string>> = {
 export interface StationCoverRouteBadge {
   readonly routeId: string;
   readonly label: string;
+  /** The real route color, used for the outline and glyph -- never the fill. */
   readonly color: string;
   readonly textColor: string;
+  /** STATION-02 -- the same route color at ~10% opacity, for the restrained "tinted glass" interior fill (never a heavy solid bullet). Derived, not a second color a designer would need to keep in sync. */
+  readonly tintBackground: string;
 }
+
+/**
+ * `#RRGGBB` -> `rgba(r, g, b, alpha)`. Pure, exported for its own
+ * deterministic test coverage -- this is the one piece of "does the
+ * route-color-derived symbol actually derive from canonical color data"
+ * logic worth testing directly.
+ */
+export function hexToRgba(hex: string, alpha: number): string {
+  const match = /^#([0-9a-fA-F]{6})$/.exec(hex);
+  if (!match) return `rgba(51, 51, 51, ${alpha})`; // same #333333 fallback toRouteBadge already uses
+  const value = match[1]!;
+  const r = parseInt(value.slice(0, 2), 16);
+  const g = parseInt(value.slice(2, 4), 16);
+  const b = parseInt(value.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+/** ~10% opacity -- "very subtle tinted glass," never a solid fill. */
+const ROUTE_TINT_ALPHA = 0.1;
 
 export type StationCoverDisplay =
   | { readonly kind: "loading" }
@@ -40,11 +62,13 @@ export type StationCoverDisplay =
     };
 
 function toRouteBadge(route: StationTruthRoute): StationCoverRouteBadge {
+  const color = /^[0-9a-fA-F]{6}$/.test(route.color) ? `#${route.color}` : "#333333";
   return {
     routeId: route.routeId,
     label: route.shortName || route.routeId,
-    color: /^[0-9a-fA-F]{6}$/.test(route.color) ? `#${route.color}` : "#333333",
+    color,
     textColor: /^[0-9a-fA-F]{6}$/.test(route.textColor) ? `#${route.textColor}` : "#ffffff",
+    tintBackground: hexToRgba(color, ROUTE_TINT_ALPHA),
   };
 }
 

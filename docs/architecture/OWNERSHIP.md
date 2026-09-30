@@ -77,7 +77,7 @@ See [subway/README.md](subway/README.md) for the full current-state map.
 | MAP member paint authoring (free drawing) | `subwayMapPaintSurface.js` → Firestore `artworks` (`surfaceId: map:*`) | ACTIVE |
 | car-surface graffiti authoring | `SubwayArtworkAuthority` / `SubwayArtworkPlacementAuthority` / `SubwayCarSurfaceAuthority` / `SubwayResidentGraffitiArtistAuthority` (`wall/systems/transit/`) | ACTIVE — separate identity/storage from map paint above |
 | RADIO Channel reception (LIVE indicator, RADIO ON/OFF, volume, Now Playing) | `radioChannelReceiverRuntime.ts` (`music/src/member/`) + `radioChannelHud.js` (`wall/systems/presentation/`) | ACTIVE — receiver only, no clock/resolver authority of its own; see [radio/README.md](radio/README.md) |
-| Station Cover (representation, V1: Bay Ridge Av) | `stationTruth.ts` / `stationCoverPresentation.ts` / `stationCoverRuntime.ts` (`music/src/`) | ACTIVE — reads `MTASubwayStationLibrary`'s own static snapshot directly, never a second station database; see [subway/README.md](subway/README.md)'s "STATION-01" section |
+| Station Cover (representation, V1: Bay Ridge Av) | `stationTruth.ts` / `stationCoverPresentation.ts` / `stationArrivalPresentation.ts` / `stationCoverRuntime.ts` (`music/src/`) | ACTIVE — reads `MTASubwayStationLibrary`'s own static snapshot directly, never a second station database; live arrivals and station-ordering-along-route remain unreachable STOP findings, see [subway/README.md](subway/README.md)'s "STATION-01"/"STATION-02" sections |
 
 The live runtime authorities above and the MUSIC-side station-geometry
 authoring tools are **two disjoint systems** — see

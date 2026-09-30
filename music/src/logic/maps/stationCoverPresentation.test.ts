@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { deriveStationCoverDisplay } from "./stationCoverPresentation";
+import { deriveStationCoverDisplay, hexToRgba } from "./stationCoverPresentation";
 import type { StationTruth } from "./stationTruth";
 
 const BAY_RIDGE_AV: StationTruth = {
@@ -27,7 +27,7 @@ describe("deriveStationCoverDisplay -- STATION-01", () => {
     expect(result.kind).toBe("resolved");
     if (result.kind !== "resolved") throw new Error("unreachable");
     expect(result.name).toBe("Bay Ridge Av");
-    expect(result.routes).toEqual([{ routeId: "R", label: "R", color: "#F6BC26", textColor: "#000000" }]);
+    expect(result.routes).toEqual([{ routeId: "R", label: "R", color: "#F6BC26", textColor: "#000000", tintBackground: "rgba(246, 188, 38, 0.1)" }]);
   });
 
   it("expands a recognized borough code to its full name", () => {
@@ -62,5 +62,21 @@ describe("deriveStationCoverDisplay -- STATION-01", () => {
     if (result.kind !== "resolved") throw new Error("unreachable");
     expect(result.routes[0]!.color).toBe("#333333");
     expect(result.routes[0]!.textColor).toBe("#ffffff");
+  });
+
+  it("STATION-02: the route badge's tint background is derived from the SAME real route color, never a second color", () => {
+    const result = deriveStationCoverDisplay("R42", BAY_RIDGE_AV);
+    if (result.kind !== "resolved") throw new Error("unreachable");
+    expect(result.routes[0]!.tintBackground).toBe(hexToRgba(result.routes[0]!.color, 0.1));
+  });
+});
+
+describe("hexToRgba -- STATION-02", () => {
+  it("converts a real hex route color to a low-alpha rgba string", () => {
+    expect(hexToRgba("#F6BC26", 0.1)).toBe("rgba(246, 188, 38, 0.1)");
+  });
+
+  it("falls back safely for an invalid hex string rather than throwing", () => {
+    expect(hexToRgba("not-a-color", 0.1)).toBe("rgba(51, 51, 51, 0.1)");
   });
 });

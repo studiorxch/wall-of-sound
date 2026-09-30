@@ -433,3 +433,106 @@ exact button; this batch intentionally goes no further.
 recognized, the raw code as a fallback, omitted only when truth supplies
 none), and the two navigation actions above — nothing else. No photos, no
 arrivals, no directions, no 3D, no promotional content.
+
+## 13. STATION-02 — Live transit + directional line view + visual refinement
+
+Extends V1 (§12) toward Station Cover's permanent role — MAP → STATION
+COVER → {identity, line/service orientation, live arrivals, N/S context}
+— without changing which system owns Station Truth. Station Cover still
+consumes; it still never becomes a truth authority.
+
+**Route symbol visual language.** `stationCoverPresentation.ts` gained
+`hexToRgba()` and a `tintBackground` field on `StationCoverRouteBadge`,
+derived from the SAME real route color already resolved in V1 (never a
+second, hand-picked color). `stationCoverRuntime.ts`/`station.html` render
+it as a circular outline (1.5px border, route-color glyph, ~10% opacity
+interior fill) instead of V1's solid pill, with an optional
+`prefers-reduced-motion`-respecting hover/focus "shine" — purely
+presentational CSS, no new data dependency.
+
+**Arrival display rule — implemented as pure logic, deliberately NOT
+wired to a live feed.** New module `music/src/logic/maps/stationArrivalPresentation.ts`
+(`selectStationArrivalRows(arrivals, direction)`) enforces the one real
+business rule: maximum two upcoming arrivals per service, per direction,
+nearest-first, with multiple simultaneous services each keeping their own
+capped rows. Fully unit-tested (9 cases) against synthetic input.
+`stationCoverRuntime.ts` currently calls it with an **empty arrival
+array** and renders an honest "Live arrivals aren't available in this
+view yet" note — see the STOP finding below for why.
+
+**Northbound/Southbound.** `stationCoverRuntime.ts` holds a small local
+`direction: "N" | "S"` UI state (default `"N"`) that drives which
+capped-arrival set `selectStationArrivalRows` would show and which local-line
+emphasis is shown. **Default rationale:** no directional entry-state
+exists anywhere in the current navigation contract
+(`{surface:"station", stationId}` carries no direction) — `"N"` is the
+smallest deterministic default, not a derived one. A future batch adding
+a real directional entry point (e.g. from an itinerary/destination
+context) should replace this constant with that context rather than
+building around it now, per the task's own explicit "don't block future
+station-model N/S architecture" framing.
+
+**Local line orientation — minimal, honest, not wired to real ordering.**
+`stationCoverRuntime.ts` renders only the current station (a dot +
+name) flanked by two dim dash placeholders — never a fabricated
+neighboring station. See the second STOP finding below for why real
+neighbors aren't shown.
+
+### STOP finding 1 — live arrival authority is unreachable from Station Cover today
+
+`wall/systems/transit/subwayArrivalIntelligence.js` is pure in the sense
+of having no fetch/DOM/persistence of its own, but it reads from
+`MTASubwayTransitStore`, a **live, in-memory object populated by
+`mtaSubwayRealtimeAdapter.js`'s own polling inside `wall/`'s JS realm**.
+Station Cover is a separately-hosted document (§12's "Hosted surface"
+paragraph) — HOME's iframe surface-swap is a full document reload
+(`frame.contentWindow.location.replace(...)`), which destroys MAP's
+entire `wall/` runtime, including that live store, whenever Station
+Cover (rather than MAP) is the mounted surface. There is today no
+static/cross-document path to that data, unlike the static GTFS
+snapshot §12 already established as safe to fetch directly.
+
+**Recommended smallest resolution (not built this batch):** a
+RADIO-01-style persistent live-transit session, owned by the persistent
+HOME parent (outside any single surface's iframe, same shape as
+`RadioChannelReceiver`/`homeRadioSession.ts`), exposing a
+`getTransitSession()` bridge method on `window.StudioRichHome` that a
+hosted Station Cover could read/subscribe to without needing `wall/`'s
+own runtime alive. Scoped, not attempted here — no such persistent
+session exists yet for transit data, and building one is a meaningfully
+larger batch than a visual-refinement pass.
+
+### STOP finding 2 — canonical station-ordering-along-a-route authority is absent/unreachable
+
+`wall/systems/transit/subwayItineraryLegResolver.js`'s `resolveLeg()` is
+the closest existing "ordering" logic, but it requires an explicit
+origin+destination pair (an itinerary query, not a "what's adjacent to
+this one station" query) and also depends on live `SBE` globals scoped to
+`wall/`'s own JS realm — the same reachability problem as Finding 1, not
+a separate one. No pure, static "given a route + a station, what are its
+immediate neighbors" function exists anywhere in the codebase today.
+
+**Recommended smallest resolution (not built this batch):** a new pure
+shape-projection module operating on the already-fetched static
+snapshot's `shapes[]`/`stops[]` data (same file §12's `stationTruth.ts`
+already reads), projecting a route's stops into an ordered sequence by
+shape distance — no live dependency, no `wall/` runtime required. This is
+additive to `stationTruth.ts`, not a replacement for it.
+
+**Both findings are reported per the task's own explicit STOP-condition
+instructions, not treated as blockers for the rest of this batch.** The
+UI shows an honest "not yet available" state for each rather than
+inventing arrivals or neighboring stations; the display-rule logic
+(`stationArrivalPresentation.ts`) is fully built and tested ahead of the
+data becoming reachable, so wiring either resolution above requires no
+further change to the arrival-selection or line-orientation rendering
+logic — only a real data source behind each.
+
+**Testing.** `stationArrivalPresentation.test.ts` (9 cases: cap-at-2,
+multi-service, cross-service sort, direction filtering, eta-order vs.
+array-order, due/minute formatting, empty-safe, three-simultaneous-services).
+`stationCoverPresentation.test.ts` extended with `hexToRgba` coverage (2
+cases) and a `tintBackground`-derives-from-the-same-color assertion.
+Existing `homeNavigation.test.ts` MAP↔STATION mount/leave/runtime-UUID
+coverage re-verified passing, unmodified — no navigation-contract change
+this batch.
