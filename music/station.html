@@ -28,17 +28,36 @@
     position: relative;
     overflow: hidden;
   }
+  /* STATION-02A -- corrective pass. The shine must read as a small
+     specular glint riding the RING (the border), never a filled wedge
+     from center to edge (that read as a "broken border"/redraw line).
+     Masking the conic-gradient down to a thin band matching the border
+     width is what keeps it confined to the circumference; the wide,
+     soft-edged gradient stops are what keep it a "glint" rather than a
+     hard dash. */
   @media (prefers-reduced-motion: no-preference) {
     .station-route-badge::after {
-      content: ""; position: absolute; inset: -1.5px; border-radius: 50%;
-      background: conic-gradient(from 0deg, transparent 0deg, rgba(255,255,255,.55) 8deg, transparent 20deg);
-      opacity: 0; animation: station-badge-shine 2.4s ease-out 1;
+      content: ""; position: absolute; inset: 0; border-radius: 50%;
+      background: conic-gradient(from 0deg,
+        transparent 0deg,
+        transparent 152deg,
+        rgba(255,255,255,.65) 178deg,
+        transparent 204deg,
+        transparent 360deg);
+      -webkit-mask-image: radial-gradient(circle closest-side, transparent calc(100% - 3.5px), #000 calc(100% - 3px));
+      mask-image: radial-gradient(circle closest-side, transparent calc(100% - 3.5px), #000 calc(100% - 3px));
+      opacity: 0; animation: station-badge-shine 2.2s ease-in-out 1;
       animation-play-state: paused;
     }
     .station-cover-routes:hover .station-route-badge::after,
     .station-route-badge:focus-visible::after { animation-play-state: running; opacity: 1; }
   }
-  @keyframes station-badge-shine { from { transform: rotate(0deg); opacity: 1; } to { transform: rotate(360deg); opacity: 0; } }
+  @keyframes station-badge-shine {
+    0% { transform: rotate(-40deg); opacity: 0; }
+    12% { opacity: 1; }
+    88% { opacity: 1; }
+    100% { transform: rotate(320deg); opacity: 0; }
+  }
 
   .station-cover-location { color: #8a8177; font-size: 13px; margin: 0 0 2.5rem; letter-spacing: .02em; }
   .station-cover-status { color: #8a8177; }
