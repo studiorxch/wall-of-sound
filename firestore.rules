@@ -464,7 +464,8 @@ service cloud.firestore {
     // application/repository boundary instead
     // (firestoreRadioChannelRepository.ts's own validate* functions),
     // with these rules providing the structural/type backstop: real map
-    // shape, a non-empty list, a finite anchor.
+    // shape, a list (non-empty only when `status == 'active'`, RADIO-04D),
+    // a finite anchor.
     match /radioChannels/{channelId} {
       allow read: if true;
       allow write: if isEventOperator()
@@ -478,7 +479,14 @@ service cloud.firestore {
         && request.resource.data.rotation.keys().hasOnly(['anchorAtMs', 'programIds'])
         && request.resource.data.rotation.anchorAtMs is number
         && request.resource.data.rotation.programIds is list
-        && request.resource.data.rotation.programIds.size() >= 1
+        // RADIO-04D -- an `inactive` Channel may have an empty default
+        // rotation (no default Program to fall back on outside a
+        // scheduled window is a legitimate, intentional state); an
+        // `active` Channel still requires at least one, unchanged from
+        // before this batch. See firestoreRadioChannelRepository.ts's
+        // own status-aware isValidRotationShape for the matching
+        // application-layer check.
+        && (request.resource.data.status != 'active' || request.resource.data.rotation.programIds.size() >= 1)
         && request.resource.data.updatedAt == request.time
         && request.resource.data.updatedBy is string;
       allow delete: if isEventOperator();

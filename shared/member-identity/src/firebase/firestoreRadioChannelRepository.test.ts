@@ -43,9 +43,14 @@ describe("validateCreateRadioChannelInput", () => {
     expect(() => validateCreateRadioChannelInput(input, KNOWN_PROGRAMS)).toThrow("invalid_radio_channel_rotation");
   });
 
-  it("rejects an empty programIds list", () => {
-    const input = fullCreateInput({ rotation: validRotation({ programIds: [] }) });
+  it("rejects an empty programIds list when status is active", () => {
+    const input = fullCreateInput({ status: "active", rotation: validRotation({ programIds: [] }) });
     expect(() => validateCreateRadioChannelInput(input, KNOWN_PROGRAMS)).toThrow("invalid_radio_channel_rotation");
+  });
+
+  it("RADIO-04D: accepts an empty programIds list when status is inactive", () => {
+    const input = fullCreateInput({ status: "inactive", rotation: validRotation({ programIds: [] }) });
+    expect(() => validateCreateRadioChannelInput(input, KNOWN_PROGRAMS)).not.toThrow();
   });
 
   it("rejects a non-string entry in programIds", () => {
@@ -78,32 +83,42 @@ describe("validateCreateRadioChannelInput", () => {
 describe("validateUpdateRadioChannelInput", () => {
   it("accepts an update with only channelId (a true no-op patch)", () => {
     const input: UpdateRadioChannelInput = { channelId: "channel-main" };
-    expect(() => validateUpdateRadioChannelInput(input, KNOWN_PROGRAMS)).not.toThrow();
+    expect(() => validateUpdateRadioChannelInput(input, "active", KNOWN_PROGRAMS)).not.toThrow();
   });
 
   it("accepts a title-only update", () => {
     const input: UpdateRadioChannelInput = { channelId: "channel-main", title: "New Title" };
-    expect(() => validateUpdateRadioChannelInput(input, KNOWN_PROGRAMS)).not.toThrow();
+    expect(() => validateUpdateRadioChannelInput(input, "active", KNOWN_PROGRAMS)).not.toThrow();
   });
 
   it("rejects an explicit empty-string title", () => {
     const input: UpdateRadioChannelInput = { channelId: "channel-main", title: "" };
-    expect(() => validateUpdateRadioChannelInput(input, KNOWN_PROGRAMS)).toThrow("invalid_radio_channel_title");
+    expect(() => validateUpdateRadioChannelInput(input, "active", KNOWN_PROGRAMS)).toThrow("invalid_radio_channel_title");
   });
 
   it("rejects an invalid status", () => {
     const input = { channelId: "channel-main", status: "live" } as unknown as UpdateRadioChannelInput;
-    expect(() => validateUpdateRadioChannelInput(input, KNOWN_PROGRAMS)).toThrow("invalid_radio_channel_status");
+    expect(() => validateUpdateRadioChannelInput(input, "active", KNOWN_PROGRAMS)).toThrow("invalid_radio_channel_status");
   });
 
   it("rejects a rotation reorder that references an unknown program", () => {
     const input: UpdateRadioChannelInput = { channelId: "channel-main", rotation: validRotation({ programIds: ["unknown-program"] }) };
-    expect(() => validateUpdateRadioChannelInput(input, KNOWN_PROGRAMS)).toThrow("invalid_radio_channel_program_reference");
+    expect(() => validateUpdateRadioChannelInput(input, "active", KNOWN_PROGRAMS)).toThrow("invalid_radio_channel_program_reference");
   });
 
   it("accepts a valid rotation reorder", () => {
     const input: UpdateRadioChannelInput = { channelId: "channel-main", rotation: validRotation({ programIds: ["late-night", "jungle-fade", "soft-motion-radio"] }) };
-    expect(() => validateUpdateRadioChannelInput(input, KNOWN_PROGRAMS)).not.toThrow();
+    expect(() => validateUpdateRadioChannelInput(input, "active", KNOWN_PROGRAMS)).not.toThrow();
+  });
+
+  it("RADIO-04D: rejects an empty rotation when the effective status is active", () => {
+    const input: UpdateRadioChannelInput = { channelId: "channel-main", rotation: validRotation({ programIds: [] }) };
+    expect(() => validateUpdateRadioChannelInput(input, "active", KNOWN_PROGRAMS)).toThrow("invalid_radio_channel_rotation");
+  });
+
+  it("RADIO-04D: accepts an empty rotation when the effective status is inactive", () => {
+    const input: UpdateRadioChannelInput = { channelId: "channel-main", rotation: validRotation({ programIds: [] }) };
+    expect(() => validateUpdateRadioChannelInput(input, "inactive", KNOWN_PROGRAMS)).not.toThrow();
   });
 });
 
@@ -130,8 +145,15 @@ describe("decodeRadioChannel", () => {
     expect(decodeRadioChannel("channel-main", { ...BASE_CHANNEL_DOC, rotation: { anchorAtMs: Number.NaN, programIds: ["x"] } })).toBeNull();
   });
 
-  it("rejects a document with an empty programIds list", () => {
-    expect(decodeRadioChannel("channel-main", { ...BASE_CHANNEL_DOC, rotation: { anchorAtMs: 1, programIds: [] } })).toBeNull();
+  it("rejects an ACTIVE document with an empty programIds list", () => {
+    expect(decodeRadioChannel("channel-main", { ...BASE_CHANNEL_DOC, status: "active", rotation: { anchorAtMs: 1, programIds: [] } })).toBeNull();
+  });
+
+  it("RADIO-04D: decodes an INACTIVE document with an empty programIds list -- it must remain visible (e.g. to listRadioChannels()), never treated as malformed", () => {
+    const result = decodeRadioChannel("channel-main", { ...BASE_CHANNEL_DOC, status: "inactive", rotation: { anchorAtMs: 1, programIds: [] } });
+    expect(result).not.toBeNull();
+    expect(result!.status).toBe("inactive");
+    expect(result!.rotation.programIds).toEqual([]);
   });
 
   it("rejects a document missing the rotation entirely", () => {

@@ -164,6 +164,35 @@ was added instead, exactly as this architecture's own prior recon required
 ("do not fake those capabilities using anchorAtMs if they are not
 represented by the current model").
 
+**An inactive Channel may have an empty default rotation. An active
+Channel requires at least one default Program. Scheduled programming is
+independently capable of taking priority during its window (RADIO-04D).**
+`isValidRotationShape`/`decodeRadioChannel`
+(`firestoreRadioChannelRepository.ts`) and the `radioChannels` Firestore
+rule are all status-aware: `rotation.programIds.length === 0` is rejected
+(write) and treated as malformed (read) only when `status === "active"`.
+An `inactive` Channel with `programIds: []` is a real, valid, visible
+document — it simply has no default fallback outside a scheduled window,
+which every consumer in this chain (`hydrateChannelRotationFromCatalog`,
+`resolveChannelRotation`, `resolveCurrentChannelBroadcast`) already
+reports as a graceful, typed failure state (`"channel-inactive"`,
+`"hydration-failed"`, `"empty_entries"`), never a crash or a fabricated
+Program. This was already true before RADIO-04D for every OTHER reason a
+rotation could be empty/invalid — the only thing this batch actually
+changed is that "an inactive Channel with zero Programs" became a state
+that can exist at all, by relaxing the write/read validation for that one
+combination. Scheduled programming (`resolveChannelTrackBroadcastWithSchedule`,
+above) was already structurally independent of Channel status/rotation
+before this batch — it resolves an active `radioScheduleBlocks` entry's own
+Program directly, never consulting `channel.status`/`channel.rotation` at
+all, so a Channel can already be legitimately "played" during a scheduled
+window regardless of whether it has any default Programs of its own.
+`RadioNewChannelDialog.tsx` (RADIO → Programming's own "+" Channel-creation
+affordance) creates every new Channel this way — Name only, `status:
+"inactive"`, `rotation.programIds: []` — with Program-adding left entirely
+to Channel Control, exactly matching the smaller "Publish → Program →
+Schedule" chain's own separation of concerns.
+
 ## RADIO Schedule (RADIO-04)
 
 The canonical `Program x Channel x start x end` authority, closing the gap

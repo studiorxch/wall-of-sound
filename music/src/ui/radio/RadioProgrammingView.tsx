@@ -390,7 +390,6 @@ export function RadioProgrammingView({ radioPlaylists, radioWebExports, radioSit
       {showNewChannelDialog && (
         <RadioNewChannelDialog
           getChannelRepository={getChannelRepository}
-          getEventRadioRepository={getEventRadioRepository}
           onClose={() => setShowNewChannelDialog(false)}
           onCreated={(created) => {
             setShowNewChannelDialog(false);

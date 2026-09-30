@@ -1,44 +1,29 @@
-// RADIO-04C -- the smallest direct Channel-creation affordance: Name +
-// Initial Program. `RadioChannelRotation`'s own schema
+// RADIO-04D -- reduced to the true minimum: Name only. An `inactive`
+// Channel may now have an empty `rotation.programIds`
 // (`shared/member-identity/src/firebase/firestoreRadioChannelRepository.ts`'s
-// `isValidRotationShape`) rejects an empty `programIds` array, so "Name
-// only" cannot safely supply every field the way a defaults-only form
-// could -- an Initial Program is a genuine, unavoidable requirement, not
-// scope creep. This exact minimal field set (Title + Initial Program,
-// `channelId` derived rather than operator-typed, `status: "inactive"`,
-// `rotation.anchorAtMs: Date.now()`) already exists as
-// `channel-control.html`'s own "Create First Channel" form
-// (`channelControlRuntime.ts`) -- this dialog reuses the SAME
-// `RadioChannelRepository.createRadioChannel` call and the SAME
-// `slugifyStationTitle` helper, never a second Channel model/store.
-// Advanced Channel configuration (rotation editing, Activate/Deactivate,
-// Start/Restart Rotation Now) stays in Channel Control -- not duplicated
-// here.
-//
-// NOT actually circular with "a Program needs a Channel to be created":
-// `CreateRadioProgramInput` has no `channelId` field at all (only
-// `stationId`, the source RadioPlaylist) -- Program creation never
-// depends on any Channel existing. A brand-new station with zero
-// Channels AND zero Programs still has a real bootstrap path: Event
-// Radio Control's "Add Published Program" creates a Program directly
-// from a published package's manifest URL, independent of this dialog
-// entirely. This dialog's own Program requirement only means "pick which
-// already-existing Program seeds the new Channel's rotation" -- it is
-// never the only way a Program can come into existence.
+// status-aware `isValidRotationShape` -- only `active` still requires at
+// least one Program), so this dialog no longer has any reason to ask for
+// one, fetch the Program catalog, or depend on `EventRadioRepository` at
+// all. `channelId` is derived via the existing, already-tested
+// `slugifyStationTitle` helper (never operator-typed); `status: "inactive"`
+// and `rotation.anchorAtMs: Date.now()` reuse the same defaults
+// `channel-control.html`'s own "Create First Channel" form already uses.
+// Same `RadioChannelRepository.createRadioChannel` call, never a second
+// Channel model/store. No Program is fabricated, defaulted, or
+// auto-selected -- an empty rotation is written exactly as such. Advanced
+// Channel configuration (adding Programs to the rotation, Activate/
+// Deactivate, Start/Restart Rotation Now) stays in Channel Control.
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   createFirebaseMemberIdentityAuthority,
-  type EventRadioRepository,
   type RadioChannel,
   type RadioChannelRepository,
-  type RadioProgramSummary,
 } from "@studiorich/member-identity";
 import { slugifyStationTitle } from "../../logic/radio/radioWebBundlePlan";
 
 interface Props {
   getChannelRepository: () => RadioChannelRepository;
-  getEventRadioRepository: () => EventRadioRepository;
   onClose: () => void;
   onCreated: (channel: RadioChannel) => void;
 }
@@ -51,43 +36,21 @@ function getMemberIdentity() {
 
 type SaveState = { status: "idle" } | { status: "pending" } | { status: "error"; message: string };
 
-export function RadioNewChannelDialog({ getChannelRepository, getEventRadioRepository, onClose, onCreated }: Props) {
+export function RadioNewChannelDialog({ getChannelRepository, onClose, onCreated }: Props) {
   const [title, setTitle] = useState("");
-  const [programId, setProgramId] = useState("");
-  const [programs, setPrograms] = useState<readonly RadioProgramSummary[] | null>(null);
   const [saveState, setSaveState] = useState<SaveState>({ status: "idle" });
-
-  // Fetched independently of the parent's channel-scoped Program list --
-  // the bootstrap case this dialog exists for (zero Channels yet) means
-  // there is no selected Channel for that list to be scoped to at all.
-  useEffect(() => {
-    let cancelled = false;
-    getEventRadioRepository()
-      .listRadioPrograms()
-      .then((list) => {
-        if (cancelled) return;
-        setPrograms(list);
-        setProgramId((prev) => prev || list[0]?.id || "");
-      })
-      .catch((error) => {
-        if (!cancelled) setSaveState({ status: "error", message: error instanceof Error ? error.message : String(error) });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [getEventRadioRepository]);
 
   const trimmedTitle = title.trim();
   const channelId = trimmedTitle ? slugifyStationTitle(trimmedTitle) : "";
 
   async function handleCreate() {
-    if (!trimmedTitle || !channelId || !programId) return;
+    if (!trimmedTitle || !channelId) return;
     setSaveState({ status: "pending" });
     try {
       const memberState = getMemberIdentity().getState();
       const createdByMemberId = memberState.status === "signedIn" ? memberState.authUser.uid : "unknown";
       const created = await getChannelRepository().createRadioChannel(
-        { channelId, title: trimmedTitle, status: "inactive", rotation: { anchorAtMs: Date.now(), programIds: [programId] } },
+        { channelId, title: trimmedTitle, status: "inactive", rotation: { anchorAtMs: Date.now(), programIds: [] } },
         createdByMemberId,
       );
       onCreated(created);
@@ -108,25 +71,15 @@ export function RadioNewChannelDialog({ getChannelRepository, getEventRadioRepos
             Name
             <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Late Night FM" autoFocus />
           </label>
-          <label>
-            Initial Program
-            <select value={programId} onChange={(e) => setProgramId(e.target.value)} disabled={!programs || programs.length === 0}>
-              {!programs && <option value="">Loading…</option>}
-              {programs?.length === 0 && <option value="">No Programs exist yet — create one first via Event Radio Control's "Add Published Program"</option>}
-              {programs?.map((p) => (
-                <option key={p.id} value={p.id}>{p.title}</option>
-              ))}
-            </select>
-          </label>
           {saveState.status === "error" && <p className="radio-diff-note">{saveState.message}</p>}
           <div className="radio-dialog-actions">
             <button className="npw-btn npw-btn--ghost" onClick={onClose}>Cancel</button>
             <button
               className="npw-btn npw-btn--primary"
               onClick={handleCreate}
-              disabled={!trimmedTitle || !programId || saveState.status === "pending"}
+              disabled={!trimmedTitle || saveState.status === "pending"}
             >
-              {saveState.status === "pending" ? "Creating…" : "Create Channel"}
+              {saveState.status === "pending" ? "Creating…" : "Create"}
             </button>
           </div>
         </div>
