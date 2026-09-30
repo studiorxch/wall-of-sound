@@ -33,6 +33,7 @@ import { listSchedulablePlaylists, type SchedulablePlaylist } from "../../logic/
 import { findActiveScheduleBlock } from "../../logic/radio/radioScheduleBroadcastPriority";
 import { resolveRadioProgramGuide, type RadioProgramGuide } from "../../logic/radio/radioPublicProgramGuide";
 import { RadioScheduleBlockDialog } from "./RadioScheduleBlockDialog";
+import { RadioNewChannelDialog } from "./RadioNewChannelDialog";
 
 // Same lazy-singleton convention RadioPlaylistPublishPanel.tsx already
 // uses -- constructed on first real use, never at module scope (this
@@ -80,6 +81,18 @@ function fmtDayHeader(ms: number): string {
 
 function fmtTime(ms: number): string {
   return new Date(ms).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+}
+
+// RADIO-04C -- presentation only: the hour axis's own gutter labels (every
+// even hour, "12 AM"/"2 AM"/.../"12 PM"/.../"10 PM"), never the underlying
+// timestamp/storage/timezone semantics -- every actual scheduling
+// computation in this file still works in real epoch ms via
+// startOfWeekMs/DAY_MS/combineDateTime, completely unaffected by how an
+// hour number is merely displayed here.
+function fmtHourLabel(hour: number): string {
+  const period = hour < 12 ? "AM" : "PM";
+  const twelveHour = hour % 12 === 0 ? 12 : hour % 12;
+  return `${twelveHour} ${period}`;
 }
 
 function fmtWeekRange(weekStartMs: number): string {
@@ -133,6 +146,7 @@ export function RadioProgrammingView({ radioPlaylists, radioWebExports, radioSit
   const [guide, setGuide] = useState<RadioProgramGuide | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [dialogTarget, setDialogTarget] = useState<{ block: RadioScheduleBlock | null; startAtMs: number; endAtMs: number } | null>(null);
+  const [showNewChannelDialog, setShowNewChannelDialog] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   // Adjust state during render (React-endorsed pattern, same one used in
@@ -251,6 +265,16 @@ export function RadioProgrammingView({ radioPlaylists, radioWebExports, radioSit
             {channels?.length === 0 && <option>No Channels found</option>}
             {channels?.map((c) => <option key={c.channelId} value={c.channelId}>{c.title} ({c.status})</option>)}
           </select>
+          {isAuthorizedOperator && (
+            <button
+              type="button"
+              className="npw-btn npw-btn--ghost radio-programming-new-channel-btn"
+              title="New Channel"
+              onClick={() => setShowNewChannelDialog(true)}
+            >
+              +
+            </button>
+          )}
         </label>
       </div>
 
@@ -296,7 +320,7 @@ export function RadioProgrammingView({ radioPlaylists, radioWebExports, radioSit
           <div className="radio-programming-day-header" />
           {hours.map((h) => (
             <div key={h} className="radio-programming-hour-label" style={{ height: HOUR_PX }}>
-              {h % 2 === 0 ? `${h.toString().padStart(2, "0")}:00` : ""}
+              {h % 2 === 0 ? fmtHourLabel(h) : ""}
             </div>
           ))}
         </div>
@@ -360,6 +384,19 @@ export function RadioProgrammingView({ radioPlaylists, radioWebExports, radioSit
           getEventRadioRepository={getEventRadioRepository}
           onClose={() => setDialogTarget(null)}
           onSaved={() => { setDialogTarget(null); void reloadSchedule(); }}
+        />
+      )}
+
+      {showNewChannelDialog && (
+        <RadioNewChannelDialog
+          getChannelRepository={getChannelRepository}
+          getEventRadioRepository={getEventRadioRepository}
+          onClose={() => setShowNewChannelDialog(false)}
+          onCreated={(created) => {
+            setShowNewChannelDialog(false);
+            setChannels((prev) => [...(prev ?? []), created]);
+            setSelectedChannelId(created.channelId);
+          }}
         />
       )}
     </div>

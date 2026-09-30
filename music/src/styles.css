@@ -13767,6 +13767,7 @@ td.cat-col-frozen { z-index: 1; }
 .radio-programming-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .radio-programming-header h2 { margin: 0; }
 .radio-programming-channel-select select { margin-left: 6px; background: var(--surface2); color: var(--text-main); border: 1px solid var(--border2); border-radius: 4px; padding: 4px 8px; }
+.radio-programming-new-channel-btn { margin-left: 6px; padding: 3px 10px; font-size: 13px; line-height: 1; }
 .radio-programming-guide { display: flex; gap: 20px; flex-wrap: wrap; font-size: 12px; color: var(--text-mid); background: var(--surface2); border: 1px solid var(--border2); border-radius: 6px; padding: 8px 12px; }
 .radio-programming-week-nav { display: flex; align-items: center; gap: 10px; }
 .radio-programming-week-label { font-size: 13px; font-weight: 600; min-width: 180px; text-align: center; }
