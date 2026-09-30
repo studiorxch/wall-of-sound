@@ -123,15 +123,28 @@ export function resolveStationTruth(snapshot: unknown, gtfsStopId: string): Stat
 const SNAPSHOT_PATH = "/wall-app/data/subway/mtaSubwayStaticSnapshot.json";
 
 /**
- * The one IO wrapper -- fetches the real, existing snapshot and delegates
- * to `resolveStationTruth` above. Callers that already have the snapshot
- * in memory (e.g. a future batch reusing `wall/`'s own already-loaded
- * copy) should call `resolveStationTruth` directly instead of fetching a
- * second time.
+ * STATION-03 -- the one fetch of the real snapshot, extracted so a caller
+ * needing MORE than station identity (e.g. `stationLineOrientation.ts`'s
+ * own route-ordering resolver, which reads the same file's `routes[]`/
+ * `shapes{}`) can fetch it ONCE and pass the same in-memory snapshot to
+ * every pure resolver, never re-fetching the same ~3.7MB file per
+ * resolver. `fetchStationTruth` below is unchanged for any caller that
+ * only needs station identity.
  */
-export async function fetchStationTruth(gtfsStopId: string): Promise<StationTruth | null> {
+export async function fetchStaticSnapshot(): Promise<unknown> {
   const response = await fetch(SNAPSHOT_PATH);
   if (!response.ok) throw new Error(`station_truth_snapshot_fetch_failed:${response.status}`);
-  const snapshot: unknown = await response.json();
+  return response.json();
+}
+
+/**
+ * The one IO wrapper -- fetches the real, existing snapshot and delegates
+ * to `resolveStationTruth` above. Callers that already have the snapshot
+ * in memory (e.g. `stationCoverRuntime.ts`, which also needs it for
+ * `stationLineOrientation.ts`) should call `fetchStaticSnapshot()` once
+ * and `resolveStationTruth` directly instead of fetching a second time.
+ */
+export async function fetchStationTruth(gtfsStopId: string): Promise<StationTruth | null> {
+  const snapshot = await fetchStaticSnapshot();
   return resolveStationTruth(snapshot, gtfsStopId);
 }

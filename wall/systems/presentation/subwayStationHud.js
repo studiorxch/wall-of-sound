@@ -1,8 +1,8 @@
-// ── SubwayStationHud v1.1.0 ────────────────────────────────────────────────────
-// 0819_SUBWAY_Public_HUD_Line_Ribbon_v1.0.0_BUILD — §6-9, §12-15, §21
+// ── SubwayStationHud v1.2.0 ────────────────────────────────────────────────────
+// 0819_SUBWAY_Public_HUD_Line_Ribbon_v1.0.0_BUILD — §6-9, §15, §21
 // 0821_SUBWAY_Boarding_UX_TrainRideSession — when the selected station IS the
 // boarding station of an active waiting_to_board itinerary leg, a YOUR TRIP
-// section renders above the general arrivals: route/direction/exit, then
+// section renders inside the identity block: route/direction/exit, then
 // MATCHING LIVE TRAINS with a real BOARD action per candidate. Sourced
 // EXCLUSIVELY from SubwayItineraryRideAuthority.getBoardingContext() — never
 // a second candidate derivation. Clicking BOARD calls the exact same
@@ -11,19 +11,32 @@
 // command, no duplicate ride lifecycle. When a real arrival exists but has
 // no logicalTrainId yet, this honestly shows "arrival in X min / waiting for
 // live train identity" with no BOARD action, never a fabricated candidate.
+// This is a distinct, itinerary-scoped feature (an active boarding decision),
+// not the general per-direction arrival board removed below — it stays.
+//
+// STATION-03 — MAP → STATION presentation boundary: the general §11-12
+// per-direction arrival board (up to two transient panels, one per real
+// direction, listing several upcoming arrivals each) has been REMOVED from
+// this module. MAP's selected-station presentation is now the lightweight
+// identity block only; detailed live arrivals (NORTHBOUND/SOUTHBOUND, max
+// two per service) are now Station Cover's job exclusively
+// (music/src/logic/maps/stationArrivalPresentation.ts +
+// music/src/station/stationCoverRuntime.ts) — see
+// docs/architecture/subway/README.md §14. The underlying data authority
+// this module read from, `SubwayArrivalIntelligence`, is UNCHANGED and
+// UNDUPLICATED — this is a presentation-only removal, not a data-authority
+// change. `refreshArrivals()`/`isVisible()`'s old arrival-panel behavior no
+// longer exists; `show()`/`hide()` now only manage the identity block.
 //
 // Status: active | Classification: presentation (DOM only — no fetch, no
 // canonical identity of its own)
 //
 // The PUBLIC-facing replacement for the small corner debug panel
 // mtaSubwayMapLayer.js used to render on station selection. Reads already-
-// canonical data only (MTASubwayStationLibrary record + SubwayArrivalIntelligence)
-// — never a second identity/arrival authority (BUILD §4/§14: "Use the
-// existing Arrival Intelligence data. Do not create a second arrival
-// parser."). This module owns three DOM regions:
+// canonical data only (MTASubwayStationLibrary record) — never a second
+// identity authority. This module owns two DOM regions:
 //
-//   #subway-station-identity  — NEIGHBORHOOD / STATION NAME / LINE BADGES
-//   #subway-arrival-lane      — up to two transient direction panels
+//   #subway-station-identity  — NEIGHBORHOOD / STATION NAME / LINE BADGES / YOUR TRIP
 //   #subway-radio-slot        — the reserved bottom-bar RADIO region (§21)
 //
 // Internal ids (stlib-*, canonical stop ids, freshness/source metadata) are
@@ -31,12 +44,16 @@
 // (mtaSubwayMapLayer.js's own gated diagnostics panel, BUILD §5/§13).
 //
 // Placement: wall/systems/presentation/subwayStationHud.js
-// Load: AFTER mtaSubwayStationLibrary.js, subwayArrivalIntelligence.js.
+// Load: AFTER mtaSubwayStationLibrary.js, subwayArrivalIntelligence.js
+// (still a real load-order dependency: SubwayItineraryRideAuthority's own
+// YOUR TRIP section indirectly relies on arrival-adjacent identity timing
+// elsewhere in the boot sequence, even though this module itself no longer
+// calls SubwayArrivalIntelligence directly).
 // ──────────────────────────────────────────────────────────────────────────────
 (function (global) {
   'use strict';
   var SBE = (global.SBE = global.SBE || {});
-  var VERSION = '1.1.0';
+  var VERSION = '1.2.0';
 
   // Real, standard MTA borough abbreviations (from the real static GTFS
   // complex data this codebase already imports) — not a fabricated mapping,
@@ -53,14 +70,13 @@
   // generous-enough-to-read, not-nagging choice.
   var DISMISS_MS = 20000;
 
-  var _dom = null; // { identityEl, arrivalLaneEl, radioSlotEl } — created lazily
+  var _dom = null; // { identityEl, radioSlotEl } — created lazily
   var _dismissTimer = null;
   var _currentStationId = null;
   var _hovering = false;
 
   function _library() { return SBE.MTASubwayStationLibrary || null; }
   function _store() { return SBE.MTASubwayTransitStore || null; }
-  function _arrivalIntelligence() { return SBE.SubwayArrivalIntelligence || null; }
   function _ride() { return SBE.SubwayItineraryRideAuthority || null; }
 
   function _fmtEta(seconds) {
@@ -135,10 +151,6 @@
     identityEl.id = 'subway-station-identity';
     identityEl.className = 'subway-station-identity subway-panel-hidden';
 
-    var arrivalLaneEl = global.document.createElement('div');
-    arrivalLaneEl.id = 'subway-arrival-lane';
-    arrivalLaneEl.className = 'subway-arrival-lane subway-panel-hidden';
-
     var radioSlotEl = global.document.createElement('div');
     radioSlotEl.id = 'subway-radio-slot';
     radioSlotEl.className = 'subway-radio-slot';
@@ -147,17 +159,13 @@
     // only, never fake transport controls.
     radioSlotEl.innerHTML = '<span class="subway-radio-label">RADIO</span>';
 
-    [identityEl, arrivalLaneEl].forEach(function (el) {
-      el.addEventListener('mouseenter', _onPanelHoverStart);
-      el.addEventListener('mouseleave', _onPanelHoverEnd);
-    });
+    identityEl.addEventListener('mouseenter', _onPanelHoverStart);
+    identityEl.addEventListener('mouseleave', _onPanelHoverEnd);
     identityEl.addEventListener('click', _onIdentityClick);
-    arrivalLaneEl.addEventListener('click', _postponeDismiss);
 
     global.document.body.appendChild(identityEl);
-    global.document.body.appendChild(arrivalLaneEl);
     global.document.body.appendChild(radioSlotEl);
-    _dom = { identityEl: identityEl, arrivalLaneEl: arrivalLaneEl, radioSlotEl: radioSlotEl };
+    _dom = { identityEl: identityEl, radioSlotEl: radioSlotEl };
     return _dom;
   }
 
@@ -254,37 +262,6 @@
 
   // ── Arrival direction panels (BUILD §14) — reads SubwayArrivalIntelligence
   //    exclusively; never re-derives arrival timing itself. ───────────────
-  function _renderArrivalPanels(record) {
-    var dom = _ensureDom();
-    var ai = _arrivalIntelligence();
-    if (!ai) { dom.arrivalLaneEl.innerHTML = ''; return; }
-    var result = ai.getArrivalsForStation(record.studioRichStationId);
-    if (!result.ok || !result.data.directions.length) {
-      dom.arrivalLaneEl.innerHTML = '<div class="subway-arrival-panel subway-arrival-empty">No upcoming arrivals available right now.</div>';
-      return;
-    }
-    var html = '';
-    result.data.directions.forEach(function (dir) {
-      html += '<div class="subway-arrival-panel">';
-      html += '<div class="subway-arrival-panel-heading">' + _escapeHtml(dir.friendlyLabel) + '</div>';
-      if (!dir.arrivals.length) {
-        html += '<div class="subway-arrival-row subway-arrival-row-empty">No trains currently predicted</div>';
-      } else {
-        dir.arrivals.forEach(function (a) {
-          var routeLabel = a.routeId.replace('subway:route:', '');
-          var etaLabel = a.dueSoon ? 'Due' : (Math.max(1, Math.round(a.etaSeconds / 60)) + ' min');
-          html += '<div class="subway-arrival-row">' +
-            '<span class="subway-arrival-route">' + _escapeHtml(routeLabel) + '</span>' +
-            '<span class="subway-arrival-eta">' + _escapeHtml(etaLabel) + '</span>' +
-            '<span class="subway-arrival-dest">' + _escapeHtml(a.destination || dir.destination || '') + '</span>' +
-            '</div>';
-        });
-      }
-      html += '</div>';
-    });
-    dom.arrivalLaneEl.innerHTML = html;
-  }
-
   function _escapeHtml(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
@@ -315,10 +292,7 @@
       dom.identityEl.insertAdjacentHTML('beforeend', _renderYourTripSection(rideSnap));
     }
 
-    _renderArrivalPanels(record);
-
     dom.identityEl.classList.remove('subway-panel-hidden');
-    dom.arrivalLaneEl.classList.remove('subway-panel-hidden');
     _startDismissTimer();
     return { ok: true, data: record };
   }
@@ -329,18 +303,10 @@
     _currentStationId = null;
     if (!_dom) return;
     _dom.identityEl.classList.add('subway-panel-hidden');
-    _dom.arrivalLaneEl.classList.add('subway-panel-hidden');
   }
 
   function isVisible() {
     return !!(_dom && !_dom.identityEl.classList.contains('subway-panel-hidden'));
-  }
-
-  function refreshArrivals() {
-    if (!_currentStationId || !isVisible()) return;
-    var lib = _library();
-    var record = lib ? lib.getRecord(_currentStationId) : null;
-    if (record) _renderArrivalPanels(record);
   }
 
   SBE.SubwayStationHud = Object.freeze({
@@ -349,7 +315,6 @@
     show: show,
     hide: hide,
     isVisible: isVisible,
-    refreshArrivals: refreshArrivals,
     getCurrentStationId: function () { return _currentStationId; },
     // Test-only exposures — pure functions, never mutate identity.
     __neighborhoodContext: _neighborhoodContext,

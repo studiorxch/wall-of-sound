@@ -1,7 +1,11 @@
-// ── SubwayStationHud Tests v1.1.0 ─────────────────────────────────────────────
+// ── SubwayStationHud Tests v1.2.0 ─────────────────────────────────────────────
 // 0819_SUBWAY_Public_HUD_Line_Ribbon_v1.0.0_BUILD — Required Tests §24
-// (3,4,5,6,7,8,9,10,11,12,13,14,15,16,21)
+// (3,4,5,6,7,8,9,10,13,14,15,16,21)
 // 0821_SUBWAY_Boarding_UX_TrainRideSession — YOUR TRIP section coverage.
+// STATION-03 — §11-12's old per-direction arrival-panel assertions are
+// replaced below with an assertion that the arrival lane has been REMOVED
+// from MAP's presentation entirely (detailed arrivals now live on Station
+// Cover — see subwayStationHud.js's own updated header).
 // Run via: SBE.SubwayStationHudTests.run()
 // ──────────────────────────────────────────────────────────────────────────────
 (function (global) {
@@ -70,28 +74,12 @@
       results.push(_assert('§15 internal gtfsStopId is never surfaced in the public identity block', identityEl.textContent.indexOf(multi.authoritativeLink.gtfsStopId) === -1));
     }
 
-    // ── §11-12 arrival panels ─────────────────────────────────────────────
-    var arrivalLaneEl = global.document.getElementById('subway-arrival-lane');
-    results.push(_assert('arrival lane DOM element exists', !!arrivalLaneEl));
-    if (arrivalLaneEl && ai) {
-      var realArrivals = ai.getArrivalsForStation(multi.studioRichStationId);
-      var panelEls = arrivalLaneEl.querySelectorAll('.subway-arrival-panel');
-      if (realArrivals.ok && realArrivals.data.directions.length) {
-        results.push(_assert('§11 arrival panels are populated from real SubwayArrivalIntelligence data (no second parser — count matches real direction groups)',
-          panelEls.length === realArrivals.data.directions.length, { rendered: panelEls.length, real: realArrivals.data.directions.length }));
-        if (realArrivals.data.directions.length >= 2) {
-          results.push(_assert('§12 two real direction groups render as two SEPARATE panels, not merged', panelEls.length >= 2));
-        }
-        // Cross-check one real ETA value made it through verbatim.
-        var firstDir = realArrivals.data.directions[0];
-        if (firstDir.arrivals.length) {
-          var expectedRoute = firstDir.arrivals[0].routeId.replace('subway:route:', '');
-          results.push(_assert('a real route label from Arrival Intelligence appears in the rendered arrival lane', arrivalLaneEl.textContent.indexOf(expectedRoute) !== -1));
-        }
-      } else {
-        results.push(_assert('arrival panels handle unavailable arrival data gracefully (no crash, an honest empty state renders)', arrivalLaneEl.textContent.length > 0));
-      }
-    }
+    // ── STATION-03: the old §11-12 per-direction arrival board has been
+    //    REMOVED from MAP's presentation entirely -- detailed arrivals are
+    //    now Station Cover's job exclusively (see subwayStationHud.js's own
+    //    updated header). This asserts the removal, not a replacement UI. ──
+    results.push(_assert('STATION-03: the arrival lane DOM element no longer exists on MAP', !global.document.getElementById('subway-arrival-lane')));
+    results.push(_assert('STATION-03: SubwayArrivalIntelligence itself is untouched/still loaded (data authority preserved, only MAP presentation removed)', !!ai));
 
     // ── §13-14 transient dismissal lifecycle ─────────────────────────────
     results.push(_assert('§13 a dismiss timer is active immediately after a real selection', hud.__test.isDismissTimerActive() === true));

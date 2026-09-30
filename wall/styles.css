@@ -5340,13 +5340,11 @@ body.wos-orbital-earth-active .app-body {
    existing --panel/--text/--accent tokens rather than inventing a second
    palette. ── */
 #subway-station-identity,
-#subway-arrival-lane,
 #subway-radio-slot,
 #subway-line-ribbon {
   display: none;
 }
 body.subway-presentation #subway-station-identity,
-body.subway-presentation #subway-arrival-lane,
 body.subway-presentation #subway-radio-slot,
 body.subway-presentation #subway-line-ribbon {
   display: block;
@@ -5457,57 +5455,6 @@ body.subway-presentation #subway-line-ribbon {
 }
 .subway-station-your-trip-waiting { font-size: 13px; color: var(--text); margin-top: 6px; }
 .subway-station-your-trip-waiting-sub { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
-
-#subway-arrival-lane {
-  position: fixed;
-  right: 24px;
-  top: 96px;
-  z-index: 40;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  width: 300px;
-  transition: opacity 220ms ease, transform 220ms ease;
-}
-.subway-arrival-panel {
-  background: rgba(19, 20, 22, 0.88);
-  border: 1px solid var(--panel-border);
-  border-radius: 10px;
-  padding: 12px 14px;
-  backdrop-filter: blur(6px);
-  font-family: inherit;
-}
-.subway-arrival-panel-heading {
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-  margin-bottom: 8px;
-}
-.subway-arrival-row {
-  display: grid;
-  grid-template-columns: 28px 52px 1fr;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  color: var(--text);
-  padding: 3px 0;
-}
-.subway-arrival-route {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: #f2f2f2;
-  color: #101112;
-  font-size: 11px;
-  font-weight: 700;
-}
-.subway-arrival-eta { color: var(--accent); font-weight: 600; }
-.subway-arrival-dest { color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.subway-arrival-row-empty, .subway-arrival-empty { color: var(--text-dim); font-size: 13px; }
 
 #subway-radio-slot {
   position: fixed;

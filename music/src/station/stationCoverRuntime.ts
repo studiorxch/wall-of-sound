@@ -1,4 +1,4 @@
-// STATION-01/02 -- the Station Cover page. A hosted StudioRich surface,
+// STATION-01/02/03 -- the Station Cover page. A hosted StudioRich surface,
 // alongside MAP and BLACKBOOK, that CONSUMES existing canonical Station
 // Truth (stationTruth.ts) and renders the smallest reusable Cover
 // presentation (stationCoverPresentation.ts) -- it owns neither of those,
@@ -7,20 +7,32 @@
 // homeRadioSession.ts) -- this page constructs neither, deliberately.
 //
 // STATION-02 -- adds the route-symbol visual refinement, a Northbound/
-// Southbound direction control, and the (currently empty) arrival-rows
-// display rule. Live arrivals and local line orientation are DELIBERATELY
-// not wired to real data this pass -- both would-be canonical authorities
-// (`SubwayArrivalIntelligence`, and any station-ordering-along-a-route
-// source) are live, in-memory objects scoped to `wall/`'s own JS realm,
-// structurally unreachable from this separately-hosted document today.
-// See docs/architecture/subway/README.md's STATION-02 section for the
-// full recon and the smallest recommended resolution for each gap. This
-// page shows an honest "not yet available" state for both rather than
-// inventing data -- never a fabricated arrival, never a fabricated
-// neighboring station.
+// Southbound direction control, and the arrival-rows display rule.
+//
+// STATION-03 -- MAP -> STATION presentation boundary. Detailed live
+// arrivals are now canonically presented HERE (moved off MAP's own
+// selected-station HUD -- see wall/systems/presentation/subwayStationHud.js's
+// own updated header and docs/architecture/subway/README.md §14). The
+// underlying live-arrival data authority (`SubwayArrivalIntelligence`)
+// remains a live, in-memory `wall/`-JS-realm object with no static/
+// cross-document access path -- STILL unreachable from this separately-
+// hosted document (that STOP finding is unchanged by this batch; see the
+// architecture doc). This page shows an honest "not yet available" state
+// for arrivals rather than inventing data -- never a fabricated arrival.
+//
+// STATION-03 also adds real local-line orientation
+// (stationLineOrientation.ts), which DOES NOT depend on `wall/`'s live
+// runtime -- it's a pure projection over the same static GTFS snapshot
+// already fetched for station identity, so real neighboring-station names
+// now render here. The obsolete "Enter station creative space" dead-end
+// placeholder is removed -- the real future path is Station Cover ->
+// Station Model, which does not exist yet, and this page adds no fake
+// destination in its place.
 
-import { fetchStationTruth } from "../logic/maps/stationTruth";
+import { fetchStaticSnapshot } from "../logic/maps/stationTruth";
+import { resolveStationTruth, type StationTruth } from "../logic/maps/stationTruth";
 import { deriveStationCoverDisplay, type StationCoverDisplay } from "../logic/maps/stationCoverPresentation";
+import { resolveStationLineOrientation, type StationLineOrientation } from "../logic/maps/stationLineOrientation";
 import { selectStationArrivalRows, type StationArrival, type StationArrivalDirection } from "../logic/maps/stationArrivalPresentation";
 import { createStationHomeSurface } from "../home/stationHomeSurface";
 
@@ -64,6 +76,7 @@ let direction: StationArrivalDirection = "N";
 const ARRIVALS: readonly StationArrival[] = [];
 
 let currentDisplay: StationCoverDisplay = { kind: "loading" };
+let currentOrientation: StationLineOrientation | null = null;
 
 function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] as string);
@@ -97,17 +110,22 @@ function renderArrivals(): string {
 }
 
 function renderLineOrientation(name: string): string {
-  // Minimal resting state -- only the current station, never a
-  // fabricated neighbor (see this file's own header). "—" marks stand in
-  // for unknown adjacent stops rather than omitting the idea of a line
-  // entirely.
+  // STATION-03 -- real neighboring-station names when
+  // `resolveStationLineOrientation` could confidently place this station
+  // on its route's real shape; an honest "—" placeholder (never a
+  // fabricated name) for whichever side it couldn't. Deliberately
+  // non-directional (no claim about which neighbor is "north" vs
+  // "south") -- the shape-projection direction is real but arbitrary
+  // per GTFS shape, not a verified N/S mapping; see the architecture doc.
+  const previousLabel = currentOrientation?.previous ? escapeHtml(currentOrientation.previous.name.toUpperCase()) : "—";
+  const nextLabel = currentOrientation?.next ? escapeHtml(currentOrientation.next.name.toUpperCase()) : "—";
   return `
     <div class="station-line-orientation" aria-hidden="false">
-      <div class="station-line-mark station-line-mark--dim">—</div>
+      <div class="station-line-mark station-line-mark--dim">${previousLabel}</div>
       <div class="station-line-mark station-line-mark--current"><span class="station-line-dot"></span> ${escapeHtml(name.toUpperCase())}</div>
-      <div class="station-line-mark station-line-mark--dim">—</div>
+      <div class="station-line-mark station-line-mark--dim">${nextLabel}</div>
     </div>
-    <p class="station-cover-note">Neighboring stations aren’t available in this view yet.</p>
+    ${currentOrientation ? "" : `<p class="station-cover-note">Neighboring stations aren’t available in this view yet.</p>`}
   `;
 }
 
@@ -130,11 +148,6 @@ function render(): void {
     ${renderDirectionControl()}
     ${renderArrivals()}
     ${renderLineOrientation(display.name)}
-
-    <button type="button" class="station-cover-creative-space" disabled
-      title="Bay Ridge Av's public creative space doesn't exist yet -- this is the navigation boundary a future batch completes.">
-      Enter station creative space — coming soon
-    </button>
   `;
 
   root.querySelectorAll<HTMLButtonElement>("[data-direction]").forEach((button) => {
@@ -158,10 +171,19 @@ async function boot(): Promise<void> {
   currentDisplay = deriveStationCoverDisplay(stationId, undefined); // "loading"
   render();
   try {
-    const truth = await fetchStationTruth(stationId);
+    const snapshot = await fetchStaticSnapshot();
+    const truth: StationTruth | null = resolveStationTruth(snapshot, stationId);
     currentDisplay = deriveStationCoverDisplay(stationId, truth);
+    // STATION-03 -- a station can serve multiple routes; local-line
+    // orientation is inherently per-route, so the first canonical route
+    // is used (Bay Ridge Av serves exactly one, R, today). A future
+    // multi-route station would need its own route-selection UI, not
+    // silently picking one -- out of scope for this batch.
+    const primaryRouteId = truth?.routes[0]?.routeId;
+    currentOrientation = primaryRouteId ? resolveStationLineOrientation(snapshot, primaryRouteId, stationId) : null;
   } catch {
     currentDisplay = deriveStationCoverDisplay(stationId, null); // fails safely, never a fabricated record
+    currentOrientation = null;
   } finally {
     render();
     // Same "first stable, interactive state" contract BLACKBOOK's own

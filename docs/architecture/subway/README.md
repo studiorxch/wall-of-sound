@@ -504,20 +504,22 @@ larger batch than a visual-refinement pass.
 
 ### STOP finding 2 — canonical station-ordering-along-a-route authority is absent/unreachable
 
-`wall/systems/transit/subwayItineraryLegResolver.js`'s `resolveLeg()` is
-the closest existing "ordering" logic, but it requires an explicit
-origin+destination pair (an itinerary query, not a "what's adjacent to
-this one station" query) and also depends on live `SBE` globals scoped to
-`wall/`'s own JS realm — the same reachability problem as Finding 1, not
-a separate one. No pure, static "given a route + a station, what are its
-immediate neighbors" function exists anywhere in the codebase today.
+**RESOLVED in STATION-03 — see §14.** `wall/systems/transit/subwayItineraryLegResolver.js`'s
+`resolveLeg()` is the closest existing "ordering" logic, but it requires
+an explicit origin+destination pair (an itinerary query, not a "what's
+adjacent to this one station" query) and also depends on live `SBE`
+globals scoped to `wall/`'s own JS realm — the same reachability problem
+as Finding 1, not a separate one. No pure, static "given a route + a
+station, what are its immediate neighbors" function existed anywhere in
+the codebase at the time this finding was written.
 
-**Recommended smallest resolution (not built this batch):** a new pure
-shape-projection module operating on the already-fetched static
-snapshot's `shapes[]`/`stops[]` data (same file §12's `stationTruth.ts`
-already reads), projecting a route's stops into an ordered sequence by
-shape distance — no live dependency, no `wall/` runtime required. This is
-additive to `stationTruth.ts`, not a replacement for it.
+**Resolution actually built (STATION-03):** a new pure shape-projection
+module, `music/src/logic/maps/stationLineOrientation.ts`, operating on
+the already-fetched static snapshot's `routes[].shapeIds`/`shapes{}`
+polyline data (same file §12's `stationTruth.ts` already reads) —
+exactly the approach predicted here, now real and tested. See §14 for
+the full account, including why "longest shape by point count" (the
+naive choice) is wrong and had to be replaced with a coverage heuristic.
 
 **Both findings are reported per the task's own explicit STOP-condition
 instructions, not treated as blockers for the rest of this batch.** The
@@ -536,3 +538,151 @@ cases) and a `tintBackground`-derives-from-the-same-color assertion.
 Existing `homeNavigation.test.ts` MAP↔STATION mount/leave/runtime-UUID
 coverage re-verified passing, unmodified — no navigation-contract change
 this batch.
+
+## 14. STATION-03 — MAP → Station Cover presentation boundary
+
+Product decision: **MAP should feel like a map. STATION should feel like
+a station.** Canonical hierarchy: MAP = geography/routes/live trains/
+station selection/lightweight identity/drill-in. STATION COVER =
+understand the selected station (detailed arrivals, N/S, local line
+orientation). STATION MODEL (future, unbuilt) = inspect the physical
+representation. Each level narrows scope while increasing detail — a
+deeper level's information does not leak upward just because it exists.
+
+### MAP presentation responsibility — BEFORE / AFTER
+
+**BEFORE (STATION-01/02 era):** `wall/systems/presentation/subwayStationHud.js`
+owned three DOM regions on station selection — `#subway-station-identity`
+(neighborhood/name/line badges/YOUR TRIP boarding), `#subway-arrival-lane`
+(up to two transient per-direction panels, several arrivals each, reading
+`SubwayArrivalIntelligence.getArrivalsForStation()` directly), and
+`#subway-radio-slot`. Selecting a station opened a detailed directional
+arrival board directly over the geographic map.
+
+**AFTER (STATION-03):** `subwayStationHud.js` owns `#subway-station-identity`
+(unchanged: neighborhood/name/line badges/YOUR TRIP) and
+`#subway-radio-slot` only. `#subway-arrival-lane` and its rendering
+function (`_renderArrivalPanels`) are **removed** — not hidden, not
+gated, deleted — along with the dead public `refreshArrivals()` method
+(confirmed zero callers before removal) and the corresponding
+`#subway-arrival-lane`/`.subway-arrival-panel*` CSS in `wall/styles.css`.
+Selecting a station now shows only the lightweight identity card — the
+same card that already existed, unchanged in content or layout. No new
+"VIEW STATION" affordance was added to it: the existing always-visible
+`subwayStationCoverNavLink.js` top-chrome pill ("BAY RIDGE AV STATION")
+already provides an obvious, permanent route into Station Cover, and
+duplicating it inside the identity card would violate this codebase's own
+"never duplicate navigation/actions" doctrine.
+
+**What was preserved vs. removed, explicitly:** `SubwayArrivalIntelligence`
+itself — the data authority — is **completely untouched**: same file, same
+public API (`getArrivalsForStation`, `getArrivalEvents`, `getDiagnostics`),
+same `MTASubwayTransitStore` dependency, zero lines changed. Only the
+**presentation** that read from it on MAP was deleted. YOUR TRIP (the
+active-boarding-leg section inside the identity block) was deliberately
+**kept** — it's a distinct, itinerary-scoped decision surface (an
+in-progress boarding action), not a duplicate of the general per-direction
+arrival board that was removed.
+
+### Station Cover presentation responsibility — BEFORE / AFTER
+
+**BEFORE (STATION-02):** identity + route badges + N/S toggle + arrival
+rows (display rule fully built, but wired to an empty array — STOP
+finding 1) + a minimal line-orientation marker (current station only,
+dash placeholders either side, honest "not available" note — STOP
+finding 2) + a dead "Enter station creative space — coming soon" button.
+
+**AFTER (STATION-03):** identity + route badges + N/S toggle + arrival
+rows (**unchanged** — still wired to an empty array; STOP finding 1 is
+still open, see below) + **real local-line orientation** (real
+previous/next station names either side of the current station, from
+`stationLineOrientation.ts` — STOP finding 2 is now resolved) + the
+obsolete creative-space button **removed entirely**, with no fake
+destination in its place. Station Cover remains the sole canonical
+location for detailed per-direction arrival presentation and local line
+orientation — MAP does not duplicate either.
+
+### Route-order authority (new)
+
+`music/src/logic/maps/stationLineOrientation.ts` —
+`resolveStationLineOrientation(snapshot, routeId, gtfsStopId)` — pure,
+never fetches. Given a route's real GTFS `shapeIds` and the static
+snapshot's `complexes[]` (already the exact same file `stationTruth.ts`
+reads — no second/duplicated station database), it:
+
+1. Picks the ONE shape among the route's `shapeIds` that passes within
+   300m of the most real stations serving that route (a **coverage**
+   heuristic). This was verified necessary against real data before
+   writing the module: for the R line, the naive "pick the shape with
+   the most points" choice selects a shape that misses Bay Ridge Av by
+   2.4km (a partial-branch/express variant) — the coverage heuristic
+   correctly selects the one shape that actually spans the whole route,
+   placing every one of the 45 real R-served stations within ~140m.
+2. Projects every real station serving that route onto the chosen shape
+   (nearest-point-on-polyline, real haversine distance) and sorts by
+   cumulative distance along it.
+3. Returns the immediate previous/next real station names for the
+   requested station — `null` on either side at a line terminus, `null`
+   overall for any route/station this can't confidently resolve, never a
+   fabricated or forced placement.
+
+Verified against real data: Bay Ridge Av (R42) on the R line resolves to
+`59 St` / `77 St`, the real MTA order — locked in as a test against the
+actual `wall/data/subway/mtaSubwayStaticSnapshot.json` file, not a
+synthetic fixture, alongside a full synthetic-fixture suite (11 cases:
+ordering, both terminus edges, decoy-shape rejection, unknown route/
+station, no-shapeIds, single-candidate, malformed snapshot, empty ids).
+
+**Deliberately non-directional presentation.** The resolver's
+previous/next ordering follows whichever direction the chosen GTFS shape
+happens to be encoded in — real and consistent per shape, but not a
+verified general N/S mapping (a shape's own point order isn't guaranteed
+to correlate with `SubwayArrivalIntelligence`'s real `nyct.direction`
+NORTH/SOUTH values without further, unverified cross-referencing).
+Station Cover therefore renders both neighbors as plain flanking markers
+(`59 ST · BAY RIDGE AV · 77 ST`), never claiming one side is "northbound"
+— avoiding exactly the kind of fabricated-direction claim this codebase's
+own `SubwayArrivalIntelligence` file header already warns against for
+borough-bound labels.
+
+### STOP finding 1 (live-arrival authority) — STILL OPEN, re-confirmed this batch
+
+STATION-03's own product brief called for "the smallest clean shared/
+persistent transit authority" (a `PERSISTENT STUDIO RICH HOST → LIVE
+TRANSIT STATE → {MAP, STATION}` shape, explicitly modeled on RADIO-01).
+This was investigated again this batch and **not built**, for a fact
+this investigation surfaced that RADIO-01's own pattern doesn't actually
+resolve here:
+
+RADIO-01's persistent session (`homeRadioSession.ts`) works because its
+underlying engine (`createRadioChannelReceiver()`) is a small, pure
+MUSIC/TS module with no `wall/`-side counterpart — moving its
+construction into the persistent HOME parent was simply choosing where
+to instantiate a lightweight, portable engine. Live transit arrivals have
+no equivalent portable engine: `SubwayArrivalIntelligence` reads from
+`MTASubwayTransitStore`, which is populated by
+`mtaSubwayRealtimeAdapter.js`'s own polling — both part of a large,
+tightly-coupled `wall/`-only stack (`mtaSubwayIdentity.js`,
+`mtaSubwayStaticAdapter.js`, `SubwayLogicalRollingStockAuthority`, and
+more) that is itself part of this codebase's explicitly protected MAPS/
+RACETRACK infrastructure (see `AGENTS.md`). And critically: `wall/`
+itself is **not** the persistent parent in this architecture — it is
+ALSO a hosted child surface (MAP), torn down by the exact same full-
+document-reload surface-swap as Station Cover whenever MAP isn't the
+mounted surface. There is currently no code, anywhere, that keeps any
+`wall/` JS object alive outside MAP's own iframe.
+
+Relocating (not duplicating — the task is explicit that there must be
+exactly one engine) that entire realtime stack into the persistent HOME
+parent would be a real, large, higher-risk architectural migration of
+protected infrastructure — genuinely a separate, dedicated batch, not a
+"smallest coherent" extension of this one. This finding is therefore
+reported again, unchanged in substance, with the same recommended
+resolution as before (a RADIO-01-*shaped* — not RADIO-01-*equivalent* —
+persistent transit session, requiring the realtime stack itself to move,
+not just a bridge method to be added).
+
+Station Cover's arrival rows remain wired to an empty array with an
+honest "not yet available" message, exactly as in STATION-02 — no fake
+sharing, no fabricated data, no second polling engine built to work
+around this.
