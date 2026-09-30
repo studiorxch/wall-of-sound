@@ -55,14 +55,6 @@
   var SBE = (global.SBE = global.SBE || {});
   var VERSION = '1.2.0';
 
-  // Real, standard MTA borough abbreviations (from the real static GTFS
-  // complex data this codebase already imports) — not a fabricated mapping,
-  // just the full names for the same 5 real boroughs every NYC subway
-  // station already belongs to.
-  var BOROUGH_NAMES = {
-    Bx: 'The Bronx', Bk: 'Brooklyn', M: 'Manhattan', Q: 'Queens', SI: 'Staten Island',
-  };
-
   // "Choose a reasonable timeout based on current UI patterns" (BUILD §7) —
   // this codebase's own HUD/panel conventions elsewhere in wall/ (traversal
   // HUD auto-hide, tooltip dismissal) commonly land in the 15-30s band for
@@ -85,63 +77,22 @@
     return m <= 0 ? 'due' : m + ' min';
   }
 
-  function _boroughFullName(code) {
-    if (!code) return null;
-    return BOROUGH_NAMES[code] || code; // unknown code: show it verbatim rather than hide it, never fabricate a name
-  }
-
-  // BUILD §8: "the displayed neighborhood should correspond to that
-  // station's location... Prefer an existing geographic/neighborhood
-  // resolver if present. Do not fabricate neighborhood names. If
-  // neighborhood data is unavailable, fall back gracefully to
-  // borough/city context." No arbitrary-lat/lon neighborhood resolver
-  // exists anywhere in wall/ (confirmed by live investigation before
-  // writing this file — ViewportLocationAuthority only resolves the
-  // camera/hero position, not a queried point) — the Station Library's own
-  // real `operational.neighborhood` field is used when populated, honestly
-  // falling back to the real `operational.borough` (always populated from
-  // real MTA static data) rather than inventing a resolver in this build.
-  function _neighborhoodContext(record) {
-    var op = record.operational;
-    if (op.neighborhood) return op.neighborhood;
-    var borough = _boroughFullName(op.borough);
-    return borough || 'New York, NY';
-  }
-
-  // BUILD §12: "circle / route letter/number inside / high contrast /
-  // consistent sizing... semantically ready for route-specific color
-  // later." Deliberately no per-family color logic yet — a `data-route-id`
-  // attribute is the hook a future build can key palette color from
-  // without this module needing to change.
-  function _buildLineBadge(routeId, displayText) {
-    var el = global.document.createElement('span');
-    el.className = 'subway-line-badge';
-    el.setAttribute('data-route-id', routeId);
-    el.textContent = displayText;
-    // Line Mode trigger (BUILD §18) — clicking a served-line badge shows
-    // that route's real ordered station sequence in the left ribbon. Never
-    // reaches into the ribbon's internals — calls its own public API.
-    el.addEventListener('click', function (e) {
-      e.stopPropagation();
-      var ribbon = SBE.SubwayLineRibbon;
-      if (ribbon) ribbon.showLineMode(routeId);
-      _postponeDismiss();
-    });
-    return el;
-  }
-
-  function _lineBadgesForRecord(record) {
-    var store = _store();
-    var frag = global.document.createDocumentFragment();
-    var routeIds = (record.operational.routeIds || []).slice().sort();
-    routeIds.forEach(function (rawRouteId) {
-      var canonicalId = 'subway:route:' + rawRouteId;
-      var route = store ? store.getRoute(canonicalId) : null;
-      var label = route ? (route.displayName || rawRouteId) : rawRouteId;
-      frag.appendChild(_buildLineBadge(canonicalId, label));
-    });
-    return frag;
-  }
+  // STATION-04 -- neighborhood/borough resolution and the served-route
+  // line-badge row (`_boroughFullName`/`_neighborhoodContext`/
+  // `_buildLineBadge`/`_lineBadgesForRecord`) were REMOVED from this file:
+  // that identity content is the Mezzanine Drawer's job exclusively now
+  // (see subwayMezzanineDrawer.js / music/station.html, which already
+  // re-derive the same facts from canonical Station Truth independently).
+  // KNOWN GAP, intentionally deferred (see docs/architecture/subway/README.md
+  // §15): `_buildLineBadge`'s click handler was the ONLY production
+  // trigger for `SubwayLineRibbon.showLineMode()` ("click a served route
+  // to see its ordered station sequence in the left ribbon"). No
+  // replacement trigger was added this batch -- the drawer's own route
+  // badges live in a separate document and cannot call a `wall/`-realm
+  // function directly. Recommended smallest resolution: a small
+  // `postMessage` bridge from the drawer's badge click to
+  // `subwayMezzanineDrawer.js`, which already owns the same-origin iframe
+  // reference needed to receive it.
 
   // ── DOM setup — idempotent, mirrors mtaSubwayMapLayer.js's own
   //    lazy-HUD-creation convention. ────────────────────────────────────
@@ -278,22 +229,33 @@
     var dom = _ensureDom();
     _currentStationId = studioRichStationId;
 
-    dom.identityEl.innerHTML =
-      '<div class="subway-station-neighborhood">' + _escapeHtml(_neighborhoodContext(record)) + '</div>' +
-      '<div class="subway-station-name">' + _escapeHtml(record.operational.displayName || '') + '</div>';
-    var badgeRow = global.document.createElement('div');
-    badgeRow.className = 'subway-line-badge-row';
-    badgeRow.appendChild(_lineBadgesForRecord(record));
-    dom.identityEl.appendChild(badgeRow);
-
+    // STATION-04 -- neighborhood/name/line-badge identity is now the
+    // Mezzanine Drawer's job exclusively (see subwayMezzanineDrawer.js and
+    // music/station.html) -- rendering it here too would be exactly the
+    // "fragmented station information" this batch consolidates. This
+    // block now renders ONLY YOUR TRIP (an itinerary-scoped, live-action
+    // decision surface this codebase's own STATION-03/04 recon confirmed
+    // cannot safely cross into the drawer's separately-hosted iframe
+    // document -- the same reachability class as live arrivals). When
+    // there is no active boarding leg for this station, identityEl stays
+    // empty and hidden -- never a redundant identity card.
+    dom.identityEl.innerHTML = '';
     var ride = _ride();
     var rideSnap = ride ? ride.getSnapshot() : null;
-    if (rideSnap && _isBoardingStationForActiveLeg(record)) {
+    var hasYourTrip = !!(rideSnap && _isBoardingStationForActiveLeg(record));
+    if (hasYourTrip) {
       dom.identityEl.insertAdjacentHTML('beforeend', _renderYourTripSection(rideSnap));
+      dom.identityEl.classList.remove('subway-panel-hidden');
+      _startDismissTimer();
+    } else {
+      dom.identityEl.classList.add('subway-panel-hidden');
+      _clearDismissTimer();
     }
 
-    dom.identityEl.classList.remove('subway-panel-hidden');
-    _startDismissTimer();
+    var drawer = SBE.SubwayMezzanineDrawer;
+    var gtfsStopId = record.authoritativeLink && record.authoritativeLink.gtfsStopId;
+    if (drawer && gtfsStopId) drawer.open(gtfsStopId);
+
     return { ok: true, data: record };
   }
 
@@ -301,6 +263,8 @@
     _clearDismissTimer();
     _hovering = false;
     _currentStationId = null;
+    var drawer = SBE.SubwayMezzanineDrawer;
+    if (drawer) drawer.close();
     if (!_dom) return;
     _dom.identityEl.classList.add('subway-panel-hidden');
   }
@@ -317,8 +281,6 @@
     isVisible: isVisible,
     getCurrentStationId: function () { return _currentStationId; },
     // Test-only exposures — pure functions, never mutate identity.
-    __neighborhoodContext: _neighborhoodContext,
-    __boroughFullName: _boroughFullName,
     __isBoardingStationForActiveLeg: _isBoardingStationForActiveLeg,
     __test: {
       postponeDismiss: _postponeDismiss,

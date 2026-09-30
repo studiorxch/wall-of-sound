@@ -2003,6 +2003,34 @@
           </section>
         </div>
       </aside>
+
+      <!-- STATION-04 -- Mezzanine Drawer: the station-information layer
+           between MAP and the future Platform (see docs/architecture/
+           subway/README.md §15). Only occupies real layout space while
+           body.subway-mezzanine-open is set AND a station is selected --
+           collapses to zero grid-column width otherwise (see styles.css),
+           so MAP genuinely flexes into the freed space rather than this
+           floating over it. Content is a same-origin iframe reusing the
+           EXACT SAME canonical Station Truth / route-styling / direction /
+           line-orientation / arrival-presentation logic Station Cover
+           (music/station.html) already built and tests -- never a second,
+           duplicated station-information implementation. See
+           subwayMezzanineDrawer.js. -->
+      <aside id="subway-mezzanine-drawer" aria-hidden="true">
+        <div
+          id="subway-mezzanine-drawer-resize-handle"
+          class="subway-mezzanine-drawer-resize-handle"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize station drawer"
+          tabindex="0"
+        ></div>
+        <iframe
+          id="subway-mezzanine-drawer-frame"
+          class="subway-mezzanine-drawer-frame"
+          title="Station information"
+        ></iframe>
+      </aside>
     </div>
 
     <!-- Status text (hidden) -->
@@ -2870,6 +2898,7 @@
     <script src="./systems/presentation/homeMapSurface.js"></script>
     <script src="./systems/presentation/subwayBlackbookNavLink.js"></script>
     <script src="./systems/presentation/subwayStationCoverNavLink.js"></script>
+    <script src="./systems/presentation/subwayMezzanineDrawer.js"></script>
     <script src="./systems/presentation/subwayStationHud.js"></script>
     <script src="./systems/presentation/subwayLineRibbon.js"></script>
     <script src="./systems/presentation/subwayPresentationSurface.tests.js"></script>
@@ -2882,6 +2911,7 @@
     <script type="module" src="../assets/radio-channel-receiver-runtime.js"></script>
     <script src="./systems/presentation/radioChannelHud.js"></script>
     <script src="./systems/presentation/subwayStationHud.tests.js"></script>
+    <script src="./systems/presentation/subwayMezzanineDrawer.tests.js"></script>
     <script src="./systems/presentation/subwayLineRibbon.tests.js"></script>
     <!-- ── 0819_SUBWAY_Sunroof_Camera_Ride_Test_v1.0.0_BUILD — experimental
          camera-follow mode. Reads SubwayTrainMotionModel/MapboxViewportRuntime

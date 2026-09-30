@@ -686,3 +686,166 @@ Station Cover's arrival rows remain wired to an empty array with an
 honest "not yet available" message, exactly as in STATION-02 — no fake
 sharing, no fabricated data, no second polling engine built to work
 around this.
+
+## 15. STATION-04 — Mezzanine Drawer / MAP → Station Cover presentation consolidation
+
+Introduces the **Mezzanine Drawer**: the consolidated station-information
+layer between MAP and the future Platform. Product hierarchy: `MAP
+(select station) → MEZZANINE DRAWER (explicit ENTER PLATFORM) → PLATFORM
+(future, unbuilt)`. "MAP should feel like a map; STATION should feel
+like a station" — MAP genuinely flexes into the space the drawer frees,
+never a floating overlay.
+
+### Layout mechanism — real CSS Grid, not a second drawer system
+
+`wall/index.html`'s `.app-body` is already a 3-column CSS Grid
+(`50px minmax(0,1fr) var(--inspector-width)`), and the active public
+SUBWAY mode (`body.subway-public`) already collapses columns 1 and 3 to
+`0` (`grid-template-columns: 0 minmax(0,1fr) 0 !important`). STATION-04
+adds a 4th column, `var(--mezzanine-drawer-width)` (0 = closed), with a
+new `#subway-mezzanine-drawer` grid item mirroring `#right-panel`'s own
+established shape (`grid-column`, `width`/`min-width`/`max-width` all
+driven by one CSS var, `transition`, an `opacity`/`pointer-events`
+open-state gate). Opening/closing the drawer is therefore a real Grid
+column resize — MAP's own `minmax(0,1fr)` column automatically reclaims
+or cedes the space, with **no DOM reparenting of the map canvas, no
+floating overlay, no `z-index` stacking**.
+
+**Deliberately NOT `SBE.DrawerSystem`** (`wall/ui/drawerSystem.js`): that
+system is an overlay/backdrop-based, closes-on-outside-click drawer built
+for creator tools (Sampler/Library), and is explicitly suppressed
+entirely in `body.subway-public` mode already (`#drawer-panel` is one of
+the elements that mode's own CSS hides). It is architecturally the wrong
+shape for "MAP flexes beside it, never floats over it" — reusing it would
+have meant fighting its own backdrop/modal semantics, not adopting them.
+
+**Resize + persistence.** `wall/systems/presentation/subwayMezzanineDrawer.js`
+owns a real pointer-drag handle (315-540px clamp, 360px default),
+persisted to `localStorage` and re-applied on the next `open()` (never
+mid-drag — a resize always wins over a stale persisted value while the
+drawer is open). **A real bug this module's own test suite caught before
+merge:** the first implementation conflated "the user's preferred width"
+with "the currently-rendered CSS var," so `close()` never actually
+collapsed the grid column back to 0 — MAP silently never reclaimed the
+space. Fixed by separating `_openWidth` (the preference, meaningful
+whether open or closed) from the rendered CSS var (0 while closed,
+`_openWidth` while open) — now covered by an explicit regression test
+(`subwayMezzanineDrawer.tests.js`: "closing collapses the rendered CSS
+grid-column width to 0").
+
+**Resize sync.** After any width change, this module calls
+`SBE.WorkspaceViewportSync.schedule()` — `wall/main.js`'s own
+pre-existing, centralized, rAF-debounced resize scheduler (already
+documented there as driving Mapbox's `map.resize()` after "drawer
+open/close," among other triggers). `WorkspaceViewportSync` was a
+private closure before this batch; STATION-04 exposes it on `SBE`
+(one new line in `main.js`) specifically so this module could call the
+existing mechanism instead of building a second one.
+
+### Content — real reuse, not a second implementation
+
+The drawer's content is a **same-origin iframe** pointing at
+`../station.html?station=<gtfsStopId>&embedded=1` — the EXACT SAME page
+and runtime (`stationCoverRuntime.ts`) Station Cover already built across
+STATION-01/02/03, unmodified in substance. `?embedded=1` toggles two
+purely presentational things (hide the standalone "← MAP" link; drop the
+fixed `max-width`/large padding in favor of fluid, drawer-width-appropriate
+spacing) — every other behavior (Station Truth fetch, route-badge
+styling, N/S direction state, the arrival-rows display rule, real line
+orientation via `stationLineOrientation.ts`) is identical in both modes.
+`subwayMezzanineDrawer.js` itself owns zero station-information rendering
+— it is a container only.
+
+An **ENTER PLATFORM** action (disabled placeholder, same honest
+"coming soon" pattern the old creative-space button used) replaces the
+STATION-03-era "Enter station creative space" button, which represented
+an obsolete model (Cover leading to a generic creative destination).
+Platform itself does not exist yet — this batch's own explicit boundary.
+
+### MAP cleanup — before/after ownership, element by element
+
+| Element | Before STATION-04 | After STATION-04 |
+|---|---|---|
+| Station name / neighborhood / served-route badges | Rendered in `subwayStationHud.js`'s `#subway-station-identity` on every selection | **Moved** to the Mezzanine Drawer exclusively (`station.html`'s own presentation) — `identityEl` no longer renders any of this |
+| Detailed per-direction arrival board | Already removed in STATION-03 (`#subway-arrival-lane`) | Unchanged — still Station Cover's job exclusively, now inside the drawer specifically |
+| **YOUR TRIP** (active-boarding-leg BOARD action) | Rendered inside `#subway-station-identity`, alongside name/badges | **Retained, MAP-owned**, still inside `#subway-station-identity` — now the ONLY thing that element renders. Itinerary-scoped, live-action UI (`SubwayItineraryRideAuthority`, real BOARD clicks) — the same reachability class as live arrivals (§13's STOP finding 1), so it structurally CANNOT move into the drawer's separately-hosted iframe document. `identityEl` now stays empty/hidden except during an active boarding leg for the selected station |
+| Local-line orientation | STATION-03: rendered in the drawer already (no MAP-side presentation existed) | Unchanged — drawer-only, per this batch's own explicit "not a MAP overlay" instruction |
+| Dismiss timer (`isVisible()`, `hide()` auto-hide) | Started on every selection (name/badges/YOUR TRIP all shared one lifecycle) | Now only starts when YOUR TRIP is actually showing — nothing else lives in `identityEl` to auto-hide. `isVisible()`'s meaning narrowed accordingly (asserted explicitly in `subwayStationHud.tests.js`) |
+| RADIO slot (`#subway-radio-slot`) | MAP-owned, untouched | **Unchanged**, MAP-owned |
+| BLACKBOOK / Bay Ridge Av Station top-chrome nav links | MAP-owned, `position:fixed` | **Unchanged**, verified byte-identical `getBoundingClientRect()` before/after drawer open+close this batch — the BLACKBOOK-position invariant holds |
+| Weather/clock HUD, global MAP chrome | MAP-owned, untouched | **Unchanged** |
+
+**Known gap, intentionally deferred (not silently dropped).**
+`_buildLineBadge`'s click handler (previously inside the now-removed
+identity badge row) was the ONLY production trigger for
+`SubwayLineRibbon.showLineMode()` ("click a served route to see its
+ordered station sequence in the left ribbon"). No replacement trigger
+was added this batch — the drawer's route badges live in a separate
+document and cannot call a `wall/`-realm function directly, and forcing
+the badge row back into `identityEl` (mixed-purpose: partly identity,
+partly a Line Mode trigger) would have re-blurred the exact boundary
+this batch establishes. **Recommended smallest resolution:** a small
+`postMessage` bridge from the drawer's own route-badge click (inside
+`station.html`) to `subwayMezzanineDrawer.js`, which already owns the
+same-origin iframe reference needed to receive it and call
+`SBE.SubwayLineRibbon.showLineMode()` on MAP's side.
+
+### Station Cover migration — reused / moved / superseded / retained
+
+- **Reused, unmodified:** `stationTruth.ts`, `stationCoverPresentation.ts`
+  (route-color glass-badge styling), `stationArrivalPresentation.ts`
+  (max-2-per-service rule), `stationLineOrientation.ts` (real neighbor
+  resolution), the entire `stationCoverRuntime.ts` render pipeline and
+  N/S direction state. None of these were duplicated for the drawer —
+  the drawer's iframe loads the literal same page.
+- **Moved (presentation-layer only):** the MAP-side identity card
+  content (name/neighborhood/badges) — this was already Station Cover's
+  own job since STATION-01/02; STATION-04 just removes MAP's redundant
+  parallel copy of it.
+- **Superseded (not deleted):** the STATION-03 "Enter station creative
+  space" placeholder → ENTER PLATFORM. The old button's underlying
+  intent (an honest, disabled, future-facing action) is preserved
+  exactly — only its label/destination changed.
+- **Retained, unmodified:** `music/station.html` remains independently
+  reachable as a standalone, full-page HOME surface
+  (`{surface:"station", stationId}`) and via `subwayStationCoverNavLink.js`'s
+  own always-visible top-chrome pill — useful for a direct/shareable
+  link to a station's page outside of MAP context. **Intentionally left
+  for STATION-05 evaluation:** now that the drawer opens automatically
+  on every MAP selection and supersedes the pill's original "get me to
+  Station Cover" job for the common case, whether that pill should be
+  retired (per this codebase's own "never duplicate navigation" doctrine)
+  is a real open question this batch does not resolve unilaterally.
+
+### Forward-architecture constraint — verified, not just stated
+
+No station-topology types were touched this batch — `stationGeometryTypes.ts`,
+`stationArchetypeTypes.ts`, `stationClassificationTypes.ts`, and Bay Ridge
+Av's own side-platform arrangement are all untouched. The drawer's only
+structural assumption about a station is the one `StationTruth` already
+encodes (a `gtfsStopId` with zero or more served routes) — nothing about
+platform count, configuration, or arrangement is encoded anywhere in this
+batch's code, satisfying this batch's own explicit "do not encode Bay
+Ridge Av's side-platform arrangement" constraint by simply never
+introducing any topology concept to begin with.
+
+### Testing
+
+`subwayMezzanineDrawer.tests.js` (new, 29 cases): width contract/clamping,
+real DOM wiring, open/close lifecycle (including the close-collapses-to-0
+regression test above), same-station re-open doesn't reload the iframe,
+different-station open updates it, persisted-width round-trip.
+`subwayStationHud.tests.js` updated (42 cases, was 43 — §10's now-dead
+neighborhood-resolution tests removed, not just left stale): §8/§9
+reassigned to assert identity content is ABSENT from `identityEl` and
+present in the drawer instead; §13/§14 dismiss-timer coverage moved into
+the real boarding-active (YOUR TRIP) scenario, the only context where a
+timer now runs. `subwayCameraSunroof.tests.js`'s own §23 regression check
+updated to match `isVisible()`'s narrowed meaning. Full hand-rolled
+`wall/` regression sweep re-run clean: `subwayPresentationSurfaceTests`,
+`subwayArrivalIntelligenceTests`, `subwayItineraryLegResolverTests`,
+`subwayItineraryRideAuthorityTests`, `subwayItineraryRideHudTests`,
+`mtaSubwayMapLayerTests`, `subwayLineRibbonTests` — zero failures.
+MUSIC/Vite suite (1442 tests) unaffected — no logic module was modified,
+only `station.html`'s own embedded-mode CSS/markup and
+`stationCoverRuntime.ts`'s embedded-mode branch.

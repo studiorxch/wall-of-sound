@@ -257,7 +257,12 @@
         var anyRecord = lib && lib.getAllRecords()[0];
         if (anyRecord) {
           var showResult = hud.show(anyRecord.studioRichStationId);
-          results.push(_assert('§23 public station HUD works normally outside ride mode, unaffected by Sunroof', showResult.ok === true && hud.isVisible() === true));
+          // STATION-04: isVisible() now reflects identityEl's own content
+          // (YOUR TRIP only) -- with no active boarding leg for this
+          // record, identityEl correctly stays hidden. show() resolving
+          // ok and tracking the current station id is the real "works
+          // normally" signal here, not identityEl's visibility.
+          results.push(_assert('§23 public station HUD works normally outside ride mode, unaffected by Sunroof', showResult.ok === true && hud.getCurrentStationId() === anyRecord.studioRichStationId));
           hud.hide();
         } else {
           results.push(_assert('§23 public station HUD regression check (SKIPPED — no station record available)', true));

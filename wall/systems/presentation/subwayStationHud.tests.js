@@ -1,11 +1,20 @@
-// ── SubwayStationHud Tests v1.2.0 ─────────────────────────────────────────────
+// ── SubwayStationHud Tests v1.3.0 ─────────────────────────────────────────────
 // 0819_SUBWAY_Public_HUD_Line_Ribbon_v1.0.0_BUILD — Required Tests §24
-// (3,4,5,6,7,8,9,10,13,14,15,16,21)
+// (3,4,5,6,7,13,14,15,16,21 — §8/§9/§10 superseded, see STATION-04 note)
 // 0821_SUBWAY_Boarding_UX_TrainRideSession — YOUR TRIP section coverage.
 // STATION-03 — §11-12's old per-direction arrival-panel assertions are
 // replaced below with an assertion that the arrival lane has been REMOVED
 // from MAP's presentation entirely (detailed arrivals now live on Station
 // Cover — see subwayStationHud.js's own updated header).
+// STATION-04 — §8/§9's old "station name/badges render in identityEl"
+// assertions are replaced: that content now renders in the Mezzanine
+// Drawer exclusively (see subwayMezzanineDrawer.js) — identityEl now
+// renders ONLY YOUR TRIP. §10's neighborhood-resolution pure-function
+// tests are removed along with the (now dead) functions themselves —
+// equivalent behavior is covered by stationCoverPresentation.test.ts in
+// the MUSIC suite. §13/§14's dismiss-timer assertions moved into the real
+// boarding-active scenario below (there's nothing to dismiss in the
+// no-active-trip case anymore, since identityEl stays empty/hidden).
 // Run via: SBE.SubwayStationHudTests.run()
 // ──────────────────────────────────────────────────────────────────────────────
 (function (global) {
@@ -49,29 +58,46 @@
       return { ok: false, total: 1, failed: 1, results: results };
     }
 
-    // ── §10 neighborhood resolution — pure function, real + fallback cases ─
-    var withNeighborhood = { operational: { neighborhood: 'Greenwich Village', borough: 'M' } };
-    results.push(_assert('§10 real neighborhood value is used when the Station Library record has one', hud.__neighborhoodContext(withNeighborhood) === 'Greenwich Village'));
-    var withoutNeighborhood = { operational: { neighborhood: null, borough: 'Bx' } };
-    results.push(_assert('§10 falls back to the real borough (expanded to its full name) when neighborhood data is unavailable — never fabricated', hud.__neighborhoodContext(withoutNeighborhood) === 'The Bronx'));
-    var withNeither = { operational: { neighborhood: null, borough: null } };
-    results.push(_assert('falls back to an honest generic city label when neither is available (never fabricates a specific place)', hud.__neighborhoodContext(withNeither) === 'New York, NY'));
+    // STATION-04: §10's old neighborhood-resolution pure-function tests are
+    // removed along with `_neighborhoodContext`/`_boroughFullName`
+    // themselves (dead code in this file since identity moved to the
+    // Mezzanine Drawer) — that exact behavior (real neighborhood, borough
+    // fallback, honest generic-city fallback) is independently covered by
+    // `stationCoverPresentation.test.ts` in the MUSIC/Vite suite, the
+    // drawer's own real content now.
 
-    // ── §7-9, §15 station selection → public identity ────────────────────
+    // ── §7, §15 station selection → public identity ──────────────────────
     // Prefer a multi-line station for a meaningful badge-count check.
     var multi = allRecords.slice().sort(function (a, b) { return (b.operational.routeIds || []).length - (a.operational.routeIds || []).length; })[0];
     var selectResult = layer.selectStation(multi.studioRichStationId);
     results.push(_assert('§7 station click resolves the selected station identity', selectResult.ok === true && hud.getCurrentStationId() === multi.studioRichStationId));
-    results.push(_assert('SubwayStationHud reports visible after a real selection', hud.isVisible() === true));
+
+    // STATION-04: with no active boarding leg for this station, identityEl
+    // now correctly stays EMPTY/hidden -- station identity itself moved to
+    // the Mezzanine Drawer (asserted separately below), and there is no
+    // YOUR TRIP to show.
+    results.push(_assert('STATION-04: SubwayStationHud reports NOT visible after a selection with no active YOUR TRIP (identity moved to the drawer)', hud.isVisible() === false));
 
     var identityEl = global.document.getElementById('subway-station-identity');
     results.push(_assert('station identity DOM element exists', !!identityEl));
     if (identityEl) {
-      results.push(_assert('§8 real station name renders in the public identity block', identityEl.textContent.indexOf(multi.operational.displayName) !== -1));
-      var badges = identityEl.querySelectorAll('.subway-line-badge');
-      results.push(_assert('§9 served routes render as one badge component per real served route', badges.length === (multi.operational.routeIds || []).length, { badgeCount: badges.length, routeCount: (multi.operational.routeIds || []).length }));
-      results.push(_assert('§15 internal stlib-* id is never surfaced in the public identity block', identityEl.textContent.indexOf(multi.studioRichStationId) === -1));
-      results.push(_assert('§15 internal gtfsStopId is never surfaced in the public identity block', identityEl.textContent.indexOf(multi.authoritativeLink.gtfsStopId) === -1));
+      results.push(_assert('STATION-04: real station name no longer renders in identityEl (moved to the Mezzanine Drawer)', identityEl.textContent.indexOf(multi.operational.displayName) === -1));
+      results.push(_assert('STATION-04: no line badges render in identityEl any more (moved to the Mezzanine Drawer)', identityEl.querySelectorAll('.subway-line-badge').length === 0));
+      results.push(_assert('§15 internal stlib-* id is never surfaced in identityEl', identityEl.textContent.indexOf(multi.studioRichStationId) === -1));
+      results.push(_assert('§15 internal gtfsStopId is never surfaced in identityEl', identityEl.textContent.indexOf(multi.authoritativeLink.gtfsStopId) === -1));
+    }
+
+    // ── STATION-04: Mezzanine Drawer opens on real station selection ────
+    var drawer = SBE.SubwayMezzanineDrawer;
+    results.push(_assert('STATION-04: SubwayMezzanineDrawer is loaded', !!drawer));
+    if (drawer) {
+      results.push(_assert('STATION-04: the drawer opens with the selected station\'s real gtfsStopId, never studioRichStationId', drawer.isOpen() === true && drawer.getOpenGtfsStopId() === multi.authoritativeLink.gtfsStopId, drawer.getOpenGtfsStopId()));
+      var frameEl = global.document.getElementById('subway-mezzanine-drawer-frame');
+      results.push(_assert('STATION-04: the drawer iframe points at the real Station Cover page in embedded mode, same-origin, no second implementation',
+        !!frameEl && frameEl.src.indexOf('/station.html?station=' + multi.authoritativeLink.gtfsStopId) !== -1 && frameEl.src.indexOf('embedded=1') !== -1, frameEl && frameEl.src));
+      layer.clearSelection();
+      results.push(_assert('STATION-04: clearing the selection closes the drawer', drawer.isOpen() === false));
+      layer.selectStation(multi.studioRichStationId); // re-select — remaining assertions below assume an active selection
     }
 
     // ── STATION-03: the old §11-12 per-direction arrival board has been
@@ -81,15 +107,16 @@
     results.push(_assert('STATION-03: the arrival lane DOM element no longer exists on MAP', !global.document.getElementById('subway-arrival-lane')));
     results.push(_assert('STATION-03: SubwayArrivalIntelligence itself is untouched/still loaded (data authority preserved, only MAP presentation removed)', !!ai));
 
-    // ── §13-14 transient dismissal lifecycle ─────────────────────────────
-    results.push(_assert('§13 a dismiss timer is active immediately after a real selection', hud.__test.isDismissTimerActive() === true));
-    hud.__test.setHovering(true);
-    results.push(_assert('§14 hovering/interacting cancels the pending dismissal', hud.__test.isDismissTimerActive() === false));
-    hud.__test.setHovering(false);
-    results.push(_assert('§14 leaving hover restarts the dismissal timer (postponed, not cancelled forever)', hud.__test.isDismissTimerActive() === true));
+    // STATION-04: with no active YOUR TRIP, no dismiss timer starts at all
+    // (nothing to dismiss) -- real §13/§14 timer-lifecycle coverage now
+    // lives in the boarding-active scenario below, where identityEl
+    // genuinely has content to auto-hide. forceDismiss()/hide() are still
+    // generically verified here: clearing the tracked station id and
+    // closing the drawer happen regardless of whether YOUR TRIP was shown.
+    results.push(_assert('STATION-04: no dismiss timer is running when nothing is shown (no active YOUR TRIP)', hud.__test.isDismissTimerActive() === false));
     hud.__test.forceDismiss();
-    results.push(_assert('§13 dismissal hides the public panel', hud.isVisible() === false));
     results.push(_assert('dismissal clears the tracked current station id', hud.getCurrentStationId() === null));
+    results.push(_assert('STATION-04: dismissal closes the Mezzanine Drawer too', !drawer || drawer.isOpen() === false));
 
     // ── §16 debug/operator metrics remain accessible internally ─────────
     var diag = layer.getDiagnostics();
@@ -191,6 +218,20 @@
           results.push(_assert('YOUR TRIP renders when the selected station IS the active leg\'s real boarding station', !!identityEl && identityEl.textContent.indexOf('YOUR TRIP') !== -1, identityEl && identityEl.textContent));
           results.push(_assert('YOUR TRIP shows the real route/direction and the real exit station — sourced from the leg, never re-derived',
             !!identityEl && identityEl.textContent.indexOf(leg.direction.towardStationName) !== -1 && identityEl.textContent.indexOf(leg.exitStation.name) !== -1));
+
+          // ── §13-14 transient dismissal lifecycle — moved here (STATION-04):
+          //    a real dismiss timer only makes sense when identityEl
+          //    actually has content to auto-hide, which now only happens
+          //    while YOUR TRIP is showing. ──
+          results.push(_assert('§13 a dismiss timer is active while YOUR TRIP is showing', hud.__test.isDismissTimerActive() === true));
+          hud.__test.setHovering(true);
+          results.push(_assert('§14 hovering/interacting cancels the pending dismissal', hud.__test.isDismissTimerActive() === false));
+          hud.__test.setHovering(false);
+          results.push(_assert('§14 leaving hover restarts the dismissal timer (postponed, not cancelled forever)', hud.__test.isDismissTimerActive() === true));
+          hud.__test.forceDismiss();
+          results.push(_assert('§13 dismissal hides the public panel', hud.isVisible() === false));
+          layer.selectStation(r41Record.studioRichStationId); // re-select — remaining boarding assertions below assume YOUR TRIP is showing again
+          identityEl = global.document.getElementById('subway-station-identity');
 
           if (assoc && assoc.logicalTrainId) {
             results.push(_assert('MATCHING LIVE TRAINS renders once identity resolves', !!identityEl && identityEl.textContent.indexOf('MATCHING LIVE TRAINS') !== -1));

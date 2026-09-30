@@ -28,6 +28,24 @@
 // placeholder is removed -- the real future path is Station Cover ->
 // Station Model, which does not exist yet, and this page adds no fake
 // destination in its place.
+//
+// STATION-04 -- this exact runtime is now ALSO the Mezzanine Drawer's
+// content, loaded in a same-origin iframe MAP itself hosts
+// (wall/systems/presentation/subwayMezzanineDrawer.js), never a second,
+// duplicated station-information implementation. `?embedded=1` (present
+// only when loaded that way) switches two things, both purely
+// presentational: the standalone "<- MAP" link is hidden (MAP already
+// provides its own close/deselect affordance for the drawer hosting this
+// page), and outer page padding shrinks to fit the drawer's own
+// resizable 315-540px width rather than the standalone page's fixed
+// max-width. Every other behavior -- fetch, direction state, arrivals,
+// line orientation -- is identical in both modes; this is real reuse, not
+// a fork. `station.html`'s own static markup is unchanged by embedded
+// mode; only this script's applied classes/markup differ.
+//
+// An "ENTER PLATFORM" action is added (disabled placeholder, same honest
+// "coming soon" pattern the old creative-space button used) -- Platform
+// itself does not exist yet (STATION-04's own explicit scope boundary).
 
 import { fetchStaticSnapshot } from "../logic/maps/stationTruth";
 import { resolveStationTruth, type StationTruth } from "../logic/maps/stationTruth";
@@ -43,6 +61,12 @@ const required = <T extends Element>(selector: string): T => {
 };
 
 const homeSurface = createStationHomeSurface();
+
+// STATION-04 -- the one flag distinguishing "Mezzanine Drawer content"
+// from "standalone Station Cover page". Never read anywhere except here
+// and the two presentational branches below.
+const isEmbedded = new URLSearchParams(location.search).get("embedded") === "1";
+if (isEmbedded) document.body.classList.add("embedded");
 
 const root = required<HTMLElement>("#station-cover-root");
 const backLink = required<HTMLAnchorElement>("#station-back-to-map");
@@ -148,6 +172,11 @@ function render(): void {
     ${renderDirectionControl()}
     ${renderArrivals()}
     ${renderLineOrientation(display.name)}
+
+    <button type="button" class="station-cover-enter-platform" disabled
+      title="The Platform view doesn't exist yet -- this is the navigation boundary a future batch completes.">
+      ENTER PLATFORM
+    </button>
   `;
 
   root.querySelectorAll<HTMLButtonElement>("[data-direction]").forEach((button) => {

@@ -21052,6 +21052,14 @@
       requestAnimationFrame(_doViewportSync);
     }
 
+    // STATION-04 -- exposed so an external module (subwayMezzanineDrawer.js)
+    // can trigger the SAME centralized, rAF-debounced resize sync this file's
+    // own inspector-collapse/DrawerSystem hooks already use, after changing
+    // the Mezzanine Drawer's own grid column width -- never a second,
+    // independently-implemented resize-scheduling loop.
+    window.SBE = window.SBE || {};
+    SBE.WorkspaceViewportSync = { schedule: _scheduleViewportSync };
+
     // Wire window resize
     window.addEventListener('resize', _scheduleViewportSync, { passive: true });
 

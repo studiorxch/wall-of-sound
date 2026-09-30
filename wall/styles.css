@@ -19,6 +19,13 @@
   --inspector-width: 300px;
   --drawer-width: 420px;
 
+  /* STATION-04 -- Mezzanine Drawer's own grid column width. 0 = closed
+     (MAP occupies the full middle grid column); subwayMezzanineDrawer.js
+     sets this to the resolved/persisted width (315-540px) on open, and
+     back to 0 on close -- the grid column itself does the "MAP flexes
+     into the remaining viewport" work, no floating overlay involved. */
+  --mezzanine-drawer-width: 0px;
+
   /* ── Symbol workbench ─────────────────────────────── */
   --symbol-workbench-height: 520px;
   --swb-slot-col-width: 160px;
@@ -205,6 +212,74 @@ body {
     min-width 200ms ease,
     max-width 200ms ease,
     opacity 160ms ease;
+}
+
+/* ── STATION-04: Mezzanine Drawer ─────────────────────────────────────
+   Same "grid column collapses to 0" shape as #right-panel's own
+   inspector-hidden pattern below -- width is the ONE visibility driver,
+   never display:none (so a resize/close transition can animate), and
+   MAP's own middle grid column (minmax(0,1fr)) automatically reclaims
+   the freed space -- no floating overlay, no reparenting the map canvas.
+   See wall/systems/presentation/subwayMezzanineDrawer.js. ────────────── */
+#subway-mezzanine-drawer {
+  grid-column: 4;
+  grid-row: 1 / -1;
+  width: var(--mezzanine-drawer-width);
+  min-width: var(--mezzanine-drawer-width);
+  max-width: var(--mezzanine-drawer-width);
+  min-height: 0;
+  flex-shrink: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: row;
+  position: relative;
+  background: #0e0d0b;
+  opacity: 0;
+  pointer-events: none;
+  border-left: 1px solid transparent;
+  transition:
+    width 200ms ease,
+    min-width 200ms ease,
+    max-width 200ms ease,
+    opacity 160ms ease,
+    border-color 160ms ease;
+}
+body.subway-mezzanine-open #subway-mezzanine-drawer {
+  opacity: 1;
+  pointer-events: auto;
+  border-left: 1px solid rgba(255, 255, 255, 0.12);
+}
+/* Dragging: disable the width transition so the drag tracks the pointer
+   1:1 (no animation lag), and disable text selection app-wide so a fast
+   drag doesn't select page text. */
+body.subway-mezzanine-resizing #subway-mezzanine-drawer {
+  transition: none;
+}
+body.subway-mezzanine-resizing {
+  user-select: none;
+  cursor: ew-resize;
+}
+.subway-mezzanine-drawer-resize-handle {
+  position: absolute;
+  left: -3px;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: ew-resize;
+  z-index: 5;
+  background: transparent;
+  transition: background 120ms ease;
+}
+.subway-mezzanine-drawer-resize-handle:hover,
+body.subway-mezzanine-resizing .subway-mezzanine-drawer-resize-handle {
+  background: rgba(255, 255, 255, 0.1);
+}
+.subway-mezzanine-drawer-frame {
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: #0e0d0b;
 }
 
 /* ── INSPECTOR COLLAPSED (no selection, not pinned) ─────────────────── */
@@ -1069,7 +1144,10 @@ body.subway-presentation .wt-reality {
    surfaces are suppressed. Map interaction, station/train selection,
    arrivals, weather, and RADIO remain available. */
 body.subway-public .app-body {
-  grid-template-columns: 0 minmax(0, 1fr) 0 !important;
+  /* STATION-04 -- 4th column is the Mezzanine Drawer. Width 0 (closed) by
+     default, so this is a no-op change to MAP's own layout until a
+     station is actually selected -- see --mezzanine-drawer-width above. */
+  grid-template-columns: 0 minmax(0, 1fr) 0 var(--mezzanine-drawer-width) !important;
 }
 body.subway-public #left-rail,
 body.subway-public #left-panel,
