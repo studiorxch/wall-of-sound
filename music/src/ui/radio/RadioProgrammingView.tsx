@@ -32,8 +32,11 @@ import type { RadioWebExportRecord, RadioSitesPublicationRecord } from "../../da
 import { listSchedulablePlaylists, type SchedulablePlaylist } from "../../logic/radio/radioProgramLifecycle";
 import { findActiveScheduleBlock } from "../../logic/radio/radioScheduleBroadcastPriority";
 import { resolveRadioProgramGuide, type RadioProgramGuide } from "../../logic/radio/radioPublicProgramGuide";
+import { buildActivateChannelUpdate, buildDeactivateChannelUpdate } from "../../logic/radio/channelRotationEditorState";
+import { canActivateChannel, canDeleteChannel } from "../../logic/radio/radioChannelLifecycle";
 import { RadioScheduleBlockDialog } from "./RadioScheduleBlockDialog";
 import { RadioNewChannelDialog } from "./RadioNewChannelDialog";
+import { RadioRenameChannelDialog } from "./RadioRenameChannelDialog";
 
 // Same lazy-singleton convention RadioPlaylistPublishPanel.tsx already
 // uses -- constructed on first real use, never at module scope (this
@@ -147,6 +150,9 @@ export function RadioProgrammingView({ radioPlaylists, radioWebExports, radioSit
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [dialogTarget, setDialogTarget] = useState<{ block: RadioScheduleBlock | null; startAtMs: number; endAtMs: number } | null>(null);
   const [showNewChannelDialog, setShowNewChannelDialog] = useState(false);
+  const [showRenameDialog, setShowRenameDialog] = useState(false);
+  const [showChannelMenu, setShowChannelMenu] = useState(false);
+  const [channelActionState, setChannelActionState] = useState<{ status: "idle" } | { status: "pending" } | { status: "error"; message: string }>({ status: "idle" });
   const [loadError, setLoadError] = useState<string | null>(null);
 
   // Adjust state during render (React-endorsed pattern, same one used in
@@ -243,6 +249,78 @@ export function RadioProgrammingView({ radioPlaylists, radioWebExports, radioSit
 
   const programTitleById = useMemo(() => new Map((programs ?? []).map((p) => [p.id, p.title])), [programs]);
 
+  const selectedChannel = channels?.find((c) => c.channelId === selectedChannelId) ?? null;
+
+  // RADIO-04E -- Activate/Deactivate reuse channelControlRuntime.ts's own
+  // pure buildActivateChannelUpdate/buildDeactivateChannelUpdate builders
+  // (channelRotationEditorState.ts) rather than constructing the update
+  // payload a second time. canActivateChannel is a friendly pre-flight
+  // check only -- the real gate is firestoreRadioChannelRepository.ts's
+  // own status-aware validation, which rejects this exact case
+  // authoritatively regardless of what this check does.
+  async function handleActivate() {
+    if (!selectedChannel) return;
+    const check = canActivateChannel(selectedChannel);
+    if (!check.ok) { setChannelActionState({ status: "error", message: check.reason }); return; }
+    setChannelActionState({ status: "pending" });
+    try {
+      const memberState = getMemberIdentity().getState();
+      const updatedByMemberId = memberState.status === "signedIn" ? memberState.authUser.uid : "unknown";
+      const updated = await getChannelRepository().updateRadioChannel(buildActivateChannelUpdate(selectedChannel.channelId), updatedByMemberId);
+      setChannels((prev) => (prev ?? []).map((c) => (c.channelId === updated.channelId ? updated : c)));
+      setChannelActionState({ status: "idle" });
+      setShowChannelMenu(false);
+    } catch (error) {
+      setChannelActionState({ status: "error", message: error instanceof Error ? error.message : String(error) });
+    }
+  }
+
+  async function handleDeactivate() {
+    if (!selectedChannel) return;
+    setChannelActionState({ status: "pending" });
+    try {
+      const memberState = getMemberIdentity().getState();
+      const updatedByMemberId = memberState.status === "signedIn" ? memberState.authUser.uid : "unknown";
+      const updated = await getChannelRepository().updateRadioChannel(buildDeactivateChannelUpdate(selectedChannel.channelId), updatedByMemberId);
+      setChannels((prev) => (prev ?? []).map((c) => (c.channelId === updated.channelId ? updated : c)));
+      setChannelActionState({ status: "idle" });
+      setShowChannelMenu(false);
+    } catch (error) {
+      setChannelActionState({ status: "error", message: error instanceof Error ? error.message : String(error) });
+    }
+  }
+
+  // RADIO-04E -- hard-delete, gated on canDeleteChannel's own precondition
+  // (inactive, and zero radioScheduleBlocks ever reference this channelId
+  // -- see that module's own doc on why this is the smallest safe rule).
+  // One confirmation, same window.confirm convention every other
+  // destructive RADIO/MEMBER action already uses (blackbookRuntime.ts,
+  // memberHomeUI.ts, channelControlRuntime.ts's own Start/Restart Rotation
+  // confirm).
+  async function handleDelete() {
+    if (!selectedChannel) return;
+    setChannelActionState({ status: "pending" });
+    try {
+      const scheduleBlocks = await getScheduleRepository().listScheduleBlocksForChannel(selectedChannel.channelId);
+      const check = canDeleteChannel(selectedChannel, scheduleBlocks);
+      if (!check.ok) { setChannelActionState({ status: "error", message: check.reason }); return; }
+      if (!window.confirm(`Delete "${selectedChannel.title}"? This cannot be undone.`)) {
+        setChannelActionState({ status: "idle" });
+        return;
+      }
+      await getChannelRepository().deleteRadioChannel(selectedChannel.channelId);
+      setChannels((prev) => {
+        const next = (prev ?? []).filter((c) => c.channelId !== selectedChannel.channelId);
+        setSelectedChannelId(next[0]?.channelId ?? null);
+        return next;
+      });
+      setChannelActionState({ status: "idle" });
+      setShowChannelMenu(false);
+    } catch (error) {
+      setChannelActionState({ status: "error", message: error instanceof Error ? error.message : String(error) });
+    }
+  }
+
   function openCreateDialog(dayStartMs: number, hour: number) {
     const startAtMs = dayStartMs + hour * 3600 * 1000;
     setDialogTarget({ block: null, startAtMs, endAtMs: startAtMs + 2 * 3600 * 1000 });
@@ -274,6 +352,38 @@ export function RadioProgrammingView({ radioPlaylists, radioWebExports, radioSit
             >
               +
             </button>
+          )}
+          {isAuthorizedOperator && selectedChannel && (
+            <span className="radio-programming-channel-menu">
+              <button
+                type="button"
+                className="npw-btn npw-btn--ghost radio-programming-new-channel-btn"
+                title="Channel actions"
+                onClick={() => { setShowChannelMenu((v) => !v); setChannelActionState({ status: "idle" }); }}
+              >
+                •••
+              </button>
+              {showChannelMenu && (
+                <div className="radio-programming-channel-menu-popover">
+                  <button type="button" className="radio-programming-channel-menu-item" onClick={() => { setShowRenameDialog(true); setShowChannelMenu(false); }}>
+                    Rename
+                  </button>
+                  {selectedChannel.status === "active" ? (
+                    <button type="button" className="radio-programming-channel-menu-item" onClick={handleDeactivate} disabled={channelActionState.status === "pending"}>
+                      Deactivate
+                    </button>
+                  ) : (
+                    <button type="button" className="radio-programming-channel-menu-item" onClick={handleActivate} disabled={channelActionState.status === "pending"}>
+                      Activate
+                    </button>
+                  )}
+                  <button type="button" className="radio-programming-channel-menu-item radio-programming-channel-menu-item--danger" onClick={handleDelete} disabled={channelActionState.status === "pending"}>
+                    Delete
+                  </button>
+                  {channelActionState.status === "error" && <p className="radio-diff-note">{channelActionState.message}</p>}
+                </div>
+              )}
+            </span>
           )}
         </label>
       </div>
@@ -395,6 +505,18 @@ export function RadioProgrammingView({ radioPlaylists, radioWebExports, radioSit
             setShowNewChannelDialog(false);
             setChannels((prev) => [...(prev ?? []), created]);
             setSelectedChannelId(created.channelId);
+          }}
+        />
+      )}
+
+      {showRenameDialog && selectedChannel && (
+        <RadioRenameChannelDialog
+          channel={selectedChannel}
+          getChannelRepository={getChannelRepository}
+          onClose={() => setShowRenameDialog(false)}
+          onRenamed={(updated) => {
+            setShowRenameDialog(false);
+            setChannels((prev) => (prev ?? []).map((c) => (c.channelId === updated.channelId ? updated : c)));
           }}
         />
       )}

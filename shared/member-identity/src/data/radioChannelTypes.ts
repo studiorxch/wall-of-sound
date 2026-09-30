@@ -81,4 +81,13 @@ export interface RadioChannelRepository {
   createRadioChannel(input: CreateRadioChannelInput, createdByMemberId: string): Promise<RadioChannel>;
   /** Authorized-operator-only in Firestore rules. The channel must already exist -- this never creates one. Validates the same way `createRadioChannel` does. */
   updateRadioChannel(input: UpdateRadioChannelInput, updatedByMemberId: string): Promise<RadioChannel>;
+  /**
+   * RADIO-04E -- authorized-operator-only in Firestore rules (the
+   * existing, unconditional `allow delete`, unchanged by this batch).
+   * Hard-delete, no soft/archive state. Callers are responsible for
+   * deciding it's safe to call this at all (see `canDeleteChannel` in
+   * `music/src/logic/radio/radioChannelLifecycle.ts`) -- this method does
+   * not check whether the channel is active or has schedule history.
+   */
+  deleteRadioChannel(channelId: string): Promise<void>;
 }

@@ -1,4 +1,4 @@
-import { collection, doc, getDoc, getDocs, runTransaction, serverTimestamp, Timestamp, type Firestore } from "firebase/firestore";
+import { collection, deleteDoc, doc, getDoc, getDocs, runTransaction, serverTimestamp, Timestamp, type Firestore } from "firebase/firestore";
 import type {
   CreateRadioChannelInput,
   RadioChannel,
@@ -58,22 +58,28 @@ export function validateCreateRadioChannelInput(input: CreateRadioChannelInput, 
 }
 
 /**
- * `effectiveStatus` is the status the document will actually have AFTER
- * this update is applied -- `input.status ?? <current persisted status>`
- * -- never `input.status` alone: a rotation-only update (no `status` in
- * the payload) on an already-active Channel must still be validated
- * against "active," not silently treated as unconstrained just because
- * this particular call didn't happen to touch `status`.
+ * `effectiveStatus`/`effectiveRotation` are what the document will
+ * ACTUALLY have after this update lands -- `input.status ?? <current
+ * persisted status>` / `input.rotation ?? <current persisted rotation>`
+ * -- never `input.*` alone. This matters most for Activate: RADIO-04E's
+ * `buildActivateChannelUpdate` deliberately sends `{channelId, status:
+ * "active"}` with no `rotation` field at all, so validating only
+ * `input.rotation` (when present) would let an already-empty rotation
+ * silently reach "active" simply because THIS call never touched
+ * `rotation` -- always validating the EFFECTIVE rotation against the
+ * EFFECTIVE status closes that gap for every caller, not just ones that
+ * happen to also resend `rotation`.
  */
 export function validateUpdateRadioChannelInput(
   input: UpdateRadioChannelInput,
   effectiveStatus: RadioChannelStatus,
+  effectiveRotation: RadioChannelRotation,
   knownProgramIds: ReadonlySet<string>,
 ): void {
   if (!input.channelId) throw new Error("invalid_radio_channel_id");
   if (input.title !== undefined && !input.title) throw new Error("invalid_radio_channel_title");
   if (input.status !== undefined && !isChannelStatus(input.status)) throw new Error("invalid_radio_channel_status");
-  if (input.rotation !== undefined) assertValidRotation(input.rotation, effectiveStatus, knownProgramIds);
+  assertValidRotation(effectiveRotation, effectiveStatus, knownProgramIds);
 }
 
 /**
@@ -175,11 +181,10 @@ export class FirestoreRadioChannelRepository implements RadioChannelRepository {
       if (!existing.exists()) throw new Error("radio_channel_not_found");
       const current = decodeRadioChannel(input.channelId, existing.data());
       if (!current) throw new Error("radio_channel_existing_document_malformed");
-      // Effective status AFTER this update lands -- never `input.status`
-      // alone (see validateUpdateRadioChannelInput's own doc): a
-      // rotation-only update on an already-active Channel must still be
-      // validated against "active".
-      validateUpdateRadioChannelInput(input, input.status ?? current.status, knownProgramIds);
+      // Effective status/rotation AFTER this update lands -- never
+      // `input.status`/`input.rotation` alone (see
+      // validateUpdateRadioChannelInput's own doc).
+      validateUpdateRadioChannelInput(input, input.status ?? current.status, input.rotation ?? current.rotation, knownProgramIds);
       transaction.set(reference, {
         title: input.title ?? current.title,
         status: input.status ?? current.status,
@@ -191,5 +196,22 @@ export class FirestoreRadioChannelRepository implements RadioChannelRepository {
     const updated = await this.getRadioChannel(input.channelId);
     if (!updated) throw new Error("radio_channel_update_read_back_failed");
     return updated;
+  }
+
+  /**
+   * RADIO-04E -- hard-delete. `firestore.rules`' existing `allow delete:
+   * if isEventOperator()` already permits this unconditionally (unchanged
+   * by this batch); the actual safety precondition -- inactive only, and
+   * only when nothing in `radioScheduleBlocks` references this channelId
+   * -- is a client-side business rule (`canDeleteChannel` in
+   * `music/src/logic/radio/radioChannelLifecycle.ts`), same "rules permit
+   * it, application logic decides when it's actually a good idea" split
+   * `channelRotationEditorState.ts`'s own `removeProgramFromRotation`
+   * ("cannot-remove-last-program") already uses. This method itself
+   * performs no precondition check -- callers must have already confirmed
+   * deletion is safe before calling it.
+   */
+  async deleteRadioChannel(channelId: string): Promise<void> {
+    await deleteDoc(doc(this.firestore, RADIO_CHANNELS_COLLECTION_PATH, channelId));
   }
 }

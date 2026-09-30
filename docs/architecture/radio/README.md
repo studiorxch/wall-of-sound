@@ -193,6 +193,64 @@ affordance) creates every new Channel this way — Name only, `status:
 to Channel Control, exactly matching the smaller "Publish → Program →
 Schedule" chain's own separation of concerns.
 
+**Minimal Channel lifecycle: Rename / Activate / Deactivate / Delete
+(RADIO-04E).** `inactive` is an OPERATIONAL state, not an approval state —
+"parked, not currently broadcasting by default," never "pending review."
+An inactive Channel remains fully selectable, editable, schedulable, and
+usable in RADIO → Programming; nothing here gates on `status` except the
+Channel Clock's own existing "inactive is never on-air by default"
+short-circuit (`currentChannelBroadcast.ts`, unchanged). The intended
+model:
+
+```
+INACTIVE + EMPTY      = valid   -- newly created / experimental
+INACTIVE + PROGRAMMED  = valid   -- being prepared or parked
+ACTIVE   + PROGRAMMED  = valid   -- operational
+ACTIVE   + EMPTY        = invalid -- rejected by RADIO-04D's own rule
+```
+
+- **Rename** (`RadioRenameChannelDialog.tsx`) changes `title` only, via a
+  plain `updateRadioChannel({channelId, title})` call. `channelId` is
+  never re-derived from the new title (unlike creation, which derives it
+  once via `slugifyStationTitle`) — rotation, schedules, history, and
+  status are preserved automatically, simply because this update never
+  mentions those fields (`input.field ?? current.field` in
+  `firestoreRadioChannelRepository.ts`'s `updateRadioChannel`).
+- **Activate/Deactivate** reuse the pre-existing, unchanged
+  `buildActivateChannelUpdate`/`buildDeactivateChannelUpdate` pure
+  builders (`channelRotationEditorState.ts`, already used by Channel
+  Control) — no second construction path. Activation is gated on
+  `canActivateChannel` (`music/src/logic/radio/radioChannelLifecycle.ts`),
+  a friendly pre-flight check that surfaces one concise message before
+  the write is even attempted; the AUTHORITATIVE gate is still RADIO-04D's
+  own status-aware validation in `firestoreRadioChannelRepository.ts`,
+  which now checks the Channel's EFFECTIVE rotation (`input.rotation ??
+  current.rotation`) against its EFFECTIVE status on every update — this
+  closes a real gap `buildActivateChannelUpdate`'s own `{channelId,
+  status: "active"}` payload (no `rotation` field at all) would otherwise
+  have slipped through, since the old validator only checked `rotation`
+  when an update's own input happened to include it. Deactivate has no
+  precondition and never deletes anything — rotation, schedules, and
+  history all survive.
+- **Delete** (`canDeleteChannel`, same module) is hard-delete, gated on
+  two preconditions checked client-side before the call:
+  `status !== "active"` (deactivate first — not bypassable), and ZERO
+  `radioScheduleBlocks` documents reference this `channelId`, past or
+  future, scheduled or cancelled. `firestore.rules`' own `radioChannels`
+  `allow delete: if isEventOperator()` is unconditional and UNCHANGED by
+  this batch (rules cannot cheaply query "does any document in another
+  collection reference this id," so the precondition lives at the
+  application layer — the same "rules permit it, application logic
+  decides when it's actually a good idea" split
+  `removeProgramFromRotation`'s own "cannot-remove-last-program" already
+  uses). This is why the model is genuinely safe without an archive/
+  retirement field: a Channel that was ever actually scheduled can never
+  be deleted at all (protecting historical/aired occurrences and any
+  future reference from ever orphaning), while a truly disposable Channel
+  (created, never scheduled) has zero references and deletes cleanly. One
+  `window.confirm`, the same convention every other destructive RADIO/
+  MEMBER action already uses.
+
 ## RADIO Schedule (RADIO-04)
 
 The canonical `Program x Channel x start x end` authority, closing the gap
