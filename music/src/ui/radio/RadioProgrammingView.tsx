@@ -103,6 +103,26 @@ export function RadioProgrammingView({ radioPlaylists, radioWebExports, radioSit
   }, []);
   const isAuthorizedOperator = memberState.status === "signedIn" && OPERATOR_EMAILS.includes(memberState.authUser.email ?? "");
 
+  // RADIO-04A -- Programming must be able to recover operator authority
+  // itself, in-tab, rather than sending the operator to Event Radio
+  // Control and hoping cross-tab auth-state sync catches up before they
+  // click back. This calls the SAME shared MemberIdentityAuthority
+  // instance every other RADIO surface uses (createFirebaseMemberIdentityAuthority
+  // returns the one registered authority per Firebase app, see
+  // createFirebaseMemberIdentityAuthority.ts) -- not a second identity
+  // system, not a new approval/staging step, just the existing
+  // signInWithGoogle() capability triggered from where it's needed.
+  const [signInError, setSignInError] = useState<string | null>(null);
+  function handleSignIn() {
+    setSignInError(null);
+    getMemberIdentity().signInWithGoogle().catch((error) => {
+      setSignInError(error instanceof Error ? error.message : String(error));
+    });
+  }
+  function handleSignOut() {
+    void getMemberIdentity().signOut();
+  }
+
   const [channels, setChannels] = useState<readonly RadioChannel[] | null>(null);
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(() => {
     try { return window.localStorage.getItem(SELECTED_CHANNEL_STORAGE_KEY); } catch { return null; }
@@ -252,18 +272,22 @@ export function RadioProgrammingView({ radioPlaylists, radioWebExports, radioSit
       </div>
 
       {!isAuthorizedOperator && (
-        <p className="radio-diff-note">
-          {memberState.status === "signedIn"
-            ? "Signed in, but not as a StudioRich operator — scheduling is read-only."
-            : (
-              <>
-                Not signed in — scheduling is read-only.{" "}
-                <a className="radio-diff-link" href="/event-control.html" target="_blank" rel="noreferrer">
-                  Sign in as the StudioRich operator
-                </a>{" "}
-                (opens Event Radio Control; the same persistent session — no separate Programming sign-in).
-              </>
-            )}
+        <p className="radio-diff-note radio-programming-operator-gate">
+          {memberState.status === "signedIn" ? (
+            <>
+              Signed in as {memberState.authUser.email ?? "this account"}, but not as a StudioRich
+              operator — scheduling is read-only.{" "}
+              <button className="npw-btn npw-btn--ghost radio-diff-inline-btn" onClick={handleSignOut}>Sign Out</button>
+            </>
+          ) : (
+            <>
+              Not signed in — scheduling is read-only.{" "}
+              <button className="npw-btn npw-btn--ghost radio-diff-inline-btn" onClick={handleSignIn}>
+                Sign in as the StudioRich operator
+              </button>
+            </>
+          )}
+          {signInError && <span className="radio-diff-note"> {signInError}</span>}
         </p>
       )}
 

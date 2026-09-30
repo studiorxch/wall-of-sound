@@ -267,6 +267,28 @@ construction path. `listSchedulablePlaylists` gates which RadioPlaylists
 even appear in the scheduling picker on the same "real export AND matching
 Sites publication" discipline the old Publish-panel Program buttons used.
 
+**Operator identity is recovered in-place, not via a detour through Event
+Radio Control (RADIO-04A, corrective pass).** The first human acceptance
+attempt found that `RadioProgrammingView.tsx` linked out to
+`event-control.html` to sign in, then depended on Firebase Auth's cross-tab
+`browserLocalPersistence` sync to reflect that session back in the
+already-open Programming tab — in practice this left the operator stuck:
+signed in on one tab, still reading `signedOut` on the other. The fix is
+not a second identity system; `RadioProgrammingView.tsx` now calls
+`signInWithGoogle()`/`signOut()` directly on the exact same shared
+`MemberIdentityAuthority` instance every RADIO surface already resolves via
+`createFirebaseMemberIdentityAuthority` (one authority per Firebase app,
+registered in a module-level `WeakMap` — see that file's own doc), so the
+sign-in and its `onAuthStateChanged` callback now happen in the same
+document, with no cross-tab dependency at all. This is the same "wire a
+button straight to `memberIdentity.signInWithGoogle()`" pattern
+`eventControlRuntime.ts`/`channelControlRuntime.ts`/`adminShellRuntime.ts`/
+`blackbookRuntime.ts` already use — MUSIC's own React app was simply the
+one surface that hadn't yet, and (confirmed via `homeSurfaceContract.ts`/
+HOST-03A recon) MUSIC is never a HOME-hosted surface, so the plain,
+un-adapted `signInWithPopup` call these other runtimes use is safe here
+too — no HOST-03B credential-relay adapter is needed.
+
 **Public Now/Next/Upcoming — reads the canonical authority, never a second
 one.** `music/src/logic/radio/radioPublicProgramGuide.ts`'s
 `resolveRadioProgramGuide` composes `findActiveScheduleBlock`/
