@@ -70,8 +70,8 @@ See [subway/README.md](subway/README.md) for the full current-state map.
 | Underground / Tunnel Vision (3D) rendering | `subway3DTrainActorLayer.js` + `subway3DVisibilityPolicy.js` (`wall/systems/presentation/`) | ACTIVE — dev-flag gated OFF by default |
 | track-structure classification (underground/elevated/at-grade/…) | `SubwayTrackStructureAuthority` (`wall/systems/transit/`) | ACTIVE, but DORMANT relative to rendering — zero current consumers |
 | subway camera authority | `subwayCameraSunroof.js` (`wall/systems/presentation/`) | EXPERIMENTAL |
-| station geometry authority (authored plan/topology) | `stationGeometryStore.ts` / `stationGeometryTypes.ts` (`music/src/data/`) | EXPERIMENTAL, authoring-only — not bridged into `wall/` |
-| station archetypes | `stationArchetypeTypes.ts` + `stationArchetypeInstantiate.ts` (`music/src/`) | EXPERIMENTAL |
+| station geometry authority (authored plan/topology) | `stationGeometryStore.ts` / `stationGeometryTypes.ts` (`music/src/data/`) | EXPERIMENTAL, authoring-only — not bridged into `wall/`. As of STATION-06, this is also the candidate generic Station Base Truth: `StationTrackCenterline.platformSide` (which edge of an island platform) and `StationWallSurface.adjacentTrackId` (a trackside wall with no passenger platform) extend it additively — see [subway/README.md](subway/README.md)'s "STATION-06" section |
+| station archetypes | `stationArchetypeTypes.ts` + `stationArchetypeInstantiate.ts` (`music/src/`) | EXPERIMENTAL — three ship as of STATION-06: `UG_SIDE_2TRACK`, `UG_SIDE_4TRACK`, `UG_ISLAND_2TRACK` (the first island archetype); `instantiateStationArchetype()` now dispatches all three (previously only `UG_SIDE_2TRACK`) |
 | station classification grammar | `stationClassificationTypes.ts` (`music/src/data/`) | EXPERIMENTAL — types + tests only, no classifier |
 | station editor | `StationGeometryEditor.tsx` (`music/src/ui/maps/`) | EXPERIMENTAL — single-station (Bay Ridge Av) V0 |
 | MAP member paint authoring (free drawing) | `subwayMapPaintSurface.js` → Firestore `artworks` (`surfaceId: map:*`) | ACTIVE |

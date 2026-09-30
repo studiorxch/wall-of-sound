@@ -139,5 +139,9 @@ current-state pages only with their verified implementation checkpoints.
   3D authoring); finds island platforms are type-valid but functionally
   unproven, proposes two additive fields (`platformSide`,
   `adjacentTrackId`) to support island topology and door-side derivation
-  without a parallel type system. Recon only — STATION-06 on hold pending
-  discussion.
+  without a parallel type system. Recon record — implemented as STATION-06
+  (items 1-3 of its own recommendation: the two additive fields, the
+  `UG_ISLAND_2TRACK` archetype, and the `instantiateStationArchetype()`
+  dispatch repair); see [subway/README.md](subway/README.md)'s "STATION-06"
+  section for current-state truth. A real island station seed remains
+  future work.

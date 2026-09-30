@@ -164,9 +164,36 @@ export type TrackPhysicalRole = "local" | "express" | "reversibleExpress" | "byp
  */
 export type TrackOperatingDirection = "northbound" | "southbound" | "reversible" | "none";
 
+// ── platformSide ─────────────────────────────────────────────────────────
+// STATION-06 (0912_WOS_Subway_Station_Base_Truth_Extension_v1.0.0)
+//
+// Structural station truth, deliberately NOT a direction: "A"/"B" name
+// which of a platform's (potentially several) track-facing edges a track
+// sits on — never "northbound"/"southbound", "left"/"right", or any other
+// direction- or screen-relative label. A side platform has exactly one
+// track-facing edge, so `platformSide` is meaningless there and stays
+// omitted (its own `platformId` alone is already sufficient — see
+// STATION-05's own recon). An ISLAND platform has exactly two: the track
+// on each edge gets the opposite letter, purely to disambiguate WHICH
+// edge, with no claim about compass direction, current operating
+// direction, or which side a train's doors will eventually open on. That
+// derivation (track -> platformId -> platformSide -> physical edge ->
+// eventual door side) is a FUTURE presentation-layer computation from
+// this fact plus the station's own real orientationDeg + platform
+// footprint — never encoded here.
+export type PlatformSide = "A" | "B";
+
 export interface StationTrackCenterline {
   id: string;
   platformId: string | null;
+  /**
+   * Which edge of `platformId`'s platform this track sits on — see
+   * `PlatformSide`'s own doc above. Omitted for every side-platform
+   * station (platformId alone is unambiguous there); required to
+   * distinguish an island platform's two track-facing edges from each
+   * other. Meaningless (and left omitted) when platformId is null.
+   */
+  platformSide?: PlatformSide;
   /** Canonical service role — see TrackRole. Omitted for stations/archetypes where the distinction doesn't apply (e.g. any 2-track station), OR where the newer physicalRole/operatingDirection pair below is used instead (a reversible track). */
   role?: TrackRole;
   /**
@@ -293,6 +320,21 @@ export interface StationWallSurface {
   localPolygon: LocalPoint3D[];
   label: string;
   suitableForArt: boolean;
+  /**
+   * STATION-06 -- the track this wall faces, when it's a trackside
+   * surface with NO adjacent passenger platform (e.g. the outer walls of
+   * an island-platform station, or a center wall between express
+   * tracks). Passenger accessibility and observable/writable-surface
+   * status are deliberately NOT the same property: a wall can be a real,
+   * inspectable/writable surface (see `suitableForArt`) while sitting
+   * directly across from a track with no platform a rider could ever
+   * stand on. Omitted for a wall that isn't specifically trackside (e.g.
+   * a mezzanine or entrance wall) -- never set merely because a wall
+   * happens to be near a platform-serving track; use this only when the
+   * wall's own defining relationship is "faces this track, not a
+   * platform."
+   */
+  adjacentTrackId?: string;
   provenance: Provenance;
 }
 

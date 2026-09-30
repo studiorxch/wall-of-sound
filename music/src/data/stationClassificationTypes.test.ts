@@ -276,11 +276,17 @@ describe("existing archetypes remain byte/semantic equivalent", () => {
     expect(after).toEqual(before);
   });
 
-  it("no new archetype family was built this checkpoint — exactly the two pre-existing archetype ids exist, no island archetype id was added", () => {
+  it("STATION-06: UG_ISLAND_2TRACK now exists alongside the two pre-existing side archetypes — the classification layer's own ISLAND_2TRACK/ISLAND_4TRACK topology labels are no longer unbacked by any archetype", () => {
     const archetypeIdKeys = Object.keys(archetypeTypesModule).filter((key) => key.endsWith("_ARCHETYPE_ID"));
-    expect(archetypeIdKeys.sort()).toEqual(["UG_SIDE_2TRACK_ARCHETYPE_ID", "UG_SIDE_4TRACK_ARCHETYPE_ID"]);
-    // ISLAND_2TRACK/ISLAND_4TRACK are classification-layer TOPOLOGY labels
-    // only in this checkpoint — no deriveUnderground*Island*Geometry module
-    // exists, and this test file never imports one.
+    expect(archetypeIdKeys.sort()).toEqual([
+      "UG_ISLAND_2TRACK_ARCHETYPE_ID",
+      "UG_SIDE_2TRACK_ARCHETYPE_ID",
+      "UG_SIDE_4TRACK_ARCHETYPE_ID",
+    ]);
+    // ISLAND_4TRACK remains a classification-layer TOPOLOGY label only —
+    // STATION-06's own scope boundary explicitly excludes a UG_ISLAND_4TRACK
+    // production archetype (see stationGeometryFourTrackIslandContract.test.ts
+    // for the synthetic, non-archetype proof that the extended Base Truth
+    // contract can still represent that topology).
   });
 });

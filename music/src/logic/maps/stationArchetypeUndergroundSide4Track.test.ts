@@ -17,6 +17,7 @@ import {
   validateUndergroundSide2TrackParameters,
 } from "./stationArchetypeUndergroundSide2Track";
 import { DEFAULT_UG_SIDE_2TRACK_PARAMETERS, UG_SIDE_2TRACK_ARCHETYPE_ID } from "../../data/stationArchetypeTypes";
+import { instantiateStationArchetype } from "./stationArchetypeInstantiate";
 
 function params(overrides: Partial<UndergroundSide4TrackParameters> = {}): UndergroundSide4TrackParameters {
   return { ...DEFAULT_UG_SIDE_4TRACK_PARAMETERS, ...overrides };
@@ -245,5 +246,66 @@ describe("existing UG_SIDE_2TRACK remains completely unchanged", () => {
     deriveUndergroundSide4TrackGeometry(DEFAULT_UG_SIDE_4TRACK_PARAMETERS, "TEST"); // exercise the sibling archetype
     const after = deriveUndergroundSide2TrackGeometry(DEFAULT_UG_SIDE_2TRACK_PARAMETERS, "TEST");
     expect(after).toEqual(before);
+  });
+});
+
+// STATION-06 — repairs the pre-existing gap where instantiateStationArchetype()
+// only ever dispatched UG_SIDE_2TRACK, even though this archetype already
+// existed. Both real 4-track seeds (45th/53rd St) had to bypass this
+// function entirely and call deriveUndergroundSide4TrackGeometry directly —
+// this proves the function now routes UG_SIDE_4TRACK correctly, closing
+// that gap without requiring either seed to change.
+describe("instantiateStationArchetype — UG_SIDE_4TRACK dispatch (STATION-06 repair)", () => {
+  it("produces a StationGeometryData-shaped object with 4 tracks, explicit roles, and 2 side platforms — previously unreachable through this function", () => {
+    const result = instantiateStationArchetype({
+      archetypeId: UG_SIDE_4TRACK_ARCHETYPE_ID,
+      stationRef: { gtfsStopId: "Z99", routeIds: ["Z"] },
+      origin: { longitude: -74, latitude: 40.7, orientationDeg: 30 },
+      now: "2026-09-12T00:00:00.000Z",
+    });
+    expect(result.id).toBe("stationGeometry:Z99");
+    expect(result.platforms).toHaveLength(2);
+    expect(result.trackCenterlines).toHaveLength(4);
+    expect(result.trackCenterlines.map((t) => t.role)).toEqual([
+      "northboundLocal",
+      "northboundExpress",
+      "southboundExpress",
+      "southboundLocal",
+    ]);
+    expect(result.platformLinks).toEqual([]);
+  });
+
+  it("merges 4-track-shaped overrides onto the 4-track defaults, never the 2-track defaults", () => {
+    const result = instantiateStationArchetype({
+      archetypeId: UG_SIDE_4TRACK_ARCHETYPE_ID,
+      stationRef: { gtfsStopId: "Z99", routeIds: ["Z"] },
+      origin: { longitude: -74, latitude: 40.7, orientationDeg: 30 },
+      overrides: { platformLengthM: 200 },
+      now: "2026-09-12T00:00:00.000Z",
+    });
+    const xs = result.platforms[0]!.footprint!.map((p) => p.x);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeCloseTo(200, 9);
+  });
+
+  it("is deterministic given the same inputs (including an explicit `now`)", () => {
+    const input = {
+      archetypeId: UG_SIDE_4TRACK_ARCHETYPE_ID,
+      stationRef: { gtfsStopId: "Z99", routeIds: ["Z"] },
+      origin: { longitude: -74, latitude: 40.7, orientationDeg: 30 },
+      now: "2026-09-12T00:00:00.000Z",
+    };
+    expect(instantiateStationArchetype(input)).toEqual(instantiateStationArchetype(input));
+  });
+
+  it("UG_SIDE_2TRACK dispatch through the same function is completely unaffected by the repair", () => {
+    const result = instantiateStationArchetype({
+      archetypeId: UG_SIDE_2TRACK_ARCHETYPE_ID,
+      stationRef: { gtfsStopId: "X99", routeIds: ["X"] },
+      origin: { longitude: -74, latitude: 40.7, orientationDeg: 30 },
+      now: "2026-09-12T00:00:00.000Z",
+    });
+    expect(result.platforms).toHaveLength(2);
+    expect(result.trackCenterlines).toHaveLength(2);
+    for (const track of result.trackCenterlines) expect(track.role).toBeUndefined();
   });
 });

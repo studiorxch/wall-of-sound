@@ -16,9 +16,9 @@
 /**
  * Deterministic archetype identity — never a random id, matching this
  * codebase's existing `stationGeometry:${gtfsStopId}` convention (see
- * makeStationGeometryId). V0 ships exactly one archetype key
- * ("UG_SIDE_2TRACK"), but the id shape supports more without a schema
- * change.
+ * makeStationGeometryId). Three archetype keys ship as of STATION-06
+ * ("UG_SIDE_2TRACK", "UG_SIDE_4TRACK", "UG_ISLAND_2TRACK"), but the id
+ * shape supports more without a schema change.
  */
 export type StationArchetypeId = `stationArchetype:${string}`;
 
@@ -140,5 +140,60 @@ export const DEFAULT_UG_SIDE_4TRACK_PARAMETERS: UndergroundSide4TrackParameters 
 /** One rejected-parameter finding — see validateUndergroundSide4TrackParameters. Deliberately a separate type from ParameterValidationIssue above (different field union) rather than a shared generic, to avoid touching UG_SIDE_2TRACK's own type. */
 export interface FourTrackParameterValidationIssue {
   field: keyof UndergroundSide4TrackParameters;
+  message: string;
+}
+
+// ── UG_ISLAND_2TRACK ─────────────────────────────────────────────────────────
+// STATION-06 (0912_WOS_Subway_Station_Base_Truth_Extension_v1.0.0)
+//
+// Same "reusable editable starting model, not geographic truth" doctrine as
+// UG_SIDE_2TRACK/UG_SIDE_4TRACK above — a genuinely separate archetype: ONE
+// island platform flanked by two tracks, one on each of the platform's two
+// edges (see stationGeometryTypes.ts's own PlatformSide doc for what "A"/"B"
+// means — structural, never a direction). This is the first archetype whose
+// StationPlatform.config is "island" rather than "side" (see
+// stationArchetypeUndergroundSide2Track.ts/Side4Track.ts, both hardcode
+// "side" — STATION-05's own recon confirmed no island archetype existed
+// before this checkpoint).
+//
+// Parameterization is deliberately NOT a mirror of UG_SIDE_2TRACK's
+// trackCenterSpacingM-first shape: a side station's tracks sit BETWEEN the
+// two platforms (tracks are the given, platforms build outward), while an
+// island station's ONE platform sits BETWEEN its two tracks (the platform
+// is the given, tracks build outward from its two edges) — a real physical
+// difference, not an arbitrary renaming.
+export const UG_ISLAND_2TRACK_ARCHETYPE_KEY = "UG_ISLAND_2TRACK";
+export const UG_ISLAND_2TRACK_ARCHETYPE_ID: StationArchetypeId = makeStationArchetypeId(UG_ISLAND_2TRACK_ARCHETYPE_KEY);
+
+/**
+ * Compact parameter set for UG_ISLAND_2TRACK. Elevations follow the same
+ * negative-below-street convention as the other two archetypes.
+ */
+export interface UndergroundIsland2TrackParameters {
+  platformLengthM: number;
+  /** The one island platform's own width — there is only one platform, so (unlike UG_SIDE_2TRACK) there is no northbound/southbound pair of widths to keep independent. */
+  platformWidthM: number;
+  /** Gap from EACH of the platform's two edges to its own adjacent track's centerline — applied symmetrically to both sides. */
+  platformEdgeToTrackCenterM: number;
+  platformElevationM: number;
+  mezzanineElevationM: number;
+  mezzanineLengthM: number;
+  mezzanineWidthM: number;
+}
+
+/** Generic, explicitly-labeled defaults — never derived from any real station's data. Platform width defaults wider than a side platform's own default (4m) since an island platform typically serves passengers boarding/alighting from both edges. */
+export const DEFAULT_UG_ISLAND_2TRACK_PARAMETERS: UndergroundIsland2TrackParameters = {
+  platformLengthM: 150,
+  platformWidthM: 8,
+  platformEdgeToTrackCenterM: 1.5,
+  platformElevationM: -10,
+  mezzanineElevationM: -5,
+  mezzanineLengthM: 30,
+  mezzanineWidthM: 15,
+};
+
+/** One rejected-parameter finding — see validateUndergroundIsland2TrackParameters. A separate type from the other two issue types (different field union), same convention. */
+export interface IslandParameterValidationIssue {
+  field: keyof UndergroundIsland2TrackParameters;
   message: string;
 }

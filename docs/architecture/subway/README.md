@@ -155,8 +155,9 @@ Vocabulary, as currently implemented:
   — a reusable **editable starting model, not geographic truth**. Generates a
   labeled-`heuristic`-provenance `StationGeometryData` shell for a human to
   calibrate. Never a hidden source of truth, never auto-applied to a real
-  station, never a step toward bulk generation. Two ship today:
-  `UG_SIDE_2TRACK`, `UG_SIDE_4TRACK`.
+  station, never a step toward bulk generation. Three ship today:
+  `UG_SIDE_2TRACK`, `UG_SIDE_4TRACK`, `UG_ISLAND_2TRACK` (STATION-06 — see
+  §16) — `instantiateStationArchetype()` dispatches all three.
 - **Seed** — an individually, directly-authored canonical geometry record for
   one specific real station. Not archetype-generated (Bay Ridge Av's own
   instantiate path has zero dependency on the archetype system). Four exist:
@@ -849,3 +850,122 @@ updated to match `isVisible()`'s narrowed meaning. Full hand-rolled
 MUSIC/Vite suite (1442 tests) unaffected — no logic module was modified,
 only `station.html`'s own embedded-mode CSS/markup and
 `stationCoverRuntime.ts`'s embedded-mode branch.
+
+## 16. STATION-06 — Station Base Truth extension (island platforms, trackside walls)
+
+Implements the smallest extension the STATION-05 recon
+(`../proposals/STATION_05_BASE_TRUTH_RECON.md`, kept as the historical
+design record — this section is the promoted, current-state truth). Both
+new fields are additive and optional; every existing real seed (Bay Ridge
+Av, 45th St, 53rd St, 77th St) and the two pre-existing archetypes are
+byte-identical to before this batch wherever they don't set the new
+fields (verified by regression test, not just asserted).
+
+**New fields on `stationGeometryTypes.ts`:**
+
+- `StationTrackCenterline.platformSide?: "A" | "B"` (new `PlatformSide`
+  type) — which of a platform's (potentially several) track-facing edges
+  a track sits on. Deliberately structural, never a direction: not
+  "northbound"/"southbound", not screen-relative "left"/"right". Omitted
+  for every side-platform station (`platformId` alone is already
+  unambiguous there — a side platform has exactly one track-facing
+  edge); required only to distinguish an island platform's two edges
+  from each other.
+- `StationWallSurface.adjacentTrackId?: string` — the track a wall
+  faces, for a trackside surface with NO adjacent passenger platform
+  (e.g. an island station's outer walls, or a wall between two express
+  tracks). Confirms passenger accessibility and observable/writable-
+  surface status are genuinely separate properties, per this batch's own
+  brief — a wall can be a real, inspectable/writable surface
+  (`suitableForArt`) while facing a track no rider can stand beside.
+
+**`UG_ISLAND_2TRACK` — the first island archetype**
+(`stationArchetypeUndergroundIsland2Track.ts`), mirroring
+`UG_SIDE_2TRACK`'s own module structure/discipline exactly (same guard-
+clause style, same heuristic-only provenance, same non-goals). Produces:
+ONE island platform (`config: "island"`, previously unexercised by any
+archetype — STATION-05's own recon confirmed no island archetype
+existed) flanked by exactly two tracks, one per edge
+(`platformSide: "A"`/`"B"`), and one shared mezzanine↔platform
+connection (`relatedPlatformId` genuinely inapplicable here — there's
+only one platform to disambiguate from). Parameterization is
+deliberately NOT a mirror of `UG_SIDE_2TRACK`'s own shape: a side
+station's tracks are the given (platforms build outward from them); an
+island station's ONE platform is the given (tracks build outward from
+its two edges) — a real physical difference between the two archetypes,
+not an arbitrary renaming.
+
+**`instantiateStationArchetype()` dispatch repair.** Previously routed
+only `UG_SIDE_2TRACK` — `UG_SIDE_4TRACK` existed as its own archetype but
+both real 4-track seeds (45th St, 53rd St) had to bypass this function
+entirely and call `deriveUndergroundSide4TrackGeometry` directly,
+hand-assembling the `StationGeometryData` envelope themselves (both
+seeds' own file headers called this "a real, separate design decision
+not yet made"). Now dispatches all three archetypes by `archetypeId`;
+every existing `UG_SIDE_2TRACK` caller is unaffected (regression-tested).
+
+**Synthetic 4-track island contract validation** (`stationGeometryFourTrackIslandContract.test.ts`)
+— NOT a production `UG_ISLAND_4TRACK` archetype (explicitly out of this
+batch's scope). A hand-built `StationGeometryData` fragment proving the
+extended contract represents `WALL | LOCAL | ISLAND | EXPRESS | EXPRESS
+| ISLAND | LOCAL | WALL`: two independent island platforms, each
+relating to its own two adjacent tracks (one local, one express) via
+`platformId` + `platformSide`, with the two outer walls identifying
+their adjacent outer track via `adjacentTrackId` — and, by construction
+of `StationWallSurface`'s own type, structurally unable to also claim a
+passenger platform (there is no `platformId` field on a wall at all, not
+merely an unpopulated one).
+
+**Door-side derivation — structurally supported, not implemented.**
+`track → platformId → platformSide → physical edge` is demonstrated
+end-to-end in tests (both the synthetic island fixture and the real
+`UG_SIDE_4TRACK` archetype's bypass tracks, which correctly derive "no
+platform, no doors" via `platformId: null`). The demonstration helper is
+test-only, never exported from production code, and returns the same
+structural `PlatformSide` the Base Truth already carries — never a
+literal left/right or a hardcoded northbound/southbound assumption.
+Converting `platformSide` into an actual screen/world-space direction
+remains explicit future presentation-layer work (a computation from the
+station's real `orientationDeg` + platform footprint), not built here.
+
+**Explicitly not done this batch** (per its own scope boundary): no
+generic Platform renderer, no Detail/Overview UI, no real island station
+seed, no train movement, no doors, no live-arrival migration, no 3D
+Station Editor work, no `SubwayLineRibbon.showLineMode()` corrective
+bridge, no retirement of the floating "BAY RIDGE AV STATION" pill — the
+latter two remain open STATION-04 follow-up items, tracked for a
+separate corrective batch, unchanged by this one.
+
+**Testing.** `stationArchetypeUndergroundIsland2Track.test.ts` (new, 27
+cases: structure, track-offset symmetry, parametric predictability,
+provenance discipline, clearance validation, non-overlap, guard clauses,
+`instantiateStationArchetype` wiring, regression against the two side
+archetypes and the real Bay Ridge Av seed).
+`stationGeometryFourTrackIslandContract.test.ts` (new, 9 cases: the
+synthetic 4-track island proof plus the door-side derivation
+demonstration). `stationArchetypeUndergroundSide4Track.test.ts` extended
+(+4 cases: the dispatch-repair proof). `stationClassificationTypes.test.ts`'s
+own STATION-05-era "no island archetype was added" guard updated to
+assert the new, correct reality. Full relevant suite (station geometry +
+archetype + classification + service-pattern-refinement): 253/253
+passing. Broader `music/src/logic/maps/` + `src/data/` + `src/ui/maps/`
+sweep: 505/505 passing. Full combined MUSIC suite: 3903/3910 passing (7
+pre-existing skips, 11 pre-existing unrelated `trainingExclusionExport`
+failures from a missing `WOS-share/SUNO` fixture — untouched by this
+batch). Typecheck and lint clean on every touched file.
+
+### Recommendation for the next Platform implementation boundary
+
+The extended Base Truth is now proven end-to-end for both validation
+axes (side vs. island, 2-track vs. 4-track) but still entirely
+data/logic-layer — no renderer exists yet. The next batch should build
+the smallest thing that reads this Base Truth and draws something real
+(even a flat, schematic 2D plan of one station's tracks/platforms/walls,
+reusing `stationGeometryCoordinates.ts`'s existing station-local↔geographic
+math), deliberately BEFORE attempting the Detail/Overview Platform UI
+described in STATION-04/05's own future-context sections. Building the
+full Platform UI directly against an unrendered Base Truth would risk
+discovering representation gaps only after a much larger investment; a
+minimal renderer proves the contract is sufficient for real drawing, the
+same way this batch's synthetic island fixture proved it sufficient for
+relationship queries.
