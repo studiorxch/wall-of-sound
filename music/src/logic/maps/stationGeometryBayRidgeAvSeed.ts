@@ -27,7 +27,17 @@
 // Level elevations, mezzanine polygon, and stair/crossover path geometry
 // remain genuinely unauthored — omitted per stationGeometryTypes.ts's own
 // field docs, never defaulted into looking like measured facts.
-// Entrances/wallSurfaces stay empty — out of scope for this whole arc.
+// Entrances stay empty — out of scope for this whole arc.
+//
+// STATION-11 (0915_WOS_Subway_Bay_Ridge_Av_Structural_Truth_Enrichment_v1.0.0)
+// adds a real surface level (station stack: surface -> mezzanine -> platform,
+// field-confirmed real entrances on both sides, no stair geometry linking
+// it yet), two real circulation/asymmetry provenance notes (northbound
+// comparatively columnless; a field-observed 20-step platform<->mezzanine
+// stair run on the northbound side), and the first two real wallSurfaces
+// records (each side platform's own back wall) — IDENTITY and RELATIONSHIP
+// only, no real polygon yet. See docs/architecture/subway/README.md's
+// "STATION-11" section for the full evidence matrix and gap analysis.
 //
 // ── Real coordinate (authority) ─────────────────────────────────────────────
 // wall/data/subway/mtaSubwayStaticSnapshot.json: stops[] station-level record
@@ -182,20 +192,36 @@ export const BAY_RIDGE_AV_ORIGIN_ANCHOR = makeStationOriginAnchor({
 const REFERENCE_SOURCES =
   "https://en.wikipedia.org/wiki/Bay_Ridge_Avenue_station ; https://nycsubway.org/wiki/BMT_4th_Avenue_Line";
 
+const SURFACE_LEVEL_ID = "level:R42:surface";
 const MEZZANINE_LEVEL_ID = "level:R42:mezzanine";
 const PLATFORM_LEVEL_ID = "level:R42:platform"; // shared by both platforms — "common passenger platform level"
 const NORTHBOUND_PLATFORM_ID = "platform:R42:northbound";
 const SOUTHBOUND_PLATFORM_ID = "platform:R42:southbound";
 const NORTHBOUND_TRACK_ID = "track:R42:northbound";
 const SOUTHBOUND_TRACK_ID = "track:R42:southbound";
+// STATION-11 (0915_WOS_Subway_Bay_Ridge_Av_Structural_Truth_Enrichment_v1.0.0)
+// -- each side platform's own back wall (the long edge opposite its
+// track-facing side). Real, field-evidenced structural IDENTITY; no real
+// polygon exists yet (localPolygon intentionally omitted -- see
+// StationWallSurface's own doc in stationGeometryTypes.ts). See this
+// checkpoint's own evidence matrix in docs/architecture/subway/README.md's
+// "STATION-11" section for exactly what is and isn't supported.
+const NORTHBOUND_BACK_WALL_ID = "wall:R42:northbound-back";
+const SOUTHBOUND_BACK_WALL_ID = "wall:R42:southbound-back";
+
+const FIELD_OBSERVATION_SOURCES =
+  "WOS-share/SUBWAY/FIELD/BAY_RIDGE_AV/0908_Bay_Ridge_Av_Field_Observations.md ; WOS-share/SUBWAY/BUILDS/0908_WOS_Subway_Bay_Ridge_Av_Visual_Field_Observations_v1.0.0.md ; User field observation, 2026-09-09 (Bay Ridge Av Circulation/Topology Observation Pass)";
 
 /**
- * The one canonical V0 StationGeometryData record for Bay Ridge Av.
- * `id`/`stationRef` are deterministic from the real GTFS stop id — never an
- * arbitrary random id (see makeStationGeometryId's own doc). Topology
- * (levels/platforms/tracks/connections/platformLinks) reflects this
- * checkpoint's evidence-backed research; entrances/wallSurfaces remain
- * genuinely empty — out of this checkpoint's scope.
+ * The one canonical StationGeometryData record for Bay Ridge Av. `id`/
+ * `stationRef` are deterministic from the real GTFS stop id — never an
+ * arbitrary random id (see makeStationGeometryId's own doc), and every
+ * platform/track/level/wall id is a stable, role-based string (e.g.
+ * `platform:R42:northbound`) that has never changed across any checkpoint
+ * in this arc, including this one (STATION-11 is purely additive — zero
+ * existing ids renamed, zero existing fields removed). Topology reflects
+ * this codebase's own accumulated evidence-backed research; entrances
+ * remain genuinely empty — out of scope for this whole arc.
  */
 export function buildBayRidgeAvStationGeometrySeed(now: string = new Date().toISOString()): StationGeometryData {
   return {
@@ -217,6 +243,29 @@ export function buildBayRidgeAvStationGeometrySeed(now: string = new Date().toIS
       },
     },
     levels: [
+      // STATION-11 -- the real station stack's third level (surface ->
+      // mezzanine/fare control -> platform). Field photos directly confirm
+      // real street-level entrances exist on both the northbound and
+      // southbound sides (plus a separate southbound rear exit — see that
+      // platform's own note below); no stair/connection geometry links this
+      // level to the mezzanine yet (that would need the same kind of
+      // position evidence the field calibration survey's own item 7 asks
+      // for), so it is authored unconnected rather than wired to a guessed
+      // position. elevationM follows this codebase's own existing
+      // convention (0 = the same reference plane as origin.altitudeM) —
+      // the same heuristic every archetype's own surface level already
+      // uses, never a measured value.
+      {
+        id: SURFACE_LEVEL_ID,
+        kind: "surface",
+        label: "Surface",
+        elevationM: 0,
+        provenance: {
+          source: "heuristic",
+          sourceRef: FIELD_OBSERVATION_SOURCES,
+          note: "Surface level, by convention the same reference plane as origin.altitudeM (0) — that convention itself is heuristic, not measured. Real street-level entrances are field-confirmed on both the northbound and southbound sides, plus a separate southbound rear exit (see sourceRef; also platforms[].provenance.note for the rear-exit relationship); no stair/connection geometry down to the mezzanine is authored yet.",
+        },
+      },
       {
         id: MEZZANINE_LEVEL_ID,
         kind: "mezzanine",
@@ -250,7 +299,7 @@ export function buildBayRidgeAvStationGeometrySeed(now: string = new Date().toIS
           source: "reference",
           confidence: 0.35,
           sourceRef: `OSM way 907184533 (railway=platform, gtfs:stop_id=R42N, source=estimated); ${BAY_RIDGE_AV_OSM_QUERY_NOTE}`,
-          note: "Northbound (Manhattan-bound) side platform. Footprint polygon is OSM's own self-labeled ESTIMATE, not a survey. Length (~186m) cross-validates within <1% of this station's own Wikipedia-sourced ~615ft renovation record (checkpoint 3) — but width (~3.7m) came back nearly identical to the southbound platform's OSM width, which conflicts with the well-sourced qualitative fact that this platform is real-world WIDER (reserved space for a never-built express trackway). Treat the LENGTH as reasonably defensible and the WIDTH as low-confidence pending a real source.",
+          note: "Northbound (Manhattan-bound) side platform. Footprint polygon is OSM's own self-labeled ESTIMATE, not a survey. Length (~186m) cross-validates within <1% of this station's own Wikipedia-sourced ~615ft renovation record (checkpoint 3) — but width (~3.7m) came back nearly identical to the southbound platform's OSM width, which conflicts with the well-sourced qualitative fact that this platform is real-world WIDER (reserved space for a never-built express trackway). Treat the LENGTH as reasonably defensible and the WIDTH as low-confidence pending a real source. STATION-11 field observation (no measurement): comparatively open/columnless along its length, contrasting with the southbound platform's own dense column rhythm (see that platform's own note) — qualitative only, no column count or spacing asserted.",
         },
       },
       {
@@ -313,7 +362,7 @@ export function buildBayRidgeAvStationGeometrySeed(now: string = new Date().toIS
         provenance: {
           source: "reference",
           sourceRef: `${REFERENCE_SOURCES} ; User field observation, 2026-09-09 (Bay Ridge Av Circulation/Topology Observation Pass)`,
-          note: "Mezzanine connects down to the northbound platform via a staircase, per reference sources (exact position not established). Field observation (2026-09-09, qualitative, no measurement): on this side, stair circulation continues directly into the platform path, effectively preserving two circulation lanes — no lane count, width, or position is asserted as a number.",
+          note: "Mezzanine connects down to the northbound platform via a staircase, per reference sources (exact position not established). Field observation (2026-09-09, qualitative, no measurement): on this side, stair circulation continues directly into the platform path, effectively preserving two circulation lanes — no lane count, width, or position is asserted as a number. STATION-11 field observation (photo IMG_1186, 0908_Bay_Ridge_Av_Field_Observations.md): a single flight of 20 steps separates the platform from the mezzanine landing on this side — a directly observed stair-run COUNT only, never converted into an elevation value (that would also require the mezzanine's own depth below street, which remains unestablished — see the field calibration survey's own item 5 for what a full measured depth would require).",
         },
       },
       {
@@ -374,7 +423,47 @@ export function buildBayRidgeAvStationGeometrySeed(now: string = new Date().toIS
       },
     ],
     entrances: [],
-    wallSurfaces: [],
+    // STATION-11 -- each side platform's own real back wall. Structural
+    // IDENTITY and RELATIONSHIP are field-evidenced (a platform's own back
+    // wall, opposite its track-facing edge, is inherent to how a side
+    // platform is physically bounded, and field photos directly show each
+    // one — see FIELD_OBSERVATION_SOURCES). No real polygon has been
+    // authored (localPolygon omitted — see that field's own doc) — this
+    // records the wall's existence and which platform it belongs to, NOT
+    // its geometry. `suitableForArt` is an explicit, undecided placeholder
+    // (`false`) — a curation decision this batch does not make, never
+    // promoted to a researched fact. Neither wall is trackside
+    // (`adjacentTrackId` stays omitted); `adjacentPlatformId` disambiguates
+    // which of the two same-level platforms each wall belongs to (both
+    // platforms share `PLATFORM_LEVEL_ID`, so `levelId` alone cannot).
+    wallSurfaces: [
+      {
+        id: NORTHBOUND_BACK_WALL_ID,
+        levelId: PLATFORM_LEVEL_ID,
+        label: "Northbound platform back wall",
+        suitableForArt: false,
+        adjacentPlatformId: NORTHBOUND_PLATFORM_ID,
+        provenance: {
+          source: "reference",
+          confidence: 0.4,
+          sourceRef: FIELD_OBSERVATION_SOURCES,
+          note: "The northbound platform's own back wall (opposite its track-facing edge) — field-confirmed to exist via on-site photos; no real polygon authored (geometry remains unmeasured, see the field calibration survey's own item 1, which targets exactly this wall's own position). suitableForArt is an undecided placeholder (false), not a curation decision.",
+        },
+      },
+      {
+        id: SOUTHBOUND_BACK_WALL_ID,
+        levelId: PLATFORM_LEVEL_ID,
+        label: "Southbound platform back wall",
+        suitableForArt: false,
+        adjacentPlatformId: SOUTHBOUND_PLATFORM_ID,
+        provenance: {
+          source: "reference",
+          confidence: 0.4,
+          sourceRef: FIELD_OBSERVATION_SOURCES,
+          note: "The southbound platform's own back wall (opposite its track-facing edge) — field-confirmed to exist via on-site photos; no real polygon authored (geometry remains unmeasured, see the field calibration survey's own item 2, which targets exactly this wall's own position). suitableForArt is an undecided placeholder (false), not a curation decision.",
+        },
+      },
+    ],
   };
 }
 

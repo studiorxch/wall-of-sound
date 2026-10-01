@@ -317,7 +317,21 @@ export interface StationEntrance {
 export interface StationWallSurface {
   id: string;
   levelId: string;
-  localPolygon: LocalPoint3D[];
+  /**
+   * STATION-11 -- closed local-meter-and-up polygon, same "omission, not a
+   * fabricated default" discipline as `StationPlatform.footprint` (see its
+   * own doc above): omitted when a wall's STRUCTURAL IDENTITY and
+   * RELATIONSHIP are already real/evidenced (e.g. "the northbound
+   * platform has a real back wall, field-observed") but no real geometry
+   * has been authored for it yet. A wall record with no polygon still has
+   * a stable, resolvable identity (see stationDetailSubjectResolver.ts,
+   * STATION-10) -- it simply has nothing for
+   * stationTopologyProjection.ts's own `meanY()` to plot, and is skipped
+   * by that projection exactly like any other positionally-unauthored
+   * record (see that module's own doc). Never defaulted to an empty
+   * array, which would read as "authored to be degenerate."
+   */
+  localPolygon?: LocalPoint3D[];
   label: string;
   suitableForArt: boolean;
   /**
@@ -335,6 +349,21 @@ export interface StationWallSurface {
    * platform."
    */
   adjacentTrackId?: string;
+  /**
+   * STATION-11 (0915_WOS_Subway_Bay_Ridge_Av_Structural_Truth_Enrichment_v1.0.0)
+   * -- the symmetric counterpart to `adjacentTrackId` above, closing the
+   * gap STATION-09's own recon identified: nothing previously let a wall
+   * declare "I sit behind this platform" (only "I face this track" was
+   * expressible). Set this for a platform-backing wall (e.g. a side
+   * platform's own back wall, opposite its track-facing edge); leave it
+   * omitted for a trackside wall (use `adjacentTrackId` instead) or any
+   * wall with no established platform relationship. The two fields are
+   * not mutually exclusive by the type system, but no real wall in this
+   * codebase sets both today -- a wall's defining relationship is
+   * ordinarily to exactly one of "a track" or "a platform," never both at
+   * once.
+   */
+  adjacentPlatformId?: string;
   provenance: Provenance;
 }
 

@@ -16,6 +16,7 @@ import {
   resolveStationDetailSubject,
   type StationDetailSubjectSource,
 } from "./stationDetailSubjectResolver";
+import { projectStationTopology } from "./stationTopologyProjection";
 
 const NOW = "2026-09-30T00:00:00.000Z";
 const BAY_RIDGE = buildBayRidgeAvStationGeometrySeed(NOW);
@@ -23,9 +24,10 @@ const BAY_RIDGE_ID = makeStationGeometryId("R42");
 
 // The four-track island contract fixture is synthetic/test-only (STATION-06/07,
 // NOT a real UG_ISLAND_4TRACK archetype — see that fixture's own header).
-// It is the one fixture in this repo with real wallSurfaces, so it is this
-// batch's own required proof for wall-subject resolution — Bay Ridge Av's
-// real wallSurfaces stays empty, per this task's own explicit instruction.
+// It predates STATION-11's own real Bay Ridge Av wall records (added below)
+// and remains the one fixture with a real/synthetic wall that also carries
+// authored geometry — useful for proving a GEOMETRIED wall still resolves
+// and still projects, distinctly from STATION-11's geometryless real walls.
 const CONTRACT_GEOMETRY_ID = makeStationGeometryId("CONTRACT");
 const CONTRACT_SOURCE: StationDetailSubjectSource = {
   id: CONTRACT_GEOMETRY_ID,
@@ -175,6 +177,58 @@ describe("resolveStationDetailSubject -- platform/track/wall resolution", () => 
 
   it("confirms the fixture's own provenance is synthetic/authored, not a real production wall seed", () => {
     expect(FOUR_TRACK_ISLAND_CONTRACT_PROVENANCE.source).toBe("authored");
+  });
+});
+
+// STATION-11 (0915_WOS_Subway_Bay_Ridge_Av_Structural_Truth_Enrichment_v1.0.0)
+// -- proves the two new real R42 wall records (each side platform's own
+// back wall, authored with no real polygon yet) travel through the exact
+// same generic STATION-10 resolution path as any other subject, with zero
+// R42-specific code anywhere in the resolver itself.
+describe("real Bay Ridge Av wall subjects resolve through the exact generic STATION-10 path (STATION-11)", () => {
+  it("resolves the northbound back wall to the exact canonical R42 wall record", () => {
+    const ref: StationDetailSubjectRef = {
+      stationGeometryId: BAY_RIDGE_ID,
+      subjectKind: "wall",
+      subjectId: "wall:R42:northbound-back",
+    };
+    const resolved = resolveStationDetailSubject(BAY_RIDGE, ref);
+    expect(resolved).not.toBeNull();
+    expect(resolved?.subjectKind).toBe("wall");
+    expect(resolved?.subject).toBe(BAY_RIDGE.wallSurfaces.find((w) => w.id === "wall:R42:northbound-back"));
+  });
+
+  it("resolves the southbound back wall to the exact canonical R42 wall record", () => {
+    const ref: StationDetailSubjectRef = {
+      stationGeometryId: BAY_RIDGE_ID,
+      subjectKind: "wall",
+      subjectId: "wall:R42:southbound-back",
+    };
+    const resolved = resolveStationDetailSubject(BAY_RIDGE, ref);
+    expect(resolved).not.toBeNull();
+    expect(resolved?.subject).toBe(BAY_RIDGE.wallSurfaces.find((w) => w.id === "wall:R42:southbound-back"));
+  });
+
+  it("each resolved wall carries its own adjacentPlatformId relationship, unmodified by resolution", () => {
+    const northboundResolved = resolveStationDetailSubject(BAY_RIDGE, {
+      stationGeometryId: BAY_RIDGE_ID,
+      subjectKind: "wall",
+      subjectId: "wall:R42:northbound-back",
+    });
+    expect((northboundResolved?.subject as { adjacentPlatformId?: string }).adjacentPlatformId).toBe("platform:R42:northbound");
+  });
+
+  it("STATION-07's projection honestly SKIPS these walls (no localPolygon to plot) -- real identity exists in Base Truth without being visible in the 2D Overview, exactly as the projection's own doc already promises", () => {
+    const model = projectStationTopology({
+      platforms: BAY_RIDGE.platforms,
+      trackCenterlines: BAY_RIDGE.trackCenterlines,
+      wallSurfaces: BAY_RIDGE.wallSurfaces,
+    });
+    const wallLaneIds = model.lanes.filter((l) => l.kind === "wall").map((l) => l.id);
+    expect(wallLaneIds).toHaveLength(0);
+    // The platform/track lanes are completely unaffected by the new wall records.
+    expect(model.lanes.filter((l) => l.kind === "platform")).toHaveLength(2);
+    expect(model.lanes.filter((l) => l.kind === "track")).toHaveLength(2);
   });
 });
 

@@ -166,7 +166,7 @@ describe("Bay Ridge Av real coordinate fixture", () => {
     expect(Math.abs(behindLocal.y)).toBeLessThan(5);
   });
 
-  it("buildBayRidgeAvStationGeometrySeed() produces a deterministic id, real stationRef, and the derived origin — with entrances/wallSurfaces genuinely empty (out of scope) and topology populated (checkpoint 2)", () => {
+  it("buildBayRidgeAvStationGeometrySeed() produces a deterministic id, real stationRef, and the derived origin — with entrances genuinely empty (out of scope) and topology populated (checkpoint 2)", () => {
     const seed = buildBayRidgeAvStationGeometrySeed("2026-09-07T00:00:00.000Z");
     expect(seed.id).toBe("stationGeometry:R42");
     expect(seed.stationRef).toEqual({ gtfsStopId: "R42", routeIds: ["R"] });
@@ -175,7 +175,87 @@ describe("Bay Ridge Av real coordinate fixture", () => {
     expect(seed.origin.orientationDeg).toBeCloseTo(BAY_RIDGE_AV_DERIVED_ORIENTATION_DEG, 9);
     expect(seed.origin.provenance.source).toBe("authority");
     expect(seed.entrances).toEqual([]);
-    expect(seed.wallSurfaces).toEqual([]);
+  });
+
+  // STATION-11 (0915_WOS_Subway_Bay_Ridge_Av_Structural_Truth_Enrichment_v1.0.0)
+  describe("real wallSurfaces (STATION-11)", () => {
+    const seed = buildBayRidgeAvStationGeometrySeed("2026-09-15T00:00:00.000Z");
+
+    it("has exactly two real wall records, one per side platform's own back wall", () => {
+      expect(seed.wallSurfaces).toHaveLength(2);
+      const ids = seed.wallSurfaces.map((w) => w.id);
+      expect(new Set(ids)).toEqual(new Set(["wall:R42:northbound-back", "wall:R42:southbound-back"]));
+    });
+
+    it("each wall relates to exactly one platform via adjacentPlatformId, never adjacentTrackId (neither is trackside)", () => {
+      const byId = Object.fromEntries(seed.wallSurfaces.map((w) => [w.id, w]));
+      expect(byId["wall:R42:northbound-back"].adjacentPlatformId).toBe("platform:R42:northbound");
+      expect(byId["wall:R42:southbound-back"].adjacentPlatformId).toBe("platform:R42:southbound");
+      for (const wall of seed.wallSurfaces) expect(wall.adjacentTrackId).toBeUndefined();
+    });
+
+    it("has no authored geometry yet — localPolygon stays omitted, never a fabricated/degenerate polygon", () => {
+      for (const wall of seed.wallSurfaces) expect(wall.localPolygon).toBeUndefined();
+    });
+
+    it("suitableForArt is an explicit, undecided placeholder (false) on both — not a curation decision", () => {
+      for (const wall of seed.wallSurfaces) expect(wall.suitableForArt).toBe(false);
+    });
+
+    it("both walls sit on the shared platform level, distinguishable from each other only via adjacentPlatformId", () => {
+      for (const wall of seed.wallSurfaces) expect(wall.levelId).toBe("level:R42:platform");
+    });
+
+    it("carries real provenance citing the field evidence, never a blanket/empty source", () => {
+      for (const wall of seed.wallSurfaces) {
+        expect(wall.provenance.source).toBe("reference");
+        expect(wall.provenance.sourceRef).toBeTruthy();
+      }
+    });
+  });
+
+  // STATION-11
+  describe("real surface-level station stack (STATION-11)", () => {
+    const seed = buildBayRidgeAvStationGeometrySeed("2026-09-15T00:00:00.000Z");
+
+    it("has exactly 3 levels: surface, mezzanine, platform", () => {
+      expect(seed.levels.map((l) => l.kind).sort()).toEqual(["mezzanine", "platform", "surface"]);
+    });
+
+    it("the surface level has no connection wired to it yet — field-confirmed entrances exist, but no stair geometry/position has been authored", () => {
+      const surfaceLevel = seed.levels.find((l) => l.kind === "surface");
+      expect(surfaceLevel).toBeDefined();
+      const connectedToSurface = seed.connections.filter(
+        (c) => c.fromLevelId === surfaceLevel?.id || c.toLevelId === surfaceLevel?.id,
+      );
+      expect(connectedToSurface).toHaveLength(0);
+    });
+  });
+
+  // STATION-11
+  describe("qualitative circulation/asymmetry field notes (STATION-11) — no fabricated numbers", () => {
+    const seed = buildBayRidgeAvStationGeometrySeed("2026-09-15T00:00:00.000Z");
+    const NUMBER_WITH_UNIT = /\d+\s?(m|cm|ft|in|meters?|feet|inches)\b/i;
+
+    it("northbound platform's note states it is comparatively columnless, with no column count/spacing number in the newly-added portion", () => {
+      const northbound = seed.platforms.find((p) => p.id === "platform:R42:northbound");
+      const addedPortion = northbound?.provenance.note?.split("STATION-11 field observation")[1];
+      expect(addedPortion).toBeDefined();
+      expect(addedPortion).toMatch(/columnless/i);
+      expect(addedPortion).not.toMatch(NUMBER_WITH_UNIT);
+    });
+
+    it("the northbound mezzanine-platform connection records the field-observed 20-step stair run as a step COUNT, never an elevation/distance value", () => {
+      const connection = seed.connections.find((c) => c.id === "connection:R42:mezzanine-platform-northbound");
+      const addedPortion = connection?.provenance.note?.split("STATION-11 field observation")[1];
+      expect(addedPortion).toBeDefined();
+      expect(addedPortion).toMatch(/20 steps/i);
+      expect(addedPortion).not.toMatch(NUMBER_WITH_UNIT);
+      // No elevationM was fabricated anywhere in the seed as a result of this observation.
+      for (const level of seed.levels) {
+        if (level.kind !== "surface") expect(level.elevationM).toBeUndefined();
+      }
+    });
   });
 
   it("is deterministic across repeated calls (aside from the explicit timestamp override)", () => {
@@ -296,13 +376,20 @@ describe("Bay Ridge Av topology (checkpoint 2 — topology only, no physical geo
     }
   });
 
-  it("still leaves connection paths and level elevations unauthored — this checkpoint's scope was platform/track geometry only, not stairs or elevations", () => {
+  it("still leaves connection paths and the mezzanine/platform level elevations unauthored — no stair geometry or measured depth exists for either", () => {
     for (const connection of seed.connections) {
       expect(connection.localPath).toBeUndefined();
     }
-    for (const level of seed.levels) {
+    for (const level of seed.levels.filter((l) => l.kind !== "surface")) {
       expect(level.elevationM).toBeUndefined();
     }
+  });
+
+  it("STATION-11: the surface level's elevationM follows this codebase's own existing heuristic convention (0 = origin.altitudeM's own reference plane), never a measured value", () => {
+    const surfaceLevel = seed.levels.find((l) => l.kind === "surface");
+    expect(surfaceLevel).toBeDefined();
+    expect(surfaceLevel?.elevationM).toBe(0);
+    expect(surfaceLevel?.provenance.source).toBe("heuristic");
   });
 
   it("treats each track's gtfsShapeRef as a distinct concept from its authored localPoints — the alignment reference was never the source of the physical geometry", () => {

@@ -1416,3 +1416,163 @@ authoring, inferred wall geometry, visual station reconstruction, N/S
 direction switching, doors, trains/train selection in Overview, arrivals,
 live transit migration, materials/textures, a visual facelift, or any
 change to Station Editor.
+
+## 21. STATION-11 — Bay Ridge Av structural truth enrichment
+
+Turns Bay Ridge Av (R42) from a minimal topology proof into the first
+meaningfully authored real Station Truth model, using only existing
+in-repo evidence (field photos, the field calibration survey, prior
+checkpoint reports) — no new field visit, no web research, no invented
+dimensions.
+
+### Evidence matrix
+
+| Fact | Source | Confidence/provenance | Representable today? | Action taken |
+|---|---|---|---|---|
+| Two side platforms, Manhattan-bound (N) / 95th St-bound (S) | OSM footprints + reference sources | `reference`, 0.35 | Yes (`StationPlatform`) | Already authored (checkpoint 5), unchanged |
+| Northbound wider (direction only, no magnitude) | Reference sources + field confirmation, 2026-09-09 | `evidenceConflict:R42:platformWidthAsymmetry`, status `resolved` (direction), magnitude unresolved | Yes (`StationGeometryEvidenceConflict`) | Already resolved (prior checkpoint), unchanged |
+| Southbound has columns along its full length | Field photos (IMG_1169 etc.) | `reference`, qualitative | Partially — no column/pillar primitive exists, only a provenance-note mention | Already present (southbound platform note), unchanged this batch |
+| Northbound comparatively open/columnless | Field photos (IMG_1115/1167, contrastive reading) | `reference`, qualitative | Same as above | **Added**: new sentence in northbound platform's own provenance note |
+| Northbound stair circulation preserves two lanes; southbound interrupts to one | 2026-09-09 field observation | `reference`, qualitative | Yes (`StationConnection.provenance.note`, split per-platform since a prior pass) | Already present, unchanged |
+| Southbound has a rear-exit relationship; northbound does not | 2026-09-09 field observation | `reference`, qualitative | Yes (note-level only, no `StationEntrance`) | Already present, unchanged |
+| A 20-step stair run separates the northbound platform from the mezzanine landing | Field photo IMG_1186 | `reference`, a directly-observed step COUNT, not an elevation | Yes, as a qualitative note; NOT as `elevationM` (would also need the mezzanine's own unmeasured depth below street) | **Added**: new sentence on `connection:R42:mezzanine-platform-northbound`'s provenance |
+| Station stack includes a real surface level (real street entrances on both sides, confirmed by photos) | Field photos (surface-entry screenshots) | `heuristic` (elevation, by convention) + the entrances claim itself `reference`-sourced | Yes (`StationLevel{kind:"surface"}`) | **Added**: new `level:R42:surface` record, unconnected (no stair/position evidence yet) |
+| Each side platform has a real back wall (opposite its track-facing edge) | Field calibration survey (items 1/2 target exactly this wall) + field photos | `reference`, identity/relationship only — zero geometry | **Gap closed this batch**: `StationWallSurface.localPolygon` was previously required, and no field existed for "faces this platform" (only `adjacentTrackId` existed) | **Added**: two new `StationWallSurface` records + two new optional schema fields (see below) |
+| Track center-to-center spacing, platform-edge-to-track distance, real platform width, platform depth, crossover/entrance exact position | Field calibration survey (items 1-7), all explicitly UNMEASURED | n/a | N/A — no real number exists anywhere in the repo for any of these | **Not touched.** Remains `reference`/estimated exactly as before; no magnitude fabricated |
+
+Unlocatable/unavailable facts: no repository evidence was found for exact
+column count, column spacing, column material, back-wall position/
+dimensions, surface-to-mezzanine stair position, or absolute platform
+depth below street. These remain honestly absent, not estimated.
+
+### Schema capability / gap analysis
+
+The existing model expresses almost everything supported by evidence
+without any change: platform asymmetry, circulation differences, and the
+rear-exit relationship already lived in `provenance.note` fields from
+prior checkpoints. Two real gaps were found and closed, both exactly the
+smallest additive primitive needed:
+
+1. **`StationWallSurface.localPolygon` was required**, so a wall's
+   identity/relationship could not be authored before its geometry was
+   measured — contradicting this codebase's own established "omission,
+   not a fabricated default" discipline (already used for
+   `StationPlatform.footprint`). **Fix:** made it optional
+   (`localPolygon?: LocalPoint3D[]`).
+2. **No field let a wall declare "I sit behind this platform"** — only
+   `adjacentTrackId` (STATION-06, trackside) existed, a gap STATION-09's
+   own recon already identified. **Fix:** added
+   `StationWallSurface.adjacentPlatformId?: string`, symmetric to
+   `adjacentTrackId`, not mutually exclusive by the type system but never
+   both-set on any real wall today.
+
+Both changes are structural (identity/relationship), not visual;
+optional/backward-compatible (every existing real seed and every
+archetype-generated wall is unaffected — confirmed by the full regression
+suite); independent of 2D/3D rendering, Tunnel Vision, BLACKBOOK, and
+UGC/evidence storage. No column/pillar primitive was added — the only
+supported column fact (existence + qualitative density contrast) is
+already expressible as a provenance note, and no real position/spacing
+evidence exists to justify a geometric primitive yet; this is reported as
+a known gap, not a blocker.
+
+### What was authored (R42, this batch)
+
+- `level:R42:surface` (new `StationLevel`, `kind:"surface"`,
+  `elevationM:0` by the same convention every archetype's own surface
+  level already uses) — unconnected to the mezzanine (no stair-position
+  evidence yet).
+- Two new `StationWallSurface` records: `wall:R42:northbound-back` /
+  `wall:R42:southbound-back`, each `adjacentPlatformId`-linked to its own
+  platform, `localPolygon` omitted, `suitableForArt:false` as an explicit
+  undecided placeholder (a curation decision this batch does not make,
+  never promoted to a researched fact).
+- Two new provenance-note sentences (northbound columnless contrast;
+  northbound's 20-step stair count) — zero new fields required for either.
+
+Zero existing ids were renamed; zero existing fields were removed; every
+pre-existing platform/track/connection/platformLink/evidenceConflict
+record is byte-identical except where a note explicitly grew.
+
+### Stable identity — future-safe, verified by construction
+
+Both new walls use this codebase's own established deterministic,
+role-based id convention (`wall:R42:northbound-back`), identical in kind
+to every other real id in this arc (`platform:R42:northbound`,
+`track:R42:southbound`) — never renderer-derived, never random. A future
+`EvidenceCapture`-shaped record (not implemented here) could already say
+`{stationGeometryId:"stationGeometry:R42", subjectId:"wall:R42:northbound-back", ...}`
+today and remain valid once real geometry is later authored onto the same
+record — the same "same record, same id, fields filled in" upgrade path
+STATION-05's own recon already established for platforms/tracks (§F of
+that recon). No structural refinement in this batch split an existing
+subject into multiple subjects, so the "STOP and document" identity-
+migration case this batch's own instructions warned about did not arise.
+
+### Projection / selection proof (STATION-07/STATION-10 untouched)
+
+Neither `stationTopologyProjection.ts`, `stationTopologySvgRenderer.ts`,
+nor `stationDetailSubjectResolver.ts` was modified this batch. Both new
+walls resolve through the exact generic STATION-10 path
+(`resolveStationDetailSubject`) with zero R42-specific code — proven by
+direct unit test. Both are honestly **skipped** by
+`projectStationTopology()` (its own `meanY()` returns `null` for an
+omitted `localPolygon`, exactly the same "no positional evidence, don't
+guess" rule that already applies to any unauthored platform/track) — real
+Base Truth identity exists without being visible in the 2D Overview. This
+is intentional, not a defect: the alternative would be fabricating
+geometry merely to make the renderer show something.
+
+### Testing / verification
+
+New: 6 wallSurfaces tests + 2 surface-level tests + 2 qualitative-note
+(no-fabricated-number) tests in `stationGeometryCoordinates.test.ts`; 4
+new resolution/projection-skip tests in
+`stationDetailSubjectResolver.test.ts` (both new walls resolve via
+STATION-10; both are confirmed absent from the projected model; platform/
+track lane counts unaffected). Two pre-existing assertions updated to
+match the new reality (`wallSurfaces` is no longer `[]`; level elevations
+are unauthored except the new, conventionally-zeroed surface level).
+Full combined MUSIC suite: 3989 passing (same 11 pre-existing unrelated
+manifest-path failures as before this batch, untouched by it). Typecheck
+and lint clean on every touched/new file.
+
+**Human acceptance — live-verified, full real path (not the dev-harness
+shortcut STATION-10 used).** `home-dev.html?surface=map` → real map marker
+click on Bay Ridge Av → Mezzanine Drawer opened with the real Station
+Cover → real ENTER PLATFORM click → Platform loaded R42 through the
+unmodified `stationGeometryRegistry.ts` → clicked the northbound track
+lane, confirmed Detail View resolved `{Track, track:R42:northbound, R42}`
+→ confirmed via direct DOM inspection that the Overview still renders
+exactly 2 platform + 2 track lanes and zero wall lanes (the two new walls
+present in Base Truth, correctly invisible in this 2D view) → back to MAP
+→ confirmed the same `runtimeId` persisted and `#member-avatar-root` was
+never removed/reconstructed.
+
+### Architectural gate
+
+**Is Bay Ridge Av Station Truth now sufficiently expressive to begin a
+representation-independent 3D structural projection?**
+
+**NO** — specifically missing: (1) any real wall/back-wall/mezzanine
+geometry (only identity/relationship exists for the two new walls); (2)
+a column/pillar structural primitive (not even attempted this batch —
+no position evidence exists to justify one yet); (3) stair/connection
+path geometry for any of the three real stair runs (two platform↔
+mezzanine, the not-yet-wired mezzanine↔surface pair); (4) the mezzanine's
+own footprint/polygon; (5) any level's real elevation relative to another
+level (only the surface level's conventional 0 exists); (6) real track
+spacing/platform-edge-to-track distance (still OSM-estimated, per the
+unresolved items of the field calibration survey). A future STATION-12
+consuming this record for a 3D projection would need, at minimum: real
+platform footprints (replacing the OSM estimates), at least one real wall
+polygon per platform, real level elevations for mezzanine and platform
+relative to surface, and a documented policy for how a 3D projection
+should represent a structurally-real-but-geometrically-unauthored subject
+(e.g. the two new walls) — rendering nothing, per this batch's own
+documented STATION-07 behavior, is the only policy proven safe so far.
+
+**Architecture docs:** this section + the `OWNERSHIP.md` station-geometry
+row update are the required bookkeeping for this batch's schema change
+(`StationWallSurface.localPolygon` optional,
+`adjacentPlatformId` added) — both are included in this same commit.
