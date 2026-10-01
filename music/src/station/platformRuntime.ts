@@ -28,11 +28,14 @@
 // stationGeometryRegistry.ts's own header) -- any other real/valid stationId
 // reaches this exact same code path and renders an honest "topology not yet
 // available" Overview state instead of silently substituting Bay Ridge.
+import type { StationGeometryData } from "../data/stationGeometryTypes";
+import type { StationDetailSubjectRef } from "../data/stationDetailSubjectTypes";
 import { fetchStaticSnapshot, resolveStationTruth, type StationTruth } from "../logic/maps/stationTruth";
 import { deriveStationCoverDisplay, type StationCoverDisplay } from "../logic/maps/stationCoverPresentation";
 import { resolveKnownStationGeometry } from "../logic/maps/stationGeometryRegistry";
 import { projectStationTopology } from "../logic/maps/stationTopologyProjection";
 import { renderStationTopologySvg } from "../logic/maps/stationTopologySvgRenderer";
+import { isStationDetailSubjectKind, resolveStationDetailSubject } from "../logic/maps/stationDetailSubjectResolver";
 import { selectStationArrivalRows, type StationArrival, type StationArrivalDirection } from "../logic/maps/stationArrivalPresentation";
 import { createPlatformHomeSurface } from "../home/platformHomeSurface";
 
@@ -48,6 +51,7 @@ const backLink = required<HTMLAnchorElement>("#platform-back-to-map");
 const headerEl = required<HTMLElement>("#platform-header");
 const bodyEl = required<HTMLElement>("#platform-body");
 const statusRoot = required<HTMLElement>("#platform-status-root");
+const detailViewEl = required<HTMLElement>("#platform-detail-view");
 const overviewContent = required<HTMLElement>("#platform-overview-content");
 
 // Same standalone-vs-hosted delegation pattern stationCoverRuntime.ts's own
@@ -76,6 +80,85 @@ function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] as string);
 }
 
+// ── STATION-10 -- Detail Subject selection proof ────────────────────────────
+// The real Base Truth record currently backing the Overview, kept ONLY so a
+// click can be resolved against it -- never a second topology model, never
+// read by the projection/renderer above (both stay exactly as STATION-07
+// left them). Reset on every renderOverview() call (i.e. once per real
+// boot()); a station with no real geometry never reaches here at all.
+let currentGeometry: StationGeometryData | null = null;
+let selectedSubjectRef: StationDetailSubjectRef | null = null;
+
+const DETAIL_SUBJECT_KIND_LABEL: Readonly<Record<StationDetailSubjectRef["subjectKind"], string>> = {
+  platform: "Platform",
+  track: "Track",
+  wall: "Wall",
+};
+
+function renderDetailSubject(): void {
+  if (!selectedSubjectRef || !currentGeometry) {
+    detailViewEl.textContent = "DETAIL VIEW";
+    return;
+  }
+  const ref = selectedSubjectRef;
+  detailViewEl.innerHTML = [
+    `<div class="platform-detail-subject">`,
+    `<div class="platform-detail-row"><span class="platform-detail-label">SUBJECT</span><span class="platform-detail-value">${escapeHtml(DETAIL_SUBJECT_KIND_LABEL[ref.subjectKind])}</span></div>`,
+    `<div class="platform-detail-row"><span class="platform-detail-label">ID</span><span class="platform-detail-value">${escapeHtml(ref.subjectId)}</span></div>`,
+    `<div class="platform-detail-row"><span class="platform-detail-label">STATION</span><span class="platform-detail-value">${escapeHtml(currentGeometry.stationRef.gtfsStopId)}</span></div>`,
+    `</div>`,
+  ].join("");
+}
+
+// Pure DOM feedback only -- never the source of selection identity (that is
+// always `selectedSubjectRef`, resolved against real Base Truth). Matches
+// the rendered SVG's own `data-lane-kind`/`data-lane-id` attributes
+// (stationTopologySvgRenderer.ts), never a second id scheme.
+function applySelectionHighlight(): void {
+  overviewContent.querySelectorAll("[data-selected]").forEach((el) => el.removeAttribute("data-selected"));
+  if (!selectedSubjectRef) return;
+  const ref = selectedSubjectRef;
+  const laneEl = Array.from(overviewContent.querySelectorAll(`[data-lane-kind="${ref.subjectKind}"]`)).find(
+    (el) => el.getAttribute("data-lane-id") === ref.subjectId,
+  );
+  laneEl?.setAttribute("data-selected", "true");
+}
+
+// Reads the already-existing `data-lane-kind`/`data-lane-id` the STATION-07
+// renderer emits on every drawn shape (stationTopologySvgRenderer.ts) --
+// never a replaced/forked renderer, never a new rendering-layer identity.
+// SVG DOM identity (`data-lane-id`) is only the bridge back to real Base
+// Truth: every click builds a StationDetailSubjectRef and resolves it
+// against `currentGeometry` via resolveStationDetailSubject() -- the
+// rendered element itself is never treated as canonical.
+function handleOverviewClick(event: MouseEvent): void {
+  if (!currentGeometry) return;
+  const target = event.target;
+  if (!(target instanceof Element)) return;
+  // A lane's own label <text> sits as a sibling, not a descendant, of the
+  // shape that actually carries data-lane-id -- fall back to the previous
+  // sibling so clicking a lane's own label selects the lane it labels.
+  const laneEl = target.closest("[data-lane-id]") ?? (target.tagName === "text" ? target.previousElementSibling : null);
+  if (!laneEl || !overviewContent.contains(laneEl)) return;
+  const laneKind = laneEl.getAttribute("data-lane-kind");
+  const laneId = laneEl.getAttribute("data-lane-id");
+  if (!laneId || !laneKind || !isStationDetailSubjectKind(laneKind)) return;
+
+  const ref: StationDetailSubjectRef = {
+    stationGeometryId: currentGeometry.id,
+    subjectKind: laneKind,
+    subjectId: laneId,
+  };
+  // Resolution never depends on writability (`suitableForArt`) -- a track
+  // (which has no such field at all) is exactly as selectable as a wall.
+  const resolved = resolveStationDetailSubject(currentGeometry, ref);
+  selectedSubjectRef = resolved ? ref : null;
+  applySelectionHighlight();
+  renderDetailSubject();
+}
+
+overviewContent.addEventListener("click", handleOverviewClick);
+
 function renderHeader(display: StationCoverDisplay): void {
   if (display.kind !== "resolved") return;
   const routeBadges = display.routes
@@ -96,6 +179,9 @@ function renderHeader(display: StationCoverDisplay): void {
 
 function renderOverview(stationId: string): void {
   const geometry = resolveKnownStationGeometry(stationId);
+  currentGeometry = geometry;
+  selectedSubjectRef = null;
+  renderDetailSubject();
   if (!geometry) {
     overviewContent.innerHTML = `<p class="platform-overview-note">Station topology isn’t available in this view yet.</p>`;
     return;

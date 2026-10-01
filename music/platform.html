@@ -64,6 +64,22 @@
     color: #3a352e; font: 700 11px/1 monospace; letter-spacing: .12em;
   }
 
+  /* STATION-10 -- a deliberately neutral, read-only subject identification
+     panel: proves the Overview-click -> StationDetailSubjectRef -> resolve
+     chain, not a designed final station-inspection UI (see this batch's
+     own explicit instruction). Replaces the plain "DETAIL VIEW" placeholder
+     text only once a real Base Truth subject has been resolved. */
+  .platform-detail-subject {
+    display: flex; flex-direction: column; gap: .5rem;
+    font: 400 12px/1.3 -apple-system, system-ui, sans-serif; letter-spacing: normal;
+  }
+  .platform-detail-row { display: flex; gap: .75rem; align-items: baseline; }
+  .platform-detail-label {
+    width: 70px; flex-shrink: 0; color: #6b6357;
+    font: 700 10px/1 monospace; letter-spacing: .1em;
+  }
+  .platform-detail-value { color: #f4efe7; font: 700 13px/1.2 monospace; word-break: break-all; }
+
   #platform-overview {
     flex: 1 1 0; min-height: 110px; max-height: 22vh;
     border-top: 1px solid rgba(255,255,255,.08);
@@ -79,6 +95,14 @@
   }
   #platform-overview-content svg { max-width: 100%; height: auto; }
   .platform-overview-note { color: #6b6357; font-size: 12px; margin: 0; }
+
+  /* STATION-10 -- selection affordance/feedback only, never the source of
+     identity (that is always a resolved StationDetailSubjectRef). Every
+     drawn lane already carries data-lane-id (stationTopologySvgRenderer.ts,
+     unmodified) -- this only makes the existing attribute clickable and
+     shows which one is currently selected. */
+  #platform-overview-content [data-lane-id] { cursor: pointer; }
+  #platform-overview-content [data-selected="true"] { stroke: #f4efe7; stroke-width: 3; }
 
   .platform-status { padding: 2rem 1.25rem; color: #8a8177; }
 </style>

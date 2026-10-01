@@ -154,4 +154,9 @@ current-state pages only with their verified implementation checkpoints.
   observable/writable/passengerAccessible are independent and mostly
   derived rather than stored facts, and that a facelift never changes
   element identity since ids are already deterministic/role-based. Recon
-  only — not implemented; proposes the smallest STATION-10 follow-up.
+  record — implemented as STATION-10 (the proposed `StationDetailSubjectRef`
+  type, adopted as written, plus a resolver and read-only Overview-click
+  selection proof); see [subway/README.md](subway/README.md)'s "STATION-10"
+  section for current-state truth. BLACKBOOK integration, real Bay Ridge
+  wall authoring, and the observable/writable/passengerAccessible
+  derivation logic remain future work.

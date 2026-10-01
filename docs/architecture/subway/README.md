@@ -1293,3 +1293,126 @@ topology, a selected-viewport indicator, live-arrival authority
 migration, a persistent transit session, 3D, Station Editor changes, new
 archetypes, new real station survey data, a new island seed, or any
 Mezzanine Drawer redesign.
+
+## 20. STATION-10 — Detail Subject selection proof
+
+Implements the smallest real proof that STATION-09's own recon
+(`docs/architecture/proposals/STATION_09_DETAIL_SUBJECT_RECON.md`)
+proposed: a visible subject in the Platform Overview can be clicked and
+resolved back to the exact canonical Station Base Truth record it came
+from. Read-only subject identification only — no drawing, no Canvas, no
+BLACKBOOK integration, no Artwork/Placement.
+
+```
+Platform Overview (rendered SVG, STATION-07, UNMODIFIED)
+  ↓ click
+data-lane-kind / data-lane-id   (already emitted by stationTopologySvgRenderer.ts)
+  ↓
+StationDetailSubjectRef { stationGeometryId, subjectKind, subjectId }   (new, additive)
+  ↓
+resolveStationDetailSubject()   (new — the ONLY place a ref becomes real data)
+  ↓
+canonical StationPlatform / StationTrackCenterline / StationWallSurface
+  ↓
+Platform Detail View — neutral, read-only SUBJECT/ID/STATION panel
+```
+
+**`StationDetailSubjectRef`** (`music/src/data/stationDetailSubjectTypes.ts`,
+new) is the pointer-triple type STATION-09 proposed, adopted as written:
+`{ stationGeometryId, subjectKind: "platform"|"track"|"wall", subjectId }`.
+Deliberately independent of (does not import) `TopologyLaneKind`
+(`stationTopologyProjection.ts`) even though the string values coincide
+today — a Base-Truth identity reference must never depend on the
+rendering layer for its own type, per STATION-09's own stated invariant
+that the projection/renderer may expose identity but must never become
+its authority.
+
+**`resolveStationDetailSubject()`** (`music/src/logic/maps/
+stationDetailSubjectResolver.ts`, new) is the one place a ref is turned
+into real data. Its input type, `StationDetailSubjectSource`, is a
+narrower structural type (`id` + `platforms`/`trackCenterlines`/
+`wallSurfaces`) — same narrowing precedent as STATION-07's own
+`StationTopologyInput` — so any real `StationGeometryData` satisfies it
+structurally, and a synthetic/test-only fixture can too without
+fabricating an entire record. Dispatch is scoped strictly by
+`subjectKind`: a platform id and a track id sharing the same string value
+can never cross-resolve, because each kind only ever searches its own
+array. Never reads `.suitableForArt` or any other writability field — a
+track (which has no such field at all) resolves exactly like a wall.
+Fails honestly (`null`) for a station-id mismatch or an unknown
+`subjectId`, never substituting another subject or falling back to R42.
+
+**Platform integration — the renderer was neither replaced nor forked.**
+`platformRuntime.ts` keeps the real, currently-loaded `StationGeometryData`
+only long enough to resolve a click (`currentGeometry`, reset on every
+real Overview render); the projection/renderer themselves are completely
+unmodified from STATION-07. A single delegated click listener on
+`#platform-overview-content` reads the clicked shape's own already-
+existing `data-lane-kind`/`data-lane-id` (falling back to a lane's `<text>`
+label's previous sibling, since the renderer draws them as siblings, not
+nested — no renderer change was needed or made), builds a
+`StationDetailSubjectRef` from `currentGeometry.id` (never a hardcoded
+station id), resolves it, and renders a neutral SUBJECT/ID/STATION panel
+into the previously-static "DETAIL VIEW" placeholder. A resolved
+selection also gets a `data-selected="true"` attribute (plain CSS
+`stroke`/`stroke-width` override in `platform.html`, no `!important`
+needed — presentation attributes lose to stylesheet rules by default) so
+a human can see which lane is active; switching subjects clears the prior
+highlight cleanly.
+
+**Bay Ridge Av acceptance — honest, not padded.** Bay Ridge Av's real
+seed still has zero authored `wallSurfaces` (unchanged, deliberately not
+touched by this batch — real wall authoring is explicit future work, not
+STATION-10's). Live-verified: Overview renders exactly `platform →
+track → track → platform` (two platform lanes, two track lanes, zero wall
+lanes); clicking a track lane resolves to `{Track, track:R42:northbound,
+R42}`; clicking a platform lane resolves to `{Platform,
+platform:R42:southbound, R42}`; switching between them updates the Detail
+View and the highlight cleanly; no wall was fabricated to make the demo
+look complete.
+
+**Wall proof — the synthetic fixture, not Bay Ridge.** Wall-subject
+resolution is proven in `stationDetailSubjectResolver.test.ts` against
+the existing STATION-06/07 four-track-island contract fixture
+(`stationGeometryFourTrackIslandContractFixture.ts`, synthetic/
+`authored`-provenance, not a real station) — the one fixture in this
+repo with real `StationWallSurface` records, exactly as this batch's own
+instruction required.
+
+**Testing.** New: `stationDetailSubjectResolver.test.ts` (new, 15 cases —
+ref field preservation; platform/track/wall resolution against real Bay
+Ridge Av Base Truth and the synthetic wall fixture; honest failure for a
+missing subject id and for a station-id mismatch; no kind-crossing
+cross-resolution even with a shared id string; resolution independent of
+`suitableForArt`; identical contract for archetype-generated vs.
+hand-authored geometry; no archetype branching in the resolver's own
+source). `platformRuntime.test.ts` (+5 static-source cases: imports the
+real resolver, no archetype branching in the new code, no `.suitableForArt`
+read, every ref built from `currentGeometry.id`, no Artwork/Placement/
+Canvas/Marks concept introduced). Full combined MUSIC suite: 3974 passing
+(7 pre-existing skips, the same 11 pre-existing unrelated
+`machineLife`/`sunoLibrary` manifest-path failures this environment
+already had before this batch, untouched by it). Typecheck and lint
+clean on every touched/new file.
+
+**Human acceptance — live-verified.** HOME dev harness
+(`home-dev.html?surface=map` → `PLATFORM (Bay Ridge Av)`, the same
+`requestNavigate({surface:"platform", stationId:"R42"})` call ENTER
+PLATFORM itself drives): clicked a track lane (resolved `Track /
+track:R42:northbound / R42`), clicked a platform lane (resolved
+`Platform / platform:R42:southbound / R42`, prior highlight cleared
+cleanly), confirmed via direct DOM inspection that exactly 2 platform +
+2 track lanes render and zero wall lanes exist for R42, navigated back to
+MAP, confirmed the SAME `runtimeId` persisted across the whole round trip
+and `#member-avatar-root` was never removed/reconstructed. (Reached
+Platform via the dev harness's own direct entry point rather than
+re-driving a full pixel-level MAP pan/zoom to Bay Ridge Av's map marker —
+the identical `requestNavigate` call STATION-08's own MAP→Drawer→ENTER
+PLATFORM path already issues and already proved live in that batch.)
+
+**Explicitly NOT built:** drawing, Canvas, BLACKBOOK integration,
+Artwork, ArtworkPlacement, graffiti placement, Bay Ridge Av wall
+authoring, inferred wall geometry, visual station reconstruction, N/S
+direction switching, doors, trains/train selection in Overview, arrivals,
+live transit migration, materials/textures, a visual facelift, or any
+change to Station Editor.
