@@ -1576,3 +1576,165 @@ documented STATION-07 behavior, is the only policy proven safe so far.
 row update are the required bookkeeping for this batch's schema change
 (`StationWallSurface.localPolygon` optional,
 `adjacentPlatformId` added) — both are included in this same commit.
+
+## 22. STATION-12 — Bay Ridge Av 3D readiness / structural geometry resolution
+
+Resolves as much of STATION-11's own architectural-gate "NO" as existing
+in-repo evidence honestly supports, and establishes a canonical,
+representation-independent readiness evaluator — no web research, no
+invented geometry, no renderer.
+
+### Phase 1 — recon against the STATION-11 gate
+
+| Requirement | Current truth | Available evidence | Schema support | Resolve now? | Why |
+|---|---|---|---|---|---|
+| Platform footprints | OSM-estimated polygons, `reference`, 0.35 confidence; width asymmetry direction-resolved, magnitude unresolved | No new measurement exists anywhere in the repo | `StationPlatform.footprint?` already supports partial/omitted | No | Nothing beyond what STATION-11 already found; the field calibration survey's own items 1/2 remain unexecuted |
+| Northbound back-wall geometry | Identity/relationship only (STATION-11) | Zero coordinates in any source document | `StationWallSurface.localPolygon?` already optional | No | No position evidence exists; the calibration survey's own item 1 targets exactly this and is unexecuted |
+| Southbound back-wall geometry | Identity/relationship only (STATION-11) | Zero coordinates | Same | No | Same as above (survey item 2) |
+| Platform↔mezzanine stairs | Connectivity known (kind, levels, relatedPlatformId, qualitative circulation notes); no spatial path | Field photos show which side feeds which staircase; no coordinates | `StationConnection.localPath?` already optional | No (geometry); **connectivity already complete, nothing to add** | No position evidence; this requirement was already as resolved as the project's evidence allows |
+| Mezzanine footprint | No footprint, no primitive existed to hold one | Field photos show a real unified mezzanine area; no dimensions | **Gap — no `footprint` field existed on `StationLevel` at all** | Schema gap closed; R42 instance left empty (no evidence) | Primitive now exists generically; Bay Ridge's own value stays honestly unauthored |
+| Relative surface/mezzanine/platform elevations | Surface=0 (convention); mezzanine/platform elevationM omitted; **no connection wired the surface level to anything** | Field photos directly show real entrances feeding the same mezzanine on both sides | `StationConnection` already generic; `StationLevel.elevationM?` already supports omission | **Partially — topological order, not magnitude** | Magnitude requires a real survey (unexecuted); topological order is fully evidenced and was simply never wired up |
+| Columns/pillars | Existence + qualitative density contrast only (STATION-11 notes) | No count, spacing, or position anywhere | No primitive exists | No | Phase 4's own explicit caution: a primitive must not imply known positions when none exist; still zero justification for one |
+| Structural openings/interruptions | Already expressed as qualitative circulation notes (prior checkpoints) | Same field observations already used | Existing `provenance.note` convention is sufficient | Already resolved | No new primitive needed; nothing left unexpressed |
+
+### Phase 2 — minimum 3D structural contract (representation-independent)
+
+**Required for first structural 3D:**
+- Every level that exists is reachable via at least one real `StationConnection` (relative STACKING ORDER known) — exact `elevationM` magnitude is NOT required for a first pass.
+- Every platform has a `config` and, ideally, a `footprint` — but a station may enter 3D with `footprint` partially estimated (as R42's is) rather than withheld entirely.
+- Every track has a `platformId` relationship; `localPoints` strengthens but is not strictly required to show adjacency.
+- A wall may exist with identity/relationship only; a 3D consumer must be able to ask "does this wall have geometry?" and get an honest no.
+- Connectivity between levels (which stairs connect what) must be real, even if the spatial path is not.
+
+**Optional enrichment (improves but never blocks a first pass):**
+- Real `elevationM` magnitudes for every level.
+- Real wall/mezzanine polygons.
+- Real `localPath` spatial geometry for connections.
+- `TrackRole`/`TrackPhysicalRole`/`platformSide` refinements.
+
+**Visual truth — explicitly NOT required, NOT modeled here or ever by Station Truth itself:**
+tile appearance, paint color, signage appearance, benches, advertisements,
+lighting design, photographic materials, graffiti, decorative fixtures,
+column material/finish, AI reconstruction.
+
+### Phase 3 — partial-truth policy (confirmed canonical, not newly invented)
+
+STATION-11 already established this invariant by construction (the two
+geometryless walls, honestly skipped by the STATION-07 projection);
+STATION-12 confirms it as the repository's own canonical policy, now
+also directly enforced by `stationStructuralReadiness.ts`'s own
+existence/geometry distinction:
+
+```
+known subject + unknown geometry
+      -> subject remains canonical (stable id, real relationships)
+      -> no invented geometry is ever stored as truth
+      -> a projection/renderer may honestly omit it
+      -> later evidence may add geometry WITHOUT replacing identity
+```
+
+No fake placeholder coordinates were introduced anywhere in this batch.
+How a future renderer might visually indicate "this subject exists but is
+unmeasured" is a representation concern, explicitly out of scope here.
+
+### Phase 4 — minimal structural primitives
+
+One generic, additive primitive was added: `StationLevel.footprint?:
+LocalPoint2D[]` — identical discipline to `StationPlatform.footprint` and
+(STATION-11) `StationWallSurface.localPolygon`: omitted, never defaulted,
+whenever a level's existence is real but its spatial extent is not yet
+authored. Applies to any station's any level — not Bay Ridge-specific, not
+mezzanine-specific (the field name doesn't encode "mezzanine" anywhere).
+
+**No column/pillar primitive was added.** Investigated directly per this
+batch's own instruction — no project evidence anywhere establishes a
+count, spacing, or position for any column at any station, and the task's
+own caution against implying known positions where none exist applies
+squarely. The existing qualitative-note convention (already used for
+"columns along its full length") remains the only representation until
+real evidence justifies a geometric primitive.
+
+**No new connection-geometry primitive was added** — `StationConnection
+.localPath?` already existed (STATION-05 era) and already supports
+exactly the "connectivity known, path unknown" case this batch needed;
+confirmed by Phase 1's own recon rather than assumed.
+
+### Phase 5 — R42 geometry actually authored this batch
+
+Only one class of fact was improved, and it is topological, not metric:
+two new `StationConnection` records wire the real surface level
+(STATION-11) into actual topology for the first time —
+`connection:R42:surface-mezzanine-northbound` and
+`...-southbound`, each citing the same real field-photographed street
+entrances the existing `platformLinks[crossover]` note already uses as
+corroborating visual evidence for "one unified mezzanine." Both have
+`localPath` omitted (no position evidence). The southbound REAR exit
+(a distinct, separately-observed relationship) deliberately received NO
+connection record — its own structural path (through this mezzanine, or
+bypassing it) is not established by any evidence in this repository, and
+asserting `fromLevelId`/`toLevelId` for it would have been a fabricated
+relationship, not an observed one; it remains exactly where STATION-11
+left it, a provenance note only.
+
+No platform footprint, wall polygon, mezzanine footprint, or any
+elevation magnitude was authored — none is supported by any evidence this
+batch could locate, and Phase 1's own recon says so explicitly rather
+than silently declining to look.
+
+### Phase 6 — future field-evidence compatibility (verified, not built)
+
+No Evidence/Capture schema was created. Verified compatible: every
+canonical subject this batch touched (the surface level, the two new
+connections) already carries the same stable, deterministic id shape
+(`level:R42:surface`, `connection:R42:surface-mezzanine-northbound`) a
+future `EvidenceCapture`-shaped record could reference today — identical
+reasoning to STATION-11's own identity/facelift analysis, now extended to
+levels and connections, not just platforms/tracks/walls.
+
+### Phase 8 — `stationStructuralReadiness.ts` (new, generic evaluator)
+
+A pure function, `evaluateStationStructuralReadiness(geometry):
+StationStructuralReadinessReport`, classifying 7 requirements as
+READY/PARTIAL/UNKNOWN purely from real `StationGeometryData` fields —
+never a station id, never an archetype id (proven directly by static-
+source test, and behaviorally by running it against Bay Ridge Av, two
+different archetypes, and the STATION-06/07 synthetic four-track-island
+fixture, all producing correctly-differentiated results from the same
+unmodified function).
+
+**R42's own real readiness, as of this commit:**
+
+| Requirement | Status | Why |
+|---|---|---|
+| levels | READY | All 3 levels (surface/mezzanine/platform) are now topologically connected — relative order fully known. Elevation magnitude (0/3 beyond the conventional surface=0) remains optional enrichment. |
+| platformFootprints | PARTIAL | Both platforms have a footprint, neither at strong (authority-grade or ≥0.8 confidence) provenance — OSM estimates, known-unreliable on width. |
+| trackCenterlines | PARTIAL | Both tracks have real localPoints, neither at strong provenance — OSM-sourced, not survey-grade. |
+| wallSurfaces | UNKNOWN | Both STATION-11 walls have real identity/relationship; zero have geometry. Existence is never read as geometry. |
+| mezzanineFootprint | UNKNOWN | The mezzanine level exists; no footprint has ever been authored. |
+| connections | READY | Every level is reachable via a real connection (this batch's own improvement); 0/4 connections have spatial path geometry (optional enrichment). |
+| columns | UNKNOWN | No primitive exists in Station Truth at all — true for every station, not specific to R42. |
+
+### Phase 9/architectural gate
+
+**Is Bay Ridge Av Station Truth now sufficiently expressive to begin the
+first representation-independent 3D structural projection?**
+
+**YES** — with the explicit understanding (per this batch's own
+instruction) that YES does not mean complete: `levels` and `connections`
+are READY (the real station stack and its circulation topology are fully
+known), `platformFootprints`/`trackCenterlines` are PARTIAL (real but
+estimated geometry — enough for a first pass, not survey-grade),
+`wallSurfaces`/`mezzanineFootprint`/`columns` remain UNKNOWN and should
+render as nothing, exactly as STATION-07's own projection already does
+for any geometryless subject. A future STATION-13 (if pursued) should
+consume: `levels` (for stacking), `platforms[].footprint` +
+`trackCenterlines[].localPoints` (for plan geometry, explicitly PARTIAL-
+grade), and `connections` (for level-to-level circulation) — and should
+render `wallSurfaces`/`mezzanineFootprint`/columns as absent rather than
+guessed, per the Phase 3 policy this batch confirmed canonical.
+
+**Architecture docs:** this section, `OWNERSHIP.md`'s station-geometry
+row, and `stationStructuralReadiness.ts`'s own module doc are the
+required bookkeeping for this batch's schema change
+(`StationLevel.footprint?` added) and the newly-canonicalized partial-
+truth policy — all included in this same commit.

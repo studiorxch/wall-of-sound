@@ -222,13 +222,31 @@ describe("Bay Ridge Av real coordinate fixture", () => {
       expect(seed.levels.map((l) => l.kind).sort()).toEqual(["mezzanine", "platform", "surface"]);
     });
 
-    it("the surface level has no connection wired to it yet — field-confirmed entrances exist, but no stair geometry/position has been authored", () => {
+    it("STATION-12: the surface level is now wired into real topology (connectivity only — no stair geometry/position has been authored)", () => {
       const surfaceLevel = seed.levels.find((l) => l.kind === "surface");
       expect(surfaceLevel).toBeDefined();
       const connectedToSurface = seed.connections.filter(
         (c) => c.fromLevelId === surfaceLevel?.id || c.toLevelId === surfaceLevel?.id,
       );
-      expect(connectedToSurface).toHaveLength(0);
+      expect(connectedToSurface).toHaveLength(2);
+      for (const connection of connectedToSurface) {
+        expect(connection.kind).toBe("stairs");
+        expect(connection.localPath).toBeUndefined();
+      }
+      const relatedPlatformIds = connectedToSurface.map((c) => c.relatedPlatformId);
+      expect(new Set(relatedPlatformIds)).toEqual(new Set(["platform:R42:northbound", "platform:R42:southbound"]));
+    });
+
+    it("STATION-12: no level has an authored footprint yet — the new StationLevel.footprint field stays omitted for every R42 level, never a fabricated extent", () => {
+      for (const level of seed.levels) expect(level.footprint).toBeUndefined();
+    });
+
+    it("STATION-12: the southbound REAR exit (a distinct, separately-observed relationship) is deliberately NOT given its own surface-mezzanine connection record — its structural path is not established by any evidence", () => {
+      const surfaceMezzanineConnections = seed.connections.filter((c) => c.id.startsWith("connection:R42:surface-mezzanine"));
+      expect(surfaceMezzanineConnections).toHaveLength(2);
+      // The rear-exit relationship remains exactly where STATION-11 put it: a provenance note only.
+      const southbound = seed.platforms.find((p) => p.id === "platform:R42:southbound");
+      expect(southbound?.provenance.note).toMatch(/rear-exit/i);
     });
   });
 
@@ -653,22 +671,28 @@ describe("Bay Ridge Av side-specific stair connections (2026-09-09 — split fro
   const southboundPlatformId = seed.platforms.find((p) => p.id.includes("southbound"))!.id;
 
   it("has exactly two mezzanine<->platform stair connections, one per platform side, each with its own relatedPlatformId", () => {
-    const stairConnections = seed.connections.filter((c) => c.kind === "stairs");
+    const stairConnections = seed.connections.filter((c) => c.kind === "stairs" && c.toLevelId === platformLevelId);
     expect(stairConnections).toHaveLength(2);
     const relatedPlatformIds = stairConnections.map((c) => c.relatedPlatformId).sort();
     expect(relatedPlatformIds).toEqual([northboundPlatformId, southboundPlatformId].sort());
   });
 
-  it("both stair connections still connect the same two levels — only ownership and provenance differ, not topology", () => {
-    for (const connection of seed.connections) {
+  it("both mezzanine<->platform stair connections still connect the same two levels — only ownership and provenance differ, not topology", () => {
+    const mezzaninePlatformConnections = seed.connections.filter((c) => c.toLevelId === platformLevelId);
+    expect(mezzaninePlatformConnections).toHaveLength(2);
+    for (const connection of mezzaninePlatformConnections) {
       expect(connection.fromLevelId).toBe(mezzanineLevelId);
       expect(connection.toLevelId).toBe(platformLevelId);
     }
   });
 
   it("attaches the correct, distinct qualitative circulation observation to each side — never lane counts or numbers", () => {
-    const northboundConnection = seed.connections.find((c) => c.relatedPlatformId === northboundPlatformId)!;
-    const southboundConnection = seed.connections.find((c) => c.relatedPlatformId === southboundPlatformId)!;
+    const northboundConnection = seed.connections.find(
+      (c) => c.relatedPlatformId === northboundPlatformId && c.toLevelId === platformLevelId,
+    )!;
+    const southboundConnection = seed.connections.find(
+      (c) => c.relatedPlatformId === southboundPlatformId && c.toLevelId === platformLevelId,
+    )!;
     expect(northboundConnection.provenance.note).toMatch(/continues directly into the platform path/);
     expect(northboundConnection.provenance.note).toMatch(/preserving two circulation lanes/);
     expect(southboundConnection.provenance.note).toMatch(/interrupts that continuity/);

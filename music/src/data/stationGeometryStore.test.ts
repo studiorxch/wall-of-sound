@@ -136,7 +136,8 @@ describe("station geometry persistence round trip (save -> reload)", () => {
 
     const reloaded = await loadStationGeometryFromDB(seed.id);
     expect(reloaded!.connections).toEqual(seed.connections);
-    const stairConnections = reloaded!.connections.filter((c) => c.kind === "stairs");
+    const platformLevelId = seed.levels.find((l) => l.kind === "platform")!.id;
+    const stairConnections = reloaded!.connections.filter((c) => c.kind === "stairs" && c.toLevelId === platformLevelId);
     expect(stairConnections).toHaveLength(2);
     const reloadedNorthbound = stairConnections.find((c) => c.relatedPlatformId === northboundPlatformId)!;
     const reloadedSouthbound = stairConnections.find((c) => c.relatedPlatformId === southboundPlatformId)!;

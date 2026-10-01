@@ -377,6 +377,46 @@ export function buildBayRidgeAvStationGeometrySeed(now: string = new Date().toIS
           note: "Mezzanine connects down to the southbound platform via a staircase, per reference sources (exact position not established). Field observation (2026-09-09, qualitative, no measurement): on this side, the stair geometry interrupts that continuity, leaving effectively one main circulation lane — no lane count, width, or position is asserted as a number.",
         },
       },
+      // STATION-12 -- wires the real surface level (STATION-11) into the
+      // station's actual topology for the first time. Field photos
+      // directly show a real street-level entrance stair on each side
+      // feeding the SAME unified paid mezzanine (the same visual evidence
+      // already cited by platformLinks[crossover]'s own note) -- a real,
+      // evidenced connectivity fact, independent of any position/path
+      // geometry (localPath stays omitted on both, exactly like the
+      // mezzanine-platform connections above). The southbound REAR exit
+      // observed elsewhere (see platforms[southbound].provenance.note) is
+      // deliberately NOT given a connection record here: its own
+      // structural path (whether it passes through this same mezzanine or
+      // bypasses it entirely) is not established by any evidence in this
+      // repository, and asserting fromLevelId/toLevelId for it would be a
+      // fabricated relationship, not an observed one.
+      {
+        id: "connection:R42:surface-mezzanine-northbound",
+        fromLevelId: SURFACE_LEVEL_ID,
+        toLevelId: MEZZANINE_LEVEL_ID,
+        kind: "stairs",
+        relatedPlatformId: NORTHBOUND_PLATFORM_ID,
+        provenance: {
+          source: "reference",
+          confidence: 0.5,
+          sourceRef: FIELD_OBSERVATION_SOURCES,
+          note: "A real street-level entrance stair on the northbound side, field-photographed (Screenshot 2026-09-08 10.50.44PM, 10.51.31PM), feeding down into the same unified paid mezzanine the crossover record already describes. Connectivity only -- no position, path, or step count is authored.",
+        },
+      },
+      {
+        id: "connection:R42:surface-mezzanine-southbound",
+        fromLevelId: SURFACE_LEVEL_ID,
+        toLevelId: MEZZANINE_LEVEL_ID,
+        kind: "stairs",
+        relatedPlatformId: SOUTHBOUND_PLATFORM_ID,
+        provenance: {
+          source: "reference",
+          confidence: 0.5,
+          sourceRef: FIELD_OBSERVATION_SOURCES,
+          note: "A real street-level entrance stair on the southbound side, field-photographed (Screenshot 2026-09-08 10.51.18PM), feeding down into the same unified paid mezzanine the crossover record already describes. Connectivity only -- no position, path, or step count is authored. Distinct from the separately-observed southbound REAR exit, whose own structural path is not established by any evidence and is therefore not given a connection record here.",
+        },
+      },
     ],
     platformLinks: [
       {

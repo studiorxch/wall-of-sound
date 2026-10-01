@@ -100,6 +100,19 @@ export interface StationLevel {
    * placeholder number here to imply a measurement that was never taken.
    */
   elevationM?: number;
+  /**
+   * STATION-12 -- closed local-meter polygon describing this level's own
+   * spatial extent (e.g. a mezzanine's walkable footprint), same
+   * "omission, not a fabricated default" discipline as
+   * `StationPlatform.footprint` and (STATION-11) `StationWallSurface
+   * .localPolygon`: omitted whenever a level's existence/identity is real
+   * but no real spatial extent has been authored yet. A level with no
+   * footprint still has a stable, resolvable identity and a real position
+   * in the station's own level/connection topology -- it simply has
+   * nothing for a future spatial projection to plot as area, exactly like
+   * an unauthored platform or wall.
+   */
+  footprint?: LocalPoint2D[];
   label: string;
   provenance: Provenance;
 }
