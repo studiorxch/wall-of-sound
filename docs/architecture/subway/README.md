@@ -2416,3 +2416,26 @@ new canonical Underground integration this batch establishes — no
 `OWNERSHIP.md` row changes were required beyond updating the existing
 "Underground / Tunnel Vision (3D) rendering" row (below) to name the new
 file.
+
+## 26. Future: printable/semantic MAP output (direction, not implementation)
+
+Documented here as intended direction only — **not implemented, not
+designed, not scheduled**. A future StudioRich OUTPUTS phase (roadmap
+concept, not this directory's concern — see the `WOS-share` roadmap) may
+eventually want a print/poster representation of MAP data (Surface map,
+Underground/Tunnel Vision map, borough/line/station/neighborhood maps,
+event or artwork editions, personalized member maps).
+
+The one thing current work should keep in mind so that direction stays
+reachable later: avoid unnecessarily coupling semantic map information
+(borough boundaries, coastline/water, parks, airports, subway routes,
+station markers, terminal symbols, labels, station hierarchy, Station
+Truth, selected artwork/location info) to exactly one interactive
+renderer (Surface's Mapbox layer, or Underground's Mapbox-custom-layer
+Three.js scene), so that a future, genuinely different print renderer
+isn't forced to re-derive truth the interactive renderers already have.
+`StationGeometryData`/`StationStructuralProjection3D` (STATION-13) are
+already one real example of this discipline done correctly — canonical
+truth, consumed by more than one representation, owned by neither. No
+print-specific module, type, or consumer exists anywhere in this
+codebase today.

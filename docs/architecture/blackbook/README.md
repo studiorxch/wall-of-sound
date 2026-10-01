@@ -456,3 +456,20 @@ conflict currently exists (the two `WorldLayer` concepts don't interact).
   introduced (vs. continuing to distinguish purely by `surfaceId` prefix,
   as today) was not resolved — no current code answers this either way,
   and it wasn't asked to be decided in this pass.
+
+## 14. Future physical output / Book POD (direction, not implementation)
+
+Documented here as intended direction only — **not implemented, not
+designed, not scheduled**. A future StudioRich OUTPUTS phase (roadmap
+concept, not this directory's concern — see the `WOS-share` roadmap) may
+eventually let Artwork/Pages/a Collection become an optional physical
+output (individual print, poster, physical book — personal BLACKBOOK,
+selected-page collection, artist edition, collaborative book, event
+book, annual/member archive, station/neighborhood collection,
+personalized book). No POD vendor has been selected or researched; no
+print/export module, type, or consumer exists anywhere in this codebase
+today. Per the roadmap's own sequencing, real POD requirements
+(dimensions, page counts, binding, paper, color reproduction, minimum
+quantities, fulfillment, unit economics) should only be investigated
+once enough real BLACKBOOK work exists to make them concrete — BLACKBOOK
+should not be designed around a POD provider's constraints before then.
