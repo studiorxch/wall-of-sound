@@ -542,6 +542,39 @@ export default defineConfig({
         // forever or silently vanishing.
         reconcileAbandonedStemStaging(TRACK_STEM_LIBRARY_ROOT)
 
+        // STATION-15 — dev-mode gap discovered (and fixed here) during this
+        // batch's own recon: `subway-member-runtime.js`/`radio-channel-
+        // receiver-runtime.js`/(new) `station-3d-bridge.js` are production-
+        // build-only chunks (see rollupOptions.input below) that
+        // wall/index.html references by their fixed, built filename
+        // (`../assets/<name>.js`, resolved through the `/wall-app` proxy
+        // below to THIS server's own `/assets/*`). In `vite dev` mode there
+        // is no `dist/` build step, so that request previously fell through
+        // to Vite's own SPA history-fallback and silently received
+        // `index.html` back (wrong content, wrong MIME type) instead of the
+        // real script — pre-existing for the first two bridges, confirmed
+        // live during this batch's own recon, not introduced by it. Fixes
+        // it the smallest way: if a real file exists on disk at
+        // `dist/assets/<name>` for a `/assets/<name>` request, serve it
+        // directly, before Vite's own internal middlewares run (this
+        // `server.middlewares.use` call executes in `configureServer`'s own
+        // body, not a returned post-hook — see Vite's own documented
+        // ordering). Requires `npm run build` (or `vite build`) to have
+        // produced `dist/assets/` at least once; otherwise this simply
+        // falls through to `next()`, unchanged prior behavior.
+        server.middlewares.use('/assets', (req, res, next) => {
+          const url = req.url || ''
+          const relPath = url.split('?')[0].replace(/^\/+/, '')
+          if (!relPath || relPath.includes('..')) { next(); return }
+          const filePath = path.resolve(__dirname, 'dist/assets', relPath)
+          if (!filePath.startsWith(path.resolve(__dirname, 'dist/assets'))) { next(); return }
+          fs.stat(filePath, (err, stat) => {
+            if (err || !stat.isFile()) { next(); return }
+            res.setHeader('Content-Type', filePath.endsWith('.js') ? 'text/javascript' : 'application/octet-stream')
+            fs.createReadStream(filePath).pipe(res)
+          })
+        })
+
         // /music-audio/<relPath> — serve audio files from the library root.
         // Track records store audioRelPath = "catalog/audio/foo.flac"; this
         // route resolves it to LIBRARY_ROOT/catalog/audio/foo.flac.
@@ -2153,11 +2186,13 @@ export default defineConfig({
         admin: path.resolve(__dirname, 'admin.html'),
         subwayMemberRuntime: path.resolve(__dirname, 'src/member/subwayMemberRuntime.ts'),
         radioChannelReceiverRuntime: path.resolve(__dirname, 'src/member/radioChannelReceiverRuntime.ts'),
+        station3DBridge: path.resolve(__dirname, 'src/station/station3DBridge.ts'),
       },
       output: {
         entryFileNames: (chunk) => {
           if (chunk.name === 'subwayMemberRuntime') return 'assets/subway-member-runtime.js';
           if (chunk.name === 'radioChannelReceiverRuntime') return 'assets/radio-channel-receiver-runtime.js';
+          if (chunk.name === 'station3DBridge') return 'assets/station-3d-bridge.js';
           return 'assets/[name]-[hash].js';
         },
       },

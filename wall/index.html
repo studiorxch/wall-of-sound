@@ -2910,6 +2910,12 @@
          for the ONE canonical RADIO Channel ("studiorich-radio"). MAP is a
          receiver only -- no clock/resolver/authority of its own. ── -->
     <script type="module" src="../assets/radio-channel-receiver-runtime.js"></script>
+    <!-- ── STATION-15 -- same same-origin bridge pattern as
+         subway-member-runtime.js above, exposing ONLY plain-data
+         canonical-Station-Truth functions (window.SBE.StationStructure3DBridge)
+         for subway3DStationActorLayer.js (loaded further below) to consume.
+         Never Three.js -- see that layer's own file header for why. ── -->
+    <script type="module" src="../assets/station-3d-bridge.js"></script>
     <script src="./systems/presentation/radioChannelHud.js"></script>
     <script src="./systems/presentation/subwayStationHud.tests.js"></script>
     <script src="./systems/presentation/subwayMezzanineDrawer.tests.js"></script>
@@ -2938,6 +2944,16 @@
     <script src="./systems/presentation/subway3DVisibilityPolicy.tests.js"></script>
     <script src="./systems/presentation/subway3DTrainActorLayer.js"></script>
     <script src="./systems/presentation/subway3DTrainActorLayer.tests.js"></script>
+    <!-- ── STATION-15 -- integrates the first real canonical 3D station
+         (Bay Ridge Av / R42) into Underground/Tunnel Vision, via
+         window.SBE.StationStructure3DBridge (loaded above) only -- never a
+         second Station Truth, never archetype/station-specific code.
+         Shares the ?subway3d=1 dev flag with subway3DTrainActorLayer.js
+         above; placed directly after it since both are independent
+         Mapbox custom layers sharing the same GL context, with no
+         load-order dependency between them. ── -->
+    <script src="./systems/presentation/subway3DStationActorLayer.js"></script>
+    <script src="./systems/presentation/subway3DStationActorLayer.tests.js"></script>
     <!-- ── 0819_SUBWAY_Itinerary_Execution_Map_Authoring — the execution half
          of the SUBWAY itinerary story (resolution was the prior checkpoint).
          SubwayItineraryRideAuthority reads SubwayItineraryLegResolver/

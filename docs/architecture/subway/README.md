@@ -2151,3 +2151,268 @@ on that container's own teardown.
 (`station structural 3D scene builder`, `station structural 3D renderer`)
 are the required bookkeeping for this batch — both included in this same
 commit.
+
+## 25. STATION-15 — Tunnel Vision / Underground 3D station integration
+
+Integrates the first real canonical 3D station (Bay Ridge Av / R42) into
+the existing Underground/Tunnel Vision world:
+
+```
+StationGeometryData (canonical)
+  -> projectStationStructure3D()                       (STATION-13, unmodified)
+  -> deriveStationWorldAnchor() / deriveLevelPresentationDepthM()   (STATION-15, pure)
+  -> window.SBE.StationStructure3DBridge                (STATION-15, plain data only)
+  -> wall/systems/presentation/subway3DStationActorLayer.js         (STATION-15, native THREE)
+  -> existing Underground / Tunnel Vision Mapbox world
+```
+
+### Targeted recon result (Phase 1-2, reported before implementation)
+
+1. Underground/Tunnel Vision is owned by `wall/systems/presentation/
+   subway3DTrainActorLayer.js` + `subway3DVisibilityPolicy.js` — a Mapbox
+   **custom layer** (`type:'custom', renderingMode:'3d'`), not a separate
+   world/page.
+2. It already owns a real Three.js scene: `onAdd(map, gl)` creates
+   `THREE.Camera()` + `THREE.WebGLRenderer({canvas: map.getCanvas(),
+   context: gl})`; `render(gl, matrix)` composes one real model matrix per
+   object (`MercatorCoordinate.fromLngLat` + `meterInMercatorCoordinateUnits()`
+   + `rotateZ(-headingDeg)`) and calls `renderer.render(object, camera)`
+   once per object — the exact, already-proven pattern this batch reuses
+   for the station.
+3. **Critical finding, materially affecting the implementation path**:
+   `wall/` loads its own global `THREE` **r0.160** via a CDN `<script>` tag
+   (see `wall/index.html`); MUSIC's own `three` npm dependency (added
+   STATION-14) is **r0.186** — a real, confirmed version gap. Passing a
+   `THREE.Object3D` built against one module instance into a
+   `WebGLRenderer` built against the other is a genuine cross-version risk,
+   not a hypothetical one. Per this batch's own explicit instruction
+   ("if the actual Underground architecture materially contradicts the
+   assumptions in this prompt, report the smallest architecture-consistent
+   integration path" — this is exactly that case), STATION-14's own scene
+   builder (`stationStructure3DScene.ts`) is **not** reused directly for
+   this integration. Instead: the bridge carries ONLY plain data (zero
+   Three.js dependency, confirmed by build output — the built
+   `station-3d-bridge.js` chunk is ~2KB, nowhere near `three`'s real size),
+   and `subway3DStationActorLayer.js` builds its own Three.js scene
+   content natively against wall/'s own global `THREE`, mirroring
+   `stationStructure3DScene.ts`'s own presentation constants/behavior
+   rather than importing its (incompatible) objects.
+4. Station-local's own native convention (+X along-track, +Y lateral,
+   +Z up, real meters) already matches EXACTLY what this Mapbox-Three
+   bridge's own per-object model matrix expects (local X/Y → the real
+   horizontal Mercator plane, local Z → real altitude, rotation around
+   local Z for heading) — no axis swap/mirror is needed anywhere in the
+   new integration file, unlike STATION-14's own standalone debug renderer
+   (which deliberately converts to a Y-up scene for its own OrbitControls
+   camera convenience).
+5. `window.SBE.MapboxViewportRuntime.getMap()`/`.onReady()` is the existing
+   map-instance/readiness authority (same one this entire SUBWAY arc
+   already uses, including every STATION-08-14 live-acceptance pass).
+6. Bay Ridge Av's existing 2D marker (`MTASubwayStationLibrary`/
+   `subwayStationHud.js`) is untouched and unaffected — the new 3D layer
+   is an independent, additive Mapbox custom layer, never a replacement.
+7. A genuinely pre-existing, previously-undetected dev-environment gap was
+   found and fixed as part of making this batch's own acceptance possible:
+   `vite dev` has no static-serving rule for `dist/assets/*`, so
+   `wall/index.html`'s own `<script type="module" src="../assets/
+   subway-member-runtime.js">` (and its sibling
+   `radio-channel-receiver-runtime.js`) silently received Vite's SPA
+   `index.html` fallback instead of the real script in dev mode —
+   confirmed live, not introduced by this batch. Fixed with the smallest
+   possible addition: a `server.middlewares.use('/assets', ...)` static
+   file handler in `vite.config.ts`, serving a real file from
+   `dist/assets/` when one exists, else falling through unchanged. This
+   also retroactively fixes the same long-standing gap for the two
+   pre-existing bridges. Requires `npm run build` (or `vite build`) to
+   have produced `dist/assets/` at least once before `npm run dev`.
+
+### Integration boundary (Phase 1)
+
+`subway3DStationActorLayer.js` reads real `StationGeometryData` ONLY
+through `window.SBE.StationStructure3DBridge` — never the Bay Ridge seed,
+never any MUSIC source file directly, never a second copy of R42's
+geometry. The bridge itself is a thin, same-origin, build-once pass-
+through (same convention `subway-member-runtime.js` already established)
+of three already-canonical functions:
+`resolveKnownStationGeometry` (STATION-08), `projectStationStructure3D`
+(STATION-13), and this batch's own `deriveStationWorldAnchor`/
+`deriveLevelPresentationDepthM`.
+
+### Station-local → world transform (Phase 3)
+
+`music/src/logic/maps/stationWorldTransform.ts` (new, pure, zero
+Three.js/Mapbox dependency — deliberately, so it stays safely bridgeable
+despite the version gap above):
+
+```ts
+interface StationWorldAnchor { longitude; latitude; altitudeM; headingDeg }
+function deriveStationWorldAnchor(geometry: StationGeometryData): StationWorldAnchor
+function deriveLevelPresentationDepthM(level: ProjectedLevel): number
+```
+
+- **Geographic position (Phase 4)**: `anchor.longitude`/`latitude` are a
+  verbatim pass-through of `StationGeometryData.origin.longitude`/
+  `latitude` — themselves already sourced from the real GTFS station-stop
+  record (see `stationGeometryBayRidgeAvSeed.ts`'s own header). No second
+  geographic authority was consulted or introduced.
+- **Orientation (Phase 5)**: `anchor.headingDeg` is a verbatim pass-through
+  of `origin.orientationDeg` — itself already a real, derived route
+  bearing (`computeBearingDeg()` against real GTFS track-shape geometry,
+  STATION-05 era) — never hand-typed, never an `if stationId === "R42"`
+  branch. Any future station whose own `origin.orientationDeg` is
+  similarly derived gets correct orientation automatically, with zero new
+  code.
+- **Scale (Phase 6)**: deliberately NOT answered by this module. Station-
+  local coordinates are already real/estimated meters; the integration
+  layer applies Mapbox's own real, per-latitude
+  `MercatorCoordinate.meterInMercatorCoordinateUnits()` conversion at
+  render time — reusing real, already-correct geographic math rather than
+  reimplementing (and risking drifting from) it. 1 station-local unit =
+  1 real meter throughout.
+- **Vertical/depth (Phase 7)**: `deriveLevelPresentationDepthM()` mirrors
+  `stationStructure3DScene.ts`'s own `buildLevelSceneY()` rule exactly (a
+  real `canonicalElevationM` is used directly, unconverted; otherwise
+  `presentationStackIndex` scaled by the same documented constant) —
+  intentionally re-declared rather than imported, to keep this module
+  dependency-free. `STATION_DEPTH_OFFSET_M` (in
+  `subway3DStationActorLayer.js`, currently `0`) is the one explicit,
+  representation-owned knob for a future station whose own real altitude
+  anchor would otherwise collide visually with surface terrain/buildings
+  — Bay Ridge Av's own `origin.altitudeM` (0, street level) needs none.
+
+### Existing marker relationship (Phase 8) / visibility (Phase 9)
+
+The 2D station marker is never removed, never station-specific-cased
+away — stations without sufficient Station Truth (every station except
+R42, today) continue to rely on it exclusively, unchanged. The 3D
+structural layer is purely additive, gated by the same dev-flag
+convention as 3D trains, and only renders once the camera is reasonably
+near (`STATION_VISIBLE_FROM_ZOOM = 14`, a presentation-owned constant) —
+the smallest useful visibility rule, explicitly documented as the next
+refinement a future batch could replace with real semantic zoom, not a
+camera-system rewrite.
+
+### Visual language (Phase 10)
+
+Reuses STATION-14's own presentation constants/behavior by convention
+(same colors, same geometryKnown/geometryUnknown and pathKnown/
+topologyOnly rules) — no redesign, no tiles/signage/benches/decoration,
+no fabricated walls/stairs/mezzanine footprint.
+
+### Bay Ridge Av live proof (Phase 11) — live-verified
+
+**START HERE:**
+```
+cd wall && npx serve -p 5500 .                 # wall/'s own static server
+cd music && PLAY_LIBRARY_ROOT=... npm run dev -- --port 5176   # MUSIC dev server (requires a prior `npm run build` for /assets/* — see the recon finding above)
+```
+Then: `http://localhost:5177/wall-app/?subway3d=1` (direct standalone
+MAP entry, with the shared 3D dev flag in the URL — the flag reads
+`location.search` of this exact document, so a HOME-hosted iframe path
+would need the flag applied differently; both are legitimate real
+entry points, see `subwayMezzanineDrawer.js`'s own precedent for
+standalone-vs-hosted handling elsewhere in this arc).
+
+Confirmed live: `[Subway3DStationActorLayer] activated — stations
+mounted: {0: R42}`; `window.SBE.Subway3DStationActorLayer.getMountedStationIds()`
+→ `["R42"]`; zero console errors from the new modules. Jumping the camera
+to R42's real coordinate (`[-74.023377, 40.634967]`) at top-down (`pitch:
+0`) showed a real, subtly-tinted structural overlay precisely at the Bay
+Ridge Av marker, with dashed topology-only connection indicators visibly
+aligned with the real R-line route direction (confirming both position
+and orientation). A pitched/oblique view showed the real existing
+`Subway3DTrainActorLayer` 3D train continuing to render and promote/
+retire trains normally alongside the new station layer, sharing the same
+GL context without conflict — direct live proof of Phase 2's own "reuse
+the shared context, never a second canvas" requirement. `disable()`/
+`enable()` cycled cleanly (`map.getLayer(LAYER_ID)` removed then
+re-added, mounted-station list emptied then restored to exactly `["R42"]`
+— never duplicated). MEMBER avatar persistence and the same persistent
+`runtimeId` were separately reconfirmed via the normal HOME-hosted
+`home-dev.html?surface=map` path (3D mode off by default there, as
+designed — the dev flag is never forced on for a hosted session).
+Bay Ridge Av's own two STATION-11 back walls remained geometrically
+absent throughout (geometryUnknown is never fabricated); all four of its
+real connections rendered only as abstract dashed indicators
+(topologyOnly), never invented stairs.
+
+### Generic transform proof (Phase 12) — not R42-specific
+
+`stationWorldTransform.test.ts` (new, 13 tests, vitest) proves
+`deriveStationWorldAnchor`/`deriveLevelPresentationDepthM` work
+identically for: the real R42 seed, an entirely arbitrary synthetic
+origin (longitude/latitude/altitude/bearing unrelated to Bay Ridge Av),
+an archetype-generated station, and a reversed/perpendicular bearing —
+all through the one unmodified function, with a static-source test
+confirming no archetype-id or real-station-id branch exists anywhere in
+the module.
+
+### Future multi-station / train-alignment compatibility (Phase 13-14)
+
+`subway3DStationActorLayer.js`'s own `KNOWN_STATION_GTFS_STOP_IDS` is a
+plain array (today: `['R42']`) and `mountStation(gtfsStopId)`/
+`unmountStation(gtfsStopId)` are already per-station functions, keyed
+entirely by a real gtfsStopId parameter — adding a future station means
+adding its id to that array, never a new code path, never a global-
+singleton assumption tied to R42. No train integration was built or
+implied; the transform this batch establishes (station-local meters →
+real Mercator world position, deterministic, per-track as well as
+per-wall/platform) is exactly the same coordinate space a future train
+alignment would need to share — proven deterministic and station-generic
+here, nothing about it would need to change or be rebuilt for that later
+work.
+
+### MEMBER / RADIO / host boundary (Phase 15)
+
+`subway3DStationActorLayer.js` and `station3DBridge.ts` construct no
+`MemberIdentityAuthority`, no RADIO receiver, no independent persistent
+runtime of any kind — confirmed by direct code inspection (neither file
+imports anything from `music/src/member/` or constructs an identity/
+session object) and by live verification (same `runtimeId`, same
+`#member-avatar-root`, through the normal HOME-hosted path, unaffected by
+this batch).
+
+### Testing
+
+13 new tests in `stationWorldTransform.test.ts` (determinism, no
+mutation, verbatim pass-through for real/arbitrary/archetype-generated
+geometry, no archetype/station branching, zero Three.js/Mapbox
+dependency) + a new hand-rolled `subway3DStationActorLayer.tests.js`
+(same convention as `subway3DTrainActorLayer.tests.js`: known-station-
+list integrity, honest `mountStation()` failure when the bridge is
+unavailable or a station is unresolvable, dev-flag URL-param reading).
+Full combined MUSIC vitest suite: 4081 passing (same 11 pre-existing
+unrelated manifest-path failures as before this batch). Typecheck clean;
+this batch's own files lint clean (the `vite.config.ts` dev-server fix
+touches a file with pre-existing, unrelated lint findings elsewhere in
+it, none on the lines this batch added).
+
+### Architectural gates
+
+**Is the first canonical 3D station now successfully integrated into the
+real Underground/Tunnel Vision world?**
+
+**YES** — live-verified via the real `wall/` Mapbox world (not the
+STATION-14 debug page alone), at R42's real geographic position and real
+route orientation, coexisting with the existing 3D train layer, the
+existing 2D station marker, and the existing camera/navigation, with
+clean mount/unmount and no second canvas or second Station Truth.
+
+**Is the Underground integration now generic enough that additional
+stations with sufficient Station Truth can enter the same 3D world
+without a new station-specific integration path?**
+
+**YES** — `mountStation(gtfsStopId)` and `deriveStationWorldAnchor()`/
+`deriveLevelPresentationDepthM()` are already fully generic (proven by
+the arbitrary-origin/arbitrary-bearing/archetype-generated test cases);
+adding a second real station is exactly: author its `StationGeometryData`
+seed (existing, unrelated workflow), register it in
+`stationGeometryRegistry.ts` (existing, STATION-08 workflow), and add its
+gtfsStopId to `KNOWN_STATION_GTFS_STOP_IDS` — zero new rendering code,
+zero new transform code.
+
+**Architecture docs:** this section is the required bookkeeping for the
+new canonical Underground integration this batch establishes — no
+`OWNERSHIP.md` row changes were required beyond updating the existing
+"Underground / Tunnel Vision (3D) rendering" row (below) to name the new
+file.
