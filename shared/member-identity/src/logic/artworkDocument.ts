@@ -71,13 +71,24 @@ export function validateArtworkMark(mark: ArtworkMark): void {
   }
   if (mark.geometry.format === "geographic-stroke-v1" || mark.geometry.format === "geographic-erasure-v1") {
     if (!mark.geometry.points.every(finiteGeographicCoordinate)) throw new Error("invalid_artwork_geographic_points");
-  } else if (mark.geometry.format === "local-2d-stroke-v1" || mark.geometry.format === "local-2d-erasure-v1") {
+  } else if (mark.geometry.format === "local-2d-stroke-v1" || mark.geometry.format === "local-2d-erasure-v1" || mark.geometry.format === "local-2d-drip-v1") {
     if (!mark.geometry.points.every(finiteLocalCoordinate)) throw new Error("invalid_artwork_local_points");
   } else {
     throw new Error("invalid_artwork_geometry_format");
   }
   if (mark.type === "material-erasure") {
     if (mark.targetMaterialId !== "graphite" || !Number.isFinite(mark.width) || mark.width <= 0) throw new Error("invalid_artwork_erasure");
+    return;
+  }
+  // BLACKBOOK Deterministic Drips V1 -- see LocalMaterialDripMark's own doc.
+  // Bounded independently of the style checks below (shared with stroke).
+  if (mark.type === "material-drip") {
+    if (mark.geometry.format !== "local-2d-drip-v1") throw new Error("invalid_artwork_drip_geometry");
+    if (!mark.originMarkId || typeof mark.originMarkId !== "string") throw new Error("invalid_artwork_drip_origin");
+    if (mark.targetMaterialId !== "mop" && mark.targetMaterialId !== "spray") throw new Error("invalid_artwork_drip_material");
+    if (!mark.style || typeof mark.style.color !== "string" || !mark.style.color.trim()) throw new Error("invalid_artwork_style_color");
+    if (!Number.isFinite(mark.style.width) || mark.style.width <= 0) throw new Error("invalid_artwork_style_width");
+    if (!Number.isFinite(mark.style.opacity) || mark.style.opacity < 0 || mark.style.opacity > 1) throw new Error("invalid_artwork_style_opacity");
     return;
   }
   if (mark.type !== "stroke") throw new Error("invalid_artwork_mark_type");

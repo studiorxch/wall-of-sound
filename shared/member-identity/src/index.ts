@@ -27,6 +27,8 @@ export type {
   MaterialErasureMark,
   LocalMaterialErasureMark,
   GeographicMaterialErasureMark,
+  MaterialDripMark,
+  LocalMaterialDripMark,
 } from "./data/artworkTypes.js";
 export type { ArtMaterialId, ArtSupplyId, ArtSupplySettings, DrawingSupplyId, DrawingWidthRange, MarkMaterialIdentity, PencilSupplySettings } from "./data/artSupplyTypes.js";
 export { STUDIO_RICH_OPERATOR_EMAILS } from "./data/operatorIdentity.js";

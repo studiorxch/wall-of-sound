@@ -1,4 +1,4 @@
-import type { ArtMaterialId, Artwork, ArtworkRepository, LocalMaterialErasureMark, LocalStrokeMark, PageFrame } from "@studiorich/member-identity";
+import type { ArtMaterialId, Artwork, ArtworkRepository, LocalMaterialDripMark, LocalMaterialErasureMark, LocalStrokeMark, PageFrame } from "@studiorich/member-identity";
 import { createArtworkPersistenceBridge, type CurrentArtworkTarget } from "./mapArtworkBridge";
 import { sortArtworksByRecency } from "./artworkGallery";
 
@@ -60,7 +60,31 @@ export interface BlackbookErasure {
   readonly points: readonly { readonly x: number; readonly y: number }[];
   readonly width: number;
 }
-export type BlackbookOperation = BlackbookStroke | BlackbookErasure;
+
+/**
+ * BLACKBOOK Deterministic Drips β0.1 -- the runtime-side counterpart to
+ * `LocalMaterialDripMark` (artworkTypes.ts), mirroring how `BlackbookErasure`
+ * already pairs with `LocalMaterialErasureMark`. `markId` is always
+ * pre-assigned by the caller (blackbookRuntime.ts) BEFORE this is pushed
+ * alongside its originating Mop/Spray operation -- never left to
+ * `persistStroke`'s own `createMarkId()` fallback -- so the drip's final
+ * persisted id is already known (and usable as a deterministic seed) at
+ * the moment it's generated, with no async gap between creating the
+ * origin's own Mark id and creating the drip that references it.
+ */
+export interface BlackbookDrip {
+  readonly operation: "material-drip";
+  readonly id: string;
+  artworkId?: string;
+  markId?: string;
+  creatorId?: string;
+  surfaceId?: string;
+  readonly points: readonly { readonly x: number; readonly y: number }[];
+  readonly originMarkId: string;
+  readonly targetMaterialId: "mop" | "spray";
+  readonly style: { readonly color: string; readonly width: number; readonly opacity: number };
+}
+export type BlackbookOperation = BlackbookStroke | BlackbookErasure | BlackbookDrip;
 
 const MATERIAL_BY_SUPPLY: Readonly<Record<BlackbookStroke["operation"], ArtMaterialId>> = Object.freeze({
   pencil: "graphite",
@@ -106,8 +130,24 @@ export function toLocalErasureMark(erasure: BlackbookErasure, markId: string, cr
   return { id: markId, type: "material-erasure", createdAt, geometry: { format: "local-2d-erasure-v1", points: erasure.points.map(({ x, y }) => ({ x, y })) }, targetMaterialId: "graphite", width: erasure.width };
 }
 
+/** BLACKBOOK Deterministic Drips β0.1 -- see `BlackbookDrip`'s own doc. */
+export function toLocalDripMark(drip: BlackbookDrip, markId: string, createdAt = new Date()): LocalMaterialDripMark {
+  if (!drip.originMarkId || drip.points.length < 2) throw new Error("invalid_blackbook_drip");
+  return {
+    id: markId,
+    type: "material-drip",
+    createdAt,
+    geometry: { format: "local-2d-drip-v1", points: drip.points.map(({ x, y }) => ({ x, y })) },
+    originMarkId: drip.originMarkId,
+    targetMaterialId: drip.targetMaterialId,
+    style: { ...drip.style },
+  };
+}
+
 export function toBlackbookMark(operation: BlackbookOperation, markId: string) {
-  return operation.operation === "eraser" ? toLocalErasureMark(operation, markId) : toLocalStrokeMark(operation, markId);
+  if (operation.operation === "eraser") return toLocalErasureMark(operation, markId);
+  if (operation.operation === "material-drip") return toLocalDripMark(operation, markId);
+  return toLocalStrokeMark(operation, markId);
 }
 
 export function createBlackbookArtworkPersistenceBridge(options: {

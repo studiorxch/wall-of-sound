@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { selectArtworkForMark, type Artwork, type ArtworkMark, type ArtworkRepository } from "@studiorich/member-identity";
-import { BLACKBOOK_PAGE_FRAME, BLACKBOOK_PAGE_SURFACE_ID, createBlackbookArtworkPersistenceBridge, filterBlackbookArtworks, resolveActiveBlackbookArtworkId, toLocalErasureMark, toLocalStrokeMark, withActiveArtworkUrlParam, type BlackbookOperation, type BlackbookStroke } from "./blackbookArtworkBridge";
+import { BLACKBOOK_PAGE_FRAME, BLACKBOOK_PAGE_SURFACE_ID, createBlackbookArtworkPersistenceBridge, filterBlackbookArtworks, resolveActiveBlackbookArtworkId, toBlackbookMark, toLocalDripMark, toLocalErasureMark, toLocalStrokeMark, withActiveArtworkUrlParam, type BlackbookOperation, type BlackbookStroke } from "./blackbookArtworkBridge";
 
 function stroke(id: string, offset = 0): BlackbookStroke {
   return { operation: "pencil", id, points: [{ x: 0.1 + offset, y: 0.2 }, { x: 0.2 + offset, y: 0.3 }], style: { color: "#171412", width: 7, opacity: 0.9 } };
@@ -485,5 +485,58 @@ describe("Blackbook My Pages V1 -- listing", () => {
     const beforeA = JSON.stringify(a);
     resolveActiveBlackbookArtworkId([a, b], "art-b", null);
     expect(JSON.stringify(a)).toBe(beforeA);
+  });
+});
+
+describe("BLACKBOOK Deterministic Drips β0.1 -- material-drip Mark bridge", () => {
+  it("authors a drip as a first-class Mark carrying its own originMarkId/targetMaterialId, never a mutation of the origin stroke", () => {
+    const drip = toLocalDripMark(
+      { operation: "material-drip", id: "drip-a", points: [{ x: 0.1, y: 0.2 }, { x: 0.11, y: 0.26 }, { x: 0.1, y: 0.3 }], originMarkId: "mark-mop-origin", targetMaterialId: "mop", style: { color: "#1c6e6e", width: 34, opacity: 0.55 } },
+      "mark-drip-a",
+      new Date(0),
+    );
+    expect(drip).toMatchObject({
+      id: "mark-drip-a",
+      type: "material-drip",
+      originMarkId: "mark-mop-origin",
+      targetMaterialId: "mop",
+      geometry: { format: "local-2d-drip-v1" },
+      style: { color: "#1c6e6e", width: 34, opacity: 0.55 },
+    });
+  });
+
+  it("toBlackbookMark dispatches a material-drip operation to toLocalDripMark, distinct from the stroke/eraser branches", () => {
+    const dripOperation: BlackbookOperation = { operation: "material-drip", id: "drip-b", points: [{ x: 0.1, y: 0.2 }, { x: 0.1, y: 0.3 }], originMarkId: "mark-spray-origin", targetMaterialId: "spray", style: { color: "#e2572b", width: 24, opacity: 0.6 } };
+    const mark = toBlackbookMark(dripOperation, "mark-drip-b");
+    expect(mark).toMatchObject({ type: "material-drip", originMarkId: "mark-spray-origin", targetMaterialId: "spray" });
+  });
+
+  it("rejects a drip with fewer than 2 points or no originMarkId, mirroring the same authoring-time validation every other Mark-producing operation already has", () => {
+    expect(() => toLocalDripMark({ operation: "material-drip", id: "drip-c", points: [{ x: 0, y: 0 }], originMarkId: "mark-a", targetMaterialId: "mop", style: { color: "#1c6e6e", width: 34, opacity: 0.55 } }, "mark-drip-c")).toThrow();
+    expect(() => toLocalDripMark({ operation: "material-drip", id: "drip-d", points: [{ x: 0, y: 0 }, { x: 0, y: 1 }], originMarkId: "", targetMaterialId: "mop", style: { color: "#1c6e6e", width: 34, opacity: 0.55 } }, "mark-drip-d")).toThrow();
+  });
+
+  it("Undo removes a drip Mark through the same generic removeStroke path as any other Mark -- no special-cased persistence for drips", async () => {
+    const mopMark = toLocalStrokeMark({ ...stroke("mop"), operation: "mop", style: { color: "#1c6e6e", width: 34, opacity: 0.55 } }, "mark-mop", new Date(0));
+    const dripMark = toLocalDripMark({ operation: "material-drip", id: "drip-e", points: [{ x: 0.11, y: 0.21 }, { x: 0.11, y: 0.26 }], originMarkId: "mark-mop", targetMaterialId: "mop", style: { color: "#1c6e6e", width: 34, opacity: 0.55 } }, "mark-drip-e", new Date(1));
+    const withBoth = artwork("art-drip", [mopMark, dripMark]);
+    const afterDripRemoved = artwork("art-drip", [mopMark]);
+    const repository: ArtworkRepository = {
+      createArtwork: vi.fn(), listOwnedArtwork: vi.fn(async () => [withBoth]),
+      createMapArtwork: vi.fn(), listOwnedMapArtwork: vi.fn(async () => [withBoth]),
+      appendOwnedArtworkMark: vi.fn(),
+      removeOwnedArtworkMark: vi.fn(async () => afterDripRemoved),
+      deleteOwnedArtwork: vi.fn(), renameOwnedArtwork: vi.fn(),
+    };
+    const bindArtwork = vi.fn(() => true);
+    const bridge = createBlackbookArtworkPersistenceBridge({ repository, drawing: { bindArtwork }, getAuthenticatedMemberId: () => "member-1" });
+    const hydratedDrip = Object.assign(
+      { operation: "material-drip" as const, id: "drip-e", points: dripMark.geometry.points, originMarkId: "mark-mop", targetMaterialId: "mop" as const, style: dripMark.style },
+      { artworkId: "art-drip", markId: "mark-drip-e", creatorId: "member-1", surfaceId: BLACKBOOK_PAGE_SURFACE_ID },
+    );
+    await bridge.removeStroke(hydratedDrip);
+    expect(repository.removeOwnedArtworkMark).toHaveBeenCalledWith("art-drip", "member-1", "mark-drip-e");
+    // The origin Mop Mark is never touched by removing its drip.
+    expect(repository.removeOwnedArtworkMark).not.toHaveBeenCalledWith("art-drip", "member-1", "mark-mop");
   });
 });

@@ -22,6 +22,7 @@ import {
   resolveActiveBlackbookArtworkId,
   toBlackbookMark,
   withActiveArtworkUrlParam,
+  type BlackbookDrip,
   type BlackbookOperation,
 } from "./blackbookArtworkBridge";
 import { createCartesianCamera, type CartesianCamera, type DocRect } from "./cartesianWorkspaceCamera";
@@ -34,6 +35,7 @@ import {
   strokeGraphite,
   strokeInk,
   strokeMarker,
+  strokeMaterialDrip,
   strokeMop,
   strokeSpray,
   traceSmoothedPath,
@@ -41,7 +43,8 @@ import {
   GRAPHITE_PROFILE_VERSION,
   type GraphiteGradeId,
 } from "./strokeSmoothing";
-import { resolveSprayCapProfile, DEFAULT_SPRAY_CAP_ID, STUDIORICH_STOCK_CAP, STUDIORICH_FAT_CAP } from "./sprayDeposition";
+import { resolveSprayCapProfile, resolveSprayDripPlans, hashSeed, DEFAULT_SPRAY_CAP_ID, STUDIORICH_STOCK_CAP, STUDIORICH_FAT_CAP } from "./sprayDeposition";
+import { resolveMopDripPlans } from "./mopDeposition";
 import { createBlackbookHomeSurface } from "../home/blackbookHomeSurface";
 
 function required<T>(value: T | null, error: string): T { if (!value) throw new Error(error); return value; }
@@ -408,6 +411,20 @@ function path(context: CanvasRenderingContext2D, points: readonly { x: number; y
 function drawOperation(operation: BlackbookOperation): void {
   const { points } = operation;
   if (points.length < 2) return;
+  // BLACKBOOK Deterministic Drips β0.1 -- a drip renders on its OWN target
+  // material's layer (mop/spray), never a third layer, so it visually
+  // composites with (and z-orders alongside) that material exactly like an
+  // ordinary Mop/Spray Mark. Rendering only ever replays this Mark's own
+  // already-persisted/already-generated points (strokeMaterialDrip derives
+  // taper purely from point index) -- no re-simulation happens here.
+  if (operation.operation === "material-drip") {
+    const dripCtx = materialLayers[operation.targetMaterialId].context;
+    dripCtx.save();
+    const scaledStyle = { ...operation.style, width: operation.style.width * widthScale() };
+    strokeMaterialDrip(dripCtx, points.map((point) => docToScreen(point)), scaledStyle, operation.targetMaterialId);
+    dripCtx.restore();
+    return;
+  }
   const materialId = operation.operation === "pencil" ? "graphite"
     : operation.operation === "pen" ? "ink"
     : operation.operation === "marker" ? "marker"
@@ -517,6 +534,14 @@ function activeOperation(points: readonly CapturedPoint[]): BlackbookOperation {
     operation: activeSupply,
     id,
     points,
+    // BLACKBOOK Deterministic Drips β0.1 -- Mop/Spray's own persisted Mark
+    // id is pre-assigned HERE, synchronously, rather than left to
+    // persistStroke's own createMarkId() fallback. This is what lets
+    // createDripOperationsFor (pointerup, below) know the real originMarkId
+    // a drip must reference -- and use it as a stable deterministic seed --
+    // without waiting on an async persist round-trip. Every other supply is
+    // unaffected (no drip seam exists for it).
+    ...(activeSupply === "mop" || activeSupply === "spray" ? { markId: crypto.randomUUID() } : {}),
     style: { color: colorControl.value, width: Number(widthControl.value), opacity: Number(opacityControl.value) },
     // Graphite Grades Foundation V1: only Pencil carries a grade; every
     // other supply is unaffected.
@@ -524,6 +549,67 @@ function activeOperation(points: readonly CapturedPoint[]): BlackbookOperation {
     // BLACKBOOK Spray Physicality V1: only Spray carries a capId.
     ...(activeSupply === "spray" ? { capId: activeSprayCapId } : {}),
   };
+}
+
+/**
+ * BLACKBOOK Deterministic Drips β0.1 -- the one place a committed Mop/Spray
+ * operation's own authored points turn into zero or more sibling
+ * BlackbookDrip operations. Called synchronously at pointerup, BEFORE any
+ * persistence call -- `operation.markId` is already pre-assigned (see
+ * `activeOperation` above), so this never waits on an async round-trip, and
+ * nothing else can be pushed onto `operations` between an origin and its
+ * own drips (JS's single-threaded, synchronous execution is what keeps the
+ * two always contiguous for `popLastGesture`'s own undo grouping below).
+ * `operation.markId` doubles as this drip's own deterministic seed --
+ * `hashSeed` is the same stable string->int hash Spray/Mop/Pencil/Marker's
+ * own rendering already uses for their deterministic particle/dab fields.
+ */
+function createDripOperationsFor(operation: BlackbookOperation): BlackbookDrip[] {
+  if (operation.operation !== "mop" && operation.operation !== "spray") return [];
+  if (!operation.markId) return []; // defensive -- always pre-assigned above
+  // Narrow explicitly into a local -- BlackbookOperation's shared
+  // `operation` field spans several supply-specific literal sets, which
+  // the guard above doesn't narrow cleanly through TS's own control-flow
+  // analysis (BlackbookStroke's own `operation` type is itself a 5-literal
+  // union, not a single discriminant literal).
+  const targetMaterialId: "mop" | "spray" = operation.operation === "mop" ? "mop" : "spray";
+  const originMarkId = operation.markId;
+  const baseRadius = operation.style.width * 0.5;
+  const seed = hashSeed(originMarkId);
+  const plans = targetMaterialId === "mop"
+    ? resolveMopDripPlans(operation.points, baseRadius, seed)
+    : resolveSprayDripPlans(operation.points, baseRadius, seed, resolveSprayCapProfile(operation.capId));
+  return plans.map((plan) => ({
+    operation: "material-drip" as const,
+    id: `blackbook-drip-${nextOperationId++}`,
+    markId: crypto.randomUUID(),
+    points: plan.points,
+    originMarkId,
+    targetMaterialId,
+    style: { ...operation.style },
+  }));
+}
+
+/**
+ * BLACKBOOK Deterministic Drips β0.1 -- Undo's own grouping unit. A
+ * gesture's origin operation and any drip operations it spawned are always
+ * pushed onto `operations` contiguously, origin first (see
+ * `createDripOperationsFor`'s own doc) -- so "the last authored gesture" is
+ * simply the trailing run of `material-drip` operations plus the one
+ * ordinary operation beneath them. This is what makes one Undo remove a
+ * drip together with its originating Mark, never leaving it orphaned
+ * (requirement 7), while an ordinary non-drip-producing gesture (nothing
+ * trailing) still undoes exactly as it always did -- one operation, one step.
+ */
+function popLastGesture(): BlackbookOperation[] {
+  const removed: BlackbookOperation[] = [];
+  let next = operations[operations.length - 1];
+  while (next && next.operation === "material-drip") {
+    removed.unshift(operations.pop() as BlackbookOperation);
+    next = operations[operations.length - 1];
+  }
+  if (next) removed.unshift(operations.pop() as BlackbookOperation);
+  return removed;
 }
 
 // Blackbook Spatial Workspace V1: pointer capture now goes through the
@@ -682,7 +768,13 @@ function marksToOperations(artwork: Artwork): BlackbookOperation[] {
     ...(mark.material?.supplyId === "spray" && mark.material?.capId !== undefined
       ? { capId: mark.material.capId }
       : {}),
-  }] : mark.type === "material-erasure" && mark.geometry.format === "local-2d-erasure-v1" ? [{ operation: "eraser", id: `blackbook-mark-${mark.id}`, artworkId: artwork.id, markId: mark.id, creatorId: artwork.creatorId, surfaceId: artwork.surfaceId, points: mark.geometry.points, width: mark.width }] : []);
+  }] : mark.type === "material-erasure" && mark.geometry.format === "local-2d-erasure-v1" ? [{ operation: "eraser", id: `blackbook-mark-${mark.id}`, artworkId: artwork.id, markId: mark.id, creatorId: artwork.creatorId, surfaceId: artwork.surfaceId, points: mark.geometry.points, width: mark.width }]
+  // BLACKBOOK Deterministic Drips β0.1 -- reconstructs a persisted drip
+  // Mark back into its own BlackbookDrip operation on hydrate/reload,
+  // exactly like every other Mark type here -- never regenerated, only
+  // replayed from its own already-persisted points.
+  : mark.type === "material-drip" && mark.geometry.format === "local-2d-drip-v1" ? [{ operation: "material-drip" as const, id: `blackbook-mark-${mark.id}`, artworkId: artwork.id, markId: mark.id, creatorId: artwork.creatorId, surfaceId: artwork.surfaceId, points: mark.geometry.points, originMarkId: mark.originMarkId, targetMaterialId: mark.targetMaterialId as "mop" | "spray", style: mark.style }]
+  : []);
 }
 
 /**
@@ -829,6 +921,13 @@ canvas.addEventListener("pointerup", (event) => {
     // of the reported mouse-up reshuffle.
     const operation = activeOperation(activePoints);
     operations.push(operation);
+    // BLACKBOOK Deterministic Drips β0.1 -- generated and pushed
+    // synchronously, immediately after the origin (see
+    // createDripOperationsFor's own doc for why this must happen here,
+    // before any persistence call, and why that keeps the two always
+    // contiguous in `operations`).
+    const dripOperations = createDripOperationsFor(operation);
+    for (const dripOperation of dripOperations) operations.push(dripOperation);
     // BLACKBOOK CLEAR + Single-Step Undo V1 -- a newly committed stroke
     // means CLEAR is no longer "the last action" -- its own one-shot Undo
     // is no longer available (same single-level semantics as an ordinary
@@ -836,6 +935,7 @@ canvas.addEventListener("pointerup", (event) => {
     lastClearSnapshot = null;
     showStatus("Saving…", "info");
     void persistence.persistStroke(operation)
+      .then(() => Promise.all(dripOperations.map((dripOperation) => persistence.persistStroke(dripOperation))))
       .then(() => showStatus("Saved", "success"))
       .catch((error) => reportError("Couldn't save that stroke", error));
   }
@@ -859,10 +959,16 @@ undoButton.addEventListener("click", () => {
     }
     return;
   }
-  const operation = operations.pop();
-  if (!operation) return;
+  // BLACKBOOK Deterministic Drips β0.1 -- removes the last GESTURE (its
+  // origin operation plus any drip operations it spawned) as one logical
+  // Undo step, never orphaning a drip -- see popLastGesture's own doc.
+  // A non-drip-producing gesture still undoes exactly one operation, same
+  // as before this build.
+  const removedGesture = popLastGesture();
+  if (removedGesture.length === 0) return;
   render();
-  void persistence.removeStroke(operation)
+  showStatus("Saving…", "info");
+  void Promise.all(removedGesture.map((operation) => persistence.removeStroke(operation)))
     .then(() => showStatus("Saved", "success"))
     .catch((error) => reportError("Undo didn't save", error));
 });

@@ -33,6 +33,8 @@
  */
 
 
+import { SPRAY_DRIP_TUNING, resolveMaterialDripPlans, type DripPlan } from "./dripDeposition";
+
 export interface SprayPoint {
   readonly x: number;
   readonly y: number;
@@ -657,4 +659,30 @@ export function resolveSprayCorePlan(
     });
   }
   return passesOut;
+}
+
+/**
+ * BLACKBOOK Deterministic Drips β0.1 -- Spray's own drip seam, the same
+ * shared engine (`dripDeposition.ts`) Mop's `resolveMopDripPlans` uses, fed
+ * from Spray's own already-resolved emission points (their existing
+ * `densityFactor` -- real captured velocity when available, else the
+ * legacy point-spacing proxy) rather than a second local-load derivation.
+ * `SPRAY_DRIP_TUNING` deliberately requires materially more accumulation
+ * than Mop's own `MOP_DRIP_TUNING` before a drip spawns at all -- an
+ * aerosol coverage field drips less readily than a pooled wet applicator at
+ * the same dwell. Uses the cap's own `footprintRadiusScale`d radius, the
+ * same effective radius every other Spray computation in this module keys
+ * off, so a Fat Cap's wider footprint also widens its own drip gravity/
+ * wobble consistently with its wider deposition.
+ */
+export function resolveSprayDripPlans(
+  points: readonly SprayPoint[],
+  baseRadius: number,
+  seed: number,
+  cap: SprayCapProfile = STUDIORICH_STOCK_CAP,
+): readonly DripPlan[] {
+  if (points.length === 0 || baseRadius <= 0) return [];
+  const effectiveRadius = baseRadius * cap.footprintRadiusScale;
+  const emissions = resolveSprayEmissionPoints(points, baseRadius, cap);
+  return resolveMaterialDripPlans(emissions, effectiveRadius, seed, SPRAY_DRIP_TUNING);
 }

@@ -232,8 +232,34 @@ service cloud.firestore {
         && hasValidAuthoredZoom(mark);
     }
 
+    // BLACKBOOK Deterministic Drips V1 -- the persisted shape of a
+    // LocalMaterialDripMark (shared/member-identity/src/data/artworkTypes.ts).
+    // Local-2d only (no geographic drip format exists). `points.size() <=
+    // 64` is a generous, hard safety ceiling independent of this build's own
+    // tuning (mopDeposition.ts/sprayDeposition.ts's DripTuning.maxDripSteps,
+    // both well under this) -- bounded Mark size, never unbounded geometry.
+    function hasValidMaterialDripMark(mark) {
+      return mark is map
+        && mark.keys().hasAll(['id', 'type', 'createdAt', 'geometry', 'originMarkId', 'targetMaterialId', 'style'])
+        && mark.keys().hasOnly(['id', 'type', 'createdAt', 'geometry', 'originMarkId', 'targetMaterialId', 'style'])
+        && mark.id is string
+        && mark.type == 'material-drip'
+        && mark.createdAt is timestamp
+        && mark.geometry is map
+        && mark.geometry.keys().hasAll(['format', 'points'])
+        && mark.geometry.keys().hasOnly(['format', 'points'])
+        && mark.geometry.format == 'local-2d-drip-v1'
+        && mark.geometry.points is list
+        && mark.geometry.points.size() >= 2
+        && mark.geometry.points.size() <= 64
+        && mark.originMarkId is string
+        && mark.originMarkId.size() > 0
+        && mark.targetMaterialId in ['mop', 'spray']
+        && hasValidArtworkStyle(mark.style);
+    }
+
     function hasValidArtworkMark(mark) {
-      return hasValidStrokeMark(mark) || hasValidMaterialErasureMark(mark);
+      return hasValidStrokeMark(mark) || hasValidMaterialErasureMark(mark) || hasValidMaterialDripMark(mark);
     }
 
     function hasValidPageFrame(frame) {

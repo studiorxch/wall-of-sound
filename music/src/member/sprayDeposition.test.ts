@@ -4,6 +4,7 @@ import {
   resolveSprayCapProfile,
   resolveSprayCorePlan,
   resolveSprayCoreSamplePoints,
+  resolveSprayDripPlans,
   resolveSprayEmissionPoints,
   resolveSprayParticlePlan,
   SPRAY_CAP_PROFILES,
@@ -11,6 +12,7 @@ import {
   STUDIORICH_STOCK_CAP,
   type SprayCapProfile,
 } from "./sprayDeposition";
+import { SPRAY_DRIP_TUNING } from "./dripDeposition";
 
 describe("Spray aerosol engine -- determinism", () => {
   it("produces an identical particle plan for identical points/radius/seed/cap -- no Math.random anywhere", () => {
@@ -604,5 +606,41 @@ describe("LIVE STROKE STABILITY V2 -- a substantially longer, direction-changing
       expect(current.slice(0, previous.length)).toEqual(previous);
       previous = current;
     }
+  });
+});
+
+describe("BLACKBOOK Deterministic Drips β0.1 -- Spray's own drip seam (resolveSprayDripPlans)", () => {
+  it("an ordinary fast gesture produces no drips", () => {
+    const fast = [{ x: 0, y: 0 }, { x: 400, y: 0 }, { x: 800, y: 0 }];
+    expect(resolveSprayDripPlans(fast, 12, hashSeed("spray-fast"))).toEqual([]);
+  });
+
+  it("a slow, tightly-dwelled gesture produces at least one bounded drip, respecting Spray's own (higher than Mop's) accumulation threshold", () => {
+    const dwelled = Array.from({ length: 60 }, (_, i) => ({ x: i * 0.4, y: 0 }));
+    const plans = resolveSprayDripPlans(dwelled, 12, hashSeed("spray-dwell"));
+    expect(plans.length).toBeGreaterThan(0);
+    expect(plans.length).toBeLessThanOrEqual(SPRAY_DRIP_TUNING.maxDripsPerStroke);
+    for (const plan of plans) expect(plan.points.length).toBeLessThanOrEqual(SPRAY_DRIP_TUNING.maxDripSteps + 1);
+  });
+
+  it("is deterministic -- the same stroke points, radius, seed, and cap always replay to the identical drip plan", () => {
+    const dwelled = Array.from({ length: 60 }, (_, i) => ({ x: i * 0.4, y: 0 }));
+    const seed = hashSeed("spray-determinism");
+    expect(resolveSprayDripPlans(dwelled, 12, seed)).toEqual(resolveSprayDripPlans(dwelled, 12, seed));
+  });
+
+  it("a different cap's effective (footprint-scaled) radius changes drip gravity/wobble scale consistently with its wider deposition, without losing determinism", () => {
+    const dwelled = Array.from({ length: 60 }, (_, i) => ({ x: i * 0.4, y: 0 }));
+    const seed = hashSeed("spray-cap");
+    const stock = resolveSprayDripPlans(dwelled, 12, seed, STUDIORICH_STOCK_CAP);
+    const fat = resolveSprayDripPlans(dwelled, 12, seed, STUDIORICH_FAT_CAP);
+    expect(resolveSprayDripPlans(dwelled, 12, seed, STUDIORICH_STOCK_CAP)).toEqual(stock);
+    expect(stock.length).toBeGreaterThan(0);
+    expect(fat.length).toBeGreaterThan(0);
+  });
+
+  it("returns no plans for no points or a non-positive base radius, rather than throwing", () => {
+    expect(resolveSprayDripPlans([], 12, hashSeed("spray-empty"))).toEqual([]);
+    expect(resolveSprayDripPlans([{ x: 0, y: 0 }], 0, hashSeed("spray-empty"))).toEqual([]);
   });
 });

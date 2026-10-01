@@ -326,3 +326,54 @@ describe("BLACKBOOK Spray Physicality V1 -- tMs/pressure/capId decode round trip
     expect(artwork.marks[0].material).not.toHaveProperty("capId");
   });
 });
+
+describe("BLACKBOOK Deterministic Drips β0.1 -- material-drip Mark decode", () => {
+  it("decodes a persisted drip Mark with its own originMarkId/targetMaterialId/style, alongside its origin Mop Mark", () => {
+    const time = Timestamp.fromDate(new Date("2026-01-01T00:00:00Z"));
+    const artwork = decodeArtworkData("blackbook-drip-1", {
+      creatorId: "member-1", createdAt: time, updatedAt: time,
+      surfaceId: "blackbook:studio-rich-main:page:page-1",
+      composition: { bounds: { minX: 0.1, minY: 0.2, maxX: 0.3, maxY: 0.4 }, startedAt: time, lastEditedAt: time },
+      marks: [
+        { id: "mark-mop", type: "stroke", createdAt: time, geometry: { format: "local-2d-stroke-v1", points: [{ x: 0.1, y: 0.2 }, { x: 0.3, y: 0.4 }] }, style: { color: "#1c6e6e", width: 34, opacity: 0.55 }, material: { supplyId: "mop", materialId: "mop" } },
+        { id: "mark-drip", type: "material-drip", createdAt: time, geometry: { format: "local-2d-drip-v1", points: [{ x: 0.11, y: 0.21 }, { x: 0.111, y: 0.26 }] }, originMarkId: "mark-mop", targetMaterialId: "mop", style: { color: "#1c6e6e", width: 34, opacity: 0.55 } },
+      ],
+      state: "draft", visibility: "private",
+    });
+    expect(artwork.marks).toHaveLength(2);
+    expect(artwork.marks[1]).toMatchObject({
+      id: "mark-drip",
+      type: "material-drip",
+      originMarkId: "mark-mop",
+      targetMaterialId: "mop",
+      geometry: { format: "local-2d-drip-v1" },
+      style: { color: "#1c6e6e", width: 34, opacity: 0.55 },
+    });
+  });
+
+  it("a malformed drip Mark (missing originMarkId) fails to decode rather than silently inventing one", () => {
+    const time = Timestamp.fromDate(new Date("2026-01-01T00:00:00Z"));
+    expect(() => decodeArtworkData("blackbook-drip-bad", {
+      creatorId: "member-1", createdAt: time, updatedAt: time,
+      surfaceId: "blackbook:studio-rich-main:page:page-1",
+      composition: { bounds: { minX: 0.1, minY: 0.2, maxX: 0.3, maxY: 0.4 }, startedAt: time, lastEditedAt: time },
+      marks: [
+        { id: "mark-drip-bad", type: "material-drip", createdAt: time, geometry: { format: "local-2d-drip-v1", points: [{ x: 0.11, y: 0.21 }, { x: 0.111, y: 0.26 }] }, targetMaterialId: "mop", style: { color: "#1c6e6e", width: 34, opacity: 0.55 } },
+      ],
+      state: "draft", visibility: "private",
+    })).toThrow();
+  });
+
+  it("a legacy Artwork with no drip Marks at all continues decoding unchanged (legacy compatibility)", () => {
+    const time = Timestamp.fromDate(new Date("2026-01-01T00:00:00Z"));
+    const artwork = decodeArtworkData("blackbook-no-drip", {
+      creatorId: "member-1", createdAt: time, updatedAt: time,
+      surfaceId: "blackbook:studio-rich-main:page:page-1",
+      composition: { bounds: { minX: 0.1, minY: 0.2, maxX: 0.3, maxY: 0.4 }, startedAt: time, lastEditedAt: time },
+      marks: [{ id: "mark-mop-only", type: "stroke", createdAt: time, geometry: { format: "local-2d-stroke-v1", points: [{ x: 0.1, y: 0.2 }, { x: 0.3, y: 0.4 }] }, style: { color: "#1c6e6e", width: 34, opacity: 0.55 }, material: { supplyId: "mop", materialId: "mop" } }],
+      state: "draft", visibility: "private",
+    });
+    expect(artwork.marks).toHaveLength(1);
+    expect(artwork.marks[0].type).toBe("stroke");
+  });
+});

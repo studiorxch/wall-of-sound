@@ -44,7 +44,34 @@ export interface LocalMaterialErasureMark { readonly id: string; readonly type: 
 /** See GeographicStrokeMark.authoredZoom's doc -- same semantics for the geographic Eraser Mark. */
 export interface GeographicMaterialErasureMark { readonly id: string; readonly type: "material-erasure"; readonly createdAt: Date; readonly geometry: { readonly format: "geographic-erasure-v1"; readonly points: readonly GeographicArtworkPoint[] }; readonly targetMaterialId: ArtMaterialId; readonly width: number; readonly authoredZoom?: number }
 export type MaterialErasureMark = LocalMaterialErasureMark | GeographicMaterialErasureMark;
-export type ArtworkMark = StrokeMark | MaterialErasureMark;
+/**
+ * BLACKBOOK Deterministic Drips V1 -- the "material-drip Mark" the
+ * previously-documented FUTURE DRIP SEAM (mopDeposition.ts) anticipated, the
+ * same pattern `LocalMaterialErasureMark` already established: a
+ * first-class additive Mark rather than a hidden mutation of the stroke it
+ * came from. `originMarkId` points at the Mop/Spray `StrokeMark.id` whose
+ * own local accumulation/dwell generated this drip -- callers (see
+ * blackbookRuntime.ts's Undo grouping) remove a drip together with the Mark
+ * that produced it, so a drip never survives as an orphan once its origin
+ * is undone. `geometry.points` is the drip's own already-generated,
+ * downward-tapering centerline -- computed ONCE, deterministically, at
+ * authoring time (never recomputed by a running physics loop); rendering
+ * only ever replays these persisted points, exactly like every other Mark.
+ * Local-2d only today (Blackbook's own coordinate space) -- Map has no Drip
+ * concept yet, so there is no geographic counterpart.
+ */
+export interface LocalMaterialDripMark {
+  readonly id: string;
+  readonly type: "material-drip";
+  readonly createdAt: Date;
+  readonly geometry: { readonly format: "local-2d-drip-v1"; readonly points: readonly LocalArtworkPoint[] };
+  readonly originMarkId: string;
+  /** Which material deposited this drip -- "mop" | "spray" today, the only two supplies with a drip seam. */
+  readonly targetMaterialId: ArtMaterialId;
+  readonly style: { readonly color: string; readonly width: number; readonly opacity: number };
+}
+export type MaterialDripMark = LocalMaterialDripMark;
+export type ArtworkMark = StrokeMark | MaterialErasureMark | MaterialDripMark;
 
 /**
  * ARTWORK V2 -- an explicit, durable discriminator. Deliberately NOT the

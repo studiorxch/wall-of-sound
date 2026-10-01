@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { MOP_DAB_ALPHA_SCALE, MOP_MAX_EMISSION_POINTS, resolveMopDabPlan, resolveMopEmissionPoints } from "./mopDeposition";
+import { MOP_DAB_ALPHA_SCALE, MOP_MAX_EMISSION_POINTS, resolveMopDabPlan, resolveMopDripPlans, resolveMopEmissionPoints } from "./mopDeposition";
+import { MOP_DRIP_TUNING } from "./dripDeposition";
 
 describe("Mop deposition -- Revision 3 emission resampling", () => {
   it("a sparse raw path produces bounded, interpolated emission points -- not just the original points", () => {
@@ -99,6 +100,38 @@ describe("Mop deposition -- Width and speed response are preserved through resam
     expect(resolveMopDabPlan([{ x: 0.1, y: 0.1 }], 0)).toEqual([]);
     expect(resolveMopDabPlan([{ x: 0.1, y: 0.1 }], -5)).toEqual([]);
     expect(resolveMopEmissionPoints([], 10)).toEqual([]);
+  });
+});
+
+describe("BLACKBOOK Deterministic Drips β0.1 -- Mop's own drip seam (resolveMopDripPlans)", () => {
+  it("an ordinary fast gesture produces no drips", () => {
+    const fast = [{ x: 0, y: 0 }, { x: 400, y: 0 }, { x: 800, y: 0 }];
+    expect(resolveMopDripPlans(fast, 17, 7)).toEqual([]);
+  });
+
+  it("a slow, tightly-dwelled gesture (closely-spaced points, well over Mop's own accumulation threshold) produces at least one bounded drip", () => {
+    const dwelled = Array.from({ length: 40 }, (_, i) => ({ x: i * 0.5, y: 0 }));
+    const plans = resolveMopDripPlans(dwelled, 17, 7);
+    expect(plans.length).toBeGreaterThan(0);
+    expect(plans.length).toBeLessThanOrEqual(MOP_DRIP_TUNING.maxDripsPerStroke);
+    for (const plan of plans) expect(plan.points.length).toBeLessThanOrEqual(MOP_DRIP_TUNING.maxDripSteps + 1);
+  });
+
+  it("is deterministic -- the same stroke points, radius, and seed always replay to the identical drip plan", () => {
+    const dwelled = Array.from({ length: 40 }, (_, i) => ({ x: i * 0.5, y: 0 }));
+    expect(resolveMopDripPlans(dwelled, 17, 123)).toEqual(resolveMopDripPlans(dwelled, 17, 123));
+  });
+
+  it("a different seed (a different originating Mark id) produces different drip geometry, never Math.random()-style nondeterminism within one seed", () => {
+    const dwelled = Array.from({ length: 40 }, (_, i) => ({ x: i * 0.5, y: 0 }));
+    const a = resolveMopDripPlans(dwelled, 17, 1);
+    const b = resolveMopDripPlans(dwelled, 17, 2);
+    expect(a).not.toEqual(b);
+  });
+
+  it("returns no plans for no points or a non-positive base radius, rather than throwing", () => {
+    expect(resolveMopDripPlans([], 17, 7)).toEqual([]);
+    expect(resolveMopDripPlans([{ x: 0, y: 0 }], 0, 7)).toEqual([]);
   });
 });
 

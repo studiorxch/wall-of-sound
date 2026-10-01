@@ -8,6 +8,7 @@ import {
   strokeGraphite,
   strokeInk,
   strokeMarker,
+  strokeMaterialDrip,
   strokeMop,
   strokeSpray,
   traceSmoothedPath,
@@ -806,5 +807,47 @@ describe("strokeSpray -- Spray Material Calibration V1", () => {
     expect(() => strokeSpray({} as never, [], legacyStyle, "legacy-mark")).not.toThrow();
     const { ctx } = fakeMopContext();
     expect(() => strokeSpray(ctx as never, points, legacyStyle, "legacy-mark")).not.toThrow();
+  });
+});
+
+describe("BLACKBOOK Deterministic Drips β0.1 -- strokeMaterialDrip (rendering a persisted drip's own points)", () => {
+  const dripPoints = [{ x: 10, y: 10 }, { x: 11, y: 16 }, { x: 10.5, y: 22 }, { x: 11.2, y: 27 }];
+  const style = { color: "#1c6e6e", width: 34, opacity: 0.55 };
+
+  it("draws exactly one fill per persisted point -- never regenerating/resampling the drip's own already-authored geometry", () => {
+    const { ctx, calls } = fakeMopContext();
+    strokeMaterialDrip(ctx as never, dripPoints, style, "mop");
+    expect(calls.filter((call) => call.startsWith("arc(")).length).toBe(dripPoints.length);
+    expect(calls.filter((call) => call === "fill").length).toBe(dripPoints.length);
+  });
+
+  it("tapers -- each successive circle's radius is strictly smaller than the previous, never widening", () => {
+    const { ctx, calls } = fakeMopContext();
+    strokeMaterialDrip(ctx as never, dripPoints, style, "mop");
+    const radii = calls.filter((call) => call.startsWith("arc(")).map((call) => Number(call.slice(0, -1).split(",")[2]));
+    for (let i = 1; i < radii.length; i += 1) expect(radii[i]).toBeLessThan(radii[i - 1]);
+  });
+
+  it("Mop starts fatter than Spray at the same authored width -- distinct material calibration, same renderer", () => {
+    const mop = fakeMopContext();
+    strokeMaterialDrip(mop.ctx as never, dripPoints, style, "mop");
+    const spray = fakeMopContext();
+    strokeMaterialDrip(spray.ctx as never, dripPoints, style, "spray");
+    const firstRadius = (calls: string[]) => Number(calls.find((call) => call.startsWith("arc("))!.slice(0, -1).split(",")[2]);
+    expect(firstRadius(mop.calls)).toBeGreaterThan(firstRadius(spray.calls));
+  });
+
+  it("is a pure function of its inputs -- rendering the same points/style/material twice issues identical draw calls", () => {
+    const a = fakeMopContext();
+    strokeMaterialDrip(a.ctx as never, dripPoints, style, "mop");
+    const b = fakeMopContext();
+    strokeMaterialDrip(b.ctx as never, dripPoints, style, "mop");
+    expect(a.calls).toEqual(b.calls);
+  });
+
+  it("draws nothing for an empty point list, rather than throwing", () => {
+    const { ctx, calls } = fakeMopContext();
+    expect(() => strokeMaterialDrip(ctx as never, [], style, "mop")).not.toThrow();
+    expect(calls.filter((call) => call.startsWith("arc("))).toHaveLength(0);
   });
 });

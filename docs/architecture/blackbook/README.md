@@ -38,6 +38,7 @@ engine/camera) is imported or depended on.
 | Shared authoring persistence | `music/src/member/mapArtworkBridge.ts`'s `createArtworkPersistenceBridge`/`createMapArtworkPersistenceBridge` | the one bridge implementation both Blackbook and MAP paint reuse — not a duplicate |
 | Gallery ordering | `music/src/member/artworkGallery.ts` (`sortArtworksByRecency`) | presentation-only helper |
 | Art Supplies | `shared/member-identity/src/data/artSupplyTypes.ts` (`PENCIL_SUPPLY`, `PEN_SUPPLY`, `MARKER_SUPPLY`, `MOP_SUPPLY`, `SPRAY_SUPPLY`, `DRAWING_SUPPLY_ORDER`) | the one canonical supply set — MAP's own paint surface reuses this same set (see [../subway/README.md](../subway/README.md)§2), never a second one |
+| Drip engine | `music/src/member/dripDeposition.ts` | shared, parameterized deterministic drip generator Mop's/Spray's own wrappers (`resolveMopDripPlans`/`resolveSprayDripPlans`) feed — see §11a |
 
 ## 4. Data / persistence authority
 
@@ -297,7 +298,8 @@ today.**
 
 ## 7. READ / WRITE (current vs. direction)
 
-**Current — WRITE only**: drawing marks (stroke or material-erasure) via
+**Current — WRITE only**: drawing marks (stroke, material-erasure, or —
+Mop/Spray only, see §11a — a deterministic material-drip consequence) via
 the shared Art Supply set (pencil/pen/marker/mop/spray), single-creator
 authorship (`creatorId == request.auth.uid`), save/versioning via ordinary
 Firestore document updates (`updatedAt`, `state: draft|archived`). No
@@ -430,8 +432,8 @@ genuine cap/nozzle simulation in production — two data-driven
 `SprayCapProfile`s, `STUDIORICH_STOCK_CAP` and `STUDIORICH_FAT_CAP`, each
 with a distinct physical footprint, particle density, core/edge behavior,
 and velocity/pressure response — not merely a stroke-style (color/width/
-opacity) tool. Mop remains a stroke-style tool, not a physical wet-paint/
-drip simulation. The richer "authentic spray/drip" *behavior* referenced
+opacity) tool. Both Mop and Spray also have a real, deterministic DRIP
+seam now — see §11a. The richer "authentic spray/drip" *behavior* referenced
 above (hand tracking, person segmentation, a wet-drip physics engine) still
 exists only in the separate `prototypes/spatial-spraypaint/` prototype,
 which `blackbook.html` explicitly does **not** import or depend on (§2) —
@@ -442,6 +444,123 @@ unrelated implementation from Blackbook's own `sprayDeposition.ts` cap
 profiles described above — Blackbook borrows only one proven idea from it
 (a seeded PRNG for deterministic particle scatter), never its code or cap
 set.
+
+## 11a. DRIPS (current, established BLACKBOOK Deterministic Drips β0.1)
+
+Mop and Spray can now each generate a bounded, fully deterministic downward
+drip when enough local material accumulates during authoring. This is an
+AUTHOR-TIME CONSEQUENCE of a gesture, never a running wet-paint simulation:
+there is no timer/animation loop, no `Math.random()`, and a saved Artwork's
+drip geometry never changes after it's authored, regardless of how long it
+stays open or how many times it's reloaded.
+
+**Canonical Mark type**: `LocalMaterialDripMark` (`type: "material-drip"`,
+`geometry.format: "local-2d-drip-v1"`,
+`shared/member-identity/src/data/artworkTypes.ts`) — a first-class additive
+Mark, the same pattern `LocalMaterialErasureMark` already established for
+Eraser, never a hidden mutation of the Mop/Spray stroke Mark that produced
+it. It carries `originMarkId` (the producing stroke's own persisted Mark
+id), `targetMaterialId` (`"mop" | "spray"` — the only two supplies with a
+drip seam today), and its own `style` (copied from the origin stroke at the
+moment the drip is generated). `ArtworkMark` is now `StrokeMark |
+MaterialErasureMark | MaterialDripMark`. Local-2d only — there is no
+geographic drip format; Map has no Drip concept.
+
+**Deterministic generation engine**: `music/src/member/dripDeposition.ts`,
+a standalone, parameterized module (no dependency on `mopDeposition.ts`/
+`sprayDeposition.ts`, to avoid any import cycle) with two tuning constants
+— `MOP_DRIP_TUNING` and `SPRAY_DRIP_TUNING` — that make Mop accumulate/run
+more readily than Spray (lower load threshold, more/longer drips) without
+a second bespoke engine. `mopDeposition.ts`'s `resolveMopDripPlans` and
+`sprayDeposition.ts`'s `resolveSprayDripPlans` are the two thin,
+material-specific wrappers that feed each engine's own already-resolved
+emission points (their existing `densityFactor` — Mop's point-spacing
+proxy, Spray's real captured velocity when available) into the shared
+engine. This is the FUTURE DRIP SEAM `mopDeposition.ts` had documented
+since BLACKBOOK Art Supplies V3 — completed here, not superseded or
+redesigned.
+
+**Where accumulation/load is calculated**: `dripDeposition.ts`'s
+`computeLocalLoad`/`resolveDripOrigins` — a bounded trailing-window sum of
+how far each emission point's own `densityFactor` sits above neutral
+(dwelling/slow movement only; a fast/dispersed gesture contributes nothing
+and never crosses the threshold, so a drip never appears on every ordinary
+gesture). Crossing a material's own `loadThreshold` selects a bounded,
+spaced set of drip origins (`maxDripsPerStroke`, `minOriginSpacingRatio`).
+
+**When drip geometry becomes authored/final**: `simulateMaterialDrip`
+(same module) computes one origin's own downward, gravity/drag centerline
+in a fixed, bounded number of steps (`maxDripSteps`, stopping early once
+velocity decays below `minVelocityRatio`) — called exactly ONCE, in
+`blackbookRuntime.ts`'s `createDripOperationsFor`, synchronously at
+pointerup, immediately after the origin Mop/Spray operation is pushed and
+BEFORE any persistence call. The returned points are then persisted
+verbatim as the resulting `LocalMaterialDripMark`'s own geometry; rendering
+(`strokeSmoothing.ts`'s `strokeMaterialDrip`) only ever replays those
+already-fixed points — taper is derived purely from each point's own index
+along the (now immutable) list, never a second persisted field, never
+re-simulated.
+
+**Deterministic identity/seeding**: `blackbookRuntime.ts`'s
+`activeOperation()` pre-assigns Mop/Spray's own real persisted Mark id
+(`crypto.randomUUID()`, written into `BlackbookStroke.markId` directly,
+rather than left to the generic persistence bridge's own fallback
+`createMarkId()`) the instant the operation object is created — before a
+single point of drip geometry is generated. That id, hashed
+(`sprayDeposition.ts`'s existing `hashSeed`), is both the drip's
+`originMarkId` and its deterministic PRNG seed, so no async round-trip to
+Firestore is ever needed to know a drip's own seed, and the same authored
+points + the same origin Mark id always regenerate (at generation time) —
+and, once persisted, always replay — byte-identical geometry.
+
+**How Spray and Mop differ**: both route through the exact same
+`resolveMaterialDripPlans`/`simulateMaterialDrip` engine; only their own
+`DripTuning` constant differs (lower threshold, more/longer drips for Mop;
+materially higher threshold, fewer/shorter drips for Spray — a wet
+applicator pools and runs more readily than an aerosol coverage field at
+the same dwell). Spray's own effective (cap-`footprintRadiusScale`d) radius
+feeds the engine, so a Fat Cap's wider footprint also scales its drip
+gravity/wobble consistently with its wider deposition.
+
+**Lifecycle**: a drip and its origin stroke are always pushed onto
+`blackbookRuntime.ts`'s `operations` array contiguously (origin first,
+drips immediately after, both synchronous — nothing else can be authored
+in between) and persisted as independent Marks through the same generic
+`ArtworkRepository.appendOwnedArtworkMark`/`removeOwnedArtworkMark` path
+every other Mark already uses — no drip-specific persistence branch.
+**Undo** (`popLastGesture`) removes the trailing run of `material-drip`
+operations together with the one ordinary operation beneath them as ONE
+logical step, so a drip is never orphaned when its originating gesture is
+undone; an ordinary non-drip-producing gesture still undoes exactly one
+operation, unchanged. **CLEAR**/**CLEAR→Undo** (`replaceArtworkMarks`) and
+**PAGES/Artwork switching** (`marksToOperations`/`applyActiveArtwork`) both
+already generically round-trip the full `marks`/`operations` array
+regardless of Mark type, so drips clear/restore/switch exactly like every
+other Mark, with no special-casing added. **DELETE** removes the whole
+Artwork document, drips included, same as any other Mark. **Eraser**
+cannot interact with a drip today — `canEraseMaterial` only ever targets
+`"graphite"` (Pencil), so Mop/Spray content (and therefore their drips) has
+no eraser interaction in current architecture, drip or not; this is a
+pre-existing scope boundary, not something this batch narrowed.
+
+**Bounds**: `maxDripsPerStroke` (3 for Mop, 2 for Spray) and
+`maxDripSteps` (18 / 12) keep both drip count and per-drip point count
+bounded independently of gesture length; `firestore.rules`'
+`hasValidMaterialDripMark` additionally hard-caps `geometry.points.size()`
+at 64 as a schema-level safety ceiling, generously above either tuning.
+
+**Legacy compatibility**: an Artwork with no drip Marks decodes and
+renders completely unchanged — `decodeArtworkData`'s `marks` mapping only
+ever adds a `"material-drip"` branch, never altering how `"stroke"`/
+`"material-erasure"` decode. Drips are never synthesized onto historical
+Artwork merely because it's opened.
+
+**Tuning/debt**: `MOP_DRIP_TUNING`/`SPRAY_DRIP_TUNING` are internal
+constants only — no per-supply/per-cap/per-material override exists yet
+beyond Mop-vs-Spray's own two presets and Spray's existing cap-footprint
+scaling (both already parameterized seams this build reused rather than
+duplicated). No user-facing Drip settings panel exists, per this batch's
+own explicit scope.
 
 **Montana palette data**: an existing, real Montana Gold 400ml swatch/
 catalog dataset was found at

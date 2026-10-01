@@ -193,3 +193,40 @@ describe("createMapArtworkDocument", () => {
     });
   });
 });
+
+describe("BLACKBOOK Deterministic Drips β0.1 -- material-drip Mark validation", () => {
+  const dripMark = {
+    id: "drip-1",
+    type: "material-drip" as const,
+    createdAt: new Date("2026-01-01T00:00:00Z"),
+    geometry: { format: "local-2d-drip-v1" as const, points: [{ x: 0.11, y: 0.21 }, { x: 0.111, y: 0.26 }, { x: 0.108, y: 0.3 }] },
+    originMarkId: "mark-mop-origin",
+    targetMaterialId: "mop" as const,
+    style: { color: "#1c6e6e", width: 34, opacity: 0.55 },
+  };
+
+  it("a well-formed drip Mark is valid and coexists in boundsForMarks with its origin stroke", () => {
+    expect(() => validateArtworkMark(dripMark)).not.toThrow();
+    const origin = { ...localMark, id: "mark-mop-origin", material: { supplyId: "mop" as const, materialId: "mop" as const } };
+    expect(() => boundsForMarks([origin, dripMark])).not.toThrow();
+  });
+
+  it("requires a non-empty originMarkId -- a drip can never be orphaned from the stroke that produced it", () => {
+    expect(() => validateArtworkMark({ ...dripMark, originMarkId: "" })).toThrow();
+  });
+
+  it("targetMaterialId is restricted to mop/spray -- the only two supplies with a drip seam", () => {
+    expect(() => validateArtworkMark({ ...dripMark, targetMaterialId: "graphite" as never })).toThrow();
+    expect(() => validateArtworkMark({ ...dripMark, targetMaterialId: "spray" as const })).not.toThrow();
+  });
+
+  it("requires at least 2 points and a valid style, same as every other Mark", () => {
+    expect(() => validateArtworkMark({ ...dripMark, geometry: { ...dripMark.geometry, points: [{ x: 0, y: 0 }] } })).toThrow();
+    expect(() => validateArtworkMark({ ...dripMark, style: { ...dripMark.style, width: 0 } })).toThrow();
+    expect(() => validateArtworkMark({ ...dripMark, style: { ...dripMark.style, opacity: 1.5 } })).toThrow();
+  });
+
+  it("a geographic point on a local-2d drip format is rejected, same local/geographic discipline every other local-2d Mark has", () => {
+    expect(() => validateArtworkMark({ ...dripMark, geometry: { ...dripMark.geometry, points: [{ longitude: -73.9, latitude: 40.7 }, { longitude: -73.8, latitude: 40.8 }] as never } })).toThrow();
+  });
+});

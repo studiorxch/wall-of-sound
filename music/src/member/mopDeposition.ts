@@ -24,6 +24,7 @@
  */
 
 import { simplifyPathToBudget } from "./pathSimplify";
+import { MOP_DRIP_TUNING, resolveMaterialDripPlans, type DripPlan } from "./dripDeposition";
 
 export interface MopPoint {
   readonly x: number;
@@ -157,31 +158,23 @@ export function resolveMopDabPlan(
 }
 
 /**
- * FUTURE DRIP SEAM (not implemented in V3 -- see Art Supplies V3 brief
- * §5). A convincing drip would need, at minimum:
- *
- * 1. A bounded, deterministic "local load" scalar derived the same way as
- *    `resolveMopDabPlan`'s speedFactor above -- e.g. summing dab radii (or
- *    inverse spacing) within a fixed trailing window of a Mop stroke's own
- *    points, capped at a small constant. No physics, no simulation state
- *    carried between strokes.
- * 2. A drip's geometry would need to be a SEPARATE Mark (the same pattern
- *    `material-erasure` already uses for Eraser: its own authored Mark
- *    type, e.g. `"material-drip"`, carrying `{ originMarkId, points,
- *    targetMaterialId: "mop" }`), not a hidden mutation of the originating
- *    Mop stroke Mark. This keeps Undo, ordering, and replay exactly as
- *    simple as they are for Eraser today.
- * 3. The drip's own points would be generated ONCE, deterministically, at
- *    the moment of authoring (from the local-load scalar above plus the
- *    stroke's own endpoint and gravity direction) and then persisted like
- *    any other Mark's points -- never recomputed by a running physics loop
- *    on every render.
- *
- * This is intentionally not built here: a convincing gravity-driven drip
- * needs real visual tuning (see the much larger Spatial Spraypaint
- * prototype's DripLogic.ts for how many iterations that took even in an
- * isolated sandbox), and forcing it into Blackbook's simple per-material
- * canvas-layer renderer in this pass would either produce an unconvincing
- * result or pull in that larger subsystem wholesale -- both explicitly
- * out of scope for V3.
+ * BLACKBOOK Deterministic Drips β0.1 -- completes the FUTURE DRIP SEAM this
+ * doc block used to describe as not-yet-built. All three points that seam
+ * anticipated are implemented exactly as sketched: the "local load" scalar
+ * is `dripDeposition.ts`'s bounded trailing-window sum over this module's
+ * own `densityFactor` (no new signal, no physics, no cross-stroke state);
+ * the drip's geometry is the first-class `LocalMaterialDripMark`
+ * (`{ originMarkId, geometry.points, targetMaterialId: "mop" }`,
+ * shared/member-identity/src/data/artworkTypes.ts), never a mutation of
+ * this stroke's own Mark; and its points are generated ONCE, at authoring
+ * time, in blackbookRuntime.ts, then persisted and replayed verbatim --
+ * never recomputed by a running loop. `MOP_DRIP_TUNING` (dripDeposition.ts)
+ * is what makes Mop accumulate/run more readily than Spray's own
+ * `SPRAY_DRIP_TUNING`, each material's own calibration living entirely in
+ * that one shared, parameterized engine rather than a second bespoke one.
  */
+export function resolveMopDripPlans(points: readonly MopPoint[], baseRadius: number, seed: number): readonly DripPlan[] {
+  if (points.length === 0 || baseRadius <= 0) return [];
+  const emissions = resolveMopEmissionPoints(points, baseRadius);
+  return resolveMaterialDripPlans(emissions, baseRadius, seed, MOP_DRIP_TUNING);
+}

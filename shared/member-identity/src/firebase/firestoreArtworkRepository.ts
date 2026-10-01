@@ -88,6 +88,23 @@ function decodeMark(value: unknown): ArtworkMark {
     validateArtworkMark(decoded);
     return decoded;
   }
+  // BLACKBOOK Deterministic Drips V1 -- local-2d only (see
+  // LocalMaterialDripMark's own doc); decoded the same shape it was
+  // persisted in, never regenerated from the origin stroke at read time.
+  if (stroke.type === "material-drip") {
+    const dripStyle = stroke.style as Record<string, unknown> | null;
+    const decoded: ArtworkMark = {
+      id: String(stroke.id ?? ""),
+      type: "material-drip",
+      createdAt,
+      geometry: { format: "local-2d-drip-v1", points: Array.isArray(geometry?.points) ? geometry.points.map(decodeLocalPoint) : [] },
+      originMarkId: String(stroke.originMarkId ?? ""),
+      targetMaterialId: String(stroke.targetMaterialId ?? "") as ArtMaterialId,
+      style: { color: String(dripStyle?.color ?? ""), width: Number(dripStyle?.width), opacity: Number(dripStyle?.opacity) },
+    };
+    validateArtworkMark(decoded);
+    return decoded;
+  }
   const material = stroke.material && typeof stroke.material === "object" ? stroke.material as Record<string, unknown> : null;
   const base = {
     id: String(stroke.id ?? ""),

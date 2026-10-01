@@ -617,6 +617,49 @@ export function strokeMop(
  * fills for the longest possible single Mark, never scaling with canvas
  * area or an Artwork's total history.
  */
+/**
+ * BLACKBOOK Deterministic Drips β0.1 -- the shared renderer for a
+ * `LocalMaterialDripMark`'s already-persisted, already-generated centerline
+ * (see dripDeposition.ts's own doc for why generation itself never happens
+ * here). Taper is deliberately NOT a persisted field: it is a pure function
+ * of each point's own INDEX along the already-fixed point list (further
+ * along -> narrower), so the same persisted points always taper identically
+ * without needing a second stored width-per-point array. `targetMaterialId`
+ * only selects which of two small calibration constants to use (Mop starts
+ * fatter and holds its width longer than Spray, mirroring each material's
+ * own DripTuning in dripDeposition.ts) -- never a third material-specific
+ * code path.
+ */
+const DRIP_INITIAL_WIDTH_RATIO_BY_MATERIAL: Readonly<Record<"mop" | "spray", number>> = Object.freeze({ mop: 0.42, spray: 0.3 });
+const DRIP_WIDTH_TAPER_BY_MATERIAL: Readonly<Record<"mop" | "spray", number>> = Object.freeze({ mop: 0.9, spray: 0.86 });
+const DRIP_ALPHA_BASE = 0.8;
+const DRIP_MIN_RADIUS = 0.4;
+
+export function strokeMaterialDrip(
+  ctx: CanvasRenderingContext2D,
+  points: readonly SmoothablePoint[],
+  style: { readonly color: string; readonly width: number; readonly opacity: number },
+  targetMaterialId: "mop" | "spray",
+): void {
+  if (points.length === 0) return;
+  const baseRadius = style.width * 0.5;
+  const taper = DRIP_WIDTH_TAPER_BY_MATERIAL[targetMaterialId];
+  let radius = Math.max(DRIP_MIN_RADIUS, baseRadius * DRIP_INITIAL_WIDTH_RATIO_BY_MATERIAL[targetMaterialId]);
+  ctx.save();
+  ctx.globalCompositeOperation = "source-over";
+  ctx.fillStyle = style.color;
+  for (let index = 0; index < points.length; index += 1) {
+    const point = points[index];
+    const alpha = style.opacity * DRIP_ALPHA_BASE * (1 - (index / points.length) * 0.25);
+    ctx.globalAlpha = Math.min(1, Math.max(0, alpha));
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
+    ctx.fill();
+    radius = Math.max(DRIP_MIN_RADIUS, radius * taper);
+  }
+  ctx.restore();
+}
+
 export function strokeSpray(
   ctx: CanvasRenderingContext2D,
   points: readonly SmoothablePoint[],
