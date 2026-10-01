@@ -1922,3 +1922,232 @@ the required bookkeeping for the new canonical transformation this batch
 establishes — both included in this same commit. (A second small row,
 for `stationStructuralReadiness.ts`, was also added — STATION-12 had
 left that module without its own explicit `OWNERSHIP.md` entry.)
+
+## 24. STATION-14 — first visual 3D station renderer
+
+Implements the first visual consumer of the chain STATION-13 established:
+
+```
+StationGeometryData -> projectStationStructure3D() -> StationStructuralProjection3D
+                                                              |
+                                                              v
+                                               buildStationStructure3DScene()   (pure, music/src/logic/maps/stationStructure3DScene.ts)
+                                                              |
+                                                              v
+                                               renderStationStructure3D()       (DOM/WebGL lifecycle, stationStructure3DRenderer.ts)
+                                                              |
+                                                              v
+                                                    visible 3D structural scene
+```
+
+### Renderer boundary (Phase 1, confirmed)
+
+Both new modules consume **only** `StationStructuralProjection3D` — proven
+directly by static-source test, not just by convention: neither imports
+`stationGeometryBayRidgeAvSeed.ts`, `stationGeometryRegistry.ts`,
+`stationArchetypeInstantiate.ts`, or any archetype-id constant, and
+neither contains a quoted `"R42"`/`'R42'` literal anywhere. The one place
+R42's own real geometry is resolved is the debug runtime
+(`station3DDebugRuntime.ts`), which calls the exact, unmodified STATION-08
+registry and then hands the result to `projectStationStructure3D()` —
+same three-stage pipeline every other consumer already uses.
+
+### Rendering infrastructure recon (Phase 2)
+
+No 3D/WebGL library existed anywhere in this repository before this
+batch (confirmed directly: no `three` import, no WebGL usage, in
+`music/` or elsewhere). MAP's own 3D buildings are Mapbox GL's own
+internal WebGL layer, not a general-purpose scene API this batch could
+reuse for arbitrary station structure. **`three`** (^0.186, + `@types/three`
+devDependency) was added as the smallest appropriate, actively-maintained
+dependency — its own `OrbitControls` (`three/examples/jsm/controls/
+OrbitControls.js`, bundled in the package, no separate install) satisfies
+Phase 11's "reuse existing controls if available" directly. No other new
+dependency was added. The existing dark-field token palette
+(`#0e0d0b` background, `#f4efe7`/`#6b6357`/`#a39a8d` text, already used by
+`platform.html`/`station-topology-debug.html`) is reused for the debug
+page's own chrome and scene background, per Phase 10's "reuse existing
+tokens, don't redesign branding."
+
+### API
+
+```ts
+buildStationStructure3DScene(projection: StationStructuralProjection3D): THREE.Group   // pure
+renderStationStructure3D(container: HTMLElement, projection: StationStructuralProjection3D, options?: { onSelect? }): { dispose(); resetCamera() }
+```
+
+Split deliberately into a **pure** scene-builder (`stationStructure3DScene.ts`
+— constructs Three.js scene-graph objects only, touches no canvas/WebGL
+context, and is therefore fully unit-testable in this repo's own Node/
+vitest runner with no jsdom, same "no jsdom configured here" precedent
+`platformRuntime.test.ts` already established) and a thin **DOM-mounting**
+lifecycle wrapper (`stationStructure3DRenderer.ts` — the only file that
+touches `WebGLRenderer`/`<canvas>`/`ResizeObserver`). Neither is R42's own
+API, nor an archetype's — both take `StationStructuralProjection3D` and
+nothing else.
+
+### Coordinate mapping (Phase 4)
+
+Station-local convention (unchanged, STATION-13): `+X` = along-track,
+`+Y` = lateral, `+Z` = up. Three.js scene convention: `+X` = right,
+`+Y` = up, `+Z` = toward the camera. The ONE place this swap happens is
+`toSceneVector3()` in `stationStructure3DScene.ts` — station-local `Z`
+(up) becomes scene `Y` (up); station-local `Y` (lateral) becomes scene
+`Z` (depth), so an oblique camera reads along-track motion as left/right
+and platform/track lateral separation as near/far depth, matching how a
+person standing on a platform actually perceives the station. No other
+function in either module swaps axes independently.
+
+### Canonical vs. presentation vertical placement (Phase 4)
+
+`buildLevelSceneY()` is the one place a level's scene height is decided:
+when `ProjectedLevel.canonicalElevationM` exists, it is used **directly,
+unconverted** (real meters, already using the same "negative = below
+street" sign convention as scene-space "up"); when absent,
+`presentationStackIndex` drives scene Y instead, scaled by
+`LEVEL_PRESENTATION_SPACING_UNITS` (a renderer-owned, deliberately
+un-meter-like constant — `6`, scene units, never written back anywhere).
+Proven by test: a level with a real `elevationM` of `-3.56` renders at
+exactly `-3.56`, never at a stack-index-derived value, even when its
+`presentationStackIndex` would independently suggest a different number.
+
+### Level / platform / track / wall / connection representation (Phases 5-9)
+
+- **Levels**: an abstract, fixed-extent reference `GridHelper` at the
+  level's own scene height, plus a text label (`SURFACE`/`MEZZANINE`/
+  `PLATFORM`, derived from `kind`) — never an invented floor/room
+  footprint. A real canonical level `footprint`, when one exists, draws
+  as an honest outline on that grid.
+- **Platforms**: rendered only when a real `footprint` exists — an
+  extruded, translucent planar shape plus an outline, extrusion depth a
+  documented presentation constant (`PLATFORM_PRESENTATION_THICKNESS_UNITS`),
+  never implying measured thickness. R42's own real, estimated, currently
+  width-unreliable footprints render exactly as estimated — never
+  beautified or completed.
+- **Tracks**: rendered only when real `localPoints` exist — a schematic
+  two-rail line pair, offset by a documented presentation gauge constant
+  (`TRACK_RAIL_GAUGE_PRESENTATION_UNITS`), never a claim about real rail
+  spacing. A platformless bypass track (`SIDE_4TRACK`'s own express
+  tracks) falls back to the lowest `platform`-kind level's own scene
+  height — a generic, documented decision, not R42-specific.
+- **Walls**: `geometryState: "geometryKnown"` renders the real
+  `localPolygon` as an extruded mesh; `"geometryUnknown"` renders
+  **nothing physical at all** — proven directly by test that R42's two
+  real STATION-11 back walls produce zero wall-type scene objects. Their
+  existence is communicated only through the debug page's own text
+  summary (`Walls: 0 / 2 geometrically resolved`), never a placeholder
+  mesh at an arbitrary position.
+- **Connections**: `pathState: "pathKnown"` renders the real `localPath`,
+  interpolated in height between its two levels, as a solid line.
+  `"topologyOnly"` (all four of R42's real connections, today) renders an
+  explicitly **dashed**, 2-point, level-to-level relationship indicator —
+  proven by test to never exceed 2 points (never an invented multi-point
+  staircase shape) and to use `LineDashedMaterial` specifically so it
+  reads visually distinct from a real path.
+
+### Camera (Phase 11)
+
+One deterministic default oblique view (`DEFAULT_CAMERA_POSITION`/
+`DEFAULT_CAMERA_TARGET`, module-level constants) showing along-track
+extent, lateral platform/track relationship, and vertical level stack
+simultaneously. `OrbitControls` (damping disabled) provides restrained
+orbit/zoom/pan; a `resetCamera()` handle method restores the exact
+default view deterministically. No first-person, train-follow, cinematic,
+or fly-through camera exists anywhere in this batch.
+
+### Picking / identity (Phase 14)
+
+Every renderable Object3D carries `userData: { type, id, levelId? }` —
+the EXACT canonical id STATION-13's own projection already carried,
+never a renderer-generated id. `renderStationStructure3D()`'s optional
+`onSelect` raycasts on click and walks up the Object3D ancestry to the
+nearest tagged node — reporting PROJECTION identity only. It does not
+construct or duplicate STATION-10's own `resolveStationDetailSubject()`;
+truth resolution remains exactly where STATION-10 put it.
+
+### Lifecycle / disposal (Phase 15)
+
+No animation loop exists — `OrbitControls` (damping disabled) fires a
+`"change"` event on every pointer-driven camera move, which together with
+the initial frame and `ResizeObserver`-triggered resizes is this
+renderer's only `render()` trigger. `dispose()` disconnects the
+`ResizeObserver`, removes the `"change"`/click listeners, disposes every
+geometry/material/texture the scene builder created, disposes the
+`WebGLRenderer` itself, and removes its `<canvas>` from the container —
+live-verified: switching fixtures repeatedly, and a full page reload,
+both leave exactly one `<canvas>` in the container, never a duplicate.
+
+### Debug/proof entry point
+
+`music/station-3d-debug.html` + `music/src/station/station3DDebugRuntime.ts`
+— development/debug tooling ONLY, same "isolated page route, excluded
+from `vite.config.ts`'s production `rollupOptions.input`" convention
+`station-topology-debug.html` (STATION-07) already established. Not
+reachable from MAP, the Mezzanine Drawer, or Platform. A fixture selector
+covers the real R42 station (via the unmodified registry) plus
+`UG_SIDE_2TRACK`/`UG_ISLAND_2TRACK`/`UG_SIDE_4TRACK`/the synthetic
+four-track-island contract fixture — the exact same five cases
+`station-topology-debug.html` already exercises for STATION-07's own
+renderer. A compact, fully-derived (never hardcoded) truth/projection
+summary panel and a picked-subject panel (`TYPE`/`ID`/`LEVEL`) sit beside
+the canvas.
+
+### Boundary with future Tunnel Vision integration
+
+This batch deliberately stops short of: materials, lighting, textures,
+tiles, signage, trains, doors, animation, a network/world camera, and any
+BLACKBOOK/evidence/UGC integration. A future Tunnel Vision integration
+should consume `StationStructuralProjection3D` (not `StationGeometryData`
+directly) and may build its own renderer, or extend
+`stationStructure3DScene.ts`'s own scene-building conventions, but must
+preserve the same invariants this section documents: canonical identity
+on every render-object, no fabricated geometry for an unknown subject,
+and presentation constants that never become physical truth.
+
+### Testing / verification
+
+28 new tests in `stationStructure3DScene.test.ts` (scene construction,
+mutation safety, canonical-identity preservation for every subject kind,
+wall/connection partial-truth behavior, canonical-vs-presentation
+vertical placement, the 5-case generic topology proof, projection-only-
+boundary and no-branching static-source checks, dispose()-lifecycle and
+no-`requestAnimationFrame` static-source checks, and direct STATION-07/
+STATION-10/STATION-12/STATION-13 regression checks). Full combined MUSIC
+suite: 4068 passing (same 11 pre-existing unrelated manifest-path
+failures as before this batch). Typecheck clean; this batch's own files
+lint clean.
+
+**Human visual acceptance — live-verified.** `station-3d-debug.html`:
+R42 renders a visibly three-dimensional SURFACE/MEZZANINE/PLATFORM stack
+with the real platform footprint visible and zero fabricated walls;
+orbit-drag rotates the camera and simultaneously proved picking (a drag
+that ended as a click correctly selected and reported `LEVEL /
+level:R42:surface`); `Reset camera` restores the default view; switching
+to `ISLAND_4_TEST` shows a visibly distinct wall|local|island|express|
+express|island|local|wall structure with real wall geometry now present
+(`Walls: 2 / 2 geometrically resolved`); switching to `SIDE_4` shows the
+correct, independently-derived counts (`Connections: 0 / 2 spatially
+resolved`); cycling through three fixtures and a full page reload both
+leave exactly one `<canvas>` in the container.
+
+### Architectural gate
+
+**Is the first generic visual 3D station renderer sufficiently stable to
+integrate a station into the Underground/Tunnel Vision world?**
+
+**YES** — the same renderer faithfully visualizes partial canonical
+Station Truth (R42) and fully generic structural cases (all four
+archetype/fixture cases) without station-specific fabrication, archetype
+branching, a second station model, or confusing presentation-space
+placement with measured geometry. A future STATION-15 should integrate:
+`renderStationStructure3D()` (`music/src/logic/maps/
+stationStructure3DRenderer.ts`) fed by `projectStationStructure3D()`
+(STATION-13) fed by real `StationGeometryData` from
+`stationGeometryRegistry.ts` (STATION-08, unmodified) — mounted into
+whatever container Tunnel Vision's own future layout provides, disposed
+on that container's own teardown.
+
+**Architecture docs:** this section plus two new `OWNERSHIP.md` rows
+(`station structural 3D scene builder`, `station structural 3D renderer`)
+are the required bookkeeping for this batch — both included in this same
+commit.

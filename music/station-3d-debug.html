@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Station 3D Debug</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; padding: 2rem; box-sizing: border-box; display: flex; flex-direction: column; height: 100vh;
+    font: 14px/1.4 -apple-system, system-ui, sans-serif; background: #0e0d0b; color: #f4efe7;
+  }
+  h1 { font-size: 18px; margin: 0 0 .25rem; flex: 0 0 auto; }
+  .station-3d-debug-banner { color: #6b6357; font-size: 12px; margin: 0 0 1.25rem; max-width: 720px; flex: 0 0 auto; }
+  .station-3d-debug-controls { margin-bottom: 1rem; flex: 0 0 auto; display: flex; gap: .75rem; align-items: center; }
+  select, button {
+    font: 700 12px/1 monospace; padding: 8px 10px; background: #1a1814; color: #f4efe7;
+    border: 1px solid rgba(255,255,255,.2); border-radius: 6px; cursor: pointer;
+  }
+  .station-3d-debug-layout { flex: 1 1 auto; min-height: 0; display: flex; gap: 1.5rem; }
+  #station-3d-canvas-host {
+    flex: 1 1 auto; min-width: 0; border: 1px solid rgba(255,255,255,.1); border-radius: 8px; overflow: hidden; position: relative;
+  }
+  #station-3d-canvas-host canvas { display: block; }
+  .station-3d-debug-sidebar { flex: 0 0 300px; display: flex; flex-direction: column; gap: 1rem; font: 12px/1.6 monospace; color: #c8c0b6; overflow: auto; }
+  .station-3d-debug-sidebar h2 { font-size: 11px; letter-spacing: .08em; color: #6b6357; margin: 0 0 .25rem; text-transform: uppercase; }
+  #station-3d-summary div { padding: 1px 0; }
+  #station-3d-picked { border: 1px solid rgba(255,255,255,.1); border-radius: 6px; padding: 10px; min-height: 64px; }
+  #station-3d-picked .station-3d-picked-empty { color: #6b6357; }
+  #station-3d-picked .station-3d-picked-type { color: #6fa8f0; font-weight: 700; }
+</style>
+</head>
+<body>
+  <h1>Station 3D Debug</h1>
+  <p class="station-3d-debug-banner">
+    STATION-14 -- development/debug tooling only, NOT a product surface. Not
+    reachable from MAP, the Mezzanine Drawer, or Platform. Proves that one
+    shared renderer (projectStationStructure3D / renderStationStructure3D)
+    can consume real canonical Station Base Truth and produce a visibly
+    correct, distinct structural 3D scene for real and generic stations
+    alike, without any station- or archetype-specific rendering logic.
+    Unknown geometry (walls/connections) is shown as absent, never invented.
+  </p>
+  <div class="station-3d-debug-controls">
+    <label for="station-3d-fixture">Station:</label>
+    <select id="station-3d-fixture"></select>
+    <button id="station-3d-reset-camera" type="button">Reset camera</button>
+  </div>
+  <div class="station-3d-debug-layout">
+    <div id="station-3d-canvas-host"></div>
+    <div class="station-3d-debug-sidebar">
+      <div>
+        <h2>Truth / projection summary</h2>
+        <div id="station-3d-summary"></div>
+      </div>
+      <div>
+        <h2>Picked subject</h2>
+        <div id="station-3d-picked"><span class="station-3d-picked-empty">Click a structural element</span></div>
+      </div>
+    </div>
+  </div>
+  <script type="module" src="/src/station/station3DDebugRuntime.ts"></script>
+</body>
+</html>
