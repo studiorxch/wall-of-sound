@@ -1738,3 +1738,187 @@ row, and `stationStructuralReadiness.ts`'s own module doc are the
 required bookkeeping for this batch's schema change
 (`StationLevel.footprint?` added) and the newly-canonicalized partial-
 truth policy — all included in this same commit.
+
+## 23. STATION-13 — representation-independent 3D structural projection
+
+Implements the generic transformation STATION-12's own gate called for:
+
+```
+StationGeometryData -> projectStationStructure3D() -> StationStructuralProjection3D
+```
+
+`music/src/logic/maps/stationStructuralProjection3D.ts` (new). This
+describes SPATIAL STRUCTURE only — no color, material, lighting, texture,
+mesh, camera, or any Three.js/WebGL concept appears anywhere in this
+module or its output type. It is a pure, archetype-blind, provenance-
+blind bridge, same architectural family as `stationTopologyProjection.ts`
+(STATION-07) and `stationStructuralReadiness.ts` (STATION-12), downstream
+of canonical Base Truth and never a second authority over it.
+
+### Phase 1 — input contract confirmed, no contradiction found
+
+STATION-12's own minimum structural contract (level stacking order,
+platform/track relationships and geometry-where-available, wall identity
+and geometry-where-available, real level connectivity) matched current
+canonical architecture exactly — no discrepancy between this prompt and
+the existing registry was found, so none was reported as a deviation.
+
+### Ownership / projection boundary
+
+`StationStructuralProjection3D` is **derived, read-only, and never
+persisted** — no IndexedDB store, no `localStorage` key, no Firestore
+collection, nothing analogous to `stationGeometryStore.ts` exists or was
+added for it (verified directly by this module's own static-source
+test). There remains exactly one physical Station Truth authority:
+`StationGeometryData`. A future renderer calls
+`projectStationStructure3D(geometry)` fresh whenever it needs the
+projection — the same "call it, don't cache it as truth" discipline
+`projectStationTopology()` already established.
+
+### Canonical vs. projection-derived vertical coordinates
+
+Every `ProjectedLevel` carries two deliberately distinct fields:
+
+- `presentationStackIndex: number` — ALWAYS present, unitless, a
+  deterministic 0-based stacking rank derived purely from each level's
+  own `kind` (`surface`/`entrance` > `mezzanine` > `platform` > `other`,
+  ties broken by id) — real schema-level domain knowledge every station
+  already carries, not an R42-specific or archetype-specific heuristic.
+- `canonicalElevationM?: number` — the real `StationLevel.elevationM`,
+  copied verbatim, present ONLY when Base Truth actually has one, NEVER
+  derived, defaulted, or set equal to the stack index.
+
+The naming asymmetry itself (`presentationStackIndex` vs.
+`canonicalElevationM`) is deliberate: a future consumer that wants
+physical truth must read the `M`-suffixed field explicitly; the unitless
+rank can never be mistaken for a measurement. Confirmed by test: the
+derived index is never written back onto the canonical `StationLevel`
+object.
+
+### Platform / track projection
+
+Both are thin, identity-preserving projections: canonical `id`,
+`levelId`/relationship fields, and `footprint`/`localPoints` copied
+verbatim ONLY when the canonical record has them — never padded,
+completed, or beautified. R42's own real, OSM-estimated, currently-
+incomplete-on-width platform footprints project exactly as estimated,
+not as though they were exact. `ProjectedTrack.levelId` is derived only
+when `platformId` is set (via the owning platform's own `levelId`) —
+never guessed for a platformless bypass track (proven directly against
+`UG_SIDE_4TRACK`'s own express tracks).
+
+### Wall / connection partial-truth behavior
+
+Both honor the STATION-11/STATION-12 invariant explicitly, with a typed
+discriminator rather than an implicit convention:
+
+- `ProjectedWall.geometryState: "geometryKnown" | "geometryUnknown"` —
+  a wall with no `localPolygon` still appears in `projection.walls`
+  (existence known) but never receives a fabricated polygon
+  (`geometryUnknown`). R42's two STATION-11 back walls project exactly
+  this way today.
+- `ProjectedConnection.pathState: "pathKnown" | "topologyOnly"` — a
+  connection with no `localPath` still appears, with its real
+  `fromLevelId`/`toLevelId`/`kind` intact, but no invented staircase path.
+  All four of R42's real connections (two mezzanine↔platform, two
+  surface↔mezzanine, STATION-12) project as `topologyOnly` today —
+  honest, not a defect.
+
+### Generic topology proof
+
+Exercised directly, through the one unmodified exported function, with
+no station/archetype-specific code path: `UG_SIDE_2TRACK` (2 platforms, 2
+tracks, 0 walls), `UG_ISLAND_2TRACK` (1 island platform served by 2
+tracks), `UG_SIDE_4TRACK` (2 platforms, 4 tracks — 2 platformless bypass),
+the STATION-06/07 synthetic four-track-island contract fixture (2 island
+platforms, 4 tracks, 2 geometried walls — proving `geometryKnown` is
+reachable, not just `geometryUnknown`), and the real, hand-authored R42
+seed — all through the identical `projectStationStructure3D()` call site.
+
+### R42 projection summary (live-generated, not hand-written)
+
+```
+Station: stationGeometry:R42
+Levels (3):
+  [0] level:R42:surface (surface) -- elevationM=0, footprint=unknown
+  [1] level:R42:mezzanine (mezzanine) -- elevationM=unknown, footprint=unknown
+  [2] level:R42:platform (platform) -- elevationM=unknown, footprint=unknown
+Platforms (2):
+  platform:R42:northbound (side, level=level:R42:platform) -- footprint=known, servedBy=[track:R42:northbound]
+  platform:R42:southbound (side, level=level:R42:platform) -- footprint=known, servedBy=[track:R42:southbound]
+Tracks (2):
+  track:R42:northbound (platformId=platform:R42:northbound) -- localPoints=known
+  track:R42:southbound (platformId=platform:R42:southbound) -- localPoints=known
+Walls (2):
+  wall:R42:northbound-back -- geometryUnknown, adjacentPlatformId=platform:R42:northbound
+  wall:R42:southbound-back -- geometryUnknown, adjacentPlatformId=platform:R42:southbound
+Connections (4):
+  connection:R42:mezzanine-platform-northbound (stairs: level:R42:mezzanine -> level:R42:platform) -- topologyOnly
+  connection:R42:mezzanine-platform-southbound (stairs: level:R42:mezzanine -> level:R42:platform) -- topologyOnly
+  connection:R42:surface-mezzanine-northbound (stairs: level:R42:surface -> level:R42:mezzanine) -- topologyOnly
+  connection:R42:surface-mezzanine-southbound (stairs: level:R42:surface -> level:R42:mezzanine) -- topologyOnly
+```
+
+Produced by `summarizeStationStructuralProjection3D()` (STATION-13 Phase
+13 — a plain text debug function, never a renderer, never Three.js).
+
+### Stable identity / mutation / persistence proof
+
+Every projected id (platforms, tracks, walls, connections) is copied
+verbatim from its canonical record — proven directly by test, for both
+R42 and every generic case above. `projectStationStructure3D()` never
+mutates its input (`Array.prototype.sort` is applied to a COPY of
+`geometry.levels`, never the original); proven by a before/after deep-
+equality check in the test suite. No persistence of any kind exists for
+`StationStructuralProjection3D` — confirmed by a static-source test that
+the module never imports `indexedDB`/`localStorage`/`fetch`.
+
+### Regression — STATION-07 / STATION-10 / STATION-12 unaffected
+
+None of `stationTopologyProjection.ts`, `stationTopologySvgRenderer.ts`,
+`stationDetailSubjectResolver.ts`, or `stationStructuralReadiness.ts` was
+modified this batch. Confirmed directly by test: STATION-07's own
+projection still renders R42 as 2 platform + 2 track lanes (0 wall
+lanes); STATION-10's resolver still resolves R42's real platform/wall
+subjects; STATION-12's readiness evaluator still reports R42's `levels`/
+`connections` as READY and `wallSurfaces` as UNKNOWN, unchanged.
+
+### Testing
+
+34 new tests in `stationStructuralProjection3D.test.ts` (determinism,
+mutation safety, stable-identity preservation for every subject kind,
+level-stacking-order proof, platform/track/wall/connection partial-truth
+behavior, the 4-archetype + synthetic-fixture + real-R42 generic topology
+proof, the R42 end-to-end proof + debug-summary content check, no-
+persistence/no-archetype-branch/no-station-branch static-source checks,
+and direct STATION-07/STATION-10/STATION-12 regression checks run from
+within this same file). Full combined MUSIC suite: 4040 passing (same 11
+pre-existing unrelated manifest-path failures as before this batch).
+Typecheck clean; this batch's own files lint clean.
+
+### Architectural gate
+
+**Is the representation-independent 3D structural projection now
+sufficiently stable to build the first visual 3D station renderer?**
+
+**YES** — future visual consumers can call `projectStationStructure3D()`
+and render canonical known structure without inventing Station Truth,
+branching on a station or archetype identity, creating a second station
+model, or confusing presentation-space placement (`presentationStackIndex`)
+with measured geometry (`canonicalElevationM`). A future STATION-14
+should consume `StationStructuralProjection3D` directly — specifically
+`levels[].presentationStackIndex` (and `canonicalElevationM` where
+present) for vertical placement, `platforms[].footprint`/
+`tracks[].localPoints` where present for plan geometry (explicitly
+PARTIAL-grade for R42 today), `walls[].geometryState` to decide whether
+to draw anything per wall, and `connections[].pathState` to decide
+whether to draw a real path or only indicate topological connectivity —
+never guessing where either state reads `"geometryUnknown"`/
+`"topologyOnly"`.
+
+**Architecture docs:** this section plus a new dedicated `OWNERSHIP.md`
+row (`station structural 3D projection (representation-independent)`) are
+the required bookkeeping for the new canonical transformation this batch
+establishes — both included in this same commit. (A second small row,
+for `stationStructuralReadiness.ts`, was also added — STATION-12 had
+left that module without its own explicit `OWNERSHIP.md` entry.)
